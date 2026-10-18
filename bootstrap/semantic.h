@@ -72,8 +72,6 @@ struct type {
     bool structMAlloc; //true when referenced via a trailing "{}" or "{name}" - heap-indirect, breaks
                         //recursive embedding
     bool refMut;       //T25b: a WRITABLE reference ("mut T&") - through a read-only one nothing may be written
-    bool refOwn;       //T25e/O31: an OWN reference ("own Conn&") - the one reference owning its object, which lives in a
-                       //region of its own (O30). Its scope tag is the slot's reach (O34): where its storage lives
     bool isTuple; //D8c: the anonymous result of a function returning several values - fields "0", "1", ...
                   //It is never a value in its own right: only destructured, returned, or discarded
     //valid only when structMAlloc: NULL for a bare "&" (O4: this value's own function's "own" scope);
@@ -126,8 +124,6 @@ struct type {
                                     //fields around it is exactly what decides when it runs.
 
     bool hasDestruct;
-    bool owning; //O31: an OWNING type - a struct with a field of an own reference type (T25e), held only by reference
-                 //(C11's rule, so no value copy duplicates an owner); set with its fields, as hasDestruct is
     struct var* destructFunc; //synthetic BASETYPE_FUNC var, one param (the instance, by value, plain
                                 //struct type), no return type, no error union - a destructor can never
                                 //propagate a failure to anyone (see the report), so any fallible call in
@@ -456,55 +452,6 @@ struct var {
     bool bodyHadErrors;       //K3: checking this function's body reported errors, so its body is not the
                               //program's and must never be evaluated
     char mayBuild;            //P2: SemanticMayBuild's answer - 0 not known, 1 being found, 2 no, 3 yes
-    //O33: a REGION - a synthetic scope variable standing for the region of the object one read of an own slot borrows
-    //(O32). It outlives no scope but itself and is outlived by its reach - the scope the slot's storage lives in - and by
-    //what outlives that (scopeOutlives). regionSlot is the read, whose ownOrig is the own type read; regionRoot says
-    //where the slot was reached from (OWN_ROOT_*), regionRootParam which parameter for OWN_ROOT_PARAM
-    bool isRegion;
-    struct operand* regionSlot;
-    struct var* regionReach;    //...its reach: a scope variable, or NULL for a block at regionReachDepth
-    int regionReachDepth;
-    bool regionReachUnnamed;    //...the program's scope (a global's slot)
-    bool regionArray;           //...of an own ARRAY's buffer, whose reach is where its elements' referents live - the
-                                //scope a plain array in that slot would have kept them in (O33), as an index reads it
-    int regionRoot;
-    int regionRootParam;
-    struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
-    struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
-    bool regionOfResult;        //...the object(s) a call's borrowed own result (O37) borrows, below the argument it names
-    int regionStmt;             //...the statement whose check made it (ownStmtSerial), for O34's same-path move
-    bool regionAnyType;         //...of objects of any own type (a borrowed own result whose object's type is not one known)
-    int ownBorrowResult;        //O37 (Vec phase 1): a function returning a borrow of an owned object reached from its
-                                //parameters by own fields, as a result borrowed from them (T&p): the first one's index + 1,
-                                //else 0 - settled once every body is checked (ownBorrowResultsSettle, vec2 N1)
-    struct list ownBorrowParams; //...every parameter (int) it may be borrowed from (vec2: a set, not the last return's)
-    struct type* ownBorrowResultType; //...the type of the own object it borrows (OwnTypeKey of its slot - never the result's
-                                //own type, which a conversion may have renamed: "String(v.View())"), what its loan is on
-    bool ownBorrowResultAnyType; //...it may borrow objects of several types, or one not known: its loan meets any release
-    bool ownResultFresh; //O38 (vec3 F1): a built reference result proven new storage - every return a constructor call, an
-                         //allocation, a literal, text made here, a local declared from one and never repointed, or a call
-                         //to a function proven so (ownResultFreshSettle, a least fixed point once every body is checked)
-    struct var* regionLife;     //...the scope the slot itself lives in - its container's, an owner local's block - which the
-    int regionLifeDepth;        //   object is released by at the latest: what lasts until a join is judged by it (P2), where
-    bool regionLifeUnnamed;     //   an owner local's reach (its initializer's) may be longer
-    //O33: an owner local's reach - the scope what its object refers to is known to outlive, which a slot it is moved into
-    //may not outlive: its initializer's (a constructor call holding nothing outside it, null: the program's; "take x": x's)
-    bool ownReachSet;
-    struct var* ownReach;
-    int ownReachDepth;
-    bool ownReachUnnamed;
-    //O31/O32: a local of an owning type held by value - an owner value local (ownValue), released at its block's end
-    //unless moved on, its reach above; or a borrowed copy of one (ownCopy), owning nothing and read-only, its own
-    //references borrows of the source's objects, rooted where the source is (ownCopyRoot, as regionRoot)
-    bool ownValue;
-    bool ownCopy;
-    int ownCopyRoot;
-    int ownCopyRootParam;
-    struct var* ownCopyRootLocal;
-    struct var* ownCopyFrom; //...the variable it was copied from, for a message
-    struct list ownValueReads; //O38 (own5 F2): an owner value local's own fields, read once as it is declared - what a
-                               //reference to its storage borrows (operand*, checker only: never evaluated)
-    struct ownEffects* ownEff;  //O39: on a function, what its body may release (settleOwnEffects), NULL for nothing
     struct vgSum* vecViews;     //M19g: on a function, which Vecs its body may grow and which views it hands back (settleVecViews)
     int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
@@ -700,7 +647,6 @@ enum operation {
     OPERATION_RETIRE, //M19d: "a.retire()", the prelude's own - args[0] an array its collection no longer uses (a Vec's
                       //old buffer). Nothing at run time but under -sanitize (B2f); the evaluator stops on a later use (K1)
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
-    OPERATION_TAKE, //E34: "take p" - args[0] is the place (an own slot); the owner it held, the place left null
     OPERATION_NOMINAL_CONVERT, //T29: "Name(x)" between a declared type and its underlying one - same
                                 //representation, so it emits nothing
                                  //(byte/int32/int64/float32/float64) - the explicit conversion builtin (see
@@ -796,26 +742,8 @@ struct operand {
                         //type is that method's result, as a call's is (D15)
     bool viaConversion; //T29a: a variable, field, element or slice read under a declared array type's name ("String(b)")
                         //- the argument's own storage, lent as it is, but no place an assignment may name
-    //O32: an own slot read where it is not moved - a borrow: its type is the own type without "own", its scope this
-    //region (a struct var with isRegion); ownOrig is the type it had, for a move position or a take that restores it
-    struct var* ownRegion;
-    struct type* ownOrig;
-    struct var* ownElemRegion; //O33 (T25e): an element of an own array, held by value and holding references - stored in
-                               //this region (the buffer) while what it holds refers where the base is retagged (the reach)
-    bool ownMoved;     //O34: an owner local or an owning parameter moved here - its slot is left null (codegen)
-    bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
-    bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
-    bool ownByReturn;  //O34/O37: a "take" a return of an owned result made of an owner local or an owning parameter given whole
-    struct var* ownValueBorrow; //O38 (own5 F2): this lvalue, rooted at the owner value local named, is borrowed by
-                                //reference (E12c, a slice) - a loan on everything it owns, confined as a borrowed copy's
-    struct list ownResultRegions; //O38 (Vec phase 1): the loans a call giving a borrowed own result makes (regionOfResult),
-                                  //one per parameter it may be borrowed from (struct var*)
-    bool ownResultRegionsMade;
-    bool inPlaceBorrow; //O38 (own7 F1): this value lvalue is borrowed where it is (E12c) - by a reference parameter, a
-                        //receiver, a reference local or field, a task's argument - not read as a copy: a part of an owned
-                        //object borrowed so borrows the object, whatever the part's type holds
-    struct list ownCopyReads; //O32/O38: a borrowed copy's initializer - a read of each own field of what it copies, made
-                              //borrows, whose loans the copy holds (checker only: never evaluated)
+    bool inPlaceBorrow; //E12c: this value lvalue is borrowed where it is - by a reference parameter, a receiver, a
+                        //reference local or field, a task's argument - not read as a copy (what M19g's walk follows)
     bool isNullLiteral; //T2a: this operand is the "null" literal. Survives the retag in
                          //OperandFitsType/OperandBinary, which is what tells codegen to emit the
                          //adapted type's zero value rather than treat it as an aggregate literal.
@@ -1009,10 +937,6 @@ struct list* SemanticAllModules(void);
 struct list* SemanticPreludeModules(void); //list of struct semaModule*: every file of <std>/prelude (M19d)
 struct list* SemanticAllLambdas(void);
 bool TypeIsPermRef(struct type t); //T25b: a reference type carrying a permission
-bool TypeIsOwning(struct type t); //O31: a struct holding an own reference in a field
-bool TypeIsOwnValue(struct type t); //O31: ...held by value - an owner value local, a borrowed copy, an owned result
-struct var* OwnValueLocalOf(struct operand* op); //O31: the owner value local a read names, or NULL
-bool OwnValuePlace(struct operand* op); //O31/O34: a place whose owning value its container owns - local, global, field
 bool TypeIsSameStrict(struct type a, struct type b); //T25b: identity including the outermost permission //D16: every lambda's hidden function
 //which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
 //NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.

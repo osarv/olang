@@ -1,5 +1,5 @@
 ; olang's runtime: the LLVM IR a program links once, as an object of its own (compiler/DESIGN.md section 1.10) - the
-; arena allocator and its chunk pool (O2, O8b), owned regions (O30), the worker cache behind spawn and join (P1e), the
+; arena allocator and its chunk pool (O2, O8b), regions (docs/memory.md 3.4), the worker cache behind spawn and join (P1e), the
 ; checks' failure paths and the test unwinding (S18, P1d), text rendering (E11a, E11c), and what std reaches through
 ; "extern fn": the process, the file system and processes (X6), a call on a stack of its own and crash messages (S1,
 ; S2). Two parts beside it: san.ll, the scope sanitizer (B2f), compiled into the same object under -s; and dyncall.ll,
@@ -392,8 +392,8 @@ done:
 ; Not an address of the thread's own: a thread's storage is reused for the next one, which would then take a part
 ; made for the one before, or a stand-in it claimed, for its own
 @__olang_self = thread_local(initialexec) global ptr null
-; O35: the releases under way on this thread, and the stack of those deferred until the 256th has closed
-; (__olang_own_free) - its entries, its room, how many it holds
+; the region releases under way on this thread, and the stack of those deferred until the 256th has closed
+; (__olang_region_free) - its entries, its room, how many it holds
 @__olang_rel_depth = thread_local(initialexec) global i64 0
 @__olang_rel_stack = thread_local(initialexec) global ptr null
 @__olang_rel_cap = thread_local(initialexec) global i64 0
@@ -1748,7 +1748,7 @@ out:
 ; needs to know which blocks were actually reached.
 define void @__olang_unwind_to(ptr %mark) {
 entry:
-  ; a release the jump abandons is abandoned with what it deferred (__olang_own_free), so the ones after start afresh
+  ; a release the jump abandons is abandoned with what it deferred (__olang_region_free), so the ones after start afresh
   store i64 0, ptr @__olang_rel_depth
   store i64 0, ptr @__olang_rel_len
   br label %loop
@@ -1793,8 +1793,8 @@ entry:
   ret void
 }
 
-; ...the node given: an own reference's object made with room for its nodes before its word (__olang_own_new),
-; so registering it allocates nothing - a region of one small object stays one allocation
+; ...the node given: a region's object made with room for its nodes before its word (__olang_region_new), so
+; registering it allocates nothing - a region of one small object stays one allocation
 define void @__olang_scope_push_dtor(ptr %scope0, ptr %node, ptr %instance, ptr %dtorFn) {
 entry:
   %scope = call ptr @__olang_scope_mine(ptr %scope0)
@@ -1810,12 +1810,14 @@ entry:
   ret void
 }
 
-; O30: an own reference's object, in a region of its own - a scope whose 48-byte header is made here (malloc'd, so
+; REGIONS (docs/memory.md 3.3-3.4): an object in a region of its own, freed at once when the one place holding it lets
+; go of it - what the self-hosted compiler's early freeing is to call; nothing stage 0 emits uses them, and a test of
+; checks/checks.olang drives them from C. A region is a scope whose 48-byte header is made here (malloc'd, so
 ; it outlives every chunk the region takes), the word before the object holding it. The object is the region's
 ; first allocation, at its own alignment (at least 8: the word before it); what it builds into itself lands in the
-; same scope - the constructor's %here is the region. %nodes destructor nodes (24 bytes each: its owners' release,
-; its destructor) are reserved just before the word, for __olang_scope_push_dtor
-define ptr @__olang_own_new(i64 %size, i64 %aln0, i64 %nodes) noinline {
+; same scope - the constructor's %here is the region. %nodes destructor nodes (24 bytes each: the release of the regions
+; it holds, its destructor) are reserved just before the word, for __olang_scope_push_dtor
+define ptr @__olang_region_new(i64 %size, i64 %aln0, i64 %nodes) noinline {
 entry:
   %small = icmp ult i64 %aln0, 8
   %aln = select i1 %small, i64 8, i64 %aln0
@@ -1824,10 +1826,10 @@ entry:
   %pre0 = add i64 %aln, 7
   %pre1 = add i64 %pre0, %nodeb
   %pre = and i64 %pre1, %neg
-  ; O30: a small object - 2KB or less - is one allocation of the C allocator's own size classes: the region's header,
+  ; a small object - 2KB or less - is one allocation of the C allocator's own size classes: the region's header,
   ; its destructor nodes, the word, the object, so a region costs about what malloc does rather than a 4KB chunk (a
-  ; million small owners: 4.2GB as chunks, about 0.1GB this way); what it builds later takes
-  ; chunks as any scope does, and __olang_own_free's free of the header frees the object with it. Under -s every region
+  ; million small regions: 4.2GB as chunks, about 0.1GB this way); what it builds later takes
+  ; chunks as any scope does, and __olang_region_free's free of the header frees the object with it. Under -s every region
   ; takes a chunk, which a release poisons and holds back (B2f)
 ; @if !san
   %fits = icmp ule i64 %size, 2048
@@ -1877,13 +1879,13 @@ ok:
   ret ptr %obj
 }
 
-; O35: releases what an own reference owns - nothing for null - by closing its region (__olang_own_close). The
-; region's destructors release what the object owns, each in turn, so releasing a chain of owners nests as deep
-; as the chain is long: up to 256 releases deep it is done right there, and beyond that a release is
-; pushed on this thread's stack of deferred ones, which the 256th release drains once its own region has closed -
-; each batch a release defers reversed, so they are finished in the order made, depth first. A chain of any
-; length is released with constant stack (a million owners linked through own fields overflowed it)
-define void @__olang_own_free(ptr %obj) noinline {
+; releases the region of the object at obj - nothing for null - by closing it (__olang_region_close). The region's
+; destructors release the regions the object holds, each in turn, so releasing a chain of regions nests as deep as
+; the chain is long: up to 256 releases deep it is done right there, and beyond that a release is pushed on this
+; thread's stack of deferred ones, which the 256th release drains once its own region has closed - each batch a
+; release defers reversed, so they are finished in the order made, depth first. A chain of any length is released
+; with constant stack (a million regions linked through their objects overflowed it)
+define void @__olang_region_free(ptr %obj) noinline {
 entry:
   %none = icmp eq ptr %obj, null
   br i1 %none, label %ret, label %go
@@ -1899,7 +1901,7 @@ defer:
 now:
   %d1 = add i64 %d, 1
   store i64 %d1, ptr @__olang_rel_depth
-  call void @__olang_own_close(ptr %hdr)
+  call void @__olang_region_close(ptr %hdr)
   %bottom = icmp eq i64 %d1, 256
   br i1 %bottom, label %drain, label %done
 drain:
@@ -1914,7 +1916,7 @@ ret:
 
 ; a region closed: its destructors run, its chunks go back to the pool (or, under -s, are poisoned and held back),
 ; and its header - with, for a small object, the object - is freed
-define void @__olang_own_close(ptr %hdr) {
+define void @__olang_region_close(ptr %hdr) {
 entry:
   call void @__olang_scope_close(ptr %hdr)
   call void @free(ptr %hdr)
@@ -1999,49 +2001,49 @@ pop:
   %st = load ptr, ptr @__olang_rel_stack
   %sl = getelementptr ptr, ptr %st, i64 %n
   %h = load ptr, ptr %sl
-  call void @__olang_own_close(ptr %h)
+  call void @__olang_region_close(ptr %h)
   call void @__olang_rel_reverse(i64 %n)
   br label %loop
 done:
   ret void
 }
 
-; O35: an owner local's slot, released as its block's scope closes (a destructor node's function: the slot is
+; a slot holding a region's object, released as its block's scope closes (a destructor node's function: the slot is
 ; its "instance") - what it holds then, null when it was moved on
-define void @__olang_own_drop_slot(ptr %slot, ptr %scope) {
+define void @__olang_region_drop_slot(ptr %slot, ptr %scope) {
 entry:
   %obj = load ptr, ptr %slot
   store ptr null, ptr %slot
-  call void @__olang_own_free(ptr %obj)
+  call void @__olang_region_free(ptr %obj)
   ret void
 }
 
-; ...an own array's: its buffer, the pointer half of the slot's { len, ptr }
-define void @__olang_own_drop_aslot(ptr %slot, ptr %scope) {
+; ...an array's whose buffer is a region: the pointer half of the slot's { len, ptr }
+define void @__olang_region_drop_aslot(ptr %slot, ptr %scope) {
 entry:
   %a = load { i64, ptr }, ptr %slot
   store { i64, ptr } zeroinitializer, ptr %slot
   %obj = extractvalue { i64, ptr } %a, 1
-  call void @__olang_own_free(ptr %obj)
+  call void @__olang_region_free(ptr %obj)
   ret void
 }
 
-; F3/M1: a hidden owner slot { owner, registered }, released as its scope closes - what it holds then, the mark
-; cleared so a hold evaluated again after the scope's next opening registers again
-define void @__olang_own_drop_held(ptr %slot, ptr %scope) {
+; a held slot { object, registered }, released as its scope closes - what it holds then, the mark cleared so a hold
+; evaluated again after the scope's next opening registers again
+define void @__olang_region_drop_held(ptr %slot, ptr %scope) {
 entry:
   %obj = load ptr, ptr %slot
   store { ptr, i64 } zeroinitializer, ptr %slot
   %some = icmp ne ptr %obj, null
   br i1 %some, label %free, label %done
 free:
-  call void @__olang_own_free(ptr %obj)
+  call void @__olang_region_free(ptr %obj)
   br label %done
 done:
   ret void
 }
 
-define void @__olang_own_drop_aheld(ptr %slot, ptr %scope) {
+define void @__olang_region_drop_aheld(ptr %slot, ptr %scope) {
 entry:
   %a = load { i64, ptr }, ptr %slot
   store { { i64, ptr }, i64 } zeroinitializer, ptr %slot
@@ -2049,15 +2051,15 @@ entry:
   %some = icmp ne ptr %obj, null
   br i1 %some, label %free, label %done
 free:
-  call void @__olang_own_free(ptr %obj)
+  call void @__olang_region_free(ptr %obj)
   br label %done
 done:
   ret void
 }
 
-; O32: the region a borrow's referent is in, for building there - the word before the object; a null borrow's is
+; the region a reference's referent is in, for building there - the word before the object; a null reference's is
 ; read from here instead (null: a build into it traps, as reading through the null itself does, T2b)
-@__olang_own_nullhdr = global ptr null
+@__olang_region_nullhdr = global ptr null
 ; P2: folds a task's sub-scope back into the scope it stands for, on the spawner's thread, after
 ; the join - so the only thread that ever bumps a given arena is the one that owns it. Nothing is
 ; copied or moved: the two chunk lists are relinked, and the sub-scope's dtor nodes (which live in

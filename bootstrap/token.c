@@ -60,8 +60,6 @@ struct tokRule tokRules[] = {
     {TOK_FUNC, "fn", NULL},
     {TOK_ERROR, "error", NULL},
     {TOK_MUT, "mut", NULL},
-    {TOK_OWN, "own", NULL},
-    {TOK_TAKE, "take", NULL},
     {TOK_IMPORT, "import", NULL},
     {TOK_TEST, "test", NULL},
     {TOK_DESTRUCT, "destruct", NULL},

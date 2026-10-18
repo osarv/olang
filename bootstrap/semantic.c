@@ -507,7 +507,6 @@ bool TypeIsSame(struct type a, struct type b) {
     //unconditionally, so "byte[]" and "byte[]&" are both { len, ptr } and the marker carries nothing but a
     //scope name, which T25 keeps out of identity. Identity tracks representation, not annotation.
     if (a.structMAlloc != b.structMAlloc) return false;
-    if (a.refOwn != b.refOwn) return false; //T25e: an own reference is a type of its own
     if (isTypeVanilla(a.bType)) {
         //T29: a DECLARED type is nominal even when its underlying shape is a primitive. "type Meters int32"
         //and "type Feet int32" are different types, and both differ from int32 - which is the entire point
@@ -1681,7 +1680,7 @@ struct list SemanticMatchValues(struct operand* op) {
 //    joinErrors.
 //  struct operand: args, chainOperands, callee, comprBody, catchClauses (each block, dflt and taskCall).
 //    Not code of its own: checkRoot, placeOf and landsWith (other operands of the same tree, reached through it),
-//    ownCopyReads and ownResultRegions (the checker's records, never evaluated), scopeBindings, a lambda's body (a
+//    scopeBindings, a lambda's body (a
 //    function of its own, walked as one), pendingLambda (checked by the time a body is walked).
 //A walker gives callbacks for what it wants - NULL skips that kind - and may set stop to end the walk early
 enum codeRole {
@@ -1767,11 +1766,6 @@ static void codeDeepStmt(struct codeVisit* v, struct statement* s, enum codeRole
 static bool CodeDeepBlock(struct list* block, struct codeVisit* pre) {
     struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
     codeDeepBlock(&d, block, ROLE_BLOCK);
-    return !pre->stop;
-}
-static bool CodeDeepStmt(struct statement* s, struct codeVisit* pre) {
-    struct codeVisit d = { codeDeepOp, codeDeepStmt, codeDeepBlock, pre, false };
-    codeDeepStmt(&d, s, ROLE_BLOCK);
     return !pre->stop;
 }
 static bool CodeDeepOp(struct operand* op, struct codeVisit* pre) {
@@ -1949,11 +1943,8 @@ void semaCollectNames(struct semaModule* mod) {
                            firstPartOfType(actual, SNTX_RECEIVER) != NULL);
                 break;
             case SNTX_VAR_DECL: {
-                //T2: "mut" at the top of a global's type makes it assignable - after a leading "own" ("G own mut T&") the
-                //type expression holds it
-                struct syntax* te = firstPartOfType(actual, SNTX_TYPE_EXPR);
-                bool mut = hasTokOfType(actual, TOK_MUT) || (te && hasTokOfType(te, TOK_OWN) && hasTokOfType(te, TOK_MUT));
-                collectVar(mod, firstTokOfType(actual, TOK_IDEN), mut, false, false);
+                //T2: "mut" at the top of a global's type makes it assignable
+                collectVar(mod, firstTokOfType(actual, TOK_IDEN), hasTokOfType(actual, TOK_MUT), false, false);
                 break;
             }
             case SNTX_IMPORT:
@@ -1968,25 +1959,10 @@ void semaCollectNames(struct semaModule* mod) {
 // ---- pass 2: resolve type shapes and function signatures ----
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams);
-//T25e: whether "own" may stand on the type being resolved - set by the declarations that take one (a field, a local, a
-//global) around their type's resolution only, and never inside it: a type argument, a function type's parameter or a
-//payload resolved within sees it cleared
-static bool ownAllowed;
-//O36/O37: "own" on a declared function's parameters and result. resolveFuncSig reads the first two for the signature
-//it resolves next, and hands resolveParamList where owning may begin (-1: nowhere - a receiver is parameter 0)
-static bool ownSigAllowed;
-static bool ownSigReceiver;
-static int ownParamsFrom = -1;
-static int ownDenied = -1; //what "own" written where it may not be says, when not ERR_OWN_POSITION_NOT_YET
-static bool ownSigListIsFunc; //resolveParamList's list is a function signature's (resolveFuncSig)
-static bool ownSigTrait; //the signature resolveFuncSig reads next is a trait method's - "own" there is not supported yet
-static bool ownUsed; //O39: an own reference is written somewhere in the program - else the borrow pass has nothing to do
-static bool ownResultCall(struct operand* op);
-static bool ownMoveFits(struct operand* val, struct type slotT);
-static bool ownArrayKindOk(struct type t);
-static bool ownSignature(struct var* f);
-static struct str ownQuoted(struct var* f);
-static struct str ownFuncName(struct var* f);
+//QW: the signature resolveFuncSig reads next is a declared method's, whose receiver introduces its type's variables
+static bool sigHasReceiver;
+static struct str quotedFuncName(struct var* f);
+static struct str funcNameAsWritten(struct var* f);
 struct paramDefault* newParamDefault(struct semaModule* mod, struct syntax* defNode, struct type paramType);
 static struct paramDefault* boundParamDefault(struct paramDefault* d, struct type paramType, struct list* bindings);
 struct operand* paramDefaultOp(struct var* param);
@@ -2209,7 +2185,6 @@ struct type TypeSubstitute(struct type t, struct list* bindings) {
         out.scopeParam = t.scopeParam;
         out.scopeDepth = t.scopeDepth;
         out.refMut = t.refMut;
-        out.refOwn = t.refOwn; //T25e: and "own"
         return out;
     }
     //a declared struct that mentions no type variable is already what it is - and walking its fields
@@ -2344,7 +2319,7 @@ static int unifyFrozen;
 //there, once (O16). Bound by value, the instance was copied in and out of the callee, each copy registered, and
 //destructed twice
 static struct type unifyTempAsRef(struct type param, struct type arg) {
-    if (!param.structMAlloc && arg.bType == BASETYPE_STRUCT && (arg.hasDestruct || TypeIsOwning(arg)) && !arg.structMAlloc) {
+    if (!param.structMAlloc && arg.bType == BASETYPE_STRUCT && arg.hasDestruct && !arg.structMAlloc) {
         arg.structMAlloc = true;
         arg.refMut = true;
     }
@@ -2365,7 +2340,6 @@ bool TypeUnify(struct type param, struct type arg, struct list* bindings) {
             return false;
         }
         arg = unifyTempAsRef(param, arg);
-        arg.refOwn = false; //O36/T25e: a variable binds the borrow - an owner reaching one is borrowed, never owned there
         if (bound) {
             //G9d/T25c: two references of one type that differ in permission meet at the read-only one, whichever comes
             //first - as two numbers meet at the wider (T6b) - so the order of the arguments decides nothing. Never a
@@ -2863,7 +2837,6 @@ static void typeSpell(struct sbuf* b, struct type t) {
     }
     //reference-shapedness is part of identity (T27), and so is a reference's permission (T25b)
     if (t.structMAlloc) sbufStr(b, t.bType == BASETYPE_FUNC || !t.refMut ? "-r" : "-w");
-    if (t.refOwn) sbufStr(b, "-o"); //T25e: an own reference is a type of its own
 }
 
 struct str typeShortName(struct type t) {
@@ -3053,19 +3026,6 @@ struct var* instantiateFunc(struct var* generic, struct list* bindings) {
     bool unmet = false;
     for (int i = 0; i < spec->type.vars.len && !unmet; i++)
         unmet = typeReachesUnmet(((struct var*)ListGetIdx(&spec->type.vars, i))->type, 0);
-    //T25e/G18: what an own array's elements may be, asked again once its type variables are bound - an owning
-    //parameter's or an owned result's, as a field's is (instantiateType)
-    for (int i = 0; i <= spec->type.vars.len; i++) {
-        struct type* t = i < spec->type.vars.len ? &((struct var*)ListGetIdx(&spec->type.vars, i))->type
-                         : spec->type.hasRetType ? spec->type.retType : NULL;
-        if (unmet || !t || !t->refOwn || t->bType != BASETYPE_ARRAY || ownArrayKindOk(*t)) continue;
-        struct type shown = *t;
-        shown.refOwn = shown.refMut = shown.scopeWritten = false;
-        shown.scopeParam = NULL;
-        Err(instSite.type != TOK_NONE ? instSite : generic->tok, ERR_OWN_KIND_NOT_YET, &shown);
-        unmet = true;
-        break;
-    }
     //G4: nor the body of a generic whose signature names a variable no call can give a value - reported once, at its
     //declaration, its body unchecked there and in every instantiation
     if (unmet || tooDeep || generic->type.sigUninferable) { spec->bodyState = 2; spec->bodyHadErrors = true; } //never checked, on demand either
@@ -3100,30 +3060,6 @@ static struct type* canonicalStructOf(struct type t) {
     return NULL;
 }
 
-//O39: the identity an own reference's object has, for what a release frees and a loan is on: a struct's declaration, or
-//for an array one record per element type (an array type has no declaration to point at), whatever reference, permission
-//or scope a use writes on it
-static bool ownArrayKindOk(struct type t);
-static struct list ownArrayKeys; //struct type*
-static struct type* OwnTypeKey(struct type t) {
-    if (t.bType != BASETYPE_ARRAY) return canonicalStructOf(t);
-    t.structMAlloc = false;
-    t.refMut = false;
-    t.refOwn = false;
-    t.scopeParam = NULL;
-    t.scopeDepth = 0;
-    t.scopeWritten = false;
-    t.scopeUnknown = false;
-    if (!ownArrayKeys.elemSize) ownArrayKeys = ListInit(sizeof(struct type*));
-    for (int i = 0; i < ownArrayKeys.len; i++) {
-        struct type* k = *(struct type**)ListGetIdx(&ownArrayKeys, i);
-        if (TypeIsSame(*k, t)) return k;
-    }
-    struct type* k = MallocOrCrash(sizeof(struct type));
-    *k = t;
-    ListAdd(&ownArrayKeys, &k);
-    return k;
-}
 
 static void refreshTypeSnapshot(struct type* ft) {
     if (ft->bType == BASETYPE_ARRAY && ft->arrElem) {
@@ -3139,13 +3075,11 @@ static void refreshTypeSnapshot(struct type* ft) {
     //the marker and scope belong to this USE of the type, not to the declaration
     bool mAlloc = ft->structMAlloc;
     bool refMut = ft->refMut; //T25b: the permission belongs to the use too
-    bool refOwn = ft->refOwn; //T25e: and so does "own"
     struct var* scopeParam = ft->scopeParam;
     int scopeDepth = ft->scopeDepth;
     *ft = *c;
     ft->structMAlloc = mAlloc;
     ft->refMut = refMut;
-    ft->refOwn = refOwn;
     ft->scopeParam = scopeParam;
     ft->scopeDepth = scopeDepth;
 }
@@ -3342,20 +3276,6 @@ struct type* instantiateType(struct type* generic, struct list* bindings) {
     spec->typeParams = argsStillGeneric ? generic->typeParams : ListInit(sizeof(struct str));
     refreshStructSnapshots(spec);
     if (!argsStillGeneric) checkHoldsItself(spec); //T16 (vec7 V1): "x N<T>" in N<T> - each instantiation holds itself
-    //T25e/G18: what an own array's elements may be, asked again once its type variables are bound
-    for (int i = 0; !argsStillGeneric && i < spec->vars.len; i++) {
-        struct var* f = ListGetIdx(&spec->vars, i);
-        if (f->type.refOwn && f->type.bType == BASETYPE_ARRAY && !ownArrayKindOk(f->type)) {
-            struct type shown = f->type;
-            shown.refOwn = shown.refMut = shown.scopeWritten = false;
-            shown.scopeParam = NULL;
-            Err(instSite.type != TOK_NONE ? instSite : generic->tok, ERR_OWN_KIND_NOT_YET, &shown);
-            if (shown.arrElem && !shown.arrElem->structMAlloc && TypeHoldsReferences(*shown.arrElem)) //(Vec<Tok>)
-                Note(instSite.type != TOK_NONE ? instSite : generic->tok, NOTE_OWN_ELEM_BY_REF, shown.arrElem, shown.arrElem);
-            ListAdd(&unmetTypeInsts, &spec); //(its methods' bodies are not checked, nor reported again: instantiateFunc)
-            break;
-        }
-    }
 
     //D13/D14a re-checked against the SUBSTITUTED field types. The generic's own declaration cannot answer
     //this: a "<T>[n]&s" field's element type is a type variable, and a type variable contains no reference,
@@ -4766,57 +4686,7 @@ static bool typeHasBareDestructStructAt(struct type t, int depth) {
 }
 bool typeHasBareDestructStruct(struct type t) { return typeHasBareDestructStructAt(t, 0); }
 
-//O31: whether t is an owning type - a struct holding an own reference in a field, or an owning type by value in one (a
-//Vec field: its owners are the instance's), to any depth of value fields
-//(no depth limit - vec6 D: a value type cannot hold itself by value (T16), so the walk ends; the path guards only a
-//program where T16 was already reported)
-struct typePath { struct type* c; struct typePath* up; };
-static bool typeOnPath(struct typePath* p, struct type* c) {
-    for (; p; p = p->up) if (p->c == c) return true;
-    return false;
-}
-static bool typeIsOwningAt(struct type t, struct typePath* path) {
-    if (t.bType != BASETYPE_STRUCT || t.isTuple) return false;
-    if (t.owning) return true;
-    struct type* c = canonicalStructOf(t);
-    if (c && typeOnPath(path, c)) return false;
-    struct typePath here = { c, path };
-    for (int i = 0; i < t.vars.len; i++) {
-        struct type ft = ((struct var*)ListGetIdx(&t.vars, i))->type;
-        if (ft.refOwn) return true;
-        if (ft.bType == BASETYPE_STRUCT && !ft.structMAlloc && typeIsOwningAt(ft, &here)) return true;
-    }
-    return false;
-}
-bool TypeIsOwning(struct type t) { return typeIsOwningAt(t, NULL); }
-//O31: an owning struct held by value - which a local and a declared function's result may be (an owner value local, a
-//borrowed copy, an owned result); anywhere else it is held by reference
-bool TypeIsOwnValue(struct type t) {
-    return t.bType == BASETYPE_STRUCT && !t.structMAlloc && !t.refOwn && !t.isTuple && !t.hasDestruct && !t.unknown
-           && TypeIsOwning(t);
-}
-//...set by resolveTypeExpr for the type it resolves, where that may be one: the type at the top, never one inside it
-static bool ownValueAllowed;
-static bool ownValueTop;
-//O31: an owning struct held by value where its type is written - C11's rule, for the same reason: a copy of the value
-//would be a second owner of what its own fields own
-//(0 no, 1 yes, 2 not known: nested past VALUE_WALK_LIMIT - refused as that, vec7 N2, never called owning)
-static int typeHasBareOwningStructAt(struct type t, int depth) {
-    if (t.unknown) return 0;
-    if (depth > VALUE_WALK_LIMIT) return 2;
-    if (t.bType == BASETYPE_STRUCT) return !t.structMAlloc && TypeIsOwning(t);
-    struct list kids = TypeValueChildren(t);
-    for (int i = 0; i < kids.len; i++) {
-        int r = typeHasBareOwningStructAt(*(struct type*)ListGetIdx(&kids, i), depth + 1);
-        if (r) { ListDestroy(kids); return r; }
-    }
-    ListDestroy(kids);
-    return 0;
-}
-
 struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struct list* scopeParams) {
-    bool ownValueHere = ownValueTop; //O31: only the type written at the top, never a type argument inside it
-    ownValueTop = false;
     struct type base = resolveTypeRefBase(mod, refNode, scopeParams);
     //T24: a type carries at most one marker, so a second one is that position written twice - "Point&s&a" -
     //with one of the two scope tags necessarily discarded, and a discarded scope tag is a discarded claim
@@ -4826,15 +4696,6 @@ struct type resolveTypeRef(struct semaModule* mod, struct syntax* refNode, struc
     struct type t = applyRefMarker(base, firstPartOfType(refNode, SNTX_ELEM_REF_MARKER), scopeParams);
     if (typeHasBareDestructStruct(t)) {
         Err(firstTokAnywhere(refNode), ERR_DESTRUCT_TYPE_BY_VALUE, &t, &t);
-    } else {
-        int owning = typeHasBareOwningStructAt(t, 0);
-        if (owning == 2) {
-            Err(firstTokAnywhere(refNode), ERR_TYPE_TOO_DEEP_TO_CHECK);
-            t.unknown = true;
-        } else if (owning && !(ownValueHere && TypeIsOwnValue(t))) {
-            Err(firstTokAnywhere(refNode), ERR_OWNING_TYPE_BY_VALUE, &t, &t, &t);
-            t.unknown = true; //one error: what is declared with it is reported no further
-        }
     }
     //T30: a trait is a constraint (G19) and nothing else - never the type of a value, a reference, a field, an element
     if (t.bType == BASETYPE_INTERFACE && !resolvingConstraint) Err(firstTokAnywhere(refNode), ERR_TRAIT_NOT_A_TYPE, &t);
@@ -4976,7 +4837,6 @@ struct type resolveInterfaceBody(struct semaModule* mod, struct token nameTok, s
         v.name = name;
         v.tok = mTok;
         v.mut = hasTokOfType(m, TOK_MUT); //"needs a mutable receiver", not "this entry is writable"
-        ownSigTrait = true; //"own" in a trait's method: not supported yet (T25e)
         v.type = resolveFuncSig(mod, firstPartOfType(m, SNTX_FUNC_SIG));
         if (v.type.errsInferred) { Err(mTok, ERR_TRAIT_ERRS_UNWRITTEN); v.type.errsInferred = false; } //R1b
         //T35: a method signature may not be generic in a type of its own - a type satisfies a trait with one method
@@ -5096,11 +4956,7 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
             struct list* prevTF = scopeTagFields;
             scopeTagParams = &ctorParams; //O3c: a field may live where a parameter or an earlier field does
             scopeTagFields = &t->vars;
-            ownAllowed = true; //T25e: a field may own
-            ownValueAllowed = true; //O31: ...and hold an owning type by value - a Vec field, its owners the instance's
             v.type = resolveTypeExpr(mod, typeExprNode, &t->scopeVars);
-            ownValueAllowed = false;
-            ownAllowed = false;
             declTypePermission(&v, f, ERR_MUT_ON_VALUE_FIELD); //C3/T25b: a field's "mut" is its reference's
             scopeTagParams = prevTP;
             scopeTagFields = prevTF;
@@ -5126,11 +4982,6 @@ static void resolveStructCtorIntoIn(struct semaModule* mod, struct type* t, stru
 
     currentSigIntros = prevIntros;
     currentTypeParamNames = prevTPN;
-    //O31: a field of an own reference type, or of an owning type held by value, makes the struct an owning type
-    for (int i = 0; i < t->vars.len; i++) {
-        struct type ft = ((struct var*)ListGetIdx(&t->vars, i))->type;
-        if (ft.refOwn || TypeIsOwnValue(ft)) t->owning = true;
-    }
     //G10d: a field holds what every call builds alike - its type names none of the constructor's variables, and is
     //written (or a pun's), since ":=" would take it from each instantiation's body
     for (int i = 0; ctorVars.len && i < t->vars.len; i++) {
@@ -5254,10 +5105,6 @@ static void giveImplicitScope(struct var* p, struct list* scopeVars);
 void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, struct list* out,
                       struct list* scopeVars) {
     *out = ListInit(sizeof(struct var));
-    int ownFrom = ownParamsFrom; //O36: this list's own, never a function type's inside it
-    bool funcSig = ownSigListIsFunc;
-    ownParamsFrom = -1;
-    ownSigListIsFunc = false;
     struct list* prevTagParams = scopeTagParams;
     scopeTagParams = out; //O3c: a parameter's type may name an earlier parameter ("b N&a")
     struct list params = allPartsOfType(paramListNode, SNTX_PARAM);
@@ -5274,13 +5121,7 @@ void resolveParamList(struct semaModule* mod, struct syntax* paramListNode, stru
         v.tok = nameTok;
         //O3: a "&name" tag declares its scope variable by appearing, into the signature's own shared
         //scopeVars list - so order among parameters no longer matters, unlike the old scope-parameter form
-        //O36: a declared function's parameter may own - not a method's receiver, nor a function type's parameter
-        ownAllowed = ownFrom >= 0 && i >= ownFrom;
-        if (funcSig && ownFrom < 0) ownDenied = ERR_OWN_IN_FUNC_TYPE;
-        else if (ownFrom > 0 && i < ownFrom) ownDenied = ERR_OWN_RECEIVER;
         v.type = resolveTypeExpr(mod, typeExprNode, scopeVars);
-        ownAllowed = false;
-        ownDenied = -1;
         //D9/T25b: "mut" says the reference is writable; a by-value parameter is the callee's own copy, always writable -
         //an enum's payload is no parameter of anyone's, so its "mut" is the plain T25b error
         declTypePermission(&v, p, resolvingPayload ? ERR_MUT_ON_VALUE_TYPE : ERR_MUT_ON_VALUE_PARAM);
@@ -5452,8 +5293,7 @@ static void assignImplicitParamScopes(struct type* ft) {
 static void finishResultScope(struct type* t, struct token tok) {
     //T25b: a BUILT result is new storage only the caller holds, so it is writable, as a fresh value is; a result
     //borrowed from a parameter ("T&p") has the permission written on it
-    //(an owned result is the owner the function gives, with the permission written on it - O37)
-    if (TypeIsPermRef(*t->retType) && !t->retType->scopeParam && !t->retType->refOwn) t->retType->refMut = true;
+    if (TypeIsPermRef(*t->retType) && !t->retType->scopeParam) t->retType->refMut = true;
     if (t->retType->isTuple) {
         for (int i = 0; i < t->retType->vars.len; i++) {
             struct var* el = ListGetIdx(&t->retType->vars, i);
@@ -5650,7 +5490,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
     //QW: a method's receiver introduces its type's variables - a name no type has, written as an argument of the
     //receiver's type ("fn (l List<T>&) Push(x T)") - unless the list introduces it (with a constraint, say)
     struct list recvIntros = ListInit(sizeof(struct token));
-    if (ownSigReceiver && !currentBindings && !currentSigIntros) {
+    if (sigHasReceiver && !currentBindings && !currentSigIntros) {
         struct syntax* plist = firstPartOfType(sigNode, SNTX_PARAM_LIST);
         struct syntax* recv = plist ? firstPartOfType(plist, SNTX_PARAM) : NULL;
         collectReceiverVars(mod, recv ? firstPartOfType(recv, SNTX_TYPE_EXPR) : NULL, false, &sigTypeVars, &recvIntros);
@@ -5688,18 +5528,9 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             if (strListHas(prevTPN, strFromTok(*(struct token*)ListGetIdx(&sigIntros, i)))) ListRemoveIdx(&sigIntros, i);
         currentSigIntros = &sigIntros;
     }
-    //O36/O37: a declared function's parameters and result may own - a method's receiver never, nor anything of a
-    //function type, which this signature may be (and which a parameter's type inside it is)
-    bool ownSig = ownSigAllowed;
-    bool trait = ownSigTrait;
-    int ownFrom = ownSigReceiver ? 1 : 0;
-    ownSigAllowed = false;
-    ownSigReceiver = false;
-    ownSigTrait = false;
+    sigHasReceiver = false;
     bool prevImplicit = implicitParamScopes;
     implicitParamScopes = true;
-    ownParamsFrom = ownSig ? ownFrom : -1;
-    ownSigListIsFunc = !trait;
     resolveParamList(mod, firstPartOfType(sigNode, SNTX_PARAM_LIST), &t.vars, &t.scopeVars);
     implicitParamScopes = prevImplicit;
     assignImplicitParamScopes(&t);
@@ -5735,13 +5566,7 @@ struct type resolveFuncSig(struct semaModule* mod, struct syntax* sigNode) {
             }
             *t.retType = TypeTuple(&elems);
         } else {
-            ownAllowed = ownSig; //O37: a declared function's result may be owned
-            ownValueAllowed = ownSig && !trait; //...and an owning type held by value, an owned result (O31)
-            if (!ownSig && !trait) ownDenied = ERR_OWN_IN_FUNC_TYPE;
             *t.retType = resolveTypeExpr(mod, firstPartOfType(retTypeNode, SNTX_TYPE_EXPR), &t.scopeVars);
-            ownAllowed = false;
-            ownValueAllowed = false;
-            ownDenied = -1;
         }
         //G4: a variable reachable only through the return type could never be determined at a call, since
         //inference matches arguments against parameters and nothing else. Reported here, at the
@@ -5871,38 +5696,10 @@ static bool typeExprHasMut(struct syntax* typeExprNode) {
     return false;
 }
 
-static struct token typeExprOwnTok(struct syntax* typeExprNode) {
-    for (int i = 0; i < typeExprNode->parts.len; i++) {
-        struct syntaxPart* p = ListGetIdx(&typeExprNode->parts, i);
-        if (p->isToken && p->tok.type == TOK_OWN) return p->tok;
-    }
-    return (struct token){0};
-}
 
-//T25e: an own array - its buffer one owned object - is of a run-time length, and its elements own nothing and hold no
-//reference by value: numbers and plain values, or references, whose referents live where the slot's container keeps
-//them (O33). A type variable is asked again once it is bound (ownArrayElemsOk, per instantiation)
-static bool ownArrayElemsOk(struct type e) {
-    if (e.unknown) return true;
-    return !e.refOwn && !TypeIsOwning(e); //(a value holding references too: its references at the reach, operandIndexAt)
-}
-static bool ownArrayKindOk(struct type t) {
-    return t.bType == BASETYPE_ARRAY && t.arrMalloc && t.arrElem && ownArrayElemsOk(*t.arrElem);
-}
 
 struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode, struct list* scopeParams) {
-    bool ownHere = ownAllowed;
-    int deniedHere = ownDenied;
-    bool ownValueHere = ownValueAllowed;
-    ownAllowed = false;
-    ownDenied = -1;
-    ownValueAllowed = false;
-    ownValueTop = ownValueHere;
     struct type t = resolveTypeExprShape(mod, typeExprNode, scopeParams);
-    ownValueTop = false;
-    ownAllowed = ownHere;
-    ownDenied = deniedHere;
-    ownValueAllowed = ownValueHere;
     //T20: an error type names no value - it is raised and caught, so a parameter, local, field, result, element or type
     //argument of one could never be given anything. Said here, where it is written; afterwards it fits anything
     if (t.bType == BASETYPE_ERROR && !t.unknown) {
@@ -5917,28 +5714,6 @@ struct type resolveTypeExpr(struct semaModule* mod, struct syntax* typeExprNode,
         //a type variable may be bound to a reference, which it then makes writable (G8a)
         if (TypeIsPermRef(t) || t.bType == BASETYPE_TYPEVAR) t.refMut = true;
         else Err(firstTokOfType(typeExprNode, TOK_MUT), ERR_MUT_ON_VALUE_TYPE, &t);
-    }
-    //T25e: "own" before a reference type - one owning its object, which lives in a region of its own (O30). Taken on a
-    //struct reference written on a field, a local or a global; anywhere else it is reported here, once
-    struct token ot = typeExprOwnTok(typeExprNode);
-    if (ot.type == TOK_OWN && !t.unknown) {
-        struct type shown = t;
-        shown.refMut = false;
-        if (!TypeIsPermRef(t) && t.bType != BASETYPE_TYPEVAR) {
-            shown.structMAlloc = false;
-            Err(ot, ERR_OWN_ON_VALUE, &shown, &shown);
-        } else if ((t.bType != BASETYPE_STRUCT || t.isTuple) && !ownArrayKindOk(t)) {
-            shown.scopeParam = NULL;
-            shown.scopeWritten = false;
-            Err(ot, ERR_OWN_KIND_NOT_YET, &shown);
-        } else if (t.scopeParam || t.scopeWritten) {
-            Err(ot, ERR_OWN_SCOPE_MARKER);
-        } else if (!ownHere) {
-            Err(ot, deniedHere >= 0 ? (enum diag)deniedHere : ERR_OWN_POSITION_NOT_YET);
-        } else {
-            t.refOwn = true;
-            ownUsed = true;
-        }
     }
     return t;
 }
@@ -6746,8 +6521,7 @@ void semaResolveModule(struct semaModule* mod) {
             struct token nameTok = firstTokOfType(actual, TOK_IDEN);
             struct var* v = varForDecl(mod, nameTok);
             struct syntax* sigNode = firstPartOfType(actual, SNTX_FUNC_SIG);
-            ownSigAllowed = true; //O36/O37
-            ownSigReceiver = firstPartOfType(actual, SNTX_RECEIVER) != NULL;
+            sigHasReceiver = firstPartOfType(actual, SNTX_RECEIVER) != NULL;
             v->type = resolveFuncSig(mod, sigNode);
             v->inferErrs = v->type.errsInferred; //R1a
             //G16: kept here, in the SIGNATURE pass, and not where the body is checked - an instantiation
@@ -6776,11 +6550,7 @@ void semaResolveModule(struct semaModule* mod) {
             //":=" (no type node) is resolved later in semaCheckBodies instead, once the initializer
             //operand that its type gets read off exists
             if (typeExprNode) {
-                ownAllowed = true; //T25e: a global may own
-                ownValueAllowed = true; //O31: ...and hold an owning type by value - a Vec global, the program's own
                 v->type = resolveTypeExpr(mod, typeExprNode, NULL); //global, no function context
-                ownValueAllowed = false;
-                ownAllowed = false;
                 declPermission(v); //T25b: "v mut Point&" is a writable global reference
             }
         }
@@ -6990,7 +6760,7 @@ struct var* scopeFindLocal(struct scope* sc, struct str name) {
     return NULL;
 }
 
-static struct var* lambdaCapture(struct var* L, struct var* outer, struct token tok);
+static struct var* lambdaCapture(struct var* L, struct var* outer);
 
 //D16: a variable as code USES it - a variable found beyond a lambda's own scope is that lambda's capture of it
 struct var* scopeFindUse(struct scope* sc, struct str name, struct token tok) {
@@ -7001,7 +6771,7 @@ struct var* scopeFindUse(struct scope* sc, struct str name, struct token tok) {
         }
         if (sc->lambda) {
             struct var* outer = scopeFindUse(sc->parent, name, tok);
-            return outer ? lambdaCapture(sc->lambda, outer, tok) : NULL;
+            return outer ? lambdaCapture(sc->lambda, outer) : NULL;
         }
     }
     return NULL;
@@ -7455,16 +7225,9 @@ bool scopeOutlives(struct var* func, struct var* longer, int longerDepth, struct
     //(O4a), and the callee's body is bracketed by the call, so every caller scope outlives it.
     if (longer == NULL && shorter == NULL) return shorterDepth == 0 || longerDepth <= shorterDepth;
     if (longer == shorter) return true;
-    //(a target "accepting any scope" - a bare field or element, whose container's scope is what the store is judged by
-    //(O20) - accepts a region too: "s.cur.n = mkNode(5)" builds the node where s.cur's object lives, its region)
+    //(a target "accepting any scope" - a bare field or element, whose container's scope is what the store is judged by,
+    //O20)
     if (shorter == NULL && shorterDepth == 0) return true;
-    //O33: a region outlives no scope but itself, and is outlived by what outlives its reach - the scope its slot lives
-    //in, which it is released by at the latest. A region's reach is never a region (ownBorrowRead)
-    if (longer && longer->isRegion) return false;
-    if (shorter && shorter->isRegion) {
-        if (shorter->regionReachUnnamed) return false;
-        return scopeOutlives(func, longer, longerDepth, shorter->regionReach, shorter->regionReachDepth);
-    }
     if (shorter == NULL) return varIsOwnParam(longer, func); //a signature's scope outlives any block
     return false;                                            //a block scope never outlives a named one (O10d)
 }
@@ -7538,9 +7301,6 @@ bool scopeCanFlowInto(struct var* func, struct var* srcScope, int srcDepth, stru
     srcScope = canonicalVar(srcScope);
     dstScope = canonicalVar(dstScope);
     if (scopeOutlives(func, srcScope, srcDepth, dstScope, dstDepth)) return true;
-    //O33: into a region, what may flow into its reach - an obligation where that is one of func's scope variables
-    if (dstScope && dstScope->isRegion && (!srcScope || !srcScope->isRegion) && !dstScope->regionReachUnnamed)
-        return scopeCanFlowInto(func, srcScope, srcDepth, dstScope->regionReach, dstScope->regionReachDepth);
     //O10d: own can never outlive a scope variable, and no caller's binding could make it so - this is a
     //bug in the body, not something to defer. Reported by the caller of this function, which has the token.
     if (srcScope == NULL) return false;
@@ -8155,7 +7915,6 @@ struct var* lvalueStorageScope(struct operand* op, bool* outIsGlobal, int* outDe
     while (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX) {
         struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
         *outDepth = base->type.scopeDepth;
-        if (op->ownElemRegion) { *outDepth = 0; return op->ownElemRegion; } //O33 (T25e): an own array's element - the buffer
         //...where the reference it is reached through leads - which, for a field or an element with no scope of its own
         //("g.arr[0]", arr a bare reference field of g), is where its container lives (O20), as above
         if (base->type.structMAlloc) return lvalueStorageScope(base, outIsGlobal, outDepth);
@@ -8202,12 +7961,11 @@ static bool splitBorrowJudgedElsewhere = false;
 static void regionLocalTaint(struct operand* op);
 enum typeFit borrowLifetimeFits(struct var* func, struct operand* op, struct type target) {
     if (!target.structMAlloc || op->type.structMAlloc || !OperandIsLvalue(op)) return TYPE_FIT_OK;
-    op->inPlaceBorrow = true; //O38 (own7 F1): borrowed where it is, not read as a copy
+    op->inPlaceBorrow = true; //M19g: borrowed where it is, not read as a copy
     if (target.refMut) regionLocalTaint(op); //O17: a local lent writably holds what its borrower writes
     if (op->handleLent) return TYPE_FIT_OK; //O17b: lent as its reference, which leads where the call's variable is bound
     struct var* root = lvalueRootVar(op);
     if (root && !root->owner) root->slotBorrowed = true; //C2d: a reference names the very storage
-    if (root && canonicalVar(root)->ownValue) op->ownValueBorrow = canonicalVar(root); //O38 (own5 F2): a borrow of the owner
     bool isGlobal = false;
     int storageDepth = 0;
     struct var* storage = lvalueStorageScope(op, &isGlobal, &storageDepth);
@@ -8413,21 +8171,7 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
 //copy's source's, a value parameter's scope (refsHome), or the program's for a global's. *depth is the block a NULL home
 //means, *unnamed the program's scope; either may be NULL
 static bool valueRefsHome(struct operand* op, struct var** out, int* depth, bool* unnamed) {
-    //O33 (T25e): an own array's value element - and every part of it held by value - holds what lives in the buffer's
-    //reach, whatever its own storage (the buffer's region) is
-    for (struct operand* p = op; p && !p->type.structMAlloc && p->args.len
-            && (p->opType == OPERATION_MEMBER || p->opType == OPERATION_INDEX || (p->opType == OPERATION_AS && p->castEnum));) {
-        if (p->opType == OPERATION_INDEX && p->ownElemRegion) {
-            *out = p->ownElemRegion->regionReach;
-            if (depth) *depth = p->ownElemRegion->regionReach ? 0 : p->ownElemRegion->regionReachDepth;
-            if (unnamed) *unnamed = p->ownElemRegion->regionReachUnnamed;
-            return true;
-        }
-        struct operand* b = *(struct operand**)ListGetIdx(&p->args, 0);
-        if (b->type.structMAlloc) break;
-        p = b;
-    }
-    //...a payload read out of an enum value by "match" or "as" holds what the enum does, where its references are (O4b)
+    //a payload read out of an enum value by "match" or "as" holds what the enum does, where its references are (O4b)
     //(...and a value a lowering held in a hidden local - "ll[0][0]", its receiver held, E31b - is that local's)
     for (;;) {
         if (heldResult(op)) op = heldResult(op);
@@ -8466,13 +8210,6 @@ static bool splitValueHome(struct operand* op, struct var** hv, int* hd, bool* h
     struct operand* root = op;
     while ((root->opType == OPERATION_MEMBER || root->opType == OPERATION_INDEX) && root->args.len) {
         struct operand* b = *(struct operand**)ListGetIdx(&root->args, 0);
-        if (root->ownElemRegion) { //O33 (T25e): an own array's element - stored in the buffer, holding what lives in the reach
-            *hv = root->ownElemRegion->regionReach;
-            *hd = root->ownElemRegion->regionReachDepth;
-            *hu = root->ownElemRegion->regionReachUnnamed;
-            (void)b;
-            return true;
-        }
         if (b->type.structMAlloc) return false;
         root = b;
     }
@@ -9150,16 +8887,11 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     if (fit == TYPE_FIT_SCOPE_MISMATCH) {
         Err(tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
         noteSliceOfTemporary(op);
-        if (op->ownRegion && op->ownOrig) Note(op->tok, NOTE_OWN_BORROW_LOCAL); //O33
     }
     else if (fit == TYPE_FIT_SCOPE_OWN) { Err(tok, ERR_OWN_CANNOT_OUTLIVE); noteSliceOfTemporary(op); }
     else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH, &op->type, &want);
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
-    else if (fit == TYPE_FIT_MISMATCH && op->opType == OPERATION_TAKE && op->type.refOwn && !want.refOwn)
-        Err(op->tok, ERR_OWN_OWNER_USE); //O34: an owner goes into an own slot, never into a plain reference
-    else if (fit == TYPE_FIT_MISMATCH && ownResultCall(op) && !want.refOwn) //O37: nor does a call's owned result
-        Err(op->tok, ERR_OWN_RESULT_USE, ownQuoted(op->readVar), ownFuncName(op->readVar));
     else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
     else if (fit == TYPE_FIT_NUMBER) { Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want); noteLiteralOwnType(op, want); }
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
@@ -9194,9 +8926,6 @@ static bool operandHasDeclType(struct operand* op) {
     return op->type.bType != BASETYPE_VOID;
 }
 
-//O31: set while a body's local is declared by ":=" - an owning type is then held by value (an owner value local, or a
-//borrowed copy), where anywhere else ":=" holds it by reference
-static bool inferOwnValue;
 //D15 + T29c: the type ":=" gives a declaration from its initializer - wherever ":=" appears (a local, a "for"
 //initializer, a constructor field, a global). Written text is a String, as it is everywhere one is wanted
 static struct type inferredDeclType(struct var* func, struct operand* rhs) {
@@ -9220,7 +8949,7 @@ static struct type inferredDeclType(struct var* func, struct operand* rhs) {
     //C11: a type declaring a destructor is held only by reference, so ":=" gives what "x T&" declares - the instance
     //built where the declaration lives and registered there. A value took it in, and its destructor never ran
     struct type t = declaredArrayType(rhs);
-    if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && (t.hasDestruct || (TypeIsOwning(t) && !inferOwnValue))) { //O31
+    if (t.bType == BASETYPE_STRUCT && !t.structMAlloc && t.hasDestruct) {
         t.structMAlloc = true;
         t.refMut = OperandGivesWritable(rhs);
         reportTypeFit(OperandFitsType(func, rhs, t), rhs->tok, rhs, t);
@@ -9430,39 +9159,8 @@ static bool typeCarriesScopes(struct type t) {
 }
 
 static struct var* handleField(struct type t);
-// ---- own references (§8.8): reading a slot gives a borrow ----
-
-//O39: where the slot a borrow was read out of was reached from - a parameter, by own fields only (what a call may release
-//below that parameter, and nothing above it), an owner local of the function (nothing a caller holds), or anything else
-enum { OWN_ROOT_ANY, OWN_ROOT_PARAM, OWN_ROOT_LOCAL };
-//the context a read is checked in - set while an expression a program wrote is built (buildExprFromSyntax), so a read
-//the checker makes for itself (a lowering's hidden local) is never converted
-static struct checkCtx* ownCtx;
-static int ownRegionCount;
-//O34 (vec7 F1): the statement being checked - a number of its own for each, restored after a nested one - so a move can
-//tell two reads of one own slot made in it from one through a borrow taken earlier, whose root may have been repointed
-static int ownStmtSerial, ownStmtCounter;
-
-static struct var* ownRegionNew(struct token tok, struct var* reach, int reachDepth, bool unnamed, int root, int rootParam) {
-    struct var* R = VarAllocSetOrigin();
-    char* nm = MallocOrCrash(24);
-    snprintf(nm, 24, "&own.%d", ++ownRegionCount); //no scope a program writes can be spelled this way
-    R->name = StrFromCStr(nm);
-    R->tok = tok;
-    R->type = TypeScope();
-    R->mayBeInitialized = true;
-    R->isRegion = true;
-    R->regionReach = reach ? canonicalVar(reach) : NULL;
-    R->regionReachDepth = reachDepth;
-    R->regionReachUnnamed = unnamed;
-    R->regionRoot = root;
-    R->regionRootParam = rootParam;
-    R->regionStmt = ownStmtSerial;
-    return R;
-}
-
 //which of func's parameters v is, or -1
-static int ownParamIndex(struct var* func, struct var* v) {
+static int paramIndexOf(struct var* func, struct var* v) {
     if (!func || !v) return -1;
     v = canonicalVar(v);
     for (int i = 0; i < func->type.vars.len; i++) {
@@ -9471,292 +9169,14 @@ static int ownParamIndex(struct var* func, struct var* v) {
     return -1;
 }
 
-//the region a value is a borrow of, or derived from - a read made into one, or a local holding one (O25a takes the
-//region exactly), else NULL
-static struct var* ownRegionOf(struct operand* op) {
-    if (!op) return NULL;
-    if (op->ownRegion && op->ownRegion->isRegion) return op->ownRegion;
-    if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->type.scopeParam
-            && op->readVar->type.scopeParam != SCOPE_AMBIGUOUS && canonicalVar(op->readVar->type.scopeParam)->isRegion)
-        return canonicalVar(op->readVar->type.scopeParam);
-    return NULL;
-}
 
-//O33: the own array a value indexed is a borrow of - read straight off its slot, a local holding the borrow, or a slice of
-//either, to any depth (a slice keeps its base's storage, E16a) - or NULL
-static struct var* ownArrayRegionOf(struct operand* op) {
-    while (op) {
-        struct var* R = ownRegionOf(op);
-        if (R) return R->regionArray ? R : NULL;
-        if (op->opType != OPERATION_SLICE || !op->args.len) return NULL;
-        op = *(struct operand**)ListGetIdx(&op->args, 0);
-    }
-    return NULL;
-}
 
 static bool opIsCtorCall(struct operand* op);
-//O31: the owner value local a read names - a local of an owning type held by value, its owners its own - or NULL
-struct var* OwnValueLocalOf(struct operand* op) {
-    if (!op || op->opType != OPERATION_READ_VAR || !op->readVar) return NULL;
-    struct var* v = canonicalVar(op->readVar);
-    return v->ownValue || op->readVar->ownValue ? v : NULL;
-}
-//O32: ...the borrowed copy a read names, or NULL
-static struct var* ownCopyLocalOf(struct operand* op) {
-    if (!op || op->opType != OPERATION_READ_VAR || !op->readVar) return NULL;
-    struct var* v = canonicalVar(op->readVar);
-    return v->ownCopy || op->readVar->ownCopy ? v : NULL;
-}
-//...the borrowed copy a place is part of, by value - "b.data" of a borrowed copy b - or NULL
-static struct var* ownCopyPartOf(struct operand* op) {
-    while (op) {
-        if (op->opType == OPERATION_READ_VAR) return ownCopyLocalOf(op);
-        if (op->opType != OPERATION_MEMBER || !op->args.len) return NULL;
-        op = *(struct operand**)ListGetIdx(&op->args, 0);
-        if (op->type.structMAlloc) return NULL; //(through a reference: another instance's)
-    }
-    return NULL;
-}
-//O31/O34: a place holding an owning type by value whose owners its container owns - an owner value local, a global, or a
-//field (to any depth of value fields) of one, or of an instance reached through a reference ("l.toks"); never a borrowed
-//copy or a part of one, which owns nothing
-bool OwnValuePlace(struct operand* op) {
-    while (op) {
-        if (!TypeIsOwnValue(op->type) || op->type.unknown) return false;
-        if (op->opType == OPERATION_READ_VAR)
-            return op->readVar && (OwnValueLocalOf(op) || (op->readVar->owner && !op->readVar->isFuncDecl));
-        if (op->opType != OPERATION_MEMBER || !op->args.len || op->isAtCall || ownCopyPartOf(op)) return false;
-        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
-        if (b->type.structMAlloc) return true;
-        op = b;
-    }
-    return false;
-}
-static void ownReachOfBase(struct checkCtx* ctx, struct operand* base, struct var** rv, int* rd, bool* ru);
-//O34 (vec7 F2): a "take" whose instance is reached through a call's reference result, or through a variable that may hold
-//one - its reach is read off the call's scope tag, which is the region's only where the callee gives no borrowed own result
-//(O37), and that is settled once every body is checked (ownBorrowResultsSettle). Recorded here, decided there
-struct ownViaTake { struct token tok; struct operand* call; struct var* v; };
-static struct list ownViaTakes;
-static struct token* ownReachTakeTok; //(set while the place a "take" moves out of is reached)
-static bool opIsCtorCall(struct operand* op);
-//...the call or the variable the instance base was reached from - through fields, elements, slices and conversions - or
-//false where it was reached otherwise (a region: known)
-static bool ownViaRoot(struct operand* op, struct operand** call, struct var** v) {
-    *call = NULL;
-    *v = NULL;
-    for (int g = 0; op && g < 256; g++) {
-        if (ownRegionOf(op)) return false;
-        if (op->opType == OPERATION_FUNCCALL) {
-            if (opIsCtorCall(op)) return false;
-            *call = op;
-            return true;
-        }
-        if (op->opType == OPERATION_READ_VAR) {
-            if (!op->readVar) return false;
-            *v = canonicalVar(op->readVar);
-            return true;
-        }
-        if ((op->opType != OPERATION_MEMBER && op->opType != OPERATION_INDEX && op->opType != OPERATION_SLICE
-             && op->opType != OPERATION_NOMINAL_CONVERT) || !op->args.len)
-            return false;
-        op = *(struct operand**)ListGetIdx(&op->args, 0);
-    }
-    return false;
-}
-//O33: the reach of an owner value place - an owner value local's, a global's the program's scope, a field's where the
-//instance holding it keeps its references
-static bool ownRefersOut(struct type t, int depth);
-static void ownValuePlaceReach(struct checkCtx* ctx, struct operand* op, struct var** rv, int* rd, bool* ru) {
-    *rv = NULL;
-    *rd = 0;
-    *ru = !ownRefersOut(op->type, 0); //(what refers to nothing outside what it owns moves anywhere)
-    if (*ru) return;
-    while (op) {
-        if (op->opType == OPERATION_READ_VAR && op->readVar) {
-            struct var* ov = OwnValueLocalOf(op);
-            if (ov) { *rv = ov->ownReach; *rd = ov->ownReachDepth; *ru = ov->ownReachUnnamed; return; }
-            *ru = true; //(a global's: the program's)
-            return;
-        }
-        if (op->opType != OPERATION_MEMBER || !op->args.len) break;
-        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
-        if (b->type.structMAlloc) {
-            //...an instance in a region keeps what its value fields hold in that region - a Vec field's elements are
-            //built there (Push's obligations bind it to the field's exact scope), as an own array's are (ownBorrowRead):
-            //the region itself, which outlives nothing, never the region's own reach
-            struct var* R = ownRegionOf(b);
-            if (!R) {
-                struct var* v;
-                int d;
-                bool u;
-                if (RefExactScope(ctx, b, true, &v, &d, &u) && v && v != SCOPE_AMBIGUOUS && canonicalVar(v)->isRegion)
-                    R = canonicalVar(v);
-            }
-            if (R) { *rv = R; *rd = 0; *ru = false; return; }
-            struct operand* call;
-            struct var* via;
-            if (ownReachTakeTok && ownViaRoot(b, &call, &via)) {
-                if (!ownViaTakes.elemSize) ownViaTakes = ListInit(sizeof(struct ownViaTake));
-                struct ownViaTake t = { *ownReachTakeTok, call, via };
-                ListAdd(&ownViaTakes, &t);
-            }
-            ownReachOfBase(ctx, b, rv, rd, ru);
-            return;
-        }
-        op = b;
-    }
-    *rv = SCOPE_AMBIGUOUS;
-}
 
-//O37: a call giving an owned result of an owning type held by value
-static bool ownValueCall(struct operand* op) {
-    return op && op->opType == OPERATION_FUNCCALL && TypeIsOwnValue(op->type) && !opIsCtorCall(op);
-}
-//O31/O34: an owner of an owning type held by value - a value made here (a constructor call, the type's zero value), a
-//call's owned result, or "take" of an owner value local; anything else of such a type is a borrowed copy, owning nothing
-static bool ownValueOwner(struct operand* op) {
-    if (!op || !TypeIsOwnValue(op->type)) return false;
-    return op->opType == OPERATION_TAKE || op->opType == OPERATION_ZERO || opIsCtorCall(op) || ownValueCall(op);
-}
-//O39: where a variable holding an owning type by value is rooted - its own owners' for an owner value local, its
-//source's for a borrowed copy of one, anywhere for anything else (a capture of a borrowed copy)
-static int ownVarRoot(struct var* v, int* param, struct var** local) {
-    *param = -1;
-    *local = NULL;
-    if (!v) return OWN_ROOT_ANY;
-    struct var* c = canonicalVar(v);
-    if (c->ownValue || v->ownValue) { *local = c; return OWN_ROOT_LOCAL; }
-    if (c->ownCopy) { *param = c->ownCopyRootParam; *local = c->ownCopyRootLocal; return c->ownCopyRoot; }
-    return OWN_ROOT_ANY;
-}
 
-//O39: where op was reached from, for what releasing below it may reach
-static int ownRootOf(struct var* func, struct operand* op, int* param, struct var** local) {
-    *param = -1;
-    *local = NULL;
-    struct var* R = ownRegionOf(op);
-    if (R) { *param = R->regionRootParam; *local = R->regionRootLocal; return R->regionRoot; }
-    if (OwnValueLocalOf(op) || ownCopyLocalOf(op)) return ownVarRoot(op->readVar, param, local);
-    if (op->opType == OPERATION_READ_VAR && op->readVar && op->readVar->type.structMAlloc) {
-        int i = ownParamIndex(func, op->readVar);
-        if (i >= 0) { *param = i; return OWN_ROOT_PARAM; }
-    }
-    //...a field held by value is part of its instance (a Vec field), reached where the instance is
-    if (op->opType == OPERATION_MEMBER && op->args.len && !op->type.structMAlloc && TypeIsOwnValue(op->type))
-        return ownRootOf(func, *(struct operand**)ListGetIdx(&op->args, 0), param, local);
-    return OWN_ROOT_ANY;
-}
 
-//O33: the reach of a slot in base's referent - where base's referent lives, a region's own reach where it is in one
-static void ownReachOfBase(struct checkCtx* ctx, struct operand* base, struct var** rv, int* rd, bool* ru) {
-    *rv = NULL;
-    *rd = 0;
-    *ru = false;
-    struct var* R = ownRegionOf(base);
-    if (!R) {
-        struct var* v;
-        int d;
-        bool u;
-        if (!RefExactScope(ctx, base, true, &v, &d, &u)) { *rv = SCOPE_AMBIGUOUS; return; } //(not known: outlived by nothing)
-        if (!v || v == SCOPE_AMBIGUOUS || !canonicalVar(v)->isRegion) {
-            *rv = v && v != SCOPE_AMBIGUOUS ? canonicalVar(v) : v;
-            *rd = d;
-            *ru = u;
-            return;
-        }
-        R = canonicalVar(v);
-    }
-    *rv = R->regionReach;
-    *rd = R->regionReachDepth;
-    *ru = R->regionReachUnnamed;
-}
 
-//O32: an own slot read where it is not moved is a borrow - the own type without "own", in a region of its own (O33),
-//writable only where the own type is and the slot is reached writably (deep: a read-only path gives a read-only
-//borrow). The read keeps the type it had (ownOrig), so a move position or "take" restores it
-static struct operand* ownBorrowRead(struct operand* op) {
-    if (!ownCtx || !op->type.refOwn || op->type.unknown) return op;
-    struct checkCtx* ctx = ownCtx;
-    struct var* rv = NULL;
-    int rd = 0;
-    bool ru = false;
-    int root = OWN_ROOT_ANY, rootParam = -1;
-    struct var* rootLocal = NULL;
-    struct var* lv = NULL; //where the slot lives (regionLife)
-    int ld = 0;
-    bool lu = false;
-    bool isArr = op->type.bType == BASETYPE_ARRAY;
-    if (op->opType == OPERATION_MEMBER) {
-        struct operand* base = *(struct operand**)ListGetIdx(&op->args, 0);
-        if (isArr) {
-            //O33: an own array's reach is where its elements' referents live - where the slot's container keeps them, as a
-            //plain array in the slot would have: the read's own scope, before it is made a borrow
-            struct var* ev;
-            int ed;
-            bool eu;
-            if (!RefExactScope(ctx, op, true, &ev, &ed, &eu)) { ev = SCOPE_AMBIGUOUS; ed = 0; eu = false; }
-            rv = ev && ev != SCOPE_AMBIGUOUS ? canonicalVar(ev) : ev;
-            rd = ed;
-            ru = eu;
-        } else ownReachOfBase(ctx, base, &rv, &rd, &ru);
-        root = ownRootOf(ctx->func, base, &rootParam, &rootLocal);
-        struct var* B = ownRegionOf(base);
-        if (!B) { //(what lives in a region - a field of an owned object reached through a plain reference in it - lives there)
-            struct var* v;
-            int d;
-            bool u;
-            if (RefExactScope(ctx, base, true, &v, &d, &u) && v && v != SCOPE_AMBIGUOUS && canonicalVar(v)->isRegion)
-                B = canonicalVar(v);
-        }
-        if (B) { lv = B->regionLife; ld = B->regionLifeDepth; lu = B->regionLifeUnnamed; } //(in an object, as long as it)
-        else { lv = rv; ld = rd; lu = ru; }
-    } else if (op->opType == OPERATION_READ_VAR && op->readVar) {
-        struct var* v = canonicalVar(op->readVar);
-        if (op->readVar->owner && !op->readVar->isFuncDecl) ru = lu = true; //a global's: the program's
-        else {
-            bool ownParam = ctx->func && varIsParamOf(v, ctx->func);
-            if (ownParam) { //O34/O36: an owning parameter's - its scope variable, bound at each call to its argument's reach
-                rv = op->readVar->type.scopeParam;
-                ru = !rv;
-            } else if (v->ownReachSet) { //an owner local's: what its object is known to need (buildOwnDecl)
-                rv = v->ownReach;
-                rd = v->ownReachDepth;
-                ru = v->ownReachUnnamed;
-            } else rd = op->readVar->type.scopeDepth;
-            //...and it is released at its block's end at the latest - an owning parameter's, the body's
-            ld = ownParam ? 1 : op->readVar->type.scopeDepth;
-            root = OWN_ROOT_LOCAL;
-            rootLocal = v;
-        }
-    } else return op;
-    struct var* R = ownRegionNew(op->tok, rv, rd, ru, root, rootParam);
-    R->regionLife = lv;
-    R->regionLifeDepth = ld;
-    R->regionLifeUnnamed = lu;
-    R->regionRootLocal = rootLocal;
-    R->regionSlot = op;
-    R->regionType = OwnTypeKey(op->type);
-    R->regionArray = isArr;
-    bool writable = op->type.refMut && OperandIsMutableLvalue(op);
-    op->ownOrig = MallocOrCrash(sizeof(struct type));
-    *op->ownOrig = op->type;
-    op->type.refOwn = false;
-    op->type.refMut = writable;
-    op->type.scopeParam = R;
-    op->type.scopeDepth = 0;
-    op->type.scopeWritten = false;
-    op->ownRegion = R;
-    return op;
-}
 
-//the read made into a borrow, back to the slot it read - a target, or what "take" moves out of
-static void ownRestore(struct operand* op) {
-    if (!op->ownOrig) return;
-    op->type = *op->ownOrig;
-    op->ownOrig = NULL;
-    op->ownRegion = NULL;
-}
 
 static bool ensureGlobalBuilt(struct var* v);
 struct operand* OperandReadVar(struct var* v, struct token tok) {
@@ -9781,7 +9201,7 @@ struct operand* OperandReadVar(struct var* v, struct token tok) {
     }
     //propagated one hop at declaration time - see buildVarDeclStmnt
     if (typeCarriesScopes(op->type)) op->scopeBindings = v->scopeBindings;
-    return ownBorrowRead(op); //O32
+    return op;
 }
 
 void bindCtorHere(struct checkCtx* ctx, struct operand* call, struct var* func);
@@ -10297,10 +9717,8 @@ static void noteSliceBorrow(struct checkCtx* ctx, struct operand* sl) {
     while ((r->opType == OPERATION_MEMBER || r->opType == OPERATION_INDEX || r->opType == OPERATION_SLICE)
            && !r->type.structMAlloc && r->args.len && !r->isAtCall)
         r = *(struct operand**)ListGetIdx(&r->args, 0);
-    if (r->opType == OPERATION_READ_VAR && r->readVar && !r->type.structMAlloc && !canonicalVar(r->readVar)->owner) {
+    if (r->opType == OPERATION_READ_VAR && r->readVar && !r->type.structMAlloc && !canonicalVar(r->readVar)->owner)
         canonicalVar(r->readVar)->slotBorrowed = true;
-        if (canonicalVar(r->readVar)->ownValue) sl->ownValueBorrow = canonicalVar(r->readVar); //O38 (own5 F2)
-    }
 }
 
 bool callIsLanding(struct operand* op) {
@@ -11455,13 +10873,6 @@ static bool calleeStoresRegion(struct var* func, struct var* sv) {
     struct regionFlag* f = regionFlagOf(func, sv, false);
     return f && (f->stored || f->handed);
 }
-//...a lambda's, for a capture whose scope variable is sv: its body is checked as it is made (D16b)
-static bool lendStores(struct var* func, struct var* sv, bool lambda) {
-    if (!lambda) return calleeStoresRegion(func, sv);
-    if (!func || func->bodyHadErrors) return false;
-    struct regionFlag* f = regionFlagOf(func, sv, false);
-    return f && (f->stored || f->handed);
-}
 
 //O17: what a call into a declared function or a constructor says - a store the callee may make into a region of the
 //caller's own (regionEdges), and a value lent to it whose own storage is not where its references are (lendChecks) -
@@ -11478,9 +10889,7 @@ bool SemanticParamTransient(struct var* func, int j);
 struct frameLambda { struct var* local; struct operand* lambda; };
 static struct list frameLambdas;
 struct regionEdge { struct var* rFunc; struct var* r; struct var* func; struct var* sv; struct token tok; bool builtOnly; };
-//(ownArr: an own array's borrow lent, O33 - said as that; a lambda's capture is judged by its body's own facts, as
-//calleeStoresRegion cannot: a lambda's body is known as it is made, its edges settled with every other)
-struct lendCheck { struct var* func; struct var* sv; struct token tok; bool atCopy; bool ownArr; bool lambda;
+struct lendCheck { struct var* func; struct var* sv; struct token tok; bool atCopy;
                    struct errContextSaved* where; }; //(where: B11, an instantiation's, reported where the program asked for it)
 static struct list regionEdges;
 static struct list lendChecks;
@@ -11571,9 +10980,9 @@ static void settleRegions(void) {
     }
     for (int i = 0; i < lendChecks.len; i++) {
         struct lendCheck* c = ListGetIdx(&lendChecks, i);
-        if (!lendStores(c->func, c->sv, c->lambda)) continue;
+        if (!calleeStoresRegion(c->func, c->sv)) continue;
         ErrMsgPushSaved(c->where); //B11 (vec2): in an instantiation, at the program's use of it
-        Err(c->tok, c->ownArr ? ERR_OWN_ARRAY_LENT_STORES : c->atCopy ? ERR_WRITE_THROUGH_AT_BUILDS : ERR_BORROW_SPLIT_SCOPES);
+        Err(c->tok, c->atCopy ? ERR_WRITE_THROUGH_AT_BUILDS : ERR_BORROW_SPLIT_SCOPES);
         ErrMsgPopSaved(c->where);
     }
     for (int i = 0; i < unknownBuilds.len; i++) {
@@ -11630,9 +11039,6 @@ static bool condOfRefs(struct operand* op) {
     if (heldResult(op)) return condOfRefs(heldResult(op));
     return (op->opType == OPERATION_COND && op->args.len == 3) || op->opType == OPERATION_MATCH;
 }
-static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type slotT, struct var* rv, int rd, bool ru);
-static void ownDeclReach(struct checkCtx* ctx, struct type declType, struct operand* rhs, struct var** reach,
-                         int* reachDepth, bool* reachUnnamed);
 static bool callBodyKnown(struct var* func);
 void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* func, struct list args,
                        struct token tok, struct list scopeArgNodes) {
@@ -11645,10 +11051,8 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
         //...and so does one a field, an element or a slice is read out of: "r.mods[0].top.Get(n)" is
         //"m := r.mods[0]; m.top.Get(n)"
         while (projectionBase(arg)) arg = projectionBase(arg);
-        //(an owning parameter's argument is an owner, landed where the parameter reaches - below)
         if (arg->opType == OPERATION_FUNCCALL && !spreadSourceOf(arg) && callIsLanding(arg)
-                && (*(struct var*)ListGetIdx(&func->type.vars, j)).type.scopeParam
-                && !(*(struct var*)ListGetIdx(&func->type.vars, j)).type.refOwn)
+                && (*(struct var*)ListGetIdx(&func->type.vars, j)).type.scopeParam)
             landDeclByObligations(ctx, arg);
     }
     for (int j = 0; j < args.len && j < func->type.vars.len && (func->owner || func->isMethod); j++) {
@@ -11673,33 +11077,6 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, j)).type;
             if (!paramTypeNamesScope(pt, sv)) continue;
             struct operand* arg = *(struct operand**)ListGetIdx(&args, j);
-            //O36/O34: an owning parameter's scope is its reach - the reach of the owner its argument gives, found as an
-            //owner local's is from its initializer (ownDeclReach): what a constructor made here refers to outside it, the
-            //caller's block for a call's owned result, p's reach for "take p" - and the argument is a move position there
-            if (pt.refOwn && ctx && ctx->hasOwnScope) {
-                //O37/O18a: an owned result made for an owning parameter lands with that parameter's scope - where another
-                //argument binds it, else where this call's own result lands - as any call made for a parameter does
-                if (ownResultCall(arg) && callIsLanding(arg)) { if (ownMoveFits(arg, pt)) arg->ownMoved = true; continue; }
-                struct var* ov;
-                int od;
-                bool ou;
-                ownDeclReach(ctx, pt, arg, &ov, &od, &ou);
-                ownMoveInto(ctx, arg, pt, ov, od, ou);
-                if (ov && ov != SCOPE_AMBIGUOUS) ov = canonicalVar(ov);
-                if (ov) od = 0;
-                if (ou) { ov = NULL; od = 0; }
-                if (determined && (!sameExactScope(ov, od, boundTo, boundDepth) || ou != unnamed)) {
-                    Err(tok, ERR_SCOPE_ARGS_DISAGREE);
-                    boundTo = SCOPE_AMBIGUOUS;
-                    break;
-                }
-                boundTo = ov;
-                boundDepth = od;
-                unnamed = ou;
-                determined = true;
-                detArg = arg;
-                continue;
-            }
             //D8d: one result of a call still landing determines nothing - the call lands with the parameter (below)
             struct operand* src = spreadSourceOf(arg);
             if (src && callIsLanding(src)) continue;
@@ -11797,7 +11174,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                 if (tempRefsScope(ctx, arg, &hv, &hd, &hu)
                         && (hu || hv == SCOPE_AMBIGUOUS || !sameExactScope(hv, hd, NULL, normDepth(ctx->blockDepth)))) {
                     if (func->owner || calleeBodyKnown(func)) {
-                        struct lendCheck lc = { func, sv, arg->tok, false, false, false, ErrMsgSaveContext() };
+                        struct lendCheck lc = { func, sv, arg->tok, false, ErrMsgSaveContext() };
                         if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
                         else if (calleeStoresRegion(func, sv)) Err(arg->tok, ERR_BORROW_SPLIT_SCOPES);
                     } else if (calleeStoresRegion(func, sv)) Err(arg->tok, ERR_BORROW_SPLIT_SCOPES);
@@ -11824,10 +11201,9 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
             bool borrowed = !argDeterminesScope(arg) && OperandIsLvalue(arg) && ctx && ctx->hasOwnScope;
             if (!argDeterminesScope(arg) && !borrowed) continue;
             if (borrowed) { //C2d: the callee is handed the very storage
-                if (!arg->type.structMAlloc) arg->inPlaceBorrow = true; //O38 (own7 F1)
+                if (!arg->type.structMAlloc) arg->inPlaceBorrow = true; //M19g: borrowed where it is
                 struct var* root = lvalueRootVar(arg);
                 if (root && !root->owner) root->slotBorrowed = true;
-                if (root && canonicalVar(root)->ownValue) arg->ownValueBorrow = canonicalVar(root); //O38 (own5 F2)
             }
             //O25: the argument's EXACT scope - a field read through a container is the container's scope,
             //not the slot's bare tag - and two arguments naming one variable must agree exactly, depth
@@ -11859,24 +11235,6 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                     if (root && !root->owner) root->lentForStores = true;
                 }
             }
-            //O17/O33 (own3 F1): an own array's borrow - a read of the slot, a local holding one, a slice of one - is a split
-            //value: its storage, the buffer, is its region, while its elements' referents live where the slot's container
-            //keeps them (its reach, which an index through the borrow reads them at). Lent, the callee's variable is bound
-            //to the region, so what it builds and stores into an element would be released with the buffer while every
-            //read of it here says it lives on. Refused where the callee - a lambda capturing it, a task - can store into
-            //what it is lent, as any split value is (O17a); reading through it, and permuting it, stay free
-            if (!borrowed && pt.structMAlloc && RefNarrowingMatters(pt) && argScope && argScope != SCOPE_AMBIGUOUS
-                    && canonicalVar(argScope)->isRegion && canonicalVar(argScope)->regionArray
-                    && ownSlotsAdmitStores(arg->type, 0)) {
-                bool synthLambda = !func->owner && !func->name.len;
-                struct var* L = synthLambda ? func->capturesOf : func;
-                if (synthLambda && !L) Err(arg->tok, ERR_OWN_ARRAY_LENT_STORES);
-                else {
-                    struct lendCheck lc = { L, sv, arg->tok, false, true, synthLambda, ErrMsgSaveContext() };
-                    if (!ErrMsgMuted() && (synthLambda || func->owner || calleeBodyKnown(func))) ListAdd(&lendChecks, &lc);
-                    else if (lendStores(L, sv, synthLambda)) Err(arg->tok, ERR_OWN_ARRAY_LENT_STORES);
-                }
-            }
             //O17/O25h: a borrowed value's storage is where the callee's variable is bound - but a value whose references
             //live elsewhere (built by a scope argument, a copy of an element) would have what the callee builds and stores
             //through it put in that storage's scope, and its own claim broken. Only where nothing can be stored through
@@ -11900,7 +11258,7 @@ void bindCallScopeVars(struct checkCtx* ctx, struct operand* op, struct var* fun
                     bool atCopy = lr && canonicalVar(lr)->atElemCopy;
                     enum diag splitErr = atCopy ? ERR_WRITE_THROUGH_AT_BUILDS : ERR_BORROW_SPLIT_SCOPES;
                     if (func->owner || calleeBodyKnown(func)) {
-                        struct lendCheck lc = { func, sv, arg->tok, atCopy, false, false, ErrMsgSaveContext() };
+                        struct lendCheck lc = { func, sv, arg->tok, atCopy, ErrMsgSaveContext() };
                         if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
                         else if (calleeStoresRegion(func, sv)) Err(arg->tok, splitErr);
                     } else if (calleeStoresRegion(func, sv)) Err(arg->tok, splitErr);
@@ -12842,8 +12200,7 @@ static struct operand* buildFuncValueRead(struct var* v, struct token tok) {
         Err(tok, ERR_GENERIC_NOT_A_VALUE, tok);
         return unknownPlaceholder(tok);
     }
-    noteFuncValueUse(v, tok); //T22a, O36, O37, O40
-    if (ownSignature(v)) return unknownPlaceholder(tok); //O36, reported: one error, not a misfit too
+    noteFuncValueUse(v, tok); //T22a
     return OperandReadVar(v, tok);
 }
 //E31: a value adapted to a function type through its Call - a call of Call with its receiver bound to where the instance
@@ -13833,7 +13190,6 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
     for (int i = 0; i < args.len; i++) {
         struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
         struct type paramType = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
-        if (paramType.refOwn && ctx && ctx->hasOwnScope) continue; //O36: a move position, judged as one (bindCallScopeVars)
         //a parameter's own "&name" tag names one of THIS SAME signature's earlier scope variables
         //(D9/O4), never anything in callerFunc's own frame - resolve it through this call's own
         //just-built binding map (above) before checking fit, so scopeCanFlowInto compares against what
@@ -14087,22 +13443,8 @@ static struct operand* operandIndexAt(struct operand* base, struct operand* inde
     if (!TypeIsInt(index->type)) Err(index->tok, ERR_INDEX_NOT_INT, &index->type);
 
     struct type elemT = *base->type.arrElem;
-    //O33: an own array's buffer is a region of its own, but a reference element refers where the slot's container keeps
-    //it - the region's reach - so the index reads the borrow as the plain array the slot would hold without "own": every
-    //walk from the element to where it refers (O20) then finds that. A value element is left reading the buffer, whose
-    //storage it is (an own array holds none that refers anywhere, T25e)
-    struct var* R = ownArrayRegionOf(base); //(a slice of one too: "b.names[0:2][0] = t" built t in the buffer's region)
-    //...and so does what a value element holds (T25e: a struct, an enum or an Array<T, N> holding references), at every
-    //depth of a read through it - while the element itself is stored in the buffer: a split value (O17a), its storage the
-    //region (lvalueStorageScope, splitValueHome), never held by reference where something can be stored through it
-    bool split = R && !elemT.structMAlloc && elemT.bType != BASETYPE_FUNC && typeCarriesScopes(elemT);
-    if (R && (elemT.structMAlloc || elemT.bType == BASETYPE_FUNC || split)) {
-        base->type.scopeParam = R->regionReach;
-        base->type.scopeDepth = R->regionReach ? 0 : R->regionReachDepth;
-    }
     elemT.scopeDepth = base->type.scopeDepth; //O2a/O20: an element lives where its container does
     struct operand* op = operandNew(tok, OPERATION_INDEX, elemT);
-    if (split) op->ownElemRegion = R;
     ListAdd(&op->args, &base);
     ListAdd(&op->args, &index);
     //E16: an index is not checked at run time, but where the index and the length are BOTH compile-time
@@ -14388,7 +13730,7 @@ struct operand* OperandMember(struct semaModule* referencingMod, struct operand*
         b.viaPath = carriedPath;
         ListAdd(&op->scopeBindings, &b);
     }
-    return ownBorrowRead(op); //O32
+    return op;
 }
 
 struct operand* incDec(struct operand* in, enum operation opType, struct token tok) {
@@ -15877,7 +15219,6 @@ static bool refAndTemporary(struct operand* ref, struct operand* v) {
 //E28: "a if c else b" - c decides which one is evaluated; both must have one type, a literal adapting to the other
 static int constCondValue(struct operand* cond, struct syntax* condNode);
 static bool syntaxReadsConstVar(struct syntax* s);
-static void ownCondValuesCheck(struct operand* op, struct list* vals);
 static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     //G26: a condition reading a constant variable picks its value per instantiation - the other is not checked
     if (currentBindings && syntaxReadsConstVar(partSntx(s, 2))) {
@@ -15938,32 +15279,9 @@ static struct operand* buildCond(struct checkCtx* ctx, struct syntax* s) {
     ListAdd(&op->args, &c);
     ListAdd(&op->args, &a);
     ListAdd(&op->args, &b);
-    struct list vals = ListInit(sizeof(struct operand*));
-    ListAdd(&vals, &a);
-    ListAdd(&vals, &b);
-    ownCondValuesCheck(op, &vals);
-    ListDestroy(vals);
     return op;
 }
 
-//O34 (own6 N2): a conditional's or a match's values of an owning type held by value - existing owners are chosen by
-//copying one, a second owner of what it owns (or a borrow built as a copy): a reference to one, repointed in a branch,
-//says which; owners made there (own7: a constructor call, an owned result, an enum case) are given nowhere yet - each
-//case's owner is assigned in its own branch. A "take" among them is the own walk's to name (ERR_OWN_IN_COND at it)
-static bool opIsCtorCall(struct operand* op);
-static bool opIsEnumCtor(struct operand* op);
-static bool ownResultCall(struct operand* op);
-static void ownCondValuesCheck(struct operand* op, struct list* vals) {
-    if (!TypeIsOwnValue(op->type)) return;
-    bool made = true;
-    for (int i = 0; i < vals->len; i++) {
-        struct operand* v = *(struct operand**)ListGetIdx(vals, i);
-        if (v->opType == OPERATION_TAKE) return;
-        if (!(opIsCtorCall(v) || opIsEnumCtor(v) || ownResultCall(v) || ownValueCall(v))) made = false;
-    }
-    if (made) Err(op->tok, ERR_OWN_IN_COND);
-    else Err(op->tok, ERR_OWN_VALUE_IN_COND, &op->type, &op->type);
-}
 
 //a hidden local holding x, declared by a statement appended to out - x evaluated where that statement runs. A
 //reference keeps x's own scope; a global's initializer, which has no block, gives the local a scope of its own.
@@ -16156,7 +15474,6 @@ struct operand* buildText(struct checkCtx* ctx, struct syntax* s) {
 static void reportUnknownMethod(struct operand* recv, struct token name);
 static struct operand* buildIncDec(struct checkCtx* ctx, struct operand* target, bool inc, bool prefix, struct token tok);
 static struct list placesWrittenOver(struct list targets);
-struct operand* buildTake(struct checkCtx* ctx, struct operand* place, struct token tok);
 struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
     int n = s->parts.len;
     struct operand* result = buildExprFromSyntax(ctx, partSntx(s, n -1)); //last part is EXPR_POSTFIX
@@ -16177,10 +15494,6 @@ struct operand* buildUnary(struct checkCtx* ctx, struct syntax* s) {
             if (!(s == ctx->incDecRoot && n == 2)) Err(opTok, ERR_INCDEC_IN_EXPRESSION, opTok); //S3a
             struct operand* r = buildIncDec(ctx, result, opTok.type == TOK_INC, true, opTok);
             if (r) { result = r; continue; }
-        }
-        if (opTok.type == TOK_TAKE) { //E34
-            result = buildTake(ctx, result, opTok);
-            continue;
         }
         result = OperandUnary(result, prefixOpFromTok(opTok.type), opTok);
         if (opTok.type == TOK_STR_OF) { //M6b: a private str renders only in its own module
@@ -16258,7 +15571,7 @@ struct operand* tryBuildCrossModuleVarRead(struct checkCtx* ctx, struct syntax* 
     *outConsumed = i +1;
     if (!v) { Err(varTok, ERR_NOT_IN_MODULE, target->identity, varTok); return OperandIntLiteral(varTok); }
     if (!isPublic(name)) { Err(varTok, ERR_VAR_IS_PRIVATE, varTok); return OperandIntLiteral(varTok); }
-    if (v->isFuncDecl) return buildFuncValueRead(v, varTok); //(vec2 N2: as by a bare name - G12, T22a, O36, O37, O40)
+    if (v->isFuncDecl) return buildFuncValueRead(v, varTok); //(as by a bare name - G12, T22a)
     return OperandReadVar(v, varTok);
 }
 
@@ -17003,9 +16316,6 @@ static struct operand* buildTryDefault(struct checkCtx* ctx, struct list* nodes,
         struct operand* d = *(struct operand**)ListGetIdx(&vals, i);
         struct type* et = rt.isTuple ? &((struct var*)ListGetIdx(&view.vars, i))->type : &view;
         if (d->type.isTuple) { Err(d->tok, ERR_TUPLE_NOT_A_VALUE); continue; }
-        //O34: an owned result's default stands for an owner, which only null is yet
-        if (et->refOwn && !d->isNullLiteral) { if (!d->type.unknown) Err(d->tok, ERR_OWN_RESULT_DEFAULT); continue; }
-        if (TypeIsOwnValue(*et)) { if (!d->type.unknown) Err(d->tok, ERR_OWN_VALUE_DEFAULT, et); continue; } //O34
         bool isRef = et->structMAlloc;
         //R11: a by-value default holding references is admitted when it holds none it did not build - a constructor
         //call or a literal made only of numbers, text written in the program and such values again - since it is built
@@ -18206,16 +17516,8 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
     return buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
 }
 
-static struct operand* buildExprFromSyntaxIn(struct checkCtx* ctx, struct syntax* s);
-struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s) {
-    struct checkCtx* saved = ownCtx;
-    ownCtx = ctx; //O32: reads written in the program become borrows
-    struct operand* r = buildExprFromSyntaxIn(ctx, s);
-    ownCtx = saved;
-    return r;
-}
 
-static struct operand* buildExprFromSyntaxIn(struct checkCtx* ctx, struct syntax* s) {
+struct operand* buildExprFromSyntax(struct checkCtx* ctx, struct syntax* s) {
     switch (s->type) {
         //SNTX_EXPR is always a single-child wrapper around whatever parseBinaryExpr actually built - a
         //degenerate 1-part "chain" itself when parts.len==1, so buildBinChain's own generic handling of
@@ -18882,12 +18184,6 @@ static bool roRefOf(struct operand* op, struct list* params, int depth) {
                 return roRefOf(*(struct operand**)ListGetIdx(&op->args, j), params, depth + 1);
         }
     }
-    //O32: an own slot's borrow is read-only where the path to it is - through an instantiation's read-only reference
-    //parameter, as its argument (Vec's At on a Vec<Link>, Link holding a "mut Box&")
-    if (!op->type.refMut && op->ownOrig && op->ownOrig->refMut && op->opType == OPERATION_MEMBER && op->args.len) {
-        struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
-        return TypeIsPermRef(b->type) ? roRefOf(b, params, depth + 1) : roValueRoot(b, params, depth + 1);
-    }
     if (!op->type.refMut) return true;
     if ((op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_AS) && op->args.len) {
         struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
@@ -19352,17 +18648,6 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
         if (asRef && !base->type.structMAlloc && ((base->opType == OPERATION_COND && base->args.len == 3)
                                                  || base->opType == OPERATION_MATCH))
             return condValueRefsHome(ctx, base, outVar, outDepth, unnamed);
-        //O33: a reference element of an own array refers where the slot's container keeps it - its region's reach, as
-        //operandIndexAt writes on a field's read - whatever the array was read from: an owner local, an owning
-        //parameter. Read off the borrow itself it was the region, which outlives nothing - so no element could be copied
-        //out of one own array into another
-        struct var* RA = op->opType == OPERATION_INDEX ? ownArrayRegionOf(base) : NULL;
-        if (asRef && RA) {
-            if (RA->regionReachUnnamed) { *unnamed = true; return true; }
-            *outVar = RA->regionReach;
-            *outDepth = RA->regionReach ? 0 : RA->regionReachDepth;
-            return true;
-        }
         return RefExactScope(ctx, base, base->type.structMAlloc, outVar, outDepth, unnamed);
     }
     if (op->opType == OPERATION_SLICE) {
@@ -19389,7 +18674,6 @@ bool RefExactScope(struct checkCtx* ctx, struct operand* op, bool asRef, struct 
     }
     if (op->opType == OPERATION_READ_VAR && op->readVar) {
         struct var* v = canonicalVar(op->readVar);
-        if (asRef && op->ownOrig && op->ownRegion) { *outVar = op->ownRegion; return true; } //O32: a borrow, a global's too
         if (v->owner) { *unnamed = true; return true; } //a global
         bool isParam = ctx && ctx->func && varIsParamOf(v, ctx->func);
         //a value local's own storage is its block, wherever its references were built (valueHome) - which is what a
@@ -19910,7 +19194,7 @@ static void syntaxTokensInto(struct syntax* n, struct list* out) {
 //statement, "l" in "l.Push(x)")
 static bool tokStartsWhole(enum tokenType t) {
     return t == TOK_PAREN_O || t == TOK_COMMA || t == TOK_SQUARE_O || t == TOK_ELSE || t == TOK_ARROW
-           || t == TOK_DEFAULT || t == TOK_RET || t == TOK_TAKE; //"take x": x moved whole (vec6)
+           || t == TOK_DEFAULT || t == TOK_RET;
 }
 static bool tokEndsWhole(enum tokenType t) {
     return t == TOK_PAREN_C || t == TOK_COMMA || t == TOK_SQUARE_C || t == TOK_IF || t == TOK_ELSE
@@ -20479,9 +19763,9 @@ static bool resultScopeVarsOf(struct type t, struct list* out, int depth) {
     }
 }
 
-//(O38: set while the own walk runs, once every body's obligations are known - a call cycle's included, which
-//obligUnsettled marks only while bodies are still being checked)
-static bool ownObligationsKnown;
+//(set while M19g's walk runs, once every body's obligations are known - a call cycle's included, which obligUnsettled
+//marks only while bodies are still being checked)
+static bool obligationsKnown;
 //O26a: whether a call to m can make its result hold what its parameter idx refers to - its result borrowed from that
 //parameter, or an obligation of its body (O10b) holding the parameter's scope to outlive a scope the result names, in
 //any part of it (own6: one of several results, a type argument, an array's elements, a function value's). A generic
@@ -20519,7 +19803,7 @@ static bool calleeMayKeepArg(struct var* m, int idx) {
     if (!kept) {
         ensureBodyChecked(m);
         //(a body not checked, or one in a call cycle whose late obligations are not added yet, may keep it)
-        kept = m->bodyState != 2 || (canonicalVar(m)->obligUnsettled && !ownObligationsKnown);
+        kept = m->bodyState != 2 || (canonicalVar(m)->obligUnsettled && !obligationsKnown);
     }
     //...or stored where a scope the result names leads - its body requires the parameter's to outlive it, or to be it
     for (int i = 0; !kept && i < m->type.scopeObligations.len; i++) {
@@ -20548,7 +19832,7 @@ static bool calleeMayHoldArg(struct var* m, int idx) {
     if (!sv) return p->type.structMAlloc || TypeHoldsReferences(p->type) || TypeIsGeneric(p->type)
                    || p->type.bType == BASETYPE_FUNC;
     ensureBodyChecked(m);
-    if (m->bodyState != 2 || m->bodyHadErrors || (canonicalVar(m)->obligUnsettled && !ownObligationsKnown)) return true;
+    if (m->bodyState != 2 || m->bodyHadErrors || (canonicalVar(m)->obligUnsettled && !obligationsKnown)) return true;
     for (int i = 0; i < m->type.scopeObligations.len; i++) {
         struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, i);
         if (scopeIsParams(ob->longer, p, sv) || (ob->exact && scopeIsParams(ob->shorter, p, sv))) return true;
@@ -20819,505 +20103,26 @@ static bool localPermission(struct syntax* s, struct syntax* typeExprNode, struc
     return true;
 }
 
-// ---- own references (§8.8): moves and take ----
-
 enum operation compoundOpFromAssignTok(enum tokenType t, bool* isCompound);
 
-//whether two types name one struct, whatever reference, permission or scope is written on them
-static bool ownSameStruct(struct type a, struct type b) {
-    if (a.bType != BASETYPE_STRUCT || b.bType != BASETYPE_STRUCT || a.isTuple || b.isTuple) return false;
-    a.structMAlloc = b.structMAlloc = false;
-    a.refOwn = b.refOwn = false;
-    a.refMut = b.refMut = false;
-    a.scopeParam = b.scopeParam = NULL;
-    a.scopeDepth = b.scopeDepth = 0;
-    a.scopeWritten = b.scopeWritten = false;
-    return TypeIsSame(a, b);
-}
 
-//"s.cur" as the program wrote it, for a message
-static const char* ownPlaceText(struct operand* op) {
-    if (op->opType == OPERATION_READ_VAR && op->readVar) {
-        char* t = MallocOrCrash((size_t)op->readVar->name.len + 1);
-        snprintf(t, (size_t)op->readVar->name.len + 1, "%.*s", op->readVar->name.len, op->readVar->name.ptr);
-        return t;
-    }
-    if (op->opType == OPERATION_MEMBER && op->args.len) {
-        const char* b = ownPlaceText(*(struct operand**)ListGetIdx(&op->args, 0));
-        size_t n = strlen(b) + (size_t)op->memberName.len + 2;
-        char* t = MallocOrCrash(n);
-        snprintf(t, n, "%s.%.*s", b, op->memberName.len, op->memberName.ptr);
-        return t;
-    }
-    return "it";
-}
 
-//E34: "take p" - the owner an own slot holds, the slot left null. Its region (ownRegion) is the slot's read: the reach
-//the owner's references were checked against, which a move position holds the destination's to
-struct operand* buildTake(struct checkCtx* ctx, struct operand* place, struct token tok) {
-    if (place->type.unknown) return place;
-    //(a lambda's copy of an owner local: refused where it was captured, ERR_OWN_CAPTURED)
-    if (place->opType == OPERATION_READ_VAR && place->readVar && place->readVar->isCapture && place->readVar->capturedFrom
-            && (place->readVar->capturedFrom->type.refOwn || canonicalVar(place->readVar->capturedFrom)->ownValue))
-        return unknownPlaceholder(tok);
-    //O32/E34: a borrowed copy owns nothing - neither it nor an own part of it is taken
-    struct var* bc = ownCopyPartOf(place);
-    if (bc) {
-        struct str from = bc->ownCopyFrom ? bc->ownCopyFrom->name : bc->name;
-        Err(tok, ERR_TAKE_BORROWED_COPY, bc->name, from, from);
-        return unknownPlaceholder(tok);
-    }
-    //O31/E34: an owner value local moved whole - left holding its type's zero value (D13c), its owners now the taker's.
-    //Its region (ownRegion) stands for its reach, which a move position holds the destination's to (O34)
-    struct var* ov = OwnValueLocalOf(place);
-    if (ov) {
-        struct operand* op = operandNew(tok, OPERATION_TAKE, place->type);
-        struct var* R = ownRegionNew(tok, ov->ownReach, ov->ownReachDepth, ov->ownReachUnnamed, OWN_ROOT_LOCAL, -1);
-        R->regionRootLocal = ov;
-        R->regionType = OwnTypeKey(place->type);
-        R->regionSlot = place;
-        op->ownRegion = R;
-        ListAdd(&op->args, &place);
-        struct operand* zero = zeroValueFor(ctx, place->type, tok, false);
-        if (zero) {
-            zero->ownMoved = true; //(into the place, whose owner it is)
-            ListAdd(&op->args, &zero);
-        }
-        return op;
-    }
-    //O31/E34: ...and a field holding one ("take l.toks") or a global, the same way: its container owns what it held
-    if (OwnValuePlace(place)) {
-        if (!OperandIsMutableLvalue(place)) Err(tok, ERR_TAKE_READ_ONLY);
-        struct var* rv;
-        int rd;
-        bool ru;
-        ownReachTakeTok = &tok;
-        ownValuePlaceReach(ctx, place, &rv, &rd, &ru);
-        ownReachTakeTok = NULL;
-        int rootParam;
-        struct var* rootLocal;
-        int root = ownRootOf(ctx->func, place, &rootParam, &rootLocal);
-        struct operand* op = operandNew(tok, OPERATION_TAKE, place->type);
-        struct var* R = ownRegionNew(tok, rv, rd, ru, root, rootParam);
-        R->regionRootLocal = rootLocal;
-        R->regionType = OwnTypeKey(place->type);
-        R->regionSlot = place;
-        op->ownRegion = R;
-        ListAdd(&op->args, &place);
-        struct operand* zero = zeroValueFor(ctx, place->type, tok, false);
-        if (zero) {
-            zero->ownMoved = true;
-            ListAdd(&op->args, &zero);
-        }
-        return op;
-    }
-    if (!place->ownOrig) {
-        Err(tok, ERR_TAKE_NOT_OWN, &place->type);
-        return unknownPlaceholder(tok);
-    }
-    struct var* R = place->ownRegion;
-    ownRestore(place);
-    if (!OperandIsMutableLvalue(place)) Err(tok, ERR_TAKE_READ_ONLY);
-    struct operand* op = operandNew(tok, OPERATION_TAKE, place->type);
-    op->ownRegion = R;
-    ListAdd(&op->args, &place);
-    return op;
-}
 
-//O33: whether an own array's elements must refer exactly where its slot's elements do - references something can be
-//stored through (O25g), as a plain array's would
-static bool ownArrayElemsExact(struct type e) {
-    return e.structMAlloc ? RefNarrowingMatters(e) : TypeHoldsReferences(e);
-}
-static bool ownSameArray(struct type a, struct type b) {
-    if (a.bType != BASETYPE_ARRAY || b.bType != BASETYPE_ARRAY || !a.arrElem || !b.arrElem) return false;
-    if ((a.owner != NULL) != (b.owner != NULL) || (a.owner && (a.owner != b.owner || !StrCmp(a.name, b.name)))) return false;
-    return typeSameNested(*a.arrElem, *b.arrElem);
-}
-//O34: a new array made where an own array slot receives it - "Array<T>(n)" (zero values, or a fill referring nowhere), and
-//for elements that carry no scopes a literal, text, a join or a comprehension: it refers to nothing, so its buffer may be
-//a region of its own wherever the slot's elements live
-//D13c: the elements' zero value an "Array<T>(n)" is filled with - zero bits, or refused where it holds a reference (the
-//elements would share one), once evaluated: it refers nowhere
-static bool opIsZeroFill(struct operand* f) {
-    for (int i = 0; i < zeroRecs.len; i++) {
-        struct zeroRec* r = ListGetIdx(&zeroRecs, i);
-        if (r->call == f && r->forArray) return true;
-    }
-    return false;
-}
-static bool ownFreshArray(struct operand* val, struct type slotT) {
-    if (!ownSameArray(val->type, slotT)) return false;
-    if (val->opType == OPERATION_SIZED_ARRAY_ALLOC) {
-        if (val->args.len < 2) return true;
-        struct operand* f = *(struct operand**)ListGetIdx(&val->args, 1);
-        return f->isNullLiteral || f->zeroBits || f->opType == OPERATION_ZERO || opIsZeroFill(f) || !typeCarriesScopes(*slotT.arrElem);
-    }
-    if (typeCarriesScopes(*slotT.arrElem)) return false;
-    return (val->isLiteral && val->opType == OPERATION_NONE) || OperandIsWrittenText(val) || val->opType == OPERATION_STR_OF
-           || val->opType == OPERATION_CONCAT || val->opType == OPERATION_COMPREHENSION;
-}
 
-//O34/T25b: whether an owner of type v may go into an own slot of type slotT - an object of the slot's type, and writable
-//wherever the slot is: an owner of a read-only own type gives no writable one
-static bool ownFitsSlot(struct type v, struct type slotT) {
-    if (slotT.bType == BASETYPE_ARRAY ? !ownSameArray(v, slotT) : !ownSameStruct(v, slotT)) return false;
-    return !slotT.refMut || v.refMut;
-}
 
-//O37: a call giving an owned result
-static bool ownResultCall(struct operand* op) {
-    return op && op->opType == OPERATION_FUNCCALL && op->type.refOwn && !op->type.unknown;
-}
 
-//O34: what a move position receives, its slot's reach (rv, rd, ru) - an owner, or null. An owner is a constructor call
-//made here, built in a new region of its own whose reach is the slot's (so what it refers to outlives the slot, C2d),
-//one taken from another own slot whose reach outlives this one's, or a call's owned result, landed at the slot's reach
-//(O37). A borrow owns nothing: it is taken from its slot
-//O34: the type half of a move - an owner taken or given by a call fits the slot it goes into (false, reported, if not)
-static bool ownMoveFits(struct operand* val, struct type slotT) {
-    if (!(val->opType == OPERATION_TAKE || ownResultCall(val)) || ownFitsSlot(val->type, slotT)) return true;
-    Err(val->tok, ERR_TYPE_MISMATCH, &slotT, &val->type);
-    val->ownMoved = true;
-    return false;
-}
 
-static void ownMoveInto(struct checkCtx* ctx, struct operand* val, struct type slotT, struct var* rv, int rd, bool ru) {
-    if (val->type.unknown || val->isNullLiteral || !ownMoveFits(val, slotT)) return;
-    if (ownResultCall(val)) {
-        val->ownMoved = true; //(a "catch default" standing for it is null, buildTryDefault says - O34)
-        struct var* rs = val->readVar ? val->readVar->type.resultScope : NULL;
-        struct scopeBinding* b = rs ? callBinding(val, rs) : NULL;
-        if (!b || b->landing) { //O18a: the result scope follows the result - to the slot's reach
-            if (rv == SCOPE_AMBIGUOUS && !ru) Err(val->tok, ERR_OWN_REACH);
-            else landCallIn(val, ru ? NULL : rv, ru ? 0 : rd, ru);
-        } else if (!b->boundUnnamed //(E25: a scope argument put it - where it must outlive the slot)
-                   && (ru || rv == SCOPE_AMBIGUOUS || b->boundTo == SCOPE_AMBIGUOUS
-                       || !scopeCanFlowInto(ctx->func, b->boundTo, b->boundTo ? 0 : b->boundDepth, rv, rv ? 0 : rd)))
-            Err(val->tok, ERR_OWN_REACH);
-        return;
-    }
-    if (val->opType == OPERATION_TAKE) {
-        struct var* S = val->ownRegion;
-        val->ownMoved = true;
-        if (!S || S->regionReachUnnamed) return;
-        if (ru || rv == SCOPE_AMBIGUOUS || S->regionReach == SCOPE_AMBIGUOUS
-                || !scopeCanFlowInto(ctx->func, S->regionReach, S->regionReachDepth, rv, rd))
-            Err(val->tok, ERR_OWN_REACH);
-        //...and an array whose elements can be stored through refers exactly where the slot's elements do (O25g): a store
-        //through one there builds where the slot's are, and hangs it off what lives where the moved one's were
-        else if (S->regionArray && slotT.arrElem && ownArrayElemsExact(*slotT.arrElem)
-                 && !sameExactScope(canonicalVar(S->regionReach), S->regionReach ? 0 : S->regionReachDepth,
-                                    rv ? canonicalVar(rv) : NULL, rv ? 0 : rd))
-            Err(val->tok, ERR_OWN_REACH_EXACT);
-        return;
-    }
-    if (slotT.bType == BASETYPE_ARRAY) { //O34: a new array made here - its buffer a region of its own
-        if (val->ownOrig) {
-            const char* t = ownPlaceText(val);
-            Err(val->tok, ERR_OWN_TAKE_NEEDED, t, t);
-            return;
-        }
-        //T29/T29c: written text or a literal adapts to a declared array type ("text own mut String& = "a"") as it would to
-        //the slot's reference without "own"
-        if (!val->type.owner && slotT.owner && (val->isLiteral || OperandIsWrittenText(val))) {
-            struct type plain = slotT;
-            plain.refOwn = false;
-            (void)OperandFitsType(ctx->func, val, plain);
-        }
-        if (!ownFreshArray(val, slotT)) {
-            if (val->opType == OPERATION_COND || val->opType == OPERATION_MATCH) Err(val->tok, ERR_OWN_IN_COND);
-            else Err(val->tok, ERR_OWN_NOT_AN_ARRAY_OWNER);
-            return;
-        }
-        struct var* R = ownRegionNew(val->tok, rv, rd, ru, OWN_ROOT_LOCAL, -1);
-        R->regionType = OwnTypeKey(slotT);
-        R->regionArray = true;
-        val->ownNewRegion = true;
-        val->ownRegion = R;
-        return;
-    }
-    if (val->ownOrig) {
-        const char* t = ownPlaceText(val);
-        Err(val->tok, ERR_OWN_TAKE_NEEDED, t, t);
-        return;
-    }
-    if (opIsCtorCall(val) && ownSameStruct(val->type, slotT) && !val->isTried) {
-        struct var* R = ownRegionNew(val->tok, rv, rd, ru, OWN_ROOT_LOCAL, -1);
-        R->regionType = OwnTypeKey(slotT);
-        val->ownNewRegion = true;
-        val->ownRegion = R;
-        landCall(val, R, 0);
-        checkCtorHereFits(ctx, val, R, 0, val->tok);
-        return;
-    }
-    if (val->opType == OPERATION_COND || val->opType == OPERATION_MATCH) { Err(val->tok, ERR_OWN_IN_COND); return; }
-    Err(val->tok, ERR_OWN_NOT_AN_OWNER, val->isTried ? "may fail" : opIsCtorCall(val) ? "builds another type" : "is not one");
-}
 
-//O34/O35: "slot = owner" - the owner moved in, the one the slot held released (codegen); "slot = null" releases it
-static struct statement buildOwnAssign(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
-    struct var* R = target->ownRegion;
-    ownRestore(target);
-    struct var* bc = ownCopyPartOf(target); //O32: an own part of a borrowed copy belongs to what it was copied from
-    if (bc) {
-        Err(opTok, ERR_OWN_COPY_PART, ownPlaceText(target), bc->ownCopyFrom ? bc->ownCopyFrom->name : bc->name);
-        struct statement stmt = (struct statement){0};
-        stmt.sType = STATEMENT_ASSIGN;
-        stmt.target = target;
-        stmt.op = rhs;
-        return stmt;
-    }
-    bool compound;
-    compoundOpFromAssignTok(opTok.type, &compound);
-    char opText[8];
-    snprintf(opText, sizeof(opText), "%.*s", opTok.str.len < 7 ? opTok.str.len : 7, opTok.str.ptr);
-    if (compound) Err(opTok, ERR_OWN_COMPOUND, opText);
-    else if (!OperandIsMutableLvalue(target)) reportWriteBlocked(opTok, target);
-    else {
-        ownMoveInto(ctx, rhs, target->type, R->regionReach, R->regionReachDepth, R->regionReachUnnamed);
-    }
-    struct statement stmt = (struct statement){0};
-    stmt.sType = STATEMENT_ASSIGN;
-    stmt.target = target;
-    stmt.op = rhs;
-    return stmt;
-}
 
-//O33: whether a constructor call refers to nothing outside what it builds - each argument a number, text written in the
-//program (constant data), null, or a constructor call of the same kind - so its object may be moved anywhere
-static bool ownCtorPlain(struct operand* call, int depth) {
-    if (depth > 32) return false;
-    for (int i = 0; i < call->args.len; i++) {
-        struct operand* a = *(struct operand**)ListGetIdx(&call->args, i);
-        if (!a || a->isNullLiteral || a->isLiteral || a->isDefaultArg || OperandIsWrittenText(a) || !typeCarriesScopes(a->type))
-            continue;
-        if (opIsCtorCall(a) && ownCtorPlain(a, depth + 1)) continue;
-        return false;
-    }
-    return true;
-}
 
-//O33: what an owner local's initializer needs (its reach): "take x" what x's needed; an own array where its elements'
-//referents live - nowhere for elements that carry no scopes, a global's the program's, else the block it is declared in,
-//what is stored in its elements kept there; a constructor call referring to nothing outside it, or null, nothing - the
-//program's scope, so the owner may be moved anywhere; any other constructor call its block (a constructor's field: the
-//instance's scope, C2g)
-static void ownDeclReach(struct checkCtx* ctx, struct type declType, struct operand* rhs, struct var** reach,
-                         int* reachDepth, bool* reachUnnamed) {
-    *reach = NULL;
-    *reachDepth = ctx->blockDepth;
-    *reachUnnamed = false;
-    if (rhs && rhs->opType == OPERATION_TAKE && rhs->ownRegion) {
-        *reach = rhs->ownRegion->regionReach;
-        *reachDepth = rhs->ownRegion->regionReachDepth;
-        *reachUnnamed = rhs->ownRegion->regionReachUnnamed;
-    } else if (ownResultCall(rhs)) { //O37: what it refers to is where its result scope lands - the block
-    } else if (declType.bType == BASETYPE_ARRAY)
-        *reachUnnamed = !ctx->func || !declType.arrElem || !typeCarriesScopes(*declType.arrElem);
-    else if (!rhs || rhs->isNullLiteral || (opIsCtorCall(rhs) && ownCtorPlain(rhs, 0))) *reachUnnamed = true;
-}
 
-//O34: a local or a global declared own: an owner local, released at its block's end unless moved on (codegen), its reach
-//(O33) what its initializer needs (ownDeclReach). A constructor's field is one too, declared by buildTypeBodiesCtor
-static struct statement buildOwnDecl(struct checkCtx* ctx, struct token nameTok, struct type declType, struct operand* rhs,
-                                     struct syntax* exprNode) {
-    declType.scopeParam = NULL;
-    declType.scopeWritten = false;
-    declType.scopeDepth = ctx->blockDepth;
-    if (!rhs && exprNode) {
-        struct type want = declType;
-        want.refOwn = false;
-        rhs = buildExpecting(ctx, exprNode, &want);
-    }
-    struct var* reach;
-    int reachDepth;
-    bool reachUnnamed;
-    ownDeclReach(ctx, declType, rhs, &reach, &reachDepth, &reachUnnamed);
-    //O37/O34: one an owned result's "return" gives whole, later in its block, reaches the result scope - what it is
-    //given then refers to what the result outlives, as O26a moves a returned value local
-    if (ctx->func && ctx->func->type.hasRetType && ctx->func->type.retType->refOwn && ctx->func->type.resultScope
-            && ctx->hasOwnScope && !ctx->inDefer) {
-        for (int i = ctx->blockStmtIdx + 1; i < ctx->blockStmts.len; i++) {
-            if (!syntaxReturnsName(*(struct syntax**)ListGetIdx(&ctx->blockStmts, i), strFromTok(nameTok))) continue;
-            reach = ctx->func->type.resultScope;
-            reachDepth = 0;
-            reachUnnamed = false;
-            break;
-        }
-    }
-    if (rhs) ownMoveInto(ctx, rhs, declType, reach, reachDepth, reachUnnamed);
-    struct var* v = scopeDeclare(ctx->mod, ctx->scope, strFromTok(nameTok), nameTok, declType, true);
-    v->ownReachSet = true;
-    v->ownReach = reach;
-    v->ownReachDepth = reachDepth;
-    v->ownReachUnnamed = reachUnnamed;
-    if (rhs) v->declInit = rhs;
-    struct statement stmt = (struct statement){0};
-    stmt.sType = STATEMENT_VAR_DECL;
-    stmt.var = *v;
-    stmt.op = rhs;
-    return stmt;
-}
 
-//O33: whether what an owning type held by value holds may refer outside the objects it owns - an own field's object or
-//buffer referring out, or a field of its own holding a reference
-static bool ownRefersOut(struct type t, int depth) {
-    if (depth > 32) return true;
-    if (t.bType == BASETYPE_ARRAY) return !t.arrElem || typeCarriesScopes(*t.arrElem);
-    struct type* c = canonicalStructOf(t);
-    if (!c) return true;
-    for (int i = 0; i < c->vars.len; i++) {
-        struct type ft = ((struct var*)ListGetIdx(&c->vars, i))->type;
-        if (ft.refOwn ? ownRefersOut(ft, depth + 1) : typeCarriesScopes(ft)) return true;
-    }
-    return false;
-}
 
-//O34: "take" of an owner value local given to a slot of the same type whose reach is (rv, rd, ru): what the taken value
-//refers to must outlive where it goes
-//O34 (vec7 F1): two reads of one own slot made in the statement being checked, by one pure path - a variable that is no
-//global, then fields only, each own slot on the way read here and not through a borrow local - so they name one object:
-//nothing in one statement repoints a local or a parameter between its reads (a call can repoint a global; a borrow local
-//was read in an earlier statement, after which its root may have moved on - a cursor walking a chain)
-static bool ownSamePathHere(struct operand* a, struct operand* b, int depth) {
-    if (!a || !b || depth > 64 || a->opType != b->opType) return false;
-    if (a->opType == OPERATION_READ_VAR) {
-        if (!a->readVar || !b->readVar || canonicalVar(a->readVar) != canonicalVar(b->readVar)) return false;
-        struct var* v = canonicalVar(a->readVar);
-        return !(v->owner && !v->isFuncDecl) && !(a->readVar->owner && !a->readVar->isFuncDecl) && !ownRegionOf(a)
-               && !ownRegionOf(b);
-    }
-    if (a->opType != OPERATION_MEMBER || !a->args.len || !b->args.len || !StrCmp(a->memberName, b->memberName)) return false;
-    struct operand* ab = *(struct operand**)ListGetIdx(&a->args, 0);
-    struct operand* bb = *(struct operand**)ListGetIdx(&b->args, 0);
-    struct var* ra = ownRegionOf(ab);
-    struct var* rb = ownRegionOf(bb);
-    if (!ra != !rb) return false;
-    if (ra && (ab->ownRegion != ra || bb->ownRegion != rb || ra->regionSlot != ab || rb->regionSlot != bb
-               || ra->regionStmt != ownStmtSerial || rb->regionStmt != ownStmtSerial))
-        return false;
-    return ownSamePathHere(ab, bb, depth + 1);
-}
-static void ownValueTakeReach(struct checkCtx* ctx, struct operand* val, struct var* rv, int rd, bool ru) {
-    struct var* S = val->ownRegion;
-    if (!S || S->regionReachUnnamed) return;
-    //...a field of an owned object moved into another field of the same object, both read in this statement by the same
-    //pure path (two reads of one own slot are two regions to §8, ownSamePathHere): what it refers to stays in that
-    //object's region
-    struct var* from = S->regionReach && S->regionReach != SCOPE_AMBIGUOUS ? canonicalVar(S->regionReach) : NULL;
-    struct var* to = rv && rv != SCOPE_AMBIGUOUS ? canonicalVar(rv) : NULL;
-    if (from && to && from->isRegion && to->isRegion
-            && (from == to
-                || (from->regionStmt == ownStmtSerial && to->regionStmt == ownStmtSerial && from->regionSlot
-                    && to->regionSlot && from->regionSlot->ownRegion == from && to->regionSlot->ownRegion == to
-                    && ownSamePathHere(from->regionSlot, to->regionSlot, 0))))
-        return;
-    if (ru || rv == SCOPE_AMBIGUOUS || S->regionReach == SCOPE_AMBIGUOUS
-            || !scopeCanFlowInto(ctx->func, S->regionReach, S->regionReachDepth, rv, rd))
-        Err(val->tok, ERR_OWN_REACH);
-}
 
-//O34: what a local of an owning type held by value is given where an owner goes - an owner (ownValueOwner); else an
-//error saying what to write
-static bool ownValueGiven(struct checkCtx* ctx, struct operand* val, struct type t, struct var* rv, int rd, bool ru) {
-    if (!val || val->type.unknown) return true;
-    if (ownValueOwner(val)) {
-        val->ownMoved = true;
-        if (val->opType == OPERATION_TAKE) ownValueTakeReach(ctx, val, rv, rd, ru);
-        return true;
-    }
-    if (val->opType == OPERATION_COND || val->opType == OPERATION_MATCH) Err(val->tok, ERR_OWN_IN_COND);
-    else if (OwnValuePlace(val)) {
-        const char* p = ownPlaceText(val);
-        Err(val->tok, ERR_OWN_TAKE_NEEDED, p, p);
-    } else Err(val->tok, ERR_OWN_VALUE_NOT_AN_OWNER, &t);
-    return false;
-}
 
-//O31/O38: one borrow read (ownBorrowRead) of each own slot a value of the owning type t holds, at base - its own fields,
-//and those of the owning values its fields hold by value (a Vec field's buffer), to any depth: what a borrowed copy of
-//the value, or a reference to its storage, borrows
-static void ownOwnSlotReads(struct operand* base, struct type* t, struct token tok, struct list* out, struct typePath* path) {
-    //(no depth limit - vec6 D: loans stopped 8 value levels down; T16 ends the walk, the path guards a reported cycle)
-    if (!t || typeOnPath(path, t)) return;
-    struct typePath here = { t, path };
-    for (int i = 0; i < t->vars.len; i++) {
-        struct var* f = ListGetIdx(&t->vars, i);
-        if (!f->type.refOwn && !TypeIsOwnValue(f->type)) continue;
-        struct operand* m = OperandMember(NULL, base, f->name, tok);
-        if (m->type.unknown) continue;
-        if (!f->type.refOwn) { ownOwnSlotReads(m, canonicalStructOf(f->type), tok, out, &here); continue; }
-        ownBorrowRead(m);
-        ListAdd(out, &m);
-    }
-}
 
-//O31/O32/O34: a body's local of an owning type held by value. Given an owner - a value made here, a call's owned result,
-//"take" of another, or its type's zero value - it is an owner value local: its owners released at its block's end
-//unless moved on (codegen), its reach (O33) where its storage is - its block, or the result scope O26a puts it in -
-//unless what it holds refers to nothing outside. Declared with ":=" from a variable holding such a value it is a
-//borrowed copy (O32): read-only (T25c), owning nothing, rooted where its source is, and holding a borrow of each object
-//its source owns until its last use (ownLoansIn)
-static void ownValueDecl(struct checkCtx* ctx, struct var* v, struct operand* rhs, bool typed, bool said) {
-    struct var* cv = canonicalVar(v);
-    struct var* src = !typed && rhs && rhs->opType == OPERATION_READ_VAR && rhs->readVar && !rhs->readVar->owner
-                      && TypeIsOwnValue(rhs->readVar->type) ? rhs->readVar : NULL;
-    //...or from a field holding one ("c := l.toks"), of an owner value local, a borrowed copy, or an instance reached
-    //through a reference - never a global's (a call may release it anywhere): rooted where the field is
-    struct var* srcRoot = NULL;
-    if (!src && !typed && rhs && rhs->opType == OPERATION_MEMBER && TypeIsOwnValue(rhs->type) && !rhs->type.unknown
-            && (OwnValuePlace(rhs) || ownCopyPartOf(rhs))) {
-        srcRoot = lvalueRootVar(rhs);
-        if (srcRoot && srcRoot->owner && !srcRoot->isFuncDecl) srcRoot = NULL;
-    }
-    if (!src && !srcRoot) {
-        struct var* rv = NULL;
-        int rd = ctx->blockDepth;
-        bool ru = false;
-        if (!ownRefersOut(v->type, 0)) ru = true;
-        else if (v->storeInResult) { rv = v->valueHome; rd = 0; }
-        if (said && rhs && !ownValueOwner(rhs)) { } //one error: what was said about this declaration stands
-        else if (!typed && rhs && !rhs->type.unknown && !ownValueOwner(rhs)) {
-            if (rhs->opType == OPERATION_COND || rhs->opType == OPERATION_MATCH) Err(rhs->tok, ERR_OWN_IN_COND);
-            else Err(rhs->tok, ERR_OWN_VALUE_SOURCE, &v->type);
-        } else ownValueGiven(ctx, rhs, v->type, rv, rd, ru);
-        v->ownValue = cv->ownValue = true;
-        v->ownReachSet = cv->ownReachSet = true;
-        v->ownReach = cv->ownReach = rv;
-        v->ownReachDepth = cv->ownReachDepth = rd;
-        v->ownReachUnnamed = cv->ownReachUnnamed = ru;
-        //O38 (own5 F2): what a reference to its storage borrows - each object its own fields hold, read once here
-        struct type* vt = canonicalStructOf(v->type);
-        struct checkCtx* savedCtx = ownCtx;
-        ownCtx = ctx;
-        cv->ownValueReads = ListInit(sizeof(struct operand*));
-        if (vt && ctx->hasOwnScope) ownOwnSlotReads(OperandReadVar(v, v->tok), vt, v->tok, &cv->ownValueReads, NULL);
-        ownCtx = savedCtx;
-        v->ownValueReads = cv->ownValueReads;
-        return;
-    }
-    int param;
-    struct var* local;
-    int root = src ? ownVarRoot(src, &param, &local) : ownRootOf(ctx->func, rhs, &param, &local);
-    struct var* fromV = src ? src : srcRoot;
-    struct var* from = canonicalVar(fromV)->ownCopyFrom ? canonicalVar(fromV)->ownCopyFrom : canonicalVar(fromV);
-    v->ownCopy = cv->ownCopy = true;
-    v->roCopy = cv->roCopy = true;
-    v->ownCopyRoot = cv->ownCopyRoot = root;
-    v->ownCopyRootParam = cv->ownCopyRootParam = param;
-    v->ownCopyRootLocal = cv->ownCopyRootLocal = local;
-    v->ownCopyFrom = cv->ownCopyFrom = from;
-    struct type* st = canonicalStructOf(rhs->type);
-    struct checkCtx* saved = ownCtx;
-    ownCtx = ctx;
-    if (!rhs->ownCopyReads.elemSize) rhs->ownCopyReads = ListInit(sizeof(struct operand*));
-    if (st) ownOwnSlotReads(src ? OperandReadVar(src, rhs->tok) : rhs, st, rhs->tok, &rhs->ownCopyReads, NULL);
-    ownCtx = saved;
-}
 
 struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
-    int errsAtDecl = ErrMsgGetNErrors(); //O34: an owner value's own error only where nothing else was said
     struct token nameTok = firstTokOfType(s, TOK_IDEN);
     bool mut = true; //D11: a local is always mutable - "mut" on one belongs to its type (localPermission)
     struct syntax* exprNode = firstPartOfType(s, SNTX_EXPR);
@@ -21338,13 +20143,8 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     if (!exprNode) {
         //D13: no initializer - the type's zero value, which for anything reference-shaped is null (T2a)
         scopeTagBody = ctx; //O3c: "&x" may name a local or parameter
-        ownAllowed = true; //T25e: a local or a global may own
-        ownValueAllowed = ctx->hasOwnScope; //O31: a body's local may hold an owning type by value
         declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
-        ownAllowed = false;
-        ownValueAllowed = false;
         scopeTagBody = NULL;
-        if (declType.refOwn) return buildOwnDecl(ctx, nameTok, declType, NULL, NULL); //O34: null until given an owner
         bareLocalLivesInBlock(ctx, &declType);
         if (ctx->hasOwnScope) permByType = !localPermission(s, typeExprNode, &declType) && TypeIsPermRef(declType); //T25b
         rhs = zeroValueFor(ctx, declType, firstTokAnywhere(s), false); //D13c
@@ -21354,13 +20154,8 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     } else {
         if (typeExprNode) {
             scopeTagBody = ctx; //O3c
-            ownAllowed = true; //T25e
-            ownValueAllowed = ctx->hasOwnScope; //O31
             declType = resolveTypeExpr(ctx->mod, typeExprNode, scopeParams);
-            ownAllowed = false;
-            ownValueAllowed = false;
             scopeTagBody = NULL;
-            if (declType.refOwn) return buildOwnDecl(ctx, nameTok, declType, NULL, exprNode); //O34
             bool bareVar = typeExprIsBareTypeVar(typeExprNode);
             //T25b: what the written type permits - "x mut T&" writable, "x T&" read-only; a type variable's binding
             //carries its own permission ("acc U = init"), which "mut" may make writable
@@ -21390,12 +20185,7 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
         } else { // ":=" - type read straight off the initializer (D15)
             roInheritDecl = true;
             rhs = buildExprFromSyntax(ctx, exprNode);
-            //O34/O37: an owner local - from "take", or a call's owned result
-            if ((rhs->opType == OPERATION_TAKE && rhs->type.refOwn) || ownResultCall(rhs))
-                return buildOwnDecl(ctx, nameTok, rhs->type, rhs, NULL);
-            inferOwnValue = ctx->hasOwnScope; //O31: an owning type held by value - an owner value local, or a borrowed copy
             declType = inferredDeclType(ctx->func, rhs);
-            inferOwnValue = false;
             //":=" writes no scope tag, so the local is a bare "&" one and takes its initializer's exact
             //scope (O25a) - the initializer's own tag may be a callee's scope variable, meaningless here
             declType.scopeParam = NULL;
@@ -21465,8 +20255,6 @@ struct statement buildVarDeclStmnt(struct checkCtx* ctx, struct syntax* s) {
     //O1b: a local taking what lives in the program's scope - a global's referent, a global value's references
     if (rhs && (declType.structMAlloc ? unnamedScope : TypeHoldsReferences(declType)) && storageInProgram(rhs))
         v->inProgram = true;
-    if (ctx->hasOwnScope && TypeIsOwnValue(declType)) //O31/O32
-        ownValueDecl(ctx, v, rhs, typeExprNode != NULL, ErrMsgGetNErrors() > errsAtDecl);
     //propagated one hop, so a later read of v (OperandReadVar) can still resolve a scope tag that's one of
     //rhs's own callee's scope params - see resolveEffectiveScopeVar. rhs is NULL for a zero-filled fixed
     //array (nothing to propagate - v->scopeBindings just stays at its zero-initialized default).
@@ -22218,51 +21006,6 @@ static void condArmsInto(struct operand* op, struct list* out) {
 }
 
 struct statement buildAssignCore(struct checkCtx* ctx, struct operand* target, struct operand* rhs, struct token opTok) {
-    if (target->ownOrig) return buildOwnAssign(ctx, target, rhs, opTok); //O34: an own slot
-    //O32: a borrowed copy owns nothing - it is not given another value
-    struct var* bcT = ownCopyLocalOf(target);
-    if (bcT) {
-        Err(opTok, ERR_OWN_COPY_ASSIGNED, bcT->name, bcT->ownCopyFrom ? bcT->ownCopyFrom->name : bcT->name);
-        struct statement stmt = (struct statement){0};
-        stmt.sType = STATEMENT_ASSIGN;
-        stmt.target = target;
-        stmt.op = rhs;
-        return stmt;
-    }
-    //...nor is a part of one holding an owning type by value ("c.a", "e.toks") - nothing would release what it is given
-    //(vec6 L1: held to the function's end), and the source keeps its own
-    struct var* bcP = TypeIsOwnValue(target->type) && !target->type.unknown ? ownCopyPartOf(target) : NULL;
-    if (bcP) {
-        Err(opTok, ERR_OWN_COPY_PART, ownPlaceText(target), bcP->ownCopyFrom ? bcP->ownCopyFrom->name : bcP->name);
-        struct statement stmt = (struct statement){0};
-        stmt.sType = STATEMENT_ASSIGN;
-        stmt.target = target;
-        stmt.op = rhs;
-        return stmt;
-    }
-    //O31/O34: an owner value local is given an owner, the one it held released once it is stored (codegen) - an
-    //assignment otherwise as any value local's
-    struct var* ovT = OwnValueLocalOf(target);
-    if (ovT || OwnValuePlace(target)) { //(a field holding one, or a global: O31)
-        bool compound;
-        compoundOpFromAssignTok(opTok.type, &compound);
-        if (compound) {
-            char opText[8];
-            snprintf(opText, sizeof(opText), "%.*s", opTok.str.len < 7 ? opTok.str.len : 7, opTok.str.ptr);
-            Err(opTok, ERR_OWN_COMPOUND, opText);
-            struct statement stmt = (struct statement){0};
-            stmt.sType = STATEMENT_ASSIGN;
-            stmt.target = target;
-            stmt.op = rhs;
-            return stmt;
-        }
-        struct var* rv;
-        int rd;
-        bool ru;
-        ownValuePlaceReach(ctx, target, &rv, &rd, &ru);
-        if (!ovT && !OperandIsMutableLvalue(target)) reportWriteBlocked(opTok, target);
-        else ownValueGiven(ctx, rhs, target->type, rv, rd, ru);
-    }
     if (target->isAtCall) {
         //an element of an element - "rows[i][j] = v" - is stored into the copy "rows[i]" gives, written back as a field
         //of one is (below); an element of a handle's copy needs none, its state is shared (O17b)
@@ -22705,9 +21448,8 @@ struct statement buildExprStmnt(struct checkCtx* ctx, struct syntax* s) {
     ctx->incDecRoot = root;
     struct operand* op = buildExprFromSyntax(ctx, e);
     ctx->incDecRoot = prevRoot;
-    if (op->opType == OPERATION_TAKE || ownResultCall(op) || ownValueCall(op)) op->ownDiscard = true; //S3/O35: an owner alone - released
-    //...text on a line of its own most often meant to continue the join on the line before (E11b)
-    if (!exprCanStandAsStatement(op) && !op->type.unknown && op->opType != OPERATION_TAKE) {
+    //text on a line of its own most often meant to continue the join on the line before (E11b)
+    if (!exprCanStandAsStatement(op) && !op->type.unknown) {
         if (s == ctx->clauseLastStmt) { //R11: a value ending a catch clause's block is meant as the clause's value
             struct list toks = ListInit(sizeof(struct token));
             syntaxTokensInto(e, &toks);
@@ -23037,7 +21779,6 @@ static void writesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
     switch (op->opType) {
         case OPERATION_PREFIX_INC: case OPERATION_PREFIX_DEC: case OPERATION_POSTFIX_INC: case OPERATION_POSTFIX_DEC:
         case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD: case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
-        case OPERATION_TAKE:
             if (op->args.len && lvalueRoot(*(struct operand**)ListGetIdx(&op->args, 0)) == c->ctx) c->stop = true;
             break;
         default: break;
@@ -23741,7 +22482,7 @@ static void forInSplitCall(struct operand* call, struct operand* src, struct tok
         return;
     bool known = calleeBodyKnown(f);
     if (!known && f->owner) { //a body checked later (a cycle) - judged with every other once all are (settleRegions)
-        struct lendCheck lc = { f, sv, kw, false, false, false, ErrMsgSaveContext() };
+        struct lendCheck lc = { f, sv, kw, false, ErrMsgSaveContext() };
         if (!ErrMsgMuted()) ListAdd(&lendChecks, &lc);
     } else if (!known || (!f->bodyHadErrors && regionStoredIn(f, sv))) {
         Err(kw, ERR_BORROW_SPLIT_SCOPES);
@@ -23968,16 +22709,13 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
         refT.arrElem = src->type.arrElem;
         refT.arrMalloc = true;
         refT.structMAlloc = true;
-        //O33: a borrow of an own array is held where its region is - taken before the fit, which a region, outliving
-        //nothing, would not pass at the bare type
         bool unnamed = false;
-        bool adopted = src->ownOrig && src->ownRegion && adoptInitializerScope(&wctx, &refT, src, &unnamed);
         bool judged = splitBorrowJudgedElsewhere;
         splitBorrowJudgedElsewhere = true;
         reportTypeFit(OperandFitsType(ctx->func, src, refT), src->tok, src, refT);
         splitBorrowJudgedElsewhere = judged;
         landWalkedByObligations(&wctx, src); //O18c
-        if (!adopted && !adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
+        if (!adoptInitializerScope(&wctx, &refT, src, &unnamed)) refT.scopeDepth = wctx.blockDepth;
         struct token at = forInHiddenTok(kw, "Arr");
         arr = scopeDeclare(wctx.mod, wctx.scope, at.str, at, refT, true);
         arr->scopeUnnamed = unnamed;
@@ -24939,7 +23677,6 @@ struct operand* buildMatchExpr(struct checkCtx* ctx, struct syntax* s) {
     ListAdd(&op->comprBody, &m);
     struct list vals = SemanticMatchValues(op);
     op->type = matchValueType(ctx, &vals);
-    ownCondValuesCheck(op, &vals); //O34 (own6 N2), as a conditional's
     return op;
 }
 
@@ -25404,184 +24141,6 @@ struct statement buildRetStmnt(struct checkCtx* ctx, struct syntax* s) {
     return buildRetValues(ctx, tok, &vals);
 }
 
-//O37 (Vec phase 1): a borrow of an owned object reached from a reference parameter p by own fields only - "return v.o",
-//"return v.data", or a call's borrowed own result given p ("return v.First()") - returned as a result borrowed from p
-//(T&p). Its region outlives nothing (O33), so the result is not where p lives in time: each call holds a loan on what
-//it borrows below its argument, confined to the caller's locals (O38), and the function is marked so
-static int ownParamIndex(struct var* func, struct var* v);
-static int ownRootOf(struct var* func, struct operand* op, int* param, struct var** local);
-//(vec2 N1: what each return borrows is recorded, and the function marked only once every body is checked
-//(ownBorrowResultsSettle) - a caller checked while its callee's body still is would copy a state the callee's later
-//returns change)
-struct ownBorrowSrc {
-    struct var* func;   //the function returning it (canonical)
-    int param;          //a borrow of an own object below parameter param...
-    struct type* type;  //...of this type (NULL: not one known)...
-    bool anyType;
-    struct operand* call; //...or a call's borrowed own result, below whichever parameters its callee settles on
-    struct var* scope;  //the result's scope variable, which the parameter the borrow is below must name
-    bool deep;          //(Vec phase 2a) a borrow reached from call's borrowed own result by own fields: of type/anyType
-    struct operand* top; //...returned here, retagged before the callee settles - an error if it does not
-};
-static struct list ownBorrowSrcs;
-static bool ownBorrowSettled;
-static void ownBorrowedOwnResult(struct checkCtx* ctx, struct operand* val, struct type rt) {
-    if (!ctx->func || !val || !rt.structMAlloc || rt.refOwn || !rt.scopeParam || rt.scopeParam == SCOPE_AMBIGUOUS) return;
-    struct operand* top = val;
-    struct var* R = ownRegionOf(val);
-    if (!R && val->opType == OPERATION_SLICE) R = ownArrayRegionOf(val); //(a slice of the buffer: the same borrow)
-    //(vec1 F1: what names the same storage - a conversion to a declared array type, "String(v.View())" (T29a), a slice, a
-    //view (E32b) - is the same borrow, of a call's borrowed own result too)
-    while (!R && val->args.len
-            && (val->opType == OPERATION_NOMINAL_CONVERT || val->opType == OPERATION_SLICE
-                || (val->opType == OPERATION_AS && val->type.bType == BASETYPE_ARRAY))) {
-        val = *(struct operand**)ListGetIdx(&val->args, 0);
-        R = ownRegionOf(val);
-        if (!R && val->opType == OPERATION_SLICE) R = ownArrayRegionOf(val);
-    }
-    struct ownBorrowSrc src = (struct ownBorrowSrc){0};
-    src.func = canonicalVar(ctx->func);
-    src.scope = canonicalVar(rt.scopeParam);
-    src.param = -1;
-    if (R && R->regionRoot == OWN_ROOT_PARAM) {
-        int p = R->regionRootParam;
-        if (p < 0 || p >= ctx->func->type.vars.len) return;
-        struct var* pv = ListGetIdx(&ctx->func->type.vars, p);
-        if (!pv->type.structMAlloc || !pv->type.scopeParam || pv->type.scopeParam == SCOPE_AMBIGUOUS
-                || canonicalVar(pv->type.scopeParam) != src.scope) return;
-        src.param = p;
-        //(vec1 F1: the loan is on the own object's type, read off its slot - the result's type may be a declared array
-        //type the buffer was converted to, "String(v.View())", which a release of the buffer, keyed by the buffer's type,
-        //never meets)
-        src.type = R->regionType;
-        src.anyType = R->regionAnyType;
-        //(where the result is put is p's referent's scope - the loan says how long the borrow is good). A slice of the
-        //buffer is retagged down to the borrow it slices, since a slice's storage is its base's (E16a)
-        for (struct operand* o = top; o; ) {
-            o->type.scopeParam = rt.scopeParam;
-            o->type.scopeDepth = 0;
-            if (ownRegionOf(o) || !o->args.len
-                    || (o->opType != OPERATION_SLICE && o->opType != OPERATION_NOMINAL_CONVERT && o->opType != OPERATION_AS))
-                break;
-            o = *(struct operand**)ListGetIdx(&o->args, 0);
-        }
-    } else if (val->opType == OPERATION_FUNCCALL && !val->callee && val->readVar) {
-        src.call = val; //(whether its callee gives a borrowed own result is known once every body is)
-    } else if (R && R->regionRoot != OWN_ROOT_PARAM) {
-        //(Vec phase 2a, 19.4 item 7: a borrow reached by own fields from another call's borrowed own result - "return
-        //v.First().deep" - is below whatever that call's result is below, a loan on the deeper object's type, which a
-        //release of any object holding it meets (ownHeld). Retagged now, as a parameter's is; the call's callee settles
-        //once every body is checked, and a return it does not make a borrowed own result of is O10's error then)
-        struct operand* slot = R->regionSlot;
-        struct operand* call = NULL;
-        while (slot && slot->opType == OPERATION_MEMBER && slot->args.len) {
-            struct operand* b = *(struct operand**)ListGetIdx(&slot->args, 0);
-            struct var* B = ownRegionOf(b);
-            if (b->opType == OPERATION_FUNCCALL && !b->callee && b->readVar && !b->ownOrig) { call = b; break; }
-            slot = B ? B->regionSlot : NULL;
-        }
-        if (!call) return;
-        src.call = call;
-        src.deep = true;
-        src.type = R->regionType;
-        src.anyType = R->regionAnyType;
-        src.top = top;
-        for (struct operand* o = top; o; ) {
-            o->type.scopeParam = rt.scopeParam;
-            o->type.scopeDepth = 0;
-            if (ownRegionOf(o) || !o->args.len
-                    || (o->opType != OPERATION_SLICE && o->opType != OPERATION_NOMINAL_CONVERT && o->opType != OPERATION_AS))
-                break;
-            o = *(struct operand**)ListGetIdx(&o->args, 0);
-        }
-    } else return;
-    ListAdd(&ownBorrowSrcs, &src);
-}
-
-static bool ownIntIn(struct list* l, int x) {
-    for (int i = 0; i < l->len; i++)
-        if (*(int*)ListGetIdx(l, i) == x) return true;
-    return false;
-}
-
-//(...one source's answer added to its function's: a parameter, and the object's type - several, or one not known, any)
-static bool ownBorrowMark(struct var* f, int p, struct type* t, bool anyT) {
-    bool changed = false;
-    if (!f->ownBorrowParams.elemSize) f->ownBorrowParams = ListInit(sizeof(int));
-    if (!ownIntIn(&f->ownBorrowParams, p)) {
-        ListAdd(&f->ownBorrowParams, &p);
-        if (!f->ownBorrowResult) f->ownBorrowResult = p + 1;
-        changed = true;
-    }
-    if (!t) anyT = true;
-    if (f->ownBorrowResultType && t && f->ownBorrowResultType != t) anyT = true;
-    if (!f->ownBorrowResultType && t && !f->ownBorrowResultAnyType) f->ownBorrowResultType = t, changed = true;
-    if (anyT && !f->ownBorrowResultAnyType) f->ownBorrowResultAnyType = true, changed = true;
-    return changed;
-}
-
-//O37 (vec2 N1): which functions give a borrowed own result, from which parameters, of which objects' types - a least
-//fixed point over the returns recorded, propagated through calls until nothing changes, before any loan is made
-static void ownBorrowResultsSettle(void) {
-    for (int i = 0; i < ownBorrowSrcs.len; i++) {
-        struct var* f = ((struct ownBorrowSrc*)ListGetIdx(&ownBorrowSrcs, i))->func;
-        f->ownBorrowResult = 0;
-        f->ownBorrowResultType = NULL;
-        f->ownBorrowResultAnyType = false;
-        f->ownBorrowParams = ListInit(sizeof(int));
-    }
-    for (int round = 0; round < 100000; round++) {
-        bool changed = false;
-        for (int i = 0; i < ownBorrowSrcs.len; i++) {
-            struct ownBorrowSrc* s = ListGetIdx(&ownBorrowSrcs, i);
-            if (!s->call) {
-                if (ownBorrowMark(s->func, s->param, s->type, s->anyType)) changed = true;
-                continue;
-            }
-            struct var* g = canonicalVar(s->call->readVar);
-            for (int k = 0; g->ownBorrowResult && k < g->ownBorrowParams.len; k++) {
-                int q = *(int*)ListGetIdx(&g->ownBorrowParams, k);
-                if (q >= s->call->args.len) continue;
-                int pp;
-                struct var* loc;
-                if (ownRootOf(s->func, *(struct operand**)ListGetIdx(&s->call->args, q), &pp, &loc) != OWN_ROOT_PARAM) continue;
-                if (pp < 0 || pp >= s->func->type.vars.len) continue;
-                struct var* pv = ListGetIdx(&s->func->type.vars, pp);
-                if (!pv->type.structMAlloc || !pv->type.scopeParam || pv->type.scopeParam == SCOPE_AMBIGUOUS
-                        || canonicalVar(pv->type.scopeParam) != s->scope) continue;
-                if (ownBorrowMark(s->func, pp, s->deep ? s->type : g->ownBorrowResultType,
-                                  s->deep ? s->anyType : g->ownBorrowResultAnyType))
-                    changed = true;
-            }
-        }
-        if (!changed) break;
-    }
-    ownBorrowSettled = true;
-    //(a deep source whose call settled on no parameter its function's result names was retagged for nothing: O10)
-    for (int i = 0; i < ownBorrowSrcs.len; i++) {
-        struct ownBorrowSrc* s = ListGetIdx(&ownBorrowSrcs, i);
-        if (!s->deep) continue;
-        struct var* g = canonicalVar(s->call->readVar);
-        bool ok = false;
-        for (int k = 0; g->ownBorrowResult && k < g->ownBorrowParams.len && !ok; k++) {
-            int q = *(int*)ListGetIdx(&g->ownBorrowParams, k);
-            int pp;
-            struct var* loc;
-            if (q >= s->call->args.len
-                    || ownRootOf(s->func, *(struct operand**)ListGetIdx(&s->call->args, q), &pp, &loc) != OWN_ROOT_PARAM
-                    || pp < 0 || pp >= s->func->type.vars.len)
-                continue;
-            struct var* pv = ListGetIdx(&s->func->type.vars, pp);
-            ok = pv->type.structMAlloc && pv->type.scopeParam && pv->type.scopeParam != SCOPE_AMBIGUOUS
-                 && canonicalVar(pv->type.scopeParam) == s->scope;
-        }
-        if (!ok && s->top) {
-            Err(s->top->tok, ERR_OWN_CANNOT_OUTLIVE);
-            Note(s->top->tok, NOTE_OWN_BORROW_LOCAL);
-        }
-    }
-}
-
 //the return of vals, already built - none for a bare "return", several for "return a, b" (D8c); also what a task's
 //clause gives its targets (P4a), as its lambda's return
 static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, struct list* valsIn) {
@@ -25651,38 +24210,17 @@ static struct statement buildRetValues(struct checkCtx* ctx, struct token tok, s
         stmt.op = val;
         return stmt;
     }
-
-    //O37: an owned result of an owning type held by value - the return a move position, its reach the result scope. An
-    //owner value local given whole is moved, as by "take" (O34); a borrowed copy owns nothing to give
-    if (val && ctx->func && ctx->func->type.hasRetType && TypeIsOwnValue(*ctx->func->type.retType) && !val->type.unknown
-            && !ctx->inCtor) {
-        if (OwnValueLocalOf(val) && !val->readVar->isCapture) {
-            val = buildTake(ctx, val, val->tok);
-            val->ownByReturn = true;
-        }
-        ownValueGiven(ctx, val, *ctx->func->type.retType, ctx->func->type.resultScope, 0, false);
-    }
     if (ctx->inCtor) Err(tok, ERR_RETURN_IN_CTOR);
     else if (ctx->inTest && !ctx->func) { if (val) Err(tok, ERR_RETURN_IN_TEST); } //S15: a test passes by a bare return
     else if (ctx->func && ctx->func->type.noReturn) Err(tok, ERR_RETURN_IN_NORETURN); //D8e
     else if (val && ctx->func && !ctx->func->type.hasRetType) Err(tok, ERR_RETURN_VALUE_IN_VOID);
     else if (!val && ctx->func && ctx->func->type.hasRetType) Err(tok, ERR_RETURN_NEEDS_VALUE, ctx->func->type.retType);
-    else if (val && ctx->func && ctx->func->type.hasRetType && ctx->func->type.retType->refOwn) {
-        //O37: an owned result - the return a move position, its reach the result scope. An owner local or an owning
-        //parameter given whole is moved, as by "take" (O34): what reads it after, deferred code, is refused (ownOpWalk)
-        if (val->opType == OPERATION_READ_VAR && val->ownOrig && val->readVar && !val->readVar->owner
-                && !val->readVar->isCapture) {
-            val = buildTake(ctx, val, val->tok);
-            val->ownByReturn = true;
-        }
-        ownMoveInto(ctx, val, *ctx->func->type.retType, ctx->func->type.resultScope, 0, false);
-    } else if (val && ctx->func && ctx->func->type.hasRetType) {
+    else if (val && ctx->func && ctx->func->type.hasRetType) {
         //O18a: a call whose result's scope follows the result is built in the scope the return type names
         struct var* resultHome = ctx->func->type.retType->scopeParam ? ctx->func->type.retType->scopeParam
                                                                      : ctx->func->type.resultScope;
         if (resultHome) noteBuiltAt(ctx, resultHome, val); //O12/O17
         if (resultHome) landCall(val, resultHome, 0);
-        ownBorrowedOwnResult(ctx, val, *ctx->func->type.retType); //O37
         landReturnedLambda(ctx, val, resultHome, *ctx->func->type.retType); //D16d
         if (checkBuiltResult(ctx, val, *ctx->func->type.retType)) {
             struct statement stmt = (struct statement){0};
@@ -25789,10 +24327,6 @@ struct var* lvalueRootVar(struct operand* op) {
 //a global, a slot reached from one with no scope of its own, a local that took such a thing, or a call's result that
 //was built or borrowed there. False where that is not known.
 bool storageInProgram(struct operand* op) {
-    //(vec3 F4: a borrow of an owned object - its slot read, a local holding the borrow, a slice of an own array, or
-    //anything reached through one - is in the object's region, which its owner may release at any time: never the
-    //program's, even where the owner is a global)
-    if (ownRegionOf(op) || ownArrayRegionOf(op)) return false;
     switch (op->opType) {
         case OPERATION_READ_VAR:
             //a named function's value - or a lambda's that captures nothing - is static, made once for the whole run (D16)
@@ -25927,12 +24461,6 @@ bool landAtTargets(struct checkCtx* ctx, struct operand* call, struct list* targ
 //P2: whether a scope lasts until the join that ctx's spawn belongs to - a scope variable or the program's does (each
 //outlives the body), a block only when it is the join block or one around it
 static bool lastsUntilJoin(struct checkCtx* ctx, struct var* v, int d, bool unnamed) {
-    //O32/P2: a borrow of an owned object lasts as long as the slot it was read from - an owner local's block, at the latest
-    //(a release before the join is the borrow check's, O41)
-    if (!unnamed && v && v != SCOPE_AMBIGUOUS && canonicalVar(v)->isRegion) {
-        struct var* R = canonicalVar(v);
-        return lastsUntilJoin(ctx, R->regionLife, R->regionLifeDepth, R->regionLifeUnnamed);
-    }
     if (unnamed || (v && v != SCOPE_AMBIGUOUS)) return true;
     if (v == SCOPE_AMBIGUOUS) return false;
     return normDepth(d) <= ctx->joinDepth;
@@ -26326,7 +24854,6 @@ struct statement buildSpawnStmnt(struct checkCtx* ctx, struct syntax* s) {
         Err(tok, ERR_SPAWN_NOT_CALL);
         return stmt;
     }
-    if (ownSignature(call->readVar)) { Err(call->tok, ERR_OWN_SPAWN_SIG); return stmt; } //O41: not yet
     if (bangNode) {
         if (call->readVar->type.errors.len == 0) Err(firstTokOfType(bangNode, TOK_BANG), ERR_BANG_NOTHING_FAILS);
         else {
@@ -26602,22 +25129,13 @@ struct funcValueUse { struct var* f; struct token tok; bool viaTypeVarResult; st
 struct list* SemanticAllLambdas(void) { return &allLambdas; }
 static void lambdaRegister(struct var* L) { ListAdd(&allLambdas, &L); }
 
-//O36/O37: whether a function owns a parameter or gives an owned result - which a function type never does
-static bool ownSignature(struct var* f) {
-    if (!f) return false;
-    for (int i = 0; i < f->type.vars.len; i++)
-        if (((struct var*)ListGetIdx(&f->type.vars, i))->type.refOwn) return true;
-    return f->type.hasRetType && f->type.retType && (f->type.retType->refOwn || TypeIsOwnValue(*f->type.retType));
-}
 
 static void noteFuncValueUse(struct var* f, struct token tok) {
-    if (ownSignature(f)) Err(tok, ERR_OWN_FUNC_VALUE_SIG, ownQuoted(f)); //O36: called by name only
     struct funcValueUse u = { f, tok, false, NULL };
     ListAdd(&funcValueUses, &u);
 }
 //E31: a value adapted to a function type through its Call - Call is then called as that function value is (T22a)
 static void noteCallValueUse(struct var* call, struct type t, struct token tok) {
-    if (ownSignature(call)) Err(tok, ERR_OWN_FUNC_VALUE_SIG, ownQuoted(call)); //O36
     struct type* tt = MallocOrCrash(sizeof(struct type));
     *tt = t;
     tt->structMAlloc = false;
@@ -26742,7 +25260,7 @@ static struct type lambdaOwnType(struct type t) {
 //copied and read-only; a reference keeps naming its instance, writable through when the variable was, and gets
 //an implicit scope of its own as a reference parameter does (O4b) - bound, when the lambda is made, to the scope
 //the captured reference lives in
-static struct var* lambdaCapture(struct var* L, struct var* outer, struct token tok) {
+static struct var* lambdaCapture(struct var* L, struct var* outer) {
     canonicalVar(outer)->valueEscapes = true; //D16c: a lambda's copy of it may outlive this frame
     if (outer->paramCopy && outer->type.bType == BASETYPE_FUNC) canonicalVar(outer)->capturedFnParam = true; //...beyond the call
     for (int i = 0; i < L->lambdaCaptures.len; i++) {
@@ -26756,12 +25274,6 @@ static struct var* lambdaCapture(struct var* L, struct var* outer, struct token 
     inner->mayBeInitialized = true;
     inner->isCapture = true;
     inner->capturedFrom = outer;
-    //O32: an owner local is its object's one owner - a lambda's copy of it would be a second, releasing or moving what the
-    //body around it still owns. A borrow of it is what a lambda captures, "b := o" outside it
-    if (inner->type.refOwn) {
-        Err(tok, ERR_OWN_CAPTURED, outer->name, outer->name);
-        inner->type.refOwn = false;
-    } else if (canonicalVar(outer)->ownValue) Err(tok, ERR_OWN_CAPTURED, outer->name, outer->name); //...an owner value local
     bool isRef = inner->type.structMAlloc;
     //D16c: an array is never copied implicitly (D9a), so a value array - text included - is BORROWED, as passing
     //it to a "&" parameter would borrow it (E12c): the lambda's copy is a read-only reference to the variable's
@@ -26893,9 +25405,7 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
         struct var* ep = exp ? ListGetIdx(&exp->vars, i) : NULL;
         struct syntax* typeNode = firstPartOfType(p, SNTX_TYPE_EXPR);
         if (typeNode) {
-            ownDenied = ERR_OWN_IN_FUNC_TYPE; //O36: a lambda is a function value
             v.type = resolveTypeExpr(octx->mod, typeNode, &t.scopeVars);
-            ownDenied = -1;
             declTypePermission(&v, p, ERR_MUT_ON_VALUE_PARAM); //D9/T25b
             if (ep && !TypeIsGeneric(ep->type) && !TypeIsSame(v.type, ep->type)) {
                 Err(nameTok, ERR_LAMBDA_SIGNATURE, exp);
@@ -26951,9 +25461,7 @@ static void finalizeLambdaIn(struct operand* op, struct type* expected) {
             }
             *t.retType = TypeTuple(&elems);
         } else {
-            ownDenied = ERR_OWN_IN_FUNC_TYPE; //O37
             *t.retType = resolveTypeExpr(octx->mod, firstPartOfType(retNode, SNTX_TYPE_EXPR), &t.scopeVars);
-            ownDenied = -1;
         }
         finishResultScope(&t, kw);
         if (exp && exp->hasRetType && !TypeIsGeneric(*exp->retType) && !TypeIsSame(*t.retType, *exp->retType)) {
@@ -27482,10 +25990,7 @@ struct statement buildStatement(struct checkCtx* ctx, struct syntax* s) {
     obligationOrigin = t;
     int pendingFrom = pendingDischarges.len; //what a statement around this one still owes stays owed
     int scopeGroup = ErrMsgScopeGroupStart(); //B11: one error per statement about where something lives
-    int prevStmt = ownStmtSerial;
-    ownStmtSerial = ++ownStmtCounter;
     struct statement st = buildStatementInner(ctx, s);
-    ownStmtSerial = prevStmt;
     flushPendingDischargesFrom(pendingFrom); //O18a: every landing site in the statement is resolved by now
     ErrMsgScopeGroupEnd(scopeGroup);
     obligationOrigin = prevOrigin;
@@ -27983,20 +26488,7 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
         //initializer's was, as an ordinary local's is its block: "q := p" is not the parameter's slot, depth 2)
         struct type fieldAsLocal = field->type;
         if (!fieldAsLocal.scopeParam && (!fieldAsLocal.structMAlloc || fieldAsLocal.scopeDepth == 0)) fieldAsLocal.scopeDepth = 1;
-        //O34: an own field is an owner local of the constructor, moved into the instance as it is assembled. Its reach
-        //(O33) is the instance's scope - the constructor's top level (C2g) - as a read of the field through the instance
-        //finds it (ownReachOfBase), so an object moved or built into it refers only to what outlives the instance (C2d);
-        //an own array whose elements carry no scopes needs nothing
-        bool ownField = typeExprNode && field->type.refOwn;
-        int ownReachDepth = 1;
-        bool ownReachUnnamed = field->type.bType == BASETYPE_ARRAY && field->type.arrElem
-                               && !typeCarriesScopes(*field->type.arrElem);
-        if (rhsNode && ownField) {
-            struct type want = field->type;
-            want.refOwn = false;
-            fieldOp = buildExpecting(&cctx, rhsNode, &want);
-            ownMoveInto(&cctx, fieldOp, field->type, NULL, ownReachDepth, ownReachUnnamed);
-        } else if (rhsNode) {
+        if (rhsNode) {
             fieldOp = buildExprFromSyntax(&cctx, rhsNode);
             if (typeExprNode) {
                 int errsFieldFit = ErrMsgGetNErrors();
@@ -28011,9 +26503,7 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
                         && RefExactScope(&cctx, fieldOp, true, &kv, &kd, &ku) && !kv && !ku && normDepth(kd) > 1)
                     Err(fieldOp->tok, ERR_SCOPE_MAY_NOT_OUTLIVE);
             } else { // ":=" - type read straight off the rhs (D15)
-                inferOwnValue = true; //O31: an owning type held by value - a Vec field, as for a local
                 field->type = inferredDeclType(cctx.func, fieldOp);
-                inferOwnValue = false;
                 //O25a/C2d: it writes no scope - the field lives where its initializer does: where a parameter's argument
                 //lives ("&p", as written), or, built here or living anywhere else, with the instance (a bare "&"). The
                 //initializer's own tag may be a callee's scope variable, meaningless here
@@ -28081,16 +26571,6 @@ static void buildTypeBodiesCtor(struct semaModule* mod, struct type* t) {
             if (!fieldAsLocal.scopeParam && (!fieldAsLocal.structMAlloc || fieldAsLocal.scopeDepth == 0)) fieldAsLocal.scopeDepth = 1;
             struct var* local = scopeDeclare(mod, &ctorScope, field->name, field->tok, fieldAsLocal, true);
             local->scopeBindings = field->scopeBindings;
-            if (ownField) {
-                local->ownReachSet = true;
-                local->ownReach = NULL;
-                local->ownReachDepth = ownReachDepth;
-                local->ownReachUnnamed = ownReachUnnamed;
-            }
-            //O31/O34: a field of an owning type held by value (a Vec field) is an owner value local of the constructor,
-            //given an owner - never a borrowed copy, which the instance would keep - and moved into the instance as it is
-            //assembled (codegen's ctorOwners), its owners released by the frame until then (N6)
-            if (TypeIsOwnValue(field->type) && !field->type.unknown) ownValueDecl(&cctx, local, fieldOp, true, false);
             struct statement decl = (struct statement){0};
             decl.sType = STATEMENT_VAR_DECL;
             decl.var = *local;
@@ -28192,7 +26672,7 @@ static bool ensureGlobalBuilt(struct var* v) {
 //R1a: a global whose type is written is built once every body has been checked - its type is all a body reads of it -
 //so what its initializer calls has its error set known when the initializer is checked: built before them, it read a
 //set still being inferred, and the whole program was checked again for it. A ":=" global is built first, its type being
-//its initializer's, and so is one owning what it holds (O31, O34)
+//its initializer's
 static struct list laterGlobals; //struct globalInitArg, in initialization order
 void semaBuildGlobalInits(struct semaModule* mod) {
     SemanticMethodScope = mod;
@@ -28201,8 +26681,7 @@ void semaBuildGlobalInits(struct semaModule* mod) {
         struct syntax* actual = partSntx(decl, 0);
         if (actual->type != SNTX_VAR_DECL) continue;
         struct var* v = VarGetList(&mod->vars, strFromTok(firstTokOfType(actual, TOK_IDEN)));
-        if (v && firstPartOfType(actual, SNTX_TYPE_EXPR) && firstPartOfType(actual, SNTX_EXPR) && !v->type.refOwn
-                && !TypeIsOwnValue(v->type) && !v->type.unknown) {
+        if (v && firstPartOfType(actual, SNTX_TYPE_EXPR) && firstPartOfType(actual, SNTX_EXPR) && !v->type.unknown) {
             struct globalInitArg a = { mod, actual };
             ListAdd(&laterGlobals, &a);
             continue;
@@ -28237,28 +26716,7 @@ static void buildGlobalInit(struct semaModule* mod, struct syntax* actual) {
         if (!exprNode) {
             v->initExpr = zeroValueFor(&ctx, v->type, nameTok, false); //D13c: a constructor's zero value, if not zero bits
         } else {
-            struct type want = v->type;
-            want.refOwn = false;
-            struct operand* rhs = v->type.refOwn ? buildExpecting(&ctx, exprNode, &want) : buildExprFromSyntax(&ctx, exprNode);
-            //O31/O34: a global holding an owning type by value - a Vec - is given an owner, its reach the program's scope;
-            //it is never released (the program's scope never closes) and never baked (K2)
-            //(written so, "G mut Vec<I64> = Vec<I64>()": a ":=" declares the reference, as it always has - D15)
-            if (TypeIsOwnValue(v->type) && !v->type.unknown && firstPartOfType(actual, SNTX_TYPE_EXPR)) {
-                reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok, rhs, v->type);
-                ownValueGiven(&ctx, rhs, v->type, NULL, 0, true);
-                v->initExpr = rhs;
-                buildDefaultFor(mod, v, nameTok);
-                ListRemoveIdx(&globalsBuilding, globalsBuilding.len - 1);
-                return;
-            }
-            if (v->type.refOwn || rhs->opType == OPERATION_TAKE) { //O34: an own global - its reach the program's scope
-                if (!v->type.refOwn) v->type = rhs->type;
-                ownMoveInto(&ctx, rhs, v->type, NULL, 0, true);
-                v->initExpr = rhs;
-                buildDefaultFor(mod, v, nameTok);
-                ListRemoveIdx(&globalsBuilding, globalsBuilding.len - 1);
-                return;
-            }
+            struct operand* rhs = buildExprFromSyntax(&ctx, exprNode);
             if (firstPartOfType(actual, SNTX_TYPE_EXPR)) {
                 reportTypeFit(OperandFitsType(ctx.func, rhs, v->type), rhs->tok, rhs, v->type);
             } else { // ":=" - type read straight off the initializer
@@ -28720,1856 +27178,32 @@ static bool isLibraryFile(struct str file) {
     return false;
 }
 
-// ---- own references (§8.8): what a body may release, and the borrow check ----
+// ---- every checked body, and a function's name as written ----
 
-//O39: a release a body may make - of an object of type t (canonical), below parameter param's referent by own fields only
-//(-1: anywhere - through a global, a capture, or a reference no own field reached), first seen at tok; move: what was
-//seen there moves the object rather than freeing it (a "take" - released or not, its tree is left, which a caller's borrow
-//of it cannot follow), for the message only
-//(site: where in this function's own body the release is - tok itself, or the call that leads to tok in a callee; B11)
-struct ownRel { struct type* t; int param; struct token tok; bool move; struct token site; };
-//...and what it may borrow (O41): the same, t NULL for an object of any type - a call through a function value, whose
-//body is not known here
-struct ownEffects { struct list rels; struct list borrows; };
-//O38: a region borrowed - one read of an own slot - and where it was read, for the message. task: borrowed by a task
-//until its join (O41) - read at tok, the spawn, or in what the task runs, at via; anyType: an object of any type, a task
-//calling a function value
-//(copied: made by a borrowed copy (O32), whose own pointers are plain copies in storage of this function's - what only
-//this function's locals may hold, O38; a borrow of an owned object itself is kept in its region by §8, O33)
-//(by: a loan a reference to an owner value local's storage made (own5 F2) - the borrowed operand; the call it is lent to
-//releases through it as its own, and so does a reference local holding it)
-struct ownLoan { struct var* R; struct token tok; bool task; bool anyType; struct token via; bool copied; struct operand* by; };
-//...held by a local (or, always, by a task until its join) for as long as the local is used
-struct ownHolder { struct var* v; struct list loans; int frame; bool always; };
-//a block being walked, the statement in it at idx being the one walked; owner: the statement the block belongs to
-struct ownFrame { struct list* block; int idx; struct statement* owner; };
-
-static struct {
-    bool check;          //false: finding what each body may release (ownEff); true: checking each body against it
-    struct var* func;    //the body's function, NULL for a test or a global's initializer
-    struct statement* stmt; //the statement being walked
-    struct list frames;  //struct ownFrame
-    struct list holders; //struct ownHolder
-    struct list cur;     //struct ownLoan - what the statement being walked borrows while it runs
-    struct list encl;    //struct ownLoan - what statements around an expression's own block borrow while it runs
-    struct list reported; //struct token - one error per release
-    struct list reportedStmts; //struct statement* - ...and one a statement
-    struct statement* relAssign; //the assignment whose release is being checked - its value is done by then
-    bool changed;
-    struct token useTok; //the read ownHolderLive found a local still used by, for a message
-    struct list lambdaLocals; //struct var* pairs: a hidden local holding a lambda a task runs ("$task", "$clause"), and it
-    bool onlyTask;       //checking again with what tasks borrow (ownTaskRewalk): only conflicts with those are new
-    bool rewalking;      //...and so making no task loans again
-    struct list rewalkLoops; //struct statement*: a loop around a spawn, in its join block, to walk again once walked
-    struct list implicitFns; //struct var*: the methods "$", "==" and a Map call by themselves - Str, Eq, Hash (O40)
-} ow;
-
-static struct str ownQuoted(struct var* f);
 //a function's name as written - an instantiation's without its type arguments (G16)
-static struct str ownFuncName(struct var* f) {
+static struct str funcNameAsWritten(struct var* f) {
     struct str n = canonicalVar(f)->name;
     for (int k = 0; k < n.len; k++)
         if (n.ptr[k] == '$') { n.len = k; break; }
     return n;
 }
 
-static bool ownTypeIn(struct list* l, struct type* t) {
-    for (int i = 0; i < l->len; i++)
-        if (*(struct type**)ListGetIdx(l, i) == t) return true;
-    return false;
-}
-
-//O39: what releasing an object of type t frees - the object and what its own fields own, all the way down
-static void ownHeld(struct type* t, struct list* out) {
-    if (!t || ownTypeIn(out, t)) return;
-    ListAdd(out, &t);
-    if (t->bType != BASETYPE_STRUCT) return; //(an own array's elements own nothing, T25e)
-    for (int i = 0; i < t->vars.len; i++) {
-        struct var* f = ListGetIdx(&t->vars, i);
-        if (f->type.refOwn) ownHeld(OwnTypeKey(f->type), out);
-        else if (TypeIsOwnValue(f->type)) ownHeld(canonicalStructOf(f->type), out); //(a Vec field's owners are the instance's)
-    }
-}
-
-static struct ownEffects* ownEffOf(struct var* f) {
-    f = canonicalVar(f);
-    if (!f->ownEff) {
-        f->ownEff = MallocOrCrash(sizeof(struct ownEffects));
-        f->ownEff->rels = ListInit(sizeof(struct ownRel));
-        f->ownEff->borrows = ListInit(sizeof(struct ownRel));
-    }
-    return f->ownEff;
-}
-
-static void ownRelPut(struct list* l, struct type* t, int param, struct token tok, bool move, struct token site) {
-    for (int i = 0; i < l->len; i++) {
-        struct ownRel* r = ListGetIdx(l, i);
-        if (r->t != t || r->param != param) continue;
-        if (r->move && !move) { r->move = false; r->tok = tok; r->site = site; } //(a release is the one worth naming)
-        return;
-    }
-    struct ownRel r = { t, param, tok, move, site };
-    ListAdd(l, &r);
-    ow.changed = true;
-}
-
-static void ownEffAdd(struct var* f, struct type* t, int param, struct token tok, bool move, struct token site) {
-    if (!f || !t) return;
-    ownRelPut(&ownEffOf(f)->rels, t, param, tok, move, site);
-}
-
-//O41: a borrow a body may make - t NULL for any type
-static void ownBorrowAdd(struct var* f, struct type* t, int param, struct token tok) {
-    if (!f) return;
-    struct list* l = &ownEffOf(f)->borrows;
-    if (t) //(nothing to add below a borrow of anything)
-        for (int i = 0; i < l->len; i++) {
-            struct ownRel* r = ListGetIdx(l, i);
-            if (!r->t && r->param == param) return;
-        }
-    ownRelPut(l, t, param, tok, false, tok);
-}
-
-//O39: where a place or a value was reached from - below which parameter by own fields only, an owner local of this body
-//(nothing a caller holds), or anything else. A value made here (a constructor call, a literal) is this body's own
-static int ownEvRoot(struct operand* op, int* param, struct var** local) {
-    *param = -1;
-    *local = NULL;
-    if (!op) return OWN_ROOT_ANY;
-    struct var* R = ownRegionOf(op);
-    if (R) {
-        *param = R->regionRootParam;
-        *local = R->regionRootLocal;
-        return R->regionRoot;
-    }
-    if (op->opType == OPERATION_READ_VAR && op->readVar) {
-        //(an owning parameter holds owners, as an owner local does: it alone reaches what it owns - O39)
-        struct var* v = canonicalVar(op->readVar);
-        if (v->type.refOwn && !v->owner) {
-            *local = v;
-            return OWN_ROOT_LOCAL;
-        }
-        if (OwnValueLocalOf(op) || ownCopyLocalOf(op)) return ownVarRoot(op->readVar, param, local); //O31/O32
-        int i = ownParamIndex(ow.func, op->readVar);
-        if (i >= 0) {
-            *param = i;
-            return OWN_ROOT_PARAM;
-        }
-        return OWN_ROOT_ANY;
-    }
-    //O39: a field held by value is part of its instance - a Vec field's owners are reached where the instance is
-    if (op->opType == OPERATION_MEMBER && op->args.len && !op->type.structMAlloc && TypeIsOwnValue(op->type))
-        return ownEvRoot(*(struct operand**)ListGetIdx(&op->args, 0), param, local);
-    if (opIsCtorCall(op) || (op->isLiteral && !op->isNullLiteral)) return OWN_ROOT_LOCAL;
-    return OWN_ROOT_ANY;
-}
-
-//O39: the regions a value is a borrow of, from the one it names up through the own slots it was read out of - a release
-//below the value reaches none of them, owners forming trees
-static void ownChain(struct operand* op, struct list* out) {
-    while (op) {
-        struct var* R = ownRegionOf(op);
-        if (!R) return;
-        ListAdd(out, &R);
-        struct operand* slot = R->regionSlot;
-        if (!slot || slot->opType != OPERATION_MEMBER || !slot->args.len) return;
-        op = *(struct operand**)ListGetIdx(&slot->args, 0);
-    }
-}
-
-static struct ownHolder* ownHolderOf(struct var* v) {
-    if (!v) return NULL;
-    v = canonicalVar(v);
-    for (int i = ow.holders.len - 1; i >= 0; i--) {
-        struct ownHolder* h = ListGetIdx(&ow.holders, i);
-        if (h->v == v) return h;
-    }
-    return NULL;
-}
-
-static void ownLoanPut(struct list* out, struct ownLoan l) {
-    for (int i = 0; i < out->len; i++) {
-        struct ownLoan* have = ListGetIdx(out, i);
-        if (have->R != l.R) continue;
-        if (l.copied) have->copied = true;
-        //(made two ways: no one place it is released through as its own - unless both are references to one owner value
-        //local's storage, "v.Push(v.Len())": only the owner a borrow is of is read off it)
-        if (have->by != l.by && !(have->by && l.by && have->by->ownValueBorrow == l.by->ownValueBorrow)) have->by = NULL;
-        return;
-    }
-    ListAdd(out, &l);
-}
-
-static void ownLoanAdd(struct list* out, struct var* R, struct token tok) {
-    struct ownLoan l = (struct ownLoan){0};
-    l.R = R;
-    l.tok = tok;
-    ownLoanPut(out, l);
-}
-
-static void ownLoansAll(struct list* from, struct list* out) {
-    for (int i = 0; i < from->len; i++) ownLoanPut(out, *(struct ownLoan*)ListGetIdx(from, i));
-}
-
-static void ownLoansOfBlockDeep(struct list* block, struct list* out);
-//O38: what evaluating op borrows while it runs - every read of an own slot made into a borrow, and every local holding
-//some, except where the value is used at once for something holding no reference (transient: "s.cur.n", a comparison, a
-//rendering). place: op is where an assignment stores, used until the store whatever it reads
-//(own5: only what a value keeps - see ownLoansIn's arguments)
-static bool ownKeptOnly;
-//O38 (Vec phase 1): the loan a call giving a borrowed own result (O37) makes - on the objects of the result's type below
-//the argument it is borrowed from, rooted where that argument is (made once a call)
-static int ownEvRoot(struct operand* op, int* param, struct var** local);
-static struct list* ownResultRegionsOf(struct operand* op) {
-    if (op->opType != OPERATION_FUNCCALL || op->callee || !op->readVar) return NULL;
-    struct var* f = canonicalVar(op->readVar);
-    if (!f->ownBorrowResult) return NULL;
-    if (op->ownResultRegionsMade) return &op->ownResultRegions;
-    op->ownResultRegionsMade = true;
-    op->ownResultRegions = ListInit(sizeof(struct var*));
-    for (int k = 0; k < f->ownBorrowParams.len; k++) { //(vec2: one below each parameter it may be borrowed from)
-        int q = *(int*)ListGetIdx(&f->ownBorrowParams, k);
-        if (q >= op->args.len) continue;
-        int param;
-        struct var* local;
-        int root = ownEvRoot(*(struct operand**)ListGetIdx(&op->args, q), &param, &local);
-        struct var* R = ownRegionNew(op->tok, NULL, 0, false, root, param);
-        R->regionRootLocal = local;
-        //(vec1 F1: on the type of the own object the callee borrows, never the result's own type, which may be a declared
-        //array type the buffer was converted to - a release of the buffer is keyed by the buffer's type. vec2 N1: as
-        //settled once every body is checked - before that, not known: any)
-        R->regionAnyType = !ownBorrowSettled || f->ownBorrowResultAnyType || !f->ownBorrowResultType;
-        R->regionType = f->ownBorrowResultType && !R->regionAnyType ? f->ownBorrowResultType : OwnTypeKey(op->type);
-        R->regionArray = R->regionType ? R->regionType->bType == BASETYPE_ARRAY : op->type.bType == BASETYPE_ARRAY;
-        R->regionOfResult = true;
-        ListAdd(&op->ownResultRegions, &R);
-    }
-    return &op->ownResultRegions;
-}
-//(a join's pieces, in order - its nested joins' flattened)
-static void ownJoinPieces(struct operand* op, struct list* out) {
-    if (op->opType != OPERATION_CONCAT) {
-        ListAdd(out, &op);
-        return;
-    }
-    for (int i = 0; i < op->args.len; i++) ownJoinPieces(*(struct operand**)ListGetIdx(&op->args, i), out);
-}
-//(whether evaluating op runs a call - a function's, a method's, an operator's, a function value's - anywhere in it)
-static bool ownOpCalls(struct operand* op) {
-    if (!op) return false;
-    if (op->opType == OPERATION_FUNCCALL || op->callee) return true;
-    for (int i = 0; i < op->args.len; i++) if (ownOpCalls(*(struct operand**)ListGetIdx(&op->args, i))) return true;
-    for (int i = 0; i < op->chainOperands.len; i++) if (ownOpCalls(*(struct operand**)ListGetIdx(&op->chainOperands, i))) return true;
-    return op->comprBody.len > 0 || op->catchClauses.len > 0;
-}
-//Vec phase 1: whether two referents are one storage's - two arrays whose elements are both references or both values
-//(a slice, and T29a's conversions between arrays of one representation, name the same storage), or one struct or enum
-static bool ownSameReferent(struct type a, struct type b) {
-    if (a.bType == BASETYPE_ARRAY || b.bType == BASETYPE_ARRAY) {
-        if (a.bType != b.bType) return false;
-        if (!a.arrElem || !b.arrElem) return true;
-        if (a.arrElem->structMAlloc != b.arrElem->structMAlloc) return false;
-        //(Vec phase 2a: values meet only where a conversion or a slice could make one storage of the other - elements of
-        //one representation, T29a/T29h - so a String& held in a Vec<Tok>'s element never names the buffer)
-        if (a.arrElem->structMAlloc || a.arrElem->unknown || b.arrElem->unknown || TypeIsGeneric(*a.arrElem)
-                || TypeIsGeneric(*b.arrElem))
-            return true;
-        struct type ea = *a.arrElem, eb = *b.arrElem;
-        if (ea.bType == BASETYPE_ARRAY && eb.bType == BASETYPE_ARRAY) return ownSameReferent(ea, eb);
-        return TypeIsSameRepr(ea, eb);
-    }
-    if (a.bType != b.bType || (a.bType != BASETYPE_STRUCT && a.bType != BASETYPE_CHOICE)) return false;
-    return canonicalStructOf(a) == canonicalStructOf(b);
-}
-//...whether a value of type res can hold a reference to a value of type tgt - at any depth, through references too. A
-//function value, a type variable, anything not settled, or a walk too deep, may hold anything
-//(seen: the declared types already walked into on this path - a type holding itself through a reference, "next mut
-//Node&", is walked once; Vec phase 2a: such a type was taken to refer to anything, its walk reaching the depth limit)
-static bool ownMayReferToIn(struct type res, struct type tgt, int depth, struct type** seen, int nseen) {
-    if (depth > 32 || res.unknown || res.bType == BASETYPE_FUNC || res.bType == BASETYPE_TYPEVAR
-            || res.bType == BASETYPE_INTERFACE)
-        return true;
-    //(vec2: an own reference refers only to the object it owns - never to one a loan is on, which is owned elsewhere: a
-    //moved one leaves its slot, "take" refused while a loan on it lives (O39); only what that object holds can)
-    if (res.structMAlloc && !res.refOwn && ownSameReferent(res, tgt)) return true;
-    res.structMAlloc = false;
-    struct type* c = (res.bType == BASETYPE_STRUCT || res.bType == BASETYPE_CHOICE) ? canonicalStructOf(res) : NULL;
-    if (c) {
-        for (int i = 0; i < nseen; i++) if (seen[i] == c) return false;
-        if (nseen >= 64) return true;
-        seen[nseen++] = c;
-    }
-    struct list kids = TypeValueChildren(res);
-    bool hit = false;
-    for (int i = 0; i < kids.len && !hit; i++)
-        hit = ownMayReferToIn(*(struct type*)ListGetIdx(&kids, i), tgt, depth + 1, seen, nseen);
-    ListDestroy(kids);
-    return hit;
-}
-static bool ownMayReferTo(struct type res, struct type tgt, int depth) {
-    struct type* seen[64];
-    return ownMayReferToIn(res, tgt, depth, seen, 0);
-}
-//...whether f's result is written built (T& or T&return - in the result scope), not borrowed from a parameter (T&p)
-//nor owned (O37), nor a call's borrowed own result (O37, whose loan is its own)
-static bool ownResultWrittenBuilt(struct var* f) {
-    f = canonicalVar(f);
-    struct type* rt = f->type.hasRetType ? f->type.retType : NULL;
-    //(a type-variable result bound to a reference returns what the body gives it, its argument included, O14b - so it
-    //is not new storage, "id(v.View())")
-    if (!rt || !rt->structMAlloc || rt->refOwn || f->ownBorrowResult || f->type.resultViaTypeVar) return false;
-    return !rt->scopeParam || (f->type.resultScope && canonicalVar(rt->scopeParam) == canonicalVar(f->type.resultScope));
-}
-//...whether f's result is new storage at its top - written built AND proven fresh (vec3 F1: "built" says only which
-//scope the result is in; a call whose result lands there - "id(a)", "pick(c, a, b)", "l[0]", "m.Get(k)" - hands an
-//argument back into it, O14b, so a written built result is no proof)
-static bool ownResultBuilt(struct var* f) {
-    return ownResultWrittenBuilt(f) && canonicalVar(f)->ownResultFresh;
-}
-
-//O38 (vec3 F1): which built results are proven new storage - a least fixed point over the returns of every checked body,
-//conservative everywhere: a return is fresh only when it is a constructor call, "Array<T>(n)", a comprehension, a
-//literal, text rendered or joined here, null, a call to a function already proven fresh, a conditional or a match all of
-//whose values are, or a local declared from one and never repointed afterwards; any catch default must be fresh too.
-//Anything else - a parameter, a field, an element, a call through a type variable or a function value, a body unchecked
-//or with errors - is not, and the result keeps every loan its arguments carry
-static struct list ownFreshFuncs;
-static void ownForEachBody(void (*fn)(struct var*, struct list*));
-static void ownFreshCollect(struct var* f, struct list* block) {
-    (void)block;
-    if (f && !f->isLambda && ownResultWrittenBuilt(f)) {
-        struct var* c = canonicalVar(f);
-        for (int i = 0; i < ownFreshFuncs.len; i++) if (*(struct var**)ListGetIdx(&ownFreshFuncs, i) == c) return;
-        ListAdd(&ownFreshFuncs, &c);
-    }
-}
-//(a local v written again anywhere in a body - assigned, a spawn's target, taken - or declared more than once; every
-//statement and operand at any depth, StmtEachChild's list)
-struct ownFreshScan { struct var* v; int decls; struct var* f; };
-static bool ownFreshIsVar(struct operand* op, struct var* v) {
-    return op && op->opType == OPERATION_READ_VAR && op->readVar && canonicalVar(op->readVar) == v;
-}
-static void ownFreshWritesStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
-    (void)r;
-    struct ownFreshScan* w = c->ctx;
-    if (s->sType == STATEMENT_VAR_DECL && canonicalVar(&s->var) == w->v) w->decls++;
-    if (s->sType == STATEMENT_ASSIGN && ownFreshIsVar(s->target, w->v)) c->stop = true;
-    for (int i = 0; i < s->spawnTargets.len; i++)
-        if (ownFreshIsVar(*(struct operand**)ListGetIdx(&s->spawnTargets, i), w->v)) c->stop = true;
-}
-static void ownFreshWritesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
-    (void)r;
-    struct ownFreshScan* w = c->ctx;
-    if (op->opType == OPERATION_TAKE && op->args.len && ownFreshIsVar(*(struct operand**)ListGetIdx(&op->args, 0), w->v))
-        c->stop = true;
-}
-static bool ownFreshBlockWrites(struct list* block, struct var* v, int* decls) {
-    struct ownFreshScan w = { v, 0, NULL };
-    struct codeVisit c = { ownFreshWritesOp, ownFreshWritesStmt, NULL, &w, false };
-    bool wrote = !CodeDeepBlock(block, &c);
-    *decls += w.decls;
-    return wrote;
-}
-static bool ownFreshValue(struct var* f, struct operand* op, int depth) {
-    if (!op || depth > 32 || op->type.unknown) return false;
-    for (int i = 0; i < op->catchClauses.len; i++) { //(a catch default is the value where the call fails)
-        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
-        if (c->dflt && !ownFreshValue(f, c->dflt, depth + 1)) return false;
-    }
-    if (op->isNullLiteral) return true;
-    if (op->isLiteral && op->opType == OPERATION_NONE) return true;
-    switch (op->opType) {
-    case OPERATION_STR_OF: case OPERATION_CONCAT: case OPERATION_SIZED_ARRAY_ALLOC: case OPERATION_COMPREHENSION:
-        return true;
-    case OPERATION_COND:
-        return op->args.len == 3 && ownFreshValue(f, *(struct operand**)ListGetIdx(&op->args, 1), depth + 1)
-               && ownFreshValue(f, *(struct operand**)ListGetIdx(&op->args, 2), depth + 1);
-    case OPERATION_MATCH: {
-        struct list vs = SemanticMatchValues(op);
-        for (int i = 0; i < vs.len; i++) if (!ownFreshValue(f, *(struct operand**)ListGetIdx(&vs, i), depth + 1)) return false;
-        return vs.len > 0;
-    }
-    case OPERATION_FUNCCALL:
-        if (op->callee || !op->readVar || op->readVar->isLambda) return false;
-        if (opIsCtorCall(op)) return true;
-        return canonicalVar(op->readVar)->ownResultFresh;
-    case OPERATION_READ_VAR: {
-        struct var* v = op->readVar;
-        if (!v || v->isGlobalVar || v->isFuncDecl || v->isLambda || v->paramOf || v->paramCopy || v->isCapture
-                || canonicalVar(v)->isCapture || !v->declInit)
-            return false;
-        int decls = 0;
-        if (ownFreshBlockWrites(&f->codeBlock, canonicalVar(v), &decls) || decls != 1) return false;
-        return ownFreshValue(f, v->declInit, depth + 1);
-    }
-    default:
-        return false;
-    }
-}
-//(every return of a block, at any depth - one inside an operand's statements (a match's clauses, a catch block) in any
-//position, StmtEachChild's list, included)
-static void ownFreshReturnsStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
-    (void)r;
-    struct ownFreshScan* w = c->ctx;
-    if (s->sType == STATEMENT_RET && !ownFreshValue(w->f, s->op, 0)) c->stop = true;
-}
-static bool ownFreshReturns(struct var* f, struct list* block) {
-    struct ownFreshScan w = { NULL, 0, f };
-    struct codeVisit c = { NULL, ownFreshReturnsStmt, NULL, &w, false };
-    return CodeDeepBlock(block, &c);
-}
-static void ownResultFreshSettle(void) {
-    ownFreshFuncs = ListInit(sizeof(struct var*));
-    ownForEachBody(ownFreshCollect);
-    for (int i = 0; i < ownFreshFuncs.len; i++) (*(struct var**)ListGetIdx(&ownFreshFuncs, i))->ownResultFresh = false;
-    for (bool changed = true; changed; ) {
-        changed = false;
-        for (int i = 0; i < ownFreshFuncs.len; i++) {
-            struct var* f = *(struct var**)ListGetIdx(&ownFreshFuncs, i);
-            if (f->ownResultFresh || f->bodyHadErrors || !calleeBodyKnown(f) || !f->codeBlock.len) continue;
-            if (ownFreshReturns(f, &f->codeBlock)) f->ownResultFresh = true, changed = true;
-        }
-    }
-    ListDestroy(ownFreshFuncs);
-}
-//...whether it can refer to an argument of type arg's own storage - the value it is, or names, and its parts by value
-static bool ownMayReferToPart(struct type res, struct type arg, int depth) {
-    if (depth > 8) return true;
-    arg.structMAlloc = false;
-    if (ownMayReferTo(res, arg, 0)) return true;
-    struct list kids = TypeValueChildren(arg);
-    bool hit = false;
-    for (int i = 0; i < kids.len && !hit; i++) {
-        struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (!k.structMAlloc) hit = ownMayReferToPart(res, k, depth + 1);
-    }
-    ListDestroy(kids);
-    return hit;
-}
-
-static void ownLoansIn(struct operand* op, struct list* out, bool transient, bool place) {
-    if (!op) return;
-    //(vec1: a conversion names its argument's storage, T29a - "String(v.View())" keeps what the view keeps, though its
-    //own type, a declared array type by value, says it holds no reference)
-    if (op->opType == OPERATION_NOMINAL_CONVERT && op->args.len == 1 && !op->constVarValue) {
-        ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out, transient, place);
-        return;
-    }
-    //(own6: a value whose type can hold no reference keeps nothing of what it was made from - a count, a flag, a number
-    //read through a borrow, "return b.buf.Len()" - whatever it borrowed while it was computed)
-    //(own7 F1: not a part borrowed where it is - E12c's reference to it, a slice or a view of it, leads into what it is a
-    //part of)
-    if (ownKeptOnly && !place && !op->inPlaceBorrow && !op->type.unknown && !typeCarriesScopes(op->type) && !TypeIsGeneric(op->type))
-        return;
-    //(own7 F1: a value lvalue borrowed where it is - by a reference parameter, a receiver, a reference local, a task - is a
-    //place: what it is a part of is borrowed, whatever the part's type holds; only a value read out of it is transient)
-    if (op->inPlaceBorrow) place = true;
-    if (!transient) {
-        for (int i = 0; i < op->ownCopyReads.len; i++) { //O32: a borrowed copy made - a borrow of each object it holds
-            struct operand* r = *(struct operand**)ListGetIdx(&op->ownCopyReads, i);
-            if (r->ownRegion && r->ownOrig) {
-                struct ownLoan l = (struct ownLoan){0};
-                l.R = r->ownRegion;
-                l.tok = op->tok;
-                l.copied = true;
-                ownLoanPut(out, l);
-            }
-        }
-        //O38 (own5 F2): a reference to an owner value local's storage borrows everything it owns, confined as a copy's
-        for (int i = 0; op->ownValueBorrow && i < op->ownValueBorrow->ownValueReads.len; i++) {
-            struct operand* r = *(struct operand**)ListGetIdx(&op->ownValueBorrow->ownValueReads, i);
-            if (!r->ownRegion || !r->ownOrig) continue;
-            struct ownLoan l = (struct ownLoan){0};
-            l.R = r->ownRegion;
-            l.tok = op->tok;
-            l.copied = true;
-            l.by = op;
-            ownLoanPut(out, l);
-        }
-        //O38 (Vec phase 1): a call giving a borrowed own result (O37) borrows what is below the argument it is borrowed from
-        struct list* RRs = ownResultRegionsOf(op);
-        for (int k = 0; RRs && k < RRs->len; k++) {
-            struct var* RR = *(struct var**)ListGetIdx(RRs, k);
-            struct ownLoan l = (struct ownLoan){0};
-            l.R = RR;
-            l.tok = op->tok;
-            l.copied = true;
-            l.anyType = RR->regionAnyType;
-            ownLoanPut(out, l);
-        }
-        if (op->ownRegion && op->ownOrig) ownLoanAdd(out, op->ownRegion, op->tok);
-        else if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) {
-            struct ownHolder* h = ownHolderOf(op->readVar);
-            if (h) ownLoansAll(&h->loans, out);
-            for (int i = 0; i < op->readVar->lambdaCaptures.len; i++) { //a closure made: what it captured
-                struct lambdaCapture* c = ListGetIdx(&op->readVar->lambdaCaptures, i);
-                struct ownHolder* ch = ownHolderOf(c->outer);
-                if (ch) ownLoansAll(&ch->loans, out);
-            }
-        }
-    }
-    switch (op->opType) {
-    case OPERATION_MEMBER:
-        if (op->args.len)
-            ownLoansIn(*(struct operand**)ListGetIdx(&op->args, 0), out,
-                       transient || (!place && !typeCarriesScopes(op->type)), place);
-        return;
-    case OPERATION_INDEX:
-        //(a reference element of an own array refers where the slot's container keeps it, not into the buffer: what is
-        //read out of one borrows nothing of the buffer, O33)
-        if (op->args.len) {
-            struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
-            struct var* R = ownArrayRegionOf(b);
-            //(Vec phase 2a: and so does a value element holding references - a split value, O17a - read out of it: what it
-            //holds is in the reach too, only the element's own storage is the buffer's, borrowed where it is - place)
-            bool outside = R && (op->type.structMAlloc || op->type.bType == BASETYPE_FUNC || op->ownElemRegion);
-            ownLoansIn(b, out, transient || (!place && (outside || !typeCarriesScopes(op->type))), place);
-        }
-        for (int i = 1; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, false, false);
-        return;
-    case OPERATION_EQ:
-    case OPERATION_NEQ:
-    case OPERATION_IS:
-    case OPERATION_STR_OF:
-        transient = true;
-        break;
-    case OPERATION_CONCAT: { //(own7: a join's pieces are rendered once every operand is evaluated, E11b - a reference's, or
-        //an array's elements, read then: held across the later operands that run code as a borrow is, an array value where
-        //it is; one no later operand runs code past is rendered as soon as it would be alone)
-        struct list pieces = ListInit(sizeof(struct operand*));
-        ownJoinPieces(op, &pieces);
-        for (int i = 0; i < pieces.len; i++) {
-            struct operand* a = *(struct operand**)ListGetIdx(&pieces, i);
-            struct operand* x = a->opType == OPERATION_STR_OF && a->args.len ? *(struct operand**)ListGetIdx(&a->args, 0) : NULL;
-            bool later = false;
-            for (int j = i + 1; x && j < pieces.len && !later; j++) later = ownOpCalls(*(struct operand**)ListGetIdx(&pieces, j));
-            if (later && (typeCarriesScopes(x->type) || x->type.bType == BASETYPE_ARRAY)) {
-                ownLoansIn(x, out, false, !x->type.structMAlloc && x->type.bType == BASETYPE_ARRAY);
-                continue;
-            }
-            ownLoansIn(a, out, false, false);
-        }
-        ListDestroy(pieces);
-        return;
-    }
-    case OPERATION_SLICE: //(own7 F1: a slice, or an "as" view, borrows its base where it is - a place, as transient as it is)
-    case OPERATION_AS:
-        if (op->args.len && (op->opType == OPERATION_SLICE || op->type.structMAlloc)) {
-            struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
-            if (!b->type.structMAlloc) {
-                ownLoansIn(b, out, transient, true);
-                for (int i = 1; i < op->args.len; i++) ownLoansIn(*(struct operand**)ListGetIdx(&op->args, i), out, false, false);
-                ownLoansIn(op->callee, out, false, false);
-                for (int i = 0; i < op->catchClauses.len; i++)
-                    ownLoansIn(((struct catchClause*)ListGetIdx(&op->catchClauses, i))->dflt, out, false, false);
-                return;
-            }
-        }
-        transient = false;
-        break;
-    default:
-        transient = false;
-        break;
-    }
-    //(own5: what a value carries of a call's arguments is what the callee may keep in its result - a call that cannot
-    //hands back nothing of them, whatever it borrowed while it ran; the statement's own loans still take every argument)
-    struct var* keeper = ownKeptOnly && op->opType == OPERATION_FUNCCALL && !op->callee && op->readVar
-                         && roCalleeKnown(op->readVar) && !op->readVar->isLambda ? op->readVar : NULL;
-    for (int i = 0; i < op->args.len; i++) {
-        if (keeper && !calleeMayKeepArg(keeper, i)) continue;
-        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
-        if (!keeper) {
-            ownLoansIn(a, out, transient, false);
-            continue;
-        }
-        //(Vec phase 1: an own array's elements refer outside its buffer (13.1) - a result that can refer neither to the
-        //buffer nor to the argument's own storage, "s := v[0]" of a Vec<String&>, keeps nothing the buffer's release frees)
-        struct list mine = ListInit(sizeof(struct ownLoan));
-        ownLoansIn(a, &mine, transient, false);
-        //(vec2: a built result is new storage at its top - an owned object's region outlives nothing, so no result scope
-        //holds a reference to it there (O33); only what the result holds can refer to it, "a := v.ToArray()")
-        struct type rt = op->type;
-        if (ownResultBuilt(keeper) && rt.structMAlloc) rt.structMAlloc = false;
-        bool spared = mine.len > 0 && !ownMayReferToPart(rt, a->type, 0);
-        for (int j = 0; spared && j < mine.len; j++) {
-            struct ownLoan* l = ListGetIdx(&mine, j);
-            spared = !l->anyType && l->R && l->R->regionArray && l->R->regionType
-                     && !ownMayReferToPart(rt, *l->R->regionType, 0); //(the buffer, its elements held by value)
-        }
-        for (int j = 0; !spared && j < mine.len; j++) ownLoanPut(out, *(struct ownLoan*)ListGetIdx(&mine, j));
-        ListDestroy(mine);
-    }
-    for (int i = 0; i < op->chainOperands.len; i++)
-        ownLoansIn(*(struct operand**)ListGetIdx(&op->chainOperands, i), out, true, false);
-    ownLoansIn(op->callee, out, false, false);
-    for (int i = 0; i < op->catchClauses.len; i++)
-        ownLoansIn(((struct catchClause*)ListGetIdx(&op->catchClauses, i))->dflt, out, false, false);
-    if (op->comprBody.len) ownLoansOfBlockDeep(&op->comprBody, out);
-}
-
-//(what a statement and everything in it borrow, StmtEachChild's list - a place where it is one: an assignment's or a
-//spawn's target)
-static void ownLoansOfStmtDeep(struct statement* s, struct list* out);
-static void ownLoansDeepOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
-    ownLoansIn(op, c->ctx, false, r == ROLE_TARGET || r == ROLE_SPAWN_TARGET);
-}
-static void ownLoansDeepStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
-    (void)r;
-    ownLoansOfStmtDeep(s, c->ctx);
-}
-static void ownLoansDeepBlock(struct codeVisit* c, struct list* b, enum codeRole r) {
-    (void)r;
-    ownLoansOfBlockDeep(b, c->ctx);
-}
-static void ownLoansOfStmtDeep(struct statement* s, struct list* out) {
-    struct codeVisit c = { ownLoansDeepOp, ownLoansDeepStmt, ownLoansDeepBlock, out, false };
-    StmtEachChild(s, &c);
-}
-
-static void ownLoansOfBlockDeep(struct list* block, struct list* out) {
-    for (int i = 0; i < block->len; i++) ownLoansOfStmtDeep(ListGetIdx(block, i), out);
-}
-
-//O38: what a statement borrows while it runs - its own operands', not its blocks' (each its own statements')
-static void ownLoansOfStmt(struct statement* s, struct list* out) {
-    switch (s->sType) {
-    case STATEMENT_VAR_DECL:
-        ownLoansIn(s->op, out, false, false);
-        ownLoansIn(s->fillValue, out, false, false);
-        break;
-    case STATEMENT_ASSIGN:
-        ownLoansIn(s->target, out, false, true);
-        ownLoansIn(s->op, out, false, false);
-        break;
-    case STATEMENT_FOR:
-        ownLoansIn(s->forInit, out, false, false);
-        ownLoansIn(s->op, out, false, false);
-        break;
-    case STATEMENT_ASSERT:
-        ownLoansIn(s->op, out, false, false);
-        ownLoansIn(s->assertMsg, out, false, false);
-        break;
-    case STATEMENT_CASE:
-        for (int i = 0; i < s->caseAlts.len; i++) {
-            struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-            ownLoansIn(a->test, out, false, false);
-            for (int k = 0; k < a->binds.len; k++)
-                ownLoansIn(((struct caseBind*)ListGetIdx(&a->binds, k))->from, out, false, false);
-        }
-        ownLoansIn(s->caseGuard, out, false, false);
-        break;
-    case STATEMENT_SPAWN: //(a target is stored into when the task's call returns - its place is used until then)
-        ownLoansIn(s->op, out, false, false);
-        for (int i = 0; i < s->spawnTargets.len; i++)
-            ownLoansIn(*(struct operand**)ListGetIdx(&s->spawnTargets, i), out, false, true);
-        break;
-    default:
-        ownLoansIn(s->op, out, false, false);
-        break;
-    }
-}
-
-//whether code reads v - directly, or as a capture of a closure it makes; anywhere in it, StmtEachChild's list
-static void ownReadsOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
-    (void)r;
-    struct var* v = c->ctx;
-    if ((op->opType == OPERATION_READ_VAR || op->opType == OPERATION_FUNCCALL) && op->readVar) { //(a call through it reads it)
-        bool reads = canonicalVar(op->readVar) == v;
-        for (int i = 0; !reads && i < op->readVar->lambdaCaptures.len; i++)
-            if (canonicalVar(((struct lambdaCapture*)ListGetIdx(&op->readVar->lambdaCaptures, i))->outer) == v) reads = true;
-        if (reads) {
-            ow.useTok = op->tok;
-            c->stop = true;
-        }
-    }
-}
-static bool ownStmtReads(struct statement* s, struct var* v) {
-    struct codeVisit c = { ownReadsOp, NULL, NULL, v, false };
-    return !CodeDeepStmt(s, &c);
-}
-
-//O39 (vec5 R2b): whether code builds into one of a holder's loaned regions - a local whose written scope or home is it
-//("d mut String&x", "d := mk&x(5)", LocalBuildScopes), a call given a scope argument binding it ("mk&x(5)"), a
-//constructor landed there ("H&x(5)"). Building there uses the region as reading its borrow does, so every holder with a
-//loan on it is live until then: a release before it would hand the build a freed region
-int LocalBuildScopes(struct var* v, struct var** out);
-static bool ownHolderHasRegion(struct ownHolder* h, struct var* sv) {
-    if (!sv || sv == SCOPE_AMBIGUOUS) return false;
-    sv = canonicalVar(sv);
-    if (!sv->isRegion) return false;
-    for (int i = 0; i < h->loans.len; i++)
-        if (canonicalVar(((struct ownLoan*)ListGetIdx(&h->loans, i))->R) == sv) return true;
-    return false;
-}
-static void ownUsesOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
-    struct ownHolder* h = c->ctx;
-    struct codeVisit rc = { NULL, NULL, NULL, h->v, false };
-    ownReadsOp(&rc, op, r);
-    if (rc.stop) { c->stop = true; return; }
-    bool builds = op->ctorLanded && !op->landedInProgram && ownHolderHasRegion(h, op->landedTo);
-    for (int i = 0; !builds && op->opType == OPERATION_FUNCCALL && i < op->scopeBindings.len; i++) {
-        struct scopeBinding* b = ListGetIdx(&op->scopeBindings, i);
-        builds = b->written && ownHolderHasRegion(h, b->boundTo);
-    }
-    if (builds) {
-        ow.useTok = op->tok;
-        c->stop = true;
-    }
-}
-static void ownUsesStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
-    (void)r;
-    struct ownHolder* h = c->ctx;
-    if (s->sType != STATEMENT_VAR_DECL) return;
-    struct var* sv[3];
-    int n = LocalBuildScopes(&s->var, sv);
-    for (int i = 0; i < n; i++) {
-        if (!ownHolderHasRegion(h, sv[i])) continue;
-        ow.useTok = s->var.tok;
-        c->stop = true;
-        return;
-    }
-}
-static bool ownOpUses(struct operand* op, struct ownHolder* h) {
-    struct codeVisit c = { ownUsesOp, ownUsesStmt, NULL, h, false };
-    return !CodeDeepOp(op, &c);
-}
-static bool ownStmtUses(struct statement* s, struct ownHolder* h) {
-    struct codeVisit c = { ownUsesOp, ownUsesStmt, NULL, h, false };
-    return !CodeDeepStmt(s, &c);
-}
-
-static bool ownLoopOwner(struct statement* s) {
-    return s && (s->sType == STATEMENT_FOR || s->sType == STATEMENT_DO);
-}
-
-//O38: whether a local's loans are still in use - it is read after this point: later in its block or one around it, in
-//deferred code, or anywhere in a loop around this point inside its block (the next turn reads it again)
-static bool ownHolderLive(struct ownHolder* h) {
-    if (h->always) return true;
-    for (int k = ow.frames.len - 1; k >= h->frame && k >= 0; k--) {
-        struct ownFrame* F = ListGetIdx(&ow.frames, k);
-        for (int i = F->idx < 0 ? 0 : F->idx; i < F->block->len; i++) {
-            struct statement* st = ListGetIdx(F->block, i);
-            //(an assignment's release follows its value, computed before the store (S4) - only its place is used then)
-            //...but what its value builds into a region the store lets go of is stored there, freed at once (vec5 R2b)
-            if (st == ow.relAssign && k == ow.frames.len - 1) {
-                if (ownOpUses(st->target, h)) return true;
-                struct ownHolder nb = *h;
-                nb.v = NULL;
-                if (ownOpUses(st->op, &nb)) return true;
-                continue;
-            }
-            if (ownStmtUses(st, h)) return true;
-        }
-        for (int i = 0; i < F->idx && i < F->block->len; i++) {
-            struct statement* d = ListGetIdx(F->block, i);
-            if (d->sType == STATEMENT_DEFER && ownStmtUses(d, h)) return true;
-        }
-        if (ownLoopOwner(F->owner)) {
-            if (k > h->frame && ownStmtUses(F->owner, h)) return true;
-            if (k == h->frame && (ownOpUses(F->owner->op, h) || (F->owner->forPost && ownStmtUses(F->owner->forPost, h))))
-                return true;
-        }
-    }
-    return false;
-}
-
-static bool ownReportedAt(struct token tok) {
-    for (int i = 0; i < ow.reported.len; i++) {
-        struct token* t = ListGetIdx(&ow.reported, i);
-        if (t->owner == tok.owner && t->tokId == tok.tokId) return true;
-    }
-    ListAdd(&ow.reported, &tok);
-    return false;
-}
-
-//O39: an owner local's tree is reached by own fields only through it: a release below it hits no loan read below another
-//owner local or below a parameter (what was moved into it was let go of there, by "take", checked then), and a release
-//below a parameter none read below an owner local. A value made here is nobody's yet. What was reached otherwise - a
-//global, a capture, a plain reference, which may point anywhere a reference may - meets everything
-//two reads of one own slot - the same variable, then the same own fields: each read is a region of its own to §8 (O33),
-//and both name the one object the slot holds (a release in between, letting one of them go, is checked where it happens)
-static bool ownSamePath(struct operand* a, struct operand* b, int depth) {
-    if (!a || !b || depth > 64) return false;
-    if (a == b) return true;
-    if (a->opType != b->opType) return false;
-    if (a->opType == OPERATION_READ_VAR)
-        return a->readVar && b->readVar && canonicalVar(a->readVar) == canonicalVar(b->readVar);
-    if (a->opType != OPERATION_MEMBER || !a->args.len || !b->args.len || !StrCmp(a->memberName, b->memberName)) return false;
-    struct operand* ab = *(struct operand**)ListGetIdx(&a->args, 0);
-    struct operand* bb = *(struct operand**)ListGetIdx(&b->args, 0);
-    struct var* ra = ownRegionOf(ab);
-    struct var* rb = ownRegionOf(bb);
-    if (ra && rb) return ra == rb || ownSamePath(ra->regionSlot, rb->regionSlot, depth + 1);
-    return !ra && !rb && ab->opType == OPERATION_READ_VAR && ownSamePath(ab, bb, depth + 1);
-}
-
-//the own slot one up from a slot - the slot the object holding it was read out of, when that was a borrow
-static struct operand* ownSlotUp(struct operand* slot) {
-    if (!slot || slot->opType != OPERATION_MEMBER || !slot->args.len) return NULL;
-    struct var* R = ownRegionOf(*(struct operand**)ListGetIdx(&slot->args, 0));
-    return R ? R->regionSlot : NULL;
-}
-
-//O39: whether a loan and the place a release or a move lets go of are apart - each reached through a different own slot of
-//one object (the same variable, then the same fields): two own slots hold two objects, and what each owns is apart (an
-//object has one owner, and none owns itself - a move into its own tree is refused while the target place borrows it)
-static bool ownLoanBesidePlace(struct ownLoan* l, struct operand* place) {
-    int ga = 0;
-    for (struct operand* a = place; a && ga < 64; a = ownSlotUp(a), ga++) {
-        if (a->opType != OPERATION_MEMBER || !a->args.len) continue;
-        struct operand* ab = *(struct operand**)ListGetIdx(&a->args, 0);
-        int gb = 0;
-        for (struct operand* b = l->R->regionSlot; b && gb < 64; b = ownSlotUp(b), gb++) {
-            if (b->opType != OPERATION_MEMBER || !b->args.len) continue;
-            if (ownSamePath(*(struct operand**)ListGetIdx(&b->args, 0), ab, 0)) {
-                if (!StrCmp(a->memberName, b->memberName)) return true;
-                break; //(one slot of one object: the same, so not apart here)
-            }
-        }
-    }
-    return false;
-}
-
-static bool ownLoanHits(struct ownLoan* l, struct list* types, struct list* chain, int root, struct var* local,
-                        struct operand* place) {
-    if (ownLoanBesidePlace(l, place)) return false;
-    int lr = l->R->regionRoot;
-    if (root == OWN_ROOT_LOCAL && (!local || (lr == OWN_ROOT_LOCAL && local != l->R->regionRootLocal) || lr == OWN_ROOT_PARAM))
-        return false;
-    if (root == OWN_ROOT_PARAM && lr == OWN_ROOT_LOCAL) return false;
-    if (!l->anyType && (!l->R->regionType || !ownTypeIn(types, l->R->regionType))) return false;
-    for (int i = 0; i < chain->len; i++) {
-        struct var* C = *(struct var**)ListGetIdx(chain, i);
-        if (C == l->R || ownSamePath(C->regionSlot, l->R->regionSlot, 0)) return false;
-    }
-    return true;
-}
-
-//use: the read the borrow is used by after the release (a local holding it), when known
-static void ownReport(struct ownLoan* l, struct token tok, const char* what, struct ownRel* via, struct var* callee, bool move,
-                      struct token* use) {
-    if (ownReportedAt(tok)) return;
-    for (int i = 0; ow.stmt && i < ow.reportedStmts.len; i++) //(one error a statement - its value's take, then its store)
-        if (*(struct statement**)ListGetIdx(&ow.reportedStmts, i) == ow.stmt) return;
-    if (ow.stmt) ListAdd(&ow.reportedStmts, &ow.stmt);
-    if (l->task && l->anyType) Err(tok, ERR_OWN_RELEASE_UNDER_TASK_ANY, what, l->tok.lineNr);
-    else if (l->task) Err(tok, ERR_OWN_RELEASE_UNDER_TASK, what, l->R->regionType, l->tok.lineNr);
-    else if (move) Err(tok, ERR_OWN_MOVE_UNDER_LOAN, what, l->R->regionType, l->tok.lineNr);
-    else Err(tok, ERR_OWN_RELEASE_UNDER_LOAN, what, l->R->regionType, l->tok.lineNr);
-    if (l->task && l->via.owner && l->anyType) Note(l->via, NOTE_OWN_TASK_CALLS_VALUE);
-    else if (l->task && l->via.owner) Note(l->via, NOTE_OWN_TASK_BORROWS);
-    else if (!l->anyType) Note(l->tok, NOTE_OWN_BORROWED_HERE);
-    if (use && use->owner) Note(*use, NOTE_OWN_USED_AFTER);
-    if (via && callee && via->tok.owner && via->move) Note(via->tok, NOTE_OWN_MOVES_HERE, ownQuoted(callee));
-    else if (via && callee && via->tok.owner) Note(via->tok, NOTE_OWN_RELEASES_HERE, ownQuoted(callee));
-}
-
-//O39: a release of the types in types (closed: ownHeld), below the value chainOf names (NULL: anywhere) - an error where
-//a loan on an object it may free is still in use. move: a "take", which frees nothing but takes the object out of the tree
-//its borrows were read through
-static void ownConflict(struct list* types, struct operand* chainOf, int root, struct var* local, struct token tok,
-                        const char* what, struct ownRel* via, struct var* callee, bool move, struct operand* place) {
-    if (!ow.check || !types->len) return;
-    struct list chain = ListInit(sizeof(struct var*));
-    if (chainOf) ownChain(chainOf, &chain);
-    //(own5 F2: a loan a reference to an owner value local's storage made is the owner's borrow, held by the locals given
-    //it to their last use: while it is, the owner releases nothing through its own name - what is released through the
-    //borrow itself, or through any other reference, is the borrow's, and what it reads it reads through the owner's
-    //slots, never freed memory. An argument's is used by its call alone, once every argument is evaluated: a release
-    //among them meets it not)
-    struct list* opens[2] = { &ow.cur, &ow.encl };
-    for (int o = 0; o < 2 && !ow.onlyTask; o++)
-        for (int i = 0; i < opens[o]->len; i++) {
-            struct ownLoan* l = ListGetIdx(opens[o], i);
-            if (l->by) continue;
-            if (ownLoanHits(l, types, &chain, root, local, place)) { ownReport(l, tok, what, via, callee, move, NULL); return; }
-        }
-    for (int i = 0; i < ow.holders.len; i++) {
-        struct ownHolder* h = ListGetIdx(&ow.holders, i);
-        if (ow.onlyTask && !h->always) continue;
-        for (int k = 0; k < h->loans.len; k++) {
-            struct ownLoan* l = ListGetIdx(&h->loans, k);
-            if (l->by && !(root == OWN_ROOT_LOCAL && local && local == l->by->ownValueBorrow)) continue;
-            ow.useTok = (struct token){0};
-            if (ownLoanHits(l, types, &chain, root, local, place) && ownHolderLive(h)) {
-                struct token use = ow.useTok;
-                ownReport(l, tok, what, via, callee, move, &use);
-                return;
-            }
-        }
-    }
-}
-
-//O35/O39: an own slot let go of - assigned, or taken out of (move): what it held may be freed, or leaves the tree it was
-//reached through
-static void ownSlotRelease(struct operand* place, struct token tok, const char* what, bool move) {
-    struct type* t = OwnTypeKey(place->type);
-    if (!t) return;
-    struct operand* base = place->opType == OPERATION_MEMBER && place->args.len ? *(struct operand**)ListGetIdx(&place->args, 0)
-                                                                               : NULL;
-    struct list types = ListInit(sizeof(struct type*));
-    ownHeld(t, &types);
-    int param;
-    struct var* local;
-    int root = ownEvRoot(base ? base : place, &param, &local);
-    if (!ow.check) {
-        if (root == OWN_ROOT_LOCAL) return;
-        for (int i = 0; i < types.len; i++)
-            ownEffAdd(ow.func, *(struct type**)ListGetIdx(&types, i), root == OWN_ROOT_PARAM ? param : -1, tok, move, tok);
-        return;
-    }
-    ownConflict(&types, base, root, local, tok, what, NULL, NULL, move, place);
-}
-
-static char* ownWhat(const char* fmt, const char* a) {
-    size_t n = strlen(fmt) + strlen(a) + 1;
-    char* t = MallocOrCrash(n);
-    snprintf(t, n, fmt, a);
-    return t;
-}
-
-//O39: a call releases what its callee's body may (ownEff): below each argument, and anywhere. A call through a function
-//value releases nothing (O40)
-static void ownCallRelease(struct operand* call) {
-    struct var* g = !call->callee && call->readVar ? canonicalVar(call->readVar) : NULL;
-    if (!g || !g->ownEff) return;
-    char nm[160];
-    struct str shown = ownFuncName(g);
-    snprintf(nm, sizeof(nm), "'%.*s'", shown.len > 120 ? 120 : shown.len, shown.ptr);
-    for (int i = 0; i < g->ownEff->rels.len; i++) {
-        struct ownRel* r = ListGetIdx(&g->ownEff->rels, i);
-        struct operand* arg = r->param >= 0 && r->param < call->args.len ? *(struct operand**)ListGetIdx(&call->args, r->param)
-                                                                         : NULL;
-        if (r->param >= 0 && !arg) continue;
-        int param = -1;
-        struct var* local = NULL;
-        int root = arg ? ownEvRoot(arg, &param, &local) : OWN_ROOT_ANY;
-        if (!ow.check) {
-            if (root != OWN_ROOT_LOCAL) ownEffAdd(ow.func, r->t, root == OWN_ROOT_PARAM ? param : -1, r->tok, r->move, call->tok);
-            continue;
-        }
-        struct list one = ListInit(sizeof(struct type*));
-        ListAdd(&one, &r->t);
-        ownConflict(&one, arg, root, local, call->tok, ownWhat("calling %s", nm), r, g, false, NULL);
-    }
-}
-
-//O41: the function whose body a call runs, for what it borrows - a declared function, a method, a constructor, a lambda,
-//or the hidden local a task's lambda is held in; NULL with *any set for a call through any other function value, whose body
-//is not known here, and NULL for an extern, which reaches no own slot
-static struct var* ownCalleeBody(struct operand* call, bool* any) {
-    *any = false;
-    if (call->callee) { *any = true; return NULL; }
-    struct var* f = call->readVar;
-    if (!f) return NULL;
-    if (roCalleeKnown(f)) return f->type.isExtern ? NULL : canonicalVar(f);
-    struct var* c = canonicalVar(f);
-    for (int i = 0; i + 1 < ow.lambdaLocals.len; i += 2)
-        if (*(struct var**)ListGetIdx(&ow.lambdaLocals, i) == c) return *(struct var**)ListGetIdx(&ow.lambdaLocals, i + 1);
-    *any = true;
-    return NULL;
-}
-
-//...and a borrow rel r of it, met at a call: rooted where the argument it is below was reached from, or anywhere
-static int ownRelRoot(struct ownRel* r, struct operand* call, int* param, struct var** local) {
-    *param = -1;
-    *local = NULL;
-    if (r->param < 0 || !call) return OWN_ROOT_ANY;
-    if (r->param >= call->args.len) return -1;
-    return ownEvRoot(*(struct operand**)ListGetIdx(&call->args, r->param), param, local);
-}
-
-//the own types a value of type t reaches - through its fields, elements, payloads and references, own ones closed under
-//what they hold (ownHeld): what rendering or comparing it may read
-static void ownReachTypes(struct type t, struct list* out, struct list* seen, int depth) {
-    (void)depth; //(no depth limit - the seen-set ends the walk: stopping early would under-collect, vec6 D)
-    if (t.bType == BASETYPE_ARRAY && t.refOwn) ownHeld(OwnTypeKey(t), out);
-    if (t.bType == BASETYPE_ARRAY) {
-        if (t.arrElem) ownReachTypes(*t.arrElem, out, seen, depth + 1);
-        return;
-    }
-    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_CHOICE) return;
-    struct type* c = canonicalStructOf(t);
-    if (c && t.refOwn) ownHeld(c, out);
-    if (c) {
-        if (ownTypeIn(seen, c)) return;
-        ListAdd(seen, &c);
-        t = *c;
-    }
-    for (int i = 0; i < t.vars.len; i++) ownReachTypes(((struct var*)ListGetIdx(&t.vars, i))->type, out, seen, depth + 1);
-}
-
-//O41: what evaluating op borrows, made this body's (finding effects): a read of an own slot, by where it was reached
-//from; a call's borrows below its arguments; what a method the language calls by itself - "$", "==" - may borrow of the
-//value it is handed, and a destructor of what a constructor call builds may borrow anywhere
-static void ownBorrowsAt(struct operand* op) {
-    if (!ow.func) return;
-    if (op->ownRegion && op->ownOrig && op->ownRegion->regionRoot != OWN_ROOT_LOCAL) {
-        struct var* R = op->ownRegion;
-        ownBorrowAdd(ow.func, R->regionType, R->regionRoot == OWN_ROOT_PARAM ? R->regionRootParam : -1, op->tok);
-    }
-    if (op->opType == OPERATION_FUNCCALL) {
-        bool any;
-        struct var* g = ownCalleeBody(op, &any);
-        if (any) ownBorrowAdd(ow.func, NULL, -1, op->tok);
-        for (int i = 0; g && g->ownEff && i < g->ownEff->borrows.len; i++) {
-            struct ownRel* r = ListGetIdx(&g->ownEff->borrows, i);
-            int param;
-            struct var* local;
-            int root = ownRelRoot(r, op, &param, &local);
-            if (root >= 0 && root != OWN_ROOT_LOCAL) ownBorrowAdd(ow.func, r->t, root == OWN_ROOT_PARAM ? param : -1, r->tok);
-        }
-        struct type* ct = opIsCtorCall(op) ? canonicalStructOf(op->type) : NULL;
-        struct var* d = ct && ct->destructFunc ? canonicalVar(ct->destructFunc) : NULL;
-        for (int i = 0; d && d->ownEff && i < d->ownEff->borrows.len; i++) {
-            struct ownRel* r = ListGetIdx(&d->ownEff->borrows, i);
-            if (r->param < 0) ownBorrowAdd(ow.func, r->t, -1, r->tok); //(its instance is made here)
-        }
-    }
-    if (op->opType != OPERATION_STR_OF && op->opType != OPERATION_EQ && op->opType != OPERATION_NEQ) return;
-    for (int a = 0; a < op->args.len; a++) {
-        struct operand* v = *(struct operand**)ListGetIdx(&op->args, a);
-        if (!v || (v->type.bType != BASETYPE_STRUCT && v->type.bType != BASETYPE_CHOICE && v->type.bType != BASETYPE_ARRAY
-                   && v->type.bType != BASETYPE_TYPEVAR))
-            continue;
-        int param;
-        struct var* local;
-        int root = ownEvRoot(v, &param, &local);
-        if (root == OWN_ROOT_LOCAL) continue;
-        int p = root == OWN_ROOT_PARAM ? param : -1;
-        struct list types = ListInit(sizeof(struct type*));
-        struct list seen = ListInit(sizeof(struct type*));
-        ownReachTypes(v->type, &types, &seen, 0);
-        for (int i = 0; i < types.len; i++) ownBorrowAdd(ow.func, *(struct type**)ListGetIdx(&types, i), p, op->tok);
-        for (int i = 0; i < ow.implicitFns.len; i++) { //(whichever Str, Eq or Hash it calls, below the value or anywhere)
-            struct var* m = *(struct var**)ListGetIdx(&ow.implicitFns, i);
-            for (int k = 0; m->ownEff && k < m->ownEff->borrows.len; k++) {
-                struct ownRel* r = ListGetIdx(&m->ownEff->borrows, k);
-                ownBorrowAdd(ow.func, r->t, r->param < 0 ? -1 : p, r->tok);
-            }
-        }
-    }
-}
-
-//O41: what a task borrows until its join, made loans: what its call borrows below its arguments, or anywhere, and what its
-//own clauses (P4a), run on its thread, borrow anywhere
-static void ownTaskBodyLoans(struct operand* call, struct var* clauseFn, struct token at, struct list* out) {
-    bool any = false;
-    struct var* g = call ? ownCalleeBody(call, &any) : clauseFn;
-    if (any) {
-        struct ownLoan l = (struct ownLoan){0};
-        l.R = ownRegionNew(at, NULL, 0, false, OWN_ROOT_ANY, -1);
-        l.tok = at;
-        l.task = true;
-        l.anyType = true;
-        l.via = at;
-        ownLoanPut(out, l);
-        return;
-    }
-    for (int i = 0; g && g->ownEff && i < g->ownEff->borrows.len; i++) {
-        struct ownRel* r = ListGetIdx(&g->ownEff->borrows, i);
-        int param;
-        struct var* local;
-        int root = ownRelRoot(r, call, &param, &local);
-        if (root < 0 || (root == OWN_ROOT_LOCAL && !local)) continue; //(a value made for the task: its own)
-        struct ownLoan l = (struct ownLoan){0};
-        l.R = ownRegionNew(at, NULL, 0, false, root, param);
-        l.R->regionRootLocal = local;
-        l.R->regionType = r->t;
-        l.tok = at;
-        l.task = true;
-        l.anyType = !r->t;
-        l.via = r->tok;
-        ownLoanPut(out, l);
-    }
-}
-
-static void ownBlockWalk(struct list* block, struct statement* owner);
-static void ownStmtWalk(struct statement* s);
-static void ownOpWalk(struct operand* op);
-
-//O41: a statement walked again with what tasks borrow until their join, reporting only conflicts with that - deferred code
-//that runs before the join, already walked, and a loop around a spawn, whose earlier turns' tasks are still running when
-//its statements before the spawn run again
-static void ownTaskRewalk(struct statement* s) {
-    bool rw = ow.rewalking, ot = ow.onlyTask;
-    ow.rewalking = ow.onlyTask = true;
-    ownStmtWalk(s);
-    ow.rewalking = rw;
-    ow.onlyTask = ot;
-}
-
-//O41: a task spawned - what it borrows held until its join, against every release in the join block after the spawn
-static void ownTaskLoans(struct statement* s) {
-    int kJ = -1;
-    for (int k = ow.frames.len - 1; k >= 0 && kJ < 0; k--) {
-        struct ownFrame* F = ListGetIdx(&ow.frames, k);
-        if (F->owner && F->owner->sType == STATEMENT_JOIN) kJ = k;
-    }
-    if (kJ < 0) return;
-    struct ownHolder h = { NULL, ListInit(sizeof(struct ownLoan)), kJ, true };
-    for (int i = 0; i < ow.cur.len; i++) { //its arguments and its targets' places (O38)
-        struct ownLoan l = *(struct ownLoan*)ListGetIdx(&ow.cur, i);
-        l.task = true;
-        ownLoanPut(&h.loans, l);
-    }
-    struct token at = s->op ? s->op->tok : (struct token){0};
-    if (s->op && s->op->opType == OPERATION_FUNCCALL) ownTaskBodyLoans(s->op, NULL, at, &h.loans);
-    for (int i = 0; i < s->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&s->catchClauses, i);
-        if (!c->taskCall) continue;
-        bool any;
-        struct var* L = ownCalleeBody(c->taskCall, &any);
-        if (L || any) ownTaskBodyLoans(any ? c->taskCall : NULL, L, at, &h.loans);
-    }
-    if (!h.loans.len) return;
-    ListAdd(&ow.holders, &h);
-    //deferred code written before the spawn in the blocks it is in, inside the join block, runs before the join waits
-    for (int k = kJ; k < ow.frames.len; k++) {
-        struct ownFrame* F = ListGetIdx(&ow.frames, k);
-        int upTo = F->idx;
-        struct list* block = F->block;
-        for (int i = 0; i < upTo && i < block->len; i++) {
-            struct statement* d = ListGetIdx(block, i);
-            if (d->sType == STATEMENT_DEFER) ownTaskRewalk(d);
-        }
-    }
-    //...and a loop around it, inside the join block, runs its statements before the spawn again while it runs
-    for (int k = kJ + 1; k < ow.frames.len; k++) {
-        struct ownFrame* F = ListGetIdx(&ow.frames, k);
-        if (!ownLoopOwner(F->owner)) continue;
-        bool have = false;
-        for (int i = 0; i < ow.rewalkLoops.len && !have; i++) have = *(struct statement**)ListGetIdx(&ow.rewalkLoops, i) == F->owner;
-        if (!have) ListAdd(&ow.rewalkLoops, &F->owner);
-        break; //(the outermost: its walk again covers the loops in it)
-    }
-}
-
-//...a loop walked: walked again if a spawn in it asked (above)
-static void ownLoopRewalk(struct statement* s) {
-    if (!ow.check || ow.rewalking) return;
-    for (int i = 0; i < ow.rewalkLoops.len; i++) {
-        if (*(struct statement**)ListGetIdx(&ow.rewalkLoops, i) != s) continue;
-        ListRemoveIdx(&ow.rewalkLoops, i);
-        ownTaskRewalk(s);
-        return;
-    }
-}
-
-//a block run in the middle of the statement walked - a catch clause's, a match value's, a comprehension's: what that
-//statement borrows stays borrowed while it runs
-static void ownExprBlockWalk(struct list* block) {
-    if (!block->len) return;
-    int had = ow.encl.len;
-    ownLoansAll(&ow.cur, &ow.encl);
-    struct list cur = ow.cur;
-    struct statement* stmt = ow.stmt;
-    ownBlockWalk(block, stmt);
-    ow.cur = cur;
-    ow.stmt = stmt;
-    ow.encl.len = had;
-}
-
-//O33: a region is known from the borrow that names it as that borrow is read - an argument's value built into the
-//region an argument after it reads would be built before the region is known
-//(anywhere in root, at any depth - a match value's clauses, a comprehension's body, a catch clause and its default
-//included: StmtEachChild's list, vec5)
-static void ownContainsOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
-    (void)r;
-    if (op == c->ctx) c->stop = true;
-}
-static bool ownOpContains(struct operand* root, struct operand* x) {
-    struct codeVisit c = { ownContainsOp, NULL, NULL, x, false };
-    return root && !CodeDeepOp(root, &c);
-}
-static void ownArgOrder(struct operand* op) {
-    struct var* func = op->readVar;
-    if (!func || func->type.isExtern || op->callee) return;
-    for (int i = 0; i < op->args.len && i < func->type.vars.len; i++) {
-        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
-        struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
-        if (!pt.scopeParam || OperandNamesExistingStorage(a)) continue;
-        struct var* R = SemanticBoundScope(op, pt.scopeParam);
-        if (!R || !R->isRegion || !R->regionSlot) continue;
-        for (int j = i + 1; j < op->args.len; j++) {
-            if (!ownOpContains(*(struct operand**)ListGetIdx(&op->args, j), R->regionSlot)) continue;
-            const char* t = ownPlaceText(R->regionSlot);
-            if (!ownReportedAt(a->tok)) Err(a->tok, ERR_OWN_BUILT_BEFORE_BORROW, t, t);
-            break;
-        }
-    }
-}
-
-//O34: a "return" giving an owner local or an owning parameter whole moves it - nothing may read it after but deferred
-//code run on the way out, which would find it null: an error naming "take", which says so
-static void ownReturnMoveCheck(struct operand* op) {
-    struct operand* place = op->args.len ? *(struct operand**)ListGetIdx(&op->args, 0) : NULL;
-    if (!place || place->opType != OPERATION_READ_VAR || !place->readVar) return;
-    struct var* v = canonicalVar(place->readVar);
-    for (int k = ow.frames.len - 1; k >= 0; k--) {
-        struct ownFrame* F = ListGetIdx(&ow.frames, k);
-        for (int i = 0; i < F->idx && i < F->block->len; i++) {
-            struct statement* d = ListGetIdx(F->block, i);
-            if (d->sType != STATEMENT_DEFER || !ownStmtReads(d, v) || ownReportedAt(op->tok)) continue;
-            const char* t = ownPlaceText(place);
-            Err(op->tok, ERR_OWN_MOVED_READ_AGAIN, t, t, t);
-            if (ow.useTok.owner) Note(ow.useTok, NOTE_OWN_USED_AFTER);
-            return;
-        }
-    }
-}
-
-//O38 (own3 F2): the arguments a call to m may keep what its parameter i refers to in (dest) - each one whose scope m's body
-//requires parameter i's to outlive or to be (O10b), and the one a derived obligation's scope belongs to (O22). False
-//where that is not known: m generic, its body not checked, or an obligation naming a scope no argument gives. Its result -
-//a constructor's instance included - is not among them: a local given the result holds what it holds
-static bool ownKeepDests(struct var* m, int i, int nargs, bool* dest) {
-    if (m->type.isExtern) return true; //(an extern keeps no reference, X1a)
-    if (m->type.typeParams.len || i >= m->type.vars.len) return false;
-    struct var* p = ListGetIdx(&m->type.vars, i);
-    struct var* sv = p->type.scopeParam && p->type.scopeParam != SCOPE_AMBIGUOUS ? canonicalVar(p->type.scopeParam) : NULL;
-    if (!sv) return !typeCarriesScopes(p->type);
-    //(asked once every body's obligations are known - settleOwnBorrows runs after dischargeLateObligations - so one in a
-    //cycle of calls is settled here too; a constructor's body is known once it is built)
-    struct type* ct = m->type.hasRetType ? m->type.retType : NULL;
-    if (ct && ct->ctorFunc && canonicalVar(ct->ctorFunc) == canonicalVar(m)) ensureCtorBodyBuilt(ct);
-    else ensureBodyChecked(m);
-    if (!calleeBodyKnown(m) || m->bodyHadErrors) return false;
-    struct var* rs = m->type.resultScope ? canonicalVar(m->type.resultScope) : NULL;
-    for (int k = 0; k < m->type.scopeObligations.len; k++) {
-        struct scopeObligation* ob = ListGetIdx(&m->type.scopeObligations, k);
-        struct var* other;
-        //(an obligation on a derived scope of p - a field of its argument kept, O23a - is one on p, own5 F1)
-        if (ob->longer && scopeIsParams(ob->longer, p, sv)) other = ob->shorter;
-        else if (ob->exact && ob->shorter && scopeIsParams(ob->shorter, p, sv)) other = ob->longer;
-        else continue;
-        if (ob->shorterViaParam && scopeIsParams(ob->longer, p, sv)) { //O22: in what that parameter's argument was built with
-            int j = ownParamIndex(m, ob->shorterViaParam);
-            if (j < 0 || j >= nargs) return false;
-            dest[j] = true;
-            continue;
-        }
-        if (!other) return false;
-        other = canonicalVar(other);
-        if (other == rs || scopeIsParams(other, p, sv) || other->isInstanceScope) continue; //(the result, a constructor's instance included)
-        bool named = false;
-        for (int j = 0; j < m->type.vars.len && j < nargs; j++) {
-            struct var* pj = ListGetIdx(&m->type.vars, j);
-            if (j == i || !(paramTypeNamesScope(pj->type, other) || scopeIsParams(other, pj, NULL))) continue;
-            dest[j] = true;
-            named = true;
-        }
-        if (!named) return false;
-    }
-    return true;
-}
-
-//O38 (confined, own4): what only this function's locals may hold that v carries - the loans of a borrowed copy, or of
-//anything made from one (a value holding a reference to it, a closure capturing it, a call's result given it)
-//...whether every release of an object of type t releases one of type u too - u held below t by own fields (ownHeld), as
-//"return o.First().deep" gives a Leaf whose callers' loan meets every release of the Inner holding it (Vec phase 2a)
-static bool ownHeldBy(struct type* t, struct type* u) {
-    if (!t || !u) return false;
-    struct list held = ListInit(sizeof(struct type*));
-    ownHeld(t, &held);
-    bool in = ownTypeIn(&held, u);
-    ListDestroy(held);
-    return in;
-}
-
-static void ownCarried(struct operand* v, struct list* out) {
-    if (!v || v->isNullLiteral) return;
-    struct list all = ListInit(sizeof(struct ownLoan));
-    bool was = ownKeptOnly;
-    ownKeptOnly = true;
-    ownLoansIn(v, &all, false, false);
-    ownKeptOnly = was;
-    for (int i = 0; i < all.len; i++) {
-        struct ownLoan* l = ListGetIdx(&all, i);
-        if (l->copied) ownLoanPut(out, *l);
-    }
-}
-
-//...whether a value of type t has a destructor, which reads what it holds as its scope closes (C9, O15)
-static bool ownTypeDestructs(struct type t) {
-    struct type* c = canonicalStructOf(t);
-    return c && c->destructFunc;
-}
-//...whether a value of type t is, or is made, an owner, or has a destructor - which releases, or reads, what it holds as
-//its scope closes, after the loans of a copy given it have ended (O35, O15)
-static bool ownTypeOutlivesLoans(struct type t) {
-    if (t.refOwn) return true;
-    if (ownTypeDestructs(t)) return true;
-    return !t.structMAlloc && TypeIsOwning(t);
-}
-//...whether every loan in loans was made by a reference to an owner value local's storage (own5 F2), none by a copy
-static bool ownLoansOnlyRef(struct list* loans) {
-    for (int i = 0; i < loans->len; i++)
-        if (!((struct ownLoan*)ListGetIdx(loans, i))->by) return false;
-    return true;
-}
-
-//...whether a value of type t can reach, through references at any depth - own ones included, since a borrowed copy's
-//own field names its source's object (O32) - a value of type tgt, or one held by value inside one. A type variable, a
-//function value or anything not settled may reach anything; a type met again on the path is walked once
-static bool ownIsPartOf(struct type r, struct type tgt, int depth) {
-    if (depth > 32) return true;
-    struct list kids = TypeValueChildren(tgt);
-    bool hit = false;
-    for (int i = 0; i < kids.len && !hit; i++) {
-        struct type k = *(struct type*)ListGetIdx(&kids, i);
-        if (k.structMAlloc) continue;
-        hit = k.unknown || k.bType == BASETYPE_TYPEVAR || ownSameReferent(r, k) || ownIsPartOf(r, k, depth + 1);
-    }
-    ListDestroy(kids);
-    return hit;
-}
-static bool ownReachesIn(struct type t, struct type tgt, int depth, struct type** seen, int nseen) {
-    if (depth > 32 || t.unknown || t.bType == BASETYPE_FUNC || t.bType == BASETYPE_TYPEVAR || t.bType == BASETYPE_INTERFACE)
-        return true;
-    if (t.structMAlloc) {
-        struct type r = t;
-        r.structMAlloc = false;
-        r.refOwn = false;
-        if (ownSameReferent(r, tgt) || ownIsPartOf(r, tgt, 0)) return true;
-    }
-    t.structMAlloc = false;
-    t.refOwn = false;
-    struct type* c = (t.bType == BASETYPE_STRUCT || t.bType == BASETYPE_CHOICE) ? canonicalStructOf(t) : NULL;
-    if (c) {
-        for (int i = 0; i < nseen; i++) if (seen[i] == c) return false;
-        if (nseen >= 64) return true;
-        seen[nseen++] = c;
-    }
-    struct list kids = TypeValueChildren(t);
-    bool hit = false;
-    for (int i = 0; i < kids.len && !hit; i++) hit = ownReachesIn(*(struct type*)ListGetIdx(&kids, i), tgt, depth + 1, seen, nseen);
-    ListDestroy(kids);
-    return hit;
-}
-//...whether a parameter of type t (read as what it refers to: it is the callee's own copy) may be given a reference to
-//what a's loans are on, or to a's own storage, or to anything reaching them (ownReachesIn). A loan of any type may
-static bool ownTypeMayHold(struct type t, struct operand* a, struct list* loans) {
-    struct type* seen[64];
-    t.structMAlloc = false;
-    t.refOwn = false;
-    struct type at = a->type;
-    at.structMAlloc = false;
-    at.refOwn = false;
-    if (ownReachesIn(t, at, 0, seen, 0)) return true;
-    for (int k = 0; k < loans->len; k++) {
-        struct ownLoan* l = ListGetIdx(loans, k);
-        if (l->anyType || !l->R || !l->R->regionType || ownReachesIn(t, *l->R->regionType, 0, seen, 0)) return true;
-    }
-    return false;
-}
-
-//(a call refused for what it was given is one error: a call it is given to, or a target given its result, adds none)
-static struct list ownRefusedCalls;
-static bool ownCallRefused(struct operand* a) {
-    for (int i = 0; i < ownRefusedCalls.len; i++) if (*(struct operand**)ListGetIdx(&ownRefusedCalls, i) == a) return true;
-    return false;
-}
-static void ownRefuse(struct operand* call, struct token tok, enum diag d) {
-    if (!ownRefusedCalls.elemSize) ownRefusedCalls = ListInit(sizeof(struct operand*));
-    ListAdd(&ownRefusedCalls, &call);
-    if (!ownReportedAt(tok)) Err(tok, d);
-}
-
-//O38 (confined, own4): a call given what only this function's locals may hold (ownCarried) is refused where it may keep
-//it beyond the call: in another argument - its body's obligations relate their scopes (O10b), or it is not known - in
-//an owner it is handed (an owning parameter), or in its result where that is an owner or has a destructor. Kept in a
-//result that is neither, it is held by the local given the result, as any value derived from a loan is. Through a
-//function value nothing is kept but in its result (T22a)
-static void ownCallConfined(struct operand* call) {
-    if (!ow.check || ow.rewalking || !call || call->opType != OPERATION_FUNCCALL || call->callee) return;
-    struct var* m = call->readVar;
-    if (!m || !roCalleeKnown(m) || m->isLambda) return;
-    for (int i = 0; i < call->args.len; i++) {
-        struct operand* a = *(struct operand**)ListGetIdx(&call->args, i);
-        if (ownCallRefused(a)) continue;
-        struct list loans = ListInit(sizeof(struct ownLoan));
-        ownCarried(a, &loans);
-        if (!loans.len) continue;
-        //(own5 F2: what a reference to an owner value local's storage makes reads through that local's slots - not a copy
-        //of its pointers, which its release would leave dangling - so an owner holding one is held to O34's reach, as one
-        //holding any reference to a block's storage is; only a destructor, which reads it as its scope closes, is refused)
-        bool onlyRef = ownLoansOnlyRef(&loans);
-        if (i < m->type.vars.len && ((struct var*)ListGetIdx(&m->type.vars, i))->type.refOwn) {
-            if (!onlyRef) ownRefuse(call, a->tok, ERR_OWN_BORROW_IN_OWNER);
-            continue;
-        }
-        if (!calleeMayHoldArg(m, i)) continue;
-        bool* dest = calloc(call->args.len + 1, sizeof(bool));
-        bool elsewhere = !ownKeepDests(m, i, call->args.len, dest);
-        //(Vec phase 2a: a parameter whose type can refer to nothing the argument's loans are on, nor to the argument's
-        //storage - at any depth, through references too, as O38's results are judged - keeps none of it, whatever its scope
-        //is related to: "v.Push(Link(...))", a Link holding a "mut Node&" and so related exactly to the Vec's)
-        for (int j = 0; j < call->args.len && !elsewhere; j++)
-            elsewhere = dest[j] && (j >= m->type.vars.len
-                                    || ownTypeMayHold(((struct var*)ListGetIdx(&m->type.vars, j))->type, a, &loans));
-        free(dest);
-        if (elsewhere) ownRefuse(call, a->tok, ERR_OWN_BORROW_KEPT_BY_CALL);
-        else if (m->type.hasRetType && (onlyRef ? ownTypeDestructs(*m->type.retType) : ownTypeOutlivesLoans(*m->type.retType))
-                 && calleeMayKeepArg(m, i))
-            ownRefuse(call, a->tok, ERR_OWN_BORROW_IN_OWNER);
-    }
-}
-
-static void ownOpWalk(struct operand* op) {
-    if (!op) return;
-    if (ow.check && op->opType == OPERATION_FUNCCALL) ownArgOrder(op);
-    //O34/E34: an owner taken goes into an own slot, or is let go of as a statement (O35) - anywhere else nothing would
-    //own it. A conditional or a match giving an owner is not supported yet
-    if (ow.check && op->opType == OPERATION_TAKE && !op->ownMoved && !op->ownDiscard && !ownReportedAt(op->tok))
-        Err(op->tok, ERR_OWN_OWNER_USE);
-    //O37: and so does a call's owned result
-    if (ow.check && (ownResultCall(op) || ownValueCall(op)) && !op->ownMoved && !op->ownDiscard && !ownReportedAt(op->tok)) {
-        struct str nm = ownFuncName(op->readVar);
-        Err(op->tok, ERR_OWN_RESULT_USE, ownQuoted(op->readVar), nm);
-    }
-    if (ow.check && op->opType == OPERATION_TAKE && op->ownByReturn) ownReturnMoveCheck(op);
-    if (ow.check && (op->opType == OPERATION_COND || op->opType == OPERATION_MATCH)) {
-        struct list vs = op->opType == OPERATION_MATCH ? SemanticMatchValues(op) : op->args;
-        for (int i = 0; i < vs.len; i++) {
-            struct operand* v = *(struct operand**)ListGetIdx(&vs, i);
-            if (v && v->opType == OPERATION_TAKE && !ownReportedAt(v->tok)) Err(v->tok, ERR_OWN_IN_COND);
-        }
-    }
-    for (int i = 0; i < op->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&op->args, i));
-    for (int i = 0; i < op->chainOperands.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&op->chainOperands, i));
-    ownOpWalk(op->callee);
-    if (op->comprBody.len) ownExprBlockWalk(&op->comprBody);
-    for (int i = 0; i < op->catchClauses.len; i++) {
-        struct catchClause* c = ListGetIdx(&op->catchClauses, i);
-        ownExprBlockWalk(&c->block);
-        ownOpWalk(c->dflt);
-    }
-    if (!ow.check) {
-        ownBorrowsAt(op);
-        for (int i = 0; i < op->ownCopyReads.len; i++) ownBorrowsAt(*(struct operand**)ListGetIdx(&op->ownCopyReads, i));
-    }
-    if (op->opType == OPERATION_FUNCCALL) {
-        ownCallRelease(op);
-        ownCallConfined(op);
-    } else if (op->opType == OPERATION_TAKE && op->args.len) {
-        //O39: a move frees nothing, but the object leaves the tree a borrow of it, or of anything inside it, was read
-        //through - and a release through its new owner meets no loan rooted at the old one. So it is refused while one is
-        //in use, as a release would be, wherever it goes: an own field, a global, an owner local
-        struct operand* place = *(struct operand**)ListGetIdx(&op->args, 0);
-        ownSlotRelease(place, op->tok, ownWhat("taking '%s'", ownPlaceText(place)), op->ownMoved);
-    }
-}
-
-static int ownFramePush(struct list* block, struct statement* owner) {
-    struct ownFrame f = { block, 0, owner };
-    ListAdd(&ow.frames, &f);
-    return ow.frames.len - 1;
-}
-
-//(every holder held until frame k or one inside it ends - wherever it is in the list: one held until an outer frame's end
-//can be added while an inner one is walked, a task's or what a call keeps)
-static void ownFramePop(int k) {
-    int keep = 0;
-    for (int i = 0; i < ow.holders.len; i++) {
-        struct ownHolder* h = ListGetIdx(&ow.holders, i);
-        if (h->frame >= k) continue;
-        if (keep != i) *(struct ownHolder*)ListGetIdx(&ow.holders, keep) = *h;
-        keep++;
-    }
-    ow.holders.len = keep;
-    ow.frames.len = k;
-}
-
-//O33/O38 (vec4 R): a local whose written scope names an owned object's region - "d mut String&x" with "x := c.text", or a
-//":=" from a call given that scope, "d := mk&x(5)" - is new storage built in the region, which the region's release frees
-//as it frees what is read through the owner: it holds a loan on the region as the borrow it names does, live to its last
-//use and confined as a borrow is (the region outlives nothing, so §8.4 keeps it in locals, calls and the region)
-static struct var* ownRegionScope(struct var* sv) {
-    if (!sv || sv == SCOPE_AMBIGUOUS) return NULL;
-    sv = canonicalVar(sv);
-    return sv->isRegion ? sv : NULL;
-}
-static void ownHomeLoan(struct var* v, struct list* out, struct token tok) {
-    if (!v) return;
-    struct var* R = ownRegionScope(v->type.scopeParam);
-    if (!R && v->valueHomeSet) R = ownRegionScope(v->valueHome);
-    if (!R && v->refsHomeSet) R = ownRegionScope(v->refsHome);
-    if (R) ownLoanAdd(out, R, tok);
-}
-
-//O38: a local declared holding what it was given - a reference, a value holding one, or a closure - until its last use
-static void ownHold(struct var* v, struct list* loans, int frame) {
-    if (!v || v->type.refOwn || !typeCarriesScopes(v->type)) return;
-    struct ownHolder h = { canonicalVar(v), ListInit(sizeof(struct ownLoan)), frame, false };
-    ownLoansAll(loans, &h.loans);
-    ListAdd(&ow.holders, &h);
-}
-
-//O38 (own3): what a value stored into a local's storage borrows, held until the end of frame - the local's block - by
-//every name that storage has, not only the local it was stored through
-static void ownHoldUntil(int frame, struct list* loans, struct token at) {
-    (void)at;
-    if (!loans->len) return;
-    if (frame >= ow.frames.len) frame = ow.frames.len - 1;
-    struct ownHolder h = { NULL, ListInit(sizeof(struct ownLoan)), frame < 0 ? 0 : frame, true };
-    for (int k = 0; k < loans->len; k++) ownLoanPut(&h.loans, *(struct ownLoan*)ListGetIdx(loans, k));
-    ListAdd(&ow.holders, &h);
-}
-
-//...or later given more, by an assignment to it or into a value it holds. What only this function's locals may hold
-//(ownCarried) is stored only into a local's own storage: through a reference - where it leads, which other names may
-//reach, a handle's shared state included - or into a global or a lambda's capture it is refused (own4); into a local's
-//storage a reference was taken to, it is held until that local's block ends, not only while the local is used (own3)
-static void ownHoldMore(struct operand* target, struct list* loans, struct operand* val) {
-    struct operand* t = target;
-    bool viaRef = false;
-    while (t && (t->opType == OPERATION_MEMBER || t->opType == OPERATION_INDEX) && t->args.len) {
-        struct operand* b = *(struct operand**)ListGetIdx(&t->args, 0);
-        if (b->type.structMAlloc) viaRef = true;
-        t = b;
-    }
-    //(an owner moved or made into an own slot holds no borrow - C2d - whatever the place it was taken from was read through;
-    //one made from a borrowed copy is refused where it is made, ownCallConfined)
-    bool ownerInto = target->type.refOwn || (target->ownOrig && target->ownOrig->refOwn) || OwnValuePlace(target);
-    if (val && !ownerInto && !ow.rewalking) {
-        struct list vl = ListInit(sizeof(struct ownLoan));
-        ownCarried(val, &vl);
-        bool root = t && t->opType == OPERATION_READ_VAR && t->readVar;
-        bool outside = viaRef || t->type.structMAlloc || !root || (t->readVar->owner && !t->readVar->isFuncDecl)
-                       || canonicalVar(t->readVar)->isCapture || t->readVar->isCapture;
-        if (vl.len && outside) {
-            if (!ownCallRefused(val)) ownRefuse(val, val->tok, ERR_OWN_BORROW_STORED);
-        } else if (vl.len && canonicalVar(t->readVar)->slotBorrowed) {
-            struct ownHolder* h = ownHolderOf(t->readVar);
-            ownHoldUntil(h ? h->frame : 0, &vl, target->tok);
-        }
-    }
-    if (viaRef) return; //(stored through a reference: not into a local's storage)
-    if (!t || t->opType != OPERATION_READ_VAR || !t->readVar || !loans->len) return;
-    struct ownHolder* h = ownHolderOf(t->readVar);
-    if (!h) {
-        if (t->readVar->owner || !typeCarriesScopes(t->readVar->type)) return;
-        ownHold(t->readVar, loans, 0);
-        return;
-    }
-    ownLoansAll(loans, &h->loans);
-}
-
-static void ownBlockWalkIn(int k) {
-    //(the frame is read again each turn: a nested block's frame pushed by the walk may move the list)
-    struct list* block = ((struct ownFrame*)ListGetIdx(&ow.frames, k))->block;
-    for (int i = 0; i < block->len; i++) {
-        ((struct ownFrame*)ListGetIdx(&ow.frames, k))->idx = i;
-        ownStmtWalk(ListGetIdx(block, i));
-    }
-}
-
-static void ownBlockWalk(struct list* block, struct statement* owner) {
-    if (!block->len) return;
-    int k = ownFramePush(block, owner);
-    ownBlockWalkIn(k);
-    ownFramePop(k);
-}
-
-//(what of a statement its case in ownStmtWalk walks itself, in its own order and frames - the rest of StmtEachChild's list
-//is walked after it, so that code in a position no case names is never skipped, vec4 F1')
-static bool ownStmtWalksRole(enum statementType t, enum codeRole r) {
-    switch (t) {
-    case STATEMENT_VAR_DECL: return r == ROLE_OP || r == ROLE_FILL;
-    case STATEMENT_ASSIGN: return r == ROLE_TARGET || r == ROLE_OP;
-    case STATEMENT_IF: return r == ROLE_OP || r == ROLE_BLOCK || r == ROLE_ELSE;
-    case STATEMENT_FOR: return r == ROLE_FOR_INIT || r == ROLE_OP || r == ROLE_FOR_POST || r == ROLE_BLOCK;
-    case STATEMENT_DO: return r == ROLE_BLOCK || r == ROLE_OP;
-    case STATEMENT_MATCH:
-        return r == ROLE_OP || r == ROLE_MATCH_HOLD || r == ROLE_MATCH_CASES || r == ROLE_NOMATCH_BLOCK
-               || r == ROLE_NOMATCH_VALUE;
-    case STATEMENT_CASE:
-        return r == ROLE_CASE_TEST || r == ROLE_CASE_BIND || r == ROLE_CASE_GUARD || r == ROLE_BLOCK || r == ROLE_OP;
-    case STATEMENT_DEFER: return r == ROLE_BLOCK;
-    case STATEMENT_JOIN: return r == ROLE_BLOCK || r == ROLE_CATCH_BLOCK;
-    case STATEMENT_SPAWN: //(a task's clauses are its lambdas' bodies, walked by ownTaskLoans)
-        return r == ROLE_OP || r == ROLE_SPAWN_TARGET || r == ROLE_CATCH_BLOCK || r == ROLE_CATCH_DEFAULT || r == ROLE_TASK_CALL;
-    case STATEMENT_TRY_CATCH: return r == ROLE_OP || r == ROLE_CATCH_BLOCK || r == ROLE_CATCH_DEFAULT;
-    case STATEMENT_ASSERT: return r == ROLE_OP || r == ROLE_ASSERT_MSG;
-    default: return r == ROLE_OP;
-    }
-}
-static void ownRestOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
-    if (!ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) ownOpWalk(op);
-}
-static void ownRestStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
-    if (ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) return;
-    struct list one = ListInit(sizeof(struct statement));
-    ListAdd(&one, s);
-    int k = ownFramePush(&one, c->ctx);
-    ownStmtWalk(s);
-    ownFramePop(k);
-}
-static void ownRestBlock(struct codeVisit* c, struct list* b, enum codeRole r) {
-    if (!ownStmtWalksRole(((struct statement*)c->ctx)->sType, r)) ownBlockWalk(b, c->ctx);
-}
-
-static void ownStmtWalk(struct statement* s) {
-    struct list cur = ow.cur;
-    struct statement* stmt = ow.stmt;
-    ow.stmt = s;
-    ow.cur = ListInit(sizeof(struct ownLoan));
-    if (ow.check) ownLoansOfStmt(s, &ow.cur);
-    switch (s->sType) {
-    case STATEMENT_VAR_DECL:
-        ownOpWalk(s->op);
-        ownOpWalk(s->fillValue);
-        if (ow.check) { //(what the local is given keeps - own5: a call's result keeps of its arguments what its callee may)
-            struct list kept = ListInit(sizeof(struct ownLoan));
-            ownKeptOnly = true;
-            ownLoansIn(s->op, &kept, false, false);
-            ownLoansIn(s->fillValue, &kept, false, false);
-            ownKeptOnly = false;
-            ownHomeLoan(&s->var, &kept, s->var.tok); //(vec4 R: a local built in an owned object's region)
-            //(vec3 F4: a global's initializer - every loan it keeps would outlive its release, which nothing here sees)
-            //(vec4: a value whose type holds no reference - "T String = Docs.title" - is a copy and keeps nothing, as in a local)
-            if (s->var.isGlobalVar) {
-                if (kept.len && !s->var.type.refOwn && typeCarriesScopes(s->var.type) && !ow.rewalking && s->op && !ownCallRefused(s->op)) ownRefuse(s->op, s->op->tok, ERR_OWN_BORROW_STORED);
-            } else ownHold(&s->var, &kept, ow.frames.len - 1);
-        }
-        //D16e/P4a: the hidden local a task's lambda is held in - a call through it runs that lambda's body (ownCalleeBody)
-        if (s->op && s->op->opType == OPERATION_READ_VAR && s->op->readVar && s->op->readVar->isLambda && s->var.name.len
-                && s->var.name.ptr[0] == '$') {
-            struct var* a = canonicalVar(&s->var);
-            struct var* L = canonicalVar(s->op->readVar);
-            ListAdd(&ow.lambdaLocals, &a);
-            ListAdd(&ow.lambdaLocals, &L);
-        }
-        break;
-    case STATEMENT_ASSIGN:
-        if (s->target)
-            for (int i = 0; i < s->target->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&s->target->args, i));
-        ownOpWalk(s->op);
-        if (s->target && ((s->target->type.refOwn && !s->target->ownOrig) || OwnValuePlace(s->target))) {
-            //the old owner is let go of once the new one is stored - what the value borrowed was used before then, and the
-            //value is an owner, holding no borrow (C2d)
-            struct list all = ow.cur;
-            ow.cur = ListInit(sizeof(struct ownLoan));
-            if (ow.check) ownLoansIn(s->target, &ow.cur, false, true);
-            ow.relAssign = s;
-            ownSlotRelease(s->target, s->target->tok, ownWhat("assigning '%s'", ownPlaceText(s->target)), false);
-            ow.relAssign = NULL;
-            ow.cur = all;
-        }
-        if (ow.check && s->target) {
-            struct list kept = ListInit(sizeof(struct ownLoan));
-            ownKeptOnly = true;
-            ownLoansIn(s->op, &kept, false, false);
-            ownKeptOnly = false;
-            ownHoldMore(s->target, &kept, s->op);
-        }
-        break;
-    case STATEMENT_IF: {
-        ownOpWalk(s->op);
-        ow.cur.len = 0;
-        ownBlockWalk(&s->block, s);
-        if (s->elseStmnt) {
-            struct list one = ListInit(sizeof(struct statement));
-            ListAdd(&one, s->elseStmnt);
-            int k = ownFramePush(&one, s);
-            ownStmtWalk(s->elseStmnt);
-            ownFramePop(k);
-        }
-        break;
-    }
-    case STATEMENT_FOR: {
-        ownOpWalk(s->forInit);
-        int k = ownFramePush(&s->block, s);
-        if (ow.check) {
-            ownHomeLoan(&s->var, &ow.cur, s->var.tok); //(vec4 R)
-            ownHold(&s->var, &ow.cur, k);
-        }
-        ownOpWalk(s->op);
-        ow.cur.len = 0;
-        if (s->forPost) ownStmtWalk(s->forPost);
-        ownBlockWalkIn(k);
-        ownFramePop(k);
-        ownLoopRewalk(s);
-        break;
-    }
-    case STATEMENT_DO: {
-        ow.cur.len = 0;
-        int k = ownFramePush(&s->block, s);
-        ownBlockWalkIn(k);
-        ((struct ownFrame*)ListGetIdx(&ow.frames, k))->idx = s->block.len;
-        ownOpWalk(s->op);
-        ownFramePop(k);
-        ownLoopRewalk(s);
-        break;
-    }
-    case STATEMENT_MATCH: {
-        ownOpWalk(s->op);
-        ow.cur.len = 0;
-        int k = ownFramePush(&s->matchCases, s);
-        for (int i = 0; i < s->matchHold.len; i++) ownStmtWalk(ListGetIdx(&s->matchHold, i));
-        ownBlockWalkIn(k);
-        ownFramePop(k);
-        ownBlockWalk(&s->nomatchBlock, s);
-        ownOpWalk(s->nomatchValue);
-        break;
-    }
-    case STATEMENT_CASE: {
-        for (int i = 0; i < s->caseAlts.len; i++) {
-            struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-            ownOpWalk(a->test);
-            for (int j = 0; j < a->binds.len; j++) ownOpWalk(((struct caseBind*)ListGetIdx(&a->binds, j))->from);
-        }
-        int k = ownFramePush(&s->block, s);
-        if (ow.check)
-            for (int i = 0; i < s->caseAlts.len; i++) {
-                struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
-                for (int j = 0; j < a->binds.len; j++) {
-                    struct caseBind* b = ListGetIdx(&a->binds, j);
-                    struct list loans = ListInit(sizeof(struct ownLoan));
-                    ownLoansIn(b->from, &loans, false, false);
-                    struct ownHolder* h = ownHolderOf(b->v);
-                    if (h && h->frame == k) ownLoansAll(&loans, &h->loans);
-                    else ownHold(b->v, &loans, k);
-                }
-            }
-        ownOpWalk(s->caseGuard);
-        ownBlockWalkIn(k);
-        ownOpWalk(s->op);
-        ownFramePop(k);
-        break;
-    }
-    case STATEMENT_DEFER:
-        ow.cur.len = 0;
-        ownBlockWalk(&s->block, s);
-        break;
-    case STATEMENT_JOIN:
-        ow.cur.len = 0;
-        ownBlockWalk(&s->block, s);
-        for (int i = 0; i < s->catchClauses.len; i++) ownBlockWalk(&((struct catchClause*)ListGetIdx(&s->catchClauses, i))->block, s);
-        break;
-    case STATEMENT_SPAWN: {
-        struct operand* call = s->op;
-        if (call) {
-            for (int i = 0; i < call->args.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&call->args, i));
-            ownOpWalk(call->callee);
-            if (ow.check && call->opType == OPERATION_FUNCCALL) ownArgOrder(call); //O33: as a call's (vec5)
-        }
-        for (int i = 0; i < s->spawnTargets.len; i++) ownOpWalk(*(struct operand**)ListGetIdx(&s->spawnTargets, i));
-        if (call) ownCallConfined(call); //O38: what the task's call keeps outlives its join
-        //...and a target given what only this function's locals may hold - the call's result made from a borrowed copy -
-        //is set on the task's thread, where no local of this function holds it (own4 N2)
-        if (ow.check && !ow.rewalking && call && call->opType == OPERATION_FUNCCALL && s->spawnTargets.len) {
-            //(any result that can hold a reference may hold what it was given - a tuple's element borrowed from it too)
-            struct list loans = ListInit(sizeof(struct ownLoan));
-            struct var* f = call->readVar;
-            bool holds = call->callee || !f || !f->type.hasRetType || typeCarriesScopes(*f->type.retType)
-                         || f->type.retType->bType == BASETYPE_FUNC;
-            for (int i = 0; holds && i < call->args.len; i++) ownCarried(*(struct operand**)ListGetIdx(&call->args, i), &loans);
-            //(...and the call's own: a borrowed own result's loan - "spawn d = w.View()" - is the call's, not an argument's,
-            //vec3 F3)
-            ownCarried(call, &loans);
-            if (loans.len && !ownCallRefused(call)) ownRefuse(call, call->tok, ERR_OWN_BORROW_STORED);
-        }
-        struct var* g = call && !call->callee && call->readVar ? canonicalVar(call->readVar) : NULL;
-        if (g && g->ownEff && g->ownEff->rels.len) {
-            if (!ow.check) ownCallRelease(call);
-            else if (!ownReportedAt(call->tok)) {
-                Err(call->tok, ERR_OWN_TASK_RELEASE, ownFuncName(g));
-                struct ownRel* r = ListGetIdx(&g->ownEff->rels, 0);
-                if (r->tok.owner) Note(r->tok, NOTE_OWN_RELEASES_HERE, ownQuoted(g));
-            }
-        }
-        if (!ow.check) { //O41: what the task borrows is the body's that spawns it - its clauses' too, run on its thread
-            if (call && call->opType == OPERATION_FUNCCALL) ownBorrowsAt(call);
-            for (int i = 0; i < s->catchClauses.len; i++) {
-                struct catchClause* c = ListGetIdx(&s->catchClauses, i);
-                if (c->taskCall) ownBorrowsAt(c->taskCall);
-            }
-        } else if (!ow.rewalking) ownTaskLoans(s); //O41: and is held until its join
-        break;
-    }
-    case STATEMENT_TRY_CATCH:
-        ownOpWalk(s->op);
-        ow.cur.len = 0;
-        for (int i = 0; i < s->catchClauses.len; i++) {
-            struct catchClause* c = ListGetIdx(&s->catchClauses, i);
-            ownBlockWalk(&c->block, s);
-            ownOpWalk(c->dflt);
-        }
-        break;
-    case STATEMENT_ASSERT:
-        ownOpWalk(s->op);
-        ownOpWalk(s->assertMsg);
-        break;
-    case STATEMENT_RET:
-        ownOpWalk(s->op);
-        //O38 (own5 F2): what only this function's locals may hold is not handed back - a reference to an owner value
-        //local's storage, or a value holding one, would outlive the release of its owners at its block's end
-        if (ow.check && !ow.rewalking && s->op) {
-            struct list loans = ListInit(sizeof(struct ownLoan));
-            ownCarried(s->op, &loans);
-            //(a borrowed own result's loan rooted at the parameter this function's own borrowed own result is borrowed from
-            //is the caller's to hold - O37 - where the caller's loan meets its releases: on an object of the type this
-            //function settled on, or any (vec3 F2: a return no source was recorded for - "t := c.Text(); return t" beside
-            //"return String(c.data)" - borrows a String where the callers' loan is keyed by Array<Char>)
-            int keep = 0;
-            struct var* fc = ow.func ? canonicalVar(ow.func) : NULL;
-            for (int i = 0; i < loans.len; i++) {
-                struct ownLoan* l = ListGetIdx(&loans, i);
-                bool covered = fc && (fc->ownBorrowResultAnyType
-                                      || (!l->anyType && !l->R->regionAnyType && l->R->regionType
-                                          && (l->R->regionType == fc->ownBorrowResultType
-                                              || ownHeldBy(l->R->regionType, fc->ownBorrowResultType))));
-                if (l->R->regionOfResult && l->R->regionRoot == OWN_ROOT_PARAM && covered
-                        && ownIntIn(&fc->ownBorrowParams, l->R->regionRootParam)) continue;
-                *(struct ownLoan*)ListGetIdx(&loans, keep++) = *l;
-            }
-            loans.len = keep;
-            struct var* owner = NULL;
-            for (int i = 0; i < loans.len && !owner; i++) {
-                struct ownLoan* l = ListGetIdx(&loans, i);
-                if (l->by && l->by->ownValueBorrow) owner = l->by->ownValueBorrow;
-            }
-            if (owner && !ownReportedAt(s->op->tok)) {
-                struct type vt = owner->type;
-                Err(s->op->tok, ERR_OWN_RETURNS_OWNER_BORROW, owner->name, &vt, owner->name);
-            } else if (loans.len && !ownCallRefused(s->op)) ownRefuse(s->op, s->op->tok, ERR_OWN_BORROW_STORED);
-        }
-        break;
-    default:
-        ownOpWalk(s->op);
-        break;
-    }
-    struct codeVisit rest = { ownRestOp, ownRestStmt, ownRestBlock, s, false };
-    StmtEachChild(s, &rest);
-    ow.cur = cur;
-    ow.stmt = stmt;
-}
-
-static void ownBodyWalk(struct var* func, struct list* block) {
-    ow.func = func;
-    ow.stmt = NULL;
-    ow.frames.len = 0;
-    ow.holders.len = 0;
-    ow.cur = ListInit(sizeof(struct ownLoan));
-    ow.encl.len = 0;
-    ow.lambdaLocals.len = 0;
-    ow.rewalkLoops.len = 0;
-    ownBlockWalk(block, NULL);
+static struct str quotedFuncName(struct var* f) {
+    struct str n = funcNameAsWritten(f);
+    char* t = MallocOrCrash((size_t)n.len + 3);
+    snprintf(t, (size_t)n.len + 3, "'%.*s'", n.len, n.ptr);
+    return StrFromCStr(t);
 }
 
 //every checked body of the program: functions, constructors and destructors, instantiations, lambdas, tests, and each
 //global's initializer
-static void ownForEachBody(void (*fn)(struct var*, struct list*)) {
+static void forEachBody(void (*fn)(struct var*, struct list*)) {
     for (int m = 0; m < allModules.len; m++) {
         struct semaModule* mod = *(struct semaModule**)ListGetIdx(&allModules, m);
         for (int i = 0; i < mod->vars.len; i++) {
             struct var* v = ListGetIdx(&mod->vars, i);
             if (v->isGlobalVar && v->initExpr) {
-                //(vec3 F4: walked as the declaration it is - a global holds nothing only locals may, O38)
-                struct list one = ListInit(sizeof(struct statement));
+                    struct list one = ListInit(sizeof(struct statement));
                 struct statement st = (struct statement){0};
                 st.sType = STATEMENT_VAR_DECL;
                 st.var = *v;
@@ -30603,215 +27237,6 @@ static void ownForEachBody(void (*fn)(struct var*, struct list*)) {
     }
 }
 
-static bool ownEffectsSome(struct var* f) {
-    f = canonicalVar(f);
-    return f && f->ownEff && f->ownEff->rels.len;
-}
-
-//O40: a function whose calls nothing at its call site shows - a function value, a destructor, a method "$", "==" or a
-//Map calls by itself - releases nothing a caller could have borrowed
-static void ownImplicitCheck(struct var* f, struct token at, enum diag d, struct str name) {
-    if (!ownEffectsSome(f) || ownReportedAt(at)) return;
-    struct ownRel* r = ListGetIdx(&canonicalVar(f)->ownEff->rels, 0);
-    //(a destructor's error is at the release in its own body - the call leading to one in a library, B11 - with a note
-    //where that call releases)
-    if (d == ERR_OWN_DESTRUCTOR_RELEASE) {
-        bool viaCall = r->site.owner && (r->site.owner != r->tok.owner || r->site.tokId != r->tok.tokId);
-        Err(viaCall ? r->site : r->tok, d);
-        if (viaCall && r->tok.owner) {
-            char* q = MallocOrCrash((size_t)r->site.str.len + 3);
-            snprintf(q, (size_t)r->site.str.len + 3, "'%.*s'", r->site.str.len, r->site.str.ptr);
-            Note(r->tok, NOTE_OWN_RELEASES_HERE, StrFromCStr(q));
-        }
-        return;
-    }
-    Err(at, d, name);
-    if (r->tok.owner) Note(r->tok, NOTE_OWN_RELEASES_HERE, name);
-}
-
-static struct str ownQuoted(struct var* f) {
-    struct str n = ownFuncName(f);
-    char* t = MallocOrCrash((size_t)n.len + 3);
-    snprintf(t, (size_t)n.len + 3, "'%.*s'", n.len, n.ptr);
-    return StrFromCStr(t);
-}
-
-static bool ownImplicitName(struct str n) {
-    return n.len && (StrCmp(n, StrFromCStr("Str")) || StrCmp(n, StrFromCStr("str")) || StrCmp(n, StrFromCStr("Eq"))
-                     || StrCmp(n, StrFromCStr("eq")) || StrCmp(n, StrFromCStr("Hash")) || StrCmp(n, StrFromCStr("hash")));
-}
-
-static void ownImplicitBody(struct var* f, struct list* block) {
-    (void)block;
-    if (!f) return;
-    if (f->isLambda) ownImplicitCheck(f, f->tok, ERR_OWN_FUNC_VALUE_RELEASE, StrFromCStr("the lambda"));
-    else if (f->isMethod && ownImplicitName(ownFuncName(f))) ownImplicitCheck(f, f->tok, ERR_OWN_IMPLICIT_RELEASE, ownQuoted(f));
-    else if (f->type.vars.len) {
-        struct var* p = ListGetIdx(&f->type.vars, 0);
-        if (p->type.bType == BASETYPE_STRUCT && p->type.destructFunc && canonicalVar(p->type.destructFunc) == canonicalVar(f))
-            ownImplicitCheck(f, f->tok, ERR_OWN_DESTRUCTOR_RELEASE, (struct str){0});
-    }
-}
-
-//O41: the methods the language calls by itself, for what they may borrow (ownBorrowsAt)
-static void ownImplicitCollect(struct var* f, struct list* block) {
-    (void)block;
-    if (!f || !f->isMethod || !ownImplicitName(ownFuncName(f))) return;
-    f = canonicalVar(f);
-    for (int i = 0; i < ow.implicitFns.len; i++)
-        if (*(struct var**)ListGetIdx(&ow.implicitFns, i) == f) return;
-    ListAdd(&ow.implicitFns, &f);
-}
-
-//K2: whether a value of type t reaches an own reference - through its fields, elements, payloads and references. An owned
-//object lives in a region of its own (O30), which a global written out as data is not, so such a global is never baked
-static bool ownReachesOwnIn(struct type t, struct list* seen, int depth) {
-    if (depth > 64) return true;
-    if (t.refOwn) return true;
-    if (t.bType == BASETYPE_ARRAY) return t.arrElem && ownReachesOwnIn(*t.arrElem, seen, depth + 1);
-    if (t.bType != BASETYPE_STRUCT && t.bType != BASETYPE_CHOICE) return false;
-    struct type* c = canonicalStructOf(t);
-    if (c) {
-        if (ownTypeIn(seen, c)) return false;
-        ListAdd(seen, &c);
-        t = *c;
-    }
-    for (int i = 0; i < t.vars.len; i++)
-        if (ownReachesOwnIn(((struct var*)ListGetIdx(&t.vars, i))->type, seen, depth + 1)) return true;
-    return false;
-}
-
-static bool ownReachesOwn(struct type t) {
-    if (!ownUsed) return false;
-    struct list seen = ListInit(sizeof(struct type*));
-    return ownReachesOwnIn(t, &seen, 0);
-}
-
-//O39-O41: once every body is checked - what each body may release, a least fixed point over calls; then where that is
-//refused (O40, O41), and each body against what its statements borrow (O38/O39)
-//O34 (vec7 F2): once borrowed own results are settled - the takes ownValuePlaceReach recorded whose instance was reached
-//through a call giving one, directly or through a variable some such call's result may have reached (assigned, declared
-//from, a spawn's target - any time in its function, read off the checked bodies): its region is not known there, so the
-//take is refused (O34), as one whose reach is not known
-struct ownViaFlow { struct var* to; struct operand* call; struct var* from; };
-static struct list ownViaFlows;
-static bool ownViaCallGives(struct operand* call) {
-    return call->callee || (call->readVar && canonicalVar(call->readVar)->ownBorrowResult);
-}
-struct ownViaScan { struct var* to; };
-static void ownViaSrcOp(struct codeVisit* c, struct operand* op, enum codeRole r) {
-    (void)r;
-    struct ownViaScan* w = c->ctx;
-    struct ownViaFlow f = { w->to, NULL, NULL };
-    if (op->opType == OPERATION_FUNCCALL && !opIsCtorCall(op)) f.call = op;
-    else if (op->opType == OPERATION_READ_VAR && op->readVar) f.from = canonicalVar(op->readVar);
-    else return;
-    if (f.from == f.to) return;
-    ListAdd(&ownViaFlows, &f);
-}
-static void ownViaNote(struct var* to, struct operand* val) {
-    if (!to || !val) return;
-    struct ownViaScan w = { canonicalVar(to) };
-    struct codeVisit c = { ownViaSrcOp, NULL, NULL, &w, false };
-    CodeDeepOp(val, &c);
-}
-static void ownViaStmt(struct codeVisit* c, struct statement* s, enum codeRole r) {
-    (void)c;
-    (void)r;
-    if (s->sType == STATEMENT_VAR_DECL) ownViaNote(&s->var, s->op);
-    if (s->sType == STATEMENT_ASSIGN && s->target && s->target->opType == OPERATION_READ_VAR)
-        ownViaNote(s->target->readVar, s->op);
-    if (s->sType == STATEMENT_FOR && s->forInit) ownViaNote(&s->var, s->forInit);
-    for (int i = 0; i < s->spawnTargets.len; i++) {
-        struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
-        if (t && t->opType == OPERATION_READ_VAR) ownViaNote(t->readVar, s->op);
-    }
-}
-static void ownViaBody(struct var* f, struct list* block) {
-    (void)f;
-    struct codeVisit c = { NULL, ownViaStmt, NULL, NULL, false };
-    CodeDeepBlock(block, &c);
-}
-static void ownViaSettle(void) {
-    if (!ownViaTakes.len) return;
-    ownViaFlows = ListInit(sizeof(struct ownViaFlow));
-    ownForEachBody(ownViaBody);
-    struct list tainted = ListInit(sizeof(struct var*));
-    for (bool changed = true; changed;) {
-        changed = false;
-        for (int i = 0; i < ownViaFlows.len; i++) {
-            struct ownViaFlow* f = ListGetIdx(&ownViaFlows, i);
-            bool in = false;
-            for (int k = 0; k < tainted.len && !in; k++) in = *(struct var**)ListGetIdx(&tainted, k) == f->to;
-            if (in) continue;
-            bool src = f->call ? ownViaCallGives(f->call) : false;
-            for (int k = 0; k < tainted.len && !src && f->from; k++) src = *(struct var**)ListGetIdx(&tainted, k) == f->from;
-            if (!src) continue;
-            ListAdd(&tainted, &f->to);
-            changed = true;
-        }
-    }
-    struct list done = ListInit(sizeof(struct token));
-    for (int i = 0; i < ownViaTakes.len; i++) {
-        struct ownViaTake* t = ListGetIdx(&ownViaTakes, i);
-        bool bad = t->call ? ownViaCallGives(t->call) : false;
-        for (int k = 0; k < tainted.len && !bad && t->v; k++) bad = *(struct var**)ListGetIdx(&tainted, k) == t->v;
-        if (!bad) continue;
-        bool seen = false;
-        for (int k = 0; k < done.len && !seen; k++) {
-            struct token* d = ListGetIdx(&done, k);
-            seen = d->owner == t->tok.owner && d->tokId == t->tok.tokId;
-        }
-        if (seen) continue;
-        ListAdd(&done, &t->tok);
-        Err(t->tok, ERR_OWN_REACH);
-        Note(t->tok, NOTE_OWN_REACH_VIA_CALL);
-    }
-}
-static void settleOwnBorrows(void) {
-    if (!ownUsed) return;
-    ownBorrowResultsSettle(); //O37 (vec2 N1): before any loan is made
-    ownViaSettle(); //O34 (vec7 F2)
-    ownResultFreshSettle(); //O38 (vec3 F1): which built results are new storage, before any loan is made
-    ow.frames = ListInit(sizeof(struct ownFrame));
-    ow.holders = ListInit(sizeof(struct ownHolder));
-    ow.encl = ListInit(sizeof(struct ownLoan));
-    ow.reported = ListInit(sizeof(struct token));
-    ownRefusedCalls = ListInit(sizeof(struct operand*));
-    ow.reportedStmts = ListInit(sizeof(struct statement*));
-    ow.lambdaLocals = ListInit(sizeof(struct var*));
-    ow.rewalkLoops = ListInit(sizeof(struct statement*));
-    ow.implicitFns = ListInit(sizeof(struct var*));
-    ownForEachBody(ownImplicitCollect);
-    ow.check = false;
-    for (int round = 0; round < 1000; round++) {
-        ow.changed = false;
-        ownForEachBody(ownBodyWalk);
-        if (!ow.changed) break;
-    }
-    ownForEachBody(ownImplicitBody);
-    for (int i = 0; i < funcValueUses.len; i++) {
-        //O37 (vec1 F2): a borrowed own result's loan is made by a call by name (ownResultRegionsOf) - a call through a
-        //function value or a Call adapter makes none, so such a function is never a value (known once every body is)
-        struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
-        if (canonicalVar(u->f)->ownBorrowResult && !ownReportedAt(u->tok)) {
-            if (u->f->isLambda) Err(u->tok, ERR_OWN_LAMBDA_BORROW_RESULT);
-            else Err(u->tok, ERR_OWN_FUNC_VALUE_BORROW, ownQuoted(u->f), ownQuoted(u->f));
-        }
-    }
-    for (int i = 0; i < funcValueUses.len; i++) {
-        struct funcValueUse* u = ListGetIdx(&funcValueUses, i);
-        if (u->f->isLambda) continue; //(a lambda: above, at itself)
-        ownImplicitCheck(u->f, u->tok, ERR_OWN_FUNC_VALUE_RELEASE, ownQuoted(u->f));
-    }
-    for (int i = 0; i < roCallAdapters.len; i++) {
-        struct roFuncValue* u = ListGetIdx(&roCallAdapters, i);
-        ownImplicitCheck(u->f, u->tok, ERR_OWN_FUNC_VALUE_RELEASE, ownQuoted(u->f));
-    }
-    ow.check = true;
-    ownForEachBody(ownBodyWalk);
-}
-
 // ---- a Vec's views (M19g) ----
 //A view (View(), ViewMut()) is a window on a Vec's buffer as it is when it is taken; a growth replaces the buffer, and
 //the view goes on showing the old one. M19g refuses a use of a view after its Vec may have grown, where the same Vec is
@@ -30828,7 +27253,7 @@ static void settleOwnBorrows(void) {
 //other. A local made a second name of a place ("w := v", "r Lexer& = l") stands for that place; one made from anything
 //else is a root of its own.
 //
-//What each function may do is its SUMMARY, a least fixed point over every body (as O39's release effects are): the
+//What each function may do is its SUMMARY, a least fixed point over every body: the
 //places below its parameters and the globals it may grow, and the views of places below its parameters it may hand
 //back. Then each body is walked once more against them, in order: a view held by a local (or by what holds it - a
 //struct it was stored in, a lambda capturing it) is STALE from a growth of its place on, and a use of a stale holder is
@@ -31043,7 +27468,7 @@ static int vgWeight(struct vgState* s) {
 // -- places --
 static int vgParamIndex(struct var* v) {
     if (!vg.func) return -1;
-    return ownParamIndex(vg.func, v);
+    return paramIndexOf(vg.func, v);
 }
 static void vgPlacesOf(struct operand* op, struct vgState* st, struct list* out) {
     if (!op) return;
@@ -31259,7 +27684,7 @@ static void vgCall(struct operand* op, struct vgState* st, struct list* out) {
         if (l) ListAddList(&fnRefs, l->refs);
     }
     struct vgSum* S = fn ? canonicalVar(fn)->vecViews : NULL;
-    struct str fnName = fn ? ownQuoted(fn) : StrFromCStr("a call through a function value");
+    struct str fnName = fn ? quotedFuncName(fn) : StrFromCStr("a call through a function value");
     //the growths it may make
     struct list grows = ListInit(sizeof(struct vgPlace));
     struct list inner = ListInit(sizeof(struct token)); //...each one's place in the callee, for a note
@@ -31796,11 +28221,11 @@ static void settleVecViews(void) {
     vg.quiet = false;
     for (int round = 0; round < 1000; round++) {
         vg.changed = false;
-        ownForEachBody(vgBody);
+        forEachBody(vgBody);
         if (!vg.changed) break;
     }
     vg.check = true;
-    ownForEachBody(vgBody);
+    forEachBody(vgBody);
 }
 
 static void settleInferredErrs(void) {
@@ -31941,9 +28366,6 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
 
     instantiations = ListInit(sizeof(struct instantiation));
     allLambdas = ListInit(sizeof(struct var*)); //D16
-    ownUsed = false; //O39
-    ownBorrowSrcs = ListInit(sizeof(struct ownBorrowSrc)); //O37
-    ownBorrowSettled = false;
     strMethods = ListInit(sizeof(struct strMethod)); //E11c
     funcValueUses = ListInit(sizeof(struct funcValueUse)); //T22a
     typeInstantiations = ListInit(sizeof(struct type*));
@@ -32056,11 +28478,10 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     settleFrameLambdas(); //D16c: before the may-build walk, which reads it
     checkStrRendered(); //E11c
     settleMayBuild(); //E11c
-    if (ErrMsgGetNErrors() == errsAtStart) { //O38-O41: on a program that checked cleanly
-        ownObligationsKnown = true;
-        settleOwnBorrows();
-        settleVecViews(); //M19g
-        ownObligationsKnown = false;
+    if (ErrMsgGetNErrors() == errsAtStart) { //M19g: on a program that checked cleanly
+        obligationsKnown = true;
+        settleVecViews();
+        obligationsKnown = false;
     }
 
     //K2: every immutable global whose initializer can be computed now is - its value becomes the global's
@@ -32136,7 +28557,6 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             for (int i = 0; i < mod->vars.len; i++) {
                 struct var* v = ListGetIdx(&mod->vars, i);
                 if ((v->type.bType == BASETYPE_FUNC && !v->isGlobalVar) || !v->initExpr || v->mut || v->isMethod) continue;
-                if (ownReachesOwn(v->type)) continue; //K2: an owned object's region is no global's data
                 struct ctVal* val;
                 struct token whyTok = (struct token){0};
                 const char* why = NULL;

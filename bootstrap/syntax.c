@@ -742,10 +742,8 @@ struct syntax* parseFuncType(SyntaxCtx sc) {
 
 //"CHOICE_BODY|INTERFACE_BODY|FUNC_TYPE|TYPE_REF"
 struct syntax* parseTypeExpr(SyntaxCtx sc) {
-    //T25b: "mut" before a type makes a reference writable - kept after the shape, so the shape stays part 0. T25e:
-    //"own" before it, "own mut Conn&" - an owned, writable reference
+    //T25b: "mut" before a type makes a reference writable - kept after the shape, so the shape stays part 0
     int cur = TokenGetCursor(sc->tc);
-    struct token own = acceptTok(sc, TOK_OWN);
     struct token mut = acceptTok(sc, TOK_MUT);
     struct syntax* inner = parseChoiceBody(sc);
     if (!inner) inner = parseInterfaceBody(sc);
@@ -754,7 +752,6 @@ struct syntax* parseTypeExpr(SyntaxCtx sc) {
     if (!inner) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_TYPE_EXPR);
     addSntx(s, inner);
-    if (own.type != TOK_NONE) addTok(s, own);
     if (mut.type != TOK_NONE) addTok(s, mut);
     return s;
 }
@@ -3182,8 +3179,7 @@ struct syntax* parseExprPostfix(SyntaxCtx sc) {
 
 bool isUnaryOpTok(enum tokenType t) {
     return t == TOK_SUB || t == TOK_BTWSE_INV || t == TOK_INC || t == TOK_DEC
-            || t == TOK_STR_OF //E11a
-            || t == TOK_TAKE;  //E34: "take p" - its operand is the place, a postfix
+            || t == TOK_STR_OF; //E11a
 }
 
 static struct syntax* parseExprUnaryOne(SyntaxCtx sc);

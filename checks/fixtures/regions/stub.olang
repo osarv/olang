@@ -1,0 +1,2 @@
+# the runtime's regions for drive.c (docs/memory.md 3.4): built with "build -debug", its runtime object linked with drive.c
+fn main() { }

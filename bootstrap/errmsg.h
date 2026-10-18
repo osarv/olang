@@ -194,47 +194,6 @@ struct type;
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
     X(ERR_DESTRUCT_TYPE_BY_VALUE,       "C11",   "%t has a destructor, so it is held only by reference - write %t&") \
-    X(ERR_TYPE_TOO_DEEP_TO_CHECK,       "O31",   "this type nests more than 64 levels of values and arrays - too deep to check whether it holds an owning type by value: nest it less") \
-    X(ERR_OWNING_TYPE_BY_VALUE,         "O31",   "%t owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write %t&, or 'own mut %t&' to own one") \
-    X(ERR_OWN_ON_VALUE,                 "T25e",  "'own' marks a reference, and %t is none - write 'own %t&'") \
-    X(ERR_OWN_KIND_NOT_YET,             "T25e",  "'own' on %t is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements own nothing ('own Array<I64>&', 'own Array<Tok>&', 'own Array<Node&>&')") \
-    X(ERR_OWN_SCOPE_MARKER,             "T25e",  "an own reference lives in its own region, not where a variable does - drop the name after '&'") \
-    X(ERR_OWN_POSITION_NOT_YET,         "T25e",  "'own' is written on a field's, a local's or a global's type, or a declared function's parameter or result - here it is not supported yet") \
-    X(ERR_OWN_RECEIVER,                 "O36",   "a method is called on a borrow, so its receiver never owns - drop 'own', or take the owner as another parameter") \
-    X(ERR_OWN_IN_FUNC_TYPE,             "O36",   "a function value's parameters and result never own - only a declared function's do; drop 'own'") \
-    X(ERR_OWN_BUILT_BEFORE_BORROW,      "O33",   "this value would be built where the object of '%s' lives, which a later argument reads - read it first, 'o := %s'") \
-    X(ERR_OWN_TAKE_NEEDED,              "O34",   "moving out of '%s' would leave it empty - write 'take %s'") \
-    X(ERR_OWN_NOT_AN_OWNER,             "O34",   "an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this %s") \
-    X(ERR_OWN_NOT_AN_ARRAY_OWNER,       "O34",   "an own array slot takes an array made here - 'Array<T>(n)', or a literal, text or join of elements referring nowhere - 'take' from another own slot, or null") \
-    X(ERR_OWN_REACH_EXACT,              "O34",   "the array's elements can be stored through, so they must refer exactly where this slot's elements do - move it into a slot whose container lives where the source's does") \
-    X(ERR_OWN_REACH,                    "O34",   "the owner refers to what lives shorter than the slot it is moved into - move it where that lives") \
-    X(ERR_OWN_COMPOUND,                 "O34",   "an own slot is given an owner with '=', not '%s'") \
-    X(ERR_OWN_OWNER_USE,                "O34",   "'take' gives an owner, which only an own slot receives - 'x := take ...', an own field, an own global or an owning parameter") \
-    X(ERR_OWN_RESULT_USE,               "O37",   "%S gives an owner, which only an own slot receives - 'x := %S(...)', an own field or global, an owning parameter, or a statement of its own") \
-    X(ERR_OWN_RESULT_DEFAULT,           "O34",   "an owned result's 'catch default' is 'null' for now - or a clause that leaves") \
-    X(ERR_OWN_MOVED_READ_AGAIN,         "O34",   "'return %s' moves '%s', which deferred code reads afterwards - write 'return take %s' to leave it null there") \
-    X(ERR_OWN_FUNC_VALUE_BORROW,        "O37",   "%S gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call %S by name") \
-    X(ERR_OWN_LAMBDA_BORROW_RESULT,     "O37",   "a lambda never gives a borrowed own result - a call through a function value holds no loan on the owned object it borrows; return a Clone(), or declare a function and call it by name") \
-    X(ERR_OWN_FUNC_VALUE_SIG,           "O36",   "%S owns a parameter or gives an owned result, so it is called by name only - a function value never owns") \
-    X(ERR_OWN_SPAWN_SIG,                "O41",   "a task's call may not own a parameter or give an owned result yet - spawn a function that borrows, and move the owner after the join") \
-    X(ERR_OWN_IN_COND,                  "O34",   "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") \
-    X(ERR_OWN_VALUE_IN_COND,            "O34",   "a conditional's or a match's values own objects (%t), and one is chosen by copying it - borrow one, 'r mut %t& = a', then repoint it in a branch, 'if not c { r = b }'") \
-    X(ERR_TAKE_NOT_OWN,                 "E34",   "'take' moves an owner out of an own slot, and this is %t") \
-    X(ERR_TAKE_READ_ONLY,               "E34",   "'take' writes the slot it moves out of, and it is read-only here") \
-    X(ERR_TAKE_BORROWED_COPY,           "E34",   "'%S' is a borrowed copy and owns nothing - take from '%S', which owns what it holds, 'take %S'") \
-    X(ERR_OWN_COPY_ASSIGNED,            "O32",   "'%S' is a borrowed copy of '%S' and owns nothing, so it is not assigned - declare another with ':='") \
-    X(ERR_OWN_COPY_PART,                "O32",   "'%s' belongs to what '%S' was copied from - assign it there") \
-    X(ERR_OWN_VALUE_SOURCE,             "O32",   "%t owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it") \
-    X(ERR_OWN_VALUE_NOT_AN_OWNER,       "O34",   "a local of %t, which owns objects, is given an owner - a value made here, a call's result, or 'take' of another - and this is not one") \
-    X(ERR_OWN_VALUE_DEFAULT,            "O34",   "%t owns objects, and a 'catch default' giving one is not supported yet - give the clause a block that leaves") \
-    X(ERR_OWN_RELEASE_UNDER_LOAN,       "O39",   "%s may release the %t borrowed on line %d, which is used after it") \
-    X(ERR_OWN_MOVE_UNDER_LOAN,          "O39",   "%s moves the %t borrowed on line %d, which is used after it - a borrowed object is not moved until its borrow is done") \
-    X(ERR_OWN_RELEASE_UNDER_TASK,       "O41",   "%s may release the %t the task spawned on line %d may be using until the join - release it after the join") \
-    X(ERR_OWN_RELEASE_UNDER_TASK_ANY,   "O41",   "%s may release what the task spawned on line %d may be using until the join - it calls a function value, which may reach any owned object; release it after the join") \
-    X(ERR_OWN_CAPTURED,                 "O32",   "a lambda does not capture the owner local '%S' - capture a borrow of it, 'b := %S' outside the lambda") \
-    X(ERR_OWN_TASK_RELEASE,             "O41",   "a task may not release owned objects yet, and '%S' may - release them before the spawn or after the join") \
-    X(ERR_OWN_FUNC_VALUE_RELEASE,       "O40",   "%S releases owned objects, so it cannot be a function value - a function value releases nothing yet") \
-    X(ERR_OWN_DESTRUCTOR_RELEASE,       "O40",   "a destructor may not release owned objects - its instance's own fields are released after it runs") \
     X(ERR_TRAIT_NOT_A_TYPE,             "T30",   "%t is a trait - a constraint on a type variable, never the type of a value") \
     X(ERR_ENUM_CASE_IN_USE,             "T17",   "enum case %n is already declared") \
     X(ERR_DECLARED_TWICE,               "",      "%n is declared twice") \
@@ -334,11 +293,6 @@ struct type;
     X(ERR_SCOPE_ARGS_DISAGREE,          "O25e",  "these arguments live in different scopes, and the signature requires one ('&p')") \
     X(ERR_BORROW_SPLIT_SCOPES,          "O17",   "this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')") \
     X(ERR_SLICE_SPLIT_VALUE,            "O17a",  "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") \
-    X(ERR_OWN_BORROW_KEPT_BY_CALL,      "O38",   "this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead") \
-    X(ERR_OWN_BORROW_STORED,            "O38",   "this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead") \
-    X(ERR_OWN_RETURNS_OWNER_BORROW,     "O38, O26a", "this result reaches the owner value local '%S' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('%t'), where 'return %S' moves it") \
-    X(ERR_OWN_BORROW_IN_OWNER,          "O38",   "this value borrows an own object, and an owner, or a value with a destructor, would hold it past its loans - make it from a Clone() instead") \
-    X(ERR_OWN_ARRAY_LENT_STORES,        "O17, O33", "an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is - lend it what holds the array, or hand it the array as an owner ('b.names = f(take b.names)')") \
     X(ERR_BORROW_SPLIT_VALUE,           "O17a",  "this value's references live where its own storage does not, so it is not held by reference - use the value itself") \
     X(ERR_FIELD_BINDING_UNKNOWN,        "O23, O11", "this stores into a '&p' field whose binding is not known through this path - store through a variable holding the instance") \
     X(ERR_SCOPE_OBLIGATION_UNMET,       "O10c",  "the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope") \
@@ -377,19 +331,9 @@ struct type;
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
     X(NOTE_VEC_GREW_HERE,               "",      "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") \
-    X(NOTE_OWN_ELEM_BY_REF,             "",      "its elements, %t, are values holding references - hold them by reference, '%t&'") \
-    X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
-    X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
     X(NOTE_VEC_GROWS_HERE,              "",      "'%s' may grow here, in %S - take the view after it, or copy the elements first: '%s.ToArray()'") \
     X(NOTE_VEC_GROWS_INSIDE,            "",      "%S may grow it here") \
     X(NOTE_VEC_TASK_HOLDS,              "",      "the task holding a view of '%s' is started here") \
-    X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \
-    X(NOTE_OWN_MOVES_HERE,              "",      "%S moves it here") \
-    X(NOTE_OWN_USED_AFTER,              "",      "used here, after it") \
-    X(NOTE_OWN_TASK_BORROWS,            "",      "the task borrows it here") \
-    X(NOTE_OWN_TASK_CALLS_VALUE,        "",      "it calls a function value here") \
-    X(NOTE_OWN_REACH_VIA_CALL,          "",      "this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads") \
-    X(NOTE_OWN_BORROW_LOCAL,            "",      "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") \
     X(NOTE_STR_BUILDS_HERE,             "",      "built here, where the receiver's part it was handed lives") \
     X(NOTE_STR_KEEP_COPIES,             "",      "'%S' cannot be made where '%S' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references") \
     X(NOTE_IN_LIBRARY,                  "",      "in the standard library's code, here") \
