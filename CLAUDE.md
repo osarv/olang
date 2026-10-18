@@ -626,6 +626,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   case for them. Stage 0 and the port both enforce it; the error is `G19, T31` "... is sealed". Used by std/math's float
   functions (`<T Float>`), std/stats (`<T Number>`), linalg's FastExp/FastTanh/FastSigmoid (`<T Float>`, F16/BF16 now
   through F32); Abs/Min/Max/Clamp and the Matrix operations stay open (Less types, F8 elements).
+- **A literal reaching a constrained variable takes a type its constraint allows (G9a, G19, T35c, 2026-10-18, the
+  user: "math.Sqrt(4) should not be an error").** A variable only numeric literals reach is bound to the widest of their
+  types unless that fails its constraint; then to the first of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8,
+  U8` (my order: widest first, a float before an integer of its width) that meets it and that every literal adapts to
+  (T6) - `math.Sqrt(4)` is `Sqrt` at `F64`; none fitting, G19's error stays (`whole(2.5)`). A typed argument binds its
+  own type: `math.Sqrt(n)` with `n I64` stays an error (no implicit integer-to-float). Both compilers; the evaluator
+  sees the bound type.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

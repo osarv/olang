@@ -13478,6 +13478,46 @@ static void unifyLambdaWritten(struct operand* arg, struct type paramT, struct l
         if (TypeUnify(want, wt, &trial)) *bindings = trial;
     }
 }
+//G9a/G19: whether binding `name` to `t` meets every constraint the generic puts on it - a constraint still naming an
+//unbound variable is left to checkTypeConstraints, as there
+static bool literalBindingMeetsConstraints(struct var* func, struct str name, struct type t, struct list* bindings) {
+    struct list tmp = ListInit(sizeof(struct typeBinding));
+    for (int i = 0; i < bindings->len; i++) ListAdd(&tmp, ListGetIdx(bindings, i));
+    struct typeBinding nb = { name, t };
+    ListAdd(&tmp, &nb);
+    for (int i = 0; i < func->type.typeConstraints.len; i++) {
+        struct type* c = ListGetIdx(&func->type.typeConstraints, i);
+        if (!StrCmp(c->name, name) || !c->varConstraint) continue;
+        struct type want = TypeSubstitute(*c->varConstraint, &tmp);
+        if (TypeIsGeneric(want)) continue;
+        if (!TypeSatisfiesConstraint(t, want, NULL)) return false;
+    }
+    return true;
+}
+//G9a: a variable only numeric literals reach is bound to the widest of their own types - unless that type fails the
+//variable's constraint (G19), when it is bound to the first type, widest first and a float before an integer of its
+//width, that meets the constraint and that every one of those literals adapts to (T6): "math.Sqrt(4)" is Sqrt at F64.
+//Only number literals choose so - a character literal is a Char (T29h), and "ncNext('a')" stays G19's error. None
+//meeting both, the widest stays, and the constraint's error is said at the call as ever.
+static struct type literalTypeForConstraint(struct var* func, struct str name, struct type widest, struct list args,
+                                            struct list* bindings) {
+    if (literalBindingMeetsConstraints(func, name, widest, bindings)) return widest;
+    static const enum baseType order[] = { BASETYPE_FLOAT64, BASETYPE_INT64, BASETYPE_U64, BASETYPE_FLOAT32, BASETYPE_INT32,
+        BASETYPE_U32, BASETYPE_F16, BASETYPE_BF16, BASETYPE_I16, BASETYPE_U16, BASETYPE_I8, BASETYPE_BYTE };
+    for (size_t k = 0; k < sizeof order / sizeof *order; k++) {
+        struct type cand = TypeVanilla(order[k]);
+        bool fits = true;
+        for (int i = 0; fits && i < args.len; i++) {
+            struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+            struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+            if (!(operandNumericLiteralLike(arg) && pt.bType == BASETYPE_TYPEVAR && StrCmp(pt.name, name))) continue;
+            if (arg->type.owner) return widest; //a character literal is a Char (T29h), never a number to adapt
+            fits = operandCondOfLiterals(arg) ? condOfLiteralsWouldFit(arg, cand) : literalLikeWouldFit(arg, cand);
+        }
+        if (fits && literalBindingMeetsConstraints(func, name, cand, bindings)) return cand;
+    }
+    return widest;
+}
 static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list args, bool keepsAll);
 struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
                                 struct list scopeArgNodes) {
@@ -13573,6 +13613,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                     widest = other->type;
                 }
             }
+            widest = literalTypeForConstraint(func, paramT.name, widest, args, &bindings);
             TypeUnify(paramT, widest, &bindings);
         }
         //G19/G9c: a variable named only in a constraint is bound through it as soon as the variable it constrains is -

@@ -1,0 +1,14 @@
+# check: run
+# G9a/T35c: a variable only literals reach, whose constraint their own type (I64) fails, takes the first type that meets
+# it and that they adapt to - F64 for std/math's Float - so math.Sqrt(4) is Sqrt at F64, as math.Sqrt(4.0) is; an
+# integer literal still binds I64 where the constraint takes it (Abs's Number)
+import "std/math"
+fn whole<T Integer>(x T) T { return x }
+fn main() ? {
+    a F64 = math.Sqrt(4)
+    b := math.Sqrt(2 + 2)
+    c := math.Pow(2, 10)
+    d I64 = math.Abs(-3)
+    e I64 = whole(7)
+    assert a == 2.0 and b == 2.0 and c == 1024.0 and d == 3 and e == 7
+}

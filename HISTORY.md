@@ -19898,6 +19898,27 @@ pieces, and a second spelling would hide the window on the current buffer that `
 kept across a growth is a stale view like any other). A prelude test cuts a Vec's view into pieces written by a task
 each, built and under -debug -sanitize.
 
+## A literal reaching a constrained variable takes a type its constraint allows (G9a, G19, T35c, 2026-10-18; the user: "math.Sqrt(4) should not be an error")
+
+`math.Sqrt(4)` (`fn Sqrt<T Float>(x T) T`) bound `T` to `I64`, the integer literal's own type (T6a), and then failed the
+`Float` constraint at the call - an error for what any reader means as the square root of four. The decided rule: a
+variable that only numeric literals (or literal-only expressions, E4a, or conditionals of them) reach is bound to the
+widest of their types as before; when that type fails the variable's constraint, it is bound instead to the first type
+of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8, U8` that meets the constraint and that every one of those
+literals adapts to by T6. The order (mine) is widest first, a float before an integer of its width - so a constraint a
+float meets takes `F64`, the float literal's own type, and one only an integer meets takes `I64` (or `U64` for a literal
+above `I64`'s range). With none, the binding stays and G19's error is said as before (`whole(2.5)`, a float literal never
+adapting to an integer). Nothing a typed argument binds changes: `math.Sqrt(n)` with `n I64` is still G19's error - no
+implicit integer-to-float conversion. Since only the prelude declares methods on built-in types (M19d), the candidates
+that can matter are the prelude's numeric traits and whatever a program's own trait asks of the built-in method set.
+Built in both compilers: stage 0's `literalTypeForConstraint` beside G9a's widest-literal step in `OperandFuncCall`, the
+port's `Checker.literalBinding` after the argument pass, over `Program.MeetsBound`. The evaluator needed nothing: it
+sees the instance at `F64`, so `NtSqrtBaked := math.Sqrt(4)` bakes and `assert math.Sqrt(4) == 2.0` is decided while
+compiling (S18c) beside the same at run time. `checks/cases/numtraitsqrtint` became the typed-variable case, and
+`numtraitsqrtlit` runs the literal ones (`Sqrt(4)`, `Sqrt(2 + 2)`, `Pow(2, 10)`, `Abs(-3)` still `I64`). A character literal
+chooses nothing (it is a `Char`, T29h): `ncNext('a')` against `Integer` stays G19's error - the full verify's
+`numtraitchar` case caught the first version, which adapted `'a'` to `I64`.
+
 ## The view rule M19g, and alias tags for references: round 2 of docs/memory.md (M19g, T36, 2026-10-18)
 
 Round 2 of `docs/memory.md` (approved by the user with the rest of it, QAB): a view of a `Vec` used after the same `Vec`

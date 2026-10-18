@@ -353,6 +353,80 @@ design. Do what you want") - nothing to decide until a GUI is written.
   error). Being fixed in both compilers. ANSWERED the methods question with a recommendation: keep std/math's free
   functions (the method-set overload incl. through extends, several-argument functions, one place). In effect: free
   functions; E13c unchanged (`4.Sqrt()`/`2.0.Sqrt()` stay errors).
+  CONFIRMED 2026-10-18 (the user: "Keep in math lib"; moving only Sqrt/Exp would be arbitrary). Also confirmed:
+  static race safety dropped ("an artifact" of own/take); Char does not satisfy Number (the numtraits decision).
+  REVERSED the same day (the user: "this kinda makes moving the math functions onto the type viable again. If integers
+  only take min max clamp, isqrt and exp... floats are a compsci type", then "Also abs for integers"): math becomes
+  methods - floats (F16, BF16, F32, F64) get every std/math function as a method written once over the Float trait
+  (x.Sqrt(), y.Atan2(x), a.Hypot(b), x.Fma(a, b) ...); integers get Abs, Min, Max, Clamp, ISqrt; prelude constants Pi,
+  Euler, Inf, NaN (others computed, folded: F64(2).Sqrt()); std/math removed, the free functions gone, corpus and std
+  migrated by an olang tool. Then (the user: "Yes let's do this. I want an integer power as well for the integer set.
+  And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
+  a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
+  (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAI REVISED 2026-10-18 (the user: "we never check function calls with checked, not even as try", "Checked only ever
+  operates on operators"; my reading that try=calls/checked=operators incl. user operators was rejected: "No, this is
+  not cleaner"). ASKED, current reading: `try` handles everything declared fallible as written (calls, and user
+  operators whose methods declare errors); `checked` only adds the checks of built-in operators (overflow, division,
+  shifts, conversions, as, indexes, slices) and covers nothing else - not calls, not user operators, not their errors.
+  Awaiting confirmation.
+- QAI DECIDED 2026-10-18 (the user: "This is all good"): `checked` binds to its operand (one index/slice/conversion or a
+  parenthesized expression - every built-in operation in it), never into calls or function values; the Checked forms
+  and the superset rule go (a user type's operators check themselves; `checked x[i]` on At+Len types keeps the derived
+  Len check); `-debug` aborts on every such check program-wide; `unchecked (e)` marks intended wraps, truncations and
+  infinities (std's hashes, RNGs, checksums, Fixed's limbs); BuiltinError is renamed CheckError. Both compilers; queued
+  with QAH after wt-mathmeth (whose CheckedPow is taken out) and wt-mem2 merge.
+- QAJ ASKED 2026-10-18 (the user: "settle checked on function prototypes, is this something to have?"): `checked fn f`
+  (every operation of the body checked). Recommended: not now - it makes every `+` in the body an error exit not marked
+  at its line (the reason `try { }` was declined), and -debug covers the find-every-overflow job; add later if parser
+  code reads noisy with `checked (...)`. In effect: not built.
+- QAI 2026-10-18 (checked reaching into callees). DECIDED (the user): a call through a function value is never checked
+  (a lambda written inside the checked expression is). ASKED: (1) keep `checked` local as today but drop the Checked
+  forms (a user operator method is an ordinary call; `checked x[i]` on At+Len types keeps the derived bounds check),
+  move the program-wide "find every overflow" job to a build option (aborting checks under -debug, Rust's debug
+  overflow), and add `unchecked (e)` to mark intended wraps/truncations for that mode - recommended over deep checked
+  (checked copies of every reached function, BuiltinError in every reached set, std's wraps marked) as too much for its
+  payoff; (2) rename BuiltinError to CheckError (recommended; raised only by checked). In effect: today's design.
+- QAH DECIDED 2026-10-18 (the user: "If this make sense in general we do it in general yes"): generics over error sets.
+  A declaration's type parameter list may end in one error-set parameter after `?` (`trait Iterator<T ? E>`, `fn
+  Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E`), usable wherever an error set is written; inferred like a type
+  variable from the error sets of function values and iterators passed; empty when nothing fallible binds it (then no
+  `try` is needed); absent = empty (`Iterator<I64>`); monomorphized per error set. Not a stored error (no Result type).
+  Iterator becomes `trait Iterator<T ? E> { mut Next() T ? E, Exhausted }`; generators write `fn lines(p String&)
+  Iterator<String ? IoError>` and have no `?` of their own. std's helpers (Fold, Map, Filter, Any, All, Count, Sort's
+  comparator, linalg Map) take fallible callbacks. Core generics: both compilers. Queued after wt-mathmeth and wt-mem2
+  merge (semantic.c).
+- QAG GENERATORS REVISED 2026-10-18 (the user: "settle on fn evens (n I64) Iterator<T> ... the compiler knows this is a
+  generator because of the return type and the yields and the user doesn't need to know"): no `generator` keyword and no
+  `yields` marker - a `fn` whose result is `Iterator<T>` and whose body yields is a generator; `Iterator<T>` there is the
+  hidden type. Details mine: its `? E` is Next's errors; a trait as a result type is allowed only for such a generator
+  (general `impl Trait` results not now). OPERATORS also reverted the same day to today's E31 methods (the user: "Let's
+  take operators back to where we started"). Below is the superseded record.
+- QAG DECIDED 2026-10-18 (the user, on ideas.md #1 and operators: "maybe we want a new keyword ... generator? ... and
+  maybe we want operator for operators?", clarified: the keyword replaces `fn`; "Record it yes"): a declaration's first
+  word says its kind - `fn`, `generator`, `operator`. GENERATORS (ideas #1): `generator evens(n I64) I64 { ... yield i
+  ... }`, the result written is the element type, the caller gets an Iterator<I64>; `yield v` is a statement only (no
+  send-back - the Python coroutine extra declined for now, additive later); four rules: (1) a `fn` may not contain
+  yield, a generator must; the end or a bare `return` ends it, `return v` is an error; (2) `? E` comes out of Next;
+  (3) no yield inside a lambda, a join or deferred code; (4) no defer open across a yield (relaxable). Port only (an
+  extra), after self-hosting. OPERATOR: every method the compiler calls by itself is declared `operator` (symbols,
+  Eq/Str/Hash/Next/Iter/Len/Call/Has/Contains...), must have its role's shape; a `fn` method is never called
+  implicitly - replaces E31's "operator only in its shape". Core syntax: both compilers, migrated by a tool.
+  ASKED: operators named by their symbol now that `operator` marks them (`operator (a V) +(b V) V`, `[]`, `[]=`, `[:]`,
+  `==`, `<`, `$`, `in`, `()`, `checked +`; Next/Iter/RunFrom/Len/Hash keep names) - names like Plus freed; an operator
+  visible wherever its type is (no private spelling); no call by name. Recommended yes. In effect: not built.
+  REVISED by the user ("I don't want them to be methods anymore. Many operators are commutative etc. What if we do
+  operator X Number + y Number Number"; then "many of these, like iter or len aren't even operators"; then "Or next",
+  read as "OK, next" - stated to the user): operators are free declarations shaped like their use - `operator (a V) +
+  (b V) V`, `operator - (a V) V`, `operator (m Mat&) [i I64, j I64] F64`, `operator (m mut Mat&) [i I64, j I64] = (x F64)`,
+  `operator (a P) == (b P) Bool`, `operator (a P) < (b P) Bool`, `operator $ (p P) String`, `in`, `()`; looked up by
+  both operand types (a literal adapting; exactly one match); declared only in the module of one operand's type;
+  built-in with built-in fixed; commutativity written out (both orders); derived forms (+= != > <= >= ++) derived;
+  `operator checked (a M) + (b M) M ? E` is what checked uses, superset rule kept; traits may list operator signatures
+  for generic code. Protocols are NOT operators: Next, Iter, RunFrom, Len, Hash stay ordinary methods, each named by a
+  prelude trait (Iterator, Iterable, Indexable, Hashable); anything called implicitly is an operator or a prelude
+  trait's method. Names like Plus/At/Eq freed. Core syntax, both compilers, migrated by a tool. Queued after the
+  current batches.
 - QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
