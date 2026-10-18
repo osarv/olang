@@ -66,7 +66,12 @@ overrated".
   vs semantic.c's 31,350 (which also holds section 8); the finished port projected at 40-50k vs C's 56k.
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
-  self-hosting (stage 0 too): wt-noown (own/take removed, memory round 3). Then the port to self-hosting (M5 finish, M6
+  self-hosting (stage 0 too): wt-noown (own/take removed, memory round 3); then the open STAGE-0 BUG FIXES (checked
+  2026-10-18): T22a lets a function whose parameters share a scope (`fn link(a mut N&, b N&a)`) become a function value
+  - both /home/user/review/typed/repro/sharedscope*.olang still segfault under -debug -sanitize; S4d decided by types
+  in C to match SPEC and E31b's M1 (both unverified - check them); the `f.Blocks[b].S.Push(x)` handle UAF no longer
+  reproduces. Bugs found later in either compiler are fixed in both (also in the port, its own list in each
+  PROGRESS.md: wt-drv, wt-eval, wt-lower, wt-check). Then the port to self-hosting (M5 finish, M6
   scope pass from docs/scope-model.md, M7/M8 finish, M9 emit, M10, M11-M12), then the seed and bootstrap/ removed (QAL).
   After self-hosting, in the port only:**
   1. Arrays batch (QP1-QP4, docs/arrays.md on wt-arrays): one constructor, fixed lengths inferred, written
@@ -86,7 +91,8 @@ overrated".
   12. Runtime interfaces `any Trait&` (decided 2026-10-08, ledger).
   13. Memory rounds 4-7 (docs/memory.md: prelude let-go and Map.Take, the port's early freeing, `x.Destroy()`), M19g in
       the port, QZ2's prelude moves (helpers onto Vec, List to std/list), a test that a long-running Map stays flat (QF).
-  14. The port verbosity audit; SPEC section 5 renumbered.
+  14. The port verbosity audit; SPEC section 5 renumbered; SPEC section 8 restated in the scope model's form beside M6
+      (QAE).
   STILL TO DISCUSS: Result/Option (the user wants to talk about them), contracts (#8), doc tests (#9), method and
   constructor overloading (#10, #11), fixed point (#5's second half).
 - **C COMPILER FROZEN, 2026-10-18 (the user: "So basically freeze the C compiler now?" - yes).** Stage 0 takes only:
