@@ -382,7 +382,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   Len check); `-debug` aborts on every such check program-wide; `unchecked (e)` marks intended wraps, truncations and
   infinities (std's hashes, RNGs, checksums, Fixed's limbs); BuiltinError is renamed CheckError. Both compilers; queued
   with QAH after wt-mathmeth (whose CheckedPow is taken out) and wt-mem2 merge.
-- QAJ ASKED 2026-10-18 (the user: "settle checked on function prototypes, is this something to have?"): `checked fn f`
+- QAJ RESOLVED 2026-10-18 by QAI: `checked` on a prototype is the checked overload (`fn checked f`). Was: QAJ ASKED 2026-10-18 (the user: "settle checked on function prototypes, is this something to have?"): `checked fn f`
   (every operation of the body checked). Recommended: not now - it makes every `+` in the body an error exit not marked
   at its line (the reason `try { }` was declined), and -debug covers the find-every-overflow job; add later if parser
   code reads noisy with `checked (...)`. In effect: not built.
