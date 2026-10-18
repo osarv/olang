@@ -1275,7 +1275,8 @@ the case its tag selects, and `&` (T24) is typed. Two accesses of different type
 except where an external function writes storage handed to it (X3b), which this language does not
 describe. A declared type over a number (T29) is stored as its base is - T29h's view of an `Array<Char>` as an
 `Array<U8>` reads what was written - while every numeric primitive (T4) is a storage type of its own, two of one
-width included: `U8` storage is never read as `I8`, nor `F16` as `BF16` or `U16`.
+width included: `U8` storage is never read as `I8`, nor `F16` as `BF16` or `U16`. A reference (T24) is a storage type too:
+storage holding one is never read as a number, a descriptor or anything else, nor theirs as a reference.
 
 This is a property an implementation may rely on when deciding whether two accesses can refer to the same
 storage.
@@ -1984,12 +1985,44 @@ way to have its elements as an array - `Array<T>&v`, `ViewMut()` writably - a wi
 until the `Vec` grows (a `Push`, `PushAll`, `Insert` or `Reserve` that replaces the buffer). The buffer a growth
 replaces is kept where the `Vec` lives until that scope closes, so a view used after a growth reads the elements as
 they were - never storage that was freed - and what the elements refer to lives where the `Vec` does, not in the buffer,
-so an element read out of it (`s := v[0]`) is kept across growth. Such a stale view is a mistake the compile-time
-evaluator stops on (K1) and the scope sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
+so an element read out of it (`s := v[0]`) is kept across growth. Such a stale view is a compile-time error where the
+same `Vec` is seen on both sides (M19g), and elsewhere a mistake the compile-time evaluator stops on (K1) and the scope
+sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
 (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`. A `Vec` is the growable array;
 a `List` is for what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The prelude's
 collections say where they stop using an array with an operation only the prelude has, `a.retire()`: nothing at run
 time, it is what the evaluator and the sanitizer learn a replaced buffer from.
+
+**M19g (a Vec's views).** A **view** is what `v.View()` or `v.ViewMut()` gives - the elements of `v`'s buffer as it is
+when the view is taken - and so is what is made of one: a slice of it, a conversion of it (`String(v.View())`), an
+element of it borrowed in place by a reference parameter (E12c), a value holding one (a struct built from it, a lambda
+capturing it, a collection a call is known to keep it in), and a function's result where the function's body hands
+back a view of a `Vec` its argument reaches. A view is **stale** from a growth of its `Vec` on: a `Push`, `PushAll`,
+`Insert` or `Reserve`, or any call whose body may make one of those - the buffer is replaced, and the view goes on
+showing the old one. Using a stale view - reading it, writing through it, calling a lambda holding it - is a
+compile-time error **where the same `Vec` is visible on both sides**, and nowhere else:
+
+1. **In one function**: between the view and its use - on any path, a loop's next turn included - the function grows
+   the `Vec` the view is of, by the name the view was taken through (`v`, `l.toks`) or through a second name of it the
+   function made (`w := v`, `r Lexer& = l`).
+2. **A call given both**: a call between the view and its use is given that `Vec` - or a value or writable reference
+   holding it - through a parameter its body may grow; or a call is given the view itself and, through another
+   parameter, its `Vec`. A body may grow a parameter when it grows it as in 1, or hands it (or a part of it) to a callee
+   that may - read off the bodies, over calls to any depth. A call through a function value, whose body is not known
+   here, may grow what it is given by value or writably, and nothing it is not given.
+3. **A global by name**: the `Vec` is a global's, or reached from one by fields, and a call between the view and its
+   use runs a body that may grow that global by name.
+4. **A task**: while a task given a view (as an argument, or captured by the lambda it runs) may still run - until its
+   `join` - the spawner grows that view's `Vec` as in 1-3.
+
+Where the `Vec` is reached is compared by root and fields only: through an index or a call's result it is not known
+which `Vec` is meant, so no growth there makes a view stale, and **never by element type** - another `Vec` of the same
+element type growing is no growth of this one. Two places of different roots are different `Vec`s here, even where a
+second name stored in a structure makes them one: that hazard is not refused. It is never a memory error - the buffer a
+growth replaces stays where the `Vec` lives until that scope closes (M19d) - and the compile-time evaluator stops on such
+a use (K1) and the scope sanitizer reports it (B2f). The error names the view and the `Vec`, with a note at the growth:
+take the view after it, or copy the elements first (`v.ToArray()`). The prelude's own `Vec` methods, which read a
+replaced buffer on purpose while copying it, are not held to it.
 
 The prelude declares `type StringBuilder`, text gathered piece by piece and handed back whole: `Push(t)` adds a
 `String` at the end, `PushChar(c)` a `Char`, `Len()` counts the characters, and `ToString()` copies them into one

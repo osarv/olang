@@ -1,0 +1,11 @@
+# check: fail error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
+# M19g: a view kept by a call in another of its arguments - "l.Push(String(v.View()))" stores it in l - so l holds it
+import "std/io"
+fn main() ? {
+    v := Vec<Char>()
+    v.Push('a')
+    l := List<String&>()
+    l.Push(String(v.View()))
+    for i in range 100 { v.Push('b') }
+    try io.Println(l[0])
+}

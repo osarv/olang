@@ -1,0 +1,13 @@
+# check: fail error[M19g]: this view of 'v' is given to 'grow', which may grow 'v' - copy the elements first: 'v.ToArray()'
+# also: note: 'grow' may grow it here
+# M19g: a call given both a view of the Vec and the Vec itself, through a parameter it may grow
+import "std/io"
+fn grow(w mut Vec<I64>&, d Array<I64>&) I64 {
+    for i in range 100 { w.Push(i) }
+    return d[0]
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(4)
+    try io.Println($grow(v, v.View()))
+}

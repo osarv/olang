@@ -873,7 +873,8 @@ sequential, because they all edit `bootstrap/semantic.c` and SPEC.
 - **Accept when**: `make verify`; the Vec tests agree built, built with `-debug`, built with `-sanitize` and
   interpreted; 4.6's budgets met or each miss recorded as a finding.
 
-**Round 2 - the view rule, M19g, in stage 0.**
+**Round 2 - the view rule, M19g, in stage 0.** *(Built 2026-10-18, with 4.2's reference tags and the runtime headers'
+tags - HISTORY.md "The view rule M19g".)*
 - **Checker**: the three cases of 4.4. Case 1 is liveness of what derives from `View()`/`ViewMut()` in one function.
   Cases 2 and 3 need a may-grow summary per parameter and per global name: a fixed point over bodies, written new or
   adapted from `own`'s release effects. A method "may grow" when its body assigns `vecState.data` or calls one that may.

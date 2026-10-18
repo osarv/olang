@@ -1,0 +1,12 @@
+# check: fail error[M19g]: 'd' holds a view of 'Toks' taken before 'Toks' may have grown
+# also: note: 'Toks' may grow here, in 'more'
+# M19g: a mutable global the view is of, grown by name in the body of a call between the view and its use
+import "std/io"
+Toks mut Vec<I64> = Vec<I64>()
+fn more() { for i in range 100 { Toks.Push(i) } }
+fn main() ? {
+    Toks.Push(3)
+    d := Toks.View()
+    more()
+    try io.Println($d[0])
+}

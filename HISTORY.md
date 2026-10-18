@@ -20089,3 +20089,95 @@ now also writes the integers' `Pow`, `checked ... Pow` and `Sqrt`), comments, SP
 `math.Sqrt(4)`; with std/math gone they are a generic of the program's own (`fn ntRoot<T Float>(x T) T { return
 x.Sqrt() }`, `root`, `power` and `size` in `numtraitsqrtlit`), which keeps what they test - a literal reaching a
 constrained variable - where `4.0.Sqrt()` would test nothing. tests/shared.olang's `import "std/math"` went.
+
+## The view rule M19g, and alias tags for references: round 2 of docs/memory.md (M19g, T36, 2026-10-18)
+
+Round 2 of `docs/memory.md` (approved by the user with the rest of it, QAB): a view of a `Vec` used after the same `Vec`
+may have grown is a compile-time error, where the compiler sees the same `Vec` on both sides. The user's decisions, all
+in the doc (4.4): views are explicit (`v.View()`, `v.ViewMut()`), there is no implicit Vec -> Array conversion; a use
+is refused only when the same Vec is visible on both sides - a growth in the same function or through a second name it
+made, a call given both the view and v (or a writable holder of v) through a parameter whose body may grow it, a mutable
+global grown by name in the callee; nothing is keyed by element type; the evaluator and `-sanitize` catch the rest.
+
+**The checker (stage 0, `settleVecViews` in semantic.c, once a program checks cleanly).** A *place* is a root - a local,
+a parameter or a global - and a path of field names (`l.toks`). Nothing about `Vec` is special-cased by name: every
+growing method comes down to vec.olang's `room`, whose `s.data = Array<T>(...)` is the one base fact (an assignment to a
+record's buffer grows the record), and `View`'s `v.s.data[:v.s.n]` is the one view (a slice of a record's buffer is a
+view of the record) - so growth and views are both at the record's place, `v.s`, and everything else is read off bodies:
+`Push` grows its parameter 0 at `.s` because it calls `room` on `s := v.s`; `fn scan(l mut Lexer&) { l.toks.Push(1) }`
+grows its parameter 0 at `.toks.s`; `fn view(l Lexer&) Array<I64>&l { return l.toks.View() }` hands back a view of its
+parameter 0 at `.toks.s`. Each function's SUMMARY - the places below its parameters and the globals it may grow, and the
+views of places below its parameters it may hand back - is a least fixed point over every body (adapting how own's
+release effects were settled: `ownForEachBody` walks every body, instantiations and lambdas included, until no summary
+changes; a path deeper than eight fields is cut to "something below there", so a recursion over a chain of fields
+settles). Then each body is walked once more, in order, with a state per program point: which views each local holds
+(a view, a slice or conversion of one, an element of one borrowed in place by a reference parameter, a struct built
+from one, a lambda capturing one, a collection a call keeps it in - the third part of a summary, a body storing one
+parameter's value below another, as `l.Push(x)` does, found by seeding each parameter with a mark of its own), which place each
+local is a second name of (`w := v`, `r Lexer& = l`, flow-sensitive: reassigned, it is no longer), and which views
+tasks hold until their join. A growth - a call whose summary grows a place its argument is at, a global it grows by
+name, or a call through a function value given a value or a writable reference (a body not known grows what it is
+given writably) - marks every view of that place stale, and a later use of a stale holder is `error[M19g]: 'd' holds a
+view of 'v' taken before 'v' may have grown`, with a note at the growth (`'v' may grow here, in 'fill' - take the view
+after it, or copy the elements first: 'v.ToArray()'`) and, when the growth is a callee's, a note where in it (B11: not
+in the standard library). Branches merge (a holder stale on any path is stale), loops are walked to a fixed point (a
+view read at the top of a turn after the body grew the Vec), `break`, `continue`, `return` and the rest end a path,
+deferred code is walked where its block ends. A call given a view and, through another parameter it may grow, the view's
+Vec is an error at the view (`v.PushAll(v.View())` included - write `v.ToArray()`); a growth while a task holds a view is
+an error at the growth with a note at the spawn. vec.olang's own bodies are not checked (`room` reads the buffer it just
+replaced, on purpose). **Decided (mine)**: a place through an index or a call's result is not known and meets no other
+(`vv[0].View()` and `vv[1].Push` are not judged the same Vec, nor `users[i]`'s hidden copy) - only refusing what is the
+same Vec for sure; a struct copy is a second name of the struct (its Vec fields are second names, M19d), until a field
+of it is assigned; a view inside an inner `Vec` of a `Vec<Vec<T>>` is not stale when the outer one grows (the outer
+buffer's handles still name the same inner Vecs); a by-value `Vec` parameter grows the caller's Vec (a handle); a parameter given another value is a root of its own from then
+on, so its growth is no growth of the caller's; an element read out of a view is a value apart from the buffer, a
+reference element included (it refers where the Vec's elements do) - only one borrowed in place is the buffer's; a
+local or field whose type holds no reference (an array or struct by value) takes a copy and holds no view
+(`copied String = String(v.View())`, vec20); the
+summary of a function is per function, never per element type. The rule has no run-time part and the evaluator needed
+nothing: it already stops on every stale view it reaches (round 1).
+
+**Diagnostics**: `ERR_VEC_VIEW_STALE`, `ERR_VEC_VIEW_GIVEN_GROWING`, `ERR_VEC_GROWS_UNDER_TASK` and three notes, all
+`M19g`, with their twins in compiler/msgs.olang (what genmsgs writes, byte for byte). **Checks**: one must-fail case per
+route (`m19g01push` a direct Push, `02secondname`, `03callgrows`, `04struct` a writable struct holding the Vec, `05global`
+grown by name, `06chain` three callees deep, `07funcvalue`, `08givenboth`, `09element` an element borrowed in place,
+`10through` a view handed back by a function, `11lambda`, `12task`, `13kept` a view kept in a List by `Push`,
+`14byvalue`, `15loop`, `16forin` - a loop walking a view while its body pushes, said as `this reads a view of 'v'`,
+not by the loop's hidden local) and a run case (`m19g20allowed`: another Vec of the same element type growing, a call given the
+Vec read-only, one that only sets elements, a view taken after the growth or again each turn, a copy of the Vec, an
+iterator, the Vec given another one, an inner Vec growing). Round 1's deleted candidates are back with their names:
+vec01, 04, 05, 06, 13, 14, 19, 88, 92, 94, 96, 97, 103 and 104 as M19g's fail cases, and vec03, 09, 90, 91, 126 and 127
+(copies and an iterator - second names, no view) as run cases; the vecalias scenario has n2 (a function value through an
+import alias handing back a view) and f3 (a spawn target set from one) again, now M19g's. `retire02global` hid nothing
+from M19g (a second name `w := v`), so it is rewritten to grow the Vec through a second name stored in a structure, as
+`retire01assert` does, and still shows the evaluator's stop. Measured cost: 3-4 rounds, 0.04 s on a small program and
+0.36 s on worker.olang's test build.
+
+**The two perf misses of round 1, fixed (T36).** (1) A reference to a struct or an enum now has alias tags of its own
+(`ref`, field and element families as every number has - docs/memory.md 4.2, sound because no storage holding a
+reference is read as anything else, which SPEC's T36 now says). The load of a handle's `v.s` is no longer clobbered by
+an element store and hoists. (2) The runtime's scope-header and chunk-header accesses in `__olang_scope_close` and
+`__olang_scope_alloc_a` get families of their own (`scopehdr`, `chunkhdr`, defined in runtime.ll and in every module's
+type tree): an element store no longer may alias a loop body's scope header, so GVN reads the zeros the block stored,
+the close folds away whole, and the header stops escaping. Callgrind at `-target x86-64-v3`, the loop alone (1M
+elements, passes 10 less passes 0; push and sort less a run of one), round 1's numbers before:
+
+| row | Vec before | Vec after | Array before | Array after | C |
+|---|---|---|---|---|---|
+| walk x10 | 6.8M | 6.8M | 6.8M | 6.8M | 6.9M |
+| gather 10M | 417.4M | 252.4M | 417.4M | 252.4M | 245.6M |
+| store x10 | 200.0M | 11.8M | 180.0M | 11.8M | 11.9M |
+| two fields x10 | 320.0M | 9.3M | 190.0M | 9.3M | 9.4M |
+| push 1M | 53.3M | 25.8M | - | - | 14.5M |
+| opaque call x10 | 250.0M | 250.0M | 240.0M | 240.0M | 90.0M |
+| Sort 1M | 1181.4M | 925.8M | 1160.5M | 924.1M | 560.6M |
+
+(List: store 779.9M -> 519.9M, push 53.1M -> 33.7M.) The store and two-field rows now vectorize, Vec and Array alike, at
+C's count; the Array store loop through a reference parameter that round 1 found not vectorized was the same scope
+header. Every row's output is the same before and after. Opaque calls are unchanged: the reloads after a call LLVM
+cannot see through are expected (4.2).
+
+**For round 3** (`own` removed): M19g has no part in own and needs nothing from it; `settleVecViews` runs beside
+`settleOwnBorrows` in the block that runs once a program checks cleanly, and reuses only `ownForEachBody`,
+`ownParamIndex`, `ownFuncName`/`ownQuoted` (rename them when own's code goes) and O26a's `calleeMayKeepArg` (which
+reads `ownObligationsKnown`).

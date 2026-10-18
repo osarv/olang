@@ -927,14 +927,14 @@ entry:
   ; array under 32 bytes, decided while compiling where the size is known - takes the offset as it is
   %round = icmp ugt i64 %aln, 8
   %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
-  %head = load ptr, ptr %headptr
+  %head = load ptr, ptr %headptr, !tbaa !59
   %headnull = icmp eq ptr %head, null
   br i1 %headnull, label %needchunk, label %checkspace
 checkspace:
   %csusedptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 1
-  %csused = load i64, ptr %csusedptr
+  %csused = load i64, ptr %csusedptr, !tbaa !60
   %cscapptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 2
-  %cscap = load i64, ptr %cscapptr
+  %cscap = load i64, ptr %cscapptr, !tbaa !60
   %csup = add i64 %csused, %alnm1
   %csrounded = and i64 %csup, %alnmask
   %csaligned = select i1 %round, i64 %csrounded, i64 %csused
@@ -946,7 +946,7 @@ bump:
   %dataptr = getelementptr %olang.chunk, ptr %head, i32 1
   %result = getelementptr i8, ptr %dataptr, i64 %csaligned
   %newused = add i64 %csaligned, %size
-  store i64 %newused, ptr %csusedptr
+  store i64 %newused, ptr %csusedptr, !tbaa !60
   ret ptr %result
   ; the pool's spare 4KB chunk when it is there and holds this (O8b) - what a block allocating a little on each pass
   ; of a loop takes every time, taken here; anything else is __olang_new_chunk's
@@ -955,7 +955,7 @@ needchunk:
   br i1 %isfwd, label %forward, label %fresh
 forward:
   %fwdptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
-  %fwd = load ptr, ptr %fwdptr
+  %fwd = load ptr, ptr %fwdptr, !tbaa !59
   %viafwd = tail call ptr @__olang_scope_alloc_a(ptr %fwd, i64 %rawsize, i64 %aln)
   ret ptr %viafwd
 fresh:
@@ -975,23 +975,23 @@ callnew:
   br label %link
 link:
   %newchunk = phi ptr [ %spare, %usespare ], [ %made, %callnew ]
-  %oldhead = load ptr, ptr %headptr
+  %oldhead = load ptr, ptr %headptr, !tbaa !59
   %newnextptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 0
-  store ptr %oldhead, ptr %newnextptr
-  store ptr %newchunk, ptr %headptr
+  store ptr %oldhead, ptr %newnextptr, !tbaa !60
+  store ptr %newchunk, ptr %headptr, !tbaa !59
   ; first chunk in this scope: it is the tail, and stays the tail for the scope's whole life, since
   ; every later chunk is prepended ahead of it
   %wasempty = icmp eq ptr %oldhead, null
   br i1 %wasempty, label %settail, label %first
 settail:
   %tailptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
-  store ptr %newchunk, ptr %tailptr
+  store ptr %newchunk, ptr %tailptr, !tbaa !59
   br label %first
   ; a chunk from __olang_new_chunk is empty (its offset 0) and its data area 64-aligned, so this allocation is its
   ; first bytes, whatever alignment it wants
 first:
   %ncusedptr = getelementptr %olang.chunk, ptr %newchunk, i32 0, i32 1
-  store i64 %size, ptr %ncusedptr
+  store i64 %size, ptr %ncusedptr, !tbaa !60
   %ncdata = getelementptr %olang.chunk, ptr %newchunk, i32 1
   ret ptr %ncdata
 }
@@ -2137,24 +2137,24 @@ done:
 define void @__olang_scope_close(ptr %scope) alwaysinline {
 entry:
   %fptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 4
-  %f = load ptr, ptr %fptr
+  %f = load ptr, ptr %fptr, !tbaa !59
   %hasf = icmp ne ptr %f, null
   br i1 %hasf, label %parts, label %start
 parts:
   %pdp = getelementptr %olang.scope, ptr %scope, i32 0, i32 1
-  %pd = load ptr, ptr %pdp
+  %pd = load ptr, ptr %pdp, !tbaa !59
   %php = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
-  %ph = load ptr, ptr %php
+  %ph = load ptr, ptr %php, !tbaa !59
   %ptp = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
-  %pt = load ptr, ptr %ptp
+  %pt = load ptr, ptr %ptp, !tbaa !59
   %folded = call { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr %f, ptr %pd, ptr %ph, ptr %pt)
   %fd = extractvalue { ptr, ptr, ptr } %folded, 0
-  store ptr %fd, ptr %pdp
+  store ptr %fd, ptr %pdp, !tbaa !59
   %fh = extractvalue { ptr, ptr, ptr } %folded, 1
-  store ptr %fh, ptr %php
+  store ptr %fh, ptr %php, !tbaa !59
   %ft = extractvalue { ptr, ptr, ptr } %folded, 2
-  store ptr %ft, ptr %ptp
-  store ptr null, ptr %fptr
+  store ptr %ft, ptr %ptp, !tbaa !59
+  store ptr null, ptr %fptr, !tbaa !59
   br label %start
 start:
   %dheadptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 1
@@ -2167,13 +2167,13 @@ start:
   ; run: a destructor that leaves by a failed check while a test runs (S18) leaves the rest here, and the unwind's
   ; close of this same scope (__olang_unwind_to) runs them - each destructor still exactly once (C10)
 dloop:
-  %dcur = load ptr, ptr %dheadptr
+  %dcur = load ptr, ptr %dheadptr, !tbaa !59
   %dempty = icmp eq ptr %dcur, null
   br i1 %dempty, label %chunks, label %dcall
 dcall:
   %dnextptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 0
   %dnext = load ptr, ptr %dnextptr
-  store ptr %dnext, ptr %dheadptr
+  store ptr %dnext, ptr %dheadptr, !tbaa !59
   %instptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 1
   %inst = load ptr, ptr %instptr
   %fnptr = getelementptr %olang.dtornode, ptr %dcur, i32 0, i32 2
@@ -2187,23 +2187,23 @@ dcall:
   %haswp = icmp ne ptr %wp, null
   br i1 %haswp, label %dparts, label %dloop
 dparts:
-  %wdh = load ptr, ptr %dheadptr
+  %wdh = load ptr, ptr %dheadptr, !tbaa !59
   %whp = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
-  %wh = load ptr, ptr %whp
+  %wh = load ptr, ptr %whp, !tbaa !59
   %wtp = getelementptr %olang.scope, ptr %scope, i32 0, i32 2
-  %wt = load ptr, ptr %wtp
+  %wt = load ptr, ptr %wtp, !tbaa !59
   %wfolded = call { ptr, ptr, ptr } @__olang_scope_fold_parts(ptr %wp, ptr %wdh, ptr %wh, ptr %wt)
   %wfd = extractvalue { ptr, ptr, ptr } %wfolded, 0
-  store ptr %wfd, ptr %dheadptr
+  store ptr %wfd, ptr %dheadptr, !tbaa !59
   %wfh = extractvalue { ptr, ptr, ptr } %wfolded, 1
-  store ptr %wfh, ptr %whp
+  store ptr %wfh, ptr %whp, !tbaa !59
   %wft = extractvalue { ptr, ptr, ptr } %wfolded, 2
-  store ptr %wft, ptr %wtp
-  store ptr null, ptr %fptr
+  store ptr %wft, ptr %wtp, !tbaa !59
+  store ptr null, ptr %fptr, !tbaa !59
   br label %dloop
 chunks:
   %headptr = getelementptr %olang.scope, ptr %scope, i32 0, i32 0
-  %head = load ptr, ptr %headptr
+  %head = load ptr, ptr %headptr, !tbaa !59
   %empty = icmp eq ptr %head, null
   br i1 %empty, label %done, label %give
   ; every chunk to the pool, out of line, so that what is left here is small; and this is always inlined, so a
@@ -2212,7 +2212,7 @@ chunks:
   ; loop's body scope then cost two stores and two tests every pass). The tail needs no reset: it is read only
   ; while the list is not empty, and set when the list next stops being empty
 give:
-  store ptr null, ptr %headptr
+  store ptr null, ptr %headptr, !tbaa !59
   ; -s: no chunk a scope gives back is reused at once - it is poisoned and held out of reach for a while
 ; @if !san
   ; one 4KB chunk, and no spare: it becomes the spare, here
@@ -3389,3 +3389,11 @@ done:
   ret i64 %len
 }
 
+; T36: the scope and chunk headers' own families - the same nodes as every module's (emitTbaaTypeTree), so an element
+; store, a number's or a reference's, never aliases a header access: a loop body's scope that allocates nothing then
+; folds away whole, its header kept in registers, even where the body calls a method taking a hidden scope argument
+!20 = !{!"olang"}
+!49 = !{!"scopehdr", !20, i64 0}
+!50 = !{!"chunkhdr", !20, i64 0}
+!59 = !{!49, !49, i64 0}
+!60 = !{!50, !50, i64 0}

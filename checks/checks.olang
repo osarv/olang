@@ -1045,7 +1045,7 @@ fn typereview(r mut report&) ? Failed {
 # vec2 N2: a function made a value through an import alias ("f := lib.F") is checked as one named bare is - G12, T22a,
 # O36 and O40 - where it once skipped them all; one error each, and what stays legal through an alias the same built and
 # interpreted. (A Vec's View() is an ordinary borrowed result since Vec is a handle, so a function handing one back is a
-# value like any other.)
+# value like any other - and M19g follows a view through one, n2 and f3.)
 test "a function value through an import alias is checked as one named bare" { assert passed("vecalias") }
 
 fn vecalias(r mut report&) ? Failed {
@@ -1058,6 +1058,8 @@ fn vecalias(r mut report&) ? Failed {
     try oneError(r, dir, "p2", "error[O40]: 'Drop' releases owned objects")
     try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
     try oneError(r, dir, "p4", "error[O36]: 'Eat' owns a parameter")
+    try oneError(r, dir, "n2", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
+    try oneError(r, dir, "f3", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
 }
 
 # M19d, B2f, K1 (round 1 of docs/memory.md): a Vec is a handle - copies second names, growth retiring the old buffer - and

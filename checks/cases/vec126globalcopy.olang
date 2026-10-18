@@ -1,0 +1,15 @@
+# check: run
+# Vec phase 2a (O32): a borrowed copy is not declared from a global - any call may release what it owns
+# M19g, round 2 (brought back): a copy is a second name and an iterator reads the Vec each step - no view is stale
+import "std/io"
+type Lexer struct() {
+    toks Vec<I64> = Vec<I64>()
+}
+G mut Vec<I64> = Vec<I64>()
+GL mut Lexer = Lexer()
+fn main() ? {
+    G.Push(3)
+    GL.toks.Push(4)
+    x := G
+    try io.Println($x.Len() " " $G.View()[0] " " $GL.toks.Len())
+}

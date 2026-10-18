@@ -274,7 +274,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (2026-10-08 - bugs clustered in tables and boxing; enums and function values cover most uses). Planned back as `any
   Trait&` (decided 2026-10-08, ledger).
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
-- **TBAA (T36).** Every numeric primitive has element and field tags; aggregates and references are untagged.
+- **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
+  field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk
+  headers have their own (a loop body's empty scope folds away); aggregates and function values are untagged.
 - **Parameters (D9, D9b).** `&` says whose instance, `mut` whether it can be written; an immutable lvalue never binds
   a `mut &` parameter. A generic's by-value parameter bound to a run-time-length array is copied exactly when its body
   writes it (D9b, `paramWritten`), else is the caller's array. ON HOLD (the user): passing arrays by value.
@@ -567,8 +569,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (prelude-only, no method elsewhere) is nothing at run time but under `-sanitize`, where an array made in a module
   that retires has a chunk of its own and retiring poisons and protects it (`stale view: ...`, B2f); the evaluator marks
   the node and stops on a later read or write with both places - the use and the program's growing call (K1: an error
-  where a value is required, a stop under `interpret`). The view rule M19g (an error where the compiler sees the same
-  Vec on both sides) is round 2. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
+  where a value is required, a stop under `interpret`). **M19g (round 2, 2026-10-18)**: using a view after the same Vec
+  may have grown is a compile-time error where the compiler sees the same Vec on both sides - grown in the function
+  (by name or a second name it made), by a call given the Vec or a struct holding it through a parameter whose body may
+  grow it (summaries read off bodies, a fixed point; a function value grows what it is given writably), a global grown
+  by name, or while a task holds the view; never by element type, and a place through an index or a call's result
+  meets no other (mine). Hidden routes stay the evaluator's and `-sanitize`'s. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
   buffer), then built on `own` (QH), and is now neither.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `IoError` and are written with `try`; no std function ends the program on

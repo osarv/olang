@@ -381,6 +381,9 @@ struct type;
     X(NOTE_OWN_ELEM_BY_REF,             "",      "its elements, %t, are values holding references - hold them by reference, '%t&'") \
     X(NOTE_OWN_BORROWED_HERE,           "",      "borrowed here") \
     X(ERR_OWN_IMPLICIT_RELEASE,         "O40",   "%S may not release owned objects - the compiler calls it where a borrow may be in use") \
+    X(NOTE_VEC_GROWS_HERE,              "",      "'%s' may grow here, in %S - take the view after it, or copy the elements first: '%s.ToArray()'") \
+    X(NOTE_VEC_GROWS_INSIDE,            "",      "%S may grow it here") \
+    X(NOTE_VEC_TASK_HOLDS,              "",      "the task holding a view of '%s' is started here") \
     X(NOTE_OWN_RELEASES_HERE,           "",      "%S releases here") \
     X(NOTE_OWN_MOVES_HERE,              "",      "%S moves it here") \
     X(NOTE_OWN_USED_AFTER,              "",      "used here, after it") \
@@ -613,6 +616,10 @@ struct type;
     X(ERR_ASSERT_MESSAGE_NOT_TEXT,      "S18a",  "an assertion's message is text, found %t - write it as text: \"x is \" $x") \
     X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
+    X(ERR_VEC_VIEW_STALE,               "M19g",  "'%S' holds a view of '%s' taken before '%s' may have grown") \
+    X(ERR_VEC_HIDDEN_VIEW_STALE,        "M19g",  "this reads a view of '%s' taken before '%s' may have grown") \
+    X(ERR_VEC_VIEW_GIVEN_GROWING,       "M19g",  "this view of '%s' is given to %S, which may grow '%s' - copy the elements first: '%s.ToArray()'") \
+    X(ERR_VEC_GROWS_UNDER_TASK,         "M19g",  "'%s' may grow here while a task holds a view of it - give the task a copy: '%s.ToArray()'") \
     X(ERR_ASSERT_STALE,                 "S18c, K1", "evaluated while compiling, this assertion stops on a stale view: %s") \
     X(ERR_GLOBAL_STALE,                 "K2, K1", "evaluated while compiling, this global's initializer stops on a stale view: %s") \
     X(ERR_COND_TOO_DEEP,                "B9c",   "conditions decide branches holding further conditions more than %d levels deep") \

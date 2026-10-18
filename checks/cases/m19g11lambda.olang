@@ -1,0 +1,11 @@
+# check: fail error[M19g]: 'f' holds a view of 'v' taken before 'v' may have grown
+# M19g: a lambda capturing a view holds it - called after the Vec grew, it reads the old buffer
+import "std/io"
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(5)
+    d := v.View()
+    f := fn() I64 { return d[0] }
+    for i in range 100 { v.Push(i) }
+    try io.Println($f())
+}

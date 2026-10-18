@@ -393,6 +393,9 @@ type Diag enum {
     NoteOwnElemByRef
     NoteOwnBorrowedHere
     OwnImplicitRelease
+    NoteVecGrowsHere
+    NoteVecGrowsInside
+    NoteVecTaskHolds
     NoteOwnReleasesHere
     NoteOwnMovesHere
     NoteOwnUsedAfter
@@ -616,6 +619,10 @@ type Diag enum {
     AssertMessageNotText
     AssertAborts
     GlobalAborts
+    VecViewStale
+    VecHiddenViewStale
+    VecViewGivenGrowing
+    VecGrowsUnderTask
     AssertStale
     GlobalStale
     CondTooDeep
@@ -1680,6 +1687,15 @@ fn NoteOwnBorrowedHere() Msg { return Msg(Diag.NoteOwnBorrowedHere, "", "borrowe
 # ERR_OWN_IMPLICIT_RELEASE
 fn OwnImplicitRelease(text String&) Msg { return Msg(Diag.OwnImplicitRelease, "O40", $text " may not release owned objects - the compiler calls it where a borrow may be in use") }
 
+# NOTE_VEC_GROWS_HERE
+fn NoteVecGrowsHere(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.NoteVecGrowsHere, "", "'" $text1 "' may grow here, in " $text2 " - take the view after it, or copy the elements first: '" $text3 ".ToArray()'") }
+
+# NOTE_VEC_GROWS_INSIDE
+fn NoteVecGrowsInside(text String&) Msg { return Msg(Diag.NoteVecGrowsInside, "", $text " may grow it here") }
+
+# NOTE_VEC_TASK_HOLDS
+fn NoteVecTaskHolds(text String&) Msg { return Msg(Diag.NoteVecTaskHolds, "", "the task holding a view of '" $text "' is started here") }
+
 # NOTE_OWN_RELEASES_HERE
 fn NoteOwnReleasesHere(text String&) Msg { return Msg(Diag.NoteOwnReleasesHere, "", $text " releases here") }
 
@@ -2348,6 +2364,18 @@ fn AssertAborts(text String&) Msg { return Msg(Diag.AssertAborts, "S18c", "this 
 
 # ERR_GLOBAL_ABORTS
 fn GlobalAborts(text String&) Msg { return Msg(Diag.GlobalAborts, "K2", "this global's initializer aborts the program, evaluated while compiling: " $text) }
+
+# ERR_VEC_VIEW_STALE
+fn VecViewStale(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.VecViewStale, "M19g", "'" $text1 "' holds a view of '" $text2 "' taken before '" $text3 "' may have grown") }
+
+# ERR_VEC_HIDDEN_VIEW_STALE
+fn VecHiddenViewStale(text1 String&, text2 String&) Msg { return Msg(Diag.VecHiddenViewStale, "M19g", "this reads a view of '" $text1 "' taken before '" $text2 "' may have grown") }
+
+# ERR_VEC_VIEW_GIVEN_GROWING
+fn VecViewGivenGrowing(text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.VecViewGivenGrowing, "M19g", "this view of '" $text1 "' is given to " $text2 ", which may grow '" $text3 "' - copy the elements first: '" $text4 ".ToArray()'") }
+
+# ERR_VEC_GROWS_UNDER_TASK
+fn VecGrowsUnderTask(text1 String&, text2 String&) Msg { return Msg(Diag.VecGrowsUnderTask, "M19g", "'" $text1 "' may grow here while a task holds a view of it - give the task a copy: '" $text2 ".ToArray()'") }
 
 # ERR_ASSERT_STALE
 fn AssertStale(text String&) Msg { return Msg(Diag.AssertStale, "S18c, K1", "evaluated while compiling, this assertion stops on a stale view: " $text) }

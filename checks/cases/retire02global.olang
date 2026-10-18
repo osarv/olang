@@ -1,15 +1,22 @@
 # check: fail error[K2, K1]: evaluated while compiling, this global's initializer stops on a stale view
 # also: note: the Vec grew here, after the view was taken
 # round 1 of docs/memory.md (K1, K2): a global whose initializer reads a Vec's elements through a view taken before a
-# Push grew it - a value is required, so the stale read is an error, at the global
+# Push grew it - a value is required, so the stale read is an error, at the global. (The Vec is grown through a second
+# name stored in a structure, which M19g cannot see: written as "w := v; w.Push(i)" it is M19g's error instead.)
 import "std/io"
-fn stale(n I64) I64 {
-    v := Vec<I64>()
-    v.Push(n)
+type Job struct() {
+    items Vec<I64>
+}
+fn add(j mut Job&) { for i in range 20 { j.items.Push(i) } }
+fn report(v Vec<I64>, j mut Job&) I64 {
     d := v.View()
-    w := v
-    for i in range 20 { w.Push(i) }
+    add(j)
     return d[0]
+}
+fn stale(n I64) I64 {
+    j := Job()
+    j.items.Push(n)
+    return report(j.items, j)
 }
 G I64 = stale(4)
 fn main() {
