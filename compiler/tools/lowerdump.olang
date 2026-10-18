@@ -1,0 +1,154 @@
+# lowerdump - every body of a program checked by the self-hosted checker, lowered to MIR (compiler/lower.olang) and
+# held to the MIR verifier (mir.Fn.Verify): M7's acceptance, measured (compiler/DESIGN.md section 6, the M7 row).
+#
+#     lowerdump [-D NAME=VALUE]... [-t] [-v] [-mir PATTERN] [-typed PATTERN] FILE...
+#
+# For each file, "== FILE", then the program it is the root of loaded, its names resolved, every body checked and every
+# body with code lowered: one row per body the verifier finds a problem with, "bad PATH:LINE:COL B<id>: PROBLEM" (its
+# first problem, or with -v every one), one per construct lowering does not lower yet, "gap PATH:LINE:COL WHAT", then
+# "errors E bodies N lowered L clean C bad B gapped G unchecked U" - E the diagnostics checking said (with -v rendered
+# first), unchecked counting the bodies a check error or a check gap
+# left with an unknown type, which are not lowered. At the end, over every file, the totals and the gaps counted by
+# what. -mir dumps the MIR of each body whose place (PATH:LINE) contains PATTERN, -typed its typed body. -D defines
+# build constants; -t makes TestBuild true and checks and lowers the root module's test blocks.
+
+import "std/os"
+import "std/io"
+import "../source"
+import "../diag"
+import "../cond"
+import "../fetch"
+import "../load"
+import resolver "../names"
+import "../generic"
+import typecheck "../check"
+import "../lower"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PrintErrln("usage: lowerdump [-D NAME=VALUE]... [-t] [-v] [-mir PATTERN] [-typed PATTERN] FILE...")
+            catch io.IoError { }
+        os.Exit(2)
+    }
+    os.RunOnStack(1 << 30, fn() { run(args) })
+}
+
+type totals struct() {
+    bodies I64 = 0
+    lowered I64 = 0
+    clean I64 = 0
+    bad I64 = 0
+    gapped I64 = 0
+    unchecked I64 = 0
+    whats List<String&>
+    counts List<I64>
+}
+
+fn run(args Array<String&>&) {
+    out := io.Writer(1)
+    std := try os.Env("OLANG_STD") catch default "std"
+    defines List<String&>
+    testBuild := false
+    verbose := false
+    mirAt String&args = ""
+    typedAt String&args = ""
+    k I64 = 1
+    for k < args.Len() and args[k].StartsWith("-") {
+        if args[k] == "-t" {
+            testBuild = true
+        } else if args[k] == "-v" {
+            verbose = true
+        } else if args[k] == "-D" and k + 1 < args.Len() {
+            k++
+            defines.Push(args[k])
+        } else if args[k] == "-mir" and k + 1 < args.Len() {
+            k++
+            mirAt = args[k]
+        } else if args[k] == "-typed" and k + 1 < args.Len() {
+            k++
+            typedAt = args[k]
+        }
+        k++
+    }
+    all := totals()
+    for i in range k, args.Len() {
+        path := args[i]
+        out.Write("== " $path "\n")
+        d := diag.Diagnostics(false)
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
+        for f in defines { try consts.Define(f, d) catch { } }
+        f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
+        l := load.Loader(std, consts, f, source.Names(), d)
+        l.Load(path)
+        r := resolver.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, testBuild)
+        c.CheckProgram()
+        if verbose { out.Write(d.Render()) }
+        errs := d.Count()
+        lw := lower.Lowerer(p, c.Bodies)
+        n := totals()
+        for b in range c.Bodies.Len() {
+            if not lw.HasCode(b) { continue }
+            n.bodies++
+            body := c.Bodies[b]
+            where := d.Locate(body.File, I64(body.Sp.Start))
+            if typedAt.Len() > 0 and (try where.Find(typedAt) catch default -1) >= 0 {
+                out.Write("-- typed B" $b " " $where "\n" $body.Print(p.T))
+            }
+            gaps := lw.Gaps.Len()
+            wantDump := mirAt.Len() > 0 and (try where.Find(mirAt) catch default -1) >= 0
+            gapped, problems, dump := lw.Verified(b, wantDump)
+            if gapped {
+                if lw.Gaps.Len() > gaps and lw.Gaps[gaps].What.StartsWith("a body with an unknown type") {
+                    n.unchecked++
+                } else {
+                    n.gapped++
+                }
+                continue
+            }
+            n.lowered++
+            if wantDump { out.Write("-- mir B" $b " " $where "\n" $dump) }
+            if problems.Len() == 0 {
+                n.clean++
+                continue
+            }
+            n.bad++
+            for line in problems.Split("\n") {
+                if line.Len() == 0 { continue }
+                out.Write("bad " $where " B" $b ": " $line "\n")
+                if not verbose { break }
+            }
+        }
+        for g in lw.Gaps {
+            if g.What.StartsWith("a body with an unknown type") { continue }
+            out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n")
+            at := -1
+            for j in range all.whats.Len() {
+                if all.whats[j] == g.What { at = j }
+            }
+            if at < 0 {
+                all.whats.Push($g.What)
+                all.counts.Push(1)
+            } else {
+                all.counts[at] = all.counts[at] + 1
+            }
+        }
+        out.Write(("errors " $errs " bodies " $n.bodies " lowered " $n.lowered " clean " $n.clean " bad " $n.bad " gapped " $n.gapped
+                   " unchecked " $n.unchecked "\n"))
+        try out.Flush() catch io.IoError { os.Exit(1) }
+        all.bodies += n.bodies
+        all.lowered += n.lowered
+        all.clean += n.clean
+        all.bad += n.bad
+        all.gapped += n.gapped
+        all.unchecked += n.unchecked
+    }
+    out.Write(("== total: bodies " $all.bodies " lowered " $all.lowered " clean " $all.clean " bad " $all.bad " gapped "
+               $all.gapped " unchecked " $all.unchecked "\n"))
+    for j in range all.whats.Len() { out.Write("  " $all.counts[j] " " $all.whats[j] "\n") }
+    try out.Flush() catch io.IoError { os.Exit(1) }
+}
