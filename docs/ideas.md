@@ -15,7 +15,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 4 | Portable SIMD vectors | Zig, Rust | open |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | open |
 | 6 | Embedding a file | Zig, Rust | open |
-| 7 | `errdefer` | Zig | open |
+| 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
 | 9 | Doc tests | Rust | open |
 
@@ -199,6 +199,15 @@ when the file changes (B3 staleness has to include it).
 2. Can it read a directory, or files only?
 
 ## 7. `errdefer`
+
+**Decided 2026-10-18 (the user: "1) errdefer 2) that's good 3) good"):** `errdefer STATEMENT` / `errdefer { block }`
+registers deferred code of its block that runs only when the block is left by an error moving outward - out of the
+function (try's propagation, an `error` statement), a failing join to its `try join` clauses, a `for x in try c` ended
+by its own error; an error a clause catches inside the block does not leave it. Not on what ends the program or the test
+(a failed assert, `unreachable`, `!`, `os.Exit`), as for `defer`. One list with `defer`, in reverse registration order
+(an error exit runs both kinds, a normal exit only the defers - two lists would misorder `x := alloc(); errdefer
+free(x); y := build(x); defer log(y)`). The error is not available inside (errors are no values, T20); restricting it
+to some words (`errdefer IoError.FULL { }`) can be added later. Built in the port after self-hosting.
 
 **What:** a deferred block that runs only when its block is left by an error.
 
