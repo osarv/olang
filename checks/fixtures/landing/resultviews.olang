@@ -5,6 +5,7 @@
 # numbers computed for a slice of a parameter (study 6's r02: two I64 locals a call), stay in the function's frame.
 # Each shape runs four million times under an address-space limit far below what keeping them would take
 import "infos"
+import "std/io"
 
 type View struct(Data Array<F64>&, Off I64, N I64) {
     Data
@@ -53,5 +54,5 @@ fn main() ? {
     for c in range 4000000 {
         total += window(a, c % 90)[0]
     }
-    println($sum " " $total)
+    try io.Println($sum " " $total)
 }

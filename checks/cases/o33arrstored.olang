@@ -1,5 +1,6 @@
 # check: fail error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
 # the buffer borrow stored outside: must fail (O33)
+import "std/io"
 type B struct() {
     data own mut Array<I64>& = null
 }
@@ -12,5 +13,5 @@ fn main() ? {
     b.data = Array<I64>(4)
     h.view = b.data
     b.data = null
-    println($h.view[0])
+    try io.Println($h.view[0])
 }

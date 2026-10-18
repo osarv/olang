@@ -4,7 +4,7 @@
 type Node struct(v I64) {
     v
 }
-fn put(l mut List<<T>>&, x T) {
+fn put<T>(l mut List<T>&, x T) {
     v T = x
     l.Push(v)
 }

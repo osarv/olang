@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # O25h under the scope sanitizer: a copy of a local enum's payload - a match binding, an "as" - keeps its references
 # where the enum's are, so a callee given it by value, one it is lent to, and a lambda through a reference read out of it
 # all build there, not in the clause's or the block's own arena (each was "use after scope closed")
@@ -55,5 +55,5 @@ fn main() ? {
     churn()
     s I64 = 0
     for v in c.left { s += v }
-    if second(e1) != 42 or second(e2) != 43 or second(e3) != 44 or s != 210 { fail }
+    assert not (second(e1) != 42 or second(e2) != 43 or second(e3) != 44 or s != 210)
 }

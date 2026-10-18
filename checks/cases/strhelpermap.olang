@@ -1,7 +1,8 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/O18c: a helper walking a Map handed the receiver's map ('for e in m', 'm.Keys()') builds nothing where it
 # lives - its iterators are its own (E11c): it runs, as the same loops in Str's body do
+import "std/io"
 fn total(m Map<String&, I64>&) I64 {
     t I64 = 0
     for e in m { t += e.Value }
@@ -22,5 +23,5 @@ fn main() ? {
     r := Reg()
     r.m.Put("a", 1)
     r.m.Put("b", 2)
-    println($r)
+    try io.Println($r)
 }

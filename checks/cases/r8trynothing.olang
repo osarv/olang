@@ -1,0 +1,4 @@
+# check: fail nothing here can fail - write it without 'try'
+# R8: a try covering nothing that can fail - an inferred set that came out empty included - is an error
+fn inc(n I64) I64 ? { return n + 1 }
+fn main() ? { x := try inc(1) }

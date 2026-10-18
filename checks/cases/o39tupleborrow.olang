@@ -1,6 +1,7 @@
-# check: fail error[O39]: assigning 'h.cur' may release the Inner borrowed on line 14
+# check: fail error[O39]: assigning 'h.cur' may release the Inner borrowed on line 15
 # O39 (own6 N1): a borrow handed back as one of several results (D8c) carries the loan it was made from - the slot it
 # came out of is not released while it is used
+import "std/io"
 type Inner struct(k I64) {
     k
 }
@@ -13,5 +14,5 @@ fn main() ? {
     h.cur = Inner(1)
     c, k := two(h.cur)
     h.cur = null
-    println($c.k " " $k)
+    try io.Println($c.k " " $k)
 }

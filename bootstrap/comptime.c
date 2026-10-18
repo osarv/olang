@@ -7,8 +7,8 @@
 //
 //What makes a computation impossible here, and so falls back to run time: reading a mutable global (its
 //value is the running program's), writing any global (skipping the computation at run time would then skip
-//the write), an extern call, a call through a function value whose target cannot be, done/fail, reaching
-//abort/unreachable or a failing assert or check (only where reached), integer division by zero or an out-of-range
+//the write), an extern call, a call through a function value whose target cannot be, reaching
+//unreachable or a failing assert or check (only where reached), integer division by zero or an out-of-range
 //shift or conversion (undefined at run time - refused here rather than guessed), and running out of the step
 //budget. Every one of those is reported with the operation that caused it. A join's tasks run in sequence, each
 //to completion at the join, in the order spawned (K1).
@@ -19,7 +19,7 @@
 //
 //B3e: under "-i" the same evaluation runs a whole program (CtRunProgram), and what it refuses above because
 //only a running program may do it is done instead: globals are read and written, an extern is called in this
-//process through libffi (the runtime's own functions, X6, by this file's versions of them), done/fail exit, a
+//process through libffi (the runtime's own functions, X6, by this file's versions of them), os.Exit exits, a
 //guaranteed check aborts with the runtime's message, and there is no step budget. What the built program leaves
 //undefined still stops it, now naming the operation and its place. Tasks and destructors are not interpreted yet.
 //Memory is still never reclaimed, which a long run will notice.
@@ -134,19 +134,20 @@ const char* CT_WHY_INCOMPLETE = "it calls a function one of whose branches is st
 
 //K1: what aborts the program when reached - evaluation ends there, and where a value is required that is an error
 static const char* CT_WHY_UNREACHABLE = "it reaches unreachable code, which aborts the program";
-static const char* CT_WHY_ABORT = "it reaches abort, which aborts the program";
 static const char* CT_WHY_ASSERT = "an assertion in it fails, which aborts the program";
 static const char* CT_WHY_SLICE = "it slices out of range, which aborts the program";
 static const char* CT_WHY_LENGTH = "it makes an array of a length out of range, which aborts the program";
 static const char* CT_WHY_FIXED = "it copies an array of another length into fixed storage, which aborts the program";
+static const char* CT_WHY_BANG = "an error reaches '!', which ends the program";
+static const char* CT_WHY_TEST_ERROR = "an error leaves the test, which fails it";
 //B12a: the target is another architecture or system than this machine's - so its C math library is not the one this
 //process calls, and a function IEEE 754 does not pin down may give another result there
 static bool ctForeignTarget;
 //B12a, X8: a function of the C math library whose result is the library's own, for another machine than this one
 static const char* CT_WHY_FOREIGN_MATH = "it calls a function of the C math library whose result is the target's own library's, and the target is another machine";
 bool CtWhyAborts(const char* why) {
-    return why == CT_WHY_UNREACHABLE || why == CT_WHY_ABORT || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
-           || why == CT_WHY_LENGTH || why == CT_WHY_FIXED;
+    return why == CT_WHY_UNREACHABLE || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
+           || why == CT_WHY_LENGTH || why == CT_WHY_FIXED || why == CT_WHY_BANG || why == CT_WHY_TEST_ERROR;
 }
 
 //immutable globals already evaluated, or being evaluated (a cycle is a failure, not a hang). writable: its value reaches
@@ -178,6 +179,26 @@ static void ctRunAbortTok(struct token tok, const char* what) {
 
 //S18a: a written check that failed under -i says where, as the built program does - "FILE:LINE: what", then the
 //program's own message (text, evaluated now) when it gave one
+//S18d: the error return trace -i prints as the built program does - its last 32 places, the raise first
+static struct { struct token tok; const char* what; } ctErt[32];
+static long long ctErtN;
+static void ctTrace(struct token tok, const char* what, bool raise) {
+    if (!ctRun) return;
+    if (raise) ctErtN = 0;
+    ctErt[ctErtN & 31].tok = tok;
+    ctErt[ctErtN & 31].what = what;
+    ctErtN++;
+}
+static void ctTracePrint(void) {
+    if (ctErtN > 32) fprintf(stderr, "(%lld earlier places not kept)\n", ctErtN - 32);
+    for (long long i = ctErtN > 32 ? ctErtN - 32 : 0; i < ctErtN; i++) {
+        struct token t = ctErt[i & 31].tok;
+        struct str f = t.owner ? TokenGetFileName(t.owner) : StrFromCStr("?");
+        fprintf(stderr, "%.*s:%d: %s\n", f.len, f.ptr, t.lineNr, ctErt[i & 31].what);
+    }
+    ctErtN = 0;
+}
+
 static void ctRunAbortAt(struct statement* s, const char* what, struct ctVal* msg) {
     fflush(NULL);
     if (s && s->line > 0 && s->file.len) fprintf(stderr, "%.*s:%d: ", s->file.len, s->file.ptr, s->line);
@@ -198,6 +219,7 @@ static struct ctVal* ctFloat(struct type t, double f);
 //R20: a check under "try" failed with BuiltinError.word - as the generated code does, so the try's clauses (or the
 //function's error union) take it
 static struct ctVal* ctCheckFail(struct ctState* st, struct operand* op, char* word) {
+    ctTrace(op->checkRoot ? op->checkRoot->tok : op->tok, "raised here", true);
     st->flow = CF_ERROR;
     st->errType = *SemanticBuiltinErrorType();
     st->errWord = SemanticBuiltinErrorWord(word);
@@ -217,7 +239,7 @@ static bool ctFits(struct type t, ctWide v) {
 //T4: an integer value's exact mathematical value - a U64's bit pattern read unsigned; every other type's value is
 //kept normalized in its range already
 static ctWide ctExact(struct ctVal* v) {
-    if (v->type.bType == BASETYPE_U64) return (ctWide)(unsigned long long)v->i;
+    if (v->type->bType == BASETYPE_U64) return (ctWide)(unsigned long long)v->i;
     return v->i;
 }
 
@@ -256,13 +278,59 @@ static const char* CT_WHY_DESTRUCTOR = "it builds a value whose destructor runs 
 
 //every value the evaluator has made, in bytes - the memory budget (CT_MEM_BUDGET) is measured against it
 static size_t ctAllocated;
+//...counted as a value with its type inside - what one cost before types were shared (CtType), so the budget still
+//admits the evaluations it did
+#define CT_VAL_BYTES (sizeof(struct ctVal) + sizeof(struct type) - sizeof(const struct type*))
+
+//a value's type, kept once for every value of that type rather than in each value: a type is 624 bytes, a value with it
+//inside was 704, and a test build's evaluator made a million of them. Two types are one when their bytes are - the copy
+//is never written through, so a value whose type changes is given another
+static const struct type** ctTypes;
+static size_t ctTypesCap, ctTypesLen;
+static unsigned long long ctTypeHash(const struct type* t) {
+    unsigned long long h = 1469598103934665603ULL, w;
+    const unsigned char* b = (const unsigned char*)t;
+    for (size_t i = 0; i + sizeof(w) <= sizeof(struct type); i += sizeof(w)) {
+        memcpy(&w, b + i, sizeof(w));
+        h = (h ^ w) * 1099511628211ULL;
+        h ^= h >> 29;
+    }
+    return h;
+}
+const struct type* CtType(struct type t) {
+    static const struct type* last; //values are made in runs of one type
+    if (last && !memcmp(last, &t, sizeof(struct type))) return last;
+    if (ctTypesLen * 2 >= ctTypesCap) {
+        size_t cap = ctTypesCap ? ctTypesCap * 2 : 1024;
+        const struct type** nt = calloc(cap, sizeof(struct type*));
+        CheckAllocPtr(nt);
+        for (size_t i = 0; i < ctTypesCap; i++) {
+            if (!ctTypes[i]) continue;
+            size_t k = ctTypeHash(ctTypes[i]) & (cap - 1);
+            while (nt[k]) k = (k + 1) & (cap - 1);
+            nt[k] = ctTypes[i];
+        }
+        free(ctTypes);
+        ctTypes = nt;
+        ctTypesCap = cap;
+    }
+    size_t k = ctTypeHash(&t) & (ctTypesCap - 1);
+    for (; ctTypes[k]; k = (k + 1) & (ctTypesCap - 1)) {
+        if (!memcmp(ctTypes[k], &t, sizeof(struct type))) return last = ctTypes[k];
+    }
+    struct type* c = MallocOrCrash(sizeof(struct type));
+    *c = t;
+    ctTypes[k] = c;
+    ctTypesLen++;
+    return last = c;
+}
 
 static struct ctVal* ctNew(enum ctKind k, struct type t) {
-    ctAllocated += sizeof(struct ctVal);
+    ctAllocated += CT_VAL_BYTES;
     struct ctVal* v = MallocOrCrash(sizeof(struct ctVal));
     *v = (struct ctVal){0};
     v->kind = k;
-    v->type = t;
+    v->type = CtType(t);
     return v;
 }
 
@@ -277,7 +345,7 @@ static const void* ctArrayStorage(struct ctVal* a) {
     if (!a) return NULL;
     if (a->elems) return a->elems;
     struct ctVal* s = a->viewOf ? a->viewOf : a;
-    return s->type.bType != BASETYPE_ARRAY || s->type.arrMalloc ? NULL : (const void*)s;
+    return s->type->bType != BASETYPE_ARRAY || s->type->arrMalloc ? NULL : (const void*)s;
 }
 static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
     if (x->kind == CT_FUNC || y->kind == CT_FUNC) {
@@ -288,8 +356,8 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
     struct ctVal* b = y->kind == CT_REF ? y->target : NULL;
     //an array is its storage and its length: no storage and no length is what a null array reference is too, bit for
     //bit ({ 0, null }) - the zero value of an array has no storage yet
-    bool arrA = x->kind == CT_NULL ? x->type.bType == BASETYPE_ARRAY : a && a->kind == CT_AGG && a->type.bType == BASETYPE_ARRAY;
-    bool arrB = y->kind == CT_NULL ? y->type.bType == BASETYPE_ARRAY : b && b->kind == CT_AGG && b->type.bType == BASETYPE_ARRAY;
+    bool arrA = x->kind == CT_NULL ? x->type->bType == BASETYPE_ARRAY : a && a->kind == CT_AGG && a->type->bType == BASETYPE_ARRAY;
+    bool arrB = y->kind == CT_NULL ? y->type->bType == BASETYPE_ARRAY : b && b->kind == CT_AGG && b->type->bType == BASETYPE_ARRAY;
     if (arrA && arrB) {
         int na = a ? a->n : 0, nb = b ? b->n : 0;
         return a == b || (na == nb && ctArrayStorage(a) == ctArrayStorage(b));
@@ -301,11 +369,11 @@ static bool ctSameIdentity(struct ctVal* x, struct ctVal* y) {
 //E10: a reference to an array - "==" compares the array it names, where any other reference compares by identity. A
 //null one has no storage: the null literal, or a reference to an array value's zero value ({ 0, null } at run time)
 static bool ctArrayRef(struct ctVal* v) {
-    if (v->kind == CT_NULL) return v->type.bType == BASETYPE_ARRAY;
+    if (v->kind == CT_NULL) return v->type->bType == BASETYPE_ARRAY;
     if (v->kind != CT_REF) return false;
     struct ctVal* t = v->target;
     while (t && t->kind == CT_REF) t = t->target;
-    return t && t->kind == CT_AGG && t->type.bType == BASETYPE_ARRAY;
+    return t && t->kind == CT_AGG && t->type->bType == BASETYPE_ARRAY;
 }
 //(a fixed-length array is storage of its own however long it is - an Array<T, 0> too, a slot of no bytes at run time - so
 //a reference to it, or a slice of it, is never null; only a run-time-length array's zero value has none)
@@ -316,12 +384,12 @@ static bool ctArrayRefNull(struct ctVal* v) {
     if (!t) return true;
     if (t->kind != CT_AGG || t->n != 0 || t->elems) return false;
     struct ctVal* s = t->viewOf ? t->viewOf : t;
-    return s->type.bType != BASETYPE_ARRAY || s->type.arrMalloc;
+    return s->type->bType != BASETYPE_ARRAY || s->type->arrMalloc;
 }
 
 //a fresh, independent copy: an aggregate's elements are copied, a reference keeps pointing where it did
 static struct ctVal* ctCopy(struct ctVal* v) {
-    struct ctVal* c = ctNew(v->kind, v->type);
+    struct ctVal* c = ctNew(v->kind, *v->type);
     *c = *v;
     if (v->kind == CT_AGG) {
         c->viewOf = NULL; //a copy is storage of its own
@@ -338,8 +406,8 @@ static struct ctVal* ctCopy(struct ctVal* v) {
 //changes gets new storage, which an earlier borrow of the old one goes on naming
 static void ctAssign(struct ctVal* node, struct ctVal* v) {
     if (v->kind != CT_AGG) { *node = *v; return; } //ctCopy of anything else is this same struct copy
-    bool sameShape = node->kind == CT_AGG && node->n == v->n && node->type.bType == v->type.bType
-                     && (v->type.bType != BASETYPE_CHOICE || node->i == v->i);
+    bool sameShape = node->kind == CT_AGG && node->n == v->n && node->type->bType == v->type->bType
+                     && (v->type->bType != BASETYPE_CHOICE || node->i == v->i);
     if (sameShape) {
         node->i = v->i;
         for (int i = 0; i < v->n; i++) ctAssign(node->elems[i], v->elems[i]);
@@ -718,8 +786,8 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
             if (forWrite && !ctRun && CtNodeOwner(base)) return ctFail(st, op->tok, CT_WHY_WRITES_GLOBAL);
             if (base->kind == CT_NULL) return ctFail(st, op->tok, "it reads through a null reference");
             if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
-            for (int i = 0; i < base->type.vars.len && i < base->n; i++) {
-                if (StrCmp(((struct var*)ListGetIdx(&base->type.vars, i))->name, op->memberName)) return base->elems[i];
+            for (int i = 0; i < base->type->vars.len && i < base->n; i++) {
+                if (StrCmp(((struct var*)ListGetIdx((struct list*)&base->type->vars, i))->name, op->memberName)) return base->elems[i];
             }
             return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
         }
@@ -828,7 +896,8 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
                 case OPERATION_SUB: return ctCheckFloat(st, op, t, x, y, true, x - y);
                 case OPERATION_MUL: return ctCheckFloat(st, op, t, x, y, true, x * y);
                 case OPERATION_DIV:
-                    if (y == 0) return ctCheckFail(st, op, "DIVIDE_BY_ZERO");
+                    //IEEE's division by zero: a finite nonzero dividend; 0/0 is INVALID (ctCheckFloat), inf/0 exact
+                    if (y == 0 && isfinite(x) && x != 0) return ctCheckFail(st, op, "DIVIDE_BY_ZERO");
                     return ctCheckFloat(st, op, t, x, y, true, x / y);
                 default: break;
             }
@@ -844,9 +913,16 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
                     if (!TypeIsUnsigned(t) && y == -1 && !ctFits(t, -x)) return ctCheckFail(st, op, "OVERFLOW");
                     break;
                 case OPERATION_BTSFT_L: case OPERATION_BTSFT_R: {
-                    //the amount in its own type: a negative one, or one past the width, is INVALID
+                    //the amount in its own type: a negative one, or one past the width, is OUT_OF_BOUNDS (QO6)
                     ctWide n = ctExact(b);
-                    if (n < 0 || n >= w) return ctCheckFail(st, op, "INVALID");
+                    if (n < 0 || n >= w) return ctCheckFail(st, op, "OUT_OF_BOUNDS");
+                    if (op->opType == OPERATION_BTSFT_L) { //QO6: the true value x * 2^n has to fit
+                        const struct primInfo* p = PrimInfo(t.bType);
+                        bool un = p->kind == 'u';
+                        ctWide mx = un ? (((ctWide)1 << p->bits) - 1) : (((ctWide)1 << (p->bits - 1)) - 1);
+                        ctWide mn = un ? 0 : -((ctWide)1 << (p->bits - 1));
+                        if (x > (mx >> n) || x < (mn >> n)) return ctCheckFail(st, op, "OVERFLOW");
+                    }
                     break;
                 }
                 default: break;
@@ -911,7 +987,7 @@ static struct ctVal* ctBinary(struct ctState* st, struct operand* op) {
 //without end there, and here stops where a recursion would, with the same message. 1 equal, 0 not, -1 stopped
 static int ctDeepEq(struct ctState* st, struct token tok, struct ctVal* x, struct ctVal* y, int depth) {
     if (st->depth + depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
-        ctFail(st, tok, ctRun ? "the comparison recurses deeper than -i allows"
+        ctFail(st, tok, ctRun ? "the comparison recurses deeper than interpret allows"
                               : "the comparison recurses deeper than compile-time evaluation allows");
         return -1;
     }
@@ -923,7 +999,7 @@ static int ctDeepEq(struct ctState* st, struct token tok, struct ctVal* x, struc
     if (ctIsIdentity(x) || ctIsIdentity(y)) return ctSameIdentity(x, y);
     if (x->kind == CT_AGG || y->kind == CT_AGG) {
         if (x->kind != y->kind || x->n != y->n) return 0;
-        if (x->type.bType == BASETYPE_CHOICE && x->i != y->i) return 0; //T17a: the live case, then its payload
+        if (x->type->bType == BASETYPE_CHOICE && x->i != y->i) return 0; //T17a: the live case, then its payload
         for (int i = 0; i < x->n; i++) {
             int r = ctDeepEq(st, tok, x->elems[i], y->elems[i], depth + 1);
             if (r != 1) return r;
@@ -959,7 +1035,7 @@ static struct ctVal* ctConvert(struct ctState* st, struct operand* op) {
             if (!ctFits(t, ctExact(v))) return ctCheckFail(st, op, "OVERFLOW");
         }
     }
-    if (ctIsFloat(t) && v->kind == CT_FLOAT && v->type.bType == t.bType) return ctMoveFloat(v, t); //E26: unchanged
+    if (ctIsFloat(t) && v->kind == CT_FLOAT && v->type->bType == t.bType) return ctMoveFloat(v, t); //E26: unchanged
     if (ctIsFloat(t)) return ctFloat(t, ctToFloat(v, t));
     if (ctIsInt(t)) {
         if (v->kind == CT_FLOAT) {
@@ -1176,11 +1252,7 @@ static void ctScanOp(struct ctScan* sc, struct operand* op) {
 
 static void ctScanStmt(struct ctScan* sc, struct statement* s) {
     if (sc->why) return;
-    struct token tok = s->op ? s->op->tok : s->var.tok;
     switch (s->sType) {
-        case STATEMENT_DONE: case STATEMENT_FAIL: //K1: abort and unreachable stop an evaluation only where reached
-            ctScanFail(sc, tok, "it ends the test or the process");
-            return;
         case STATEMENT_SPAWN: //K1: a task is run at its join, in sequence - what it does is what is scanned
             for (int i = 0; i < s->spawnTargets.len && !sc->why; i++) {
                 struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
@@ -1562,7 +1634,7 @@ static struct ctVal* ctCall(struct ctState* st, struct operand* op) {
 static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFrame* fr) {
     struct var* func = op->readVar;
     if (op->isCtorCall && ctHasDestructor(op->type) && !(st->globalInit && st->depth == 0)) {
-        ctFail(st, op->tok, ctRun ? "it builds a value whose type declares a destructor, which -i does not run yet" : CT_WHY_DESTRUCTOR);
+        ctFail(st, op->tok, ctRun ? "it builds a value whose type declares a destructor, which interpret does not run yet" : CT_WHY_DESTRUCTOR);
         return false;
     }
     if (!func || func->type.isExtern) { ctFail(st, op->tok, "it calls an external function"); return false; }
@@ -1593,7 +1665,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
     if (func->codeBlock.len == 0 && func->type.hasRetType) { ctFail(st, op->tok, "it calls a function whose body is not available"); return false; }
     if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd())
     {
-        ctFail(st, op->tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
+        ctFail(st, op->tok, ctRun ? "it recurses deeper than interpret allows" : "the computation recurses deeper than compile-time evaluation allows");
         return false;
     }
 
@@ -1604,7 +1676,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         struct var* p = ListGetIdx(&func->type.vars, 0);
         struct ctVal* node = ctNew(CT_INT, p->type);
         *node = *(ctIsRef(p->type) ? through->elems[0] : ctCopy(ctDeref(through->elems[0])));
-        if (ctIsRef(p->type)) node->type = p->type;
+        if (ctIsRef(p->type)) node->type = CtType(p->type);
         struct ctLocal l = { p->name, node };
         ListAdd(&locals, &l);
     }
@@ -1621,7 +1693,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         if (v && shareArr) v = ctDeref(v);
         if (v && shareArr && v->kind != CT_AGG) { //a null reference: the empty array the pair { 0, null } is
             v = ctCopy(v);
-            v->type = p->type;
+            v->type = CtType(p->type);
         }
         if (!v) {
             //from an argument, not from this call - unless a check this call's own try asked for (R20, E31)
@@ -1633,7 +1705,7 @@ static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFram
         //never writes is the caller's array itself, its elements shared, as at run time
         struct ctVal* node = ctNew(CT_INT, p->type);
         *node = *(ctIsRef(p->type) || (shareArr && v->kind == CT_AGG) ? v : ctCopy(v));
-        if (shareArr && v->kind == CT_AGG) node->type = p->type;
+        if (shareArr && v->kind == CT_AGG) node->type = CtType(p->type);
         struct ctLocal l = { p->name, node };
         ListAdd(&locals, &l);
     }
@@ -1667,13 +1739,6 @@ static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ct
     st->mod = savedMod;
     //this call's clauses see it - or, for a Try form an operator called inside a tried expression, that try's (E31)
     if (st->flow == CF_ERROR) { st->errBypass = false; st->errCheckRoot = op->isTried ? NULL : op->checkRoot; }
-    //R17: through a bare "?" function, any error leaves as that function's own default error, its one word
-    struct type* generic = SemanticGenericErrorType();
-    if (st->flow == CF_ERROR && generic && func->type.errors.len == 1
-            && TypeIsSame(**(struct type**)ListGetIdx(&func->type.errors, 0), *generic)) {
-        st->errType = *generic;
-        st->errWord = 0;
-    }
     if (st->flow == CF_RETURN) {
         st->flow = CF_NORMAL;
         struct ctVal* r = st->ret;
@@ -1682,6 +1747,33 @@ static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ct
     }
     if (st->flow == CF_NORMAL) return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID)); //fell off a void body
     return NULL; //an error, a failure, or a stray break
+}
+
+//E35: the program ends, naming the error st holds, as a failed check does - while compiling, K1's abort. ends 2: a test's
+//escaping error (S16)
+static void ctBangEnds(struct ctState* st, struct operand* op, int ends) {
+    if (ctRun) {
+        fflush(NULL);
+        if (op->tok.owner && op->tok.lineNr > 0) {
+            struct str f = TokenGetFileName(op->tok.owner);
+            fprintf(stderr, "%.*s:%d: ", f.len, f.ptr, op->tok.lineNr);
+        }
+        struct str q = (struct str){0};
+        struct semaModule* o = st->errType.owner;
+        if (o && o->identity.len && !(o->identity.len >= 11 && !strncmp(o->identity.ptr, "std/prelude", 11))
+                && o != st->mod) {
+            q = o->identity;
+            for (int k = q.len - 1; k >= 0; k--)
+                if (q.ptr[k] == '/') { q.ptr += k + 1; q.len -= k + 1; break; }
+        }
+        struct token w = st->errWord >= 0 && st->errWord < st->errType.words.len
+                         ? *(struct token*)ListGetIdx(&st->errType.words, st->errWord) : (struct token){0};
+        fprintf(stderr, "%.*s%s%.*s.%.*s\n", q.len, q.ptr, q.len ? "." : "", st->errType.name.len,
+                st->errType.name.ptr, w.str.len, w.str.ptr);
+        ctTracePrint();
+        abort();
+    }
+    ctFail(st, op->tok, ends == 2 ? CT_WHY_TEST_ERROR : CT_WHY_BANG);
 }
 
 //R9/R9a/R9b: a tried operand's failure - handled by the first clause that names it, else propagated
@@ -1695,6 +1787,8 @@ static struct ctVal* ctHandleTry(struct ctState* st, struct operand* op) {
             match = TypeIsSame(cm->errType, st->errType) && (!cm->hasWord || cm->wordOrdinal == st->errWord);
         }
         if (!match) continue;
+        if (!cc->ends) ctErtN = 0; //S18d: taken
+        if (cc->ends) { ctBangEnds(st, op, cc->ends); return NULL; }
         st->flow = CF_NORMAL;
         if (cc->hasBlock) {
             size_t mark = (size_t)st->locals->len;
@@ -1705,6 +1799,7 @@ static struct ctVal* ctHandleTry(struct ctState* st, struct operand* op) {
         if (!cc->dflt) return NULL;
         return ctFit(st, cc->dflt, op->tryDefaultType);
     }
+    if (op->isTried) ctTrace(op->tok, "try passed it on", false); //S18d
     return NULL; //no clause named it: it propagates
 }
 
@@ -1716,8 +1811,8 @@ static struct ctVal* ctIncDec(struct ctState* st, struct operand* op, bool prefi
     if (!node) return NULL;
     struct ctVal* old = ctCopy(node);
     //E6c: wraps, computed unsigned - the compiler's own arithmetic has no overflow of its own
-    struct ctVal* nv = ctIsFloat(node->type) ? ctFloat(node->type, node->f + (inc ? 1 : -1))
-                                            : ctInt(node->type, (long long)((unsigned long long)node->i + (inc ? 1ULL : ~0ULL)));
+    struct ctVal* nv = ctIsFloat(*node->type) ? ctFloat(*node->type, node->f + (inc ? 1 : -1))
+                                            : ctInt(*node->type, (long long)((unsigned long long)node->i + (inc ? 1ULL : ~0ULL)));
     ctAssign(node, nv);
     return prefix ? ctCopy(node) : old;
 }
@@ -1881,7 +1976,7 @@ static bool ctRenderStr(struct ctState* st, struct ctText* b, struct var* m, str
         if (why) { ctFail(st, whyTok, why); return false; }
     }
     if (st->depth >= (ctRun ? CT_RUN_DEPTH_BUDGET : CT_DEPTH_BUDGET) || ctStackNearEnd()) {
-        ctFail(st, tok, ctRun ? "it recurses deeper than -i allows" : "the computation recurses deeper than compile-time evaluation allows");
+        ctFail(st, tok, ctRun ? "it recurses deeper than interpret allows" : "the computation recurses deeper than compile-time evaluation allows");
         return false;
     }
     struct var* p = ListGetIdx(&m->type.vars, 0);
@@ -1946,14 +2041,14 @@ static struct ctVal* ctPieceValue(struct ctVal* v, struct type t) {
     if (t.bType == BASETYPE_ARRAY && (t.arrMalloc || t.structMAlloc)) {
         if (v->kind == CT_NULL || (v->kind == CT_REF && ctArrayRefNull(v))) return v;
         struct ctVal* a = ctDeref(v);
-        struct ctVal* c = ctNew(a->kind, a->type);
+        struct ctVal* c = ctNew(a->kind, *a->type);
         *c = *a; //the same elements
         return c;
     }
     if (t.bType == BASETYPE_ARRAY) return v; //Array<T, N>: the storage it lies in
     if (ctIsRef(t)) {
         if (v->kind != CT_REF) return v;
-        struct ctVal* c = ctNew(CT_REF, v->type);
+        struct ctVal* c = ctNew(CT_REF, *v->type);
         *c = *v; //the instance it names now
         return c;
     }
@@ -2083,7 +2178,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             }
             struct ctVal* v = ctNew(CT_NULL, op->type);
             *v = *node;
-            v->type = op->type;
+            v->type = CtType(op->type);
             node->kind = CT_NULL;
             node->target = NULL;
             return v;
@@ -2114,7 +2209,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             struct ctVal* v = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!v) return NULL;
             v = ctCopy(v);
-            v->type = op->type;
+            v->type = CtType(op->type);
             return v;
         }
         case OPERATION_MATCH: { //S12b
@@ -2179,7 +2274,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         case OPERATION_COMPR_RESERVE: { //E27/D14b: room for more elements than an array of them can have aborts
             struct ctVal* n = ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0));
             if (!n) return NULL;
-            struct type elem = *st->compr[st->comprDepth - 1]->type.arrElem;
+            struct type elem = *st->compr[st->comprDepth - 1]->type->arrElem;
             if ((unsigned long long)n->i > (unsigned long long)ArrayLengthLimit(TypeGetSize(elem))) {
                 if (ctRun) ctRunAbortTok(op->tok, "array length out of range\n");
                 return ctFail(st, op->tok, CT_WHY_LENGTH);
@@ -2188,14 +2283,14 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
         }
         case OPERATION_COMPR_PUSH: {
             struct ctVal* a = st->compr[st->comprDepth - 1];
-            struct ctVal* v = ctFit(st, *(struct operand**)ListGetIdx(&op->args, 0), *a->type.arrElem);
+            struct ctVal* v = ctFit(st, *(struct operand**)ListGetIdx(&op->args, 0), *a->type->arrElem);
             if (!v) return NULL;
             int* cap = &st->comprCap[st->comprDepth - 1];
             if (a->n == *cap) {
                 *cap *= 2;
                 a->elems = ReallocOrCrash(a->elems, sizeof(struct ctVal*) * (size_t)*cap);
             }
-            a->elems[a->n++] = ctIsRef(*a->type.arrElem) ? v : ctCopy(v);
+            a->elems[a->n++] = ctIsRef(*a->type->arrElem) ? v : ctCopy(v);
             return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
         }
         case OPERATION_SIZED_ARRAY_ALLOC: {
@@ -2208,7 +2303,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             if (bad) return ctFail(st, op->tok, CT_WHY_LENGTH);
             if (n->i > INT_MAX) return ctFail(st, op->tok, "it makes an array longer than the evaluator holds");
             //every element is at least one value: measured before any is made, so a long array is refused, not made
-            if (ctOverMemory(st, op->tok, (size_t)n->i * sizeof(struct ctVal))) return NULL;
+            if (ctOverMemory(st, op->tok, (size_t)n->i * CT_VAL_BYTES)) return NULL;
             struct ctVal* a = ctNew(CT_AGG, op->type);
             a->n = (int)n->i;
             a->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(a->n ? a->n : 1));
@@ -2255,19 +2350,19 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             //on its place - which is refused where an ordinary write (or, for AtomicLoad, read) of it would be
             struct ctVal* node = ctDeref(ctLvalue(st, *(struct operand**)ListGetIdx(&op->args, 0), op->opType != OPERATION_ATOMIC_LOAD));
             if (!node) return NULL;
-            struct ctVal* a = op->args.len > 1 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 1), node->type) : NULL;
+            struct ctVal* a = op->args.len > 1 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 1), *node->type) : NULL;
             if (op->args.len > 1 && !a) return NULL;
-            struct ctVal* b = op->args.len > 2 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 2), node->type) : NULL;
+            struct ctVal* b = op->args.len > 2 ? ctFit(st, *(struct operand**)ListGetIdx(&op->args, 2), *node->type) : NULL;
             if (op->args.len > 2 && !b) return NULL;
-            struct ctVal* old = ctInt(node->type, node->i);
+            struct ctVal* old = ctInt(*node->type, node->i);
             switch (op->opType) {
                 case OPERATION_ATOMIC_LOAD: return old;
-                case OPERATION_ATOMIC_STORE: node->i = ctWrap(node->type, ctDeref(a)->i); return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
+                case OPERATION_ATOMIC_STORE: node->i = ctWrap(*node->type, ctDeref(a)->i); return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
                 case OPERATION_ATOMIC_ADD: //wraps (E6c), computed unsigned
-                    node->i = ctWrap(node->type, (long long)((unsigned long long)node->i + (unsigned long long)ctDeref(a)->i));
+                    node->i = ctWrap(*node->type, (long long)((unsigned long long)node->i + (unsigned long long)ctDeref(a)->i));
                     return old;
-                case OPERATION_ATOMIC_SWAP: node->i = ctWrap(node->type, ctDeref(a)->i); return old;
-                default: if (node->i == ctDeref(a)->i) node->i = ctWrap(node->type, ctDeref(b)->i); return old;
+                case OPERATION_ATOMIC_SWAP: node->i = ctWrap(*node->type, ctDeref(a)->i); return old;
+                default: if (node->i == ctDeref(a)->i) node->i = ctWrap(*node->type, ctDeref(b)->i); return old;
             }
         }
         case OPERATION_SLICE: return ctSlice(st, op);
@@ -2280,7 +2375,7 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
                 bool hit = v && v->kind != CT_NULL && v->i == op->castTag; //T17d: a null reference holds no case
                 if (!isAs) return ctBool(hit);
                 if (!hit) {
-                    if (op->checkRoot) return ctCheckFail(st, op, "INVALID");
+                    if (op->checkRoot) return ctCheckFail(st, op, "WRONG_CASE");
                     if (ctRun) ctRunAbortTok(op->tok, "'as' named what the value is not\n");
                     return ctFail(st, op->tok, "an 'as' that does not hold aborts the program");
                 }
@@ -2350,16 +2445,16 @@ static struct ctVal* ctFit(struct ctState* st, struct operand* op, struct type d
     //C2e: fixed storage (an inline field) takes an array of exactly its length - checked once per copy, and a mismatch
     //aborts, as the generated code checks it
     if (dst.bType == BASETYPE_ARRAY && !dst.arrMalloc && dst.arrLen && v->kind == CT_AGG
-            && v->type.bType == BASETYPE_ARRAY && v->n != dst.arrLen->intLiteralVal) {
+            && v->type->bType == BASETYPE_ARRAY && v->n != dst.arrLen->intLiteralVal) {
         if (ctRun) ctRunAbortTok(op->tok, "array length does not match its fixed storage\n");
         return ctFail(st, op->tok, CT_WHY_FIXED);
     }
     //a number is made afresh at its target's type, which is already the copy - no second one first
     if (ctIsInt(dst) && v->kind == CT_INT) return ctInt(dst, v->i);
-    if (ctIsFloat(dst) && v->kind == CT_FLOAT && v->type.bType == dst.bType) return ctMoveFloat(v, dst); //E33
+    if (ctIsFloat(dst) && v->kind == CT_FLOAT && v->type->bType == dst.bType) return ctMoveFloat(v, dst); //E33
     if (ctIsFloat(dst) && (v->kind == CT_INT || v->kind == CT_FLOAT)) return ctFloat(dst, ctToFloat(v, dst));
     v = ctCopy(v);
-    if (dst.bType != BASETYPE_VOID && v->kind == CT_AGG) v->type = dst;
+    if (dst.bType != BASETYPE_VOID && v->kind == CT_AGG) v->type = CtType(dst);
     return v;
 }
 
@@ -2591,6 +2686,12 @@ static void ctRunTasks(struct ctState* st, struct list* tasks, struct ctJoinFail
             } else {
                 struct catchClause* cc = ListGetIdx(&t->s->catchClauses, hit);
                 struct ctCallFrame* cf = ListGetIdx(&t->clauses, hit);
+                if (cc->ends) { //E35: "spawn f(x)!"
+                    ctTaskRunning = outerTask;
+                    ctTasksPending -= tasks->len - 1 - i;
+                    ctBangEnds(st, t->op, cc->ends);
+                    return;
+                }
                 st->flow = CF_NORMAL;
                 st->errBypass = false;
                 v = cf->func ? ctCallRun(st, cc->taskCall, cf) : ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
@@ -2702,6 +2803,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             }
             return;
         case STATEMENT_ERROR:
+            ctTrace(tok, "raised here", true);
             st->flow = CF_ERROR;
             st->errType = s->op->type;
             st->errWord = s->op->intLiteralVal;
@@ -2720,23 +2822,21 @@ static void ctExec(struct ctState* st, struct statement* s) {
                     match = TypeIsSame(cm->errType, st->errType) && (!cm->hasWord || cm->wordOrdinal == st->errWord);
                 }
                 if (!match) continue;
+                ctErtN = 0; //S18d: taken
                 st->flow = CF_NORMAL;
                 ctExecBlock(st, &cc->block);
                 return;
             }
+            ctTrace(s->op->tok, "try passed it on", false);
             return; //no clause named it: it propagates
         }
-        case STATEMENT_DONE: case STATEMENT_FAIL: case STATEMENT_ABORT: case STATEMENT_UNREACHABLE:
-            if (ctRun) { //B3e/S16: the process ends, as the built program's does outside a test
+        case STATEMENT_UNREACHABLE:
+            if (ctRun) { //B3e/S16d: the process aborts, as the built program's does outside a test
                 fflush(NULL);
-                if (s->sType == STATEMENT_DONE) exit(0);
-                if (s->sType == STATEMENT_FAIL) exit(1);
-                ctRunAbortAt(s, s->sType == STATEMENT_ABORT ? "aborted" : "reached unreachable code", NULL);
+                ctRunAbortAt(s, "reached unreachable code", NULL);
             }
-            //K1: abort and unreachable end the evaluation where reached, as they end the program; done and fail end a
-            //test or the process, which only a running program has
-            ctFail(st, tok, s->sType == STATEMENT_ABORT ? CT_WHY_ABORT : s->sType == STATEMENT_UNREACHABLE ? CT_WHY_UNREACHABLE
-                            : "it ends the test or the process");
+            //K1: unreachable ends the evaluation where reached, as it ends the program
+            ctFail(st, tok, CT_WHY_UNREACHABLE);
             return;
         case STATEMENT_DEFER: return; //S19: registered by the block it is in (ctExecBlock), and run on its way out
         case STATEMENT_JOIN: {
@@ -2759,6 +2859,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->errWord = jf.errWord;
             st->errBypass = false;
             st->errCheckRoot = NULL;
+            ctTrace(s->startTok.owner ? s->startTok : tok, "a task failed, and its join passed it on", true); //S18d: as the run time - a task's trace is its own
             for (int c = 0; c < s->catchClauses.len; c++) {
                 struct catchClause* cc = ListGetIdx(&s->catchClauses, c);
                 bool match = cc->catchAll;
@@ -2768,6 +2869,7 @@ static void ctExec(struct ctState* st, struct statement* s) {
                 }
                 if (!match) continue;
                 st->flow = CF_NORMAL;
+                ctErtN = 0; //S18d: taken
                 int mark = st->locals->len;
                 ctExecBlock(st, &cc->block);
                 st->locals->len = mark;
@@ -2877,9 +2979,9 @@ bool CtIsZero(struct ctVal* v) {
         case CT_INT: case CT_BOOL: return v->i == 0;
         case CT_FLOAT: return v->f == 0 && !signbit(v->f);
         case CT_AGG:
-            if (ctIsRef(v->type)) return false;
-            if (v->type.bType == BASETYPE_CHOICE && v->i != 0) return false;
-            if (v->type.bType == BASETYPE_ARRAY && v->type.arrMalloc) return v->n == 0; //an empty array is { 0, null }
+            if (ctIsRef(*v->type)) return false;
+            if (v->type->bType == BASETYPE_CHOICE && v->i != 0) return false;
+            if (v->type->bType == BASETYPE_ARRAY && v->type->arrMalloc) return v->n == 0; //an empty array is { 0, null }
             for (int i = 0; i < v->n; i++) if (!CtIsZero(v->elems[i])) return false;
             return true;
         default: return false;
@@ -2890,7 +2992,7 @@ bool CtIsPlainData(struct ctVal* v) {
     if (v->kind == CT_REF) return false;
     if (v->kind == CT_NULL) return true; //null is all-zero bits (T2a)
     if (v->kind == CT_AGG) {
-        if (ctIsRef(v->type)) return false;
+        if (ctIsRef(*v->type)) return false;
         for (int i = 0; i < v->n; i++) if (!CtIsPlainData(v->elems[i])) return false;
     }
     return true;
@@ -3171,7 +3273,7 @@ static void ctGetNum(const unsigned char* at, enum baseType b, struct ctVal* int
     if (p->kind == 'f') { unsigned long long u = 0; memcpy(&u, at, (size_t)(p->bits / 8)); into->f = FloatFromBits(u, b); return; } //E33
     long long i = 0;
     memcpy(&i, at, (size_t)(p->bits / 8));
-    into->i = ctWrap(into->type, i);
+    into->i = ctWrap(*into->type, i);
 }
 
 static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* op, struct var* func) {
@@ -3189,20 +3291,20 @@ static struct ctExternCall* ctExternPrepare(struct ctState* st, struct operand* 
         if (!libm) libm = dlopen("libm.so.6", RTLD_NOW | RTLD_GLOBAL);
         if (libm) sym = dlsym(libm, name);
     }
-    if (!sym && !own) { ctFail(st, op->tok, "it calls an external function -i cannot find in this process"); return NULL; }
+    if (!sym && !own) { ctFail(st, op->tok, "it calls an external function interpret cannot find in this process"); return NULL; }
     int n = func->type.vars.len;
     ffi_type** at = MallocOrCrash(sizeof(ffi_type*) * (size_t)(n ? n : 1));
     for (int i = 0; i < n; i++) {
         struct type pt = ((struct var*)ListGetIdx(&func->type.vars, i))->type;
         at[i] = pt.bType == BASETYPE_ARRAY ? &ffi_type_pointer : ctFfiType(pt.bType);
         if (pt.bType == BASETYPE_ARRAY && !PrimInfo(pt.arrElem->bType)) at[i] = NULL; //X3: any number's bytes, F16 too
-        if (!at[i]) { ctFail(st, op->tok, "it calls an external function with a parameter type -i cannot pass"); return NULL; }
+        if (!at[i]) { ctFail(st, op->tok, "it calls an external function with a parameter type interpret cannot pass"); return NULL; }
     }
     ffi_type* rt = func->type.hasRetType ? ctFfiType(func->type.retType->bType) : &ffi_type_void;
-    if (!rt) { ctFail(st, op->tok, "it calls an external function with a result type -i cannot receive"); return NULL; }
+    if (!rt) { ctFail(st, op->tok, "it calls an external function with a result type interpret cannot receive"); return NULL; }
     struct ctExternCall c = { func, sym, own, {0} };
     if (ffi_prep_cif(&c.cif, FFI_DEFAULT_ABI, (unsigned)n, rt, at) != FFI_OK) {
-        ctFail(st, op->tok, "it calls an external function -i cannot call");
+        ctFail(st, op->tok, "it calls an external function interpret cannot call");
         return NULL;
     }
     ListAdd(&ctExternCalls, &c);
@@ -3217,7 +3319,7 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
     struct str fname = func->name;
     bool untimed = StrCmp(fname, StrFromCStr("pthread_cond_wait"));
     if (ctRun && (untimed || StrCmp(fname, StrFromCStr("pthread_cond_timedwait"))) && (untimed || ctTasksPending || ctTaskRunning)) {
-        const char* why = "it waits for another task, and -i runs a join's tasks one after another, never beside each other";
+        const char* why = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other";
         if (ctTaskRunning && ctTaskRunning->op->tok.owner) {
             struct str f = TokenGetFileName(ctTaskRunning->op->tok.owner);
             why = StrFmt("%s - here in the task spawned at %.*s:%d", why, f.len, f.ptr, ctTaskRunning->op->tok.lineNr);
@@ -3296,19 +3398,18 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
 static int ctRunStopped(struct ctState* st) {
     fflush(NULL);
     struct str f = st->whyTok.owner ? TokenGetFileName(st->whyTok.owner) : StrFromCStr("?");
-    fprintf(stderr, "olang -i: %.*s:%d: %s\n", f.len, f.ptr, st->whyTok.lineNr, st->why ? st->why : "it cannot go on");
+    fprintf(stderr, "olang interpret: %.*s:%d: %s\n", f.len, f.ptr, st->whyTok.lineNr, st->why ? st->why : "it cannot go on");
     return 1;
 }
 
 //B5: an error escaping main is named, as the built program names it
 static int ctRunUnhandled(struct ctState* st) {
     fflush(NULL);
-    struct type* generic = SemanticGenericErrorType();
-    if (generic && TypeIsSame(st->errType, *generic)) fputs("unhandled error\n", stderr);
-    else if (st->errWord >= 0 && st->errWord < st->errType.words.len) {
+    if (st->errWord >= 0 && st->errWord < st->errType.words.len) {
         struct token w = *(struct token*)ListGetIdx(&st->errType.words, (int)st->errWord);
         fprintf(stderr, "unhandled error: %.*s.%.*s\n", st->errType.name.len, st->errType.name.ptr, w.str.len, w.str.ptr);
     } else fputs("unhandled error\n", stderr);
+    ctTracePrint();
     return 1;
 }
 

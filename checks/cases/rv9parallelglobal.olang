@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # S4c/O1b (tonight9's review): a parallel assignment's temporary for a reference field of a global is held - and built -
 # where the global's referent lives, the program's scope, as the assignment alone builds it. It was refused (O1b, O17a)
 type Node struct(v I64) {
@@ -25,5 +25,5 @@ fn main() ? {
     x := churn()
     G.next.next, x = Node(9), x + 1
     churn()
-    if k != 5 or G.next.v != 5 or G.next.next.v != 9 or x != 1226 { fail }
+    assert not (k != 5 or G.next.v != 5 or G.next.next.v != 9 or x != 1226)
 }

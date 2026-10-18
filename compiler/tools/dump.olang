@@ -14,12 +14,12 @@
 #
 # - tokens: one line per token - its line and its text, ";" for a statement end - and then one line per lexical error,
 #   "error RULE LINE:COL". bootstrap/oracle/tokdump prints the C tokenizer's stream the same way, and
-#   compiler/tools/tokdiff.sh compares the two.
+#   compiler/tools/tokdiff.olang compares the two.
 # - speed: the fastest of ten scans, in MB/s.
 # - ast: one line per declaration and statement, "KIND LINE:COL-LINE:COL", the span of its tokens - an item the parser
 #   met an error in prints none - then "-- diagnostics" and the first syntax error of each item, "error RULE LINE:COL".
 #   Every branch of an if is parsed and its diagnostics said, as if each were taken. bootstrap/oracle/astdump prints
-#   the C parser's tree the same way, and compiler/tools/astdiff.sh compares the two.
+#   the C parser's tree the same way, and compiler/tools/astdiff.olang compares the two.
 # - parse: the fastest of ten scans and parses, in MB/s.
 # - roundtrip: the tree written back as source (unparse) must hold the file's own tokens - statement ends, trailing
 #   commas and comments aside, a token of "<", ">" and "=" read a character at a time ("List<List<I32>>= ...") - and
@@ -27,14 +27,14 @@
 #   branch the build may decide is skipped; such a branch is written as its text.
 # - modules: the program the file is the root of, loaded (load): "module IDENTITY" for every module, then one
 #   "  ALIAS IDENTITY" per import it loaded, sorted. bootstrap/oracle/modgraph prints stage 0's the same way, and
-#   compiler/tools/modgraph.sh compares the two. -D defines build constants, -t makes TestBuild true.
+#   compiler/tools/modgraph.olang compares the two. -D defines build constants, -t makes TestBuild true.
 # - names: the program loaded and its names resolved (names): the diagnostics both said, rendered as the compiler
-#   renders them. compiler/tools/namesdiff.sh compares their load and names rules with stage 0's goldens.
+#   renders them. compiler/tools/namesdiff.olang compares their load and names rules with stage 0's goldens.
 # - layout: GOLDEN is bootstrap/oracle/layoutdump's output for many programs (compiler/goldens/layout.txt), a group per
 #   program, "== ROOT [FLAGS]" and then one line per type the C checker held. For each group the program is loaded and
 #   its names resolved, and each line's type read back from its canonical text (generic) and laid out (types), then
 #   printed as the oracle prints it: "CANON\tSIZE ALIGN\tLLVM\tBODY\tPARTS". A type the text names no type of is
-#   "TEXT\tunparsed", one with no layout yet "TEXT\tdeferred". compiler/tools/layoutdiff.sh compares the two.
+#   "TEXT\tunparsed", one with no layout yet "TEXT\tdeferred". compiler/tools/layoutdiff.olang compares the two.
 
 import "std/os"
 import "std/io"
@@ -60,17 +60,17 @@ fn main() ? {
     mode := args[1] if args.Len() >= 3 else ""
     if mode != "tokens" and mode != "speed" and mode != "ast" and mode != "parse" and mode != "roundtrip" and
        mode != "modules" and mode != "names" and mode != "layout" {
-        eprintln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names|layout FILE...")
+        try io.PrintErrln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names|layout FILE...")
         os.Exit(2)
     }
-    os.RunOnStack(1 << 30, fn() { run(mode, args) })
+    os.RunOnStack(1 << 30, fn() { try run(mode, args) catch io.IoError { } })
 }
 
-fn run(mode String&, args Array<String&>&) {
+fn run(mode String&, args Array<String&>&) ? io.IoError {
     out := io.Writer(1)
     std := try os.Env("OLANG_STD") catch default "std"
     if mode == "layout" {
-        layout(out, std, args[2])
+        try layout(out, std, args[2])
         try out.Flush() catch io.IoError { os.Exit(1) }
         return
     }
@@ -135,9 +135,9 @@ fn program(out mut io.Writer&, mode String&, std String&, args Array<String&>&) 
 # ---- layouts ----
 
 # every group of a golden file of layouts, its program loaded and each type read back and laid out
-fn layout(out mut io.Writer&, std String&, golden String&) {
+fn layout(out mut io.Writer&, std String&, golden String&) ? io.IoError {
     text := try os.ReadFile(golden) catch os.OsError {
-        eprintln("dump: cannot read " $golden)
+        try io.PrintErrln("dump: cannot read " $golden)
         os.Exit(2)
         unreachable
     }
@@ -512,7 +512,7 @@ fn (w mut walker&) stmt(s ast.Stmt&) {
         case ast.Stmt.ExprS(sp, x) {
             kind String& = "EXPR"
             match x {
-                case ast.Expr.Try(_, _, cl) {
+                case ast.Expr.Try(_, _, cl, _) {
                     if cl != null and cl.Len() > 0 { kind = "TRY" }
                 }
                 nomatch { }
@@ -531,7 +531,7 @@ fn (w mut walker&) stmt(s ast.Stmt&) {
             w.expr(t)
             w.expr(v)
         }
-        case ast.Stmt.TryStore(sp, inner, cl) {
+        case ast.Stmt.TryStore(sp, inner, cl, _) {
             w.line("TRYSTORE", sp)
             match inner {
                 case ast.Stmt.Assign(_, _, _, _) { w.stmt(inner) }
@@ -594,9 +594,6 @@ fn (w mut walker&) stmt(s ast.Stmt&) {
             kind := match k {
                 case token.Tok.Break => "BREAK"
                 case token.Tok.Continue => "CONTINUE"
-                case token.Tok.Done => "DONE"
-                case token.Tok.Fail => "FAIL"
-                case token.Tok.Abort => "ABORT"
                 case _ => "UNREACHABLE"
             }
             w.line(kind, sp)
@@ -661,7 +658,7 @@ fn (w mut walker&) exprs(xs Array<ast.Expr&>&) {
 fn (w mut walker&) expr(x ast.Expr&) {
     if x == null { return }
     match x {
-        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.IsType(_, a, _, _),
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.IsType(_, a, _, _)
              ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _), ast.Expr.Member(_, a, _) {
             w.expr(a)
         }
@@ -692,7 +689,7 @@ fn (w mut walker&) expr(x ast.Expr&) {
             w.expr(c.Source)
             w.expr(c.Filter)
         }
-        case ast.Expr.Try(_, a, cl) {
+        case ast.Expr.Try(_, a, cl, _) {
             w.expr(a)
             w.clauses(cl)
         }
@@ -712,9 +709,10 @@ fn (w mut walker&) expr(x ast.Expr&) {
 fn leavesWhole(rule String&) Bool { return rule == "T17, T19, C2" or rule == "D12b" or rule == "O3" }
 
 # the item a diagnostic belongs to: an unclosed block's is said at the declaration after it, and is the one before
-fn itemOfSaid(starts List<I32>&, s diag.Said&) I64 {
+fn itemOfSaid(starts List<I32>&, s diag.Said&, p parse.Parser&) I64 {
     if s.Text.StartsWith("the block opened on line") { return itemOf(starts, s.Start - 1) }
-    return itemOf(starts, s.Start)
+    i := try p.SaidIn.Get(I32(s.Start)) catch default -1
+    return i if i >= 0 else itemOf(starts, s.Start)
 }
 
 # a file's tree and its first syntax error an item, as "dump ast" prints them
@@ -739,7 +737,7 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
     w.failed.Push(false)
     for s in said {
         if s.File != file or s.Start < 0 or leavesWhole(s.Rule) { continue }
-        i := itemOfSaid(w.starts, s)
+        i := itemOfSaid(w.starts, s, p)
         # L21 is said at a statement met at the limit, and stage 0 keeps the item when that statement nests nothing
         if s.Rule == "L21" and i < p.ItemKept.Len() and p.ItemKept[i] { continue }
         w.failed[i] = true
@@ -759,7 +757,7 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
         }
         # O3 is stage 0's checker's to report; the self-hosted parser reports it where it reads it
         if s.Rule == "O3" { continue }
-        i := itemOfSaid(w.starts, s)
+        i := itemOfSaid(w.starts, s, p)
         if not leavesWhole(s.Rule) {
             if shown[i] { continue }
             shown[i] = true
@@ -820,8 +818,8 @@ fn roundTrip(out mut io.Writer&, src source.Source&, std String&, prelude String
     n := a.Len() if a.Len() < b.Len() else b.Len()
     for i in range n {
         if a[i].Text != b[i].Text {
-            out.Write("tokens differ: " $lineCol(src, a[i].Start) " " $a[i].Text " in the file, "
-                      $lineCol(written, b[i].Start) " " $b[i].Text " written\n")
+            out.Write(("tokens differ: " $lineCol(src, a[i].Start) " " $a[i].Text " in the file, "
+                      $lineCol(written, b[i].Start) " " $b[i].Text " written\n"))
             return
         }
     }
@@ -854,19 +852,14 @@ type tokText struct(Text String&, Start I64) {
     Start
 }
 
-# a file's tokens as their texts, statement ends and a comma before a closing bracket left out, angles a character each
+# a file's tokens as their texts, statement ends and commas left out - a list's items are separated by either (QY,
+# L18a), and the text written puts each list on one line - angles a character each
 fn tokenTexts(text String&, ts scan.Tokens&) List<tokText> {
     l := List<tokText>()
-    for i, t in ts.Toks {
+    for t in ts.Toks {
         k := t.Kind
         if k == token.Tok.Eof { break }
-        if k == token.Tok.StmtEnd { continue }
-        if k == token.Tok.Comma {
-            j := i + 1
-            for ts.Toks[j].Kind == token.Tok.StmtEnd { j++ }
-            nk := ts.Toks[j].Kind
-            if nk == token.Tok.RParen or nk == token.Tok.RBrack { continue }
-        }
+        if k == token.Tok.StmtEnd or k == token.Tok.Comma { continue }
         if angles(text[t.Start:t.End]) {
             for j in range t.Start, t.End { l.Push(tokText(text[j:j + 1], I64(j))) }
             continue

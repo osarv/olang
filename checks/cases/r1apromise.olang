@@ -1,0 +1,16 @@
+# check: fail can escape here, and this function does not declare it
+# R1: a written error set is a promise the body is held to - only "?" alone takes on what the body can fail with
+error A {
+    X
+}
+error B {
+    Y
+}
+fn g(n I64) ? B {
+    if n < 0 { error B.Y }
+}
+fn f(n I64) ? A {
+    if n > 9 { error A.X }
+    try g(n)
+}
+fn main() { }

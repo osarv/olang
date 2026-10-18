@@ -1,0 +1,230 @@
+# A small HTTP server for std/http's tests: binds 127.0.0.1 on a free port, writes the port to the file named by its
+# argument, and answers the requests the tests make. It stops on GET /quit, or after 60 seconds whatever happens.
+#
+#     build/out build checks/fixtures/http/server.olang && build/checks_fixtures_http_server build/http_port
+#
+# Written over the C library's socket calls through extern fn (std has no socket module): a sockaddr_in is sixteen bytes
+# that only the kernel reads, so it is sixteen bytes here (X3a - the element type is what decides the alignment, and
+# the kernel needs none). Each connection is served by a task of its own, as Python's ThreadingHTTPServer did, so a slow
+# request does not hold the others up; the response closes the connection.
+#
+#   GET /hello         200 "hello", Content-Type text/plain, X-Test twice (a and b)
+#   any /echo          200, the request's body back, X-Method, X-Seen (the request's X-Ask, else "-"), X-Type (its
+#                      Content-Type, else "-")
+#   any /status/N      status N, body "status N"
+#   GET /redirect      302 to /hello
+#   GET /json          200 {"a": [1, 2.5, "x"], "ok": true}, Content-Type application/json
+#   GET /slow          200 "late" after three seconds
+#   GET /quit          200 "bye", then the server ends
+#   anything else      404 "no PATH"
+# GET, POST, PUT, DELETE, HEAD and PATCH are answered (a HEAD without its body); any other method is 501.
+
+import "std/os"
+import "std/io"
+
+extern fn socket(domain I32, kind I32, protocol I32) I32
+extern fn bind(fd I32, addr Array<U8>, len U32) I32
+extern fn listen(fd I32, backlog I32) I32
+extern fn accept(fd I32, addr Array<U8>, len Array<U32>) I32
+extern fn getsockname(fd I32, addr Array<U8>, len Array<U32>) I32
+extern fn alarm(seconds U32) U32
+extern fn sleep(seconds U32) U32
+
+# the standard reason phrase of a status code, "" for one without
+fn reason(code I64) String& {
+    return match code {
+        case 200 => "OK"
+        case 201 => "Created"
+        case 202 => "Accepted"
+        case 204 => "No Content"
+        case 301 => "Moved Permanently"
+        case 302 => "Found"
+        case 303 => "See Other"
+        case 304 => "Not Modified"
+        case 307 => "Temporary Redirect"
+        case 308 => "Permanent Redirect"
+        case 400 => "Bad Request"
+        case 401 => "Unauthorized"
+        case 403 => "Forbidden"
+        case 404 => "Not Found"
+        case 405 => "Method Not Allowed"
+        case 409 => "Conflict"
+        case 410 => "Gone"
+        case 418 => "I'm a Teapot"
+        case 429 => "Too Many Requests"
+        case 500 => "Internal Server Error"
+        case 501 => "Not Implemented"
+        case 502 => "Bad Gateway"
+        case 503 => "Service Unavailable"
+        case 504 => "Gateway Timeout"
+        nomatch => ""
+    }
+}
+
+# one request as it arrived: its method, path, headers (names and values, in order) and body
+type Request struct(Method String&, Path String&, Names List<String&>, Values List<String&>, Body String&) {
+    Method
+    Path
+    Names
+    Values
+    Body
+}
+
+# the value of a request header, whatever the case of its name, else the fallback
+fn (r Request&) Header(name String&, fallback String&) String {
+    lower := name.ToLower()
+    for k, n in r.Names {
+        if n.ToLower() == lower { return $r.Values[k] }
+    }
+    return $fallback
+}
+
+# how long the request's body is, by its Content-Length (0 when there is none)
+fn bodyLength(head String&) I64 {
+    for line in head.Split("\r\n") {
+        at := try line.FindByte(':') catch { continue }
+        if line[:at].ToLower() == "content-length" {
+            return try line[at + 1:].Trim().ParseInt() catch default 0
+        }
+    }
+    return 0
+}
+
+# what arrived on the connection: until the head is complete and as much body as Content-Length says, or the other side
+# closes
+fn receive(fd I32) String {
+    buf mut Array<U8>& = Array<U8>(4096)
+    got := StringBuilder()
+    for {
+        chunk := try io.Read(fd, buf) catch { break }
+        if chunk.Len() == 0 { break }
+        got.Push(String(chunk))
+        text := got.ToString()
+        end := try text.Find("\r\n\r\n") catch { continue }
+        if text.Len() >= end + 4 + bodyLength(text[:end]) { return text }
+    }
+    return got.ToString()
+}
+
+# what parse fails with: the text is no request
+error badRequest {
+    LINE
+}
+
+# the request in text, or badRequest.LINE when it is not one
+fn parse(text String&) Request ? {
+    end := try text.Find("\r\n\r\n")
+    lines := text[:end].Split("\r\n")
+    parts := lines[0].Split(" ")
+    if parts.Len() < 2 { error badRequest.LINE }
+    names List<String&>
+    values List<String&>
+    for k in range 1, lines.Len() {
+        at := try lines[k].FindByte(':') catch { continue }
+        names.Push($lines[k][:at])
+        values.Push($lines[k][at + 1:].Trim())
+    }
+    return Request($parts[0], $parts[1], names, values, $text[end + 4:])
+}
+
+# one response, as bytes to send
+fn response(code I64, headers List<String&>, body String&, withBody Bool) String {
+    out := StringBuilder()
+    out.Push("HTTP/1.1 " $code " " $reason(code) "\r\n")
+    for h in headers { out.Push($h "\r\n") }
+    out.Push("Content-Length: " $body.Len() "\r\nConnection: close\r\n\r\n")
+    if withBody { out.Push(body) }
+    return out.ToString()
+}
+
+# answers one connection
+fn serve(fd I32) {
+    text := receive(fd)
+    req := try parse(text) catch {
+        send(fd, response(400, List<String&>(), "bad request", true))
+        return
+    }
+    headers List<String&>
+    code I64 = 200
+    body := ""
+    path := req.Path
+    method := req.Method
+    if not (method in String&["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]) {
+        send(fd, response(501, List<String&>(), "unsupported method " $method, true))
+        return
+    }
+    if path == "/hello" {
+        headers.Push("Content-Type: text/plain")
+        headers.Push("X-Test: a")
+        headers.Push("X-Test: b")
+        body = "hello"
+    } else if path == "/echo" {
+        headers.Push("X-Method: " $method)
+        headers.Push("X-Seen: " $req.Header("X-Ask", "-"))
+        headers.Push("X-Type: " $req.Header("Content-Type", "-"))
+        body = req.Body
+    } else if path.StartsWith("/status/") {
+        code = try path[8:].ParseInt() catch default 400
+        body = "status " $path[8:]
+    } else if path == "/redirect" {
+        code = 302
+        headers.Push("Location: /hello")
+    } else if path == "/json" {
+        headers.Push("Content-Type: application/json")
+        body = "{\"a\": [1, 2.5, \"x\"], \"ok\": true}"
+    } else if path == "/slow" {
+        sleep(3)
+        body = "late"
+    } else if path == "/quit" {
+        body = "bye"
+        send(fd, response(200, headers, body, method != "HEAD"))
+        os.Exit(0)
+    } else {
+        code = 404
+        body = "no " $path
+    }
+    send(fd, response(code, headers, body, method != "HEAD"))
+}
+
+# writes all of data, giving up quietly when the other side has gone
+fn send(fd I32, data String&) {
+    try io.Write(fd, data) catch io.IoError { }
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() != 2 {
+        try io.PrintErrln("usage: server PORTFILE")
+        os.Exit(2)
+    }
+    alarm(60)
+    fd := socket(2, 1, 0)
+    addr mut Array<U8>& = Array<U8>(16)
+    addr[0] = 2                        # AF_INET; the port stays 0, so the kernel picks one
+    addr[4] = 127
+    addr[7] = 1
+    size mut Array<U32>& = Array<U32>(1)
+    size[0] = 16
+    if bind(fd, addr, 16) != 0 or listen(fd, 16) != 0 or getsockname(fd, addr, size) != 0 {
+        try io.PrintErrln("server: cannot listen")
+        os.Exit(1)
+    }
+    port := I64(addr[2]) * 256 + I64(addr[3])
+    try os.WriteFile($args[1] ".tmp", $port) catch {
+        try io.PrintErrln("server: cannot write the port")
+        os.Exit(1)
+    }
+    try os.Rename($args[1] ".tmp", args[1]) catch {
+        try io.PrintErrln("server: cannot write the port")
+        os.Exit(1)
+    }
+    peer mut Array<U8>& = Array<U8>(16)
+    join {
+        for {
+            peerSize mut Array<U32>& = Array<U32>(1)
+            peerSize[0] = 16
+            conn := accept(fd, peer, peerSize)
+            if conn >= 0 { spawn serve(conn) }
+        }
+    }
+}

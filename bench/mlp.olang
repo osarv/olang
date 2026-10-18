@@ -37,14 +37,14 @@ type Net struct(seed U64) {
 }
 
 # one step on (x, labels): forward, loss, backward, update. Returns the mean loss before the update
-fn (n mut Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, threads I64) F32 {
-    linalg.Gemm(n.H, x, false, n.W1, true, 1, 0, threads)          # H = x W1^T
-    n.H.AddRow(n.B1)
-    n.A.Map(n.H, fn(v) { return v if v > 0.0 else 0.0 })             # A = relu(H)
-    linalg.Gemm(n.O, n.A, false, n.W2, true, 1, 0, threads)        # O = A W2^T
-    n.O.AddRow(n.B2)
+fn (n mut Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, threads I64) F32 ? linalg.ShapeError {
+    try linalg.Gemm(n.H, x, false, n.W1, true, 1, 0, threads)          # H = x W1^T
+    try n.H.AddRow(n.B1)
+    try n.A.Map(n.H, fn(v) { return v if v > 0.0 else 0.0 })             # A = relu(H)
+    try linalg.Gemm(n.O, n.A, false, n.W2, true, 1, 0, threads)        # O = A W2^T
+    try n.O.AddRow(n.B2)
     # softmax, its cross-entropy, and its gradient (P - onehot) / batch, row by row
-    n.O.RowMax(n.RowMax)
+    try n.O.RowMax(n.RowMax)
     loss F32 = 0.0
     for r in range batch {
         o := n.O.Row(r)
@@ -61,22 +61,26 @@ fn (n mut Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, thread
         p[k] = p[k] - 1.0
     }
     n.P.Scale(1.0 / F32(batch))
-    linalg.Gemm(n.DW2, n.P, true, n.A, false, 1, 0, threads)       # dW2 = dO^T A
-    n.P.ColumnSums(n.DB2)
-    linalg.Gemm(n.DA, n.P, false, n.W2, false, 1, 0, threads)      # dA = dO W2
-    n.DA.Map2(n.DA, n.H, fn(g, v) { return g if v > 0.0 else 0.0 })  # dH = dA relu'(H)
-    linalg.Gemm(n.DW1, n.DA, true, x, false, 1, 0, threads)        # dW1 = dH^T x
-    n.DA.ColumnSums(n.DB1)
-    n.W1.AddScaled(n.DW1, -rate)
-    n.B1.AddScaled(n.DB1, -rate)
-    n.W2.AddScaled(n.DW2, -rate)
-    n.B2.AddScaled(n.DB2, -rate)
+    try linalg.Gemm(n.DW2, n.P, true, n.A, false, 1, 0, threads)       # dW2 = dO^T A
+    try n.P.ColumnSums(n.DB2)
+    try linalg.Gemm(n.DA, n.P, false, n.W2, false, 1, 0, threads)      # dA = dO W2
+    try n.DA.Map2(n.DA, n.H, fn(g, v) { return g if v > 0.0 else 0.0 })  # dH = dA relu'(H)
+    try linalg.Gemm(n.DW1, n.DA, true, x, false, 1, 0, threads)        # dW1 = dH^T x
+    try n.DA.ColumnSums(n.DB1)
+    try n.W1.AddScaled(n.DW1, -rate)
+    try n.B1.AddScaled(n.DB1, -rate)
+    try n.W2.AddScaled(n.DW2, -rate)
+    try n.B2.AddScaled(n.DB2, -rate)
     return loss / F32(batch)
+}
+
+error Usage {
+    ARGS
 }
 
 fn main() ? {
     args := os.Args()
-    if args.Len() < 3 { error }
+    if args.Len() < 3 { error Usage.ARGS }
     steps := try args[1].ParseInt()
     threads := try args[2].ParseInt()
     net := Net(7)
@@ -90,10 +94,10 @@ fn main() ? {
         row := x.Row(r)
         for c in range 78 { row[I64(labels[r]) * 78 + c] += 1.0 }
     }
-    first := net.Step(x, labels, 0.05, threads)
+    first := try net.Step(x, labels, 0.05, threads)
     last F32 = first
     t0 := time.Now()
-    for s in range steps { last = net.Step(x, labels, 0.05, threads) }
+    for s in range steps { last = try net.Step(x, labels, 0.05, threads) }
     per F64 = F64(time.Since(t0)) / F64(steps) / 1000.0
     perText := per.Fixed(1)
     try io.Print("loss " $first.Fixed(4) " -> " $last.Fixed(4) ", " $perText "us a step\n")

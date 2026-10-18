@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (decision 48, replacing decision 40's refusal): tasks calling closures held in structs they are given - each closure
 # builds into the scope it captured from the task's thread, into that thread's own part of it
 type N struct(v I64) {
@@ -24,5 +24,5 @@ fn main() ? {
     for x in a { if x.v != i or x.w != 3 * i { bad++ } i++ }
     i = 0
     for x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } i++ }
-    if bad != 0 or a.Len() + b.Len() != 400000 { fail }
+    assert not (bad != 0 or a.Len() + b.Len() != 400000)
 }

@@ -1,6 +1,7 @@
 # check: run
 # vec4 (over-rejection 1): a global value copied from a global's own text holds no reference, so it keeps no loan,
 # as in a local
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -9,7 +10,7 @@ fn churn() I64 {
     }
     return t
 }
-# F4 via a -D default (B10c): an immutable top-level String global initialized with a borrow of a global's own object
+# F4 via a -define default (B10c): an immutable top-level String global initialized with a borrow of a global's own object
 type Doc struct() {
     title own mut String& = $1 "-title-built-at-run-time"
 }
@@ -18,5 +19,5 @@ T String = Docs.title
 fn main() ? {
     Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(T)
+    try io.Println(T)
 }

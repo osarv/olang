@@ -1,4 +1,6 @@
 # E11b/E11c: Map.Str through a helper: text, char, struct, enum and fixed-array keys and values, nested Maps
+import "std/pair"
+import "std/io"
 type K struct(a I64, b String&) {
     a
     b
@@ -31,12 +33,12 @@ fn mk() String {
     m5.Put(2, inner)
     m6 := Map<Bool, F64>()
     m6.Put(true, 0.1)
-    m7 := Map<I64, Pair<String&, Char>>()
-    m7.Put(7, Pair("p", 'c'))
+    m7 := Map<I64, pair.Pair<String&, Char>>()
+    m7.Put(7, pair.Pair("p", 'c'))
     return $m1 "\n" $m2 "\n" $m3 "\n" $m4 "\n" $m5 "\n" $m6 "\n" $m7
 }
 Baked String& = mk()
 fn main() ? {
-    println(mk())
+    try io.Println(mk())
     assert Baked == mk()
 }

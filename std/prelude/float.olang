@@ -7,8 +7,8 @@
 # -i exactly as it runs in a built program.
 
 # x with n digits after the point, rounded to the nearest such number - a tie to the even one - as C's "%.*f" rounds:
-# "1.25".Fixed(1) is "1.2", "2.5".Fixed(0) is "2", and -0.04.Fixed(1) is "-0.0" (the sign is x's). n below 0 counts as
-# 0. A NaN is "nan" and an infinity "inf" or "-inf", as "$x" writes them
+# "1.25".Fixed(1) is "1.2", "2.5".Fixed(0) is "2", and F64(-0.04).Fixed(1) is "-0.0" (the sign is x's). n below 0
+# counts as 0. A NaN is "nan" and an infinity "inf" or "-inf", as "$x" writes them
 fn (x F64) Fixed(n I64) String {
     bits := x.Bits()
     neg Bool = bits >> 63 == 1

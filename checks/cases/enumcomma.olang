@@ -1,4 +1,8 @@
-# check: fail entries are separated by line ends, not commas
-# T17/T19/C2: a comma between entries is a compile-time error
+# check: run
+# T17/QY: cases on one line are separated by ",", on different lines by the line break
 type D enum { N, S }
-fn main() ? { }
+type E enum {
+    W
+    O
+}
+fn main() ? { assert D.S != D.N and E.O != E.W }

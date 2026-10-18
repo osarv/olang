@@ -5,7 +5,7 @@ type Pack<T> struct(v T) {
     v
     Copy T = v
 }
-fn ReadA(x a.Wrap<<T>>&) T { return x.Twin }
+fn ReadA<T>(x a.Wrap<T>&) T { return x.Twin }
 test "a generic type first reached from another module's signature" {
     assert ReadA(a.Wrap(3)) == 3
     assert a.ReadB(Pack(4)) == 4

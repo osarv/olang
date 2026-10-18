@@ -1,0 +1,301 @@
+# diagedit - what the migrations driven by the compiler's own diagnostics (perm_mut, int_literal_i64) share: reading a
+# diagnostic row, compiling many files side by side, keeping a trailing comment where it was after an edit, and moving the
+# LINE:COL a checks/cases header names along with the edit on its line.
+#
+# Test it with: build/out test tools/diagedit.olang
+
+import "std/os"
+import "std/filepath"
+import "srcmask"
+
+# one edit a diagnostic asks for: its file (a real path), the line and column it points at, what kind of edit (the tool
+# says), the one word the edit needs (a name or a type) and the row of the error it answers
+type Request struct(Path String&, Line I64, Col I64, Kind String&, Arg String&, Why String&) {
+    Path
+    Line
+    Col
+    Kind
+    Arg
+    Why
+}
+
+# the number of files being compiled, shared by the workers of CompileAll (each takes the next index atomically)
+Taken mut I64 = 0
+
+# what ParseRow fails with: the row is no compiler diagnostic
+error NotARow {
+    ROW
+}
+
+# a compiler row "PATH:LINE:COL: error[RULE]: MESSAGE", "PATH:LINE:COL: error: MESSAGE" or "PATH:LINE:COL: note: MESSAGE"
+# as its parts: the path, line, column, whether it is an error (else a note), the rule ("" when it names none) and the
+# message. Any other row fails with NotARow.ROW. The path is the shortest start of the row that leaves the rest
+# matching, as the Python scripts' non-greedy (.*?) read it
+fn ParseRow(row String&) (String, I64, I64, Bool, String, String) ? {
+    n := row.Len()
+    for k in range n {
+        if row[k] != ':' { continue }
+        a := k + 1
+        b := a
+        for b < n and row[b].IsDigit() { b++ }
+        if b == a or b >= n or row[b] != ':' { continue }
+        c := b + 1
+        d := c
+        for d < n and row[d].IsDigit() { d++ }
+        if d == c or not row[d:].StartsWith(": ") { continue }
+        w := d + 2
+        isError := false
+        rule := ""
+        after := w
+        if row[w:].StartsWith("error") {
+            isError = true
+            after = w + 5
+            if after < n and row[after] == '[' {
+                close := after + 1
+                for close < n and row[close] != ']' { close++ }
+                if close < n {
+                    rule = $row[after + 1:close]
+                    after = close + 1
+                }
+            }
+        } else if row[w:].StartsWith("note") {
+            after = w + 4
+        } else {
+            continue
+        }
+        if not row[after:].StartsWith(": ") { continue }
+        return $row[:k], (try row[a:b].ParseInt()), (try row[c:d].ParseInt()), isError, rule, $row[after + 2:]
+    }
+    error NotARow.ROW
+}
+
+# what a checks/cases program must fail with, from its first twelve lines "# check: fail TEXT" and "# also: TEXT" - an edit
+# reported by a diagnostic carrying one of the texts is not applied
+fn ExpectedTexts(src String&, out mut List<String&>&) {
+    lines := src.Split("\n")
+    for k in range (12 if lines.Len() > 12 else lines.Len()) {
+        line := lines[k]
+        if not line.StartsWith("#") { continue }
+        i := 1
+        for i < line.Len() and srcmask.IsPySpace(line[i]) { i++ }
+        if line[i:].StartsWith("check:") {
+            i += 6
+            for i < line.Len() and srcmask.IsPySpace(line[i]) { i++ }
+            if not line[i:].StartsWith("fail") { continue }
+            i += 4
+        } else if line[i:].StartsWith("also:") {
+            i += 5
+        } else {
+            continue
+        }
+        text := srcmask.Strip(line[i:])
+        if text.Len() > 0 { out.Push($text) }
+    }
+}
+
+# whether any of the texts occurs in what
+fn ContainsAny(what String&, texts List<String&>&) Bool {
+    for t in texts {
+        if what.Contains(t) { return true }
+    }
+    return false
+}
+
+# text[a:b], as Python slices: the ends past the text are clamped
+fn Sub(text String&, a I64, b I64) String&text {
+    lo := a if a < text.Len() else text.Len()
+    hi := b if b < text.Len() else text.Len()
+    if hi < lo { hi = lo }
+    return text[lo:hi]
+}
+
+# keeps a trailing comment where it was: the spaces before it after column at take up what the edit changed
+fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
+    text := lines[k]
+    mask := srcmask.Mask(text, true)
+    hashAt I64 = -1
+    for i in range at, text.Len() {
+        if hashAt < 0 and text[i] == '#' and mask[i] != 'c' { hashAt = i }
+    }
+    if hashAt <= at { return }
+    gap := hashAt
+    for gap > at and text[gap - 1] == ' ' { gap-- }
+    spaces := hashAt - gap
+    if spaces < 2 or delta == 0 { return }
+    want := spaces - delta
+    if want < 1 { want = 1 }
+    pad := StringBuilder()
+    for count in range want { pad.PushChar(' ') }
+    lines[k] = $text[:gap] $pad.ToString() $text[hashAt:]
+}
+
+# a checks/cases header (one of the first twelve lines starting "# check: fail" or "# also:") naming LINE:COL on a line an
+# edit changed follows the edit's shift of that column: shifts are (line, column index, change in length), in the order the
+# edits were made
+fn ShiftExpected(lines mut Array<String&>&, shLine List<I64>&, shAt List<I64>&, shDelta List<I64>&) {
+    for k in range (12 if lines.Len() > 12 else lines.Len()) {
+        line := lines[k]
+        if not line.StartsWith("#") { continue }
+        i := 1
+        for i < line.Len() and srcmask.IsPySpace(line[i]) { i++ }
+        if not (line[i:].StartsWith("also:") or (line[i:].StartsWith("check:") and checkFail(line[i + 6:]))) { continue }
+        out := StringBuilder()
+        p I64 = 0
+        for p < line.Len() {
+            # \b(\d+):(\d+):
+            if line[p].IsDigit() and (p == 0 or not srcmask.IsWord(line[p - 1])) {
+                a := p
+                for a < line.Len() and line[a].IsDigit() { a++ }
+                if a < line.Len() and line[a] == ':' {
+                    b := a + 1
+                    for b < line.Len() and line[b].IsDigit() { b++ }
+                    if b > a + 1 and b < line.Len() and line[b] == ':' {
+                        ln := try line[p:a].ParseInt() catch default 0
+                        col := try line[a + 1:b].ParseInt() catch default 0
+                        for s in range shLine.Len() {
+                            if shLine[s] == ln and col - 1 > shAt[s] { col += shDelta[s] }
+                        }
+                        out.Push($ln ":" $col ":")
+                        p = b + 1
+                        continue
+                    }
+                }
+            }
+            out.PushChar(line[p])
+            p++
+        }
+        lines[k] = out.ToString()
+    }
+}
+
+# whether the text after "check:" is whitespace and then "fail"
+fn checkFail(rest String&) Bool {
+    return srcmask.StripStart(rest).StartsWith("fail")
+}
+
+# the real path of a path - symbolic links resolved - or its absolute path when it names nothing
+fn RealPathOf(path String&) String {
+    return $(try os.RealPath(path) catch default srcmask.AbsPath(path))
+}
+
+# whether path is one of the allowed paths or below one
+fn Allowed(path String&, allowed List<String&>&) Bool {
+    for a in allowed {
+        if path == a or path.StartsWith($a "/") { return true }
+    }
+    return false
+}
+
+# the real paths of the .olang files under the paths (a directory is searched, not entering build or .git; a path ending
+# .olang is taken as it is), sorted
+fn OlangFiles(paths List<String&>&, out mut List<String&>&) {
+    found List<String&>
+    for p in paths {
+        if os.IsDir(p) {
+            srcmask.Walk(p, found)
+        } else if p.EndsWith(".olang") {
+            found.Push($p)
+        }
+    }
+    real List<String&>
+    for f in found { real.Push(RealPathOf(f)) }
+    real.Sort(fn(a, b) { return a < b })
+    for f in real { out.Push($f) }
+}
+
+# whether some line of src starts, after whitespace, with test and a quote: regex ^\s*test\s+"
+fn hasTestLine(src String&) Bool {
+    n := src.Len()
+    at I64 = 0
+    for at < n {
+        j := at
+        for j < n and src[j] != '\n' and srcmask.IsPySpace(src[j]) { j++ }
+        if src[j:].StartsWith("test") {
+            k := j + 4
+            ws := k
+            for k < n and srcmask.IsPySpace(src[k]) { k++ }
+            if k > ws and k < n and src[k] == '"' { return true }
+        }
+        at = at + (try src[at:].FindByte('\n') catch default (n - at)) + 1
+    }
+    return false
+}
+
+# compiles one file in dir, "" when it cannot be read or the compiler ran out its time. The mode is test for a file with
+# tests (one that mentions TestBuild, and with testLines also one with a test "..." block), else -c
+fn compileOne(olang String&, file String&, dir String&, testLines Bool) String {
+    src := try srcmask.ReadText(file) catch { return "" }
+    mode := "compile"
+    if src.Contains("TestBuild") or (testLines and hasTestLine(src)) { mode = "test" }
+    out := try srcmask.Capture(String&[olang, mode, file], dir, 900000) catch os.OsError {
+        srcmask.SayErr("could not run " $olang)
+        os.Exit(1)
+        unreachable
+    } catch default ""
+    return $out
+}
+
+# one worker: takes the next file to compile until there are none
+fn worker(olang String&, files Array<String&>&, dir String&, testLines Bool, outputs mut Array<String&>&) {
+    for {
+        k := Taken.AtomicAdd(1)
+        if k >= files.Len() { break }
+        outputs[k] = compileOne(olang, files[k], dir, testLines)
+    }
+}
+
+# what compiling each of the files prints, in the order of the files, "jobs" at a time, each worker in a directory of its own
+fn CompileAll(olang String&, files Array<String&>&, workDirs Array<String&>&, testLines Bool) Array<String&>& {
+    outputs mut Array<String&>&return = Array<String&>(files.Len())
+    for i in range files.Len() { outputs[i] = "" }
+    Taken = 0
+    join {
+        for w in range workDirs.Len() { spawn worker(olang, files, workDirs[w], testLines, outputs) }
+    }
+    return outputs
+}
+
+test "ParseRow reads errors and notes" {
+    path, line, col, isError, rule, msg := try ParseRow("a/b.olang:12:34: error[D9]: a: b") catch { unreachable }
+    assert path == "a/b.olang" and line == 12 and col == 34 and isError and rule == "D9" and msg == "a: b"
+    p2, l2, c2, e2, r2, m2 := try ParseRow("x.olang:1:2: note: 'x' is declared") catch { unreachable }
+    assert p2 == "x.olang" and l2 == 1 and c2 == 2 and not e2 and r2 == "" and m2 == "'x' is declared"
+    p3, l3, c3, e3, r3, m3 := try ParseRow("x:1:2: error: plain") catch { unreachable }
+    assert p3 == "x" and l3 == 1 and c3 == 2 and e3 and r3 == "" and m3 == "plain"
+    ok := true
+    try ParseRow("compilation failed with 1 error") catch { ok = false }
+    assert not ok
+    try ParseRow("x.olang:1:2: warning: no") catch { ok = false }
+    assert not ok
+}
+
+test "ExpectedTexts reads the check headers" {
+    texts List<String&>
+    ExpectedTexts("# check: fail  the text \n# also: more\n# flags: -d\nfn main() ? { }\n", texts)
+    assert texts.Len() == 2 and texts[0] == "the text" and texts[1] == "more"
+    assert ContainsAny("an error with more in it", texts)
+    assert not ContainsAny("nothing", texts)
+}
+
+test "Sub clamps as a Python slice does" {
+    assert Sub("abc", 1, 9) == "bc"
+    assert Sub("abc", 5, 9) == ""
+}
+
+test "ShiftExpected moves a header's column with the edit" {
+    lines mut Array<String&>& = "# check: fail 4:27: x 9:9:\nfn f()\n".Split("\n")
+    shLine List<I64>
+    shAt List<I64>
+    shDelta List<I64>
+    shLine.Push(4)
+    shAt.Push(7)
+    shDelta.Push(-4)
+    ShiftExpected(lines, shLine, shAt, shDelta)
+    assert lines[0] == "# check: fail 4:23: x 9:9:"
+}
+
+test "Realign keeps a comment's column" {
+    lines mut Array<String&>& = "fn f(a I64, b I64) {   # c\n".Split("\n")
+    Realign(lines, 0, -4, 5)
+    assert lines[0] == "fn f(a I64, b I64) {       # c"
+}

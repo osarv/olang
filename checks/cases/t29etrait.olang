@@ -3,7 +3,7 @@
 type Counter trait {
   Count(keep fn(x I32) Bool) I64
 }
-fn n(c <C Counter>&) I64 { return c.Count(fn(x I32) Bool { return x > 1 }) }
+fn n<C Counter>(c C&) I64 { return c.Count(fn(x I32) Bool { return x > 1 }) }
 type Ints extends Array<I32>
 fn main() ? {
   a Ints = Ints(I32[1, 2, 3])

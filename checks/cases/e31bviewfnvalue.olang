@@ -1,0 +1,16 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: the parameter handed to a function value - its body is not known, so it may write the parameter's storage
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn f(v mut V&, h fn(x mut V&)) { h(v) }
+
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    f(s[0], fn(x mut V&) { })
+}

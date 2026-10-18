@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # S4c: a parallel assignment's temporary going into a reference is held as that reference - built where the target's
 # referent lives, as "a.next = Node(i)" alone is - so a parameter's or a capture's field takes one (it was refused with
 # O17a and O25: held as a value, it was a copy in the statement's block that the field would borrow), and at a
@@ -37,6 +37,6 @@ fn main() ? {
     c.next, c.v = Node(9), 9
     d := c.next
     c.next, c.v = Node(10), 10
-    if kept[0].v != 0 or kept[3].v != 30 or a.next.v != 5 or b.next.v != 6 or a.v != 5 { fail }
-    if d.v != 9 or c.next.v != 10 or d is c.next { fail }
+    assert not (kept[0].v != 0 or kept[3].v != 30 or a.next.v != 5 or b.next.v != 6 or a.v != 5)
+    assert not (d.v != 9 or c.next.v != 10 or d is c.next)
 }

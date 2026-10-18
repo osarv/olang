@@ -1,0 +1,825 @@
+# QY and QW (2026-10-17): the listing rule and type parameter lists. This rewrites olang sources written under the old
+# rules to the new ones:
+#   QY - items of a list on different lines are separated by the line break, never by a comma: a comma ending a line
+#        inside parentheses or square brackets is removed; an item that ran over several lines, its lines ending where
+#        a line break now separates (L18's tokens), is kept one item - an operator beginning the next line moves to the
+#        end of the line before it, and anything else (a text join, a conditional, a ".") is put in parentheses, where
+#        a line break separates nothing. An error set and catch items are separated by "," where they were by "+", and a
+#        function type's or a lambda's error set of several items is parenthesized ("fn() ? (A, B)").
+#   QW - a function's type variables are listed after its name: "fn max(a <T>, b T) T" becomes "fn max<T>(a T, b T) T",
+#        a method on a generic type takes its variables bare from its receiver ("fn (l List<<T>>&) Push" becomes
+#        "fn (l List<T>&) Push"), a variable of its own and every constrained one are listed ("fn (it mut <I
+#        Iterator<<T>>>&) Count" becomes "fn (it mut I&) Count<I Iterator<T>, T>"), and a constructor's own variables
+#        (G10d) are listed after "struct" ("struct(g G<<T>>&)" becomes "struct<T>(g G<T>&)").
+# Comments and string literals are left alone - code a program writes into a string (a generator, a test) is not
+# migrated. Files are rewritten in place, and a count of each kind of change is printed; --check writes nothing and the
+# exit status says whether anything would change. A Markdown file has its "```olang" blocks migrated.
+#
+#     build/out build tools/syntax_migrate.olang && build/tools_syntax_migrate [--old] [--check] [-v] FILE|DIR...
+#
+# Running it again changes nothing. One case cannot be told apart by the text alone: a line ending in a name, a literal or
+# a ")" inside a list whose lines end in no comma, with the next line starting something an item can start ("f(a" then
+# "b)") - two items under the new rule, one item running over two lines under the old. It is left as two items, which is
+# what makes the tool safe to run again on migrated code; with --old (every file given is entirely in the old syntax, as
+# a branch or a repository that never saw the change is) it is one item, put in parentheses. Lists that end a line with
+# a comma anywhere are old wherever they are, so --old only matters for a list running over lines whose items ended
+# no line - a text join in a call, say. A comma ending a line outside brackets ("return a," then "b") is reported and
+# left for a person.
+
+import "std/os"
+import "srcmask"
+import "../compiler/scan"
+import "../compiler/token"
+
+# a token of the text as the migration reads it: no statement ends, and a "<<" or ">>" split in two halves so a type
+# variable written right after a list's "<" ("List<<T>>") is a token of its own. lb: a line ended before it
+type VT struct(k token.Tok, start I64, end I64, lb Bool, half Bool) {
+    k
+    start
+    end
+    lb
+    half
+}
+
+# one edit: the span start..end replaced by the text numbered rep; seq orders edits at one place
+type Edit struct(start I64, end I64, rep I64, seq I64) {
+    start
+    end
+    rep
+    seq
+}
+
+# what a file's migration did
+type Counts struct() {
+    commas I64 = 0
+    joined I64 = 0
+    moved I64 = 0
+    wrapped I64 = 0
+    errPluses I64 = 0
+    errParens I64 = 0
+    catchPluses I64 = 0
+    fnLists I64 = 0
+    recvBare I64 = 0
+    ctorLists I64 = 0
+}
+
+fn (c Counts&) Total() I64 {
+    return c.commas + c.joined + c.moved + c.wrapped + c.errPluses + c.errParens + c.catchPluses + c.fnLists + c.recvBare + c.ctorLists
+}
+
+fn (c mut Counts&) Add(d Counts&) {
+    c.commas += d.commas
+    c.joined += d.joined
+    c.moved += d.moved
+    c.wrapped += d.wrapped
+    c.errPluses += d.errPluses
+    c.errParens += d.errParens
+    c.catchPluses += d.catchPluses
+    c.fnLists += d.fnLists
+    c.recvBare += d.recvBare
+    c.ctorLists += d.ctorLists
+}
+
+fn (c Counts&) Describe() String {
+    a := $c.commas " line-end commas removed, " $c.joined " lines joined, " $c.moved " operators moved up, " $c.wrapped " items parenthesized, "
+    b := $c.errPluses " '+' in error sets, " $c.errParens " function-type error sets parenthesized, "
+    d := $c.catchPluses " '+' in catch items, " $c.fnLists " type parameter lists, " $c.recvBare " receiver variables bare, "
+    return $a $b $d $c.ctorLists " constructor lists"
+}
+
+# ---- tokens ----
+
+# the text's tokens as VT, statement ends dropped and "<<"/">>" split; the last is Eof
+fn vtokens(src String&) List<VT> {
+    ts := scan.Scan(src)
+    out List<VT>
+    for tk in ts.Toks {
+        if tk.Kind == token.Tok.StmtEnd { continue }
+        s := I64(tk.Start)
+        e := I64(tk.End)
+        lb := tk.Has(token.LineBreak)
+        if tk.Kind == token.Tok.Shl {
+            out.Push(VT(token.Tok.Lt, s, s + 1, lb, true))
+            out.Push(VT(token.Tok.Lt, s + 1, e, false, true))
+        } else if tk.Kind == token.Tok.Shr {
+            out.Push(VT(token.Tok.Gt, s, s + 1, lb, true))
+            out.Push(VT(token.Tok.Gt, s + 1, e, false, true))
+        } else {
+            out.Push(VT(tk.Kind, s, e, lb, false))
+        }
+    }
+    return out
+}
+
+# for every "(", "[" and "{" its closer's index, and for every closer its opener's; -1 where there is none
+fn matches(v List<VT>&) Array<I64> {
+    m := Array<I64>(v.Len(), -1)
+    stack List<I64>
+    for i in range v.Len() {
+        k := v[i].k
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            stack.Push(i)
+        } else if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace {
+            o := try stack.Pop() catch { continue }
+            m[o] = i
+            m[i] = o
+        }
+    }
+    return m
+}
+
+# whether the token is a word: a name, or a keyword (a method's name may be one, L9a)
+fn isWord(src String&, t VT&) Bool { return t.end > t.start and srcmask.IsIdStart(src[t.start]) }
+
+# whether the "(" at index i opens a list (a call's arguments, parameters, results, a payload, an error set) rather than
+# a parenthesized expression
+fn parenIsList(v List<VT>&, i I64) Bool {
+    if i == 0 { return false }
+    p := v[i - 1]
+    adjacent := p.end == v[i].start
+    if p.k == token.Tok.Iden or p.k == token.Tok.RParen or p.k == token.Tok.RBrack { return true }
+    if p.k == token.Tok.Fn or p.k == token.Tok.Struct or p.k == token.Tok.Question { return true }
+    if p.k == token.Tok.Gt or p.k == token.Tok.RBrace { return adjacent }
+    return false
+}
+
+# an operator that can only continue an expression, never begin an item - one beginning a line inside a list is moved to
+# the end of the line before it
+fn movable(t VT&) Bool {
+    if t.half { return false }
+    return match t.k {
+        case token.Tok.Plus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At => true
+        case token.Tok.Amp, token.Tok.Pipe, token.Tok.Caret, token.Tok.Shl, token.Tok.Shr => true
+        case token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge => true
+        case token.Tok.And, token.Tok.Or, token.Tok.Xor, token.Tok.In, token.Tok.Is, token.Tok.As => true
+        nomatch => false
+    }
+}
+
+# a token that can only continue an expression, but is put in parentheses with its item rather than moved
+fn continuesOnly(t VT&) Bool {
+    return t.k == token.Tok.Dot or t.k == token.Tok.If or t.k == token.Tok.Else
+}
+
+# ---- the migration ----
+
+type migration struct(src String&, old Bool, path String&) {
+    src
+    old
+    path
+    v List<VT>
+    m Array<I64>& = null
+    edits List<Edit>
+    reps List<String&>
+    report List<String&>
+    c Counts
+}
+
+fn (g mut migration&) edit(start I64, end I64, text String&) {
+    g.edits.Push(Edit(start, end, g.reps.Len(), g.edits.Len()))
+    g.reps.Push($text)
+}
+
+fn (g migration&) lineOf(pos I64) I64 {
+    n I64 = 1
+    for i in range pos {
+        if g.src[i] == '\n' { n++ }
+    }
+    return n
+}
+
+fn (g mut migration&) note(pos I64, what String&) {
+    g.report.Push($g.path ":" $g.lineOf(pos) ": " $what)
+}
+
+# the first token of the line the token at i is on, or of the line before it when that line ends in a comma
+fn (g migration&) lineHead(i I64) I64 {
+    k := i
+    for {
+        for k > 0 and not g.v[k].lb { k-- }
+        if k > 0 and g.v[k - 1].k == token.Tok.Comma {
+            k--
+        } else {
+            return k
+        }
+    }
+}
+
+# a frame of the bracket walk: the opener's index, whether it is a list, whether it ends a line with a comma at its own
+# level (then it is old wherever it is), whether a comprehension's "for" was passed, where the current item starts and
+# whether it must be put in parentheses
+type frame struct(open I64, list Bool, commaLines Bool) {
+    open
+    list
+    commaLines
+    compr Bool = false
+    itemStart I64 = -1
+    wrap Bool = false
+}
+
+# QY's first walk: which openers end a line with a comma at their own level
+fn (g migration&) commaLines() Array<Bool> {
+    out := Array<Bool>(g.v.Len(), false)
+    stack List<I64>
+    for i in range g.v.Len() - 1 {
+        k := g.v[i].k
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            stack.Push(i)
+        } else if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace {
+            try stack.Pop() catch { }
+        } else if k == token.Tok.Comma and g.v[i + 1].lb and stack.Len() > 0 {
+            top := stack[stack.Len() - 1]
+            out[top] = true
+        }
+    }
+    return out
+}
+
+# the current item of the frame ends before index end: put it in parentheses when it must be
+fn (g mut migration&) closeItem(f frame, end I64) {
+    if f.wrap and f.itemStart >= 0 and end > f.itemStart {
+        g.edit(g.v[f.itemStart].start, g.v[f.itemStart].start, "(")
+        g.edit(g.v[end - 1].end, g.v[end - 1].end, ")")
+        g.c.wrapped++
+    }
+}
+
+fn (g mut migration&) listing() {
+    cl := g.commaLines()
+    stack List<frame>
+    n := g.v.Len()
+    for i in range n - 1 {
+        t := g.v[i]
+        depth := stack.Len()
+        # a line break before t inside a list
+        if t.lb and i > 0 and depth > 0 {
+            f := stack[depth - 1]
+            p := g.v[i - 1]
+            closer := g.m[f.open]
+            if f.list and not f.compr and p.k != token.Tok.Comma and i != closer and p.k.EndsStatement() {
+                if movable(t) {
+                    g.edit(p.end, p.end, $" " $g.src[t.start:t.end])
+                    blankEnd := t.end
+                    if blankEnd < g.src.Len() and g.src[blankEnd] == ' ' { blankEnd++ }
+                    g.edit(t.start, blankEnd, "")
+                    g.c.moved++
+                } else if continuesOnly(t) or g.old or f.commaLines {
+                    stack[depth - 1].wrap = true
+                }
+            }
+        }
+        k := t.k
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace {
+            if depth > 0 and stack[depth - 1].itemStart < 0 { stack[depth - 1].itemStart = i }
+            list := k == token.Tok.LBrack or (k == token.Tok.LParen and parenIsList(g.v, i))
+            stack.Push(frame(i, list, cl[i]))
+            continue
+        }
+        if k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace {
+            if depth > 0 {
+                f := try stack.Pop() catch { continue }
+                g.closeItem(f, i)
+            }
+            if stack.Len() > 0 and stack[stack.Len() - 1].itemStart < 0 { stack[stack.Len() - 1].itemStart = i }
+            continue
+        }
+        if k == token.Tok.Comma {
+            atEnd := g.v[i + 1].lb
+            if depth > 0 and stack[depth - 1].list {
+                f := stack[depth - 1]
+                if not f.compr {
+                    g.closeItem(f, i)
+                    stack[depth - 1].wrap = false
+                    stack[depth - 1].itemStart = -1
+                }
+                if atEnd {
+                    g.edit(t.start, t.end, "")
+                    g.c.commas++
+                }
+            } else if atEnd {
+                if (depth > 0 and g.v[stack[depth - 1].open].k != token.Tok.LBrace) or g.v[g.lineHead(i)].k == token.Tok.Case {
+                    # inside brackets that hold no list, or between a case's alternatives: the line break separates
+                    g.edit(t.start, t.end, "")
+                    g.c.commas++
+                } else {
+                    # a statement's comma ("assert c, why", "return a, b"): its next line joins this one
+                    g.edit(t.end, g.v[i + 1].start, " ")
+                    g.c.joined++
+                }
+            }
+            continue
+        }
+        if depth > 0 {
+            if k == token.Tok.For and g.v[stack[depth - 1].open].k == token.Tok.LBrack and not stack[depth - 1].compr {
+                g.closeItem(stack[depth - 1], i)
+                stack[depth - 1].wrap = false
+                stack[depth - 1].compr = true
+                continue
+            }
+            if stack[depth - 1].itemStart < 0 { stack[depth - 1].itemStart = i }
+        }
+    }
+}
+
+# ---- types ----
+
+# the index past the type starting at i, or -1 when none starts there. A type variable "<X [C]>" is one too
+fn (g migration&) skipType(at I64) I64 {
+    i := at
+    n := g.v.Len()
+    for i < n and (g.v[i].k == token.Tok.Mut or g.v[i].k == token.Tok.Own) { i++ }
+    if i >= n { return -1 }
+    k := g.v[i].k
+    if k == token.Tok.Lt {
+        e := g.typeVarEnd(i)
+        if e < 0 { return -1 }
+        i = e
+    } else if k == token.Tok.Fn and i + 1 < n and g.v[i + 1].k == token.Tok.LParen {
+        e := g.fnTypeEnd(i)
+        if e < 0 { return -1 }
+        return e
+    } else if k == token.Tok.Iden {
+        i++
+        for i + 1 < n and g.v[i].k == token.Tok.Dot and g.v[i + 1].k == token.Tok.Iden { i += 2 }
+        if i < n and g.v[i].k == token.Tok.Lt and g.v[i].start == g.v[i - 1].end {
+            e := g.angleEnd(i)
+            if e < 0 { return -1 }
+            i = e
+        }
+    } else {
+        return -1
+    }
+    if i < n and g.v[i].k == token.Tok.Amp {
+        i++
+        if i < n and (g.v[i].k == token.Tok.Iden or g.v[i].k == token.Tok.Return) and g.v[i].start == g.v[i - 1].end { i++ }
+    }
+    return i
+}
+
+# the index past the ">" matching the "<" at i - parentheses inside skipped whole - or -1
+fn (g migration&) angleEnd(at I64) I64 {
+    depth I64 = 0
+    i := at
+    for i < g.v.Len() {
+        k := g.v[i].k
+        if k == token.Tok.Lt {
+            depth++
+        } else if k == token.Tok.Gt {
+            depth--
+            if depth == 0 { return i + 1 }
+        } else if k == token.Tok.LParen or k == token.Tok.LBrack {
+            if g.m[i] < 0 { return -1 }
+            i = g.m[i]
+        } else if k == token.Tok.LBrace or k == token.Tok.RBrace or k == token.Tok.Eof {
+            return -1
+        }
+        i++
+    }
+    return -1
+}
+
+# whether a type variable "<X [C]>" opens at i: a "<" with a name right after it, which follows no name right before it
+# (that is a type argument list, "List<")
+fn (g migration&) typeVarOpens(i I64) Bool {
+    if g.v[i].k != token.Tok.Lt or i + 1 >= g.v.Len() { return false }
+    nx := g.v[i + 1]
+    if nx.k != token.Tok.Iden or nx.start != g.v[i].end { return false }
+    if i > 0 {
+        p := g.v[i - 1]
+        adjacentName := p.end == g.v[i].start and (p.k == token.Tok.Iden or p.k == token.Tok.Gt)
+        # "(a<T>, b T)": a parameter's name - lowercase, after "(" or "," - and its type written against it
+        paramName := p.k == token.Tok.Iden and i > 1 and g.src[p.start].IsLower()
+        if paramName { paramName = g.v[i - 2].k == token.Tok.LParen or g.v[i - 2].k == token.Tok.Comma }
+        if adjacentName and not paramName { return false }
+    }
+    return true
+}
+
+# the index past the type variable "<X [C]>" opening at i, or -1
+fn (g migration&) typeVarEnd(i I64) I64 {
+    if not g.typeVarOpens(i) { return -1 }
+    j := i + 2
+    if j < g.v.Len() and g.v[j].k == token.Tok.Gt { return j + 1 }
+    e := g.skipType(j)
+    if e < 0 or e >= g.v.Len() or g.v[e].k != token.Tok.Gt { return -1 }
+    return e + 1
+}
+
+# the index past the function type whose "fn" is at i - its parameters, results and error set - or -1
+fn (g migration&) fnTypeEnd(i I64) I64 {
+    close := g.m[i + 1]
+    if close < 0 { return -1 }
+    j := close + 1
+    n := g.v.Len()
+    if j < n and not g.v[j].lb {
+        if g.v[j].k == token.Tok.LParen {
+            if g.m[j] < 0 { return -1 }
+            j = g.m[j] + 1
+        } else {
+            e := g.skipType(j)
+            if e > 0 { j = e }
+        }
+    }
+    if j < n and g.v[j].k == token.Tok.Question and not g.v[j].lb {
+        j++
+        if j < n and g.v[j].k == token.Tok.LParen {
+            if g.m[j] < 0 { return -1 }
+            return g.m[j] + 1
+        }
+        for j < n and g.v[j].k == token.Tok.Iden {
+            j++
+            for j + 1 < n and g.v[j].k == token.Tok.Dot and g.v[j + 1].k == token.Tok.Iden { j += 2 }
+            if j + 1 < n and (g.v[j].k == token.Tok.Plus or g.v[j].k == token.Tok.Comma) and g.v[j + 1].k == token.Tok.Iden {
+                j++
+            } else {
+                break
+            }
+        }
+    }
+    return j
+}
+
+# ---- error sets and catch items ----
+
+# the end of the error item "A" or "A.B..." starting at i, or -1
+fn (g migration&) errItemEnd(i I64) I64 {
+    n := g.v.Len()
+    if i >= n or g.v[i].k != token.Tok.Iden { return -1 }
+    j := i + 1
+    for j + 1 < n and g.v[j].k == token.Tok.Dot and g.v[j + 1].k == token.Tok.Iden { j += 2 }
+    return j
+}
+
+# the "+"-separated items starting at i: each "+" made ","; returns the index past them and how many there are
+fn (g mut migration&) plusItems(at I64, inCatch Bool) (I64, I64) {
+    i := g.errItemEnd(at)
+    if i < 0 { return at, 0 }
+    count I64 = 1
+    for i + 1 < g.v.Len() and g.v[i].k == token.Tok.Plus {
+        e := g.errItemEnd(i + 1)
+        if e < 0 { break }
+        g.edit(g.v[i - 1].end, g.v[i].end, ",")
+        if inCatch { g.c.catchPluses++ } else { g.c.errPluses++ }
+        count++
+        i = e
+    }
+    return i, count
+}
+
+# whether the "fn" at i is a declaration's ("fn name" or "fn (receiver) name"): then the index of its name, else -1
+fn (g migration&) declName(i I64) I64 {
+    n := g.v.Len()
+    if i + 2 >= n { return -1 }
+    nx := g.v[i + 1]
+    if isWord(g.src, nx) and nx.k != token.Tok.Fn {
+        k := g.v[i + 2].k
+        if k == token.Tok.LParen or k == token.Tok.Lt { return i + 1 }
+        return -1
+    }
+    if nx.k != token.Tok.LParen { return -1 }
+    close := g.m[i + 1]
+    if close < 0 or close + 2 >= n { return -1 }
+    name := g.v[close + 1]
+    after := g.v[close + 2]
+    adjacentLt := after.k == token.Tok.Lt and after.start == name.end
+    if isWord(g.src, name) and not name.lb and (after.k == token.Tok.LParen or adjacentLt) { return close + 1 }
+    return -1
+}
+
+fn (g mut migration&) errorSets() {
+    n := g.v.Len()
+    for i in range n {
+        k := g.v[i].k
+        if k == token.Tok.Catch {
+            g.plusItems(i + 1, true)
+        } else if k == token.Tok.Fn and i + 1 < n and g.v[i + 1].k == token.Tok.LParen and g.declName(i) < 0 {
+            # a lambda or a function type: its error set, when it has several items, is put in parentheses
+            close := g.m[i + 1]
+            if close < 0 { continue }
+            j := close + 1
+            if j < n and not g.v[j].lb and g.v[j].k != token.Tok.Question and g.v[j].k != token.Tok.LBrace {
+                if g.v[j].k == token.Tok.LParen {
+                    if g.m[j] >= 0 { j = g.m[j] + 1 }
+                } else {
+                    e := g.skipType(j)
+                    if e > 0 { j = e }
+                }
+            }
+            if j < n and g.v[j].k == token.Tok.Question and not g.v[j].lb and j + 1 < n and g.v[j + 1].k == token.Tok.Iden {
+                end, count := g.plusItems(j + 1, false)
+                if count > 1 {
+                    g.edit(g.v[j + 1].start, g.v[j + 1].start, "(")
+                    g.edit(g.v[end - 1].end, g.v[end - 1].end, ")")
+                    g.c.errParens++
+                }
+                g.v[j] = VT(token.Tok.Comma, g.v[j].start, g.v[j].end, g.v[j].lb, true) # handled: no second pass
+            }
+        }
+    }
+    # every other error set: a declaration's, a constructor's, a trait method's
+    for i in range n {
+        if g.v[i].k == token.Tok.Question { g.plusItems(i + 1, false) }
+    }
+}
+
+# ---- type parameter lists ----
+
+# one type variable written "<X [C]>": its "<" and past its ">" (indices), its name's index, its constraint's span of
+# indices (cs == ce when none), and the occurrence it is written inside (-1 when none)
+type occ struct(open I64, end I64, name I64, cs I64, ce I64, parent I64) {
+    open
+    end
+    name
+    cs
+    ce
+    parent
+}
+
+# the type variables written from index lo to index hi, outer before inner
+fn (g migration&) occurrences(lo I64, hi I64) List<occ> {
+    out List<occ>
+    for i in range lo, hi {
+        e := g.typeVarEnd(i)
+        if e < 0 { continue }
+        parent I64 = -1
+        for p in range out.Len() {
+            if out[p].open < i and out[p].end > i { parent = p }
+        }
+        cs := i + 2
+        ce := cs
+        if g.v[cs].k != token.Tok.Gt { ce = e - 1 }
+        out.Push(occ(i, e, i + 1, cs, ce, parent))
+    }
+    return out
+}
+
+# the text from index lo to index hi with every occurrence inside it written as its bare name
+fn (g migration&) bareText(occs List<occ>&, lo I64, hi I64) String {
+    b := StringBuilder()
+    pos := g.v[lo].start
+    end := g.v[hi - 1].end
+    for o in occs {
+        if o.open < lo or o.end > hi { continue }
+        start := g.v[o.open].start
+        if start < pos { continue }
+        b.Push(g.src[pos:start])
+        b.Push(g.src[g.v[o.name].start:g.v[o.name].end])
+        pos = g.v[o.end - 1].end
+    }
+    b.Push(g.src[pos:end])
+    return b.ToString()
+}
+
+# what "<X ...>" at o becomes in place: "X", spaced from a word it would otherwise run into
+fn (g migration&) bareInPlace(o occ&) String {
+    s := g.v[o.open].start
+    e := g.v[o.end - 1].end
+    name := g.src[g.v[o.name].start:g.v[o.name].end]
+    left := " " if s > 0 and srcmask.IsWord(g.src[s - 1]) else ""
+    right := " " if e < g.src.Len() and srcmask.IsWord(g.src[e]) else ""
+    return $left $name $right
+}
+
+# rewrites the type variables written from index lo to hi: each to its bare name, the list after index at - those of
+# the receiver lo..hi's span recvLo..recvHi written as a whole type argument and unconstrained stay bare there, listed
+# nowhere. Returns whether anything changed
+fn (g mut migration&) typeList(lo I64, hi I64, at I64, recvLo I64, recvHi I64, ctor Bool) Bool {
+    occs := g.occurrences(lo, hi)
+    if occs.Len() == 0 { return false }
+    names List<String&>
+    entries List<String&>
+    for o in occs {
+        name := g.src[g.v[o.name].start:g.v[o.name].end]
+        if o.parent < 0 {
+            g.edit(g.v[o.open].start, g.v[o.end - 1].end, g.bareInPlace(o))
+        }
+        prev := g.v[o.open - 1].k
+        inRecv := o.open > recvLo and o.open < recvHi and o.parent < 0
+        asArg := prev == token.Tok.Lt or prev == token.Tok.Comma
+        if inRecv and asArg and o.cs == o.ce {
+            g.c.recvBare++
+            continue
+        }
+        if name in names { continue }
+        names.Push(name)
+        if o.cs == o.ce {
+            entries.Push(name)
+        } else {
+            entries.Push($name " " $g.bareText(occs, o.cs, o.ce))
+        }
+    }
+    if entries.Len() > 0 {
+        b := StringBuilder()
+        b.PushChar('<')
+        for k in range entries.Len() {
+            if k > 0 { b.Push(", ") }
+            b.Push(entries[k])
+        }
+        b.PushChar('>')
+        g.edit(g.v[at].end, g.v[at].end, b.ToString())
+        if ctor { g.c.ctorLists++ } else { g.c.fnLists++ }
+    }
+    return true
+}
+
+fn (g mut migration&) typeLists() {
+    n := g.v.Len()
+    for i in range n {
+        k := g.v[i].k
+        if k == token.Tok.Fn {
+            name := g.declName(i)
+            if name < 0 or (i > 0 and g.v[i - 1].k == token.Tok.Extern) { continue }
+            if g.v[name + 1].k == token.Tok.Lt { continue }     # listed already
+            open := name + 1
+            close := g.m[open]
+            if close < 0 { continue }
+            # the signature runs to the body's "{" - or, with no body, to its line's end
+            j := close + 1
+            for j < n and g.v[j].k != token.Tok.LBrace and g.v[j].k != token.Tok.Eof and not g.v[j].lb {
+                if (g.v[j].k == token.Tok.LParen or g.v[j].k == token.Tok.LBrack) and g.m[j] > j { j = g.m[j] }
+                j++
+            }
+            recvLo I64 = -1
+            recvHi I64 = -1
+            if name != i + 1 {
+                recvLo = i + 1
+                recvHi = g.m[i + 1]
+            }
+            g.typeList(i + 1, j, name, recvLo, recvHi, false)
+        } else if k == token.Tok.Struct and i + 1 < n and g.v[i + 1].k == token.Tok.LParen and i > 0 {
+            close := g.m[i + 1]
+            if close < 0 { continue }
+            g.typeList(i + 1, close, i, -1, -1, true)
+        }
+    }
+}
+
+# ---- applying ----
+
+fn (g migration&) applied() String {
+    reps := g.reps
+    sorted := g.edits.ToArray()
+    sorted.Sort(fn(a Edit, b Edit) Bool {
+        if a.start != b.start { return a.start < b.start }
+        ai := a.end == a.start
+        bi := b.end == b.start
+        if ai != bi { return ai }
+        return a.seq < b.seq
+    })
+    out := StringBuilder()
+    last I64 = 0
+    for e in sorted {
+        if e.start < last { continue }
+        out.Push(g.src[last:e.start])
+        out.Push(reps[e.rep])
+        last = e.end
+    }
+    out.Push(g.src[last:])
+    return out.ToString()
+}
+
+# src migrated; what it took is added to total and report
+fn migrate(src String&, old Bool, path String&, total mut Counts&, report mut List<String&>&) String {
+    g := migration(src, old, path)
+    g.v = vtokens(src)
+    g.m = matches(g.v)
+    g.listing()
+    g.errorSets()
+    g.typeLists()
+    total.Add(g.c)
+    for r in g.report { report.Push($r) }
+    if g.edits.Len() == 0 { return $src }
+    return g.applied()
+}
+
+# a Markdown text with its "```olang" blocks migrated
+fn migrateMarkdown(src String&, old Bool, path String&, total mut Counts&, report mut List<String&>&) String {
+    out := StringBuilder()
+    lines := src.Split("\n")
+    inBlock := false
+    block := StringBuilder()
+    for k in range lines.Len() {
+        line := lines[k]
+        last := k == lines.Len() - 1
+        if inBlock and line.StartsWith("```") {
+            out.Push(migrate(block.ToString(), old, path, total, report))
+            block.Clear()
+            inBlock = false
+        } else if inBlock {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if line.StartsWith("```olang") {
+            inBlock = true
+        }
+        out.Push(line)
+        if not last { out.PushChar('\n') }
+    }
+    if inBlock { out.Push(block.ToString()) }
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    old := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else if a == "--old" {
+            old = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Counts()
+    report List<String&>
+    changedFiles I64 = 0
+    for path in files {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("syntax_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        mine := Counts()
+        out := migrateMarkdown(src, old, path, mine, report) if path.EndsWith(".md") else migrate(src, old, path, mine, report)
+        total.Add(mine)
+        if out == src { continue }
+        changedFiles++
+        if verbose { srcmask.Say($path ": " $mine.Describe()) }
+        if not check {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("syntax_migrate: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    for r in report { srcmask.Say(r) }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changedFiles " files: " $total.Describe())
+    if check and changedFiles > 0 { os.Exit(1) }
+}
+
+fn run(src String&, old Bool) String {
+    total := Counts()
+    report List<String&>
+    return migrate(src, old, "x.olang", total, report)
+}
+
+test "a comma ending a line in a list goes, and a line ending a statement separates" {
+    assert run("f(a,\n  b,\n)\n", false) == "f(a\n  b\n)\n"
+    assert run("x := I64[1, 2,\n         3]\n", false) == "x := I64[1, 2\n         3]\n"
+    assert run("f(a, # one\n  b)\n", false) == "f(a # one\n  b)\n"
+}
+
+test "an item running over lines stays one" {
+    assert run("f(a,\n  b\n  + c)\n", false) == "f(a\n  b +\n  c)\n"
+    assert run("f(a,\n  \"x\" $y\n  \"z\")\n", false) == "f(a\n  (\"x\" $y\n  \"z\"))\n"
+    assert run("f(\"x\" $y\n  \"z\")\n", true) == "f((\"x\" $y\n  \"z\"))\n"
+    assert run("f(\"x\" $y\n  \"z\")\n", false) == "f(\"x\" $y\n  \"z\")\n"
+    assert run("x := (a\n      + b)\n", false) == "x := (a\n      + b)\n"
+}
+
+test "a comma ending a line outside brackets" {
+    assert run("match x {\n    case A, B,\n         C { }\n}\n", false) == "match x {\n    case A, B\n         C { }\n}\n"
+    assert run("assert a,\n       \"why\"\n", false) == "assert a, \"why\"\n"
+}
+
+test "error sets and catch items take commas" {
+    assert run("fn f() ? A + B.X {\n}\n", false) == "fn f() ? A, B.X {\n}\n"
+    assert run("try f() catch A + B { }\n", false) == "try f() catch A, B { }\n"
+    assert run("g fn(x I64) I64 ? A + B = h\n", false) == "g fn(x I64) I64 ? (A, B) = h\n"
+    assert run("q := fn() ? A + B { }\n", false) == "q := fn() ? (A, B) { }\n"
+}
+
+test "a function's type variables are listed after its name" {
+    assert run("fn max(a <T>, b T) T { return a }\n", false) == "fn max<T>(a T, b T) T { return a }\n"
+    assert run("fn max(a<T>, b T) T { return a }\n", false) == "fn max<T>(a T, b T) T { return a }\n"
+    assert run("g fn(List<T>) I64 = h\n", false) == "g fn(List<T>) I64 = h\n"
+    assert run("fn (l List<<T>>&) Push(x T) { }\n", false) == "fn (l List<T>&) Push(x T) { }\n"
+    want := "fn (l List<T>&) Map<U>(f fn(x T) U) List<U>& { }\n"
+    assert run("fn (l List<<T>>&) Map(f fn(x T) <U>) List<U>& { }\n", false) == want
+    want2 := "fn (it mut I&) Count<I Iterator<T>, T>(f fn(x T) Bool) I64 { }\n"
+    assert run("fn (it mut <I Iterator<<T>>>&) Count(f fn(x T) Bool) I64 { }\n", false) == want2
+    assert run("fn (m Map<<K>, <V>>&) Len() I64 { }\n", false) == "fn (m Map<K, V>&) Len() I64 { }\n"
+    assert run("fn k(a Array<I32, <N I64>>&) I32 { }\n", false) == "fn k<N I64>(a Array<I32, N>&) I32 { }\n"
+    assert run("type D struct(g G<<T>>&) { g }\n", false) == "type D struct<T>(g G<T>&) { g }\n"
+    assert run("x := a << 3 >> b\n", false) == "x := a << 3 >> b\n"
+    assert run("extern fn sqrt(x F64) F64\nfn f(a <T>) { }\n", false) == "extern fn sqrt(x F64) F64\nfn f<T>(a T) { }\n"
+}
+
+test "running it again changes nothing" {
+    for s in String&["fn max<T>(a T, b T) T { return a }\n", "f(a\n  b\n)\n", "fn f() ? A, B {\n}\n"
+                     "g fn(x I64) I64 ? (A, B) = h\n", "fn (it mut I&) Count<I Iterator<T>, T>() I64 { }\n"] {
+        assert run(s, false) == s, s
+    }
+}

@@ -1,0 +1,18 @@
+# check: fail error[O20]: the container outlives what this refers to
+# Vec phase 2a (O33): an element's references live where the array's slot keeps them - never its own buffer
+import "std/io"
+type Q struct(n I64) {
+    n
+    back Array<Q>& = null
+}
+type B struct() {
+    data own mut Array<Q>& = null
+}
+fn main() ? {
+    b := B()
+    b.data = Array<Q>(2)
+    b.data[0].back = b.data
+    e := b.data[0]
+    b.data = Array<Q>(1)
+    try io.Println($e.back[1].n)
+}

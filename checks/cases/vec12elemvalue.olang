@@ -1,12 +1,29 @@
-# check: fail note: its elements, Tok, are values holding references - hold them by reference, 'Tok&'
-# Vec phase 1 (T25e): a Vec's elements may be numbers, plain values or references, not values holding references - one
-# error at the program's Vec<Tok>, with the fix, and none again for each method used
+# check: run
+# Vec phase 2a (T25e, was Vec phase 1's refusal): a Vec's elements may be values holding references - Vec<Tok> with Tok
+# holding its text: pushed, grown, sorted, indexed, an element kept across growth and read back after a churn
 type Tok struct(text String&, k I64) {
     text
     k
 }
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
 fn main() ? {
     v := Vec<Tok>()
     v.Push(Tok("a", 1))
-    println($v.Len())
+    first := v[0]
+    for i in range 40 { v.Push(Tok("t" $i, i)) }
+    churn()
+    v.Sort(fn(a Tok, b Tok) Bool { return a.text < b.text })
+    churn()
+    assert first.text == "a" and v.Len() == 41 and v[0].text == "a" and v[40].text == "t9"
+    v[1] = Tok("b", 2)
+    taken := try v.TakeAt(1)
+    churn()
+    assert taken.text == "b" and v.Len() == 40 and v[1].text == "t1"
 }

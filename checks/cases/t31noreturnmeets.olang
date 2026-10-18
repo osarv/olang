@@ -1,0 +1,13 @@
+# check: fail Q does not satisfy the constraint Quitter on T: it has no method Quit that fits
+# T31/D8e: a 'noreturn' trait method is met only by a 'noreturn' method
+import "std/os"
+type Quitter trait {
+    Quit() noreturn
+}
+type Q struct() { }
+fn (q Q&) Quit() { os.Exit(1) }
+fn stop<T Quitter>(q T&) I64 { q.Quit() }
+fn main() {
+    q := Q()
+    x := stop(q)
+}

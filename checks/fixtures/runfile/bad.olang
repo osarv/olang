@@ -1,0 +1,4 @@
+# a compile-time error: nothing is run
+fn main() ? {
+    x I32 = "text"
+}

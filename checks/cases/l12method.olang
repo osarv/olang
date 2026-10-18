@@ -1,5 +1,7 @@
-# check: run
-# L12: a "." before a name is no decimal point - "7.Hash()" calls a method on the integer 7
+# check: fail error[E13c]: the receiver of 'Hash' is a number written as a literal
+# also: compilation failed with 1 error
+# L12: a "." before a name is no decimal point - "7.Hash()" is the integer 7, a member access and a call - and E13c
+# then refuses it (a number written as a literal is no method's receiver); the error is that, not a lexical one
 fn main() ? {
     assert 7.Hash() == I32(7).Hash()
     x := 7.5

@@ -1,0 +1,18 @@
+# check: fail error[O39]: assigning 'h.lx' may release the Array<I64> borrowed on line 15, which is used after it
+# Vec phase 2a (O35/O39): releasing an owned struct releases its Vec field's buffer - not while a view of it is used
+import "std/io"
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Host struct() {
+    lx own mut Lexer& = null
+}
+fn main() ? {
+    h := Host()
+    h.lx = Lexer(3)
+    h.lx.toks.Push(1)
+    d := h.lx.toks.View()
+    h.lx = null
+    try io.Println($d[0])
+}

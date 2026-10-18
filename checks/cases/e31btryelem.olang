@@ -1,0 +1,15 @@
+# check: run
+# E31b (T1): "checked a[i]" with no default on a built-in array is the element itself - lent writably, the write lands; so
+# does a method on it, and the plain element
+type Acc struct() {
+    N I64 = 0
+}
+fn bump(a mut Acc&) { a.N++ }
+fn (a mut Acc&) Add() { a.N += 10 }
+fn main() ? {
+    a := Acc[Acc(), Acc(), Acc()]
+    bump(checked a[0])
+    (checked a[2]).Add()
+    bump(a[0])
+    assert a[0].N == 2 and a[1].N == 0 and a[2].N == 10, "N " $a[0].N " " $a[1].N " " $a[2].N
+}

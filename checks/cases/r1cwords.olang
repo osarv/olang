@@ -1,0 +1,29 @@
+# check: run
+# R1c/R14/R1a: words in written and inferred sets - catching the words a callee names is complete, an inferred set
+# holds the words it lets through, a function value fits a set holding more words, and a signature renders them
+error LE {
+    EMPTY
+    GONE
+}
+N mut I64 = 0
+fn pop(n I64) I64 ? LE.EMPTY {
+    if n == 0 { error LE.EMPTY }
+    return n
+}
+fn two(n I64) I64 ? LE.EMPTY, LE.GONE {
+    if n == 1 { error LE.GONE }
+    return try pop(n)
+}
+fn inf(n I64) I64 ? { return try two(n) catch LE.GONE default 7 }
+fn run(f fn(n I64) I64 ? LE) I64 { return try f(N) catch LE default 3 }
+Baked I64 = (try pop(0) catch LE.EMPTY default -1) + (try inf(1) catch LE.EMPTY default 0) + run(pop)
+fn main() {
+    a := try pop(N) catch LE.EMPTY default -1
+    b := try two(N + 1) catch LE.EMPTY default -1 catch LE.GONE default -2
+    c := try inf(N) catch LE.EMPTY default -1
+    l := List<I64>()
+    d := try l.Pop() catch ListError.EMPTY default -4
+    e := try "abc".Find("z") catch TextError.NOT_FOUND default -5
+    assert a == -1 and b == -2 and c == -1 and d == -4 and e == -5 and run(pop) == 3 and Baked == 9
+    assert $inf == "inf(n I64) I64 ? LE.EMPTY" and $two == "two(n I64) I64 ? LE"     # every word of LE: the type whole
+}

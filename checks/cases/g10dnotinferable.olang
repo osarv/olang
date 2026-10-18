@@ -3,7 +3,7 @@
 type G<T> struct() {
     n I64 = 0
 }
-type D struct(g G<<T>>&) {
+type D struct<T>(g G<T>&) {
     n I64 = 1
 }
 fn main() ? { d := D(null) }

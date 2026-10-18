@@ -1,0 +1,42 @@
+# check: run
+# flags: -debug -sanitize
+# Vec phase 2a review R1: what may leave an owned object's region - a field moved into another field of the same object
+# read by the same path, a Vec that refers to nothing outside what it owns, and the whole object (its region with it)
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+    ns Vec<I64> = Vec<I64>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn numbers() Vec<I64> {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.ns.Push(i + 40) }
+    return take p.lx.ns
+}
+fn lexer() own mut Lexer& {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word") }
+    p.lx.more = take p.lx.toks
+    return take p.lx
+}
+fn main() ? {
+    n := numbers()
+    l := lexer()
+    churn()
+    assert n[0] == 40 and n.Len() == 3
+    assert l.more.Len() == 3 and l.toks.Len() == 0
+    w := l.more[1]
+    assert w == "1-word"
+}

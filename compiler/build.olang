@@ -6,29 +6,23 @@
 # after that is here, and is a build cache in the style of Bazel's and Go's:
 #
 # - An object is named by a SHA-256 of what it is made from: its IR, the flags clang compiles it with and clang's own
-#   version. One with that name is current by construction - stale by source, by -D values (B10b), by target (B12b) or
-#   by compiler can only mean other IR or other flags, so another name - and a build reuses it exactly when the file is
-#   there. Changing a value back finds the earlier objects. An object is written under a temporary name and renamed
-#   into place, so an interrupted compile is never taken for one.
 # - The stale objects are compiled by clang in parallel, as many at once as the machine has cores, by tasks taking
-#   jobs from a channel (join and spawn over os.Exec - nothing runs through a shell).
 # - A binary records a hash of what its link read - every argument, the objects being named by their contents - with
-#   its size and time, so a build that changed nothing links nothing.
-# - -t over several files runs the compiler again once per file (TestFiles), one at a time in the order listed, so a
-#   file's memory goes back to the system before the next and a crash ends that file alone (B3a).
+# - test over several files runs the compiler again once per file (TestFiles), one at a time in the order listed, so a
 import "std/os"
 import "std/chan"
 import "diag"
 import "msgs"
 import "cond"
 import "target"
+import "std/io"
 
 extern fn getpid() I32
 extern fn sysconf(name I32) I64
 
 # ---- what the front end gives ----
 
-# what a build makes of its root: one object (-c), a program (-b, -i), or a test binary (-t)
+# what a build makes of its root: one object (compile), a program (build, interpret), or a test binary (test)
 type Kind enum {
     Module
     Program
@@ -73,9 +67,9 @@ type Frontend trait {
 
 # ---- a build's configuration ----
 
-# a build: where its files go, the clang it runs, its target and build constants, its modes (-d, -r, -s, -u, and
-# whether it is a test build), how many compiles run at once (0: one per core), and whether colour is used. Compiled
-# and Linked count what it did, which is how a test sees a build that had nothing to do
+# a build: where its files go, the clang it runs, its target and build constants, its modes (-debug, -race, -sanitize,
+# -update, and whether it is a test build), how many compiles run at once (0: one per core), and whether colour is used.
+# Compiled and Linked count what it did, which is how a test sees a build that had nothing to do
 type Config struct() {
     Dir String& = "build"
     Clang String& = ""
@@ -88,7 +82,9 @@ type Config struct() {
     Tests Bool = false
     Jobs I64 = 0
     Color Bool = false
-    Quiet Bool = false                  # no "built ..." lines: for tests of the build itself
+    Quiet Bool = false  # no "built ..." lines: for tests of the build itself, and running a file
+    Output String& = "" # -output: where the executable or the object goes (B3h); "" for build/
+    Built String& = ""  # the binary the last BuildProgram made
     Compiled I64 = 0
     Linked I64 = 0
     version String& = ""
@@ -112,7 +108,7 @@ fn (c Config&) modeSuffix() String {
 }
 
 # the flags of the build's mode, shared by every compile and the link so the two never disagree (B2c, B2d, P7, B12): the
-# target's triple for another machine and its CPU; -O0 -g under -d, -O1 under -r, else -O3 with full LTO
+# target's triple for another machine and its CPU; -O0 -g under -debug, -O1 under -race, else -O3 with full LTO
 fn (c Config&) ModeFlags() List<String&> {
     out List<String&>
     if c.Target.Foreign { out.Push($"--target=" $c.Target.Triple) }
@@ -133,7 +129,7 @@ fn (c Config&) ModeFlags() List<String&> {
     return out
 }
 
-# the flags an object with this IR is compiled with: the mode's, and under -d LLVM 18's -O0 instruction selector
+# the flags an object with this IR is compiled with: the mode's, and under -debug LLVM 18's -O0 instruction selector
 # (FastISel) turned off where the IR holds a bfloat, which it keeps wrongly live across a branch (B2c) - everywhere
 # else FastISel is kept, since doing without it costs -O0 compiles 70% (DESIGN.md 3.4)
 fn (c Config&) CompileFlags(ir String&) List<String&> {
@@ -157,20 +153,20 @@ fn (c mut Config&) clangVersion() String&c {
 # how many compiles run at once: Jobs, or one per core this machine has online
 fn (c Config&) width() I64 {
     if c.Jobs > 0 { return c.Jobs }
-    n := sysconf(84)                    # _SC_NPROCESSORS_ONLN
+    n := sysconf(84) # _SC_NPROCESSORS_ONLN
     return n if n > 0 else 1
 }
 
 # ---- content hashes: SHA-256 (FIPS 180-4) ----
 
-ShaK Array<U32, 64> = U32[0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
-                          0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,
-                          0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
-                          0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967,
-                          0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85,
-                          0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
-                          0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3,
-                          0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]
+ShaK Array<U32, 64> = U32[0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5
+    0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174
+    0xe49b69c1, 0xefbe4786, 0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da
+    0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147, 0x06ca6351, 0x14292967
+    0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13, 0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85
+    0xa2bfe8a1, 0xa81a664b, 0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070
+    0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a, 0x5b9cca4f, 0x682e6ff3
+    0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208, 0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2]
 
 # a hash being taken: Write the bytes, then Sum the hex digest
 type Sha256 struct() {
@@ -309,7 +305,7 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64) (Array<I32>, Array<String&>) 
     if n == 0 { return status, said }
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
-    for k in range n { chan.Send(queue, k) }
+    for k in range n { try chan.Send(queue, k) catch chan.ChanError { unreachable } }
     workers := width if width < n else n
     join {
         for w in range workers { spawn runner(queue, cmds, status, said) }
@@ -388,13 +384,13 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&>
     failed := false
     for i in range status.Len() {
         if status[i] != 0 {
-            eprint(said[i])
+            sayErr(said[i])
             if not failed { d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(j.irs[i])) }
             failed = true
             try os.Remove(j.temps[i]) catch os.OsError { }
             continue
         }
-        if said[i] != "" { eprint(said[i]) }
+        if said[i] != "" { sayErr(said[i]) }
         try os.Rename(j.temps[i], j.finals[i]) catch os.OsError {
             if not failed { fileFatal(j.finals[i], msgs.CannotOpen(), d) }
             failed = true
@@ -418,7 +414,7 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool) ? Failed
     for o in objs { args.Push($o) }
     args.Push("-lm")
     args.Push("-lpthread")
-    args.Push("-ldl")                   # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
+    args.Push("-ldl") # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
     if dyncall { args.Push("-lffi") }
     parts List<String&>
     for a in args { parts.Push(a) }
@@ -447,16 +443,21 @@ fn linkCurrent(bin String&, stamp String&, h String&) Bool {
 # a path as a command line runs it: "./build/m" for a relative one
 fn Shown(p String&) String { return $p if p.StartsWith("/") else $"./" $p }
 
+# text written to the standard output, or (sayErr) the standard error, where it can be
+fn say(text String&) { try io.Print(text) catch io.IoError { } }
+fn sayln(text String&) { try io.Println(text) catch io.IoError { } }
+fn sayErr(text String&) { try io.PrintErr(text) catch io.IoError { } }
+
 # what a failed compilation writes: its diagnostics and the line counting them (B11)
 fn finish(d mut diag.Diagnostics&) I32 {
-    print(d.Render())
-    print(d.Summary())
+    say(d.Render())
+    say(d.Summary())
     return 1
 }
 
 # what a front end that cannot make code yet writes
 fn unbuilt() I32 {
-    println("olang: error: this compiler does not generate code yet - its checker and back end are compiler/DESIGN.md's " $
+    sayln("olang: error: this compiler does not generate code yet - its checker and back end are compiler/DESIGN.md's " $
             "M5b-M9; build with build/out")
     return 1
 }
@@ -476,35 +477,65 @@ fn (p Program&) rootIdentity() String {
     return $p.Units[0].Identity if p.Units.Len() > 0 else "a"
 }
 
-# -c FILE: the one module's object, and the runtime's beside it (B2)
-fn Compile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
+# compile FILE: the one module's object, and the runtime's beside it (B2)
+fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     prog := Program()
     try fe.Analyze(file, Kind.Module, c, prog, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
-    if not c.Quiet { println(c.paint("32", $"built " $objs[0])) }
+    obj := objs[0]
+    if c.Output != "" {
+        bytes := try os.ReadFile(obj) catch os.OsError {
+            fileFatal(obj, msgs.CannotOpen(), d)
+            return finish(d)
+        }
+        try os.WriteFile(c.Output, bytes) catch os.OsError {
+            fileFatal(c.Output, msgs.OutputCannotWrite(), d)
+            return finish(d)
+        }
+        obj = $c.Output
+    }
+    if not c.Quiet { sayln(c.paint("32", $"built " $obj)) }
     return 0
 }
 
-# -b FILE: every module's object, then one link (B3)
-fn BuildProgram(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
+# build FILE: every module's object, then one link (B3)
+fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     prog := Program()
     try fe.Analyze(file, Kind.Program, c, prog, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
-    bin := $c.Dir "/" $Readable(prog.rootIdentity()) $c.modeSuffix()
+    bin := $c.Output if c.Output != "" else $c.Dir "/" $Readable(prog.rootIdentity()) $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(bin))
         return finish(d)
     }
-    if not c.Quiet { println(c.paint("32", $"built " $Shown(bin))) }
+    c.Built = $bin
+    if not c.Quiet { sayln(c.paint("32", $"built " $(bin if c.Output != "" else Shown(bin)))) }
     return 0
 }
 
-# -t FILE with one file: its test binary built and run here (B3a). 0 when every test passed
-fn TestFile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
+# FILE.olang ARGS: the program built, saying nothing when it is, then run with ARGS; the status it ends with (B3g).
+# Unlike stage 0, which runs it in this process's place (execv), it runs as a child with this process's output: its
+# command line's first word is the binary's path rather than the file as written
+fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
+    c.Quiet = true
+    status := BuildProgram(fe, c, file, d)
+    if status != 0 { return status }
+    av List<String&>
+    av.Push(Shown(c.Built))
+    for a in args { av.Push($a) }
+    out := try os.Exec(av.ToArray(), "", false) catch os.OsError {
+        d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
+        return finish(d)
+    }
+    return out.Status
+}
+
+# test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
+fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
     info := try os.Stat(file) catch os.OsError { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
@@ -515,13 +546,13 @@ fn TestFile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagno
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
     bin := $c.Dir "/" $Readable(prog.rootIdentity()) "_test" $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
-        println(c.paint("31", $file ": native compilation failed"))
+        sayln(c.paint("31", $file ": native compilation failed"))
         return 1
     }
-    if not c.Quiet { println(c.paint("36", $"== " $file " ==")) }
+    if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
     out := try os.Exec(String&[Shown(bin)], "", false) catch os.OsError { return 1 }
     if out.Status > 128 {
-        println(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
+        sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     }
     return 0 if out.Status == 0 else 1
 }
@@ -529,8 +560,8 @@ fn TestFile(fe mut <F Frontend>&, c mut Config&, file String&, d mut diag.Diagno
 # a listed file that is no file to build: said, and the others still run (B3a)
 fn (c Config&) unusable(file String&, m msgs.Msg, d mut diag.Diagnostics&) I32 {
     fileError(file, m, d)
-    print(d.Render())
-    println(c.paint("31", $file ": cannot be built, skipping"))
+    say(d.Render())
+    sayln(c.paint("31", $file ": cannot be built, skipping"))
     return 1
 }
 
@@ -540,12 +571,12 @@ fn fileError(path String&, m msgs.Msg, d mut diag.Diagnostics&) {
 }
 
 fn (c Config&) skipped(file String&, d mut diag.Diagnostics&) I32 {
-    print(d.Render())
-    println(c.paint("31", $file ": semantic errors, skipping"))
+    say(d.Render())
+    sayln(c.paint("31", $file ": semantic errors, skipping"))
     return 1
 }
 
-# -t FILE FILE ...: each file in a process of its own - this compiler, exe, run again as "-t" with the same modifiers
+# test FILE FILE ...: each file in a process of its own - this compiler, exe, run again as "test" with the same options
 # (passed, as written) and that one file - one after another in the order listed, each writing straight to this
 # process's output as it goes. A file whose compiler ended by a signal is said to have; 0 when every file passed (B3a)
 fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&>&) I32 {
@@ -553,24 +584,24 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
     for f in files {
         args List<String&>
         args.Push($exe)
-        args.Push("-t")
+        args.Push("test")
         for p in passed { args.Push($p) }
         args.Push($f)
         out := try os.Exec(args.ToArray(), "", false) catch os.OsError {
-            println(c.paint("31", $f ": lost track of its build, skipping"))
+            sayln(c.paint("31", $f ": lost track of its build, skipping"))
             failed = true
             continue
         }
         if out.Status > 128 {
-            println(c.paint("31", $f ": the compiler ended (" $SignalName(out.Status - 128) "), skipping"))
+            sayln(c.paint("31", $f ": the compiler ended (" $SignalName(out.Status - 128) "), skipping"))
         }
         if out.Status != 0 { failed = true }
     }
     return 1 if failed else 0
 }
 
-# -i FILE ARGS: the program run by the front end (B3e); the status it ends with
-fn Interpret(fe mut <F Frontend>&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
+# interpret FILE ARGS: the program run by the front end (B3e); the status it ends with
+fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
     return try fe.Interpret(file, args, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
 }
 
@@ -606,7 +637,7 @@ test "SHA-256 gives FIPS 180-4's digests, whatever the writes are cut into" {
     assert hexOf("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
     assert hexOf("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
     assert hexOf("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") ==
-           "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
+        "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1"
     million := "a".Repeat(1000000)
     assert hexOf(million) == "cdc76e5c9914fb9281a1c7e284d73e67f1809a48a497200e046d39ccc7112cd0"
     s := Sha256()
@@ -658,16 +689,16 @@ test "commands run side by side, each one's status and output kept by its number
     assert status[9] == 127
 }
 
-# a front end for the build's own tests: a program of three modules, "lib" giving a number (-D N, else 41), "util" one
-# Edit changes, and the root "app" whose main ends with lib's number, plus the instances' object and a runtime - their
-# IR carrying the target's attributes, as real IR does
+# a front end for the build's own tests: a program of three modules, "lib" giving a number (-define N, else 41), "util"
+# one Edit changes, and the root "app" whose main ends with lib's number, plus the instances' object and a runtime -
+# their IR carrying the target's attributes, as real IR does
 type stubFrontend struct() {
     Edit I64 = 0
     Analyzed I64 = 0
 }
 
-fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&,
-                                 d mut diag.Diagnostics&cfg) ? Failed {
+fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&
+    d mut diag.Diagnostics&cfg) ? Failed {
     s.Analyzed++
     n := cfg.Consts.Raw("N") if cfg.Consts.Has("N") else "41"
     attrs := $"attributes #0 = { nounwind " $cfg.Target.Attrs " }\n"
@@ -675,16 +706,16 @@ fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog 
     prog.Units.Push(Unit("lib", UnitKind.Module, $tt "define i32 @lib_n() #0 {\n  ret i32 " $n "\n}\n" $attrs))
     prog.Units.Push(Unit("util", UnitKind.Module, $tt "define i32 @util_k() #0 {\n  ret i32 " $s.Edit "\n}\n" $attrs))
     main mut String&prog = ($tt "declare i32 @lib_n()\ndeclare i32 @util_k()\ndeclare i32 @inst_z()\ndeclare void @olang_rt()\n" $
-             "define i32 @main() #0 {\n  call void @olang_rt()\n  %a = call i32 @lib_n()\n" $
-             "  %b = call i32 @util_k()\n  %c = call i32 @inst_z()\n  %s = add i32 %a, %b\n  %t = add i32 %s, %c\n" $
-             "  ret i32 %t\n}\n" $attrs)
+            "define i32 @main() #0 {\n  call void @olang_rt()\n  %a = call i32 @lib_n()\n" $
+            "  %b = call i32 @util_k()\n  %c = call i32 @inst_z()\n  %s = add i32 %a, %b\n  %t = add i32 %s, %c\n" $
+            "  ret i32 %t\n}\n" $attrs)
     prog.Units.Push(Unit("app", UnitKind.Main if kind == Kind.Program else UnitKind.Tests, main))
     prog.Units.Push(Unit("app", UnitKind.Instances, $tt "define i32 @inst_z() #0 {\n  ret i32 0\n}\n" $attrs))
     prog.Runtime = $tt "define void @olang_rt() #0 {\n  ret void\n}\n" $attrs
 }
 
-fn (s mut stubFrontend&) Interpret(root String&, args Array<String&>&, cfg mut Config&,
-                                   d mut diag.Diagnostics&cfg) I32 ? Failed {
+fn (s mut stubFrontend&) Interpret(root String&, args Array<String&>&, cfg mut Config&
+    d mut diag.Diagnostics&cfg) I32 ? Failed {
     return I32(args.Len())
 }
 
@@ -694,17 +725,17 @@ fn statusOf(bin String&) I32 {
     return out.Status
 }
 
-test "a build compiles and links only what changed: modules, -D, the target, a missing binary" {
+test "a build compiles and links only what changed: modules, -define, the target, a missing binary" {
     clang := target.FindClang()
-    if clang == "" { done }                     # nothing to build with: passed, as the http tests are
-    dir := try os.MkTemp("", "olang-build-") catch os.OsError { fail }
+    if clang == "" { return } # nothing to build with: passed, as the http tests are
+    dir := try os.MkTemp("", "olang-build-")
     defer try os.RemoveAll(dir) catch os.OsError { }
     d := diag.Diagnostics(false)
     c := Config()
     c.Dir = $dir
     c.Clang = $clang
     c.Quiet = true
-    c.Target = try target.Resolve("native", clang, false, d) catch target.Bad { fail }
+    c.Target = try target.Resolve("native", clang, false, d)
     fe := stubFrontend()
     bin := $dir "/app"
     assert BuildProgram(fe, c, "app.olang", d) == 0, $"first build: " $d.Render()
@@ -717,23 +748,23 @@ test "a build compiles and links only what changed: modules, -D, the target, a m
     fe.Edit = 1
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 6 and c.Linked == 2 and statusOf(bin) == 42
-    # -D N=50 changes lib's IR alone; taken back, every object is there and only the link is redone
+    # -define N=50 changes lib's IR alone; taken back, every object is there and only the link is redone
     c.Consts = cond.Consts()
-    try c.Consts.Define("N=50", d) catch cond.Bad { fail }
+    try c.Consts.Define("N=50", d)
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 7 and c.Linked == 3 and statusOf(bin) == 51
     c.Consts = cond.Consts()
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 7 and c.Linked == 4 and statusOf(bin) == 42
     # another target: every object, the runtime's too
-    c.Target = try target.Resolve("x86-64", clang, false, d) catch target.Bad { fail }
+    c.Target = try target.Resolve("x86-64", clang, false, d)
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 12 and c.Linked == 5 and statusOf(bin) == 42
     # a binary that is gone, or not the one linked, is linked again from the objects there
-    try os.Remove(bin) catch os.OsError { fail }
+    try os.Remove(bin)
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 12 and c.Linked == 6 and statusOf(bin) == 42
-    try os.WriteFile(bin, "not a program") catch os.OsError { fail }
+    try os.WriteFile(bin, "not a program")
     assert BuildProgram(fe, c, "app.olang", d) == 0
     assert c.Compiled == 12 and c.Linked == 7 and statusOf(bin) == 42
     # -c compiles the root's module alone, with the runtime, and reuses what is there
@@ -744,20 +775,20 @@ test "a build compiles and links only what changed: modules, -D, the target, a m
 }
 
 test "listed test files run one after another in processes of their own, a signal said" {
-    dir := try os.MkTemp("", "olang-tfiles-") catch os.OsError { fail }
+    dir := try os.MkTemp("", "olang-tfiles-")
     defer try os.RemoveAll(dir) catch os.OsError { }
     # a stand-in compiler: writes its arguments to a log, and ends as the file it is given says
     exe := $dir "/fake"
     log := $dir "/log"
     script := ("#!/bin/sh\necho \"$@\" >> " $log "\neval \"last=\\${$#}\"\n" $
-               "case \"$last\" in *ok*) exit 0 ;; *bad*) exit 1 ;; *kill*) kill -9 $$ ;; esac\n")
-    try os.WriteFile(exe, script) catch os.OsError { fail }
-    chmod := try os.Exec(String&["chmod", "+x", exe]) catch os.OsError { fail }
+            "case \"$last\" in *ok*) exit 0 ;; *bad*) exit 1 ;; *kill*) kill -9 $$ ;; esac\n")
+    try os.WriteFile(exe, script)
+    chmod := try os.Exec(String&["chmod", "+x", exe])
     assert chmod.Status == 0
     c := Config()
-    assert TestFiles(c, exe, String&["-d"], String&["a_ok.olang", "b_ok.olang"]) == 0
+    assert TestFiles(c, exe, String&["-debug"], String&["a_ok.olang", "b_ok.olang"]) == 0
     assert TestFiles(c, exe, String&[], String&["x_kill.olang", "y_bad.olang", "z_ok.olang"]) == 1
-    text := try os.ReadFile(log) catch os.OsError { fail }
-    assert text == "-t -d a_ok.olang\n-t -d b_ok.olang\n-t x_kill.olang\n-t y_bad.olang\n-t z_ok.olang\n"
+    text := try os.ReadFile(log)
+    assert text == "test -debug a_ok.olang\ntest -debug b_ok.olang\ntest x_kill.olang\ntest y_bad.olang\ntest z_ok.olang\n"
     assert SignalName(9) == "Killed" and SignalName(11) == "Segmentation fault" and SignalName(60) == "Unknown signal 60"
 }

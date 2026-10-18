@@ -1,4 +1,5 @@
 # E11b/E11c: later operands clearing and popping a List and clearing a Map before the earlier pieces render
+import "std/io"
 fn shrink(l mut List<String&>&) I64 {
     l.Clear()
     l.Push("z")
@@ -22,6 +23,6 @@ fn joins() String {
 Baked String& = joins()
 fn main() ? {
     s := joins()
-    println(s)
+    try io.Println(s)
     assert Baked == s
 }

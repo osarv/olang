@@ -12,7 +12,7 @@ type Server struct() {
     cur own mut Conn&
     other own mut Conn&
 }
-fn id(x <T>) T { return x }
+fn id<T>(x T) T { return x }
 fn main() ? {
     x own mut Conn& = Conn(1)
     n := id(take x)

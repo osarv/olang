@@ -1,6 +1,7 @@
 # check: fail error[O33]: this value would be built where the object of 's.cur' lives, which a later argument reads
 # vec5 (o33_order_match_value_argument): O33's order check reaches into a match value's clauses (ownOpContains on
 # StmtEachChild's list)
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -20,7 +21,7 @@ fn main() ? {
         k := i % 2
         setN(Node(9 + i), match k { case 7 { unreachable } case _ => s.cur })
         churn()
-        println($s.cur.n.v)
+        try io.Println($s.cur.n.v)
     }
 }
 fn churn() I64 {

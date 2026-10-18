@@ -136,13 +136,18 @@ struct type {
 
     //BASETYPE_CHOICE, BASETYPE_ERROR
     struct list words; //list of struct token: choice or error member names
+    unsigned long long errWords; //R1c: BASETYPE_ERROR in an error set - the words of it the set holds (bit = ordinal);
+                                 //0, every word. Not part of the type's identity: TypeIsSame ignores it
 
     //BASETYPE_FUNC
     bool hasRetType;
     bool sigUninferable; //G4: a variable the result names that no parameter's type does - reported at the declaration,
                          //whose body is then never checked (one error, not one per use of the variable)
     struct type* retType; //heap-allocated, valid when hasRetType
-    struct list errors; //list of struct type*: error types declared in the signature's error list
+    struct list errors; //list of struct type*: error types declared in the signature's error list - or, for one written
+                        //"?" alone (errsInferred, R1a), the set its body can produce, in a canonical order once settled
+    bool errsInferred;  //R1a: the signature wrote "?" with no error types - the set is the body's
+    bool noReturn;      //D8e: "noreturn" - the function never returns to its caller
     //BASETYPE_FUNC, O13: the result scope of a BUILT result - a scope variable no parameter names, bound where
     //the call's result lands (O18a) or by a scope argument (E25). NULL for a borrowed result (T&p) and for a
     //result that neither is nor holds a reference.
@@ -383,6 +388,7 @@ struct var {
                         //lent keeps its storage in the instance scope, where what refers to it outlives the constructor
     bool atElemCopy; //E31: the hidden local an element "x[i]" is read into to be written through, then written back
     bool atHandleCopy; //E31b/O17b: a hidden copy of a handle element x[i], lent to a call as its reference
+    bool atViewCopy;   //E31b: a hidden copy of a struct element x[i], lent to a call that writes nothing of its own storage
     bool lentForStores; //O13a/O25h: a value local lent to a callee that can keep what it builds in the value's own slots
     struct list* paramReads; //O17b: a parameter's - every read of it its body's check made (OperandReadVar), allocated on
                              //the first
@@ -440,7 +446,10 @@ struct var {
     struct semaModule* lambdaObject; //D8a: a parameter default's lambda, made for calls in this module's code - the
                                      //object emitting it, with no host (NULL: its owner's)
     bool inferRet;            //D16: a lambda whose result is taken from its first "return"
-    bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through
+    bool inferErrs;           //D16: a lambda whose errors are taken from what its body raises and lets through; R1a: a
+                              //function or constructor declared with "?" alone - its error set is what its body can produce
+    bool errsUnsettled;       //R1a: its body read the error set of a function whose set was not final yet (a cycle, an
+                              //unchecked body) - so its own set is not final either until the attempt is judged
     int bodyState;            //O10b: 0 while this function's body is unchecked, 1 while it is being checked, 2 once
                               //it has been - its obligations are part of its signature, so a call checks the
                               //callee's body first (ensureBodyChecked) and only a cycle sees a partial set
@@ -463,6 +472,7 @@ struct var {
     struct var* regionRootLocal; //...for OWN_ROOT_LOCAL, the owner local whose tree it is in (NULL: a value made here)
     struct type* regionType;    //...the type of the object it is the region of (canonical), what a release of it frees
     bool regionOfResult;        //...the object(s) a call's borrowed own result (O37) borrows, below the argument it names
+    int regionStmt;             //...the statement whose check made it (ownStmtSerial), for O34's same-path move
     bool regionAnyType;         //...of objects of any own type (a borrowed own result whose object's type is not one known)
     int ownBorrowResult;        //O37 (Vec phase 1): a function returning a borrow of an owned object reached from its
                                 //parameters by own fields, as a result borrowed from them (T&p): the first one's index + 1,
@@ -542,10 +552,7 @@ enum statementType {
     STATEMENT_DEFER, //S19: block is the deferred code, run on every way out of the block this statement is in
     STATEMENT_BREAK,    //S11: leaves the innermost enclosing loop
     STATEMENT_CONTINUE, //S11: ends the current iteration
-    STATEMENT_ABORT,       //S16c
     STATEMENT_UNREACHABLE, //S16d
-    STATEMENT_DONE,  //process exit, OS-standard success (0) - never takes a value
-    STATEMENT_FAIL, //process exit, OS-standard failure (1) - never takes a value
     STATEMENT_ASSERT,
     STATEMENT_ERROR,
     STATEMENT_TRY_CATCH
@@ -574,6 +581,8 @@ struct catchClause {
     struct var* taskFn;
     struct operand* taskCall;
     bool givesValue;
+    unsigned char ends;      //E35: 1 for "x!" - the error ends the test or the program, naming itself, as a failed check;
+                             //2 (S16) - an error a try lets out of a test body, which fails the test
 };
 
 //D16: one variable a lambda captured - as the body around it sees it, and the lambda's own copy
@@ -598,6 +607,7 @@ struct statement {
     enum statementType sType;
     int line; //B2e: the source line the statement starts on, for -d's line table; 0 when synthesized
     struct str file; //B2e/M22: the source file that line is in - a package's functions come from several
+    struct token startTok; //its first token as written - for a note pointing at it (E31b); no owner when synthesized
     struct var var;              //VAR_DECL: the declared variable; FOR: the loop variable
     struct operand* target;      //ASSIGN: the lvalue being assigned to
     struct list spawnTargets;    //SPAWN (D8c/P1g): one operand* per result bound, NULL for a "_"; empty for a
@@ -758,6 +768,9 @@ struct operand {
     bool hereChecked; //C2d/T17c: checkCtorHereFits has judged this value where it landed - once is enough
     bool storeRelied; //O18c: a store's target was read through this call's result and judged where the result was then -
                       //the end of the statement never lands it anywhere else
+    bool splitLent; //O17: a value with no storage of its own (a call's result, a conditional's, a try's) whose references
+                    //live elsewhere, lent to a reference parameter: bound where its references are, its copy built in the
+                    //block (codegen)
     bool handleLent; //O17b: a handle borrowed for a call that uses it only through its reference - lent as that reference,
                      //so the call's scope variable is where the reference leads and the handle's own storage is no part of it
     struct list args; //list of struct operand*: operator operands, call args, or [base, index]/[base] for index/member
@@ -784,6 +797,8 @@ struct operand {
     //region (a struct var with isRegion); ownOrig is the type it had, for a move position or a take that restores it
     struct var* ownRegion;
     struct type* ownOrig;
+    struct var* ownElemRegion; //O33 (T25e): an element of an own array, held by value and holding references - stored in
+                               //this region (the buffer) while what it holds refers where the base is retagged (the reach)
     bool ownMoved;     //O34: an owner local or an owning parameter moved here - its slot is left null (codegen)
     bool ownNewRegion; //O30/O34: a temporary built for an own slot - in a new region of its own (codegen)
     bool ownDiscard;   //O35: an owned result no slot receives, standing as a statement - released at its end (codegen)
@@ -808,6 +823,10 @@ struct operand {
                      //(args[2]); its type is the fixed-length reference
     bool constVarValue; //G23: "<N>" - an instantiation's constant, read as a value: configuration, never S8a's dead code
     bool isTried; //OPERATION_FUNCCALL only: true if this call was written as "try f(...)" - see semantic.c
+    //E15a/E35: a "checked" with no clauses written as (or in) the operand of a try or "!" hands what it checks to that
+    //one - its errors and BuiltinError words, which the enclosing one takes on as its own
+    struct list* absorbErrs; //struct type*, NULL unless this is such a checked
+    unsigned absorbWords;
     bool isIncDec;              //E31: an OPERATION_SEQ standing for "x++" / "--x" on a type declaring its own
     bool isWriteBack;           //E31b: an OPERATION_SEQ standing for a call on a handle element - "users[i].Push(x)":
                                 //the handle's copy held in a hidden local, then the call lending it as its reference
@@ -972,6 +991,10 @@ void VarListAddSetOrigin(struct list* l, struct var v);
 
 void StatementAdd(struct list* codeBlock, struct statement s);
 bool StatementCatchCoversType(struct list* matches, struct type errType);
+unsigned long long ErrSetWords(struct type e); //R1c: the words of e an error set holds
+void ErrSpellItems(struct type e, char* buf, size_t n); //R1c: "T", or "T.W + T.V" where the set names words
+bool OperandIsNoReturnCall(struct operand* op); //D8e
+bool operandLeaves(struct operand* op); //D8e: a noreturn call, or a conditional or match giving only such
 
 //requireMain: only "-b" (§10 B3) needs a "main" - "-c" compiles a plain module and "-t" runs tests,
 //neither of which has or wants one
@@ -983,6 +1006,7 @@ bool TypeIsPermRef(struct type t); //T25b: a reference type carrying a permissio
 bool TypeIsOwning(struct type t); //O31: a struct holding an own reference in a field
 bool TypeIsOwnValue(struct type t); //O31: ...held by value - an owner value local, a borrowed copy, an owned result
 struct var* OwnValueLocalOf(struct operand* op); //O31: the owner value local a read names, or NULL
+bool OwnValuePlace(struct operand* op); //O31/O34: a place whose owning value its container owns - local, global, field
 bool TypeIsSameStrict(struct type a, struct type b); //T25b: identity including the outermost permission //D16: every lambda's hidden function
 //which of the CALLING function's scopes a callee's scope variable was bound to at one call (§8 O17/O18).
 //NULL means the caller's own scope. Codegen's one entry point into the scope-binding map.
@@ -1006,11 +1030,8 @@ struct list* SemanticAllTypeInstantiations(void);
 struct list* SemanticAllCtorTwins(void); //G10d: struct type*, each with its constructor's instantiation
 struct instantiation { struct var* generic; struct list bindings; struct var* specialized;
                        struct token site; int chain; }; //site: where it was first asked for, for a note on errors inside it //list of struct semaModule*, in load order; index is used for codegen symbol mangling
-struct type* SemanticGenericErrorType(void);
 struct type* SemanticBuiltinErrorType(void);
-int SemanticBuiltinErrorWord(char* word); //the bare error singleton (§7.6 R15) - codegen uses this
-                                              //only to print a cleaner "unhandled error: error" message,
-                                              //never for ordinal encoding (already generic, see the report)
+int SemanticBuiltinErrorWord(char* word); //R20: the ordinal of BuiltinError's word, which a check fails with
 
 //O18a: whether a call's binding for one of its callee's scope variables still follows the result
 bool SemanticParamTransient(struct var* func, int j);

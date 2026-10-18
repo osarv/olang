@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (decision 48): a closure made on a task, capturing the stand-in it was handed, kept past the join, then called on the
 # main thread and on two tasks at once - each thread builds into its own part of the scope the stand-in was folded into,
 # and the destructors of what they built run as that scope closes
@@ -55,6 +55,6 @@ fn run() I64 {
 fn main() ? {
     want I64 = 0
     for i in range 20000 { want += 3 * (1 + i) + 300000 }
-    if run() != want { fail }
-    if Dtors != 60 { fail }
+    assert run() == want
+    assert Dtors == 60
 }

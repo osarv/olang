@@ -1,15 +1,16 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/D16c: a lambda over the receiver's parts, in a generic function and in a trait's default, held in a local that is
 # only ever called - its environment is in the frame, so nothing is built where the parts live
+import "std/io"
 type Sized trait {
     Len() I64
 }
-fn (x <T Sized>&) Twice() I64 {
+fn (x T&) Twice<T Sized>() I64 {
     f := fn() I64 { return x.Len() * 2 }
     return f()
 }
-fn count(xs Array<<T>>&) I64 {
+fn count<T>(xs Array<T>&) I64 {
     f := fn() I64 { return xs.Len() }
     return f()
 }
@@ -25,5 +26,5 @@ fn (b Bag&) Str() String {
     return $count(b.arr) " " $b.box.Twice()
 }
 fn main() ? {
-    println($Bag(I64[1, 2, 3], Box(5)))
+    try io.Println($Bag(I64[1, 2, 3], Box(5)))
 }

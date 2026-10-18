@@ -1,5 +1,5 @@
 # gemm: C = A B for square matrices through std/linalg's Gemm, timed inside the program (the best of several runs, since
-# the sizes go down to 64 x 64), printing GFLOPS - the olang side of bench/gemm.sh, against bench/c/gemm.c (naive,
+# the sizes go down to 64 x 64), printing GFLOPS - the olang side of bench/rungemm.olang, against bench/c/gemm.c (naive,
 # blocked and OpenBLAS). Arguments: f32|f64, n, threads, repetitions, and then "mv" or "mvt" and m for a
 # matrix-vector product through Gemv instead, 1000 times a run: with W an n x m matrix, "mv" is y = W x (each output
 # a row of W dotted with x - a dense layer at batch 1) and "mvt" is y = W^T u (W's rows added in, scaled - the same
@@ -9,14 +9,14 @@ import "std/os"
 import "std/time"
 import "std/linalg"
 
-fn conv(x F64, like <T>) T {
+fn conv<T>(x F64, like T) T {
     return match T {
         case F32 => F32(x)
         case F64 => x
     }
 }
 
-fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError {
+fn run<T>(n I64, m I64, threads I64, reps I64, mode String&, like T) ? io.IoError, linalg.ShapeError {
     a := linalg.Matrix<T>(n, m)
     b := linalg.Matrix<T>(n, m)
     c := linalg.Matrix<T>(n, m)
@@ -34,7 +34,7 @@ fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError
         fastest I64 = 0
         for r in range reps {
             t0 := time.Now()
-            for i in range 1000 { linalg.Gemv(y, b, trans, x) }
+            for i in range 1000 { try linalg.Gemv(y, b, trans, x) }
             t := time.Since(t0)
             if r == 0 or t < fastest { fastest = t }
         }
@@ -49,7 +49,7 @@ fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError
     best I64 = 0
     for r in range reps {
         t0 := time.Now()
-        linalg.Gemm(c, a, false, b, false, 1, 0, threads)
+        try linalg.Gemm(c, a, false, b, false, 1, 0, threads)
         t := time.Since(t0)
         if r == 0 or t < best { best = t }
     }
@@ -59,9 +59,13 @@ fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError
     try io.Print($n " " $threads " " $secs "s " $rate " GFLOPS check " $c.Sum() "\n")
 }
 
+error Usage {
+    ARGS
+}
+
 fn main() ? {
     args := os.Args()
-    if args.Len() < 5 { error }
+    if args.Len() < 5 { error Usage.ARGS }
     n := try args[2].ParseInt()
     threads := try args[3].ParseInt()
     reps := try args[4].ParseInt()

@@ -1,0 +1,17 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: the parameter handed on whole to a callee that writes its own storage - declared after its caller, so the
+# answer is settled once every body is checked
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    f(s[0])
+}
+fn f(v mut V&) { g(v) }
+fn g(v mut V&) { v.n = 2 }

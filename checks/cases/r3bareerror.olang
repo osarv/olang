@@ -1,0 +1,6 @@
+# check: fail expected a name
+# R3: every error names its type and word - there is no bare "error"
+fn f(n I64) ? {
+    if n < 0 { error }
+}
+fn main() { }

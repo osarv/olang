@@ -1,0 +1,24 @@
+# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# Vec phase 2a (O37): a borrow of an own object reached through a plain reference is no borrowed own result - what holds
+# it is not below the parameter (an over-rejection: the object is still borrowed where it is)
+import "std/io"
+type Leaf struct(n I64) {
+    n
+    text String& = "leaf" $n
+}
+type Inner struct(k I64) {
+    k
+    deep own mut Leaf& = Leaf(k * 10)
+}
+type Outer struct() {
+    o own mut Inner& = Inner(1)
+    p Inner& = null
+}
+fn (x Outer&) First() Inner&x { return x.o }
+fn (x Outer&) Deep() Leaf&x { return x.First().deep }
+fn (x Outer&) Plain() Inner&x { return x.p }
+fn (x Outer&) Deep2() Leaf&x { return x.Plain().deep }
+fn main() ? {
+    v := Outer()
+    try io.Println($v.Deep2().n)
+}

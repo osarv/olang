@@ -2,6 +2,7 @@
 # never: unknown type
 # never: Box is not generic
 # a type declaration that does not parse is reported once: the type stays declared, so its uses say nothing more
+import "std/io"
 type A enum {
     Leaf(v I64)
     Many(b B&)
@@ -17,5 +18,5 @@ fn f(b Box<I64>&) I64 { return 1 }
 fn main() ? {
     x A& = A.Leaf(3)
     c := Box<I64>(3)
-    println($x " " $f(c))
+    try io.Println($x " " $f(c))
 }

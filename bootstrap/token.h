@@ -19,6 +19,7 @@ enum tokenType {
     TOK_IF,
     TOK_ELSE,
     TOK_TRY,
+    TOK_CHECKED, //"checked (...)", "checked a[i]" - a try that also turns on every optional check inside (E15a)
     TOK_CATCH,
     TOK_RET,
     TOK_JOIN,  //"join { ... }" - a block that waits for every task spawned in it before it ends (P1)
@@ -27,11 +28,9 @@ enum tokenType {
     TOK_DEFER, //"defer STATEMENT" / "defer { ... }" - code run on every way out of the enclosing block (S19)
     TOK_BREAK,    //S11: leaves the innermost enclosing loop, closing every block scope it leaves
     TOK_CONTINUE, //S11: ends the current iteration, same unwinding
-    TOK_ABORT,       //S16c: stop now, violently - no cleanup, a core dump, the OS's abort status
     TOK_UNREACHABLE, //S16d: control was believed never to get here; aborts if it does
     TOK_EXTENDS,     //T29f: "type Meters extends I32" - the declared type inherits its base's methods and operators
-    TOK_DONE,
-    TOK_FAIL,
+    TOK_NORETURN, //D8e: "fn Exit(code I32) noreturn" - the function never returns to its caller
     TOK_ASSERT, //"assert EXPR" - a statement, takes its operand directly like "return" does, not a
                 //function call - see the report
     TOK_FOR,
@@ -92,6 +91,7 @@ enum tokenType {
     TOK_ARROW, //S12b: "=>" - a match case's value
     TOK_NOT,
     TOK_NEQ,
+    TOK_BANG, //E35: a postfix '!' - what fails here ends the program
     TOK_AND,
     TOK_OR,
     TOK_XOR,
@@ -128,6 +128,8 @@ bool TokenIfBeginsLine(TokenCtx tc, struct token t);
 bool isLetter(char c);
 bool isDigit(char c);
 struct token TokenFeed(TokenCtx tc);
+bool TokenSkipEnds(TokenCtx tc, bool skip); //L18a: sets whether TokenFeed passes over statement ends; returns what it was
+bool TokenSkippingEnds(TokenCtx tc);
 bool TokenSplitShiftRight(TokenCtx tc);
 bool TokenSplitShiftLeft(TokenCtx tc);
 int TokenEditMark(TokenCtx tc);

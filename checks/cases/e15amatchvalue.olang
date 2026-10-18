@@ -1,0 +1,12 @@
+# check: fail error[R8]: nothing here can fail - write it without 'checked'
+# E15a: a match used as a value's clauses are statements' bodies - a checked around the match checks none of them, so
+# here it covers nothing that can fail
+fn f(x I64, a I64, b I64) I64 ? {
+    return checked (match x {
+        case 1 => a / b
+        nomatch => 0
+    })
+}
+fn main() ? {
+    r := try f(1, 4, 2)
+}

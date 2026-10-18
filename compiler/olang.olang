@@ -1,19 +1,17 @@
-# olang - the compiler's command line (compiler/DESIGN.md section 1.10, M10).
+# olang - the compiler's command line (compiler/DESIGN.md section 1.10, M10), in words, as stage 0's (B1):
 #
-#     olang -b FILE           build a program, linking every module it reaches (B3)
-#     olang -c FILE           compile one module to its object (B2)
-#     olang -t FILE...        build and run each file's tests, each file a build of its own (B3a)
-#     olang -i FILE ARGS...   run the program, ARGS its command line (B3e, B3f)
-#     olang -e RULE           print a rule of the specification (B11a)
 #
-# with the modifiers -r -d -s -u, -a TARGET and -D NAME=VALUE anywhere before -i's file (B1, B2c, B2f, B12, B10, M23c).
-# A mistake in the command line is one row, "olang: error[RULE]: ...", and status 1, as every other mistake (B11).
+# with the options -output -debug -race -sanitize -target -define -update -check, each for the modes it applies to,
+# anywhere after the mode and before the file a run or interpret takes. A mistake in the command line is one row,
+# "olang: error[RULE]: ...", and status 1, as every other mistake (B11).
 #
 # What is built is build's (the build plan, the objects, the link); what a program means is the front end's - here the
 # passes that exist so far, loading and names (M4), which report what they find and say that code generation is still
 # to come (M5b-M9).
 
 import "std/os"
+import "std/io"
+import "std/filepath"
 import "build"
 import "target"
 import "cond"
@@ -34,12 +32,93 @@ fn main() ? {
 
 # ---- the command line ----
 
-# what the command line asks for: the mode and what follows it, and the modifiers as written (for -t's children)
+# the modes, by number: running a file (no word - a file ending in .olang written first, B3g), then each mode's word
+ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", "format", "explain", "help"]
+Run I64 = 0
+Build I64 = 1
+Compile I64 = 2
+Test I64 = 3
+Interp I64 = 4
+Format I64 = 5
+Explain I64 = 6
+Help I64 = 7
+
+# what each mode is, for help
+ModeUsage Array<String&> = String&[
+    "olang [OPTION...] FILE.olang [ARGUMENT...]"
+    "olang build [OPTION...] FILE.olang"
+    "olang compile [OPTION...] FILE.olang"
+    "olang test [OPTION...] FILE.olang..."
+    "olang interpret [OPTION...] FILE.olang [ARGUMENT...]"
+    "olang format [OPTION...] FILE.olang..."
+    "olang explain RULE"
+    "olang help [MODE]"
+]
+ModeWhat Array<String&> = String&[
+    "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
+    "builds one program, FILE.olang its root module, into build/ (B3)"
+    "compiles one module to an object, linking nothing (B2)"
+    "runs each file's test blocks, each file built on its own (B3a)"
+    "runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)"
+    "rewrites each file in olang's one layout (B13)"
+    "prints a rule of the specification (B11a)"
+    "lists the modes, or a mode's options"
+]
+
+# the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
+# what they do
+OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", ""]
+OptModes Array<I64> = I64[6, 15, 15, 15, 31, 31, 31, 32]
+OptWhat Array<String&> = String&[
+    "writes the executable or the object to PATH (B3h)"
+    "builds unoptimized, with debug information (B2c, B2e)"
+    "builds with the data race detector (B2b)"
+    "builds with the scope sanitizer (B2f)"
+    "builds for another machine (B12)"
+    "defines a build constant (B10)"
+    "moves the remote repositories the build reaches to their refs' current commits (M23c)"
+    "rewrites nothing: lists each file not in the layout (B13)"
+]
+
+fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
+
+# the modes an option applies to, as a diagnostic names them: "build and compile"
+fn modesOf(modes I64) String {
+    n I64 = 0
+    for m in range ModeWords.Len() { n += (modes >> m) & 1 }
+    b := StringBuilder()
+    k I64 = 0
+    for m in range ModeWords.Len() {
+        if ((modes >> m) & 1) == 0 { continue }
+        k++
+        if k > 1 { b.Push(" and " if k == n else ", ") }
+        b.Push(modeName(m))
+    }
+    return b.ToString()
+}
+
+fn endsWithOlang(a String&) Bool { return a.Len() > 6 and a.EndsWith(".olang") }
+
+fn modeNumber(word String&) I64 {
+    for m in range 1, ModeWords.Len() {
+        if ModeWords[m] == word { return m }
+    }
+    return -1
+}
+
+# what the command line asks for: the mode, its files (explain's rule or help's mode as Word), the program's own
+# arguments for a run or interpret, and the options as written (for test's children)
 type CommandLine struct() {
-    Mode String& = ""
+    Mode I64 = 0
     Files List<String&>
+    Word String& = ""
+    HasWord Bool = false
+    Args List<String&>
     Passed List<String&>
     Spec String& = "native"
+    Output String& = ""
+    Check Bool = false
 }
 
 # a mistake in the command line: reported to the diagnostics already
@@ -50,67 +129,144 @@ fn usage(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
     error Bad.USAGE
 }
 
-# args read as stage 0 reads them (B1): left to right, the modifiers taken out wherever they stand - each recorded in
-# c, a -D defined at once - up to the file -i runs, whose own command line everything after it is; the first mistake
-# reported and the reading stopped. Then the mode is the first word left and the files the rest; -e needs exactly one
+# args read as stage 0 reads them (B1): the mode the first word - running a file when it is a file or an option - then
+# the options and the files in any order, each option checked against the mode and a -define defined at once; for
+# running a file and for interpret, whatever follows the file is the program's own, an option's spelling included. The
+# first mistake is reported and the reading stopped
 fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
     cl := CommandLine()
-    kept List<String&>
+    if args.Len() < 2 { try usage(d, msgs.Usage()) }
     i I64 = 1
+    if not args[1].StartsWith("-") and not endsWithOlang(args[1]) {
+        m := modeNumber(args[1])
+        if m < 0 { try usage(d, msgs.NotAMode(args[1])) }
+        cl.Mode = m
+        i = 2
+    }
     for i < args.Len() {
         a := args[i]
-        if kept.Len() >= 2 and kept[0] == "-i" {
-            kept.Push($a)
-        } else if a == "-r" or a == "-u" or a == "-d" or a == "-s" {
-            c.Race = c.Race or a == "-r"
-            c.Update = c.Update or a == "-u"
-            c.Debug = c.Debug or a == "-d"
-            c.San = c.San or a == "-s"
-            cl.Passed.Push($a)
-        } else if a == "-a" {
-            if i + 1 >= args.Len() { try usage(d, msgs.TargetMissing()) }
-            i++
-            cl.Spec = $args[i]
-            cl.Passed.Push("-a")
-            cl.Passed.Push($args[i])
-        } else if a == "-D" {
-            if i + 1 >= args.Len() { try usage(d, msgs.DefineMissing()) }
-            i++
-            try c.Consts.Define(args[i], d) catch cond.Bad { error Bad.USAGE }
-            cl.Passed.Push("-D")
-            cl.Passed.Push($args[i])
-        } else if a.StartsWith("-D") {
-            try c.Consts.Define(a[2:], d) catch cond.Bad { error Bad.USAGE }
-            cl.Passed.Push($a)
-        } else if a.StartsWith("-") and not isMode(a) {
-            try usage(d, msgs.UnknownFlag(a))
-        } else {
-            kept.Push($a)
-        }
         i++
+        if a.StartsWith("-") {
+            o I64 = -1
+            for k in range OptWords.Len() {
+                if OptWords[k] == a { o = k }
+            }
+            if o < 0 { try usage(d, msgs.UnknownFlag(a, modeName(cl.Mode))) }
+            if ((OptModes[o] >> cl.Mode) & 1) == 0 {
+                try usage(d, msgs.OptionNotForMode(a, modesOf(OptModes[o]), modeName(cl.Mode)))
+            }
+            cl.Passed.Push($a)
+            v String& = ""
+            if OptValues[o] != "" {
+                if i >= args.Len() { try usage(d, msgs.OptionNeedsValue(a, OptValues[o])) }
+                v = $args[i]
+                i++
+                cl.Passed.Push($v)
+            }
+            if o == 0 { cl.Output = $v }
+            if o == 1 { c.Debug = true }
+            if o == 2 { c.Race = true }
+            if o == 3 { c.San = true }
+            if o == 4 { cl.Spec = $v }
+            if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.USAGE } }
+            if o == 6 { c.Update = true }
+            if o == 7 { cl.Check = true }
+            continue
+        }
+        if cl.Mode == Explain or cl.Mode == Help {
+            if cl.HasWord { try usage(d, msgs.ExplainNeedsRule() if cl.Mode == Explain else msgs.HelpOneMode()) }
+            cl.Word = $a
+            cl.HasWord = true
+            continue
+        }
+        # running a file, the file is what tells it from a mode: a mode's word after the options belongs before them,
+        # and any other word is no file to run. A mode's own files are taken as named, so a missing file or a directory
+        # is reported as it is (B3a, M1)
+        if cl.Mode == Run and not endsWithOlang(a) {
+            if modeNumber(a) > 0 { try usage(d, msgs.ModeFirst(a)) }
+            try usage(d, msgs.NotASource(a))
+        }
+        cl.Files.Push($a)
+        if cl.Mode == Run or cl.Mode == Interp {
+            for i < args.Len() {
+                cl.Args.Push($args[i])
+                i++
+            }
+        }
     }
-    if kept.Len() == 0 { try usage(d, msgs.Usage()) }
-    cl.Mode = $kept[0]
-    for k in range 1, kept.Len() { cl.Files.Push($kept[k]) }
-    if cl.Mode == "-e" and cl.Files.Len() != 1 { try usage(d, msgs.ExplainNeedsRule()) }
     return cl
 }
 
-fn isMode(a String&) Bool { return a == "-b" or a == "-c" or a == "-t" or a == "-i" or a == "-e" }
-
-# the eight built-in constants (B10a), once the target is known; a -D naming one is a mistake, the first such in their
-# order reported
+# the eight built-in constants (B10a), once the target is known; a -define naming one is a mistake, the first such in
+# their order reported
 fn builtins(c mut build.Config&, testBuild Bool, d mut diag.Diagnostics&) ? Bad {
-    for name in String&["TargetOs", "TargetArch", "TargetCpu", "TargetVectorBits", "TargetHasFma", "DebugBuild",
-                        "RaceBuild", "TestBuild"] {
+    for name in String&["TargetOs", "TargetArch", "TargetCpu", "TargetVectorBits", "TargetHasFma", "DebugBuild"
+        "RaceBuild", "TestBuild"] {
         if c.Consts.Has(name) { try usage(d, msgs.DefineBuiltin(name)) }
     }
     t := c.Target
     c.Consts.Builtins(t.Os, t.Arch, t.Cpu, t.VectorBits, 1 if t.Fma else 0, c.Debug, c.Race, testBuild)
 }
 
-# -e RULE: the rule's text, from the specification beside the compiler (B11a)
-fn explain(rule String&, d mut diag.Diagnostics&) ? Bad {
+# B3h: -output's directory must be there - the compiler makes none
+fn checkOutput(out String&, d mut diag.Diagnostics&) ? Bad {
+    if os.IsDir(out) { try usage(d, msgs.OutputIsDir(out)) }
+    slash := try out.FindLast("/") catch { return }
+    dir := out[:1] if slash == 0 else out[:slash]
+    if not os.IsDir(dir) { try usage(d, msgs.OutputNoDir(out, dir)) }
+}
+
+# the command line args read and checked - its options in c, the target resolved and the built-in constants defined
+# for a mode that builds - before anything is analyzed: every mistake a command line can have, the first reported.
+# help and explain need nothing more; format only its files
+fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
+    cl := try Parse(args, c, d)
+    if cl.Mode == Help { return cl }
+    if cl.Mode == Explain {
+        if not cl.HasWord { try usage(d, msgs.ExplainNeedsRule()) }
+        return cl
+    }
+    if cl.Files.Len() == 0 { try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode))) }
+    if (cl.Mode == Build or cl.Mode == Compile) and cl.Files.Len() != 1 {
+        try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
+    }
+    if cl.Mode == Format { return cl }
+    if cl.Output != "" { try checkOutput(cl.Output, d) }
+    c.Output = $cl.Output
+    c.Clang = target.FindClang()
+    c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == Interp, d) catch target.Bad { error Bad.USAGE }
+    if c.Target.Foreign and cl.Mode != Compile { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
+    c.Tests = cl.Mode == Test
+    try builtins(c, c.Tests, d)
+    return cl
+}
+
+# help, and help MODE: the modes, or one mode's options, on the standard output
+fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
+    b := StringBuilder()
+    if not cl.HasWord {
+        b.Push("usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]\n\nmodes:\n")
+        b.Push($"  " $"FILE.olang".PadEnd(11) " " $ModeWhat[Run] "\n")
+        for m in range 1, ModeWords.Len() { b.Push($"  " $ModeWords[m].PadEnd(11) " " $ModeWhat[m] "\n") }
+        b.Push("\n'olang help MODE' lists a mode's options; 'olang help run' those of running a file.\n")
+        return b.ToString()
+    }
+    m := Run if cl.Word == "run" else modeNumber(cl.Word)
+    if m < 0 { try usage(d, msgs.NotAMode(cl.Word)) }
+    b.Push($"usage: " $ModeUsage[m] "\n" $ModeWhat[m] "\n")
+    any := false
+    for o in range OptWords.Len() {
+        if ((OptModes[o] >> m) & 1) == 0 { continue }
+        if not any { b.Push("\noptions:\n") }
+        any = true
+        w := $OptWords[o] $(" " if OptValues[o] != "" else "") $OptValues[o]
+        b.Push($"  " $w.PadEnd(18) " " $OptWhat[o] "\n")
+    }
+    return b.ToString()
+}
+
+# explain RULE: the rule's text, from the specification beside the compiler (B11a)
+fn explain(rule String&, d mut diag.Diagnostics&) String ? Bad {
     path := diag.SpecPath()
     spec := try os.ReadFile(path) catch os.OsError {
         d.Error(diag.Where.Nowhere, msgs.NoSpec(path))
@@ -120,55 +276,77 @@ fn explain(rule String&, d mut diag.Diagnostics&) ? Bad {
         d.Error(diag.Where.Nowhere, msgs.NoRule($rule[:1].ToUpper() $rule[1:]))
         error Bad.USAGE
     }
-    print(text)
+    return text
 }
 
-# the command line args read and checked - its modifiers in c, the target resolved and the built-in constants defined
-# for a mode that builds - before anything is analyzed: every mistake a command line can have, the first reported
-fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) CommandLine ? Bad {
-    cl := try Parse(args, c, d)
-    if cl.Mode == "-e" { return cl }
-    c.Clang = target.FindClang()
-    c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == "-i", d) catch target.Bad { error Bad.USAGE }
-    if c.Target.Foreign and (cl.Mode == "-b" or cl.Mode == "-t") {
-        try usage(d, msgs.TargetForeignMode(cl.Mode, cl.Spec))
+# format: the formatter (compiler/tools/fmt.olang), as built beside this compiler (make's build/compiler_tools_fmt),
+# run over the files with std beside it - stage 0 builds it into its cache itself, which this driver cannot do until it
+# makes code
+fn format(cl CommandLine&, d mut diag.Diagnostics&) I32 ? Bad {
+    exe := try os.ReadLink("/proc/self/exe") catch os.OsError default "olang"
+    dir := filepath.Dir(exe)
+    bin := $dir "/compiler_tools_fmt"
+    if not os.Exists(bin) { try usage(d, msgs.FormatterMissing(bin)) }
+    std := try os.Env("OLANG_STD") catch default $dir "/../std"
+    av List<String&>
+    av.Push("/usr/bin/env")
+    av.Push($"OLANG_STD=" $std)
+    av.Push(bin)
+    av.Push("-l" if cl.Check else "-f")
+    for f in cl.Files { av.Push($f) }
+    out := try os.Exec(av.ToArray(), "", false) catch os.OsError {
+        d.Error(diag.Where.Nowhere, msgs.FormatterBuild(bin))
+        error Bad.USAGE
     }
-    c.Tests = cl.Mode == "-t"
-    try builtins(c, c.Tests, d)
-    if (cl.Mode == "-c" or cl.Mode == "-b") and cl.Files.Len() != 1 { try usage(d, msgs.ModeOneFile(cl.Mode)) }
-    if (cl.Mode == "-i" or cl.Mode == "-t") and cl.Files.Len() == 0 { try usage(d, msgs.ModeNeedsFile(cl.Mode)) }
-    if not isMode(cl.Mode) { try usage(d, msgs.NotAMode(cl.Mode)) }
-    return cl
+    return out.Status
 }
 
 # runs the command line args with the front end fe, as the process olang is: the status it ends with
-fn Run(args Array<String&>&, fe mut <F build.Frontend>&) I32 {
+fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     d := diag.Diagnostics(diag.ColorWanted())
     c := build.Config()
     c.Color = d.Color
     cl := try Prepare(args, c, d) catch Bad { return said(d) }
-    files := cl.Files.ToArray()
-    if cl.Mode == "-e" {
-        try explain(files[0], d) catch Bad { return said(d) }
-        return 0
+    if cl.Mode == Help {
+        text := try help(cl, d) catch Bad { return said(d) }
+        return write(text)
     }
-    if cl.Mode == "-c" { return build.Compile(fe, c, files[0], d) }
-    if cl.Mode == "-b" { return build.BuildProgram(fe, c, files[0], d) }
-    if cl.Mode == "-i" { return build.Interpret(fe, c, files[0], files, d) }
+    if cl.Mode == Explain {
+        text := try explain(cl.Word, d) catch Bad { return said(d) }
+        return write(text)
+    }
+    if cl.Mode == Format { return try format(cl, d) catch Bad { return said(d) } }
+    files := cl.Files.ToArray()
+    if cl.Mode == Compile { return build.Compile(fe, c, files[0], d) }
+    if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }
+    if cl.Mode == Run { return build.RunProgram(fe, c, files[0], cl.Args.ToArray(), d) }
+    if cl.Mode == Interp {
+        # the program's command line is the file, then what follows it (B3f)
+        pargs List<String&>
+        pargs.Push($files[0])
+        for a in cl.Args { pargs.Push($a) }
+        return build.Interpret(fe, c, files[0], pargs.ToArray(), d)
+    }
     if files.Len() == 1 { return build.TestFile(fe, c, files[0], d) }
     exe := try os.ReadLink("/proc/self/exe") catch os.OsError default $args[0]
     return build.TestFiles(c, exe, cl.Passed.ToArray(), files)
 }
 
+# text written to the standard output; 0, or 1 where it could not be
+fn write(text String&) I32 {
+    try io.Print(text) catch io.IoError { return 1 }
+    return 0
+}
+
 # a mistake in the command line, written as it was reported: no line counting errors follows it (B11)
 fn said(d mut diag.Diagnostics&) I32 {
-    print(d.Render())
+    write(d.Render())
     return 1
 }
 
 fn drive(args Array<String&>&) I32 {
     fe := Passes()
-    return Run(args, fe)
+    return RunWith(args, fe)
 }
 
 # ---- the front end so far ----
@@ -180,14 +358,14 @@ type Passes struct() {
     Loaded I64 = 0
 }
 
-fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&,
-                           d mut diag.Diagnostics&cfg) ? build.Failed {
+fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&
+    d mut diag.Diagnostics&cfg) ? build.Failed {
     try p.front(root, cfg, d)
     error build.Failed.UNBUILT
 }
 
-fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&,
-                             d mut diag.Diagnostics&cfg) I32 ? build.Failed {
+fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&
+    d mut diag.Diagnostics&cfg) I32 ? build.Failed {
     try p.front(root, cfg, d)
     error build.Failed.UNBUILT
 }
@@ -206,20 +384,6 @@ fn (p mut Passes&) front(root String&, cfg mut build.Config&, d mut diag.Diagnos
 
 # ---- tests ----
 
-# what the command line args makes this compiler write before anything is built, and the status: Run with a front
-# end that reaches nothing
-type nothing struct() { }
-
-fn (n mut nothing&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&,
-                            d mut diag.Diagnostics&cfg) ? build.Failed {
-    error build.Failed.REPORTED
-}
-
-fn (n mut nothing&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&,
-                              d mut diag.Diagnostics&cfg) I32 ? build.Failed {
-    return 7
-}
-
 # the row a command line's mistake is reported as, and whether it was one
 fn mistake(words Array<String&>&) String {
     args List<String&>
@@ -228,43 +392,53 @@ fn mistake(words Array<String&>&) String {
     d := diag.Diagnostics(false)
     c := build.Config()
     cl := try Parse(args.ToArray(), c, d) catch Bad { return d.Render() }
-    return $"no mistake: " $cl.Mode
+    return $"no mistake: " $modeName(cl.Mode)
 }
 
 test "a command line's mistakes are said as stage 0 says them" {
-    assert mistake(String&[]) == "olang: error[B1]: nothing to do - write a mode and a file, as 'olang -b main.olang'\n"
-    assert mistake(String&["-d", "-r"]) == mistake(String&[])
+    assert mistake(String&[]) == ("olang: error[B1]: nothing to do - write a file to build and run, as 'olang " $
+            "main.olang', or a mode ('olang help' lists them)\n")
     assert mistake(String&["-x"]) ==
-           "olang: error[B1]: unknown flag '-x' - the flags are -b -c -t -i -e -r -d -s -u -a -D\n"
-    assert mistake(String&["-race", "-b", "m.olang"]) ==
-           "olang: error[B1]: unknown flag '-race' - the flags are -b -c -t -i -e -r -d -s -u -a -D\n"
-    assert mistake(String&["-b", "m.olang", "-a"]) == "olang: error[B12]: -a needs a target after it, as '-a x86-64-v3'\n"
-    assert mistake(String&["-D"]) == "olang: error[B10]: -D needs Name=value after it\n"
-    assert mistake(String&["-D", "X"]) == "olang: error[B10]: -D takes Name=value, found 'X'\n"
-    assert mistake(String&["-DX=1", "-D", "X=2"]) == "olang: error[B10]: -D X=2: defined twice\n"
-    assert mistake(String&["-D", "1x=2"]) == "olang: error[B10]: -D 1x=2: the name is not an identifier\n"
-    assert mistake(String&["-e"]) == "olang: error[B11a]: -e takes one rule, as 'olang -e B1'\n"
-    assert mistake(String&["-e", "B1", "B2"]) == mistake(String&["-e"])
-    # the first mistake is the one said, and what follows -i's file is the program's
+        "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file\n"
+    assert mistake(String&["build", "-b", "m.olang"]) ==
+        "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
+    assert mistake(String&["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
+            "interpret, format, explain and help, and a file ending in .olang is built and run\n")
+    assert mistake(String&["build", "m.olang", "-target"]) ==
+        "olang: error[B1]: -target needs a value after it: NAME\n"
+    assert mistake(String&["test", "-output", "x", "m.olang"]) ==
+        "olang: error[B1]: -output applies to build and compile, not to test\n"
+    assert mistake(String&["format", "-debug", "m.olang"]) ==
+        "olang: error[B1]: -debug applies to running a file, build, compile and test, not to format\n"
+    assert mistake(String&["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"
+    assert mistake(String&["build", "-define", "X=1", "-define", "X=2"]) ==
+        "olang: error[B10]: -define X=2: defined twice\n"
+    assert mistake(String&["explain", "B1", "B2"]) ==
+        "olang: error[B11a]: explain takes one rule, as 'olang explain B1'\n"
+    assert mistake(String&["help", "a", "b"]) == "olang: error[B1]: help takes at most one mode\n"
+    assert mistake(String&["-debug", "build"]) == "olang: error[B1]: the mode comes first: 'olang build' and then its options\n"
+    assert mistake(String&["-debug", "x.txt"]) ==
+        "olang: error[B1]: 'x.txt' is no olang file to run - a file's name ends in .olang\n"
+    # the first mistake is the one said, and what follows a run's or interpret's file is the program's
     assert mistake(String&["-x", "-y"]) == mistake(String&["-x"])
-    assert mistake(String&["-i", "p.olang", "-x", "-D"]) == "no mistake: -i"
-    assert mistake(String&["-d", "-i", "-r", "p.olang", "-r"]) == "no mistake: -i"
+    assert mistake(String&["interpret", "p.olang", "-x", "-define"]) == "no mistake: interpret"
+    assert mistake(String&["-debug", "p.olang", "-race", "x"]) == "no mistake: running a file"
 }
 
-test "the modifiers are recorded wherever they stand, and passed on as written" {
+test "the options are recorded wherever they stand, and passed on as written" {
     d := diag.Diagnostics(false)
     c := build.Config()
-    cl := try Parse(String&["olang", "-r", "-t", "a.olang", "-DN=3", "-a", "x86-64", "b.olang", "-d", "-D", "M=x"], c,
-                    d) catch Bad { fail }
-    assert cl.Mode == "-t" and cl.Files.Len() == 2 and cl.Files[0] == "a.olang" and cl.Files[1] == "b.olang"
+    cl := try Parse(String&["olang", "test", "-race", "a.olang", "-define", "N=3", "-target", "x86-64", "b.olang"
+        "-debug"], c, d) catch Bad { unreachable }
+    assert cl.Mode == Test and cl.Files.Len() == 2 and cl.Files[0] == "a.olang" and cl.Files[1] == "b.olang"
     assert c.Race and c.Debug and not c.San and not c.Update and cl.Spec == "x86-64"
-    assert c.Consts.Raw("N") == "3" and c.Consts.Raw("M") == "x"
+    assert c.Consts.Raw("N") == "3"
     p := cl.Passed
-    assert p.Len() == 7 and p[0] == "-r" and p[1] == "-DN=3" and p[2] == "-a" and p[3] == "x86-64" and p[4] == "-d"
-    assert p[5] == "-D" and p[6] == "M=x"
+    assert p.Len() == 6 and p[0] == "-race" and p[1] == "-define" and p[2] == "N=3" and p[3] == "-target"
+    assert p[4] == "x86-64" and p[5] == "-debug"
     c2 := build.Config()
-    i := try Parse(String&["olang", "-s", "-i", "p.olang", "-s", "x"], c2, d) catch Bad { fail }
-    assert i.Mode == "-i" and i.Files.Len() == 3 and i.Files[1] == "-s" and c2.San and i.Passed.Len() == 1
+    i := try Parse(String&["olang", "interpret", "-update", "p.olang", "-sanitize", "x"], c2, d) catch Bad { unreachable }
+    assert i.Mode == Interp and i.Files.Len() == 1 and i.Args.Len() == 2 and i.Args[0] == "-sanitize" and c2.Update and not c2.San
 }
 
 # the row Prepare reports for args, with the target given or native
@@ -275,21 +449,35 @@ fn prepared(words Array<String&>&) String {
     d := diag.Diagnostics(false)
     c := build.Config()
     cl := try Prepare(args.ToArray(), c, d) catch Bad { return d.Render() }
-    return $"no mistake: " $cl.Mode
+    return $"no mistake: " $modeName(cl.Mode)
 }
 
 test "the modes: each said wrong as stage 0 says it" {
-    if target.FindClang() == "" { done }        # the target is resolved by asking clang
-    assert prepared(String&["-b"]) == "olang: error[B1]: -b takes exactly one file\n"
-    assert prepared(String&["-c", "a.olang", "b.olang"]) == "olang: error[B1]: -c takes exactly one file\n"
-    assert prepared(String&["-t"]) == "olang: error[B1]: -t needs a file\n"
-    assert prepared(String&["-i"]) == "olang: error[B1]: -i needs a file\n"
-    assert prepared(String&["m.olang"]) ==
-           "olang: error[B1]: 'm.olang' is not a mode - the modes are -b, -c, -t, -i and -e\n"
-    assert prepared(String&["-D", "TargetOs=x", "-b", "m.olang"]) ==
-           "olang: error[B10a]: -D cannot redefine the built-in constant TargetOs\n"
-    assert prepared(String&["-a", "aarch64-linux-gnu", "-b", "m.olang"]) ==
-           prepared(String&["-a", "aarch64-linux-gnu", "-c", "m.olang"])
-    assert prepared(String&["-i", "p.olang", "x", "-y"]) == "no mistake: -i"
-    assert prepared(String&["-e", "zz9"]) == "no mistake: -e"
+    if target.FindClang() == "" { return } # the target is resolved by asking clang
+    assert prepared(String&["build"]) == "olang: error[B1]: build needs a file\n"
+    assert prepared(String&["compile", "a.olang", "b.olang"]) == "olang: error[B1]: compile takes exactly one file\n"
+    assert prepared(String&["test"]) == "olang: error[B1]: test needs a file\n"
+    assert prepared(String&["explain"]) == "olang: error[B11a]: explain takes one rule, as 'olang explain B1'\n"
+    assert prepared(String&["build", "-define", "TargetOs=x", "m.olang"]) ==
+        "olang: error[B10a]: -define cannot redefine the built-in constant TargetOs\n"
+    assert prepared(String&["build", "-target", "aarch64-linux-gnu", "m.olang"]) ==
+        prepared(String&["compile", "-target", "aarch64-linux-gnu", "m.olang"])
+    assert prepared(String&["interpret", "p.olang", "x", "-y"]) == "no mistake: interpret"
+    assert prepared(String&["explain", "zz9"]) == "no mistake: explain"
+    assert prepared(String&["help"]) == "no mistake: help"
+}
+
+test "help lists the modes, and a mode's options, as stage 0 does" {
+    d := diag.Diagnostics(false)
+    cl := CommandLine()
+    all := try help(cl, d) catch Bad { unreachable }
+    assert all.StartsWith("usage: olang MODE [OPTION...] FILE...") and all.Contains("\n  build       builds one program")
+    cl.Word = "build"
+    cl.HasWord = true
+    b := try help(cl, d) catch Bad { unreachable }
+    assert b.Contains("\n  -define Name=value defines a build constant (B10)\n")
+    assert b.Contains("\n  -output PATH       writes the executable")
+    cl.Word = "nope"
+    try help(cl, d) catch Bad { return }
+    unreachable
 }

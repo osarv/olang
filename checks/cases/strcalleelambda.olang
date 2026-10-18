@@ -1,7 +1,8 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E11c/D16c: a helper handed the receiver's node makes a lambda capturing it, only ever called - its environment is in
 # the helper's frame, so nothing is built where the node lives
+import "std/io"
 type Node struct(v I64, next mut Node&) {
     v
     next
@@ -30,5 +31,5 @@ fn main() ? {
     b := Bag(Node(4, null))
     s := $b
     churn()
-    println(s)
+    try io.Println(s)
 }

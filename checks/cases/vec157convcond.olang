@@ -1,0 +1,15 @@
+# check: run
+# flags: -debug -sanitize
+# vec7 N1 (T29a): only a call's reference is converted in place - a conditional or a match of array references stays a
+# conversion of its own, so returning one through a borrowed result is not "returns String&, found String&"
+fn pickc(k I64, a Array<Char>&) String&a {
+    return String(a if k > 0 else a[0:1])
+}
+fn pickm(k I64, a Array<Char>&) String&a {
+    return String(match k { case 1 => a nomatch => a[0:1] })
+}
+fn main() ? {
+    w := Array<Char>(3, 'w')
+    assert pickc(1, w) == "www" and pickc(0, w) == "w"
+    assert pickm(1, w) == "www" and pickm(2, w) == "w"
+}

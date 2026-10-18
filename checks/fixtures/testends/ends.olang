@@ -1,0 +1,127 @@
+# S16, S18b, P1d, S19c: tests failing on purpose - inside a join, inside callees, inside a Str, inside a destructor, by an
+# error leaving the body, by a "!" - each followed by a test reading what the failure left behind, which passes
+import "std/os"
+
+# P1d: a test failing inside a join waits for its task before it goes
+Finished mut I64 = 0
+fn slowly(n I64) {
+    s I64 = 0
+    for i in range n { s += i }
+    if s >= 0 { Finished = 1 }
+}
+test "fails inside a join" {
+    Finished = 0
+    join {
+        spawn slowly(20000000)
+        unreachable
+    }
+}
+test "the join's task had finished" { assert Finished == 1 }
+
+# S18b: the destructors of every scope a failing test abandons run - its own, a callee's, a block in that callee
+Closed mut I64 = 0
+type Handle struct(id I64) {
+    id
+} destruct { Closed += 1 }
+fn deeper() {
+    h Handle& = Handle(1)
+    for i in range 1 {
+        g Handle& = Handle(2)
+        if i == 0 { unreachable }
+    }
+}
+test "fails two frames down" {
+    Closed = 0
+    top Handle& = Handle(0)
+    deeper()
+}
+test "all three handles were destructed" { assert Closed == 3 }
+
+# S19c: a failing test runs no deferred code, neither a helper's nor its own
+DeferLog mut I64 = 0
+fn endsEarly() {
+    defer DeferLog = 2
+    unreachable
+}
+test "fails in a helper with code deferred" {
+    DeferLog = 0
+    defer DeferLog = 1
+    endsEarly()
+}
+test "no deferred code ran" { assert DeferLog == 0 }
+
+# E11c: failing inside a Str - the scope "$" opened for its result and its own block are closed, their destructors run
+StrDestructs mut I64 = 0
+type res struct(k I64) {
+    k
+} destruct { StrDestructs += k }
+type bag struct(n I64) {
+    n
+}
+fn (b bag&) Str() String {
+    r res&return = res(1)
+    q := res(2)
+    if b.n == 7 { unreachable }
+    return "b" $r.k $q.k
+}
+test "fails inside a Str" {
+    s := $bag(7)
+    assert s == "never"
+}
+test "both of the Str's destructors ran" { assert StrDestructs == 3 }
+
+# C9a: a destructor failing its test leaves the scope's other destructors to the unwind, which runs them, each once
+Steps mut I64 = 0
+type step struct(k I64) {
+    k
+} destruct {
+    Steps = Steps * 10 + k
+    if k == 2 { unreachable }
+}
+fn steps() {
+    s1 step& = step(1)
+    s2 step& = step(2)
+    s3 step& = step(3)
+}
+test "fails in a destructor" { steps() }
+test "the other destructors ran once each" { assert Steps == 321 }
+
+# os.RunOnStack (S1): a failure on its thread fails the calling test, the caller's scopes unwound too
+OnStack mut I64 = 0
+test "fails on another stack" {
+    OnStack = 0
+    h Handle& = Handle(9)
+    os.RunOnStack(1 << 20, fn() {
+        OnStack = 1
+        unreachable
+    })
+}
+test "the stack's code ran, and the caller's handle was destructed" { assert OnStack == 1 and Closed == 4 }
+
+# S16, S18d: an error a try lets out of a test fails it, naming the error, with the places it went
+Depth mut I64 = 3    # read at run time, so no assert below is decided while compiling (S18c)
+error FxErr {
+    GONE
+}
+fn inner(n I64) I64 ? {
+    if n > 0 { error FxErr.GONE }
+    return n
+}
+fn middle(n I64) I64 ? {
+    return try inner(n)
+}
+test "an error leaves the test" {
+    x := try middle(Depth)
+    assert x == 0
+}
+test "a try in a test that catches what it lets through passes" {
+    x := try middle(Depth) catch FxErr default 5
+    assert x == 5
+}
+
+# E35, S18d: a "!" taking an error fails the test with the error and its trace
+test "a ! takes an error" {
+    y := middle(Depth + 1)!
+    assert y == 0
+}
+test "after" { assert true }

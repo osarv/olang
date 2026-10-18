@@ -1,0 +1,16 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b: repointing the parameter's reference field writes its own storage, though what it named is unchanged
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn f(v mut V&) { v.d = Array<I64>(3) }
+
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    f(s[0])
+}

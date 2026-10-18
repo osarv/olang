@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # O12/E28: a reference read out of a conditional of values whose references live in one scope lives there, so a callee
 # may build through it (condvaluefield is the same with two scopes, refused)
 type In struct() {

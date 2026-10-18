@@ -4,7 +4,7 @@ error E {
     B
 }
 error F { C }
-fn f() I32 ? E + F { error E.A }
+fn f() I32 ? E, F { error E.A }
 fn main() ? E { }
 fn t() I32 ? E {
     x := try f() catch E default 1

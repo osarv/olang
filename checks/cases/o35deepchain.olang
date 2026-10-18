@@ -23,5 +23,5 @@ fn release() {
 }
 fn main() ? {
     os.RunOnStack(262144, release)
-    if RelNext != -1 or RelBad != 0 { fail }
+    assert not (RelNext != -1 or RelBad != 0)
 }

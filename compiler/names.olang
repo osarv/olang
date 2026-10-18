@@ -1,5 +1,5 @@
 # names - who each name is: every module's declaration table, and every name a body, a signature or a type writes
-# resolved against it (D2, D3, D3a, D8c, M10, M14, M19f, M20, B10, B10c, G22; compiler/DESIGN.md 1.5).
+# resolved against it (D2, D3, D3a, D8c, M10, M14, M20, B10, B10c, G22; compiler/DESIGN.md 1.5).
 #
 # A module's table holds its types, functions, globals and error types - those of the branches of its top-level ifs
 # that are chosen; a branch still pending (B9c) waits aside, and DecideTop resolves it once the checker has decided
@@ -11,6 +11,7 @@
 # rules that are about declarations and imports, and B10's unknown name in a condition. A local if whose condition
 # the build decides (S8b) has its branches' diagnostics chosen or dropped here; one only compile-time evaluation can
 # decide stays pending for the checker.
+import "std/pair"
 import "std/os"
 import "source"
 import "token"
@@ -30,7 +31,6 @@ type What enum {
     Type        # a type or an error type
     Import      # an import's alias: Index is the module it reaches
     Build       # a build constant (B10)
-    PreludeFn   # print, println, eprint, eprintln (M19f)
     Builtin     # a primitive, Bool or Array
     TypeVar     # a type variable or a constant variable of the declaration
 }
@@ -68,9 +68,6 @@ type local struct(Name source.NameId, Sp source.Span, Kind What, Const Bool) {
     Const
 }
 
-# M19f: the prelude's words for writing text, seen in every module by bare name
-fn PreludeWord(t String&) Bool { return t == "print" or t == "println" or t == "eprint" or t == "eprintln" }
-
 # T4, T7: the names every module sees as a type
 fn BuiltinTypeName(t String&) Bool {
     return t == "Bool" or t == "Array" or t == "I8" or t == "I16" or t == "I32" or t == "I64" or t == "U8" or
@@ -87,11 +84,11 @@ type Resolver struct(L mut load.Loader&) {
     mi I64 = -1
     locals List<local>
     scope Map<source.NameId, I64>
-    undo List<Pair<source.NameId, I64>>
+    undo List<pair.Pair<source.NameId, I64>>
     itemNames List<source.NameId>
     inCond Bool = false
     item I64 = 0
-    unknownSaid List<Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
+    unknownSaid List<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
 }
 
 # ---- the program ----
@@ -290,8 +287,8 @@ fn (r mut Resolver&) addType(mi I64, n source.NameId, sp source.Span, decl ast.T
     t.Entries.Push(Entry(n, sp, What.Type, false, decl))
 }
 
-# D2, D8c, B10, B10c, M19f, M20: a function or a global (a method is in no namespace of names)
-fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable Bool, isFunc Bool, isMethod Bool,
+# D2, D8c, B10, B10c, M20: a function or a global (a method is in no namespace of names)
+fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable Bool, isFunc Bool, isMethod Bool
                               v ast.VarDecl&) {
     t := r.Tables[mi]
     m := r.L.Mods[mi]
@@ -311,7 +308,6 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
             r.buildDefault(mi, n, sp, v)
         }
     }
-    if not m.Prelude and PreludeWord(name) { r.L.Diags.Error(r.at(mi, sp), msgs.PreludeWordRedeclared(r.tok(n))) }
     prev := try t.values.Get(n) catch default -1
     if prev >= 0 and not (isFunc and t.Entries[prev].Kind == What.Func) {
         r.L.Diags.Error(r.at(mi, sp), msgs.NameInUse(r.tok(n)))
@@ -377,7 +373,6 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     if a >= 0 { return Ref(What.Import, a, -1) }
     name := r.text(n)
     if r.L.Consts.Has(name) { return Ref(What.Build, -1, -1) }
-    if PreludeWord(name) { return Ref(What.PreludeFn, -1, -1) }
     p := try r.preludeTypes.Get(n) catch default -1
     if p >= 0 { return Ref(What.Type, p, try r.Tables[p].types.Get(n) catch default -1) }
     if BuiltinTypeName(name) { return Ref(What.Builtin, -1, -1) }
@@ -427,13 +422,13 @@ fn (r mut Resolver&) popTo(mark I64) {
 
 fn (r mut Resolver&) bind(n source.NameId, sp source.Span, what What, constant Bool) {
     prev := try r.scope.Get(n) catch default -1
-    r.undo.Push(Pair(n, prev))
+    r.undo.Push(pair.Pair(n, prev))
     r.scope.Put(n, r.locals.Len())
     r.locals.Push(local(n, sp, what, constant))
     if n not in r.itemNames { r.itemNames.Push(n) }
 }
 
-# D3, D3a, D8c, M19f, M20, G22: a parameter or a local declared - a name its module, the build or a type already gives
+# D3, D3a, D8c, M20, G22: a parameter or a local declared - a name its module, the build or a type already gives
 # is an error, as is one already declared here
 fn (r mut Resolver&) declare(n source.NameId, sp source.Span) {
     name := r.text(n)
@@ -459,8 +454,6 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
         r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
     } else if r.L.Consts.Has(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
-    } else if PreludeWord(name) {
-        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeWordRedeclared(r.tok(n)))
     } else if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n)))
     } else {
@@ -469,8 +462,7 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
     }
 }
 
-# G22, D3a: a constant variable is named apart from the module's globals and functions, the build's constants and the
-# prelude's words. A type's name is G1's, reported where the variable is written
+# G22, D3a: a constant variable is named apart from the module's globals and functions and the build's constants. A type's name is G1's, reported where the variable is written
 fn (r mut Resolver&) noConstClash(n source.NameId, sp source.Span) {
     t := r.Tables[r.mi]
     name := r.text(n)
@@ -483,8 +475,6 @@ fn (r mut Resolver&) noConstClash(n source.NameId, sp source.Span) {
         r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
     } else if r.L.Consts.Has(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
-    } else if PreludeWord(name) and not r.L.Mods[r.mi].Prelude {
-        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeWordRedeclared(r.tok(n)))
     }
 }
 
@@ -564,7 +554,11 @@ fn (r mut Resolver&) func(f ast.Func&) {
 # a signature, its parameters declared where a body follows (a parameter is a local of the body, D3a)
 fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     s := f.S
-    if f.Recv != null and f.Recv.Ty != null { r.typeRef(f.Recv.Ty) }
+    r.typeParams(f.TypeParams, f.Recv, s.Params, s.Results)
+    if f.Recv != null and f.Recv.Ty != null {
+        r.receiverVars(f.Recv.Ty, false)
+        r.typeRef(f.Recv.Ty)
+    }
     for p in s.Params {
         if p.Ty != null { r.typeRef(p.Ty) }
     }
@@ -575,6 +569,96 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     }
     if f.Recv != null and f.Recv.Name != source.NameId(0) { r.param(f.Recv, body) }
     for p in s.Params { r.param(p, body) }
+}
+
+# a function's or a constructor's type-parameter list (G3, G10d, QW): every item declared for the rest of its item,
+# then the constraints and constants' types read, so an item's may name a later one. An item is a constant where it
+# has a constant's type, or where the signature writes it as a constant argument (G22)
+fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&, recv ast.Param&, ps Array<ast.Param&>&, rs Array<ast.TypeRef&>&) {
+    if tps == null { return }
+    for p in tps {
+        constant := (p.Ty != null and r.constType(p.Ty)) or (p.Ty == null and r.constIn(p.Name, recv, ps, rs))
+        nsp := r.nameSpan(r.mi, p.Sp.Start, p.Name)
+        if constant { r.noConstClash(p.Name, nsp) }
+        r.bind(p.Name, nsp, What.TypeVar, constant)
+        r.record(nsp, Ref(What.TypeVar, r.mi, r.locals.Len() - 1))
+    }
+    for p in tps {
+        if p.Ty != null { r.typeRef(p.Ty) }
+    }
+}
+
+# whether a signature writes n as a constant argument somewhere (G20: Array's length, a parameter its type declares
+# a constant)
+fn (r mut Resolver&) constIn(n source.NameId, recv ast.Param&, ps Array<ast.Param&>&, rs Array<ast.TypeRef&>&) Bool {
+    if recv != null and r.constUse(n, recv.Ty) { return true }
+    for p in ps {
+        if r.constUse(n, p.Ty) { return true }
+    }
+    for t in rs {
+        if r.constUse(n, t) { return true }
+    }
+    return false
+}
+
+fn (r mut Resolver&) constUse(n source.NameId, t ast.TypeRef&) Bool {
+    if t == null { return false }
+    match t {
+        case ast.TypeRef.Named(_, path, args) {
+            for i in range args.Len() {
+                match args[i] {
+                    case ast.TypeRef.Named(_, ap, aargs) {
+                        if ap.Len() == 1 and aargs.Len() == 0 and ap[0] == n and r.constArg(path, i) { return true }
+                    }
+                    nomatch { }
+                }
+                if r.constUse(n, args[i]) { return true }
+            }
+        }
+        case ast.TypeRef.Func(_, sg) {
+            for p in sg.Params {
+                if r.constUse(n, p.Ty) { return true }
+            }
+            for x in sg.Results {
+                if r.constUse(n, x) { return true }
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _) { return r.constUse(n, of) }
+        case ast.TypeRef.Perm(_, of, _, _) { return r.constUse(n, of) }
+        nomatch { }
+    }
+    return false
+}
+
+# the type variables a method's receiver introduces (QW: "fn (l List<T>&) Push(x T)"): its type's arguments that name
+# no type and no variable already declared - each a constant where the type's parameter is one (G20)
+fn (r mut Resolver&) receiverVars(t ast.TypeRef&, inArgs Bool) {
+    if t == null { return }
+    match t {
+        case ast.TypeRef.Named(sp, path, args) {
+            for i in range args.Len() {
+                a := args[i]
+                match a {
+                    case ast.TypeRef.Named(asp, ap, aargs) {
+                        if ap.Len() == 1 and aargs.Len() == 0 {
+                            n := ap[0]
+                            j := try r.scope.Get(n) catch default -1
+                            known := j >= 0 and r.locals[j].Kind == What.TypeVar
+                            if not known and r.typeIn(r.mi, n).Kind == What.None {
+                                r.introduce(asp, n, null, r.constArg(path, i))
+                            }
+                        } else {
+                            r.receiverVars(a, true)
+                        }
+                    }
+                    case _ { r.receiverVars(a, true) }
+                }
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _) { r.receiverVars(of, inArgs) }
+        case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
+        nomatch { }
+    }
 }
 
 fn (r mut Resolver&) param(p ast.Param&, body Bool) {
@@ -603,6 +687,8 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
     if t.Body == null { return }
     match t.Body {
         case ast.TypeBody.Struct(s) {
+            m0 := r.mark()
+            r.typeParams(s.TypeParams, null, s.Params, Array<ast.TypeRef&>(0))
             for p in s.Params {
                 if p.Ty != null { r.typeRef(p.Ty) }
             }
@@ -616,7 +702,9 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             }
             if s.Body != null { r.block(s.Body) }
             r.popTo(m)
+            r.popTo(m0)
             if s.Dtor != null {
+
                 m2 := r.mark()
                 for f in fieldNames(s) { r.bind(f, source.Span(0, 0), What.Local, false) }
                 r.block(s.Dtor)
@@ -714,7 +802,7 @@ fn (r mut Resolver&) stmt(s ast.Stmt&) {
             r.expr(target)
             r.expr(value)
         }
-        case ast.Stmt.TryStore(_, inner, clauses) {
+        case ast.Stmt.TryStore(_, inner, clauses, _) {
             r.stmt(inner)
             r.clauses(clauses)
         }
@@ -978,7 +1066,7 @@ fn (r mut Resolver&) expr(x ast.Expr&) {
             r.expr(c.Filter)
             r.popTo(m)
         }
-        case ast.Expr.Try(_, a, clauses) {
+        case ast.Expr.Try(_, a, clauses, _) {
             r.expr(a)
             r.clauses(clauses)
         }
@@ -989,7 +1077,6 @@ fn (r mut Resolver&) expr(x ast.Expr&) {
             r.inCond = wasCond
         }
         case ast.Expr.MatchE(_, mt) { r.matchOf(mt) }
-        case ast.Expr.TypeVar(sp, n) { r.record(sp, r.lookup(n)) }
         nomatch { }
     }
 }
@@ -1009,7 +1096,7 @@ fn (r mut Resolver&) unknownInCond(sp source.Span, n source.NameId) {
     for u in r.unknownSaid {
         if u.First == n and u.Second == r.item { return }
     }
-    r.unknownSaid.Push(Pair(n, r.item))
+    r.unknownSaid.Push(pair.Pair(n, r.item))
     r.L.Diags.Error(r.at(r.mi, sp), msgs.UnknownBuildName(r.tok(n), name))
 }
 
@@ -1118,7 +1205,7 @@ fn (r mut Resolver&) unknownHead(sp source.Span, n source.NameId) {
     for u in r.unknownSaid {
         if u.First == n and u.Second == -1 { return }
     }
-    r.unknownSaid.Push(Pair(n, I64(-1)))
+    r.unknownSaid.Push(pair.Pair(n, I64(-1)))
     r.L.Diags.Error(r.at(r.mi, sp), msgs.UnknownImportStd(r.tok(n), name))
 }
 
@@ -1139,18 +1226,8 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
     match t {
         case ast.TypeRef.Named(sp, path, args) {
             r.typePath(sp, path)
-            for i in range args.Len() {
-                a := args[i]
-                match a {
-                    case ast.TypeRef.Var(vsp, n, c) {
-                        constant := (c != null and r.constType(c)) or r.constArg(path, i)
-                        r.introduce(vsp, n, c, constant)
-                    }
-                    case _ { r.typeRef(a) }
-                }
-            }
+            for a in args { r.typeRef(a) }
         }
-        case ast.TypeRef.Var(sp, n, c) { r.introduce(sp, n, c, c != null and r.constType(c)) }
         case ast.TypeRef.Func(_, s) {
             for p in s.Params {
                 if p.Ty != null { r.typeRef(p.Ty) }
@@ -1186,7 +1263,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
     }
 }
 
-# a type variable's or a constant's introduction (G8b, G22): declared for the rest of its item, once
+# a type variable's or a constant's introduction by a receiver (QW, G22): declared for the rest of its item, once
 fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef&, constant Bool) {
     if c != null { r.typeRef(c) }
     i := try r.scope.Get(n) catch default -1
@@ -1252,6 +1329,14 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
         r.unknownHead(r.nameSpan(r.mi, sp.Start, head), head)
         return
     }
+    if path.Len() == 2 and (try r.Tables[r.mi].aliases.Get(head) catch default -1) < 0 {
+        # an enum's case written where a type argument goes (G20: a constant argument): its head is the type
+        h := r.typeIn(r.mi, head)
+        if h.Kind == What.Type {
+            r.record(sp, h)
+            return
+        }
+    }
     t := r.aliasModule(path)
     if t >= 0 { r.record(sp, r.memberOf(t, path[path.Len() - 1])) }
 }
@@ -1269,7 +1354,7 @@ fn testRules(files Array<String&>&, defines Array<String&>&) String {
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
     d := diag.Diagnostics(false)
     for f in defines { try consts.Define(f, d) catch { } }
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true),
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
                      source.Names(), d)
     l.Load($dir "/" $files[0])
     r := Resolver(l)
@@ -1295,10 +1380,10 @@ fn lineCol(text String&, at I64) (I64, I64) {
     return line, col
 }
 
-test "D2, D3a, M19f and M20: a name means one thing in a module" {
+test "D2, D3a and M20: a name means one thing in a module; nothing is reached bare that no import gave" {
     got := testRules(String&["main.olang", "import \"util\"\nfn Circle() I32 { return 3 }\ntype Circle struct() { }\nCount I32 = 1\nfn f(Count I32, I32 I32) { for c in I32[1] { c := 2 } }\nfn print() { }\nutil := 3\nfn main() ? { }\n", "util.olang", ""], String&[])
     assert got.Contains("D2 3:6\n") and got.Contains("D3a 5:6\n") and got.Contains("D3a 5:17\n"), got
-    assert got.Contains(" 5:46\n") and got.Contains("M19f 6:4\n") and got.Contains("M20 7:1\n"), got
+    assert got.Contains(" 5:46\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
 }
 
 test "B10, B10c: build constants and their defaults, and an unknown name in a condition" {

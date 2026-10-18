@@ -1,11 +1,14 @@
 # check: fail error[R11, O25]: a reference default lives where the call's result does
 # R9a: a default is judged where the call's result lands - here the outer variable keep - not where the try is
 # written; inner dies with the loop body, so keep would be left pointing into a reclaimed arena
+error Stop {
+    HERE
+}
 type Node struct(v I32) {
     v
 }
 fn mk(k I64) Node& ? {
-    if k > -5 { error }
+    if k > -5 { error Stop.HERE }
     return Node(7)
 }
 fn main() ? {

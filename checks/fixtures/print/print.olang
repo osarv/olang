@@ -1,12 +1,13 @@
-# M19f: the prelude's words for writing text - no try, no error set on main; built and interpreted alike
-fn main() ? {
+# M19f: std/io's words for writing text - fallible with IoError, written with try; built and interpreted alike
+import "std/io"
+fn main() ? io.IoError {
     n := 42
-    print("n is ")
-    println($n)
-    println("joined " $n " and " $(n + 1))
-    println()
-    eprint("to the ")
-    eprintln("standard error")
-    say := println                # a function value, as any function is
-    say("through a value")
+    try io.Print("n is ")
+    try io.Println($n)
+    try io.Println("joined " $n " and " $(n + 1))
+    try io.Println()
+    try io.PrintErr("to the ")
+    try io.PrintErrln("standard error")
+    say := io.Println                # a function value, as any function is
+    try say("through a value")
 }

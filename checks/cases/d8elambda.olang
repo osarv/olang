@@ -1,0 +1,7 @@
+# check: fail a lambda cannot be 'noreturn'
+# D8e: a lambda's type is inferred (D16b) - it cannot be written 'noreturn'
+import "std/os"
+fn main() {
+    f := fn() noreturn { os.Exit(3) }
+    f()
+}

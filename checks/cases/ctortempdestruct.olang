@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # C11/O16: every constructor call of a type declaring a destructor is one instance, destructed once when the scope it
 # was built in closes - a call standing as a statement, read through, rendered, passed, stored, kept in a conditional
 # or pushed alike (the first three were never destructed), and an instance a conditional or a match chooses, or one passed
@@ -15,8 +15,8 @@ type Box struct(w Wrap&) {
     w
 }
 fn peek(w Wrap&) I64 { return w.a.v }
-fn id(x <T>) T { return x }
-fn kept(x <T>) T {
+fn id<T>(x T) T { return x }
+fn kept<T>(x T) T {
     y := x
     return y
 }

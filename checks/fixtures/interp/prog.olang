@@ -48,8 +48,8 @@ fn steps() String {
     }
     return b.ToString()
 }
-fn main() ? Oops + io.IoError + os.OsError {
-    defer try io.Print("main's deferred code ran\n") catch { }
+fn main() ? Oops, io.IoError, os.OsError {
+    defer try io.Print("main's deferred code ran\n") catch io.IoError { }
     Count++
     m := Map<String&, I32>()
     for i, n in Names { m.Put(n, I32(i) + Count) }

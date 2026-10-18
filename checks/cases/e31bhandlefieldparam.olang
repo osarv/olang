@@ -1,0 +1,22 @@
+# check: run
+# flags: -debug -sanitize
+# E31b/O18c (F2): "bs[b].S.Push(x)" with the collection a parameter
+import "std/io"
+type Blk struct() {
+    S List<I64>
+    t I64 = 0
+}
+fn churn() ? io.IoError {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+fn add(bs mut List<Blk>&, b I64, x I64) { bs[b].S.Push(x) }
+fn main() ? {
+    bs := List<Blk>()
+    bs.Push(Blk())
+    add(bs, 0, 7)
+    try churn()
+    assert bs[0].S.Len() == 1 and bs[0].S[0] == 7, $bs[0].S
+}

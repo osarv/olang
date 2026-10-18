@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (decision 48): nested joins - tasks spawning tasks, all calling one closure the main thread made, which builds into
 # the scope it captured, while each also builds into the stand-ins it was handed and the main thread builds into both
 type Node struct(v I64) {
@@ -43,5 +43,5 @@ fn main() ? {
     }
     one I64 = 0
     for i in range 10000 { one += 2 * i }
-    if x != 2 * one + 1 or y != 2 * one + 1 or z != one { fail }
+    assert not (x != 2 * one + 1 or y != 2 * one + 1 or z != one)
 }

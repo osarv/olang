@@ -1,11 +1,12 @@
-# check: fail error[R11, B5b]: a call that ends the program is not a leave - write 'unreachable' after it
-# R11/B5b: os.Exit ends the program, but as an ordinary call - a clause in value position ending in it still needs
-# "unreachable" after it, which the error says (study 4's r18)
+# check: build
+# R11/B5b/D8e: os.Exit is 'noreturn', so a clause in value position ending in it leaves, as 'unreachable' would
+# (study 4's r18 needed 'unreachable' after it)
 import "std/os"
+import "std/io"
 fn main() ? {
     text := try os.ReadFile("/nonexistent") catch os.OsError {
-        eprintln("cannot read")
+        try io.PrintErrln("cannot read")
         os.Exit(2)
     }
-    println(text)
+    try io.Println(text)
 }

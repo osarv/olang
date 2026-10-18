@@ -1,5 +1,6 @@
 # P4-P4d: tasks that fail, the same built, built -d -s (a use of storage after its scope closed would stop it), and under
 # -i, which runs a join's tasks one after another: each line printed by each, and the three the same
+import "std/io"
 error E {
     NEG
     BIG
@@ -60,7 +61,7 @@ fn earliest() I64 {
     } catch E.NEG { return 1 } catch E.BIG { return 2 }
     return 0
 }
-fn mixed(a I64, b I64) I64 ? E + F {
+fn mixed(a I64, b I64) I64 ? E, F {
     try join {
         spawn try seven(a)
         spawn try sq(b)
@@ -122,13 +123,13 @@ fn nested() I64 {
     } catch E.NEG { return 5 } catch E { return 4 }
     return 6
 }
-fn main() ? E {
-    println($earliest())
-    println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
-    println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.NEG default -1 catch default -2))
-    println(defaulted(I64[3, -3, 3000, 4]))
-    println(counted())
-    println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
+fn main() ? E, io.IoError {
+    try io.Println($earliest())
+    try io.Println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
+    try io.Println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.NEG default -1 catch default -2))
+    try io.Println(defaulted(I64[3, -3, 3000, 4]))
+    try io.Println(counted())
+    try io.Println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
     a, b String
     p, q Node&
     l1, l2 List<I64>
@@ -144,12 +145,12 @@ fn main() ? E {
         spawn d3, d4 = try divmod(17, 0 * run) catch default -1, -2
     }
     churn()
-    println($a " " $b " " $p.v " " $q.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
+    try io.Println($a " " $b " " $p.v " " $q.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
     #...and the earliest failure of a join no clause takes leaves main, reported as an unhandled error
     try join {
         spawn try sq(4 * run)
         spawn try sq(-4 * run)
         spawn try sq(4000 * run)
     }
-    println("not reached")
+    try io.Println("not reached")
 }

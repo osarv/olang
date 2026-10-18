@@ -1,0 +1,19 @@
+# check: fail error[O39]: calling 'drop' may release the
+# Vec phase 2a (O35/O39): ...and a call that may release the struct, the same way
+import "std/io"
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+type Host struct() {
+    lx own mut Lexer& = null
+}
+fn drop(h mut Host&) { h.lx = null }
+fn main() ? {
+    h := Host()
+    h.lx = Lexer(3)
+    h.lx.toks.Push(1)
+    d := h.lx.toks.View()
+    drop(h)
+    try io.Println($d[0])
+}

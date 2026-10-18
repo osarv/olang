@@ -1,0 +1,224 @@
+# astdiff [FILE...] - compares the self-hosted parser's tree with the C parser's (compiler/DESIGN.md section 4):
+# every declaration and statement, as its kind and the span of its tokens, and the syntax errors - each item's first,
+# by rule and position, and the lexical ones - and that each tree, written back as source, holds the file's tokens and
+# reads back as itself ("dump roundtrip"). With no FILE, every .olang file of the repository. Prints the first
+# differences and exits 1 if there are any.
+#
+# Run from the repository root after "make build/astdump build/compiler_tools_dump". What is normalized away, as
+# DESIGN.md section 4 lists: the order of lines (each file's structure, and its diagnostics, are sorted - the trees
+# hold the same nodes in different shapes), the C diagnostics' text and notes (only "error RULE LINE:COL" is kept),
+# the C parser's reports beyond an item's first (it reports one an item; the self-hosted parser goes on and the
+# dump keeps its first), an L21 said inside an item kept whole (stage 0 says one where a form it tried and dropped
+# reached the limit), and the position of an L21 that ends an item (for the same reason; the rows say which item
+# ends). A missing tool, or one printing fewer files than it was given, is a failure. ASTDIFF_ORACLE and ASTDIFF_DUMP
+# name other builds of the two tools; ASTDIFF_KEEP names a directory to leave the renderings in.
+
+import "std/os"
+import "toolkit"
+
+fn main() {
+    files := toolkit.FilesOr(os.Args(), toolkit.Tracked("*.olang"))
+    oracle := toolkit.Env("ASTDIFF_ORACLE", "build/astdump")
+    dump := toolkit.Env("ASTDIFF_DUMP", "build/compiler_tools_dump")
+    keep := toolkit.Env("ASTDIFF_KEEP", "")
+    work String& = ""
+    if keep != "" {
+        work = keep
+        try os.MkDirAll(work) catch os.OsError { toolkit.Die("astdiff: cannot make " $work) }
+    } else {
+        work = toolkit.Scratch("astdiff")
+    }
+    defer {
+        if keep == "" { toolkit.Clean(work) }
+    }
+    for t in String&[oracle, dump] {
+        if not toolkit.Built(t) { toolkit.Die("astdiff: " $t " is not built (make " $t ")") }
+    }
+    args := List<String&>()
+    args.Push(oracle)
+    for f in files { args.Push(f) }
+    craw := toolkit.RunShowing(args.ToArray()).Stdout
+    args.Clear()
+    args.Push(dump)
+    args.Push("ast")
+    for f in files { args.Push(f) }
+    oraw := toolkit.RunShowing(args.ToArray()).Stdout
+    toolkit.Write($work "/c.raw", craw)
+    toolkit.Write($work "/olang.raw", oraw)
+    sections(craw, files.Len(), oracle)
+    sections(oraw, files.Len(), $dump " ast")
+    c := normalize(craw)
+    olang := normalize(oraw)
+    toolkit.Write($work "/c", c)
+    toolkit.Write($work "/olang", olang)
+    if c != olang {
+        toolkit.Say(toolkit.Head(toolkit.Diff(work, c, olang), 60))
+        toolkit.Say("astdiff: the trees differ\n")
+        os.Exit(1)
+    }
+    toolkit.Say("astdiff: no difference over " $files.Len() " files\n")
+    # each tree written back as source holds the file's tokens, and reads back as itself
+    args.Clear()
+    args.Push(dump)
+    args.Push("roundtrip")
+    for f in files { args.Push(f) }
+    rt := toolkit.RunShowing(args.ToArray()).Stdout
+    toolkit.Write($work "/rt", rt)
+    sections(rt, files.Len(), $dump " roundtrip")
+    bad := false
+    header String& = ""
+    for line in toolkit.Rows(rt) {
+        if line.StartsWith("== ") {
+            header = $line
+            continue
+        }
+        if line == "ok" or line.StartsWith("skipped") { continue }
+        toolkit.Say($header "\n" $line "\n")
+        bad = true
+    }
+    if bad {
+        toolkit.Say("astdiff: a tree written back is not the file's\n")
+        os.Exit(1)
+    }
+    toolkit.Say("astdiff: every tree written back reads as itself\n")
+}
+
+# a tool that stops early prints fewer sections than files: that is a failure, never an empty match
+fn sections(text String&, files I64, who String&) {
+    n := toolkit.Sections(text)
+    if n != files { toolkit.Die("astdiff: " $who " printed " $n " of " $files " files") }
+}
+
+# a position "LINE:COL" as one number
+fn pos(at String&) I64 {
+    parts := at.Split(":")
+    line := try parts[0].ParseInt() catch default 0
+    col := try parts[1].ParseInt() catch default 0
+    return line * 1000000 + col
+}
+
+# whether text is a span "L:C-L:C"
+fn isSpan(t String&) Bool {
+    dash := try t.FindByte('-') catch default -1
+    if dash < 0 { return false }
+    for half in String&[t[0:dash], t[dash + 1:]] {
+        colon := try half.FindByte(':') catch default -1
+        if colon < 0 or not toolkit.IsNumber(half[0:colon]) or not toolkit.IsNumber(half[colon + 1:]) { return false }
+    }
+    return true
+}
+
+# the state of normalizing one rendering: the rows of the section being read, the spans of the file's items
+type norm struct() {
+    out List<String&> = List<String&>()
+    header String& = ""
+    rows List<String&> = List<String&>()
+    lo List<I64> = List<I64>()
+    hi List<I64> = List<I64>()
+}
+
+# the section read so far written out - its header, then its rows sorted by bytes - and a new one begun
+fn (n mut norm&) flush(next String&) {
+    if n.header != "" { n.out.Push(n.header) }
+    for r in toolkit.Sorted(n.rows) { n.out.Push($r) }
+    n.rows.Clear()
+    n.header = $next
+}
+
+# whether an item the file keeps whole holds the position
+fn (n norm&) kept(at I64) Bool {
+    for i in range n.lo.Len() {
+        if n.lo[i] <= at and at <= n.hi[i] { return true }
+    }
+    return false
+}
+
+# a diagnostic's row: an L21 said inside an item kept whole is not compared, and one ending an item is compared
+# without its position (stage 0 says it where the first form it tried reached the limit)
+fn (n mut norm&) emit(rule String&, at String&) {
+    if rule == "L21" {
+        if not n.kept(pos(at)) { n.rows.Push("error L21") }
+        return
+    }
+    n.rows.Push("error " $rule " " $at)
+}
+
+# "error RULE LINE:COL" of the self-hosted parser's rendering: the rule may be several ("T17, T19, C2") or none
+fn (n mut norm&) olangDiag(line String&) {
+    f := toolkit.Fields(line)
+    last := f[f.Len() - 1]
+    r := $line[6:]
+    # drop the last word and the blanks before it
+    cut := r.Len() - last.Len()
+    for cut > 0 and r[cut - 1] == ' ' { cut-- }
+    n.emit(r[0:cut], last)
+}
+
+# stage 0's rendering: "path:LINE:COL: error[RULE]: text" - the rule, if written, and the position; a row
+# "path: error[RULE]:" names no position
+fn (n mut norm&) cDiag(line String&) {
+    e := try line.Find(": error") catch default -1
+    if e < 0 { return }
+    head := line[0:e]
+    if (try head.FindByte(' ') catch default -1) >= 0 { return }
+    after := line[e + 7:]
+    rule String = ""
+    if after.StartsWith("[") {
+        close := try after.FindByte(']') catch default -1
+        if close < 0 { return }
+        rule = $after[1:close]
+        after = after[close + 1:]
+    }
+    if not after.StartsWith(":") { return }
+    c2 := try head.FindLast(":") catch default -1
+    if c2 >= 0 {
+        c1 := try head[0:c2].FindLast(":") catch default -1
+        if c1 >= 0 and toolkit.IsNumber(head[c2 + 1:]) and toolkit.IsNumber(head[c1 + 1:c2]) {
+            n.emit(rule, head[c1 + 1:])
+            return
+        }
+    }
+    n.rows.Push("error " $rule " 0:0")
+}
+
+# each file's sections sorted; the C rows reduced to "error RULE LINE:COL"
+fn normalize(raw String&) String {
+    n := norm()
+    diag := false
+    for line in toolkit.Rows(raw) {
+        if line.StartsWith("== ") {
+            n.lo.Clear()
+            n.hi.Clear()
+        }
+        if line.StartsWith("== ") or line == "-- diagnostics" {
+            n.flush(line)
+            diag = line.StartsWith("-- ")
+            continue
+        }
+        if diag {
+            if line.StartsWith("error ") { n.olangDiag(line) } else { n.cDiag(line) }
+            continue
+        }
+        f := toolkit.Fields(line)
+        if f.Len() >= 2 and isSpan(f[1]) {
+            dash := try f[1].FindByte('-') catch default 0
+            n.lo.Push(pos(f[1][0:dash]))
+            n.hi.Push(pos(f[1][dash + 1:]))
+        }
+        n.rows.Push($line)
+    }
+    n.flush("")
+    return toolkit.Text(n.out)
+}
+
+test "an L21 inside a kept item is dropped, one ending an item loses its position" {
+    raw := "== f\nFN 3:1-9:2\n-- diagnostics\nf:4:5: error[L21]: deep\nf:12:1: error[L21]: deep\n"
+    assert normalize(raw) == "== f\nFN 3:1-9:2\n-- diagnostics\nerror L21\n"
+}
+
+test "rows of the two renderings meet, sorted by bytes" {
+    raw := "== f\nRETURN 5:1-5:9\nFN 3:1-6:2\n-- diagnostics\nerror T17, T19 7:3\nerror  2:2\n"
+    assert normalize(raw) == "== f\nFN 3:1-6:2\nRETURN 5:1-5:9\n-- diagnostics\nerror  2:2\nerror T17, T19 7:3\n"
+    c := "== f\nFN 3:1-6:2\n-- diagnostics\nf:7:3: error[T17, T19]: text\n   7 | source\nf:2:2: error: bare\nf: error[B1]: none\n"
+    assert normalize(c) == "== f\nFN 3:1-6:2\n-- diagnostics\nerror  2:2\nerror B1 0:0\nerror T17, T19 7:3\n"
+}

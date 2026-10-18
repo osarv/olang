@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (a review of rv3fix, h3): a fold into a stand-in folded already goes to what it forwards to. Here a closure a first
 # task handed back holds that task's stand-in; a second task handed the closure gets a stand-in whose parent is the
 # first one, and builds R(2) there. Folded into the forwarder itself, R(2) - and R(3), built after it on this thread -
@@ -30,5 +30,5 @@ fn run() {
 }
 fn main() ? {
     run()
-    if Dtors != 9 { fail }
+    assert Dtors == 9
 }

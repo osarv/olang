@@ -7,7 +7,7 @@ type Filler trait {
 }
 type S struct() { k I32 = 0 }
 fn (s S&) Fill(n mut Node&) { n.v = 1 }
-fn g(s <T Filler>&, n Node&) { s.Fill(n) }
+fn g<T Filler>(s T&, n Node&) { s.Fill(n) }
 fn main() ? {
   g(S(), Node(0))
 }

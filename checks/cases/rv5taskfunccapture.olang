@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (decision 48, replacing decision 40's refusal): a spawned lambda calling a closure held in what it captured - the
 # closure builds, from the task's thread, into its own part of the scope it captured
 type H struct(f fn(i I64)) { f }
@@ -9,6 +9,6 @@ fn main() ? {
     join {
         spawn fn() { for i in range 10 { ha.f(i) } }
     }
-    if a.Len() != 10 { fail }
-    for i, x in a { if x != i { fail } }
+    assert a.Len() == 10
+    for i, x in a { assert x == i }
 }

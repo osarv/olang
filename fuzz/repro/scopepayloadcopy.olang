@@ -13,6 +13,7 @@
 # the payload through - so the copy's refsHome is never set; valueRefsHome (~7604) likewise walks down through MEMBER
 # only. With no home recorded, valueRefsScope answers the copy's own storage: O4b binds build's scope variable there,
 # O17a's splitValueHome sees no split (so grow(y) is not refused), and "h := y.head" takes the copy's block (O25a).
+import "std/io"
 type Node struct(v I64) {
     v
     next mut Node& = null
@@ -58,5 +59,5 @@ fn main() ? {
         case _ { }
     }
     churn()
-    println($second(e1) " " $second(e2) " " $second(e3))
+    try io.Println($second(e1) " " $second(e2) " " $second(e3))
 }

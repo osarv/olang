@@ -1,5 +1,9 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line
 # vec4 (f1d_case_guard_return): the review's repro
+import "std/io"
+error Stop {
+    HERE
+}
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -9,9 +13,9 @@ fn churn() I64 {
     return t
 }
 # F1 evasion: a return hidden in a case guard's catch block
-fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 fn g(k I64) I64 ? {
-    if k < 5 { error }
+    if k < 5 { error Stop.HERE }
     return k
 }
 fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {
@@ -29,5 +33,5 @@ fn main() ? {
     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
     for i in range 1000 { v.Push(i) } # frees the buffer
     churn()
-    println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
 }

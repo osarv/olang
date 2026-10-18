@@ -3,6 +3,7 @@
 # E16a (tonight9's review): a slice of a temporary - here an inline field of a call's value result - borrows that
 # temporary where it is made, the block the slice is written in, so it is not stored where it outlives that block. It
 # was accepted, and h.r pointed into set's dead frame
+import "std/io"
 type Big struct(n I64) {
     a Array<I64, 4>
     a[0] = n
@@ -19,5 +20,5 @@ fn set(h mut H&, n I64) {
 fn main() ? {
     h mut H& = H(1)
     set(h, 7)
-    println($h.r[1])
+    try io.Println($h.r[1])
 }

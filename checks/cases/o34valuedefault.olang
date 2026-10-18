@@ -1,5 +1,8 @@
 # check: fail error[O34]: Buf owns objects, and a 'catch default' giving one is not supported yet
 # a catch default giving an owning value is not supported yet
+error Stop {
+    HERE
+}
 type Buf struct() {
     data own mut Array<I64>& = Array<I64>(2)
     n I64 = 0
@@ -20,7 +23,7 @@ fn (b Buf&) copy() Buf {
     return c
 }
 fn mk(n I64) Buf ? {
-    if n < 0 { error }
+    if n < 0 { error Stop.HERE }
     return Buf()
 }
 fn main() ? {

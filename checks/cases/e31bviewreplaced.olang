@@ -1,0 +1,28 @@
+# check: run
+# E31b (the review of the view lend, F1): a view callee that replaces the element through another path, then writes
+# through its view - from a List the copy still names the old element's storage, so the write lands there and the
+# element never sees it (as a handle's copy, e31bhandlereplaced); from an Array the view is the element itself.
+# Memory-safe either way; this pins the behaviour SPEC E31b states
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+}
+fn work(c mut V&, l mut List<V>&) I64 {
+    l[0] = V(Array<I64>(2), 7)
+    c.d[0] = 5
+    return c.n
+}
+fn workA(c mut V&, a mut Array<V>&) I64 {
+    a[0] = V(Array<I64>(2), 7)
+    c.d[0] = 5
+    return c.n
+}
+fn main() ? {
+    l := List<V>()
+    l.Push(V(Array<I64>(2), 1))
+    seen := work(l[0], l)
+    assert seen == 1 and l[0].d[0] == 0 and l[0].n == 7, "list " $seen " " $l[0].d[0] " " $l[0].n
+    a := V[V(Array<I64>(2), 1)]
+    seenA := workA(a[0], a)
+    assert seenA == 7 and a[0].d[0] == 5 and a[0].n == 7, "array " $seenA " " $a[0].d[0] " " $a[0].n
+}

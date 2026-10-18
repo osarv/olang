@@ -1,5 +1,6 @@
 # check: fail error[O41]: assigning 'v.o' may release the Inner the task spawned
 # O37/O38 (Vec phase 1): a borrowed own result - ...handed to a task while the spawner releases the object
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -62,5 +63,5 @@ fn main() ? {
         v.o = null
         churn()
     }
-    println($out[0])
+    try io.Println($out[0])
 }

@@ -1,8 +1,26 @@
-# check: fail error[T25e]: 'own' on Array<P>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')
-# per instantiation: not yet (T25e)
+# check: run
+# Vec phase 2a (T25e): per instantiation - an own array of a type variable bound to a value holding references is
+# allowed, as written directly; its elements' text is read back after the buffer is replaced and the arena churns
 type P struct(s String&, n I64) { s
  n }
 type SV<T> struct() {
     data own mut Array<T>& = null
 }
-fn main() ? { b := SV<P>() }
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b := SV<P>()
+    b.data = Array<P>(2)
+    b.data[0] = P("x" $3, 3)
+    b.data[1] = P("y", 4)
+    k := b.data[0]
+    b.data = Array<P>(1)
+    churn()
+    assert k.s == "x3" and k.n == 3 and b.data.Len() == 1
+}

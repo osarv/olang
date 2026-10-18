@@ -1,0 +1,67 @@
+# checkdump - every body of a program checked by the self-hosted checker (compiler/check.olang), for its acceptance
+# (compiler/DESIGN.md section 4, M5b/M5c). Apart from compiler/tools/dump.olang because stage 0 checks a program whole
+# while building it, and the two together do not fit the memory a build is given.
+#
+#     checkdump [-D NAME=VALUE]... [-t] FILE...
+#
+# For each file, "== FILE", then the program it is the root of loaded, its names resolved and every body checked: the
+# diagnostics said, rendered as the compiler renders them, then "gap PATH:LINE:COL WHAT" for each construct the checker
+# met and does not check yet, and "bodies N". compiler/tools/checkdiff.olang compares them with stage 0's goldens. -D
+# defines build constants; -t makes TestBuild true and checks the root module's test blocks.
+
+import "std/os"
+import "std/io"
+import "../source"
+import "../diag"
+import "../cond"
+import "../fetch"
+import "../load"
+import resolver "../names"
+import "../generic"
+import typecheck "../check"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PrintErrln("usage: checkdump [-D NAME=VALUE]... [-t] FILE...") catch io.IoError { }
+        os.Exit(2)
+    }
+    os.RunOnStack(1 << 30, fn() { run(args) })
+}
+
+fn run(args Array<String&>&) {
+    out := io.Writer(1)
+    std := try os.Env("OLANG_STD") catch default "std"
+    defines List<String&>
+    testBuild := false
+    k I64 = 1
+    for k < args.Len() and args[k].StartsWith("-") {
+        if args[k] == "-t" {
+            testBuild = true
+        } else if args[k] == "-D" and k + 1 < args.Len() {
+            k++
+            defines.Push(args[k])
+        }
+        k++
+    }
+    for i in range k, args.Len() {
+        path := args[i]
+        out.Write("== " $path "\n")
+        d := diag.Diagnostics(false)
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
+        for f in defines { try consts.Define(f, d) catch { } }
+        f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
+        l := load.Loader(std, consts, f, source.Names(), d)
+        l.Load(path)
+        r := resolver.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, testBuild)
+        c.CheckProgram()
+        out.Write(d.Render())
+        for g in c.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }
+        out.Write("bodies " $c.Bodies.Len() "\n")
+    }
+    try out.Flush() catch io.IoError { os.Exit(1) }
+}

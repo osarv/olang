@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2/O1b (review of rv3fix, #2): a closure made in a task capturing the program's scope keeps null for it, the calling thread's view
 type Node struct(v I64) {
     v
@@ -28,7 +28,7 @@ fn main() ? {
     }
     churn()
     f := Fns[0]
-    if f() != 42 { fail }
+    assert f() == 42
     churn()
-    if G.next.v != 42 { fail }
+    assert G.next.v == 42
 }

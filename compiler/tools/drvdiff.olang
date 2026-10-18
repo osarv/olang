@@ -1,0 +1,134 @@
+# drvdiff - M10's acceptance so far: the self-hosted driver (compiler/olang.olang, built as build/compiler_olang) says
+# what stage 0 (build/out) says for every command line below - what each writes to standard output and to standard
+# error, and the status it ends with. These are the command lines whose outcome is decided before code is generated:
+# the command line's own mistakes (B1, B3h, B10, B10a, B11a, B12, B12a), help, explain, and files that cannot be built.
+# Prints the differences and exits 1 if there are any.
+#
+# Run from the repository root after "make build/out build/compiler_olang" (make drvdiff). A case's words are split at
+# spaces; W stands for a scratch directory holding an empty directory "adir".
+
+import "std/os"
+import "toolkit"
+
+Cases Array<String&> = String&[
+    # nothing to do, and options alone
+    ""
+    "-debug"
+    "-race -sanitize -update"
+    # unknown options, the first said
+    "-x"
+    "-race build main.olang"
+    "build main.olang -x -y"
+    "--help"
+    "build -b main.olang"
+    # options for other modes, and options needing a value
+    "test -output o main.olang"
+    "format -debug a.olang"
+    "interpret -race p.olang"
+    "help -debug"
+    "explain -check B1"
+    "build main.olang -target"
+    "build -output"
+    "compile main.olang -define"
+    # -output
+    "build -output W/adir main.olang"
+    "build -output W/nodir/x main.olang"
+    "compile -output W/adir main.olang"
+    # -target
+    "compile -target bogus-cpu main.olang"
+    "compile -target riscv64-linux-gnu main.olang"
+    "compile -target x86_64-apple-darwin main.olang"
+    "compile -target x86_64-linux-gnu:a:b main.olang"
+    "compile -target aarch64-linux-gnu main.olang"
+    "build -target aarch64-linux-gnu main.olang"
+    "test -target aarch64-linux-gnu main.olang"
+    "interpret -target aarch64-linux-gnu main.olang"
+    # -define
+    "build -define X main.olang"
+    "build -define X=1 -define X=2 main.olang"
+    "build -define 1x=2 main.olang"
+    "build -define X=1.2.3e main.olang"
+    "build -define X=0xZZ main.olang"
+    "build -define X=99999999999999999999 main.olang"
+    "build -define X=-99999999999999999999 main.olang"
+    "build -define X=1e400 main.olang"
+    "build -define TargetOs=x main.olang"
+    "test -define TestBuild=1 main.olang"
+    # the modes
+    "build"
+    "build a.olang b.olang"
+    "compile"
+    "compile a.olang b.olang"
+    "test"
+    "interpret"
+    "format"
+    "bogus"
+    "main.txt"
+    "-debug main.txt"
+    "-debug test main.olang"
+    # help
+    "help"
+    "help build"
+    "help run"
+    "help compile"
+    "help test"
+    "help interpret"
+    "help format"
+    "help explain"
+    "help help"
+    "help nope"
+    "help build test"
+    # explain
+    "explain"
+    "explain B1 B2"
+    "explain B1"
+    "explain t6b"
+    "explain Zz9"
+    # files that cannot be built
+    "test W/none.olang"
+    "test W/adir"
+    "test /dev/null"
+    "test W/none.olang W/adir /dev/null"
+    "build W/none.olang"
+    "compile W/none.olang"
+    "interpret W/none.olang a b"
+    "W/none.olang a b"
+]
+
+fn main() {
+    stage0 := "build/out"
+    driver := "build/compiler_olang"
+    for t in String&[stage0, driver] {
+        if not toolkit.Built(t) { toolkit.Die("drvdiff: " $t " is not built (make " $t ")") }
+    }
+    work := toolkit.Scratch("drvdiff")
+    defer toolkit.Clean(work)
+    try os.MkDir($work "/adir") catch os.OsError { toolkit.Die("drvdiff: cannot make " $work "/adir") }
+    bad I64 = 0
+    for line in Cases {
+        a := outcome(stage0, line, work)
+        b := outcome(driver, line, work)
+        if a != b {
+            bad++
+            toolkit.Say("-- olang " $line "\n")
+            toolkit.Say(toolkit.Head(toolkit.Diff(work, a, b), 12))
+        }
+    }
+    if bad > 0 {
+        toolkit.Say("drvdiff: " $bad " of " $Cases.Len() " command lines differ\n")
+        os.Exit(1)
+    }
+    toolkit.Say("drvdiff: no difference over " $Cases.Len() " command lines\n")
+}
+
+# what the compiler at exe writes for the command line line, and its status, as one text
+fn outcome(exe String&, line String&, work String&) String {
+    args := List<String&>()
+    args.Push(exe)
+    for w in line.Split(" ") {
+        if w == "" { continue }
+        args.Push(w.Replace("W/", $work "/") if w.StartsWith("W/") else $w)
+    }
+    o := toolkit.Run(args.ToArray())
+    return $"stdout:\n" $o.Stdout "stderr:\n" $o.Stderr "status " $o.Status "\n"
+}
