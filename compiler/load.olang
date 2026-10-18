@@ -816,14 +816,14 @@ test "a program's modules: relative imports, a cycle, the prelude and identities
     write(dir, "main.olang", "import \"lib/util\"\nimport Pub \"lib/pub\"\nfn main() ? { }\n")
     write(dir, "lib/util.olang", "import \"helper\"\ntype Box struct() { }\n")
     write(dir, "lib/helper.olang", "import \"util\"\nfn H() I64 { return 1 }\n")
-    write(dir, "lib/pub.olang", "import \"std/math\"\n")
+    write(dir, "lib/pub.olang", "import \"std/stats\"\n")
     l := testLoader($dir "/olang.lock")
     root := l.Load($dir "/main.olang")
     assert root >= 0 and l.Diags.Errors() == 0, rules(l)
     g := l.Graph()
     assert g.Contains("module main\n  Pub lib/pub\n  util lib/util\n"), g
     assert g.Contains("module lib/util\n  helper lib/helper\n") and g.Contains("module lib/helper\n  util lib/util\n")
-    assert g.Contains("module lib/pub\n  math std/math\n") and g.Contains("module std/prelude/list\n")
+    assert g.Contains("module lib/pub\n  stats std/stats\n") and g.Contains("module std/prelude/list\n")
     # the oracle knew the imported type's name through its alias
     assert l.Mods[root].Oracle != null
 }

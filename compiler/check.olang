@@ -5752,7 +5752,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
 }
 
 # G9a: a variable only literals reach, whose constraint (G19) the widest of their types fails, takes the first type
-# of literalOrder that meets it and that every one of those literals adapts to (T6) - "math.Sqrt(4)" is Sqrt at F64.
+# of literalOrder that meets it and that every one of those literals adapts to (T6) - root(4), with "fn root<T Float>(x T) T", is root at F64.
 # None doing both, the binding stays and the constraint's error is said at the call
 fn (c mut Checker&) literalBinding(owner I64, b mut generic.Binding&, ps Array<types.TypeId>&, k0 I64, args Array<ast.Expr&>&) {
     for i in range b.N {

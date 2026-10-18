@@ -1131,7 +1131,7 @@ fn agree(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build math.olang > out.txt 2>&1 && ./build/math > b.txt 2>&1") == 0, "math", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug math.olang > out.txt 2>&1 && ./build/math.debug > d.txt 2>&1") == 0, "math -d", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret math.olang > i.txt 2>&1") == 0, "math -i", dir)
-    try r.expect(sh(dir, "test $(wc -l < b.txt) = 12 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
+    try r.expect(sh(dir, "test $(wc -l < b.txt) = 14 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
     mll String& = " build/math.main.ll"
     try r.expect(sh(dir, "grep -q '^@math_SqrtTwo = constant double 0x3FF6A09E667F3BCD$'" $mll) == 0, "math baked", dir)
     try r.expect(sh(dir, "grep -q '^declare double @sqrt(double) memory(none) nounwind willreturn$'" $mll) == 0, "math exact", dir)
