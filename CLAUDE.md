@@ -23,43 +23,21 @@ drift out of sync with the actual code.
 
 ## Claude's memory
 
-What Claude has learned working with the user - their standing rules (`feedback_*`), their direction for the
-language (`user_*`), and the project's state and open questions (`project_*`). The files live in `.claude/memory/`
-and are imported here, so every session starts with them. Keep them current in the same commit as the work, as
-with this file: a new standing rule or correction from the user gets a `feedback_` file and a line in the index,
-and every question put to the user goes into the pending-decisions ledger when it is asked.
+What Claude has learned working with the user, in five files in `.claude/memory/`, imported here so every session
+starts with them: `rules.md` (their standing rules and corrections), `direction.md` (their direction for the language,
+how they write, their time zone), `plan.md` (the work order and recorded future work), `decisions.md` (the ledger of
+questions put to them and the decisions made for their review) and `outreach.md` (the contract-work plan).
+`MEMORY.md` is the index; `archive/` holds historical notes, which are not imported. Keep them current in the same
+commit as the work, as with this file: a new standing rule or correction from the user goes into `rules.md` under its
+topic (with their words) and, if it adds a file's worth of something new, a line in the index; and every question put to
+the user goes into the ledger (`decisions.md`) when it is asked.
 
 @.claude/memory/MEMORY.md
-@.claude/memory/feedback_agent_effort.md
-@.claude/memory/feedback_c_only_for_port.md
-@.claude/memory/feedback_decide_details.md
-@.claude/memory/feedback_errors_are_errors.md
-@.claude/memory/feedback_folder_readmes.md
-@.claude/memory/feedback_olang_only.md
-@.claude/memory/feedback_keep_evaluator_current.md
-@.claude/memory/feedback_oann_after_compiler.md
-@.claude/memory/feedback_keep_old_tests.md
-@.claude/memory/feedback_maintain_claude_md.md
-@.claude/memory/feedback_no_askuserquestion_for_design.md
-@.claude/memory/feedback_no_claude_attribution.md
-@.claude/memory/feedback_no_runtime_checks.md
-@.claude/memory/feedback_numbered_questions.md
-@.claude/memory/feedback_port_clean_design.md
-@.claude/memory/feedback_record_flagged_decisions.md
-@.claude/memory/feedback_revisit_decisions.md
-@.claude/memory/feedback_style_form_conciseness.md
-@.claude/memory/feedback_surface_and_fix_bugs.md
-@.claude/memory/feedback_usage_and_agents.md
-@.claude/memory/user_olang_direction.md
-@.claude/memory/user_olang_natural_language.md
-@.claude/memory/user_dictation.md
-@.claude/memory/user_timezone.md
-@.claude/memory/project_olang_concurrency_gaps.md
-@.claude/memory/project_olang_next_steps.md
-@.claude/memory/project_olang_open_language_gaps.md
-@.claude/memory/project_olang_pending_decisions.md
-@.claude/memory/project_olang_vec_growth_question.md
-@.claude/memory/project_outreach.md
+@.claude/memory/rules.md
+@.claude/memory/direction.md
+@.claude/memory/plan.md
+@.claude/memory/decisions.md
+@.claude/memory/outreach.md
 
 ## Checklist for every language change
 
@@ -75,7 +53,7 @@ Go through this for every change to what olang means - a rule added, revised or 
 5. **Migrate the corpus and `std`** when the change invalidates code; keep old tests unless the change invalidates them.
 6. **Diagnostics**: new errors name the rule and say what to write instead; reword any message the change made stale.
 7. **Record it**: the current-state entry below, the full story in `HISTORY.md`, and any question left open in the
-   pending-decisions ledger (`.claude/memory/project_olang_pending_decisions.md`).
+   pending-decisions ledger (`.claude/memory/decisions.md`).
 8. **`make verify`** passes, then commit.
 
 ## Settled decisions

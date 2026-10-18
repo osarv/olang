@@ -1,5 +1,5 @@
 ---
-name: project-olang-next-steps
+name: plan
 description: "Work order for olang and the recorded future work: the current plan (the port, own/Vec, queued stage-0 fixes), recorded ideas, parked items and revisit-ifs; the dated progress log is in archive/next_steps_log.md"
 metadata:
   node_type: memory
@@ -9,7 +9,7 @@ metadata:
 ---
 
 Rewritten 2026-10-08 from an audit of CLAUDE.md, HISTORY.md and the old ledger; the earlier text (a running log of
-work long since done) is in git before this commit. Open QUESTIONS live in the ledger [[project-olang-pending-decisions]];
+work long since done) is in git before this commit. Open QUESTIONS live in the ledger decisions.md;
 this file is the work order and the future work nobody owes an answer on.
 
 **Now (as of 2026-10-17)** - written from the newest entries when this file was slimmed; dated progress entries
@@ -137,7 +137,7 @@ overrated".
 
 **After the compiler (the user, 2026-10-11):** research on settling networks. Extract functional structures for tasks,
 MNIST first, NLP and robotics later; genetic algorithms are allowed. Done in oann, clean room
-(user_olang_direction.md).
+(direction.md).
 
 **Recorded future work** (the user recorded or deferred these; not next unless they say so):
 - **FPGA support, for spiking neural networks** (the user, 2026-10-09: "I want FPGA support for spiking neural network
@@ -184,4 +184,4 @@ checked by hand only (comments, before `checks/` existed) - worth moving into ch
 is the one type walker still kept in step with the others by hand.
 
 **How to apply:** the user sets the order; don't start an item from the future-work list unasked. Fix bugs and debts
-on sight per [[feedback-surface-and-fix-bugs]].
+on sight per rules.md, "Code rules".

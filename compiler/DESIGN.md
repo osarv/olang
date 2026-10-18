@@ -20,7 +20,7 @@ Measurements below were taken on 2026-10-09 on the shared 4-core machine while o
 
 - **Behaviour is the acceptance test.** The whole suite (`make verify`) passes, plus token and structure diffs
   against the C compiler where they are cheap (section 4). The port's IR does not have to match the C compiler's.
-- **Industry-standard designs** (`.claude/memory/feedback_port_clean_design.md`): a hand-written scanner,
+- **Industry-standard designs** (`.claude/memory/rules.md`, "The port is a redesign"): a hand-written scanner,
   recursive descent with a Pratt expression parser, separate passes over trees of tagged unions, and a typed
   mid-level IR.
 - **One module per pass**, long where the pass is long. Files are split only at real module boundaries. M19 adds a

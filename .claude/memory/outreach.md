@@ -1,5 +1,5 @@
 ---
-name: project-outreach
+name: outreach
 description: "Contract work to pay for compute: fixed-price measured speedups; the outreach doc, 14 targets and 8 letters; the company Gmail I am to send from; what waits on the user"
 metadata:
   node_type: memory
@@ -43,7 +43,7 @@ Before each letter: check that the issue is still open, and check the contact ad
 **Company name:** the user asked "What could I name my company?" I offered Osarv (recommended), O Labs/Olab, Hotpath,
 Measured, Cycles, Kvick and Rask, and said to avoid "fart". I offered to check availability (Bolagsverket, .se/.com
 domains, EUIPO) and to draft a compute-credits application. Neither offer has an answer yet. The open questions are
-QL in [[project-olang-pending-decisions]].
+QL in decisions.md.
 
 **How to apply:** send nothing until the Gmail exists and the user has OKed the defaults (QL2). When the user is back,
 re-raise QL. Replies come back to me for a scope and quote draft, which goes to the user before it goes out.

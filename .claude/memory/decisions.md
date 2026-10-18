@@ -1,5 +1,5 @@
 ---
-name: project-olang-pending-decisions
+name: decisions
 description: "Ledger of every olang decision I flagged for the user that is still unanswered - question, default in effect meanwhile, my recommendation; re-raise when the area comes up"
 metadata:
   node_type: memory
@@ -11,9 +11,9 @@ metadata:
 Every question I put to the user goes here the moment I ask it, and leaves only when they answer - the answer then goes
 into CLAUDE.md/HISTORY.md as any design decision does. Unanswered is not consent: the default stays in effect and the
 entry is re-raised when its area comes up or at the end of a report. One decision per number, each with the default in
-effect and my recommendation. See [[feedback-record-flagged-decisions]]. Rebuilt 2026-10-08 after an audit of
+effect and my recommendation. See rules.md, "How to decide and record". Rebuilt 2026-10-08 after an audit of
 CLAUDE.md, HISTORY.md and the old ledger (the full old ledger is in git at bc9f9c9). Slimmed 2026-10-17: answered questions and the numbered decisions 1-51 are in archive/decisions_log.md (not imported). Recorded future work that asks
-nothing of the user is in [[project-olang-next-steps]], not here.
+nothing of the user is in plan.md, not here.
 
 **Decided 2026-10-08, next after the current batch:** runtime interfaces back as `any Trait&` (the user: "any widget is
 good"): a trait stays a constraint; `any Trait&` is a run-time value written on purpose, itself satisfying the trait;
@@ -21,7 +21,7 @@ only structs/enums convert, no widening at first, defaults/overrides through the
 code comes back from git (T30). GUI style (retained vs immediate mode) left to me (the user: "I don't know about GUI
 design. Do what you want") - nothing to decide until a GUI is written.
 
-**Asked 2026-10-11 (contract work, [[project-outreach]]):**
+**Asked 2026-10-11 (contract work, outreach.md):**
 - QL1. The company's name. Recommended: Osarv (also offered: O Labs/Olab, Hotpath, Measured, Cycles, Kvick, Rask). In
   effect: `[company]` in the letters. Also offered: checking the name (Bolagsverket, .se/.com domains, EUIPO).
   The user, 2026-10-11: "I want an English name, and preferably one that starts with O ... Olab or something like that
@@ -513,7 +513,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
   Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
   control flow). Recommended: (a) now, (b) only if real code still reads noisy.
 
-**QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
+**QUESTIONS for the user** - direction-level only since 2026-10-08 (rules.md, "How to decide and record"):
 (Answered questions - QA-QE, QG-QI, Q1-Q21, the user's oann and settling-network decisions - are in archive/decisions_log.md.)
 **Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
 - QF. Long-lived, mutated structures only ever grow: what is removed from or replaced in a List/Map/struct that lives

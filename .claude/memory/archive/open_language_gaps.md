@@ -1,5 +1,5 @@
 ---
-name: project-olang-open-language-gaps
+name: archive-open-language-gaps
 description: "Historical record of deferred olang gaps - all resolved as of 2026-09-29; open questions moved to the pending-decisions ledger"
 metadata:
   node_type: memory
@@ -7,6 +7,8 @@ metadata:
   originSessionId: 7f2a5325-2cc9-4c97-9679-ec83bcdf63a5
   modified: 2026-09-09T00:00:00.000Z
 ---
+
+> HISTORICAL (2026-10-18): every item here is resolved; kept for the evidence. Not imported by CLAUDE.md.
 
 Deliberately deferred, each verified to exist as of 2026-09-07 (`72cbcfe`):
 
@@ -38,7 +40,7 @@ Deliberately deferred, each verified to exist as of 2026-09-07 (`72cbcfe`):
 
 **Why:** all of these were found by writing real code (the stdlib) or by the user questioning the model, and
 all were consciously left rather than forgotten. A fourth entry, the byte-literal gap, was found the same
-way on 2026-09-09 and fixed immediately (`46b6fbd`) rather than deferred - see [[project-olang-next-steps]].
+way on 2026-09-09 and fixed immediately (`46b6fbd`) rather than deferred - see plan.md.
 The generic-inference literal gap (2026-09-21) is **RESOLVED** as G9a (2026-09-24, `27d99f0`).
 
 5. **RESOLVED 2026-09-28 as O25 (`2379c87`): references never narrow.** Was: writing through a narrowed reference (found 2026-09-24, `58d0ff8`).** `a mut N& = p`
@@ -56,9 +58,9 @@ The generic-inference literal gap (2026-09-21) is **RESOLVED** as G9a (2026-09-2
 later by O4b. Nothing in this file is open.
 **Status 2026-09-29:** item 1 RESOLVED as D8c (multiple returns, `be0f44d`); scope order RESOLVED as O10e;
 the "grow builtin" question resolved (no such builtin; user satisfied). Everything still awaiting the user is
-in [[project-olang-pending-decisions]]. Older status line follows.
+in decisions.md. Older status line follows.
 **Status 2026-09-28:** open is item 1 (multiple returns). Pending user answers: implicit scope ORDER
 (shortest first) - I flagged over-constraint of unrelated scopes (e.g. ToArray's return scope); and
 whether primitives become referenceable (`int32&`) - the user floated it because everything has methods.
 **How to apply:** raise the relevant one when its area comes up; do not silently work around them.
-See [[project-olang-next-steps]].
+See plan.md.
