@@ -72,6 +72,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
     joinMarks List<I64>        # where each one's errors start in joinErrs
     joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
+    spawnSaid I64 = 0              # spawned calls said to need try (P4): their join is not said to need none
 }
 
 # a construct met and not checked yet: where, and what (the acceptance's "gap")
@@ -7190,6 +7191,7 @@ fn (c mut Checker&) notStmtSpan(x ast.Expr&) source.Span {
 fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
     fr := c.fr()
     targetFails := fr.TargetFails
+    said0 := fr.spawnSaid
     fr.joins.Push(0)
     fr.joinMarks.Push(fr.joinErrs.Len())
     from := c.stmts.Len()
@@ -7219,7 +7221,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
         if errs.Len() == 0 { c.err(c.catchSpan(j.Clauses[0]), msgs.JoinCatchNeedsTry()) }
     }
     if j.Tried {
-        if errs.Len() == 0 { c.err(sp, msgs.JoinCannotFail()) }
+        if errs.Len() == 0 and fr.spawnSaid == said0 { c.err(sp, msgs.JoinCannotFail()) }
         lm := fr.leaks.Len()
         for e in errs { fr.leaks.Push(e) }
         jend := fr.leaks.Len()
@@ -7301,7 +7303,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     errs := c.P.T.Items(c.lastErrs)
     if errs.Len() > 0 and not tried {
         c.err(inner.Span(), msgs.SpawnFallible())
-        for e in errs { fr.joinErrs.Push(e) }   # said once: its join is not then said to need no try
+        fr.spawnSaid++   # said once: its "try join" is not then said to need no try
     }
     if errs.Len() == 0 and tried { c.err(call.Span(), msgs.SpawnTryInfallible()) }
     # the clauses: what each takes, and the code it runs on the task (P4a)
