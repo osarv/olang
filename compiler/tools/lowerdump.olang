@@ -9,7 +9,7 @@
 # "errors E bodies N lowered L clean C bad B gapped G unchecked U" - E the diagnostics checking said (with -v rendered
 # first), unchecked counting the bodies a check error or a check gap
 # left with an unknown type, which are not lowered. At the end, over every file, the totals and the gaps counted by
-# what. -mir dumps the MIR of each body whose place (PATH:LINE) contains PATTERN, -typed its typed body. -D defines
+# what. A file's "# flags:" line (a checks case's) gives it its -define constants. -mir dumps the MIR of each body whose place (PATH:LINE) contains PATTERN, -typed its typed body. -D defines
 # build constants; -t makes TestBuild true and checks and lowers the root module's test blocks.
 
 import "std/os"
@@ -83,6 +83,15 @@ fn run(args Array<String&>&) {
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
         for f in defines { try consts.Define(f, d) catch { } }
+        # a checks case's own build constants, from its "# flags:" line
+        text := try os.ReadFile(path) catch os.OsError default ""
+        for line in text.Split("\n") {
+            if not line.StartsWith("# flags:") { continue }
+            words := line[8:].Trim().Split(" ")
+            for j in range words.Len() {
+                if words[j] == "-define" and j + 1 < words.Len() { try consts.Define(words[j + 1], d) catch { } }
+            }
+        }
         f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
         l := load.Loader(std, consts, f, source.Names(), d)
         l.Load(path)

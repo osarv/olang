@@ -50,6 +50,7 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     Wanted List<mir.FnKey>
     wanted Map<mir.FnKey, Bool>
     ctorOf Map<types.TypeId, I64>   # a type's constructor's body (twin 0), once looked up
+    strOf Map<types.TypeId, I64>    # a type's Str's body, -1 for none, once looked up
     indexed Bool = false
     builtinT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
@@ -1702,10 +1703,13 @@ fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.
 # helper, the builder its one scope
 fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
     t := ln.T
+    if ty == types.UnknownT or ln.gapped { return }
     r := t.Repr(ty)
     how := mir.WriteKind.Bool
     direct := true
-    if t.Same(ty, ln.L.char()) {
+    if ln.hasStr(ty) {
+        direct = false
+    } else if ln.isChar(ty) {
         how = mir.WriteKind.Char
     } else if r == types.BoolT {
         how = mir.WriteKind.Bool
@@ -1800,11 +1804,11 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
             ln.prologue(mir.VarKind[])
             a := ln.at(mir.LocalId(0))
             b := ln.at(mir.LocalId(1))
-            ln.epilogue(ln.equalAt(a, b, ty, sp))
+            ln.epilogue(ln.equalAt(a, b, ty, sp, true))
         }
         case mir.HelperKind.Hash {
             ln.prologue(mir.VarKind[])
-            ln.epilogue(ln.hashAt(ln.at(mir.LocalId(0)), ty, sp))
+            ln.epilogue(ln.hashAt(ln.at(mir.LocalId(0)), ty, sp, true))
         }
         case mir.HelperKind.Zero {
             vs := t.ScopeVarsOf(ln.F.Ty)
@@ -1813,7 +1817,7 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
         }
         case mir.HelperKind.Render {
             ln.prologue(mir.VarKind[mir.VarKind.Builder])
-            ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp)
+            ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
     }
@@ -1892,7 +1896,7 @@ fn (ln mut lowering&) flag(v Bool, sp source.Span) mir.LocalId {
 # other reference or function value by identity, a null equal only to a null; a struct's, tuple's or record's fields in
 # order, an enum's case then its payload, an array's length then its elements - an aggregate part through its own
 # Equal helper, so a type that comes round to itself is one function
-fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
     t := ln.T
     r := t.Repr(ty)
     if ln.scalar(ty) {
@@ -1928,7 +1932,7 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span) mir.O
         ln.start(after)
         return mir.Operand.Copy(mir.L(res))
     }
-    if not ln.isTop(ty) {
+    if not top {
         return ln.helperCall(mir.HelperKind.Equal, ty, mir.Operand[ln.refTo(a, ty, sp), ln.refTo(b, ty, sp)], mir.ScopeRef[]
                              types.BoolT, sp)
     }
@@ -1987,15 +1991,6 @@ fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span) mir.O
     return mir.Operand.Copy(mir.L(res))
 }
 
-# whether ty is the type this helper is for: its parts are lowered here, any other aggregate through its own helper
-fn (ln mut lowering&) isTop(ty types.TypeId) Bool {
-    t := ln.T
-    match ln.F.Of {
-        case mir.FnKey.Helper(_, h) { return t.Same(t.Repr(h), t.Repr(ty)) }
-        case _ { return false }
-    }
-}
-
 # for each case of an enum with a payload: the code each gives, run where the tag tag (an I64) is that case's
 fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp source.Span, each fn(tag I64, rec types.TypeId)) {
     with List<I64>
@@ -2052,7 +2047,7 @@ fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
 # the supplied Hash (E10b): an integer, Bool or Char by the prelude's mixHash, a reference to an array by its
 # elements' (a null 0); a struct's, tuple's or record's fields combined in order, an enum's case then its payload's, an
 # array's elements - an aggregate part through its own Hash helper
-fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
     t := ln.T
     r := t.Repr(ty)
     if ln.scalar(ty) {
@@ -2073,7 +2068,7 @@ fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span) mir.Operand 
         ln.start(after)
         return mir.Operand.Copy(mir.L(res))
     }
-    if not ln.isTop(ty) { return ln.helperCall(mir.HelperKind.Hash, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[], mir.I64T, sp) }
+    if not top { return ln.helperCall(mir.HelperKind.Hash, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[], mir.I64T, sp) }
     h := ln.temp(mir.I64T, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Use(ln.constI64(0))))
     parts, isParts := ln.partsOf(ty)
@@ -2207,7 +2202,274 @@ fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
     return ln.F
 }
 
-# "$x" of a value of the type, written into builder b (E11a): to come
-fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span) {
-    ln.gap(sp, "a Render helper")
+# "$x" of a value of the type, at the top of its rendering, written into builder b (E11a): a type declaring Str by what
+# Str returns; a struct as its name and its fields, an enum as its type and case and its payload, an array as its
+# element type and its items, several results as a tuple, a reference as null or what it names, a function value as
+# its signature - each part as it renders inside another value (inner)
+fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span, top Bool = false) {
+    t := ln.T
+    if ln.renderStr(a, ty, b, sp) { return }
+    r := t.Repr(ty)
+    if t.IsRef(r) {
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        some, none, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(nn, some, none))
+        ln.start(none)
+        ln.word(b, "null", sp)
+        ln.goto(after)
+        ln.start(some)
+        ln.inner(ln.at(x), t.Referent(r), b, sp)
+        ln.goto(after)
+        ln.start(after)
+        return
+    }
+    if t.KindOf(r) == types.Kind.Func {
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        some, none, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(nn, some, none))
+        ln.start(none)
+        ln.word(b, "null", sp)
+        ln.goto(after)
+        ln.start(some)
+        ln.word(b, ln.spell(ty, true), sp)
+        ln.goto(after)
+        ln.start(after)
+        return
+    }
+    if not top {
+        ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[b], types.VoidT, sp)
+        return
+    }
+    parts, isParts := ln.partsOf(ty)
+    cases, isEnum := ln.casesOf(ty)
+    if isParts {
+        if t.KindOf(r) == types.Kind.Named { ln.word(b, ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
+        ln.word(b, "(", sp)
+        for i in range parts.Len() {
+            if i > 0 { ln.word(b, ", ", sp) }
+            ln.inner(ln.with(a, mir.Proj.Field(i)), parts[i], b, sp)
+        }
+        ln.word(b, ")", sp)
+    } else if isEnum {
+        names := t.CaseNames(r) if t.KindOf(r) == types.Kind.Named else t.ShapeNames(r)
+        tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
+        prefix := "" if t.KindOf(r) != types.Kind.Named else $ln.T.Names.Text(t.DeclName(t.DeclOf(r))) "."
+        after := ln.F.NewBlock()
+        cs := Array<mir.Case>(cases.Len())
+        bs := Array<mir.BlockId>(cases.Len())
+        for k in range cases.Len() {
+            bs[k] = ln.F.NewBlock()
+            cs[k] = mir.Case(k, bs[k])
+        }
+        ln.end(mir.Term.Switch(tag, ln.F.AddCases(cs), after))
+        for k in range cases.Len() {
+            ln.start(bs[k])
+            name := ln.T.Names.Text(names[k]) if names != null and k < names.Len() else $k
+            ln.word(b, $prefix $name, sp)
+            if cases[k] != types.TypeId(0) {
+                fs := ln.items(t.Parts(cases[k]))
+                if fs.Len() > 0 {
+                    ln.word(b, "(", sp)
+                    for i in range fs.Len() {
+                        if i > 0 { ln.word(b, ", ", sp) }
+                        ln.inner(ln.with(ln.with(a, mir.Proj.Payload(k)), mir.Proj.Field(i)), fs[i], b, sp)
+                    }
+                    ln.word(b, ")", sp)
+                }
+            }
+            ln.goto(after)
+        }
+        ln.start(after)
+    } else if ln.arrayOf(ty) != types.UnknownT {
+        el := t.Elem(ln.arrayOf(ty))
+        ln.word(b, $ln.spell(ln.readOnly(el), false) "[", sp)
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
+        ln.eachIndex(n, sp, fn(i mir.LocalId) {
+            first := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(0)], sp)
+            sep, item := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(first, item, sep))
+            ln.start(sep)
+            ln.word(b, ", ", sp)
+            ln.goto(item)
+            ln.start(item)
+            ln.inner(ln.with(a, mir.Proj.Index(i)), el, b, sp)
+        })
+        ln.word(b, "]", sp)
+    } else {
+        ln.gap(sp, "a Render helper for a type with no rendering")
+    }
+}
+
+# a value written inside another's rendering (E11a): a Char as a character literal, text as a string literal, a
+# number or a Bool as at the top, anything else as at the top through its Render helper
+fn (ln mut lowering&) inner(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span) {
+    t := ln.T
+    r := t.Repr(ty)
+    if ln.isChar(ty) {
+        ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.QuotedChar, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        return
+    }
+    if ln.isText(ty) and not ln.hasStr(ty) {
+        ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Quoted, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        return
+    }
+    if ln.scalar(ty) {
+        how := mir.WriteKind.Bool
+        if t.IsUnsigned(r) { how = mir.WriteKind.Uint } else if t.IsInt(r) { how = mir.WriteKind.Int } else if t.IsFloat(r) {
+            how = mir.WriteKind.Float
+        }
+        ln.emit(mir.Stmt.Write(sp, b, how, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        return
+    }
+    ln.renderAt(a, ty, b, sp)
+}
+
+# a Char, or a type declared over one (E11a renders those as characters)
+fn (ln mut lowering&) isChar(ty types.TypeId) Bool {
+    t := ln.T
+    x := ty
+    for k in range 16 {
+        if t.Same(x, ln.L.char()) { return true }
+        if not (t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Over and t.HasBody(x)) {
+            return false
+        }
+        x = t.Base(x)
+    }
+    return false
+}
+
+# text written into builder b as it is
+fn (ln mut lowering&) word(b mir.ScopeRef, text String&, sp source.Span) {
+    bytes := Array<U8>(text.Len())
+    for i in range text.Len() { bytes[i] = U8(text[i]) }
+    u8 := ln.T.Prim("U8")
+    bt := ln.T.Ref(ln.T.Array(u8, types.TypeId(0)), types.ReadOnly)
+    c := ln.F.AddConst(typed.Const.Bytes(bytes))
+    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Data(bt, c, ln.file, sp)))
+}
+
+# the type with its own write permission dropped: an array's element type as a literal writes it (E11a)
+fn (ln mut lowering&) readOnly(ty types.TypeId) types.TypeId {
+    t := ln.T
+    if t.IsRef(ty) { return t.Ref(t.Referent(ty), t.PermOf(ty) & (0 - 1 - types.Writable)) }
+    return ty
+}
+
+# a type as source writes it (E11a, E21): primitives and declared types by name, their arguments in angle brackets,
+# references with their permission, arrays as Array<T> or Array<T, N>; a function type as a signature, after "fn"
+# where fnWord says
+fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
+    t := ln.T
+    k := t.KindOf(ty)
+    if k == types.Kind.Named {
+        name := ln.T.Names.Text(t.DeclName(t.DeclOf(ty)))
+        args := t.Items(t.Args(ty))
+        if args.Len() == 0 { return $name }
+        out := StringBuilder()
+        out.Push(name)
+        out.PushChar('<')
+        for i in range args.Len() {
+            if i > 0 { out.Push(", ") }
+            out.Push(ln.spell(args[i], true))
+        }
+        out.PushChar('>')
+        return out.ToString()
+    }
+    if k == types.Kind.Ref {
+        m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
+        return $m $ln.spell(t.Referent(ty), true) "&"
+    }
+    if k == types.Kind.Array {
+        n := t.Length(ty)
+        if n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const {
+            return "Array<" $ln.spell(t.Elem(ty), true) ", " $t.ConstValue(n) ">"
+        }
+        return "Array<" $ln.spell(t.Elem(ty), true) ">"
+    }
+    if k == types.Kind.Const { return $t.ConstValue(ty) }
+    if k == types.Kind.Tuple {
+        out := StringBuilder()
+        xs := t.Items(t.Parts(ty))
+        out.PushChar('(')
+        for i in range xs.Len() {
+            if i > 0 { out.Push(", ") }
+            out.Push(ln.spell(xs[i], true))
+        }
+        out.PushChar(')')
+        return out.ToString()
+    }
+    if k == types.Kind.Func {
+        out := StringBuilder()
+        if fnWord { out.Push("fn") }
+        out.PushChar('(')
+        ps := t.Items(t.Params(ty))
+        for i in range ps.Len() {
+            if i > 0 { out.Push(", ") }
+            out.Push(ln.spell(ps[i], true))
+        }
+        out.PushChar(')')
+        res := t.Result(ty)
+        if res != types.VoidT { out.Push(" " $ln.spell(res, true)) }
+        es := t.Items(t.Errors(ty))
+        if es.Len() > 0 {
+            out.Push(" ?")
+            for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
+        }
+        return out.ToString()
+    }
+    return t.Canon(ty)
+}
+
+# whether a type declares Str (E11c), and its body: its Str, rendering it at every depth
+fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
+    lw := ln.L
+    t := ln.T
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Named { return -1 }
+    got := try lw.strOf.Get(r) catch default -2
+    if got != -2 { return got }
+    id := -1
+    for name in String&["Str", "str"] {
+        m := lw.P.MethodOf(r, t.Names.Intern(name))
+        if m < 0 { continue }
+        for i in range lw.Bodies.Len() {
+            match lw.Bodies[i].Of {
+                case typed.BodyOf.Fn(inst) {
+                    if id < 0 and lw.P.InstanceFn(inst) == m {
+                        ps := t.Items(t.Params(lw.Bodies[i].Ty))
+                        if ps.Len() == 1 {
+                            p0 := t.Referent(ps[0]) if t.IsRef(ps[0]) else ps[0]
+                            if t.Same(t.Repr(p0), r) { id = i }
+                        }
+                    }
+                }
+                case _ { }
+            }
+        }
+    }
+    lw.strOf.Put(r, id)
+    return id
+}
+
+fn (ln mut lowering&) hasStr(ty types.TypeId) Bool { return ln.strBody(ty) >= 0 }
+
+# a value of a type declaring Str rendered by it: Str called on it, what it returns written as it is
+fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span) Bool {
+    id := ln.strBody(ty)
+    if id < 0 { return false }
+    t := ln.T
+    callee, fty := ln.bodyCallee(typed.BodyId(I32(id)))
+    p0 := t.Items(t.Params(fty))[0]
+    recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp) if t.IsRef(p0) else ln.into(p0, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+    res := t.Result(fty)
+    ok := ln.F.NewBlock()
+    dest := ln.temp(res, sp)
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+                               true, ok, mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
+    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(dest))))
+    return true
 }

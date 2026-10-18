@@ -219,10 +219,13 @@ type Rvalue enum {
 }
 
 # what a Write appends to a builder: an array of U8 or Char as bytes, a Char as itself, a number as E11a writes it
-# (an integer in decimal, a float as its shortest text), a Bool as true or false
+# (an integer in decimal, a float as its shortest text), a Bool as true or false; text and a Char inside another
+# value, as E11a writes them there - a string literal and a character literal, escaped (Quoted, QuotedChar)
 type WriteKind enum {
     Bytes
+    Quoted
     Char
+    QuotedChar
     Int
     Uint
     Float
@@ -1128,8 +1131,8 @@ fn (v mut verifier&) stmtTypes(s Stmt) {
             xt := v.operandType(x)
             r := t.Repr(xt)
             good := match how {
-                case WriteKind.Bytes => v.isText(xt)
-                case WriteKind.Char => r == types.TypeId(7)
+                case WriteKind.Bytes, WriteKind.Quoted => v.isText(xt)
+                case WriteKind.Char, WriteKind.QuotedChar => r == types.TypeId(7)
                 case WriteKind.Int => t.IsInt(r) and not t.IsUnsigned(r)
                 case WriteKind.Uint => t.IsUnsigned(r)
                 case WriteKind.Float => t.IsFloat(r)
