@@ -535,7 +535,9 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
     if ln.dead { return }
     match s {
         case typed.Stmt.Let(sp, l, init) {
-            v := ln.fit(ln.val(init), init, ln.B.Locals[I64(l)].Ty, sp)
+            ty := ln.B.Locals[I64(l)].Ty
+            v := ln.fit(ln.val(init), init, ty, sp)
+            if ln.copiesArray(init, ty) and not ln.dead { v = ln.arrayCopy(v, ty, sp) }
             ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
         }
         case typed.Stmt.Assign(sp, target, value) {
@@ -543,7 +545,11 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             ln.targets.Push(p)
             v := ln.fit(ln.val(value), value, target.Type(), sp)
             try ln.targets.Pop() catch { }
-            ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
+            if ln.valueArray(target.Type()) and not ln.dead {
+                ln.arrayStore(ln.mk(p), v, target.Type(), ln.copiesArray(value, target.Type()), sp)
+            } else {
+                ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
+            }
         }
         case typed.Stmt.Eval(_, x) { ln.val(x) }
         case typed.Stmt.If(sp, i) { ln.ifStmt(sp, i) }
@@ -565,6 +571,57 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }
         case typed.Stmt.Yield(sp, x) { ln.yield(sp, x) }
     }
+}
+
+# ---- array values (T7b, T11b) ----
+
+# whether a type is an array of a run-time length held by value: its storage its own, made where it is declared (T7b)
+fn (ln mut lowering&) valueArray(ty types.TypeId) Bool {
+    t := ln.T
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)
+}
+
+# whether storing x where a value array of type ty is wanted copies its elements: x is existing storage (a place read),
+# not a temporary whose storage the target takes
+fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
+    if not ln.valueArray(ty) { return false }
+    return match x {
+        case typed.Expr.Read(_, _, _, _) => true
+        case _ => false
+    }
+}
+
+# an array value's elements copied into storage of its own (T7b), made in the program's scope under the stand-in
+# placement
+fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    src := ln.local(v, ty, sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    buf := ln.temp(ty, sp)
+    el := t.Elem(t.Repr(ty))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(mir.ScopeRef.Program, ty, n, mir.Operand.Const(el, 0))))
+    ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
+    return mir.Operand.Copy(mir.L(buf))
+}
+
+# v stored into the value array at dst (T11b): written into the storage dst holds where the length is unchanged, else
+# dst given v's storage - a copy of it where v is existing storage
+fn (ln mut lowering&) arrayStore(dst mir.Place, v mir.Operand, ty types.TypeId, copies Bool, sp source.Span) {
+    src := ln.local(v, ty, sp)
+    old := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(dst)], sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[old, n], sp)
+    inPlace, fresh, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(same, inPlace, fresh))
+    ln.start(inPlace)
+    ln.emit(mir.Stmt.CopyElems(sp, dst, mir.L(src), n))
+    ln.goto(after)
+    ln.start(fresh)
+    w := ln.arrayCopy(mir.Operand.Copy(mir.L(src)), ty, sp) if copies else mir.Operand.Copy(mir.L(src))
+    ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
+    ln.goto(after)
+    ln.start(after)
 }
 
 fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {

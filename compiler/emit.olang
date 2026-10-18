@@ -39,13 +39,20 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Tests Bool = false              # a test build: the harness runs the root's tests
     Gaps List<String&>              # what emission met and does not emit yet, a line each
     queue List<mir.FnKey>           # the functions to write, in the order first referred to
-    queued Map<mir.FnKey, Bool>
+    queued Map<mir.FnKey, I64>      # each function's index in queue
+    cur I64 = -1                    # the function being written
+    callFrom List<I64>              # what each function refers to (calls, function values, destructors): B5a's graph
+    callTo List<I64>
+    readFrom List<I64>              # the globals each function reads or writes
+    readM List<I64>
+    readN List<source.NameId>
     named List<types.TypeId>        # the declared structs whose types are spelled by name, to define
     namedSeen Map<types.TypeId, Bool>
     body StringBuilder              # the functions written
     tail StringBuilder              # globals, constant data and declarations, written after the functions
     seen Map<String&, Bool>          # the symbols tail defines or declares already
     nconst I64 = 0
+    badType Bool = false            # a type met with no layout, in the function being written
     ntask I64 = 0                   # tasks' trampolines made
     dataAt Map<String&, String&>      # a Data operand's storage by its position: one instance for each (T25d)
     thunks List<String&>            # function-value thunks to write: "SYM|key index"
@@ -96,9 +103,11 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
     k I64 = 0
     for k < e.queue.Len() {
         key := e.queue[k]
+        e.cur = k
         k++
         e.function(key)
     }
+    e.cur = -1
     for i in range e.thunkKeys.Len() { e.thunk(e.thunkKeys[i], e.thunkTys[i]) }
     for d in e.dtorKeys { e.dtorThunk(d) }
     if e.Tests {
@@ -167,9 +176,100 @@ fn (e mut Emitter&) index() {
 }
 
 fn (e mut Emitter&) want(k mir.FnKey) {
-    if e.queued.Has(k) { return }
-    e.queued.Put(k, true)
-    e.queue.Push(k)
+    i := try e.queued.Get(k) catch default -1
+    if i < 0 {
+        i = e.queue.Len()
+        e.queued.Put(k, i)
+        e.queue.Push(k)
+    }
+    if e.cur >= 0 {
+        e.callFrom.Push(e.cur)
+        e.callTo.Push(i)
+    }
+}
+
+# ---- B5a: a module's globals initialized after the globals each reads ----
+
+# the global bodies of the modules in inits, in the order they run: a module's after its imports' (inits' order), and
+# within a module each after the globals its initializer reads, directly or through what it calls - else in the order
+# they were checked
+fn (e mut Emitter&) globalOrder(inits List<I64>) List<I64> {
+    out List<I64>
+    state Map<I64, I64>
+    for m in inits {
+        for i in range e.Lw.Bodies.Len() {
+            match e.Lw.Bodies[i].Of {
+                case typed.BodyOf.Global(gm, _) {
+                    if gm == m and e.Lw.Bodies[i].Root != null { e.visitGlobal(i, state, out) }
+                }
+                case _ { }
+            }
+        }
+    }
+    return out
+}
+
+fn (e mut Emitter&) visitGlobal(b I64, state mut Map<I64, I64>&, out mut List<I64>&) {
+    if state.Has(b) { return }
+    state.Put(b, 1)
+    gm := -1
+    match e.Lw.Bodies[b].Of {
+        case typed.BodyOf.Global(m, _) { gm = m }
+        case _ { }
+    }
+    for g in e.readsOf(b) {
+        if g != b and e.globalModule(g) == gm { e.visitGlobal(g, state, out) }
+    }
+    state.Put(b, 2)
+    out.Push(b)
+}
+
+fn (e mut Emitter&) globalModule(b I64) I64 {
+    return match e.Lw.Bodies[b].Of {
+        case typed.BodyOf.Global(m, _) => m
+        case _ => -1
+    }
+}
+
+# the global bodies whose globals body b's function reads, through every function it reaches
+fn (e mut Emitter&) readsOf(b I64) List<I64> {
+    out List<I64>
+    start := try e.queued.Get(mir.FnKey.Body(typed.BodyId(I32(b)))) catch default -1
+    if start < 0 { return out }
+    seen Map<I64, Bool>
+    work List<I64>
+    work.Push(start)
+    seen.Put(start, true)
+    k I64 = 0
+    for k < work.Len() {
+        f := work[k]
+        k++
+        for j in range e.callFrom.Len() {
+            if e.callFrom[j] == f and not seen.Has(e.callTo[j]) {
+                seen.Put(e.callTo[j], true)
+                work.Push(e.callTo[j])
+            }
+        }
+    }
+    for j in range e.readFrom.Len() {
+        if seen.Has(e.readFrom[j]) {
+            g := e.globalBody(e.readM[j], e.readN[j])
+            if g >= 0 and g not in out { out.Push(g) }
+        }
+    }
+    return out
+}
+
+fn (e mut Emitter&) globalBody(m I64, n source.NameId) I64 {
+    for i in range e.Lw.Bodies.Len() {
+        match e.Lw.Bodies[i].Of {
+            case typed.BodyOf.Global(gm, gn) {
+                if gm == m and gn == n { return i }
+            }
+            case _ { }
+        }
+    }
+    return -1
 }
 
 # ---- names ----
@@ -204,6 +304,16 @@ fn (e mut Emitter&) globalSym(m I64, n source.NameId) String {
     return types.Symbol("G." $e.P.L.Mods[m].Identity "." $e.text(n))
 }
 
+fn (e mut Emitter&) isGlobalInit(k mir.FnKey) Bool {
+    return match k {
+        case mir.FnKey.Body(id) => match e.Lw.Bodies[I64(id)].Of {
+            case typed.BodyOf.Global(_, _) => true
+            case _ => false
+        }
+        case _ => false
+    }
+}
+
 # whether a function takes an environment first: a lambda, an adapter
 fn (e mut Emitter&) hasEnv(k mir.FnKey) Bool {
     return match k {
@@ -236,7 +346,10 @@ fn (e mut Emitter&) ty(t types.TypeId) String {
         e.gap("an unknown type")
         return "i8"
     }
-    e.P.Layout(t)
+    if not e.P.Layout(t) {
+        e.badType = true
+        e.gap("a type with no layout: " $e.T.Canon(t))
+    }
     e.need(t)
     return $e.T.Llvm(t)
 }
@@ -430,6 +543,11 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     if e.Lw.Gapped or bad != "" {
         e.gap("not lowered: " $symbol)
         e.body.Push(e.header(k, f.Ty, symbol, passed, env))
+        if e.isGlobalInit(k) {
+            # a global's initializer: the global left at its zero value, so that the rest of the program still runs
+            e.body.Push("entry:\n  ret void\n}\n\n")
+            return
+        }
         e.body.Push("entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not lowered by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
         e.runtime("__olang_check_failed")
         return
@@ -437,12 +555,20 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     fe mut fnEm&e = fnEm(e, f, k)
     fe.passed = passed
     fe.env = env
+    e.badType = false
     fe.run()
+    if e.badType {
+        # a type the program's layouts do not settle (a length a call computes, G21, is the evaluator's, M8)
+        e.body.Push(e.header(k, f.Ty, symbol, passed, env))
+        e.body.Push("entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not emitted by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
+        e.runtime("__olang_check_failed")
+        return
+    }
     e.body.Push(e.header(k, f.Ty, symbol, passed, env))
     e.body.Push("entry:\n")
     e.body.Push(fe.head.ToString())
     e.body.Push(fe.pro.ToString())
-    e.body.Push("  br label %bb0\n")
+    e.body.Push("  br label %start\n")
     e.body.Push(fe.code.ToString())
     e.body.Push("}\n\n")
 }
@@ -490,6 +616,17 @@ fn (fe mut fnEm&) run() {
             case _ { fe.pro.Push("  store " $fe.ty(lt) " %a" $i ", ptr %l" $l "\n") }
         }
     }
+    # D9b: a by-value array parameter the body writes is the callee's own copy, else the caller's array
+    fe.label("start")
+    for i in range f.Params.Len() {
+        l := f.Params[i]
+        lt := f.Locals[I64(l)].Ty
+        if fe.runTime(lt) and fe.writesInto(l) {
+            v := fe.load("{ i64, ptr }", "%l" $l)
+            fe.store("{ i64, ptr }", fe.copyArray(mir.ScopeRef.Program, v, lt), "%l" $l)
+        }
+    }
+    fe.w("br label %bb0")
     if f.Captures.Len() > 0 {
         et := fe.envType()
         for i in range f.Captures.Len() {
@@ -513,6 +650,42 @@ fn (fe mut fnEm&) run() {
     } else {
         fe.label("ret")
         fe.w("ret void")
+    }
+}
+
+# whether the function writes into what local l holds: a store or a copy into a place reached from it, or a writable
+# reference made to it
+fn (fe mut fnEm&) writesInto(l mir.LocalId) Bool {
+    f := fe.F
+    for bb in f.Blocks {
+        for st in bb.Stmts {
+            match st {
+                case mir.Stmt.Assign(_, p, rv) {
+                    if p.Path.N > I32(0) and fe.baseIs(p, l) { return true }
+                    match rv {
+                        case mir.Rvalue.Ref(q, ty) {
+                            if fe.baseIs(q, l) and (fe.E.T.PermOf(fe.E.T.Repr(ty)) & types.Writable) != 0 { return true }
+                        }
+                        case mir.Rvalue.Slice(q, _, _, ty) {
+                            if fe.baseIs(q, l) and (fe.E.T.PermOf(fe.E.T.Repr(ty)) & types.Writable) != 0 { return true }
+                        }
+                        case _ { }
+                    }
+                }
+                case mir.Stmt.CopyElems(_, d, _, _) {
+                    if fe.baseIs(d, l) { return true }
+                }
+                case _ { }
+            }
+        }
+    }
+    return false
+}
+
+fn (fe mut fnEm&) baseIs(p mir.Place, l mir.LocalId) Bool {
+    return match p.B {
+        case mir.Base.Local(k) => k == l
+        case _ => false
     }
 }
 
@@ -560,6 +733,9 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
         }
         case mir.Base.Global(m, n, gt) {
             at = fe.E.global(m, n, gt)
+            fe.E.readFrom.Push(fe.E.cur)
+            fe.E.readM.Push(m)
+            fe.E.readN.Push(n)
             ty = gt
         }
         case mir.Base.None { fe.gap("a place with no base") }
@@ -1037,7 +1213,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.New(s, x, ty) {
             rt := t.Referent(t.Repr(ty))
             v := fe.val(x, rt)
-            if fe.runTime(rt) { return v }
+            if fe.runTime(rt) { return fe.copyArray(s, v, rt) }
             p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
             fe.store(fe.ty(rt), v, p)
             return p
@@ -1057,6 +1233,20 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             return fe.pair(n, out)
         }
     }
+}
+
+# a run-time-length array value given storage of its own in scope s: its elements copied there
+fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String {
+    t := fe.E.T
+    el := t.Elem(fe.arrayOf(ty))
+    n := fe.let("extractvalue { i64, ptr } " $v ", 0")
+    data := fe.let("extractvalue { i64, ptr } " $v ", 1")
+    bytes := fe.let("mul i64 " $n ", " $fe.size(el))
+    fe.E.runtime("__olang_scope_alloc")
+    p := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(s) ", i64 " $bytes ")")
+    fe.E.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
+    fe.w("call void @llvm.memcpy.p0.p0.i64(ptr " $p ", ptr " $data ", i64 " $bytes ", i1 false)")
+    return fe.pair(n, p)
 }
 
 fn (fe mut fnEm&) pair(n String&, p String&) String {
@@ -1359,6 +1549,16 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
     # an array between a run-time and a fixed length (T7c): its storage taken, or read whole
     fa, ga := fe.arrayOf(t.Referent(f) if t.IsRef(f) else f), fe.arrayOf(t.Referent(g) if t.IsRef(g) else g)
     if fa != types.UnknownT and ga != types.UnknownT {
+        if fe.fixed(fa) and not t.IsRef(f) and not fe.fixed(ga) {
+            # a fixed array's value as a run-time-length one: storage of its own, which MIR does not place - the
+            # program's under the stand-in placement
+            el := t.Elem(fa)
+            n := fe.fixedLen(fa)
+            fe.E.runtime("__olang_scope_alloc")
+            p := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.program() ", i64 " $(n * fe.size(el)) ")")
+            fe.store(fe.ty(fa), v, p)
+            return fe.pair($n, p)
+        }
         data, n := fe.arrayParts(v, f)
         if fe.fixed(ga) {
             if t.IsRef(g) { return data }
@@ -1872,7 +2072,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     b.Push("define i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
-    for m in inits { b.Push("  call void @" $e.sym(mir.FnKey.Init(m)) "()\n") }
+    for i in e.globalOrder(inits) { b.Push("  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))) "()\n") }
     k := mir.FnKey.Body(typed.BodyId(I32(mainBody)))
     ty := e.Lw.Bodies[mainBody].Ty
     errs := t.Items(t.Errors(ty))
@@ -1937,7 +2137,16 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     b.Push("  store i32 0, ptr %pass\n  store i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
-    for m in inits { b.Push("  call void @" $e.sym(mir.FnKey.Init(m)) "()\n") }
+    # each global's initializer behind a recovery point of its own: one that fails a check leaves its global at its
+    # zero value and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
+    g I64 = 0
+    for i in e.globalOrder(inits) {
+        key := mir.FnKey.Body(typed.BodyId(I32(i)))
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj" $g " = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  %gz" $g " = icmp eq i32 %gj" $g ", 0\n  br i1 %gz" $g ", label %grun" $g ", label %gnext" $g "\n")
+        b.Push("grun" $g ":\n  call void @" $e.sym(key) "()\n  br label %gnext" $g "\ngnext" $g ":\n")
+        g++
+    }
     okFmt := e.cstr("ok - %s\n")
     for i in range tests.Len() {
         id := tests[i]
