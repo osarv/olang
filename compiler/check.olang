@@ -86,6 +86,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     P
     Tests                                  # a test build (the root module's test blocks are checked in every build, S15)
     RootOnly Bool = false                  # only the root module's declarations, and what they ask for (tests)
+    s4d List<typed.Place&>                 # S4d: the value places an assignment writes over, while its values are checked
     Bodies List<mut typed.Body&>
     Gaps List<Gap>
     frames List<mut frame&>
@@ -2744,6 +2745,10 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
                     c.mustWrite(p, sp, false)
                     c.roDeepNeed(x)
+                }
+                # S4d: a borrow of the place being written over, or of storage within it, takes its old value - a copy
+                for q in c.s4d {
+                    if c.within(p, q) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
                 }
                 return typed.Expr.Borrow(sp, want, p)
             }
@@ -7771,6 +7776,11 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
     held List<I64>
     places mut List<typed.Place&>&c = List<typed.Place&>()
     for i in range n { places.Push(c.discardOr(m.Targets[i])) }
+    # S4d: a borrow in any value of any target's storage takes its old value
+    s4d := c.s4d.Len()
+    for pl in places {
+        if pl != null and not c.isRef(pl.Type()) and c.P.T.HoldsRefs(pl.Type()) { c.s4d.Push(pl) }
+    }
     for i in range n {
         want := places[i].Type() if places[i] != null else types.UnknownT
         v := c.exprTo(m.Values[i], want)
@@ -7778,6 +7788,7 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         c.emit(typed.Stmt.Let(m.Values[i].Span(), typed.LocalId(I32(h)), v))
         held.Push(h)
     }
+    c.s4d.Truncate(s4d)
     for i in range n {
         if places[i] != null { c.emit(typed.Stmt.Assign(sp, places[i], c.readLocal(sp, held[i]))) }
     }
@@ -7845,6 +7856,54 @@ fn compoundOp(op token.Tok) token.Tok {
     }
 }
 
+# S4d: whether place q is place p or storage within it - a field, payload or element (any element standing for any other)
+# reached with no reference followed
+fn (c mut Checker&) within(q typed.Place&, p typed.Place&) Bool {
+    if c.samePlace(q, p) { return true }
+    return match q {
+        case typed.Place.Field(_, _, b, _) => c.within(b, p)
+        case typed.Place.Elem(_, _, e) => c.within(e.Base, p)
+        case typed.Place.Payload(_, _, py) => c.within(py.Base, p)
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) samePlace(a typed.Place&, b typed.Place&) Bool {
+    match a {
+        case typed.Place.Local(_, _, x) {
+            match b {
+                case typed.Place.Local(_, _, y) { return x == y }
+                nomatch { return false }
+            }
+        }
+        case typed.Place.Global(_, _, m, n) {
+            match b {
+                case typed.Place.Global(_, _, m2, n2) { return m == m2 and n == n2 }
+                nomatch { return false }
+            }
+        }
+        case typed.Place.Field(_, _, ab, ai) {
+            match b {
+                case typed.Place.Field(_, _, bb, bi) { return ai == bi and c.samePlace(ab, bb) }
+                nomatch { return false }
+            }
+        }
+        case typed.Place.Elem(_, _, ae) {
+            match b {
+                case typed.Place.Elem(_, _, be) { return c.samePlace(ae.Base, be.Base) }
+                nomatch { return false }
+            }
+        }
+        case typed.Place.Payload(_, _, ap) {
+            match b {
+                case typed.Place.Payload(_, _, bp) { return ap.Tag == bp.Tag and c.samePlace(ap.Base, bp.Base) }
+                nomatch { return false }
+            }
+        }
+        nomatch { return false }
+    }
+}
+
 # x = v, x op= v (S4): the target's place, then the value, then the store; a compound one reads the old value through
 # Place.Target
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
@@ -7879,9 +7938,13 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     c.notCapture(p, c.writeAt(target))
     t := p.Type()
     if op == token.Tok.Assign {
-        # E12: the value fits the target, said at the "=" as stage 0 says it
+        # E12: the value fits the target, said at the "=" as stage 0 says it - a borrow in it of the place itself, or
+        # of storage within it, its old value where the value can hold a reference (S4d)
+        s4d := c.s4d.Len()
+        if not c.isRef(t) and c.P.T.HoldsRefs(t) { c.s4d.Push(p) }
         x := c.expr(value, t)
         if t != types.UnknownT { x = c.fit(x, t, osp) }
+        c.s4d.Truncate(s4d)
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, t, x)) }
         # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
         if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
