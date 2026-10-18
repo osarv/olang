@@ -3054,18 +3054,17 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
         s.why = 0
     }
     if v.K == ValKind.Existing {
-        exact := isRef and not s.isFunc(t)
-        if not isRef { exact = s.storeThrough(t) }
+        exact := s.narrowingMatters(t)
         kind := FitLocal
         if loc.Kind == typed.LocalKind.Field {
             # a constructor's field is a slot of the instance (C2d): exact where something can be stored through it, and
             # a field written "&q" keeps its argument's own scope, which need only outlive the instance
-            kind = FitField
             exact = s.storeThrough(t)
             match loc.Marked {
                 case typed.Mark.Of(_) { exact = false }
                 case _ { }
             }
+            kind = FitField if exact else FitDecl
             s.why = WhyHolds
         }
         s.fit(v.T, claim, exact, x, kind)
@@ -3149,6 +3148,8 @@ FitField I64 = 1  # a field or an element reached through a container (O20, O25c
 FitGlobal I64 = 2 # a global or what is reached from one (O1b)
 FitReturn I64 = 3 # a result (O14, O26)
 FitValue I64 = 4  # a value local holding references (O25h)
+FitPayload I64 = 5 # an enum case's payload (T17c)
+FitDecl I64 = 6   # a constructor's field declared (C2d): where nothing can be stored through it, outliving (O10)
 
 # a place's slot: its term, whether a value put there must be exactly in it, and its kind
 fn (s mut Scoper&) slotOf(p typed.Place&) (Term, Bool, I64) {
@@ -3157,7 +3158,7 @@ fn (s mut Scoper&) slotOf(p typed.Place&) (Term, Bool, I64) {
     match p {
         case typed.Place.Local(_, _, id) {
             loc := s.B.Locals[I64(id)]
-            if isRef or s.isFunc(t) { return s.terms[I64(id)], isRef, FitLocal }
+            if isRef or s.isFunc(t) { return s.terms[I64(id)], s.narrowingMatters(t), FitLocal }
             return s.terms[I64(id)], s.storeThrough(t), FitValue
         }
         case typed.Place.Global(_, _, _, _) { return Term.Program, isRef and s.storeThrough(t), FitGlobal }
@@ -3710,7 +3711,7 @@ fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
         case typed.Expr.Make(_, ty, m) {
             if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
             s.val(m.Length, Term.None)
-            for it in m.Items { s.item(it, d) }
+            for it in m.Items { s.item(it, d, FitPayload if m.Kind == typed.MakeKind.Case else FitField) }
             if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
             return fresh(d)
         }
@@ -3776,9 +3777,9 @@ fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
 
 # an item of an array, tuple or case being built in d: a temporary built there too (O6), existing storage judged as a
 # slot of it (O25c, T17c)
-fn (s mut Scoper&) item(x typed.Expr&, d Term) {
+fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
     v := s.val(x, d)
-    if v.K == ValKind.Existing { s.fit(v.T, d, s.storeThrough(x.Type()), x, FitField) }
+    if v.K == ValKind.Existing { s.fit(v.T, d, s.storeThrough(x.Type()), x, kind) }
 }
 
 # what reading a place gives (O20, O25h): a reference's referent's term, a value's references' - a held local's
@@ -4713,6 +4714,13 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     s.fitError(x, kind, exact)
 }
 
+# whether a local of type t must hold exactly what it is given (O25, O25g): a reference through which, at any depth,
+# something could be stored; a value holding such a reference
+fn (s mut Scoper&) narrowingMatters(t types.TypeId) Bool {
+    if s.isFunc(t) { return false }
+    return s.admitsStores(t) if s.isRef(t) else s.valueAdmits(t)
+}
+
 fn (s mut Scoper&) derivedTerm(t Term) Bool {
     return match t {
         case Term.Derived(p, _) => p >= 0
@@ -4740,7 +4748,10 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) {
     }
     m := msgs.ScopeMayNotOutlive()
     if kind == FitLocal {
-        m = msgs.ReferenceNarrowed()
+        # a reference narrowed where something can be stored through it (O25); else one put where it may not live (O10)
+        if exact { m = msgs.ReferenceNarrowed() }
+    } else if kind == FitPayload {
+        m = msgs.PayloadOutlived()
     } else if kind == FitField {
         m = msgs.StoredRefOutlived()
     } else if kind == FitGlobal {
