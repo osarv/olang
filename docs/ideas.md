@@ -13,7 +13,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 2 | Compile-time reflection | Zig, Rust derive | decided 2026-10-18: `T.Name/Kind/Base/Fields/Cases/Params`, both compilers |
 | 3 | Units of measure | F# | declined 2026-10-18 (the user: "I don't want units") |
 | 4 | Portable SIMD vectors | Zig, Rust | open |
-| 5 | Arbitrary-width integers and fixed point | Zig, VHDL | open |
+| 5 | Arbitrary-width integers and fixed point | Zig, VHDL | integers decided 2026-10-18; fixed point open |
 | 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
 | 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
@@ -159,6 +159,14 @@ own (perhaps from `TargetVectorBits`); there are also masks, shuffles and loads 
 2. Is it a prelude type built on compiler support, or language syntax?
 
 ## 5. Arbitrary-width integers and fixed point
+
+**Integers decided 2026-10-18 (the user: "Names are fine width is fine"):** `I1`-`I128` and `U1`-`U128`, any width,
+named as today's eight are (Zig's form; the eight become ordinary members). The existing integer rules apply unchanged:
+arithmetic wraps at the width (E6c), `checked` checks it, the T6b lattice widens them (wider within a signedness,
+unsigned into a strictly wider signed), literals adapt, `$`, `Hash`, `Format`, the `Integer` trait. Storage is whole
+bytes (a `U12` takes two); packing bits is the declared-layout work's. Cost on a CPU: one mask or sign-extension where a
+result's width matters, a library call for 128-bit division; on an FPGA odd widths are the cheap ones. Fixed point
+(`Q4.12`-style, saturating) is decided separately, with the FPGA work. Built in the port after self-hosting.
 
 **What:** integer types of any bit width, and fixed-point numbers with saturating arithmetic.
 
