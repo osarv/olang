@@ -14,6 +14,7 @@ import "std/io"
 import "source"
 import "ast"
 import "diag"
+import "msgs"
 import "load"
 import "names"
 import "types"
@@ -116,6 +117,69 @@ fn findInIf(ti ast.TopIf&, at I32) ast.TopIf&ti {
         if f != null { return f }
     }
     return findInIf(ti.ElseIf, at)
+}
+
+# ---- asserts decided while compiling (S18c) ----
+
+# the asserts c met whose condition reads no local, evaluated while compiling (K1): each true one put into the
+# lowering's AssertsTrue (no test at run time), a false one - or one whose evaluation reaches what aborts the program -
+# reported at the assert, with its message where that evaluates too; one the evaluator refuses stays the run time's.
+# How many were decided
+fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&) I64 {
+    if c.AssertAsks.Len() == 0 { return 0 }
+    d := c.P.L.Diags
+    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    n I64 = 0
+    for a in c.AssertAsks {
+        key := pair.Pair(a.Body, I64(a.Sp.Start))
+        if decided.Has(key) { continue }
+        k := mir.FnKey.Body(typed.BodyId(I32(a.Cond)))
+        x.Need(k)
+        s := x.M.Eval(k, Array<I64>(0))
+        at := diag.Where.Span(a.File, a.At.Start, a.At.End)
+        match s {
+            case eval.Stop.None {
+                n++
+                if x.M.Int(x.M.Result, types.BoolT) != 0 {
+                    decided.Put(key, true)
+                } else {
+                    text, has := x.Text(a.Msg)
+                    d.Error(at, msgs.AssertFalseMessage(text) if has else msgs.AssertFalse())
+                }
+            }
+            case eval.Stop.Exited(kind, file, sp, _) {
+                n++
+                rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
+                d.Note(rec, diag.Where.Span(file, sp.Start, sp.End), msgs.NoteHere())
+            }
+            case _ { }
+        }
+    }
+    return n
+}
+
+# why an evaluation that reached an exit aborts the program, as K1 says it (stage 0's words)
+fn AbortWhy(k mir.ExitKind) String& {
+    return match k {
+        case mir.ExitKind.Unreachable => "it reaches unreachable code, which aborts the program"
+        case mir.ExitKind.Assert => "an assertion in it fails, which aborts the program"
+        case mir.ExitKind.SliceBounds => "it slices out of range, which aborts the program"
+        case mir.ExitKind.ArrayLength => "it makes an array of a length out of range, which aborts the program"
+        case mir.ExitKind.FixedLength => "it copies an array of another length into fixed storage, which aborts the program"
+        case mir.ExitKind.As => "an 'as' that does not hold aborts the program"
+        case mir.ExitKind.Error => "an error reaches '!', which ends the program"
+        nomatch => "it ends the test or the process"
+    }
+}
+
+# a text body's value evaluated while compiling (an assert's message, S18c): the text, and whether it has one
+fn (x mut Exec&) Text(body I64) (String, Bool) {
+    if body < 0 { return "", false }
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return "", false }
+    return x.M.Text(x.M.Result, x.M.ResultTy), true
 }
 
 # a condition's body evaluated while compiling (K1): its value, and whether it has one

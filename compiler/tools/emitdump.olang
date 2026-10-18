@@ -11,6 +11,7 @@
 
 import "std/os"
 import "std/io"
+import "std/pair"
 import "../source"
 import "../diag"
 import "../cond"
@@ -66,10 +67,14 @@ fn run(args Array<String&>&) {
     # checked with the build's decisions made by evaluation (B9c, S8b)
     c := interp.Analyze(l, testBuild)
     p := c.P
+    # the asserts the evaluator decides while compiling (S18c): a true one is not tested at run time
+    asserts Map<pair.Pair<I64, I64>, Bool>
+    interp.DecideAsserts(c, asserts)
     # what checking said, and the program written anyway: a body checking left wrong is a function that says so when
     # it is called (the self-hosted checker is still being finished, M5b/M5c)
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
     lw := lower.Lowerer(p, c.Bodies)
+    lw.AssertsTrue = asserts
     e := emit.Emitter(p, lw, d, p.T)
     e.Tests = testBuild
     e.Attrs = tg.Attrs

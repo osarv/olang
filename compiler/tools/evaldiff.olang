@@ -80,7 +80,7 @@ fn compare(olang String&, evaldump String&, f String&, v Bool, interpret Bool) r
     }
     a := outcomes(toolkit.Rows(s0.Stdout))
     b := outcomes(toolkit.Rows(p.Stdout))
-    if b.Len() == 0 {
+    if b.Len() == 0 and (a.Len() > 0 or p.Status != s0.Status) {
         r.Broken = true
         r.Row = $f ": no test ran (status " $p.Status ") - " $firstLine(p.Stderr) "\n"
         return r

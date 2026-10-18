@@ -12,6 +12,7 @@
 
 import "std/os"
 import "std/io"
+import "std/pair"
 import "../source"
 import "../diag"
 import "../cond"
@@ -63,8 +64,12 @@ fn run(args Array<String&>&) I32 {
     # checked with the build's decisions made by evaluation (B9c, S8b)
     c := interp.Analyze(l, testBuild)
     p := c.P
+    # the asserts the evaluator decides while compiling (S18c): a true one is not tested at run time
+    asserts Map<pair.Pair<I64, I64>, Bool>
+    interp.DecideAsserts(c, asserts)
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
     x := interp.Exec(p, c.Bodies, eval.Mode.Run)
+    x.Lw.AssertsTrue = asserts
     # the command line the program is given: under -t the test binary's, as stage 0 names it (build/std_os_test)
     if testBuild {
         base := path[:path.Len() - 6] if path.EndsWith(".olang") else path
