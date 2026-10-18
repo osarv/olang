@@ -133,6 +133,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roArgs List<roArg>
     roFns List<roFn>
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
+    unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -224,6 +225,7 @@ fn (c mut Checker&) reset() {
     c.roArgs = List<roArg>()
     c.roFns = List<roFn>()
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
+    c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -2460,7 +2462,7 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     }
     if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
     if ref.Kind == names.What.None {
-        c.err(sp, msgs.UnknownName(c.tok(n)))
+        if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) { c.err(sp, msgs.UnknownName(c.tok(n))) }
         return c.unknown(sp)
     }
     if ref.Kind == names.What.Func { return c.fnValue(sp, c.P.FnNamed(ref.Module, n)) }
@@ -7438,6 +7440,10 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
         return -2
     }
     isConst := c.P.T.KindOf(st) == types.Kind.Const
+    # S13e: a type match chooses its case while compiling - nothing is left for a guard to decide
+    for cs in m.Cases {
+        if cs.Guard != null { c.err(c.wordBefore(cs.Guard.Span().Start, "if"), msgs.TypeMatchGuard()) }
+    }
     for i in range m.Cases.Len() {
         for tr in m.Cases[i].Types {
             if isWildType(c, tr) { return i }
@@ -7477,28 +7483,56 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         for k in range c.P.T.Items(c.P.T.Cases(et)).Len() { covered.Push(false) }
     }
     all := false
+    allSaid := false
     rows mut List<Array<ast.Pattern&>&>&m = List<Array<ast.Pattern&>&>()
+    subjLocal := I64(-1)
+    match place {
+        case typed.Place.Local(_, _, lid) { if local { subjLocal = I64(lid) } }
+        nomatch { }
+    }
     for cs in m.Cases {
+        # S13f: nothing reaches a case after an unguarded "case _"
+        if all and not allSaid {
+            c.err(source.Span(cs.Sp.Start, cs.Sp.Start + 4), msgs.CaseAfterWildcard())
+            allSaid = true
+        }
         id, outer, mark := c.open(typed.BlockKind.Plain, cs.Sp)
         bfrom := c.stmts.Len()
         alts mut List<typed.Alt&>&c = List<typed.Alt&>()
-        for p in cs.Alts {
+        firstNames mut List<source.NameId>&c = List<source.NameId>()
+        for ai in range cs.Alts.Len() {
+            p := cs.Alts[ai]
+            if isWild(p) and cs.Alts.Len() > 1 { c.err(p.Span(), msgs.WildcardNotAlone()) }
             binds mut List<typed.Bind&>&c = List<typed.Bind&>()
-            tst := c.pattern(p, place, st, binds, id)
+            tst typed.Expr&c = null
+            if c.caseName(p, subjLocal) {
+                tst = c.lit(p.Span(), types.BoolT, 1)
+            } else {
+                tst = c.pattern(p, place, st, binds, id)
+            }
+            c.altNames(binds, firstNames, ai, p)
             alts.Push(typed.Alt(tst, binds.ToArray()))
             if cs.Guard == null { c.cover(p, et, covered, all) }
             if cs.Guard == null and isWild(p) { all = true }
             if cs.Guard == null { rows.Push(patRow(p)) }
         }
         guard typed.Expr&c = null
-        if cs.Guard != null { guard = c.cond1(cs.Guard) }
+        if cs.Guard != null {
+            # S13e: a guard is a Bool
+            guard = c.value(c.expr(cs.Guard, types.BoolT), cs.Guard.Span())
+            gt := typeOf(guard)
+            if gt != types.BoolT and gt != types.UnknownT {
+                c.err(cs.Guard.Span(), msgs.GuardNotBool(c.ty(gt)))
+                guard = c.unknown(cs.Guard.Span())
+            }
+        }
         if cs.Body != null {
             for s in cs.Body { c.stmt(s) }
         }
         v typed.Expr&c = null
         if cs.Value != null {
             if not isValue {
-                c.gap(cs.Value.Span(), "'=>' in a statement match (S12b)")
+                c.err(c.wordBefore(cs.Value.Span().Start, "=>"), msgs.ArrowInStatement())
             } else {
                 v = c.expr(cs.Value, rt)
                 if rt == types.UnknownT and typeOf(v) != types.NullT {
@@ -7513,8 +7547,11 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
             }
         }
         code := c.close(id, outer, mark, bfrom)
+        # S12b: in a match used as a value, a case's block leaves
+        if isValue and cs.Value == null and cs.Body != null and not leavesValue(code) { c.err(c.braceAfter(cs), msgs.CaseBlockStays()) }
         arms.Push(typed.Arm(cs.Sp, alts.ToArray(), guard, code, v))
     }
+    if m.NoMatch != null and all and not allSaid { c.err(source.Span(m.NoMatch.Sp.Start, m.NoMatch.Sp.Start + 7), msgs.CaseAfterWildcard()) }
     for k in range covered.Len() {
         if covered[k] { continue }
         all = all
@@ -7547,12 +7584,125 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     } else {
         efrom := c.stmts.Len()
         if exhaustive or isValue { c.stmts.Push(typed.Stmt.Exit(m.Sp, typed.ExitKind.Unreachable)) }
-        if isValue and not exhaustive { c.gap(m.Sp, "a match value no case is shown to cover (S13a)") }
+        if not exhaustive and c.isEnum(et) {
+            # S13a: an enum's cases covered by unguarded clauses, or a nomatch
+            k := c.firstUncovered(rows, et)
+            if k >= 0 {
+                cn := c.P.T.CaseNames(et)
+                c.err(ssp, msgs.MatchNotExhaustive(c.text(cn[k]) if cn != null and k < cn.Len() else "?", c.ty(et)))
+            }
+        } else if isValue and not exhaustive and st != types.UnknownT {
+            c.err(source.Span(m.Sp.Start, m.Sp.Start + 5), msgs.MatchValueNeedsNomatch(c.ty(st)))
+        }
         code := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, efrom))
         noMatch = typed.Arm(m.Sp, Array<typed.Alt&>(0), null, code, null)
     }
     if not isValue { rt = types.VoidT }
     return typed.Expr.Match(sp, rt, typed.Match(held, arms.ToArray(), noMatch, isValue))
+}
+
+# the first of an enum's cases the unguarded rows do not cover (S13a), -1 for none
+fn (c mut Checker&) firstUncovered(rows List<Array<ast.Pattern&>&>&, t types.TypeId) I64 {
+    n := c.P.T.Items(c.P.T.Cases(t)).Len()
+    for k in range n {
+        sig := c.P.CaseSig(t, k)
+        ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
+        sub mut List<Array<ast.Pattern&>&>&rows = List<Array<ast.Pattern&>&>()
+        for r in rows {
+            p := r[0]
+            if c.patWild(p) {
+                sub.Push(patTail(r, null, ps.Len()))
+                continue
+            }
+            match p {
+                case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
+                    if c.caseTag(x, t) == k { sub.Push(patTail(r, null, ps.Len())) }
+                }
+                case ast.Pattern.Case(_, path, subs) {
+                    if c.caseTag(path, t) == k and subs.Len() == ps.Len() { sub.Push(patTail(r, subs, 0)) }
+                }
+                nomatch { }
+            }
+        }
+        if not c.coversRows(sub, ps, 1) { return k }
+    }
+    return -1
+}
+
+# S13f: a lone name in a case that is no value - unknown, or the local being matched - meant "case _ if"; said, and
+# the alternative taken as matching (true where it is said)
+fn (c mut Checker&) caseName(p ast.Pattern&, subj I64) Bool {
+    match p {
+        case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
+            match x {
+                case ast.Expr.Name(nsp, n) {
+                    ref := c.P.R.Use(c.fr().File, nsp.Start)
+                    if ref.Kind == names.What.None {
+                        c.err(nsp, msgs.CaseUnknownName(c.tok(n)))
+                        c.unknownSaid.Put(pair.Pair(c.fr().Body, I64(n)), true)
+                        return true
+                    }
+                    if ref.Kind == names.What.Local and subj >= 0 and c.localNamed(n) == subj {
+                        c.err(nsp, msgs.CaseIsSubject(c.tok(n)))
+                        return true
+                    }
+                }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    return false
+}
+
+# S13c: the alternatives of a case bind the same names, each of one type - the first alternative's names kept in first
+fn (c mut Checker&) altNames(binds List<typed.Bind&>&, first mut List<source.NameId>&, ai I64, p ast.Pattern&) {
+    ns := List<source.NameId>()
+    for b in binds { ns.Push(c.cur().Local(b.To).Name) }
+    if ai == 0 {
+        for n in ns { first.Push(n) }
+        return
+    }
+    for b in binds {
+        n := c.cur().Local(b.To).Name
+        known := false
+        for f in first {
+            if f == n { known = true }
+        }
+        if not known {
+            c.err(c.cur().Local(b.To).Sp, msgs.AltBindsOtherNames())
+            return
+        }
+    }
+    for f in first {
+        has := false
+        for n in ns {
+            if n == f { has = true }
+        }
+        if not has {
+            c.err(p.Span(), msgs.AltBindsOtherNames())
+            return
+        }
+    }
+}
+
+# the span of a word written just before a position, past spaces: an "if" before a guard, a "=>" before a value
+fn (c mut Checker&) wordBefore(at I32, w String&) source.Span {
+    t := c.P.L.Mods[c.fr().Mi].Src.Text
+    i := I64(at) - 1
+    for i > 0 and (t[i] == ' ' or t[i] == '\t' or t[i] == '\n') { i-- }
+    st := i + 1 - w.Len()
+    if st < 0 { return source.Span(at, at) }
+    return source.Span(I32(st), I32(i + 1))
+}
+
+# a case's block's "{": the first after its patterns and guard
+fn (c mut Checker&) braceAfter(cs ast.Case&) source.Span {
+    from := cs.Guard.Span().End if cs.Guard != null else cs.Alts[cs.Alts.Len() - 1].Span().End if cs.Alts.Len() > 0 else cs.Sp.Start
+    t := c.P.L.Mods[c.fr().Mi].Src.Text
+    i := I64(from)
+    for i < t.Len() and t[i] != '{' { i++ }
+    return source.Span(I32(i), I32(i + 1))
 }
 
 # whether rows of patterns, one per column of types ts, cover every value (Maranget's usefulness, over the patterns'
@@ -7761,6 +7911,17 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId,
             id := c.localNamed(n)
             if id < 0 or I64(c.cur().Locals[id].In) != arm or c.cur().Locals[id].Kind != typed.LocalKind.Binding {
                 id = c.local(n, sp, t, typed.LocalKind.Binding, typed.Mark.Infer)
+            } else if not c.P.T.Same(c.cur().Locals[id].Ty, t) and t != types.UnknownT {
+                lt := c.cur().Locals[id].Ty
+                if c.isRef(lt) and c.isRef(t) and c.P.T.Same(c.P.T.Referent(lt), c.P.T.Referent(t)) {
+                    # S13c: references of one type meet - writable only where every alternative's is
+                    l := c.cur().Locals[id]
+                    l.Ty = c.P.T.Ref(c.P.T.Referent(lt), c.P.T.PermOf(lt) & c.P.T.PermOf(t))
+                    c.cur().Locals[id] = l
+                } else {
+                    # S13c: a name several alternatives bind has one type
+                    c.err(sp, msgs.AltBindingType(c.tok(n), c.ty(lt)))
+                }
             }
             c.roLet(id, c.read(sp, place))   # T25c: a binding of a place reached read-only is a read-only copy
             binds.Push(typed.Bind(typed.LocalId(I32(id)), c.read(sp, place)))
