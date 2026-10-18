@@ -419,6 +419,12 @@ fn (c mut Checker&) inheritClash(f I64) {
     if ps.Len() == 0 { return }
     rt := c.deref(ps[0])
     c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+    # M19d: a built-in type's methods are the prelude's alone
+    if not c.isNamed(rt) and rt != types.UnknownT and c.P.T.KindOf(rt) != types.Kind.Var and not c.P.L.Mods[c.P.FnModule(f)].Prelude {
+        c.err(c.nameSpan(fd), msgs.MethodOnBuiltinType(c.ty(rt)))
+        c.pop()
+        return
+    }
     c.bothSpellings(f, rt, name, ps.Len() - 1)
     for x in String&["Eq", "eq", "Hash", "hash", "Str", "str"] {
         if x == name {
@@ -7495,6 +7501,14 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     }
     vals := gather(c.exprs, vfrom)
     if t == types.UnknownT { t = c.i64() }
+    # S9b: a literal step is positive
+    if rargs.Len() > 2 {
+        fs := c.fold(rargs[2])
+        if fs.Ok and not fs.IsFloat and not fs.Big and fs.I <= 0 {
+            c.err(rargs[2].Span(), msgs.RangeStep())
+            return null
+        }
+    }
     rfrom := c.exprs.Len()
     for i in range rargs.Len() {
         if vals[i] == null {
