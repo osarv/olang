@@ -259,6 +259,7 @@ fn (c mut Checker&) reset() {
 
 fn (c mut Checker&) attempt() {
     for f in range c.P.FnCount() {
+        if c.P.FnIsExtern(f) and not (c.RootOnly and c.P.FnModule(f) != c.P.L.Root) { c.externRules(f) }
         if c.P.FnIsExtern(f) or c.P.FnDecl(f).Body == null { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
@@ -278,6 +279,31 @@ fn (c mut Checker&) attempt() {
     c.drain()
     c.failForms()
     c.roSettle()
+}
+
+# X2: what crosses the C boundary - a number, or for a parameter an array of numbers; a runtime function's parameter
+# (X6, "__olang_") may be fn() too
+fn (c mut Checker&) externRules(f I64) {
+    fd := c.P.FnDecl(f)
+    mi := c.P.FnModule(f)
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    runtime := c.text(fd.Name).StartsWith("__olang_")
+    file := c.P.L.Mods[mi].File
+    for i in range fd.S.Params.Len() {
+        if i >= ps.Len() { break }
+        t := ps[i]
+        if t == types.UnknownT or c.externParam(t) { continue }
+        if runtime and c.P.T.KindOf(t) == types.Kind.Func and c.P.T.Items(c.P.T.Params(t)).Len() == 0 and c.P.T.Result(t) == types.VoidT and c.P.T.Items(c.P.T.Errors(t)).Len() == 0 { continue }
+        sp := fd.S.Params[i].Sp
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), msgs.ExternType(c.ty(t)))
+    }
+}
+
+fn (c mut Checker&) externParam(t types.TypeId) Bool {
+    if c.P.T.IsNumber(t) { return true }
+    if c.isRef(t) { t = c.P.T.Referent(t) }
+    return c.P.T.KindOf(t) == types.Kind.Array and c.P.T.IsNumber(c.under(c.P.T.Elem(t)))
 }
 
 # the operator methods by name (E31, E31a, E10a, E11c): their operands besides the receiver, whether they give a result,
@@ -1598,6 +1624,19 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
             if store { c.err(sp, msgs.AssignIntoTried() if tried else msgs.WriteIntoCallValue()) }
         }
         nomatch { }
+    }
+}
+
+# whether a store into p is allowed (S6, T25b, D16c): mustWrite's question, asked without saying anything
+fn (c mut Checker&) placeWritable(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Local(_, _, id) => not (c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty)) and not c.roLocal(I64(id))
+        case typed.Place.Global(_, _, mi, n) => c.P.GlobalDecl(mi, n) == null or writtenMut(c.P.GlobalDecl(mi, n).Ty)
+        case typed.Place.Deref(_, _, ref) => (c.P.T.PermOf(typeOf(ref)) & types.Writable) != 0
+        case typed.Place.Field(_, _, base, _) => c.placeWritable(base)
+        case typed.Place.Elem(_, _, e) => c.placeWritable(e.Base)
+        case typed.Place.Payload(_, _, pl) => c.placeWritable(pl.Base)
+        case _ => false
     }
 }
 
@@ -3532,6 +3571,8 @@ fn (c mut Checker&) typeHasEq(t types.TypeId, depth I64) Bool {
     return c.partsHaveEq(d, depth + 1)
 }
 
+fn (c mut Checker&) tyOrNull(t types.TypeId) String { return "null" if t == types.NullT else c.ty(t) }
+
 # "a is b": two references naming one instance (E10c)
 fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated Bool) typed.Expr&c {
     if c.typeNamed(b) >= types.TypeId(0) {
@@ -3555,8 +3596,11 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
         return c.negate(sp, r0) if negated else r0
     }
     y := c.expr(b, typeOf(x))
-    if not c.isRef(typeOf(x)) and typeOf(x) != types.NullT and c.P.T.KindOf(typeOf(x)) != types.Kind.Func {
-        c.gap(sp, "'is' on what is no reference")
+    if (not c.isRef(typeOf(x)) and typeOf(x) != types.NullT and c.P.T.KindOf(typeOf(x)) != types.Kind.Func) or (typeOf(x) == types.NullT and typeOf(y) == types.NullT) {
+        # E10c: identity is of references (or function values) - two values, or two nulls, have none
+        if typeOf(x) != types.UnknownT and typeOf(y) != types.UnknownT {
+            c.err(c.between(a.Span(), b.Span(), 2), msgs.IsNotReferences(c.tyOrNull(typeOf(x)), c.tyOrNull(typeOf(y))))
+        }
         return c.lit(sp, types.BoolT, 0)
     }
     yy := y
@@ -5453,6 +5497,14 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
 
 # where an argument that does not fit is said (stage 0's token for it): an "as" at its keyword, a conversion to a
 # declared type over another at what it converts (T29a), else the argument
+# where an operand is said (stage 0's token for it): a member at its name, else as an argument is
+fn (c mut Checker&) operandAt(x ast.Expr&) source.Span {
+    match x {
+        case ast.Expr.Member(msp, _, n) { return memberSpan(msp, c.text(n).Len()) }
+        nomatch { return c.argSpan(x) }
+    }
+}
+
 fn (c mut Checker&) argSpan(x ast.Expr&) source.Span {
     match x {
         case ast.Expr.As(_, y, t) { return c.between(y.Span(), t.Span(), 2) }
@@ -5711,7 +5763,11 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
         p := readPlace(rx)
         if p == null {
-            c.err(nsp, msgs.AtomicNotPlace())
+            c.err(c.operandAt(x), msgs.AtomicNotPlace())
+            return c.unknown(sp)
+        }
+        if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
+            c.err(c.operandAt(x), msgs.AtomicNotWritable())
             return c.unknown(sp)
         }
         if args.Len() != want {
@@ -5974,6 +6030,13 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
     i := c.value(c.expr(items[0], c.i64()), items[0].Span())
     if not c.isInt(typeOf(i)) and typeOf(i) != types.UnknownT {
         c.err(items[0].Span(), msgs.IndexNotInt(c.ty(typeOf(i))))
+    }
+    # E16: a constant index outside a fixed array's length is an error where it is written - unless it is checked
+    lt := c.P.T.Length(at)
+    if c.fr().Checks == 0 and lt != types.TypeId(0) and c.P.T.KindOf(lt) == types.Kind.Const {
+        v := c.fold(items[0])
+        n := c.P.T.ConstValue(lt)
+        if v.Ok and not v.IsFloat and not v.Big and (v.I < 0 or v.I >= n) { c.err(items[0].Span(), msgs.IndexOutOfRange(v.I, n)) }
     }
     chk := c.checkOp(typed.Check.None)
     return typed.Place.Elem(sp, c.P.T.Elem(at), typed.Elem(base, i, chk))
@@ -6578,7 +6641,18 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
             return
         }
         case ast.Expr.Call(_, _, _) {
-            c.emit(typed.Stmt.Eval(sp, c.expr(x, types.UnknownT)))
+            e := c.expr(x, types.UnknownT)
+            match e {
+                case typed.Expr.Prim(_, _, op, _, _) {
+                    # S3: AtomicLoad reads and changes nothing - a value discarded
+                    if op == typed.PrimOp.AtomicLoad {
+                        c.err(c.calleeSpan(x), msgs.NotAStatement())
+                        return
+                    }
+                }
+                nomatch { }
+            }
+            c.emit(typed.Stmt.Eval(sp, e))
             return
         }
         case ast.Expr.Try(_, _, _, _) {
