@@ -12,7 +12,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 1 | Generators (`yield`) | C#, Python | decided 2026-10-18: `fn f(...) Iterator<T>` with `yield`, both compilers |
 | 2 | Compile-time reflection | Zig, Rust derive | decided 2026-10-18: `T.Name/Kind/Base/Fields/Cases/Params`, both compilers |
 | 3 | Units of measure | F# | declined 2026-10-18 (the user: "I don't want units") |
-| 4 | Portable SIMD vectors | Zig, Rust | open |
+| 4 | Portable SIMD vectors | Zig, Rust | decided 2026-10-18 as lane-by-lane array operators, after self-hosting |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | integers decided 2026-10-18; fixed point open |
 | 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
 | 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
@@ -138,6 +138,22 @@ conversions are written.
 3. How does a plain literal meet a unit: does `2.0 * d` stay `F64<m>`?
 
 ## 4. Portable SIMD vectors
+
+**Decided 2026-10-18 (the user), as lane-by-lane array operators instead of vector types:** an array's operators work
+element by element - `a + b`, `a * b + c` - wherever the element type has the operator (a one-method prelude trait per
+operator: built-in numbers, declared types through `extends`, C32/C64, F8, a user's types). They are ordinary prelude
+operator methods whose bodies are comprehensions (E31; inherited by `extends` array types, never redefined, T29e).
+Fixed-length arrays (lengths known while compiling - the arrays batch, incl. constant-width slices) give fixed results:
+no allocation, vector instructions. Run-time-length arrays give a new array where the expression lands, as a
+comprehension does; lengths checked once per operation (abort, or `CheckError.OUT_OF_BOUNDS` under `checked`);
+assignment into an existing array of that length reuses its storage. General fusion: any method whose body is a single
+comprehension over its inputs' positions is a map, and maps of maps compose into one loop - `a + b * c - d` and
+`(a * b).Sum()` make no temporaries, for user functions of that shape too. Comparisons lane by lane are methods
+(`a.LanesEqual(b)`, `a.LanesLess(b)` giving `Array<Bool>`), since `==` is whole-array equality; `mask.Select(a, b)`,
+`a.Shuffle(...)` (constant positions), `mask.Bits()`/`FirstSet()`, `acc.DotAdd4(a, b)`. Totals: `a.Sum()` (T has Plus;
+an empty array gives T's zero value; replaces std/stats' Sum), `a.Max()`/`a.Min()` (T has Less; empty fails with
+ArrayError.EMPTY, replacing stats' Min/Max). No implicit threads: parallelism stays explicit (join/spawn,
+`a.Chunks`); a `parallel (e)` marker could come later. Built in the port after self-hosting.
 
 **What:** a value type of N lanes with element-wise operators, compiled to the machine's vector instructions.
 
