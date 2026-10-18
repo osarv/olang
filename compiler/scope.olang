@@ -1162,14 +1162,18 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
 
 # whether a call's result passed on as an argument lands by its obligations (O18c): its arguments' terms, read without
 # judging them, give it a scope to land in
-fn (s mut Scoper&) argLands(a typed.Expr&) Bool {
+fn (s mut Scoper&) argLands(a typed.Expr&) Bool { return s.landTerm(a) != Term.None }
+
+# where a call's result lands by its obligations (O18c), read off its arguments without judging them; None where it does
+# not
+fn (s mut Scoper&) landTerm(a typed.Expr&) Term {
     c := s.callOf(a)
-    if c == null { return false }
+    if c == null { return Term.None }
     fty := s.calleeType(c)
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.sums[callee].Done { return false }
+    if callee < 0 or not s.sums[callee].Done { return Term.None }
     rv := s.resultVarOf(fty)
-    if rv < 0 { return false }
+    if rv < 0 { return Term.None }
     vars := s.P.T.ScopeVarsOf(fty)
     beta := Array<Term>(vars.Len())
     for i in range c.Args.Len() {
@@ -1179,7 +1183,7 @@ fn (s mut Scoper&) argLands(a typed.Expr&) Bool {
             if vars[v] == q and beta[v] == Term.None { beta[v] = s.peekTerm(c.Args[i]) }
         }
     }
-    return s.landByObligations(c, rv, beta) != Term.None
+    return s.landByObligations(c, rv, beta)
 }
 
 # an argument's term read off its shape without judging it: a local's or a field's read or borrow; None for anything else
@@ -1187,9 +1191,23 @@ fn (s mut Scoper&) peekTerm(a typed.Expr&) Term {
     if a == null { return Term.None }
     return match a {
         case typed.Expr.Read(_, ty, p, _) => s.peekPlace(p, true) if s.holds(ty) else Term.None
-        case typed.Expr.Borrow(_, _, p) => s.peekPlace(p, false)
+        case typed.Expr.Borrow(_, _, p) => s.peekBorrow(p)
         case typed.Expr.Away(_, _, y) => s.peekTerm(y)
         case _ => Term.None
+    }
+}
+
+# a borrow's term read off its shape: its place's storage - a temporary's (a handle a call gives, lent as its reference,
+# O17b) where its value's references are, which its call's landing says before it is judged (O18c)
+fn (s mut Scoper&) peekBorrow(p typed.Place&) Term {
+    match p {
+        case typed.Place.Temp(_, _, v, site) {
+            t := try s.temps.Get(I64(site)) catch default Term.None
+            if t != Term.None { return t }
+            if s.isHandle(v.Type()) { return s.landTerm(v) }
+            return Term.None
+        }
+        case _ { return s.peekPlace(p, false) }
     }
 }
 
@@ -1202,6 +1220,8 @@ fn (s mut Scoper&) peekPlace(p typed.Place&, parts Bool) Term {
         case typed.Place.Payload(_, _, pl) => s.peekPlace(pl.Base, parts)
         case typed.Place.Elem(_, _, e) => s.peekPlace(e.Base, parts or s.runLength(e.Base.Type()))
         case typed.Place.Deref(_, _, r) => s.peekTerm(r)
+        # a temporary judged already: where its value's references are (tempTerm)
+        case typed.Place.Temp(_, _, _, site) => (try s.temps.Get(I64(site)) catch default Term.None) if parts else Term.None
         case _ => Term.None
     }
 }
@@ -2956,6 +2976,23 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
         s.held.Put(I64(l), x)
         s.terms[I64(l)] = Term.None
         return
+    }
+    # the handle a for-in walks that a call gives (users[0][0]): lent as its reference where the call landed (O17b, O18c),
+    # its copy in the walk's block
+    if loc.Kind == typed.LocalKind.Hidden and s.isRef(t) {
+        match s.unAway(x) {
+            case typed.Expr.Promote(_, _, pr) {
+                if s.isHandle(pr.X.Type()) and s.isFresh(pr.X) and s.argLands(pr.X) {
+                    s.buildSite(pr.Site, s.blockTerm(loc.In), pr.X.Span())
+                    s.landing = true
+                    v := s.val(pr.X, Term.None)
+                    s.landing = false
+                    s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
+                    return
+                }
+            }
+            case _ { }
+        }
     }
     # the array a for-in walks, a literal of constant data reaching a read-only reference: its elements are the constant
     # data itself (T25d), in the program's scope, whatever its own storage is
@@ -4827,6 +4864,10 @@ fn (s mut Scoper&) nameSpan(sp source.Span) source.Span {
             continue
         } else if ch != '.' and ch != ' ' and ch != ',' and angle == 0 {
             last = source.Span(0, 0)
+        }
+        # a store written "x[i] = v" calls SetAt (E31b): said at its "="
+        if ch == '=' and depth == 0 and not found and k + 1 < end and text[k + 1] != '=' and k > at and text[k - 1] != '=' and text[k - 1] != '!' and text[k - 1] != '<' and text[k - 1] != '>' {
+            return source.Span(I32(k), I32(k + 1))
         }
         k++
     }
