@@ -13496,7 +13496,8 @@ static bool literalBindingMeetsConstraints(struct var* func, struct str name, st
 //G9a: a variable only numeric literals reach is bound to the widest of their own types - unless that type fails the
 //variable's constraint (G19), when it is bound to the first type, widest first and a float before an integer of its
 //width, that meets the constraint and that every one of those literals adapts to (T6): "math.Sqrt(4)" is Sqrt at F64.
-//None meeting both, the widest stays, and the constraint's error is said at the call as ever.
+//Only number literals choose so - a character literal is a Char (T29h), and "ncNext('a')" stays G19's error. None
+//meeting both, the widest stays, and the constraint's error is said at the call as ever.
 static struct type literalTypeForConstraint(struct var* func, struct str name, struct type widest, struct list args,
                                             struct list* bindings) {
     if (literalBindingMeetsConstraints(func, name, widest, bindings)) return widest;
@@ -13509,6 +13510,7 @@ static struct type literalTypeForConstraint(struct var* func, struct str name, s
             struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
             struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
             if (!(operandNumericLiteralLike(arg) && pt.bType == BASETYPE_TYPEVAR && StrCmp(pt.name, name))) continue;
+            if (arg->type.owner) return widest; //a character literal is a Char (T29h), never a number to adapt
             fits = operandCondOfLiterals(arg) ? condOfLiteralsWouldFit(arg, cand) : literalLikeWouldFit(arg, cand);
         }
         if (fits && literalBindingMeetsConstraints(func, name, cand, bindings)) return cand;
