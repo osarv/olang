@@ -20429,3 +20429,57 @@ soundness differences still open.
 
 **Found on the way, for the checker:** a body whose function type's `ResultFrom` names a parameter it does not have
 (`typed.Body.ResultMark` indexes past `Params`; compiler/build.olang) - guarded in the scope pass.
+
+## Port M6: the scope pass, round 2 - soundness (2026-10-18)
+
+Round 1 left 147 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error at all from the port:
+programs the self-hosted compiler would have accepted and miscompiled. Round 2 was soundness first, and closed 129 of
+them: 18 remain (and 2 where the checker errs before the pass sees the body). Nothing stage 0 refuses was relaxed; each
+rule was built from SPEC and docs/scope-model.md, with stage 0 (`bootstrap/semantic.c`) read for behaviour and small
+programs it builds deciding what is accepted. `make scopediff` now counts the cases the checker erred in apart.
+
+**What was built, by rule**, each a cluster of the silent cases:
+- **E11c** (decision 49): a `Str` builds nothing where its receiver lives. It needed what a body builds into each scope
+  variable, and where, as a least fixed point over bodies - a task's stand-ins, lambdas' and adapters' bodies, moved
+  locals, try defaults and choices placed where their values live, D16c's frame lambdas. The checker had resolved a
+  lambda's scope marker to the outer body's local instead of the lambda's capture; fixed there.
+- **E31b**: a copy of an element nobody holds, lent for a writable reference parameter, is refused - but for a handle the
+  callee uses only through its reference and a view writing nothing of its own storage, both read off the callee's body
+  as a greatest fixed point.
+- **O17, O17a**: what a body keeps in what it is lent, read per parameter - stores of anything not read out of the
+  region, writable references into it handed out, task results - split into `Stores` and `Keeps`, since a reference
+  read out of a region and handed on is kept in it only by a callee that stores into it. A value whose references live
+  where its own storage does not is not held by reference, sliced or viewed. Without the split std/linalg's `Gemm`, which
+  hands a packed panel's reference on, was refused.
+- **C2d**: an instance outliving what it holds, said at the argument; nothing built into a derived scope (where a task's
+  stand-in for one is made where its instance lives, O23); an instance built where it stands or where its parameter is
+  bound, never landed by its obligations (O18a, O18b) - landing it by obligations had hidden every C2d case.
+- **P2, P1g**: what a task is handed lasts until its join block - arguments, what its temporaries hold, the function
+  value it calls, what its clauses capture, its targets; its temporaries are built in the join block; a target is
+  fitted as the assignment it is. Stand-ins are kept apart from builds in summaries (`Builds` and `Real`), so a
+  derived scope takes only real builds, as stage 0's `viaDerived` says.
+- **T22a**: a function with obligations becomes no value - named, a lambda, an instance's `Call` - judged once every body
+  is (obligations are summaries); a function value returned from a parameter (O14b) is exempt.
+- **G16b**: an error inside an instance's body is said at the program's use with the checker's "instantiated here" note,
+  through two hooks the checker now exports.
+- **O10d, O14, T25c, O4a, D16d**: a reference or function value returned from the function's own scope; a parameter's
+  storage, or a read-only reference, returned as a built result; a signature's marker naming no earlier parameter (in
+  `compiler/generic.olang`, where signatures are made); a returned lambda's captures as obligations, never moved by
+  O26a.
+
+**Which rule an error names** mattered for "first error": stage 0 says O25 for a narrowing only where something can be
+stored through at any depth, O10 otherwise and for a local whose own scope is too short, T17c for a payload's slot, and
+says each at a particular token (an assignment's `=`, a call's last callee in a chain, an index call's `[`). The port
+now follows it: 221 of the 279 cases give stage 0's first error (211 exactly its scope errors), from 52.
+
+**Measured** (`make scopediff`, about 2 minutes): first error 52 -> 221 of 279; pinned message 75 -> 227; silent 147 ->
+18; accepted programs scope clean 277 of 300 -> 279 of 301; distinct error rows on accepted programs 96 -> 92. The rows
+left are nearly all the per-instance bindings (O23a, O13c) round 3 is for.
+
+**Tried and reverted**: calls through function values building only where something can be stored through - unsound,
+since a lambda builds into a read-only parameter's scope through a typed local (`t String&s = ...`).
+
+**Left**: per-instance bindings (the precision goal, not started); the 18 silent cases (conditionals and matches of
+places from two scopes, a for-in copy lent, slices of temporaries in constructors, conversions naming storage, reference
+defaults, E25 with a global, two more); one acceptance kept on purpose - `l := m.l; return l` moved into the result
+scope by O26a where stage 0 keeps it, which is sound. PROGRESS.md lists them case by case.
