@@ -16345,7 +16345,7 @@ the rules can test, and a function type carries it with no new field. (4) `x!` i
 failing are judged once every set is known, a generic's checked forms per instance. (6) A declared number's constructor
 on a literal is no fallible call (T29d runs it while compiling). Root tests are checked in every build, as stage 0 does.
 **Constraints, read-only copies and the long tail (2026-10-18; checkdiff 232/418 refused cases giving stage 0's first
-error and 278/282 accepted programs clean before, 327/411 and 279/283 after, T25e and E34 now counted decided away).**
+error and 278/282 accepted programs clean before, 342/411 and 279/283 after, T25e and E34 now counted decided away).**
 G19 is checked where variables are bound: a call's inference, a written type's arguments (said at the first argument,
 as stage 0 says it), an inferred constructor's, the instances an instance's signature holds (`g19substituted`), and the
 types a checked signature writes - once per type instance (`boundsMet`), the instance's body unchecked where one is not
@@ -16370,9 +16370,12 @@ enum holding itself by value through fields, payloads and fixed arrays, at the f
 infinity in a narrower float), T4/B11 (unknown types and functions named with the nearest type, numbers by letter and
 width), the match rules (S12b, S13a's first case not covered at the subject, S13c's alternatives - references of one type
 meet, S13e, S13f), G1, G4 (said once at the declaration, at the result for a type variable and the occurrence for a
-constant one; the function is then never instantiated and its calls say nothing), G6, G7, G10d, and E15a's checks
-turned off in a match value's clauses. An assignment's fit is said at its `=`, an argument's at an `as` or at what a
-conversion converts, as stage 0 says them. **Decided (mine):** (1) G19 is checked once per type instance, where first
+constant one; the function is then never instantiated and its calls say nothing), G6, G7, G10d, M6b (a protocol method
+public and private), E23/E33/P9 (a method the compiler supplies declared), M19d, E28 (numbers of two types are no
+conditional's values, a literal alone adapting), E32 (`is` with a case, `as` on a case carrying nothing), L10/L12b/E4a
+(literals beyond 64 bits or F64 - a division by zero still an infinity), S9b's step, and E15a's checks turned off in a
+match value's clauses. An assignment's fit is said at its `=`, an argument's at an `as` or at what a
+conversion converts, a binary expression's at its operator, a method call's at its name, as stage 0 says them. **Decided (mine):** (1) G19 is checked once per type instance, where first
 asked for, and an unmet instance gives the unknown type so nothing more is said about it; (2) read-only copies are
 local facts during checking plus one settle per attempt for parameters, not a pass of their own; (3) a generic
 instance's read-only reference parameters are read as not read-only until `roByArg` exists - accepting what stage 0
