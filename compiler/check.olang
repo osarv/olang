@@ -8400,7 +8400,7 @@ fn (c mut Checker&) dropElse(s ast.Stmt&) {
     if s == null { return }
     match s {
         case ast.Stmt.If(_, e) {
-            if e.Then.Group >= 0 { c.P.L.Diags.Drop(e.Then.Group) }
+            if e.Then.Group >= 0 { c.P.L.Diags.CutOff(e.Then.Group) }
             c.dropElse(e.Else)
         }
         nomatch { }
@@ -8415,12 +8415,13 @@ fn (c mut Checker&) elseHolds(s ast.Stmt&) Bool {
     }
 }
 
-# whether the whole else chain was dropped: the build took the then. One else-if's branch is dropped as well where its
-# own condition is decided false after a running one, so only every branch of the chain dropped says the then was
+# whether the else chain was dropped because the build took the then: a plain else dropped, or an else-if cut off - an
+# else-if dropped for its own condition, decided false after a running if, says nothing about the then
 fn (c mut Checker&) elseDropped(s ast.Stmt&) Bool {
     match s {
         case ast.Stmt.If(_, e) {
-            return e.Then.Group >= 0 and c.P.L.Diags.IsDropped(e.Then.Group) and (e.Else == null or c.elseDropped(e.Else))
+            d := c.P.L.Diags
+            return d.IsDropped(e.Then.Group) if e.Cond == null else d.IsCut(e.Then.Group)
         }
         nomatch { return false }
     }

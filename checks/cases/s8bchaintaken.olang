@@ -1,6 +1,7 @@
 # check: run
 # S8b: a chain whose first branch the build takes drops every later branch - an else-if whose own condition holds as
-# well, and the else after it, which is never compiled (it names nothing that exists)
+# well, and the else after it, which is never compiled (it names nothing that exists); and a running if whose else-if
+# the build drops for its own condition still runs both ways
 fn pick() I64 {
     if TargetVectorBits >= 0 {
         return 1
@@ -10,6 +11,14 @@ fn pick() I64 {
         return nothingByThisName()
     }
 }
+fn running(x I64) I64 {
+    if x > 3 {
+        return 1
+    } else if TargetVectorBits < 0 {
+        return nothingByThisName()
+    }
+    return 2
+}
 fn main() {
-    assert pick() == 1
+    assert pick() == 1 and running(5) == 1 and running(0) == 2
 }

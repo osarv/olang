@@ -947,7 +947,7 @@ fn (r mut Resolver&) choose(b ast.Branch&, decided Bool, taken Bool, runtime Boo
 
 # an else-if chain after a branch the build took: none of it is compiled
 fn (r mut Resolver&) dropAll(i ast.If&) {
-    if i.Then.Group >= 0 { r.L.Diags.Drop(i.Then.Group) }
+    if i.Then.Group >= 0 { r.L.Diags.CutOff(i.Then.Group) }
     if i.Else == null { return }
     match i.Else {
         case ast.Stmt.If(_, e) { r.dropAll(e) }

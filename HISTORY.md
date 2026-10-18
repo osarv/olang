@@ -20394,7 +20394,7 @@ yet.
 **Acceptance, measured** (`compiler/tools/evaldump.olang` runs a program or its tests; `compiler/tools/evaldiff.olang`
 compares with stage 0's runs test by test, and with -i with stage 0's interpret; `make evaldiff`, not in verify): of
 the corpus and std's tests (shared.olang, std/cancel and std/chan left out - too slow, and tasks run in sequence so a
-channel's two ends block), 18 of 23 files and 246 of 287 tests end as stage 0's under a debug build in 200s each; of the
+channel's two ends block), 20 of 23 files and 254 of 287 tests end as stage 0's (linalg runs 6 of its 35 tests in 900s); of the
 checks' 144 flag-free run cases, 134 behave as stage 0's. What is left is the evaluator's speed (about 50k instructions
 a loop iteration: frames and functions copied per statement; a 1M-iteration loop 6.8s against stage 0 interpret's
 15.5s), destructors and the stand-in placement (M6), and check's own (a named function rendered as `fn(...)`,
@@ -20409,8 +20409,9 @@ tables, not C stack).
 
 **Found and fixed on the way**: a running `if` whose else-if was decided false (B9a) was compiled as its then alone,
 and conversely a chain whose first branch the build took lowered its unchecked else-if chain (a gap, so the function -
-std/linalg's `micro` - was never lowered): an else chain counts as dropped only when every branch of it is
-(checks/cases/s8bchaintaken.olang). A local condition reading a local inside a slice, a join, `is`, `as` or a `try`
+std/linalg's `micro` - was never lowered): diag gained a group state, `Cut` - dropped because a branch before it in
+its chain was taken - so a then counts as taken when its plain else is dropped or its else-if cut off, never when an
+else-if is dropped for its own condition (checks/cases/s8bchaintaken.olang). A local condition reading a local inside a slice, a join, `is`, `as` or a `try`
 was taken for one the build decides and silently folded to false (cond's `mentionsLocal` now reads every expression
 form). In eval: an extern's array argument was written through its length word; a function value converted between
 function types (a noreturn function for one with no result, D8e) read as null; a run-time array given storage by `New`

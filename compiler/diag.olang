@@ -66,7 +66,7 @@ type Diagnostics struct(Color Bool) {
     records := List<record>()
     notes := List<note>()
     groupParent := List<I64>()      # per group: the group it was opened inside, or -1
-    groupState := List<I64>()       # per group: Pending, Chosen or Dropped
+    groupState := List<I64>()       # per group: Pending, Chosen, Dropped or Cut
     held := List<I64>()             # the groups open now, innermost last
     contexts := List<context>()     # the contexts open now, innermost last
     ctxFrom I64 = 0                 # the first of them in effect: those below belong to a body set aside (ContextBase)
@@ -81,6 +81,7 @@ type Diagnostics struct(Color Bool) {
 Pending I64 = 0
 Chosen I64 = 1
 Dropped I64 = 2
+Cut I64 = 3          # dropped because a branch before it in its chain was taken
 
 # ---- files ----
 
@@ -318,8 +319,17 @@ fn (d mut Diagnostics&) ChooseAll() {
     for g in range d.groupState.Len() { d.groupState[g] = Chosen }
 }
 
+# the branch group g holds was not taken because a branch before it in its chain was: dropped, and said so
+fn (d mut Diagnostics&) CutOff(g I64) { d.groupState[g] = Cut }
+
 # whether group g was dropped: its branch was not taken
-fn (d Diagnostics&) IsDropped(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Dropped }
+fn (d Diagnostics&) IsDropped(g I64) Bool {
+    return g >= 0 and g < d.groupState.Len() and (d.groupState[g] == Dropped or d.groupState[g] == Cut)
+}
+
+# whether group g was dropped because a branch before it in its chain was taken - an else-if dropped for its own
+# condition is not
+fn (d Diagnostics&) IsCut(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Cut }
 
 # whether group g is neither chosen nor dropped: a branch nothing has decided yet (B9c, S8b)
 fn (d Diagnostics&) IsPending(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Pending }
