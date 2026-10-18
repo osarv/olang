@@ -7907,6 +7907,17 @@ fn (c mut Checker&) samePlace(a typed.Place&, b typed.Place&) Bool {
                 nomatch { return false }
             }
         }
+        case typed.Place.Deref(_, _, ar) {
+            # what one reference names, read from the same place - the names written, never where references lead
+            match b {
+                case typed.Place.Deref(_, _, br) {
+                    pa := readPlace(ar)
+                    pb := readPlace(br)
+                    return pa != null and pb != null and c.samePlace(pa, pb)
+                }
+                nomatch { return false }
+            }
+        }
         nomatch { return false }
     }
 }
@@ -8899,11 +8910,13 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(hi)), end))
     st := c.hidden(sp, t)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(st)), step))
-    # the count: (hi - lo + step - 1) / step where hi > lo, else none
+    # the count: (hi - lo + step - 1) / step where hi > lo and step > 0, else none
     diff := c.prim(sp, t, typed.PrimOp.Sub, c.readLocal(sp, hi), c.readLocal(sp, lo))
     num := c.prim(sp, t, typed.PrimOp.Sub, c.prim(sp, t, typed.PrimOp.Add, diff, c.readLocal(sp, st)), c.lit(sp, t, 1))
     more := c.prim(sp, types.BoolT, typed.PrimOp.Gt, c.readLocal(sp, hi), c.readLocal(sp, lo))
-    cnt typed.Expr&c = typed.Expr.Cond(sp, t, typed.Cond(more, c.prim(sp, t, typed.PrimOp.Div, num, c.readLocal(sp, st)), c.lit(sp, t, 0)))
+    up := c.prim(sp, types.BoolT, typed.PrimOp.Gt, c.readLocal(sp, st), c.lit(sp, t, 0))
+    per typed.Expr&c = typed.Expr.Cond(sp, t, typed.Cond(up, c.prim(sp, t, typed.PrimOp.Div, num, c.readLocal(sp, st)), c.lit(sp, t, 0)))
+    cnt typed.Expr&c = typed.Expr.Cond(sp, t, typed.Cond(more, per, c.lit(sp, t, 0)))
     n := c.hidden(sp, t)
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), cnt))
     k := c.hidden(sp, t)
