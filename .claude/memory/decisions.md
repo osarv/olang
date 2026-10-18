@@ -370,8 +370,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   keep the outcome: `r := parse(s)?`), so `x := parse(s)` stays an error; after a type's `?` one error type (a named
   set is one); `try r.Get()` raises the stored error; `$r` prints Ok(5)/Failed(ParseError.BAD). The user kept postfix
   `?` over a `keep` word ("func() is a value not a type, so it isn't that confusing"). Built in the port after
-  self-hosting (plan.md item 14). Loose ends ASKED: case names Ok/Failed; unwrap by `try r`/`r!` instead of r.Get();
-  `? E` alone for a function with no result; `Result` written only as the case qualifier.
+  self-hosting (plan.md item 14). Loose ends DECIDED (the user): cases `Ok`/`Err`; a kept result unwrapped by `try r`, `r!`, catch
+  clauses (no r.Get()); both spellings allowed, `T ? E` and `Result<T, E>` ("one would never use Result<T, E> but
+  making it an error feels kinda extreme"). ASKED: `save(f)?` on a function with no result - the user: "should be a
+  compile error no?"; proposed instead: it gives the error value itself (`e := save(f)?` is an IoError, null when it
+  succeeded), the null zero of QAM doing the job. In effect: a compile error.
 - QAM 2026-10-18 (errors as values; the user: "1) ... I want this feature tho 2) yes, disallow this 3) reserve the
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
