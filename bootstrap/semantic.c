@@ -1830,6 +1830,7 @@ void collectType(struct semaModule* mod, struct token nameTok, enum baseType bTy
 //rest once every signature is known.
 static void rejectUnderscoreName(struct str name, struct token tok);
 static struct var* buildConstVar(struct str name);
+static struct var* preludeConst(struct str name);
 static bool definedBuildConst(struct str name);
 static bool identityIsStd(struct str id);
 static bool isPreludeModule(struct semaModule* mod);
@@ -1854,6 +1855,8 @@ void collectVar(struct semaModule* mod, struct token nameTok, bool mut, bool isF
         struct var* prev = VarGetList(&mod->vars, name);
         if (prev && !(isFuncDecl && prev->isFuncDecl)) { Err(nameTok, ERR_NAME_IN_USE, nameTok); return; }
         if (!prev) checkNoAliasClash(mod, name, nameTok); //M20
+        //M19d: nor a constant of the prelude's, which every module reads by its bare name
+        if (!prev && !isPreludeModule(mod) && preludeConst(name)) Err(nameTok, ERR_PRELUDE_CONST_REDECLARED, nameTok);
         //D2: nor a type's name - a type declared later in the module is caught by collectType
         if (!prev && (typeNamed(mod, name) || isBuiltinTypeName(name))) Err(nameTok, ERR_NAME_IS_TYPE, nameTok);
     }
@@ -2979,6 +2982,7 @@ static bool typeReachesUnmet(struct type t, int depth) {
 struct var* VarGetMethod(struct semaModule* mod, struct str name, struct type recv);
 struct var* instantiateFunc(struct var* generic, struct list* bindings);
 //E31a: for a method named for a checked form ("CheckedPlus", "checkedAt") the name of its plain form, or NULL
+static struct var* interfaceMethodIn(struct semaModule* m, struct type recv, struct str name, int* found, struct var* got);
 static char* checkedFormPlainName(struct str name) {
     if (name.len < 8) return NULL;
     bool priv = name.ptr[0] == 'c';
@@ -2996,7 +3000,13 @@ static struct var* checkedFormPlain(struct var* generic, struct var* spec) {
     struct type* grecv = plain ? SemanticMethodReceiver(generic) : NULL;
     struct type* srecv = grecv ? SemanticMethodReceiver(spec) : NULL;
     if (!srecv) return NULL;
-    struct var* pg = VarGetMethod(generic->owner, StrFromCStr(plain), *grecv);
+    //a default over a type variable (M19e): the one of the plain form's name the trait spec's receiver satisfies offers -
+    //an integer's Pow, not a float's - since several traits' defaults may share a name
+    struct var* pg = NULL;
+    if (grecv->bType == BASETYPE_TYPEVAR) {
+        int found = 0;
+        pg = interfaceMethodIn(generic->owner, *srecv, StrFromCStr(plain), &found, NULL);
+    } else pg = VarGetMethod(generic->owner, StrFromCStr(plain), *grecv);
     if (!pg || pg->type.bType != BASETYPE_FUNC || !pg->type.typeParams.len || !pg->type.vars.len) return NULL;
     struct list b = ListInit(sizeof(struct typeBinding));
     if (!TypeUnify((*(struct var*)ListGetIdx(&pg->type.vars, 0)).type, *srecv, &b)) return NULL;
@@ -3648,7 +3658,8 @@ static struct syntax* cfGlobalDecl(struct semaModule* mod, struct str name) {
 bool nameIsImportAlias(struct semaModule* mod, struct str name);
 static bool cfNamesGlobal(struct semaModule* mod, struct str name) {
     if (!mod) return false;
-    return cfGlobalDecl(mod, name) || VarGetList(&mod->vars, name) || buildConstVar(name) || nameIsAType(mod, name)
+    return cfGlobalDecl(mod, name) || VarGetList(&mod->vars, name) || buildConstVar(name) || preludeConst(name)
+           || nameIsAType(mod, name)
            || nameIsImportAlias(mod, name);
 }
 
@@ -7029,6 +7040,7 @@ static void rejectConstVarClash(struct semaModule* mod, struct str name, struct 
         if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+    else if (preludeConst(name)) Err(tok, ERR_PRELUDE_CONST_REDECLARED, tok);
 }
 
 //D3a: no shadowing - a local or parameter may not reuse a name its module declares at the top level (a
@@ -7045,6 +7057,7 @@ static void rejectShadowing(struct semaModule* mod, struct str name, struct toke
         if (g->tok.owner && g->tok.type != TOK_NONE) Note(g->tok, NOTE_DECLARED_HERE, g->tok);
     }
     else if (buildConstVar(name)) Err(tok, ERR_SHADOWS_BUILD_CONST, tok);
+    else if (preludeConst(name)) Err(tok, ERR_PRELUDE_CONST_REDECLARED, tok); //M19d
     else if (typeNamed(mod, name) || isBuiltinTypeName(name)) Err(tok, ERR_SHADOWS_TYPE, tok);
     else if (constVarNamed(name)) Err(tok, ERR_CONST_VAR_SHADOWED, tok); //G22
 }
@@ -7072,6 +7085,7 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
     if (v) return v;
     v = VarGetList(&ctx->mod->vars, name);
     if (!v) v = buildConstVar(name); //B10: visible in every module by bare name
+    if (!v) v = preludeConst(name); //M19d: so is a constant of the prelude
     //G23: a type variable written bare as a value - "return T"
     if (!v && currentBindings && bindingGet(currentBindings, name)) { Err(tok, ERR_TYPE_VAR_AS_VALUE, name); return NULL; }
     //B10: in a condition, a name nothing declares and nothing is near is most likely a build constant -D did not define
@@ -7096,7 +7110,7 @@ struct var* lookupVar(struct checkCtx* ctx, struct token tok) {
 static bool lookupVarQuiet(struct checkCtx* ctx, struct token tok) {
     struct str name = strFromTok(tok);
     return scopeFindUse(ctx->scope, name, tok) || VarGetList(&ctx->mod->vars, name) || buildConstVar(name)
-           || (currentBindings && bindingGet(currentBindings, name));
+           || preludeConst(name) || (currentBindings && bindingGet(currentBindings, name));
 }
 
 //resolves a possibly-namespaced call-target name node ("func" or "alias.func", from SNTX_NAME) to a var -
@@ -16753,9 +16767,7 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             //written at all.
             struct syntax* argsNode = firstPartOfType(p->sntx, SNTX_EXPR_ARGS);
             if (argsNode) {
-                //E13c: a number written as a literal has no type until it lands, and a method call is no place it lands
-                //(reported, then built as written, so what follows sees the call's own result and adds no error)
-                if (operandOnlyNumericLiterals(result) && !result->type.owner) Err(memberTok, ERR_METHOD_ON_NUMBER_LITERAL, memberTok);
+                //E13c: a number written as a literal is a receiver like any other value, of its own type (T6a)
                 bool mReported = false;
                 bool prevAllow = ctx->allowFallibleCall;
                 ctx->allowFallibleCall = i == s->parts.len - 1 && allowLast;
@@ -17740,6 +17752,29 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         }
         viaInterface = m != NULL;
     }
+    //E31a: where "checked" checks it, a method called by name calls its checked form - "CheckedPow" for "Pow" - when the
+    //receiver's type has one of as many parameters ("checked x.Pow(n)"); a name already of a checked form is called as is
+    if (m && ctx->checkingTry && m->type.bType == BASETYPE_FUNC && !checkedFormPlainName(mName)
+            && mName.ptr[0] != '$' && mName.len) {
+        bool priv = mName.ptr[0] >= 'a' && mName.ptr[0] <= 'z';
+        char* cn = MallocOrCrash((size_t)mName.len + 8);
+        snprintf(cn, (size_t)mName.len + 8, "%s%c%.*s", priv ? "checked" : "Checked",
+                 priv ? (char)(mName.ptr[0] - 'a' + 'A') : mName.ptr[0], mName.len - 1, mName.ptr + 1);
+        struct str cname = StrFromCStr(cn);
+        struct var* cm = VarGetMethod(recvType.owner, cname, recvType);
+        bool cmVia = false;
+        if (!cm) {
+            int cfound = 0;
+            cm = interfaceMethodFor(ctx->mod, recvType, cname, &cfound);
+            if (cfound > 1) cm = NULL;
+            cmVia = cm != NULL;
+        }
+        if (cm && cm->type.bType == BASETYPE_FUNC && cm->type.vars.len == m->type.vars.len) {
+            m = cm;
+            mName = cname;
+            viaInterface = cmVia;
+        }
+    }
     bool noArgs = prebuiltMethodArgs ? prebuiltMethodArgs->len == 0 : allPartsOfType(argsNode, SNTX_EXPR).len == 0;
     //E10b: a Hash the compiler supplies, for a value whose type has none and whose parts all hash
     if (!m && StrCmp(mName, StrFromCStr("Hash")) && typeAutoHashable(recvType, 0)) {
@@ -17982,6 +18017,7 @@ struct operand* buildPrimary(struct checkCtx* ctx, struct syntax* s) {
         if (!recvVar && nameIdens.len >= 2) {
             struct var* g = VarGetList(&ctx->mod->vars, strFromTok(recvTok));
             if (!g) g = buildConstVar(strFromTok(recvTok));
+            if (!g) g = preludeConst(strFromTok(recvTok));
             if (g && g->type.bType != BASETYPE_FUNC) recvVar = g;
         }
         if (!recvVar && nameIdens.len >= 3) {
@@ -28613,6 +28649,17 @@ int SemanticBuiltinErrorWord(char* word) {
 
 static struct var* buildConstVar(struct str name) {
     return buildModule ? VarGetList(&buildModule->vars, name) : NULL;
+}
+
+//M19d: a constant of the prelude - an exported immutable global of one of its files ("Pi", "Inf"), visible by its bare
+//name in every module as a build constant is
+static struct var* preludeConst(struct str name) {
+    if (!name.len || !isPublic(name)) return NULL;
+    for (int i = 0; i < preludeModules.len; i++) {
+        struct var* v = VarGetList(&(*(struct semaModule**)ListGetIdx(&preludeModules, i))->vars, name);
+        if (v && !v->isFuncDecl && !v->mut && v->type.bType != BASETYPE_FUNC) return v;
+    }
+    return NULL;
 }
 
 bool SemanticIsBuildConst(struct var* v) { return v && ((buildModule && v->owner == buildModule) || v->buildDefault); }

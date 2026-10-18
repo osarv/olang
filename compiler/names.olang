@@ -78,6 +78,7 @@ type Resolver struct(L mut load.Loader&) {
     L
     Tables List<mut Table&>
     preludeTypes Map<source.NameId, I64>   # an exported type of the prelude: the module declaring it
+    preludeConsts Map<source.NameId, Ref>  # M19d: an exported immutable global of the prelude ("Pi"): where it is
     uses Map<I64, Ref>                     # by where a name is written: its file and offset
     members Map<I64, Ref>                  # by where a member's name ends: x.y through an import's alias
     # the item being resolved
@@ -102,6 +103,12 @@ fn (r mut Resolver&) Resolve() {
         r.tableOf(mi)
         for t in r.L.Mods[mi].Types {
             if t[0].IsUpper() { r.preludeTypes.Put(r.L.Names.Intern(t), mi) }
+        }
+        for e in r.Tables[mi].values {
+            en := r.Tables[mi].Entries[e.Value]
+            if en.Kind == What.Global and not en.Mut and r.text(e.Key)[0].IsUpper() {
+                r.preludeConsts.Put(e.Key, Ref(What.Global, mi, e.Value))
+            }
         }
     }
     for mi in range r.L.Mods.Len() {
@@ -318,6 +325,7 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
         if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
             r.L.Diags.Error(r.at(mi, sp), msgs.NameIsType(r.tok(n)))
         }
+        if not m.Prelude and n in r.preludeConsts { r.L.Diags.Error(r.at(mi, sp), msgs.PreludeConstRedeclared(r.tok(n))) }
         t.values.Put(n, t.Entries.Len())
     }
     t.Entries.Push(Entry(n, sp, What.Func if isFunc else What.Global, mutable, null))
@@ -373,6 +381,8 @@ fn (r mut Resolver&) lookup(n source.NameId) Ref {
     if a >= 0 { return Ref(What.Import, a, -1) }
     name := r.text(n)
     if r.L.Consts.Has(name) { return Ref(What.Build, -1, -1) }
+    pc := try r.preludeConsts.Get(n) catch default Ref(What.None, -1, -1)
+    if pc.Kind != What.None { return pc }
     p := try r.preludeTypes.Get(n) catch default -1
     if p >= 0 { return Ref(What.Type, p, try r.Tables[p].types.Get(n) catch default -1) }
     if BuiltinTypeName(name) { return Ref(What.Builtin, -1, -1) }
@@ -454,6 +464,8 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
         r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
     } else if r.L.Consts.Has(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
+    } else if n in r.preludeConsts {
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeConstRedeclared(r.tok(n)))
     } else if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n)))
     } else {
@@ -475,6 +487,8 @@ fn (r mut Resolver&) noConstClash(n source.NameId, sp source.Span) {
         r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
     } else if r.L.Consts.Has(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
+    } else if n in r.preludeConsts {
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeConstRedeclared(r.tok(n)))
     }
 }
 

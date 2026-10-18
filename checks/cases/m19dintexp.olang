@@ -1,0 +1,7 @@
+# check: fail error[M19]: I64 has no method 'Exp'
+# also: compilation failed with 1 error
+# M19d: the C math library's functions are the floats' methods - an integer has Abs, Min, Max, Clamp, Pow and Sqrt only
+fn main() ? {
+    n I64 = 4
+    r := n.Exp()
+}

@@ -1,0 +1,321 @@
+# Migrates olang sources from std/math's free functions to the numbers' methods (M19d, 2026-10-18): std/math is gone,
+# its functions are methods of the numbers in the prelude, and its constants the prelude's own.
+#
+#     build/out build tools/math_methods.olang && build/tools_math_methods [--dry] PATH...
+#
+# Each PATH is an .olang file or a directory searched for them. In code (never inside a string, a character literal or
+# a comment), through the alias the file imports std/math as:
+#   - math.F(a, b, ...) becomes a.F(b, ...) - the first argument the receiver, in parentheses unless it is a name, a
+#     call, an index, a member or a literal already (math.Sqrt(x * x + 1.0) becomes (x * x + 1.0).Sqrt());
+#   - math.Pi, math.Inf and math.NaN become Pi, Inf and NaN, math.E becomes Euler, and math.Sqrt2, math.Ln2 and
+#     math.Ln10 become F64(2).Sqrt(), F64(2).Log() and F64(10).Log();
+#   - the import of std/math is removed.
+# A literal receiver keeps its own type (E13c), where the function's type variable used to come from the other
+# arguments: an integer literal given a float function becomes a float literal (math.Sqrt(4) becomes 4.0.Sqrt()),
+# Min, Max and Hypot of a literal and something else take the something else as the receiver (math.Max(0.0, x) becomes
+# x.Max(0.0) - the same value either way round), and any other literal receiver beside a value that is not one is
+# listed at the end for a person, who writes its type (math.Pow(2.0, x) with an F32 x wants F32(2.0).Pow(x)). Text
+# inside string literals - programs a generator writes - and comments are not touched; search them for "math." by hand.
+# Running it again changes nothing.
+#
+# Called with no PATH it prints the usage line and exits 2.
+
+import "std/os"
+import "std/filepath"
+import "srcmask"
+
+# std/math's constants, and what each is now
+ConstNames Array<String&>& = String&["Pi", "E", "Inf", "NaN", "Sqrt2", "Ln2", "Ln10"]
+ConstNow Array<String&>& = String&["Pi", "Euler", "Inf", "NaN", "F64(2).Sqrt()", "F64(2).Log()", "F64(10).Log()"]
+
+# the functions that take a number of any type: an integer literal stays one for them
+AnyNumber Array<String&>& = String&["Abs", "Min", "Max", "Clamp"]
+
+# whether text has s at position i
+fn hasAt(text String&, i I64, s String&) Bool {
+    return i + s.Len() <= text.Len() and text[i:i + s.Len()] == s
+}
+
+# the alias "text" (read from "path") imports std/math by, and the line holding the import (its start and the start of
+# the line after it) - or "" when it imports no std/math. In a file of std a relative "math" is std/math too
+fn mathImport(text String&, path String&) (String, I64, I64) {
+    n := text.Len()
+    dir := filepath.Dir(srcmask.AbsPath(path))
+    at I64 = 0
+    for at < n {
+        next := at + (try text[at:].FindByte('\n') catch default (n - at)) + 1
+        j := at
+        for j < n and (text[j] == ' ' or text[j] == '\t') { j++ }
+        if text[j:].StartsWith("import ") {
+            k := j + 7
+            for k < n and text[k] == ' ' { k++ }
+            alias := ""
+            w := k
+            for w < n and srcmask.IsWord(text[w]) { w++ }
+            if w > k {
+                alias = $text[k:w]
+                k = w
+                for k < n and text[k] == ' ' { k++ }
+            }
+            if k < n and text[k] == '"' {
+                close := k + 1
+                for close < n and text[close] != '"' and text[close] != '\n' { close++ }
+                target := text[k + 1:close]
+                resolved := $filepath.Clean(filepath.Join(dir, target))
+                if target == "std/math" or resolved.EndsWith("/std/math") {
+                    return (alias if alias.Len() > 0 else "math"), at, (next if next <= n else n)
+                }
+            }
+        }
+        at = next
+    }
+    return "", -1, -1
+}
+
+# whether t is a number written as a literal - digits, a point, an exponent, "_" - with no sign
+fn isNumberLit(t String&) Bool {
+    if t.Len() == 0 or not t[0].IsDigit() { return false }
+    for i in range t.Len() {
+        c := t[i]
+        ok := c.IsDigit() or c == '.' or c == '_' or c == 'x' or c == 'X' or c == 'b' or c == 'B' or
+              (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F') or
+              ((c == '-' or c == '+') and i > 0 and (t[i - 1] == 'e' or t[i - 1] == 'E'))
+        if not ok { return false }
+    }
+    return true
+}
+
+# whether t is a number written as a literal, with a sign or not
+fn isSignedLit(t String&) Bool {
+    if t.StartsWith("-") { return isNumberLit(srcmask.StripStart(t[1:])) }
+    return isNumberLit(t)
+}
+
+# whether a literal is an integer one: digits alone (no point, no exponent, not hexadecimal or binary)
+fn isIntLit(t String&) Bool {
+    body := srcmask.StripStart(t[1:]) if t.StartsWith("-") else t
+    if body.Len() == 0 { return false }
+    for c in body {
+        if not c.IsDigit() and c != '_' { return false }
+    }
+    return true
+}
+
+# whether t can be a receiver as it is: a name, a call, an index or a member of one, or a literal - nothing at its top
+# level but names, points and brackets
+fn simple(t String&) Bool {
+    if t.Len() == 0 { return false }
+    if isNumberLit(t) { return true }
+    first := t[0]
+    if not (srcmask.IsIdStart(first) or first.IsDigit() or first == '"' or first == '\'' or first == '(') { return false }
+    mask := srcmask.Mask(t, false)
+    depth I64 = 0
+    for i in range t.Len() {
+        if mask[i] != 'c' { continue }
+        c := t[i]
+        if c == '(' or c == '[' or c == '{' {
+            depth++
+        } else if c == ')' or c == ']' or c == '}' {
+            depth--
+        } else if depth == 0 and not (srcmask.IsWord(c) or c == '.') {
+            return false
+        }
+    }
+    return true
+}
+
+# a call's arguments - the text between its brackets - split at the commas outside any bracket, each stripped
+fn splitArgs(t String&) List<String&> {
+    out List<String&>
+    mask := srcmask.Mask(t, true)
+    depth I64 = 0
+    start I64 = 0
+    for i in range t.Len() {
+        if mask[i] != 'c' { continue }
+        c := t[i]
+        if c == '(' or c == '[' or c == '{' {
+            depth++
+        } else if c == ')' or c == ']' or c == '}' {
+            depth--
+        } else if c == ',' and depth == 0 {
+            out.Push($srcmask.Strip(t[start:i]))
+            start = i + 1
+        }
+    }
+    last := srcmask.Strip(t[start:])
+    if last.Len() > 0 or out.Len() > 0 { out.Push($last) }
+    return out
+}
+
+# the line number of position at
+fn lineOf(text String&, at I64) I64 {
+    line I64 = 1
+    for i in range at {
+        if text[i] == '\n' { line++ }
+    }
+    return line
+}
+
+# text with every use of alias's functions and constants in code made a method call or a prelude constant; a literal
+# receiver a person should look at is added to notes, with the line it is on (counted from first)
+fn migrate(text String&, alias String&, first I64, notes mut List<String&>&) String {
+    mask := srcmask.Mask(text, false)
+    out := StringBuilder()
+    last I64 = 0
+    i I64 = 0
+    for i < text.Len() {
+        here := mask[i] == 'c' and hasAt(text, i, alias) and hasAt(text, i + alias.Len(), ".")
+        if not here or (i > 0 and (srcmask.IsWord(text[i - 1]) or text[i - 1] == '.')) {
+            i++
+            continue
+        }
+        s := i + alias.Len() + 1
+        e := s
+        for e < text.Len() and srcmask.IsWord(text[e]) { e++ }
+        name := text[s:e]
+        if name.Len() == 0 or not name[0].IsUpper() {
+            i++
+            continue
+        }
+        k := try ConstNames.FindIndex(fn(c) { return c == name }) catch default -1
+        if k >= 0 and not hasAt(text, e, "(") {
+            out.Push(text[last:i])
+            out.Push(ConstNow[k])
+            last = e
+            i = e
+            continue
+        }
+        if not hasAt(text, e, "(") {
+            i++
+            continue
+        }
+        close := srcmask.CloseOf(text, mask, e)
+        if close < 0 {
+            i++
+            continue
+        }
+        args := splitArgs(text[e + 1:close - 1])
+        if args.Len() == 0 {
+            i++
+            continue
+        }
+        line := first + lineOf(text, i) - 1
+        for a in range args.Len() { args[a] = $migrate(args[a], alias, line, notes) }
+        recvLit := isSignedLit(args[0])
+        otherValue := false
+        for a in range 1, args.Len() {
+            if not isSignedLit(args[a]) { otherValue = true }
+        }
+        if recvLit and otherValue and (name == "Min" or name == "Max" or name == "Hypot") {
+            t := args[0]
+            args[0] = args[1]
+            args[1] = t
+        } else if recvLit and otherValue {
+            notes.Push($line ": " $name " of the literal " $args[0] " - a receiver of its own type now; convert it if another is meant")
+        }
+        if isSignedLit(args[0]) and isIntLit(args[0]) and not AnyNumber.Has(name) { args[0] = $args[0] ".0" }
+        recv := args[0] if simple(args[0]) else $("(" $args[0] ")")
+        out.Push(text[last:i])
+        out.Push(recv)
+        out.PushChar('.')
+        out.Push(name)
+        out.PushChar('(')
+        for a in range 1, args.Len() {
+            if a > 1 { out.Push(", ") }
+            out.Push(args[a])
+        }
+        out.PushChar(')')
+        last = close
+        i = close
+    }
+    out.Push(text[last:])
+    return out.ToString()
+}
+
+# migrates one file; whether it changed
+fn migrateFile(path String&, dry Bool, notes mut List<String&>&) Bool {
+    if path == "std/math.olang" or path.EndsWith("/std/math.olang") { return false }
+    text := try srcmask.ReadText(path) catch {
+        srcmask.SayErr("math_methods: cannot read " $path)
+        os.Exit(1)
+        unreachable
+    }
+    alias, from, to := mathImport(text, path)
+    if alias.Len() == 0 { return false }
+    mine List<String&>
+    result := migrate($text[:from] $text[to:], alias, 1, mine)
+    for n in mine { notes.Push($path ":" $n) }
+    if result == text { return false }
+    if not dry {
+        try os.WriteFile(path, result) catch {
+            srcmask.SayErr("math_methods: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    srcmask.Say($("would migrate " if dry else "migrated ") $path)
+    return true
+}
+
+fn main() ? {
+    dry := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        if args[i] == "--dry" { dry = true } else { paths.Push($args[i]) }
+    }
+    if paths.Len() == 0 {
+        srcmask.Say("Migrates olang sources from std/math's functions to the numbers' methods (M19d, 2026-10-18).\n\n    build/tools_math_methods [--dry] PATH...\n\nsee the header of tools/math_methods.olang")
+        os.Exit(2)
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    files.Sort(fn(a, b) { return a < b })
+    changed I64 = 0
+    notes List<String&>
+    for k, f in files {
+        if k > 0 and f == files[k - 1] { continue }
+        if migrateFile(f, dry, notes) { changed++ }
+    }
+    srcmask.Say($changed " files " $("would change" if dry else "changed"))
+    if notes.Len() > 0 {
+        srcmask.Say("for a person:")
+        for n in notes { srcmask.Say("  " $n) }
+    }
+}
+
+test "functions become methods of their first argument, constants the prelude's" {
+    notes List<String&>
+    assert migrate("y := math.Sqrt(x) + math.Atan2(a.b, c[1]) * math.Pi\n", "math", 1, notes) == "y := x.Sqrt() + a.b.Atan2(c[1]) * Pi\n"
+    assert migrate("z := math.Exp(-(x - m) * k) / math.Sqrt(2.0 * math.Pi)\n", "math", 1, notes) == "z := (-(x - m) * k).Exp() / (2.0 * Pi).Sqrt()\n"
+    assert migrate("w := math.Max(best, math.Abs(f(a, b) - c)) + math.E + math.Sqrt2\n", "math", 1, notes) == "w := best.Max((f(a, b) - c).Abs()) + Euler + F64(2).Sqrt()\n"
+    assert migrate("v := m.Fma(F32(0.1), x, -1.0)\n", "m", 1, notes) == "v := F32(0.1).Fma(x, -1.0)\n"
+    assert notes.Len() == 0
+}
+
+test "literal receivers" {
+    notes List<String&>
+    assert migrate("a := math.Sqrt(4) + math.Abs(-3) + math.Exp(-1.5)\n", "math", 1, notes) == "a := 4.0.Sqrt() + (-3).Abs() + (-1.5).Exp()\n"
+    assert migrate("b := math.Max(0.0, x) + math.Min(1, n)\n", "math", 1, notes) == "b := x.Max(0.0) + n.Min(1)\n"
+    assert notes.Len() == 0
+    assert migrate("c := math.Pow(2.0, x)\n", "math", 7, notes) == "c := 2.0.Pow(x)\n"
+    assert notes.Len() == 1 and notes[0].StartsWith("7: Pow")
+}
+
+test "strings, comments and other modules' names are left alone" {
+    notes List<String&>
+    t := "s := \"math.Sqrt(x)\" # math.Sqrt(y)\nmymath.Sqrt(z)\nq.math.Sqrt(w)\n"
+    assert migrate(t, "math", 1, notes) == t
+}
+
+test "the import is found, aliased or not, and std's relative one" {
+    alias, from, to := mathImport("import \"std/io\"\nimport \"std/math\"\nfn f() { }\n", "a.olang")
+    assert alias == "math" and from == 16 and to == 34
+    alias2, _, _ := mathImport("import m \"std/math\"\n", "a.olang")
+    assert alias2 == "m"
+    alias3, _, _ := mathImport("import \"math\"\n", "std/stats.olang")
+    assert alias3 == "math"
+    alias4, _, _ := mathImport("import \"math\"\n", "tests/x.olang")
+    assert alias4 == ""
+}

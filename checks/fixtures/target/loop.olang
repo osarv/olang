@@ -1,7 +1,6 @@
 # B12: what a build is for - the target's build constants on the first line, then what the loops computed, which is the
-# same on every target (B12c): a * b + c rounds twice wherever it runs, math.Fma once
+# same on every target (B12c): a * b + c rounds twice wherever it runs, x.Fma(a, b) once
 import "std/io"
-import "std/math"
 
 # c[i] = a[i] * b[i] + c[i], vectorizable, and never fused into one rounding
 fn mulAdd(a Array<F32>&, b Array<F32>&, c mut Array<F32>&) {
@@ -10,7 +9,7 @@ fn mulAdd(a Array<F32>&, b Array<F32>&, c mut Array<F32>&) {
 
 # the same with one rounding - an FMA instruction where the target has one
 fn fused(a Array<F32>&, b Array<F32>&, c mut Array<F32>&) {
-    for i in range a.Len() { c[i] = math.Fma(a[i], b[i], c[i]) }
+    for i in range a.Len() { c[i] = a[i].Fma(b[i], c[i]) }
 }
 
 fn main() ? io.IoError {

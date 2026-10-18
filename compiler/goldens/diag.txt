@@ -951,22 +951,6 @@ e13btry.olang:6:16: error[E15]: this call can fail - write 'try', and catch or p
     6 |     n := pick()()
       |                ^
 compilation failed with 1 error
-=== e13cfloat.olang
-e13cfloat.olang:6:16: error[E13c]: the receiver of 'Fixed' is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'
-    6 |     assert 2.5.Fixed(1) == "2.5"
-      |                ^~~~~
-compilation failed with 1 error
-=== e13cparens.olang
-e13cparens.olang:8:16: error[E13c]: the receiver of 'Format' is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'
-    8 |     t := (255).Format(16)
-      |                ^~~~~~
-e13cparens.olang:9:17: error[E13c]: the receiver of 'Bits' is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'
-    9 |     b := (-0.0).Bits()
-      |                 ^~~~
-e13cparens.olang:10:18: error[E13c]: the receiver of 'Hash' is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'
-   10 |     h := (1 + 2).Hash()
-      |                  ^~~~
-compilation failed with 3 errors
 === e15amatchvalue.olang
 e15amatchvalue.olang:5:12: error[R8]: nothing here can fail - write it without 'checked'
     5 |     return checked (match x {
@@ -2015,11 +1999,6 @@ l12bfloatbig.olang:4:10: error[L12b]: '1e400' is beyond F64's range
     4 |     x := 1e400
       |          ^~~~~
 compilation failed with 1 error
-=== l12method.olang
-l12method.olang:6:14: error[E13c]: the receiver of 'Hash' is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'
-    6 |     assert 7.Hash() == I32(7).Hash()
-      |              ^~~~
-compilation failed with 1 error
 === l13eof.olang
 l13eof.olang:4:10: error[L13]: unterminated character literal
     4 |     x := '
@@ -2143,9 +2122,19 @@ compilation failed with 1 error
 === longflag.olang
 olang: error[B1]: unknown option '-x' - 'olang help' lists the options of build
 === m10stdimport.olang
-m10stdimport.olang:5:10: error[M10]: 'math' is no import here - std has it: 'import "std/math"'
-    5 |     m := math.Min(1, 2)
-      |          ^~~~
+m10stdimport.olang:5:10: error[M10]: 'filepath' is no import here - std has it: 'import "std/filepath"'
+    5 |     m := filepath.Base("a/b")
+      |          ^~~~~~~~
+compilation failed with 1 error
+=== m19dintexp.olang
+m19dintexp.olang:6:12: error[M19]: I64 has no method 'Exp'
+    6 |     r := n.Exp()
+      |            ^~~
+compilation failed with 1 error
+=== m19dintsqrtnotry.olang
+m19dintsqrtnotry.olang:6:18: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    6 |     s := I32(17).Sqrt()
+      |                  ^~~~
 compilation failed with 1 error
 === m23ext.olang
 m23ext.olang:2:8: error[M23]: an import names its file without '.olang'
@@ -2257,9 +2246,9 @@ numtraitextends.olang:7:10: error[G19, T31]: ntDist does not satisfy the constra
       |          ^~~~~~
 compilation failed with 1 error
 === numtraitsqrtint.olang
-numtraitsqrtint.olang:6:15: error[G19, T31]: I64 does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
-    6 |     r := math.Sqrt(4)
-      |               ^~~~
+numtraitsqrtint.olang:7:10: error[G19, T31]: I64 does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    7 |     r := nsRoot(n)
+      |          ^~~~~~
 compilation failed with 1 error
 === o10ccycle.olang
 o10ccycle.olang:21:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -4309,6 +4298,14 @@ parsedropret.olang:5:1: error: expected an expression, found '}'
     5 | }
       | ^
 compilation failed with 1 error
+=== preludeconst.olang
+preludeconst.olang:6:1: error[D3a]: 'Pi' is a constant of the prelude - choose another name
+    6 | Pi F64 = 3.14
+      | ^~
+preludeconst.olang:8:5: error[D3a]: 'Inf' is a constant of the prelude - choose another name
+    8 |     Inf := 1.0
+      |     ^~~
+compilation failed with 2 errors
 === preludename.olang
 preludename.olang:2:6: error[D3a]: 'ParseError' is a built-in type's name - choose another
     2 | type ParseError struct(x I32) { x }

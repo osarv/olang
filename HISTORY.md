@@ -19897,3 +19897,74 @@ still run clean at the seeds `checks` uses (the refused ones are left out, the a
 pieces, and a second spelling would hide the window on the current buffer that `View` exists to make visible (a piece
 kept across a growth is a stale view like any other). A prelude test cuts a Vec's view into pieces written by a task
 each, built and under -debug -sanitize.
+
+## Math is the numbers' methods; a number literal is a receiver again (M19d, E13c, E31a, D3a, E2, T35c, X8, 2026-10-18; the user's decisions, details mine)
+
+The user, after the numeric traits made a method over a constrained receiver cheap: "this kinda makes moving the math
+functions onto the type viable again. If integers only take min max clamp, isqrt and exp... floats are a compsci type",
+"Also abs for integers", then "Yes let's do this. I want an integer power as well for the integer set. And 2.0.Sqrt()
+should be valid code. Don't make an exception for floats like that". This reverses the morning's "keep std/math's free
+functions" (QAF) and the previous day's E13c. While it was being built the user renamed the integer root: "the integer
+square root is named `Sqrt`, not `ISqrt` - the receiver's type says which root, as `/` truncates on integers", exact for
+every 64-bit value, a signed one failing on a negative value and an unsigned one infallible.
+
+**What it is.** `std/prelude/number.olang` holds the three sealed traits, the constants and every method. Each float
+function is written once as a default over `Float` (`fn (x T) Sqrt<T Float>() T`) with std/math's own `match T` body
+and its X8 libm calls unchanged, so the code generator and the evaluator see exactly what they saw before: a baked
+global (`bakedSqrtTwo F64 = 2.0.Sqrt()` is `constant double 0x3FF6A09E667F3BCD`) and a decided assert agree with the
+run time, and `checks/fixtures/agree/math.olang` still prints the same lines built, built `-debug` and interpreted.
+Several-argument functions take the first C argument as the receiver: `y.Atan2(x)`, `a.Hypot(b)`, `x.Fma(a, b)` (`x *
+a + b` rounded once), `x.Pow(y)`, `x.CopySign(s)`. `Abs`, `Min`, `Max` and `Clamp` are defaults over `Number`, IEEE's
+on the floats as before (`Min`/`Max` propagate a NaN and put -0.0 below 0.0). The integers get `x.Pow(n U32)` and
+`Sqrt()`. `Pi`, `Euler`, `Inf` and `NaN` are prelude constants.
+
+**Decided (mine).**
+- The methods live in `number.olang`, beside the traits: M19 lets a default be declared only in its trait's module.
+- Two defaults named `Pow` on different traits (`Float`'s `Pow(y T)`, `Integer`'s `Pow(n U32)`) coexist: a call picks
+  the one whose constraint the receiver meets (M19e's lookup already did). Stage 0's check that a checked form fails
+  with every error its plain form can looked the plain form up by the generic receiver alone and so found the float
+  `Pow` for the integer `CheckedPow` - it now asks which default the concrete receiver meets (`checkedFormPlain`).
+- **E31a covers a method called by name**: `x.M(args)` where `checked` checks it calls `x.CheckedM(args)` when the type
+  has one of as many parameters, as an operator calls its checked form. That is what "checked under `checked` for
+  overflow" needed - `checked` never reaches into a called body - and it composes with the existing rules (the
+  superset of errors, a checked form requiring its plain one). `CheckedPow` fails with `BuiltinError.OVERFLOW` exactly
+  where the true power does not fit: it never squares the base once no later step needs the square.
+- The integer `Sqrt` is a concrete method per type, not a default: the signed and unsigned signatures differ (`? 
+  NumberError` or nothing). One private `sqrtU64` does the work - `U64(sqrt(F64(n)))`, then `r > n / r` and `r + 1 <=
+  n / (r + 1)` corrections, which divide rather than square so nothing overflows next to 2^64. Tested at 0, 1, every
+  value below 2000, perfect squares, one below `(2^32 - 1)^2`, 2^53 + 1 (which F64 rounds) and each width's maximum.
+- `NumberError { NEGATIVE }` is the prelude's (errors are errors; a named type, as std's other failures have). Not
+  `MathError`: the corpus declares one, and prelude type names are reserved everywhere.
+- **The prelude's constants** are its exported immutable globals, visible by bare name in every module as a build
+  constant is (E2), and reserved like one: a module's global, function, local or parameter of that name is D3a's new
+  error, "'Pi' is a constant of the prelude - choose another name" (both compilers' message tables;
+  `checks/cases/preludeconst`). `bench/nbody.olang` lost its own `Pi`. `Sqrt2`, `Ln2` and `Ln10` went: `F64(2).Sqrt()`
+  is folded while compiling where a value is needed. A named constant does not adapt as a literal does (`f F32 = Pi` is
+  an error, `F32(Pi)` is written): E4a's rule covers expressions of literals only, and extending it to names is a
+  language change of its own - reported, not built.
+- **Less-only types lose `Min`/`Max`/`Clamp`.** std/math's were unconstrained so a type declaring `Less` could use them;
+  the one user was std/math's own test (`grade`), which is dropped. linalg's Matrix operations call them on numbers
+  only (the F8 structs have no `<`). A type wanting them declares its own.
+- E13c is restated positively rather than deleted: a number written as a literal is a receiver of its own type (T6a),
+  because a call is no place a literal adapts - so `2.0.Sqrt()` is `F64`'s, `7.Hash()` `I64`'s, and `-2.0.Sqrt()` is
+  `-(2.0.Sqrt())`. Stage 0's `operandOnlyNumericLiterals` check at the postfix method call and the port's
+  `numberLitsOnly` check in `methodCall` went with `ERR_METHOD_ON_NUMBER_LITERAL`; the conversions the 2026-10-17
+  migration wrote (`I64(255).Format(16)`) are left as they are - correct either way. The three E13c checks cases are run
+  cases now.
+
+**Both compilers.** Stage 0: `preludeConst` beside `buildConstVar` (lookups, the shadowing and redeclaration checks,
+the dotted receiver path, the constant-argument fold's names), the named checked form in `buildMethodCall`, E13c's
+check removed. The port: `preludeConsts` in the resolver (lookup, `addValue`, `noShadow`, `noConstClash`),
+`checkedMethod` in `methodCall`, E13c's check removed. The port's checker already resolved methods over a constrained
+receiver; it checks `std/prelude/tests/number.olang` with no error and no gap, and gives stage 0's first error on every
+new case.
+
+**Migration.** `tools/math_methods.olang` (re-runnable, for oann later): `math.F(a, b...)` becomes `a.F(b...)`, the
+receiver parenthesized unless it is a name, call, index, member or literal; the constants become the prelude's; the
+import goes. A literal receiver keeps its own type now, so an integer literal given a float function becomes a float
+one (`math.Sqrt(4)` -> `4.0.Sqrt()`), `Min`/`Max`/`Hypot` of a literal and a value take the value as the receiver (the
+same result either way round), and any other literal receiver beside a value is listed for a person - none in the
+repository needed one. Ten files: std/linalg (147 lines), std/stats, std/rand, bench/mlp, compiler/tools/unparse, the
+agree, bits and target fixtures, a fuzz repro, a checks case; std/math's tests became `std/prelude/tests/number.olang`
+(the integers' methods, literal receivers and the constants added). By hand: the fuzz generator's emitted calls (it
+now also writes the integers' `Pow`, `checked ... Pow` and `Sqrt`), comments, SPEC's `math.Fma`, the READMEs.

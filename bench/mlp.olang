@@ -6,7 +6,6 @@
 import "std/io"
 import "std/os"
 import "std/time"
-import "std/math"
 import "std/rand"
 import "std/linalg"
 
@@ -32,8 +31,8 @@ type Net struct(seed U64) {
     DB2 := linalg.Matrix<F32>(1, classes)
     RowMax mut Array<F32>& = Array<F32>(batch)
     r := rand.Rand(seed)
-    W1.FillNormal(r, 0.0, math.Sqrt(2.0 / F64(inputs)))
-    W2.FillNormal(r, 0.0, math.Sqrt(2.0 / F64(hidden)))
+    W1.FillNormal(r, 0.0, (2.0 / F64(inputs)).Sqrt())
+    W2.FillNormal(r, 0.0, (2.0 / F64(hidden)).Sqrt())
 }
 
 # one step on (x, labels): forward, loss, backward, update. Returns the mean loss before the update
@@ -51,13 +50,13 @@ fn (n mut Net&) Step(x linalg.Matrix<F32>&, labels Array<I32>&, rate F32, thread
         p := n.P.Row(r)
         s F32 = 0.0
         for c in range classes {
-            e := math.Exp(o[c] - n.RowMax[r])
+            e := (o[c] - n.RowMax[r]).Exp()
             p[c] = e
             s += e
         }
         for c in range classes { p[c] = p[c] / s }
         k := labels[r]
-        loss -= math.Log(p[k])
+        loss -= p[k].Log()
         p[k] = p[k] - 1.0
     }
     n.P.Scale(1.0 / F32(batch))

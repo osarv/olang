@@ -610,7 +610,7 @@ reviews found drifting. It gives errors only, and the plan comes before MIR, so 
   - **Scopes are arenas** freed when they close, using §8's placement, and destructors run then.
   - **Floats are held as bits**, so E33a's NaN rules are exact.
   - **Budgets.** K1's step and memory budgets apply to compile-time evaluation.
-  - **libm** is called through `std/math`, which is X8's libm itself. A program's externs go through a dynamic call
+  - **libm** is called through the floats' methods in the prelude (`std/prelude/number.olang`), which are X8's libm itself. A program's externs go through a dynamic call
     (section 7, S3).
 - **Evaluation serves:**
   - constants and conditions (S8a, S8b, B9c), during checking;
@@ -1301,7 +1301,7 @@ Notes on the schedule:
 - **Collections and text:** `List` (indexing, `Pop`, `Sort`, `RunFrom`), `Map` (`Update`, `Keys`), `StringBuilder`,
   `Find`, `Split`, `Trim`, `PadStart`, `ParseInt`/`ParseUint` in any base (base 0 reads an olang literal, as L10 needs),
   exact `ParseFloat` and `ShortestDecimal`, and `x.Bits()` with the `FromBits` methods for float constants in IR.
-- **Other modules and features:** `std/math` (X8's libm, which the evaluator calls), `std/time`, `std/chan`; recursive
+- **Other modules and features:** the prelude's number methods (X8's libm, which the evaluator calls), `std/time`, `std/chan`; recursive
   enums for the trees, `join`/`spawn` for parallel clang and parsing, and `try (...)` for overflow-checked arithmetic.
 
 **Missing.** Each design below is decided. All go in during P0, in C and std, before the milestones that need them.

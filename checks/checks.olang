@@ -802,7 +802,7 @@ fn k2(r mut report&) ? Failed {
 
 # E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form
 # LLVM reads back exactly, the 16-bit ones in their own; and a BF16's sign bit, read from memory, is its own under -d
-# as under -b (LLVM 18's selection took it for a known zero, so std/math's SignBit failed at -d and -r)
+# as under -b (LLVM 18's selection took it for a known zero, so the SignBit of the floats failed at -d and -r)
 test "a NaN made from bits is written out with its bits, and a BF16's sign bit read from memory" { assert passed("bits") }
 
 fn bits(r mut report&) ? Failed {
@@ -1301,7 +1301,7 @@ fn target(r mut report&) ? Failed {
     try r.expect(nl > 0, "native printed " $native, dir)
     first := native[:nl]
     results := native[nl + 1:]
-    # this machine's vectors, when it has wider ones than SSE's, and its FMA instruction for math.Fma, not a call
+    # this machine's vectors, when it has wider ones than SSE's, and its FMA instruction for x.Fma(a, b), not a call
     if not first.EndsWith(" 128 false") {
         try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'ymm|zmm'") == 0, "no wide vectors in " $first, dir)
     }

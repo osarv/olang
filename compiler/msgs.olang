@@ -301,6 +301,7 @@ type Diag enum {
     ShadowsGlobal
     ShadowsFunction
     ShadowsBuildConst
+    PreludeConstRedeclared
     ShadowsType
     TypeHasNoConstructor
     MethodCalledAsFunction
@@ -438,7 +439,6 @@ type Diag enum {
     MembershipNotBool
     MembershipNeedsTry
     IncdecInExpression
-    MethodOnNumberLiteral
     NotCallable
     JoinPieceCalled
     UnhandledFallibleCall
@@ -1404,6 +1404,9 @@ fn ShadowsFunction(tok String&) Msg { return Msg(Diag.ShadowsFunction, "D3a", $t
 # ERR_SHADOWS_BUILD_CONST
 fn ShadowsBuildConst(tok String&) Msg { return Msg(Diag.ShadowsBuildConst, "D3a", $tok " is a build constant - choose another name") }
 
+# ERR_PRELUDE_CONST_REDECLARED
+fn PreludeConstRedeclared(tok String&) Msg { return Msg(Diag.PreludeConstRedeclared, "D3a", $tok " is a constant of the prelude - choose another name") }
+
 # ERR_SHADOWS_TYPE
 fn ShadowsType(tok String&) Msg { return Msg(Diag.ShadowsType, "D3a", $tok " is a type's name - choose another") }
 
@@ -1814,9 +1817,6 @@ fn MembershipNeedsTry(text String&) Msg { return Msg(Diag.MembershipNeedsTry, "E
 
 # ERR_INCDEC_IN_EXPRESSION
 fn IncdecInExpression(tok String&) Msg { return Msg(Diag.IncdecInExpression, "S3a", $tok " is a statement of its own, never part of an expression") }
-
-# ERR_METHOD_ON_NUMBER_LITERAL
-fn MethodOnNumberLiteral(tok String&) Msg { return Msg(Diag.MethodOnNumberLiteral, "E13c", "the receiver of " $tok " is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'") }
 
 # ERR_NOT_CALLABLE
 fn NotCallable(ty String&) Msg { return Msg(Diag.NotCallable, "E13b", $ty " is not a function, and declares no Call") }

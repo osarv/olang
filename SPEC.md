@@ -190,7 +190,7 @@ nullable type it is used against; see §2.1 T2a.
 | digit { digit } "." digit { digit } [ exponent ]` — at least one digit is required on *both* sides of
 the `.`; there is no leading-dot (`.5`) or trailing-dot (`5.`) form, and no more than one `.`. A `.` followed by a
 letter or `_` is not part of a number at all - `7.Hash()` is the integer literal `7`, a member access and a call
-(which E13c then refuses: a literal number is no method's receiver).
+(on `I64`, the literal's own type: E13c), and `2.5.Fixed(1)` is the float `2.5` and a call.
 
 **L12a.** `exponent ::= ( "e" | "E" ) [ "+" | "-" ] digit { digit }`. An exponent makes the literal a
 float whether or not a `.` appeared, so `1e3` is a float literal and equals `1000.0`. The exponent is
@@ -1262,7 +1262,9 @@ module declaring the three, which gives it to those types and no others, so no t
 - not by declaring a method of that name, and not by `extends` (T29f): `Char`, `type Meters extends I32` and
 `type Dist extends F64` inherit the method but satisfy nothing, so code constrained by a numeric trait may pick its
 behaviour with `match T` over the built-in types alone. Generic numeric code says which numbers it takes -
-`fn Sqrt<T Float>(x T) T` - so a call with any other type is an error at the call naming the trait (G19).
+`fn mean<T Float>(a Array<T>&) T`, or a default on the numbers themselves, `fn (x T) Sqrt<T Float>() T` (M19e) - so a
+call with any other type is an error at the call naming the trait (G19). The prelude's own methods on the numbers are
+listed in §4 M19d.
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as
@@ -1317,7 +1319,7 @@ function's own parameters) — that is a compile-time error, not shadowing.
 
 **D3a.** There is **no shadowing** at all: a local declaration or a parameter may not reuse a name its
 module declares in its `vars` set (a global, a function or an external function), the name of a build
-constant (B10), or the name of a type it sees -
+constant (B10), a constant of the prelude (`Pi`, `Euler`, `Inf`, `NaN`, §4 M19d), or the name of a type it sees -
 one its module declares, one of the prelude's (§4 M19d), or a built-in one (a primitive, `Bool`, `Array`); each is a
 compile-time error. A module is what keeps a namespace small enough to manage,
 so within one a name means one thing everywhere — which is also what lets a condition be read before its
@@ -1853,12 +1855,38 @@ Requiring a declared type's methods to live in its own module is a coherence rul
 one to a foreign type and no two modules can disagree about what `x.f` means. No module is exempt from it.
 
 **M19d (the prelude).** Every program includes the **prelude**: the files of the standard library's
-`prelude` directory, each an ordinary module, loaded before any other module. Their exported types are
-visible in every module by their bare names, with no import, and no module may declare a type of the same
-name (D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
+`prelude` directory, each an ordinary module, loaded before any other module. Their exported types and
+their exported immutable globals - the **constants of the prelude** - are visible in every module by their bare names,
+with no import, and no module may declare a type, a global, a function, a local or a parameter of the same name
+(D2, D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
 types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods.
+
+**The numbers.** The prelude's constants are `Pi`, `Euler` (e), `Inf` (the positive infinity) and `NaN` (the quiet NaN
+with no sign and no payload), each an `F64`: `F32(Pi)` is the `F32` nearest pi, and other constants are computed where
+they are wanted (`F64(2).Sqrt()`, `F64(2).Log()`), which a constant context does while compiling (K2). Every float
+(`F16`, `BF16`, `F32`, `F64`) has the C math library's functions as methods, each a default over `Float` (T35c, M19e)
+with what C passes as its first argument as the receiver: `Sqrt`, `Cbrt`, `Exp`, `Exp2`, `Expm1`, `Log`, `Log2`,
+`Log10`, `Log1p`, `x.Pow(y)`, `x.Hypot(y)` (the length of `(x, y)` with no overflow on the way), `x.Fma(a, b)` (`x *
+a + b` rounded once), `Sin`, `Cos`, `Tan`, `Asin`, `Acos`, `Atan`, `y.Atan2(x)` (the angle of the point `(x, y)`, `y`
+first as in C), `Sinh`, `Cosh`, `Tanh`, `Erf`, `Erfc`, `Floor`, `Ceil`, `Trunc`, `Round` (a half away from zero),
+`RoundEven` (a half to the even one), `x.CopySign(s)`, and `SignBit()`, `IsNan()`, `IsInf()` and `IsFinite()` giving a
+`Bool`. An `F64` or an `F32` is computed by the C library's function for its type (X8, so a call is evaluated while
+compiling where a value is needed then, K1, by the very function the program calls), an `F16` or a `BF16` in `F32` -
+`F64` for `Fma` - and rounded once to its own type. A result outside a function's domain is what IEEE 754 says
+(`(-1.0).Sqrt()` and `(-1.0).Log()` are `NaN`, `0.0.Log()` is `-Inf`, `1000.0.Exp()` is `Inf`), never an error: a NaN
+carries the failure through the rest of a computation and is asked about once, with `IsNan`.
+Every number has `Abs()`, `a.Min(b)`, `a.Max(b)` and `x.Clamp(lo, hi)`, defaults over `Number`: on a float `Abs`
+clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a NaN if either is one, and `-0.0` below
+`0.0`, so `a.Min(b)` and `b.Min(a)` are one value; on an integer `Abs` negates a negative value (the most negative one
+staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
+`hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
+U32)`, `x` to the `n`th power, wrapping as `*` does (E6c), whose checked form `CheckedPow` (E31a) fails with
+`BuiltinError.OVERFLOW` where the true power does not fit - so `checked x.Pow(n)` checks it; and `Sqrt()`, the integer
+square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
+exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
+error type the prelude declares) for a negative value, so it is written with `try`.
 
 `Pair` is not part of the prelude: `std/pair` declares `type Pair<A, B> struct(First A, Second B)`, two values of
 any types held as one, named `pair.Pair` once imported, its type arguments inferred at construction (G10c). It has
@@ -2214,7 +2242,8 @@ two operators in prefix and postfix position (E5); both require the operand to b
 lvalue (§6.2).
 
 **E2.** A `primary` that is a bare `IDEN` is a variable or function read: a local, a parameter, a
-module-level global, or a module-level function name, resolved by innermost-scope-first lookup (D3).
+module-level global, a module-level function name, a build constant (B10) or a constant of the prelude (M19d),
+resolved by innermost-scope-first lookup (D3).
 A bare `IDEN` immediately followed by `member` is additionally checked, before ordinary member
 resolution, against every rule in §4.4 for a cross-module alias
 chain; if it resolves as one, ordinary member resolution does not apply to that leading identifier.
@@ -2670,13 +2699,13 @@ statement (L18), never a `call-on`. Calling a value not of function type is a co
 `f` is a field of `x` is such a call too - the function value the field holds is called, as `(x.f)(args)` - since a
 method may not share a field's name (M19), so the spelling has that one meaning.
 
-**E13c.** A method call's receiver may not be a number written as a literal: a numeric literal (L10, L12), alone,
-negated or in parentheses, or an expression built only from numeric literals (E4a) - `7.Hash()`, `2.5.Fixed(1)`,
-`(255).Format(16)` and `(-0.0).Bits()` are compile-time errors. Such a number has no type of its own until it lands
-(T6), and a method call is not a place it lands, so the type the method belongs to would be invisible at the call. The
-number is put in a variable of the type wanted, or converted to it (`n I64 = 255` then `n.Format(16)`, or
-`I64(255).Format(16)`). Text literals, character literals, array literals and comprehensions are receivers like any
-other value (`"a,b".Split(",")`, `I32[3, 1].Sort(...)`): each says what it is.
+**E13c.** A number written as a literal is a method call's receiver like any other value - a numeric literal (L10,
+L12), in parentheses, or an expression built only from numeric literals (E4a): `2.0.Sqrt()`, `7.Hash()`,
+`255.Format(16)`, `(1 + 2).Hash()`. A method call is no place a literal adapts to (T6), so the receiver has the
+literal's own type (T6a) - `I64` for an integer, `F64` for a float, `U64` for a decimal integer above `I64`'s largest -
+and the method is that type's; another type is written as a conversion (`F32(2).Sqrt()`, `U8(7).Hash()`). A minus
+sign before such a call negates its result (`-2.0.Sqrt()` is `-(2.0.Sqrt())`: a unary operator applies to the postfix expression after it, E1); a negative receiver is written in
+parentheses (`(-2.0).Abs()`).
 
 **E13a.** `Array<T>(n)` and `Array<T>(n, v)` build an array (T8): `n`, of any integer type, is its length,
 and every element is `T`'s zero value or `v`, which must fit `T`. It is a value with no storage of its own,
@@ -3125,7 +3154,9 @@ releases nothing the borrow reaches.
 **E31a (checked forms).** An operation may have a **checked form**, a method of its own named with `Checked`:
 `CheckedAt`, `CheckedSetAt`, `CheckedSlice`, `CheckedPlus`, `CheckedMinus`, `CheckedMul`, `CheckedDiv`, `CheckedRem`,
 `CheckedMatMul`, `CheckedNeg`, `CheckedShiftLeft`, `CheckedShiftRight`, `CheckedInc` and `CheckedDec` - each with its
-operation's shape, declaring the errors it fails with. The lowercase spelling (`checkedAt`) is private, as above. The
+operation's shape, declaring the errors it fails with. A method called by name has one the same way: `x.M(args)` where
+`checked` checks it calls `x.CheckedM(args)` when `x`'s type has a method of that name and as many parameters (an
+integer's `Pow`, M19d), and `x.M(args)` otherwise. The lowercase spelling (`checkedAt`) is private, as above. The
 plain form is what the operator calls, under `try` too; the checked form is what it calls **where `checked` checks
 it** (E15a, R21, S9e). A checked form only adds checks, so it fails with **every error its plain form can** and
 possibly more: one whose errors do not include each of the plain form's is a compile-time error at its declaration,
@@ -6269,7 +6300,7 @@ target (B12): `TargetOs`, `TargetArch` and `TargetCpu`, text naming its operatin
 architecture (`"x86_64"`, `"aarch64"`) and its CPU as clang names it (`"cascadelake"`, `"x86-64-v3"`, `"generic"`);
 `TargetVectorBits`, an `I64`, the width in bits of the vectors the generated code computes with - `512` where the
 target has AVX-512, `256` where it has AVX, `128` with only SSE2 or on `aarch64` (Advanced SIMD); and `TargetHasFma`, a
-`Bool`, whether the target has fused multiply-add instructions - whether `math.Fma` (X8) is one instruction or a call.
+`Bool`, whether the target has fused multiply-add instructions - whether a float's `Fma` (X8, M19d) is one instruction or a call.
 Three describe the build: `DebugBuild`, `RaceBuild` and `TestBuild`, `Bool`s saying whether it is `-debug`, `-race` and
 `test` respectively.
 
@@ -6321,7 +6352,7 @@ target never reuses an object built for another, and changing the target back fi
 
 **B12c (one result on every target).** The target changes how fast a program runs, never what it computes - except
 where the program itself asks, through the build constants. The generated code never fuses a multiplication and an
-addition into one rounding: `a * b + c` rounds twice on every target, and `math.Fma(a, b, c)` (X8) once on every target -
+addition into one rounding: `a * b + c` rounds twice on every target, and `a.Fma(b, c)` (X8, M19d) once on every target -
 the target's instruction where it has one, the C library's function where it has not. It never reorders a
 floating-point computation, and never uses an instruction whose result is not IEEE 754's: on x86-64 the `BF16`
 conversions of AVX512-BF16 and AVX-NE-CONVERT treat subnormals as zero, so a target's extensions are taken without

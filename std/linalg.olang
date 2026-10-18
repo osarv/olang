@@ -49,7 +49,6 @@
 # ParallelRows gives the same splitting to the row-wise kernels a caller writes itself. The count is a parameter rather
 # than a setting: a global the program can change would keep every product from being computed while compiling (K1).
 
-import "std/math"
 import "std/rand"
 
 extern fn sysconf(name I32) I64
@@ -398,12 +397,12 @@ fn (m Matrix<T>&) Mapped(f fn(x T) T) Matrix<T> {
     return out
 }
 
-# the floating-point functions of std/math, element by element, into a new matrix
-fn (m Matrix<T>&) Exp() Matrix<T> { return m.Mapped(fn(x) { return math.Exp(x) }) }
-fn (m Matrix<T>&) Log() Matrix<T> { return m.Mapped(fn(x) { return math.Log(x) }) }
-fn (m Matrix<T>&) Tanh() Matrix<T> { return m.Mapped(fn(x) { return math.Tanh(x) }) }
-fn (m Matrix<T>&) Sqrt() Matrix<T> { return m.Mapped(fn(x) { return math.Sqrt(x) }) }
-fn (m Matrix<T>&) Abs() Matrix<T> { return m.Mapped(fn(x) { return math.Abs(x) }) }
+# the floats' methods (M19d), element by element, into a new matrix
+fn (m Matrix<T>&) Exp() Matrix<T> { return m.Mapped(fn(x) { return x.Exp() }) }
+fn (m Matrix<T>&) Log() Matrix<T> { return m.Mapped(fn(x) { return x.Log() }) }
+fn (m Matrix<T>&) Tanh() Matrix<T> { return m.Mapped(fn(x) { return x.Tanh() }) }
+fn (m Matrix<T>&) Sqrt() Matrix<T> { return m.Mapped(fn(x) { return x.Sqrt() }) }
+fn (m Matrix<T>&) Abs() Matrix<T> { return m.Mapped(fn(x) { return x.Abs() }) }
 
 fn lesser(a I64, b I64) I64 { return a if a < b else b }
 # ---- matrix multiplication ----
@@ -907,7 +906,7 @@ fn rowStep<A>(acc mut tile<A>&, base I64, x A, bp Array<A>&, b I64, nr I64) {
 fn mulAdd<A>(a A, b A, c A) A {
     match A {
         case F32, F64 {
-            if TargetHasFma { return math.Fma(a, b, c) }
+            if TargetHasFma { return a.Fma(b, c) }
         }
         nomatch { }
     }
@@ -2032,8 +2031,8 @@ fn (a Matrix<T>&) Dot(b Matrix<T>&) T ? ShapeError {
 fn (m Matrix<T>&) Norm() T {
     like T
     return match T {
-        case F16, BF16, F8E4M3, F8E5M2 => Cast(math.Sqrt(dotIn(m, m, F32(0))), like)
-        nomatch => math.Sqrt(dotIn(m, m, like))
+        case F16, BF16, F8E4M3, F8E5M2 => Cast(dotIn(m, m, F32(0)).Sqrt(), like)
+        nomatch => dotIn(m, m, like).Sqrt()
     }
 }
 
@@ -2042,8 +2041,8 @@ fn (a Matrix<T>&) Distance(b Matrix<T>&) T ? ShapeError {
     if not (sameShape(a, b)) { error ShapeError.MISMATCH }
     like T
     return match T {
-        case F16, BF16, F8E4M3, F8E5M2 => Cast(math.Sqrt(distanceIn(a, b, F32(0))), like)
-        nomatch => math.Sqrt(distanceIn(a, b, like))
+        case F16, BF16, F8E4M3, F8E5M2 => Cast(distanceIn(a, b, F32(0)).Sqrt(), like)
+        nomatch => distanceIn(a, b, like).Sqrt()
     }
 }
 
@@ -2079,7 +2078,7 @@ fn (a Matrix<T>&) MaxAbsDifference(b Matrix<T>&) T ? ShapeError {
     for r in range a.Rows {
         x I64 = r * a.Stride
         y I64 = r * b.Stride
-        for c in range a.Cols { best = math.Max(best, math.Abs(a.Data[x + c] - b.Data[y + c])) }
+        for c in range a.Cols { best = best.Max((a.Data[x + c] - b.Data[y + c]).Abs()) }
     }
     return best
 }
@@ -2090,18 +2089,18 @@ fn (m Matrix<T>&) MaxAbs() T {
     best T = z
     for r in range m.Rows {
         d I64 = r * m.Stride
-        for c in range m.Cols { best = math.Max(best, math.Abs(m.Data[d + c])) }
+        for c in range m.Cols { best = best.Max(m.Data[d + c].Abs()) }
     }
     return best
 }
 
-# the largest element, and the smallest - a NaN if any element is one (std/math's Max and Min); for a matrix with
+# the largest element, and the smallest - a NaN if any element is one (the numbers' Max and Min); for a matrix with
 # at least one element
 fn (m Matrix<T>&) Max() T {
     best T = m.Data[0]
     for r in range m.Rows {
         d I64 = r * m.Stride
-        for c in range m.Cols { best = math.Max(best, m.Data[d + c]) }
+        for c in range m.Cols { best = best.Max(m.Data[d + c]) }
     }
     return best
 }
@@ -2110,7 +2109,7 @@ fn (m Matrix<T>&) Min() T {
     best T = m.Data[0]
     for r in range m.Rows {
         d I64 = r * m.Stride
-        for c in range m.Cols { best = math.Min(best, m.Data[d + c]) }
+        for c in range m.Cols { best = best.Min(m.Data[d + c]) }
     }
     return best
 }
@@ -2139,7 +2138,7 @@ fn (m Matrix<T>&) RowMaxAbs(out mut Array<T>&) ? ShapeError {
     for r in range m.Rows {
         d I64 = r * m.Stride
         best T = z
-        for c in range m.Cols { best = math.Max(best, math.Abs(m.Data[d + c])) }
+        for c in range m.Cols { best = best.Max(m.Data[d + c].Abs()) }
         out[r] = best
     }
 }
@@ -2163,10 +2162,10 @@ fn rowAbsSumsIn<T, A>(m Matrix<T>&, out mut Array<T>&, z A) {
         d I64 = r * m.Stride
         whole I64 = m.Cols - m.Cols % 8
         for i in range 0, whole, 8 {
-            for j in range 8 { acc.v[j] = acc.v[j] + math.Abs(Cast(m.Data[d + i + j], z)) }
+            for j in range 8 { acc.v[j] = acc.v[j] + Cast(m.Data[d + i + j], z).Abs() }
         }
         rest A = z
-        for i in range whole, m.Cols { rest = rest + math.Abs(Cast(m.Data[d + i], z)) }
+        for i in range whole, m.Cols { rest = rest + Cast(m.Data[d + i], z).Abs() }
         out[r] = Cast(acc.total() + rest, like)
     }
 }
@@ -2177,10 +2176,10 @@ fn (m Matrix<T>&) RowNorms(out mut Array<T>&) ? ShapeError {
     like T
     match T {
         case F16, BF16, F8E4M3, F8E5M2 {
-            for r in range m.Rows { out[r] = Cast(math.Sqrt(dotRun(m.Data, r * m.Stride, m.Data, r * m.Stride, m.Cols, F32(0))), like) }
+            for r in range m.Rows { out[r] = Cast(dotRun(m.Data, r * m.Stride, m.Data, r * m.Stride, m.Cols, F32(0)).Sqrt(), like) }
         }
         nomatch {
-            for r in range m.Rows { out[r] = math.Sqrt(dotRun(m.Data, r * m.Stride, m.Data, r * m.Stride, m.Cols, like)) }
+            for r in range m.Rows { out[r] = dotRun(m.Data, r * m.Stride, m.Data, r * m.Stride, m.Cols, like).Sqrt() }
         }
     }
 }
@@ -2190,7 +2189,7 @@ fn (m mut Matrix<T>&) NormalizeRows() {
     like T
     for r in range m.Rows {
         d I64 = r * m.Stride
-        n T = math.Sqrt(dotRun(m.Data, d, m.Data, d, m.Cols, like))
+        n T = dotRun(m.Data, d, m.Data, d, m.Cols, like).Sqrt()
         if n == like { continue }
         inv T = 1.0 / n
         for c in range m.Cols { m.Data[d + c] = m.Data[d + c] * inv }
@@ -2208,10 +2207,10 @@ fn (dst mut Matrix<T>&) RowSoftmax(src Matrix<T>&, temperature T) ? ShapeError {
         s I64 = r * src.Stride
         d I64 = r * dst.Stride
         top T = src.Data[s]
-        for c in range 1, src.Cols { top = math.Max(top, src.Data[s + c]) }
+        for c in range 1, src.Cols { top = top.Max(src.Data[s + c]) }
         total T = like
         for c in range src.Cols {
-            e T = math.Exp((src.Data[s + c] - top) * inv)
+            e T = ((src.Data[s + c] - top) * inv).Exp()
             dst.Data[d + c] = e
             total = total + e
         }
@@ -2226,7 +2225,7 @@ fn (m Matrix<T>&) RowMax(out mut Array<T>&) ? ShapeError {
     for r in range m.Rows {
         d I64 = r * m.Stride
         best T = m.Data[d]
-        for c in range 1, m.Cols { best = math.Max(best, m.Data[d + c]) }
+        for c in range 1, m.Cols { best = best.Max(m.Data[d + c]) }
         out[r] = best
     }
 }
@@ -2289,7 +2288,7 @@ fn columnSumsIn<T, A>(m Matrix<T>&, out mut Matrix<T>&, beta F64, z A) {
 
 # ---- activations that vectorize ----
 #
-# std/math's Exp and Tanh are the C library's (X8): within about an ulp and the same while compiling, but a call per
+# A float's Exp and Tanh are the C library's (X8): within about an ulp and the same while compiling, but a call per
 # element, so a loop over them does not vectorize. These are written in olang from arithmetic and bit operations
 # only, so a Map with one of them inlined runs in vector registers - in F32, 14 instructions an element for FastExp
 # and 17 for FastTanh, against the C library's 39 for exp and 129 for tanh. Each takes any Float, an F32 or an F64
@@ -2342,12 +2341,12 @@ fn fastExp64(x F64) F64 {
     up Bool = k > 0.0
     scale F64 = ((ki - (U64(1) if up else U64(0)) + 1023) << 52).F64FromBits()
     e F64 = p * scale * (2.0 if up else 1.0)
-    e = e if x < 709.782712893384 else math.Inf
+    e = e if x < 709.782712893384 else Inf
     e = e if x > -708.3964185322641 else 0.0
     return e if x == x else x
 }
 
-infinity32 F32 = F32(math.Inf)
+infinity32 F32 = F32(Inf)
 
 # the hyperbolic tangent: 1 - 2 / (e^(2|x|) + 1), with x's sign. |x| is held below the point past which tanh rounds
 # to 1 in the type (10 in F32, 20 in F64), so that e^(2|x|) stays finite; a NaN is not held and gives a NaN
@@ -2357,14 +2356,14 @@ fn FastTanh<T Float>(x T) T {
         case BF16 { return BF16(FastTanh(F32(x))) }
         nomatch { }
     }
-    a T = math.Abs(x)
+    a T = x.Abs()
     limit T = match T {
         case F64 => 20.0
         nomatch => 10.0
     }
     a = limit if a > limit else a
     v T = 1.0 - 2.0 / (FastExp(a + a) + 1.0)
-    return math.CopySign(v, x)
+    return v.CopySign(x)
 }
 
 # the logistic function 1 / (1 + e^-x)
@@ -2441,7 +2440,7 @@ fn (m Matrix<T>&) ColumnAbsSums(out mut Matrix<T>&) ? ShapeError {
     out.Fill(z)
     for r in range m.Rows {
         d I64 = r * m.Stride
-        for c in range m.Cols { out.Data[c] = out.Data[c] + math.Abs(m.Data[d + c]) }
+        for c in range m.Cols { out.Data[c] = out.Data[c] + m.Data[d + c].Abs() }
     }
 }
 
@@ -2578,7 +2577,7 @@ fn solveInPlace<T>(lu mut Matrix<T>&, x mut Matrix<T>&) ? SolveError {
     for k in range n {
         p I64 = k
         for i in range k + 1, n {
-            if math.Abs(lu.Get(i, k)) > math.Abs(lu.Get(p, k)) { p = i }
+            if lu.Get(i, k).Abs() > lu.Get(p, k).Abs() { p = i }
         }
         if lu.Get(p, k) == 0 { error SolveError.SINGULAR }
         if p != k {
@@ -2750,8 +2749,8 @@ if TestBuild {
         try d.Map(d, fn(x) { return x + 1.0 })
         assert d.Get(1, 2) == 19.0
         e := a.Exp()
-        assert e.Get(0, 0) == math.Exp(1.0) and a.Sqrt().Get(1, 0) == 2.0 and a.Log().Get(0, 0) == 0.0
-        assert (-a).Abs() == a and a.Tanh().Get(0, 0) == math.Tanh(1.0)
+        assert e.Get(0, 0) == 1.0.Exp() and a.Sqrt().Get(1, 0) == 2.0 and a.Log().Get(0, 0) == 0.0
+        assert (-a).Abs() == a and a.Tanh().Get(0, 0) == 1.0.Tanh()
         i := Matrix<F32>(3, 3)
         i.SetIdentity()
         assert i.Sum() == 3.0 and i.Get(1, 1) == 1.0 and i.Get(0, 1) == 0.0
@@ -2813,7 +2812,7 @@ if TestBuild {
                 try Gemm(c, a, transA, b, transB, 2.0, 1.0)
                 twice := want * 2.0 + 1.0
                 assert (try c.Distance(twice)) < 1e-9 * F64(k)
-                c.Fill(math.NaN)
+                c.Fill(NaN)
                 try Gemm(c, a, transA, b, transB, 1.0, 0.0)
                 assert (try c.Distance(want)) < 1e-9 * F64(k)
                 # threads change nothing
@@ -2983,8 +2982,8 @@ if TestBuild {
     test "sums, means, norms and extremes" {
         m := counting(3, 4, 1.0)
         assert m.Sum() == 78.0 and m.Mean() == 6.5 and m.Max() == 12.0 and m.Min() == 1.0
-        assert (try m.Dot(m)) == 650.0 and m.Norm() == math.Sqrt(650.0) and m.MaxAbs() == 12.0
-        assert (try m.Distance(m)) == 0.0 and (try m.Distance(m + 1.0)) == math.Sqrt(12.0)
+        assert (try m.Dot(m)) == 650.0 and m.Norm() == 650.0.Sqrt() and m.MaxAbs() == 12.0
+        assert (try m.Distance(m)) == 0.0 and (try m.Distance(m + 1.0)) == 12.0.Sqrt()
         assert (try m.MaxAbsDifference(m * 2.0)) == 12.0
         rows := Array<F64>(3)
         try m.RowSums(rows)
@@ -3007,9 +3006,9 @@ if TestBuild {
         classes := Array<I32>(2)
         try scores.ArgMaxRows(classes)
         assert classes[0] == 1 and classes[1] == 0
-        scores.Set(1, 2, math.NaN)
+        scores.Set(1, 2, NaN)
         try scores.ArgMaxRows(classes)
-        assert classes[1] == 2 and math.IsNan(scores.Max())
+        assert classes[1] == 2 and scores.Max().IsNan()
         # a strided view sums only its own elements
         assert (try m.ColRange(1, 3)).Sum() == 2.0 + 3.0 + 6.0 + 7.0 + 10.0 + 11.0
         # a long sum in lanes: exact here, since every partial sum is an integer
@@ -3103,16 +3102,16 @@ if TestBuild {
             x := Matrix<F64>(cols, 1)
             x.FillUniform(r, -1.0, 1.0)
             want := referenceProduct(a, false, x, false)
-            y := Array<F64>(rows, math.NaN)
+            y := Array<F64>(rows, NaN)
             try Gemv(y, a, false, x.Data)
-            for i in range rows { assert math.Abs(y[i] - want.Get(i, 0)) < 1e-13 * F64(cols) }
+            for i in range rows { assert (y[i] - want.Get(i, 0)).Abs() < 1e-13 * F64(cols) }
             # a's columns: y = 2 a^T u + y
             u := Matrix<F64>(rows, 1)
             u.FillUniform(r, -1.0, 1.0)
             wantT := referenceProduct(a, true, u, false)
             yt := Array<F64>(cols, 1.0)
             try Gemv(yt, a, true, u.Data, 2.0, 1.0)
-            for j in range cols { assert math.Abs(yt[j] - (2.0 * wantT.Get(j, 0) + 1.0)) < 1e-13 * F64(rows) }
+            for j in range cols { assert (yt[j] - (2.0 * wantT.Get(j, 0) + 1.0)).Abs() < 1e-13 * F64(rows) }
             # a view: its rows are not contiguous with each other
             v := (try a.ColRange(1, cols - 1))
             xv := Matrix<F64>(cols - 2, 1)
@@ -3120,11 +3119,11 @@ if TestBuild {
             wantV := referenceProduct(v, false, xv, false)
             yv := Array<F64>(rows)
             try Gemv(yv, v, false, xv.Data)
-            for i in range rows { assert math.Abs(yv[i] - wantV.Get(i, 0)) < 1e-13 * F64(cols) }
+            for i in range rows { assert (yv[i] - wantV.Get(i, 0)).Abs() < 1e-13 * F64(cols) }
             wantVT := referenceProduct(v, true, u, false)
             yvt := Array<F64>(cols - 2)
             try Gemv(yvt, v, true, u.Data)
-            for j in range cols - 2 { assert math.Abs(yvt[j] - wantVT.Get(j, 0)) < 1e-13 * F64(rows) }
+            for j in range cols - 2 { assert (yvt[j] - wantVT.Get(j, 0)).Abs() < 1e-13 * F64(rows) }
         }
         # a batch of one to four rows through Gemm takes the same path, every transpose
         for m in range 1, 5 {
@@ -3151,7 +3150,7 @@ if TestBuild {
         assert w.Get(1, 2) == 5.0 + 10.0 and w.Get(0, 0) == 3.0
         try Ger(w, x, y, 2.0, 0.5)
         assert w.Get(1, 2) == 0.5 * 15.0 + 2.0 * 2.0 * 5.0
-        w.Fill(math.NaN)
+        w.Fill(NaN)
         try Ger(w, x, y, 1.0, 0.0)
         assert w == Outer(x, y)
         u := counting(2, 3, 1.0)
@@ -3190,14 +3189,14 @@ if TestBuild {
         try m.RowAbsSums(out)
         assert out[0] == 3.0 and out[1] == 6.0
         try m.RowNorms(out)
-        assert out[0] == math.Sqrt(5.0) and out[1] == math.Sqrt(14.0)
+        assert out[0] == 5.0.Sqrt() and out[1] == 14.0.Sqrt()
         cs := Matrix<F64>(1, 3)
         try counting(2, 3, -4.0).ColumnAbsSums(cs)
         assert cs.Get(0, 0) == 5.0 and cs.Get(0, 1) == 3.0 and cs.Get(0, 2) == 3.0
         n := m.Clone()
         n.NormalizeRows()
         try n.RowNorms(out)
-        assert math.Abs(out[0] - 1.0) < 1e-15 and math.Abs(out[1] - 1.0) < 1e-15
+        assert (out[0] - 1.0).Abs() < 1e-15 and (out[1] - 1.0).Abs() < 1e-15
         zero := Matrix<F64>(1, 3)
         zero.NormalizeRows()
         assert zero.Sum() == 0.0
@@ -3208,12 +3207,12 @@ if TestBuild {
         assert s.Get(0, 0) == 0.0 and s.Get(1, 0) == 4.0
         sums := Array<F64>(2)
         try block.RowSums(sums)
-        assert math.Abs(sums[0] - 1.0) < 1e-15 and math.Abs(sums[1] - 1.0) < 1e-15
-        want F64 = math.Exp(-1.0) / (math.Exp(-1.0) + math.Exp(-0.5) + 1.0)
-        assert math.Abs(s.Get(0, 1) - want) < 1e-15 and math.Abs(s.Get(1, 1) - want) < 1e-15
+        assert (sums[0] - 1.0).Abs() < 1e-15 and (sums[1] - 1.0).Abs() < 1e-15
+        want F64 = (-1.0).Exp() / ((-1.0).Exp() + (-0.5).Exp() + 1.0)
+        assert (s.Get(0, 1) - want).Abs() < 1e-15 and (s.Get(1, 1) - want).Abs() < 1e-15
         p := Matrix<F32>(2, 3)
         try p.RowSoftmax(m.ToF32(), 1.0)
-        assert p.Get(0, 2) > p.Get(0, 1) and math.Abs(p.Sum() - 2.0) < 1e-6
+        assert p.Get(0, 2) > p.Get(0, 1) and (p.Sum() - 2.0).Abs() < 1e-6
     }
 
     # the largest errors of FastExp (relative, where e^x is a normal number), FastTanh and FastSigmoid (absolute) against
@@ -3226,10 +3225,10 @@ if TestBuild {
         worstExp, worstTanh, worstSig := 0.0, 0.0, 0.0
         for i in range n {
             x T = Cast(-100.0 + 200.0 * F64(i) / F64(n - 1), like)
-            want F64 = F64(math.Exp(x))
-            if want > tiny and math.IsFinite(want) { worstExp = math.Max(worstExp, math.Abs(F64(FastExp(x)) - want) / want) }
-            worstTanh = math.Max(worstTanh, math.Abs(F64(FastTanh(x)) - F64(math.Tanh(x))))
-            worstSig = math.Max(worstSig, math.Abs(F64(FastSigmoid(x)) - 1.0 / (1.0 + math.Exp(-F64(x)))))
+            want F64 = F64(x.Exp())
+            if want > tiny and want.IsFinite() { worstExp = worstExp.Max((F64(FastExp(x)) - want).Abs() / want) }
+            worstTanh = worstTanh.Max((F64(FastTanh(x)) - F64(x.Tanh())).Abs())
+            worstSig = worstSig.Max((F64(FastSigmoid(x)) - 1.0 / (1.0 + (-F64(x)).Exp())).Abs())
         }
         return worstExp, worstTanh, worstSig
     }
@@ -3239,14 +3238,14 @@ if TestBuild {
         assert e32 < 3e-7 and t32 < 2e-7 and s32 < 2e-7
         e64, t64, s64 := fastErrors(F64(0), 20001)
         assert e64 < 6e-16 and t64 < 3e-16 and s64 < 3e-16
-        assert math.IsInf(FastExp(F32(89.0))) and FastExp(F32(-88.0)) == 0.0 and math.IsNan(FastExp(F32(math.NaN)))
-        assert math.IsInf(FastExp(710.0)) and FastExp(-709.0) == 0.0 and FastExp(0.0) == 1.0 and FastExp(F32(0.0)) == 1.0
+        assert FastExp(F32(89.0)).IsInf() and FastExp(F32(-88.0)) == 0.0 and FastExp(F32(NaN)).IsNan()
+        assert FastExp(710.0).IsInf() and FastExp(-709.0) == 0.0 and FastExp(0.0) == 1.0 and FastExp(F32(0.0)) == 1.0
         assert FastTanh(F32(50.0)) == 1.0 and FastTanh(-50.0) == -1.0 and FastTanh(0.0) == 0.0
         assert FastSigmoid(F32(-1000.0)) == 0.0 and FastSigmoid(1000.0) == 1.0 and FastSigmoid(0.0) == 0.5
         m := counting(2, 2, -1.0).ToF32()
         e := Matrix<F32>(2, 2)
         try e.Map(m, fn(x) { return FastExp(x) })
-        assert math.Abs(F64(e.Get(1, 1)) - math.Exp(2.0)) < 1e-6 * math.Exp(2.0)
+        assert (F64(e.Get(1, 1)) - 2.0.Exp()).Abs() < 1e-6 * 2.0.Exp()
     }
 
     test "Cast converts as a conversion does, the 8-bit floats included" {
@@ -3260,7 +3259,7 @@ if TestBuild {
         stride I64 = cols + 3
         ms I64 = rows * stride + 5
         gs I64 = members * ms + 7
-        data mut Array<F64>&return = Array<F64>(groups * gs, math.NaN)
+        data mut Array<F64>&return = Array<F64>(groups * gs, NaN)
         b mut Batch<F64>&return = try Batch<F64>(rows, cols, stride, groups, gs, members, ms, data) catch { unreachable }
         for g in range groups {
             for m in range members {
@@ -3282,7 +3281,7 @@ if TestBuild {
             }
         }
         for e in range b.Data.Len() {
-            if not inside[e] and not math.IsNan(b.Data[e]) { return false }
+            if not inside[e] and not b.Data[e].IsNan() { return false }
         }
         return true
     }
@@ -3314,7 +3313,7 @@ if TestBuild {
                 for e in range d.Data.Len() { d.Data[e] = c0.Data[e] }
                 ws := GemmWorkspace<F64>()
                 try ws.GemmBatch(d, a, transA, b, transB, 2.0, 0.5, Triangular.None, 0, 4)
-                for e in range d.Data.Len() { assert d.Data[e] == c.Data[e] or math.IsNan(c.Data[e]) }
+                for e in range d.Data.Len() { assert d.Data[e] == c.Data[e] or c.Data[e].IsNan() }
             }
         }
     }
@@ -3362,7 +3361,7 @@ if TestBuild {
                 q.FillUniform(r, -1.0, 1.0)
                 k.FillUniform(r, -1.0, 1.0)
                 s := Matrix<F64>(2 * 2 * T, T + first)
-                s.Fill(math.NaN)
+                s.Fill(NaN)
                 S := (try s.Stacked(T, 2))
                 Q := (try q.Heads(T, 2))
                 K := (try k.Heads(T + first, 2))
@@ -3373,7 +3372,7 @@ if TestBuild {
                         got := S[g, h]
                         for i in range T {
                             for j in range T + first {
-                                if j <= i + d { assert math.Abs(got.Get(i, j) - 0.5 * want.Get(i, j)) < 1e-12 * F64(T) } else { assert math.IsNan(got.Get(i, j)) }
+                                if j <= i + d { assert (got.Get(i, j) - 0.5 * want.Get(i, j)).Abs() < 1e-12 * F64(T) } else { assert got.Get(i, j).IsNan() }
                             }
                         }
                     }
@@ -3386,7 +3385,7 @@ if TestBuild {
                         got := S[g, h]
                         for i in range T {
                             for j in range T + first {
-                                if j <= i + d { assert math.Abs(got.Get(i, j) - want.Get(i, j)) < 1e-12 * F64(T) } else { assert math.IsNan(got.Get(i, j)) }
+                                if j <= i + d { assert (got.Get(i, j) - want.Get(i, j)).Abs() < 1e-12 * F64(T) } else { assert got.Get(i, j).IsNan() }
                             }
                         }
                     }
@@ -3406,7 +3405,7 @@ if TestBuild {
                     clean := p.Clone()
                     for g in range 3 {
                         aboveDiagonal((try clean.RowRange(g * T, (g + 1) * T)), diag, 0.0)
-                        aboveDiagonal((try p.RowRange(g * T, (g + 1) * T)), diag, math.NaN)      # never read
+                        aboveDiagonal((try p.RowRange(g * T, (g + 1) * T)), diag, NaN)      # never read
                     }
                     v := Matrix<F64>(3 * T, 19)
                     v.FillUniform(r, -1.0, 1.0)
@@ -3467,8 +3466,8 @@ if TestBuild {
                 try ws.Gemm(ps, DY[g, h], false, V[g, h], true)
                 for i in range T {
                     for j in range i + 1 {
-                        assert math.Abs((try s.Stacked(T, heads))[g, h].Get(i, j) - ss.Get(i, j)) < 1e-5
-                        assert math.Abs((try dp.Stacked(T, heads))[g, h].Get(i, j) - ps.Get(i, j)) < 1e-5
+                        assert ((try s.Stacked(T, heads))[g, h].Get(i, j) - ss.Get(i, j)).Abs() < 1e-5
+                        assert ((try dp.Stacked(T, heads))[g, h].Get(i, j) - ps.Get(i, j)).Abs() < 1e-5
                     }
                 }
                 for which in range 4 {
@@ -3523,21 +3522,21 @@ if TestBuild {
         for i in range 20001 {
             x F64 = -10.0 + 20.0 * F64(i) / 20000.0
             u F64 = 0.7978845608028654 * (x + 0.044715 * x * x * x)
-            tanhForm F64 = 0.5 * x * (1.0 + math.Tanh(u))
-            exact F64 = 0.5 * x * (1.0 + math.Erf(x / math.Sqrt2))
-            worstTanhForm = math.Max(worstTanhForm, math.Abs(Activate(x, Activation.Gelu) - tanhForm))
-            worstTanhForm32 = math.Max(worstTanhForm32, math.Abs(F64(Activate(F32(x), Activation.Gelu)) - tanhForm))
-            worstExact = math.Max(worstExact, math.Abs(tanhForm - exact))
+            tanhForm F64 = 0.5 * x * (1.0 + u.Tanh())
+            exact F64 = 0.5 * x * (1.0 + (x / F64(2).Sqrt()).Erf())
+            worstTanhForm = worstTanhForm.Max((Activate(x, Activation.Gelu) - tanhForm).Abs())
+            worstTanhForm32 = worstTanhForm32.Max((F64(Activate(F32(x), Activation.Gelu)) - tanhForm).Abs())
+            worstExact = worstExact.Max((tanhForm - exact).Abs())
             # the slope, against a central difference of the activation itself
             h F64 = 1e-5
             for act in Activation[Activation.Gelu, Activation.Tanh, Activation.Sigmoid] {
                 diff F64 = (Activate(x + h, act) - Activate(x - h, act)) / (2.0 * h)
-                worstSlope = math.Max(worstSlope, math.Abs(ActivationSlope(x, act) - diff))
+                worstSlope = worstSlope.Max((ActivationSlope(x, act) - diff).Abs())
             }
         }
         assert worstTanhForm < 4e-16 and worstTanhForm32 < 1e-6 and worstExact < 5e-4 and worstSlope < 1e-8
         assert Activate(-2.0, Activation.Relu) == 0.0 and Activate(3.0, Activation.Relu) == 3.0
-        assert math.IsNan(Activate(math.NaN, Activation.Relu))
+        assert Activate(NaN, Activation.Relu).IsNan()
         assert ActivationSlope(0.0, Activation.Relu) == 0.0 and ActivationSlope(0.5, Activation.Relu) == 1.0
         assert (try Activate(I32(-3), Activation.Relu)) == 0 and Activate(F16(-1.5), Activation.Relu) == 0.0
         z := counting(3, 4, -6.0)
@@ -3558,7 +3557,7 @@ if TestBuild {
         for i in range 2001 {
             x F64 = -10.0 + 20.0 * F64(i) / 2000.0
             for act in Activation[Activation.Identity, Activation.Relu, Activation.Gelu, Activation.Tanh, Activation.Sigmoid] {
-                worst = math.Max(worst, math.Abs(F64(ActivationSlope(F32(x), act)) - ActivationSlope(x, act)))
+                worst = worst.Max((F64(ActivationSlope(F32(x), act)) - ActivationSlope(x, act)).Abs())
             }
         }
         assert worst < 1e-4
@@ -3720,7 +3719,7 @@ if TestBuild {
         s := Matrix<F64>(4, 4)
         try GemmBatch(s.Stacked(4), q.Heads(4, 1), false, k.Heads(4, 1), true, 1, 0, Triangular.Result) catch { unreachable }
         p := Full(4, 4, one)
-        aboveDiagonal(p, 0, math.NaN)
+        aboveDiagonal(p, 0, NaN)
         v := counting(4, 4, -one)
         y := Matrix<F64>(4, 4)
         try GemmBatch(y.Stacked(4), p.Stacked(4), false, v.Stacked(4), false, 1, 0, Triangular.Left) catch { unreachable }
