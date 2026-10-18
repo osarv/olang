@@ -104,6 +104,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
     eqAt source.Span = source.Span(-1, -1)    # where the "==" being elaborated is written (M6b's error)
+    compoundAt source.Span = source.Span(-1, -1)  # a compound assignment's operator, while its target is read (E31)
     opIn source.Span = source.Span(-1, -1)    # where "in" is written, for the Has or Contains being built (E29)
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
     textT types.TypeId = types.TypeId(-1)
@@ -1616,7 +1617,7 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
         case typed.Place.Deref(_, _, ref) {
             rt := typeOf(ref)
             if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
-                c.err(sp, msgs.ReadOnlyRefWrite())
+                c.err(sp, msgs.CaptureReadOnly() if c.capturedValue(ref) else msgs.ReadOnlyRefWrite())
             } else if c.isRef(rt) and c.roRoot(readPlace(ref)) >= 0 {
                 # T25c: a read-only copy writes nothing through the writable references it shares
                 rec := c.err(sp, msgs.ReadOnlyCopyWrite())
@@ -1665,6 +1666,26 @@ fn (c mut Checker&) placeWritable(p typed.Place&) Bool {
         case typed.Place.Payload(_, _, pl) => c.placeWritable(pl.Base)
         case _ => false
     }
+}
+
+# whether a reference is a lambda's borrow of a captured array value (T7b, D16c) - read-only as every capture is
+fn (c mut Checker&) capturedValue(ref typed.Expr&) Bool {
+    p := readPlace(ref)
+    if p == null { return false }
+    match p {
+        case typed.Place.Local(_, _, id) {
+            if c.cur().Local(id).Kind != typed.LocalKind.Capture { return false }
+            for k in c.fr().captures {
+                if k.Inner != id { continue }
+                return match k.Outer {
+                    case typed.Expr.Borrow(_, _, _) => true
+                    case _ => false
+                }
+            }
+        }
+        nomatch { }
+    }
+    return false
 }
 
 fn writtenMut(t ast.TypeRef&) Bool {
@@ -1797,7 +1818,7 @@ fn (c mut Checker&) noIndex(sp source.Span, t types.TypeId, written types.TypeId
     bsp := c.bracketIn(sp)
     if c.notOperator(t, "At", bsp, "'x[i]'", 1, true) { return }
     if c.roleMethod(t, "SetAt", n + 1) >= 0 {
-        c.err(bsp, msgs.AtUndeclared(c.ty(written)))
+        c.err(c.compoundAt if c.compoundAt.Start >= 0 else bsp, msgs.AtUndeclared(c.ty(written)))
         return
     }
     c.err(bsp, msgs.NotIndexable(c.ty(t)))
@@ -2686,6 +2707,11 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             c.exprs.Push(src)
             return typed.Expr.Prim(sp, want, typed.PrimOp.Convert, typed.Check.Abort, gather(c.exprs, from))
         }
+    }
+    # T7d: two fixed arrays of one element type and two lengths
+    if hk == types.Kind.Array and wk == types.Kind.Array and c.P.T.Same(c.P.T.Elem(have), c.P.T.Elem(want)) and c.P.T.KindOf(c.P.T.Length(have)) == types.Kind.Const and c.P.T.KindOf(c.P.T.Length(want)) == types.Kind.Const {
+        c.err(sp, msgs.ArraySizeMismatch(c.ty(have), c.ty(want)))
+        return x
     }
     c.err(sp, msgs.TypeMismatch(c.ty(want), c.ty(have)))
     return x
@@ -4917,6 +4943,18 @@ fn nameDistance(a String&, b String&) I64 {
 }
 
 # a written type's instances checked where it is written: each at its first argument (G19)
+# whether a type may be held by reference (T24): a struct, an enum, an array, a type over an array, a type variable
+fn (c mut Checker&) referable(t types.TypeId) Bool {
+    k := c.P.T.KindOf(t)
+    if k == types.Kind.Named {
+        if not c.P.Body(t) { return true }
+        dk := c.declKind(t)
+        if dk == types.DeclKind.Over { return c.referable(c.P.T.Base(t)) }
+        return true
+    }
+    return not (c.P.T.IsNumber(t) or t == types.BoolT)
+}
+
 # whether a type is an array of a run-time length held by value - which inside an array or a struct is held by
 # reference instead (T7a)
 fn (c mut Checker&) runArrayValue(t types.TypeId) Bool {
@@ -4957,7 +4995,16 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
             }
             return c.instancesMet(rt, args[0].Span())
         }
-        case ast.TypeRef.Ref(_, of, _) { return c.writtenMet(of) }
+        case ast.TypeRef.Ref(_, of, _) {
+            if not c.writtenMet(of) { return false }
+            # T24: only a struct, an enum or an array is held by reference
+            rt := c.P.Resolve(c.fr().Ctx, of)
+            if not c.referable(rt) {
+                c.err(source.Span(of.Span().End, of.Span().End + 1), msgs.InvalidReferenceTarget(c.ty(rt)))
+                return false
+            }
+            return true
+        }
         case ast.TypeRef.Perm(_, of, _, _) { return c.writtenMet(of) }
         case ast.TypeRef.Func(_, s) {
             for prm in s.Params {
@@ -5542,6 +5589,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
 fn (c mut Checker&) operandAt(x ast.Expr&) source.Span {
     match x {
         case ast.Expr.Member(msp, _, n) { return memberSpan(msp, c.text(n).Len()) }
+        case ast.Expr.Index(_, y, _) { return c.bracketOf(y) }
         nomatch { return c.argSpan(x) }
     }
 }
@@ -6927,7 +6975,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
                     same := c.P.T.Same(pt, parts[i]) or
                             (c.isRef(pt) and c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), c.deref(parts[i])))
                     if places[i] != null and not same {
-                        c.err(targets[i].Span(), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i].Type())))
+                        c.err(c.operandAt(targets[i]), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i].Type())))
                     }
                 }
             }
@@ -7200,7 +7248,7 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
         return
     }
     if m.Values.Len() != n {
-        c.err(sp, msgs.AssignListCount(n, m.Values.Len()))
+        c.err(c.opAfter(m.Targets[n - 1].Span(), 2 if m.Define else 1), msgs.AssignListCount(n, m.Values.Len()))
         for x in m.Values { c.expr(x, types.UnknownT) }
         return
     }
@@ -7293,10 +7341,30 @@ fn compoundOp(op token.Tok) token.Tok {
 # Place.Target
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
     if c.assignAt(sp, op, target, value) { return }
+    osp0 := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)
+    ca := c.compoundAt
+    if op != token.Tok.Assign { c.compoundAt = osp0 }
     p := c.place(target)
+    c.compoundAt = ca
     if p == null {
         c.expr(value, types.UnknownT)
         return
+    }
+    match p {
+        case typed.Place.Temp(_, _, tv, _) {
+            match tv {
+                case typed.Expr.Prim(_, _, pop, _, _) {
+                    # S4: a conversion is no place - what it converts is
+                    if pop == typed.PrimOp.Convert {
+                        c.err(c.argSpan(target), msgs.NotAssignable())
+                        c.expr(value, types.UnknownT)
+                        return
+                    }
+                }
+                nomatch { }
+            }
+        }
+        nomatch { }
     }
     osp := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)
     if c.writeBack(sp, op, p, value, osp) { return }

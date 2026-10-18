@@ -1862,7 +1862,7 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
     if pk != ak { return false }
     match pk {
         case types.Kind.Named {
-            return p.T.DeclOf(pat) == p.T.DeclOf(actual) and p.unifyLists(p.T.Args(pat), p.T.Args(actual), b)
+            return p.T.DeclOf(pat) == p.T.DeclOf(actual) and p.unifyLists(p.T.Args(pat), p.T.Args(actual), b, receiver)
         }
         case types.Kind.Array {
             if not p.Unify(p.T.Elem(pat), p.T.Elem(actual), b, false, receiver) { return false }
@@ -1882,12 +1882,12 @@ fn (p mut Program&) Unify(pat types.TypeId, actual types.TypeId, b mut Binding&,
     }
 }
 
-fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&) Bool {
+fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&, receiver Bool = false) Bool {
     xs := p.T.Items(a)
     ys := p.T.Items(c)
     if xs.Len() != ys.Len() { return false }
     for i in range xs.Len() {
-        if not p.Unify(xs[i], ys[i], b, false, false) { return false }
+        if not p.Unify(xs[i], ys[i], b, false, receiver) { return false }
     }
     return true
 }
