@@ -36,6 +36,7 @@ fn run(args Array<String&>&) {
         unreachable
     }
     if not os.Exists(dump) { stop(out, "scopediff: " $dump " is not built (make " $dump ")") }
+    exe := $dump if dump.StartsWith("/") else $root "/" $dump
     golden := try os.ReadFile("compiler/goldens/diag.txt") catch os.OsError {
         stop(out, "scopediff: no goldens")
         unreachable
@@ -60,7 +61,7 @@ fn run(args Array<String&>&) {
         if want != "" and scopeRow(want) { mineCases.Push(c) }
     }
     said := StringBuilder()
-    runAll(said, $root "/" $dump, $root "/checks/cases", mineCases, root)
+    runAll(said, exe, $root "/checks/cases", mineCases, root)
     saidText := said.ToString()
     got := rows(saidText)
     texts := caseTexts(saidText)
@@ -96,7 +97,7 @@ fn run(args Array<String&>&) {
 
     # ---- 2. the programs stage 0 accepts ----
     said2 := StringBuilder()
-    runAll(said2, $root "/" $dump, $root "/checks/cases", oks, root)
+    runAll(said2, exe, $root "/checks/cases", oks, root)
     tests List<String&>
     for dir in String&["tests", "std", "compiler", "fuzz", "bench"] {
         fs := try os.ReadDir(dir) catch os.OsError { continue }
@@ -105,7 +106,7 @@ fn run(args Array<String&>&) {
         }
     }
     tests.Push("checks/checks.olang")
-    for f in tests { said2.Push(check($root "/" $dump, root, String&["-t", f], root)) }
+    for f in tests { said2.Push(check(exe, root, String&["-t", f], root)) }
     clean := rows(said2.ToString())
     n I64 = 0
     ok I64 = 0
@@ -320,6 +321,17 @@ fn check(dump String&, dir String&, files Array<String&>&, root String&) String&
     args.Push("OLANG_STD=" $root "/std")
     args.Push(dump)
     for f in files { args.Push(f) }
-    o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError { return "" }
-    return $o.Stdout $o.Stderr
+    o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError {
+        io.PrintErrln("scopediff: cannot run " $dump)!
+        os.Exit(1)
+    }
+    if o.Status == 0 { return $o.Stdout $o.Stderr }
+    # a run that ended badly leaves its files unjudged: each counts as refused by the scope pass, never as clean
+    b := StringBuilder()
+    b.Push($o.Stdout)
+    for f in files {
+        if f.StartsWith("-") { continue }
+        b.Push("== " $f "\n" $f ":0:0: error[O0]: the scope pass ended with status " $o.Status "\n")
+    }
+    return b.ToString()
 }
