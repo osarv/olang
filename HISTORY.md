@@ -19768,3 +19768,19 @@ after; `String` has it (T29e), its pieces `Array<Char>&` (the result is not the 
 `std/prelude/tests/array.olang`: shapes, writes through a piece, refused sizes, and four tasks each writing their piece
 of an array read back after the join and an arena churn - baked while compiling (K1 runs the join's tasks in sequence)
 as at run time, and clean under `-race` and `-sanitize`.
+
+## The formal model of section 8 (docs/scope-model.md, 2026-10-18)
+
+Written before the port's scope pass (M6), as the user asked on 2026-10-17 ("section 8's soundness is the project's main
+risk"). The model separates run-time scope terms (blocks, scope variables, the program - the only ones built into) from
+static-only terms (derived scopes, "not known here", untraced - read through, never built into), which is what O12,
+O23a, C2d and E11c's build restrictions have in common; one outlives order with obligations; two type predicates (refs,
+st); one fit rule (exact where something can be stored through, else outlives). Every O-rule is marked kept, runtime,
+subsumed (O2d, O5, O13b, O18, O19, O22, O25d, O25f), revised (O8c) or retired (O30-O42). Decided by its author: the
+program scope outlives every term (O10a to say so); derived scopes join the obligations' closure; no summary is read
+before its strongly connected component has converged (the root of tonight2 #2 and str4 C1); M6 implements LEND as SPEC
+states it, a two-scope-variable alternative measured after. Found: a hole in docs/memory.md 2.4 as first written - one
+region term for all of a place's values would let `b.next = a`, both read from one map, survive `m.Remove(1)` freeing
+`a`; fixed by a region term per read and no region term outliving another or itself (a collection whose values refer
+to each other is then never freed early). Stale SPEC text listed for round 3 (O11's index clause, O17b's try-default,
+S13b vs O4b, the section 8.8 leftovers).
