@@ -1665,7 +1665,7 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
         }
         case typed.Place.Global(_, _, mi, n) {
             v := c.P.GlobalDecl(mi, n)
-            if v != null and not writtenMut(v.Ty) { c.err(sp, msgs.Immutable(c.tok(n))) }
+            if v != null and not writtenMut(v.Ty) { c.err(sp, msgs.Immutable(c.text(n))) }
         }
         case typed.Place.Deref(_, _, ref) {
             rt := typeOf(ref)
@@ -2025,8 +2025,29 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                 b.PushChar(' ')
                 c.spell(b, c.P.T.Result(t), false)
             }
+            es := c.P.T.Items(c.P.T.Errors(t))
+            if es.Len() > 0 {
+                b.Push(" ?")
+                for i in range es.Len() {
+                    if es[i] == types.DefaultErrT { continue }
+                    b.Push(" " if i == 0 else " + ")
+                    c.spell(b, es[i], false)
+                }
+            }
         }
         case types.Kind.Tuple { c.spellList(b, c.P.T.Parts(t), "(", ")") }
+        case types.Kind.AnonEnum {
+            # "enum { A(I32) B }", as an anonymous enum is written (T27)
+            b.Push("enum {")
+            ns := c.P.T.ShapeNames(t)
+            cs := c.P.T.Items(c.P.T.ShapeCases(t))
+            for i in range ns.Len() {
+                b.PushChar(' ')
+                b.Push(c.text(ns[i]))
+                if i < cs.Len() and cs[i] != types.TypeId(0) and c.P.T.Items(c.P.T.Parts(cs[i])).Len() > 0 { c.spellList(b, c.P.T.Parts(cs[i]), "(", ")") }
+            }
+            b.Push(" }")
+        }
         case types.Kind.Const { b.Push($c.P.T.ConstValue(t)) }
         case types.Kind.Var { b.Push(c.text(c.P.VarAt(c.P.T.A(t), c.P.T.B(t)).Name)) }
         nomatch { b.Push(c.P.T.Canon(t)) }
@@ -5001,6 +5022,25 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
     return best
 }
 
+# T17: an enum with no case of this name - the nearest one suggested
+fn (c mut Checker&) noCase(t types.TypeId, n source.NameId) msgs.Msg {
+    name := c.text(n)
+    cn := c.P.T.CaseNames(t)
+    best := ""
+    bestD := 2 if name.Len() <= 4 else 3
+    if cn != null {
+        for x in cn {
+            d := nameDistance(name, c.text(x))
+            if d < bestD {
+                bestD = d
+                best = c.text(x)
+            }
+        }
+    }
+    if best.Len() > 0 { return msgs.NoSuchCaseMeant(c.ty(t), c.tok(n), best) }
+    return msgs.NoSuchCase(c.ty(t), c.tok(n))
+}
+
 # case-insensitive edit distance
 fn nameDistance(a String&, b String&) I64 {
     if a.Len() > 40 or b.Len() > 40 { return 99 }
@@ -5909,7 +5949,8 @@ fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want 
     fd := c.P.FnDecl(f)
     i := k - 1 if hasRecv or fd.Recv != null else k
     if fd.S.Params == null or i < 0 or i >= fd.S.Params.Len() or fd.S.Params[i].Dflt == null {
-        c.err(sp, msgs.ArgCount(k, "" if k == 1 else "s", k - 1))
+        np := fd.S.Params.Len() if fd.S.Params != null else 0
+        c.err(sp, msgs.ArgCount(np, "" if np == 1 else "s", i))
         return c.unknown(sp)
     }
     mi := c.P.FnModule(f)
@@ -6259,7 +6300,7 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
         }
     }
     if tag < 0 {
-        c.err(nsp, msgs.NoSuchCase(c.ty(t), c.tok(n)))
+        c.err(nsp, c.noCase(t, n))
         return c.unknown(sp)
     }
     sig := c.P.CaseSig(t, tag)
@@ -9381,7 +9422,7 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId,
                     case ast.Expr.Member(_, prefix, n) {
                         pt := c.typeNamed(prefix)
                         if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
-                            c.err(memberSpan(sp, c.text(n).Len()), msgs.NoSuchCase(c.ty(et), c.tok(n)))
+                            c.err(memberSpan(sp, c.text(n).Len()), c.noCase(et, n))
                             return c.lit(sp, types.BoolT, 0)
                         }
                         if pt >= types.TypeId(0) and c.isEnum(pt) and not (c.isEnum(et) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et)) {
@@ -9403,7 +9444,7 @@ fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId,
                     case ast.Expr.Member(msp, prefix, n) {
                         pt := c.typeNamed(prefix)
                         if c.isEnum(et) and pt >= types.TypeId(0) and c.P.T.DeclOf(pt) == c.P.T.DeclOf(et) {
-                            c.err(memberSpan(msp, c.text(n).Len()), msgs.NoSuchCase(c.ty(et), c.tok(n)))
+                            c.err(memberSpan(msp, c.text(n).Len()), c.noCase(et, n))
                             return c.lit(sp, types.BoolT, 0)
                         }
                     }
