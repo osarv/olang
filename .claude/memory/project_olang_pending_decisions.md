@@ -364,6 +364,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAG GENERATORS REVISED 2026-10-18 (the user: "settle on fn evens (n I64) Iterator<T> ... the compiler knows this is a
+  generator because of the return type and the yields and the user doesn't need to know"): no `generator` keyword and no
+  `yields` marker - a `fn` whose result is `Iterator<T>` and whose body yields is a generator; `Iterator<T>` there is the
+  hidden type. Details mine: its `? E` is Next's errors; a trait as a result type is allowed only for such a generator
+  (general `impl Trait` results not now). OPERATORS also reverted the same day to today's E31 methods (the user: "Let's
+  take operators back to where we started"). Below is the superseded record.
 - QAG DECIDED 2026-10-18 (the user, on ideas.md #1 and operators: "maybe we want a new keyword ... generator? ... and
   maybe we want operator for operators?", clarified: the keyword replaces `fn`; "Record it yes"): a declaration's first
   word says its kind - `fn`, `generator`, `operator`. GENERATORS (ideas #1): `generator evens(n I64) I64 { ... yield i
