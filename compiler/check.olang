@@ -132,6 +132,17 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roDeps List<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
     roArgs List<roArg>
     roFns List<roFn>
+    # ...and through a generic instance's read-only reference parameters (roByArg): every value given a local of an
+    # instance's body, by (body, local); the parameters a by-value result is copied out of, by (body, parameter)
+    # (roToResult); the by-value results and the values kept writable in instance bodies, by body, settled at the
+    # body's end and once every body is checked; the arguments whose parameters decide in turn; the read-only
+    # references passed to such a parameter, an error where it needs a writable one
+    roVals Map<pair.Pair<I64, I64>, List<typed.Expr&>>
+    roToResult Map<pair.Pair<I64, I64>, Bool>
+    roResults List<pair.Pair<I64, typed.Expr&>>
+    roDeepNeeds List<pair.Pair<I64, typed.Expr&>>
+    roDeepArgs List<roDeepArg>
+    roRefArgs List<roArg>
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     unfillable Map<I64, Bool>                       # the generic functions G4 says no call can instantiate
@@ -151,6 +162,15 @@ type roArg struct(Body I64, Param I64, At diag.Where, Callee String&, Ty String&
     Callee
     Ty
     Fix
+}
+
+# an argument of a body (T25c) whose read-only-ness rests on the caller's own generic read-only reference parameters:
+# the caller's body and the value, the callee's body and its parameter
+type roDeepArg struct(Body I64, X typed.Expr&, Callee I64, Param I64) {
+    Body
+    X
+    Callee
+    Param
 }
 
 # a body made a function value (T25c): what it is called in a diagnostic, and its parameters from First on
@@ -225,6 +245,12 @@ fn (c mut Checker&) reset() {
     c.roDeps = List<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roArgs = List<roArg>()
     c.roFns = List<roFn>()
+    c.roVals = Map<pair.Pair<I64, I64>, List<typed.Expr&>>()
+    c.roToResult = Map<pair.Pair<I64, I64>, Bool>()
+    c.roResults = List<pair.Pair<I64, typed.Expr&>>()
+    c.roDeepNeeds = List<pair.Pair<I64, typed.Expr&>>()
+    c.roDeepArgs = List<roDeepArg>()
+    c.roRefArgs = List<roArg>()
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
     c.unfillable = Map<I64, Bool>()
@@ -1153,6 +1179,7 @@ fn (c mut Checker&) check(id I64) {
         nomatch { }
     }
     c.state[id] = 2
+    if c.instanceBody(id) { c.roSettleResults(id) }   # T25c: what its calls' results copy, before a caller asks
 }
 
 fn (c mut Checker&) checkFn(id I64, inst I64) {
@@ -2460,9 +2487,13 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         if c.P.T.Same(r, have) {
             p := readPlace(x)
             if p != null {
-                if (c.P.T.PermOf(want) & types.Writable) != 0 { c.mustWrite(p, sp, false) }
+                if (c.P.T.PermOf(want) & types.Writable) != 0 {
+                    c.mustWrite(p, sp, false)
+                    c.roDeepNeed(x)
+                }
                 return typed.Expr.Borrow(sp, want, p)
             }
+            if (c.P.T.PermOf(want) & types.Writable) != 0 { c.roLend(x, sp) }
             return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp)))
         }
         if c.flowsInto(have, r) or (c.isNumber(have) and c.isNumber(r) and c.P.Flows(have, r)) {
@@ -3921,6 +3952,16 @@ fn (c mut Checker&) holdsWritableAt(t types.TypeId, depth I64) Bool {
     }
 }
 
+# whether what a reference names holds writable references it shares with a copy: an array's elements, any other
+# value as itself
+fn (c mut Checker&) namedHolds(t types.TypeId) Bool {
+    for k in range 8 {
+        if c.P.T.KindOf(t) != types.Kind.Array { break }
+        t = c.P.T.Elem(t)
+    }
+    return c.holdsWritable(t)
+}
+
 fn (c mut Checker&) listHoldsWritable(l types.ListId, depth I64) Bool {
     for x in c.P.T.Items(l) {
         if x != types.TypeId(0) and c.holdsWritableAt(x, depth + 1) { return true }
@@ -3962,7 +4003,8 @@ fn (c mut Checker&) roRef(x typed.Expr&) Bool {
         case typed.Expr.Read(_, _, p, _) => c.roRead(p)
         case typed.Expr.Borrow(_, _, p) => c.roPlace(p)
         case typed.Expr.Slice(_, _, sl) => c.roPlace(sl.Base)
-        case typed.Expr.Call(_, _, _), typed.Expr.Promote(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Lit(_, _, _) => false
+        case typed.Expr.Call(_, _, cl) => c.roCallRef(cl)
+        case typed.Expr.Promote(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Lit(_, _, _) => false
         case _ => true
     }
 }
@@ -4039,6 +4081,8 @@ fn (c mut Checker&) roCopied(x typed.Expr&) Bool {
         case typed.Expr.Cond(_, _, k) => c.roCopied(k.A) or c.roCopied(k.B)
         case typed.Expr.Seq(_, _, q) => q.X != null and c.roCopied(q.X)
         case typed.Expr.Match(_, _, m) => c.roMatch(m)
+        case typed.Expr.Try(_, _, t) => t.X != null and c.roCopied(t.X)
+        case typed.Expr.Call(_, _, cl) => c.roCallCopy(cl)
         case _ => false
     }
 }
@@ -4099,6 +4143,7 @@ fn (c mut Checker&) noteRo(rec I64, p typed.Place&) {
 fn (c mut Checker&) roStore(x typed.Expr&, sp source.Span, kind I64) Bool {
     if not c.roValue(x) {
         if x != null and not c.isRef(typeOf(x)) { c.roNeed(readPlace(x)) }
+        if kind == RoReturned { c.roResult(x) } else { c.roDeepNeed(x) }
         return false
     }
     t := typeOf(x)
@@ -4138,18 +4183,41 @@ fn (c mut Checker&) roNeed(p typed.Place&) {
 # an argument for a by-value parameter of a body: a read-only copy is judged once the body's need is known; a
 # parameter of this body passed on needs what the other needs
 fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr&, sp source.Span, callee String&) {
-    if body < 0 or e == null or c.isRef(typeOf(e)) or not c.holdsWritable(typeOf(e)) { return }
+    if body < 0 or e == null { return }
+    me := c.fr().Body
+    if c.isRef(typeOf(e)) {
+        # an instance's read-only reference parameter (roByArg): a read-only argument is judged once its need is known
+        if not c.roByArg(body, k) { return }
+        r := c.P.T.Referent(c.P.T.Items(c.P.T.Params(c.Bodies[body].Ty))[k])
+        if not c.namedHolds(r) { return }
+        if c.roRef(e) {
+            c.roRefArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(r), ""))
+            return
+        }
+        match e {
+            case typed.Expr.Borrow(_, _, p) {
+                j := c.paramOf(p)
+                if j >= 0 { c.roDeps.Push(pair.Pair(pair.Pair(me, j), pair.Pair(body, k))) }
+            }
+            nomatch { }
+        }
+        if c.instanceBody(me) { c.roDeepArgs.Push(roDeepArg(me, e, body, k)) }
+        return
+    }
+    if not c.holdsWritable(typeOf(e)) { return }
     if c.roValue(e) {
         c.roArgs.Push(roArg(body, k, c.at(sp), callee, c.ty(typeOf(e)), c.roFix(c.roName(e), typeOf(e))))
         return
     }
     j := c.paramOf(readPlace(e))
-    if j >= 0 { c.roDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k))) }
+    if j >= 0 { c.roDeps.Push(pair.Pair(pair.Pair(me, j), pair.Pair(body, k))) }
+    if c.instanceBody(me) { c.roDeepArgs.Push(roDeepArg(me, e, body, k)) }
 }
 
 # what each by-value parameter needs settled over every call, then the read-only copies passed to one that needs a
 # writable argument, and the function values with such a parameter, said
 fn (c mut Checker&) roSettle() {
+    c.roSettleDeep()
     for round in range c.roDeps.Len() + 1 {
         changed := false
         for d in c.roDeps {
@@ -4168,6 +4236,14 @@ fn (c mut Checker&) roSettle() {
         rec := c.P.L.Diags.Error(a.At, msgs.ReadOnlyCopyArg(a.Callee, c.text(l.Name), a.Ty, a.Fix))
         c.P.L.Diags.Note(rec, diag.Where.Span(b.File, I64(l.Sp.Start), I64(l.Sp.End)), msgs.NoteDeclaredHere(c.tok(l.Name)))
     }
+    for a in c.roRefArgs {
+        if not c.roNeeds.Has(pair.Pair(a.Body, a.Param)) { continue }
+        b := c.Bodies[a.Body]
+        if a.Param >= b.Params.Len() { continue }
+        l := b.Local(b.Params[a.Param])
+        rec := c.P.L.Diags.Error(a.At, msgs.ReadOnlyRefKept(a.Callee, c.text(l.Name), a.Ty))
+        c.P.L.Diags.Note(rec, diag.Where.Span(b.File, I64(l.Sp.Start), I64(l.Sp.End)), msgs.NoteDeclaredHere(c.tok(l.Name)))
+    }
     for f in c.roFns {
         b := c.Bodies[f.Body]
         for k in range f.First, b.Params.Len() {
@@ -4177,6 +4253,240 @@ fn (c mut Checker&) roSettle() {
             c.P.L.Diags.Error(f.At, msgs.ReadOnlyFuncValue(f.What, c.text(l.Name), fix))
             break
         }
+    }
+}
+
+# ---- read-only copies through a generic's read-only reference parameters (T25c: roByArg, roToResult) ----
+
+# whether a body is a generic instance's: its read-only reference parameters are as read-only as each call's argument
+fn (c mut Checker&) instanceBody(id I64) Bool {
+    if id < 0 or id >= c.Bodies.Len() { return false }
+    return match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(inst) => c.P.T.Items(c.P.InstanceArgs(inst)).Len() > 0
+        case _ => false
+    }
+}
+
+# whether parameter k of body id is such a parameter (roByArg): a read-only reference, no function value, in an instance
+fn (c mut Checker&) roByArg(id I64, k I64) Bool {
+    if not c.instanceBody(id) { return false }
+    ps := c.P.T.Items(c.P.T.Params(c.Bodies[id].Ty))
+    if k < 0 or k >= ps.Len() or not c.isRef(ps[k]) { return false }
+    return (c.P.T.PermOf(ps[k]) & types.Writable) == 0 and c.P.T.KindOf(c.P.T.Referent(ps[k])) != types.Kind.Func
+}
+
+# whether a call of body id gives a by-value result as read-only as its argument k: one its body copies out of that
+# parameter, or - its body not checked yet (a cycle) - any such parameter
+fn (c mut Checker&) roFollows(id I64, k I64) Bool {
+    if c.roToResult.Has(pair.Pair(id, k)) { return true }
+    return c.roByArg(id, k) and c.state[id] != 2
+}
+
+# a read-only reference a call gives: borrowed from an instance's read-only reference parameter, as read-only as that
+# argument; any other is fresh or as its own type says
+fn (c mut Checker&) roCallRef(cl typed.Call&) Bool {
+    k := c.roBorrowedFrom(cl)
+    return k >= 0 and k < cl.Args.Len() and c.roRef(cl.Args[k])
+}
+
+# a call's by-value result copied out of what a read-only argument reaches (roToResult)
+fn (c mut Checker&) roCallCopy(cl typed.Call&) Bool {
+    id := c.bodyOfCallee(cl.Target)
+    if id < 0 { return false }
+    for k in range cl.Args.Len() {
+        a := cl.Args[k]
+        if a != null and c.isRef(typeOf(a)) and c.roFollows(id, k) and c.roRef(a) { return true }
+    }
+    return false
+}
+
+# the parameter of a call's body a reference result is borrowed from: an instance's read-only reference parameter
+# whose scope the result's is, -1 for none
+fn (c mut Checker&) roBorrowedFrom(cl typed.Call&) I64 {
+    id := c.bodyOfCallee(cl.Target)
+    if id < 0 or not c.instanceBody(id) { return -1 }
+    sig := c.Bodies[id].Ty
+    e := c.P.T.ResultFrom(sig, 0)
+    if e < 0 { return -1 }
+    for k in range cl.Args.Len() {
+        j := c.P.T.ShareOf(sig, k)
+        if (k == e or j == e) and c.roByArg(id, k) { return k }
+    }
+    return -1
+}
+
+# a value an instance's body copies is checked before a caller asks for it: a call of an instance with such a
+# parameter, whose result can hold writable references
+fn (c mut Checker&) roCheckCallee(target typed.Callee&, r types.TypeId) {
+    id := c.bodyOfCallee(target)
+    if id < 0 or c.state[id] != 0 or not c.instanceBody(id) { return }
+    if not c.isRef(r) and not c.holdsWritable(r) { return }
+    ps := c.P.T.Items(c.P.T.Params(c.Bodies[id].Ty))
+    for k in range ps.Len() {
+        if c.roByArg(id, k) {
+            c.checkNow(id)
+            return
+        }
+    }
+}
+
+# a value given a local of an instance's body - its initializer, an assignment - kept for the walk below
+fn (c mut Checker&) roKeep(s typed.Stmt&) {
+    b := c.fr().Body
+    if not c.instanceBody(b) { return }
+    match s {
+        case typed.Stmt.Let(_, id, x) { c.roKeepVal(b, I64(id), x) }
+        case typed.Stmt.Assign(_, t, x) {
+            match t {
+                case typed.Place.Local(_, _, id) { c.roKeepVal(b, I64(id), x) }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+}
+
+fn (c mut Checker&) roKeepVal(b I64, id I64, x typed.Expr&) {
+    if x == null { return }
+    key := pair.Pair(b, id)
+    if not c.roVals.Has(key) { c.roVals.Put(key, List<typed.Expr&>()) }
+    l := try c.roVals.Get(key) catch { return }
+    l.Push(x)
+}
+
+# the read-only reference parameters of body b (roByArg) a value is copied out of, through any number of references
+# and of locals (by every value given them), and through calls handing back what such a parameter reaches - a by-value
+# result copied out of it (roToResult), a reference borrowed from it: their indices added to out
+fn (c mut Checker&) roDeep(b I64, x typed.Expr&, out mut List<I64>&) {
+    seen := Map<I64, Bool>()
+    c.roDeepIn(b, x, out, seen, 0)
+}
+
+fn (c mut Checker&) roDeepIn(b I64, x typed.Expr&, out mut List<I64>&, seen mut Map<I64, Bool>&, depth I64) {
+    if x == null or depth > 48 { return }
+    match x {
+        case typed.Expr.Read(_, _, p, _) { c.roDeepPlace(b, p, out, seen, depth + 1) }
+        case typed.Expr.Borrow(_, _, p) { c.roDeepPlace(b, p, out, seen, depth + 1) }
+        case typed.Expr.Slice(_, _, sl) { c.roDeepPlace(b, sl.Base, out, seen, depth + 1) }
+        case typed.Expr.Promote(_, _, pr) { c.roDeepIn(b, pr.X, out, seen, depth + 1) }
+        case typed.Expr.Cond(_, _, k) {
+            c.roDeepIn(b, k.A, out, seen, depth + 1)
+            c.roDeepIn(b, k.B, out, seen, depth + 1)
+        }
+        case typed.Expr.Seq(_, _, q) { c.roDeepIn(b, q.X, out, seen, depth + 1) }
+        case typed.Expr.Try(_, _, t) { c.roDeepIn(b, t.X, out, seen, depth + 1) }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms { c.roDeepIn(b, a.Value, out, seen, depth + 1) }
+            if m.NoMatch != null { c.roDeepIn(b, m.NoMatch.Value, out, seen, depth + 1) }
+        }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() > 0 { c.roDeepIn(b, args[0], out, seen, depth + 1) }
+        }
+        case typed.Expr.Call(_, ty, cl) {
+            id := c.bodyOfCallee(cl.Target)
+            if id < 0 { return }
+            if c.isRef(ty) {
+                sig := c.Bodies[id].Ty
+                e := c.P.T.ResultFrom(sig, 0)
+                if e < 0 { return }
+                for k in range cl.Args.Len() {
+                    if (k == e or c.P.T.ShareOf(sig, k) == e) and c.isRef(typeOf(cl.Args[k])) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
+                }
+                return
+            }
+            for k in range cl.Args.Len() {
+                if c.roFollows(id, k) { c.roDeepIn(b, cl.Args[k], out, seen, depth + 1) }
+            }
+        }
+        nomatch { }
+    }
+}
+
+fn (c mut Checker&) roDeepPlace(b I64, p typed.Place&, out mut List<I64>&, seen mut Map<I64, Bool>&, depth I64) {
+    if p == null or depth > 48 { return }
+    match p {
+        case typed.Place.Local(_, _, id) {
+            l := c.Bodies[b].Local(id)
+            if l.Kind == typed.LocalKind.Param {
+                ps := c.Bodies[b].Params
+                for k in range ps.Len() {
+                    if ps[k] == id and c.roByArg(b, k) and not out.Has(k) { out.Push(k) }
+                }
+                return
+            }
+            if l.Kind == typed.LocalKind.Capture or seen.Has(I64(id)) { return }
+            seen.Put(I64(id), true)
+            vs := try c.roVals.Get(pair.Pair(b, I64(id))) catch { return }
+            for v in vs { c.roDeepIn(b, v, out, seen, depth + 1) }
+        }
+        case typed.Place.Deref(_, _, ref) { c.roDeepIn(b, ref, out, seen, depth + 1) }
+        case typed.Place.Field(_, _, base, _) { c.roDeepPlace(b, base, out, seen, depth + 1) }
+        case typed.Place.Elem(_, _, e) { c.roDeepPlace(b, e.Base, out, seen, depth + 1) }
+        case typed.Place.Payload(_, _, pl) { c.roDeepPlace(b, pl.Base, out, seen, depth + 1) }
+        case typed.Place.Temp(_, _, v, _) { c.roDeepIn(b, v, out, seen, depth + 1) }
+        nomatch { }
+    }
+}
+
+# a value with no storage of its own lent writably (T25c): a read-only copy may not be - a call's result copied out of
+# what a read-only argument reaches
+fn (c mut Checker&) roLend(x typed.Expr&, sp source.Span) {
+    if c.roValue(x) {
+        c.err(c.roCallAt(x, sp), msgs.ReadOnlyCopyLent(c.roFix(c.roName(x), typeOf(x))))
+        return
+    }
+    c.roDeepNeed(x)
+}
+
+# where a call's result is said: an index through At at its "[" (stage 0's token for it), any other where it is written
+fn (c mut Checker&) roCallAt(x typed.Expr&, sp source.Span) source.Span {
+    match x {
+        case typed.Expr.Call(csp, _, cl) {
+            if cl.Args.Len() > 0 and cl.Args[0] != null and cl.Args[0].Span() == csp { return c.bracketIn(csp) }
+        }
+        nomatch { }
+    }
+    return sp
+}
+
+# a value of this body kept writable - stored where it can be written, lent writably: in an instance, the read-only
+# reference parameters it is copied out of need writable arguments, judged once every body is checked
+fn (c mut Checker&) roDeepNeed(x typed.Expr&) {
+    if x == null or not c.instanceBody(c.fr().Body) { return }
+    t := typeOf(x)
+    if c.isRef(t) { t = c.P.T.Referent(t) }
+    if not c.namedHolds(t) { return }
+    c.roDeepNeeds.Push(pair.Pair(c.fr().Body, x))
+}
+
+# a by-value result of an instance's body holding writable references: the parameters it is copied out of give a call's
+# result their argument's permission, settled at the body's end
+fn (c mut Checker&) roResult(x typed.Expr&) {
+    if x == null or not c.instanceBody(c.fr().Body) or not c.holdsWritable(typeOf(x)) { return }
+    c.roResults.Push(pair.Pair(c.fr().Body, x))
+}
+
+fn (c mut Checker&) roSettleResults(id I64) {
+    for r in c.roResults {
+        if r.First != id { continue }
+        ps := List<I64>()
+        c.roDeep(id, r.Second, ps)
+        for k in ps { c.roToResult.Put(pair.Pair(id, k), true) }
+    }
+}
+
+# what instance bodies keep writable of their read-only reference parameters, now every value given a local is known;
+# and the arguments that rest on them
+fn (c mut Checker&) roSettleDeep() {
+    for n in c.roDeepNeeds {
+        ps := List<I64>()
+        c.roDeep(n.First, n.Second, ps)
+        for k in ps { c.roNeeds.Put(pair.Pair(n.First, k), true) }
+    }
+    for a in c.roDeepArgs {
+        ps := List<I64>()
+        c.roDeep(a.Body, a.X, ps)
+        for k in ps { c.roDeps.Push(pair.Pair(pair.Pair(a.Body, k), pair.Pair(a.Callee, a.Param))) }
     }
 }
 
@@ -4844,7 +5154,9 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     from := c.exprs.Len()
     k I64 = 0
     if recv != null {
-        c.exprs.Push(c.fit(recv, ps[0] if ps.Len() > 0 else types.UnknownT, recv.Span()))
+        rx := c.fit(recv, ps[0] if ps.Len() > 0 else types.UnknownT, recv.Span())
+        c.roArgFor(c.bodyOfCallee(target), 0, rx, recv.Span(), c.calleeName(f))
+        c.exprs.Push(rx)
         k = 1
     }
     n := pre.Len() if pre != null else args.Len()
@@ -4927,6 +5239,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         }
         if changed { r = c.P.T.Tuple(c.P.T.List(nps.ToArray())) }
     }
+    c.roCheckCallee(target, r)
     call := typed.Expr.Call(sp, r, typed.Call(target, gather(c.exprs, from), typed.Mark.None, c.site(typed.SiteKind.Call, sp)))
     if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return call
@@ -5961,7 +6274,10 @@ fn (c mut Checker&) wordIndex(d types.DeclId, w source.NameId) I64 {
 
 # ---- statements ----
 
-fn (c mut Checker&) emit(s typed.Stmt&c) { c.stmts.Push(s) }
+fn (c mut Checker&) emit(s typed.Stmt&c) {
+    c.roKeep(s)
+    c.stmts.Push(s)
+}
 
 fn (c mut Checker&) stmt(s ast.Stmt&) {
     if s == null { return }
