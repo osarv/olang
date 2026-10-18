@@ -6042,12 +6042,20 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         if t == types.UnknownT { return }
         # x op= v on a declared type: x = x op v through its operator's method (E31)
         v := c.expr(value, types.UnknownT)
-        r := c.operatorCall(sp, sp, bop, c.read(sp, typed.Place.Target(sp, t)), v)
-        if r == null and c.isNumber(t) and c.isNamed(t) {
-            # T29f: a declared number that does not extend its base takes none of its operators
-            c.err(osp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $operatorName(bop) "'"))
+        if c.isNumber(t) and c.isNamed(t) and c.roleMethod(t, operatorName(bop), 1) < 0 {
+            # T29f: a declared number that does not extend its base takes none of its operators: beside another of
+            # it there is none, beside its base or a literal the result is its base's, which does not flow back
+            vt := typeOf(v)
+            if vt == types.UnknownT { return }
+            if c.P.T.Same(vt, t) {
+                c.err(osp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $operatorName(bop) "'"))
+            } else {
+                m := c.under(t) if c.litLike(value) else c.P.Meet(c.under(t), c.under(vt))
+                c.err(osp, msgs.NumberDoesNotFlow(c.ty(m), c.ty(t), c.ty(t)))
+            }
             return
         }
+        r := c.operatorCall(sp, sp, bop, c.read(sp, typed.Place.Target(sp, t)), v)
         if r == null {
             c.gap(sp, "a compound assignment to what has no operator method (E31)")
             return
