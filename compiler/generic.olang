@@ -103,6 +103,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     instances List<instance>
     instanceOf Map<pair.Pair<I64, types.ListId>, I64>
     said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
+    expanding I64 = 0                  # how many instances' bodies are being made inside one another (G17)
     folding Map<I64, Bool>             # the globals being folded (a cycle folds to nothing)
     chain I64 = 0                      # how many instances' layouts are being made, each asked for by the one before
     Asking Origin = NoOrigin           # where the checker is asking from: recorded by the instances it makes (G16b)
@@ -361,7 +362,7 @@ fn (p mut Program&) Apply(c Context&, d types.DeclId, args Array<ast.TypeRef&>&)
 # arguments of an instance may nest
 fn (p mut Program&) Instance(d types.DeclId, args types.ListId) types.TypeId {
     t := p.T.Named(d, args)
-    if p.T.Depth(t) > MaxDepth {
+    if p.T.Depth(t) > MaxDepth + 1 {
         p.unbounded(d)
         return types.UnknownT
     }
@@ -371,6 +372,50 @@ fn (p mut Program&) Instance(d types.DeclId, args types.ListId) types.TypeId {
 
 # where a type instance was first asked for (G16b), NoOrigin for one the checker never asked for
 fn (p Program&) TypeOrigin(t types.TypeId) Origin { return try p.typeFrom.Get(t) catch default NoOrigin }
+
+# the instances a type names, through references, arrays, functions and other instances' arguments, given their
+# bodies (G17); one nesting deeper than any program writes is a chain that never ends
+fn (p mut Program&) expand(t types.TypeId, depth I64) {
+    if depth > 4 * MaxDepth or t == types.UnknownT { return }
+    match p.T.KindOf(t) {
+        case types.Kind.Named {
+            args := p.T.Args(t)
+            if args == types.ListId(0) or p.T.HasBody(t) { return }
+            if p.T.Depth(t) > MaxDepth + 1 or p.expanding > 200 {
+                p.unbounded(p.T.DeclOf(t))
+                return
+            }
+            p.expandList(args, depth + 1)
+            p.expanding++
+            if p.T.Closed(t) { p.Body(t) }
+            p.expanding--
+        }
+        case types.Kind.Ref { p.expand(p.T.Referent(t), depth + 1) }
+        case types.Kind.Array { p.expand(p.T.Elem(t), depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record { p.expandList(p.T.Parts(t), depth + 1) }
+        nomatch { }
+    }
+}
+
+fn (p mut Program&) expandList(l types.ListId, depth I64) {
+    if l == types.ListId(0) { return }
+    for x in p.T.Items(l) { p.expand(x, depth) }
+}
+
+# G17 for a function: an instance whose arguments nest deeper than any program writes, said once at the function's
+# declaration - whether its arguments do
+fn (p mut Program&) FnTooDeep(f I64, args types.ListId, at diag.Where) Bool {
+    for x in p.T.Items(args) {
+        if p.T.Depth(x) > MaxDepth {
+            if not (try p.said.Get(-1 - f) catch default false) {
+                p.said.Put(-1 - f, true)
+                p.L.Diags.Error(at, msgs.UnboundedInstantiation())
+            }
+            return true
+        }
+    }
+    return false
+}
 
 # G17, said once for a declaration
 fn (p mut Program&) unbounded(d types.DeclId) {
@@ -1001,6 +1046,15 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
             case types.DeclKind.Enum { p.T.SetEnumBody(t, p.T.CaseNames(self), p.substList(p.T.Cases(self), owner, args)) }
             case types.DeclKind.Over { p.T.SetOverBody(t, p.Subst(p.T.Base(self), owner, args)) }
             nomatch { p.T.SetEmptyBody(t) }
+        }
+        # G17: the instances its parts name are made too, as far as they nest - a field instantiating the type with a
+        # larger argument is a chain that never ends
+        if p.T.Closed(t) {
+            match p.T.DeclKindOf(d) {
+                case types.DeclKind.Struct { p.expandList(p.T.Fields(t), 0) }
+                case types.DeclKind.Enum { p.expandList(p.T.Cases(t), 0) }
+                nomatch { }
+            }
         }
         return true
     }

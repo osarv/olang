@@ -1299,6 +1299,18 @@ fn (c mut Checker&) param(n source.NameId, sp source.Span, t types.TypeId, i I64
 }
 
 # a function's name's span: after "fn" and its receiver, the first place its name is written
+# where function f's name is written, in its own module
+fn (c mut Checker&) fnNameAt(f I64) diag.Where {
+    fd := c.P.FnDecl(f)
+    mi := c.P.FnModule(f)
+    text := c.P.L.Mods[mi].Src.Text
+    name := c.text(fd.Name)
+    from := I64(fd.Recv.Sp.End) if fd.Recv != null else I64(fd.Sp.Start) + 2
+    at := try text[from:I64(fd.Sp.End)].Find(name) catch default -1
+    s := I64(fd.Sp.Start) if at < 0 else from + at
+    return diag.Where.Span(c.P.L.Mods[mi].File, s, s + name.Len())
+}
+
 fn (c mut Checker&) nameSpan(fd ast.Func&) source.Span {
     text := c.src(fd.Sp)
     name := c.text(fd.Name)
@@ -5267,6 +5279,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         c.gap(nsp, "more than 1,000 instances of one function (G17)")
         return c.unknown(sp)
     }
+    if c.P.FnTooDeep(f, c.P.T.List(b.Vals), c.fnNameAt(f)) { return c.unknown(sp) }   # G17
     asking := c.P.Asking
     c.P.Asking = generic.Origin(c.fr().File, nsp, c.curInst())   # G16b: where the instance is asked for
     inst := c.P.FnInstance(f, c.P.T.List(b.Vals))
