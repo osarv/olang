@@ -955,7 +955,12 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     s.landOK = false
     loc := s.B.Locals[I64(l)]
     if loc.Kind == typed.LocalKind.Held { return }
-    if s.qualifiesMove(loc, x) {
+    # a constructor's own top level is its instance's scope (C2g); a block inside it moves nothing there
+    ctor := match s.B.Of {
+        case typed.BodyOf.Ctor(_, _) => true
+        case _ => false
+    }
+    if s.qualifiesMove(loc, x) and not ctor {
         rt := s.resultTerm(0)
         if rt.Runs() and not s.isBlock(rt) {
             s.flowStart(l, 0)
@@ -4681,6 +4686,12 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         }
         case _ { }
     }
+    # exactly in a derived scope, or in another scope exactly where a derived one is: nothing here shows the two the same
+    # (O25, O23a)
+    if exact and t != slot and (s.derivedTerm(t) or s.derivedTerm(slot)) {
+        s.fitError(x, kind, true)
+        return
+    }
     k := s.order(t, slot)
     if k == Holds and exact and t != slot {
         k = s.order(slot, t)
@@ -4702,6 +4713,13 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     s.fitError(x, kind, exact)
 }
 
+fn (s mut Scoper&) derivedTerm(t Term) Bool {
+    return match t {
+        case Term.Derived(p, _) => p >= 0
+        case _ => false
+    }
+}
+
 fn (s mut Scoper&) isBlock(t Term) Bool {
     return match t {
         case Term.Block(_) => true
@@ -4711,7 +4729,7 @@ fn (s mut Scoper&) isBlock(t Term) Bool {
 
 fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     if not s.report { return }
-    s.fitErrorAt(s.fitSp if s.fitAt else x.Span(), kind, exact)
+    s.fitErrorAt(s.fitSp if s.fitAt else s.opTok(x), kind, exact)
 }
 
 fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) {
