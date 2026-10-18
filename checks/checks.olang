@@ -1691,7 +1691,7 @@ fn regions(r mut report&) ? Failed {
                  "drive.c did not link", dir)
     for want in String&["small 2 0", "large 2 0", "null 0 0", "chain 1000000 0", "slots 4 0"] {
         mode := want[:try want.FindByte(' ') catch default 0]
-        try r.expect(sh(dir, "./drive " $mode " > out.txt 2>&1") == 0 and outOf(dir) == want "\n", "drive " $mode, dir)
+        try r.expect(sh(dir, "./drive " $mode " > out.txt 2>&1") == 0 and outOf(dir) == $want "\n", "drive " $mode, dir)
     }
 }
 
