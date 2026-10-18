@@ -121,6 +121,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # a for-in's hidden borrow of a value, by (body, local): whether that value is reached read-only
     roCopies Map<Pair<I64, I64>, source.NameId>
     roBorrows Map<Pair<I64, I64>, Bool>
+    # a reference local made from a place, by (body, local): the place, and whether the reference names its storage (a
+    # borrow, a slice, a view) rather than having been read out of it - what read-only copies and parameters reach
+    roFrom Map<Pair<I64, I64>, roOrigin>
     # ...and a by-value parameter's need of a writable argument, read off its body: by (body, parameter) the ones
     # written through, lent writably or stored; what a parameter passed on as another's argument needs in turn; the
     # read-only copies passed as arguments and the bodies made function values, judged once every body is checked
@@ -128,6 +131,11 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roDeps List<Pair<Pair<I64, I64>, Pair<I64, I64>>>
     roArgs List<roArg>
     roFns List<roFn>
+}
+
+type roOrigin struct(P typed.Place&, View Bool) {
+    P
+    View
 }
 
 # a read-only copy passed to a by-value parameter (T25c): the callee's body and the parameter, where, its name, the
@@ -208,6 +216,7 @@ fn (c mut Checker&) reset() {
     c.boundsMet = Map<types.TypeId, Bool>()
     c.roCopies = Map<Pair<I64, I64>, source.NameId>()
     c.roBorrows = Map<Pair<I64, I64>, Bool>()
+    c.roFrom = Map<Pair<I64, I64>, roOrigin>()
     c.roNeeds = Map<Pair<I64, I64>, Bool>()
     c.roDeps = List<Pair<Pair<I64, I64>, Pair<I64, I64>>>()
     c.roArgs = List<roArg>()
@@ -3420,15 +3429,50 @@ fn (c mut Checker&) roRead(p typed.Place&) Bool {
     }
 }
 
-# the read-only copy a place is part of by value, never through a reference: its local, or -1
+# the local a place is part of by value - never through a reference, save one naming another place's storage (a
+# borrow, a slice), followed to that place, and a reference local read out of a place, followed to it: -1 for none
+fn (c mut Checker&) rootLocal(p typed.Place&) I64 { return c.rootIn(p, 0) }
+
+fn (c mut Checker&) rootIn(p typed.Place&, depth I64) I64 {
+    if p == null or depth > 32 { return -1 }
+    match p {
+        case typed.Place.Local(_, _, id) {
+            o := try c.roFrom.Get(c.roKey(I64(id))) catch default roOrigin(null, false)
+            if o.P != null { return c.rootIn(o.P, depth + 1) }
+            return I64(id)
+        }
+        case typed.Place.Field(_, _, base, _) { return c.rootIn(base, depth + 1) }
+        case typed.Place.Elem(_, _, e) { return c.rootIn(e.Base, depth + 1) }
+        case typed.Place.Payload(_, _, pl) { return c.rootIn(pl.Base, depth + 1) }
+        case typed.Place.Deref(_, _, ref) {
+            q := readPlace(ref)
+            match q {
+                case typed.Place.Local(_, _, id) {
+                    o := try c.roFrom.Get(c.roKey(I64(id))) catch default roOrigin(null, false)
+                    if o.P != null and o.View { return c.rootIn(o.P, depth + 1) }
+                }
+                nomatch { }
+            }
+            return -1
+        }
+        nomatch { return -1 }
+    }
+}
+
+# the read-only copy a place is part of by value: its local, or -1
 fn (c mut Checker&) roRoot(p typed.Place&) I64 {
-    if p == null { return -1 }
-    return match p {
-        case typed.Place.Local(_, _, id) => I64(id) if c.roLocal(I64(id)) else -1
-        case typed.Place.Field(_, _, base, _) => c.roRoot(base)
-        case typed.Place.Elem(_, _, e) => c.roRoot(e.Base)
-        case typed.Place.Payload(_, _, pl) => c.roRoot(pl.Base)
-        case _ => -1
+    r := c.rootLocal(p)
+    return r if r >= 0 and c.roLocal(r) else -1
+}
+
+# a reference local made from a place (T25c): recorded, so what is reached through it is reached from that place
+fn (c mut Checker&) roTrack(id I64, x typed.Expr&) {
+    if x == null or not c.isRef(typeOf(x)) { return }
+    match x {
+        case typed.Expr.Read(_, _, p, _) { c.roFrom.Put(c.roKey(id), roOrigin(p, false)) }
+        case typed.Expr.Borrow(_, _, p) { c.roFrom.Put(c.roKey(id), roOrigin(p, true)) }
+        case typed.Expr.Slice(_, _, sl) { c.roFrom.Put(c.roKey(id), roOrigin(sl.Base, true)) }
+        nomatch { }
     }
 }
 
@@ -3475,6 +3519,7 @@ fn (c mut Checker&) placeName(p typed.Place&) source.NameId {
 # a local declared from a value: a read-only copy where the value is one (T25c)
 fn (c mut Checker&) roLet(id I64, x typed.Expr&) {
     if c.roValue(x) { c.roCopies.Put(c.roKey(id), c.roName(x)) }
+    c.roTrack(id, x)
 }
 
 # how a copy of its own is made, for a diagnostic: through the type's Clone where it has one
@@ -3520,14 +3565,8 @@ fn (c mut Checker&) roStore(x typed.Expr&, sp source.Span, kind I64) Bool {
 # the by-value parameter of this body a place is part of by value, its type holding writable references: its index
 # among the parameters, -1 for none
 fn (c mut Checker&) paramOf(p typed.Place&) I64 {
-    if p == null { return -1 }
-    return match p {
-        case typed.Place.Local(_, ty, id) => c.paramIndex(I64(id))
-        case typed.Place.Field(_, _, base, _) => c.paramOf(base)
-        case typed.Place.Elem(_, _, e) => c.paramOf(e.Base)
-        case typed.Place.Payload(_, _, pl) => c.paramOf(pl.Base)
-        case _ => -1
-    }
+    r := c.rootLocal(p)
+    return c.paramIndex(r) if r >= 0 else -1
 }
 
 fn (c mut Checker&) paramIndex(id I64) I64 {
@@ -6321,7 +6360,9 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
         coll := c.hidden(sp, rt)
         c.roBorrows.Put(c.roKey(coll), c.roRef(src) if c.isRef(st) else c.roPlace(readPlace(src)))   # T25c
-        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), c.fit(src, rt, f.Source.Span())))
+        fx := c.fit(src, rt, f.Source.Span())
+        c.roTrack(coll, fx)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), fx))
         k := c.hidden(sp, c.i64())
         c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
         n := c.hidden(sp, c.i64())
@@ -6660,7 +6701,9 @@ fn (c mut Checker&) borrowedSource(sp source.Span, src typed.Expr&c) I64 {
     coll := c.hidden(sp, rt)
     # T25c: a value borrowed is as read-only as the place it is (its elements read-only copies exactly then)
     c.roBorrows.Put(c.roKey(coll), c.roRef(src) if c.isRef(st) else c.roPlace(readPlace(src)))
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), c.fit(src, rt, sp)))
+    fx := c.fit(src, rt, sp)
+    c.roTrack(coll, fx)
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(coll)), fx))
     return coll
 }
 
