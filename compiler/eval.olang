@@ -1141,8 +1141,8 @@ fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
 # its elements, and how many
 fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp source.Span) (Ptr, I64) {
     # what lowering synthesizes (a helper's words) is written nowhere: its instance is its function's
-    own I64 = m.codeIndex(f.Of) if sp.Start == I32(0) and sp.End == I32(0) else -1
-    key := dkey(file, sp.Start, sp.End, ty, c, own)
+    maker I64 = m.codeIndex(f.Of) if sp.Start == I32(0) and sp.End == I32(0) else -1
+    key := dkey(file, sp.Start, sp.End, ty, c, maker)
     id := try m.datas.Get(key) catch default 0
     node := f.Consts[I64(c)]
     n := m.constLen(f, node)
