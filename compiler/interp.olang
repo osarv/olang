@@ -495,7 +495,8 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     w := code & 0xFFFF
     word := $x.P.T.Names.Text(ws[w]) if w < ws.Len() else $w
     name := x.P.T.Names.Text(x.P.T.DeclName(dl))
-    if x.P.T.DeclModule(dl) == x.P.L.Root { return $name "." $word }
+    m := x.P.T.DeclModule(dl)
+    if m == x.P.L.Root or x.P.L.Mods[m].Prelude { return $name "." $word }
     id := x.P.L.Mods[x.P.T.DeclModule(dl)].Identity
     k := try id.FindLast("/") catch default -1
     return $id[k + 1:] "." $name "." $word
