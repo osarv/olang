@@ -353,6 +353,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   error). Being fixed in both compilers. ANSWERED the methods question with a recommendation: keep std/math's free
   functions (the method-set overload incl. through extends, several-argument functions, one place). In effect: free
   functions; E13c unchanged (`4.Sqrt()`/`2.0.Sqrt()` stay errors).
+  CONFIRMED 2026-10-18 (the user: "Keep in math lib"; moving only Sqrt/Exp would be arbitrary). Also confirmed:
+  static race safety dropped ("an artifact" of own/take); Char does not satisfy Number (the numtraits decision).
 - QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
