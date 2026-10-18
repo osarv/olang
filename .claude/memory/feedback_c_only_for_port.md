@@ -27,3 +27,8 @@ just don't spend effort building extras twice.
   need one, in which case stage 0 gets it.
 - The port is written in the best olang; stage 0 is amended to follow, never the reverse.
 - Today's batches (errors, arrays incl. QW, the word command line, formatter) are core: they go into both.
+
+**Syntax goes into both (the user, 2026-10-18, on generators): "they are a syntax features so I kinda think they should
+go in both. Restricting the port on syntax is probably gonna backfire eventually."** Anything the port's own source
+could be written with - syntax and language constructs (generators included) - goes into stage 0 too, so the port is
+never restricted by what stage 0 accepts. Port-only stays for domain extras (arbitrary precision, FPGA, new backends).

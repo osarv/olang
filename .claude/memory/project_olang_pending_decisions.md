@@ -410,7 +410,7 @@ design. Do what you want") - nothing to decide until a GUI is written.
 - QAG GENERATORS REVISED 2026-10-18 (the user: "settle on fn evens (n I64) Iterator<T> ... the compiler knows this is a
   generator because of the return type and the yields and the user doesn't need to know"): no `generator` keyword and no
   `yields` marker - a `fn` whose result is `Iterator<T>` and whose body yields is a generator; `Iterator<T>` there is the
-  hidden type. Details mine: its `? E` is Next's errors; a trait as a result type is allowed only for such a generator
+  hidden type. BOTH COMPILERS (the user, 2026-10-18: syntax goes in both), after QAH (needs Iterator<T ? E>). Details mine: its `? E` is Next's errors; a trait as a result type is allowed only for such a generator
   (general `impl Trait` results not now). OPERATORS also reverted the same day to today's E31 methods (the user: "Let's
   take operators back to where we started"). Below is the superseded record.
 - QAG DECIDED 2026-10-18 (the user, on ideas.md #1 and operators: "maybe we want a new keyword ... generator? ... and
