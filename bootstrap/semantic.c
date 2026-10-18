@@ -31075,7 +31075,9 @@ static void vgUse(struct var* v, struct token at, struct vgState* st) {
         ListAdd(&vg.reportedHolds, &seen);
         if (vgReported(at)) return;
         char* where = vgPlaceText(r->p);
-        Err(at, ERR_VEC_VIEW_STALE, canonicalVar(v)->name, where, where);
+        struct str name = canonicalVar(v)->name;
+        if (name.len && name.ptr[0] == '$') Err(at, ERR_VEC_HIDDEN_VIEW_STALE, where, where); //(a loop's own, S9a)
+        else Err(at, ERR_VEC_VIEW_STALE, name, where, where);
         Note(r->growTok, NOTE_VEC_GROWS_HERE, where, r->growIn, where);
         if (r->innerTok.owner && !isLibraryFile(TokenGetFileName(r->innerTok.owner)))
             Note(r->innerTok, NOTE_VEC_GROWS_INSIDE, r->growIn);

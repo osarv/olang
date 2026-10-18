@@ -617,6 +617,7 @@ struct type;
     X(ERR_ASSERT_ABORTS,                "S18c",  "this assertion aborts the program, evaluated while compiling: %s") \
     X(ERR_GLOBAL_ABORTS,                "K2",    "this global's initializer aborts the program, evaluated while compiling: %s") \
     X(ERR_VEC_VIEW_STALE,               "M19g",  "'%S' holds a view of '%s' taken before '%s' may have grown") \
+    X(ERR_VEC_HIDDEN_VIEW_STALE,        "M19g",  "this reads a view of '%s' taken before '%s' may have grown") \
     X(ERR_VEC_VIEW_GIVEN_GROWING,       "M19g",  "this view of '%s' is given to %S, which may grow '%s' - copy the elements first: '%s.ToArray()'") \
     X(ERR_VEC_GROWS_UNDER_TASK,         "M19g",  "'%s' may grow here while a task holds a view of it - give the task a copy: '%s.ToArray()'") \
     X(ERR_ASSERT_STALE,                 "S18c, K1", "evaluated while compiling, this assertion stops on a stale view: %s") \

@@ -620,6 +620,7 @@ type Diag enum {
     AssertAborts
     GlobalAborts
     VecViewStale
+    VecHiddenViewStale
     VecViewGivenGrowing
     VecGrowsUnderTask
     AssertStale
@@ -2366,6 +2367,9 @@ fn GlobalAborts(text String&) Msg { return Msg(Diag.GlobalAborts, "K2", "this gl
 
 # ERR_VEC_VIEW_STALE
 fn VecViewStale(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.VecViewStale, "M19g", "'" $text1 "' holds a view of '" $text2 "' taken before '" $text3 "' may have grown") }
+
+# ERR_VEC_HIDDEN_VIEW_STALE
+fn VecHiddenViewStale(text1 String&, text2 String&) Msg { return Msg(Diag.VecHiddenViewStale, "M19g", "this reads a view of '" $text1 "' taken before '" $text2 "' may have grown") }
 
 # ERR_VEC_VIEW_GIVEN_GROWING
 fn VecViewGivenGrowing(text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.VecViewGivenGrowing, "M19g", "this view of '" $text1 "' is given to " $text2 ", which may grow '" $text3 "' - copy the elements first: '" $text4 ".ToArray()'") }

@@ -1,0 +1,8 @@
+# check: fail error[M19g]: this reads a view of 'v' taken before 'v' may have grown
+# M19g: a loop walking a view of a Vec while its body grows the Vec - the loop's own borrow of the view (S9a) is read
+# each turn after the first growth. "for x in v" walks the Vec itself, by At and Len, and sees what the body pushes
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    for x in v.View() { v.Push(x) }
+}

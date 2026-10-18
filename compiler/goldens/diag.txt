@@ -2282,6 +2282,14 @@ m19g15loop.olang:11:11: note: 'v' may grow here, in 'Push' - take the view after
    11 |         v.Push(i)
       |           ^~~~
 compilation failed with 1 error
+=== m19g16forin.olang
+m19g16forin.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' may have grown
+    7 |     for x in v.View() { v.Push(x) }
+      |     ^~~
+m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+    7 |     for x in v.View() { v.Push(x) }
+      |                           ^~~~
+compilation failed with 1 error
 === m23ext.olang
 m23ext.olang:2:8: error[M23]: an import names its file without '.olang'
     2 | import "badform.olang"
