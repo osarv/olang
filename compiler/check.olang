@@ -3562,6 +3562,11 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
     }
     ta := typeOf(x)
     tb := typeOf(y)
+    # E28: nothing but a literal adapts between the two values - numbers of two types do not meet here
+    if c.isNumber(ta) and c.isNumber(tb) and not c.P.T.Same(ta, tb) and not c.litLike(a) and not c.litLike(b) {
+        c.err(c.between(a.Span(), k.Span(), 2), msgs.CondBranchTypes(c.ty(ta), c.ty(tb)))
+        return c.unknown(sp)
+    }
     rt := ta
     if want != types.UnknownT {
         rt = want
