@@ -37,6 +37,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     D
     T
     Tests Bool = false              # a test build: the harness runs the root's tests
+    Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
     Gaps List<String&>              # what emission met and does not emit yet, a line each
     queue List<mir.FnKey>           # the functions to write, in the order first referred to
     queued Map<mir.FnKey, I64>      # each function's index in queue
@@ -132,7 +133,7 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
     w.Write(defs.ToString())
     w.Write(e.body.ToString())
     w.Write(e.tail.ToString())
-    w.Write("attributes #0 = { null_pointer_is_valid }\n")
+    w.Write("attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n")
 }
 
 # the modules whose initialization runs, imports first (B5a): the prelude's, then the root's imports depth first

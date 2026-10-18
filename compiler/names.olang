@@ -1240,7 +1240,9 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
     match t {
         case ast.TypeRef.Named(sp, path, args) {
             r.typePath(sp, path)
-            for a in args { r.typeRef(a) }
+            for i in range args.Len() {
+                if not r.constName(path, i, args[i]) { r.typeRef(args[i]) }
+            }
         }
         case ast.TypeRef.Func(_, s) {
             for p in s.Params {
@@ -1274,6 +1276,24 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
             }
         }
         case ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
+    }
+}
+
+# a constant argument (G20) written as a bare name that is no type and no type variable - a global, a build constant:
+# recorded as the value it names, as an expression would read it
+fn (r mut Resolver&) constName(path Array<source.NameId>&, i I64, a ast.TypeRef&) Bool {
+    match a {
+        case ast.TypeRef.Named(asp, ap, aargs) {
+            if ap.Len() != 1 or aargs.Len() > 0 or not r.constArg(path, i) { return false }
+            j := try r.scope.Get(ap[0]) catch default -1
+            if j >= 0 and r.locals[j].Kind == What.TypeVar { return false }
+            if r.typeIn(r.mi, ap[0]).Kind != What.None { return false }
+            got := r.lookup(ap[0])
+            if got.Kind == What.None { return false }
+            r.record(asp, got)
+            return true
+        }
+        nomatch { return false }
     }
 }
 

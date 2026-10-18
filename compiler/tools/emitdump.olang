@@ -21,6 +21,7 @@ import "../generic"
 import typecheck "../check"
 import "../lower"
 import "../emit"
+import "../target"
 
 fn main() ? {
     args := os.Args()
@@ -53,7 +54,13 @@ fn run(args Array<String&>&) {
     path := args[k]
     d := diag.Diagnostics(false)
     consts := cond.Consts()
-    consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
+    # B12: built for this machine, as stage 0 builds by default - what the target constants say and every function
+    # carries
+    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+        try io.PrintErr(d.Render()) catch io.IoError { }
+        os.Exit(1)
+    }
+    consts.Builtins(tg.Os, tg.Arch, tg.Cpu, tg.VectorBits, 1 if tg.Fma else 0, false, false, testBuild)
     for f in defines { try consts.Define(f, d) catch { } }
     f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
     l := load.Loader(std, consts, f, source.Names(), d)
@@ -69,6 +76,7 @@ fn run(args Array<String&>&) {
     lw := lower.Lowerer(p, c.Bodies)
     e := emit.Emitter(p, lw, d, p.T)
     e.Tests = testBuild
+    e.Attrs = tg.Attrs
     if outPath == "" {
         base := path
         s := try base.FindLast("/") catch default -1

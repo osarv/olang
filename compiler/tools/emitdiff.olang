@@ -45,8 +45,12 @@ fn main() {
     tests, testsSame I64 = 0, 0
     for i in range files.Len() {
         f := files[i]
-        out := $dir "/p" $i
         program := f.StartsWith("checks/")
+        # named as stage 0 names its binary (build/std_os_test), since a program may read its own name (os.Args)
+        sub := $dir "/p" $i
+        try os.MkDirAll(sub) catch os.OsError { toolkit.Die("emitdiff: cannot make " $sub) }
+        base := f[:f.Len() - 6] if f.EndsWith(".olang") else f
+        out := $sub "/" $base.Replace("/", "_") $("" if program else "_test")
         r := compare(olang, emitdump, level, rt, f, out, program, verbose)
         toolkit.Say(r.Row)
         tests += r.Tests
@@ -58,8 +62,7 @@ fn main() {
         } else {
             differ++
         }
-        try os.Remove(out) catch os.OsError { }
-        try os.Remove($out ".ll") catch os.OsError { }
+        try os.RemoveAll(sub) catch os.OsError { }
     }
     toolkit.Say(("== total: files " $files.Len() " same " $same " differ " $differ " broken " $broken "; tests " $tests
                  " ending as stage 0's " $testsSame "\n"))

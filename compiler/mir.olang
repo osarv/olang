@@ -540,7 +540,7 @@ fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
 fn ErrorCode(t types.Table&, errors types.ListId, err types.TypeId, word I64) I64 {
     xs := t.Items(errors)
     for k in range xs.Len() {
-        if t.Same(xs[k], err) { return ((k + 1) << 16) | word }
+        if t.Same(t.ErrOf(xs[k]), t.ErrOf(err)) { return ((k + 1) << 16) | word }
     }
     for k in range xs.Len() {
         if xs[k] == types.DefaultErrT { return (k + 1) << 16 }
