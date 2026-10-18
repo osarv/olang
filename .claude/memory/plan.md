@@ -64,6 +64,10 @@ overrated".
   comments, the generated msgs table), which patterns repeat, and which language features would shrink them - evidence
   for language design, not only tidying. Measured 2026-10-18: scanner+parser 4,470 lines vs C's 6,050; checker 17,100
   vs semantic.c's 31,350 (which also holds section 8); the finished port projected at 40-50k vs C's 56k.
+- 2026-10-18 16:00 CEST (weekly 0.74; the user: "Continue working in the background, stop at 90%"): started wt-s0fix
+  (stage-0 open bug fixes: T22a sharedscope, S4d by types, E31b M1) and wt-emit (port M9: compiler/emit.olang, an
+  emitdiff against stage 0). Freed ~8GB of merged worktrees' build/. Next when one finishes: M6 scope pass (xhigh),
+  then eval wired to lower (M8). Stop new work at 0.90 weekly.
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
   self-hosting (stage 0 too): the open STAGE-0 BUG FIXES (wt-noown - own/take removed, memory round 3 - merged
