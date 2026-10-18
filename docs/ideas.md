@@ -14,7 +14,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 3 | Units of measure | F# | open |
 | 4 | Portable SIMD vectors | Zig, Rust | open |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | open |
-| 6 | Embedding a file | Zig, Rust | open |
+| 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
 | 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
 | 9 | Doc tests | Rust | open |
@@ -180,6 +180,14 @@ they meet `checked`.
 3. Part of the FPGA work, or useful before it?
 
 ## 6. Embedding a file
+
+**Decided 2026-10-18 (the user: "It's good for spelling ... Do as you want"):** `embed PATH` is an expression giving the
+file's bytes, read while compiling, as a read-only `Array<U8>` in the program's constant data (length known while
+compiling); text is `String(embed "help.txt")`, a view. PATH is any compile-time constant text, relative to the
+source file as imports are, kept inside a remote package. The evaluator can read the bytes (a table parsed and baked
+while compiling). An object is rebuilt when an embedded file changes (its content is in the object's hash). Large
+files are placed in the object as raw bytes (assembler `.incbin`), not as an LLVM constant. Not now: directories,
+globs. Built in the port after self-hosting.
 
 **What:** a file's bytes become constant data in the binary, read while compiling.
 
