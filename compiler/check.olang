@@ -117,6 +117,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     found Map<Pair<I64, I64>, types.ListId>
     Attempts I64 = 0
     boundsMet Map<types.TypeId, Bool>         # a type instance's constraints, checked where it was first asked for (G19)
+    # T25c: the locals that are read-only copies, by (body, local), each with the name of what it copies (0 for none);
+    # a for-in's hidden borrow of a value, by (body, local): whether that value is reached read-only
+    roCopies Map<Pair<I64, I64>, source.NameId>
+    roBorrows Map<Pair<I64, I64>, Bool>
 }
 
 # an element read through At where a place is wanted (E31, E31b): its body and site, the collection's place, and the
@@ -176,6 +180,8 @@ fn (c mut Checker&) reset() {
     c.unsettled = Map<I64, Bool>()
     c.found = Map<Pair<I64, I64>, types.ListId>()
     c.boundsMet = Map<types.TypeId, Bool>()
+    c.roCopies = Map<Pair<I64, I64>, source.NameId>()
+    c.roBorrows = Map<Pair<I64, I64>, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -914,6 +920,8 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     if k < v.Values.Len() {
         x = c.exprTo(v.Values[k], want)
         if v.Ty == null { want = c.inferred(v.Values[k], x) }
+        # T25c: a mutable global is stored where it can be written
+        if writtenMut(v.Ty) and not c.isRef(want) { c.roStore(x, v.Values[k].Span(), RoGlobal) }
     } else if v.Values.Len() == 1 and v.Names.Len() > 1 {
         c.gap(sp, "several globals given one value (D8c)")
     } else {
@@ -1008,6 +1016,10 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
         case typed.Place.Local(_, _, id) {
             if c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty) {
                 c.err(sp, msgs.CaptureReadOnly())
+            } else if not store and c.roLocal(I64(id)) {
+                # T25c: a read-only copy is not lent writably
+                rec := c.err(sp, msgs.ReadOnlyCopyLent(c.roFix(source.NameId(0), c.cur().Local(id).Ty)))
+                c.noteRo(rec, p)
             }
         }
         case typed.Place.Global(_, _, mi, n) {
@@ -1016,7 +1028,13 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
         }
         case typed.Place.Deref(_, _, ref) {
             rt := typeOf(ref)
-            if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 { c.err(sp, msgs.ReadOnlyRefWrite()) }
+            if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
+                c.err(sp, msgs.ReadOnlyRefWrite())
+            } else if c.isRef(rt) and c.roRoot(readPlace(ref)) >= 0 {
+                # T25c: a read-only copy writes nothing through the writable references it shares
+                rec := c.err(sp, msgs.ReadOnlyCopyWrite())
+                c.noteRo(rec, readPlace(ref))
+            }
         }
         case typed.Place.Field(_, _, base, _) { c.mustWrite(base, sp, store) }
         case typed.Place.Elem(_, _, e) { c.mustWrite(e.Base, sp, store) }
@@ -3278,6 +3296,192 @@ fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr&c {
     return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
 }
 
+# ---- read-only copies (T25c) ----
+
+# whether a value of the type holds a writable reference - a "mut" reference among its fields, payloads and the
+# elements of its fixed arrays, walked by value, never through a reference (O25g's walk) - and so shares it with every
+# copy of it
+fn (c mut Checker&) holdsWritable(t types.TypeId) Bool { return c.holdsWritableAt(t, 0) }
+
+fn (c mut Checker&) holdsWritableAt(t types.TypeId, depth I64) Bool {
+    if depth > 16 or t == types.UnknownT { return false }
+    match c.P.T.KindOf(t) {
+        case types.Kind.Ref { return (c.P.T.PermOf(t) & types.Writable) != 0 and depth > 0 }
+        case types.Kind.Array {
+            if c.P.T.Length(t) == types.TypeId(0) { return false }
+            return c.holdsWritableAt(c.P.T.Elem(t), depth + 1)
+        }
+        case types.Kind.Tuple, types.Kind.Record { return c.listHoldsWritable(c.P.T.Parts(t), depth) }
+        case types.Kind.AnonEnum { return c.listHoldsWritable(c.P.T.ShapeCases(t), depth) }
+        case types.Kind.Named {
+            if not c.P.Body(t) { return false }
+            k := c.declKind(t)
+            if k == types.DeclKind.Struct { return c.listHoldsWritable(c.P.T.Fields(t), depth) }
+            if k == types.DeclKind.Enum { return c.listHoldsWritable(c.P.T.Cases(t), depth) }
+            if k == types.DeclKind.Over { return c.holdsWritableAt(c.P.T.Base(t), depth + 1) }
+            return false
+        }
+        nomatch { return false }
+    }
+}
+
+fn (c mut Checker&) listHoldsWritable(l types.ListId, depth I64) Bool {
+    for x in c.P.T.Items(l) {
+        if x != types.TypeId(0) and c.holdsWritableAt(x, depth + 1) { return true }
+    }
+    return false
+}
+
+fn (c mut Checker&) roKey(id I64) Pair<I64, I64> { return Pair(c.fr().Body, id) }
+
+# whether a place is reached read-only: an immutable global, what a read-only reference names, a captured value, a
+# read-only copy - and what is held in any of these by value
+fn (c mut Checker&) roPlace(p typed.Place&) Bool {
+    if p == null { return false }
+    return match p {
+        case typed.Place.Local(_, ty, id) => c.roLocal(I64(id)) or (c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(ty))
+        case typed.Place.Global(_, _, mi, n) => c.immutableGlobal(mi, n)
+        case typed.Place.Deref(_, _, ref) => c.roRef(ref)
+        case typed.Place.Field(_, _, base, _) => c.roPlace(base)
+        case typed.Place.Elem(_, _, e) => c.roPlace(e.Base)
+        case typed.Place.Payload(_, _, pl) => c.roPlace(pl.Base)
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) roLocal(id I64) Bool { return c.roCopies.Has(c.roKey(id)) }
+
+fn (c mut Checker&) immutableGlobal(mi I64, n source.NameId) Bool {
+    v := c.P.GlobalDecl(mi, n)
+    return v != null and not writtenMut(v.Ty)
+}
+
+# whether a reference is read-only where it is read: by its type - save a call's, which is fresh or borrowed from an
+# argument, and a for-in's borrow of a value, as read-only as that value - or, writable by its type, read out of a
+# read-only copy by value (T25b)
+fn (c mut Checker&) roRef(x typed.Expr&) Bool {
+    if x == null { return false }
+    if (c.P.T.PermOf(typeOf(x)) & types.Writable) != 0 { return c.roRoot(readPlace(x)) >= 0 }
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => c.roRead(p)
+        case typed.Expr.Borrow(_, _, p) => c.roPlace(p)
+        case typed.Expr.Slice(_, _, sl) => c.roPlace(sl.Base)
+        case typed.Expr.Call(_, _, _), typed.Expr.Promote(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Lit(_, _, _) => false
+        case _ => true
+    }
+}
+
+fn (c mut Checker&) roRead(p typed.Place&) Bool {
+    match p {
+        case typed.Place.Local(_, _, id) {
+            # a generic's read-only reference parameter is as read-only as the argument a call gives it, which its
+            # instance's body cannot know (roByArg)
+            if c.cur().Local(id).Kind == typed.LocalKind.Param and c.inGeneric() { return false }
+            return try c.roBorrows.Get(c.roKey(I64(id))) catch default true
+        }
+        nomatch { return true }
+    }
+}
+
+# the read-only copy a place is part of by value, never through a reference: its local, or -1
+fn (c mut Checker&) roRoot(p typed.Place&) I64 {
+    if p == null { return -1 }
+    return match p {
+        case typed.Place.Local(_, _, id) => I64(id) if c.roLocal(I64(id)) else -1
+        case typed.Place.Field(_, _, base, _) => c.roRoot(base)
+        case typed.Place.Elem(_, _, e) => c.roRoot(e.Base)
+        case typed.Place.Payload(_, _, pl) => c.roRoot(pl.Base)
+        case _ => -1
+    }
+}
+
+# whether a value is a read-only copy: one whose type holds writable references, copied out of a place reached
+# read-only, or chosen among values one of which is
+fn (c mut Checker&) roValue(x typed.Expr&) Bool {
+    if x == null or c.isRef(typeOf(x)) or not c.holdsWritable(typeOf(x)) { return false }
+    return c.roCopied(x)
+}
+
+fn (c mut Checker&) roCopied(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => c.roPlace(p)
+        case typed.Expr.Cond(_, _, k) => c.roCopied(k.A) or c.roCopied(k.B)
+        case typed.Expr.Seq(_, _, q) => q.X != null and c.roCopied(q.X)
+        case typed.Expr.Match(_, _, m) => c.roMatch(m)
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) roMatch(m typed.Match&) Bool {
+    for a in m.Arms {
+        if a.Value != null and c.roCopied(a.Value) { return true }
+    }
+    return m.NoMatch != null and m.NoMatch.Value != null and c.roCopied(m.NoMatch.Value)
+}
+
+# the name a read-only value copies, for a note: a named local's or a global's, else 0
+fn (c mut Checker&) roName(x typed.Expr&) source.NameId {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => c.placeName(p)
+        case _ => source.NameId(0)
+    }
+}
+
+fn (c mut Checker&) placeName(p typed.Place&) source.NameId {
+    return match p {
+        case typed.Place.Local(_, _, id) => c.cur().Local(id).Name
+        case typed.Place.Global(_, _, _, n) => n
+        case _ => source.NameId(0)
+    }
+}
+
+# a local declared from a value: a read-only copy where the value is one (T25c)
+fn (c mut Checker&) roLet(id I64, x typed.Expr&) {
+    if c.roValue(x) { c.roCopies.Put(c.roKey(id), c.roName(x)) }
+}
+
+# how a copy of its own is made, for a diagnostic: through the type's Clone where it has one
+fn (c mut Checker&) roFix(n source.NameId, t types.TypeId) String {
+    if c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("Clone")) < 0 { return "from its parts" }
+    if n != source.NameId(0) { return "with '" $c.text(n) ".Clone()'" }
+    return "with 'Clone()'"
+}
+
+# the note at the read-only copy a place is part of
+fn (c mut Checker&) noteRo(rec I64, p typed.Place&) {
+    id := c.roRoot(p)
+    if id < 0 { return }
+    l := c.cur().Local(typed.LocalId(I32(id)))
+    if l.Name == source.NameId(0) { return }
+    src := try c.roCopies.Get(c.roKey(id)) catch default source.NameId(0)
+    w := c.at(l.Sp)
+    if src != source.NameId(0) and c.P.MethodOf(c.deref(l.Ty), c.P.L.Names.Intern("Clone")) >= 0 {
+        c.P.L.Diags.Note(rec, w, msgs.NoteReadOnlyCopyOf(c.text(l.Name), c.text(src), c.text(l.Name), c.text(src)))
+    } else {
+        c.P.L.Diags.Note(rec, w, msgs.NoteReadOnlyCopy(c.text(l.Name)))
+    }
+}
+
+# a value stored where it can be written (a declaration's written type, an assignment, a literal's element, a payload,
+# a result): a read-only copy may not be, said with m's words
+fn (c mut Checker&) roStore(x typed.Expr&, sp source.Span, kind I64) Bool {
+    if not c.roValue(x) { return false }
+    t := typeOf(x)
+    fix := c.roFix(c.roName(x), t)
+    m := msgs.ReadOnlyCopyStored(c.ty(t), fix)
+    if kind == 1 { m = msgs.ReadOnlyCopyDecl(c.ty(t), fix) }
+    if kind == 2 { m = msgs.ReadOnlyCopyReturned(c.ty(t), fix) }
+    if kind == 3 { m = msgs.ReadOnlyCopyGlobal(c.ty(t), fix) }
+    rec := c.err(sp, m)
+    c.noteRo(rec, readPlace(x))
+    return true
+}
+
+RoStored I64 = 0
+RoDecl I64 = 1
+RoReturned I64 = 2
+RoGlobal I64 = 3
+
 # ---- constraints (G19) ----
 
 # a binding of owner's variables checked against their constraints where they are bound, reported at sp: whether
@@ -4390,7 +4594,11 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
 # T[a, b]: an array literal, its length its items' count (E19)
 fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.Expr&>&) typed.Expr&c {
     from := c.exprs.Len()
-    for it in items { c.exprs.Push(c.exprTo(it, elem)) }
+    for it in items {
+        x := c.exprTo(it, elem)
+        if not c.isRef(elem) { c.roStore(x, it.Span(), RoStored) }   # T25c: an element is writable storage
+        c.exprs.Push(x)
+    }
     n := items.Len()
     xs := gather(c.exprs, from)
     at := c.P.T.Array(elem, c.P.T.Const(c.i64(), n))
@@ -5327,7 +5535,15 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             x = c.zero(nsp, t)
         }
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(nsp, typed.Place.Deref(nsp, t, x)) }
+        # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
+        # a writable value
+        inferred := i < v.Values.Len() and (v.Ty == null or v.Infer)
+        if inferred and c.isRef(t) and (c.P.T.PermOf(t) & types.Writable) != 0 and c.P.T.KindOf(c.deref(t)) != types.Kind.Func and c.roRef(x) {
+            t = c.P.T.Ref(c.P.T.Referent(t), c.P.T.PermOf(t) & types.Owning)
+        }
+        if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         id := c.local(v.Names[i], nsp, t, kind, mark)
+        if inferred { c.roLet(id, x) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
         if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
     }
@@ -5519,6 +5735,8 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     if op == token.Tok.Assign {
         x := c.exprTo(value, t)
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, t, x)) }
+        # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
+        if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
         c.emit(typed.Stmt.Assign(sp, p, x))
         return
     }
@@ -6517,6 +6735,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         }
         x := c.exprTo(values[0], rt)
         if rt == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, rt, x)) }
+        if not c.isRef(rt) { c.roStore(x, values[0].Span(), RoReturned) }   # T25c: the caller holds it writably
         c.emit(typed.Stmt.Return(sp, x))
         return
     }
