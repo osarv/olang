@@ -1248,6 +1248,12 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
                 m.convertArray(fi, dst, m.arg(fi, args, 0), ty)
                 return
             }
+            # a function value is the same two words whatever function type it is seen as (a noreturn function for
+            # one with no result, D8e)
+            if op == typed.PrimOp.Convert and m.T.KindOf(m.T.Repr(ty)) == types.Kind.Func {
+                m.put(fi, dst, ty, m.arg(fi, args, 0))
+                return
+            }
             m.wr(dst, m.width(ty), m.prim(fi, op, ty, args))
         }
         case mir.Rvalue.Overflows(op, ty, args) { m.wr(dst, 1, 1 if m.overflows(fi, op, ty, args) else 0) }
@@ -1356,7 +1362,19 @@ fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mi
 fn (m mut Machine&) newRef(fi I64, dst Ptr, s mir.ScopeRef, x mir.Operand, ty types.TypeId) {
     r := m.T.Referent(m.T.Repr(ty))
     if m.rtArray(r) {
-        m.put(fi, dst, r, x)
+        # a run-time-length array value given storage of its own: its elements copied there, as the run time does
+        p := m.addr(fi, x, 1)
+        if m.halted { return }
+        data, n := m.arrayView(p, r)
+        if m.halted { return }
+        sc := m.buildScope(fi, s)
+        if m.halted { return }
+        bytes := n * m.size(m.elemOf(r))
+        q := m.allocate(bytes, aValue, sc)
+        if m.halted { return }
+        m.copy(q, data, bytes)
+        m.wr(dst, 8, n)
+        m.wrPtr(Ptr(dst.Id, dst.Off + 8), q)
         return
     }
     sc := m.buildScope(fi, s)
@@ -1398,8 +1416,15 @@ fn (m mut Machine&) slice(fi I64, dst Ptr, q mir.Place, lo mir.Operand, hi mir.O
         return
     }
     es := m.size(m.elemOf(st))
+    at := Ptr(data.Id, data.Off + a * es) if b > a or data.Id != 0 else NullPtr
+    # a view as a fixed array (E32b): one pointer, its length its type's
+    r := m.T.Repr(ty)
+    if m.T.KindOf(r) == types.Kind.Ref and m.T.Length(m.T.Repr(m.T.Referent(r))) != types.TypeId(0) {
+        m.wrPtr(dst, at)
+        return
+    }
     m.wr(dst, 8, b - a)
-    m.wrPtr(Ptr(dst.Id, dst.Off + 8), Ptr(data.Id, data.Off + a * es) if b > a or data.Id != 0 else NullPtr)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), at)
 }
 
 # the code allocation standing for a function: a function value's first word

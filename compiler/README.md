@@ -8,8 +8,9 @@ stage 0. It is the reference for behaviour only (diagnostics, edge cases, test r
 Built so far: the front end (source, tokens, parser, diagnostics, loader, name resolution) and the type table. The
 typed core and the MIR are written as contracts. Checking (`check.olang`) and lowering (`lower.olang`, with a stand-in
 placement until the scope pass) are in progress, and so is emission (`emit.olang`): the pipeline writes one LLVM
-module for a whole program, which clang compiles and links with stage 0's runtime (`make emitdiff`); evaluation is not
-built yet, and the driver does not compile with it yet. The formatter (`olang format`) is the one part already in use. The command line
+module for a whole program, which clang compiles and links with stage 0's runtime (`make emitdiff`); and evaluation
+(`eval.olang`, `interp.olang`), which runs what lowering makes - while compiling (B9c, S8b, S18c) and as `olang
+interpret` (`make evaldiff`). The driver does not compile with the pipeline yet. The formatter (`olang format`) is the one part already in use. The command line
 is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
 
 ## Modules (one file per pass)
@@ -29,6 +30,8 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
 | `typed.olang`, `mir.olang` | the typed core language and the mid-level IR (contracts) |
 | `check.olang` | the checker: the resolved tree elaborated into the typed core (M5b/M5c, in progress) |
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |
+| `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
+| `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
 | `emit.olang` | MIR written as LLVM IR text, a whole program as one module streamed through a writer (M9, in progress) |
 | `fmt.olang` | the formatter's layout (B13), over the scanner's tokens; `tools/fmt.olang` is its program |
 | `target.olang` | the machine a build is for (B12): clang asked, without clang for `interpret` |
@@ -46,7 +49,8 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
   make of a file), `checkdump.olang` (what the checker says of a program), `checkdiff.olang` (the
   checker against stage 0's goldens), `drvdiff.olang` (the driver's command line against stage 0's), `lowerdump.olang`
   (every function of a program lowered and verified, `-mir` to dump), `emitdump.olang` (a program written as LLVM IR),
-  `emitdiff.olang` (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `unparse.olang`, `diaggold.olang`, `genmsgs.olang`
+  `emitdiff.olang` (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldump.olang`
+  (a program or its tests run by the evaluator), `evaldiff.olang` (stage 0's runs against the evaluator's), `unparse.olang`, `diaggold.olang`, `genmsgs.olang`
   (writes `msgs.olang` from the C table; from the
   repository root, `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
 - `goldens/` - what stage 0 gave, captured: `diag.txt` (diagnostics per checks case), `layout.txt` and
@@ -71,6 +75,7 @@ make checkdiff     # the checker's first errors equal stage 0's on refused cases
 make drvdiff       # the driver says what stage 0 says, on every command line decided before code generation
 make lowerdump     # every body and helper of the corpus and the checks' run cases lowered to MIR and verified
 make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with stage 0's
+make evaldiff      # the corpus, std's tests and the checks' run cases run by the evaluator, compared with stage 0's runs
 ```
 
 The `*diff` targets build the C oracles in `bootstrap/oracle/` and `build/compiler_tools_dump` first.

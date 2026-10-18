@@ -142,6 +142,18 @@ emitdiff: build/compiler_tools_emitdump build/compiler_tools_emitdiff
 	build/compiler_tools_emitdiff -v > build/emitdiff.txt
 	grep '^== total' build/emitdiff.txt
 
+# M8's acceptance, measured: each file of tests in the corpus and std run by stage 0 and by the self-hosted pipeline's
+# evaluator (load, names, check, lower, eval - compiler/tools/evaldump.olang), compared test by test, and the checks'
+# run cases compared as programs (compiler/tools/evaldiff.olang; the rows in build/evaldiff.txt, not in verify until
+# it is required)
+build/compiler_tools_evaldump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/evaldump.olang
+	$(OLANG) build compiler/tools/evaldump.olang
+EVAL_CASES = $(shell grep -L '^\# flags' $$(grep -l '^\# check: run' checks/cases/*.olang))
+evaldiff: build/compiler_tools_evaldump build/compiler_tools_evaldiff
+	build/compiler_tools_evaldiff -v > build/evaldiff.txt
+	build/compiler_tools_evaldiff $(EVAL_CASES) > build/evaldiff.cases.txt
+	grep '^== total' build/evaldiff.txt build/evaldiff.cases.txt
+
 # captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
 # (minutes: stage 0 checks each root program whole)
 layoutgold: build/layoutdump build/compiler_tools_layoutgold
@@ -268,7 +280,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff lowerdump emitdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff lowerdump emitdiff evaldiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
