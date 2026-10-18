@@ -219,10 +219,13 @@ type Rvalue enum {
 }
 
 # what a Write appends to a builder: an array of U8 or Char as bytes, a Char as itself, a number as E11a writes it
-# (an integer in decimal, a float as its shortest text), a Bool as true or false
+# (an integer in decimal, a float as its shortest text), a Bool as true or false; text and a Char inside another
+# value, as E11a writes them there - a string literal and a character literal, escaped (Quoted, QuotedChar)
 type WriteKind enum {
     Bytes
+    Quoted
     Char
+    QuotedChar
     Int
     Uint
     Float
@@ -938,18 +941,51 @@ fn (v mut verifier&) types() {
 fn (v mut verifier&) canon(ty types.TypeId) String { return v.T.Canon(ty) }
 
 # whether a value of type from may be put where a to is: one representation (T29: a declared type over another is its
-# representation), null into a reference or a function value, and a reference into one of the same referent with no
-# permission it lacks - writable or owning dropped (T25b; a borrow of an own slot, O32)
+# representation, an array of a declared number one of its base's, T29h), null into a reference or a function value,
+# and a reference into one of the same referent with no permission it lacks - writable or owning dropped (T25b; a
+# borrow of an own slot, O32)
 fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
     t := v.T
     if from == types.UnknownT or to == types.UnknownT { return false }
-    if t.Same(t.Repr(from), t.Repr(to)) { return true }
+    if v.sameRepr(from, to) { return true }
     if from == types.NullT { return t.IsRef(to) or t.KindOf(to) == types.Kind.Func }
     if t.IsRef(from) and t.IsRef(to) {
         pf, pt := t.PermOf(from), t.PermOf(to)
-        return t.Same(t.Repr(t.Referent(from)), t.Repr(t.Referent(to))) and (pf | pt) == pf
+        return v.sameRepr(t.Referent(from), t.Referent(to)) and (pf | pt) == pf
     }
     return false
+}
+
+# whether two types have one representation: past declared types over others (T29), and through arrays to their
+# elements' (T29h's Array<Char> is an Array<U8>)
+fn (v mut verifier&) sameRepr(a types.TypeId, b types.TypeId) Bool {
+    t := v.T
+    ra, rb := t.Repr(a), t.Repr(b)
+    if t.Same(ra, rb) { return true }
+    if t.KindOf(ra) == types.Kind.Array and t.KindOf(rb) == types.Kind.Array {
+        return t.Length(ra) == t.Length(rb) and v.sameRepr(t.Elem(ra), t.Elem(rb))
+    }
+    return false
+}
+
+# a call's result as the caller holds it: a result built in the result scope is new storage only the caller holds, and
+# writable (T25b) - a reference result built, or one of several results built, with its write permission
+fn (v mut verifier&) held(f types.TypeId) types.TypeId {
+    t := v.T
+    res := t.Result(f)
+    if t.KindOf(res) == types.Kind.Tuple {
+        xs := t.Items(t.Parts(res))
+        out := Array<types.TypeId>(xs.Len())
+        for k in range xs.Len() { out[k] = v.builtPart(f, k, xs[k]) }
+        return t.Tuple(t.List(out))
+    }
+    return v.builtPart(f, 0, res)
+}
+
+fn (v mut verifier&) builtPart(f types.TypeId, k I64, x types.TypeId) types.TypeId {
+    t := v.T
+    if not t.IsRef(x) or t.ResultFrom(f, k) != types.OwnScope { return x }
+    return t.Ref(t.Referent(x), t.PermOf(x) | types.Writable)
 }
 
 fn (v mut verifier&) want(from types.TypeId, to types.TypeId, what String&) {
@@ -1095,8 +1131,8 @@ fn (v mut verifier&) stmtTypes(s Stmt) {
             xt := v.operandType(x)
             r := t.Repr(xt)
             good := match how {
-                case WriteKind.Bytes => v.isText(xt)
-                case WriteKind.Char => r == types.TypeId(7)
+                case WriteKind.Bytes, WriteKind.Quoted => v.isText(xt)
+                case WriteKind.Char, WriteKind.QuotedChar => r == types.TypeId(7)
                 case WriteKind.Int => t.IsInt(r) and not t.IsUnsigned(r)
                 case WriteKind.Uint => t.IsUnsigned(r)
                 case WriteKind.Float => t.IsFloat(r)
@@ -1120,7 +1156,7 @@ fn (v mut verifier&) stmtTypes(s Stmt) {
             ty := v.calleeType(task.Target)
             if ty != types.UnknownT {
                 v.args(task.Target, ty, task.Args, task.Scopes)
-                rs := t.Results(ty)
+                rs := t.Results(t.Func(t.Params(ty), v.held(ty), t.Errors(ty)))
                 if task.Targets.N > I32(0) and I64(task.Targets.N) != rs.Len() {
                     v.bad("a task with " $task.Targets.N " targets for " $rs.Len() " results")
                 } else {
@@ -1254,7 +1290,10 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
         case typed.PrimOp.Same {
             b := v.operandType(v.arg(r, 1))
             k := t.KindOf(ra)
-            if (k != types.Kind.Ref and k != types.Kind.Func) or not t.Same(t.Plain(t.Repr(b)), t.Plain(ra)) {
+            rb := t.Repr(b)
+            same := t.Same(rb, ra)
+            if k == types.Kind.Ref and t.IsRef(rb) { same = v.sameRepr(t.Referent(ra), t.Referent(rb)) }
+            if (k != types.Kind.Ref and k != types.Kind.Func) or not same {
                 v.bad("Same of a " $v.canon(a) " and a " $v.canon(b))
             }
             if ty != types.BoolT { v.bad("Same typed " $v.canon(ty)) }
@@ -1441,7 +1480,7 @@ fn (v mut verifier&) termTypes(term Term) {
             ty := v.calleeType(c.Target)
             if ty == types.UnknownT { return }
             v.args(c.Target, ty, c.Args, c.Scopes)
-            res := t.Result(ty)
+            res := v.held(ty)
             if c.HasDest {
                 if res == types.VoidT { v.bad("a call with no result stores one") } else {
                     v.want(res, v.placeType(c.Dest), "the call's result")
