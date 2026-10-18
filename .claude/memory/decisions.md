@@ -373,11 +373,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   LoadError error IoError, ParseError`; a function type's set too (`f fn(I64) ? LoadError` - my parenthesized
   `fn(I64) ? (A, B)` of 2026-10-17 is removed); a catch binding takes the set its clause covers, unnamed, and a named
   set is the same type as that set unnamed, so it flows into a `List<LoadError>`. The only ways to get an error value:
-  a catch binding, or an error word written (`IoError.FULL`). Still PROPOSED (asked): error types declared as types - `type IoError error { FULL  DENIED }` (replacing `error IoError
+  a catch binding, or an error word written (`IoError.FULL`). DECIDED (the user: "Both of these are good") - error types declared as types - `type IoError error { FULL  DENIED }` (replacing `error IoError
   { }`) and a named set `type LoadError error IoError, ParseError`, usable as a value's type and in a signature
   (`? LoadError`); the zero written `null` (`e == null`), raising a null error aborts (one compare on the raise path);
-  no postfix `?` (one way: `try`, which covers a whole chain; `?` already marks error sets). In effect: nothing built;
-  after self-hosting once decided.
+  no postfix `?` (one way: `try`, which covers a whole chain; `?` already marks error sets; the user did not object).
+  Built in the port after self-hosting (plan.md build list item 14).
 - QAL DECIDED 2026-10-18 (the user: "Yes remove it but keep in git"): bootstrap/ is removed from the tree once the port
   self-hosts and the seed has rebuilt the compiler from nothing, the last commit holding it tagged `stage0-final`. Was: QAL ASKED 2026-10-18 (the user: "Do we remove the C compiler eventually as well or keep it in the project?").
   Recommended: keep it as stage 0 until the port is self-hosting and the seed has rebuilt the compiler from nothing at
