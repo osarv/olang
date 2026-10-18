@@ -9,7 +9,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 
 | # | Feature | From | Status |
 |---|---|---|---|
-| 1 | Generators (`yield`) | C#, Python | open |
+| 1 | Generators (`yield`) | C#, Python | decided 2026-10-18: `generator` declarations, port only |
 | 2 | Compile-time reflection | Zig, Rust derive | open |
 | 3 | Units of measure | F# | open |
 | 4 | Portable SIMD vectors | Zig, Rust | open |
