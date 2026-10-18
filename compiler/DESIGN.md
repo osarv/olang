@@ -884,6 +884,31 @@ golden dumps in `lower`'s tests stand in for round trips.
   addressed by the content they were built from (section 3.4).
 - **Process spawning.** Every external program runs through `os.Exec`: clang, git, the test binaries, and the
   compiler re-running itself for `test`. None runs through a shell.
+- **Built (M10, 2026-10-17)**, against an interface, so everything a build does is real before the passes that make
+  IR exist:
+  - `build.olang`: a `Frontend` trait (`Analyze` fills a `Program` - each object's IR by module identity and what it
+    holds: a module, the root with `main` or the test harness, or the instances - plus the runtime's and the dynamic
+    call's IR; `Interpret` runs `interpret`), the `Config` of a build, SHA-256 in olang, objects named
+    `IDENTITY.HASH[.main|.test|.inst][.race][.debug][.san].o` (HASH 16 hex digits of the IR, the clang flags and
+    clang's version), compiled side by side by `RunAll` (workers over a channel, one per core), each written to a
+    temporary and renamed into place, the link skipped when its stamp (`BIN.link`: a hash of every argument and
+    clang's version, with the binary's size and time) says the binary is the one it would make, and the modes
+    (`Compile`, `BuildProgram`, `TestFile`, `TestFiles`, `Interpret`) over any front end;
+  - `target.olang`: B12's resolution (clang asked for its attributes, B12a's capability probe, B12c's features taken
+    out, without clang for `interpret`) and the target's build constants;
+  - `olang.olang`: the command line in words, as stage 0 reads it (B1: the modes `build compile test interpret format
+    explain help`, a bare `FILE.olang` built and run, the options `-output -debug -race -sanitize -target -define
+    -update -check` each for its modes, `help` and `help MODE` written as stage 0 writes them), the built-in constants,
+    and the front end so far - load and names (M4), which report what they find and then say code generation is still
+    to come (M5b-M9). `format` runs `build/compiler_tools_fmt` beside the driver (stage 0 builds it into its cache,
+    which the driver cannot until it makes code).
+  Proven so: a test building a stub front end's program with real clang (a second build compiles and links nothing;
+  a changed module recompiles only it; `-define` and the target rebuild what they change; a binary that is gone or
+  changed is linked again), `TestFiles` with a stand-in compiler, and `compiler/tools/drvdiff.olang` (`make drvdiff`, in
+  `make verify`): 72 command lines whose outcome is decided before code generation - every mistake, `help`, `explain`,
+  files that cannot be built - their standard output, standard error and status each equal to stage 0's.
+  Waiting for the back end: the real `Analyze` (M5b-M9), `interpret` (M8), checks' build scenarios and the build-time
+  measurements of section 3.3 (M11). B3's text in SPEC.md keeps stage 0's timestamps until stage 1 replaces it.
 
 ## 2. The thirteen grammar points
 
@@ -1017,8 +1042,11 @@ Estimated peak for a build of the compiler itself (about 1.2 MB of compiler sour
 - **Isolation.** A file's build lives in its own process, as in B3a: a crash or a fatal error ends that file only,
   and memory is returned between files.
 - **Mechanism.** olang has no `fork`, so `test a b c` re-runs the compiler (`os.ReadLink("/proc/self/exe")`) once
-  per file through `os.Exec`, with output captured and replayed in file order. That costs about 50-100 ms of
-  start-up per file against builds of seconds.
+  per file through `os.Exec`, as `test`, the modifiers as written, and that one file. The child writes straight to the
+  parent's output (`capture` false), so a file's results appear as its tests run, as B3a's do, and a test that
+  crashes has already shown what it printed; captured and replayed, they would wait for the file's end. That costs
+  about 50-100 ms of start-up per file against builds of seconds. `test` with one file builds it in the process itself.
+  A child ended by a signal is said to have been (B3a). (Built, M10.)
 - **One file at a time** at first, as B3a decided. Running several files at once becomes an internal change once
   stage 1's per-file memory is measured.
 
@@ -1065,16 +1093,16 @@ These are extrapolations from the measurements above, to be measured at M10.
    emission is cheap next to clang. So every module's IR is emitted, and its object is named by a hash of that IR
    text, the clang flags and clang's version. An object is reused exactly when that file exists. This replaces B3's
    timestamp rules: it never reuses a stale object, including one built by an older compiler, and it never rebuilds
-   an importer whose IR did not change (`resolve` above). B3's text is restated to match.
+   an importer whose IR did not change (`resolve` above). B3's text is restated to match. (Built, M10.)
 3. **Put instances in their own object** (`<root>.inst`), so editing one module no longer recompiles every instance
    with the root. With item 2, the instance object is rebuilt only when the instance set or an instance's code
-   changes.
+   changes. (Built, M10: `UnitKind.Instances`.)
 4. **Skip the link when nothing it reads changed**: the binary records a hash of its inputs. A no-op build is then
-   the front end alone: about 1.5 s here instead of 10.7 s.
+   the front end alone: about 1.5 s here instead of 10.7 s. (Built, M10: the stamp `BIN.link`.)
 5. **Run clang in parallel** over stale modules, bounded by the core count, using `join` and `spawn` over
-   `os.Exec`. Today the runs are serial.
+   `os.Exec`. Today the runs are serial. (Built, M10: `RunAll`.)
 6. **Use FastISel under `-d` unless the module's IR contains `bfloat`.** B2c's workaround for LLVM 18 costs 70% of
-   `-O0` time, and the compiler uses no BF16.
+   `-O0` time, and the compiler uses no BF16. (Built, M10: `CompileFlags`.)
 7. **LTO only where it pays.** Release builds keep full LTO; ThinLTO measured twice as slow to link at this size,
    so revisit it if the compiler's own link passes about 60 s. Development builds of the compiler use `-d`.
 8. **Parse modules in parallel** (section 1.4). This is small but free.
@@ -1280,7 +1308,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1) |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
 | M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 |
-| M10 | `build`, `target`, `olang` (driver) | from the start; integrates last | every mode and flag; content-addressed objects (B3, B10b, B12b); a no-op build links nothing; checks' build scenarios; `-t` self-exec |
+| M10 | `build`, `target`, `olang` (driver) | from the start; integrates last | every mode and flag; content-addressed objects (B3, B10b, B12b); a no-op build links nothing; checks' build scenarios; `-t` self-exec (built 2026-10-17 over a `Frontend` interface, all but checks' scenarios - section 1.11) |
 | M11 | stage 1 | all | emit acceptance (section 4); per-file `-t` peak under 500 MB |
 | M12 | self-hosting | M11 | stage 1 builds `compiler/`; stage 2 equals stage 3; `make bootstrap`; freeze |
 

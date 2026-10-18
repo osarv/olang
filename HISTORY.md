@@ -19918,3 +19918,98 @@ compiling (S18c) beside the same at run time. `checks/cases/numtraitsqrtint` bec
 `numtraitsqrtlit` runs the literal ones (`Sqrt(4)`, `Sqrt(2 + 2)`, `Pow(2, 10)`, `Abs(-3)` still `I64`). A character literal
 chooses nothing (it is a `Char`, T29h): `ncNext('a')` against `Integer` stays G19's error - the full verify's
 `numtraitchar` case caught the first version, which adapted `'a'` to `I64`.
+### Port M10: the driver, over a front-end interface (B1, B3, B3a, B10, B10a, B10b, B11a, B12, B12a, B12b, 2026-10-17)
+
+The driver was the one module of the port that could be written whole before the passes that make IR: what a build
+does with IR - name its objects, decide which exist already, compile the rest, link, run tests - does not depend on how
+the IR was made. So it is written against an interface, `build.Frontend`, and everything behind that interface is the
+part still to come.
+
+**The interface.** `Analyze(root, kind, cfg, prog, d) ? Failed` fills a `Program`: a list of units, each one object's IR
+with the identity of the module it is for (M22a) and what it holds - a module's code, the root's with `main` or with the
+test harness, or the program's instances (DESIGN.md 3.4 item 3) - plus the runtime's IR (std/runtime filled in for this
+build, 1.10) and the dynamic call's where the program declares one. `Interpret` is `-i`. A front end that found
+mistakes says `REPORTED` (they are in the diagnostics); one that cannot do what is asked yet says `UNBUILT`. The
+diagnostics are passed as living where the configuration does (`d mut diag.Diagnostics&cfg`): the loader holds both,
+and its constructor needs one scope for everything it holds (O25e, C2d).
+
+**Objects by content (3.4 item 2).** An object is `DIR/IDENTITY.HASH[.main|.test|.inst][.race][.debug][.san].o`, HASH
+the first 16 hex digits of the SHA-256 of its IR text, every clang flag it is compiled with, and clang's own
+`--version`. The IR already holds everything an object depends on - the signatures it was compiled against, the `-D`
+values a build-decided branch chose, the target's attributes (B12b) - so the hash replaces B3's timestamps, B10b's
+`.d<hash>` and B12b's mixing in with one rule, and an object built by another compiler, or another clang, is never
+reused. SHA-256 is written in olang (FIPS 180-4's vectors, a million `a`s in one write and in a thousand). Sixteen hex
+digits are 64 bits: a collision among the few thousand objects of a cache is not a practical concern, and the name stays
+readable. An object with the name is reused exactly when the file exists; a compile writes `OBJ.PID.tmp` and renames it
+into place, so an interrupted build never leaves an object that looks finished. Its IR is written beside it only when it
+is compiled.
+
+**Side by side (item 5).** `RunAll` runs a list of commands, a number at a time (one per core, `sysconf`), each through
+`os.Exec` with its output gathered, workers taking command numbers from a `std/chan` channel inside a `join` - the
+first real use of `join`/`spawn` in the compiler. A clang that fails has its output written and the first failure
+reported (`ClangFailed`); what it compiled is removed.
+
+**The link (item 4).** The link's stamp `BIN.link` holds a hash of every argument of the link and clang's version,
+then the binary's size and modification time when it was linked. The link is skipped when the stamp matches and the
+binary is still that size and time - so a binary that was deleted, or written over, is linked again from the objects
+there. `clang` with `capture` false, so a link's errors are seen as clang writes them; `LinkFailed` follows.
+
+**FastISel (item 6).** Under `-d` the flags gain `-mllvm -fast-isel=false` only when the IR holds `bfloat` (B2c's LLVM
+18 workaround costs `-O0` compiles 70%, and nearly no module uses BF16).
+
+**`-t` (3.2).** One file is built and run in the process itself. Several re-run the compiler (`/proc/self/exe`) once per
+file, as `-t`, the modifiers as they were written, and that file, one after another. Decided (mine): the child writes
+straight to this process's output rather than having it captured and replayed in file order, as section 3.2 first
+said - B3a's results then appear as the tests run, a test that crashes has shown what it printed, and nothing is held
+in memory; files still run one at a time, so the output is in the order listed. A child ended by a signal is said to
+have been ("x: the compiler ended (Killed), skipping"), the signal named as the C library names it.
+
+**The command line.** Read as stage 0 reads it: left to right, the modifiers `-r -d -s -u -a -D` taken out wherever they
+stand, each `-D` defined at once, up to the file `-i` runs (everything after it is the program's), the first mistake
+reported and the reading stopped; then `-e` (one rule), the target resolved (B12: native by asking clang, B12a's
+foreign targets for `-c` only), the eight built-in constants (a `-D` of one is B10a's error, the first in their order),
+and the mode's file count. Every message is msgs.olang's, which M2 holds to errmsg.h, and a command line's mistake is
+one `olang: error[RULE]: ...` row with no summary line, as stage 0's. The compiler runs on `os.RunOnStack` with 1 GB
+(L21) and installs `os.OnCrash`'s internal-error line.
+
+**The front end so far** loads the program (M4: imports, remote fetches through the lock file, build-decided branches
+B9a can decide) and resolves its names; what they find is reported as stage 0 reports it, and a program they find
+nothing wrong with gets "olang: error: this compiler does not generate code yet - its checker and back end are
+compiler/DESIGN.md's M5b-M9; build with build/out".
+
+**Acceptance.** (1) A test in build.olang builds a stub front end's program - three modules, the instances and a runtime,
+their IR carrying the target's attributes and triple - with the real clang into a temporary directory and runs it: the
+first build compiles five objects and links once, a second compiles and links nothing, a changed module recompiles
+only itself, `-D N=50` only the module reading it (and taking it back recompiles nothing, the old object being there),
+another target every object, a deleted or overwritten binary is linked again, and the program's status is the value
+it should be at each step. (2) `TestFiles` driven with a shell script standing in for the compiler: arguments, order,
+statuses and a `kill -9` reported. (3) `compiler/tools/drvdiff.sh` (`make drvdiff`, in `make verify`) runs 43 command
+lines through stage 0 and through `build/compiler_olang` (the driver, built by stage 0) and compares what each writes
+and its status: no difference. (4) olang.olang's tests hold the parser and `Prepare` to stage 0's texts.
+
+**Found on the way.** `cond.Define` (M4) ended every `-D` that succeeded with its failure: its statement `try` had a
+clause for each `DefineError` word and a catch-all `catch { return }` meant for success, which only ever ran for an
+error - there was none left - so a good define fell through to `error Bad.FLAG`. Every caller ignored the failure
+(`catch { }`), which is why nothing noticed. Each clause now reports and fails, and success falls through; the unused
+word `MISSING` went.
+
+**Waiting for the back end**: the real `Analyze` (M5b-M9), `-i` (M8), checks' build scenarios and section 3.3's build
+times (M11). SPEC.md's B3 keeps stage 0's timestamp rules until stage 1 replaces stage 0.
+
+**Brought up to master (2026-10-18).** The branch was written under the one-character command line and the old
+syntax; master meanwhile made the command line words (B1), changed the listing rule and type parameter lists (QY/QW),
+the errors batch (done/fail gone, `io.Print` failing with `IoError`) and turned the acceptance scripts into olang
+programs. The three files went through tools/io_print, io_try, donefail_migrate, syntax_migrate `--old`, io_fix and
+errors_migrate (with a few edits by hand where a tool put `try` inside a qualified name or wrote `+` in an error set);
+the driver's printing now swallows a failed write rather than putting `IoError` on every mode. The command line was
+rewritten to stage 0's word reading: the mode first (a word, or running a file when the first word is an option or a
+`.olang` file), then options and files in any order, each option checked against the mode it applies to and a value
+read after it, explain's rule and help's mode one word, a run's or interpret's arguments everything after its file;
+then explain, help, the file counts, format (which runs `build/compiler_tools_fmt` beside the driver - stage 0 builds
+the formatter into its cache, which the driver cannot until it makes code), `-output`'s directory (B3h), the target
+and the built-in constants. `help` and `help MODE` are written from the same tables as stage 0's. Running a file
+builds quietly and runs the binary as a child (stage 0 runs it in its own place with `execv`, so its first argument is
+the file as written - the one difference, recorded for when the back end exists). `drvdiff.sh` became
+`compiler/tools/drvdiff.olang` over toolkit, now 72 command lines in words, comparing standard output and standard
+error apart: no difference. Found on the way: stage 0 said `-i` in B12a's message for interpret (main.c's
+resolveTarget, a leftover of the one-character flags) - now `interpret`, in both.

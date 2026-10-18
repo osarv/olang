@@ -1,0 +1,418 @@
+# target - the machine a build is for (B12, B12a, B12b, B12c, B10a; compiler/DESIGN.md 1.11).
+#
+# "-target SPEC" names it, "native" when it is not given. It is resolved once, before anything is analyzed, the way a C
+# compiler resolves "-march": by asking clang what it compiles an empty C function to for SPEC - the triple, the CPU,
+# its features - which is exactly what clang's own "-march=native" finds. What is resolved is what every generated
+# function carries (Attrs), how clang is told the CPU at the compile and the link (CpuFlag), and the five build
+# constants of B10a that describe a target. Another architecture is built for only where this clang can compile the
+# runtime's code for it (B12a). Without clang, which interpret does not otherwise need, interpret takes native to be the
+# x86-64 level this processor has, read from /proc/cpuinfo.
+import "std/os"
+import "diag"
+import "msgs"
+
+extern fn uname(buf Array<U8>) I32
+extern fn access(path Array<U8>, mode I32) I32
+
+# a resolved target. Triple is LLVM's, as clang normalizes it; Arch and Os the build constants TargetArch and TargetOs;
+# Cpu TargetCpu, the CPU clang resolved the spec to; Attrs what every generated function carries - CPU, features and
+# the vector width; CpuFlag how clang is told the CPU ("-march=X", or "-mcpu=X" on aarch64, "" without clang); Foreign
+# another architecture or operating system than this machine's (B12a: compile only)
+type Target struct() {
+    Spec String& = "native"
+    Triple String& = ""
+    Arch String& = ""
+    Os String& = "linux"
+    Cpu String& = ""
+    Attrs String& = ""
+    CpuFlag String& = ""
+    VectorBits I64 = 0
+    Fma Bool = false
+    Foreign Bool = false
+}
+
+# a target that could not be resolved - its diagnostic said
+error Bad { TARGET }
+
+# ---- the architectures ----
+
+# B12: the architectures olang builds for, how clang is told a CPU of each, and each one's baseline CPU. A 64-bit,
+# little-endian machine is what the layouts assume, and the runtime's facts about the C library are known for these
+Archs := String&["x86_64", "aarch64"]
+ArchCpuFlags := String&["-march=", "-mcpu="]
+ArchDefaultCpus := String&["x86-64", "generic"]
+
+# B12c: target features whose instructions LLVM would select for ordinary IR but which do not compute what IEEE 754
+# (and so the compile-time evaluator, K1) computes - VCVTNEPS2BF16 treats subnormal inputs as zero and flushes subnormal
+# results - so a target's extensions are taken without them, the conversion then being correct on every target
+IeeeUnsafe := String&["avx512bf16", "avxneconvert"]
+
+fn archIndex(a String&) I64 {
+    for i, n in Archs {
+        if n == a { return i }
+    }
+    return -1
+}
+
+# ---- this machine ----
+
+# the operating system (lowercase) and the architecture this machine runs, as uname(2) names them: "linux", "x86_64".
+# struct utsname is six fields of 65 bytes each on Linux, sysname first and machine fifth
+fn Host() (String, String) {
+    buf := Array<U8>(390)
+    if uname(buf) != 0 { return "unknown", "unknown" }
+    return cField(buf, 0).ToLower(), cField(buf, 260)
+}
+
+# the NUL-terminated text of a 65-byte field
+fn cField(buf Array<U8>&, at I64) String {
+    b := StringBuilder()
+    for i in range at, at + 65 {
+        if buf[i] == 0 { break }
+        b.PushChar(Char(buf[i]))
+    }
+    return b.ToString()
+}
+
+# the clang to build with: the first of clang-20 and clang found on PATH, by name (os.Exec looks it up the same way),
+# or "" when there is none
+fn FindClang() String {
+    path := try os.Env("PATH") catch default ""
+    dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
+    for name in String&["clang-20", "clang"] {
+        for dir in dirs.Split(":") {
+            cand := $dir "/" $name if dir != "" else $name
+            if access($cand "\0", 1) == 0 { return $name } # 1 is X_OK
+        }
+    }
+    return ""
+}
+
+# ---- resolving ----
+
+# what "-target spec" names (B12), for a build that interprets (interpret) or not, with clang ("" for none). A spec is a
+# CPU of this machine's architecture ("native", "x86-64-v3", "skylake"), or a triple ARCH-linux-gnu (any vendor between)
+# with ":CPU" after it where the architecture's baseline is not the CPU wanted. What cannot be built for is reported to
+# d
+fn Resolve(spec String&, clang String&, interpreting Bool, d mut diag.Diagnostics&) Target ? Bad {
+    hostOs, hostArch := Host()
+    return try ResolveOn(spec, clang, interpreting, hostOs, hostArch, d)
+}
+
+# Resolve, on a machine running hostOs on hostArch
+fn ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hostArch String&
+    d mut diag.Diagnostics&) Target ? Bad {
+    t := Target()
+    t.Spec = $spec
+    # a triple begins with an architecture and a '-'; anything else is a CPU of this machine's architecture
+    triple String& = ""
+    cpu String& = $spec
+    hasCpu := true
+    ai I64 = -1
+    dash := try spec.FindByte('-') catch default -1
+    if dash >= 0 { ai = archIndex(spec[:dash]) }
+    if ai >= 0 {
+        colon := try spec.FindByte(':') catch default -1
+        triple = $spec[:colon] if colon >= 0 else $spec
+        hasCpu = colon >= 0
+        cpu = $spec[colon + 1:] if colon >= 0 else ""
+        # the operating system part: Linux with the GNU C library, the one whose facts the runtime knows
+        if not (triple.Len() > 10 and triple.EndsWith("-linux-gnu")) { try refuse(d, msgs.TargetUnsupported(spec)) }
+        if hasCpu and (cpu == "" or cpu.Contains(":")) { try refuse(d, msgs.TargetUnknown(spec)) }
+    } else {
+        # a triple for an architecture olang does not build for, rather than a CPU
+        if spec.Contains("-linux") or spec.Contains("-apple") or spec.Contains("-windows") {
+            try refuse(d, msgs.TargetUnsupported(spec))
+        }
+        if spec.Contains(":") or spec == "" { try refuse(d, msgs.TargetUnknown(spec)) }
+        ai = archIndex(hostArch)
+        if ai < 0 { try refuse(d, msgs.TargetUnsupported(hostArch)) }
+    }
+    t.Arch = $Archs[ai]
+    t.Foreign = Archs[ai] != hostArch or hostOs != "linux"
+    # a triple naming this machine's architecture and system is this machine, with the triple's baseline CPU unless one
+    # is given: built and linked as any other build for this machine
+    if triple != "" and not t.Foreign {
+        triple = ""
+        if not hasCpu {
+            cpu = $ArchDefaultCpus[ai]
+            hasCpu = true
+        }
+    }
+    if hasCpu and cpu == "native" and t.Foreign { try refuse(d, msgs.TargetNativeForeign(spec)) }
+    if t.Foreign and interpreting { try refuse(d, msgs.TargetForeignMode("interpret", spec)) }
+    # interpret runs the program without clang and needs one only to know the target: this machine's own CPU, or an
+    # x86-64 level, it knows without - the level this processor supports standing for its CPU
+    if clang == "" {
+        if not interpreting or not t.withoutClang(cpu, cpuFlags()) { try refuse(d, msgs.TargetNoClang(spec)) }
+        return t
+    }
+    # the probe: one empty C function compiled to IR for the target, whose attributes say what clang made of it
+    args List<String&>
+    args.Push($clang)
+    if triple != "" { args.Push($"--target=" $triple) }
+    if hasCpu { args.Push($ArchCpuFlags[ai] $cpu) }
+    for a in String&["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
+    out := try os.Exec(args.ToArray(), "void olang_target_probe(void) { }\n") catch os.OsError {
+        try refuse(d, msgs.TargetUnknown(spec))
+        unreachable
+    }
+    if out.Status != 0 { try refuse(d, msgs.TargetUnknown(spec)) }
+    try t.FromProbe(out.Stdout) catch Probe.UNKNOWN { try refuse(d, msgs.TargetUnknown(spec)) }
+    catch Probe.UNSUPPORTED { try refuse(d, msgs.TargetUnsupported(spec)) }
+    # another architecture is built for only where this clang can generate all the code the runtime holds - BF16 among
+    # it, which LLVM 18's AArch64 back end cannot select: an object it could not compile at the link is not built
+    if t.Foreign and not canCompileBf16(clang, t.Triple) { try refuse(d, msgs.TargetNoBackend(spec)) }
+    t.CpuFlag = $ArchCpuFlags[ai] $t.Cpu # resolved: native is looked up once
+    return t
+}
+
+fn refuse(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
+    d.Error(diag.Where.Nowhere, m)
+    error Bad.TARGET
+}
+
+# why a probe's output names no target
+error Probe {
+    UNKNOWN     # clang said nothing a target can be read from
+    UNSUPPORTED # not a 64-bit little-endian machine (T4's layouts)
+}
+
+# the triple, CPU, features and the attributes every function carries, read from what clang compiled the probe to: its
+# "target triple", "target datalayout" and "attributes #0" lines
+fn (t mut Target&) FromProbe(out String&) ? Probe {
+    tl := try field(out, "target triple = \"") catch { error Probe.UNKNOWN }
+    dl := try field(out, "target datalayout = \"") catch { error Probe.UNKNOWN }
+    at := try out.Find("attributes #0 = {") catch { error Probe.UNKNOWN }
+    nl := try out[at:].FindByte('\n') catch default (out.Len() - at)
+    al := out[at:at + nl]
+    # the layouts the compiler gives its types assume a 64-bit, little-endian machine (T4)
+    if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16") { error Probe.UNSUPPORTED }
+    t.Triple = $tl
+    t.Cpu = $(try attrValue(al, "target-cpu") catch { error Probe.UNKNOWN })
+    features := StripUnsafe(try attrValue(al, "target-features") catch default "")
+    # B10a: the width of the vectors the generated code uses for its loops, and whether it has fused multiply-add
+    if t.Arch == "aarch64" {
+        t.VectorBits = 128 if HasFeature(features, "neon") else 0
+        t.Fma = true
+    } else {
+        t.VectorBits = 512 if HasFeature(features, "avx512f") else (256 if HasFeature(features, "avx") else 128)
+        t.Fma = HasFeature(features, "fma") or HasFeature(features, "fma4")
+    }
+    # what every generated function carries: the CPU and features (and how far a scalable vector may reach), and the
+    # vector width - told to the code generator outright, so the width the program reads (TargetVectorBits) is the one
+    # its loops are vectorized for, whatever a CPU's own tuning would have preferred
+    tune := try attrValue(al, "tune-cpu") catch default ""
+    tuneAttr := $" \"tune-cpu\"=\"" $tune "\"" if tune != "" else ""
+    vsAttr String& = ""
+    vs := try al.Find("vscale_range(") catch default -1
+    if vs >= 0 {
+        close := try al[vs:].FindByte(')') catch default -1
+        if close >= 0 { vsAttr = $" " $al[vs:vs + close + 1] }
+    }
+    width := t.VectorBits if t.VectorBits > 0 else 128
+    t.Attrs = ($"\"target-cpu\"=\"" $t.Cpu "\" \"target-features\"=\"" $features "\"" $tuneAttr $vsAttr
+        " \"prefer-vector-width\"=\"" $width "\"")
+}
+
+# the text after key up to the next '"'
+fn field(out String&, key String&) String&out ? {
+    at := try out.Find(key)
+    from := at + key.Len()
+    end := try out[from:].FindByte('"')
+    return out[from:from + end]
+}
+
+# the value of attribute "name"="..." in an attribute line
+fn attrValue(line String&, name String&) String&line ? {
+    return try field(line, $"\"" $name "\"=\"")
+}
+
+# whether a feature list (clang's: "+a,+b,-c") turns feature f on
+fn HasFeature(features String&, f String&) Bool {
+    for p in features.Split(",") {
+        if p.Len() == f.Len() + 1 and p[0] == '+' and p[1:] == f { return true }
+    }
+    return false
+}
+
+# features with every IEEE-unsafe one (IeeeUnsafe) turned off
+fn StripUnsafe(features String&) String {
+    if features == "" { return "" }
+    b := StringBuilder()
+    for i, p in features.Split(",") {
+        if i > 0 { b.PushChar(',') }
+        off := p.Len() > 1 and p[0] == '+' and p[1:] in IeeeUnsafe
+        if off {
+            b.PushChar('-')
+            b.Push(p[1:])
+        } else {
+            b.Push(p)
+        }
+    }
+    return b.ToString()
+}
+
+# B12a: whether clang can generate BF16 code for triple - its back end compiling a function using it
+fn canCompileBf16(clang String&, triple String&) Bool {
+    ir := "define float @f(float %x) {\n  %b = fptrunc float %x to bfloat\n  %c = fadd bfloat %b, %b\n" $
+        "  %r = fpext bfloat %c to float\n  ret float %r\n}\n"
+    args := String&[$clang, $"--target=" $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
+    out := try os.Exec(args, ir) catch os.OsError { return false }
+    return out.Status == 0
+}
+
+# ---- without clang (interpret) ----
+
+# the flags of this processor, as /proc/cpuinfo lists them ("" where it cannot be read)
+fn cpuFlags() String {
+    info := try os.ReadFile("/proc/cpuinfo") catch os.OsError { return "" }
+    for line in info.Lines() {
+        if line.StartsWith("flags") {
+            colon := try line.FindByte(':') catch { return "" }
+            return $" " $line[colon + 1:].Trim() " "
+        }
+    }
+    return ""
+}
+
+# x86-64-v2, -v3 and -v4: the features each level adds, as /proc/cpuinfo names them
+LevelFlags := String&["cx16 lahf_lm popcnt sse4_1 sse4_2 ssse3", "avx avx2 bmi1 bmi2 f16c fma abm movbe xsave"
+    "avx512f avx512bw avx512cd avx512dq avx512vl"]
+
+# the x86-64 level a processor with these flags (" a b c ") supports: 1 to 4
+fn X86Level(flags String&) I64 {
+    level I64 = 1
+    for i, need in LevelFlags {
+        for f in need.Split(" ") {
+            if not flags.Contains($" " $f " ") { return level }
+        }
+        level = i + 2
+    }
+    return level
+}
+
+# B12: the target without clang (interpret only): "native" or an x86-64 level on an x86_64 machine - native the level
+# the processor whose flags are given supports - and "native" or "generic" on an aarch64 one. False for any other
+fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
+    t.Triple = $t.Arch "-unknown-linux-gnu"
+    if t.Arch == "aarch64" {
+        if cpu != "native" and cpu != "generic" { return false }
+        t.Cpu = "generic"
+        t.VectorBits = 128
+        t.Fma = true
+        return true
+    }
+    level := match cpu {
+        case "x86-64" => 1
+        case "x86-64-v2" => 2
+        case "x86-64-v3" => 3
+        case "x86-64-v4" => 4
+        case "native" => X86Level(flags)
+        case _ => 0
+    }
+    if level == 0 { return false }
+    t.Cpu = "x86-64" if level == 1 else $"x86-64-v" $level
+    t.VectorBits = 512 if level == 4 else (256 if level == 3 else 128)
+    t.Fma = level >= 3
+    return true
+}
+
+# ---- tests ----
+
+# what a probe of a skylake-avx512 machine prints, cut down to what is read
+SkylakeProbe := "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\n" $
+    "target triple = \"x86_64-pc-linux-gnu\"\n" $
+    "attributes #0 = { noinline nounwind \"target-cpu\"=\"skylake-avx512\" " $
+    "\"target-features\"=\"+avx,+avx512bf16,+avx512f,+fma,-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" }\n"
+
+fn quiet() diag.Diagnostics { return diag.Diagnostics(false) }
+
+test "a probe gives the triple, the CPU, the features without the IEEE-unsafe ones, and the vector width" {
+    t := Target()
+    t.Arch = "x86_64"
+    try t.FromProbe(SkylakeProbe) catch { unreachable }
+    assert t.Triple == "x86_64-pc-linux-gnu"
+    assert t.Cpu == "skylake-avx512"
+    assert t.VectorBits == 512 and t.Fma
+    assert t.Attrs == "\"target-cpu\"=\"skylake-avx512\" \"target-features\"=\"+avx,-avx512bf16,+avx512f,+fma," $
+        "-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" \"prefer-vector-width\"=\"512\""
+    # a 32-bit machine's layout, and no attributes at all
+    assert probeOutcome(SkylakeProbe.Replace("e-m:e-p270", "e-m:e-p:32:32-p270")) == "unsupported"
+    assert probeOutcome("target triple = \"x\"\n") == "unknown"
+    assert probeOutcome(SkylakeProbe) == "ok"
+}
+
+# what FromProbe makes of a probe's output, as a word
+fn probeOutcome(text String&) String {
+    t := Target()
+    t.Arch = "x86_64"
+    try t.FromProbe(text) catch Probe.UNKNOWN { return "unknown" } catch Probe.UNSUPPORTED { return "unsupported" }
+    return "ok"
+}
+
+test "features read as clang lists them, and the x86-64 levels read from /proc/cpuinfo's flags" {
+    assert HasFeature("+a,-b,+fma", "fma") and not HasFeature("+a,-b,+fma", "b") and not HasFeature("+fma4", "fma")
+    assert StripUnsafe("+avx512bf16,+avx,+avxneconvert") == "-avx512bf16,+avx,-avxneconvert"
+    assert X86Level(" sse2 ") == 1
+    v2 := " cx16 lahf_lm popcnt sse4_1 sse4_2 ssse3 "
+    assert X86Level(v2) == 2
+    v3 := $v2 "avx avx2 bmi1 bmi2 f16c fma abm movbe xsave "
+    assert X86Level(v3) == 3
+    assert X86Level($v3 "avx512f avx512bw avx512cd avx512dq avx512vl ") == 4
+    t := Target()
+    t.Arch = "x86_64"
+    assert t.withoutClang("native", v3) and t.Cpu == "x86-64-v3" and t.VectorBits == 256 and t.Fma
+    assert t.withoutClang("x86-64", "") and t.Cpu == "x86-64" and t.VectorBits == 128 and not t.Fma
+    assert not t.withoutClang("skylake", v3)
+    a := Target()
+    a.Arch = "aarch64"
+    assert a.withoutClang("native", "") and a.Cpu == "generic" and a.Triple == "aarch64-unknown-linux-gnu"
+}
+
+# the diagnostic a spec gives on this host, or "" for none
+fn mistake(spec String&, clang String&, interpreting Bool, hostOs String&, hostArch String&) String {
+    d := quiet()
+    try ResolveOn(spec, clang, interpreting, hostOs, hostArch, d) catch Bad { return d.Render() }
+    return ""
+}
+
+test "what cannot be built for is said as stage 0 says it, before clang is asked anything" {
+    # no clang is named, so every one of these is decided from the spec alone
+    assert mistake("mips-linux-gnu", "", false, "linux", "x86_64") ==
+        "olang: error[B12]: olang does not build for 'mips-linux-gnu' - it builds for x86_64 and aarch64 Linux with " $
+        "the GNU C library\n"
+    assert mistake("aarch64-apple-darwin", "", false, "linux", "x86_64").Contains("does not build for")
+    assert mistake("aarch64-linux-gnu:native", "", false, "linux", "x86_64").Contains("native is this machine's CPU")
+    assert mistake("aarch64-linux-gnu:", "", false, "linux", "x86_64").Contains("unknown target")
+    assert mistake("a:b", "", false, "linux", "x86_64").Contains("unknown target 'a:b'")
+    assert mistake("aarch64-linux-gnu", "", true, "linux", "x86_64") ==
+        "olang: error[B12a]: interpret builds and runs on this machine, and '-target aarch64-linux-gnu' is another " $
+        "architecture or system - only compile builds for it\n"
+    assert mistake("native", "", false, "linux", "x86_64").Contains("clang not found on PATH")
+    assert mistake("native", "", false, "linux", "riscv64").Contains("does not build for 'riscv64'")
+    # without clang interpret knows this machine and the x86-64 levels, and the triple naming this machine
+    assert mistake("x86-64-v2", "", true, "linux", "x86_64") == ""
+    assert mistake("x86_64-pc-linux-gnu", "", true, "linux", "x86_64") == ""
+    assert mistake("skylake", "", true, "linux", "x86_64").Contains("clang not found")
+}
+
+test "with clang, native is this machine's CPU, a triple of this machine its baseline, and a bad CPU is unknown" {
+    clang := FindClang()
+    if clang == "" { return }
+    hostOs, hostArch := Host()
+    if hostArch != "x86_64" or hostOs != "linux" { return }
+    d := quiet()
+    t := try Resolve("native", clang, false, d) catch Bad { unreachable }
+    assert t.Arch == "x86_64" and not t.Foreign and t.Cpu != "" and t.Cpu != "native"
+    assert t.CpuFlag == $"-march=" $t.Cpu and t.Attrs.StartsWith($"\"target-cpu\"=\"" $t.Cpu "\"")
+    assert t.Attrs.EndsWith($"\"prefer-vector-width\"=\"" $t.VectorBits "\"")
+    base := try Resolve("x86_64-linux-gnu", clang, false, d) catch Bad { unreachable }
+    assert base.Cpu == "x86-64" and base.VectorBits == 128 and not base.Fma and base.CpuFlag == "-march=x86-64"
+    v3 := try Resolve("x86-64-v3", clang, false, d) catch Bad { unreachable }
+    assert v3.VectorBits == 256 and v3.Fma
+    assert mistake("bogus", clang, false, "linux", "x86_64").Contains("unknown target 'bogus'")
+    # LLVM 18 cannot build the runtime's BF16 code for aarch64 (B12a); a later clang might
+    a := mistake("aarch64-linux-gnu", clang, false, "linux", "x86_64")
+    assert a == "" or a.Contains("error[B12a]: this clang cannot build for 'aarch64-linux-gnu'")
+}

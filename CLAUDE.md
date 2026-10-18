@@ -609,7 +609,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`
   (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,
   namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
-  loading and names, M5a types and the typed contract, M7's MIR contract; the compiler under test is `OLANG ?=
+  loading and names, M5a types and the typed contract, M7's MIR contract, M10's driver (`compiler/build.olang`,
+  `target.olang`, `olang.olang` - the word command line over a front-end interface; `make drvdiff`); the compiler under test is `OLANG ?=
   build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
   elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c").
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits

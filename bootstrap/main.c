@@ -682,7 +682,7 @@ static void resolveTarget(char* clang, bool interpreting) {
     //is given: built and linked as any other build for this machine
     if (triple && !gTarget.foreign) { triple = NULL; if (!cpu) cpu = (char*)targetArchs[ai].defaultCpu; }
     if (cpu && !strcmp(cpu, "native") && gTarget.foreign) ErrUsage(ERR_TARGET_NATIVE_FOREIGN, spec);
-    if (gTarget.foreign && interpreting) ErrUsage(ERR_TARGET_FOREIGN_MODE, "-i", spec);
+    if (gTarget.foreign && interpreting) ErrUsage(ERR_TARGET_FOREIGN_MODE, "interpret", spec);
 
     //-i runs the program without clang, and needs one only to know the target: this machine's own CPU, or an x86-64
     //level, it knows without - the level this processor supports standing for its CPU

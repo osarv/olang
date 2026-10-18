@@ -28,6 +28,9 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
 | `typed.olang`, `mir.olang` | the typed core language and the mid-level IR (contracts) |
 | `check.olang` | the checker: the resolved tree elaborated into the typed core (M5b/M5c, in progress) |
 | `fmt.olang` | the formatter's layout (B13), over the scanner's tokens; `tools/fmt.olang` is its program |
+| `target.olang` | the machine a build is for (B12): clang asked, without clang for `interpret` |
+| `build.olang` | objects named by their content, compiled side by side, the link, the modes, over a `Frontend` trait |
+| `olang.olang` | the driver: the command line in words (B1), as stage 0 reads it; the front end so far |
 
 ## Subfolders
 
@@ -38,7 +41,7 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
   run by its make target (`make tokdiff`), or by hand from the repository root: `build/out build
   compiler/tools/tokdiff.olang && build/compiler_tools_tokdiff [FILE...]`. Also `dump.olang` (prints what the passes
   make of a file), `checkdump.olang` (what the checker says of a program), `checkdiff.olang` (the
-  checker against stage 0's goldens), `unparse.olang`, `diaggold.olang`, `genmsgs.olang` (writes `msgs.olang` from the C table; from the
+  checker against stage 0's goldens), `drvdiff.olang` (the driver's command line against stage 0's), `unparse.olang`, `diaggold.olang`, `genmsgs.olang` (writes `msgs.olang` from the C table; from the
   repository root, `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
 - `goldens/` - what stage 0 gave, captured: `diag.txt` (diagnostics per checks case), `layout.txt` and
   `layout.deferred` (type layouts per program).
@@ -59,7 +62,8 @@ make layoutgold    # capture layout.txt again from stage 0 (minutes)
 make diaggold      # capture diag.txt again from build/out
 make fmtdiff       # every file formatted reads back as the same tree, keeps its comments, and is its own layout
 make checkdiff     # the checker's first errors equal stage 0's on refused cases; accepted programs check clean
+make drvdiff       # the driver says what stage 0 says, on every command line decided before code generation
 ```
 
 The `*diff` targets build the C oracles in `bootstrap/oracle/` and `build/compiler_tools_dump` first.
-`make verify` runs tokdiff, astdiff, namesdiff, layoutdiff and fmtdiff.
+`make verify` runs tokdiff, astdiff, namesdiff, layoutdiff, fmtdiff and drvdiff.

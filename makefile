@@ -82,6 +82,14 @@ build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/f
 fmtdiff: build/compiler_tools_fmt
 	OLANG_STD=std build/compiler_tools_fmt -v $$(git ls-files '*.olang')
 
+# the self-hosted compiler's driver (compiler/olang.olang), built by the compiler under test
+build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
+	$(OLANG) build compiler/olang.olang
+
+# M10's acceptance so far: the driver says what stage 0 says for every command line decided before code generation
+drvdiff: build/out build/compiler_olang build/compiler_tools_drvdiff
+	build/compiler_tools_drvdiff
+
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
 tokdiff: build/tokdump build/compiler_tools_dump build/compiler_tools_tokdiff
 	build/compiler_tools_tokdiff
@@ -184,6 +192,7 @@ verify:
 	$(MAKE) namesdiff
 	$(MAKE) layoutdiff
 	$(MAKE) fmtdiff
+	$(MAKE) drvdiff
 	@echo "verify: all checks passed"
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
@@ -237,7 +246,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff checkdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
