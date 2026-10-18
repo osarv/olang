@@ -364,6 +364,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAI 2026-10-18 (checked reaching into callees). DECIDED (the user): a call through a function value is never checked
+  (a lambda written inside the checked expression is). ASKED: (1) keep `checked` local as today but drop the Checked
+  forms (a user operator method is an ordinary call; `checked x[i]` on At+Len types keeps the derived bounds check),
+  move the program-wide "find every overflow" job to a build option (aborting checks under -debug, Rust's debug
+  overflow), and add `unchecked (e)` to mark intended wraps/truncations for that mode - recommended over deep checked
+  (checked copies of every reached function, BuiltinError in every reached set, std's wraps marked) as too much for its
+  payoff; (2) rename BuiltinError to CheckError (recommended; raised only by checked). In effect: today's design.
 - QAH DECIDED 2026-10-18 (the user: "If this make sense in general we do it in general yes"): generics over error sets.
   A declaration's type parameter list may end in one error-set parameter after `?` (`trait Iterator<T ? E>`, `fn
   Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E`), usable wherever an error set is written; inferred like a type
