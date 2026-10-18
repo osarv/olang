@@ -957,6 +957,50 @@ fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind,
 
 # ---- errors ----
 
+# E35: the error a "!" took ends the program, named as a program writes it - another module's error type by its
+# module's base name, the prelude's and this module's bare ("io.IoError.FULL") - a test and an exit for each word
+fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span) {
+    t := ln.T
+    xs := t.Items(from)
+    for j in range xs.Len() {
+        et := t.ErrOf(xs[j])
+        if t.KindOf(et) != types.Kind.Named { continue }
+        d := t.DeclOf(et)
+        q := ""
+        dm := t.DeclModule(d)
+        id := ln.L.P.L.Mods[dm].Identity
+        if not id.StartsWith("std/prelude") and dm != ln.module() {
+            k := try id.FindLast("/") catch default -1
+            q = $id[k + 1:] "."
+        }
+        ws := ln.L.P.ErrorWords(d)
+        for w in range ws.Len() {
+            name := $q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w])
+            yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+            same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w)], sp)
+            ln.end(mir.Term.Branch(same, yes, no))
+            ln.start(yes)
+            ln.end(mir.Term.Exit(sp, mir.ExitKind.Error, ln.textData(name, sp)))
+            ln.start(no)
+        }
+    }
+    ln.end(mir.Term.Exit(sp, mir.ExitKind.Error, ln.textData("unhandled error", sp)))
+}
+
+# text as constant data (T25d), a String&
+fn (ln mut lowering&) textData(text String&, sp source.Span) mir.Operand {
+    c := ln.F.AddConst(typed.Const.Bytes(text))
+    return mir.Operand.Data(ln.T.Ref(ln.L.text(), types.ReadOnly), c, ln.file, sp)
+}
+
+# the module the body being lowered is in
+fn (ln mut lowering&) module() I64 {
+    for m in range ln.L.P.L.Mods.Len() {
+        if ln.L.P.L.Mods[m].File == ln.file { return m }
+    }
+    return -1
+}
+
 # an error with code, under list from, reaching here: to the first clause of the innermost try taking it, the scopes
 # opened since the try closed on the way; what its clauses do not take, to the try around it; what none takes leaves the
 # body under its own list (R17), every scope closed
@@ -1000,7 +1044,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
         }
         # what this try's clauses do not take goes to the try around it - but past a "!", which ends the program
         if tc.Ends {
-            ln.end(mir.Term.Exit(sp, mir.ExitKind.Assert, mir.Operand.None))
+            ln.bang(code, from, sp)
             return
         }
     }

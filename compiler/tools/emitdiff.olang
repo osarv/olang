@@ -7,7 +7,7 @@
 # by test: a row per file, "same N" where every test ends as stage 0's does, else what each run said - "stage0 P ok F
 # fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
 # built and run, its output and status compared. Then the totals. The port's module is compiled by clang (at -O LEVEL,
-# 1 by default) with stage 0's filled-in runtime beside it; a module clang refuses counts as "does not compile". The
+# 0 by default) with stage 0's filled-in runtime beside it; a module clang refuses counts as "does not compile". The
 # compiler under test is $OLANG (build/out), the emitter build/compiler_tools_emitdump (or $EMITDUMP).
 
 import "std/os"
@@ -19,7 +19,7 @@ fn main() {
     olang := absolute(toolkit.Env("OLANG", "build/out"))
     emitdump := toolkit.Env("EMITDUMP", "build/compiler_tools_emitdump")
     verbose := false
-    level := "1"
+    level := "0"
     files List<String&>
     k I64 = 1
     for k < args.Len() {
@@ -71,14 +71,19 @@ fn absolute(p String&) String {
     return $cwd "/" $p
 }
 
-# the runtime's IR, filled in by stage 0 for this machine: what an empty program's build leaves in its build/
-fn runtime(olang String&, dir String&) String {
-    toolkit.Write($dir "/rt/rt.olang", "fn main() { }\n")
+# the runtime's IR, filled in by stage 0 for this machine, and the dynamic call's: what a program declaring nothing
+# but an import of std/ffi leaves in its build/
+fn runtime(olang String&, dir String&) Array<String&> {
+    toolkit.Write($dir "/rt/rt.olang", "import \"std/ffi\"\nfn main() { }\n")
     toolkit.Run(String&[$olang, "build", "rt.olang"], String&[], $dir "/rt")
+    rt String& = ""
+    dc String& = ""
     for n in toolkit.Matching($dir "/rt/build", ".ll") {
-        if (try n.Find("olang_runtime.") catch default -1) >= 0 { return $n }
+        if (try n.Find("olang_runtime.") catch default -1) >= 0 { rt = $n }
+        if (try n.Find("olang_dyncall.") catch default -1) >= 0 { dc = $n }
     }
-    toolkit.Die("emitdiff: stage 0 left no runtime in " $dir "/rt/build")
+    if rt == "" or dc == "" { toolkit.Die("emitdiff: stage 0 left no runtime in " $dir "/rt/build") }
+    return String&[rt, dc]
 }
 
 type result struct() {
@@ -89,7 +94,7 @@ type result struct() {
     Same I64 = 0
 }
 
-fn compare(olang String&, emitdump String&, level String&, rt String&, f String&, out String&, program Bool, v Bool) result {
+fn compare(olang String&, emitdump String&, level String&, rt Array<String&>&, f String&, out String&, program Bool, v Bool) result {
     r := result()
     # stage 0's run
     s0 := toolkit.Run(String&["timeout", "600", $olang, $f]) if program else toolkit.Run(String&["timeout", "600", $olang, "test", $f])
@@ -102,7 +107,7 @@ fn compare(olang String&, emitdump String&, level String&, rt String&, f String&
         r.Row = $f ": not emitted (status " $e.Status ")" "\n"
         return r
     }
-    c := toolkit.Run(String&["clang", "-O" $level, "-w", $out ".ll", $rt, "-o", $out, "-lm", "-lpthread", "-ldl"])
+    c := toolkit.Run(String&["clang", "-O" $level, "-w", $out ".ll", rt[0], rt[1], "-o", $out, "-lm", "-lpthread", "-ldl", "-lffi"])
     if c.Status != 0 {
         r.Broken = true
         r.Row = $f ": does not compile - " $firstLine(c.Stderr) "\n"

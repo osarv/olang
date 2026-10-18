@@ -284,12 +284,13 @@ type ExitKind enum {
     ArrayLength    # D14b: "array length out of range"
     As             # E32: "'as' named what the value is not"
     FixedLength    # T7d: "array length does not match its fixed storage"
+    Error          # E35: an error a "!" took - its message, the error's name ("io.IoError.FULL"), is the exit's text
 }
 
 # what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
 fn ExitText(k ExitKind) String& {
     return match k {
-        case ExitKind.Done, ExitKind.Fail => ""
+        case ExitKind.Done, ExitKind.Fail, ExitKind.Error => ""
         case ExitKind.Abort => "aborted"
         case ExitKind.Unreachable => "reached unreachable code"
         case ExitKind.Assert => "assertion failed"
@@ -1515,7 +1516,7 @@ fn (v mut verifier&) termTypes(term Term) {
         }
         case Term.Exit(_, kind, msg) {
             if msg != Operand.None {
-                if kind != ExitKind.Assert { v.bad("a message for a " $short($kind) " exit") }
+                if kind != ExitKind.Assert and kind != ExitKind.Error { v.bad("a message for a " $short($kind) " exit") }
                 if not v.isText(v.operandType(msg)) { v.bad("an assert's message that is no text") }
             }
         }
