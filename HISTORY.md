@@ -20105,3 +20105,59 @@ cannot see through are expected (4.2).
 `settleOwnBorrows` in the block that runs once a program checks cleanly, and reuses only `ownForEachBody`,
 `ownParamIndex`, `ownFuncName`/`ownQuoted` (rename them when own's code goes) and O26a's `calleeMayKeepArg` (which
 reads `ownObligationsKnown`).
+
+## `own` removed: round 3 of docs/memory.md (O8c, O8d, O15, O10a, O11, O17b, S13b; O30-O42, T25e, E34 retired; 2026-10-18)
+
+Round 3 of `docs/memory.md` (the user's QAB, approved in advance: "the user should not have to deal with it"): owned
+references - `own`, `take`, loans, borrowed copies, owning parameters and results, own arrays, regions as a language
+concept (SPEC §8.8, built 2026-10-10 to -11, `docs/own.md`) - are gone from the language. One rule is left: everything
+lives in a scope. Freeing earlier is the compiler's optimization (O8d), written down now and marked not yet
+implemented: stage 0 reclaims nothing before a scope closes, and the port's scope pass will (round 6).
+
+**What went.** `own` and `take` are names again (token.c, syntax.c: `type-expr` loses `own`, `unary` loses `take`).
+The checker's §8.8 code - ownership settling, release and borrow effects, the borrow pass, reach, confinement,
+borrowed copies, holds, owned results, O17's own-array cases, T25e, E34 - and the code generator's regions, gives,
+releases, drop nodes, hidden owner slots and results in flight, and the evaluator's `take`. 55 errmsg.h entries (the
+O30-O42, T25e and E34 ones, and O31's "too deep to check", which only own's walk asked) and their twins in
+`compiler/msgs.olang`. SPEC §8.8, T25e, E34 (and §5.18, `take`; `!` is §5.18 now), the *(§8.8, not yet implemented)*
+clauses (T2, T8, E1, E31b, S3, C11, M19d's own elements, K1, K2, the keyword table), §8's title ("Scopes") and opening,
+the Status paragraph's own sentences, O26a's `take` sentence, P2's borrow sentence, C11's last paragraph and O17a's
+own-array paragraph. The rule numbers O30-O42 are retired, not reused.
+
+**What was written.** O8c revised (nothing earlier, except what O8d reclaims), O8d (letting go: a place, when it lets
+go, its only holder - six conditions - and that it is unobservable but in memory), and O15's sentence (reclaiming early
+never runs a destructor). `docs/scope-model.md` 9.1 item 9's edits: O10a gains the program's scope as outliving every
+other (`P >= s`); O11 no longer says an array index is not followed (O20 and O25c follow elements); O17b writes
+`checked a[i] catch default v`; S13b's binding read out of a by-value enum parameter is built into where that
+parameter's scope variable says (O4b), not "nothing is built into it" - the one place the model departed from SPEC's
+letter, so SPEC and the model agree now. `Map.Take` is marked *(not yet implemented)* (round 4 adds it).
+
+**Kept.** The runtime's region functions, renamed `__olang_region_*` (new, free, close, drop_slot, drop_aslot,
+drop_held, drop_aheld, nullhdr), for the port's early freeing; nothing stage 0 emits calls them now, so a checks
+scenario (`regions`, `checks/fixtures/regions/drive.c`) drives them from C - small and large objects, a million regions
+holding each other released with constant stack, the four slot kinds. M19g's settling, which round 2 built on own's
+body walk, keeps it under new names (`forEachBody`, `funcNameAsWritten`, `quotedFuncName`), still run once a program
+checks cleanly. A destructor's private frame scope is still closed at its return: it is how C9a's destructor scope is
+built, and keeping it is what keeps the IR identical.
+
+**Migration.** `tests/shared.olang`'s 37 own tests are removed; the two shapes that mean something without `own` - a
+chain of 300,000 destructor-bearing nodes, a deep tree - are plain scope tests read back after a churn ("O15/O16: a
+chain of 300,000 nodes ...", "O15: a tree's nodes destruct in reverse construction order"). `checks/cases`: 230 cases
+using `own` or expecting a removed rule go; 21 kept without `own` because they still state a rule (C2d, O10, O10c, O20,
+O25, P2, T7a, M19g, a deep field), renamed where the name carried a retired rule (`o33arrelem` -> `o20arrelem`,
+`o35deepchain` -> `o15deepchain` and so on), their descriptions rewritten; and the remaining Vec cases' descriptions lose
+O32-O41 and "loan". The `agree` scenario loses its own program, the `vecalias` scenario its own library and two cases
+(O36, O40), the `ownleave` scenario becomes `regions`. The scope fuzzer loses its own mode (its target, prelude,
+library, the vec2a/vec3-5 and own3-7 operations, the held-owner tests): about 1,400 lines. `compiler/` - the port - keeps
+its own `own` and `take` for round 5, except the message twins the checks require and the one call naming one.
+`bootstrap/oracle/layoutdump.c` stops spelling `own `. Goldens: `compiler/goldens/diag.txt` and `layout.txt` captured again.
+PRINCIPLES.md's "Deliberately not", CLAUDE.md, `docs/own.md`'s status (the record), `docs/README.md`.
+
+**IR identity.** Stage 0 before the round (its last commit, 2cef7e7) and after it, run on one tree - this round's,
+which no longer uses `own` - with clang stubbed so only the compiler's own output is collected, as for the move to
+`bootstrap/`: every corpus, std, port, tools and checks test build, the runner built plainly, `-debug` and `-race`, and
+every checks case and fixture, bench and fuzz program compiled - 1,330 builds, 2,409 IR files and 1,330 diagnostic
+outputs. All identical but one program: `checks/cases/deeparray.olang`, a field 70 array levels deep, which the old
+compiler refused with O31's "too deep to check whether it holds an owning type" and which now compiles. No output of
+the old compiler named an `own` runtime function, so nothing needed normalizing beyond the work directory's name in
+`-debug`'s DIFile entries.
