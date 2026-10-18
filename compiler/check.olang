@@ -271,8 +271,6 @@ OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus
     opShape("Inc", 0, true, true), opShape("Dec", 0, true, true), opShape("Len", 0, true, false)
     opShape("Eq", 1, true, false), opShape("Str", 0, true, false)]
 
-# a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
-# E10a, E11c); its private spelling is held to the same (M6b)
 # a function's type variables (G1, G4): none named after a type; each written in a parameter's type - a constant one as
 # a whole argument - or in the constraint of one that is, so a call can infer it
 fn (c mut Checker&) fnTypeParams(f I64) {
@@ -417,20 +415,66 @@ fn (c mut Checker&) namesType(mi I64, n source.NameId) Bool {
 fn (c mut Checker&) inheritClash(f I64) {
     fd := c.P.FnDecl(f)
     name := c.text(fd.Name)
-    for x in String&["Eq", "eq", "Hash", "hash", "Str", "str"] {
-        if x == name { return }
-    }
     ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
     if ps.Len() == 0 { return }
     rt := c.deref(ps[0])
-    if not c.isNamed(rt) or not c.P.Extends(rt) { return }
-    b := c.P.T.Base(rt)
-    if c.P.MethodOf(b, fd.Name) < 0 and c.P.DefaultMethod(b, fd.Name) < 0 { return }
     c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
-    c.err(c.nameSpan(fd), msgs.MethodClashesInherited(c.ty(ps[0]), name))
+    c.bothSpellings(f, rt, name, ps.Len() - 1)
+    for x in String&["Eq", "eq", "Hash", "hash", "Str", "str"] {
+        if x == name {
+            c.pop()
+            return
+        }
+    }
+    if not c.isNamed(rt) {
+        c.pop()
+        return
+    }
+    if c.P.Extends(rt) {
+        b := c.P.T.Base(rt)
+        if c.P.MethodOf(b, fd.Name) >= 0 or c.P.DefaultMethod(b, fd.Name) >= 0 {
+            c.err(c.nameSpan(fd), msgs.MethodClashesInherited(c.ty(ps[0]), name))
+            c.pop()
+            return
+        }
+    }
+    # E23, E33, P9: nor a method the compiler supplies - every array's Len, a type extending a float's or an unsigned
+    # integer's bit methods, a type extending an integer's atomics
+    u := c.under(rt)
+    given := false
+    if c.P.T.KindOf(u) == types.Kind.Array and (name == "Len" or name == "len") { given = true }
+    if c.P.Extends(rt) {
+        if name == "Bits" and c.P.T.IsFloat(u) { given = true }
+        if name.EndsWith("FromBits") and c.P.T.IsUnsigned(u) { given = true }
+        if name.StartsWith("Atomic") and c.P.T.IsInt(u) { given = true }
+    }
+    if given { c.err(c.nameSpan(fd), msgs.MethodClashesSupplied(name, c.ty(ps[0]))) }
     c.pop()
 }
 
+# M6b: a method the compiler calls by itself is public or private, never both - said at the public one
+fn (c mut Checker&) bothSpellings(f I64, rt types.TypeId, name String&, n I64) {
+    if name.Len() == 0 or not name[0].IsUpper() { return }
+    k := protocolArity(c.operatorRole(name))
+    if k == -2 { return }
+    low := lowerFirst(name)
+    m := c.P.MethodOf(rt, c.P.L.Names.Intern(low))
+    if m < 0 or (k >= 0 and c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() - 1 != n) { return }
+    c.err(c.nameSpan(c.P.FnDecl(f)), msgs.ProtocolBothSpellings(c.ty(c.P.T.Plain(rt)), name, name, low))
+}
+
+# how many operands a method the compiler calls takes besides its receiver: -1 for any, -2 for no such method
+fn protocolArity(cap String&) I64 {
+    k := opShapeOf(cap)
+    if k >= 0 { return OpShapes[k].Operands }
+    if cap == "Hash" or cap == "Next" or cap == "Iter" { return 0 }
+    if cap == "Has" or cap == "Contains" or cap == "RunFrom" { return 1 }
+    if cap == "Call" { return -1 }
+    return -2
+}
+
+# a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
+# E10a, E11c); its private spelling is held to the same (M6b)
 fn (c mut Checker&) operatorMethod(f I64) {
     fd := c.P.FnDecl(f)
     name := c.text(fd.Name)
