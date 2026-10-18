@@ -2750,6 +2750,13 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 for q in c.s4d {
                     if c.within(p, q) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
                 }
+                # ... and so does a compound assignment's or an increment's old value, where its type can hold one
+                match p {
+                    case typed.Place.Target(_, tt) {
+                        if c.P.T.HoldsRefs(tt) { return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp))) }
+                    }
+                    nomatch { }
+                }
                 return typed.Expr.Borrow(sp, want, p)
             }
             if (c.P.T.PermOf(want) & types.Writable) != 0 {

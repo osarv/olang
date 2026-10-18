@@ -206,6 +206,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, F mir.Fn
     T
     F
     file I64 = 0
+    rdepth mir.Operand = mir.Operand.None   # in a Render helper, how many references were followed to reach it (E11a)
     cur mir.BlockId = mir.BlockId(0)
     dead Bool = false
     gapped Bool = false
@@ -1844,7 +1845,7 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Render, ty), hty)
     ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Render, ty))
     ok := ln.F.NewBlock()
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[ref]), ln.F.ScopeRefs(mir.ScopeRef[b]), mir.NoPlace, false, ok
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[ref, ln.depth()]), ln.F.ScopeRefs(mir.ScopeRef[b]), mir.NoPlace, false, ok
                                mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
@@ -1928,6 +1929,7 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
         }
         case mir.HelperKind.Render {
             ln.prologue(mir.VarKind[mir.VarKind.Builder])
+            ln.rdepth = mir.Operand.Copy(mir.L(mir.LocalId(1)))
             ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
@@ -2330,7 +2332,19 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, "null", sp)
         ln.goto(after)
         ln.start(some)
+        # references followed 8 deep, then "..." - a cycle is cut off
+        d := ln.depth()
+        far := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[d, ln.constI64(8)], sp)
+        dots, deeper := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(far, dots, deeper))
+        ln.start(dots)
+        ln.word(b, "...", sp)
+        ln.goto(after)
+        ln.start(deeper)
+        saved := ln.rdepth
+        ln.rdepth = ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[d, ln.constI64(1)], sp)
         ln.inner(ln.at(x), t.Referent(r), b, sp)
+        ln.rdepth = saved
         ln.goto(after)
         ln.start(after)
         return
@@ -2350,7 +2364,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         return
     }
     if not top {
-        ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[b], types.VoidT, sp)
+        ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp), ln.depth()], mir.ScopeRef[b], types.VoidT, sp)
         return
     }
     parts, isParts := ln.partsOf(ty)
@@ -2412,6 +2426,9 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.gap(sp, "a Render helper for a type with no rendering")
     }
 }
+
+# how many references the rendering being written followed to reach here (E11a): 0 outside a Render helper
+fn (ln mut lowering&) depth() mir.Operand { return ln.constI64(0) if ln.rdepth == mir.Operand.None else ln.rdepth }
 
 # a value written inside another's rendering (E11a): a Char as a character literal, text as a string literal, a
 # number or a Bool as at the top, anything else as at the top through its Render helper

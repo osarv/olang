@@ -514,7 +514,7 @@ fn (f mut Fn&) addConstItems(xs Array<typed.Const&>&) Range {
 fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId {
     r := t.Ref(ty, types.ReadOnly)
     return match kind {
-        case HelperKind.Render => t.Func(t.List1(r), types.VoidT, types.ListId(0))
+        case HelperKind.Render => t.Func(t.List(types.TypeId[r, I64T]), types.VoidT, types.ListId(0))
         case HelperKind.Equal => t.Func(t.List(types.TypeId[r, r]), types.BoolT, types.ListId(0))
         case HelperKind.Hash => t.Func(t.List1(r), I64T, types.ListId(0))
         case HelperKind.Zero => t.Func(types.ListId(0), ty, types.ListId(0))
@@ -2410,7 +2410,7 @@ test "constants are flattened into the function's tables; helpers' ABI is their 
     assert w.constant(c) == "[text 2 7]" and f.Bytes.Len() == 2 and f.ConstItems.Len() == 2
     i64 := t.Prim("I64")
     render := HelperType(t, HelperKind.Render, i64)
-    assert t.Canon(render) == "fn(I64&)" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Render, i64), render), render) == 1
+    assert t.Canon(render) == "fn(I64&, I64)" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Render, i64), render), render) == 1
     eq := HelperType(t, HelperKind.Equal, i64)
     assert t.Canon(eq) == "fn(I64&, I64&) Bool" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Equal, i64), eq), eq) == 0
     assert PassedCount(t, Callee.Fn(FnKey.Body(typed.BodyId(0)), eq), eq) == 2
