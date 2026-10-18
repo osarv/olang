@@ -132,3 +132,13 @@ with way too many active branches", then "You don't need to delete the branch me
 they are part of the ref tree. Restore locally so we don't end up with a bunch of merge problems").** Merge a finished,
 verified branch at once, so few branches are unmerged at a time. Keep the branch itself, locally and on GitHub (the
 git proxy refuses deletions anyway). Removing a finished agent's worktree (disk space) is fine; never delete branches.
+
+**Week of 2026-10-17 to 2026-10-24 (the user, 2026-10-18): "This week I want the code stuff to stop at around 90
+percent of the weekly usage limit (you can burn the rest on Saturday if it becomes evident it won't get used
+otherwise) so I can have some tokens to build the company".** Code work (agents, merges, reviews) stops at ~0.90 weekly;
+the last ~10% is the user's for company work. The reset is Sat 2026-10-24 06:00 CEST, so "Saturday" is read as the
+last hours before it (Friday night): if the reserve is evidently unused then, it may go to code. At the request, 11:00
+CEST Sunday, the week read 0.67 after ~29 h, so ~23% for ~6 days - a small fraction of the pace so far: the two
+batches near their end (wt-mathmeth, wt-mem2) finish and merge, the port agents (lower, catch-up) wrapped up with
+hand-off notes, then one agent at a time with gaps - the error-set generics/checked batch first, generators after.
+Check the week at every completion; nothing new starts above ~0.85.
