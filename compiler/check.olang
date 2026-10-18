@@ -7490,6 +7490,9 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         case typed.Place.Local(_, _, lid) { if local { subjLocal = I64(lid) } }
         nomatch { }
     }
+    # E15a: a match used as a value's clauses are statements' bodies - a checked around it checks none of them
+    checks := c.fr().Checks
+    if isValue { c.fr().Checks = 0 }
     for cs in m.Cases {
         # S13f: nothing reaches a case after an unguarded "case _"
         if all and not allSaid {
@@ -7597,6 +7600,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         code := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, efrom))
         noMatch = typed.Arm(m.Sp, Array<typed.Alt&>(0), null, code, null)
     }
+    c.fr().Checks = checks
     if not isValue { rt = types.VoidT }
     return typed.Expr.Match(sp, rt, typed.Match(held, arms.ToArray(), noMatch, isValue))
 }
