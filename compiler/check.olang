@@ -8304,10 +8304,7 @@ fn (c mut Checker&) takeExpr(sp source.Span, y ast.Expr&) typed.Expr&c {
     if p == null { return c.unknown(sp) }
     t := p.Type()
     if t == types.UnknownT { return c.unknown(sp) }
-    if not c.owning(t) {
-        c.err(y.Span(), msgs.TakeNotOwn(c.ty(t)))
-        return c.unknown(sp)
-    }
+    if not c.owning(t) { return c.unknown(sp) }    # own is gone from the language (round 3); round 5 removes this
     c.notCapture(p, y.Span())
     return typed.Expr.Take(sp, t, p)
 }

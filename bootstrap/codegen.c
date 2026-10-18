@@ -686,12 +686,6 @@ static struct cgJoinFail* cgJoinFailOf(struct cgCtx* ctx, char* jh) {
     return NULL;
 }
 
-//O35 (own6 N3/N3b): an owned result in flight - computed, its function not returned yet - is held in a hidden owner slot
-//while the code its return runs first (deferred code, joins, scope closes) runs. Outside a test only a join failing in
-//the return's place (P4b) can keep it from the caller, and releases it (cgLeaveJoin); while a test runs, a failed check
-//leaving the test can too (S18), so the slot is also registered in a scope of its own on the unwind chain, above every
-//block the return closes and the frame's own scope - an unwind releases it, the frame's normal end pops it unrun.
-//t is the result's type, v its value (or with addr its address); NULL where nothing can keep it from the caller
 static FILE* cgAllocaOut(struct cgCtx* ctx);
 
 //P4b: a join block left - its tasks waited for (the code returned: the earliest failure, 0 for none) and its scope

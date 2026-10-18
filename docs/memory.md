@@ -1,6 +1,7 @@
 # Memory: one rule, and freeing early as the compiler's optimization
 
-Status: design for review, 2026-10-17. Round 1 (Vec as a handle, section 5.5) is built; the rest is not. The user
+Status: design for review, 2026-10-17. Rounds 1-3 (Vec as a handle, the view rule M19g, `own` removed - section 5.5) are
+built; the rest is not. The user
 decided the direction (ledger QAB, 2026-10-17) and approved building it ("do it"). Section 5.5 is the plan an
 implementation agent follows, round by round; what each round built and measured is in HISTORY.md. This replaces owned
 references (`own`, `take`, loans: SPEC §8.8, `docs/own.md`).
@@ -886,7 +887,7 @@ tags - HISTORY.md "The view rule M19g".)*
   elements, a view taken after the growth.
 - **Accept when**: `make verify`; every case names `M19g`.
 
-**Round 3 - `own` removed from stage 0 and from SPEC.**
+**Round 3 - `own` removed from stage 0 and from SPEC.** *(Built 2026-10-18 - HISTORY.md "own removed".)*
 - **Parser**: `own` and `take` stop being tokens; they become names.
 - **Checker**: the §8.8 code goes - ownership settling, release and borrow effects, the borrow pass, regions, reach,
   confinement, borrowed copies, holds, owned results, O17's own-array cases, T25e, E34.

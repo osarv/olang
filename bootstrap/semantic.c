@@ -1671,7 +1671,7 @@ struct list SemanticMatchValues(struct operand* op) {
 //---- the code a statement or an operand holds ----
 //One list, field by field, of every sub-operand and sub-block a checked statement or operand holds, which every walker
 //asking "what is anywhere in this body" reads - so that a field added to either struct is added here once, and no walker
-//can miss it (vec4 F1': the freshness proof, the write scan and the deep loans each kept a list of their own, and each
+//can miss it (vec4 F1': three walkers once kept a list of their own, and each
 //missed some of an else-if's condition, a case guard, an assert's message, a for's post clause and a spawn target).
 //  struct statement: op, target, spawnTargets (each, NULL for "_"), fillValue, assertMsg, forInit, forPost (a
 //    statement), block, elseStmnt (a statement - an "else if"'s condition is its op), caseAlts (each test, each bind's
@@ -4666,9 +4666,8 @@ struct list TypeValueChildren(struct type t) {
 
 //the walkers through TypeValueChildren stop at a reference, which ends a cycle through one; a type holding itself by
 //value (T16) is reported, but a walk can meet it first - while an inline field's length is still being decided (C2e),
-//say - so each is bounded too. Where the walk answers a question §8 or own relies on, the bound answers the safe way
-//(vec6 D: "holds no reference" past 64 levels left a borrowed copy with no loan) - only a type nested that deep by
-//value, or one T16 reports, ever reaches it
+//say - so each is bounded too. Where the walk answers a question §8 relies on, the bound answers the safe way - only a
+//type nested that deep by value, or one T16 reports, ever reaches it
 #define VALUE_WALK_LIMIT 64
 
 static bool typeHasBareDestructStructAt(struct type t, int depth) {
@@ -9871,7 +9870,7 @@ static bool operandIsTemporary(struct checkCtx* ctx, struct operand* op) {
 }
 
 static bool scopeIsDerived(struct var* sv) { return sv && sv != SCOPE_AMBIGUOUS && canonicalVar(sv)->derivedFrom; }
-//O23a (own5 F1): whether scope variable x is parameter p's - its own scope variable sv, or a derived one standing for where
+//O23a: whether scope variable x is parameter p's - its own scope variable sv, or a derived one standing for where
 //the argument for p bound a field's scope (a field of p, at any depth: a field of such a field reads at its container's
 //derived scope) - so an obligation on either says what a callee may keep of p's argument
 static bool scopeIsParams(struct var* x, struct var* p, struct var* sv) {

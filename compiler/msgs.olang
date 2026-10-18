@@ -211,47 +211,6 @@ type Diag enum {
     InvalidReferenceTarget
     DoubleReferenceMarker
     DestructTypeByValue
-    TypeTooDeepToCheck
-    OwningTypeByValue
-    OwnOnValue
-    OwnKindNotYet
-    OwnScopeMarker
-    OwnPositionNotYet
-    OwnReceiver
-    OwnInFuncType
-    OwnBuiltBeforeBorrow
-    OwnTakeNeeded
-    OwnNotAnOwner
-    OwnNotAnArrayOwner
-    OwnReachExact
-    OwnReach
-    OwnCompound
-    OwnOwnerUse
-    OwnResultUse
-    OwnResultDefault
-    OwnMovedReadAgain
-    OwnFuncValueBorrow
-    OwnLambdaBorrowResult
-    OwnFuncValueSig
-    OwnSpawnSig
-    OwnInCond
-    OwnValueInCond
-    TakeNotOwn
-    TakeReadOnly
-    TakeBorrowedCopy
-    OwnCopyAssigned
-    OwnCopyPart
-    OwnValueSource
-    OwnValueNotAnOwner
-    OwnValueDefault
-    OwnReleaseUnderLoan
-    OwnMoveUnderLoan
-    OwnReleaseUnderTask
-    OwnReleaseUnderTaskAny
-    OwnCaptured
-    OwnTaskRelease
-    OwnFuncValueRelease
-    OwnDestructorRelease
     TraitNotAType
     EnumCaseInUse
     DeclaredTwice
@@ -348,11 +307,6 @@ type Diag enum {
     ScopeArgsDisagree
     BorrowSplitScopes
     SliceSplitValue
-    OwnBorrowKeptByCall
-    OwnBorrowStored
-    OwnReturnsOwnerBorrow
-    OwnBorrowInOwner
-    OwnArrayLentStores
     BorrowSplitValue
     FieldBindingUnknown
     ScopeObligationUnmet
@@ -389,19 +343,9 @@ type Diag enum {
     StrReceiverWritable
     NoteHere
     NoteVecGrewHere
-    NoteOwnElemByRef
-    NoteOwnBorrowedHere
-    OwnImplicitRelease
     NoteVecGrowsHere
     NoteVecGrowsInside
     NoteVecTaskHolds
-    NoteOwnReleasesHere
-    NoteOwnMovesHere
-    NoteOwnUsedAfter
-    NoteOwnTaskBorrows
-    NoteOwnTaskCallsValue
-    NoteOwnReachViaCall
-    NoteOwnBorrowLocal
     NoteStrBuildsHere
     NoteStrKeepCopies
     NoteInLibrary
@@ -1141,129 +1085,6 @@ fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "
 # ERR_DESTRUCT_TYPE_BY_VALUE
 fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor, so it is held only by reference - write " $ty2 "&") }
 
-# ERR_TYPE_TOO_DEEP_TO_CHECK
-fn TypeTooDeepToCheck() Msg { return Msg(Diag.TypeTooDeepToCheck, "O31", "this type nests more than 64 levels of values and arrays - too deep to check whether it holds an owning type by value: nest it less") }
-
-# ERR_OWNING_TYPE_BY_VALUE
-fn OwningTypeByValue(ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.OwningTypeByValue, "O31", $ty1 " owns objects - a field of it is 'own' - so only a local, a field, a global or a result holds one by value: write " $ty2 "&, or 'own mut " $ty3 "&' to own one") }
-
-# ERR_OWN_ON_VALUE
-fn OwnOnValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.OwnOnValue, "T25e", "'own' marks a reference, and " $ty1 " is none - write 'own " $ty2 "&'") }
-
-# ERR_OWN_KIND_NOT_YET
-fn OwnKindNotYet(ty String&) Msg { return Msg(Diag.OwnKindNotYet, "T25e", "'own' on " $ty " is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements own nothing ('own Array<I64>&', 'own Array<Tok>&', 'own Array<Node&>&')") }
-
-# ERR_OWN_SCOPE_MARKER
-fn OwnScopeMarker() Msg { return Msg(Diag.OwnScopeMarker, "T25e", "an own reference lives in its own region, not where a variable does - drop the name after '&'") }
-
-# ERR_OWN_POSITION_NOT_YET
-fn OwnPositionNotYet() Msg { return Msg(Diag.OwnPositionNotYet, "T25e", "'own' is written on a field's, a local's or a global's type, or a declared function's parameter or result - here it is not supported yet") }
-
-# ERR_OWN_RECEIVER
-fn OwnReceiver() Msg { return Msg(Diag.OwnReceiver, "O36", "a method is called on a borrow, so its receiver never owns - drop 'own', or take the owner as another parameter") }
-
-# ERR_OWN_IN_FUNC_TYPE
-fn OwnInFuncType() Msg { return Msg(Diag.OwnInFuncType, "O36", "a function value's parameters and result never own - only a declared function's do; drop 'own'") }
-
-# ERR_OWN_BUILT_BEFORE_BORROW
-fn OwnBuiltBeforeBorrow(text1 String&, text2 String&) Msg { return Msg(Diag.OwnBuiltBeforeBorrow, "O33", "this value would be built where the object of '" $text1 "' lives, which a later argument reads - read it first, 'o := " $text2 "'") }
-
-# ERR_OWN_TAKE_NEEDED
-fn OwnTakeNeeded(text1 String&, text2 String&) Msg { return Msg(Diag.OwnTakeNeeded, "O34", "moving out of '" $text1 "' would leave it empty - write 'take " $text2 "'") }
-
-# ERR_OWN_NOT_AN_OWNER
-fn OwnNotAnOwner(text String&) Msg { return Msg(Diag.OwnNotAnOwner, "O34", "an own slot takes an owner - a constructor call made here, 'take' from another own slot, or null - and this " $text) }
-
-# ERR_OWN_NOT_AN_ARRAY_OWNER
-fn OwnNotAnArrayOwner() Msg { return Msg(Diag.OwnNotAnArrayOwner, "O34", "an own array slot takes an array made here - 'Array<T>(n)', or a literal, text or join of elements referring nowhere - 'take' from another own slot, or null") }
-
-# ERR_OWN_REACH_EXACT
-fn OwnReachExact() Msg { return Msg(Diag.OwnReachExact, "O34", "the array's elements can be stored through, so they must refer exactly where this slot's elements do - move it into a slot whose container lives where the source's does") }
-
-# ERR_OWN_REACH
-fn OwnReach() Msg { return Msg(Diag.OwnReach, "O34", "the owner refers to what lives shorter than the slot it is moved into - move it where that lives") }
-
-# ERR_OWN_COMPOUND
-fn OwnCompound(text String&) Msg { return Msg(Diag.OwnCompound, "O34", "an own slot is given an owner with '=', not '" $text "'") }
-
-# ERR_OWN_OWNER_USE
-fn OwnOwnerUse() Msg { return Msg(Diag.OwnOwnerUse, "O34", "'take' gives an owner, which only an own slot receives - 'x := take ...', an own field, an own global or an owning parameter") }
-
-# ERR_OWN_RESULT_USE
-fn OwnResultUse(text1 String&, text2 String&) Msg { return Msg(Diag.OwnResultUse, "O37", $text1 " gives an owner, which only an own slot receives - 'x := " $text2 "(...)', an own field or global, an owning parameter, or a statement of its own") }
-
-# ERR_OWN_RESULT_DEFAULT
-fn OwnResultDefault() Msg { return Msg(Diag.OwnResultDefault, "O34", "an owned result's 'catch default' is 'null' for now - or a clause that leaves") }
-
-# ERR_OWN_MOVED_READ_AGAIN
-fn OwnMovedReadAgain(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.OwnMovedReadAgain, "O34", "'return " $text1 "' moves '" $text2 "', which deferred code reads afterwards - write 'return take " $text3 "' to leave it null there") }
-
-# ERR_OWN_FUNC_VALUE_BORROW
-fn OwnFuncValueBorrow(text1 String&, text2 String&) Msg { return Msg(Diag.OwnFuncValueBorrow, "O37", $text1 " gives a borrowed own result, so it is called by name only - a call through a function value holds no loan on the owned object it borrows; call " $text2 " by name") }
-
-# ERR_OWN_LAMBDA_BORROW_RESULT
-fn OwnLambdaBorrowResult() Msg { return Msg(Diag.OwnLambdaBorrowResult, "O37", "a lambda never gives a borrowed own result - a call through a function value holds no loan on the owned object it borrows; return a Clone(), or declare a function and call it by name") }
-
-# ERR_OWN_FUNC_VALUE_SIG
-fn OwnFuncValueSig(text String&) Msg { return Msg(Diag.OwnFuncValueSig, "O36", $text " owns a parameter or gives an owned result, so it is called by name only - a function value never owns") }
-
-# ERR_OWN_SPAWN_SIG
-fn OwnSpawnSig() Msg { return Msg(Diag.OwnSpawnSig, "O41", "a task's call may not own a parameter or give an owned result yet - spawn a function that borrows, and move the owner after the join") }
-
-# ERR_OWN_IN_COND
-fn OwnInCond() Msg { return Msg(Diag.OwnInCond, "O34", "a conditional or a match gives an own slot nothing yet - assign each case's owner in its own branch") }
-
-# ERR_OWN_VALUE_IN_COND
-fn OwnValueInCond(ty1 String&, ty2 String&) Msg { return Msg(Diag.OwnValueInCond, "O34", "a conditional's or a match's values own objects (" $ty1 "), and one is chosen by copying it - borrow one, 'r mut " $ty2 "& = a', then repoint it in a branch, 'if not c { r = b }'") }
-
-# ERR_TAKE_NOT_OWN
-fn TakeNotOwn(ty String&) Msg { return Msg(Diag.TakeNotOwn, "E34", "'take' moves an owner out of an own slot, and this is " $ty) }
-
-# ERR_TAKE_READ_ONLY
-fn TakeReadOnly() Msg { return Msg(Diag.TakeReadOnly, "E34", "'take' writes the slot it moves out of, and it is read-only here") }
-
-# ERR_TAKE_BORROWED_COPY
-fn TakeBorrowedCopy(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.TakeBorrowedCopy, "E34", "'" $text1 "' is a borrowed copy and owns nothing - take from '" $text2 "', which owns what it holds, 'take " $text3 "'") }
-
-# ERR_OWN_COPY_ASSIGNED
-fn OwnCopyAssigned(text1 String&, text2 String&) Msg { return Msg(Diag.OwnCopyAssigned, "O32", "'" $text1 "' is a borrowed copy of '" $text2 "' and owns nothing, so it is not assigned - declare another with ':='") }
-
-# ERR_OWN_COPY_PART
-fn OwnCopyPart(text1 String&, text2 String&) Msg { return Msg(Diag.OwnCopyPart, "O32", "'" $text1 "' belongs to what '" $text2 "' was copied from - assign it there") }
-
-# ERR_OWN_VALUE_SOURCE
-fn OwnValueSource(ty String&) Msg { return Msg(Diag.OwnValueSource, "O32", $ty " owns objects: ':=' declares an owner from a value made here, a call's result or 'take', and a borrowed copy from a local or a field holding one ('b := a', 'c := l.toks') - this is neither: for a global, 'take' it or call through it") }
-
-# ERR_OWN_VALUE_NOT_AN_OWNER
-fn OwnValueNotAnOwner(ty String&) Msg { return Msg(Diag.OwnValueNotAnOwner, "O34", "a local of " $ty ", which owns objects, is given an owner - a value made here, a call's result, or 'take' of another - and this is not one") }
-
-# ERR_OWN_VALUE_DEFAULT
-fn OwnValueDefault(ty String&) Msg { return Msg(Diag.OwnValueDefault, "O34", $ty " owns objects, and a 'catch default' giving one is not supported yet - give the clause a block that leaves") }
-
-# ERR_OWN_RELEASE_UNDER_LOAN
-fn OwnReleaseUnderLoan(text String&, ty String&, n I64) Msg { return Msg(Diag.OwnReleaseUnderLoan, "O39", $text " may release the " $ty " borrowed on line " $n ", which is used after it") }
-
-# ERR_OWN_MOVE_UNDER_LOAN
-fn OwnMoveUnderLoan(text String&, ty String&, n I64) Msg { return Msg(Diag.OwnMoveUnderLoan, "O39", $text " moves the " $ty " borrowed on line " $n ", which is used after it - a borrowed object is not moved until its borrow is done") }
-
-# ERR_OWN_RELEASE_UNDER_TASK
-fn OwnReleaseUnderTask(text String&, ty String&, n I64) Msg { return Msg(Diag.OwnReleaseUnderTask, "O41", $text " may release the " $ty " the task spawned on line " $n " may be using until the join - release it after the join") }
-
-# ERR_OWN_RELEASE_UNDER_TASK_ANY
-fn OwnReleaseUnderTaskAny(text String&, n I64) Msg { return Msg(Diag.OwnReleaseUnderTaskAny, "O41", $text " may release what the task spawned on line " $n " may be using until the join - it calls a function value, which may reach any owned object; release it after the join") }
-
-# ERR_OWN_CAPTURED
-fn OwnCaptured(text1 String&, text2 String&) Msg { return Msg(Diag.OwnCaptured, "O32", "a lambda does not capture the owner local '" $text1 "' - capture a borrow of it, 'b := " $text2 "' outside the lambda") }
-
-# ERR_OWN_TASK_RELEASE
-fn OwnTaskRelease(text String&) Msg { return Msg(Diag.OwnTaskRelease, "O41", "a task may not release owned objects yet, and '" $text "' may - release them before the spawn or after the join") }
-
-# ERR_OWN_FUNC_VALUE_RELEASE
-fn OwnFuncValueRelease(text String&) Msg { return Msg(Diag.OwnFuncValueRelease, "O40", $text " releases owned objects, so it cannot be a function value - a function value releases nothing yet") }
-
-# ERR_OWN_DESTRUCTOR_RELEASE
-fn OwnDestructorRelease() Msg { return Msg(Diag.OwnDestructorRelease, "O40", "a destructor may not release owned objects - its instance's own fields are released after it runs") }
-
 # ERR_TRAIT_NOT_A_TYPE
 fn TraitNotAType(ty String&) Msg { return Msg(Diag.TraitNotAType, "T30", $ty " is a trait - a constraint on a type variable, never the type of a value") }
 
@@ -1552,21 +1373,6 @@ fn BorrowSplitScopes() Msg { return Msg(Diag.BorrowSplitScopes, "O17", "this val
 # ERR_SLICE_SPLIT_VALUE
 fn SliceSplitValue() Msg { return Msg(Diag.SliceSplitValue, "O17a", "this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call") }
 
-# ERR_OWN_BORROW_KEPT_BY_CALL
-fn OwnBorrowKeptByCall() Msg { return Msg(Diag.OwnBorrowKeptByCall, "O38", "this argument borrows an own object, and the callee may keep it beyond the call - only this function's locals may hold it: keep a Clone() instead") }
-
-# ERR_OWN_BORROW_STORED
-fn OwnBorrowStored() Msg { return Msg(Diag.OwnBorrowStored, "O38", "this value borrows an own object, and is kept where only this function's locals may hold it - store a Clone() instead") }
-
-# ERR_OWN_RETURNS_OWNER_BORROW
-fn OwnReturnsOwnerBorrow(text1 String&, ty String&, text2 String&) Msg { return Msg(Diag.OwnReturnsOwnerBorrow, "O38, O26a", "this result reaches the owner value local '" $text1 "' by reference, and its owners are released as its block ends - return the owner itself, with a result of its type ('" $ty "'), where 'return " $text2 "' moves it") }
-
-# ERR_OWN_BORROW_IN_OWNER
-fn OwnBorrowInOwner() Msg { return Msg(Diag.OwnBorrowInOwner, "O38", "this value borrows an own object, and an owner, or a value with a destructor, would hold it past its loans - make it from a Clone() instead") }
-
-# ERR_OWN_ARRAY_LENT_STORES
-fn OwnArrayLentStores() Msg { return Msg(Diag.OwnArrayLentStores, "O17, O33", "an own array's elements live where its slot's container keeps them, and the callee can store into it where the buffer is - lend it what holds the array, or hand it the array as an owner ('b.names = f(take b.names)')") }
-
 # ERR_BORROW_SPLIT_VALUE
 fn BorrowSplitValue() Msg { return Msg(Diag.BorrowSplitValue, "O17a", "this value's references live where its own storage does not, so it is not held by reference - use the value itself") }
 
@@ -1675,15 +1481,6 @@ fn NoteHere() Msg { return Msg(Diag.NoteHere, "", "here") }
 # NOTE_VEC_GREW_HERE
 fn NoteVecGrewHere() Msg { return Msg(Diag.NoteVecGrewHere, "", "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") }
 
-# NOTE_OWN_ELEM_BY_REF
-fn NoteOwnElemByRef(ty1 String&, ty2 String&) Msg { return Msg(Diag.NoteOwnElemByRef, "", "its elements, " $ty1 ", are values holding references - hold them by reference, '" $ty2 "&'") }
-
-# NOTE_OWN_BORROWED_HERE
-fn NoteOwnBorrowedHere() Msg { return Msg(Diag.NoteOwnBorrowedHere, "", "borrowed here") }
-
-# ERR_OWN_IMPLICIT_RELEASE
-fn OwnImplicitRelease(text String&) Msg { return Msg(Diag.OwnImplicitRelease, "O40", $text " may not release owned objects - the compiler calls it where a borrow may be in use") }
-
 # NOTE_VEC_GROWS_HERE
 fn NoteVecGrowsHere(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.NoteVecGrowsHere, "", "'" $text1 "' may grow here, in " $text2 " - take the view after it, or copy the elements first: '" $text3 ".ToArray()'") }
 
@@ -1692,27 +1489,6 @@ fn NoteVecGrowsInside(text String&) Msg { return Msg(Diag.NoteVecGrowsInside, ""
 
 # NOTE_VEC_TASK_HOLDS
 fn NoteVecTaskHolds(text String&) Msg { return Msg(Diag.NoteVecTaskHolds, "", "the task holding a view of '" $text "' is started here") }
-
-# NOTE_OWN_RELEASES_HERE
-fn NoteOwnReleasesHere(text String&) Msg { return Msg(Diag.NoteOwnReleasesHere, "", $text " releases here") }
-
-# NOTE_OWN_MOVES_HERE
-fn NoteOwnMovesHere(text String&) Msg { return Msg(Diag.NoteOwnMovesHere, "", $text " moves it here") }
-
-# NOTE_OWN_USED_AFTER
-fn NoteOwnUsedAfter() Msg { return Msg(Diag.NoteOwnUsedAfter, "", "used here, after it") }
-
-# NOTE_OWN_TASK_BORROWS
-fn NoteOwnTaskBorrows() Msg { return Msg(Diag.NoteOwnTaskBorrows, "", "the task borrows it here") }
-
-# NOTE_OWN_TASK_CALLS_VALUE
-fn NoteOwnTaskCallsValue() Msg { return Msg(Diag.NoteOwnTaskCallsValue, "", "it calls a function value here") }
-
-# NOTE_OWN_REACH_VIA_CALL
-fn NoteOwnReachViaCall() Msg { return Msg(Diag.NoteOwnReachViaCall, "", "this object is reached through a call's result, a borrow of an owned object whose region is not known here - take through the own field the call reads") }
-
-# NOTE_OWN_BORROW_LOCAL
-fn NoteOwnBorrowLocal() Msg { return Msg(Diag.NoteOwnBorrowLocal, "", "a read of an own slot is a borrow in a region of its own - only 'x := ...' declares a local holding it, and that local holds no other borrow") }
 
 # NOTE_STR_BUILDS_HERE
 fn NoteStrBuildsHere() Msg { return Msg(Diag.NoteStrBuildsHere, "", "built here, where the receiver's part it was handed lives") }

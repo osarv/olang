@@ -1,9 +1,9 @@
 # Owned references: `own`, `take`, loans - design and implementation plan
 
-Status: designed 2026-10-10; a first cut (section 11) built the same day. The normative rules are in `SPEC.md`: §8.8 (O30-O42), T25e, E34, and
-the rules marked *(§8.8, not yet implemented)* - L9, T2, T8, E1, E31b, S3, C11, M19d (own elements, `TakeAt`,
-`SwapTake`, `Map.Take`, `Vec`), K1, K2. This note is the plan for building them in the C compiler (`bootstrap/`) before
-the port starts, and the record of the details decided on the way. Read it with §8.8 open.
+Status: **removed from the language** 2026-10-18 (`docs/memory.md` round 3: freeing early is the compiler's, and the
+program writes nothing about it). Designed 2026-10-10 and built through 2026-10-11, as this note records; SPEC §8.8
+(O30-O42), T25e and E34 are gone and their rule numbers retired. Read this note with SPEC.md as it was before that
+removal (git history). The runtime's region functions stay, renamed `__olang_region_*`, for the port.
 
 ## 1. What was asked
 

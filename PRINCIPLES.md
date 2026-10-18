@@ -54,8 +54,8 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
 - No garbage collector, no manual `free`, no reference counting.
 - No exceptions and no hidden control flow.
 - No per-operation run-time checks.
-- No general borrow checker; scope containment does that job. Owned references (`own`, §8.8) bring a check of their
-  own, and it checks only that nothing still in use is freed - never aliasing or mutation.
+- No general borrow checker; scope containment does that job. Nothing about freeing is written by the program: storage
+  is reclaimed when its scope closes, or earlier where the compiler proves nothing still uses it.
 - No implicit lossy conversions, no shadowing, no uninitialized storage.
 - No preprocessor or macros: conditional compilation is a top-level `if` on build constants (`-D`).
 - No header files: a module's interface is its source.

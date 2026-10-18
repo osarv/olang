@@ -185,7 +185,6 @@ static void canonInner(struct buf* b, struct type t) {
 
 static void canon(struct buf* b, struct type t) {
     bool ref = t.structMAlloc && t.bType != BASETYPE_FUNC;
-    if (ref && t.refOwn) adds(b, "own ");
     if (ref && t.refMut) adds(b, "mut ");
     canonInner(b, t);
     if (ref) adds(b, "&");
@@ -272,7 +271,6 @@ static void collect(struct type t) {
         struct type v = t;
         v.structMAlloc = false;
         v.refMut = false;
-        v.refOwn = false;
         collect(v);
     }
 }

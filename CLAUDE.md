@@ -9,9 +9,9 @@ and how to judge a new feature - is `PRINCIPLES.md`, imported here:
 @PRINCIPLES.md
 
 Error handling is modeled on Zig (explicit error sets/unions, no exceptions). Longer-term direction:
-Rust-like compile-time memory/security guarantees (underway - see the ownership-scopes entry in
-Settled decisions below; scope-containment is checked at compile time, a general borrow checker is
-not; owned references, §8.8, have a check of their own that nothing in use is freed).
+Rust-like compile-time memory/security guarantees (underway - see "Memory and scopes" in Settled decisions below;
+scope containment is checked at compile time, a general borrow checker is not, and nothing about freeing is written by
+the program: freeing early is the compiler's, `docs/memory.md`).
 
 This file is a living design record, kept terse on purpose - it is not a spec (see `SPEC.md` for the
 normative, current-state language reference) and not the full story either (see `HISTORY.md`
@@ -180,7 +180,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `while` (S9); a `size()` builtin (2026-09-30, serialization is future work); an `Iterable` interface (T35b:
   `xs.Iter()`); labeled break (2026-10-08); interface switch dispatch (dropped by the user, "it gains very little and
   causes a lot of problems"); Str purity (E11c, decision 49); `done`, `fail`, `abort` (2026-10-17, QU: a test ends by
-  returning, a program by `os.Exit`).
+  returning, a program by `os.Exit`); `own` and `take` (2026-10-18, `docs/memory.md` round 3: freeing early is the
+  compiler's).
 
 ### Types
 
@@ -283,8 +284,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   in the target's scope; reference into value copies out; `Array<T, N>&` widens to `Array<T>&` with no copy. All four
   combinations read the same for structs and arrays.
 - **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
-  writable parameters, writable for read-only results is safe); a function with scope obligations, a borrowed own
-  result, or a `Call` that keeps its argument cannot become a value; a type's `Call` fits a function type (E31). A
+  writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
+  keeps its argument cannot become a value; a type's `Call` fits a function type (E31). A
   function value returned from a parameter is an obligation (O14a).
 - **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
   itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
@@ -417,6 +418,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the
   join; a closure that may build into a captured scope asks for its thread's part of it (`__olang_capture_scope`);
   reading closures pay nothing.
+- **Letting go (O8d, round 3 of `docs/memory.md`, 2026-10-18; the user's QAB: "the user should not have to deal with
+  it").** One rule: everything lives in a scope. Storage a place lets go of while it was its only holder (assigned,
+  removed from its collection, a local given something moved out of one leaving its block) may be reclaimed then rather
+  than at the scope's close - the compiler's optimization, unobservable but in memory, never running a destructor
+  early (O15). *Not yet implemented*: stage 0 reclaims nothing early (O8c); the port's scope pass will (round 6). A
+  Vec's replaced buffer is such storage: it stays where the Vec lives until that scope closes. `own`, `take`, loans and
+  borrowed copies (O30-O42, T25e, E34, built 2026-10-10 to -11) are removed from the language; the rule numbers are
+  retired, and `docs/own.md` is the record. The runtime keeps its region functions, renamed `__olang_region_*` and
+  driven from C by a checks scenario, for the port.
 - **Recorded limits:** long-lived mutated structures only grow (ledger QF; `docs/memory.md`'s early freeing, round
   6); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
@@ -430,29 +440,6 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (O4b).
 - **A match binding lives in its clause's block (S13b) and takes the matched place's permission.** A conditional or
   match of references lives where its values share a scope, else "not known here" (E28, O12).
-
-### Ownership (§8.8)
-
-- **Owned references: `own`, `take`, loans (O30-O42, T25e, E34, the user's design and name, QG-QI; the user: objects
-  "freed at will without them ever being able to leave" their owner).** `own mut T&` owns an object in a region of its
-  own, freed the moment its owner lets go (slot overwritten or `null`, owner local ending, container's scope closing)
-  - no `free`. `take p` moves (explicit, the user's call). A read is a borrow, a loan live to its last use; a release
-  or move while a loan is live is a compile-time error, through calls by a fixed point over bodies, through tasks to
-  the join. Only freeing is checked, never aliasing or mutation. Built in the C compiler before the port (the user's
-  call, 2026-10-10).
-- **Borrows are confined (own4):** a borrow or borrowed copy, or anything built from one, is held only by its
-  function's locals; keeping it elsewhere is an error naming `Clone()`.
-- **Owning parameters and results, own arrays, owner value places (O31-O37).** A parameter or result written `own`; an
-  own array holds a buffer in its region; a struct holding an owner by value is owning, its copies borrowed copies (`b
-  := v`, QJ1), `take v` moves; owner value places include fields and globals. A borrowed own result (`First() T&p`
-  of an own field) is called by name only. (`Vec` was built on these and is a handle now, M19d.)
-- Removed: `Region<T>`/`With` (decision 51, redirected by the user into `own`).
-- **The rest of §8.8.** Releases are refused while a loan is live (O39), through calls by a release effect and a
-  borrow effect read off bodies; callbacks, destructors, `Str`/`Eq`/`Hash` and spawned calls release nothing (O40/O41
-  - QJ2 in effect: an event handler closing a connection takes the server as a parameter); an object of 2 KB or less
-  is one allocation and a release nests at most 256 deep (O42); a part borrowed in place takes a loan (O38); a
-  conditional of owners is an error naming the two-step form (O34); an owned result in flight is held until its
-  function returns; a global reaching an owner is never baked (K2). Design and every review round: `docs/own.md`.
 
 ### Concurrency
 
@@ -585,7 +572,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   first refusal is remembered and every `Flush` fails with it; `io.Lines` ends a line at `\n` or `\r\n`. `os.Exec`
   captures through memory files; `chan.Send` on a closed channel fails with `ChanError.CLOSED`; `std/csv` is RFC 4180 strict;
   `std/stats` uses the sample variance and numpy's percentiles. `Array.Sort` is a stable O(n log n) merge.
-- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `extends`, `own`, `checked`.
+- **Names in std are mine unless marked**; the user's: `Map` (not Dict), `Mul`, `extends`, `checked`.
 
 ### Codegen and runtime
 
