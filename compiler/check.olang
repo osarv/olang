@@ -791,7 +791,12 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
         }
     }
     match td.Body {
-        case ast.TypeBody.Struct(sb) { c.ctorVarRules(td, sb) }
+        case ast.TypeBody.Struct(sb) {
+            c.ctorVarRules(td, sb)
+            if sb.Params != null {
+                for prm in sb.Params { c.errorTypeHeld(prm.Ty) }   # T20
+            }
+        }
         nomatch { }
     }
     text := c.src(sp)
@@ -3118,7 +3123,7 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
     }
     if op == token.Tok.Dollar {
         ps List<typed.Piece&>
-        ps.Push(typed.Piece.Render(c.expr(y, types.UnknownT)))
+        ps.Push(typed.Piece.Render(c.rendered(sp, y)))
         return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
     }
     if op == token.Tok.Take { return c.takeExpr(sp, y) }
@@ -4128,11 +4133,12 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
         }
     }
     x := c.expr(a, xw)
-    name := "Contains" if c.P.T.Same(c.deref(typeOf(x)), ct) and c.arrayOf(ct) != types.UnknownT else "Has"
+    name := "Contains" if c.P.T.Same(c.deref(typeOf(x)), ct) else "Has"
     m := c.P.MethodOf(ct, c.P.L.Names.Intern(name))
     if m < 0 { m = c.P.MethodOf(ct, c.P.L.Names.Intern(lowerFirst(name))) }
     if m < 0 {
-        c.err(b.Span(), msgs.UnknownMethod(c.ty(ct), "'" $name "'"))
+        # E29: x of the collection's own type asks Contains - a sub-collection
+        c.err(c.between(a.Span(), b.Span(), 2), msgs.MembershipNoMethod(name, c.ty(ct)))
         return c.lit(sp, types.BoolT, 0)
     }
     # E29: a Has or Contains that can fail is written under try - said at "in"
@@ -4181,7 +4187,7 @@ fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr&c {
             }
             case ast.Expr.Unary(_, op, y) {
                 if op == token.Tok.Dollar {
-                    ps.Push(typed.Piece.Render(c.expr(y, types.UnknownT)))
+                    ps.Push(typed.Piece.Render(c.rendered(p.Span(), y)))
                     ok = true
                 }
             }
@@ -5016,6 +5022,67 @@ fn nameDistance(a String&, b String&) I64 {
 }
 
 # a written type's instances checked where it is written: each at its first argument (G19)
+# what "$" renders (E11a): a value - a call returning none is said at the "$"
+fn (c mut Checker&) rendered(sp source.Span, y ast.Expr&) typed.Expr&c {
+    x := c.expr(y, types.UnknownT)
+    if typeOf(x) == types.VoidT {
+        c.err(source.Span(sp.Start, sp.Start + 1), msgs.StrOfNothing())
+        return c.unknown(sp)
+    }
+    return x
+}
+
+# whether a written type is a reference, as written
+fn refWrittenTop(t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Ref(_, _, _) => true
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) refWritten(t ast.TypeRef&) Bool {
+    if refWrittenTop(t) { return true }
+    # a type variable may be bound to a reference (T2)
+    match t {
+        case ast.TypeRef.Named(nsp, path, _) { return path.Len() == 1 and c.P.R.Use(c.fr().File, nsp.Start).Kind == names.What.TypeVar }
+        nomatch { return false }
+    }
+}
+
+# T30: a trait written where a value's type goes - said at the trait's name, of the type as written (whole)
+fn (c mut Checker&) traitWritten(tr ast.TypeRef&, whole ast.TypeRef&) Bool {
+    match tr {
+        case ast.TypeRef.Named(nsp, path, _) {
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if ref.Kind != names.What.Type or ref.Index < 0 { return false }
+            if c.P.T.DeclKindOf(c.P.DeclFor(ref.Module, ref.Index)) != types.DeclKind.Trait { return false }
+            c.err(nsp, msgs.TraitNotAType(c.src(whole.Span())))
+            return true
+        }
+        nomatch { return false }
+    }
+}
+
+# T20: an error type written where a value's type goes - it has no values: said at its name, whether it is one
+fn (c mut Checker&) errorTypeHeld(tr ast.TypeRef&) Bool {
+    if tr == null { return false }
+    match tr {
+        case ast.TypeRef.Named(nsp, path, _) {
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if ref.Kind != names.What.Type or ref.Index < 0 { return false }
+            if c.P.T.DeclKindOf(c.P.DeclFor(ref.Module, ref.Index)) != types.DeclKind.Error { return false }
+            n := c.text(path[path.Len() - 1])
+            c.err(source.Span(nsp.End - I32(n.Len()), nsp.End), msgs.ErrorTypeAsValue(n, n))
+            return true
+        }
+        case ast.TypeRef.Ref(_, of, _) { return c.errorTypeHeld(of) }
+        case ast.TypeRef.Perm(_, of, _, _) { return c.errorTypeHeld(of) }
+        nomatch { return false }
+    }
+}
+
 # whether a type may be held by reference (T24): a struct, an enum, an array, a type over an array, a type variable
 fn (c mut Checker&) referable(t types.TypeId) Bool {
     k := c.P.T.KindOf(t)
@@ -5042,6 +5109,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
                 c.unknownType(nsp, path[0])
                 return false
             }
+            if c.errorTypeHeld(tr) or c.traitWritten(tr, tr) { return false }
             ref := c.P.R.Use(c.fr().File, nsp.Start)
             if ref.Kind == names.What.Type and ref.Index >= 0 and not c.fr().Ctx.Vars.Has(path[path.Len() - 1]) {
                 # G7: a generic type's arguments, as many as its parameters; a type with none takes none
@@ -5058,6 +5126,16 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
             }
             if args.Len() == 0 { return true }
             for a in args {
+                # T25b: "mut" before a type argument is a reference's permission
+                match a {
+                    case ast.TypeRef.Perm(psp, of, w, _) {
+                        if w and not c.refWritten(of) {
+                            c.err(source.Span(psp.Start, psp.Start + 3), msgs.MutOnValueType(c.ty(c.P.Resolve(c.fr().Ctx, of))))
+                            return false
+                        }
+                    }
+                    nomatch { }
+                }
                 # G11: a type argument's reference marker is bare - its references live in the container
                 match a {
                     case ast.TypeRef.Ref(rsp, _, sc) {
@@ -5085,6 +5163,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
             return c.instancesMet(rt, args[0].Span())
         }
         case ast.TypeRef.Ref(_, of, _) {
+            if c.traitWritten(of, tr) { return false }
             if not c.writtenMet(of) { return false }
             # T24: only a struct, an enum or an array is held by reference
             rt := c.P.Resolve(c.fr().Ctx, of)
@@ -5898,7 +5977,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             fp := c.field(sp, nsp, p, n)
             if fp != null { return c.callValue(sp, nsp, c.read(sp, fp), args) }
         }
-        if supplied(name) {
+        if supplied(name) and name != "Eq" {
             c.gap(nsp, "a method the compiler supplies (E10b, E11c)")
         } else {
             c.err(nsp, msgs.UnknownMethod(c.ty(c.deref(rt)), c.tok(n)))
@@ -6118,6 +6197,12 @@ fn (c mut Checker&) fieldIndex(t types.TypeId, n source.NameId) I64 {
 # E.Case or E.Case(args): an enum value (T17)
 fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n source.NameId, args Array<ast.Expr&>&) typed.Expr&c {
     if not c.isEnum(t) {
+        if c.isNamed(t) and c.declKind(t) == types.DeclKind.Error {
+            # T20: an error word is raised and caught, never a value
+            w := c.src(sp)
+            c.err(sp, msgs.ErrorWordAsValue(w, w))
+            return c.unknown(sp)
+        }
         c.gap(nsp, "a member of a type of this kind")
         return c.unknown(sp)
     }
@@ -7965,6 +8050,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
     dt := c.deref(st)
     runs := c.roleMethod(dt, "RunFrom", 1)
     next := c.roleMethod(dt, "Next", 0)
+    if next >= 0 and not c.iterShaped(next) { next = -1 }   # S9a: an iterator's Next is "mut Next() T ? Exhausted"
     if runs >= 0 and next < 0 {
         c.walkRuns(sp, f, src, runs, cm, ce)
         return null
@@ -7993,6 +8079,19 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
     }
     c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
     return null
+}
+
+# whether a Next makes an iterator (S9a): a writable receiver, one value, Exhausted among its errors
+fn (c mut Checker&) iterShaped(m I64) Bool {
+    sig := c.P.Sig(m)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() != 1 or not c.writable(ps[0]) { return false }
+    r := c.P.T.Result(sig)
+    if r == types.VoidT or r == types.NoreturnT or c.P.T.KindOf(r) == types.Kind.Tuple { return false }
+    for e in c.P.T.Items(c.P.T.Errors(sig)) {
+        if e != types.DefaultErrT and c.text(c.P.T.DeclName(c.P.T.DeclOf(c.P.T.ErrOf(e)))) == "Exhausted" { return true }
+    }
+    return c.infersErrs(sig)
 }
 
 # ---- take (E34) ----
