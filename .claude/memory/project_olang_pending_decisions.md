@@ -364,6 +364,19 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAG DECIDED 2026-10-18 (the user, on ideas.md #1 and operators: "maybe we want a new keyword ... generator? ... and
+  maybe we want operator for operators?", clarified: the keyword replaces `fn`; "Record it yes"): a declaration's first
+  word says its kind - `fn`, `generator`, `operator`. GENERATORS (ideas #1): `generator evens(n I64) I64 { ... yield i
+  ... }`, the result written is the element type, the caller gets an Iterator<I64>; `yield v` is a statement only (no
+  send-back - the Python coroutine extra declined for now, additive later); four rules: (1) a `fn` may not contain
+  yield, a generator must; the end or a bare `return` ends it, `return v` is an error; (2) `? E` comes out of Next;
+  (3) no yield inside a lambda, a join or deferred code; (4) no defer open across a yield (relaxable). Port only (an
+  extra), after self-hosting. OPERATOR: every method the compiler calls by itself is declared `operator` (symbols,
+  Eq/Str/Hash/Next/Iter/Len/Call/Has/Contains...), must have its role's shape; a `fn` method is never called
+  implicitly - replaces E31's "operator only in its shape". Core syntax: both compilers, migrated by a tool.
+  ASKED: operators named by their symbol now that `operator` marks them (`operator (a V) +(b V) V`, `[]`, `[]=`, `[:]`,
+  `==`, `<`, `$`, `in`, `()`, `checked +`; Next/Iter/RunFrom/Len/Hash keep names) - names like Plus freed; an operator
+  visible wherever its type is (no private spelling); no call by name. Recommended yes. In effect: not built.
 - QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
