@@ -364,7 +364,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
-- QAL ASKED 2026-10-18 (the user: "Do we remove the C compiler eventually as well or keep it in the project?").
+- QAL DECIDED 2026-10-18 (the user: "Yes remove it but keep in git"): bootstrap/ is removed from the tree once the port
+  self-hosts and the seed has rebuilt the compiler from nothing, the last commit holding it tagged `stage0-final`. Was: QAL ASKED 2026-10-18 (the user: "Do we remove the C compiler eventually as well or keep it in the project?").
   Recommended: keep it as stage 0 until the port is self-hosting and the seed has rebuilt the compiler from nothing at
   least once; then remove bootstrap/ from the tree, tagged (`stage0-final`) so git can always bring it back; the seed
   stays. Trade-off stated: the C compiler is the one human-readable route from source to a compiler (no generated
