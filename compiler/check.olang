@@ -5095,6 +5095,31 @@ fn (c mut Checker&) referable(t types.TypeId) Bool {
     return not (c.P.T.IsNumber(t) or t == types.BoolT)
 }
 
+# whether a function type holds variable v of owner as an array's element, in its parameters or its result
+fn (c mut Checker&) holdsVarInArray(sig types.TypeId, owner I64, v I64) Bool {
+    if c.varInArray(c.P.T.Result(sig), owner, v, false, 0) { return true }
+    for p in c.P.T.Items(c.P.T.Params(sig)) {
+        if c.P.T.KindOf(p) != types.Kind.Func and c.varInArray(p, owner, v, false, 0) { return true }
+    }
+    return false
+}
+
+fn (c mut Checker&) varInArray(t types.TypeId, owner I64, v I64, inArray Bool, depth I64) Bool {
+    if depth > 16 { return false }
+    match c.P.T.KindOf(t) {
+        case types.Kind.Var { return inArray and c.P.T.A(t) == owner and c.P.T.B(t) == v }
+        case types.Kind.Array { return c.varInArray(c.P.T.Elem(t), owner, v, true, depth + 1) }
+        case types.Kind.Ref { return c.varInArray(c.P.T.Referent(t), owner, v, false, depth + 1) }
+        case types.Kind.Named {
+            for x in c.P.T.Items(c.P.T.Args(t)) {
+                if c.varInArray(x, owner, v, true, depth + 1) { return true }
+            }
+            return false
+        }
+        nomatch { return false }
+    }
+}
+
 # whether a type is an array of a run-time length held by value - which inside an array or a struct is held by
 # reference instead (T7a)
 fn (c mut Checker&) runArrayValue(t types.TypeId) Bool {
@@ -5155,6 +5180,19 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
                 if not c.writtenMet(a) { return false }
             }
             rt := c.P.Resolve(c.fr().Ctx, tr)
+            # T7c: a fixed length is from 0 up
+            if path.Len() == 1 and c.text(path[0]) == "Array" and args.Len() == 2 {
+                match args[1] {
+                    case ast.TypeRef.Const(_, le) {
+                        lk := c.P.FoldConst(c.fr().Ctx, le, c.i64())
+                        if c.P.T.KindOf(lk) == types.Kind.Const and c.P.T.ConstValue(lk) < 0 {
+                            c.err(args[1].Span(), msgs.ArrayLengthRange(c.P.T.ConstValue(lk)))
+                            return false
+                        }
+                    }
+                    nomatch { }
+                }
+            }
             # T7a: an array's element that is a run-time array is held by reference
             if c.P.T.KindOf(rt) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(rt)) {
                 c.err(args[0].Span(), msgs.ArrayNestedByValue(c.ty(c.P.T.Elem(rt))))
@@ -5548,7 +5586,14 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 if j < lps.Len() and lf.S.Params[j].Ty != null { c.unifySoft(lps[j], c.resolve(lf.S.Params[j].Ty), b) }
             }
             if lf.S.Results != null and lf.S.Results.Len() == 1 {
-                c.unifySoft(c.P.T.Result(ps[pk]), c.resolve(lf.S.Results[0]), b)
+                lr := c.resolve(lf.S.Results[0])
+                pr := c.P.T.Result(ps[pk])
+                # T7a: a run-time array bound to a variable the call holds in an array is held by reference
+                if c.P.T.KindOf(pr) == types.Kind.Var and c.P.T.A(pr) == owner and c.runArrayValue(c.under(lr)) and not c.isRef(lr) and c.holdsVarInArray(sig, owner, c.P.T.B(pr)) {
+                    c.err(lf.S.Results[0].Span(), msgs.LambdaResultHeld(c.text(c.P.VarAt(owner, c.P.T.B(pr)).Name), c.ty(lr), c.ty(lr)))
+                    return c.unknown(sp)
+                }
+                c.unifySoft(pr, lr, b)
             }
         }
         c.P.InferThroughBounds(b)
@@ -7028,7 +7073,14 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
         nomatch { }
     }
     e := c.expr(x, types.UnknownT)
-    if typeOf(e) != types.UnknownT { c.err(c.notStmtSpan(x), msgs.NotAStatement()) }
+    if typeOf(e) == types.UnknownT { return }
+    # S3, E11b: text standing alone - most often a join meant to continue from the line before
+    textAlone := match x {
+        case ast.Expr.Lit(_, kind) => kind == token.Tok.StrLit
+        case ast.Expr.Join(_, _) => true
+        case _ => false
+    }
+    c.err(c.notStmtSpan(x), msgs.JoinNextLine() if textAlone else msgs.NotAStatement())
 }
 
 # where S3 points: a binary's operator, a member's name, else the expression
