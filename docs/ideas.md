@@ -68,6 +68,23 @@ checks run). A loop over them is unrolled per instantiation; a `match T.Kind` is
 chosen arm checked; counts are `.Len()`, constants. Private fields show only inside their own module. Not now: methods,
 field attributes. Both compilers (a language construct). The text below is the original idea.
 
+**Extended the same day (the user: "1) this is good yes. 2) yes. 3) we want this for sure ... let's build it now"):**
+- `T.Fields` and the others are compile-time lists: a `for` over one is unrolled (the body checked per element), `.Len()`
+  and a constant index work, nothing is stored or walked at run time; a comprehension makes a run-time array of names.
+- `f.Of(v)` is the field `f` of `v`, a place (assignable through a writable `v`); a case's fields only where `v` is known
+  to be that case, as `as`.
+- `match T` takes trait cases (`case Iterable<E>`, `case Hashable`) and generic cases binding arguments (`case List<E>`,
+  `case Map<K, V>`); the first matching case wins, an unreachable case is an error, exhaustiveness holds. No `T.Args`
+  (a type argument is reached by matching, or by name inside the generic); `T.TypeArgs` only if a use appears.
+- `Kind { Struct, Enum, Integer, Float, Bool, Array, Reference, Function }`; arrays `T.Element` (and `T.Length` when
+  fixed), references `T.Target`, function types `T.Params`, `T.Results`, `T.Errors` (an error set usable in a
+  signature, `? F.Errors`); a declared type takes its base's kind.
+- Layout: `T.Size`, `T.Align` (as laid out, as C's sizeof/alignof), `f.Offset` - compile-time constants.
+- Building a value: `T(decode(p, src) for p in T.Params)` - a comprehension in a call's argument list, one argument per
+  parameter, unrolled; the constructor runs, so its checks do. A parameter's default from inside the loop is left until
+  the JSON decoder is written.
+- Reflection on a value is a generic call (`Describe(x)` binds T); no `x.Type`.
+
 **What:** generic code that walks a type's fields and enum cases while compiling, with no run-time type information.
 
 ```
