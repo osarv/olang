@@ -389,6 +389,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
   arguments, and the result of a function that returns an outcome as data without failing); `r := f()?` gives a
   `Result<T, E>`. Niches judged valid (a failing call vs a kept outcome - batches, tasks, channels,
   reporting functions). `T ? E` anywhere but a signature is a compile-time error naming `Result<T, E>`.
+  Last details (mine): `Result<T, E Error>` - `Error` a sealed prelude trait every error type satisfies, so only an error
+  type is an E; a named set lists error types only and never adds words (new words make a new error type), sets nest
+  and flatten (`type AnyError error LoadError, ChanError`), words stay qualified by their own type (`IoError.FULL`),
+  `catch LoadError e` takes every member; error values hash (a Map key), `Result` compares and renders structurally.
 - QAM 2026-10-18 (errors as values; the user: "1) ... I want this feature tho 2) yes, disallow this 3) reserve the
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
