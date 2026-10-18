@@ -195,6 +195,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     taskSlot Term = Term.None
     taskFunc Bool = false                  # ... a function value the task calls through, not an argument
     fitSlot Term = Term.None               # the slot of the fit being judged, for fitError
+    fitNarrow Bool = false                 # ... that the value outlives its slot, which is narrower (O25)
+    fitLocalRead Bool = false              # ... that the value is a local read or borrowed, its own scope's to say (O10)
     fitAt Bool = false                     # fitError says its error at fitSp, not at the value (P1g)
     fitSp source.Span = source.Span(0, 0)
     fnUses List<fnUse>                     # the functions made values, judged once every body is (T22a)
@@ -4773,9 +4775,9 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         }
         case _ { }
     }
-    # exactly in a derived scope, or in another scope exactly where a derived one is: nothing here shows the two the same
-    # (O25, O23a)
-    if exact and t != slot and (s.derivedTerm(t) or s.derivedTerm(slot)) {
+    # a local exactly in a derived scope, or in another scope exactly where a derived one is: nothing here shows the two
+    # the same (O25, O23a) - a result's is an obligation each call discharges (O14b)
+    if exact and t != slot and (kind == FitLocal or kind == FitValue) and (s.derivedTerm(t) or s.derivedTerm(slot)) {
         s.fitError(x, kind, true)
         return
     }
@@ -4784,7 +4786,9 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         k = s.order(slot, t)
         if k == FailsBlock and s.isBlock(slot) {
             # a reference narrowed into a shorter block (O25)
+            s.fitNarrow = true
             s.fitError(x, kind, true)
+            s.fitNarrow = false
             return
         }
     }
@@ -4827,11 +4831,12 @@ fn (s mut Scoper&) capsDiffer(x typed.Expr&) Bool {
     return false
 }
 
-# whether a local of type t must hold exactly what it is given (O25, O25g): a reference through which, at any depth,
-# something could be stored; a value holding such a reference
+# whether a local of type t must hold exactly what it is given (O25, O25g): a reference; a value holding a reference
+# through which, at any depth, something could be stored
 fn (s mut Scoper&) narrowingMatters(t types.TypeId) Bool {
     if s.isFunc(t) { return false }
-    return s.admitsStores(t) if s.isRef(t) else s.valueAdmits(t)
+    # a reference local never narrows, whatever it refers to (O25)
+    return s.isRef(t) or s.valueAdmits(t)
 }
 
 fn (s mut Scoper&) derivedTerm(t Term) Bool {
@@ -4853,6 +4858,16 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     # a reference or a function value returned that lives in this function's own scope (O10d); a value referring to it,
     # O26's
     if kind == FitReturn and (s.isRef(x.Type()) or s.isFunc(x.Type())) and not s.capsDiffer(x) { kind = FitOwn }
+    s.fitLocalRead = false
+    match s.unAway(x) {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) {
+            match p {
+                case typed.Place.Local(_, _, _) { s.fitLocalRead = true }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
     s.fitErrorAt(s.fitSp if s.fitAt else s.opTok(x), kind, exact)
 }
 
@@ -4864,8 +4879,9 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) {
     }
     m := msgs.ScopeMayNotOutlive()
     if kind == FitLocal {
-        # a reference narrowed where something can be stored through it (O25); else one put where it may not live (O10)
-        if exact { m = msgs.ReferenceNarrowed() }
+        # a reference narrowed, or a value whose scope its type does not say, where something can be stored through it
+        # (O25); a local's own scope too short for where it is put (O10)
+        if exact and (s.fitNarrow or not s.fitLocalRead) { m = msgs.ReferenceNarrowed() }
     } else if kind == FitPayload {
         m = msgs.PayloadOutlived()
     } else if kind == FitOwn {
