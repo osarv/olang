@@ -155,7 +155,8 @@ days lost, though no files were. Standing measures:
    session: snapshot, read usage, resume any agent a rate limit stopped (SendMessage keeps its context). A wake during
    a limit fails and the next one, after the reset, gets through - so a stop costs at most 2 hours.
 2. `/home/user/wipsnap.sh`, run every 10 minutes by `/home/user/wiploop.sh` (a detached process - a limit stops the
-   session, not it; both outside the repo, restart the loop in a new container: `setsid nohup /home/user/wiploop.sh &`),
+   session, not it; both outside the repo, restarted in a new container by a SessionStart hook in `/home/user/.claude/settings.json` (2026-10-18; /root/.claude is
+   rebuilt with the container, /home/user is not) and by the 2-hourly check-in),
    saves every worktree's uncommitted work into `refs/wip/<name>` in the shared repo, through a private index, never
    touching the agent's index, HEAD or files. Run at every check-in. It guards against an agent's mistake or a killed
    process, not a lost container.
