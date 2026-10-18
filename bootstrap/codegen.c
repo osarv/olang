@@ -6846,31 +6846,6 @@ void cgFor(struct cgCtx* ctx, struct statement* s) {
     cgPopScope(ctx);
 }
 
-void cgDo(struct cgCtx* ctx, struct statement* s) {
-    int id = ctx->lblCtr++;
-    char bodyLbl[32], condLbl[32], endLbl[32];
-    snprintf(bodyLbl, sizeof(bodyLbl), "do.body.%d", id);
-    snprintf(condLbl, sizeof(condLbl), "do.cond.%d", id);
-    snprintf(endLbl, sizeof(endLbl), "do.end.%d", id);
-    struct cgLoop lp = {0};
-    snprintf(lp.breakLbl, sizeof(lp.breakLbl), "%s", endLbl);
-    snprintf(lp.contLbl, sizeof(lp.contLbl), "%s", condLbl); //S11: a do-loop re-checks its condition
-    lp.slotsAtEntry = ctx->blockSlots.len;
-    lp.depthAtEntry = ctx->blockDepth;
-    ListAdd(&ctx->loops, &lp);
-
-    cgBr(ctx, bodyLbl);
-    cgLabel(ctx, bodyLbl);
-    cgBlock(ctx, &s->block);
-    ctx->loops.len--;
-    cgBr(ctx, condLbl);
-    cgLabel(ctx, condLbl);
-    char* cond = cgValue(ctx, s->op);
-    fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", cond, bodyLbl, endLbl);
-    ctx->terminated = true;
-    cgLabel(ctx, endLbl);
-}
-
 //S12-S14: the checker has built each alternative's test and its bindings' reads over the held value, so this lays out
 //only the order: the value held, then per case each alternative's test - the first to hold fills the clause's
 //bindings its own way - then the guard, then the block. An alternative or guard that fails falls to the next case.
@@ -7265,7 +7240,6 @@ static void cgStatementIn(struct cgCtx* ctx, struct statement* s) {
         }
         case STATEMENT_IF: cgIf(ctx, s); return;
         case STATEMENT_FOR: cgFor(ctx, s); return;
-        case STATEMENT_DO: cgDo(ctx, s); return;
         case STATEMENT_MATCH: cgMatch(ctx, s); return;
         case STATEMENT_RET: cgRet(ctx, s); return;
         case STATEMENT_UNREACHABLE: cgAbortLike(ctx, s, true); return;

@@ -6666,6 +6666,8 @@ struct checkCtx {
     struct syntax* expectNode; //G10c: an expression being built where a type is already expected - a declaration's
     struct type expectType;    //written type, a parameter's, an assignment's target, a return's - see buildExpecting
     bool* loopBreak; //D10a: set by a "break" of the innermost loop being checked - every loop points it at its own flag
+    struct syntax* loopCond; //S9: a loop's condition, checked as the first statement of its body ("if not c { break }")
+    struct var* loopCondFirst; //...a do loop's: "first or c", so its first turn evaluates none
     struct list blockStmts;  //O26a: the statements (SNTX_STMNT) of the block being checked, and which one this is - a
     int blockStmtIdx;        //declaration looks ahead in its own block for a return of the local it declares
     bool inCondition; //B10: building an if's condition - a name found nowhere there may be a build constant -D did not define
@@ -12089,8 +12091,6 @@ static bool mbStmt(struct statement* s, struct var* func) {
     case STATEMENT_FOR:
         return mbBoundary(s->var.type, s->forInit) || mbOperand(s->forInit) || mbOperand(s->op)
                || (s->forPost && mbStmt(s->forPost, func)) || mbBlock(&s->block, func);
-    case STATEMENT_DO:
-        return mbOperand(s->op) || mbBlock(&s->block, func);
     case STATEMENT_MATCH:
         if (mbOperand(s->op) || mbBlock(&s->matchHold, func) || mbBlock(&s->matchCases, func)
                 || mbBlock(&s->nomatchBlock, func) || mbOperand(s->nomatchValue))
@@ -12505,8 +12505,6 @@ static bool mbiStmt(struct statement* s) {
         return mbiOperand(s->forInit, at) || mbiOperand(s->op, false) || (s->forPost && mbiStmt(s->forPost))
                || mbiBlock(&s->block);
     }
-    case STATEMENT_DO:
-        return mbiOperand(s->op, false) || mbiBlock(&s->block);
     case STATEMENT_MATCH:
         return mbiOperand(s->op, false) || mbiBlock(&s->matchHold) || mbiBlock(&s->matchCases)
                || mbiBlock(&s->nomatchBlock) || mbiOperand(s->nomatchValue, false);
@@ -17643,8 +17641,34 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
     innerCtx.checkedTaken = NULL;
     innerCtx.inTextJoin = false;
     innerCtx.assignPlaces = (struct list){0}; //S4d: a block's statements are its own, not the value of an assignment
+    innerCtx.loopCond = NULL;
+    innerCtx.loopCondFirst = NULL;
 
     struct list result = ListInit(sizeof(struct statement));
+    //S9: a loop's condition is evaluated at the start of each turn, in the turn's own block - what it builds is the
+    //turn's, reclaimed with it, where the block around the loop kept every evaluation's while the loop ran (E31b's M1:
+    //a 72KB element read in a condition, 360MB over 5,000 turns)
+    if (ctx->loopCond) {
+        struct operand* cond = buildExprFromSyntax(&innerCtx, ctx->loopCond);
+        struct statement st = (struct statement){0};
+        st.sType = STATEMENT_IF;
+        struct token ct = firstTokAnywhere(ctx->loopCond);
+        st.line = ct.lineNr;
+        if (ct.owner) st.file = TokenGetFileName(ct.owner);
+        if (!OperandIsBool(cond)) {
+            if (!cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
+            st.op = cond;
+        } else {
+            if (ctx->loopCondFirst) cond = OperandBinary(OperandReadVar(ctx->loopCondFirst, cond->tok), cond, OPERATION_OR, cond->tok);
+            st.op = OperandUnary(cond, OPERATION_NOT, cond->tok);
+        }
+        st.block = ListInit(sizeof(struct statement));
+        struct statement brk = (struct statement){0};
+        brk.sType = STATEMENT_BREAK;
+        ListAdd(&st.block, &brk);
+        ListAdd(&result, &st);
+        finalizeStmtLambdas(ListGetIdx(&result, result.len - 1)); //D16b
+    }
     struct list stmts = allPartsOfType(blockNode, SNTX_STMNT);
     innerCtx.blockStmts = stmts;
     for (int i = 0; i < stmts.len; i++) {
@@ -22179,11 +22203,9 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     innerCtx->inLoop = true;
     bool broken = false;
     innerCtx->loopBreak = &broken;
-    if (condNode) {
-        stmt.op = buildExprFromSyntax(innerCtx, condNode);
-        if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
-    }
+    innerCtx->loopCond = condNode; //S9: checked in the body, as its first statement (buildBlock)
     stmt.block = buildBlock(innerCtx, firstPartOfType(s, SNTX_BLOCK));
+    innerCtx->loopCond = NULL;
     recheckLoopReturns(mark);
     innerCtx->loopBreak = NULL;
     //D10a: "for { }" with no break of its own leaves only by a return, an error or an ending - never by falling through
@@ -23105,6 +23127,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     return wrap;
 }
 
+struct statement buildEmptyIfStmnt(struct checkCtx* ctx, struct token tok);
 struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct scope inner = scopePush(ctx->scope);
     struct checkCtx innerCtx = *ctx;
@@ -23156,15 +23179,13 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     checkCtorHereFits(&innerCtx, initVal, declType.scopeParam, declType.scopeDepth, nameTok); //C2d
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
-    struct operand* cond = buildExprFromSyntax(&innerCtx, *(struct syntax**)ListGetIdx(&exprs, 0));
-    if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
+    struct syntax* condNode = *(struct syntax**)ListGetIdx(&exprs, 0);
     struct syntax* postNode = firstPartOfType(s, SNTX_STMNT_ASSIGN);
     if (!postNode) postNode = firstPartOfType(s, SNTX_STMNT_EXPR);
 
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_FOR;
     stmt.var = *loopVar;
-    stmt.op = cond;
     stmt.forInit = initVal;
     //a var reassigned inside a loop body can, in general, end up different across different iterations -
     //this checker only ever walks the body once (no fixpoint iteration), so rather than trust whatever
@@ -23176,12 +23197,22 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     innerCtx.inLoop = true; //S11
     bool forBroken = false;
     innerCtx.loopBreak = &forBroken; //D10a: its own breaks, not an outer loop's
+    innerCtx.loopCond = condNode; //S9: checked in the body, as its first statement (buildBlock)
     stmt.block = buildBlock(&innerCtx, firstPartOfType(s, SNTX_BLOCK));
+    innerCtx.loopCond = NULL;
     //the post clause runs after the body, so it is checked after it - which also puts a reassignment it
-    //makes ("c = c.next") inside the window the binding snapshot below treats as the loop's own
+    //makes ("c = c.next") inside the window the binding snapshot below treats as the loop's own. S9: in a block of its
+    //own, as the condition is in the turn's, so what it builds is reclaimed each time it runs
+    struct scope postScope = scopePush(innerCtx.scope);
+    struct checkCtx postCtx = innerCtx;
+    postCtx.scope = &postScope;
+    postCtx.blockDepth = innerCtx.blockDepth + 1;
+    postCtx.assignPlaces = (struct list){0};
+    struct statement postIn = postNode->type == SNTX_STMNT_ASSIGN ? buildAssignStmnt(&postCtx, postNode)
+                                                                  : buildExprStmnt(&postCtx, postNode);
     stmt.forPost = MallocOrCrash(sizeof(struct statement));
-    *stmt.forPost = postNode->type == SNTX_STMNT_ASSIGN ? buildAssignStmnt(&innerCtx, postNode)
-                                                       : buildExprStmnt(&innerCtx, postNode);
+    *stmt.forPost = buildEmptyIfStmnt(&innerCtx, firstTokAnywhere(postNode));
+    ListAdd(&stmt.forPost->block, &postIn);
     recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(innerCtx.scope);
     foldScopeBindingsBranch(&baseline, &after);
@@ -23189,23 +23220,47 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//S9: "do { B } for c" is "for first := true, , first = false { if not (first or c) { break } B }" with first a name no
+//program can write - its condition evaluated in the turn it decides, as for's is (buildBlock), from the second on
+static int doCounter = 0;
 struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct statement stmt = (struct statement){0};
-    stmt.sType = STATEMENT_DO;
-    //same "any reassignment kills it" treatment as buildForStmnt above, same reasoning.
-    struct list baseline = snapshotScopeBindings(ctx->scope);
+    struct token kw = firstTokAnywhere(s);
+    struct scope inner = scopePush(ctx->scope);
     struct checkCtx loopCtx = *ctx;
+    loopCtx.scope = &inner;
+    char* nm = MallocOrCrash(32);
+    snprintf(nm, 32, "$doFirst%d", ++doCounter);
+    struct token ft = kw;
+    ft.type = TOK_IDEN;
+    ft.str = StrFromCStr(nm);
+    struct type bt = TypeVanilla(BASETYPE_BOOL);
+    bt.scopeDepth = loopCtx.blockDepth;
+    struct var* first = scopeDeclare(loopCtx.mod, loopCtx.scope, ft.str, ft, bt, true);
+    struct token tt = kw, ff = kw;
+    tt.str = StrFromCStr("true");
+    ff.str = StrFromCStr("false");
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_FOR;
+    stmt.var = *first;
+    stmt.forInit = OperandBoolLiteral(tt);
+    //same "any reassignment kills it" treatment as buildForStmnt above, same reasoning.
+    struct list baseline = snapshotScopeBindings(loopCtx.scope);
     struct loopMark mark = loopMarkAt(ctx); //O13a
     loopCtx.inLoop = true; //S11
     bool doBroken = false;
     loopCtx.loopBreak = &doBroken; //D10a: its own breaks, not an outer loop's
+    loopCtx.loopCond = firstPartOfType(s, SNTX_EXPR);
+    loopCtx.loopCondFirst = first;
     stmt.block = buildBlock(&loopCtx, firstPartOfType(s, SNTX_BLOCK));
+    stmt.forPost = MallocOrCrash(sizeof(struct statement));
+    *stmt.forPost = (struct statement){0};
+    stmt.forPost->sType = STATEMENT_ASSIGN;
+    stmt.forPost->target = OperandReadVar(first, kw);
+    stmt.forPost->op = OperandBoolLiteral(ff);
     recheckLoopReturns(mark);
-    struct list after = snapshotScopeBindings(ctx->scope);
+    struct list after = snapshotScopeBindings(loopCtx.scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
-    stmt.op = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
     return stmt;
 }
 
@@ -28149,7 +28204,7 @@ static void vgAssign(struct operand* target, struct operand* val, struct list* r
     vgStoreInto(target, refs, st);
 }
 
-static void vgLoopBody(struct statement* stm, struct vgState* st, bool condFirst) {
+static void vgLoopBody(struct statement* stm, struct vgState* st) {
     struct vgLoop* lp = MallocOrCrash(sizeof(struct vgLoop));
     lp->breaks = ListInit(sizeof(struct vgState));
     lp->conts = ListInit(sizeof(struct vgState));
@@ -28160,17 +28215,11 @@ static void vgLoopBody(struct statement* stm, struct vgState* st, bool condFirst
         lp->breaks.len = 0;
         lp->conts.len = 0;
         struct vgState s = vgCopy(&head);
-        if (condFirst) {
-            vgEval(stm->op, &s, NULL);
-            if (stm->op) vgMerge(&exits, &s); //(the condition false; with none, only a break leaves)
-        }
+        vgEval(stm->op, &s, NULL);
+        if (stm->op) vgMerge(&exits, &s); //(the condition false; with none - S9 checks it in the body - only a break leaves)
         vgBlock(&stm->block, &s);
         for (int i = 0; i < lp->conts.len; i++) vgMerge(&s, ListGetIdx(&lp->conts, i));
-        if (condFirst) vgStmt(stm->forPost, &s);
-        else {
-            vgEval(stm->op, &s, NULL);
-            vgMerge(&exits, &s);
-        }
+        vgStmt(stm->forPost, &s);
         for (int i = 0; i < lp->breaks.len; i++) vgMerge(&exits, ListGetIdx(&lp->breaks, i));
         int before = vgWeight(&head);
         vgMerge(&head, &s);
@@ -28227,10 +28276,7 @@ static void vgStmt(struct statement* s, struct vgState* st) {
             vgEval(s->forInit, st, &refs);
             vgBind(&s->var, s->forInit, &refs, st, true);
         }
-        vgLoopBody(s, st, true);
-        break;
-    case STATEMENT_DO:
-        vgLoopBody(s, st, false);
+        vgLoopBody(s, st);
         break;
     case STATEMENT_MATCH: {
         vgBlock(&s->matchHold, st);

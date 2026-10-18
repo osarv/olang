@@ -3457,6 +3457,13 @@ statement under S3 — so `i + 1`, which computes a value and discards it, is a 
 anywhere else. The loop runs: evaluate init once; while condition is true, run body, then run the post
 clause, then re-check condition.
 
+The condition of the second and third forms is evaluated **in the turn it decides**: as the first thing in the body's
+block (O2), so what it builds - a temporary, an element `At` hands back - is that turn's and is reclaimed when the turn's
+block closes, a destructor-bearing one destructed then (O16), the last evaluation's when the loop leaves. It sees no
+name the body declares. A `do` loop's condition likewise (S10). The post clause runs in a block of its own, each time,
+so what it builds is reclaimed as it ends - an assigned value lives where its target does (O18a). (Evaluated in the
+block around the loop, every evaluation's storage stayed while the loop ran.)
+
 **S9a (`for ... in`).** `for x in e` runs its body once for each value `e` yields, with `x` a new local
 holding it; `for i, x in e` also declares `i`, an `I64` counting iterations from `0`. The names are
 scoped to the body. `e` is evaluated once, before the first iteration, and must be one of:
@@ -3530,7 +3537,8 @@ the first iteration, so the loop costs what the three-clause form does.
 
 **S10.** `do-stmnt ::= "do" block "for" expr STMNT_END`. Runs body once unconditionally, then
 repeats: evaluate `expr` (must be `Bool`); if true, run body again and repeat; if false, stop. The
-loop always executes its body at least once.
+loop always executes its body at least once. `expr` is evaluated in the turn it decides, as a `for` loop's condition
+is (S9): what it builds is reclaimed with that turn.
 
 **S11.** `break-stmnt ::= "break" STMNT_END` and `continue-stmnt ::= "continue" STMNT_END`. Both are bare
 statements taking no operand, and both are valid **only inside a loop body** (S9, S9a, S10) — writing either

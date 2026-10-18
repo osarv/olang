@@ -7176,6 +7176,48 @@ test "S9: for with no clauses and with only a condition" {
     assert n == 5
 }
 
+# S9: a loop's condition is evaluated in the turn it decides - what it builds is that turn's, destructed when the turn's
+# block closes (it was the block around the loop's, so every evaluation's stayed until the loop's block ended). The
+# three-clause form's and a do loop's likewise; a do loop's first turn evaluates none, and continue still re-checks
+LcDrops mut I64 = 0
+type lcProbe struct(n I64) {
+    n
+} destruct {
+    LcDrops++
+}
+fn (p lcProbe&) Below(k I64) Bool { return p.n < k }
+fn lcLoops() I64 {
+    t := 0
+    for i := 0, i < 6, i++ {
+        if i == 2 { continue }
+        t += i
+    }
+    j := 0
+    do {
+        j++
+        if j == 3 { continue }
+        t += 10 * j
+    } for j < 5
+    do { t += 1000 } for false
+    return t
+}
+LcBaked := lcLoops()                               # baked: the evaluator runs the loops as the run time does
+test "S9: a loop's condition is evaluated in the turn it decides" {
+    i := 0
+    for lcProbe(i).Below(3) {
+        assert LcDrops == I64(i)
+        i++
+        sbChurn()
+    }
+    assert LcDrops == 4
+    for k := 0, lcProbe(10 + k).Below(12), k++ { assert LcDrops == 4 + I64(k) }
+    assert LcDrops == 7
+    m := 0
+    do { m++ } for lcProbe(m).Below(2)
+    assert LcDrops == 9 and m == 2
+    assert LcBaked == 1133 and lcLoops() == 1133
+}
+
 test "S9a: for-in over an array gives each element, and the index when asked" {
     a := I32[10, 20, 30]
     sum := 0

@@ -96,13 +96,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `RunFrom` (run by run, S9f), a type's own `Iter()`/`Next()`, else `At`+`Len` (S9d) - in that order of preference, an
   iterator winning over indexing; elements are copies. `range end` / `range s, e` / `range s, e, step` counts upward
   only (S9b, the user's design). `for x in try c { } catch ...` covers the loop's own calls (S9e). A for-in's names
-  are new (D3a), so `for x in m` is never membership. No labeled `break`/`continue` (the user's call, 2026-10-08).
+  are new (D3a), so `for x in m` is never membership. No labeled `break`/`continue` (the user's call, 2026-10-08). A
+  loop's condition is evaluated in the turn it decides, a post clause in a block of its own, so what either builds is
+  reclaimed each turn (2026-10-18, E31b's M1 - the block around the loop kept every evaluation's: 745MB for 5,000 reads
+  of a 72KB element); stage 0 lowers `do { } for c` to the three-clause form, its condition read from the second turn.
 - **An expression statement must do something (S3):** a call or an increment. `++`/`--` are statements only, never
   operands (S3a, the user's call). A bare `{ }` is a scope (S1a).
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
   once. Assignment to a reference repoints, in every position (S4a). Parallel assignment `a, b = b, a` evaluates every
   value first; `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call). An assigned value
-  borrowing storage within the place takes its old value as a copy, decided by types (S4d).
+  borrowing storage within the place takes its old value as a copy, decided by types (S4d) - in stage 0 too since
+  2026-10-18 (it had asked the callee's body, `calleeMayKeepArg`).
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
   `break` of its own leaves, a leaving `join` counts, a `noreturn` call counts. `unreachable` is checked, never assumed
   (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b), process-wide, tests included.
