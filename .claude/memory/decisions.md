@@ -382,10 +382,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   only through its own signature (`fn f() T ? E`; `Result<T, E>` written as a result type is an error naming that form,
   since a function that fails says so with `?`), and `return r` of a kept result in such a function passes its outcome
   through; a `match` on an error value has `case null` for "no error" where null is possible, and `case null` is an error where
-  the value is known not to be null - a catch binding or an error word (the user's refinement). ASKED (the user's
-  proposal): `T ? E` only in function signatures ("this fails"), `Result<T, E>` for values (variables, fields, type
+  the value is known not to be null - a catch binding or an error word (the user's refinement). DECIDED (the user's
+  proposal; "if you think the two meanings have valid niches then sure, also disallow variable creation with ?"):
+  `T ? E` only in function signatures ("this fails"), `Result<T, E>` for values (variables, fields, type
   arguments, and the result of a function that returns an outcome as data without failing); `r := f()?` gives a
-  `Result<T, E>`. Recommended yes. In effect: both spellings, as decided before.
+  `Result<T, E>`. Niches judged valid (a failing call vs a kept outcome - batches, tasks, channels,
+  reporting functions). `T ? E` anywhere but a signature is a compile-time error naming `Result<T, E>`.
 - QAM 2026-10-18 (errors as values; the user: "1) ... I want this feature tho 2) yes, disallow this 3) reserve the
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
