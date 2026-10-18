@@ -46,6 +46,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     tail StringBuilder              # globals, constant data and declarations, written after the functions
     seen Map<String&, Bool>          # the symbols tail defines or declares already
     nconst I64 = 0
+    ntask I64 = 0                   # tasks' trampolines made
     dataAt Map<String&, String&>      # a Data operand's storage by its position: one instance for each (T25d)
     thunks List<String&>            # function-value thunks to write: "SYM|key index"
     thunkFor Map<String&, Bool>
@@ -466,6 +467,7 @@ fn (fe mut fnEm&) run() {
             fe.head.Push("  %s" $i " = alloca %olang.builder\n  %s" $i "room = alloca [64 x i8], align 8\n")
         } else {
             fe.head.Push("  %s" $i " = alloca %olang.scope\n")
+            if f.Scopes[i].Kind == mir.ScopeKind.Join { fe.head.Push("  %jh" $i " = alloca ptr\n") }
         }
     }
     rt := t.RetLlvm(f.Ty)
@@ -861,6 +863,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             } else {
                 if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Region { fe.gap("a region") }
                 fe.w("store %olang.scope zeroinitializer, ptr %s" $sc)
+                if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Join { fe.w("store ptr null, ptr %jh" $sc) }
             }
         }
         case mir.Stmt.Close(_, sc) {
@@ -899,7 +902,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
             fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $d ", ptr " $sv ", i64 " $bytes ", i1 false)")
         }
-        case mir.Stmt.Spawn(_, _, _) { fe.gap("Spawn") }
+        case mir.Stmt.Spawn(_, j, task) { fe.spawn(j, fe.F.Tasks[I64(task)]) }
     }
 }
 
@@ -1632,9 +1635,17 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             }
             fe.w("br label %ret")
         }
-        case mir.Term.Wait(_, _, _, _, _) {
-            fe.gap("Wait")
-            fe.w("unreachable")
+        case mir.Term.Wait(_, j, ok, code, failed) {
+            fe.E.declare("__olang_join_tasks", "i64 @__olang_join_tasks(ptr)")
+            e := fe.let("call i64 @__olang_join_tasks(ptr %jh" $j ")")
+            if failed == mir.NoBlock {
+                fe.w("br label %" $blockName(ok))
+            } else {
+                c := fe.let("trunc i64 " $e " to i32")
+                if code != mir.NoLocal { fe.store("i32", c, "%l" $code) }
+                bad := fe.let("icmp ne i32 " $c ", 0")
+                fe.w("br i1 " $bad ", label %" $blockName(failed) ", label %" $blockName(ok))
+            }
         }
         case mir.Term.Exit(sp, kind, msg) { fe.exit(sp, kind, msg) }
     }
@@ -1988,4 +1999,223 @@ fn (e mut Emitter&) findTestIf(ti ast.TopIf&, sp source.Span) source.Span {
         if f.End > I32(0) { return f }
     }
     return e.findTestIf(ti.ElseIf, sp)
+}
+
+# ---- tasks (P1, P2, P4) ----
+
+# a task started in join j: its environment - the function value it calls through, its arguments, the scopes it is
+# handed (each a stand-in of the task's own, folded into it at the join, P2 - none, null, for the program's, which the
+# task reaches as its worker does), the places its results go - in the join's arena, its node on the join's list, a
+# worker handed a trampoline of its own that unpacks the environment, makes the call, stores the results, and returns
+# an error no clause took under the join's list (P4b)
+fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
+    t := fe.E.T
+    e := fe.E
+    js := "%s" $j
+    ty := types.UnknownT
+    callee := ""
+    isValue := false
+    fv := ""
+    match k.Target {
+        case mir.Callee.Fn(key, fty) {
+            e.want(key)
+            ty = fty
+            callee = "@" $e.sym(key)
+        }
+        case mir.Callee.Extern(f, fty) {
+            ty = fty
+            callee = "@" $e.extern(f, fty)
+            fe.gap("a task calling an extern")
+        }
+        case mir.Callee.Value(x) {
+            ty = fe.otype(x)
+            isValue = true
+            fv = fe.val(x, ty)
+        }
+    }
+    if k.Clauses.N > I32(0) { fe.gap("a task's clauses (P4a)") }
+    ps := t.Items(t.Params(ty))
+    # the environment's fields and their values
+    fields List<String&>
+    vals List<String&>
+    if isValue {
+        fields.Push("{ ptr, ptr }")
+        vals.Push(fv)
+    }
+    for i in range ps.Len() {
+        fields.Push(fe.ty(ps[i]))
+        vals.Push(fe.val(fe.arg(k.Args, i), ps[i]))
+    }
+    subs List<String&>
+    for i in range k.Scopes.N {
+        r := fe.F.Refs[I64(k.Scopes.At) + i]
+        fields.Push("ptr")
+        match r {
+            case mir.ScopeRef.Program { vals.Push("null") }
+            case _ {
+                e.declare("__olang_standin", "ptr @__olang_standin(ptr)")
+                sub := fe.let("call ptr @__olang_standin(ptr " $fe.scope(r) ")")
+                subs.Push($sub)
+                vals.Push($sub)
+            }
+        }
+    }
+    for i in range k.Targets.N {
+        fields.Push("ptr")
+        dst, _ := fe.addr(fe.F.Places[I64(k.Targets.At) + i])
+        vals.Push($dst)
+    }
+    et := StringBuilder()
+    et.Push("{ ")
+    for i in range fields.Len() {
+        if i > 0 { et.Push(", ") }
+        et.Push(fields[i])
+    }
+    if fields.Len() == 0 { et.Push("i8") }
+    et.Push(" }")
+    envT := et.ToString()
+    e.runtime("__olang_scope_alloc_a")
+    size := fe.let("ptrtoint ptr " $fe.let("getelementptr " $envT ", ptr null, i32 1") " to i64")
+    env := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 " $size ", i64 8)")
+    for i in range fields.Len() {
+        fe.store(fields[i], vals[i], fe.let("getelementptr " $envT ", ptr " $env ", i32 0, i32 " $i))
+    }
+    # the task's node (%olang.task: next, done, merges, error) and its stand-ins' merge records
+    node := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 32, i64 8)")
+    head := "null"
+    for sub in subs {
+        mn := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 16, i64 8)")
+        fe.store("ptr", head, mn)
+        fe.store("ptr", sub, fe.let("getelementptr { ptr, ptr }, ptr " $mn ", i32 0, i32 1"))
+        head = mn
+    }
+    fe.store("ptr", head, fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 2"))
+    fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 1"))
+    fe.store("i64", "0", fe.let("getelementptr { ptr, i64, ptr, i64 }, ptr " $node ", i32 0, i32 3"))
+    name := e.trampoline(envT, fields, isValue, callee, ty, I64(k.Scopes.N), I64(k.Targets.N), fe.F.Scopes[I64(j)].Errors)
+    e.declare("__olang_worker_get", "ptr @__olang_worker_get()")
+    e.declare("__olang_worker_start", "void @__olang_worker_start(ptr, ptr, ptr, ptr)")
+    w := fe.let("call ptr @__olang_worker_get()")
+    fe.w("call void @__olang_worker_start(ptr " $w ", ptr @" $name ", ptr " $env ", ptr " $node ")")
+    fe.store("ptr", fe.load("ptr", "%jh" $j), node)
+    fe.store("ptr", node, "%jh" $j)
+}
+
+# a task's trampoline, fn(ptr env) ptr: the call made from what the environment holds, its results stored, and the
+# error it fails with re-encoded under the join's list (as a pointer's bits, the runtime's contract), null for none
+fn (e mut Emitter&) trampoline(envT String&, fields List<String&>, isValue Bool, callee String&, ty types.TypeId
+                               nscopes I64, ntargets I64, joinErrs types.ListId) String {
+    t := e.T
+    name := "olang_task" $e.ntask
+    e.ntask++
+    b := StringBuilder()
+    b.Push("define internal ptr @" $name "(ptr %env) #0 {\nentry:\n")
+    for i in range fields.Len() {
+        b.Push("  %f" $i " = getelementptr " $envT ", ptr %env, i32 0, i32 " $i "\n")
+    }
+    at I64 = 0
+    target := callee
+    args := StringBuilder()
+    first := true
+    if isValue {
+        b.Push("  %fv = load { ptr, ptr }, ptr %f0\n  %code = extractvalue { ptr, ptr } %fv, 0\n  %fenv = extractvalue { ptr, ptr } %fv, 1\n")
+        target = "%code"
+        args.Push("ptr %fenv")
+        first = false
+        at = 1
+    }
+    ps := t.Items(t.Params(ty))
+    pass := t.Passing(ty)
+    res := t.Result(ty)
+    via := res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res)
+    if via {
+        b.Push("  %out = alloca " $e.ty(res) "\n")
+        if not first { args.Push(", ") }
+        args.Push("ptr %out")
+        first = false
+    }
+    for i in range nscopes {
+        f := at + ps.Len() + i
+        b.Push("  %sc" $i " = load ptr, ptr %f" $f "\n  %sn" $i " = icmp eq ptr %sc" $i ", null\n")
+        e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
+        b.Push("  %sg" $i " = load ptr, ptr @__olang_prog_scope\n  %ss" $i " = select i1 %sn" $i ", ptr %sg" $i ", ptr %sc" $i "\n")
+        if not first { args.Push(", ") }
+        args.Push("ptr %ss" $i)
+        first = false
+    }
+    for i in range ps.Len() {
+        f := at + i
+        lt := e.ty(ps[i])
+        if not first { args.Push(", ") }
+        first = false
+        match pass[i] {
+            case 'm' { args.Push("ptr %f" $f) }
+            case 's' {
+                b.Push("  %a" $i " = load { ptr, ptr }, ptr %f" $f "\n  %ac" $i " = extractvalue { ptr, ptr } %a" $i ", 0\n")
+                b.Push("  %ae" $i " = extractvalue { ptr, ptr } %a" $i ", 1\n")
+                args.Push("ptr %ac" $i ", ptr %ae" $i)
+            }
+            case _ {
+                b.Push("  %a" $i " = load " $lt ", ptr %f" $f "\n")
+                args.Push($lt " %a" $i)
+            }
+        }
+    }
+    rt := t.RetLlvm(ty)
+    errs := t.Items(t.Errors(ty)).Len() > 0
+    if rt == "void" {
+        b.Push("  call void " $target "(" $args.ToString() ")\n")
+    } else {
+        b.Push("  %r = call " $rt " " $target "(" $args.ToString() ")\n")
+    }
+    value := ""
+    if via {
+        b.Push("  %v = load " $e.ty(res) ", ptr %out\n")
+        value = "%v"
+    } else if res != types.VoidT and res != types.NoreturnT {
+        if errs {
+            b.Push("  %v = extractvalue " $rt " %r, 1\n")
+            value = "%v"
+        } else {
+            value = "%r"
+        }
+    }
+    if errs {
+        code := "%r" if (via or res == types.VoidT) else "%c"
+        if code == "%c" { b.Push("  %c = extractvalue " $rt " %r, 0\n") }
+        b.Push("  %bad = icmp ne i32 " $code ", 0\n  br i1 %bad, label %fail, label %ok\nfail:\n")
+        rc := e.recodeText(b, code, t.Errors(ty), joinErrs)
+        b.Push("  %rc64 = zext i32 " $rc " to i64\n  %rp = inttoptr i64 %rc64 to ptr\n  ret ptr %rp\nok:\n")
+    }
+    if ntargets > 0 and value != "" {
+        t0 := at + ps.Len() + nscopes
+        if ntargets == 1 {
+            b.Push("  %d0 = load ptr, ptr %f" $t0 "\n  store " $e.ty(res) " " $value ", ptr %d0\n")
+        } else {
+            parts := t.Items(t.Parts(t.Repr(res)))
+            for i in range ntargets {
+                b.Push("  %d" $i " = load ptr, ptr %f" $(t0 + i) "\n")
+                b.Push("  %x" $i " = extractvalue " $e.ty(res) " " $value ", " $i "\n")
+                b.Push("  store " $e.ty(parts[i]) " %x" $i ", ptr %d" $i "\n")
+            }
+        }
+    }
+    b.Push("  ret ptr null\n}\n\n")
+    e.body.Push(b.ToString())
+    return name
+}
+
+# a code under list from as the same error under list to, written into b: the name of its value
+fn (e mut Emitter&) recodeText(b mut StringBuilder&, code String&, from types.ListId, to types.ListId) String {
+    t := e.T
+    xs := t.Items(from)
+    b.Push("  %rhi = lshr i32 " $code ", 16\n  %rw = and i32 " $code ", 65535\n")
+    pos := "0"
+    for k in range xs.Len() {
+        b.Push("  %rh" $k " = icmp eq i32 %rhi, " $(k + 1) "\n")
+        b.Push("  %rp" $k " = select i1 %rh" $k ", i32 " $e.position(to, xs[k]) ", i32 " $pos "\n")
+        pos = "%rp" $k
+    }
+    b.Push("  %rs = shl i32 " $pos ", 16\n  %rv2 = or i32 %rs, %rw\n")
+    return "%rv2"
 }
