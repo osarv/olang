@@ -185,8 +185,10 @@ they meet `checked`.
 file's bytes, read while compiling, as a read-only `Array<U8>` in the program's constant data (length known while
 compiling); text is `String(embed "help.txt")`, a view. PATH is any compile-time constant text, relative to the
 source file as imports are, kept inside a remote package. The evaluator can read the bytes (a table parsed and baked
-while compiling). An object is rebuilt when an embedded file changes (its content is in the object's hash). Large
-files are placed in the object as raw bytes (assembler `.incbin`), not as an LLVM constant. Not now: directories,
+while compiling). An object is rebuilt when an embedded file changes (its content is in the object's hash). A file up
+to 64 KB is an LLVM constant, so the optimizer can fold reads of known bytes (a small lookup table); a larger one is
+placed in the object as raw bytes (assembler `.incbin`), since nothing is folded out of a large blob and LLVM would
+only be slow on it. Not now: directories,
 globs. Built in the port after self-hosting.
 
 **What:** a file's bytes become constant data in the binary, read while compiling.
