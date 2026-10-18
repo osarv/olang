@@ -168,6 +168,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     under List<Term>                       # the terms fieldTerm's underestimates stand above, a Derived(-1 - k, _) for under[k]
     temps Map<I64, Term>                   # by site: a temporary place's value judged (tempTerm), the term its references are at
     trMemo Map<pair.Pair<I64, I64>, I64>   # transient's answers, by (body, parameter): 1 being asked, 2 no, 3 yes
+    useMemo Map<pair.Pair<I64, I64>, I64>  # uses' answers, by (body and mode, parameter): 1 being asked, 2 no, 3 yes
     # what decide found for the local the next Let declares: the result term it is moved to (O26a), or that a call it
     # is declared from lands by its obligations (O18c); landing is that flag handed to the call
     moveTo Term = Term.None
@@ -1723,6 +1724,449 @@ fn regionLocal(r typed.Expr&) I64 {
     return -1
 }
 
+# ---- writes through x[i] (E31b) ----
+
+# a call's argument i, for a writable reference parameter: a copy of an element no one holds - x[i] read through At, a
+# field or an element of it, a "checked ... catch default" value, a conditional or a match choosing places - is written
+# where the write is lost, an error; but a handle element lent as its reference to a callee using it only through it
+# (O17b), and a view element lent to one writing nothing of its own storage, are lent as copies (not spawned)
+fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source.Span) {
+    a := c.Args[i]
+    how := 0
+    et := types.UnknownT
+    at := a.Span()
+    x := s.unAway(a)
+    match x {
+        case typed.Expr.Promote(_, _, pr) {
+            v := s.unAway(pr.X)
+            if s.atCall(v) {
+                how = 1
+            } else if s.tryDefault(v) or s.choiceOfPlaces(v) {
+                how = 2
+            }
+            et = v.Type()
+            at = s.elemAt(v)
+        }
+        case typed.Expr.Borrow(_, _, p) {
+            v := tempOf(p)
+            if v != null {
+                if s.atCall(v) {
+                    how = 1
+                } else if s.tryDefault(v) or s.choiceOfPlaces(v) {
+                    how = 2
+                }
+            }
+            et = p.Type()
+            match p {
+                case typed.Place.Temp(_, _, _, _) { at = s.elemAt(v) }
+                case _ { at = s.lastName(p.Span()) }
+            }
+        }
+        case _ { }
+    }
+    handle := s.isHandle(et)
+    if spawned and handle and how == 1 { at = s.nameSpan(callSp) }
+    if how == 0 { return }
+    if how == 1 and not spawned {
+        match c.Target {
+            case typed.Callee.Body(id) {
+                if handle and s.uses(I64(id), i, UseThru) { return }
+                if not handle and s.isStruct(et) and s.uses(I64(id), i, UseView) { return }
+            }
+            case _ { }
+        }
+    }
+    s.err(at, msgs.SpawnAtElement() if spawned and handle and how == 1 else msgs.WriteThroughAtCall())
+}
+
+# where an element read is said: its "[" - the element a try reads, for a try's
+fn (s mut Scoper&) elemAt(v typed.Expr&) source.Span {
+    if v == null { return source.Span(0, 0) }
+    sp := v.Span()
+    match v {
+        case typed.Expr.Try(_, _, t) {
+            if t.X != null { sp = t.X.Span() }
+        }
+        case _ { }
+    }
+    text := try s.texts.Get(s.B.File) catch default ""
+    for k in range I64(sp.Start), I64(sp.End) {
+        if k >= text.Len() { break }
+        if text[k] == '[' { return source.Span(I32(k), I32(k + 1)) }
+    }
+    return sp
+}
+
+fn (s mut Scoper&) unAway(x typed.Expr&) typed.Expr&x {
+    if x == null { return x }
+    match x {
+        case typed.Expr.Away(_, _, y) { return s.unAway(y) }
+        case _ { return x }
+    }
+}
+
+# the value a place is part of, held in a temporary place - reached through fields, elements and payloads, no reference
+fn tempOf(p typed.Place&) typed.Expr&p {
+    return match p {
+        case typed.Place.Temp(_, _, v, _) => v
+        case typed.Place.Field(_, _, b, _) => tempOf(b)
+        case typed.Place.Elem(_, _, e) => tempOf(e.Base)
+        case typed.Place.Payload(_, _, pl) => tempOf(pl.Base)
+        case _ => null
+    }
+}
+
+# whether x reads an element through At (E31): a call of a method At, at, CheckedAt or checkedAt - under checked too
+fn (s mut Scoper&) atCall(x typed.Expr&) Bool {
+    if x == null { return false }
+    match x {
+        case typed.Expr.Try(_, _, t) { return t.Clauses.Len() == 0 and s.atCall(t.X) }
+        case typed.Expr.Away(_, _, y) { return s.atCall(y) }
+        case typed.Expr.Seq(_, _, q) { return s.atCall(q.X) }
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Body(id) {
+                    match s.Bodies[I64(id)].Of {
+                        case typed.BodyOf.Fn(inst) {
+                            fd := s.P.FnDecl(s.P.InstanceFn(inst))
+                            if fd.Recv == null { return false }
+                            n := s.P.L.Names.Text(fd.Name)
+                            return n == "At" or n == "at" or n == "CheckedAt" or n == "checkedAt"
+                        }
+                        case _ { }
+                    }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
+# whether x is a try giving a default (R9a): the element or the default, a value either way
+fn (s mut Scoper&) tryDefault(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Try(_, _, t) {
+            for c in t.Clauses {
+                if c.Defaults.Len() > 0 { return true }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
+# whether x is a conditional or a match one of whose values is a place read (E28): a value, not the place
+fn (s mut Scoper&) choiceOfPlaces(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Cond(_, _, c) { return not s.isFresh(c.A) or not s.isFresh(c.B) }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if a != null and a.Value != null and not s.isFresh(a.Value) { return true }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
+# whether a struct is a handle (O17b): its only field a reference living with the instance, or another handle
+fn (s mut Scoper&) isHandle(t types.TypeId) Bool {
+    if not s.isStruct(t) { return false }
+    fs := s.P.T.Items(s.P.T.Fields(t))
+    if fs.Len() != 1 { return false }
+    if s.isRef(fs[0]) { return s.fieldMark(t, 0) == typed.Mark.Bare }
+    return s.isHandle(fs[0])
+}
+
+# how a body may use a reference parameter (E31b, O17b): only through its reference field (UseThru, a handle's); or
+# writing nothing of the instance's own storage (UseView) - its references followed, its numbers, Bools and function values
+# read, it or a struct it holds handed on read-only, by value, or to a callee using it so
+UseThru I64 = 1
+UseView I64 = 2
+
+# whether body b uses its parameter j only as mode says - a body not checked does not; one whose answer is being asked
+# is taken to (a greatest fixed point)
+fn (s mut Scoper&) uses(b I64, j I64, mode I64) Bool {
+    if b < 0 { return false }
+    key := pair.Pair(b * 4 + mode, j)
+    st := try s.useMemo.Get(key) catch default 0
+    if st != 0 { return st != 2 }
+    body := s.Bodies[b]
+    if body.Root == null or not s.judged[b] or j >= body.Params.Len() { return false }
+    s.useMemo.Put(key, 1)
+    r := s.ueBlock(body, body.Root, I64(body.Params[j]), mode)
+    s.useMemo.Put(key, 3 if r else 2)
+    return r
+}
+
+fn (s mut Scoper&) ueBlock(b typed.Body&, bl typed.Block&, l I64, mode I64) Bool {
+    if bl == null { return true }
+    for st in bl.Stmts {
+        if not s.ueStmt(b, st, l, mode) { return false }
+    }
+    return true
+}
+
+fn (s mut Scoper&) ueStmt(b typed.Body&, st typed.Stmt&, l I64, mode I64) Bool {
+    if st == null { return true }
+    match st {
+        case typed.Stmt.Let(_, _, x) { return s.ueExpr(b, x, l, mode) }
+        case typed.Stmt.Assign(_, p, x) { return s.uePlace(b, p, l, mode) and s.ueExpr(b, x, l, mode) }
+        case typed.Stmt.Eval(_, x) { return s.ueExpr(b, x, l, mode) }
+        case typed.Stmt.If(_, i) {
+            return s.ueExpr(b, i.Test, l, mode) and s.ueBlock(b, i.Then, l, mode) and s.ueBlock(b, i.Else, l, mode)
+        }
+        case typed.Stmt.Loop(_, body, post) { return s.ueBlock(b, body, l, mode) and s.ueBlock(b, post, l, mode) }
+        case typed.Stmt.Return(_, x) { return s.ueExpr(b, x, l, mode) }
+        case typed.Stmt.Assert(_, c, m) { return s.ueExpr(b, c, l, mode) and s.ueExpr(b, m, l, mode) }
+        case typed.Stmt.Block(_, bl) { return s.ueBlock(b, bl, l, mode) }
+        case typed.Stmt.Defer(_, bl) { return s.ueBlock(b, bl, l, mode) }
+        case typed.Stmt.Join(_, jn) {
+            if not s.ueBlock(b, jn.Code, l, mode) { return false }
+            for c in jn.Clauses {
+                if not s.ueBlock(b, c.Code, l, mode) { return false }
+            }
+            return true
+        }
+        case typed.Stmt.Spawn(_, sw) {
+            # a task handed it keeps it past the call
+            xs List<I64>
+            s.carried(sw.Task, xs)
+            if flHas(xs, l) { return false }
+            for p in sw.Targets {
+                if not s.uePlace(b, p, l, mode) { return false }
+            }
+            if not s.ueExpr(b, sw.Task, l, mode) { return false }
+            for c in sw.Clauses {
+                if not s.ueExpr(b, c.Handler, l, mode) { return false }
+            }
+            return true
+        }
+        case typed.Stmt.Yield(_, x) { return s.ueExpr(b, x, l, mode) }
+        case _ { return true }
+    }
+}
+
+fn (s mut Scoper&) ueExprs(b typed.Body&, xs Array<typed.Expr&>&, l I64, mode I64) Bool {
+    for x in xs {
+        if not s.ueExpr(b, x, l, mode) { return false }
+    }
+    return true
+}
+
+# whether r reads the parameter's reference itself
+fn isParamRead(r typed.Expr&, l I64) Bool {
+    match r {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Local(_, _, id) { return I64(id) == l }
+                case _ { }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { return isParamRead(y, l) }
+        case _ { }
+    }
+    return false
+}
+
+# a field place read straight through the parameter: p.f, its index; -1 for none
+fn ownField(p typed.Place&, l I64) I64 {
+    match p {
+        case typed.Place.Field(_, _, base, i) {
+            match base {
+                case typed.Place.Deref(_, _, r) {
+                    if isParamRead(r, l) { return i }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+fn (s mut Scoper&) ueExpr(b typed.Body&, x typed.Expr&, l I64, mode I64) Bool {
+    if x == null { return true }
+    match x {
+        case typed.Expr.Read(_, ty, p, _) {
+            if ownField(p, l) >= 0 {
+                # a field read through it: its reference (a handle's), or for a view a number, a Bool, a function value
+                # or a reference
+                if mode == UseThru { return true }
+                k := s.P.T.KindOf(ty)
+                return k == types.Kind.Ref or k == types.Kind.Func or s.isNumberLike(ty)
+            }
+            return s.uePlace(b, p, l, mode)
+        }
+        case typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { return s.uePlace(b, p, l, mode) }
+        case typed.Expr.Promote(_, _, pr) { return s.ueExpr(b, pr.X, l, mode) }
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Value(f) {
+                    if not s.ueExpr(b, f, l, mode) { return false }
+                }
+                case _ { }
+            }
+            fty := s.calleeType(c)
+            ps := s.P.T.Items(s.P.T.Params(fty)) if fty != types.UnknownT else types.TypeId[]
+            for k in range c.Args.Len() {
+                a := s.unAway(c.Args[k])
+                handed := s.handedOn(a, l)
+                if handed == 0 {
+                    if not s.ueExpr(b, a, l, mode) { return false }
+                    continue
+                }
+                # handed on: to a named function's parameter used the same way; for a view also to a read-only
+                # reference parameter or a by-value one
+                callee := -1
+                match c.Target {
+                    case typed.Callee.Body(id) { callee = I64(id) }
+                    case _ { }
+                }
+                if callee < 0 or k >= ps.Len() { return false }
+                pt := ps[k]
+                if mode == UseView and (not s.isRef(pt) or (s.P.T.PermOf(pt) & types.Writable) == 0) { continue }
+                if handed == 1 {
+                    if not s.uses(callee, k, mode) { return false }
+                } else if handed == 2 {
+                    # a struct the parameter holds by value: a handle used only through its reference, a view as one
+                    ft := s.unAway(a).Type()
+                    if mode != UseView { return false }
+                    rt := s.P.T.Referent(pt) if s.isRef(pt) else pt
+                    if s.isHandle(rt) {
+                        if not s.uses(callee, k, UseThru) { return false }
+                    } else if not s.isStruct(rt) or not s.uses(callee, k, UseView) {
+                        return false
+                    }
+                } else {
+                    return false
+                }
+            }
+            return true
+        }
+        case typed.Expr.Make(_, _, m) { return s.ueExprs(b, m.Items, l, mode) and s.ueExpr(b, m.Length, l, mode) }
+        case typed.Expr.Collect(_, _, c) { return s.ueExpr(b, c.Reserve, l, mode) and s.ueBlock(b, c.Loop, l, mode) }
+        case typed.Expr.Prim(_, _, _, _, args) { return s.ueExprs(b, args, l, mode) }
+        case typed.Expr.Slice(_, _, sl) {
+            return s.uePlace(b, sl.Base, l, mode) and s.ueExpr(b, sl.Lo, l, mode) and s.ueExpr(b, sl.Hi, l, mode)
+        }
+        case typed.Expr.Cond(_, _, c) {
+            return s.ueExpr(b, c.C, l, mode) and s.ueExpr(b, c.A, l, mode) and s.ueExpr(b, c.B, l, mode)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts {
+                if not s.ueStmt(b, st, l, mode) { return false }
+            }
+            return s.ueExpr(b, q.X, l, mode)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held {
+                if not s.ueStmt(b, st, l, mode) { return false }
+            }
+            for a in m.Arms {
+                if not s.ueArm(b, a, l, mode) { return false }
+            }
+            return s.ueArm(b, m.NoMatch, l, mode)
+        }
+        case typed.Expr.Try(_, _, t) {
+            if not s.ueExpr(b, t.X, l, mode) { return false }
+            for c in t.Clauses {
+                if not s.ueBlock(b, c.Code, l, mode) or not s.ueExprs(b, c.Defaults, l, mode) { return false }
+            }
+            return true
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Lambda(_, caps, _) {
+                    for cp in caps {
+                        if flRootExpr(cp.Outer) == l { return false }
+                        if not s.ueExpr(b, cp.Outer, l, mode) { return false }
+                    }
+                }
+                case typed.FnVal.Adapter(_, r, _) {
+                    if flRootExpr(r) == l { return false }
+                    return s.ueExpr(b, r, l, mode)
+                }
+                case _ { }
+            }
+            return true
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(r) {
+                        if flRootExpr(r) == l or not s.ueExpr(b, r, l, mode) { return false }
+                    }
+                    case _ { }
+                }
+            }
+            return true
+        }
+        case typed.Expr.Away(_, _, y) { return s.ueExpr(b, y, l, mode) }
+        case _ { return true }
+    }
+}
+
+# how a call's argument hands the parameter on: 1 its reference itself, 2 a borrow of a struct it holds by value (p.w),
+# 3 a copy of the whole instance; 0 none
+fn (s mut Scoper&) handedOn(a typed.Expr&, l I64) I64 {
+    if isParamRead(a, l) { return 1 }
+    match a {
+        case typed.Expr.Borrow(_, _, p) {
+            if ownField(p, l) >= 0 { return 2 }
+        }
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Deref(_, _, r) {
+                    if isParamRead(r, l) { return 3 }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return 0
+}
+
+fn (s mut Scoper&) ueArm(b typed.Body&, a typed.Arm&, l I64, mode I64) Bool {
+    if a == null { return true }
+    for alt in a.Alts {
+        if not s.ueExpr(b, alt.Test, l, mode) { return false }
+        for bd in alt.Binds {
+            if not s.ueExpr(b, bd.From, l, mode) { return false }
+        }
+    }
+    return s.ueExpr(b, a.Guard, l, mode) and s.ueBlock(b, a.Code, l, mode) and s.ueExpr(b, a.Value, l, mode)
+}
+
+# a place's uses of the parameter: through a reference read out of one of its fields, anything; the parameter itself, its
+# own storage (a field of it written, borrowed, the instance copied), none
+fn (s mut Scoper&) uePlace(b typed.Body&, p typed.Place&, l I64, mode I64) Bool {
+    match p {
+        case typed.Place.Local(_, _, id) { return I64(id) != l }
+        case typed.Place.Deref(_, _, r) {
+            if isParamRead(r, l) { return false }
+            return s.ueExpr(b, r, l, mode)
+        }
+        case typed.Place.Field(_, _, base, _) { return s.uePlace(b, base, l, mode) }
+        case typed.Place.Elem(_, _, e) { return s.uePlace(b, e.Base, l, mode) and s.ueExpr(b, e.Index, l, mode) }
+        case typed.Place.Payload(_, _, pl) { return s.uePlace(b, pl.Base, l, mode) }
+        case typed.Place.Temp(_, _, v, _) { return s.ueExpr(b, v, l, mode) }
+        case _ { return true }
+    }
+}
+
+# whether t is a number or a Bool (a declared type over one counts)
+fn (s mut Scoper&) isNumberLike(t types.TypeId) Bool {
+    if s.P.T.IsNumber(t) or s.P.T.KindOf(t) == types.Kind.Bool { return true }
+    if s.P.T.KindOf(t) == types.Kind.Named and s.P.T.HasBody(t) and s.P.T.DeclKindOf(s.P.T.DeclOf(t)) == types.DeclKind.Over {
+        return s.isNumberLike(s.P.T.Base(t))
+    }
+    return false
+}
+
 # ---- lambdas that never leave the frame (D16c) ----
 
 # whether x is a lambda capturing a reference, or a value holding one
@@ -3017,6 +3461,14 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             vals[i] = s.val(a, Term.None)
         }
     }
+    # a copy of an element no one holds, for a writable reference parameter, is written and lost (E31b)
+    if s.report {
+        for i in range n {
+            if i < ps.Len() and s.isRef(ps[i]) and (s.P.T.PermOf(ps[i]) & types.Writable) != 0 {
+                s.writtenCopy(c, i, spawned, sp)
+            }
+        }
+    }
     scopes := Array<typed.Scope>(vars.Len())
     for v in range vars.Len() { scopes[v] = s.scopeOf(beta[v]) }
     s.plan.Pass(c.Site, scopes)
@@ -3405,6 +3857,25 @@ fn (s mut Scoper&) nameSpan(sp source.Span) source.Span {
         ch := text[k]
         if ch == '(' { break }
         if isNameChar(ch) {
+            from := k
+            for k < end and isNameChar(text[k]) { k++ }
+            name = source.Span(I32(from), I32(k))
+            continue
+        }
+        k++
+    }
+    return name
+}
+
+# the last name in a span: a member a place reads
+fn (s mut Scoper&) lastName(sp source.Span) source.Span {
+    text := try s.texts.Get(s.B.File) catch default ""
+    k := I64(sp.Start)
+    end := I64(sp.End)
+    if end > text.Len() { return sp }
+    name := sp
+    for k < end {
+        if isNameChar(text[k]) {
             from := k
             for k < end and isNameChar(text[k]) { k++ }
             name = source.Span(I32(from), I32(k))
