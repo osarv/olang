@@ -1972,7 +1972,12 @@ Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, count
 (`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
 array with each of those occurrences of `old` replaced by `new` (an empty `old` puts `new` before every element and
 after the last); `Repeat(n)`, `n` copies of its elements one after another (none for `n` at most `0`); and
-`Reverse()`, which reverses them in place. A `String` has them as every array method (T29e), the new ones being
+`Reverse()`, which reverses them in place; and `Chunks(size)`, the array cut into consecutive pieces of `size`
+elements, the last holding what is left (fewer, never none; an empty array has none) - each piece a writable slice of
+the array's own storage (E16a), no two sharing an element, held in an array that lives where the receiver does (the
+receiver is written `mut`, so the pieces may be written). `size` is a `ChunkSize`, a declared `I64` whose constructor
+fails with `ArrayError.BAD_CHUNK` below one: a literal size is checked while compiling (T29d, `a.Chunks(0)` is a
+compile-time error) and a computed one is made one with `try ChunkSize(n)`, as a base is a `Radix`. A `String` has them as every array method (T29e), the new ones being
 `String`s. An array of texts, `Array<String&>`, has `Join(sep)`: its texts one after another with `sep` between each
 two, built once at its length - `$` writes such an array as source instead (E11a). Text has `TrimStart()` and
 `TrimEnd()`, borrows of it as `Trim()` is; `ToUpper()` and `ToLower()`, new text with the ASCII letters changed and
@@ -4159,6 +4164,11 @@ There is no exception for any type or size. Only P9's atomic methods are atomic,
 not to a `U8`, not to an `I32`, not to a pointer — and a concurrent read of something being written may observe
 a value that was never stored. `-race` (P7) detects races that actually occur on a given run, which is a
 detector and not a proof.
+
+A program can make a race impossible by construction rather than by care: tasks that each write only their own
+piece of an array - `join { for part in a.Chunks(k) { spawn work(part) } }`, the pieces of `Chunks` (M19d) sharing no
+element - make no two accesses to one element, so P8b's condition never arises, and the join orders every piece's writes
+before what follows (P8).
 
 **P8c.** A program adds ordering of its own by calling a synchronisation primitive through `extern fn`
 (§11) — a pthread mutex or condition variable is what `chan.olang` uses. Such a call carries exactly the

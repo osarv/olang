@@ -552,6 +552,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/math` (generic over the floats, libm calls), `std/linalg` (`Matrix<T>` views, Goto GEMM with per-target tiles,
   batched causal products, fused epilogues, convolutions - the base for all numeric work, the user's call: a 2-D
   Matrix, not a tensor), `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
+- **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
+  held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
+  does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
+  `size` is a `ChunkSize` (a Radix-like checked `I64`, `ArrayError.BAD_CHUNK` below one; a literal checked while
+  compiling). Arrays only for now; Vec later (another branch is reworking Vec).
 - **`extern fn` (X1-X8).** Numeric primitives and arrays of them; an array marshals to a pointer; no extern returns a
   pointer; only the runtime's `__olang_` functions take a function value (X2). C math functions with their exact
   prototypes are known and evaluated while compiling (X8).

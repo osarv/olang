@@ -19666,3 +19666,25 @@ compiler's own errors: std's tests (`F64(0.1).ShortestDecimal()`, `I64(255).Form
 t29dradixcall`, and the fuzz generator, whose `(e).Format(b)`, `(e).Fixed(n)` and `(e).Bits()` are now conversions of
 `e` to its own type (a generated `e` may be a literal). `compiler/testdata/lex/numbers.olang` keeps its `1.5.Hash()`:
 it is scanner input, never checked.
+
+## `a.Chunks(size)`: an array cut into pieces tasks may each write (M19d, P8b, 2026-10-17; the coordinator's request, details mine)
+
+The prelude gives every array `Chunks(size)`: the consecutive pieces of `size` elements, the last holding what is left,
+each a writable slice of the array's own storage - so `join { for part in a.Chunks(4) { spawn work(part) } }` hands
+each task a part of its own and cannot race on the array (no element is reached by two tasks; the join orders every
+write before what follows). **Decided (mine)**: (1) **an array of slices, not an iterator** - an iterator's `Next` can
+only say its result lives where the iterator does (`String&it`, as `LineIter` does: a result read through a field has no
+scope of its own a signature can name), and the for-in's hidden iterator lives in the loop's block, inside the join, so
+P2 refused every piece as a task argument; the pieces' array lives where the receiver does, as `Split`'s, so a piece is
+known to live as long as the array. It costs one allocation of `ceil(n / size)` slices per call, made in the receiver's
+scope (a long-lived array chunked again and again keeps each call's piece array until it closes - the same as `Split`).
+(2) **The size is a `ChunkSize`**, a declared `I64` whose constructor fails with `ArrayError.BAD_CHUNK` below one, as a
+base is a `Radix`: a literal is checked while compiling (`a.Chunks(0)` is T29d's compile-time error) and needs no `try`;
+a computed one is `try ChunkSize(n)`. Making `Chunks` itself fallible would put `try` on every call for a mistake only
+computed sizes can make; silently treating `size <= 0` as one would hide it (errors are errors). (3) The receiver is
+`mut` - the pieces are writable views, and a read-only receiver handing them out would be the shallow-permission hole
+linalg's views have; reading in parallel needs no help. (4) Arrays only: `Vec` is being reworked elsewhere and gets it
+after; `String` has it (T29e), its pieces `Array<Char>&` (the result is not the receiver's own type, T29f). Tested in
+`std/prelude/tests/array.olang`: shapes, writes through a piece, refused sizes, and four tasks each writing their piece
+of an array read back after the join and an arena churn - baked while compiling (K1 runs the join's tasks in sequence)
+as at run time, and clean under `-race` and `-sanitize`.

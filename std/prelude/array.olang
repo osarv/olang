@@ -57,9 +57,10 @@ fn (a Array<T>&) All(keep fn(x T) Bool) Bool {
     return true
 }
 
-# what an array's FindIndex fails with: no element keep holds for
+# what an array's FindIndex fails with: no element keep holds for (NOT_FOUND); and a ChunkSize below one (BAD_CHUNK)
 error ArrayError {
     NOT_FOUND
+    BAD_CHUNK
 }
 
 # the index of the first element keep holds for - failing with NOT_FOUND when keep holds for none, so a miss is never
@@ -464,6 +465,29 @@ fn (it mut ArrayIter<T>&) Next() T ? Exhausted {
 
 # a fresh position at the array's start - each call its own, so loops never disturb each other
 fn (a Array<T>&) Iter() ArrayIter<T> { return ArrayIter<T>(a) }
+
+# how many elements a piece Chunks hands out holds: at least one. A literal is checked while compiling ("a.Chunks(4)",
+# and 0 is a compile-time error, T29d); a size computed while the program runs is made one with ChunkSize(n), which
+# fails with ArrayError.BAD_CHUNK below one - the one way a size is refused
+type ChunkSize I64(v I64) ? ArrayError.BAD_CHUNK {
+    if v < 1 { error ArrayError.BAD_CHUNK }
+}
+
+# the array cut into consecutive pieces of size elements each, the last holding what is left (fewer, never none): each
+# piece a writable view of the array's own storage (a slice, E16a), nothing copied, and no two sharing an element - so
+# "join { for part in a.Chunks(4) { spawn work(part) } }" hands every task a part of its own to write and cannot race on
+# the array. An empty array has no pieces. The pieces are held in an array that lives where the array does, as Split's
+# (so a piece outlives nothing it views), allocated once at its exact length
+fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>&a {
+    n := I64(size)
+    pieces mut Array<mut Array<T>&>&a = Array<mut Array<T>&>((a.Len() + n - 1) / n)
+    for k in range pieces.Len() {
+        start I64 = k * n
+        end I64 = start + n if a.Len() - start > n else a.Len()
+        pieces[k] = a[start:end]
+    }
+    return pieces
+}
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program
