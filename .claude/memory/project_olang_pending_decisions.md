@@ -366,12 +366,16 @@ design. Do what you want") - nothing to decide until a GUI is written.
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
 - QAI REVISED 2026-10-18 (the user: "make checked overload a function ... fn checked Plus ... requires Plus to exist
   without checked or else it's an error", then "No, checked works on any function no? Operators are normal functions").
-  PROPOSED (awaiting OK): any function or method may have a checked overload (`fn checked parse(...)`, `fn (a Money)
+  DECIDED (the user: "Checked is basically the keyword telling you to call the checked function versions of everything
+  in the () (binds as a normal unary)"): built-in operators are functions with a checked version built in; `checked` is
+  a unary binding as `not`/`-` do (`checked a + b` checks only `a`, so `checked (a + b)`; postfix binds tighter, so
+  `checked a[i]`, `checked x.Pow(n)`, `checked I32(x)` cover the whole postfix chain); a `checked` covering nothing with
+  a checked version is an error, as an empty try is. Details as proposed: any function or method may have a checked overload (`fn checked parse(...)`, `fn (a Money)
   checked Plus(...)`); `checked (e)` is try plus the built-in operators' checks, and every call in e (operators
   included) whose callee has a checked overload calls that overload instead; the plain form must exist, the same
   parameters and result, errors a superset of the plain one's; a function value is always the plain function (not
   reached); externs and lambdas have none; checked At/Slice/SetAt still derived from Len; one level only (the overload's
-  body is what its author wrote). Replaces the CheckedX names.
+  body is what its author wrote). Replaces the CheckedX names. Queued with QAH after wt-mathmeth and wt-mem2.
 - QAI DECIDED 2026-10-18 (the user: "This is all good"): `checked` binds to its operand (one index/slice/conversion or a
   parenthesized expression - every built-in operation in it), never into calls or function values; the Checked forms
   and the superset rule go (a user type's operators check themselves; `checked x[i]` on At+Len types keeps the derived
