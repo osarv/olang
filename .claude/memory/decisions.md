@@ -364,6 +364,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAN PROPOSED 2026-10-18, the user not sure yet ("I am not sure yet if we go with it"): `T ? E` is a type - the
+  outcome of a fallible call held as a value, `Result` its name, a generic enum with cases Ok(value)/Failed(error);
+  `fn f() T ? E` returns one; a call must still say what happens to its failure (`try`, `!`, catch, or postfix `?` =
+  keep the outcome: `r := parse(s)?`), so `x := parse(s)` stays an error; after a type's `?` one error type (a named
+  set is one); `try r.Get()` raises the stored error; `$r` prints Ok(5)/Failed(ParseError.BAD). The user kept postfix
+  `?` over a `keep` word ("func() is a value not a type, so it isn't that confusing"). In effect: nothing built.
 - QAM 2026-10-18 (errors as values; the user: "1) ... I want this feature tho 2) yes, disallow this 3) reserve the
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
