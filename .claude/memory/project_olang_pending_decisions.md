@@ -331,6 +331,15 @@ design. Do what you want") - nothing to decide until a GUI is written.
   destructor now, exactly once (nothing at scope close for it); its storage may then be freed early; use after it is
   refused locally, caught by the evaluator/interpret/-sanitize elsewhere, and std resource methods fail with an error.
   No Close, no idempotent destructors. In effect: neither.
+  ANSWERED (the user: "We don't want pins yet at least. For Destruct(). Only allow this if it can be proven memory
+  safe? Alternatively force server loops to exit and restart every once in a while to free up memory? Premature
+  destruction should never introduce use after frees"): no pins. DECIDED: `x.Destroy()` compiles only where the
+  compiler proves x is the sole way left to reach the object (the early-free proof: no reference to it stored
+  elsewhere, no live view; e.g. a value just taken out of a Map with `Take`), else an error naming what else reaches
+  it; use after it in the same function refused; destructors run exactly once (scope close or a proven Destroy); no
+  Close, no idempotent destructors; stage 0 a simple local version (a local straight from Take or a constructor, never
+  stored or passed), the port the full analysis; the restart pattern (a block in the server loop left every N
+  requests) documented as the fallback. Into docs/memory.md's build plan.
 - QAE DECIDED by me 2026-10-18 (the user did not follow the question; a tidy-up): SPEC section 8 is restated in the
   model's form (general rules, special cases as applications, no change in meaning), beside M6.
 - QAE ASKED (for the morning) from docs/scope-model.md (merged 2026-10-18): restate SPEC section 8 in the model's form
