@@ -20414,12 +20414,16 @@ call with a note at the callee's statement.
 - T25d's static literals for `for ... in`, sets judged member by member (E28), destructured results landing with their
   first use.
 
-**Measured.** The corpus and std went from 474 scope error rows (the skeleton) to about 130, nearly all over-rejections
-of per-instance bindings (O23a, O13c) round 2 adds. `make scopediff` and the numbers per case are in wt-scope6's
-PROGRESS.md. `lowerdump` with the scope pass's placement is as clean as with the stand-in (72,960 of 72,993 corpus
-bodies; the 12 bad and 21 unchecked are the checker's).
+**Measured** (`make scopediff`): of the 279 checks cases stage 0 refuses by a section-8 rule, 52 give its first error
+(50 exactly its scope errors) and 75 say the pinned message; 147 get no section-8 error at all - the soundness
+differences still open, by first rule "E11c, O12" 34 (a `Str` building into its receiver), E31b 29, O17 18, C2d 11,
+P2/D16e 11, O10c 8, O25 5, O17a 4 and a few more. Of the 300 programs stage 0 accepts, 277 are scope clean; the rest
+(the corpus files, the compiler's own sources, 8 checks cases) give 96 distinct error rows, nearly all over-rejections
+of per-instance bindings (O23a, O13c) - from 474 rows on the corpus and std with the skeleton. `lowerdump` with the
+scope pass's placement is as clean as with the stand-in: 72,996 of 73,029 corpus, std and compiler bodies (the 12 bad
+and 21 unchecked are the checker's), and the checks' run and build cases as before.
 
-**Not built yet** (PROGRESS.md "Left"): per-instance bindings, E31b, E11c's receiver rule, P2/D16e, D16d, T22a, T17c,
+**Not built yet**: per-instance bindings, E31b, E11c's receiver rule, P2/D16e, D16d, T22a, T17c,
 O17a, `MayBuild`. The refused cases the pass says nothing about are listed by scopediff, by rule; they are the
 soundness differences still open.
 
