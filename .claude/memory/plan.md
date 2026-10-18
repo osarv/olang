@@ -92,7 +92,9 @@ overrated".
   12. Runtime interfaces `any Trait&` (decided 2026-10-08, ledger).
   13. Memory rounds 4-7 (docs/memory.md: prelude let-go and Map.Take, the port's early freeing, `x.Destroy()`), M19g in
       the port, QZ2's prelude moves (helpers onto Vec, List to std/list), a test that a long-running Map stays flat (QF).
-  14. The port verbosity audit; SPEC section 5 renumbered; SPEC section 8 restated in the scope model's form beside M6
+  14. Errors as values (decisions.md QAM): `type X error { }` and named sets, catch bindings, `error e`, no error
+      among several results, the zero as "no error"; `fn(I64) ? (A, B)` removed for a named set.
+  15. The port verbosity audit; SPEC section 5 renumbered; SPEC section 8 restated in the scope model's form beside M6
       (QAE).
   STILL TO DISCUSS: Result/Option (the user wants to talk about them), contracts (#8), doc tests (#9), method and
   constructor overloading (#10, #11), fixed point (#5's second half).

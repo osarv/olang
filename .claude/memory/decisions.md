@@ -368,7 +368,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
   caught, `error e` raises a held one; the zero value means "no error" (it is code 0 in the error-union ABI already).
-  PROPOSED (asked): error types declared as types - `type IoError error { FULL  DENIED }` (replacing `error IoError
+  DECIDED further (the user: "Remove the () form yes"; "we can always capture an error set with catch E {}"): a set
+  of several error types is written by name everywhere except after a signature's own `?` (`fn f() T ? A, B`): `type
+  LoadError error IoError, ParseError`; a function type's set too (`f fn(I64) ? LoadError` - my parenthesized
+  `fn(I64) ? (A, B)` of 2026-10-17 is removed); a catch binding takes the set its clause covers, unnamed, and a named
+  set is the same type as that set unnamed, so it flows into a `List<LoadError>`. The only ways to get an error value:
+  a catch binding, or an error word written (`IoError.FULL`). Still PROPOSED (asked): error types declared as types - `type IoError error { FULL  DENIED }` (replacing `error IoError
   { }`) and a named set `type LoadError error IoError, ParseError`, usable as a value's type and in a signature
   (`? LoadError`); the zero written `null` (`e == null`), raising a null error aborts (one compare on the raise path);
   no postfix `?` (one way: `try`, which covers a whole chain; `?` already marks error sets). In effect: nothing built;
