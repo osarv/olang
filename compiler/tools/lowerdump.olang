@@ -103,7 +103,7 @@ fn run(args Array<String&>&) {
             wantDump := mirAt.Len() > 0 and (try where.Find(mirAt) catch default -1) >= 0
             gapped, problems, dump := lw.Verified(b, wantDump)
             if gapped {
-                if lw.Gaps.Len() > gaps and lw.Gaps[gaps].What.StartsWith("a body with an unknown type") {
+                if lw.Gaps.Len() > gaps and lw.Gaps[gaps].What.StartsWith("an unknown type") {
                     n.unchecked++
                 } else {
                     n.gapped++
@@ -124,7 +124,7 @@ fn run(args Array<String&>&) {
             }
         }
         for g in lw.Gaps {
-            if g.What.StartsWith("a body with an unknown type") { continue }
+            if g.What.StartsWith("an unknown type") { continue }
             out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n")
             at := -1
             for j in range all.whats.Len() {

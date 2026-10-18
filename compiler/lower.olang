@@ -206,7 +206,7 @@ fn (ln mut lowering&) run() {
         ln.F.Vars.Push(k)
     }
     if ln.gapped {
-        ln.L.Gaps.Push(Gap(ln.file, b.Sp, "a body with an unknown type (a check error)"))
+        ln.L.Gaps.Push(Gap(ln.file, b.Sp, "an unknown type (a check error or gap): a local"))
         return
     }
     ln.F.NewBlock()
@@ -847,11 +847,6 @@ fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind,
 # opened since the try closed on the way; what its clauses do not take, to the try around it; what none takes leaves the
 # body under its own list (R17), every scope closed
 fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Span) {
-    if ln.tries.Len() == 0 {
-        ln.gap(sp, "an error with no try to take it")
-        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
-        return
-    }
     t := ln.T
     xs := t.Items(from)
     for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
@@ -895,8 +890,10 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
             return
         }
     }
+    # with no try at all, the call is a T29d literal's constructor - decided while compiling not to fail (Key.Literal),
+    # its error edge never taken
     mineErrs := ln.T.Errors(ln.B.Ty)
-    if t.Items(mineErrs).Len() == 0 {
+    if t.Items(mineErrs).Len() == 0 or ln.tries.Len() == 0 {
         ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
         return
     }
@@ -966,7 +963,7 @@ fn (ln mut lowering&) val(x typed.Expr&) mir.Operand {
     t := ln.T
     ty := x.Type()
     if ty == types.UnknownT {
-        ln.gap(x.Span(), "an expression of unknown type (a check error)")
+        ln.gap(x.Span(), "an unknown type (a check error or gap): an expression")
         return mir.Operand.None
     }
     return match x {
