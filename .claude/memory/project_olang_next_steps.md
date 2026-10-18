@@ -55,9 +55,9 @@ overrated".
 - SMALL, after the errors and syntax batches land (they edit SPEC.md): SPEC §5's section numbers are broken - no 5.6, two
   5.11s and two 5.12s - and ~50 `§5.x` references (SPEC.md, bootstrap/syntax.h) must be checked one by one for which
   section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
-- QUEUED after the syntax batch (QAA, the user 2026-10-17): a method call on a number literal is an error (text and
-  array literals keep them), both compilers.
-- QUEUED (QZ2/QZ4, the user 2026-10-17): Pair to std/pair after the syntax batch; after Vec phase 2b, the iterator
+- DONE 2026-10-18 (9a831b2): the syntax batch (QY/QW, 9b78375), the number traits (T35c), Pair to std/pair, E13c (a
+  number literal is no receiver), `a.Chunks(ChunkSize)` for race-free fan-out.
+- QUEUED (QZ2, the user 2026-10-17): after memory round 1 (Vec as a handle - replaces Vec phase 2b), the iterator
   helpers and StringBuilder onto Vec (`a.ToVec()`), List to std/list; benchmarks before/after. Then Vec phase 2b itself
   (Vec as a type argument, in tasks and lambdas, move-aware List/Map) comes first of these. It also closes QF: a test of a long-running
   Map of owned objects staying flat in memory.
