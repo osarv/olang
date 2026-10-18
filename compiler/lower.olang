@@ -163,6 +163,9 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, F mir.Fn
     tries List<tryCtx>
     collects List<collectCtx>
     targets List<pl>    # the places of the Assigns being lowered, innermost last (Place.Target)
+    joins List<tryCtx>  # the joins being lowered, innermost last: each one's clauses (P4c), beside its scope
+    joinS List<mir.ScopeId>
+    erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
 }
 
 fn (ln mut lowering&) gap(sp source.Span, what String&) {
@@ -429,11 +432,44 @@ fn (ln mut lowering&) exitLevel(i I64) {
     if ln.dead { return }
     sp := ln.B.Blocks[I64(lv.Block)].Sp if lv.Block >= typed.BlockId(0) else ln.B.Sp
     if lv.Kind == mir.ScopeKind.Join {
+        errs := ln.F.Scopes[I64(lv.S)].Errors
         ok := ln.F.NewBlock()
-        ln.end(mir.Term.Wait(sp, lv.S, ok, mir.NoLocal, mir.NoBlock))
+        if ln.T.Items(errs).Len() == 0 {
+            ln.end(mir.Term.Wait(sp, lv.S, ok, mir.NoLocal, mir.NoBlock))
+        } else if ln.erroring {
+            code := ln.temp(mir.I32T, sp)
+            ln.end(mir.Term.Wait(sp, lv.S, ok, code, ok))
+        } else {
+            code := ln.temp(mir.I32T, sp)
+            failed := ln.F.NewBlock()
+            ln.end(mir.Term.Wait(sp, lv.S, ok, code, failed))
+            ln.start(failed)
+            ln.emit(mir.Stmt.Close(sp, lv.S))
+            ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.L(code)), errs, sp)
+        }
         ln.start(ok)
     }
     ln.emit(mir.Stmt.Close(sp, lv.S))
+}
+
+# join s, at level i, failed with code under its list: its clauses, then the tries around it, take it - as an error
+# reaching the join statement, with every level from i up closed on this path
+fn (ln mut lowering&) joinFailed(i I64, s mir.ScopeId, code mir.Operand, errs types.ListId, sp source.Span) {
+    saved List<level>
+    for ln.levels.Len() > i { saved.Push(try ln.levels.Pop() catch { unreachable }) }
+    savedT mut List<tryCtx>&ln = List<tryCtx>()
+    for ln.tries.Len() > 0 and ln.tries[ln.tries.Len() - 1].Depth > i { savedT.Push(try ln.tries.Pop() catch { unreachable }) }
+    pushed := false
+    for k in range ln.joinS.Len() {
+        if ln.joinS[k] == s {
+            ln.tries.Push(ln.joins[k])
+            pushed = true
+        }
+    }
+    ln.dispatch(code, errs, sp)
+    if pushed { try ln.tries.Pop() catch { } }
+    for savedT.Len() > 0 { ln.tries.Push(try savedT.Pop() catch { unreachable }) }
+    for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
 }
 
 # ---- statements ----
@@ -542,7 +578,10 @@ fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
         return
     }
     l := ln.local(code, mir.I32T, sp)
+    was := ln.erroring
+    ln.erroring = true
     ln.leave(0)
+    ln.erroring = was
     ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(l))))
 }
 
@@ -559,22 +598,95 @@ fn (ln mut lowering&) assert(sp source.Span, c typed.Expr&, msg typed.Expr&) {
     ln.start(ok)
 }
 
+# a join (P1, P1b, P4b, P4c): a scope its tasks are spawned into, waited for on every way out; where a task can let an
+# error through, the wait's failed edge takes the earliest-spawned's error to the join's clauses ("try join"), then to
+# the tries around it, else out of the body - unless an error is already leaving, which the join's failure does not
+# replace
 fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
-    if j.Tried or j.Clauses.Len() > 0 {
-        ln.gap(sp, "a join that can fail (P4b, P4c)")
-        return
-    }
-    ln.openBlock(j.Code, mir.ScopeKind.Join)
+    errs := ln.joinErrors(j.Code)
+    tc mut tryCtx&ln = tryCtx(ln.levels.Len(), j.Clauses, false)
+    for c in j.Clauses { tc.entries.Push(mir.NoBlock) }
+    ln.openBlock(j.Code, mir.ScopeKind.Join, errs)
+    ln.joins.Push(tc)
+    ln.joinS.Push(ln.top().S)
     for s in j.Code.Stmts { ln.stmt(s) }
     ln.closeBlock()
+    try ln.joins.Pop() catch { }
+    try ln.joinS.Pop() catch { }
+    ends List<mir.BlockId>
+    ln.leaveOpen(ends)
+    ln.clauses(tc, j.Clauses, mir.NoLocal, types.VoidT, ends)
+    ln.patch(ends)
 }
 
-# a task (P1, P1g): its targets' places, then its call's arguments, then the spawn into the innermost join
-fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
-    if sw.Clauses.Len() > 0 {
-        ln.gap(sp, "a task's clauses (P4a)")
-        return
+# the errors a join's wait can fail with (P4b): what each task's call can fail with and its clauses do not take whole -
+# its spawns, through the blocks in it but not through a join nested in it (P1a)
+fn (ln mut lowering&) joinErrors(code typed.Block&) types.ListId {
+    out List<types.TypeId>
+    ln.spawnErrors(code, out)
+    return ln.T.List(out.ToArray())
+}
+
+fn (ln mut lowering&) spawnErrors(bl typed.Block&, out mut List<types.TypeId>&) {
+    if bl == null { return }
+    for s in bl.Stmts { ln.stmtSpawnErrors(s, out) }
+}
+
+fn (ln mut lowering&) stmtSpawnErrors(s typed.Stmt&, out mut List<types.TypeId>&) {
+    t := ln.T
+    match s {
+        case typed.Stmt.Spawn(_, sw) {
+            fty := ln.taskType(sw.Task)
+            if fty == types.UnknownT { return }
+            for e in t.Items(t.Errors(fty)) {
+                taken := false
+                for cl in sw.Clauses {
+                    if cl.All { taken = true }
+                    for it in cl.Items {
+                        if it.Word < 0 and t.Same(t.ErrOf(it.Err), t.ErrOf(e)) { taken = true }
+                    }
+                }
+                if taken { continue }
+                have := false
+                for x in out { have = have or t.Same(t.ErrOf(x), t.ErrOf(e)) }
+                if not have { out.Push(t.ErrOf(e)) }
+            }
+        }
+        case typed.Stmt.Block(_, b) { ln.spawnErrors(b, out) }
+        case typed.Stmt.If(_, i) {
+            ln.spawnErrors(i.Then, out)
+            ln.spawnErrors(i.Else, out)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            ln.spawnErrors(body, out)
+            ln.spawnErrors(post, out)
+        }
+        case _ { }
     }
+}
+
+# a task's function type: its call's callee's, found without evaluating it; Unknown for a task that is no call
+fn (ln mut lowering&) taskType(task typed.Expr&) types.TypeId {
+    match task {
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Body(id) { return ln.L.Bodies[I64(id)].Ty }
+                case typed.Callee.Extern(f) { return ln.L.P.Sig(f) }
+                case typed.Callee.Value(x) { return x.Type() }
+                case typed.Callee.Helper(k, ht) {
+                    _, ty := ln.helperCallee(k, ht)
+                    return ty
+                }
+            }
+        }
+        case _ { }
+    }
+    return types.UnknownT
+}
+
+# a task (P1, P1g, P4a): its targets' places, then its call's callee and arguments, then the spawn into the innermost
+# join, its clauses handlers run on its thread
+fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
     j := mir.NoScope
     for k := ln.levels.Len() - 1, k >= 0, k-- {
         if ln.levels[k].Kind == mir.ScopeKind.Join and j == mir.NoScope { j = ln.levels[k].S }
@@ -583,26 +695,42 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
         ln.gap(sp, "a spawn outside a join")
         return
     }
+    fty := ln.taskType(sw.Task)
+    if fty == types.UnknownT {
+        ln.gap(sp, "a task that is no call")
+        return
+    }
+    # the targets' places, a discarded one ("_") a temporary of its result's type, given its zero
+    rs := ln.T.Results(fty)
+    places := Array<mir.Place>(sw.Targets.Len())
+    for i in range sw.Targets.Len() {
+        if sw.Targets[i] == null {
+            dt := rs[i] if i < rs.Len() else types.UnknownT
+            d := ln.temp(dt, sp)
+            ln.emit(mir.Stmt.Assign(sp, mir.L(d), mir.Rvalue.Use(mir.Operand.Const(dt, 0))))
+            places[i] = mir.L(d)
+        } else {
+            places[i] = ln.mk(ln.place(sw.Targets[i]))
+        }
+    }
     match sw.Task {
         case typed.Expr.Call(csp, _, c) {
             callee, ty := ln.callee(c.Target, csp)
             if ln.dead { return }
-            # the targets' places, a discarded one ("_") a temporary of its result's type
-            rs := ln.T.Results(ty)
-            places := Array<mir.Place>(sw.Targets.Len())
-            for i in range sw.Targets.Len() {
-                if sw.Targets[i] == null {
-                    places[i] = mir.L(ln.temp(rs[i] if i < rs.Len() else types.UnknownT, sp))
-                } else {
-                    places[i] = ln.mk(ln.place(sw.Targets[i]))
-                }
-            }
             args := ln.args(c, callee, ty)
             if ln.dead { return }
-            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty)), places, mir.TaskClause[])
+            cls := Array<mir.TaskClause>(sw.Clauses.Len())
+            for i in range sw.Clauses.Len() {
+                cl := sw.Clauses[i]
+                h := mir.Operand.None
+                if cl.Handler != null { h = ln.val(cl.Handler) }
+                cls[i] = mir.TaskClause(ln.F.AddItems(cl.Items), cl.All, h)
+            }
+            if ln.dead { return }
+            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty)), places, cls)
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
-        case _ { ln.gap(sp, "a task that is no call") }
+        case _ { }
     }
 }
 
@@ -777,7 +905,10 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
 
 # from here to clause ci of try tc: the scopes opened since the try closed, then a jump to the clause's entry
 fn (ln mut lowering&) toClause(tc tryCtx, ci I64) {
+    was := ln.erroring
+    ln.erroring = true
     ln.leave(tc.Depth)
+    ln.erroring = was
     if ln.dead { return }
     if tc.entries[ci] == mir.NoBlock { tc.entries[ci] = ln.F.NewBlock() }
     ln.goto(tc.entries[ci])
@@ -798,9 +929,19 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
         ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(v)))
     }
     ln.leaveOpen(ends)
-    for ci in range t.Clauses.Len() {
+    ln.clauses(tc, t.Clauses, slot, ty, ends)
+    ln.patch(ends)
+    if slot == mir.NoLocal { return mir.Operand.None }
+    return mir.Operand.Copy(mir.L(slot))
+}
+
+# the clauses errors reached, each from its entry: its code as a block of its own, then its defaults into the slot;
+# each falls through to where ends lead
+fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.LocalId, ty types.TypeId
+                              ends mut List<mir.BlockId>&) {
+    for ci in range cls.Len() {
         if tc.entries[ci] == mir.NoBlock { continue }
-        cl := t.Clauses[ci]
+        cl := cls[ci]
         ln.start(tc.entries[ci])
         if cl.Code != null { ln.block(cl.Code) }
         if not ln.dead and slot != mir.NoLocal and cl.Defaults.Len() > 0 {
@@ -815,9 +956,6 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
         }
         ln.leaveOpen(ends)
     }
-    ln.patch(ends)
-    if slot == mir.NoLocal { return mir.Operand.None }
-    return mir.Operand.Copy(mir.L(slot))
 }
 
 # ---- expressions ----
@@ -1070,6 +1208,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
 
 fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
+    if c.Zero { return ln.zero(ty, sp) }
     callee, fty := ln.callee(c.Target, sp)
     if ln.dead { return mir.Operand.None }
     args := ln.args(c, callee, fty)
@@ -1099,6 +1238,21 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         return mir.Operand.None
     }
     if dest == mir.NoLocal { return mir.Operand.None }
+    return mir.Operand.Copy(mir.L(dest))
+}
+
+# a type's zero value (D13c), a call of its Zero helper: all zero bits, its constructor on its parameters' defaults or
+# zeros, as eval decides once per type (Key.Zero) - the helper's to say which
+fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    hty := mir.HelperType(t, mir.HelperKind.Zero, ty)
+    callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Zero, ty), hty)
+    ok := ln.F.NewBlock()
+    dest := ln.temp(ty, sp)
+    k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.passed(mir.PassedCount(t, callee, hty)), mir.L(dest), true, ok
+                               mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
     return mir.Operand.Copy(mir.L(dest))
 }
 
