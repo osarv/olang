@@ -1,0 +1,14 @@
+# check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+# M19g: a view taken before a loop, read at the top of each turn while the loop's own body grows the Vec - the second
+# turn reads what the first turn's growth replaced
+fn main() {
+    v := Vec<I64>()
+    v.Push(1)
+    d := v.View()
+    t := 0
+    for i in range 10 {
+        t += d[0]
+        v.Push(i)
+    }
+    assert t > 0
+}

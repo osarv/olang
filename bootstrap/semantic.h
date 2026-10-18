@@ -505,6 +505,7 @@ struct var {
     struct list ownValueReads; //O38 (own5 F2): an owner value local's own fields, read once as it is declared - what a
                                //reference to its storage borrows (operand*, checker only: never evaluated)
     struct ownEffects* ownEff;  //O39: on a function, what its body may release (settleOwnEffects), NULL for nothing
+    struct vgSum* vecViews;     //M19g: on a function, which Vecs its body may grow and which views it hands back (settleVecViews)
     int mayBuildAt;           //P2: while being found, how deep in the calls being followed
     struct ctVal* constVal;   //K2: an immutable global whose initializer was computed at compile time - its
                               //value, which codegen writes out as the global's data instead of setting it

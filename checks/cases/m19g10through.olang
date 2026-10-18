@@ -1,0 +1,15 @@
+# check: fail error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+# M19g: a view handed back through a function of the program's own - "view(l)" gives a view of l.toks, read off its body
+import "std/io"
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn view(l Lexer&) Array<I64>&l { return l.toks.View() }
+fn main() ? {
+    l := Lexer(1)
+    l.toks.Push(1)
+    d := view(l)
+    l.toks.Push(2)
+    try io.Println($d[0])
+}

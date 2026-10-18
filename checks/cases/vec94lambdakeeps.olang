@@ -1,0 +1,16 @@
+# check: fail error[M19g]: 'f' holds a view of 'l.toks' taken before 'l.toks' may have grown
+# Vec phase 2a (O38/O39): a lambda capturing a view of a field's Vec holds its loan until the lambda's last use
+# M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
+import "std/io"
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn main() ? {
+    l := Lexer(3)
+    for i in range 3 { l.toks.Push(i) }
+    d := l.toks.View()
+    f := fn() I64 { return d[0] }
+    l.toks.Push(4)
+    try io.Println($f())
+}

@@ -1,0 +1,13 @@
+# check: fail error[M19g]: this view of 'v' is given to 'grow', which may grow 'v'
+# M19g: an element of a view borrowed in place by a reference parameter is in the buffer the call may replace
+import "std/io"
+type Pt struct(x I64) { x }
+fn grow(v mut Vec<Pt>&, p Pt&) I64 {
+    for i in range 100 { v.Push(Pt(i)) }
+    return p.x
+}
+fn main() ? {
+    v := Vec<Pt>()
+    v.Push(Pt(4))
+    try io.Println($grow(v, v.View()[0]))
+}

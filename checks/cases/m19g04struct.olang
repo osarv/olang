@@ -1,0 +1,16 @@
+# check: fail error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+# also: note: 'l.toks' may grow here, in 'scan'
+# M19g: a call given a writable struct holding the Vec, whose body grows the Vec through it
+import "std/io"
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn scan(l mut Lexer&) { for i in range l.n { l.toks.Push(i) } }
+fn main() ? {
+    l := Lexer(100)
+    l.toks.Push(7)
+    d := l.toks.View()
+    scan(l)
+    try io.Println($d[0])
+}
