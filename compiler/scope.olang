@@ -975,6 +975,8 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     if c == null { return }
     callee := s.bodyOf(c.Target)
     if callee < 0 or not s.sums[callee].Done { return }
+    # a constructor's instance is built where it is declared, C2d holding it to what it holds (O18a)
+    if s.P.T.Role(s.calleeType(c)) == types.RoleCtor { return }
     rv := s.resultVarOf(s.calleeType(c))
     if rv < 0 { return }
     # it lands there where that costs nothing (the callee builds nothing there), where an obligation needs it, or where
@@ -1172,6 +1174,8 @@ fn (s mut Scoper&) landTerm(a typed.Expr&) Term {
     fty := s.calleeType(c)
     callee := s.bodyOf(c.Target)
     if callee < 0 or not s.sums[callee].Done { return Term.None }
+    # a constructor's instance is built where its parameter is bound, C2d holding it to what it holds (O18b)
+    if s.P.T.Role(fty) == types.RoleCtor { return Term.None }
     rv := s.resultVarOf(fty)
     if rv < 0 { return Term.None }
     vars := s.P.T.ScopeVarsOf(fty)
@@ -4234,8 +4238,9 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             case _ {
                 beta[rv] = dest if dest.Runs() else here
                 # a result nothing puts anywhere lands by its obligations where they need its scope to outlive an
-                # argument's (O18a, O18c)
-                if not land and dest == Term.None {
+                # argument's (O18a, O18c) - a constructor's instance is built where it stands, C2d holding it
+                if s.P.T.Role(fty) == types.RoleCtor { land = false }
+                if not land and dest == Term.None and s.P.T.Role(fty) != types.RoleCtor {
                     cb := s.bodyOf(c.Target)
                     land = cb >= 0 and s.sums[cb].Done and s.forced(cb, rv)
                 }
@@ -4488,6 +4493,7 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         if r.Why != 0 {
             # a constructor's instance outliving what it holds (C2d): said at the argument
             ai := s.argOfVar(c, r.Hi)
+            if ai < 0 { ai = s.argOfVar(c, r.Lo) }
             at := s.argAt(c.Args[ai]) if ai >= 0 else s.nameSpan(sp)
             s.err(at, msgs.InstanceOutlivesArg() if r.Why == WhyHolds else msgs.InstanceOutlivesReferent())
             continue
