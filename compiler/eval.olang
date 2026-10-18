@@ -1458,7 +1458,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         }
         case typed.PrimOp.Convert { return m.convert(m.scalar(fi, x), at, ty) }
         case typed.PrimOp.Bitcast { return m.bitcast(m.scalar(fi, x), at) }
-        case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap,
+        case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap
              typed.PrimOp.AtomicCompareSwap { return m.atomic(fi, op, args, at) }
         case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl {
             m.refuse(WhyNotModelled)
@@ -1789,7 +1789,7 @@ fn (m mut Machine&) overflows(fi I64, op typed.PrimOp, ty types.TypeId, args mir
         return r < m.minOf(w) or r > -(m.minOf(w) + 1)
     }
     if op == typed.PrimOp.Div { return x0 == m.minOf(8) and b == -1 }
-    r := try (x0 + b if op == typed.PrimOp.Add else (x0 - b if op == typed.PrimOp.Sub else x0 * b)) catch {
+    r := checked (x0 + b if op == typed.PrimOp.Add else (x0 - b if op == typed.PrimOp.Sub else x0 * b)) catch {
         return true
     }
     return false
@@ -1989,7 +1989,7 @@ fn (m mut Machine&) globalsReady(fi I64, p mir.Place, rv mir.Rvalue) Bool {
         case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => m.operandReady(fi, x)
         case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => m.placeReady(fi, q)
         case mir.Rvalue.Slice(q, lo, hi, _) => m.placeReady(fi, q) and m.operandReady(fi, lo) and m.operandReady(fi, hi)
-        case mir.Rvalue.Prim(_, _, r), mir.Rvalue.Overflows(_, _, r), mir.Rvalue.Aggregate(_, _, r),
+        case mir.Rvalue.Prim(_, _, r), mir.Rvalue.Overflows(_, _, r), mir.Rvalue.Aggregate(_, _, r)
              mir.Rvalue.Closure(_, _, _, r) => m.rangeReady(fi, f, r)
         case mir.Rvalue.NewArray(_, _, n, fill) => m.operandReady(fi, n) and m.operandReady(fi, fill)
         case _ => true
@@ -2266,8 +2266,8 @@ fn (m mut Machine&) ffiKind(ty types.TypeId) ffi.Kind {
 
 # the C math library's functions (X8): evaluated while compiling, each under its own name for F64 and with "f" after
 # it for F32 - the host's library is the target's, as long as the target is this machine (B12a is the driver's)
-mathNames := String&["sqrt", "fma", "floor", "ceil", "trunc", "round", "roundeven", "fabs", "copysign", "cbrt", "exp",
-                     "exp2", "expm1", "log", "log2", "log10", "log1p", "pow", "sin", "cos", "tan", "asin", "acos", "atan",
+mathNames := String&["sqrt", "fma", "floor", "ceil", "trunc", "round", "roundeven", "fabs", "copysign", "cbrt", "exp"
+                     "exp2", "expm1", "log", "log2", "log10", "log1p", "pow", "sin", "cos", "tan", "asin", "acos", "atan"
                      "atan2", "sinh", "cosh", "tanh", "erf", "erfc", "hypot"]
 mathArity := I64[1, 3, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 1, 2, 1, 1, 1, 1, 1, 2]
 
@@ -2351,7 +2351,7 @@ fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
     # __olang_run_on_stack(bytes, f): the call f() (X6, K1)
     if name == "__olang_run_on_stack" {
         callee := mir.Callee.Value(f.Ops[I64(c.Args.At) + 1])
-        m.enter(fi, callee, mir.Empty, mir.Empty, rCall, try m.callIndex(fi, c) catch default 0)
+        m.enter(fi, callee, mir.Empty, mir.Empty, rCall, try m.callIndex(fi, c) catch NotACall default 0)
         return
     }
     dst := NullPtr
@@ -2361,11 +2361,14 @@ fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
     if m.callExtern(fi, e, ty, c.Args, dst, c.HasDest) { m.jump(fi, c.Ok) }
 }
 
-fn (m mut Machine&) callIndex(fi I64, c mir.Call) I64 ? {
+# a frame's block that ends in no call: the machine was asked for the call index of something else
+error NotACall { TERM }
+
+fn (m mut Machine&) callIndex(fi I64, c mir.Call) I64 ? NotACall {
     t := m.fnOfFrame(fi).Blocks[m.frames[fi].Block].T
     match t {
         case mir.Term.Call(_, k) { return I64(k) }
-        case _ { error }
+        case _ { error NotACall.TERM }
     }
 }
 
@@ -3028,10 +3031,10 @@ fn ovFn(t mut types.Table&, id I64, op typed.PrimOp, ty types.TypeId) mir.Fn {
     return f
 }
 
-fn hostBits(x <T>) I64 { return I64(x) }
+fn hostBits<T>(x T) I64 { return I64(x) }
 
 # what the host computes for op on a and b at their own type: the run time's answer
-fn hostOp(op typed.PrimOp, a <T>, b T) T {
+fn hostOp<T>(op typed.PrimOp, a T, b T) T {
     return match op {
         case typed.PrimOp.Add => a + b
         case typed.PrimOp.Sub => a - b
@@ -3045,7 +3048,7 @@ fn hostOp(op typed.PrimOp, a <T>, b T) T {
     }
 }
 
-fn hostCmp(op typed.PrimOp, a <T>, b T) Bool {
+fn hostCmp<T>(op typed.PrimOp, a T, b T) Bool {
     return match op {
         case typed.PrimOp.Eq => a == b
         case typed.PrimOp.Ne => a != b
@@ -3056,15 +3059,15 @@ fn hostCmp(op typed.PrimOp, a <T>, b T) Bool {
     }
 }
 
-IntOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div,
-                                          typed.PrimOp.Rem, typed.PrimOp.BitAnd, typed.PrimOp.BitOr,
+IntOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div
+                                          typed.PrimOp.Rem, typed.PrimOp.BitAnd, typed.PrimOp.BitOr
                                           typed.PrimOp.BitXor]
-CmpOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le,
+CmpOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le
                                           typed.PrimOp.Gt, typed.PrimOp.Ge]
 
 # every operation on every pair of xs, at the type named, against the host: a zero divisor and the most negative value
 # divided by -1 refused, as undefined
-fn intsAgree(t mut types.Table&, name String&, xs Array<<T>>&, ns Array<T>&, signed Bool, min I64) {
+fn intsAgree<T>(t mut types.Table&, name String&, xs Array<T>&, ns Array<T>&, signed Bool, min I64) {
     ty := t.Prim(name)
     m mut Machine&t = NewMachine(t, Mode.Compile)
     id := 100
@@ -3128,8 +3131,7 @@ fn intsAgree(t mut types.Table&, name String&, xs Array<<T>>&, ns Array<T>&, sig
             for b in xs {
                 assert m.Eval(tkey(id), I64[hostBits(a), hostBits(b)]) == Stop.None
                 got := m.Int(m.Result, types.BoolT) == 1
-                assert got == trueOverflows(op, hostBits(a), hostBits(b), m.width(ty), signed),
-                       $name " overflows " $op " " $a " " $b
+                assert got == trueOverflows(op, hostBits(a), hostBits(b), m.width(ty), signed), $name " overflows " $op " " $a " " $b
             }
         }
         id++
@@ -3146,11 +3148,11 @@ fn trueOverflows(op typed.PrimOp, a I64, b I64, w I64, signed Bool) Bool {
         return r < lo or r > hi
     }
     if signed {
-        r := try (a + b if op == typed.PrimOp.Add else (a - b if op == typed.PrimOp.Sub else a * b)) catch { return true }
+        r := checked (a + b if op == typed.PrimOp.Add else (a - b if op == typed.PrimOp.Sub else a * b)) catch { return true }
         return false
     }
     ua, ub := U64(a), U64(b)
-    r := try (ua + ub if op == typed.PrimOp.Add else (ua - ub if op == typed.PrimOp.Sub else ua * ub)) catch {
+    r := checked (ua + ub if op == typed.PrimOp.Add else (ua - ub if op == typed.PrimOp.Sub else ua * ub)) catch {
         return true
     }
     return false
@@ -3162,18 +3164,18 @@ test "integers at every width agree with the run time: wrapping, comparisons, sh
     intsAgree(t, "I8", I8[0, 1, -1, 7, -128, 127, 100], I8[0, 1, 7], true, -128)
     intsAgree(t, "I16", I16[0, 1, -1, 300, -32768, 32767, -999], I16[0, 3, 15], true, -32768)
     intsAgree(t, "I32", I32[0, 1, -1, 70000, -2147483648, 2147483647, -5], I32[0, 9, 31], true, -2147483648)
-    intsAgree(t, "I64", I64[0, 1, -1, 5000000000, -9223372036854775807 - 1, 9223372036854775807, -3], I64[0, 33, 63],
+    intsAgree(t, "I64", I64[0, 1, -1, 5000000000, -9223372036854775807 - 1, 9223372036854775807, -3], I64[0, 33, 63]
               true, -9223372036854775807 - 1)
     intsAgree(t, "U8", U8[0, 1, 2, 128, 255, 77], U8[0, 1, 7], false, 0)
     intsAgree(t, "U16", U16[0, 1, 2, 40000, 65535], U16[0, 5, 15], false, 0)
     intsAgree(t, "U32", U32[0, 1, 3, 3000000000, 4294967295], U32[0, 17, 31], false, 0)
-    intsAgree(t, "U64", U64[0, 1, 3, 9223372036854775808, 18446744073709551615, 12345678901234], U64[0, 1, 63], false,
+    intsAgree(t, "U64", U64[0, 1, 3, 9223372036854775808, 18446744073709551615, 12345678901234], U64[0, 1, 63], false
               0)
 }
 
-fn fbits(x <T>) I64 { return I64(x.Bits()) }
+fn fbits<T>(x T) I64 { return I64(x.Bits()) }
 
-fn hostFloat(op typed.PrimOp, a <T>, b T) T {
+fn hostFloat<T>(op typed.PrimOp, a T, b T) T {
     return match op {
         case typed.PrimOp.Add => a + b
         case typed.PrimOp.Sub => a - b
@@ -3186,7 +3188,7 @@ FloatOps Array<typed.PrimOp>& = typed.PrimOp[typed.PrimOp.Add, typed.PrimOp.Sub,
 
 # + - * / and the comparisons on every pair of xs, at the float type named, against the host: the same bits, a NaN
 # wherever the host gives one (whose payload E33a leaves unspecified); negation the sign flipped
-fn floatsAgree(t mut types.Table&, name String&, xs Array<<T>>&) {
+fn floatsAgree<T>(t mut types.Table&, name String&, xs Array<T>&) {
     ty := t.Prim(name)
     m mut Machine&t = NewMachine(t, Mode.Compile)
     w := m.width(ty)
@@ -3236,7 +3238,7 @@ test "floats at every width agree with the run time: one rounding at their own t
     names := source.Names()
     t := types.NewTable(names)
     z16 := F16(0.0)
-    floatsAgree(t, "F16", F16[0.0, -z16, 1.0, -2.5, 0.1, 65504.0, 0.00006103515625, 0.000000059604645, 1.0 / z16,
+    floatsAgree(t, "F16", F16[0.0, -z16, 1.0, -2.5, 0.1, 65504.0, 0.00006103515625, 0.000000059604645, 1.0 / z16
                               z16 / z16, 3.140625])
     zb := BF16(0.0)
     floatsAgree(t, "BF16", BF16[0.0, -zb, 1.0, -2.5, 0.1, 3.0e38, 1.0e-38, 1.0 / zb, zb / zb, 7.0])
@@ -3249,7 +3251,7 @@ test "floats at every width agree with the run time: one rounding at their own t
 NumNames Array<String&>& = String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
 
 # x converted to the numeric type named, by the host, as that type's bits
-fn hostConv(to String&, x <S>) I64 {
+fn hostConv<S>(to String&, x S) I64 {
     return match to {
         case "I8" => I64(I8(x))
         case "I16" => I64(I16(x))
@@ -3268,7 +3270,7 @@ fn hostConv(to String&, x <S>) I64 {
 
 # every x, of the numeric type named, converted to every numeric type against the host: a float out of an integer
 # type's range, or a NaN, refused as undefined (E26)
-fn convsAgree(t mut types.Table&, name String&, xs Array<<S>>&, bits fn(x S) I64) {
+fn convsAgree<S>(t mut types.Table&, name String&, xs Array<S>&, bits fn(x S) I64) {
     from := t.Prim(name)
     m mut Machine&t = NewMachine(t, Mode.Compile)
     id := 300
@@ -3285,8 +3287,7 @@ fn convsAgree(t mut types.Table&, name String&, xs Array<<S>>&, bits fn(x S) I64
             assert s == Stop.None, $name " " $x " to " $to ": " $s
             got := m.Bits(m.Result, w)
             want := hostConv(to, x) & m.mask(w)
-            assert got == want or (m.shape(ty) == vFloat and isNaNBits(got, to) and isNaNBits(want, to)),
-                   $name " " $x " to " $to ": " $got " for " $want
+            assert got == want or (m.shape(ty) == vFloat and isNaNBits(got, to) and isNaNBits(want, to)), $name " " $x " to " $to ": " $got " for " $want
         }
         id++
     }
@@ -3308,11 +3309,11 @@ test "conversions between every pair of numeric types agree with the run time: o
     zb := BF16(0.0)
     convsAgree(t, "BF16", BF16[0.0, 1.5, -2.75, 3.0e38, -3.0e38, 1.0 / zb, zb / zb, 4.0e9], fn(x BF16) I64 { return I64(x.Bits()) })
     z32 := F32(0.0)
-    convsAgree(t, "F32", F32[0.0, 1.5, -2.75, 16777217.0, 2147483520.0, 2147483648.0, -2147483648.0,
+    convsAgree(t, "F32", F32[0.0, 1.5, -2.75, 16777217.0, 2147483520.0, 2147483648.0, -2147483648.0
                               9.2233715e18, 1.8446743e19, 1.0 / z32, z32 / z32, 0.1], fn(x F32) I64 { return I64(x.Bits()) })
     z64 := 0.0
-    convsAgree(t, "F64", F64[0.0, 1.5, -2.75, 0.1, 65519.0, 65520.0, 9223372036854775807.0, -9223372036854775808.0,
-                              18446744073709549568.0, 18446744073709551616.0, -0.9, -1.0, 1.0 / z64, z64 / z64,
+    convsAgree(t, "F64", F64[0.0, 1.5, -2.75, 0.1, 65519.0, 65520.0, 9223372036854775807.0, -9223372036854775808.0
+                              18446744073709549568.0, 18446744073709551616.0, -0.9, -1.0, 1.0 / z64, z64 / z64
                               9007199254740993.0, 1.0e300], fn(x F64) I64 { return I64(x.Bits()) })
 }
 
@@ -3339,7 +3340,7 @@ fn sumFn(t mut types.Table&, id I64, allocating Bool) mir.Fn {
     f.End(head, mir.Term.Branch(mir.Operand.Copy(mir.L(c)), turn, exit))
     f.Add(turn, mir.Stmt.Open(Sp0, body))
     if allocating {
-        f.Add(turn, mir.Stmt.Assign(Sp0, mir.L(x), mir.Rvalue.NewArray(mir.ScopeRef.Scope(body), arr,
+        f.Add(turn, mir.Stmt.Assign(Sp0, mir.L(x), mir.Rvalue.NewArray(mir.ScopeRef.Scope(body), arr
                                                                        mir.Operand.Const(i64, 4), mir.Operand.Const(i64, 7))))
     }
     tprim(f, turn, I64(s), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(s)), mir.Operand.Copy(mir.L(i)))
@@ -3356,19 +3357,18 @@ fn fibFn(t mut types.Table&, id I64) mir.Fn {
     i64 := t.Prim("I64")
     ty := t.Func(t.List1(i64), i64, types.ListId(0))
     f := tfn(t, id, ty)
-    c, a, b, r1, r2, r := f.AddTemp(types.BoolT, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0),
-                          f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0)
+    c, a, b, r1, r2, r := f.AddTemp(types.BoolT, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0)
     small, big, second, sum := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
     tprim(f, B0, I64(c), typed.PrimOp.Lt, types.BoolT, tcopy(0), mir.Operand.Const(i64, 2))
     f.End(B0, mir.Term.Branch(mir.Operand.Copy(mir.L(c)), small, big))
     f.Add(small, mir.Stmt.Close(Sp0, S0))
     f.End(small, mir.Term.Return(Sp0, tcopy(0)))
     tprim(f, big, I64(a), typed.PrimOp.Sub, i64, tcopy(0), mir.Operand.Const(i64, 1))
-    k1 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.L(a))]), mir.Empty,
+    k1 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.L(a))]), mir.Empty
                              mir.L(r1), true, second, mir.NoLocal, mir.NoBlock))
     f.End(big, mir.Term.Call(Sp0, k1))
     tprim(f, second, I64(b), typed.PrimOp.Sub, i64, tcopy(0), mir.Operand.Const(i64, 2))
-    k2 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.L(b))]), mir.Empty,
+    k2 := f.AddCall(mir.Call(mir.Callee.Fn(tkey(id), ty), f.Args(mir.Operand[mir.Operand.Copy(mir.L(b))]), mir.Empty
                              mir.L(r2), true, sum, mir.NoLocal, mir.NoBlock))
     f.End(second, mir.Term.Call(Sp0, k2))
     tprim(f, sum, I64(r), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(r1)), mir.Operand.Copy(mir.L(r2)))
@@ -3394,8 +3394,7 @@ test "loops and recursion: a loop's scope every turn, calls to depth, a loop tha
         assert m.Eval(tkey(k), I64[10]) == Stop.None
         heap, allocs, scopes := m.HeapBytes(), m.Allocations(), m.ScopeSlots()
         assert m.Eval(tkey(k), I64[100000]) == Stop.None and m.Int(m.Result, i64) == 4999950000
-        assert m.HeapBytes() == heap and m.Allocations() == allocs and m.ScopeSlots() == scopes,
-               ("fn " $k ": heap " $heap " -> " $m.HeapBytes() ", allocations " $allocs " -> " $m.Allocations()
+        assert m.HeapBytes() == heap and m.Allocations() == allocs and m.ScopeSlots() == scopes, ("fn " $k ": heap " $heap " -> " $m.HeapBytes() ", allocations " $allocs " -> " $m.Allocations()
                 ", scopes " $scopes " -> " $m.ScopeSlots())
     }
 }
@@ -3427,7 +3426,7 @@ fn catchFn(t mut types.Table&, id I64, g I64, gty types.TypeId, word2 I64) mir.F
     f := tfn(t, id, t.Func(t.List1(i64), i64, types.ListId(0)))
     r, code := f.AddTemp(i64, Sp0), f.AddTemp(mir.I32T, Sp0)
     ok, err, two, other := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
-    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r), true, ok,
+    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r), true, ok
                             code, err))
     f.End(B0, mir.Term.Call(Sp0, k))
     f.Add(ok, mir.Stmt.Close(Sp0, S0))
@@ -3446,7 +3445,7 @@ fn passFn(t mut types.Table&, id I64, g I64, gty types.TypeId, from types.ListId
     f := tfn(t, id, t.Func(t.List1(i64), i64, to))
     r, code, mine := f.AddTemp(i64, Sp0), f.AddTemp(mir.I32T, Sp0), f.AddTemp(mir.I32T, Sp0)
     ok, err := f.NewBlock(), f.NewBlock()
-    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r), true, ok,
+    k := f.AddCall(mir.Call(mir.Callee.Fn(tkey(g), gty), f.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r), true, ok
                             code, err))
     f.End(B0, mir.Term.Call(Sp0, k))
     f.Add(ok, mir.Stmt.Close(Sp0, S0))
@@ -3502,7 +3501,7 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     # an index past the end: "a := Array<I64>(3, 0); return a[i]", the statement written at offset 7
     f1 := tfn(t, 1, t.Func(t.List1(i64), i64, types.ListId(0)))
     a1, x1 := f1.AddTemp(arr, Sp0), f1.AddTemp(i64, Sp0)
-    f1.Add(B0, mir.Stmt.Assign(Sp0, mir.L(a1), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 3),
+    f1.Add(B0, mir.Stmt.Assign(Sp0, mir.L(a1), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 3)
                                                                    mir.Operand.Const(i64, 9))))
     f1.Add(B0, mir.Stmt.Assign(tspan(7), mir.L(x1), mir.Rvalue.Use(mir.Operand.Copy(
         f1.Place(mir.Base.Local(a1), mir.Proj[mir.Proj.Index(mir.LocalId(0))])))))
@@ -3550,7 +3549,7 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     f5 := tfn(t, 5, i64fn)
     r5 := f5.AddTemp(i64, Sp0)
     back := f5.NewBlock()
-    k5 := f5.AddCall(mir.Call(mir.Callee.Fn(tkey(5), i64fn), f5.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r5), true,
+    k5 := f5.AddCall(mir.Call(mir.Callee.Fn(tkey(5), i64fn), f5.Args(mir.Operand[tcopy(0)]), mir.Empty, mir.L(r5), true
                               back, mir.NoLocal, mir.NoBlock))
     f5.End(B0, mir.Term.Call(tspan(17), k5))
     f5.Add(back, mir.Stmt.Close(Sp0, S0))
@@ -3563,8 +3562,8 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     turn := f6.NewBlock()
     a6 := f6.AddTemp(arr, Sp0)
     f6.End(B0, mir.Term.Goto(turn))
-    f6.Add(turn, mir.Stmt.Assign(tspan(19), mir.L(a6), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr,
-                                                                           mir.Operand.Const(i64, 1000),
+    f6.Add(turn, mir.Stmt.Assign(tspan(19), mir.L(a6), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr
+                                                                           mir.Operand.Const(i64, 1000)
                                                                            mir.Operand.Const(i64, 0))))
     f6.End(turn, mir.Term.Goto(turn))
     tdefine(t, m, f6)
@@ -3623,14 +3622,14 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     rp := t.Ref(pt, types.Writable)
     f := nfn(t, 1)
     p, r, x, y := f.AddTemp(pt, Sp0), f.AddTemp(rp, Sp0), f.AddTemp(i64, Sp0), f.AddTemp(i64, Sp0)
-    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(p), mir.Rvalue.Aggregate(pt, 0, f.Args(mir.Operand[mir.Operand.Const(i32, 3),
+    f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(p), mir.Rvalue.Aggregate(pt, 0, f.Args(mir.Operand[mir.Operand.Const(i32, 3)
                                                                                          mir.Operand.Const(i64, 40)]))))
     f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(r), mir.Rvalue.Ref(mir.L(p), rp)))
-    f.Add(B0, mir.Stmt.Assign(Sp0, f.Place(mir.Base.Local(r), mir.Proj[mir.Proj.Deref, mir.Proj.Field(0)]),
+    f.Add(B0, mir.Stmt.Assign(Sp0, f.Place(mir.Base.Local(r), mir.Proj[mir.Proj.Deref, mir.Proj.Field(0)])
                               mir.Rvalue.Use(mir.Operand.Const(i32, 7))))
     f.Add(B0, mir.Stmt.Assign(Sp0, mir.L(x), mir.Rvalue.Prim(typed.PrimOp.Convert, i64, f.Args(mir.Operand[
         mir.Operand.Copy(f.Place(mir.Base.Local(p), mir.Proj[mir.Proj.Field(0)]))]))))
-    tprim(f, B0, I64(y), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(x)),
+    tprim(f, B0, I64(y), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(x))
           mir.Operand.Copy(f.Place(mir.Base.Local(p), mir.Proj[mir.Proj.Field(1)])))
     f.Add(B0, mir.Stmt.Close(Sp0, S0))
     f.End(B0, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(y))))
@@ -3639,7 +3638,7 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     assert m.size(pt) == 16 and m.partOffset(pt, 1) == 8
     # enum Shape { Circle(r I64)  Empty }: "s := Shape.Circle(5) if k == 0 else Shape.Empty; match s { ... }"
     st := tdecl(t, names, types.DeclKind.Enum, "Shape")
-    t.SetEnumBody(st, source.NameId[names.Intern("Circle"), names.Intern("Empty")],
+    t.SetEnumBody(st, source.NameId[names.Intern("Circle"), names.Intern("Empty")]
                   t.List(types.TypeId[t.Record(t.List1(i64)), types.TypeId(0)]))
     g := tfn(t, 2, t.Func(t.List1(i64), i64, types.ListId(0)))
     sv, tag, c := g.AddTemp(st, Sp0), g.AddTemp(i64, Sp0), g.AddTemp(types.BoolT, Sp0)
@@ -3653,7 +3652,7 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     g.Add(probe, mir.Stmt.Assign(Sp0, mir.L(tag), mir.Rvalue.Tag(mir.L(sv))))
     g.End(probe, mir.Term.Switch(mir.Operand.Copy(mir.L(tag)), g.AddCases(mir.Case[mir.Case(0, isc)]), other))
     g.Add(isc, mir.Stmt.Close(Sp0, S0))
-    g.End(isc, mir.Term.Return(Sp0, mir.Operand.Copy(g.Place(mir.Base.Local(sv), mir.Proj[mir.Proj.Payload(0),
+    g.End(isc, mir.Term.Return(Sp0, mir.Operand.Copy(g.Place(mir.Base.Local(sv), mir.Proj[mir.Proj.Payload(0)
                                                                                            mir.Proj.Field(0)]))))
     g.Add(other, mir.Stmt.Close(Sp0, S0))
     g.End(other, mir.Term.Return(Sp0, mir.Operand.Const(i64, -1)))
@@ -3665,22 +3664,21 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     arr := t.Array(i64, types.TypeId(0))
     ra := t.Ref(arr, types.ReadOnly)
     h := nfn(t, 3)
-    a, sl, n, v1, v2, v3 := h.AddTemp(arr, Sp0), h.AddTemp(ra, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0),
-                            h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0)
+    a, sl, n, v1, v2, v3 := h.AddTemp(arr, Sp0), h.AddTemp(ra, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0), h.AddTemp(i64, Sp0)
     lit, ref := h.AddTemp(ra, Sp0), h.AddTemp(ra, Sp0)
     k := h.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bits(10), typed.Const.Bits(20), typed.Const.Bits(30)]))
-    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(a), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 5),
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(a), mir.Rvalue.NewArray(mir.ScopeRef.Scope(S0), arr, mir.Operand.Const(i64, 5)
                                                                  mir.Operand.Const(i64, 2))))
     h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(lit), mir.Rvalue.Use(mir.Operand.Data(ra, k, 0, tspan(30)))))
     h.Add(B0, mir.Stmt.CopyElems(Sp0, mir.L(a), h.Place(mir.Base.Local(lit), mir.Proj[mir.Proj.Deref]), mir.Operand.Const(i64, 3)))
-    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(sl), mir.Rvalue.Slice(mir.L(a), mir.Operand.Const(i64, 1),
+    h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(sl), mir.Rvalue.Slice(mir.L(a), mir.Operand.Const(i64, 1)
                                                                mir.Operand.Const(i64, 4), ra)))
     h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(n), mir.Rvalue.Prim(typed.PrimOp.Len, i64, h.Args(mir.Operand[mir.Operand.Copy(mir.L(a))]))))
-    tprim(h, B0, I64(v1), typed.PrimOp.Add, i64,
+    tprim(h, B0, I64(v1), typed.PrimOp.Add, i64
           mir.Operand.Copy(h.Place(mir.Base.Local(a), mir.Proj[mir.Proj.At(0)])), mir.Operand.Copy(mir.L(n)))
-    tprim(h, B0, I64(v2), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(v1)),
+    tprim(h, B0, I64(v2), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(v1))
           mir.Operand.Copy(h.Place(mir.Base.Local(sl), mir.Proj[mir.Proj.Deref, mir.Proj.At(0)])))
-    tprim(h, B0, I64(v3), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(v2)),
+    tprim(h, B0, I64(v3), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(v2))
           mir.Operand.Copy(h.Place(mir.Base.Local(a), mir.Proj[mir.Proj.At(4)])))
     h.Add(B0, mir.Stmt.Assign(Sp0, mir.L(ref), mir.Rvalue.Ref(mir.L(a), ra)))
     h.Add(B0, mir.Stmt.Close(Sp0, S0))
@@ -3690,9 +3688,9 @@ test "aggregates, enums, arrays and references: laid out as the target lays them
     # constant data is read-only: a write through a reference to it refused
     w := nfn(t, 4)
     wl := w.AddTemp(ra, Sp0)
-    w.Add(B0, mir.Stmt.Assign(Sp0, mir.L(wl), mir.Rvalue.Use(mir.Operand.Data(ra, w.AddConst(typed.Const.Bytes(U8[1, 2])),
+    w.Add(B0, mir.Stmt.Assign(Sp0, mir.L(wl), mir.Rvalue.Use(mir.Operand.Data(ra, w.AddConst(typed.Const.Bytes(U8[1, 2]))
                                                                                0, tspan(40)))))
-    w.Add(B0, mir.Stmt.Assign(tspan(41), w.Place(mir.Base.Local(wl), mir.Proj[mir.Proj.Deref, mir.Proj.At(0)]),
+    w.Add(B0, mir.Stmt.Assign(tspan(41), w.Place(mir.Base.Local(wl), mir.Proj[mir.Proj.Deref, mir.Proj.At(0)])
                               mir.Rvalue.Use(mir.Operand.Const(i64, 9))))
     w.Add(B0, mir.Stmt.Close(Sp0, S0))
     w.End(B0, mir.Term.Return(Sp0, mir.Operand.Const(i64, 0)))
@@ -3776,7 +3774,7 @@ test "scopes and destructors under -i: a scope's registrations run as it closes,
     d.Vars.Push(mir.VarKind.Closing)
     x := d.AddTemp(i64, Sp0)
     tprim(d, B0, I64(x), typed.PrimOp.Mul, i64, mir.Operand.Copy(gplace(t, log)), mir.Operand.Const(i64, 10))
-    tprim(d, B0, I64(x), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(x)),
+    tprim(d, B0, I64(x), typed.PrimOp.Add, i64, mir.Operand.Copy(mir.L(x))
           mir.Operand.Copy(d.Place(mir.Base.Local(mir.LocalId(0)), mir.Proj[mir.Proj.Deref, mir.Proj.Field(0)])))
     d.Add(B0, mir.Stmt.Assign(Sp0, gplace(t, log), mir.Rvalue.Use(mir.Operand.Copy(mir.L(x)))))
     d.Add(B0, mir.Stmt.Close(Sp0, S0))
