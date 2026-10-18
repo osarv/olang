@@ -2759,8 +2759,17 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
             return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp)))
         }
         if c.flowsInto(have, r) or (c.isNumber(have) and c.isNumber(r) and c.P.Flows(have, r)) {
-            v := c.fit(x, r, sp)
             p := readPlace(x)
+            # a fixed array where a reference to one of a run-time length is wanted: the place itself borrowed and the
+            # reference widened, nothing copied (E12, T7c) - the callee writes the caller's elements
+            if p != null and hk == types.Kind.Array and c.P.T.Length(have) != types.TypeId(0) {
+                if (c.P.T.PermOf(want) & types.Writable) != 0 {
+                    c.mustWrite(p, sp, false)
+                    c.roDeepNeed(x)
+                }
+                return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, c.P.T.PermOf(want)), p), want)
+            }
+            v := c.fit(x, r, sp)
             if p != null and c.isNamed(have) and c.isOver(have) {
                 return typed.Expr.Borrow(sp, want, p)
             }
@@ -2813,6 +2822,25 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     }
     c.err(sp, msgs.TypeMismatch(c.ty(want), c.ty(have)))
     return x
+}
+
+# a fixed array's storage handed to an extern's array parameter (X3): the place borrowed and read as a run-time-length
+# array - the pair naming the caller's own elements, which the foreign function may write - never a copy; null where
+# the argument is no such place
+fn (c mut Checker&) externArray(target typed.Callee&, x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
+    isExtern := match target {
+        case typed.Callee.Extern(_) => true
+        case _ => false
+    }
+    if not isExtern { return null }
+    have := typeOf(x)
+    wa := c.arrayOf(want)
+    if wa == types.UnknownT or c.P.T.Length(wa) != types.TypeId(0) { return null }
+    if c.P.T.KindOf(have) != types.Kind.Array or c.P.T.Length(have) == types.TypeId(0) { return null }
+    p := readPlace(x)
+    if p == null { return null }
+    b := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(want, types.Writable))
+    return c.read(sp, typed.Place.Deref(sp, want, b))
 }
 
 # a value made to fit a type, as fit does, with nothing said: the value, and whether it fits - for a caller saying
@@ -5882,7 +5910,8 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     e = c.unknown(asp)
                 } else {
                     if c.writable(ps[k]) and c.condChoosesPlace(e) { c.err(c.chosenAt(e), msgs.CondLentWritable()) }
-                    e = c.fit(e, ps[k], c.argSpan(args[i]))
+                    ex := c.externArray(target, e, ps[k], c.argSpan(args[i]))
+                    e = ex if ex != null else c.fit(e, ps[k], c.argSpan(args[i]))
                 }
             }
         } else {

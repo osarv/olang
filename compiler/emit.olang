@@ -193,7 +193,7 @@ fn (e mut Emitter&) bodySym(id I64) String {
         case typed.BodyOf.Ctor(ty, twin) => types.Symbol($t.Canon(ty) ".ctor" $("" if twin == types.ListId(0) else "." $twin))
         case typed.BodyOf.Dtor(ty) => types.Symbol($t.Canon(ty) ".dtor")
         case typed.BodyOf.Lambda(_) => "olang_lambda_" $id
-        case typed.BodyOf.Test(i) => "olang_test_" $i
+        case typed.BodyOf.Test(_) => "olang_test_" $id
         case typed.BodyOf.Global(m, n) => types.Symbol($e.P.L.Mods[m].Identity "." $e.text(n) ".init")
         case typed.BodyOf.Case(_, _) => "olang_case_" $id
     }
@@ -235,6 +235,7 @@ fn (e mut Emitter&) ty(t types.TypeId) String {
         e.gap("an unknown type")
         return "i8"
     }
+    e.P.Layout(t)
     e.need(t)
     return $e.T.Llvm(t)
 }
@@ -307,7 +308,7 @@ runtimeTypes String& = ("%olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr }\n"
 # ---- a function ----
 
 # one MIR function being written: its text in two parts, the entry block's allocas (head) and the blocks (code)
-type fnEm struct(E mut Emitter&, F mir.Fn, Key mir.FnKey) {
+type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     E
     F
     Key
@@ -354,6 +355,16 @@ fn (fe mut fnEm&) alloca(ty String&, align I64 = 0) String {
 }
 
 fn (fe mut fnEm&) ty(t types.TypeId) String { return fe.E.ty(t) }
+
+fn (fe mut fnEm&) size(t types.TypeId) I64 {
+    fe.E.P.Layout(t)
+    return fe.E.T.Size(t)
+}
+
+fn (fe mut fnEm&) align(t types.TypeId) I64 {
+    fe.E.P.Layout(t)
+    return fe.E.T.Align(t)
+}
 
 # a value computed into a temporary: "%tN = TEXT"
 fn (fe mut fnEm&) let(text String&) String {
@@ -410,11 +421,12 @@ fn (e mut Emitter&) passedOf(k mir.FnKey, ty types.TypeId) I64 { return mir.Pass
 
 # one function lowered and written
 fn (e mut Emitter&) function(k mir.FnKey) {
-    f := e.Lw.LowerKey(k)
+    f mir.Fn&e = e.Lw.LowerKey(k)
     symbol := e.sym(k)
     env := e.hasEnv(k)
     passed := e.passedOf(k, f.Ty)
-    if e.Lw.Gapped {
+    bad := "" if e.Lw.Gapped else f.Verify(e.T)
+    if e.Lw.Gapped or bad != "" {
         e.gap("not lowered: " $symbol)
         e.body.Push(e.header(k, f.Ty, symbol, passed, env))
         e.body.Push("entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not lowered by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
@@ -883,7 +895,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             d := fe.dataPtr(dst)
             sv := fe.dataPtr(src)
             el := t.Elem(fe.arrayOf(fe.placeType(dst)))
-            bytes := fe.let("mul i64 " $fe.index(fe.val(n), fe.otype(n)) ", " $t.Size(el))
+            bytes := fe.let("mul i64 " $fe.index(fe.val(n), fe.otype(n)) ", " $fe.size(el))
             fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
             fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $d ", ptr " $sv ", i64 " $bytes ", i1 false)")
         }
@@ -1023,7 +1035,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             rt := t.Referent(t.Repr(ty))
             v := fe.val(x, rt)
             if fe.runTime(rt) { return v }
-            p := fe.alloc(s, $t.Size(rt), t.Align(rt), fe.ty(rt))
+            p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
             fe.store(fe.ty(rt), v, p)
             return p
         }
@@ -1050,7 +1062,10 @@ fn (fe mut fnEm&) pair(n String&, p String&) String {
 }
 
 # whether an enum's value is a tag word and its payload's words (T17), not a bare I32 ordinal
-fn (e mut Emitter&) enumWords(ty types.TypeId) Bool { return e.T.PayloadSize(e.T.Repr(ty)) >= 0 }
+fn (e mut Emitter&) enumWords(ty types.TypeId) Bool {
+    e.P.Layout(ty)
+    return e.T.PayloadSize(e.T.Repr(ty)) >= 0
+}
 
 # a reference to a place (E12c): its address, or for a run-time-length array the pair its value is; a fixed array's
 # address widened to the pair where the reference is to a run-time-length one
@@ -1072,7 +1087,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     x := t.Referent(r) if t.IsRef(r) else r
     el := t.Elem(fe.arrayOf(x))
     cnt := fe.index(fe.val(n), fe.otype(n))
-    bytes := fe.let("mul i64 " $cnt ", " $t.Size(el))
+    bytes := fe.let("mul i64 " $cnt ", " $fe.size(el))
     zero := match fill {
         case mir.Operand.Const(_, b) => b == 0
         case _ => false
@@ -1215,7 +1230,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.AtomicLoad {
             it := t.Referent(r)
-            return fe.let("load atomic " $fe.ty(it) ", ptr " $x " seq_cst, align " $t.Size(it))
+            return fe.let("load atomic " $fe.ty(it) ", ptr " $x " seq_cst, align " $fe.size(it))
         }
         case _ { }
     }
@@ -1240,7 +1255,8 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.Same {
             if lt == "{ i64, ptr }" or lt == "{ ptr, ptr }" {
-                a := fe.let("icmp eq " $fe.let("extractvalue " $lt " " $x ", 0") ", " $fe.let("extractvalue " $lt " " $y ", 0"))
+                w0 := "i64 " if lt == "{ i64, ptr }" else "ptr "
+                a := fe.let("icmp eq " $w0 $fe.let("extractvalue " $lt " " $x ", 0") ", " $fe.let("extractvalue " $lt " " $y ", 0"))
                 b := fe.let("icmp eq ptr " $fe.let("extractvalue " $lt " " $x ", 1") ", " $fe.let("extractvalue " $lt " " $y ", 1"))
                 return fe.let("and i1 " $a ", " $b)
             }
@@ -1252,7 +1268,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.AtomicStore {
             it := t.Referent(r)
-            fe.w("store atomic " $fe.ty(it) " " $fe.val(fe.arg(args, 1), it) ", ptr " $x " seq_cst, align " $t.Size(it))
+            fe.w("store atomic " $fe.ty(it) " " $fe.val(fe.arg(args, 1), it) ", ptr " $x " seq_cst, align " $fe.size(it))
             return "undef"
         }
         case typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap {
@@ -1306,12 +1322,13 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
         case typed.PrimOp.Gt => "ugt" if un else "sgt"
         case _ => "uge" if un else "sge"
     }
-    # a pair (an array reference, a function value) is null exactly when its storage or code is
+    # a pair (an array reference, a function value) is equal to another, null among them, when both its words are
     if lt == "{ i64, ptr }" or lt == "{ ptr, ptr }" {
-        k := "1" if lt == "{ i64, ptr }" else "0"
-        a := fe.let("extractvalue " $lt " " $x ", " $k)
-        b := fe.let("extractvalue " $lt " " $y ", " $k)
-        return fe.let("icmp " $c " ptr " $a ", " $b)
+        w0 := "i64 " if lt == "{ i64, ptr }" else "ptr "
+        a := fe.let("icmp eq " $w0 $fe.let("extractvalue " $lt " " $x ", 0") ", " $fe.let("extractvalue " $lt " " $y ", 0"))
+        b := fe.let("icmp eq ptr " $fe.let("extractvalue " $lt " " $x ", 1") ", " $fe.let("extractvalue " $lt " " $y ", 1"))
+        both := fe.let("and i1 " $a ", " $b)
+        return both if op == typed.PrimOp.Eq else fe.let("xor i1 " $both ", true")
     }
     return fe.let("icmp " $c " " $lt " " $x ", " $y)
 }
@@ -1687,7 +1704,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     out := ""
     if via {
-        out = fe.alloca(fe.ty(res), t.Align(res))
+        out = fe.alloca(fe.ty(res), fe.align(res))
         if not first { args.Push(", ") }
         args.Push("ptr " $out)
         first = false
@@ -1710,7 +1727,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
         }
         match pass[i] {
             case 'm' {
-                p := fe.alloca(fe.ty(ps[i]), t.Align(ps[i]))
+                p := fe.alloca(fe.ty(ps[i]), fe.align(ps[i]))
                 fe.store(fe.ty(ps[i]), v, p)
                 args.Push("ptr " $p)
             }
