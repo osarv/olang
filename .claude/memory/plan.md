@@ -105,7 +105,8 @@ overrated".
       value is known non-null (a catch binding, a written word); error values compare only with their own words and null.
   15. The port verbosity audit; SPEC section 5 renumbered; SPEC section 8 restated in the scope model's form beside M6
       (QAE).
-  STILL TO DISCUSS: Result/Option (the user wants to talk about them), contracts (#8), doc tests (#9), method and
+  STILL TO DISCUSS (the user, 2026-10-18: "I want to come back to all these"): Option/null references (QAO, parked),
+  `is` vs `== null` and the word `is` (QAP), contracts (#8), doc tests (#9), method and
   constructor overloading (#10, #11), fixed point (#5's second half).
 - **C COMPILER FROZEN, 2026-10-18 (the user: "So basically freeze the C compiler now?" - yes).** Stage 0 takes only:
   bug fixes, finishing what is in flight (wt-mathmeth, wt-mem2, wt-noown removing own/take), and what the port's own
