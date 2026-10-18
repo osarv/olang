@@ -17,8 +17,10 @@
 # - checks (E15a, E16b, D14b, E32): a test and a branch - to an Exit for a guaranteed check, to the try's dispatch with
 #   BuiltinError's code for a checked one.
 #
-# Placement is the plan's (typed.Plan, M6). Until the scope pass lands, lowering runs with the stand-in DESIGN.md 1.6.1
-# allows: every site built in the program's scope, every local in its frame, every scope variable passed the program's.
+# Placement is the plan's (typed.Plan, M6): the scope pass's (compiler/scope.olang) where Plans holds one per body, else
+# the stand-in DESIGN.md 1.6.1 allows - every site built in the program's scope, every local in its frame, every scope
+# variable passed the program's. A plan's block is the MIR scope its typed block opened; an Inert scope (O12, E11c) is
+# the program's until lowering opens Inert scopes of its own.
 #
 # Memory is one model (docs/memory.md): scopes and destructor registration. Owned references are being removed, so a
 # Take lowers to MIR's Take and nothing is released, held or given (no Release, RegisterOwner, Region or Give).
@@ -50,6 +52,7 @@ type Gap struct(File I64, Sp source.Span, What String&) {
 type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     P
     Bodies
+    Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
     Gaps List<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
@@ -103,6 +106,10 @@ fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
     f := mir.Fn(mir.FnKey.Body(typed.BodyId(I32(id))), b.Ty, b.File, b.Sp)
     ln := lowering(lw, b, lw.P.T, f)
     ln.file = b.File
+    if id < lw.Plans.Len() {
+        ln.planned = true
+        ln.plan = lw.Plans[id]
+    }
     ln.run()
     lw.Gapped = ln.gapped
     return ln.F
@@ -221,6 +228,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, F mir.Fn
     joins List<tryCtx>  # the joins being lowered, innermost last: each one's clauses (P4c), beside its scope
     joinS List<mir.ScopeId>
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
+    planned Bool = false    # whether plan is the scope pass's plan for B, not the stand-in
+    plan typed.Plan = typed.Plan(0, 0, 0)
 }
 
 fn (ln mut lowering&) gap(sp source.Span, what String&) {
@@ -240,7 +249,15 @@ fn (ln mut lowering&) run() {
             case _ => mir.LocalKind.Var
         }
         if l.Ty == types.UnknownT { ln.gapped = true }
-        ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, mir.ScopeRef.Frame))
+        # where its storage is: the frame, or a scope variable where the scope pass moved it (O26a's returned locals)
+        home := mir.ScopeRef.Frame
+        if ln.planned and i < ln.plan.Stored.Len() {
+            match ln.plan.Stored[i] {
+                case typed.Scope.Var(v) { home = mir.ScopeRef.Var(v) }
+                case _ { }
+            }
+        }
+        ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
     }
     for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
     caps List<typed.LocalId>
@@ -326,8 +343,14 @@ fn (ln mut lowering&) assemble(res types.TypeId) {
     ln.end(mir.Term.Return(b.Sp, v))
 }
 
-# a constructor's instance scope: the plan's, the program's until M6 lands
-fn (ln mut lowering&) instance() mir.ScopeRef { return mir.ScopeRef.Program }
+# a constructor's instance scope: its scope variable, the program's for the stand-in placement
+fn (ln mut lowering&) instance() mir.ScopeRef {
+    if not ln.planned { return mir.ScopeRef.Program }
+    for k in range ln.B.Vars.Len() {
+        if ln.B.Vars[k] == typed.ScopeVar.Instance { return mir.ScopeRef.Var(k) }
+    }
+    return mir.ScopeRef.Program
+}
 
 # ---- emitting ----
 
@@ -410,14 +433,42 @@ fn (ln mut lowering&) asI64(x mir.Operand, ty types.TypeId, sp source.Span) mir.
     return ln.prim(typed.PrimOp.Convert, mir.I64T, mir.Operand[x], sp)
 }
 
-# the scope a site builds in: the plan's - the stand-in's program scope until M6 lands
-fn (ln mut lowering&) built(site typed.SiteId) mir.ScopeRef { return mir.ScopeRef.Program }
+# the scope a site builds in: the plan's, the program's for the stand-in placement
+fn (ln mut lowering&) built(site typed.SiteId) mir.ScopeRef {
+    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() { return mir.ScopeRef.Program }
+    return ln.scopeRef(ln.plan.Built[I64(site)])
+}
 
-# the scopes a call passes for its callee's variables: the plan's, the program's until M6 lands
-fn (ln mut lowering&) passed(n I64) mir.Range {
+# the scopes a call at site passes for its callee's n variables: the plan's, the program's for the stand-in placement
+fn (ln mut lowering&) passed(n I64, site typed.SiteId = typed.SiteId(-1)) mir.Range {
     xs := Array<mir.ScopeRef>(n)
-    for i in range n { xs[i] = mir.ScopeRef.Program }
+    for i in range n {
+        xs[i] = mir.ScopeRef.Program
+        if ln.planned and site >= typed.SiteId(0) and I64(site) < ln.plan.Built.Len() {
+            xs[i] = ln.scopeRef(ln.plan.Passed(site, i))
+        }
+    }
     return ln.F.ScopeRefs(xs)
+}
+
+# a plan's scope as MIR names it: a block the scope its typed block opened - the innermost open level standing for it,
+# else the innermost enclosing it (a block check reuses its parent's id for) - a scope variable, the program's
+fn (ln mut lowering&) scopeRef(sc typed.Scope) mir.ScopeRef {
+    match sc {
+        case typed.Scope.Block(b) {
+            for i := ln.levels.Len() - 1, i >= 0, i-- {
+                if ln.levels[i].Block == b { return mir.ScopeRef.Scope(ln.levels[i].S) }
+            }
+            for i := ln.levels.Len() - 1, i >= 0, i-- {
+                lb := ln.levels[i].Block
+                if lb >= typed.BlockId(0) and ln.B.Encloses(lb, b) { return mir.ScopeRef.Scope(ln.levels[i].S) }
+            }
+            return mir.ScopeRef.Program
+        }
+        case typed.Scope.Var(i) { return mir.ScopeRef.Var(i) }
+        case typed.Scope.Frame { return mir.ScopeRef.Frame }
+        case _ { return mir.ScopeRef.Program }
+    }
 }
 
 # ---- scopes and the exit sequence ----
@@ -539,6 +590,7 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             ty := ln.B.Locals[I64(l)].Ty
             v := ln.fit(ln.val(init), init, ty, sp)
             if ln.copiesArray(init, ty) and not ln.dead { v = ln.arrayCopy(v, ty, sp) }
+            if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
             ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
         }
         case typed.Stmt.Assign(sp, target, value) {
@@ -842,7 +894,7 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
                 cls[i] = mir.TaskClause(ln.F.AddItems(cl.Items), cl.All, h)
             }
             if ln.dead { return }
-            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty)), places, cls)
+            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty), c.Site), places, cls)
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
         case _ { }
@@ -1371,7 +1423,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     args := ln.args(c, callee, fty)
     if ln.dead { return mir.Operand.None }
     res := t.Result(fty)
-    scopes := ln.passed(mir.PassedCount(t, callee, fty))
+    scopes := ln.passed(mir.PassedCount(t, callee, fty), c.Site)
     ok := ln.F.NewBlock()
     dest := mir.NoLocal
     if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(ty if ty != types.VoidT else res, sp) }

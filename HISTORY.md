@@ -20373,3 +20373,59 @@ the review's program out of memory: it reclaims nothing (stage 1).
 **Found on the way, not fixed**: a constructor's `v := w + f(r)` field whose type depends on a function reading that
 very field of another instance (`r.v`) reports "expected no value" at the read - the field's type is not known yet
 (a cycle); writing its type (`v I64 = ...`) works. The message could name the cycle.
+
+## Port M6: the scope pass, `compiler/scope.olang` (2026-10-18, first round)
+
+`compiler/scope.olang` judges section 8 over the typed contract, after `docs/scope-model.md`, and fills each body's
+`typed.Plan` - where each site builds, which scopes each call passes, where a moved local's storage is - which
+`compiler/lower.olang` now reads instead of the stand-in placement. `compiler/tools/scopedump.olang` prints what it says
+of a program (with `-plan PATTERN`, a body's typed tree and plan), and `compiler/tools/scopediff.olang` (`make
+scopediff`) measures M6's acceptance against stage 0's goldens. Stage 0's section 8 in `bootstrap/semantic.c` was read
+for behaviour only, and small programs built by stage 0 decided each question of what is accepted.
+
+**Structure.** A body's scope terms are its blocks, its scope variables (by index in `Vars`, the order a call passes
+them), the program's, derived scopes `D(p, q)` (a `&q` field read through reference parameter `p`), sets (O12) and the
+untraced. A judgment of "outlives" holds, fails (a block asked to outlive a scope variable or a block it is in), or
+between two relatable terms is recorded as an obligation of the body (O10b). The call graph's strongly connected
+components are judged callees first (Tarjan); a cyclic one is judged until its obligations stop growing, then once more
+reporting, and only then is it marked converged - no summary is read before (7.2). A call binds its callee's scope
+variables - existing arguments by their terms (O17, O25e), the result scope by a scope argument (E25), by where the
+result lands (O18a) or by its obligations (O18c), the rest where the callee's obligations require (O18b) - builds its
+temporaries there, and discharges the callee's obligations through the bindings (O10c), an unmet one an error at the
+call with a note at the callee's statement.
+
+**What round 1 built beyond the skeleton**, each needed by the corpus:
+- O26a, decided before each `Let` by a backward flow over the rest of its block; the move puts the local's terms and
+  its storage in the result scope, and lowering gives the MIR local that home (a `Live` at the declaration).
+- O18c for `:=` locals (a call's result landing by its obligations where its callee builds nothing there, where an
+  obligation forces it, or where the local is kept beyond its block - a forward flow), for a call's result passed on as
+  an argument (landing first, then determining the parameter's scope as existing storage), and for one nothing puts
+  anywhere. "Builds nothing" is a per-variable summary read off the converged plans.
+- A constructor's fields as slots of the instance, `&q` fields recording that the instance may not outlive q's
+  argument (C2d) - without it MapKeyIter could outlive its map, and `Map.Put` recorded no obligation that its key
+  outlive the map, so `m.Put($i, i)` in a loop built the text in the loop body (a use-after-free the stand-in
+  placement hid by putting everything in the program's scope).
+- Derived scopes, so nothing is built through a `&q` field read off a parameter; through a local's instance an
+  underestimate that is never built into nor shown to be outlived.
+- LEND for split values (O17, O17b): a landed local and a call's value result promoted for a reference parameter are
+  lent where their references are to a callee keeping nothing in them (what a body keeps is read off it per parameter,
+  callees first), else O17's error. Before it, a split value was lent as its storage - which let a callee build in the
+  block what it then stored where the references were.
+- T25d's static literals for `for ... in`, sets judged member by member (E28), destructured results landing with their
+  first use.
+
+**Measured** (`make scopediff`): of the 279 checks cases stage 0 refuses by a section-8 rule, 52 give its first error
+(50 exactly its scope errors) and 75 say the pinned message; 147 get no section-8 error at all - the soundness
+differences still open, by first rule "E11c, O12" 34 (a `Str` building into its receiver), E31b 29, O17 18, C2d 11,
+P2/D16e 11, O10c 8, O25 5, O17a 4 and a few more. Of the 300 programs stage 0 accepts, 277 are scope clean; the rest
+(the corpus files, the compiler's own sources, 8 checks cases) give 96 distinct error rows, nearly all over-rejections
+of per-instance bindings (O23a, O13c) - from 474 rows on the corpus and std with the skeleton. `lowerdump` with the
+scope pass's placement is as clean as with the stand-in: 72,996 of 73,029 corpus, std and compiler bodies (the 12 bad
+and 21 unchecked are the checker's), and the checks' run and build cases as before.
+
+**Not built yet**: per-instance bindings, E31b, E11c's receiver rule, P2/D16e, D16d, T22a, T17c,
+O17a, `MayBuild`. The refused cases the pass says nothing about are listed by scopediff, by rule; they are the
+soundness differences still open.
+
+**Found on the way, for the checker:** a body whose function type's `ResultFrom` names a parameter it does not have
+(`typed.Body.ResultMark` indexes past `Params`; compiler/build.olang) - guarded in the scope pass.
