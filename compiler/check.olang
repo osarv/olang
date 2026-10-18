@@ -2505,7 +2505,7 @@ fn (c mut Checker&) lengthsMeet(a types.TypeId, b types.TypeId) Bool {
 fn (c mut Checker&) exprTo(x ast.Expr&, want types.TypeId) typed.Expr&c {
     e := c.expr(x, want)
     if want == types.UnknownT { return e }
-    return c.fit(e, want, x.Span())
+    return c.fit(e, want, c.argSpan(x))
 }
 
 # what ":=" declares from its initializer (D15): text a String value (T29c), a literal its own type (T6a)
@@ -4787,7 +4787,12 @@ fn (c mut Checker&) argSpan(x ast.Expr&) source.Span {
     match x {
         case ast.Expr.As(_, y, t) { return c.between(y.Span(), t.Span(), 2) }
         case ast.Expr.Paren(_, y) { return c.argSpan(y) }
+        case ast.Expr.Binary(_, _, _, _) { return c.opOf(x) }
         case ast.Expr.Call(_, f, args) {
+            match f {
+                case ast.Expr.Member(msp, _, n) { return memberSpan(msp, c.text(n).Len()) }
+                nomatch { }
+            }
             if args.Len() == 1 {
                 t := c.typeNamed(f)
                 if t >= types.TypeId(0) and c.isNamed(t) and c.declKind(t) == types.DeclKind.Over { return c.argSpan(args[0]) }
