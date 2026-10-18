@@ -134,6 +134,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roFns List<roFn>
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
+    unfillable Map<I64, Bool>                       # the generic functions G4 says no call can instantiate
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -226,6 +227,7 @@ fn (c mut Checker&) reset() {
     c.roFns = List<roFn>()
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
+    c.unfillable = Map<I64, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -237,6 +239,7 @@ fn (c mut Checker&) attempt() {
             c.operatorMethod(f)
             c.inheritClash(f)
         }
+        c.fnTypeParams(f)
         if c.P.VarCount(generic.FnOwner(f)) > 0 { continue }
         c.fnBody(c.P.FnInstance(f, types.ListId(0)))
     }
@@ -270,6 +273,145 @@ OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus
 
 # a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
 # E10a, E11c); its private spelling is held to the same (M6b)
+# a function's type variables (G1, G4): none named after a type; each written in a parameter's type - a constant one as
+# a whole argument - or in the constraint of one that is, so a call can infer it
+fn (c mut Checker&) fnTypeParams(f I64) {
+    fd := c.P.FnDecl(f)
+    mi := c.P.FnModule(f)
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    if fd.TypeParams != null {
+        for tp in fd.TypeParams {
+            if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
+        }
+    }
+    owner := generic.FnOwner(f)
+    nv := c.P.VarCount(owner)
+    if nv > 0 {
+        sig := c.P.Sig(f)
+        seen := Array<Bool>(nv, false)
+        for q in c.P.T.Items(c.P.T.Params(sig)) { c.varsIn(q, owner, seen, 0) }
+        # G9c: a variable named only in a constraint is bound through it
+        for round in range nv {
+            for i in range nv {
+                b := c.P.VarAt(owner, i).Bound
+                if seen[i] and b != types.UnknownT { c.varsIn(b, owner, seen, 0) }
+            }
+        }
+        for i in range nv {
+            if seen[i] { continue }
+            row := c.P.VarAt(owner, i)
+            at := c.writtenAt(fd, row.Name)
+            if row.Const != types.UnknownT or c.constUseIn(fd, row.Name) {
+                c.err(at, msgs.ConstVarOnlyInExpr(c.text(row.Name)))
+            } else {
+                # a type variable: said at the result it is written in
+                if fd.S.Results != null and fd.S.Results.Len() > 0 { at = source.Span(fd.S.Results[0].Span().Start, at.End) }
+                c.err(at, msgs.TypeVarNotInferable(c.text(row.Name)))
+            }
+            c.unfillable.Put(f, true)
+            break
+        }
+    }
+    c.pop()
+}
+
+# whether a signature writes a variable where a constant goes: inside a constant expression, or as an array's length
+fn (c mut Checker&) constUseIn(fd ast.Func&, n source.NameId) Bool {
+    for prm in fd.S.Params {
+        if c.constUse(prm.Ty, n) { return true }
+    }
+    if fd.S.Results != null {
+        for r in fd.S.Results {
+            if c.constUse(r, n) { return true }
+        }
+    }
+    return false
+}
+
+fn (c mut Checker&) constUse(t ast.TypeRef&, n source.NameId) Bool {
+    if t == null { return false }
+    match t {
+        case ast.TypeRef.Const(sp, _) { return c.wordIn(sp, c.text(n)).Start >= 0 }
+        case ast.TypeRef.Named(_, path, args) {
+            if path.Len() == 1 and c.text(path[0]) == "Array" and args.Len() == 2 and c.wordIn(args[1].Span(), c.text(n)).Start >= 0 { return true }
+            for a in args {
+                if c.constUse(a, n) { return true }
+            }
+            return false
+        }
+        case ast.TypeRef.Ref(_, of, _) { return c.constUse(of, n) }
+        case ast.TypeRef.Perm(_, of, _, _) { return c.constUse(of, n) }
+        nomatch { return false }
+    }
+}
+
+# the type variables of owner a type holds - a constant one only as a whole argument, never inside an expression
+fn (c mut Checker&) varsIn(t types.TypeId, owner I64, seen mut Array<Bool>&, depth I64) {
+    if depth > 32 or t == types.UnknownT { return }
+    match c.P.T.KindOf(t) {
+        case types.Kind.Var {
+            if c.P.T.A(t) == owner and c.P.T.B(t) < seen.Len() { seen[c.P.T.B(t)] = true }
+        }
+        case types.Kind.Named { for x in c.P.T.Items(c.P.T.Args(t)) { c.varsIn(x, owner, seen, depth + 1) } }
+        case types.Kind.Array {
+            c.varsIn(c.P.T.Elem(t), owner, seen, depth + 1)
+            if c.P.T.Length(t) != types.TypeId(0) { c.varsIn(c.P.T.Length(t), owner, seen, depth + 1) }
+        }
+        case types.Kind.Ref { c.varsIn(c.P.T.Referent(t), owner, seen, depth + 1) }
+        case types.Kind.Func {
+            for x in c.P.T.Items(c.P.T.Params(t)) { c.varsIn(x, owner, seen, depth + 1) }
+            c.varsIn(c.P.T.Result(t), owner, seen, depth + 1)
+        }
+        case types.Kind.Tuple, types.Kind.Record { for x in c.P.T.Items(c.P.T.Parts(t)) { c.varsIn(x, owner, seen, depth + 1) } }
+        nomatch { }
+    }
+}
+
+# where a variable is first written in a signature, past its introduction: the parameters', then the results' types
+fn (c mut Checker&) writtenAt(fd ast.Func&, n source.NameId) source.Span {
+    for prm in fd.S.Params {
+        if prm.Ty != null {
+            sp := c.wordIn(prm.Ty.Span(), c.text(n))
+            if sp.Start >= 0 { return sp }
+        }
+    }
+    if fd.S.Results != null {
+        for r in fd.S.Results {
+            sp := c.wordIn(r.Span(), c.text(n))
+            if sp.Start >= 0 { return sp }
+        }
+    }
+    return c.nameSpan(fd)
+}
+
+# the first whole-word w within a span of the current module's source, Start -1 for none
+fn (c mut Checker&) wordIn(sp source.Span, w String&) source.Span {
+    t := c.P.L.Mods[c.fr().Mi].Src.Text
+    i := I64(sp.Start)
+    for i + w.Len() <= I64(sp.End) {
+        if t[i:i + w.Len()] == w {
+            before := i == 0 or not (t[i - 1].IsLetter() or t[i - 1].IsDigit() or t[i - 1] == '_')
+            j := i + w.Len()
+            after := j >= t.Len() or not (t[j].IsLetter() or t[j].IsDigit() or t[j] == '_')
+            if before and after { return source.Span(I32(i), I32(j)) }
+        }
+        i++
+    }
+    return source.Span(-1, -1)
+}
+
+# whether a name is a type's a module can name by itself: one it declares, the prelude's, a primitive, Bool, Array (G1)
+fn (c mut Checker&) namesType(mi I64, n source.NameId) Bool {
+    t := c.text(n)
+    if c.P.T.Prim(t) != types.UnknownT or t == "Bool" or t == "Array" { return true }
+    if c.P.TypeEntry(mi, n) >= 0 { return true }
+    if not load.Public(t) { return false }
+    for pm in range c.P.L.Mods.Len() {
+        if c.P.L.Mods[pm].Prelude and c.P.TypeEntry(pm, n) >= 0 { return true }
+    }
+    return false
+}
+
 # T29e: a method of a type extending its base may not take a name an inherited one has - save the protocol methods the
 # compiler consults (Eq, Hash, Str), which replace the base's
 fn (c mut Checker&) inheritClash(f I64) {
@@ -456,6 +598,23 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
     d := c.P.DeclFor(mi, ei)
     fr := c.push(-1, mi, types.VoidT, types.ListId(0))
     fr.Ctx = c.P.DeclContext(d)
+    # G1: a type's parameters named after no type
+    if td.Params != null {
+        for tp in td.Params {
+            if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
+        }
+    }
+    if td.Params != null and td.Params.Len() > 0 {
+        # G6: only a struct or a trait takes type parameters
+        match td.Body {
+            case ast.TypeBody.Enum(_), ast.TypeBody.Over(_, _) { c.err(td.Params[0].Sp, msgs.GenericNotStruct()) }
+            nomatch { }
+        }
+    }
+    match td.Body {
+        case ast.TypeBody.Struct(sb) { c.ctorVarRules(td, sb) }
+        nomatch { }
+    }
     text := c.src(sp)
     name := c.text(td.Name)
     nat := try text.Find(name) catch default 0
@@ -560,6 +719,45 @@ fn fieldSpans(sb ast.StructBody&) List<source.Span> {
         }
     }
     return out
+}
+
+# G10d: a constructor's own type variables - only a type with no parameters has them, and no field's type names one
+fn (c mut Checker&) ctorVarRules(td ast.TypeDecl&, sb ast.StructBody&) {
+    if sb.TypeParams == null or sb.TypeParams.Len() == 0 { return }
+    if td.Params != null and td.Params.Len() > 0 {
+        tp := sb.TypeParams[0]
+        c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.CtorVarOfGeneric(c.text(tp.Name), c.text(td.Name), c.text(tp.Name)))
+        return
+    }
+    v := c.text(sb.TypeParams[0].Name)
+    if sb.Body == null { return }
+    for st in sb.Body {
+        match st {
+            case ast.Stmt.Var(_, vd) {
+                if not vd.Field { continue }
+                for i in range vd.Names.Len() {
+                    if vd.Ty == null and vd.Values.Len() > 0 {
+                        c.err(vd.NameSps[i], msgs.CtorGenericInferredField(c.tok(vd.Names[i]), v))
+                        return
+                    }
+                    ty := vd.Ty
+                    if ty == null and vd.Values.Len() == 0 and sb.Params != null {
+                        for prm in sb.Params {
+                            if prm.Name == vd.Names[i] { ty = prm.Ty }
+                        }
+                    }
+                    if ty == null { continue }
+                    for tp in sb.TypeParams {
+                        if c.wordIn(ty.Span(), c.text(tp.Name)).Start >= 0 {
+                            c.err(vd.NameSps[i], msgs.CtorFieldNamesVar(c.tok(vd.Names[i]), c.text(tp.Name), c.text(td.Name), c.text(tp.Name)))
+                            return
+                        }
+                    }
+                }
+            }
+            nomatch { }
+        }
+    }
 }
 
 # whether a type over an array (b, d's base) holds itself through its elements - directly, or through another type over
@@ -3994,6 +4192,20 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
                 c.unknownType(nsp, path[0])
                 return false
             }
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if ref.Kind == names.What.Type and ref.Index >= 0 and not c.fr().Ctx.Vars.Has(path[path.Len() - 1]) {
+                # G7: a generic type's arguments, as many as its parameters; a type with none takes none
+                np := c.P.T.DeclParams(c.P.DeclFor(ref.Module, ref.Index))
+                tn := c.text(path[path.Len() - 1])
+                if np == 0 and args.Len() > 0 {
+                    c.err(args[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
+                    return false
+                }
+                if np > 0 and args.Len() > 0 and np != args.Len() {
+                    c.err(args[0].Span(), msgs.TypeArgCount(tn, np, args.Len()))
+                    return false
+                }
+            }
             if args.Len() == 0 { return true }
             for a in args {
                 if not c.writtenMet(a) { return false }
@@ -4320,6 +4532,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     if c.P.FnIsExtern(f) { return c.callBody(sp, nsp, sig, typed.Callee.Extern(f), f, recv, args, pre) }
     owner := generic.FnOwner(f)
     nv := c.P.VarCount(owner)
+    if c.unfillable.Has(f) { return c.unknown(sp) }   # G4: said at its declaration, and nothing more at its calls
     if nv == 0 {
         inst := c.P.FnInstance(f, types.ListId(0))
         id := c.fnBody(inst)
