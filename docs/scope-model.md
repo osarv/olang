@@ -331,16 +331,31 @@ says, a copy in an inner block of an outer value, and values with no storage of 
 live elsewhere (a call's value result, a conditional of places, `checked x[i] catch default v`).
 
 A reference parameter has **one** scope variable. Its callee takes everything reached through the parameter to live
-there (O20), so one variable cannot describe a split value. There are two sound ways to lend one anyway, each with
-the condition that binding needs:
+there (O20), so one variable cannot describe a split value.
+
+**The rule.** The binding is fixed by what kind of split value `x` is, as SPEC O17 states it. It is never a choice an
+implementer makes. The two bindings record different obligations in `Γ_f`, so M6 matches stage 0 only by this table:
 
 ```
-not self(g, p)    ⟹   β(V(p)) = refs(x)      by its references: g never lets p's own storage outlive the call,
-                                                                 nor stores it where p's references lead
-not reg(g, p)     ⟹   β(V(p)) = stor(x)      by its storage:    g puts nothing into storage reached through p's
-                                                                 references, except what it read out of there
-otherwise         ⟹   an error (O17), naming the fix: declare x a reference where its references live
+x a value place (it has storage)       β(V(p)) = stor(x)              by its storage      if g keeps nothing in x  (O17)
+x a value with no storage of its own   β(V(p)) = refs(x)              by its references   if g keeps nothing in x  (O17)
+x a handle                             β(V(p)) = at(x's reference)    by its reference    if thru(g, p)            (O17b)
+otherwise                              an error (O17), naming the fix: declare x a reference where its references live
 ```
+
+"Keeps nothing in x" is SPEC's combined condition: `not reg(g, p)` and `not self(g, p)`.
+
+**Why each binding is sound.** Each needs only half of the combined condition:
+
+```
+not self(g, p)    ⟹   β(V(p)) = refs(x) is sound   g never lets p's own storage outlive the call,
+                                                    nor stores it where p's references lead
+not reg(g, p)     ⟹   β(V(p)) = stor(x) is sound   g puts nothing into storage reached through p's
+                                                    references, except what it read out of there
+```
+
+This is the justification, not the rule. Using it to pick a binding (say, "by references first, where both hold")
+would bind differently from stage 0 and record obligations stage 0 does not.
 
 - `self(g, p)`: `g`'s obligations require `V(p)` to outlive another scope (`p` stored into another argument's
   referent, returned, captured by a lambda that outlives the call, handed to a callee that keeps it); or `g` stores
@@ -350,11 +365,12 @@ otherwise         ⟹   an error (O17), naming the fix: declare x a reference wh
   reference, and that value was not itself read out of such storage through at least one reference. It may be built,
   another argument, `p` itself, or one of `p`'s inline parts. Handing out a writable reference into that storage, or
   passing `p` to a callee with `reg`, counts too.
-- **What SPEC does is an instance of these.** A value place is lent by its storage (O17); a value with no storage of
-  its own (a call's value result, a conditional of places) by its references (O17); a handle by its reference, where
-  the callee uses `p` only through it (O17b: `thru`, a syntactic form of `not self`). In the first two cases SPEC asks
-  one combined condition, "the callee keeps nothing in the value", which counts a store or capture of `p` itself as
-  well as `reg`. That is sound for either binding and stricter than each needs.
+- **The table is an instance of the two sound bindings.** A value place is lent by its storage; a value with no
+  storage of its own (a call's value result, a conditional of places) by its references; a handle by its reference,
+  where the callee uses `p` only through it (`thru`, a syntactic form of `not self`). The combined condition counts a
+  store or capture of `p` itself as well as `reg`. It is sound for either binding and stricter than each needs.
+  Relaxing it to the half a binding needs is an M6 relaxation, with its own soundness review (8.3), not part of the
+  port.
 - **O17a.** A split value is never held by a reference outside a call's argument: not a reference local, not the
   value of an assignment to a reference, not a constructor's reference parameter, not a slice, not a view. A reference
   has one term, and it would carry `stor(x)` away from `refs(x)`.
@@ -732,6 +748,12 @@ on it for soundness.
 10. Early freeing (all keep memory, none is an error): decided per declaration and per construction site; views across
     calls; whatever a task reaches; values of one place referring to each other (5.5); places let go of once.
 
+**M6's bar.** M6 refuses exactly stage 0's set: these ten, and every other refusal stage 0 makes (8.3).
+1. A difference is a finding: a stage-0 hole with a reproducer, or a relaxation with its soundness review.
+2. Some strictnesses are the user's design, not the model's: item 1 (O25a, a reference local is exact) and the
+   per-member judgment of a conditional stored into a field (3.6, E28). The model's general form would allow more in
+   both. M6 does not relax them for that reason: doing so is a language change, and the user decides it.
+
 ### 6.2 Where completeness needs care
 
 Each item is something a review should check is closed.
@@ -749,7 +771,8 @@ Each item is something a review should check is closed.
    deferred code, defaults (`Away`, built for each call in its declaration's context), lambdas (an edge from host to
    lambda), and calls through function values and externs as unknown bodies.
 5. **Thread reach**, for P2 and for early freeing's condition 3: arguments, captures, function values held in what a
-   task is handed, clauses, targets.
+   task is handed, clauses, targets. Early freeing also needs which construction-site collections a parameter and a
+   task may reach; their structural defaults are in `docs/memory.md` 5.5, round 6.
 6. **Unwinding in tests** (S18, P1d) closes scopes in order, so every lifetime claim still holds. Regions must be
    registered (5.6).
 
@@ -803,7 +826,19 @@ Rules for the order:
   (O18c: "taken to build"; O26a: "keeps"), so placement does not move while `Γ` grows. `Γ` then grows monotonically
   over a finite set of relations, and step 1 converges.
 - **No summary is read before its component has converged.** A check on an unconverged summary is a bug, not a
-  conservative answer: tonight2 #2 and str4 C1 were each this, and each was a use-after-free.
+  conservative answer: tonight2 #2 and str4 C1 were each this, and each was a use-after-free. Each component carries
+  a `converged` flag, set when its fixed point ends; reading a summary of a component without it is an internal error.
+- **Step-2 facts are structural.** `reg`, may-build, may-hold, may-keep and `self` say what a body stores, returns,
+  builds and keeps, read off its typed tree and `Γ`. They never depend on a step-3 verdict: not on which binding a
+  LEND chose, nor on where a build landed under that binding. Computing `reg` from "where did this build land" would
+  make step 2 read step 3, and the stratification would be circular.
+- **Lowering is held to the converged summaries.** Stage 0's `cgCheckMayBuild` (decision 48) is the precedent. The MIR
+  verifier checks every build and every store that lowering performs against what the converged summaries allowed:
+  1. a build into a scope variable the callee's may-build said it never builds into;
+  2. a store that `reg` or `self` said does not happen;
+  3. a hidden scope handed to a callee that may build into it, where the caller relied on no build there.
+  Any such case is an internal compiler error. So a stratification mistake - a summary read early, a fact computed
+  from a binding - is caught at compile time, never found later as a use-after-free.
 - **Summaries are per function instance.** study5 r03 found a region fact kept on a generic's shared scope variable,
   so `List<List<String&>>.At` decided `List<String&>.At`'s answer, depending on statement order.
 - **Least or greatest.** A may-fact computed to convergence as a least fixed point is sound and the most precise.
@@ -816,7 +851,7 @@ Rules for the order:
 
 1. **One predicate** says where a value is built, `Built[site]`, with `Passed` for hidden arguments. Everything that
    asks "does `f` build into `v`" - P2's prologue, E11c, the never-built-into terms - reads it. The MIR verifier holds
-   lowering to it, as stage 0's codegen holds bodies to the walk (decision 48).
+   lowering to it, and to the converged summaries (7.2), as stage 0's codegen holds bodies to the walk (decision 48).
 2. **Placement proposes, the judgment disposes** (3.2).
 3. **Facts are claims, and writes are held to them** (2.6).
 4. **Soundness never rests on a token scan** (tonight4): only on the typed tree.
@@ -853,9 +888,12 @@ Rules for the order:
 4. Early freeing gives each read its own region term, and a region term outlives no term, itself included, for stores
    (5.5). This closes a hole in `docs/memory.md` 2.4 as written.
 5. May-facts are least fixed points computed to convergence; must-facts are greatest fixed points, verified. Nothing
-   reads an unconverged summary.
+   reads an unconverged summary. Step-2 facts are structural, and the MIR verifier holds every build and store to the
+   converged summaries, an internal error otherwise (7.2).
 6. Placement inside a component never reads that component's obligations.
-7. M6 implements LEND as SPEC states it; the two-variable form (6.3) is an experiment after that.
+7. M6 implements LEND as SPEC states it, the binding fixed by the split value's kind (3.3); the two-variable form
+   (6.3) is an experiment after that. M6 refuses exactly stage 0's set, and the user-design strictnesses are not
+   relaxed with it (6.1).
 8. M19g runs over MIR beside the view liveness, and gives errors only.
 9. SPEC text to fix when round 3 rewrites §8: O10a gains `P ≥ s`; O11's "an array index ... not followed at all" is
    stale (O20 and O25c follow elements); O17b still writes `try a[i] catch default v`, which since QQ1 is `checked`;
@@ -863,6 +901,8 @@ Rules for the order:
    paragraph go; §8's title and opening change (`docs/memory.md` 5.5, round 3). S13b's "nothing is built into" a
    binding read out of a by-value enum parameter predates O4b's scope variable for that parameter; the model follows
    O4b (built into where `st` holds), which is sound because that variable is where the argument's references are.
+   This is the one place the model departs from SPEC's letter, so its SPEC edit lands in round 3 with the rest
+   (`docs/memory.md` 5.5). Once round 3 is in, SPEC and the model agree.
 
 ### 9.2 For the user (direction)
 
