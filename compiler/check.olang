@@ -228,7 +228,10 @@ fn (c mut Checker&) attempt() {
         if c.P.FnIsExtern(f) or c.P.FnDecl(f).Body == null { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
-        if c.P.FnDecl(f).Recv != null { c.operatorMethod(f) }
+        if c.P.FnDecl(f).Recv != null {
+            c.operatorMethod(f)
+            c.inheritClash(f)
+        }
         if c.P.VarCount(generic.FnOwner(f)) > 0 { continue }
         c.fnBody(c.P.FnInstance(f, types.ListId(0)))
     }
@@ -262,6 +265,25 @@ OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus
 
 # a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
 # E10a, E11c); its private spelling is held to the same (M6b)
+# T29e: a method of a type extending its base may not take a name an inherited one has - save the protocol methods the
+# compiler consults (Eq, Hash, Str), which replace the base's
+fn (c mut Checker&) inheritClash(f I64) {
+    fd := c.P.FnDecl(f)
+    name := c.text(fd.Name)
+    for x in String&["Eq", "eq", "Hash", "hash", "Str", "str"] {
+        if x == name { return }
+    }
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
+    if ps.Len() == 0 { return }
+    rt := c.deref(ps[0])
+    if not c.isNamed(rt) or not c.P.Extends(rt) { return }
+    b := c.P.T.Base(rt)
+    if c.P.MethodOf(b, fd.Name) < 0 and c.P.DefaultMethod(b, fd.Name) < 0 { return }
+    c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+    c.err(c.nameSpan(fd), msgs.MethodClashesInherited(c.ty(ps[0]), name))
+    c.pop()
+}
+
 fn (c mut Checker&) operatorMethod(f I64) {
     fd := c.P.FnDecl(f)
     name := c.text(fd.Name)
@@ -410,7 +432,8 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 if mi == c.P.L.Root { c.testBody(mi, sp, body, tests) }
                 tests++
             }
-            case ast.Decl.Type(_, td) {
+            case ast.Decl.Type(tsp, td) {
+                c.typeRules(mi, tsp, td)
                 c.declaredCtor(mi, td)
                 c.traitSets(mi, td)
             }
@@ -418,6 +441,64 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
             nomatch { }
         }
     }
+}
+
+# what a type declaration may be over (T29) and extend (T29f)
+fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
+    if td == null or td.Body == null { return }
+    ei := c.P.TypeEntry(mi, td.Name)
+    if ei < 0 { return }
+    d := c.P.DeclFor(mi, ei)
+    fr := c.push(-1, mi, types.VoidT, types.ListId(0))
+    fr.Ctx = c.P.DeclContext(d)
+    text := c.src(sp)
+    name := c.text(td.Name)
+    nat := try text.Find(name) catch default 0
+    nsp := source.Span(sp.Start + I32(nat), sp.Start + I32(nat + name.Len()))
+    over := false
+    match td.Body {
+        case ast.TypeBody.Over(base, _) {
+            over = true
+            b := c.P.Resolve(fr.Ctx, base)
+            if c.isNamed(b) {
+                k := c.declKind(b)
+                if k != types.DeclKind.Over or c.P.T.Args(b) != types.ListId(0) {
+                    c.err(base.Span(), msgs.DeclaredOverAggregate(c.ty(b)))
+                }
+            } else if c.P.T.KindOf(b) == types.Kind.Array and c.holdsSelf(d, b) {
+                c.err(nsp, msgs.ArrayTypeHoldsItself(name, name, c.ty(b)))
+            }
+        }
+        nomatch { }
+    }
+    if td.Extends and not over {
+        at := try text.Find("extends") catch default nat
+        c.err(source.Span(sp.Start + I32(at), sp.Start + I32(at + 7)), msgs.ExtendsNotBase())
+    }
+    c.pop()
+}
+
+# whether a type over an array (b, d's base) holds itself through its elements - directly, or through another type over
+# an array holding d in turn: said once, at the last declared of them (T29)
+fn (c mut Checker&) holdsSelf(d types.DeclId, b types.TypeId) Bool {
+    e := c.deref(c.P.T.Elem(b))
+    seen := List<types.DeclId>()
+    for k in range 16 {
+        if not c.isNamed(e) or c.declKind(e) != types.DeclKind.Over { return false }
+        ed := c.P.T.DeclOf(e)
+        if ed == d {
+            for x in seen {
+                if c.P.DeclModule(x) == c.P.DeclModule(d) and I64(x) > I64(d) { return false }
+            }
+            return true
+        }
+        seen.Push(ed)
+        if not c.P.Body(e) { return false }
+        nb := c.P.T.Base(e)
+        if c.P.T.KindOf(nb) != types.Kind.Array { return false }
+        e = c.deref(c.P.T.Elem(nb))
+    }
+    return false
 }
 
 # R1b: a trait's method writes its error set - no body says what it is
@@ -4440,6 +4521,12 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     if m < 0 and name == "Len" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT {
         return c.prim(sp, c.i64(), typed.PrimOp.Len, rx, null)
     }
+    if m < 0 and name != "Len" and c.isNamed(c.deref(rt)) and c.isOver(c.deref(rt)) and not c.P.Extends(c.deref(rt)) and c.baseHas(c.deref(rt), n) {
+        # T29f: a declared type that does not extend its base has none of its base's methods
+        c.err(nsp, msgs.MethodNotInherited(c.ty(c.deref(rt)), c.tok(n)))
+        for a in args { c.expr(a, types.UnknownT) }
+        return c.unknown(sp)
+    }
     if m < 0 {
         r := c.suppliedCall(sp, nsp, x, rx, name, args)
         if r != null { return r }
@@ -4547,6 +4634,19 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return c.callOf(sp, c.i64(), typed.Callee.Helper(typed.Helper.Hash, rt), c.one(c.value(rx, sp)))
     }
     return null
+}
+
+# whether the type a declared type is over has a method of this name - one declared, or one the compiler supplies for
+# it (E33's bits, P9's atomics)
+fn (c mut Checker&) baseHas(t types.TypeId, n source.NameId) Bool {
+    b := c.P.T.Base(t)
+    if c.P.MethodOf(b, n) >= 0 or c.P.DefaultMethod(b, n) >= 0 { return true }
+    name := c.text(n)
+    u := c.under(b)
+    if name == "Bits" { return c.P.T.IsFloat(u) }
+    if name.EndsWith("FromBits") { return c.P.T.IsUnsigned(u) }
+    if name.StartsWith("Atomic") { return c.P.T.IsInt(u) }
+    return false
 }
 
 fn supplied(name String&) Bool {
@@ -5943,6 +6043,11 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
         # x op= v on a declared type: x = x op v through its operator's method (E31)
         v := c.expr(value, types.UnknownT)
         r := c.operatorCall(sp, sp, bop, c.read(sp, typed.Place.Target(sp, t)), v)
+        if r == null and c.isNumber(t) and c.isNamed(t) {
+            # T29f: a declared number that does not extend its base takes none of its operators
+            c.err(osp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $operatorName(bop) "'"))
+            return
+        }
         if r == null {
             c.gap(sp, "a compound assignment to what has no operator method (E31)")
             return
