@@ -18,6 +18,8 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
 | 9 | Doc tests | Rust | open |
+| 10 | Method overloading by parameters | C++, Java, C# | open (the user, 2026-10-18: maybe) |
+| 11 | Constructor overloading | C++, Java, C# | open (the user, 2026-10-18: maybe) |
 
 ## 1. Generators (`yield`)
 
@@ -309,3 +311,25 @@ fn (t String&) Split(sep String&) Array<String&>&t { ... }
 - **Macros:** principle 4; compile-time evaluation and generics cover the uses.
 - **Pipelines (`x |> f |> g`):** methods already chain left to right.
 - **Optional chaining (`a?.b`):** possible, but `?` already means error sets, and a null read already traps.
+
+## 10. Method overloading by parameters
+
+**What:** several functions or methods of one name, told apart by their parameters' types or number
+(`p.Move(dx, dy)` and `p.Move(v Vec2)`). Today a name means one function; methods overload only by receiver (M21).
+
+**Costs and questions:** a call is then resolved by its arguments, which meets inference head on - a literal adapts to
+its target (T6) and a lambda takes its types from the expected function type (D16a), so with two candidates neither
+target is known; ambiguous calls need a rule and a diagnostic. A function as a value (`f := p.Move`) no longer names one
+function. Defaults (D8a) and `default` (E14) already cover the commonest use, the same operation with fewer arguments.
+Protocol methods (E31, M6b) are told apart by shape, which overloading would also blur.
+
+## 11. Constructor overloading
+
+**What:** several constructors per type (`Color(r, g, b)` and `Color(hex String&)`). Today a type has exactly one
+constructor (C2), and defaults cover its variants.
+
+**Costs and questions:** the same resolution questions as #10, plus the zero value (D13c), which is made by the one
+constructor from its defaults. The usual alternatives are named functions that build the value (`ColorFromHex(s)`,
+Go's and Rust's way), which need nothing new, or named constructors (`Color.FromHex(s)`), which would need reaching a
+function through a type name (as reflection's `T.Fields` already does).
+
