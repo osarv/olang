@@ -961,7 +961,10 @@ sequential, because they all edit `bootstrap/semantic.c` and SPEC.
 - **Rule:** `x.Destroy()` runs the destructor of `x`'s object now and marks it run, so nothing runs for it when its
   scope closes: every destructor runs exactly once, at its scope's close or at a proven `Destroy()`. It compiles only
   where the compiler proves `x` is the sole way left to reach the object - the early-free proof of section 2 (no
-  reference to it stored anywhere else, no view of it live); otherwise it is an error naming what else reaches it. A
+  reference to it stored anywhere else, no view of it live, and no call it was passed to that may have kept it - a
+  callee storing it in a field, a global or a collection, returning something holding it, or passing it on to one that
+  may, read off the callee's body as section 2's may-keep summaries; a body that cannot be seen (a function value, an
+  `extern`) is taken to have kept it); otherwise it is an error naming what else reaches it. A
   use of `x` after it in the same function is an error. So early destruction never causes a use-after-free or a
   use-after-close. With no destructor pending, the object's storage may be freed early (section 2).
 - **No `Close`, no idempotent destructors:** the destructor is the close. std's resource types lose `Close`.
@@ -970,7 +973,8 @@ sequential, because they all edit `bootstrap/semantic.c` and SPEC.
 - **Fallback, documented:** a long-lived structure whose values cannot be proven sole is rebuilt periodically - a block
   inside the server loop, left every N requests, so its scope closes and every destructor runs once.
 - **Accept when:** a server holding std sockets in a `Map` stays flat (as 2.7's server) with `Destroy()` after `Take`;
-  must-fail cases for a second reference (another map, a field, a capture), a use after `Destroy()`, and a view held.
+  must-fail cases for a second reference (another map, a field, a capture), a call that may have stored it (and one
+  through a function value), a use after `Destroy()`, and a view held; a run case for a call that provably keeps nothing.
 
 ## 6. Risks, decisions, questions
 
