@@ -364,6 +364,13 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAO ASKED 2026-10-18 (the user: "Next up, Option"): (1) references non-null by default, absence written
+  `Option<T>` (prelude generic enum, Result's family; a T flows in implicitly, `null` its empty value, one pointer for
+  `Option<Node&>`), or keep nullable references (T2a/T2b) - recommended non-null; (2) spelling `Option<T>` vs a word
+  (`maybe Node&`; `Node&?` collides with error sets) - recommended Option<T>; (3) narrowing `if x is not null { x.v }`
+  for locals only (fields unsound), else bind by match - recommended locals only; (4) the error `try x` raises (a
+  prelude `Absent` with one word?). Unwrap as Result: `x!`, `try x [catch default d]`, `match`. Cost measured: ~1,300
+  `null`s, 900 in compiler/. In effect: nullable references. Port only, after self-hosting.
 - QAN DECIDED 2026-10-18 (the user: "Nah, let's do it"; earlier not sure): `T ? E` is a type - the
   outcome of a fallible call held as a value, `Result` its name, a generic enum with cases Ok(value)/Failed(error);
   `fn f() T ? E` returns one; a call must still say what happens to its failure (`try`, `!`, catch, or postfix `?` =
