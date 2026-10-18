@@ -2657,6 +2657,10 @@ fn (c mut Checker&) expr(x ast.Expr&, want types.TypeId) typed.Expr&c {
         case ast.Expr.Postfix(sp, op, y) if op == token.Tok.Bang { return c.bang(sp, y, want) }
         case ast.Expr.Is(sp, a, b, negated) { return c.identity(sp, a, b, negated) }
         case ast.Expr.As(sp, a, tr) { return c.asCase(sp, a, tr) }
+        case ast.Expr.IsType(sp, a, tr, negated) {
+            r := c.isType(sp, a, tr)
+            return c.negate(sp, r) if negated and typeOf(r) == types.BoolT else r
+        }
         case ast.Expr.Slice(sp, y, lo, hi) { return c.slice(sp, y, lo, hi) }
         case ast.Expr.NotIn(sp, a, b) { return c.negate(sp, c.membership(sp, a, b)) }
         case ast.Expr.Chain(sp, ch) { return c.chain(sp, ch) }
@@ -3362,6 +3366,13 @@ fn (c mut Checker&) typeHasEq(t types.TypeId, depth I64) Bool {
 # "a is b": two references naming one instance (E10c)
 fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated Bool) typed.Expr&c {
     if c.typeNamed(b) >= types.TypeId(0) {
+        # E32: "is" with a type asks which case an enum value is
+        x := c.expr(a, types.UnknownT)
+        xt := typeOf(x)
+        if xt != types.UnknownT and not c.isEnum(c.deref(xt)) and not c.inGeneric() {
+            c.err(c.between(a.Span(), b.Span(), 2), msgs.IsAsNotEnum(c.ty(xt)))
+            return c.unknown(sp)
+        }
         c.gap(sp, "'is' with a type (E32)")
         return c.lit(sp, types.BoolT, 0)
     }
@@ -3534,6 +3545,11 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     chk := c.checkOp(typed.Check.Abort, WrongCase)
     rec := c.P.T.Items(c.P.T.Cases(et))[k]
     ps := c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k)))
+    if ps.Len() == 0 {
+        cn := c.P.T.CaseNames(et)
+        c.err(c.between(a.Span(), tr.Span(), 2), msgs.AsNothing(c.text(cn[k])))
+        return c.unknown(sp)
+    }
     pp := typed.Place.Payload(sp, rec, typed.Payload(base, k, chk))
     if ps.Len() == 1 { return c.read(sp, typed.Place.Field(sp, ps[0], pp, 0)) }
     from := c.exprs.Len()
@@ -3541,6 +3557,53 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     xs := gather(c.exprs, from)
     tt := c.P.T.Tuple(c.P.T.List(ps))
     return typed.Expr.Make(sp, tt, typed.Make(typed.MakeKind.Tuple, 0, xs, null, typed.SiteId(-1), typed.Check.None))
+}
+
+# x is E.C (E32): whether an enum value holds the case - a reference to one, the value it names
+fn (c mut Checker&) isType(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.Expr&c {
+    x := c.expr(a, types.UnknownT)
+    xt := typeOf(x)
+    if xt == types.UnknownT { return c.unknown(sp) }
+    et := c.deref(xt)
+    isp := c.between(a.Span(), tr.Span(), 2)
+    if not c.isEnum(et) {
+        if c.inGeneric() {
+            c.gap(sp, "'is' with a type in a generic (E32, G15)")
+            return c.unknown(sp)
+        }
+        c.err(isp, msgs.IsAsNotEnum(c.ty(xt)))
+        return c.unknown(sp)
+    }
+    k I64 = -1
+    named := tr
+    match tr {
+        case ast.TypeRef.Ref(_, of, _) { named = of }
+        nomatch { }
+    }
+    match named {
+        case ast.TypeRef.Named(_, path, targs) {
+            if path.Len() >= 2 and (targs == null or targs.Len() == 0) {
+                cn := c.P.T.CaseNames(et)
+                if cn != null {
+                    for i in range cn.Len() {
+                        if cn[i] == path[path.Len() - 1] { k = i }
+                    }
+                }
+            }
+        }
+        nomatch { }
+    }
+    if k < 0 {
+        c.err(tr.Span(), msgs.AsNeedsCase(c.ty(et), "'" $c.src(tr.Span()) "'"))
+        return c.unknown(sp)
+    }
+    base := readPlace(x)
+    if c.isRef(xt) {
+        base = typed.Place.Deref(sp, et, x)
+    } else if base == null {
+        base = typed.Place.Temp(sp, xt, x, c.site(typed.SiteKind.Temp, sp))
+    }
+    return c.isCase(sp, base, k)
 }
 
 # a if c else b (E28): one type for both values, a literal adapting
