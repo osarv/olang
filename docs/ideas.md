@@ -20,7 +20,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 9 | Doc tests | Rust | open |
 | 10 | Method overloading by parameters | C++, Java, C# | open (the user, 2026-10-18: maybe) |
 | 11 | Constructor overloading | C++, Java, C# | open (the user, 2026-10-18: maybe) |
-| 12 | Generic enums | Rust, Swift, ML | recommended 2026-10-18, after self-hosting |
+| 12 | Generic enums | Rust, Swift, ML | decided 2026-10-18 (the user: "generic enums go in for sure"), after self-hosting |
 
 ## 1. Generators (`yield`)
 

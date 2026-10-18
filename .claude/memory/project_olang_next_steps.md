@@ -64,6 +64,31 @@ overrated".
   comments, the generated msgs table), which patterns repeat, and which language features would shrink them - evidence
   for language design, not only tidying. Measured 2026-10-18: scanner+parser 4,470 lines vs C's 6,050; checker 17,100
   vs semantic.c's 31,350 (which also holds section 8); the finished port projected at 40-50k vs C's 56k.
+- **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
+  making sure all the features we decide on actually get built later on"). Each item points at its record. Before
+  self-hosting (stage 0 too): wt-noown (own/take removed, memory round 3). Then the port to self-hosting (M5 finish, M6
+  scope pass from docs/scope-model.md, M7/M8 finish, M9 emit, M10, M11-M12), then the seed and bootstrap/ removed (QAL).
+  After self-hosting, in the port only:**
+  1. Arrays batch (QP1-QP4, docs/arrays.md on wt-arrays): one constructor, fixed lengths inferred, written
+     `Array<T, N>` and constant generics dropped, the 128-byte by-value cap.
+  2. Error-set generics `<T ? E>` (QAH), `Iterator<T ? E>`, std helpers taking fallible callbacks.
+  3. The new `checked` (QAI): checked versions `fn checked f`, a unary binding to its operand, derived checked
+     At/SetAt/Slice, CheckError for BuiltinError, the Checked* names and CheckedPow removed.
+  4. Generators (`fn f() Iterator<T ? E>` with yield; docs/ideas.md #1).
+  5. Reflection (ideas #2: T.Name/Kind/Base/Fields/Cases/Params, trait and generic cases in match T, f.Of(v), layout,
+     building back with defaults).
+  6. Lane-by-lane array operators with fusion, Sum/Min/Max, masks with Any/All (ideas #4); stats' Sum/Min/Max move.
+  7. Arbitrary-width integers I1-I128/U1-U128 (ideas #5).
+  8. `embed` (ideas #6).
+  9. `errdefer` (ideas #7).
+  10. Generic enums (ideas #12).
+  11. Instance merging and sharing among reference type arguments (below).
+  12. Runtime interfaces `any Trait&` (decided 2026-10-08, ledger).
+  13. Memory rounds 4-7 (docs/memory.md: prelude let-go and Map.Take, the port's early freeing, `x.Destroy()`), M19g in
+      the port, QZ2's prelude moves (helpers onto Vec, List to std/list), a test that a long-running Map stays flat (QF).
+  14. The port verbosity audit; SPEC section 5 renumbered.
+  STILL TO DISCUSS: Result/Option (the user wants to talk about them), contracts (#8), doc tests (#9), method and
+  constructor overloading (#10, #11), fixed point (#5's second half).
 - **C COMPILER FROZEN, 2026-10-18 (the user: "So basically freeze the C compiler now?" - yes).** Stage 0 takes only:
   bug fixes, finishing what is in flight (wt-mathmeth, wt-mem2, wt-noown removing own/take), and what the port's own
   source or its std turns out to need. Every decided language change (checked versions and CheckError, error-set
