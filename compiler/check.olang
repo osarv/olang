@@ -474,11 +474,90 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
         }
         nomatch { }
     }
+    # T16: a struct or an enum holding itself by value - directly, or through a fixed array, a payload or another
+    # value it holds - is infinitely large
+    match td.Body {
+        case ast.TypeBody.Struct(sb) {
+            self := c.P.SelfType(d)
+            if c.P.Body(self) {
+                fs := c.P.T.Items(c.P.T.Fields(self))
+                sps := fieldSpans(sb)
+                for i in range fs.Len() {
+                    if i < sps.Len() and c.holdsBy(fs[i], d, 0) {
+                        c.err(sps[i], msgs.TypeHoldsItself(c.ty(self)))
+                        break
+                    }
+                }
+            }
+        }
+        case ast.TypeBody.Enum(cases) {
+            self := c.P.SelfType(d)
+            said := false
+            for cd in cases {
+                if said or cd.Payload == null { continue }
+                for prm in cd.Payload {
+                    if c.holdsBy(c.P.Resolve(fr.Ctx, prm.Ty), d, 0) {
+                        c.err(source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len())), msgs.TypeHoldsItself(c.ty(self)))
+                        said = true
+                        break
+                    }
+                }
+            }
+        }
+        nomatch { }
+    }
     if td.Extends and not over {
         at := try text.Find("extends") catch default nat
         c.err(source.Span(sp.Start + I32(at), sp.Start + I32(at + 7)), msgs.ExtendsNotBase())
     }
     c.pop()
+}
+
+# whether a value of type t holds a value of declaration d by value: itself, or through a struct's fields, an enum's
+# payloads, a fixed array's elements or what a type is declared over - never through a reference or a run-time array
+fn (c mut Checker&) holdsBy(t types.TypeId, d types.DeclId, depth I64) Bool {
+    if depth > 16 or t == types.UnknownT { return false }
+    match c.P.T.KindOf(t) {
+        case types.Kind.Named {
+            if c.P.T.DeclOf(t) == d { return true }
+            if not c.P.Body(t) { return false }
+            k := c.declKind(t)
+            if k == types.DeclKind.Struct { return c.listHoldsBy(c.P.T.Fields(t), d, depth) }
+            if k == types.DeclKind.Enum { return c.listHoldsBy(c.P.T.Cases(t), d, depth) }
+            if k == types.DeclKind.Over { return c.holdsBy(c.P.T.Base(t), d, depth + 1) }
+            return false
+        }
+        case types.Kind.Array {
+            if c.P.T.Length(t) == types.TypeId(0) { return false }
+            return c.holdsBy(c.P.T.Elem(t), d, depth + 1)
+        }
+        case types.Kind.Tuple, types.Kind.Record { return c.listHoldsBy(c.P.T.Parts(t), d, depth) }
+        nomatch { return false }
+    }
+}
+
+fn (c mut Checker&) listHoldsBy(l types.ListId, d types.DeclId, depth I64) Bool {
+    for x in c.P.T.Items(l) {
+        if x != types.TypeId(0) and c.holdsBy(x, d, depth + 1) { return true }
+    }
+    return false
+}
+
+# a struct's fields' names' spans, in their order (C2a)
+fn fieldSpans(sb ast.StructBody&) List<source.Span> {
+    out := List<source.Span>()
+    if sb.Body == null { return out }
+    for st in sb.Body {
+        match st {
+            case ast.Stmt.Var(_, v) {
+                if v.Field {
+                    for sp in v.NameSps { out.Push(sp) }
+                }
+            }
+            nomatch { }
+        }
+    }
+    return out
 }
 
 # whether a type over an array (b, d's base) holds itself through its elements - directly, or through another type over
