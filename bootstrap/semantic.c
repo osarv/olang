@@ -20461,12 +20461,78 @@ static bool storageWithinPlace(struct operand* op, struct operand* p) {
     return true;
 }
 
+//S4d: whether storage of types a and b is one representation - names aside where they name no layout of their own: a
+//number of a declared type over it, text and the bytes it is over (T29a). A struct, an enum, a reference is its own type
+static bool s4dSameStorage(struct type a, struct type b) {
+    a.refMut = b.refMut = false;
+    if (a.bType != b.bType || a.structMAlloc != b.structMAlloc) return false;
+    if (a.bType == BASETYPE_ARRAY) return a.arrElem && b.arrElem && s4dSameStorage(*a.arrElem, *b.arrElem);
+    if (isTypeVanilla(a.bType) && !a.structMAlloc) return true;
+    return TypeIsSame(a, b);
+}
+//S4d: the types the storage of a value of type t is made of - t, and what it holds in place (a field, a payload, an
+//element), never what it reaches through a reference: a reference to any of them names storage within such a value
+static void s4dStorageTypes(struct type t, struct list* out, int depth) {
+    if (depth > VALUE_WALK_LIMIT || t.unknown) return;
+    t.structMAlloc = false;
+    t.refMut = false;
+    for (int i = 0; i < out->len; i++) if (s4dSameStorage(*(struct type*)ListGetIdx(out, i), t)) return;
+    ListAdd(out, &t);
+    struct list kids = TypeValueChildren(t);
+    for (int i = 0; i < kids.len; i++) {
+        struct type k = *(struct type*)ListGetIdx(&kids, i);
+        if (!k.structMAlloc) s4dStorageTypes(k, out, depth + 1);
+    }
+    ListDestroy(kids);
+}
+//S4d: whether a value of type v can hold a reference to storage of one of the types in `storage` - following fields,
+//elements, payloads, references and type arguments (an instance's fields are its arguments'); a function value can hold
+//anything (D16c), and so can a type not known yet (a type variable). Decided from the types alone
+static bool s4dCanHoldRefTo(struct type v, struct list* storage, struct list* seen, int depth) {
+    if (v.unknown) return false;
+    if (depth > VALUE_WALK_LIMIT || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return true;
+    if (v.structMAlloc) {
+        struct type r = v;
+        r.structMAlloc = false;
+        r.refMut = false;
+        for (int i = 0; i < storage->len; i++) {
+            struct type s = *(struct type*)ListGetIdx(storage, i);
+            //an array reference may be a slice of an array of the same elements, whatever its length
+            if (r.bType == BASETYPE_ARRAY && s.bType == BASETYPE_ARRAY ? r.arrElem && s.arrElem && s4dSameStorage(*r.arrElem, *s.arrElem)
+                                                                        : s4dSameStorage(r, s))
+                return true;
+        }
+        if (r.owner && r.name.len) { //what a declared type reaches, once
+            for (int i = 0; i < seen->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(seen, i), r)) return false;
+            ListAdd(seen, &r);
+        }
+        v = r;
+    }
+    struct list kids = TypeValueChildren(v);
+    bool can = false;
+    for (int i = 0; i < kids.len && !can; i++) can = s4dCanHoldRefTo(*(struct type*)ListGetIdx(&kids, i), storage, seen, depth + 1);
+    ListDestroy(kids);
+    return can;
+}
+static bool s4dResultCanHold(struct var* func, struct type borrowed) {
+    if (!func || func->type.bType != BASETYPE_FUNC) return true;
+    if (!func->type.hasRetType) return false;
+    struct list storage = ListInit(sizeof(struct type));
+    struct list seen = ListInit(sizeof(struct type));
+    s4dStorageTypes(borrowed, &storage, 0);
+    bool can = s4dCanHoldRefTo(*func->type.retType, &storage, &seen, 0);
+    ListDestroy(storage);
+    ListDestroy(seen);
+    return can;
+}
+
 //S4d: arguments func's call, an enum case or an array literal borrows (E12c) into what it builds, while the value of an
 //assignment is built - one naming storage within a place the assignment writes over would leave the value holding a
 //reference to its own storage, written over in place (T11b): it takes the place's old value instead, as a temporary
-//copy built where one there would be. Only where what is built can keep argument j: a call's result, as its body
-//says (calleeMayKeepArg), and an enum's payload or a literal's element always (keepsAll)
-static bool calleeMayKeepArg(struct var* m, int idx);
+//copy built where one there would be. Only where what is built can keep argument j, by types alone: a call's result
+//where its type can hold a reference to storage of the argument's type (s4dResultCanHold) - whatever the callee's
+//body does with it, which no check-time decision may wait for - and an enum's payload or a literal's element always
+//(keepsAll)
 static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list args, bool keepsAll) {
     if (!ctx || !ctx->assignPlaces.len) return;
     for (int j = 0; j < args.len && (!func || j < func->type.vars.len); j++) {
@@ -20479,7 +20545,7 @@ static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list a
         bool within = false;
         for (int k = 0; k < ctx->assignPlaces.len && !within; k++)
             within = storageWithinPlace(a, *(struct operand**)ListGetIdx(&ctx->assignPlaces, k));
-        if (within && (keepsAll || calleeMayKeepArg(func, j))) a->copiesOld = true;
+        if (within && (keepsAll || s4dResultCanHold(func, a->type))) a->copiesOld = true;
     }
 }
 

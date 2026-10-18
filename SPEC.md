@@ -3361,8 +3361,9 @@ of storage within it (a field, or an element - any element of an array standing 
 compared - reached with no reference followed), takes the place's **old value**: what the place held is copied, built
 where a temporary in that position would be (O18a), and the borrow names the copy. It applies where the value's
 **type** can hold the borrow: where, following fields, elements, payloads, references and type arguments, the assigned
-value's type can hold a reference to storage of the borrowed type (or of a type sharing its representation, T29a), or a
-function value (D16c), which can hold anything. It is decided from the types alone - never from what a callee's body
+value's type can hold a reference to storage of the borrowed type or of a type it holds in place (a field, a payload, an
+element), or of a type sharing its representation (T29a) - a reference to an array standing for any array of its
+elements, whatever its length - or a function value (D16c), which can hold anything. It is decided from the types alone - never from what a callee's body
 does with its argument - so `x = E.Neg(x)` is the negation of the old `x`, `n = Node(n)` puts the old node behind the
 new one, `x = f(x)` copies the old `x` wherever `f`'s result type can hold a reference to `x`'s type whether or not
 `f` keeps it, and no assignment makes a value hold the storage it **names**. The copy is what the borrow names

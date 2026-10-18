@@ -14314,6 +14314,36 @@ test "S4d: an assignment's value borrowing the place it writes over takes the pl
     assert S4dBaked == -5 and s4dNegs(3 + k) == S4dBaked and s4dNegs(3) == -5
 }
 
+# S4d is decided by types: a constructor (or call) whose result type can hold a reference to the borrowed storage's type
+# gets the place's old value, whatever its body does with it - here it keeps nothing, but writes through the borrow, and
+# the write lands in the copy, so another name for the place still reads the old value while the value is built (the
+# body-based reading wrote the place itself, and read 9)
+type s4dT struct(w I64, a mut s4dT&, r s4dT&) {
+    s4dTPoke(a)
+    v I64 = w + s4dTRead(r)
+    next s4dT& = null
+}
+fn s4dTPoke(a mut s4dT&) { if a != null { a.v = 9 } }
+fn s4dTRead(r s4dT&) I64 { return r.v if r != null else 0 }
+fn s4dTRun(k I64) I64 {
+    x s4dT = s4dT(1, null, null)
+    r s4dT& = x
+    for i in range k { x = s4dT(0, x, r) }
+    return x.v
+}
+S4dTBaked := s4dTRun(2)                            # baked: the evaluator copies as the run time does
+test "S4d: decided by the result's type, not by what the callee does" {
+    k I64 = I64(ctRuntimeZero)
+    x s4dT = s4dT(1, null, null)
+    r s4dT& = x
+    for i in range 2 + k {
+        x = s4dT(i, x, r)
+        sbChurn()
+    }
+    sbChurn()
+    assert x.v == 2 and r.v == 2 and S4dTBaked == 1 and s4dTRun(2 + k) == 1
+}
+
 # S4c: every value of a parallel assignment is read before any target is written - an enum case built from a value, or an
 # array literal, too (they were used where they stand, as a number is, and read the target already written)
 test "S4c: a parallel assignment's enum case and array literal read their values before any target is written" {
