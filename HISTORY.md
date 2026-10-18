@@ -16344,6 +16344,40 @@ the rules can test, and a function type carries it with no new field. (4) `x!` i
 `Ends` set - the lowering is a try whose escape ends the program. (5) Checked forms' superset and `Len`/`Eq`/`Str` not
 failing are judged once every set is known, a generic's checked forms per instance. (6) A declared number's constructor
 on a literal is no fallible call (T29d runs it while compiling). Root tests are checked in every build, as stage 0 does.
+**Constraints, read-only copies and the long tail (2026-10-18; checkdiff 232/418 refused cases giving stage 0's first
+error and 278/282 accepted programs clean before, 327/411 and 279/283 after, T25e and E34 now counted decided away).**
+G19 is checked where variables are bound: a call's inference, a written type's arguments (said at the first argument,
+as stage 0 says it), an inferred constructor's, the instances an instance's signature holds (`g19substituted`), and the
+types a checked signature writes - once per type instance (`boundsMet`), the instance's body unchecked where one is not
+met. `generic.Missing` names the first method not met and whether it seals the trait (T35c: a private method and a type
+the trait's module did not declare it for); a method the compiler supplies meets a trait (E10b's `Hash` by `HasHash`,
+E23's `Len`, E33's `Bits`), an inherited `Hash` beside an `Eq` of the type's own does not, and a `noreturn` method meets
+one with no result. **T25c's read-only copies** are tracked per local: a `:=` copy, a for-in element, a match binding or
+subject of a place reached read-only (an immutable global, through a read-only reference, a capture, another read-only
+copy) is one; it is refused where lent writably, written through, stored (an assignment, an array literal's element, a
+fill, a payload, a mutable global's initializer, a by-value result) or declared with a written type; a reference local
+made from a place (a borrow, a slice, a value read out of it - `roFrom`) reaches what the place reaches, so slices and
+loops over a copy read the copy. A by-value parameter's need of a writable argument is read off its body - written
+through, lent writably, stored, or passed on to a parameter that needs it - settled over every call once the attempt has
+checked every body (`roSettle`), and a function value (named, lambda, `Call`) with such a parameter is refused. **Left**
+(rv3roat/roclone/rofilter/roget, vec111elemrocopy, t25cforinwrites): `roByArg`/`roToResult` - what a generic's read-only
+reference parameter reaches is as read-only as its argument, which needs a summary of what the instance's body copies out
+of it and keeps writable; until then a generic instance's read-only reference parameter is not treated as read-only at
+all, so nothing is falsely refused. **Also**: T29 (a type over a struct, an enum or a generic instance; over an array
+holding itself, said at the last declared of a cycle), T29f (`extends` on a struct; a method of the base, a compound
+operator, not inherited without `extends`), T29e (an inherited method's name taken, save Eq/Hash/Str), T16 (a struct or
+enum holding itself by value through fields, payloads and fixed arrays, at the field), T6 (a float literal rounding to an
+infinity in a narrower float), T4/B11 (unknown types and functions named with the nearest type, numbers by letter and
+width), the match rules (S12b, S13a's first case not covered at the subject, S13c's alternatives - references of one type
+meet, S13e, S13f), G1, G4 (said once at the declaration, at the result for a type variable and the occurrence for a
+constant one; the function is then never instantiated and its calls say nothing), G6, G7, G10d, and E15a's checks
+turned off in a match value's clauses. An assignment's fit is said at its `=`, an argument's at an `as` or at what a
+conversion converts, as stage 0 says them. **Decided (mine):** (1) G19 is checked once per type instance, where first
+asked for, and an unmet instance gives the unknown type so nothing more is said about it; (2) read-only copies are
+local facts during checking plus one settle per attempt for parameters, not a pass of their own; (3) a generic
+instance's read-only reference parameters are read as not read-only until `roByArg` exists - accepting what stage 0
+refuses rather than refusing what it accepts.
+
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
 `compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
