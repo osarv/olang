@@ -69,6 +69,10 @@ overrated".
   shapes without Rust's global exclusivity (P3 withdrawn, done properly on ownership). Neither imports the rest of
   Rust: no `&mut` exclusivity, lifetime parameters, Send/Sync, Rc/RefCell, Pin, unsafe. Likely first small borrow from
   Rust when code needs it: two-phase borrows (`v.Push(v.Len())`).
+- RECORDED 2026-10-18 (the user: "Record it then"): relax the LEND rule (docs/scope-model.md 3.3 - SPEC O17 fixes the
+  binding by the value's kind; the model shows choosing whichever binding is sound accepts slightly more safe programs).
+  Order decided: first the port's M6 matches stage 0 exactly (stage 0 is its oracle), then the relaxation in BOTH
+  compilers as a language change with its own soundness review - sooner if real code hits a refused-but-safe case.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.
