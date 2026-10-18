@@ -19629,3 +19629,62 @@ takes its initializer's scope (O25a, `Mark.Infer`; it was the `<U>` spelling), a
 constraints. `checkdiff`: 232 of 413 refused checker cases give stage 0's first error and 278 of 282 accepted programs
 check clean - master's run on the same day gave 234 of 415 and 274 of 278, with the same 181 cases failing in both; the
 difference is the removed G8b/G22 cases and the three `T17, T19, C2` comma cases, which now build.
+
+## `Pair` moves from the prelude to `std/pair` (M19d, D8d, 2026-10-17, the user: "Pair goes in Std not prelude")
+
+`std/prelude/pair.olang` is `std/pair.olang`: a program names it `pair.Pair<A, B>` after `import "std/pair"`, its
+`Hash` kept and its tests no longer under `if TestBuild` (a std module's tests compile only when it is tested). The
+prelude is what every program carries and what is visible without an import; two values kept together is a library
+convenience, not something the language needs everywhere. Neither compiler knew the name (the prelude is every file of
+`std/prelude`, so removing the file was the whole change for them). Migrated: the port's `check`, `generic`, `load`
+and `names` (Map and List keys of two numbers), `tests/shared.olang` (its header no longer says "no imports" - it
+imports none of the suite's files, only `std/pair`), three checks cases and three fixtures, the prelude's Map tests;
+the one prelude test that used a `Pair` (S9f, a List of references walked by every route) moved from `list.olang`'s
+`if TestBuild` block to `std/prelude/tests/list.olang`, which can import. The `preludestale` scenario, which edited
+`pair.olang` to show a changed prelude rebuilds the root's instantiations, edits a method added to `List` instead.
+`$` still writes the type's own name, `Pair("k", 0.5)` (E11a: a rendering names a type as its declaration does, not
+by the alias an importer wrote). Goldens recaptured for the shifted lines and the type's new identity.
+
+## A number written as a literal is no method's receiver (E13c, L12, 2026-10-17, the user: "disallow for numbers, allow for array and text")
+
+`7.Hash()` lexed as the integer 7 and a method call since L12 was written that way, and `(255).Format(16)`,
+`(-0.0).Bits()` and `0.5.Fixed(2)` all ran. They read badly - the dot after a number looks like a decimal point - and
+they hide the type the method belongs to: a literal has no type of its own until it lands (T6, T6a), and a receiver is
+not a place it lands, so `7.Hash()` was `I64.Hash` by the default type, which no reader sees at the call. E13c refuses
+a receiver that is a number written as a literal - a numeric literal alone, negated, parenthesized, or arithmetic of
+such (E4a's literal-only expression), decided on the syntax in both compilers (stage 0's `operandOnlyNumericLiterals`
+on the receiver at the postfix method call, the port's `numberLitsOnly` in `methodCall`). **Decided (mine)**: the
+parenthesized and arithmetic forms are refused too - parentheses do not give a literal a type, and refusing `7.Hash()`
+while allowing `(7).Hash()` would leave the same hidden type behind one more pair of characters; a character literal
+(`'a'.IsLetter()`) is not a number and keeps its methods (it has a declared type, `Char`, and reads as a character);
+the error names the method and the two fixes, a variable of the type wanted or a conversion (`I64(7)`); after
+reporting, the call is still built as written, so nothing that follows adds a second error. L12 is unchanged - a `.`
+before a name is still no decimal point, so `2.5.Fixed(1)` is E13c's error, not a second decimal point (the
+`l12method` case is now a must-fail case for E13c, and `e13cfloat` keeps that lexing pinned). Migrated by the
+compiler's own errors: std's tests (`F64(0.1).ShortestDecimal()`, `I64(255).Format(16)`, `F64(0.5).Fixed(0)`), `std/ffi`,
+`std/prelude/f8.olang`'s negative zero, the doc comments of `PadStart`, `Format` and `Fixed`, `checks/cases/
+t29dradixcall`, and the fuzz generator, whose `(e).Format(b)`, `(e).Fixed(n)` and `(e).Bits()` are now conversions of
+`e` to its own type (a generated `e` may be a literal). `compiler/testdata/lex/numbers.olang` keeps its `1.5.Hash()`:
+it is scanner input, never checked.
+
+## `a.Chunks(size)`: an array cut into pieces tasks may each write (M19d, P8b, 2026-10-17; the coordinator's request, details mine)
+
+The prelude gives every array `Chunks(size)`: the consecutive pieces of `size` elements, the last holding what is left,
+each a writable slice of the array's own storage - so `join { for part in a.Chunks(4) { spawn work(part) } }` hands
+each task a part of its own and cannot race on the array (no element is reached by two tasks; the join orders every
+write before what follows). **Decided (mine)**: (1) **an array of slices, not an iterator** - an iterator's `Next` can
+only say its result lives where the iterator does (`String&it`, as `LineIter` does: a result read through a field has no
+scope of its own a signature can name), and the for-in's hidden iterator lives in the loop's block, inside the join, so
+P2 refused every piece as a task argument; the pieces' array lives where the receiver does, as `Split`'s, so a piece is
+known to live as long as the array. It costs one allocation of `ceil(n / size)` slices per call, made in the receiver's
+scope (a long-lived array chunked again and again keeps each call's piece array until it closes - the same as `Split`).
+(2) **The size is a `ChunkSize`**, a declared `I64` whose constructor fails with `ArrayError.BAD_CHUNK` below one, as a
+base is a `Radix`: a literal is checked while compiling (`a.Chunks(0)` is T29d's compile-time error) and needs no `try`;
+a computed one is `try ChunkSize(n)`. Making `Chunks` itself fallible would put `try` on every call for a mistake only
+computed sizes can make; silently treating `size <= 0` as one would hide it (errors are errors). (3) The receiver is
+`mut` - the pieces are writable views, and a read-only receiver handing them out would be the shallow-permission hole
+linalg's views have; reading in parallel needs no help. (4) Arrays only: `Vec` is being reworked elsewhere and gets it
+after; `String` has it (T29e), its pieces `Array<Char>&` (the result is not the receiver's own type, T29f). Tested in
+`std/prelude/tests/array.olang`: shapes, writes through a piece, refused sizes, and four tasks each writing their piece
+of an array read back after the join and an arena churn - baked while compiling (K1 runs the join's tasks in sequence)
+as at run time, and clean under `-race` and `-sanitize`.

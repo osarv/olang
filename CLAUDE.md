@@ -240,6 +240,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   an enum reference's zero is null; a null matches no case pattern.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
+- **A number written as a literal is no method's receiver (E13c, 2026-10-17, the user: "disallow for numbers, allow for
+  array and text").** `7.Hash()`, `2.5.Fixed(1)`, `(255).Format(16)`, `(-0.0).Bits()`, `(1 + 2).Hash()` are errors: such
+  a number has no type until it lands (T6) and a call is no place it lands. Put it in a variable or convert it
+  (`I64(255).Format(16)`). Text, character, array literals and comprehensions keep methods. L12's lexing is unchanged.
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
   method is the operator only in the operator's shape - another shape is an ordinary method. Checked forms are
@@ -252,7 +256,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   references are, refused where the callee keeps something in it - capturing the parameter in a lambda that can
   outlive the call counts; a slice of a `try` value is a temporary's (E16a).
 - **Several results, no tuples (D8c/D8d, the user's call).** `return a, b`, `q, r := f()`, `f(g())` when g's call is
-  the only argument; `Pair<A, B>` in the prelude for two things kept together (the user's call).
+  the only argument; `Pair<A, B>` in `std/pair` for two things kept together (the user's call; in the prelude until 2026-10-17).
 - **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot; named arguments rejected
   (parameter names stay internal). A default is built per call in its declaration's context.
 - **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
@@ -538,7 +542,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Split`, `Trim`, `Replace`, `ParseInt(base)`, `ParseFloat`, `PadStart`, `Lines`, `<` by bytes.
 - **Collections in the prelude:** `List<T>` (chunked, never moves, a handle - a copy is a second name, `Clone()`
   copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Update`, ordered walks by
-  insertion of slot), `Vec<T>` (above), `StringBuilder`, `Pair`. Iterators have `Any All Count Fold Map Filter
+  insertion of slot), `Vec<T>` (above), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators have `Any All Count Fold Map Filter
   ToList`.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `IoError` and are written with `try`; no std function ends the program on
@@ -548,6 +552,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/math` (generic over the floats, libm calls), `std/linalg` (`Matrix<T>` views, Goto GEMM with per-target tiles,
   batched causal products, fused epilogues, convolutions - the base for all numeric work, the user's call: a 2-D
   Matrix, not a tensor), `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
+- **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
+  held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
+  does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
+  `size` is a `ChunkSize` (a Radix-like checked `I64`, `ArrayError.BAD_CHUNK` below one; a literal checked while
+  compiling). Arrays only for now; Vec later (another branch is reworking Vec).
 - **`extern fn` (X1-X8).** Numeric primitives and arrays of them; an array marshals to a pointer; no extern returns a
   pointer; only the runtime's `__olang_` functions take a function value (X2). C math functions with their exact
   prototypes are known and evaluated while compiling (X8).

@@ -425,6 +425,7 @@ struct type;
     X(ERR_MEMBERSHIP_NOT_BOOL,          "E29",   "%s, which 'in' calls, gives a Bool") \
     X(ERR_MEMBERSHIP_NEEDS_TRY,         "E29",   "%s can fail here - write 'try (x in c)'") \
     X(ERR_INCDEC_IN_EXPRESSION,         "S3a",   "%n is a statement of its own, never part of an expression") \
+    X(ERR_METHOD_ON_NUMBER_LITERAL,     "E13c",  "the receiver of %n is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'") \
     X(ERR_NOT_CALLABLE,                 "E13b",  "%t is not a function, and declares no Call") \
     X(ERR_JOIN_PIECE_CALLED,            "E11b",  "'(' after a piece of text calls it - to join the value inside, write '$(...)'") \
     X(ERR_UNHANDLED_FALLIBLE_CALL,      "E15",   "this call can fail - write 'try', and catch or pass on its errors") \

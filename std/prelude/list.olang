@@ -1016,46 +1016,4 @@ if TestBuild {
         l.Push(50)                                               # an exhausted iterator sees what is pushed after
         assert (try it.Next() catch default -1) == 50
     }
-
-    # elements that are references to what can be stored through, or values holding references, walked by a for-in, by an
-    # iterator and by its helpers - each element keeps where the list's references live, so it may be returned as the list's
-    type listBag struct() {
-        items List<I64>& = List<I64>()
-    }
-    type listItem struct(n I64) {
-        n
-    }
-    fn listFind(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
-        for f in l {
-            if f.First == key { return f.Second }
-        }
-        error ListError.NOT_FOUND
-    }
-    fn listFindIter(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
-        for f in l.Iter() {
-            if f.First == key { return f.Second }
-        }
-        error ListError.NOT_FOUND
-    }
-    test "S9f: a List of references, walked by every route" {
-        bags := List<listBag&>()
-        bags.Push(listBag())
-        bags.Push(listBag())
-        s I64 = 0
-        for b in bags { s += b.items.Len() + 1 }
-        for b in bags.Iter() { s += b.items.Len() + 1 }
-        assert s == 4
-        #(a helper's callback handed an element something can be stored through is refused - the element's scope is
-        #derived from the iterator's, O23a, which a build through it would underestimate: C2d - so it counts these)
-        items := List<listItem&>()
-        items.Push(listItem(4))
-        items.Push(listItem(5))
-        assert items.Iter().Count(fn(b) { return b.n > 4 }) == 1
-        m := List<Pair<String&, listItem&>>()
-        k String& = "x"
-        m.Push(Pair<String&, listItem&>(k, listItem(4)))
-        assert (try listFind(m, "x") catch { unreachable }).n == 4
-        assert (try listFindIter(m, "x") catch { unreachable }).n == 4
-    }
-
 }

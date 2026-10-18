@@ -17,6 +17,7 @@
 # What the checker meets and does not check yet is recorded as a gap (Gaps), never said as a diagnostic: the acceptance
 # (compiler/tools/checkdiff.olang) counts a program as checked clean only when it has neither errors nor gaps.
 
+import "std/pair"
 import "std/os"
 import "source"
 import "token"
@@ -45,7 +46,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Errors     # the declared error set, the default error DefaultErrT among them (R15)
     Block I64 = 0
     bound Map<source.NameId, I64>
-    undo List<Pair<source.NameId, I64>>
+    undo List<pair.Pair<source.NameId, I64>>
     loops List<I64>        # the loops around, innermost last: each one's body block, what continue moves on
     exits List<I64>        # beside each, the loop break leaves: a run-wise walk's outer loop for its inner (S9f)
     InTest Bool = false
@@ -91,11 +92,11 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     queued I64 = 0
     state List<I64>                        # by body: 0 waiting, 1 being checked, 2 checked
     fnBodies Map<I64, I64>                 # a function instance's body
-    ctorBodies Map<Pair<I64, I64>, I64>   # a type's constructor's body, by type and twin (G10d)
+    ctorBodies Map<pair.Pair<I64, I64>, I64>   # a type's constructor's body, by type and twin (G10d)
     instsOf Map<I64, I64>                  # by generic function: how many instances were made (G17)
     ctorCalled types.TypeId = types.UnknownT  # the type whose constructor callBody is calling: its defaults (D8a)
-    globalBodies Map<Pair<I64, I64>, I64>  # (module, name): a global's initializer's body
-    globalTypes Map<Pair<I64, I64>, types.TypeId>
+    globalBodies Map<pair.Pair<I64, I64>, I64>  # (module, name): a global's initializer's body
+    globalTypes Map<pair.Pair<I64, I64>, types.TypeId>
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
@@ -110,28 +111,28 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # cycle) - its body and the set's length then - and the bodies whose set rests on such a read
     inferring Map<I64, Bool>
     inferredErrs Map<I64, types.ListId>
-    errReads List<Pair<I64, I64>>
+    errReads List<pair.Pair<I64, I64>>
     unsettled Map<I64, Bool>
     # what each inferred set came to, by body (bodyKey) - kept from one attempt to the next, where checking starts
-    errPresets Map<Pair<I64, I64>, types.ListId>
-    found Map<Pair<I64, I64>, types.ListId>
+    errPresets Map<pair.Pair<I64, I64>, types.ListId>
+    found Map<pair.Pair<I64, I64>, types.ListId>
     Attempts I64 = 0
     boundsMet Map<types.TypeId, Bool>         # a type instance's constraints, checked where it was first asked for (G19)
     # T25c: the locals that are read-only copies, by (body, local), each with the name of what it copies (0 for none);
     # a for-in's hidden borrow of a value, by (body, local): whether that value is reached read-only
-    roCopies Map<Pair<I64, I64>, source.NameId>
-    roBorrows Map<Pair<I64, I64>, Bool>
+    roCopies Map<pair.Pair<I64, I64>, source.NameId>
+    roBorrows Map<pair.Pair<I64, I64>, Bool>
     # a reference local made from a place, by (body, local): the place, and whether the reference names its storage (a
     # borrow, a slice, a view) rather than having been read out of it - what read-only copies and parameters reach
-    roFrom Map<Pair<I64, I64>, roOrigin>
+    roFrom Map<pair.Pair<I64, I64>, roOrigin>
     # ...and a by-value parameter's need of a writable argument, read off its body: by (body, parameter) the ones
     # written through, lent writably or stored; what a parameter passed on as another's argument needs in turn; the
     # read-only copies passed as arguments and the bodies made function values, judged once every body is checked
-    roNeeds Map<Pair<I64, I64>, Bool>
-    roDeps List<Pair<Pair<I64, I64>, Pair<I64, I64>>>
+    roNeeds Map<pair.Pair<I64, I64>, Bool>
+    roDeps List<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>
     roArgs List<roArg>
     roFns List<roFn>
-    unknownTypes Map<Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
+    unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -200,29 +201,29 @@ fn (c mut Checker&) reset() {
     c.queued = 0
     c.state = List<I64>()
     c.fnBodies = Map<I64, I64>()
-    c.ctorBodies = Map<Pair<I64, I64>, I64>()
+    c.ctorBodies = Map<pair.Pair<I64, I64>, I64>()
     c.instsOf = Map<I64, I64>()
     c.ctorCalled = types.UnknownT
-    c.globalBodies = Map<Pair<I64, I64>, I64>()
-    c.globalTypes = Map<Pair<I64, I64>, types.TypeId>()
+    c.globalBodies = Map<pair.Pair<I64, I64>, I64>()
+    c.globalTypes = Map<pair.Pair<I64, I64>, types.TypeId>()
     c.exprs = List<typed.Expr&>()
     c.stmts = List<typed.Stmt&>()
     c.atRecs = List<atRec>()
     c.lastErrs = types.ListId(0)
     c.inferring = Map<I64, Bool>()
     c.inferredErrs = Map<I64, types.ListId>()
-    c.errReads = List<Pair<I64, I64>>()
+    c.errReads = List<pair.Pair<I64, I64>>()
     c.unsettled = Map<I64, Bool>()
-    c.found = Map<Pair<I64, I64>, types.ListId>()
+    c.found = Map<pair.Pair<I64, I64>, types.ListId>()
     c.boundsMet = Map<types.TypeId, Bool>()
-    c.roCopies = Map<Pair<I64, I64>, source.NameId>()
-    c.roBorrows = Map<Pair<I64, I64>, Bool>()
-    c.roFrom = Map<Pair<I64, I64>, roOrigin>()
-    c.roNeeds = Map<Pair<I64, I64>, Bool>()
-    c.roDeps = List<Pair<Pair<I64, I64>, Pair<I64, I64>>>()
+    c.roCopies = Map<pair.Pair<I64, I64>, source.NameId>()
+    c.roBorrows = Map<pair.Pair<I64, I64>, Bool>()
+    c.roFrom = Map<pair.Pair<I64, I64>, roOrigin>()
+    c.roNeeds = Map<pair.Pair<I64, I64>, Bool>()
+    c.roDeps = List<pair.Pair<pair.Pair<I64, I64>, pair.Pair<I64, I64>>>()
     c.roArgs = List<roArg>()
     c.roFns = List<roFn>()
-    c.unknownTypes = Map<Pair<I64, I64>, Bool>()
+    c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -582,11 +583,11 @@ fn (c mut Checker&) infersErrs(sig types.TypeId) Bool {
 }
 
 # a body's identity across attempts: what it is the body of
-fn (c mut Checker&) bodyKey(id I64) Pair<I64, I64> {
+fn (c mut Checker&) bodyKey(id I64) pair.Pair<I64, I64> {
     return match c.Bodies[id].Of {
-        case typed.BodyOf.Fn(inst) => Pair(inst, -1)
-        case typed.BodyOf.Ctor(t, twin) => Pair(-2 - I64(t), I64(twin))
-        case _ => Pair(-1, -1)
+        case typed.BodyOf.Fn(inst) => pair.Pair(inst, -1)
+        case typed.BodyOf.Ctor(t, twin) => pair.Pair(-2 - I64(t), I64(twin))
+        case _ => pair.Pair(-1, -1)
     }
 }
 
@@ -600,13 +601,13 @@ fn (c mut Checker&) bodyErrors(id I64) types.ListId {
     if c.state[id] == 2 {
         es := try c.inferredErrs.Get(id) catch default types.ListId(0)
         if try c.unsettled.Get(id) catch default false {
-            c.errReads.Push(Pair(id, c.P.T.Items(es).Len()))
+            c.errReads.Push(pair.Pair(id, c.P.T.Items(es).Len()))
             c.unsettle()
         }
         return es
     }
     es := try c.errPresets.Get(c.bodyKey(id)) catch default types.ListId(0)
-    c.errReads.Push(Pair(id, c.P.T.Items(es).Len()))
+    c.errReads.Push(pair.Pair(id, c.P.T.Items(es).Len()))
     c.unsettle()
     return es
 }
@@ -704,7 +705,7 @@ fn (c mut Checker&) ctorBody(t types.TypeId) I64 { return c.twinBody(t, types.Li
 
 # the constructor's body of one binding of its own variables (G10d's twin; none for an ordinary constructor)
 fn (c mut Checker&) twinBody(t types.TypeId, args types.ListId) I64 {
-    key := Pair(I64(t), I64(args))
+    key := pair.Pair(I64(t), I64(args))
     id := try c.ctorBodies.Get(key) catch default -1
     if id >= 0 { return id }
     d := c.P.T.DeclOf(t)
@@ -774,7 +775,7 @@ fn (c mut Checker&) testBody(mi I64, sp source.Span, body Array<ast.Stmt&>&, ind
 
 # a global's initializer's body (K2), checked where it is first asked for - its type may be what asks
 fn (c mut Checker&) globalBody(mi I64, n source.NameId) I64 {
-    key := Pair(mi, I64(n))
+    key := pair.Pair(mi, I64(n))
     id := try c.globalBodies.Get(key) catch default -1
     if id >= 0 { return id }
     v := c.P.GlobalDecl(mi, n)
@@ -792,7 +793,7 @@ fn (c mut Checker&) globalBody(mi I64, n source.NameId) I64 {
 
 # a global's type: written, or its initializer's (D15) - checked first where it is not known yet
 fn (c mut Checker&) globalType(mi I64, n source.NameId) types.TypeId {
-    key := Pair(mi, I64(n))
+    key := pair.Pair(mi, I64(n))
     t := try c.globalTypes.Get(key) catch default types.TypeId(-1)
     if t >= types.TypeId(0) { return t }
     v := c.P.GlobalDecl(mi, n)
@@ -1021,7 +1022,7 @@ fn (c mut Checker&) instField(sp source.Span, n source.NameId) typed.Place&c {
 
 fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     v := c.P.GlobalDecl(mi, n)
-    key := Pair(mi, I64(n))
+    key := pair.Pair(mi, I64(n))
     fr := c.push(id, mi, types.VoidT, types.ListId(0))
     fr.Ctx = generic.Context(mi, -1)
     sp := c.cur().Sp
@@ -1191,7 +1192,7 @@ fn (c mut Checker&) local(n source.NameId, sp source.Span, ty types.TypeId, kind
     fr := c.fr()
     id := I64(c.cur().AddLocal(typed.Local(n, sp, ty, typed.BlockId(I32(fr.Block)), kind, mark)))
     if n != source.NameId(0) and c.text(n) != "_" {
-        fr.undo.Push(Pair(n, try fr.bound.Get(n) catch default -1))
+        fr.undo.Push(pair.Pair(n, try fr.bound.Get(n) catch default -1))
         fr.bound.Put(n, id)
     }
     return id
@@ -1751,6 +1752,21 @@ type litv struct(Ok Bool, IsFloat Bool, Big Bool, I I64, F F64) {
     I
     F
     Hex Bool = false   # a hex or binary pattern: I its bits, read unsigned where an unsigned type is wanted (L10a)
+}
+
+# E13c: whether x is a number written as a literal - a numeric literal, alone, negated or in parentheses, or arithmetic
+# of such (E4a's literal-only expression), whatever it folds to
+fn numberLitsOnly(x ast.Expr&) Bool {
+    if x == null { return false }
+    return match x {
+        case ast.Expr.Lit(_, kind) => kind == token.Tok.IntLit or kind == token.Tok.FloatLit
+        case ast.Expr.Paren(_, y) => numberLitsOnly(y)
+        case ast.Expr.Unary(_, op, y) => (op == token.Tok.Minus or op == token.Tok.Tilde) and numberLitsOnly(y)
+        case ast.Expr.Binary(_, op, a, b) => (op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star
+            or op == token.Tok.Slash or op == token.Tok.Percent or op == token.Tok.Amp or op == token.Tok.Pipe
+            or op == token.Tok.Caret or op == token.Tok.Shl or op == token.Tok.Shr) and numberLitsOnly(a) and numberLitsOnly(b)
+        case _ => false
+    }
 }
 
 fn noLit() litv { return litv(false, false, false, 0, 0.0) }
@@ -3482,7 +3498,7 @@ fn (c mut Checker&) listHoldsWritable(l types.ListId, depth I64) Bool {
     return false
 }
 
-fn (c mut Checker&) roKey(id I64) Pair<I64, I64> { return Pair(c.fr().Body, id) }
+fn (c mut Checker&) roKey(id I64) pair.Pair<I64, I64> { return pair.Pair(c.fr().Body, id) }
 
 # whether a place is reached read-only: an immutable global, what a read-only reference names, a captured value, a
 # read-only copy - and what is held in any of these by value
@@ -3686,7 +3702,7 @@ fn (c mut Checker&) paramIndex(id I64) I64 {
 # this body's by-value parameter a place is part of needs a writable argument
 fn (c mut Checker&) roNeed(p typed.Place&) {
     k := c.paramOf(p)
-    if k >= 0 { c.roNeeds.Put(Pair(c.fr().Body, k), true) }
+    if k >= 0 { c.roNeeds.Put(pair.Pair(c.fr().Body, k), true) }
 }
 
 # an argument for a by-value parameter of a body: a read-only copy is judged once the body's need is known; a
@@ -3698,7 +3714,7 @@ fn (c mut Checker&) roArgFor(body I64, k I64, e typed.Expr&, sp source.Span, cal
         return
     }
     j := c.paramOf(readPlace(e))
-    if j >= 0 { c.roDeps.Push(Pair(Pair(c.fr().Body, j), Pair(body, k))) }
+    if j >= 0 { c.roDeps.Push(pair.Pair(pair.Pair(c.fr().Body, j), pair.Pair(body, k))) }
 }
 
 # what each by-value parameter needs settled over every call, then the read-only copies passed to one that needs a
@@ -3715,7 +3731,7 @@ fn (c mut Checker&) roSettle() {
         if not changed { break }
     }
     for a in c.roArgs {
-        if not c.roNeeds.Has(Pair(a.Body, a.Param)) { continue }
+        if not c.roNeeds.Has(pair.Pair(a.Body, a.Param)) { continue }
         b := c.Bodies[a.Body]
         if a.Param >= b.Params.Len() { continue }
         l := b.Local(b.Params[a.Param])
@@ -3725,7 +3741,7 @@ fn (c mut Checker&) roSettle() {
     for f in c.roFns {
         b := c.Bodies[f.Body]
         for k in range f.First, b.Params.Len() {
-            if not c.roNeeds.Has(Pair(f.Body, k)) { continue }
+            if not c.roNeeds.Has(pair.Pair(f.Body, k)) { continue }
             l := b.Local(b.Params[k])
             fix := c.roFix(source.NameId(0), l.Ty)
             c.P.L.Diags.Error(f.At, msgs.ReadOnlyFuncValue(f.What, c.text(l.Name), fix))
@@ -3819,7 +3835,7 @@ fn (c mut Checker&) listMet(l types.ListId, sp source.Span, depth I64) Bool {
 
 # T4, B11: an unknown type, said once in a module, with the type it most likely meant
 fn (c mut Checker&) unknownType(sp source.Span, n source.NameId) {
-    key := Pair(c.fr().Mi, I64(n))
+    key := pair.Pair(c.fr().Mi, I64(n))
     if c.unknownTypes.Has(key) { return }
     c.unknownTypes.Put(key, true)
     name := c.text(n)
@@ -4615,6 +4631,9 @@ fn (c mut Checker&) ctorDefault(sp source.Span, k I64, want types.TypeId) typed.
 
 # x.m(args): a method of x's type (M19); an array's Len supplied by the compiler (E23)
 fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp source.Span, args Array<ast.Expr&>&) typed.Expr&c {
+    # E13c: a number written as a literal has no type until it lands, and a method call is no place it lands - said, then
+    # built as written, so what follows sees the call's result and adds no error
+    if numberLitsOnly(x) { c.err(nsp, msgs.MethodOnNumberLiteral(c.tok(n))) }
     rx := c.expr(x, types.UnknownT)
     rt := typeOf(rx)
     if rt == types.UnknownT {

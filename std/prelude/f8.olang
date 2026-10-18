@@ -112,6 +112,7 @@ test "8-bit floats encode to their bit patterns and decode back" {
     assert n != n
     # a negative zero keeps its sign, in the bits and back out
     assert F8E4M3(-0.0).Bits == 128 and F8E5M2(-0.0).Bits == 128 and F8E4M3(0.0).Bits == 0 and F8E5M2(0.0).Bits == 0
-    assert F8E4M3(-0.0).F64().Bits() == (-0.0).Bits() and F8E5M2(-0.0).F64().Bits() == (-0.0).Bits()
+    negZero F64 = -0.0
+    assert F8E4M3(-0.0).F64().Bits() == negZero.Bits() and F8E5M2(-0.0).F64().Bits() == negZero.Bits()
     assert F8E4M3(-1.0e-30).Bits == 128 and F8E5M2(-1.0e-30).Bits == 128     # rounds to zero, from below
 }

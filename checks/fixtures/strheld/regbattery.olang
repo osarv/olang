@@ -1,4 +1,5 @@
 # C11/O16: 26 shapes of destructor temporaries, each block balanced
+import "std/pair"
 import "std/io"
 Made mut I64 = 0
 Gone mut I64 = 0
@@ -86,7 +87,7 @@ fn main() ? {
     }
     try io.Println("8: " $(Made - Gone))
     {
-        h := Pair(Res(11), 3)
+        h := pair.Pair(Res(11), 3)
     }
     try io.Println("9: " $(Made - Gone))
     {
@@ -157,7 +158,7 @@ fn main() ? {
     }
     try io.Println("24: " $(Made - Gone))
     {
-        x := takeR(Pair(Res(32), 1).First)
+        x := takeR(pair.Pair(Res(32), 1).First)
     }
     try io.Println("25: " $(Made - Gone))
     try io.Println("made " $Made " gone " $Gone " twice " $Twice)

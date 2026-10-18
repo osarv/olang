@@ -526,7 +526,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
             f = 10
         }
         x := g.solid(f, d - 1)
-        return "(" $x ".Bits() if " $x " == " $x " else " $g.lit(t) ")"
+        return "(" $Prims[f] "(" $x ").Bits() if " $x " == " $x " else " $g.lit(t) ")"     # E13c: never a literal's
     }
     if k == 16 { return g.recur(t, d) }
     if k == 17 {
@@ -2139,7 +2139,7 @@ fn (g mut Gen&) mathInt(t I32, d I64) String& {
 fn (g mut Gen&) formatBack(t I32, d I64) String& {
     b I64 = 2 + g.r(35)
     s := g.intT()
-    x := "(" $g.ex(s, d - 1) ").Format(" $b ")"
+    x := $Prims[s] "(" $g.ex(s, d - 1) ").Format(" $b ")"      # E13c: a conversion, never a literal
     if t == 7 { return "(try " $x ".ParseUint(" $b ") catch default " $g.lit(t) ")" }
     if t == 3 { return "(try " $x ".ParseInt(" $b ") catch default " $g.lit(t) ")" }
     return $Prims[t] "((try " $x ".ParseInt(" $b ") catch default " $g.lit(3) "))"
@@ -2311,8 +2311,14 @@ fn (g mut Gen&) collBool(d I64) String& {
 # order, an array mapped, filtered, repeated or with a part replaced
 fn (g mut Gen&) newPiece(d I64) String& {
     p := g.r(7)
-    if p == 0 and g.chance(50) { return "$((" $g.ex(g.intT(), d - 1) ").Format(" $(2 + g.r(35)) "))" }
-    if p == 1 { return "$((" $g.ex(g.floatT(), d - 1) ").Fixed(" $(g.r(28) - 3) "))" }
+    if p == 0 and g.chance(50) {
+        it := g.intT()
+        return "$(" $Prims[it] "(" $g.ex(it, d - 1) ").Format(" $(2 + g.r(35)) "))"
+    }
+    if p == 1 {
+        ft := g.floatT()
+        return "$(" $Prims[ft] "(" $g.ex(ft, d - 1) ").Fixed(" $(g.r(28) - 3) "))"
+    }
     if p == 2 {
         m := g.pick(0, 17)
         if m >= 0 {

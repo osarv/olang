@@ -189,7 +189,8 @@ nullable type it is used against; see §2.1 T2a.
 **L12.** `FLOAT_LIT ::= digit { digit } [ "." digit { digit } ] exponent
 | digit { digit } "." digit { digit } [ exponent ]` — at least one digit is required on *both* sides of
 the `.`; there is no leading-dot (`.5`) or trailing-dot (`5.`) form, and no more than one `.`. A `.` followed by a
-letter or `_` is not part of a number at all - `7.Hash()` is the integer literal `7`, a member access and a call.
+letter or `_` is not part of a number at all - `7.Hash()` is the integer literal `7`, a member access and a call
+(which E13c then refuses: a literal number is no method's receiver).
 
 **L12a.** `exponent ::= ( "e" | "E" ) [ "+" | "-" ] digit { digit }`. An exponent makes the literal a
 float whether or not a `.` appeared, so `1e3` is a float literal and equals `1000.0`. The exponent is
@@ -1409,7 +1410,7 @@ tuple type, and a call returning several values may appear only
 - alone as an expression statement (S3), discarding them.
 
 Anywhere else — an initializer, an operand, one argument among others — it is a compile-time error. Two values
-held together as one value are a `Pair` (M19d); there is no tuple type and no anonymous struct type. Each result is
+held together as one value are a `pair.Pair` (standard library `std/pair`, M19d); there is no tuple type and no anonymous struct type. Each result is
 checked on its own terms everywhere a single value would be: its type, its scope tag (§8: every built
 result is in the one result scope, O13/O14), and its fit at the target.
 
@@ -1859,9 +1860,10 @@ types get their methods; those methods are visible in every module. The prelude'
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods.
 
-Among the prelude's types is `type Pair<A, B> struct(First A, Second B)`, two values of any types held as
-one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
-every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
+`Pair` is not part of the prelude: `std/pair` declares `type Pair<A, B> struct(First A, Second B)`, two values of
+any types held as one, named `pair.Pair` once imported, its type arguments inferred at construction (G10c). It has
+`Hash()` - with `==`, what a map key needs - for every instantiation whose two parts have it (a declared one, so a
+`pair.Pair` is a key even where E10b would not apply).
 
 The prelude declares `type List<T>`, a growable sequence whose storage **never moves**: `Push(x)` and `PushAll(a)`
 (every element of an array, in order) add at the end, `Len()` counts, `ToArray()` copies the elements into one new
@@ -1970,7 +1972,12 @@ Every array has `CountOf(sub)`, how many times the run `sub` occurs in it, count
 (`"aaaa".CountOf("aa")` is 2; the empty run occurs `Len() + 1` times, at every position); `Replace(old, new)`, a new
 array with each of those occurrences of `old` replaced by `new` (an empty `old` puts `new` before every element and
 after the last); `Repeat(n)`, `n` copies of its elements one after another (none for `n` at most `0`); and
-`Reverse()`, which reverses them in place. A `String` has them as every array method (T29e), the new ones being
+`Reverse()`, which reverses them in place; and `Chunks(size)`, the array cut into consecutive pieces of `size`
+elements, the last holding what is left (fewer, never none; an empty array has none) - each piece a writable slice of
+the array's own storage (E16a), no two sharing an element, held in an array that lives where the receiver does (the
+receiver is written `mut`, so the pieces may be written). `size` is a `ChunkSize`, a declared `I64` whose constructor
+fails with `ArrayError.BAD_CHUNK` below one: a literal size is checked while compiling (T29d, `a.Chunks(0)` is a
+compile-time error) and a computed one is made one with `try ChunkSize(n)`, as a base is a `Radix`. A `String` has them as every array method (T29e), the new ones being
 `String`s. An array of texts, `Array<String&>`, has `Join(sep)`: its texts one after another with `sep` between each
 two, built once at its length - `$` writes such an array as source instead (E11a). Text has `TrimStart()` and
 `TrimEnd()`, borrows of it as `Trim()` is; `ToUpper()` and `ToLower()`, new text with the ASCII letters changed and
@@ -2662,6 +2669,14 @@ call does; a `try` written before the chain covers its last call only. A `(` beg
 statement (L18), never a `call-on`. Calling a value not of function type is a compile-time error. `x.f(args)` where
 `f` is a field of `x` is such a call too - the function value the field holds is called, as `(x.f)(args)` - since a
 method may not share a field's name (M19), so the spelling has that one meaning.
+
+**E13c.** A method call's receiver may not be a number written as a literal: a numeric literal (L10, L12), alone,
+negated or in parentheses, or an expression built only from numeric literals (E4a) - `7.Hash()`, `2.5.Fixed(1)`,
+`(255).Format(16)` and `(-0.0).Bits()` are compile-time errors. Such a number has no type of its own until it lands
+(T6), and a method call is not a place it lands, so the type the method belongs to would be invisible at the call. The
+number is put in a variable of the type wanted, or converted to it (`n I64 = 255` then `n.Format(16)`, or
+`I64(255).Format(16)`). Text literals, character literals, array literals and comprehensions are receivers like any
+other value (`"a,b".Split(",")`, `I32[3, 1].Sort(...)`): each says what it is.
 
 **E13a.** `Array<T>(n)` and `Array<T>(n, v)` build an array (T8): `n`, of any integer type, is its length,
 and every element is `T`'s zero value or `v`, which must fit `T`. It is a value with no storage of its own,
@@ -4149,6 +4164,11 @@ There is no exception for any type or size. Only P9's atomic methods are atomic,
 not to a `U8`, not to an `I32`, not to a pointer — and a concurrent read of something being written may observe
 a value that was never stored. `-race` (P7) detects races that actually occur on a given run, which is a
 detector and not a proof.
+
+A program can make a race impossible by construction rather than by care: tasks that each write only their own
+piece of an array - `join { for part in a.Chunks(k) { spawn work(part) } }`, the pieces of `Chunks` (M19d) sharing no
+element - make no two accesses to one element, so P8b's condition never arises, and the join orders every piece's writes
+before what follows (P8).
 
 **P8c.** A program adds ordering of its own by calling a synchronisation primitive through `extern fn`
 (§11) — a pthread mutex or condition variable is what `chan.olang` uses. Such a call carries exactly the

@@ -11,6 +11,7 @@
 # imports of chosen branches are loaded; a condition B9a cannot decide is pending - its imports wait, and its branches'
 # diagnostics stay held - until the checker decides it by compile-time evaluation (B9c) and calls Decide. Every branch
 # is parsed (DESIGN.md point 12); a branch not chosen has its diagnostics dropped.
+import "std/pair"
 import "std/os"
 import "std/filepath"
 import "source"
@@ -734,13 +735,13 @@ fn (l mut Loader&) Chosen(mi I64, condStart I32) I64 {
 
 # the top-level ifs B9a left to compile-time evaluation (B9c) whose own branch is part of the module: each as its
 # module and the offset of its first condition
-fn (l mut Loader&) PendingIfs() List<Pair<I64, I32>> {
-    out List<Pair<I64, I32>>
+fn (l mut Loader&) PendingIfs() List<pair.Pair<I64, I32>> {
+    out List<pair.Pair<I64, I32>>
     for mi in range l.Mods.Len() {
         m := l.Mods[mi]
         for c in range m.chainAt.Len() {
             l.decide(mi, c)
-            if m.chainChosen[c] == Pending and l.taken(mi, m.chainParent[c]) == 1 { out.Push(Pair(mi, m.chainAt[c])) }
+            if m.chainChosen[c] == Pending and l.taken(mi, m.chainParent[c]) == 1 { out.Push(pair.Pair(mi, m.chainAt[c])) }
         }
     }
     return out

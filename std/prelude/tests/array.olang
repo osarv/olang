@@ -143,3 +143,70 @@ sortBakedSumBaked := sortBakedSum()
 test "Sort evaluated while compiling as at run time" {
     assert sortBakedSumBaked == 99001 and sortBakedSum() == sortBakedSumBaked
 }
+
+# Chunks: consecutive pieces of at most n, each a writable view of the array's own storage
+fn chunkLens(a mut Array<I64>&, size ChunkSize) String {
+    b := StringBuilder()
+    for part in a.Chunks(size) { b.Push($part.Len() " ") }
+    return b.ToString()
+}
+
+test "Chunks cuts an array into consecutive pieces, the last holding what is left" {
+    a := Array<I64>(10)
+    for i in range a.Len() { a[i] = i }
+    assert chunkLens(a, 4) == "4 4 2 " and chunkLens(a, 5) == "5 5 " and chunkLens(a, 1) == "1 1 1 1 1 1 1 1 1 1 "
+    assert chunkLens(a, 10) == "10 " and chunkLens(a, 99) == "10 "
+    e := Array<I64>(0)
+    assert chunkLens(e, 3) == "" and e.Chunks(3).Len() == 0
+    p := a.Chunks(4)
+    assert p[1][0] == 4 and p[2][1] == 9 and $p[2] == "I64[8, 9]"
+    p[1][0] = 40                                         # a piece is a view: writing it writes the array
+    assert a[4] == 40
+    t := "abcdefg"
+    s := t.Chunks(3)
+    assert s.Len() == 3 and String(s[2]) == "g" and String(s[0]) == "abc"     # text cut into pieces of Chars
+}
+
+test "a size computed while running is a ChunkSize, refused below one" {
+    n I64 = 0
+    failed := false
+    z := try ChunkSize(n) catch ArrayError.BAD_CHUNK { failed = true } default ChunkSize(1)
+    assert failed and I64(z) == 1
+    n = -3
+    assert (try ChunkSize(n) catch ArrayError.BAD_CHUNK default ChunkSize(7)) == ChunkSize(7)
+    n = 3
+    a := Array<I64>(7)
+    assert a.Chunks(try ChunkSize(n) catch { unreachable }).Len() == 3
+}
+
+# every task writes its own piece: nothing two tasks share, so no race (P8b) - and what they wrote is read back after
+# the join and after other storage was made and dropped (an arena churn)
+fn chunkWork(part mut Array<I64>&, k I64) {
+    for i in range part.Len() { part[i] = part[i] * 100 + k }
+}
+
+fn chunkedSum(n I64) I64 {
+    a := Array<I64>(n)
+    for i in range n { a[i] = i }
+    join {
+        k I64 = 0
+        for part in a.Chunks(3) {
+            spawn chunkWork(part, k)
+            k++
+        }
+    }
+    for j in range 50 {
+        junk := Array<I64>(64, j)
+        assert junk[63] == j
+    }
+    s I64 = 0
+    for x in a { s += x }
+    assert a[0] == 0 and a[3] == 301 and a[n - 1] == (n - 1) * 100 + (n - 1) / 3
+    return s
+}
+ChunkedSumBaked := chunkedSum(10)
+
+test "tasks each write their own piece of an array, read back after the join" {
+    assert chunkedSum(10) == 4512 and ChunkedSumBaked == 4512    # baked while compiling, as at run time
+    assert chunkedSum(1000) > 0
+}

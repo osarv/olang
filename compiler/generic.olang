@@ -7,6 +7,7 @@
 # variables, and an instance's is the generic's substituted: an instance is its generic's DeclId with its arguments,
 # interned (types.Named), so the TypeId is the instance's identity and its canonical text its name (G16a).
 
+import "std/pair"
 import "source"
 import "token"
 import "ast"
@@ -86,21 +87,21 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     varsAt Map<I64, I64>               # by owner: where its variables start in vars, and how many
     varsN Map<I64, I64>
     vars List<varRow>
-    typeIndex Map<Pair<I64, I64>, I64> # (module, name): the entry declaring a type
+    typeIndex Map<pair.Pair<I64, I64>, I64> # (module, name): the entry declaring a type
     indexed Map<I64, Bool>             # the modules typeIndex holds
     identity Map<String&, I64>         # a module by its identity
-    r1bSaid Map<Pair<I64, I64>, Bool>  # (module, start): a function type said to write its error set (R1b)
+    r1bSaid Map<pair.Pair<I64, I64>, Bool>  # (module, start): a function type said to write its error set (R1b)
     modules I64 = 0                    # how many modules T knows
     patterns Map<I64, pattern>         # by the pattern's index in T
     fns List<fnRow>
     fnsOf Map<I64, Bool>               # the modules fns holds
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
-    fnByName Map<Pair<I64, I64>, I64>  # (module, name): a plain function
-    methods Map<Pair<I64, I64>, I64>   # (receiver key, name): the method
+    fnByName Map<pair.Pair<I64, I64>, I64>  # (module, name): a plain function
+    methods Map<pair.Pair<I64, I64>, I64>   # (receiver key, name): the method
     defaultFns List<I64>               # the methods declared on a constrained type variable: traits' defaults (M19e)
     defaultTraits List<I64>            # beside each, its trait's DeclId
     instances List<instance>
-    instanceOf Map<Pair<I64, types.ListId>, I64>
+    instanceOf Map<pair.Pair<I64, types.ListId>, I64>
     said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
     folding Map<I64, Bool>             # the globals being folded (a cycle folds to nothing)
     chain I64 = 0                      # how many instances' layouts are being made, each asked for by the one before
@@ -194,11 +195,11 @@ fn (p mut Program&) TypeEntry(mi I64, name source.NameId) I64 {
     if not (try p.indexed.Get(mi) catch default false) {
         tab := p.R.Tables[mi]
         for ei in range tab.Entries.Len() {
-            if tab.Entries[ei].Kind == names.What.Type { p.typeIndex.Put(Pair(mi, I64(tab.Entries[ei].Name)), ei) }
+            if tab.Entries[ei].Kind == names.What.Type { p.typeIndex.Put(pair.Pair(mi, I64(tab.Entries[ei].Name)), ei) }
         }
         p.indexed.Put(mi, true)
     }
-    return try p.typeIndex.Get(Pair(mi, I64(name))) catch default -1
+    return try p.typeIndex.Get(pair.Pair(mi, I64(name))) catch default -1
 }
 
 # FindDecl's miss: no module of that identity, or no type of that name in it
@@ -397,7 +398,7 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
     f := p.sigType(c, s, types.UnknownT, source.NameId(0))
     es := p.T.Items(p.T.Errors(f))
     if es.Len() == 1 and es[0] == types.DefaultErrT {
-        key := Pair(c.Mi, I64(sp.Start))
+        key := pair.Pair(c.Mi, I64(sp.Start))
         if not (try p.r1bSaid.Get(key) catch default false) {
             p.r1bSaid.Put(key, true)
             p.L.Diags.Error(p.at(c.Mi, source.Span(sp.Start, sp.Start + 2)), msgs.FuncTypeErrsUnwritten())
@@ -1335,13 +1336,13 @@ fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
     i := p.fns.Len()
     p.fns.Push(fnRow(mi, f, isExtern))
     if f.Recv == null {
-        key := Pair(mi, I64(f.Name))
+        key := pair.Pair(mi, I64(f.Name))
         if (try p.fnByName.Get(key) catch default -1) < 0 { p.fnByName.Put(key, i) }
         return
     }
     k := p.recvKey(mi, f.Recv.Ty, f.TypeParams)
     if k < 0 { return }
-    mk := Pair(k, I64(f.Name))
+    mk := pair.Pair(k, I64(f.Name))
     if (try p.methods.Get(mk) catch default -1) < 0 { p.methods.Put(mk, i) }
     if (k >> 40) == 4 {
         p.defaultFns.Push(i)
@@ -1428,7 +1429,7 @@ fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
     for k in range 16 {
         key := p.typeKey(x)
         if key < 0 { return -1 }
-        m := try p.methods.Get(Pair(key, I64(name))) catch default -1
+        m := try p.methods.Get(pair.Pair(key, I64(name))) catch default -1
         if m >= 0 { return m }
         if p.T.KindOf(x) != types.Kind.Named or not p.Body(x) { return -1 }
         if p.T.DeclKindOf(p.T.DeclOf(x)) != types.DeclKind.Over or not p.extends(p.T.DeclOf(x)) { return -1 }
@@ -1451,7 +1452,7 @@ fn (p mut Program&) extends(d types.DeclId) Bool {
 # a plain function a module declares, by its name; -1 for none
 fn (p mut Program&) FnNamed(mi I64, name source.NameId) I64 {
     p.fnsIn(mi)
-    return try p.fnByName.Get(Pair(mi, I64(name))) catch default -1
+    return try p.fnByName.Get(pair.Pair(mi, I64(name))) catch default -1
 }
 
 # a function's signature (D7, D8c, R15; M19: a method's receiver its first parameter), over its variables: those its
@@ -1544,7 +1545,7 @@ fn (p mut Program&) MethodSig(f I64, t types.TypeId) types.TypeId {
 # canonical text is)
 fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
     args := p.T.PlainList(written)   # held plain: T22's identity (G16a)
-    key := Pair(f, args)
+    key := pair.Pair(f, args)
     i := try p.instanceOf.Get(key) catch default -1
     if i >= 0 { return i }
     owner := FnOwner(f)
@@ -1619,7 +1620,7 @@ fn (p mut Program&) InstanceContext(t types.TypeId) Context {
 fn (p mut Program&) TypeKey(t types.TypeId) I64 { return p.typeKey(t) }
 fn (p mut Program&) MethodByKey(key I64, name source.NameId) I64 {
     p.allFns()
-    return try p.methods.Get(Pair(key, I64(name))) catch default -1
+    return try p.methods.Get(pair.Pair(key, I64(name))) catch default -1
 }
 fn TraitKey(d types.DeclId) I64 { return keyTrait(d) }
 # a declared type of a std module by its name, Unknown for none (String, Char, BuiltinError, Exhausted ...)
@@ -2015,7 +2016,7 @@ fn (p mut Program&) ownMethod(t types.TypeId, name source.NameId) Bool {
     p.allFns()
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     key := p.typeKey(x)
-    return key >= 0 and p.methods.Has(Pair(key, I64(name)))
+    return key >= 0 and p.methods.Has(pair.Pair(key, I64(name)))
 }
 
 fn (p mut Program&) declaresEq(t types.TypeId) Bool {

@@ -143,26 +143,26 @@ test "ParseFloat names what was wrong" {
 }
 
 test "ShortestDecimal gives the fewest digits that read back" {
-    f, e := try (0.1).ShortestDecimal() catch { unreachable }
+    f, e := try F64(0.1).ShortestDecimal() catch { unreachable }
     assert f == 1 and e == -1
-    f, e = try (100.0).ShortestDecimal() catch { unreachable }
+    f, e = try F64(100.0).ShortestDecimal() catch { unreachable }
     assert f == 1 and e == 2
-    f, e = try (-123.456).ShortestDecimal() catch { unreachable }
+    f, e = try F64(-123.456).ShortestDecimal() catch { unreachable }
     assert f == 123456 and e == -3
-    f, e = try (5e-324).ShortestDecimal() catch { unreachable }
+    f, e = try F64(5e-324).ShortestDecimal() catch { unreachable }
     assert f == 5 and e == -324
-    f, e = try (1.7976931348623157e308).ShortestDecimal() catch { unreachable }
+    f, e = try F64(1.7976931348623157e308).ShortestDecimal() catch { unreachable }
     assert f == 17976931348623157 and e == 292
-    f, e = try (7.120236347223045e-307).ShortestDecimal() catch { unreachable }     # a power of two: 16 digits
+    f, e = try F64(7.120236347223045e-307).ShortestDecimal() catch { unreachable }     # a power of two: 16 digits
     assert f == 7120236347223045 and e == -322
-    f, e = try (-0.0).ShortestDecimal() catch { unreachable }
+    f, e = try F64(-0.0).ShortestDecimal() catch { unreachable }
     assert f == 0 and e == 0
     nan F64 = 0.0 / 0.0
     failed := false
     f, e = try nan.ShortestDecimal() catch { failed = true } default 0, 0
     assert failed
     failed = false
-    f, e = try (1.0 / 0.0).ShortestDecimal() catch { failed = true } default 0, 0
+    f, e = try F64(1.0 / 0.0).ShortestDecimal() catch { failed = true } default 0, 0
     assert failed
     for x in F64[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 123.456, 3.141592653589793] {
         d, p := try x.ShortestDecimal() catch { unreachable }
@@ -178,7 +178,7 @@ fn floatsRead() U64 {
         "0.1000000000000000055511151231257827021181583404541015625", "-1.5e-300", "inf"] {
         h = h * 1099511628211 + (try t.ParseFloat() catch default 0.0).Bits()
     }
-    d, p := try (2.0 / 3.0).ShortestDecimal() catch default 0, 0
+    d, p := try F64(2.0 / 3.0).ShortestDecimal() catch default 0, 0
     return h + d + U64(p)
 }
 floatsReadBaked := floatsRead()
@@ -275,7 +275,8 @@ test "PadStart and PadEnd make text a column wide" {
 test "the integers pad as numbers, zeros after a sign" {
     n I64 = -7
     assert n.PadStart(4, '0') == "-007" and n.PadStart(4) == "  -7" and n.PadEnd(4) == "-7  " and n.PadStart(1, '0') == "-7"
-    assert (42).PadStart(5) == "   42" and (42).PadStart(5, '0') == "00042" and (42).PadEnd(5, '.') == "42..."
+    k I64 = 42
+    assert k.PadStart(5) == "   42" and k.PadStart(5, '0') == "00042" and k.PadEnd(5, '.') == "42..."
     b I8 = -128
     h I16 = 300
     u U16 = 65535
@@ -289,8 +290,8 @@ test "the integers pad as numbers, zeros after a sign" {
 }
 
 test "Format writes an integer in any base from 2 to 36, read back by ParseInt and ParseUint" {
-    assert (255).Format(16) == "ff" and (255).Format(2) == "11111111" and (255).Format(8) == "377" and (255).Format() == "255"
-    assert (0).Format(16) == "0" and (35).Format(36) == "z" and (-255).Format(16) == "-ff" and (-1).Format(2) == "-1"
+    assert I64(255).Format(16) == "ff" and I64(255).Format(2) == "11111111" and I64(255).Format(8) == "377" and I64(255).Format() == "255"
+    assert I64(0).Format(16) == "0" and I64(35).Format(36) == "z" and I64(-255).Format(16) == "-ff" and I64(-1).Format(2) == "-1"
     big I64 = 9223372036854775807
     least I64 = -9223372036854775807 - 1
     assert big.Format(16) == "7fffffffffffffff" and least.Format(16) == "-8000000000000000"
@@ -335,7 +336,7 @@ formatStart mut I64 = 255
 test "Format, evaluated while compiling as at run time" {
     assert formattedAll(formatStart) == formatBaked
     assert formatBaked.StartsWith("11111111 11111111;-11111111 ")
-    assert (255).Format(16) == "ff"          # an assert the evaluator decides (S18c)
+    assert I64(255).Format(16) == "ff"          # an assert the evaluator decides (S18c)
     bad I64 = 40
     assert (try I64(Radix(bad)) catch TextError default 0) == 0   # a base computed while running, made a Radix
 }
