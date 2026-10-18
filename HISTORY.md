@@ -16380,6 +16380,49 @@ asked for, and an unmet instance gives the unknown type so nothing more is said 
 local facts during checking plus one settle per attempt for parameters, not a pass of their own; (3) a generic
 instance's read-only reference parameters are read as not read-only until `roByArg` exists - accepting what stage 0
 refuses rather than refusing what it accepts.
+**roByArg and the long tail's end (2026-10-18, second round; checkdiff 342/411 refused cases giving stage 0's first error
+(298 exactly) before, 406/411 (367 exactly) after; 279/283 accepted programs clean throughout; a new measure, the pinned
+header messages, 381/411).** **T25c through a generic's read-only reference parameters**: in a generic instance's body
+(`instanceBody`), every value given a local is kept (`roVals`, from `emit`), so `roDeep` follows a value back through
+references, locals and calls to the read-only reference parameters it is copied out of (`roByArg`); a by-value result
+holding writable references gives its parameters `roToResult`, settled as the body finishes - before a caller reads it,
+the callee checked first where it has such a parameter (`roCheckCallee`), and in a cycle every such parameter followed;
+values the body keeps writable (stored, lent writably) make their parameters need a writable argument, and arguments
+resting on the caller's own such parameters join the settle's fixed point (`roDeepArgs`). A call's result is then a
+read-only copy where a followed argument is read-only (`ls[0].Push(9)`, `g := try m.Get(1)`), a read-only argument for a
+parameter that needs a writable one is ReadOnlyRefKept at the call (`ro.Clone()`, `ro.Filter(...)`), a reference a
+read-only call result holds is walked read-only (`for x in hs[0].ring` with a `mut At`), and a writable reference read
+out of a by-value parameter and passed on writably makes it need a writable argument - so a `Str` writing through its
+by-value receiver is E11c's error. **G16b's contexts**: an instance records where it was first asked for (the call's
+name, and the instance whose body asked), and its body is checked inside that chain of "instantiated here, with T = ..."
+contexts, so an error met in the standard library's code is reported at the program's use (B11) - which M6b's private
+`eq` reached through the prelude's `Map` needed. **The rest, each a rule stage 0 had and the port lacked**: M6b (a
+private `eq` is `==` only in its own module), E28 (a conditional or match choosing a place lent writably), G17 (a
+function instance nesting too deep, said at the function; a type instance's parts made as far as they nest, so a field
+growing its own type's argument is found), P9 (an atomic's place, its writability), S3 (`AtomicLoad` alone; text alone
+on a line, E11b), E10c (`is` on values and nulls), X2 (extern types, `fn()` for the runtime's own functions), E16 (a
+constant index past a fixed length), T7a (a run-time array in an array or a struct, a lambda's result a call holds in an
+array), T7c, T7d, T8, T24 (a reference to a number; a named marker on an element), G11, G9, G10c, G15, G19/T30 (a
+type parameter's constraint that is no trait, used as a type; a trait used as a constant), M19e (two traits' defaults,
+an override of another signature), P4a (a task's default naming storage), E27, D8a, E11a, E11b, E32, E32b, E14, E8a,
+T20, T25b, T22 (a `Call` writing what the type passes read-only), S9a (an iterator's `Next` shape), E29 (`Contains` for
+a sub-collection), D16c (a captured array is a capture), G9b through a receiver's type arguments, and positions (P1g,
+S4c, E31's compound operator, S4 on a conversion). **Fewer cascades**: a written type said wrong resolves to the unknown
+type; a trait as a value's type is not asked for methods; D10a is not said in a body holding a syntax error; L10 not
+after the scanner's L10b; a mis-shaped `Eq` is not called by `==`; an untyped lambda of a call not made is not checked.
+**Decided (mine):** (1) roByArg is per instance body and per parameter, its facts by (body, parameter) beside the
+by-value parameters' (`roNeeds`, `roDeps`), one settle per attempt - not a summary pass; a callee being checked (a cycle)
+is taken to hand back what any such parameter reaches, as stage 0 does; (2) only the program's top-level frame of an
+instance is a context base (`diag.ContextBase`), so a body checked inside another's check has its own chain, never the
+caller's; (3) a private `eq` of another module is said once per line (an operation reaching it twice, `m6bonce`);
+(4) `<T I32>` in a function's type-parameter list, `T` used as a type, is G19's "not a trait" (constant generics are
+being dropped, QP2), and `<N Shaped>` with `N` used as a constant is T30's; (5) E32b's compile-time length check is not
+made under `checked` - QP1 makes `Array<T>(3, v)` fixed in the port where stage 0 keeps it run-time, so `checked (r as
+Array<I32, 2>&)` stays the run-time check stage 0 makes (`t7dfixedrun`). **Left**: the five refused cases are own/take
+(o32copypush, o32copywrite, o34taketype, vec111elemrocopy - being removed) and a chain of constant instances
+(g17constchain - constant generics are being dropped); of the pinned messages, function types are spelled without their
+parameters' names (types carry none), text literals as `String&` where stage 0 says `Array<Char, N>`, and §8's cases
+counted here by their first error's rule.
 
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
