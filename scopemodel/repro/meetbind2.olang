@@ -1,0 +1,24 @@
+import "std/io"
+type N struct(v I32) { v }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn churn() {
+    for i in range 2000 {
+        s := $i "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+        n N& = N(I32(i))
+    }
+}
+fn f(p mut N&, c Bool) N&p {
+    n0 mut N& = N(42)                # f's block
+    a mut Cur& = Cur(n0)             # at bound to f's block
+    b mut Cur& = Cur(p)              # at bound to p's scope
+    x := a                           # x names a's instance, a's binding
+    if c { x = b }                   # b's binding outlives a's
+    x.at = n0                        # judged against the merge: f's block
+    return b.at                      # b's binding says p's scope
+}
+fn main() ? {
+    outer mut N& = N(1)
+    r := f(outer, true)
+    churn()
+    try io.Print($r.v "\n")
+}

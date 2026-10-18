@@ -1,0 +1,22 @@
+import "std/io"
+type N struct(v I32) { v }
+type Box struct(inner mut N&) { inner }
+type Holder struct(r mut N&) { r }
+fn move(p mut Box&, dst mut Holder&) { dst.r = p.inner }
+fn churnmain() {
+    for i in range 2000 {
+        s := $i "zzzzzzzzzzzzzzzzzzzzzzzz"
+        n N& = N(I32(i))
+    }
+}
+fn main() ? {
+    g mut N& = N(1)
+    h mut Holder& = Holder(g)     # h in main's block
+    for i in range 2 {
+        tmp mut N& = N(2)         # loop body
+        b mut Box& = Box(tmp)     # b.inner -> tmp (loop body)
+        move(b, h)               # stores tmp into h.r; h outlives tmp -> must be rejected
+    }
+    churnmain()
+    try io.Print($h.r.v "\n")
+}

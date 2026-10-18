@@ -1,0 +1,20 @@
+import "std/io"
+type N struct(v I32) { v }
+type Box struct(last mut N&) { last }
+fn churn() {
+    for i in range 2000 {
+        s := $i "zzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        m N& = N(I32(i))
+    }
+}
+fn main() ? {
+    outer mut N& = N(1)
+    b mut Box& = Box(outer)
+    for i in range 2 {
+        inner mut N& = N(2)              # loop body
+        c := i == 0
+        b.last = inner if c else outer   # inner (loop body) does NOT outlive b (main's block)
+    }
+    churn()
+    try io.Print($b.last.v "\n")
+}

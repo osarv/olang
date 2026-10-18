@@ -1,0 +1,19 @@
+import "std/io"
+type N struct(v I32, next mut N&) { v, next }
+type Cur struct(of mut N&) { at mut N&of = of }
+fn grow(c mut Cur&) { c.at.next = N(9, null) }   # build through c.at (a &of field): at derived scope D(c, of)
+fn churn() {
+    for i in range 2000 {
+        s := $i "zzzzzzzzzzzzzzzzzzzzzzzzzzz"
+        m N& = N(I32(i), null)
+    }
+}
+fn main() ? {
+    for i in range 2 {
+        n mut N& = N(1, null)
+        c := Cur(n)
+        grow(c)
+        try io.Print($n.next.v "\n")
+    }
+    churn()
+}

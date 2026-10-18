@@ -1,0 +1,13 @@
+import "std/io"
+type N struct(v I32) { v }
+type Box struct(last mut N&) { last }
+fn main() ? {
+    outer mut N& = N(1)
+    other mut N& = N(5)
+    b mut Box& = Box(outer)
+    for i in range 2 {
+        c := i == 0
+        b.last = other if c else outer   # both outlive b -> accepted
+    }
+    try io.Print($b.last.v "\n")
+}
