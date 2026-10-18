@@ -11,7 +11,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 |---|---|---|---|
 | 1 | Generators (`yield`) | C#, Python | decided 2026-10-18: `fn f(...) Iterator<T>` with `yield`, both compilers |
 | 2 | Compile-time reflection | Zig, Rust derive | decided 2026-10-18: `T.Name/Kind/Base/Fields/Cases/Params`, both compilers |
-| 3 | Units of measure | F# | open |
+| 3 | Units of measure | F# | declined 2026-10-18 (the user: "I don't want units") |
 | 4 | Portable SIMD vectors | Zig, Rust | open |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | open |
 | 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
