@@ -1,11 +1,13 @@
 ---
-name: user-olang-direction
-description: "The user's principles for olang (2026-10-08): no manual memory management, C-like performance, natural language, minimal syntax, multi-purpose (AI/data, scripting, GUI); the base of larger projects, so the design must be solid and smooth"
+name: direction
+description: "The user's direction for olang and the work around it, and how to read and address them: principles, natural language, dictated messages, time zone, oann/oagent plans"
 metadata:
   node_type: memory
   type: user
   modified: 2026-10-08
 ---
+
+## Principles
 
 The user, 2026-10-08: "no manual memory management, C-like performance, natural language as much as possible, minimal
 syntax, multi-purpose. AI/data science and scripting as well as GUI etc. This is the basis of a bunch of larger
@@ -13,7 +15,7 @@ projects so it's important we get the design solid and smooth."
 
 **How to apply:** weigh every design detail against these, in roughly this order of non-negotiability: no manual memory
 management (scopes/arenas, never free or a GC pause), C-like performance (no hidden per-operation cost, see
-[[feedback-no-runtime-checks]]), natural language ([[user-olang-natural-language]]), minimal syntax (reuse a construct
+rules.md, "Language rules"), natural language (below, "Natural language"), minimal syntax (reuse a construct
 before adding one), multi-purpose (a choice that serves only one domain needs a reason). "Solid and smooth": prefer one
 rule that composes over special cases, and fix rough edges found while building rather than recording them.
 
@@ -62,3 +64,35 @@ superintelligence". How I approach it, as told to the user: oversight is designe
 - The system cannot change its own objective, its evaluation, or the oversight itself.
 - Everything is logged, so each change can be traced and undone.
 
+## Natural language
+
+The user (2026-09-30, on the `for` remake): "I really like the for ... in ... pattern, I want to take Olang more
+in the direction of 'natural language'".
+
+**How to apply:** when offering syntax options, include and weigh the form that reads as plain English
+(`for x in a`), and say when a choice cuts against it. It is a direction, not a mandate to rewrite existing
+syntax unasked - raise candidates (e.g. `and`/`or`/`not`) as questions, don't change them silently. Questions go in the
+ledger decisions.md when asked; answers go to CLAUDE.md/HISTORY.md.
+
+## Dictated messages
+
+The user dictates many messages (2026-10-08: "there are going to be dictation errors showing up ... the text is going
+to be as if I speak and something gets wrong and I correct it. Record it so that you are aware of it").
+
+**How to apply:** read for intent. Misheard words are common ("case cards" = case guards, "öikenmabaled" = like
+labeled, "Fox" = fix, "grap the lady commits" = grab the latest commits). A sentence that changes course mid-way
+("do X, no, Y") means the later part. Never quote a garbled word back as though it were meant; when a reading is
+genuinely ambiguous and the choice matters, state the reading taken (and record it as such in the ledger, per
+rules.md, "How to decide and record") rather than stalling.
+
+## Times
+
+The user lives in Gothenburg: give every time in reports as Swedish local time - CEST (UTC+2) until 2026-10-25, CET
+(UTC+1) after - written like "15:10 CEST".
+
+The user, 2026-10-09: "For time use CEST instead. That's the Stockholm one, I live in Gothenburg. That way I don't have
+to convert it in my head manually every time."
+
+**How to apply:** convert before writing to the user (Europe/Stockholm). Tools still speak UTC (send_later `at`,
+rate_limit_event `resetsAt`, cron fields - though create_trigger accepts `CRON_TZ=Europe/Stockholm`); convert at the
+boundary. Older entries in memory and CLAUDE.md written in UTC stay as they are.

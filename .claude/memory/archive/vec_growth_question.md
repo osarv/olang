@@ -1,5 +1,5 @@
 ---
-name: project-olang-vec-growth-question
+name: archive-vec-growth-question
 description: "SETTLED 2026-09-23: no growable contiguous Vec in olang. List<T> is chunked and append-only; Buffer was rejected on measurements"
 metadata:
   node_type: memory
@@ -7,6 +7,8 @@ metadata:
   originSessionId: 7f2a5325-2cc9-4c97-9679-ec83bcdf63a5
   modified: 2026-09-23T00:00:00.000Z
 ---
+
+> HISTORICAL, SUPERSEDED (2026-10-18): the 'no growable Vec' conclusion below is WRONG now - Vec exists and is the default growable array (a handle with explicit View(), docs/memory.md); List stays for stable element addresses. Kept for the measurements. Not imported by CLAUDE.md.
 
 The open question was how a growable `Vec<T>` reallocates when a scope is a bump allocator that frees
 nothing. **Answered by dropping Vec.** olang's workload (LLM inference, big data) allocates once at a
@@ -25,4 +27,4 @@ in place returns ENOMEM every time, because Linux packs mmap regions with no gap
 slice-invalidation rule and borrow tracking unnecessary rather than deferred — a List never exposes
 anything that moves.
 **How to apply:** don't reopen contiguous growth; if incremental accumulation comes up, it's List.
-See [[project-olang-next-steps]].
+See plan.md.

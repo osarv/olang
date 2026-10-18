@@ -822,7 +822,7 @@ because what it finds about structure feeds the refactor.
   aimed at the three relaxations. Merge when it is clean or its findings are fixed.
   Usage: weekly 0.60 at 15:09 CEST, which leaves about 0.3%/h to the Sat 06:00 CEST reset. So one agent at a time,
   with gaps between.
-- 15:20 CEST: the outreach doc is filled: 14 targets and 8 letters ([[project-outreach]]). Its open questions are
+- 15:20 CEST: the outreach doc is filled: 14 targets and 8 letters (outreach.md). Its open questions are
   ledger QL.
 - Vec phase 1's review (/home/user/review/vec1) found six use-after-frees from two causes, both in relaxation 1
   (borrowed own results, `ownResultRegionOf`):

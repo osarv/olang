@@ -1,9 +1,11 @@
 ---
-name: project-olang-concurrency-gaps
+name: archive-concurrency-gaps
 description: "concurrency gaps: ALL DONE as of 2026-10-07 (cancellation + timeout = std/cancel Token, chan SendUntil/RecvUntil); -race/TSan done; no fixed pool or M:N"
 metadata:
   type: project
 ---
+
+> HISTORICAL (2026-10-18): every item here is done; kept for the evidence. Not imported by CLAUDE.md.
 
 As of 2026-09-17 the user asked for olang's concurrency gaps to be recorded and worked
 "in order when we are ready". The ordered list lives in CLAUDE.md under "Concurrency: the
@@ -34,6 +36,6 @@ opposite of Go's fire-and-forget `go f()`; channels stay a library; scheduling s
 
 **How to apply:** before starting any concurrency work, read the CLAUDE.md list and confirm
 which item is next; do not fix S18b in isolation, and do not propose a fixed-size thread
-pool or M:N scheduling — both were considered and rejected with reasons. See [[project-olang-next-steps]].
+pool or M:N scheduling — both were considered and rejected with reasons. See plan.md.
 
 **2026-10-08:** the race flag is now `-r` (B1: every flag is one character), so `olang -t -r f.olang`.
