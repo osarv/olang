@@ -494,6 +494,31 @@ bool TypeIsSameRepr(struct type a, struct type b) {
 static bool typeSameNested(struct type a, struct type b);
 
 static bool constPatternSame(struct type a, struct type b);
+
+//T22: where a function type's references live is part of it. Position i (a parameter, or the result at vars.len) is a
+//reference whose scope is that of the first earlier position sharing its scope variable - "b N&a" lives where "a" does,
+//a borrowed "T&p" result where p does - or none (-1): its own, or a built result's. Two function types whose positions
+//relate differently are different types: a call through the value establishes only what its type says, and passes one
+//hidden scope argument per scope variable, so a "fn link(a mut N&, b N&a)" called as a "fn(a mut N&, b N&)" stored b
+//where a lives with nothing checked, and read its hidden arguments out of place
+static struct var* funcPosScope(struct type f, int i) {
+    struct type* t = i < f.vars.len ? &((struct var*)ListGetIdx(&f.vars, i))->type : (f.hasRetType ? f.retType : NULL);
+    if (!t || !t->structMAlloc || !t->scopeParam) return NULL;
+    struct var* sv = canonicalVar(t->scopeParam);
+    return i == f.vars.len && f.resultScope && sv == canonicalVar(f.resultScope) ? NULL : sv;
+}
+static int funcPosShares(struct type f, int i) {
+    struct var* sv = funcPosScope(f, i);
+    if (!sv) return -1;
+    for (int k = 0; k < i; k++) if (funcPosScope(f, k) == sv) return k;
+    return -1;
+}
+static bool funcScopesSame(struct type a, struct type b) {
+    if (a.vars.len != b.vars.len) return false;
+    for (int i = 0; i <= a.vars.len; i++) if (funcPosShares(a, i) != funcPosShares(b, i)) return false;
+    return true;
+}
+
 bool TypeIsSame(struct type a, struct type b) {
     if (a.bType != b.bType) return false;
     //T27: reference-shapedness is part of a type's identity. "Point" and "Point&" are different types - one
@@ -559,6 +584,7 @@ bool TypeIsSame(struct type a, struct type b) {
             }
             if (a.hasRetType != b.hasRetType || a.noReturn != b.noReturn) return false;
             if (a.hasRetType && !typeSameNested(*a.retType, *b.retType)) return false;
+            if (!funcScopesSame(a, b)) return false;
             //T22: the same errors in the same order - a fallible call reports an error by its position - and the same words
             //of each (R1c)
             if (a.errors.len != b.errors.len) return false;
@@ -2761,8 +2787,17 @@ static struct str sbufTake(struct sbuf* b) {
 //A declared type is its module and name ("std_map.Node"; a generic one's instance "G-std_map.Box$I32-g"), a
 //primitive its name; the rest are spelled by structure, each compound form bracketed so that what follows it can never
 //be read as part of it: "A-" element "-n" (or "-<length>") "-e" an array, "F-" ... "-f" a function ("m-" a "mut"
-//parameter, each parameter closed by "-p", the result in "R-" ... "-q", each error in "E-" ... "-x"), "T-" ... "-u" a
-//tuple or an anonymous struct, "C-" ... "-d" an anonymous enum. A reference ends "-r", a writable one "-w" (T25b).
+//parameter, each parameter closed by "-p", the result in "R-" ... "-q", "-s<k>" before either
+//closing one living where position k does - T22), each error in "E-" ... "-x"), "T-" ... "-u" a tuple or an anonymous
+//struct, "C-" ... "-d" an anonymous enum. A reference ends "-r", a writable one "-w" (T25b).
+//T22: a position living where an earlier one does is spelled so ("-s0": where parameter 0 lives)
+static void spellShares(struct sbuf* b, struct type f, int i) {
+    int k = funcPosShares(f, i);
+    if (k < 0) return;
+    char s[32];
+    snprintf(s, sizeof(s), "-s%d", k);
+    sbufStr(b, s);
+}
 static struct str constPatternText(struct type t);
 static void typeSpell(struct sbuf* b, struct type t) {
     if (t.unknown) {
@@ -2802,11 +2837,13 @@ static void typeSpell(struct sbuf* b, struct type t) {
             struct var* v = ListGetIdx(&t.vars, i);
             if (v->mut) sbufStr(b, "m-");
             typeSpell(b, v->type);
+            spellShares(b, t, i);
             sbufStr(b, "-p");
         }
         if (t.hasRetType) {
             sbufStr(b, "R-");
             typeSpell(b, *t.retType);
+            spellShares(b, t, t.vars.len);
             sbufStr(b, "-q");
         }
         for (int i = 0; i < t.errors.len; i++) {
@@ -6629,6 +6666,8 @@ struct checkCtx {
     struct syntax* expectNode; //G10c: an expression being built where a type is already expected - a declaration's
     struct type expectType;    //written type, a parameter's, an assignment's target, a return's - see buildExpecting
     bool* loopBreak; //D10a: set by a "break" of the innermost loop being checked - every loop points it at its own flag
+    struct syntax* loopCond; //S9: a loop's condition, checked as the first statement of its body ("if not c { break }")
+    struct var* loopCondFirst; //...a do loop's: "first or c", so its first turn evaluates none
     struct list blockStmts;  //O26a: the statements (SNTX_STMNT) of the block being checked, and which one this is - a
     int blockStmtIdx;        //declaration looks ahead in its own block for a return of the local it declares
     bool inCondition; //B10: building an if's condition - a name found nowhere there may be a build constant -D did not define
@@ -8415,6 +8454,7 @@ static bool funcFitsByPermission(struct type want, struct type have) {
         if (TypeIsPermRef(*want.retType) && TypeIsPermRef(b) && !want.retType->refMut) b.refMut = false;
         if (!TypeIsSameStrict(*want.retType, b)) return false;
     }
+    if (!funcScopesSame(want, have)) return false;
     if (want.errors.len != have.errors.len) return false;
     for (int i = 0; i < want.errors.len; i++) {
         struct type* ew = *(struct type**)ListGetIdx(&want.errors, i);
@@ -8905,7 +8945,12 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH, &op->type, &want);
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
-    else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
+    else if (fit == TYPE_FIT_MISMATCH) {
+        Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
+        //T22: where its references live is part of a function type - say so where that differs
+        if (want.bType == BASETYPE_FUNC && op->type.bType == BASETYPE_FUNC && !funcScopesSame(want, op->type))
+            Note(tok, NOTE_FUNC_TYPE_SCOPES, &op->type);
+    }
     else if (fit == TYPE_FIT_NUMBER) { Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want); noteLiteralOwnType(op, want); }
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
     else if (fit == TYPE_FIT_CTOR) Err(tok, ERR_LITERAL_NEEDS_CTOR, &want, &want);
@@ -12046,8 +12091,6 @@ static bool mbStmt(struct statement* s, struct var* func) {
     case STATEMENT_FOR:
         return mbBoundary(s->var.type, s->forInit) || mbOperand(s->forInit) || mbOperand(s->op)
                || (s->forPost && mbStmt(s->forPost, func)) || mbBlock(&s->block, func);
-    case STATEMENT_DO:
-        return mbOperand(s->op) || mbBlock(&s->block, func);
     case STATEMENT_MATCH:
         if (mbOperand(s->op) || mbBlock(&s->matchHold, func) || mbBlock(&s->matchCases, func)
                 || mbBlock(&s->nomatchBlock, func) || mbOperand(s->nomatchValue))
@@ -12462,8 +12505,6 @@ static bool mbiStmt(struct statement* s) {
         return mbiOperand(s->forInit, at) || mbiOperand(s->op, false) || (s->forPost && mbiStmt(s->forPost))
                || mbiBlock(&s->block);
     }
-    case STATEMENT_DO:
-        return mbiOperand(s->op, false) || mbiBlock(&s->block);
     case STATEMENT_MATCH:
         return mbiOperand(s->op, false) || mbiBlock(&s->matchHold) || mbiBlock(&s->matchCases)
                || mbiBlock(&s->nomatchBlock) || mbiOperand(s->nomatchValue, false);
@@ -17600,8 +17641,34 @@ struct list buildBlock(struct checkCtx* ctx, struct syntax* blockNode) {
     innerCtx.checkedTaken = NULL;
     innerCtx.inTextJoin = false;
     innerCtx.assignPlaces = (struct list){0}; //S4d: a block's statements are its own, not the value of an assignment
+    innerCtx.loopCond = NULL;
+    innerCtx.loopCondFirst = NULL;
 
     struct list result = ListInit(sizeof(struct statement));
+    //S9: a loop's condition is evaluated at the start of each turn, in the turn's own block - what it builds is the
+    //turn's, reclaimed with it, where the block around the loop kept every evaluation's while the loop ran (E31b's M1:
+    //a 72KB element read in a condition, 360MB over 5,000 turns)
+    if (ctx->loopCond) {
+        struct operand* cond = buildExprFromSyntax(&innerCtx, ctx->loopCond);
+        struct statement st = (struct statement){0};
+        st.sType = STATEMENT_IF;
+        struct token ct = firstTokAnywhere(ctx->loopCond);
+        st.line = ct.lineNr;
+        if (ct.owner) st.file = TokenGetFileName(ct.owner);
+        if (!OperandIsBool(cond)) {
+            if (!cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
+            st.op = cond;
+        } else {
+            if (ctx->loopCondFirst) cond = OperandBinary(OperandReadVar(ctx->loopCondFirst, cond->tok), cond, OPERATION_OR, cond->tok);
+            st.op = OperandUnary(cond, OPERATION_NOT, cond->tok);
+        }
+        st.block = ListInit(sizeof(struct statement));
+        struct statement brk = (struct statement){0};
+        brk.sType = STATEMENT_BREAK;
+        ListAdd(&st.block, &brk);
+        ListAdd(&result, &st);
+        finalizeStmtLambdas(ListGetIdx(&result, result.len - 1)); //D16b
+    }
     struct list stmts = allPartsOfType(blockNode, SNTX_STMNT);
     innerCtx.blockStmts = stmts;
     for (int i = 0; i < stmts.len; i++) {
@@ -20418,12 +20485,78 @@ static bool storageWithinPlace(struct operand* op, struct operand* p) {
     return true;
 }
 
+//S4d: whether storage of types a and b is one representation - names aside where they name no layout of their own: a
+//number of a declared type over it, text and the bytes it is over (T29a). A struct, an enum, a reference is its own type
+static bool s4dSameStorage(struct type a, struct type b) {
+    a.refMut = b.refMut = false;
+    if (a.bType != b.bType || a.structMAlloc != b.structMAlloc) return false;
+    if (a.bType == BASETYPE_ARRAY) return a.arrElem && b.arrElem && s4dSameStorage(*a.arrElem, *b.arrElem);
+    if (isTypeVanilla(a.bType) && !a.structMAlloc) return true;
+    return TypeIsSame(a, b);
+}
+//S4d: the types the storage of a value of type t is made of - t, and what it holds in place (a field, a payload, an
+//element), never what it reaches through a reference: a reference to any of them names storage within such a value
+static void s4dStorageTypes(struct type t, struct list* out, int depth) {
+    if (depth > VALUE_WALK_LIMIT || t.unknown) return;
+    t.structMAlloc = false;
+    t.refMut = false;
+    for (int i = 0; i < out->len; i++) if (s4dSameStorage(*(struct type*)ListGetIdx(out, i), t)) return;
+    ListAdd(out, &t);
+    struct list kids = TypeValueChildren(t);
+    for (int i = 0; i < kids.len; i++) {
+        struct type k = *(struct type*)ListGetIdx(&kids, i);
+        if (!k.structMAlloc) s4dStorageTypes(k, out, depth + 1);
+    }
+    ListDestroy(kids);
+}
+//S4d: whether a value of type v can hold a reference to storage of one of the types in `storage` - following fields,
+//elements, payloads, references and type arguments (an instance's fields are its arguments'); a function value can hold
+//anything (D16c), and so can a type not known yet (a type variable). Decided from the types alone
+static bool s4dCanHoldRefTo(struct type v, struct list* storage, struct list* seen, int depth) {
+    if (v.unknown) return false;
+    if (depth > VALUE_WALK_LIMIT || v.bType == BASETYPE_FUNC || v.bType == BASETYPE_TYPEVAR) return true;
+    if (v.structMAlloc) {
+        struct type r = v;
+        r.structMAlloc = false;
+        r.refMut = false;
+        for (int i = 0; i < storage->len; i++) {
+            struct type s = *(struct type*)ListGetIdx(storage, i);
+            //an array reference may be a slice of an array of the same elements, whatever its length
+            if (r.bType == BASETYPE_ARRAY && s.bType == BASETYPE_ARRAY ? r.arrElem && s.arrElem && s4dSameStorage(*r.arrElem, *s.arrElem)
+                                                                        : s4dSameStorage(r, s))
+                return true;
+        }
+        if (r.owner && r.name.len) { //what a declared type reaches, once
+            for (int i = 0; i < seen->len; i++) if (TypeIsSame(*(struct type*)ListGetIdx(seen, i), r)) return false;
+            ListAdd(seen, &r);
+        }
+        v = r;
+    }
+    struct list kids = TypeValueChildren(v);
+    bool can = false;
+    for (int i = 0; i < kids.len && !can; i++) can = s4dCanHoldRefTo(*(struct type*)ListGetIdx(&kids, i), storage, seen, depth + 1);
+    ListDestroy(kids);
+    return can;
+}
+static bool s4dResultCanHold(struct var* func, struct type borrowed) {
+    if (!func || func->type.bType != BASETYPE_FUNC) return true;
+    if (!func->type.hasRetType) return false;
+    struct list storage = ListInit(sizeof(struct type));
+    struct list seen = ListInit(sizeof(struct type));
+    s4dStorageTypes(borrowed, &storage, 0);
+    bool can = s4dCanHoldRefTo(*func->type.retType, &storage, &seen, 0);
+    ListDestroy(storage);
+    ListDestroy(seen);
+    return can;
+}
+
 //S4d: arguments func's call, an enum case or an array literal borrows (E12c) into what it builds, while the value of an
 //assignment is built - one naming storage within a place the assignment writes over would leave the value holding a
 //reference to its own storage, written over in place (T11b): it takes the place's old value instead, as a temporary
-//copy built where one there would be. Only where what is built can keep argument j: a call's result, as its body
-//says (calleeMayKeepArg), and an enum's payload or a literal's element always (keepsAll)
-static bool calleeMayKeepArg(struct var* m, int idx);
+//copy built where one there would be. Only where what is built can keep argument j, by types alone: a call's result
+//where its type can hold a reference to storage of the argument's type (s4dResultCanHold) - whatever the callee's
+//body does with it, which no check-time decision may wait for - and an enum's payload or a literal's element always
+//(keepsAll)
 static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list args, bool keepsAll) {
     if (!ctx || !ctx->assignPlaces.len) return;
     for (int j = 0; j < args.len && (!func || j < func->type.vars.len); j++) {
@@ -20436,7 +20569,7 @@ static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list a
         bool within = false;
         for (int k = 0; k < ctx->assignPlaces.len && !within; k++)
             within = storageWithinPlace(a, *(struct operand**)ListGetIdx(&ctx->assignPlaces, k));
-        if (within && (keepsAll || calleeMayKeepArg(func, j))) a->copiesOld = true;
+        if (within && (keepsAll || s4dResultCanHold(func, a->type))) a->copiesOld = true;
     }
 }
 
@@ -22070,11 +22203,9 @@ static struct statement buildForBareStmnt(struct checkCtx* innerCtx, struct synt
     innerCtx->inLoop = true;
     bool broken = false;
     innerCtx->loopBreak = &broken;
-    if (condNode) {
-        stmt.op = buildExprFromSyntax(innerCtx, condNode);
-        if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
-    }
+    innerCtx->loopCond = condNode; //S9: checked in the body, as its first statement (buildBlock)
     stmt.block = buildBlock(innerCtx, firstPartOfType(s, SNTX_BLOCK));
+    innerCtx->loopCond = NULL;
     recheckLoopReturns(mark);
     innerCtx->loopBreak = NULL;
     //D10a: "for { }" with no break of its own leaves only by a return, an error or an ending - never by falling through
@@ -22996,6 +23127,7 @@ struct statement buildForInStmnt(struct checkCtx* ctx, struct syntax* s) {
     return wrap;
 }
 
+struct statement buildEmptyIfStmnt(struct checkCtx* ctx, struct token tok);
 struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     struct scope inner = scopePush(ctx->scope);
     struct checkCtx innerCtx = *ctx;
@@ -23047,15 +23179,13 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     checkCtorHereFits(&innerCtx, initVal, declType.scopeParam, declType.scopeDepth, nameTok); //C2d
 
     struct list exprs = allPartsOfType(s, SNTX_EXPR);
-    struct operand* cond = buildExprFromSyntax(&innerCtx, *(struct syntax**)ListGetIdx(&exprs, 0));
-    if (!OperandIsBool(cond) && !cond->type.unknown) Err(cond->tok, ERR_COND_NOT_BOOL_TYPE, &cond->type);
+    struct syntax* condNode = *(struct syntax**)ListGetIdx(&exprs, 0);
     struct syntax* postNode = firstPartOfType(s, SNTX_STMNT_ASSIGN);
     if (!postNode) postNode = firstPartOfType(s, SNTX_STMNT_EXPR);
 
     struct statement stmt = (struct statement){0};
     stmt.sType = STATEMENT_FOR;
     stmt.var = *loopVar;
-    stmt.op = cond;
     stmt.forInit = initVal;
     //a var reassigned inside a loop body can, in general, end up different across different iterations -
     //this checker only ever walks the body once (no fixpoint iteration), so rather than trust whatever
@@ -23067,12 +23197,22 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     innerCtx.inLoop = true; //S11
     bool forBroken = false;
     innerCtx.loopBreak = &forBroken; //D10a: its own breaks, not an outer loop's
+    innerCtx.loopCond = condNode; //S9: checked in the body, as its first statement (buildBlock)
     stmt.block = buildBlock(&innerCtx, firstPartOfType(s, SNTX_BLOCK));
+    innerCtx.loopCond = NULL;
     //the post clause runs after the body, so it is checked after it - which also puts a reassignment it
-    //makes ("c = c.next") inside the window the binding snapshot below treats as the loop's own
+    //makes ("c = c.next") inside the window the binding snapshot below treats as the loop's own. S9: in a block of its
+    //own, as the condition is in the turn's, so what it builds is reclaimed each time it runs
+    struct scope postScope = scopePush(innerCtx.scope);
+    struct checkCtx postCtx = innerCtx;
+    postCtx.scope = &postScope;
+    postCtx.blockDepth = innerCtx.blockDepth + 1;
+    postCtx.assignPlaces = (struct list){0};
+    struct statement postIn = postNode->type == SNTX_STMNT_ASSIGN ? buildAssignStmnt(&postCtx, postNode)
+                                                                  : buildExprStmnt(&postCtx, postNode);
     stmt.forPost = MallocOrCrash(sizeof(struct statement));
-    *stmt.forPost = postNode->type == SNTX_STMNT_ASSIGN ? buildAssignStmnt(&innerCtx, postNode)
-                                                       : buildExprStmnt(&innerCtx, postNode);
+    *stmt.forPost = buildEmptyIfStmnt(&innerCtx, firstTokAnywhere(postNode));
+    ListAdd(&stmt.forPost->block, &postIn);
     recheckLoopReturns(mark);
     struct list after = snapshotScopeBindings(innerCtx.scope);
     foldScopeBindingsBranch(&baseline, &after);
@@ -23080,23 +23220,47 @@ struct statement buildForStmnt(struct checkCtx* ctx, struct syntax* s) {
     return stmt;
 }
 
+//S9: "do { B } for c" is "for first := true, , first = false { if not (first or c) { break } B }" with first a name no
+//program can write - its condition evaluated in the turn it decides, as for's is (buildBlock), from the second on
+static int doCounter = 0;
 struct statement buildDoStmnt(struct checkCtx* ctx, struct syntax* s) {
-    struct statement stmt = (struct statement){0};
-    stmt.sType = STATEMENT_DO;
-    //same "any reassignment kills it" treatment as buildForStmnt above, same reasoning.
-    struct list baseline = snapshotScopeBindings(ctx->scope);
+    struct token kw = firstTokAnywhere(s);
+    struct scope inner = scopePush(ctx->scope);
     struct checkCtx loopCtx = *ctx;
+    loopCtx.scope = &inner;
+    char* nm = MallocOrCrash(32);
+    snprintf(nm, 32, "$doFirst%d", ++doCounter);
+    struct token ft = kw;
+    ft.type = TOK_IDEN;
+    ft.str = StrFromCStr(nm);
+    struct type bt = TypeVanilla(BASETYPE_BOOL);
+    bt.scopeDepth = loopCtx.blockDepth;
+    struct var* first = scopeDeclare(loopCtx.mod, loopCtx.scope, ft.str, ft, bt, true);
+    struct token tt = kw, ff = kw;
+    tt.str = StrFromCStr("true");
+    ff.str = StrFromCStr("false");
+    struct statement stmt = (struct statement){0};
+    stmt.sType = STATEMENT_FOR;
+    stmt.var = *first;
+    stmt.forInit = OperandBoolLiteral(tt);
+    //same "any reassignment kills it" treatment as buildForStmnt above, same reasoning.
+    struct list baseline = snapshotScopeBindings(loopCtx.scope);
     struct loopMark mark = loopMarkAt(ctx); //O13a
     loopCtx.inLoop = true; //S11
     bool doBroken = false;
     loopCtx.loopBreak = &doBroken; //D10a: its own breaks, not an outer loop's
+    loopCtx.loopCond = firstPartOfType(s, SNTX_EXPR);
+    loopCtx.loopCondFirst = first;
     stmt.block = buildBlock(&loopCtx, firstPartOfType(s, SNTX_BLOCK));
+    stmt.forPost = MallocOrCrash(sizeof(struct statement));
+    *stmt.forPost = (struct statement){0};
+    stmt.forPost->sType = STATEMENT_ASSIGN;
+    stmt.forPost->target = OperandReadVar(first, kw);
+    stmt.forPost->op = OperandBoolLiteral(ff);
     recheckLoopReturns(mark);
-    struct list after = snapshotScopeBindings(ctx->scope);
+    struct list after = snapshotScopeBindings(loopCtx.scope);
     foldScopeBindingsBranch(&baseline, &after);
     applyScopeBindingsSnapshot(&baseline);
-    stmt.op = buildExprFromSyntax(ctx, firstPartOfType(s, SNTX_EXPR));
-    if (!OperandIsBool(stmt.op) && !stmt.op->type.unknown) Err(stmt.op->tok, ERR_COND_NOT_BOOL_TYPE, &stmt.op->type);
     return stmt;
 }
 
@@ -28040,7 +28204,7 @@ static void vgAssign(struct operand* target, struct operand* val, struct list* r
     vgStoreInto(target, refs, st);
 }
 
-static void vgLoopBody(struct statement* stm, struct vgState* st, bool condFirst) {
+static void vgLoopBody(struct statement* stm, struct vgState* st) {
     struct vgLoop* lp = MallocOrCrash(sizeof(struct vgLoop));
     lp->breaks = ListInit(sizeof(struct vgState));
     lp->conts = ListInit(sizeof(struct vgState));
@@ -28051,17 +28215,11 @@ static void vgLoopBody(struct statement* stm, struct vgState* st, bool condFirst
         lp->breaks.len = 0;
         lp->conts.len = 0;
         struct vgState s = vgCopy(&head);
-        if (condFirst) {
-            vgEval(stm->op, &s, NULL);
-            if (stm->op) vgMerge(&exits, &s); //(the condition false; with none, only a break leaves)
-        }
+        vgEval(stm->op, &s, NULL);
+        if (stm->op) vgMerge(&exits, &s); //(the condition false; with none - S9 checks it in the body - only a break leaves)
         vgBlock(&stm->block, &s);
         for (int i = 0; i < lp->conts.len; i++) vgMerge(&s, ListGetIdx(&lp->conts, i));
-        if (condFirst) vgStmt(stm->forPost, &s);
-        else {
-            vgEval(stm->op, &s, NULL);
-            vgMerge(&exits, &s);
-        }
+        vgStmt(stm->forPost, &s);
         for (int i = 0; i < lp->breaks.len; i++) vgMerge(&exits, ListGetIdx(&lp->breaks, i));
         int before = vgWeight(&head);
         vgMerge(&head, &s);
@@ -28118,10 +28276,7 @@ static void vgStmt(struct statement* s, struct vgState* st) {
             vgEval(s->forInit, st, &refs);
             vgBind(&s->var, s->forInit, &refs, st, true);
         }
-        vgLoopBody(s, st, true);
-        break;
-    case STATEMENT_DO:
-        vgLoopBody(s, st, false);
+        vgLoopBody(s, st);
         break;
     case STATEMENT_MATCH: {
         vgBlock(&s->matchHold, st);

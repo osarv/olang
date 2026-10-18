@@ -745,10 +745,10 @@ arguments always name distinct instantiations. A declared type argument is disti
 and name** (T29), matching the identity rule the type itself has, so two modules each declaring a `Point`
 give two instantiations of `Vec<Point>` rather than one. An array argument is distinguished by its element
 type, its length, and whether it is reference-shaped — every part of what makes an array type distinct
-(T25a). A function type argument is distinguished by its parameters (each one's `mut` included), result and errors
-(T22); a reference argument by its permission (T25b), so `List<Node&>` and `List<mut Node&>` are two; and a declared
-array type from the array it is declared over (T29a). No argument is too long to tell apart: there is no limit on how
-deeply type arguments nest short of G17's.
+(T25a). A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
+and where its references live (T22); a reference argument by its permission (T25b), so `List<Node&>` and
+`List<mut Node&>` are two; and a declared array type from the array it is declared over (T29a). No argument is too long to tell
+apart: there is no limit on how deeply type arguments nest short of G17's.
 
 Instantiations are emitted by every object that uses one and deduplicated at link time, so several modules
 instantiating one generic over one type is ordinary and costs nothing beyond the duplicate compilation.
@@ -829,12 +829,18 @@ the result writable where the type gives a read-only one - so `fn(acc I32, b Box
 `fn(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
 the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
 type's list. A `noreturn` function value also fits a type with the same parameters, no result, no error
-list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same.
+list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same,
+**where its references live** included: a parameter written `b N&a` lives where `a` does and a result written `T&p` where
+`p` does (O4a, O14), so `fn link(a mut N&, b N&a)` is a value of `fn(a mut N&, b N&a)` and of no type whose `b` lives
+apart - a call through `fn(a mut N&, b N&)` would establish nothing `link` requires (T22a) - and a function borrowing its
+result is no value of a type building one. A result written as a type variable (O14b) is a built one here.
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
 value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
-as a value is a compile-time error naming the obligation. The exception is a function type whose result is written as
+as a value is a compile-time error naming the obligation. A relation the signature writes - a parameter living where
+another does (`b N&a`) - is one a function type can write too, so such a function is a value of a type saying the same,
+and a call through it is held to that as a direct call is (T22). The exception is a function type whose result is written as
 a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call
@@ -3355,8 +3361,9 @@ of storage within it (a field, or an element - any element of an array standing 
 compared - reached with no reference followed), takes the place's **old value**: what the place held is copied, built
 where a temporary in that position would be (O18a), and the borrow names the copy. It applies where the value's
 **type** can hold the borrow: where, following fields, elements, payloads, references and type arguments, the assigned
-value's type can hold a reference to storage of the borrowed type (or of a type sharing its representation, T29a), or a
-function value (D16c), which can hold anything. It is decided from the types alone - never from what a callee's body
+value's type can hold a reference to storage of the borrowed type or of a type it holds in place (a field, a payload, an
+element), or of a type sharing its representation (T29a) - a reference to an array standing for any array of its
+elements, whatever its length - or a function value (D16c), which can hold anything. It is decided from the types alone - never from what a callee's body
 does with its argument - so `x = E.Neg(x)` is the negation of the old `x`, `n = Node(n)` puts the old node behind the
 new one, `x = f(x)` copies the old `x` wherever `f`'s result type can hold a reference to `x`'s type whether or not
 `f` keeps it, and no assignment makes a value hold the storage it **names**. The copy is what the borrow names
@@ -3450,6 +3457,13 @@ statement under S3 — so `i + 1`, which computes a value and discards it, is a 
 anywhere else. The loop runs: evaluate init once; while condition is true, run body, then run the post
 clause, then re-check condition.
 
+The condition of the second and third forms is evaluated **in the turn it decides**: as the first thing in the body's
+block (O2), so what it builds - a temporary, an element `At` hands back - is that turn's and is reclaimed when the turn's
+block closes, a destructor-bearing one destructed then (O16), the last evaluation's when the loop leaves. It sees no
+name the body declares. A `do` loop's condition likewise (S10). The post clause runs in a block of its own, each time,
+so what it builds is reclaimed as it ends - an assigned value lives where its target does (O18a). (Evaluated in the
+block around the loop, every evaluation's storage stayed while the loop ran.)
+
 **S9a (`for ... in`).** `for x in e` runs its body once for each value `e` yields, with `x` a new local
 holding it; `for i, x in e` also declares `i`, an `I64` counting iterations from `0`. The names are
 scoped to the body. `e` is evaluated once, before the first iteration, and must be one of:
@@ -3523,7 +3537,8 @@ the first iteration, so the loop costs what the three-clause form does.
 
 **S10.** `do-stmnt ::= "do" block "for" expr STMNT_END`. Runs body once unconditionally, then
 repeats: evaluate `expr` (must be `Bool`); if true, run body again and repeat; if false, stop. The
-loop always executes its body at least once.
+loop always executes its body at least once. `expr` is evaluated in the turn it decides, as a `for` loop's condition
+is (S9): what it builds is reclaimed with that turn.
 
 **S11.** `break-stmnt ::= "break" STMNT_END` and `continue-stmnt ::= "continue" STMNT_END`. Both are bare
 statements taking no operand, and both are valid **only inside a loop body** (S9, S9a, S10) — writing either

@@ -1,0 +1,14 @@
+# check: fail error[E12]: expected fn(a mut N&, b N&), found fn(a mut N&, b N&a)
+# T22: where a function's references live is part of its type - 'link' says b's argument lives where a's does, which a
+# call through a value of type fn(a mut N&, b N&) never establishes (it stored b where a lives with nothing checked, and
+# passed one hidden scope argument where link expected another: a segfault)
+type N struct(v I64) {
+    v
+    next N& = null
+}
+fn link(a mut N&, b N&a) { a.next = b }
+fn put(f fn(a mut N&, b N&), a mut N&, i I64) { f(a, N(i)) }
+fn main() {
+    x mut N& = N(1)
+    put(link, x, 42)
+}

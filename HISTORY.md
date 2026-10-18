@@ -20317,3 +20317,59 @@ outputs. All identical but one program: `checks/cases/deeparray.olang`, a field 
 compiler refused with O31's "too deep to check whether it holds an owning type" and which now compiles. No output of
 the old compiler named an `own` runtime function, so nothing needed normalizing beyond the work directory's name in
 `-debug`'s DIFile entries.
+
+## Stage-0 fixes: function types say where their references live; S4d by types; a loop's condition in its turn (T22, T22a, G16a, S4d, S9, S10, E31b, 2026-10-18)
+
+The open stage-0 fixes of the build list (plan.md), each reproduced first and fixed in C, with the port checked too.
+
+**T22 - where a function type's references live is part of it.** `fn link(a mut N&, b N&a)` was accepted as a value of
+`fn(a mut N&, b N&)` (`review/typed/repro/sharedscope*.olang`): `TypeIsSame` and the permission fit ignored every scope
+marker, so the call through the value passed two hidden scope arguments where `link` takes one (a segfault under
+`-debug -sanitize`), and nothing held `b`'s argument to live where `a`'s does. The same hole let a function borrowing
+its result (`fn self(a mut N&) mut N&a`) be a value of a type building one, and `l.Iter().Fold(l[0], longer)` with a
+named `longer(a String&, b String&a) String&a` - each built and then failed at run time (out of memory, garbage). Found
+on the way: a generic bound to two such function types (`keep(link)`, `keep(copy)`) made two instantiations with one
+name - a duplicate symbol at the link. **Decided (mine)**: a function type's identity includes, per parameter and per
+result, which earlier parameter's scope it shares (`funcPosShares`): `TypeIsSame`, `funcFitsByPermission` and G16a's
+spelling (`-s<k>`) all compare it, so a function is a value exactly of a type writing the same - a type can write it
+(`f fn(a mut N&, b N&a)`, held to it at each call as a direct call is: O25e), a lambda takes its type from the expected
+one as before, and a result written as a type variable (O14b) counts as built (the same hidden arguments). Rejected:
+adapting the differences an adapter could bridge (compiler/DESIGN.md 1.6.1's table: a function sharing nothing for a
+type that shares, a built result for a borrowed one) - it needs per-shape adapters in stage 0, which is frozen; it is
+additive later, in the port. The error stays E12 with a note naming the type to write, or a lambda calling the function.
+SPEC T22 and T22a say it, G16a too. **The port**: `types.ScopesFit` (the scopes entries, at any depth, a built result
+and a type-variable one alike) checked in `check.fit` and `funcFits`; its spelling of types shows no scopes yet, so its
+message reads `expected fn(mut N&, N&), found fn(mut N&, N&)`. One difference remains: the port holds an instance's
+arguments plain (DESIGN.md 1.6.1), so `keep(link)` - accepted by stage 0, two instances - is refused there
+(`checks/cases/t22sharedscopegeneric.olang`, checkdiff's only new row).
+
+**S4d - decided by types in stage 0 too.** SPEC (2026-10-12) says an assignment's value borrowing storage within the
+place takes the place's old value wherever the value's type can hold the borrow; stage 0 still asked the callee's body
+(`calleeMayKeepArg`), which during checking mostly answered yes (obligations not yet settled) but for a constructor read
+C2d's what-the-instance-holds analysis. Reproduced: `x = S(0, x, r)`, `S`'s constructor writing through its `a mut S&`
+and reading `r` (another name for `x`), printed 9 (the place written, by `-b`, `-d` and `-i` alike) where SPEC says the
+copy is written and `r` reads the old 1. Now `s4dResultCanHold`: the call's result type walked through fields, elements,
+payloads, references and type arguments for a reference to storage of the borrowed type or of a type it holds in place
+(a slice of an inline field is storage within the place too, which the earlier SPEC text did not name - added), a
+function value or a type variable counting as holding anything. Enum payloads and literal elements copy as before. The
+evaluator reads `copiesOld` as codegen does, so the two agree by construction (a baked global beside the run-time test).
+The port has no S4d yet (check.olang builds no old-value copy); DESIGN.md section 7's disagreement is closed.
+
+**E31b's M1 - a loop's condition is evaluated in its turn.** The e31view review's M1 (2026-10-12, "recorded, not
+changed"): an element over 64KB read in a loop's condition - At's result and E31b's hidden copy, both T7c arena storage -
+went to the block around the loop, which never closes while it runs: 745MB for 5,000 turns of `for put(s[0], 1) < 5000
+{ }` (a plain read 374MB). **Decided (mine)**: the condition of `for c { }` and of the three-clause form is checked and
+run as the body's first statement, `if not c { break }` (`ctx.loopCond`, read by `buildBlock`), so what it builds lives
+in the turn's block, at the checker's depth as at the run time's - the port's check.olang already elaborates it so; a
+`do { B } for c` is lowered to `for first := true, , first = false { if not (first or c) { break } B }` (a hidden local),
+so its condition is read in the turn it decides from the second on, `continue` still re-checking it (S11), and
+`STATEMENT_DO` with cgDo, comptime's case and three walkers' cases is gone; a three-clause loop's post clause runs in a
+block of its own (`if true { post }`, S1a's form), as the port's Post block is. Observable only as memory and as when a
+destructor-bearing temporary of a condition runs (each turn, not at the loop's block's end) - SPEC S9 and S10 say both.
+2.2MB now for the review's program; a landing scenario (`loopcond`, under `ulimit -v 50000`) runs all four forms, and a
+corpus test counts a condition's destructions per turn beside a baked global running the loops. `interpret` still runs
+the review's program out of memory: it reclaims nothing (stage 1).
+
+**Found on the way, not fixed**: a constructor's `v := w + f(r)` field whose type depends on a function reading that
+very field of another instance (`r.v`) reports "expected no value" at the read - the field's type is not known yet
+(a cycle); writing its type (`v I64 = ...`) works. The message could name the cycle.

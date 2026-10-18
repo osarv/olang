@@ -331,6 +331,7 @@ struct type;
     X(ERR_STR_STORES_IN_RECEIVER,       "E11c, O12", "'$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here") \
     X(ERR_STR_RECEIVER_WRITABLE,        "E11c, T25c", "'$' renders read-only values too, so Str only reads its receiver - pass on what it holds read-only") \
     X(NOTE_HERE,                        "",      "here") \
+    X(NOTE_FUNC_TYPE_SCOPES,           "",      "a function type says where each reference argument and the result live, as the function does - write '%t', or pass a lambda calling it") \
     X(NOTE_VEC_GREW_HERE,               "",      "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") \
     X(NOTE_VEC_GROWS_HERE,              "",      "'%s' may grow here, in %S - take the view after it, or copy the elements first: '%s.ToArray()'") \
     X(NOTE_VEC_GROWS_INSIDE,            "",      "%S may grow it here") \

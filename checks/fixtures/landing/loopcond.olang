@@ -1,0 +1,41 @@
+# S9: a loop's condition is evaluated in the turn it decides, so what it builds - here At's 72KB element, a big
+# temporary of its own, and a node - is reclaimed with the turn's block, in each form of loop: for, three clauses, do;
+# and a three-clause loop's post clause in a block of its own, so what it builds is reclaimed each time it runs.
+# Evaluated in the block around the loop, every evaluation's storage stayed while the loop ran (E31b's M1: 745MB for
+# 5,000 turns of the first loop, where it now runs in a few MB)
+import "std/io"
+type Big struct() {
+    a Array<I64, 9000> = Array<I64, 9000>()
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    big Big = Big()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn put(v mut V&, x I64) I64 {
+    v.d[v.n] = v.d[v.n] + x
+    return v.d[v.n]
+}
+type Node struct(k I64) {
+    k
+    pad Array<I64, 64>
+}
+fn key(n Node&) I64 { return n.k }
+type BigN struct(k I64) {
+    k
+    big Big = Big()
+}
+fn keyB(n BigN&) I64 { return n.k }
+fn main() ? {
+    s := Vs(Array<I64>(8))
+    for put(s[0], 1) < 5000 { }
+    t := 0
+    for i := 0, put(s[1], 1) + key(Node(i)) < 10000, i++ { t++ }
+    do { t++ } for put(s[2], 1) < 5000
+    for i := 0, i < 5000, i = keyB(BigN(i)) + 1 { t++ }
+    try io.Println($s.d[0] $" " $s.d[1] $" " $s.d[2] $" " $t)
+}

@@ -2806,16 +2806,6 @@ static void ctExec(struct ctState* st, struct statement* s) {
             st->locals->len = mark;
             return;
         }
-        case STATEMENT_DO: {
-            while (st->flow == CF_NORMAL && ctStep(st, tok)) {
-                ctExecBlock(st, &s->block);
-                if (st->flow == CF_BREAK) { st->flow = CF_NORMAL; break; }
-                if (st->flow == CF_CONTINUE) st->flow = CF_NORMAL;
-                if (st->flow != CF_NORMAL) break;
-                if (!ctTruth(st, s->op)) break;
-            }
-            return;
-        }
         case STATEMENT_MATCH: ctRunMatch(st, s, NULL, (struct type){0}); return;
         case STATEMENT_RET:
             if (s->op) {

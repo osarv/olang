@@ -7176,6 +7176,48 @@ test "S9: for with no clauses and with only a condition" {
     assert n == 5
 }
 
+# S9: a loop's condition is evaluated in the turn it decides - what it builds is that turn's, destructed when the turn's
+# block closes (it was the block around the loop's, so every evaluation's stayed until the loop's block ended). The
+# three-clause form's and a do loop's likewise; a do loop's first turn evaluates none, and continue still re-checks
+LcDrops mut I64 = 0
+type lcProbe struct(n I64) {
+    n
+} destruct {
+    LcDrops++
+}
+fn (p lcProbe&) Below(k I64) Bool { return p.n < k }
+fn lcLoops() I64 {
+    t := 0
+    for i := 0, i < 6, i++ {
+        if i == 2 { continue }
+        t += i
+    }
+    j := 0
+    do {
+        j++
+        if j == 3 { continue }
+        t += 10 * j
+    } for j < 5
+    do { t += 1000 } for false
+    return t
+}
+LcBaked := lcLoops()                               # baked: the evaluator runs the loops as the run time does
+test "S9: a loop's condition is evaluated in the turn it decides" {
+    i := 0
+    for lcProbe(i).Below(3) {
+        assert LcDrops == I64(i)
+        i++
+        sbChurn()
+    }
+    assert LcDrops == 4
+    for k := 0, lcProbe(10 + k).Below(12), k++ { assert LcDrops == 4 + I64(k) }
+    assert LcDrops == 7
+    m := 0
+    do { m++ } for lcProbe(m).Below(2)
+    assert LcDrops == 9 and m == 2
+    assert LcBaked == 1133 and lcLoops() == 1133
+}
+
 test "S9a: for-in over an array gives each element, and the index when asked" {
     a := I32[10, 20, 30]
     sum := 0
@@ -14314,6 +14356,36 @@ test "S4d: an assignment's value borrowing the place it writes over takes the pl
     assert S4dBaked == -5 and s4dNegs(3 + k) == S4dBaked and s4dNegs(3) == -5
 }
 
+# S4d is decided by types: a constructor (or call) whose result type can hold a reference to the borrowed storage's type
+# gets the place's old value, whatever its body does with it - here it keeps nothing, but writes through the borrow, and
+# the write lands in the copy, so another name for the place still reads the old value while the value is built (the
+# body-based reading wrote the place itself, and read 9)
+type s4dT struct(w I64, a mut s4dT&, r s4dT&) {
+    s4dTPoke(a)
+    v I64 = w + s4dTRead(r)
+    next s4dT& = null
+}
+fn s4dTPoke(a mut s4dT&) { if a != null { a.v = 9 } }
+fn s4dTRead(r s4dT&) I64 { return r.v if r != null else 0 }
+fn s4dTRun(k I64) I64 {
+    x s4dT = s4dT(1, null, null)
+    r s4dT& = x
+    for i in range k { x = s4dT(0, x, r) }
+    return x.v
+}
+S4dTBaked := s4dTRun(2)                            # baked: the evaluator copies as the run time does
+test "S4d: decided by the result's type, not by what the callee does" {
+    k I64 = I64(ctRuntimeZero)
+    x s4dT = s4dT(1, null, null)
+    r s4dT& = x
+    for i in range 2 + k {
+        x = s4dT(i, x, r)
+        sbChurn()
+    }
+    sbChurn()
+    assert x.v == 2 and r.v == 2 and S4dTBaked == 1 and s4dTRun(2 + k) == 1
+}
+
 # S4c: every value of a parallel assignment is read before any target is written - an enum case built from a value, or an
 # array literal, too (they were used where they stand, as a number is, and read the target already written)
 test "S4c: a parallel assignment's enum case and array literal read their values before any target is written" {
@@ -14384,6 +14456,31 @@ test "T22: a read-only reference parameter fits a function type whose parameter 
     assert t22Apply(fn(n t22P&) I64 { return n.v + 2 }, p) == 6
     s := t22Scale(3)
     assert t22Apply(s, p) == 12
+}
+
+# T22: a function type says where its references live - "b t22sN&a" lives where a does - so a function whose parameters
+# share a scope is a value only of a type saying the same, and a call through it builds what it hands over where the
+# type says (a value of "fn(a mut t22sN&, b t22sN&)" was accepted, and stored b where a lives with nothing checked)
+type t22sN struct(v I64) {
+    v
+    next t22sN& = null
+}
+fn t22sLink(a mut t22sN&, b t22sN&a) { a.next = b }
+fn t22sPut(f fn(a mut t22sN&, b t22sN&a), a mut t22sN&, i I64) { f(a, t22sN(i)) }
+fn t22sBuild() I64 {
+    x mut t22sN& = t22sN(1)
+    t22sPut(t22sLink, x, 6)
+    return x.v + x.next.v
+}
+T22sBuilt := t22sBuild()                            # baked: the evaluator calls through the value as the run time does
+test "T22: a function value whose parameters share a scope, through a type saying so" {
+    x mut t22sN& = t22sN(1)
+    for i in range 3 {
+        t22sPut(t22sLink, x, 40 + i)
+        sbChurn()
+    }
+    sbChurn()
+    assert x.next.v == 42 and T22sBuilt == 7 and t22sBuild() == 7
 }
 
 # O17: what is read out of a lent value's region by following a reference brings in nothing new, so a callee storing

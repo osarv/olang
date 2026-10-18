@@ -1,0 +1,12 @@
+# check: fail note: a function type says where each reference argument and the result live, as the function does - write 'fn(a mut N&, b N&a)', or pass a lambda calling it
+# T22: the mismatch is said for what it is, and names the function type to write
+type N struct(v I64) {
+    v
+    next mut N& = null
+}
+fn link(a mut N&, b N&a) { a.v = b.v + 1 }
+fn main() {
+    f fn(a mut N&, b N&) = link
+    x mut N& = N(41)
+    f(x, N(7))
+}
