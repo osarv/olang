@@ -2252,8 +2252,8 @@ numtraitextends.olang:7:10: error[G19, T31]: ntDist does not satisfy the constra
       |          ^~~~~~
 compilation failed with 1 error
 === numtraitsqrtint.olang
-numtraitsqrtint.olang:6:15: error[G19, T31]: I64 does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
-    6 |     r := math.Sqrt(4)
+numtraitsqrtint.olang:7:15: error[G19, T31]: I64 does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    7 |     r := math.Sqrt(n)
       |               ^~~~
 compilation failed with 1 error
 === o10ccycle.olang

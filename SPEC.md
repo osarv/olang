@@ -769,7 +769,7 @@ I&) E`) or a generic type's (`type Map<K Hashable<K>, V>`). The `type-expr` must
 value, so it carries no reference marker. Every occurrence of the variable is its bare name (G8b).
 
 Where the variable is bound - by inference at a call (G9), by written type arguments (G7), by a constructor's
-inferred ones (G10c), or by substitution into another generic's signature or fields, reported at the call or type that
+inferred ones (G10c) - where only literals reach it, G9a first picks a type that meets the constraint - or by substitution into another generic's signature or fields, reported at the call or type that
 asked for it - its type must satisfy the constraint's trait, with every variable in the constraint
 substituted; otherwise it is a compile-time error **there**, naming the type, the constraint and the method that is
 missing, and the instantiation's body is not checked - nor the body of any method or function instantiated for it
@@ -1262,7 +1262,8 @@ module declaring the three, which gives it to those types and no others, so no t
 - not by declaring a method of that name, and not by `extends` (T29f): `Char`, `type Meters extends I32` and
 `type Dist extends F64` inherit the method but satisfy nothing, so code constrained by a numeric trait may pick its
 behaviour with `match T` over the built-in types alone. Generic numeric code says which numbers it takes -
-`fn Sqrt<T Float>(x T) T` - so a call with any other type is an error at the call naming the trait (G19).
+`fn Sqrt<T Float>(x T) T` - so a call with any other type is an error at the call naming the trait (G19); a
+literal reaching such a variable takes a type that meets it (G9a), so `math.Sqrt(4)` is `Sqrt` at `F64`.
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as
@@ -6662,7 +6663,13 @@ that matching while any other argument binds the same variable: the variable is 
 arguments, and the literal then adapts to it by T6 or is rejected as unrepresentable. A variable reached
 only by such literals is bound to the widest of their types, ranked as for a binary operator's two
 literal operands (§5.4). So `Pick(v, 7)` with `v I32` instantiates `Pick` at `I32`, `Pick(1, 2)` at `I64` (T6a), and
-`Pick(1, 2.5)` at `F64`. `null` and a `noreturn` call (D8e) take no part in that matching at all - each fits whatever
+`Pick(1, 2.5)` at `F64`. Where that widest type does not meet the variable's constraint (G19), the variable is
+bound instead to the first type of `F64`, `I64`, `U64`, `F32`, `I32`, `U32`, `F16`, `BF16`, `I16`, `U16`, `I8`, `U8` -
+widest first, a float before an integer of its width - that meets the constraint and that every one of those literals
+adapts to (T6), so `math.Sqrt(4)` and `math.Sqrt(2 + 2)` (`fn Sqrt<T Float>(x T) T`) are `Sqrt` at `F64`; with none,
+the binding stays and the constraint's error is said at the call (`whole(2.5)` with `fn whole<T Integer>(x T) T`). Only
+literals choose so: an argument with a type of its own binds it, so `math.Sqrt(n)` with `n I64` is G19's error - no
+integer becomes a float but by being written `F64(n)`. `null` and a `noreturn` call (D8e) take no part in that matching at all - each fits whatever
 the other arguments bind (`pick(3, os.Exit(1))` is `pick` at `I64`). Likewise a variable a numeric value bound through a bare type-variable parameter is rebound to a later
 such argument's type when the first flows into it (T6b), so `Pick(i32, i64)` and `Pick(i64, i32)` both instantiate
 at `I64` and the narrower argument widens; a variable fixed any other way - by a receiver (G9b), say - is not.
