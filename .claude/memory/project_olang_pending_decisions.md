@@ -325,6 +325,17 @@ design. Do what you want") - nothing to decide until a GUI is written.
   methods may cancel its destructor once Close() has done its work (`x.Disarm()`), so a closed resource's storage can be
   freed when removed; without it long-lived structures holding std resources grow with every resource ever held.
   Recommended yes. In effect: neither; both matter only for round 6 (the port's early freeing). Rounds 1-4 proceed.
+- QAE ASKED (for the morning) from docs/scope-model.md (merged 2026-10-18): restate SPEC section 8 in the model's form
+  when memory round 3 rewrites it - general rules first, the special cases as applications, no change in meaning?
+  Recommended yes, written beside M6. In effect: round 3 cuts section 8.8 and leaves the rest of section 8's text.
+- QAF 2026-10-18 (the user: "math.Sqrt(4) should not be an error. Only the form 4.Sqrt() should be. And honestly
+  2.0.Sqrt() is not that bad. Should we maybe move math methods back on types? ... the main argument against it ... we
+  don't want to overload the method set"). DECIDED (mine, a detail): a type variable reached only by literals whose
+  constraint excludes the literal's own type binds the constraint's natural type (Float -> F64, Integer -> I64), as a
+  literal adapts to a typed target - `math.Sqrt(4)` works; a variable keeps its type (`math.Sqrt(n)` with n I64 stays an
+  error). Being fixed in both compilers. ANSWERED the methods question with a recommendation: keep std/math's free
+  functions (the method-set overload incl. through extends, several-argument functions, one place). In effect: free
+  functions; E13c unchanged (`4.Sqrt()`/`2.0.Sqrt()` stay errors).
 - QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
