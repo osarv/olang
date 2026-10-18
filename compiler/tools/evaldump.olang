@@ -65,7 +65,13 @@ fn run(args Array<String&>&) I32 {
     p := c.P
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
     x := interp.Exec(p, c.Bodies, eval.Mode.Run)
-    for i in range k, args.Len() { x.M.Args.Push(args[i]) }
+    # the command line the program is given: under -t the test binary's, as stage 0 names it (build/std_os_test)
+    if testBuild {
+        base := path[:path.Len() - 6] if path.EndsWith(".olang") else path
+        x.M.Args.Push("build/" $base.Replace("/", "_") "_test")
+    } else {
+        for i in range k, args.Len() { x.M.Args.Push(args[i]) }
+    }
     status := x.RunTests(d) if testBuild else x.RunMain(d)
     for key in x.Unlowered { try io.PrintErrln("unlowered " $key) catch io.IoError { } }
     return status

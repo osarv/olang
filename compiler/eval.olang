@@ -225,11 +225,14 @@ type gkey struct(Module I64, Name source.NameId) {
     Name
 }
 
-type dkey struct(File I64, Start I32, End I32, Ty types.TypeId) {
+# constant data's instance (T25d): where it is written, its type, and its index in its function's constants - a join's
+# literal pieces share the join's span, each a constant of its own
+type dkey struct(File I64, Start I32, End I32, Ty types.TypeId, C I32) {
     File
     Start
     End
     Ty
+    C
 }
 
 # a value's shape, from its type: how its bytes are read
@@ -307,7 +310,7 @@ type Machine struct(T mut types.Table&, When Mode) {
 }
 
 # a machine evaluating in the mode given, its budgets K1's (stage 0's): 20,000,000 steps, 256 MB, 2,000 frames while
-# compiling; under -i no step or memory budget and 100,000 frames
+# compiling; under -i no step or memory budget and 10,000,000 frames (frames are the machine's tables, not this process's stack)
 fn NewMachine(t mut types.Table&, mode Mode) Machine {
     m := Machine(t, mode)
     m.allocs.Push(alloc())      # slot 0: no allocation, so an id is never 0
@@ -316,7 +319,7 @@ fn NewMachine(t mut types.Table&, mode Mode) Machine {
     if mode == Mode.Run {
         m.StepBudget = -1
         m.MemBudget = -1
-        m.DepthBudget = 100000
+        m.DepthBudget = 10000000
     }
     m.scratch = m.allocate(64, aValue, m.program).Id
     for i in range 3 { m.tmps[i] = m.allocate(64, aValue, m.program).Id }
@@ -1135,7 +1138,7 @@ fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
 # read-only storage of a constant, one instance per written position and type, made the first time it is asked for;
 # its elements, and how many
 fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp source.Span) (Ptr, I64) {
-    key := dkey(file, sp.Start, sp.End, ty)
+    key := dkey(file, sp.Start, sp.End, ty, c)
     id := try m.datas.Get(key) catch default 0
     node := f.Consts[I64(c)]
     n := m.constLen(f, node)
@@ -2416,6 +2419,8 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
         }
     }
     if m.halted { return false }
+    # what the call left in errno, as after an extern's (X6)
+    if name != "__olang_err" and name != "__olang_arg_count" and name != "__olang_arg" { m.lastErr = __olang_err() }
     res := m.T.Result(ty)
     if hasDst and res != types.VoidT { m.wr(dst, m.width(res), v) }
     return true
