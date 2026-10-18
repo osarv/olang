@@ -83,11 +83,19 @@ fn run(args Array<String&>&) {
             body := c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
             if (try where.Find(planAt) catch default -1) < 0 { continue }
-            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $planText(s.Plans[b]))
+            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $varsText(body) $planText(s.Plans[b]))
         }
         out.Write("bodies " $c.Bodies.Len() " judged " $judged " unjudged " $unjudged "\n")
     }
     try out.Flush() catch io.IoError { os.Exit(1) }
+}
+
+# a body's scope variables as text, in the order a call passes them
+fn varsText(b typed.Body&) String {
+    t := StringBuilder()
+    for k in range b.Vars.Len() { t.Push("var " $k " " $b.Vars[k] "\n") }
+    for k in range b.Locals.Len() { t.Push("local " $k " " $b.Locals[k].Kind " " $b.Locals[k].Marked " in " $b.Locals[k].In "\n") }
+    return t.ToString()
 }
 
 # a plan as text: each site's scope, each local's storage that is no stack slot, each call's passed scopes
