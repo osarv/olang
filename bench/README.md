@@ -549,6 +549,26 @@ The two misses, and what the store loop's optimized IR shows:
   stores past them.
 - An Array's own store loop through a reference parameter is not vectorized either (18 against C's 1.2 an element).
 
+## Round 2: alias tags for references and the runtime's headers (T36, 2026-10-18)
+
+The two misses above, fixed: a reference to a struct or an enum has alias tags of its own (the handle's `v.s` hoists),
+and the runtime's scope and chunk headers have theirs (a loop body's empty scope folds away). Same measurement, the
+loop alone, round 1's compiler (aa372d1) before:
+
+| row | Vec before | Vec after | Array before | Array after | List before | List after | C |
+|---|---|---|---|---|---|---|---|
+| walk, `for x in v` x10 | 6.8M | 6.8M | 6.8M | 6.8M | 6.8M | 6.8M | 6.9M |
+| gather, `v[idx[i]]` 10M | 417.4M | 252.4M | 417.4M | 252.4M | - | - | 245.6M |
+| store, `v[i] = v[i] * 2 + p` x10 | 200.0M | 11.8M | 180.0M | 11.8M | 779.9M | 519.9M | 11.9M |
+| two fields, `s.pos[i] += s.vel[i]` x10 | 320.0M | 9.3M | 190.0M | 9.3M | - | - | 9.4M |
+| push, 1M (less a run of 1) | 53.3M | 25.8M | - | - | 53.1M | 33.7M | 14.5M |
+| opaque call x10 | 250.0M | 250.0M | 240.0M | 240.0M | - | - | 90.0M |
+| Sort with a lambda, 1M | 1181.4M | 925.8M | 1160.5M | 924.1M | - | - | 560.6M |
+
+Every budget of docs/memory.md 4.6 is met now; the store and two-field loops vectorize at C's count, Vec and Array
+alike (the Array store loop through a reference parameter was held back by the same scope header). Every row prints the
+same before and after.
+
 ## Machine
 
 Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;
