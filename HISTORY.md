@@ -19936,7 +19936,8 @@ replaced, on purpose). **Decided (mine)**: a place through an index or a call's 
 (`vv[0].View()` and `vv[1].Push` are not judged the same Vec, nor `users[i]`'s hidden copy) - only refusing what is the
 same Vec for sure; a struct copy is a second name of the struct (its Vec fields are second names, M19d), until a field
 of it is assigned; a view inside an inner `Vec` of a `Vec<Vec<T>>` is not stale when the outer one grows (the outer
-buffer's handles still name the same inner Vecs); a by-value `Vec` parameter grows the caller's Vec (a handle); the
+buffer's handles still name the same inner Vecs); a by-value `Vec` parameter grows the caller's Vec (a handle); a parameter given another value is a root of its own from then
+on, so its growth is no growth of the caller's; the
 summary of a function is per function, never per element type. The rule has no run-time part and the evaluator needed
 nothing: it already stops on every stale view it reaches (round 1).
 
