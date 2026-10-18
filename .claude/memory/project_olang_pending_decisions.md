@@ -325,6 +325,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   methods may cancel its destructor once Close() has done its work (`x.Disarm()`), so a closed resource's storage can be
   freed when removed; without it long-lived structures holding std resources grow with every resource ever held.
   Recommended yes. In effect: neither; both matter only for round 6 (the port's early freeing). Rounds 1-4 proceed.
+- QAD revised 2026-10-18 (the user: "What are pins? For the disarming of the destructor. Why? Also I don't want to
+  require destructors to be idempotent, I want every destructor to run once only. 3) I don't understand"): pins
+  explained, recommendation unchanged (none for now). Disarm replaced, ASKED: `x.Destroy()` (name open) runs the
+  destructor now, exactly once (nothing at scope close for it); its storage may then be freed early; use after it is
+  refused locally, caught by the evaluator/interpret/-sanitize elsewhere, and std resource methods fail with an error.
+  No Close, no idempotent destructors. In effect: neither.
+- QAE DECIDED by me 2026-10-18 (the user did not follow the question; a tidy-up): SPEC section 8 is restated in the
+  model's form (general rules, special cases as applications, no change in meaning), beside M6.
 - QAE ASKED (for the morning) from docs/scope-model.md (merged 2026-10-18): restate SPEC section 8 in the model's form
   when memory round 3 rewrites it - general rules first, the special cases as applications, no change in meaning?
   Recommended yes, written beside M6. In effect: round 3 cuts section 8.8 and leaves the rest of section 8's text.
