@@ -82,6 +82,12 @@ overrated".
   section-8 fail cases get no error (E11c/O12 34, E31b 29, O17 18, C2d 11, P2/D16e 11, O10c 8 ...) - round 2's work,
   with per-instance bindings (O23a/O13c) for the 96 over-rejection rows. Emitter must allocate a non-Frame Home for a
   local the scope pass stores in a scope variable (O26a) - emitdump still lowers with the stand-in.
+- 2026-10-19 00:40 CEST: wt-eval merged and verified (M8 round 2, 9713316): compiler/interp.olang runs lowered MIR;
+  B9c/S8b/S18c decided by evaluation in Analyze; `olang interpret` through the driver; `make evaldiff` 254/287 tests as
+  stage 0 (linalg slow, map check errors, os needs M6); 79MB where stage 0's interpret took 1.66GB. Left: speed
+  (pre-decode MIR), K2 baking into emitted data, G21, S8c, S18d, tasks. STAGE-0 BUG to fix: `$f` renders a function's
+  error set with `+` (QY removed it); checks/cases/d16blambdaorder.olang pins the old spelling. Running: wt-scope6 (M6
+  round 2).
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
   self-hosting (stage 0 too): the open STAGE-0 BUG FIXES (wt-noown - own/take removed, memory round 3 - merged
