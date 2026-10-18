@@ -1627,11 +1627,39 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
         if a > b { return fe.let("trunc " $fl " " $v " to " $gl) }
         return fe.let($("zext " if t.IsUnsigned(f) or f == types.BoolT else "sext ") $fl " " $v " to " $gl)
     }
+    if fi and gl == "bfloat" {
+        # T4: an integer rounded once to a BF16, by the runtime's own conversion - LLVM 18 rounds twice at -O0
+        x := $v
+        if t.Bits(f) < 64 { x = fe.let($("zext " if t.IsUnsigned(f) else "sext ") $fl " " $v " to i64") }
+        neg := "false"
+        mag := x
+        if not t.IsUnsigned(f) {
+            neg = fe.let("icmp slt i64 " $x ", 0")
+            nx := fe.let("sub i64 0, " $x)
+            mag = fe.let("select i1 " $neg ", i64 " $nx ", i64 " $x)
+        }
+        fe.E.runtime("__olang_int_bf16")
+        return fe.let("call bfloat @__olang_int_bf16(i64 " $mag ", i1 " $neg ")")
+    }
+    if fi and gl == "half" {
+        # T4/E26: through a double, which holds every integer short of F16's overflow exactly, so this rounds once; the
+        # fence keeps LLVM 18 from folding "fpext (sitofp x to half)" past F16's overflow
+        d := fe.let($("uitofp " if t.IsUnsigned(f) else "sitofp ") $fl " " $v " to double")
+        fe.E.declare("llvm.arithmetic.fence.f64", "double @llvm.arithmetic.fence.f64(double)")
+        fenced := fe.let("call double @llvm.arithmetic.fence.f64(double " $d ")")
+        return fe.let("fptrunc double " $fenced " to half")
+    }
     if fi and t.IsFloat(g) { return fe.let($("uitofp " if t.IsUnsigned(f) else "sitofp ") $fl " " $v " to " $gl) }
     if t.IsFloat(f) and gi { return fe.let($("fptoui " if t.IsUnsigned(g) else "fptosi ") $fl " " $v " to " $gl) }
     if t.IsFloat(f) and t.IsFloat(g) {
-        if f == types.TypeId(11) and g == types.TypeId(12) or f == types.TypeId(12) and g == types.TypeId(11) {
-            return fe.let("fptrunc float " $fe.let("fpext " $fl " " $v " to float") " to " $gl)
+        # a BF16 widened by its bits, exactly, and an F32 narrowed to one in integers (T4: LLVM 18's own conversions
+        # call the runtime library, or at -O0 round twice); F16 and BF16 meet through an F32
+        if fl == "bfloat" and gl == "half" { return fe.let("fptrunc float " $fe.widenBF16($v, "float") " to half") }
+        if fl == "bfloat" { return fe.widenBF16($v, gl) }
+        if gl == "bfloat" {
+            if fl == "float" { return fe.narrowBF16($v) }
+            if fl == "half" { return fe.narrowBF16(fe.let("fpext half " $v " to float")) }
+            return fe.let("fptrunc " $fl " " $v " to bfloat")
         }
         return fe.let($("fpext " if t.Bits(g) > t.Bits(f) else "fptrunc ") $fl " " $v " to " $gl)
     }
@@ -1657,6 +1685,33 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
     }
     fe.gap("a conversion from " $t.Canon(from) " to " $t.Canon(to))
     return "undef"
+}
+
+# a BF16 widened to wide ("float", "double"): its bits are an F32's top half, exactly
+fn (fe mut fnEm&) widenBF16(v String&, wide String&) String {
+    bits := fe.let("bitcast bfloat " $v " to i16")
+    z := fe.let("zext i16 " $bits " to i32")
+    sh := fe.let("shl i32 " $z ", 16")
+    f := fe.let("bitcast i32 " $sh " to float")
+    if wide == "float" { return f }
+    return fe.let("fpext float " $f " to " $wide)
+}
+
+# an F32 narrowed to a BF16: to nearest, ties to even, a NaN kept with the top of its payload and made quiet - the
+# bits "fptrunc float to bfloat" gives, in integers
+fn (fe mut fnEm&) narrowBF16(f String&) String {
+    u := fe.let("bitcast float " $f " to i32")
+    hi := fe.let("lshr i32 " $u ", 16")
+    lsb := fe.let("and i32 " $hi ", 1")
+    bias := fe.let("add i32 " $lsb ", 32767")
+    sum := fe.let("add i32 " $u ", " $bias)
+    rnd := fe.let("lshr i32 " $sum ", 16")
+    quiet := fe.let("or i32 " $hi ", 64")
+    mag := fe.let("and i32 " $u ", 2147483647")
+    nan := fe.let("icmp ugt i32 " $mag ", 2139095040")
+    w := fe.let("select i1 " $nan ", i32 " $quiet ", i32 " $rnd)
+    tr := fe.let("trunc i32 " $w " to i16")
+    return fe.let("bitcast i16 " $tr " to bfloat")
 }
 
 # whether op over args, typed ty, has a true result ty cannot hold (E15a's OVERFLOW)
@@ -2153,6 +2208,7 @@ fn (e mut Emitter&) runtime(name String&) {
         case "__olang_scope_alloc_a" => "ptr @__olang_scope_alloc_a(ptr, i64, i64)"
         case "__olang_scope_alloc_zeroed" => "ptr @__olang_scope_alloc_zeroed(ptr, i64)"
         case "__olang_scope_close" => "void @__olang_scope_close(ptr)"
+        case "__olang_int_bf16" => "bfloat @__olang_int_bf16(i64, i1)"
         case "__olang_scope_register_dtor" => "void @__olang_scope_register_dtor(ptr, ptr, ptr)"
         case "__olang_sb_room" => "ptr @__olang_sb_room(ptr, i64)"
         case "__olang_sb_add" => "void @__olang_sb_add(ptr, i64)"
