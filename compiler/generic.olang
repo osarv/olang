@@ -1158,18 +1158,30 @@ fn (p mut Program&) nameType(c Context&, sp source.Span, n source.NameId) types.
     return t
 }
 
-# a global's declaration in a module, outside every top-level if; null for none
-fn (p mut Program&) anyGlobal(mi I64, n source.NameId) ast.VarDecl&p {
-    ds := p.L.Mods[mi].Decls
+# a global's declaration in a module, in the branches of its top-level ifs that were taken too; null for none
+fn (p mut Program&) anyGlobal(mi I64, n source.NameId) ast.VarDecl&p { return p.globalIn(mi, p.L.Mods[mi].Decls, n) }
+
+fn (p mut Program&) globalIn(mi I64, ds Array<ast.Decl&>&, n source.NameId) ast.VarDecl&p {
     if ds == null { return null }
     for d in ds {
         match d {
             case ast.Decl.Global(_, v) {
                 if v.Names.Has(n) { return v }
             }
+            case ast.Decl.If(_, ti) {
+                v := p.globalInIf(mi, ti, p.L.Chosen(mi, ti.Cond.Span().Start), 0, n)
+                if v != null { return v }
+            }
             nomatch { }
         }
     }
+    return null
+}
+
+fn (p mut Program&) globalInIf(mi I64, ti ast.TopIf&, chosen I64, index I64, n source.NameId) ast.VarDecl&p {
+    if chosen == index and ti.Then.Decls != null { return p.globalIn(mi, ti.Then.Decls, n) }
+    if ti.ElseIf != null { return p.globalInIf(mi, ti.ElseIf, chosen, index + 1, n) }
+    if ti.Else != null and chosen == index + 1 { return p.globalIn(mi, ti.Else.Decls, n) }
     return null
 }
 

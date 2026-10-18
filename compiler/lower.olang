@@ -206,6 +206,7 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, F mir.Fn
     T
     F
     file I64 = 0
+    rdepth mir.Operand = mir.Operand.None   # in a Render helper, how many references were followed to reach it (E11a)
     cur mir.BlockId = mir.BlockId(0)
     dead Bool = false
     gapped Bool = false
@@ -535,7 +536,9 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
     if ln.dead { return }
     match s {
         case typed.Stmt.Let(sp, l, init) {
-            v := ln.fit(ln.val(init), init, ln.B.Locals[I64(l)].Ty, sp)
+            ty := ln.B.Locals[I64(l)].Ty
+            v := ln.fit(ln.val(init), init, ty, sp)
+            if ln.copiesArray(init, ty) and not ln.dead { v = ln.arrayCopy(v, ty, sp) }
             ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
         }
         case typed.Stmt.Assign(sp, target, value) {
@@ -543,7 +546,11 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             ln.targets.Push(p)
             v := ln.fit(ln.val(value), value, target.Type(), sp)
             try ln.targets.Pop() catch { }
-            ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
+            if ln.valueArray(target.Type()) and not ln.dead {
+                ln.arrayStore(ln.mk(p), v, target.Type(), ln.copiesArray(value, target.Type()), sp)
+            } else {
+                ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
+            }
         }
         case typed.Stmt.Eval(_, x) { ln.val(x) }
         case typed.Stmt.If(sp, i) { ln.ifStmt(sp, i) }
@@ -565,6 +572,57 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }
         case typed.Stmt.Yield(sp, x) { ln.yield(sp, x) }
     }
+}
+
+# ---- array values (T7b, T11b) ----
+
+# whether a type is an array of a run-time length held by value: its storage its own, made where it is declared (T7b)
+fn (ln mut lowering&) valueArray(ty types.TypeId) Bool {
+    t := ln.T
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)
+}
+
+# whether storing x where a value array of type ty is wanted copies its elements: x is existing storage (a place read),
+# not a temporary whose storage the target takes
+fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
+    if not ln.valueArray(ty) { return false }
+    return match x {
+        case typed.Expr.Read(_, _, _, _) => true
+        case _ => false
+    }
+}
+
+# an array value's elements copied into storage of its own (T7b), made in the program's scope under the stand-in
+# placement
+fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    src := ln.local(v, ty, sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    buf := ln.temp(ty, sp)
+    el := t.Elem(t.Repr(ty))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(mir.ScopeRef.Program, ty, n, mir.Operand.Const(el, 0))))
+    ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
+    return mir.Operand.Copy(mir.L(buf))
+}
+
+# v stored into the value array at dst (T11b): written into the storage dst holds where the length is unchanged, else
+# dst given v's storage - a copy of it where v is existing storage
+fn (ln mut lowering&) arrayStore(dst mir.Place, v mir.Operand, ty types.TypeId, copies Bool, sp source.Span) {
+    src := ln.local(v, ty, sp)
+    old := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(dst)], sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[old, n], sp)
+    inPlace, fresh, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(same, inPlace, fresh))
+    ln.start(inPlace)
+    ln.emit(mir.Stmt.CopyElems(sp, dst, mir.L(src), n))
+    ln.goto(after)
+    ln.start(fresh)
+    w := ln.arrayCopy(mir.Operand.Copy(mir.L(src)), ty, sp) if copies else mir.Operand.Copy(mir.L(src))
+    ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
+    ln.goto(after)
+    ln.start(after)
 }
 
 fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {
@@ -900,6 +958,50 @@ fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind,
 
 # ---- errors ----
 
+# E35: the error a "!" took ends the program, named as a program writes it - another module's error type by its
+# module's base name, the prelude's and this module's bare ("io.IoError.FULL") - a test and an exit for each word
+fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span) {
+    t := ln.T
+    xs := t.Items(from)
+    for j in range xs.Len() {
+        et := t.ErrOf(xs[j])
+        if t.KindOf(et) != types.Kind.Named { continue }
+        d := t.DeclOf(et)
+        q := ""
+        dm := t.DeclModule(d)
+        id := ln.L.P.L.Mods[dm].Identity
+        if not id.StartsWith("std/prelude") and dm != ln.module() {
+            k := try id.FindLast("/") catch default -1
+            q = $id[k + 1:] "."
+        }
+        ws := ln.L.P.ErrorWords(d)
+        for w in range ws.Len() {
+            name := $q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w])
+            yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+            same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w)], sp)
+            ln.end(mir.Term.Branch(same, yes, no))
+            ln.start(yes)
+            ln.end(mir.Term.Exit(sp, mir.ExitKind.Error, ln.textData(name, sp)))
+            ln.start(no)
+        }
+    }
+    ln.end(mir.Term.Exit(sp, mir.ExitKind.Error, ln.textData("unhandled error", sp)))
+}
+
+# text as constant data (T25d), a String&
+fn (ln mut lowering&) textData(text String&, sp source.Span) mir.Operand {
+    c := ln.F.AddConst(typed.Const.Bytes(text))
+    return mir.Operand.Data(ln.T.Ref(ln.L.text(), types.ReadOnly), c, ln.file, sp)
+}
+
+# the module the body being lowered is in
+fn (ln mut lowering&) module() I64 {
+    for m in range ln.L.P.L.Mods.Len() {
+        if ln.L.P.L.Mods[m].File == ln.file { return m }
+    }
+    return -1
+}
+
 # an error with code, under list from, reaching here: to the first clause of the innermost try taking it, the scopes
 # opened since the try closed on the way; what its clauses do not take, to the try around it; what none takes leaves the
 # body under its own list (R17), every scope closed
@@ -943,7 +1045,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
         }
         # what this try's clauses do not take goes to the try around it - but past a "!", which ends the program
         if tc.Ends {
-            ln.end(mir.Term.Exit(sp, mir.ExitKind.Assert, mir.Operand.None))
+            ln.bang(code, from, sp)
             return
         }
     }
@@ -1743,7 +1845,7 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Render, ty), hty)
     ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Render, ty))
     ok := ln.F.NewBlock()
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[ref]), ln.F.ScopeRefs(mir.ScopeRef[b]), mir.NoPlace, false, ok
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[ref, ln.depth()]), ln.F.ScopeRefs(mir.ScopeRef[b]), mir.NoPlace, false, ok
                                mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
@@ -1827,6 +1929,7 @@ fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
         }
         case mir.HelperKind.Render {
             ln.prologue(mir.VarKind[mir.VarKind.Builder])
+            ln.rdepth = mir.Operand.Copy(mir.L(mir.LocalId(1)))
             ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
             ln.epilogue(mir.Operand.None)
         }
@@ -2229,7 +2332,19 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, "null", sp)
         ln.goto(after)
         ln.start(some)
+        # references followed 8 deep, then "..." - a cycle is cut off
+        d := ln.depth()
+        far := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[d, ln.constI64(8)], sp)
+        dots, deeper := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(far, dots, deeper))
+        ln.start(dots)
+        ln.word(b, "...", sp)
+        ln.goto(after)
+        ln.start(deeper)
+        saved := ln.rdepth
+        ln.rdepth = ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[d, ln.constI64(1)], sp)
         ln.inner(ln.at(x), t.Referent(r), b, sp)
+        ln.rdepth = saved
         ln.goto(after)
         ln.start(after)
         return
@@ -2249,7 +2364,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         return
     }
     if not top {
-        ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[b], types.VoidT, sp)
+        ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp), ln.depth()], mir.ScopeRef[b], types.VoidT, sp)
         return
     }
     parts, isParts := ln.partsOf(ty)
@@ -2311,6 +2426,9 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.gap(sp, "a Render helper for a type with no rendering")
     }
 }
+
+# how many references the rendering being written followed to reach here (E11a): 0 outside a Render helper
+fn (ln mut lowering&) depth() mir.Operand { return ln.constI64(0) if ln.rdepth == mir.Operand.None else ln.rdepth }
 
 # a value written inside another's rendering (E11a): a Char as a character literal, text as a string literal, a
 # number or a Bool as at the top, anything else as at the top through its Render helper

@@ -284,12 +284,13 @@ type ExitKind enum {
     ArrayLength    # D14b: "array length out of range"
     As             # E32: "'as' named what the value is not"
     FixedLength    # T7d: "array length does not match its fixed storage"
+    Error          # E35: an error a "!" took - its message, the error's name ("io.IoError.FULL"), is the exit's text
 }
 
 # what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
 fn ExitText(k ExitKind) String& {
     return match k {
-        case ExitKind.Done, ExitKind.Fail => ""
+        case ExitKind.Done, ExitKind.Fail, ExitKind.Error => ""
         case ExitKind.Abort => "aborted"
         case ExitKind.Unreachable => "reached unreachable code"
         case ExitKind.Assert => "assertion failed"
@@ -513,7 +514,7 @@ fn (f mut Fn&) addConstItems(xs Array<typed.Const&>&) Range {
 fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId {
     r := t.Ref(ty, types.ReadOnly)
     return match kind {
-        case HelperKind.Render => t.Func(t.List1(r), types.VoidT, types.ListId(0))
+        case HelperKind.Render => t.Func(t.List(types.TypeId[r, I64T]), types.VoidT, types.ListId(0))
         case HelperKind.Equal => t.Func(t.List(types.TypeId[r, r]), types.BoolT, types.ListId(0))
         case HelperKind.Hash => t.Func(t.List1(r), I64T, types.ListId(0))
         case HelperKind.Zero => t.Func(types.ListId(0), ty, types.ListId(0))
@@ -539,7 +540,7 @@ fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
 fn ErrorCode(t types.Table&, errors types.ListId, err types.TypeId, word I64) I64 {
     xs := t.Items(errors)
     for k in range xs.Len() {
-        if t.Same(xs[k], err) { return ((k + 1) << 16) | word }
+        if t.Same(t.ErrOf(xs[k]), t.ErrOf(err)) { return ((k + 1) << 16) | word }
     }
     for k in range xs.Len() {
         if xs[k] == types.DefaultErrT { return (k + 1) << 16 }
@@ -1515,7 +1516,7 @@ fn (v mut verifier&) termTypes(term Term) {
         }
         case Term.Exit(_, kind, msg) {
             if msg != Operand.None {
-                if kind != ExitKind.Assert { v.bad("a message for a " $short($kind) " exit") }
+                if kind != ExitKind.Assert and kind != ExitKind.Error { v.bad("a message for a " $short($kind) " exit") }
                 if not v.isText(v.operandType(msg)) { v.bad("an assert's message that is no text") }
             }
         }
@@ -2409,7 +2410,7 @@ test "constants are flattened into the function's tables; helpers' ABI is their 
     assert w.constant(c) == "[text 2 7]" and f.Bytes.Len() == 2 and f.ConstItems.Len() == 2
     i64 := t.Prim("I64")
     render := HelperType(t, HelperKind.Render, i64)
-    assert t.Canon(render) == "fn(I64&)" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Render, i64), render), render) == 1
+    assert t.Canon(render) == "fn(I64&, I64)" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Render, i64), render), render) == 1
     eq := HelperType(t, HelperKind.Equal, i64)
     assert t.Canon(eq) == "fn(I64&, I64&) Bool" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Equal, i64), eq), eq) == 0
     assert PassedCount(t, Callee.Fn(FnKey.Body(typed.BodyId(0)), eq), eq) == 2

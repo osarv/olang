@@ -1,0 +1,97 @@
+# emitdump - a program checked by the self-hosted checker, lowered (compiler/lower.olang) and written as LLVM IR by the
+# self-hosted emitter (compiler/emit.olang): M9's tool, as lowerdump is M7's.
+#
+#     emitdump [-D NAME=VALUE]... [-t] [-o OUT.ll] FILE
+#
+# The program whose root is FILE - with -t its test blocks run by the harness, else its main - written as one LLVM
+# module to OUT.ll (FILE's base name with ".ll" in build/ by default). On standard error, the check's errors when there
+# are any (the module is written still, a body they left wrong a function failing when called), and a line "gap WHAT" for each construct emission does not
+# emit yet. Compile the module with the filled-in runtime beside it (stage 0 leaves one in build/,
+# olang_runtime.HASH.ll): clang -O1 OUT.ll RUNTIME.ll -o PROG -lm -lpthread -ldl.
+
+import "std/os"
+import "std/io"
+import "../source"
+import "../diag"
+import "../cond"
+import "../fetch"
+import "../load"
+import resolver "../names"
+import "../generic"
+import typecheck "../check"
+import "../lower"
+import "../emit"
+import "../target"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PrintErrln("usage: emitdump [-D NAME=VALUE]... [-t] [-o OUT.ll] FILE") catch io.IoError { }
+        os.Exit(2)
+    }
+    os.RunOnStack(1 << 30, fn() { run(args) })
+}
+
+fn run(args Array<String&>&) {
+    std := try os.Env("OLANG_STD") catch default "std"
+    defines List<String&>
+    testBuild := false
+    outPath String&args = ""
+    k I64 = 1
+    for k < args.Len() and args[k].StartsWith("-") {
+        if args[k] == "-t" {
+            testBuild = true
+        } else if args[k] == "-D" and k + 1 < args.Len() {
+            k++
+            defines.Push(args[k])
+        } else if args[k] == "-o" and k + 1 < args.Len() {
+            k++
+            outPath = args[k]
+        }
+        k++
+    }
+    if k >= args.Len() { os.Exit(2) }
+    path := args[k]
+    d := diag.Diagnostics(false)
+    consts := cond.Consts()
+    # B12: built for this machine, as stage 0 builds by default - what the target constants say and every function
+    # carries
+    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+        try io.PrintErr(d.Render()) catch io.IoError { }
+        os.Exit(1)
+    }
+    consts.Builtins(tg.Os, tg.Arch, tg.Cpu, tg.VectorBits, 1 if tg.Fma else 0, false, false, testBuild)
+    for f in defines { try consts.Define(f, d) catch { } }
+    f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
+    l := load.Loader(std, consts, f, source.Names(), d)
+    l.Load(path)
+    r := resolver.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := typecheck.Checker(p, testBuild)
+    c.CheckProgram()
+    # what checking said, and the program written anyway: a body checking left wrong is a function that says so when
+    # it is called (the self-hosted checker is still being finished, M5b/M5c)
+    if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
+    lw := lower.Lowerer(p, c.Bodies)
+    e := emit.Emitter(p, lw, d, p.T)
+    e.Tests = testBuild
+    e.Attrs = tg.Attrs
+    if outPath == "" {
+        base := path
+        s := try base.FindLast("/") catch default -1
+        base = base[s + 1:]
+        if base.EndsWith(".olang") { base = base[:base.Len() - 6] }
+        outPath = "build/" $base ".ll"
+    }
+    fd := try os.Create(outPath) catch os.OsError {
+        try io.PrintErrln("emitdump: cannot write " $outPath) catch io.IoError { }
+        os.Exit(1)
+    }
+    w := io.Writer(fd)
+    e.Program(w)
+    try w.Flush() catch io.IoError { os.Exit(1) }
+    try os.Close(fd) catch os.OsError { }
+    for g in e.Gaps { try io.PrintErrln("gap " $g) catch io.IoError { } }
+    for g in lw.Gaps { try io.PrintErrln("lower gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.IoError { } }
+}

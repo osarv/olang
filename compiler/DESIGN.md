@@ -751,8 +751,9 @@ error list (R6), every scope closed; `Wait(j, ok, code, failed)`; and `Exit(kind
   `Str`'s `Inert` scope, hold slots, a task's stand-ins, a try default's slot).
 
 **Helpers.** `lower` makes them as MIR functions, so `emit` and `eval` run the same code. Their ABI is fixed by their
-kind, not by `ScopeVarsOf`: `Render`, `fn(x T&)`, writes `$x` into the builder that is its one passed scope (E11a,
-calling a `Str` through `Inert`, section 1.8); `Equal`, `fn(a T&, b T&) Bool`, and `Hash`, `fn(x T&) I64`, pass no
+kind, not by `ScopeVarsOf`: `Render`, `fn(x T&, depth I64)`, writes `$x` into the builder that is its one passed scope (E11a,
+calling a `Str` through `Inert`, section 1.8), `depth` the references followed to reach it - at 8 a reference is
+written `...`; `Equal`, `fn(a T&, b T&) Bool`, and `Hash`, `fn(x T&) I64`, pass no
 scope and call nothing; `Zero`, `fn() T`, a type's zero value (D13c), passes its result scope where the value holds
 references. A constructor's assembly is an `Aggregate` in the constructor's own function, not a helper.
 
