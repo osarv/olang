@@ -5152,7 +5152,62 @@ fn (c mut Checker&) rendered(sp source.Span, y ast.Expr&) typed.Expr&c {
         c.err(source.Span(sp.Start, sp.Start + 1), msgs.StrOfNothing())
         return c.unknown(sp)
     }
+    seen := Map<types.TypeId, Bool>()
+    c.wantStr(typeOf(x), seen, 0)
     return x
+}
+
+# E11c: "$" calls Str wherever a value of a type declaring one sits in what it renders - the instances it calls made
+# here, where the types are known, since a generic type's Str is otherwise made only where a call names it
+fn (c mut Checker&) wantStr(t types.TypeId, seen mut Map<types.TypeId, Bool>&, depth I64) {
+    if depth > 16 or t == types.UnknownT or t == types.TypeId(0) or seen.Has(t) { return }
+    seen.Put(t, true)
+    match c.P.T.KindOf(t) {
+        case types.Kind.Ref { c.wantStr(c.P.T.Referent(t), seen, depth + 1) }
+        case types.Kind.Named {
+            for name in String&["Str", "str"] {
+                m := c.P.MethodOf(t, c.P.T.Names.Intern(name))
+                if m >= 0 {
+                    c.strInstance(m, t)
+                    return
+                }
+            }
+            if not c.P.Body(t) { return }
+            k := c.declKind(t)
+            if k == types.DeclKind.Struct {
+                for f in c.P.T.Items(c.P.T.Fields(t)) { c.wantStr(f, seen, depth + 1) }
+            } else if k == types.DeclKind.Enum {
+                for f in c.P.T.Items(c.P.T.Cases(t)) { c.wantStr(f, seen, depth + 1) }
+            } else if k == types.DeclKind.Over {
+                c.wantStr(c.P.T.Base(t), seen, depth + 1)
+            }
+        }
+        case types.Kind.Array { c.wantStr(c.P.T.Elem(t), seen, depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for f in c.P.T.Items(c.P.T.Parts(t)) { c.wantStr(f, seen, depth + 1) }
+        }
+        nomatch { }
+    }
+}
+
+fn (c mut Checker&) strInstance(m I64, t types.TypeId) {
+    if c.P.FnIsExtern(m) { return }
+    sig := c.P.Sig(m)
+    owner := generic.FnOwner(m)
+    nv := c.P.VarCount(owner)
+    if nv == 0 {
+        c.fnBody(c.P.FnInstance(m, types.ListId(0)))
+        return
+    }
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() == 0 { return }
+    b := generic.Binding(owner, nv)
+    c.unify(ps[0], t, b, false, true)
+    c.P.InferThroughBounds(b)
+    for v in b.Vals {
+        if v == types.UnknownT { return }
+    }
+    c.fnBody(c.P.FnInstance(m, c.P.T.List(b.Vals)))
 }
 
 # whether a written type is a reference, as written
@@ -6266,6 +6321,11 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             }
             return c.prim(sp, ft, typed.PrimOp.Bitcast, c.value(rx, sp), null)
         }
+    }
+    if name == "retire" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT and c.P.L.Mods[c.fr().Mi].Prelude {
+        # M19g: where a collection stops using an array - nothing at run time but under -sanitize, which the port does
+        # not build yet; the receiver is evaluated for what it does
+        return rx
     }
     if name.StartsWith("Atomic") {
         op := typed.PrimOp.AtomicLoad

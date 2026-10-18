@@ -436,6 +436,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     errs Bool = false
     via Bool = false
     env Bool = false
+    big Bool = false
 }
 
 fn (fe mut fnEm&) tmp() String {
@@ -583,10 +584,25 @@ fn (fe mut fnEm&) run() {
         if f.Scopes[i].Kind == mir.ScopeKind.Frame and fe.frameScope < 0 { fe.frameScope = i }
     }
     # the locals, the scope headers and the result's slot
+    # T7c: storage over 64KB never on the stack - a local that large comes from an arena of the frame's own, opened
+    # here and closed at the one return
     for i in range f.Locals.Len() {
         l := f.Locals[i]
         if l.Ty == types.VoidT or l.Ty == types.NoreturnT { continue }
-        fe.head.Push("  %l" $i " = alloca " $fe.ty(l.Ty) "\n")
+        lt := fe.ty(l.Ty)
+        if fe.size(l.Ty) > 65536 {
+            if not fe.big {
+                fe.big = true
+                fe.head.Push("  %big = alloca %olang.scope\n")
+                fe.pro.Push("  store %olang.scope zeroinitializer, ptr %big\n")
+                fe.E.runtime("__olang_scope_alloc_a")
+                fe.E.runtime("__olang_scope_close")
+            }
+            a := fe.align(l.Ty)
+            fe.pro.Push("  %l" $i " = call ptr @__olang_scope_alloc_a(ptr %big, i64 " $fe.size(l.Ty) ", i64 " $(a if a > 8 else 8) ")\n")
+        } else {
+            fe.head.Push("  %l" $i " = alloca " $lt "\n")
+        }
     }
     for i in range f.Scopes.Len() {
         if f.Scopes[i].Kind == mir.ScopeKind.Builder {
@@ -643,13 +659,84 @@ fn (fe mut fnEm&) run() {
         for s in bb.Stmts { fe.stmt(s) }
         fe.term(bb.T)
     }
+    fe.label("ret")
+    if fe.big { fe.w("call void @__olang_scope_close(ptr %big)") }
     if rt != "void" {
-        fe.label("ret")
         fe.w("%rr = load " $rt ", ptr %rv")
         fe.w("ret " $rt " %rr")
     } else {
-        fe.label("ret")
         fe.w("ret void")
+    }
+}
+
+# an assignment written straight into its place where a value would be too large to carry: a fixed array built of one
+# repeated element as a loop, of more than 16 as a store each, and a copy of an aggregate over 128 bytes as a memcpy -
+# LLVM expands an aggregate value element by element, which for a million elements is a million instructions
+fn (fe mut fnEm&) fillInPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
+    t := fe.E.T
+    match rv {
+        case mir.Rvalue.Aggregate(ty, _, args) {
+            a := fe.arrayOf(ty)
+            if a == types.UnknownT or not fe.fixed(a) or fe.arrayOf(pt) == types.UnknownT { return false }
+            n := fe.fixedLen(a)
+            if n <= 16 { return false }
+            el := t.Elem(a)
+            et := fe.ty(el)
+            lt := fe.ty(a)
+            same := true
+            for i in range n {
+                if fe.arg(args, i) != fe.arg(args, 0) { same = false }
+            }
+            if same {
+                v := fe.val(fe.arg(args, 0), el)
+                at, _ := fe.addr(p)
+                head := fe.fresh("fill")
+                body := fe.fresh("fill")
+                done := fe.fresh("fill")
+                pre := fe.fresh("fill")
+                fe.w("br label %" $pre)
+                fe.label(pre)
+                fe.w("br label %" $head)
+                fe.label(head)
+                i := fe.tmp()
+                next := fe.tmp()
+                fe.w($i " = phi i64 [ 0, %" $pre " ], [ " $next ", %" $body " ]")
+                more := fe.let("icmp slt i64 " $i ", " $n)
+                fe.w("br i1 " $more ", label %" $body ", label %" $done)
+                fe.label(body)
+                e := fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i)
+                fe.store(et, v, e)
+                fe.w($next " = add i64 " $i ", 1")
+                fe.w("br label %" $head)
+                fe.label(done)
+                return true
+            }
+            vs List<String&>
+            for i in range n { vs.Push(fe.val(fe.arg(args, i), el)) }
+            at, _ := fe.addr(p)
+            for i in range n {
+                e := fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i)
+                fe.store(et, vs[i], e)
+            }
+            return true
+        }
+        case mir.Rvalue.Use(x) {
+            match x {
+                case mir.Operand.Copy(q) {
+                    k := t.KindOf(t.Repr(pt))
+                    if k != types.Kind.Array and k != types.Kind.Named and k != types.Kind.AnonEnum { return false }
+                    if t.KindOf(t.Repr(pt)) == types.Kind.Array and not fe.fixed(t.Repr(pt)) { return false }
+                    if fe.size(pt) <= 128 or fe.placeType(q) != pt { return false }
+                    src, _ := fe.addr(q)
+                    dst, _ := fe.addr(p)
+                    fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+                    fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $dst ", ptr " $src ", i64 " $fe.size(pt) ", i1 false)")
+                    return true
+                }
+                case _ { return false }
+            }
+        }
+        case _ { return false }
     }
 }
 
@@ -1023,6 +1110,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
     match s {
         case mir.Stmt.Assign(_, p, rv) {
             pt := fe.placeType(p)
+            if fe.fillInPlace(p, pt, rv) { return }
             v := fe.rvalue(rv, pt)
             if pt == types.VoidT or pt == types.NoreturnT { return }
             at, _ := fe.addr(p)
