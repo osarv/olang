@@ -26,7 +26,8 @@ body yields - no keyword, no marker. `Iterator<T>` in a result position stands f
 (a struct of its parameters, locals and resume point), which satisfies the trait; callers use it through generics,
 `for ... in` and `:=`. Rules: a function with that result yields and returns no value (the end or a bare `return`
 ends the sequence); its `? E` is what `Next()` fails with besides `Exhausted` (the call itself runs nothing and cannot
-fail); no `yield` inside a lambda, a join or deferred code; no `defer` open across a `yield`. Port only.
+fail); no `yield` inside a lambda, a join or deferred code; no `defer` open across a `yield`. Port only. Its errors are the iterator's: `fn lines(p String&) Iterator<String ? IoError>`, through the general
+error-set parameters `<T ? E>` (decided the same day, both compilers); a generator has no `?` of its own.
 
 **What:** a function that produces a sequence by `yield`ing values from ordinary code. The compiler turns it into an
 iterator: a struct holding the function's locals and a `Next() T ? Exhausted` method that resumes where it stopped.

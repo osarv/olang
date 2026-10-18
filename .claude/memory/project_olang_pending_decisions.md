@@ -364,6 +364,15 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAH DECIDED 2026-10-18 (the user: "If this make sense in general we do it in general yes"): generics over error sets.
+  A declaration's type parameter list may end in one error-set parameter after `?` (`trait Iterator<T ? E>`, `fn
+  Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E`), usable wherever an error set is written; inferred like a type
+  variable from the error sets of function values and iterators passed; empty when nothing fallible binds it (then no
+  `try` is needed); absent = empty (`Iterator<I64>`); monomorphized per error set. Not a stored error (no Result type).
+  Iterator becomes `trait Iterator<T ? E> { mut Next() T ? E, Exhausted }`; generators write `fn lines(p String&)
+  Iterator<String ? IoError>` and have no `?` of their own. std's helpers (Fold, Map, Filter, Any, All, Count, Sort's
+  comparator, linalg Map) take fallible callbacks. Core generics: both compilers. Queued after wt-mathmeth and wt-mem2
+  merge (semantic.c).
 - QAG GENERATORS REVISED 2026-10-18 (the user: "settle on fn evens (n I64) Iterator<T> ... the compiler knows this is a
   generator because of the return type and the yields and the user doesn't need to know"): no `generator` keyword and no
   `yields` marker - a `fn` whose result is `Iterator<T>` and whose body yields is a generator; `Iterator<T>` there is the

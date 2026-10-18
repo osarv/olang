@@ -55,6 +55,8 @@ overrated".
 - SMALL, after the errors and syntax batches land (they edit SPEC.md): SPEC §5's section numbers are broken - no 5.6, two
   5.11s and two 5.12s - and ~50 `§5.x` references (SPEC.md, bootstrap/syntax.h) must be checked one by one for which
   section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
+- QUEUED (QAH, 2026-10-18): error-set parameters `<T ? E>` in both compilers - spec first (G-rules, R1b), inference,
+  Iterator<T ? E>, std helpers taking fallible callbacks, checks; after wt-mathmeth and wt-mem2 merge.
 - DONE 2026-10-18 (9a831b2): the syntax batch (QY/QW, 9b78375), the number traits (T35c), Pair to std/pair, E13c (a
   number literal is no receiver), `a.Chunks(ChunkSize)` for race-free fan-out.
 - QUEUED (QZ2, the user 2026-10-17): after memory round 1 (Vec as a handle - replaces Vec phase 2b), the iterator
