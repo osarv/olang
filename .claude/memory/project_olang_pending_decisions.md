@@ -364,6 +364,16 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAI DECIDED 2026-10-18 (the user: "This is all good"): `checked` binds to its operand (one index/slice/conversion or a
+  parenthesized expression - every built-in operation in it), never into calls or function values; the Checked forms
+  and the superset rule go (a user type's operators check themselves; `checked x[i]` on At+Len types keeps the derived
+  Len check); `-debug` aborts on every such check program-wide; `unchecked (e)` marks intended wraps, truncations and
+  infinities (std's hashes, RNGs, checksums, Fixed's limbs); BuiltinError is renamed CheckError. Both compilers; queued
+  with QAH after wt-mathmeth (whose CheckedPow is taken out) and wt-mem2 merge.
+- QAJ ASKED 2026-10-18 (the user: "settle checked on function prototypes, is this something to have?"): `checked fn f`
+  (every operation of the body checked). Recommended: not now - it makes every `+` in the body an error exit not marked
+  at its line (the reason `try { }` was declined), and -debug covers the find-every-overflow job; add later if parser
+  code reads noisy with `checked (...)`. In effect: not built.
 - QAI 2026-10-18 (checked reaching into callees). DECIDED (the user): a call through a function value is never checked
   (a lambda written inside the checked expression is). ASKED: (1) keep `checked` local as today but drop the Checked
   forms (a user operator method is an ordinary call; `checked x[i]` on At+Len types keeps the derived bounds check),
