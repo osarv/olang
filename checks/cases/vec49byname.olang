@@ -1,6 +1,6 @@
 # check: run
-# vec3 F2-F4: what stays legal - a borrow used before a release, a borrowed own result whose every return borrows an
-# object of one type (a local holding one included), and a global given a number read through a global's own object
+# what stays legal: a view used before its Vec grows, a borrowed result whose every return borrows the receiver (a
+# local holding one included), and a global given a number read through another global's object
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -10,8 +10,8 @@ fn churn() I64 {
     return t
 }
 type CB struct() {
-    data own mut Array<Char>& = Array<Char>(2, 'a')
-    text own mut String& = "bb"
+    data mut Array<Char>& = Array<Char>(2, 'a')
+    text mut String& = "bb"
 }
 fn (c CB&) Text() String&c { return c.text }
 fn (c CB&) Pick(trim Bool) String&c {
@@ -19,7 +19,7 @@ fn (c CB&) Pick(trim Bool) String&c {
     t := c.Text()
     return t
 }
-G own mut CB& = CB()
+G mut CB& = CB()
 GLen := G.text.Len()
 fn main() ? {
     v := Vec<I64>()

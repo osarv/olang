@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-# Vec phase 1 (O37): a view handed back through a function of the program's own still borrows the buffer
+# a view handed back through a function of the program's own is still a view of the Vec
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 fn firstPart(v Vec<I64>&) Array<I64>&v { return v.View() }

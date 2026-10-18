@@ -1,6 +1,0 @@
-import "vlib"
-import "std/io"
-fn main() ? {
-    f := vlib.Eat
-    try io.Println("x")
-}

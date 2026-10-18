@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-# Vec phase 2a (O39): a view taken through a reference to the struct, the Vec grown through the struct
+# a view taken through a reference to the struct, the Vec grown through the struct
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 type Lexer struct(n I64) {

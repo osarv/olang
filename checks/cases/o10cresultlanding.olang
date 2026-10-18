@@ -1,0 +1,23 @@
+# check: fail error[O10c]: the callee needs one argument's scope to outlive another's
+# a built result handed to a callee that keeps it lands where the callee's obligation says - here where a loop
+# body's text may not reach: must fail
+import "std/io"
+type Rec struct(t String&) {
+    t
+}
+type H struct() {
+    k mut Rec& = null
+}
+fn mk(t String&) mut Rec& {
+    r mut Rec& = Rec(t)
+    return r
+}
+fn keep(s mut H&, r mut Rec&) { s.k = r }
+fn main() ? {
+    h mut H& = H()
+    for i in range 3 {
+        x := $i
+        keep(h, mk(x))
+    }
+    try io.Println(h.k.t)
+}

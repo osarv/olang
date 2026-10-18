@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
-# Vec phase 1 (O37/O39): a view of a Vec's elements kept across a Push, which may replace the buffer
+# a view of a Vec's elements kept across a Push, which may replace the buffer
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 fn main() ? {

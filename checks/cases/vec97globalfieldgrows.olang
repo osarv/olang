@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'd' holds a view of 'GL.toks' taken before 'GL.toks' may have grown
-# Vec phase 2a (O31/O39): a global struct holding a Vec - a function pushing to it may release a view's buffer
+# a global struct holding a Vec - a function pushing to it may grow the Vec a view is of
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 type Lexer struct(n I64) {

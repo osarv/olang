@@ -1,0 +1,35 @@
+# check: run
+# what stays legal: a typed local and a scope argument naming where a borrowed text lives, used while that text is
+# current, and in a loop a borrow taken again each turn before the text is replaced
+import "std/io"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type CB struct() {
+    text mut String& = $1 "-ttttttttttttttt"
+}
+fn mk(n I64) String& { return $n "-new-text" }
+fn main() ? {
+    c := CB()
+    x := c.text
+    d mut String&x = $5 "-built-in-the-live-region"
+    e := mk&x(6)
+    churn()
+    assert d == "5-built-in-the-live-region"
+    assert e == "6-new-text"
+    c.text = $2 "-replaced"
+    for i in range 3 {
+        y := c.text
+        f mut String&y = $i "-each-turn"
+        churn()
+        assert f == $i "-each-turn"
+        c.text = $i "-replaced"
+    }
+    assert c.text == "2-replaced"
+    try io.Println("ok")
+}

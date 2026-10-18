@@ -1,0 +1,22 @@
+# check: run
+# a String global copied from another global's text is a copy of its own: replacing that text later changes nothing
+# (an immutable top-level String global is also a -define default, B10c)
+import "std/io"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Doc struct() {
+    title mut String& = $1 "-title-built-at-run-time"
+}
+Docs mut Doc& = Doc()
+T String = Docs.title
+fn main() ? {
+    Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    churn()
+    try io.Println(T)
+}

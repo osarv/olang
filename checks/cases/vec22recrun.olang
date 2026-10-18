@@ -1,10 +1,10 @@
 # check: run
-# vec2 N1: mutually recursive borrowed own results are marked through each other (a least fixed point over calls), so a
-# use before the owner changes compiles, and a change after the last use too
+# mutually recursive borrowed results are marked through each other (a least fixed point over calls), so a use
+# before the Vec grows compiles, and a change after the last use too
 import "std/io"
 type CB struct() {
-    data own mut Array<Char>& = Array<Char>(2, 'a')
-    text own mut String& = "bb"
+    data mut Array<Char>& = Array<Char>(2, 'a')
+    text mut String& = "bb"
 }
 fn a(c CB&, n I64) String&c {
     if n == 0 { return String(c.data) }

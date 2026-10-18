@@ -1,0 +1,25 @@
+# check: run
+# an array field's elements may be values holding references: an element read out is kept across the field's
+# replacement, and the text it holds is read back after the arena churns
+type P struct(s String&, n I64) { s
+ n }
+type B struct() {
+    data mut Array<P>& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b := B()
+    b.data = Array<P>(3)
+    for i in range 3 { b.data[i] = P("p" $i, i) }
+    e := b.data[1]
+    b.data = Array<P>(5)
+    churn()
+    assert e.s == "p1" and e.n == 1 and b.data.Len() == 5 and b.data[0].n == 0
+}

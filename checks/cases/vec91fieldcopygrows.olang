@@ -1,5 +1,5 @@
 # check: run
-# Vec phase 2a (O32/O39): a copy of a field's Vec is a borrowed copy rooted where the field is
+# a copy of a field's Vec is a second name for it
 # M19g, round 2 (brought back): a copy is a second name and an iterator reads the Vec each step - no view is stale
 import "std/io"
 type Lexer struct(n I64) {

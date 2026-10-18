@@ -31,7 +31,7 @@ fn main() ? {
     v.Push(10)
     v.Push(20)
     other mut Array<I64>& = Array<I64>(1)
-    d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
+    d := longer(v.ViewMut(), other)   # a view of the Vec's buffer
     for i in range 1000 { v.Push(i) } # frees the buffer
     churn()
     try io.Println($d[0] " " $d[1])

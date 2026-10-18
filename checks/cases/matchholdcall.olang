@@ -1,0 +1,29 @@
+# check: run
+# what stays legal: a field's object chosen by a match, then handed to a call (a plain one and a spawned one) that
+# stores a new node into it
+import "std/io"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Hold struct(v I64) {
+    v
+    n mut Node& = Node(v)
+}
+type Holder struct() {
+    cur mut Hold&
+}
+fn setN(x mut Node&, h mut Hold&) { h.n = x }
+fn main() ? {
+    s := Holder()
+    for i in range 3 {
+        s.cur = Hold(i)
+        o := match i % 2 { case 7 { unreachable } case _ => s.cur }
+        setN(Node(9 + i), o)
+        assert s.cur.n.v == 9 + i
+        p := s.cur
+        join { spawn setN(Node(20 + i), p) }
+        assert s.cur.n.v == 20 + i
+    }
+    try io.Println("ok")
+}

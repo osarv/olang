@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'f' holds a view of 'l.toks' taken before 'l.toks' may have grown
-# Vec phase 2a (O38/O39): a lambda capturing a view of a field's Vec holds its loan until the lambda's last use
+# a lambda capturing a view of a field's Vec, the Vec grown before the lambda's last use
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 type Lexer struct(n I64) {

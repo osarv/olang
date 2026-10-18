@@ -1,0 +1,27 @@
+# check: run
+# O15/O16: closing a scope holding a chain of three hundred thousand destructor-bearing nodes, on a 256KB stack,
+# finishes - every destructor run once, in reverse construction order
+import "std/os"
+
+RelNext mut I64 = 0
+RelBad mut I64 = 0
+type Deep struct(v I64) {
+    v
+    next mut Deep& = null
+} destruct {
+    if v != RelNext { RelBad++ }
+    RelNext--
+}
+fn release() {
+    head mut Deep& = null
+    for i in range 300000 {
+        n mut Deep&head = Deep(i)
+        n.next = head
+        head = n
+    }
+    RelNext = 299999
+}
+fn main() ? {
+    os.RunOnStack(262144, release)
+    assert not (RelNext != -1 or RelBad != 0)
+}

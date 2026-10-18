@@ -1,0 +1,26 @@
+# check: fail error[O20]: the container outlives what this refers to
+# an inner block's text stored into a field of an object reached through another object's field: must fail
+import "std/io"
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+type Box struct() {
+    s mut String& = "none"
+}
+type CB struct() {
+    box mut Box& = Box()
+}
+fn main() ? {
+    c := CB()
+    b := c.box
+    for i in range 3 {
+        s := $i "-new-text"
+        b.s = s
+    }
+    try io.Println(b.s)
+}

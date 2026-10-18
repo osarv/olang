@@ -1,5 +1,5 @@
 # check: fail error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
-# Vec phase 2a (O31/O39): a view of a field's Vec is a loan on its buffer - a push through the struct while it is used
+# a view of a field's Vec, and a push through the struct while it is used
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 type Lexer struct(n I64) {

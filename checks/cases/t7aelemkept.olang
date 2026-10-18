@@ -1,0 +1,26 @@
+# check: run
+# a generic struct's array field of values holding references: an element read out keeps its text after the
+# array is replaced and the arena churns
+type P struct(s String&, n I64) { s
+ n }
+type SV<T> struct() {
+    data mut Array<T>& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b := SV<P>()
+    b.data = Array<P>(2)
+    b.data[0] = P("x" $3, 3)
+    b.data[1] = P("y", 4)
+    k := b.data[0]
+    b.data = Array<P>(1)
+    churn()
+    assert k.s == "x3" and k.n == 3 and b.data.Len() == 1
+}

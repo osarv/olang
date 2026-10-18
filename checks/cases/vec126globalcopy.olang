@@ -1,5 +1,5 @@
 # check: run
-# Vec phase 2a (O32): a borrowed copy is not declared from a global - any call may release what it owns
+# a copy of a global's Vec
 # M19g, round 2 (brought back): a copy is a second name and an iterator reads the Vec each step - no view is stale
 import "std/io"
 type Lexer struct() {

@@ -1042,8 +1042,8 @@ fn typereview(r mut report&) ? Failed {
     try oneError(r, dir, "lambdaalias", "is an import's alias in this module")
 }
 
-# vec2 N2: a function made a value through an import alias ("f := lib.F") is checked as one named bare is - G12, T22a,
-# O36 and O40 - where it once skipped them all; one error each, and what stays legal through an alias the same built and
+# vec2 N2: a function made a value through an import alias ("f := lib.F") is checked as one named bare is - G12 and
+# T22a - where it once skipped them all; one error each, and what stays legal through an alias the same built and
 # interpreted. (A Vec's View() is an ordinary borrowed result since Vec is a handle, so a function handing one back is a
 # value like any other - and M19g follows a view through one, n2 and f3.)
 test "a function value through an import alias is checked as one named bare" { assert passed("vecalias") }
@@ -1052,12 +1052,10 @@ fn vecalias(r mut report&) ? Failed {
     dir := fresh("vecalias")
     os.Run("cp checks/fixtures/vecalias/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
-    try r.expect(outOf(dir) == "30 60 7 9\n", "good output", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7 9\n", "good under -i", dir)
+    try r.expect(outOf(dir) == "30 60 7\n", "good output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7\n", "good under -i", dir)
     try oneError(r, dir, "p1", "error[T22a]: 'Stash' relates its arguments' scopes")
-    try oneError(r, dir, "p2", "error[O40]: 'Drop' releases owned objects")
     try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
-    try oneError(r, dir, "p4", "error[O36]: 'Eat' owns a parameter")
     try oneError(r, dir, "n2", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
     try oneError(r, dir, "f3", "error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown")
 }
@@ -1146,13 +1144,6 @@ fn agree(r mut report&) ? Failed {
     try r.expect(sh(dir, ("printf 'before\\nunhandled error: Err.LOUD\\n(build with -debug to see where it came from)\\n' | cmp -s - b.txt"
                           " && cmp -s d.txt i.txt && grep -q '^r17.olang:9: raised here$' d.txt")) == 0, "r17 output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build share.olang > out.txt 2>&1 && ./build/share") == 0, "share", dir)
-    # O30-O42: owned objects moved, taken, released and borrowed - built, built -d -s (a use after a release would be
-    # reported), and interpreted
-    try r.expect(sh(dir, "\"$OLANG\" build own.olang > out.txt 2>&1 && ./build/own > b.txt 2>&1") == 0, "own", dir)
-    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize own.olang > out.txt 2>&1 && ./build/own.debug.san > d.txt 2>&1") == 0
-                 "own -d -s", dir)
-    try r.expect(sh(dir, "\"$OLANG\" interpret own.olang > i.txt 2>&1") == 0, "own -i", dir)
-    try r.expect(sh(dir, "cmp -s own.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "own output", dir)
     ll String& = " build/share.main.ll"
     try r.expect(sh(dir, "grep -q '^@share_B = constant ptr @share_A.k[0-9]*$'" $ll) == 0, "share_B", dir)
     try r.expect(sh(dir, "grep -q '^@share_H.k[0-9]* = internal global .2 x i32.'" $ll) == 0, "share_H.k", dir)

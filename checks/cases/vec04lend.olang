@@ -1,5 +1,5 @@
 # check: fail error[M19g]: this view of 'v' is given to 'grow', which may grow 'v'
-# Vec phase 1 (f1d's shape, O38/O39): a Vec's view lent to a callee that grows the same Vec
+# a Vec's view lent to a callee that grows the same Vec
 # M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
 import "std/io"
 fn grow(v mut Vec<I64>&, d Array<I64>&) I64 {

@@ -1,9 +1,8 @@
 import "vlib"
 import "olib"
-import "glib"
 import "std/io"
 # what stays legal through an import alias: a borrowed result called by name and used before the Vec grows, a
-# plain function made a value, a scope-relating one called by name, a releasing one called once nothing is borrowed
+# plain function made a value, and a scope-relating one called by name
 fn main() ? {
     v := Vec<I64>()
     v.Push(10)
@@ -15,6 +14,5 @@ fn main() ? {
     h := olib.Holder()
     n olib.Node& = olib.Node(7)
     olib.Stash(h, n)
-    glib.Drop()
-    try io.Println($s " " $f(v) " " $h.N.V " " $glib.G.Data[0])
+    try io.Println($s " " $f(v) " " $h.N.V)
 }

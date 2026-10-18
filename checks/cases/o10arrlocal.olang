@@ -1,0 +1,11 @@
+# check: fail error[O10]: this reference lives in a scope that may not outlive where it is put
+# an inner block's array, read through a reference kept past that block: must fail
+import "std/io"
+fn main() ? {
+    y Array<I64>& = I64[0]
+    {
+        x mut Array<I64>& = Array<I64>(4)
+        y = x
+    }
+    try io.Println($y[0])
+}

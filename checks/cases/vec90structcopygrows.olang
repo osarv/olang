@@ -1,7 +1,6 @@
 # check: run
-# Vec phase 2a (O32/O39): a copy of a struct holding a Vec is a borrowed copy - a loan on its buffer - so the original's
+# a copy of a struct holding a Vec is a second name for the Vec, which grows while the copy is used
 # M19g, round 2 (brought back): a copy is a second name and an iterator reads the Vec each step - no view is stale
-# Vec does not grow while the copy is used
 import "std/io"
 type Lexer struct(n I64) {
     n

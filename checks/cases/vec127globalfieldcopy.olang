@@ -1,5 +1,5 @@
 # check: run
-# Vec phase 2a (O32): ...nor from a global's field
+# ...and of a global's field
 # M19g, round 2 (brought back): a copy is a second name and an iterator reads the Vec each step - no view is stale
 import "std/io"
 type Lexer struct() {

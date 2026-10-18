@@ -1,5 +1,5 @@
 # check: fail error[O1b]: a global holds only what lives as long as the program
-# Vec phase 2a (O1b/O38): a global does not keep a view of a field's Vec
+# O1b: a global does not keep a view of a field's Vec
 import "std/io"
 type Lexer struct(n I64) {
     n

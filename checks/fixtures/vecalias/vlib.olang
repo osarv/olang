@@ -4,5 +4,3 @@ fn Sum(v Vec<I64>&) I64 {
     for x in v { t += x }
     return t
 }
-fn Eat(v own mut Box&) I64 { return v.N }
-type Box struct(N I64) { N }

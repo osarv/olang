@@ -1,8 +1,8 @@
 # check: run
-# vec1 review: what stays legal - a borrowed own result called by name, used before the owner changes, whether its type is
-# the buffer's or a declared array type converted from it; a conversion copied into a value (a typed value declaration -
-# ':=' declares the reference the conversion names, T29a) is the copy's own; a function
-# giving a plain borrowed result is still a value
+# what stays legal: a borrowed result handing back a Vec's view, called by name and used before the Vec grows, whether
+# its type is the buffer's or a declared array type converted from it; a conversion copied into a value (a typed value
+# declaration - ':=' declares the reference the conversion names, T29a) is the copy's own; a function giving a plain
+# borrowed result is still a value
 import "std/io"
 type Ix Array<I64>
 fn view(v Vec<I64>&) Array<I64>&v { return v.View() }
@@ -10,7 +10,7 @@ fn asIx(v Vec<I64>&) Ix&v { return Ix(v.View()) }
 fn asText(v Vec<Char>&) String&v { return String(v.View()) }
 fn first(a Array<I64>&) Array<I64>&a { return a[:1] }
 type CB struct() {
-    data own mut Array<Char>& = Array<Char>(2, 'x')
+    data mut Array<Char>& = Array<Char>(2, 'x')
 }
 fn (c CB&) Text() String&c { return String(c.data) }
 fn main() ? {

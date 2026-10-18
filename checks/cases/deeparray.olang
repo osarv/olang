@@ -1,0 +1,13 @@
+# check: run
+# a field 70 array levels deep is an ordinary field: the struct is built, copied and read
+import "std/io"
+type H struct() {
+    a Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<I64>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>& = null
+    n I64 = 0
+}
+fn main() ? {
+    h := H()
+    h.n = 3
+    c := h
+    try io.Println($c.n)
+}
