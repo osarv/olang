@@ -266,6 +266,7 @@ fn (c mut Checker&) attempt() {
         if c.P.FnDecl(f).Recv != null {
             c.operatorMethod(f)
             c.inheritClash(f)
+            c.overrideClash(f)
         }
         c.fnTypeParams(f)
         if c.P.VarCount(generic.FnOwner(f)) > 0 { continue }
@@ -523,6 +524,32 @@ fn (c mut Checker&) bothSpellings(f I64, rt types.TypeId, name String&, n I64) {
 }
 
 # how many operands a method the compiler calls takes besides its receiver: -1 for any, -2 for no such method
+# M19e: a method of a declared type named like a default its traits declare overrides it, so it has the default's
+# signature - its parameters besides the receiver and its result
+fn (c mut Checker&) overrideClash(f I64) {
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() == 0 { return }
+    rt := c.deref(ps[0])
+    if not c.isNamed(rt) or not c.P.T.Closed(rt) { return }
+    fd := c.P.FnDecl(f)
+    d := c.P.DefaultMethod(rt, fd.Name)
+    if d < 0 or d == f { return }
+    ds := c.P.Sig(d)
+    qs := c.P.T.Items(c.P.T.Params(ds))
+    same := qs.Len() == ps.Len()
+    for i in range 1, ps.Len() {
+        if not same { break }
+        if c.P.T.Closed(qs[i]) and not c.P.T.Same(qs[i], ps[i]) { same = false }
+    }
+    r := c.P.T.Result(ds)
+    if same and c.P.T.Closed(r) and not c.P.T.Same(r, c.P.T.Result(sig)) { same = false }
+    if same { return }
+    c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+    c.err(c.nameSpan(fd), msgs.OverrideSignature(c.text(fd.Name)))
+    c.pop()
+}
+
 fn protocolArity(cap String&) I64 {
     k := opShapeOf(cap)
     if k >= 0 { return OpShapes[k].Operands }
@@ -4890,6 +4917,12 @@ fn nameDistance(a String&, b String&) I64 {
 }
 
 # a written type's instances checked where it is written: each at its first argument (G19)
+# whether a type is an array of a run-time length held by value - which inside an array or a struct is held by
+# reference instead (T7a)
+fn (c mut Checker&) runArrayValue(t types.TypeId) Bool {
+    return not c.isRef(t) and c.P.T.KindOf(t) == types.Kind.Array and c.P.T.Length(t) == types.TypeId(0)
+}
+
 fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
     if tr == null { return true }
     match tr {
@@ -4916,7 +4949,13 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
             for a in args {
                 if not c.writtenMet(a) { return false }
             }
-            return c.instancesMet(c.P.Resolve(c.fr().Ctx, tr), args[0].Span())
+            rt := c.P.Resolve(c.fr().Ctx, tr)
+            # T7a: an array's element that is a run-time array is held by reference
+            if c.P.T.KindOf(rt) == types.Kind.Array and c.runArrayValue(c.P.T.Elem(rt)) {
+                c.err(args[0].Span(), msgs.ArrayNestedByValue(c.ty(c.P.T.Elem(rt))))
+                return false
+            }
+            return c.instancesMet(rt, args[0].Span())
         }
         case ast.TypeRef.Ref(_, of, _) { return c.writtenMet(of) }
         case ast.TypeRef.Perm(_, of, _, _) { return c.writtenMet(of) }
@@ -5038,7 +5077,9 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 # Array<T, N>(): a fixed array's zero value (T7c). QP1 drops the form for Array<T>(N), which makes the
                 # same; accepted until SPEC, stage 0 and the corpus change with the arrays batch
                 if args.Len() != 0 {
-                    c.err(sp, msgs.ArgCount(0, "s", args.Len()))
+                    # T8: a fixed array's call makes its zero value only - a filled one is a copy
+                    c.err(args[0].Span(), msgs.FixedArrayCall())
+                    for a in args { c.expr(a, types.UnknownT) }
                     return c.unknown(sp)
                 }
                 elem := c.resolve(targs[0])
@@ -5663,7 +5704,16 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     }
     name := c.text(n)
     m := c.P.MethodOf(c.deref(rt), n)
-    if m < 0 { m = c.P.DefaultMethod(c.deref(rt), n) }
+    if m < 0 {
+        ds := c.P.DefaultMethods(c.deref(rt), n)
+        if ds.Len() > 1 {
+            # M19e: two traits' defaults of one name - the call cannot choose
+            c.err(nsp, msgs.DefaultAmbiguous(c.ty(c.deref(rt)), c.tok(n)))
+            for a in args { c.expr(a, types.UnknownT) }
+            return c.unknown(sp)
+        }
+        if ds.Len() == 1 { m = ds[0] }
+    }
     if m < 0 and name == "Len" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT {
         return c.prim(sp, c.i64(), typed.PrimOp.Len, rx, null)
     }
@@ -6254,6 +6304,50 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool = false) ty
     all := cl.Items == null or cl.Items.Len() == 0
     defaults := gather(c.exprs, from)
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
+}
+
+# a task's default (P4a): built where the call's result lands, so one holding references builds all it holds - a part
+# naming existing storage that holds a reference is said where it is written
+fn (c mut Checker&) taskDefault(x ast.Expr&, t types.TypeId) typed.Expr&c {
+    e := c.expr(x, t)
+    if c.isRef(t) or c.P.T.HoldsRefs(t) {
+        at := c.existingIn(e)
+        if at.Start >= 0 {
+            c.err(at, msgs.TaskDefaultExisting())
+            return c.unknown(x.Span())
+        }
+    }
+    return c.fit(e, t, c.argSpan(x))
+}
+
+# the first part of a value that names existing storage holding a reference rather than building it (P4a); Start -1
+# for none
+fn (c mut Checker&) existingIn(x typed.Expr&) source.Span {
+    if x == null { return source.Span(-1, -1) }
+    match x {
+        case typed.Expr.Read(sp, ty, p, _) {
+            if p != null and (c.isRef(ty) or c.P.T.HoldsRefs(ty)) { return sp }
+        }
+        case typed.Expr.Borrow(sp, _, _) { return sp }
+        case typed.Expr.Promote(_, _, pr) { return c.existingIn(pr.X) }
+        case typed.Expr.Call(_, _, cl) {
+            for a in cl.Args {
+                e := c.existingIn(a)
+                if e.Start >= 0 { return e }
+            }
+        }
+        case typed.Expr.Make(_, _, m) {
+            for a in m.Items {
+                e := c.existingIn(a)
+                if e.Start >= 0 { return e }
+            }
+        }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() > 0 { return c.existingIn(args[0]) }
+        }
+        nomatch { }
+    }
+    return source.Span(-1, -1)
 }
 
 # whether an expression builds all it holds (R11): literals, written text, calls and array literals of such, a case
@@ -6870,14 +6964,14 @@ fn (c mut Checker&) clauseHandler(cl ast.Catch&, rt types.TypeId, nt I64) typed.
     }
     if hasDef {
         if nt == 1 or cl.Defaults.Len() == 1 {
-            c.emit(typed.Stmt.Return(cl.Sp, c.exprTo(cl.Defaults[0], rt)))
+            c.emit(typed.Stmt.Return(cl.Sp, c.taskDefault(cl.Defaults[0], rt)))
         } else {
             parts := c.P.T.Items(c.P.T.Parts(rt)) if c.P.T.KindOf(rt) == types.Kind.Tuple else Array<types.TypeId>(0)
             if parts.Len() != cl.Defaults.Len() {
                 c.err(cl.Sp, msgs.DestructCount(parts.Len(), cl.Defaults.Len()))
             } else {
                 xf := c.exprs.Len()
-                for i in range parts.Len() { c.exprs.Push(c.exprTo(cl.Defaults[i], parts[i])) }
+                for i in range parts.Len() { c.exprs.Push(c.taskDefault(cl.Defaults[i], parts[i])) }
                 xs := gather(c.exprs, xf)
                 c.emit(typed.Stmt.Return(cl.Sp, typed.Expr.Make(cl.Sp, rt, typed.Make(typed.MakeKind.Tuple, 0, xs, null
                                                                                       typed.SiteId(-1), typed.Check.None))))
@@ -7009,6 +7103,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             x = c.zero(nsp, t)
         }
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(nsp, typed.Place.Deref(nsp, t, x)) }
+        # T7a: a field holding a run-time array by value - held by reference instead
+        if v.Field and c.runArrayValue(t) { c.err(nsp, msgs.ArrayNestedByValue(c.ty(t))) }
         # T25c: ":=" of a read-only copy is one, and a reference read out of one is read-only; a written type declares
         # a writable value
         inferred := i < v.Values.Len() and (v.Ty == null or v.Infer)

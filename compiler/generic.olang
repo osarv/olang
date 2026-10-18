@@ -1407,6 +1407,13 @@ fn (p mut Program&) addFn(mi I64, f ast.Func&, isExtern Bool) {
 # a trait's default method of a name that a type's own methods meet the trait of (M19e), by its methods' names; -1 for
 # none. The call's inference checks the rest (G19)
 fn (p mut Program&) DefaultMethod(t types.TypeId, name source.NameId) I64 {
+    ds := p.DefaultMethods(t, name)
+    return ds[0] if ds.Len() > 0 else -1
+}
+
+# every default of this name a type's traits declare (M19e): two make a call ambiguous
+fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) List<I64> {
+    out List<I64>
     p.allFns()
     x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
     for i in range p.defaultFns.Len() {
@@ -1424,9 +1431,9 @@ fn (p mut Program&) DefaultMethod(t types.TypeId, name source.NameId) I64 {
             }
             nomatch { }
         }
-        if ok { return f }
+        if ok { out.Push(f) }
     }
-    return -1
+    return out
 }
 
 # a written receiver's key: a type variable's by the trait its list item constrains it to (M19e)
