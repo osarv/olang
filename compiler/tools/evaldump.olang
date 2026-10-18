@@ -17,9 +17,6 @@ import "../diag"
 import "../cond"
 import "../fetch"
 import "../load"
-import resolver "../names"
-import "../generic"
-import typecheck "../check"
 import "../mir"
 import "../typed"
 import "../eval"
@@ -63,11 +60,9 @@ fn run(args Array<String&>&) I32 {
     f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
     l := load.Loader(std, consts, f, source.Names(), d)
     l.Load(path)
-    r := resolver.Resolver(l)
-    r.Resolve()
-    p := generic.Program(l, r)
-    c := typecheck.Checker(p, testBuild)
-    c.CheckProgram()
+    # checked with the build's decisions made by evaluation (B9c, S8b)
+    c := interp.Analyze(l, testBuild)
+    p := c.P
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
     x := interp.Exec(p, c.Bodies, eval.Mode.Run)
     tests, entry := x.Entries()

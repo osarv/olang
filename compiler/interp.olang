@@ -9,15 +9,124 @@
 # global the program has is defined at the start, its initializer lowered with what that reaches, so a global is
 # initialized where it is first read (B5a's order falls out: each after the globals it reads).
 
+import "std/pair"
 import "source"
 import "ast"
 import "diag"
+import "load"
+import "names"
 import "types"
 import "generic"
 import "typed"
 import "mir"
+import typecheck "check"
 import "lower"
 import "eval"
+
+# ---- checking with the build's decisions (B9c, S8b) ----
+
+# the program l loaded, resolved and checked - each condition the build decides that B9a could not evaluate decided by
+# evaluating it (B9c at the top level, S8b in a body), and the program resolved and checked again with the decisions,
+# until a check meets none left to decide: that last check. What an earlier check said is forgotten. tests as Checker's
+fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
+    decided Map<pair.Pair<I64, I64>, Bool>
+    for {
+        mark := l.Diags.Count()
+        r := names.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, tests)
+        c.Decided = decided
+        c.CheckProgram()
+        if not decide(l, c, decided) { return c }
+        l.Diags.Forget(mark)
+    }
+}
+
+# the decisions one check of the program leaves to evaluation, made where they can be: whether any was
+fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&) Bool {
+    tops := l.PendingIfs()
+    if tops.Len() == 0 and c.Asks.Len() == 0 { return false }
+    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    made := false
+    for a in c.Asks {
+        key := pair.Pair(a.File, I64(a.At))
+        if decided.Has(key) { continue }
+        v, ok := x.Cond(a.Body)
+        if ok {
+            decided.Put(key, v)
+            made = true
+        }
+    }
+    for t in tops {
+        ti := findIf(l.Mods[t.First].Decls, t.Second)
+        if ti == null { continue }
+        chosen, ok := chain(x, c, t.First, ti)
+        if ok {
+            l.Decide(t.First, t.Second, chosen)
+            made = true
+        }
+    }
+    return made
+}
+
+# a pending top-level if's branch, its conditions evaluated in order (B9c): the first true one's, the else's after
+# them, load.NoBranch for none - and whether every condition read could be evaluated
+fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) (I64, Bool) {
+    k I64 = 0
+    link := ti
+    for link != null {
+        b := c.CondBody(mi, link.Cond)
+        if b < 0 { return 0, false }
+        v, ok := x.Cond(b)
+        if not ok { return 0, false }
+        if v { return k, true }
+        k++
+        if link.ElseIf == null { return (k if link.Else != null else load.NoBranch), true }
+        link = link.ElseIf
+    }
+    return load.NoBranch, true
+}
+
+# the top-level if whose first condition starts at that offset, in decls or a branch of an if in them
+fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf&ds {
+    if ds == null { return null }
+    for d in ds {
+        match d {
+            case ast.Decl.If(_, ti) {
+                if ti.Cond != null and ti.Cond.Span().Start == at { return ti }
+                f := findInIf(ti, at)
+                if f != null { return f }
+            }
+            case _ { }
+        }
+    }
+    return null
+}
+
+fn findInIf(ti ast.TopIf&, at I32) ast.TopIf&ti {
+    if ti == null { return null }
+    if ti.Then != null {
+        f := findIf(ti.Then.Decls, at)
+        if f != null { return f }
+    }
+    if ti.Else != null {
+        f := findIf(ti.Else.Decls, at)
+        if f != null { return f }
+    }
+    return findInIf(ti.ElseIf, at)
+}
+
+# a condition's body evaluated while compiling (K1): its value, and whether it has one
+fn (x mut Exec&) Cond(body I64) (Bool, Bool) {
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return false, false }
+    return x.M.Int(x.M.Result, types.BoolT) != 0, true
+}
+
+# ---- the machine ----
 
 type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval.Mode) {
     P

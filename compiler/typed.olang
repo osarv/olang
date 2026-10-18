@@ -72,6 +72,9 @@ type BodyOf enum {
     Test(index I64)                         # a test block of the root module
     Global(module I64, name source.NameId)  # one global's initializer (K2): its order among its module's is B5a's,
                                             # computed once bodies are checked (DESIGN.md 1.6)
+    # a condition the build decides that B9a could not evaluate (B9c, S8b), as a fn() Bool giving its value, checked in
+    # its module's context for the evaluator: at the offset the condition starts at in the module's file
+    Cond(module I64, at I32)
 }
 
 # one of a body's scope variables: what its hidden scope arguments, and its environment's scopes, stand for. The ones

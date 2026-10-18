@@ -321,6 +321,9 @@ fn (d mut Diagnostics&) ChooseAll() {
 # whether group g was dropped: its branch was not taken
 fn (d Diagnostics&) IsDropped(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Dropped }
 
+# whether group g is neither chosen nor dropped: a branch nothing has decided yet (B9c, S8b)
+fn (d Diagnostics&) IsPending(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Pending }
+
 # whether group g, or a group inside it, holds a diagnostic - a branch that met a syntax error
 fn (d Diagnostics&) Holds(g I64) Bool {
     for r in d.records {

@@ -16,10 +16,8 @@ import "../diag"
 import "../cond"
 import "../fetch"
 import "../load"
-import resolver "../names"
-import "../generic"
-import typecheck "../check"
 import "../lower"
+import "../interp"
 import "../emit"
 import "../target"
 
@@ -65,11 +63,9 @@ fn run(args Array<String&>&) {
     f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
     l := load.Loader(std, consts, f, source.Names(), d)
     l.Load(path)
-    r := resolver.Resolver(l)
-    r.Resolve()
-    p := generic.Program(l, r)
-    c := typecheck.Checker(p, testBuild)
-    c.CheckProgram()
+    # checked with the build's decisions made by evaluation (B9c, S8b)
+    c := interp.Analyze(l, testBuild)
+    p := c.P
     # what checking said, and the program written anyway: a body checking left wrong is a function that says so when
     # it is called (the self-hosted checker is still being finished, M5b/M5c)
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }

@@ -151,6 +151,20 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     unfillable Map<I64, Bool>                       # the generic functions G4 says no call can instantiate
     syntaxMark I64 = -1                             # the diagnostics said before checking began: the syntax errors
+    # B9c, S8b: the local ifs whose condition the build decides that evaluation decided, by (file, the condition's
+    # start) - what the driver found in an earlier check of the program, given before this one; and the local ifs this
+    # check met undecided, each with its condition's body (CondBody) for the evaluator
+    Decided Map<pair.Pair<I64, I64>, Bool>
+    Asks List<Ask>
+}
+
+# a local if whose condition the build decides and B9a could not evaluate (S8b): the condition's body (BodyOf.Cond),
+# where it is, and the if
+type Ask struct(Body I64, File I64, At I32, If ast.If&) {
+    Body
+    File
+    At
+    If
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -260,6 +274,7 @@ fn (c mut Checker&) reset() {
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
     c.unfillable = Map<I64, Bool>()
+    c.Asks = List<Ask>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -1255,6 +1270,34 @@ fn (c mut Checker&) globalBody(mi I64, n source.NameId) I64 {
     id = c.newBody(typed.BodyOf.Global(mi, n), c.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0)), mi, sp)
     c.globalBodies.Put(key, id)
     c.check(id)
+    return id
+}
+
+# a condition the build decides that B9a could not evaluate (B9c, S8b), checked in module mi's context as the body of
+# a function giving its value (BodyOf.Cond), for the evaluator - -1 where it does not check there: it reads a local
+# (the running program's, or S8c's) or it is wrong, which is said where it is checked as part of its program
+fn (c mut Checker&) CondBody(mi I64, x ast.Expr&) I64 {
+    d := c.P.L.Diags
+    mark := d.Count()
+    gaps := c.Gaps.Len()
+    sp := x.Span()
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), types.BoolT, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, mi, types.BoolT, types.ListId(0))
+    fr.Ctx = generic.Context(mi, -1)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    v := c.cond1(x)
+    c.stmts.Push(typed.Stmt.Return(sp, v))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    if d.Count() > mark or c.Gaps.Len() > gaps {
+        d.Forget(mark)
+        c.Gaps.Truncate(gaps)
+        c.Bodies[id].Root = null
+        return -1
+    }
     return id
 }
 
@@ -8193,6 +8236,29 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) { c.emit(c.ifOf(sp, i)) }
 fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     if i.Cond == null { return typed.Stmt.Block(sp, c.branchBlock(i.Then)) }
     d := c.P.L.Diags
+    # B9c, S8b: decided by evaluation in an earlier check of the program - the branch chosen alone
+    key := pair.Pair(c.fr().File, I64(i.Cond.Span().Start))
+    if c.Decided.Has(key) {
+        if try c.Decided.Get(key) catch default false {
+            if i.Then.Group >= 0 { d.Choose(i.Then.Group) }
+            c.dropElse(i.Else)
+            return typed.Stmt.Block(sp, c.branchBlock(i.Then))
+        }
+        if i.Then.Group >= 0 { d.Drop(i.Then.Group) }
+        if i.Else == null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
+        match i.Else {
+            case ast.Stmt.If(_, e) {
+                if e.Cond == null and e.Then.Group >= 0 { d.Choose(e.Then.Group) }
+            }
+            nomatch { }
+        }
+        return c.elseOf(sp, i.Else)
+    }
+    # a condition B9a left to evaluation: asked for, the if checked as a running one meanwhile
+    if i.Then.Group >= 0 and d.IsPending(i.Then.Group) {
+        b := c.CondBody(c.fr().Mi, i.Cond)
+        if b >= 0 { c.Asks.Push(Ask(b, c.fr().File, i.Cond.Span().Start, i)) }
+    }
     if i.Then.Group >= 0 and d.IsDropped(i.Then.Group) {
         # the build took the else (S8b)
         if i.Else == null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
@@ -8238,6 +8304,18 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
         }
     }
     return typed.Stmt.If(sp, typed.If(k, then, els))
+}
+
+# an else chain after a branch evaluation took (S8b): none of it compiled
+fn (c mut Checker&) dropElse(s ast.Stmt&) {
+    if s == null { return }
+    match s {
+        case ast.Stmt.If(_, e) {
+            if e.Then.Group >= 0 { c.P.L.Diags.Drop(e.Then.Group) }
+            c.dropElse(e.Else)
+        }
+        nomatch { }
+    }
 }
 
 fn (c mut Checker&) elseHolds(s ast.Stmt&) Bool {
