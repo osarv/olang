@@ -1,7 +1,7 @@
 # lowerdump - every body of a program checked by the self-hosted checker, lowered to MIR (compiler/lower.olang) and
 # held to the MIR verifier (mir.Fn.Verify): M7's acceptance, measured (compiler/DESIGN.md section 6, the M7 row).
 #
-#     lowerdump [-D NAME=VALUE]... [-t] [-v] [-mir PATTERN] [-typed PATTERN] FILE...
+#     lowerdump [-D NAME=VALUE]... [-t] [-v] [-standin] [-mir PATTERN] [-typed PATTERN] FILE...
 #
 # For each file, "== FILE", then the program it is the root of loaded, its names resolved, every body checked and every
 # body with code lowered: one row per body the verifier finds a problem with, "bad PATH:LINE:COL B<id>: PROBLEM" (its
@@ -10,7 +10,9 @@
 # first), unchecked counting the bodies a check error or a check gap
 # left with an unknown type, which are not lowered. At the end, over every file, the totals and the gaps counted by
 # what. A file's "# flags:" line (a checks case's) gives it its -define constants. -mir dumps the MIR of each body whose place (PATH:LINE) contains PATTERN, -typed its typed body. -D defines
-# build constants; -t makes TestBuild true and checks and lowers the root module's test blocks.
+# build constants; -t makes TestBuild true and checks and lowers the root module's test blocks. Every body is lowered
+# with the scope pass's placement (compiler/scope.olang), whose own errors are not counted among E; -standin lowers with
+# the stand-in placement instead (DESIGN.md 1.6.1).
 
 import "std/os"
 import "std/io"
@@ -23,12 +25,13 @@ import resolver "../names"
 import "../generic"
 import typecheck "../check"
 import "../mir"
+import "../scope"
 import "../lower"
 
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PrintErrln("usage: lowerdump [-D NAME=VALUE]... [-t] [-v] [-mir PATTERN] [-typed PATTERN] FILE...")
+        try io.PrintErrln("usage: lowerdump [-D NAME=VALUE]... [-t] [-v] [-standin] [-mir PATTERN] [-typed PATTERN] FILE...")
             catch io.IoError { }
         os.Exit(2)
     }
@@ -55,6 +58,7 @@ fn run(args Array<String&>&) {
     defines List<String&>
     testBuild := false
     verbose := false
+    standin := false
     mirAt String&args = ""
     typedAt String&args = ""
     k I64 = 1
@@ -63,6 +67,8 @@ fn run(args Array<String&>&) {
             testBuild = true
         } else if args[k] == "-v" {
             verbose = true
+        } else if args[k] == "-standin" {
+            standin = true
         } else if args[k] == "-D" and k + 1 < args.Len() {
             k++
             defines.Push(args[k])
@@ -103,6 +109,11 @@ fn run(args Array<String&>&) {
         if verbose { out.Write(d.Render()) }
         errs := d.Count()
         lw := lower.Lowerer(p, c.Bodies)
+        sc := scope.Scoper(p, c.Bodies)
+        if not standin {
+            sc.Run()
+            lw.Plans = sc.Plans
+        }
         n := totals()
         for b in range c.Bodies.Len() {
             if not lw.HasCode(b) { continue }

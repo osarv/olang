@@ -1,0 +1,1648 @@
+# scope - section 8, the scope pass (compiler/DESIGN.md 1.7, the M6 row; docs/scope-model.md is its design): where
+# every value lives, judged over the typed core (typed.olang), and where every value is built, given to lowering as
+# each body's plan (typed.Plan).
+#
+# The model (docs/scope-model.md 2-3), in short:
+# - A scope term of a body is a block of it (B), one of its scope variables (V: a reference parameter's, a by-value one
+#   holding references, the result scope, a constructor's instance, a destructor's closing scope, a lambda's captures),
+#   the program's scope (P), a derived scope (D: where the argument for a parameter bound a field written "&q", O23a), a
+#   set of terms not known here (O12) or an untraced one (O11). Only B, V and P exist at run time, so only they are ever
+#   built into (2.3).
+# - Terms are ordered by "outlives" (2.2): P outlives everything, a scope variable or a derived scope every block, a
+#   block the blocks nested in it; anything else between V, D and P terms is an obligation of the body (O10b), which its
+#   callers discharge (O10c).
+# - FIT (3.1): existing storage put into a slot must outlive the slot's term, and be exactly it where something can be
+#   stored through it (O25, O25g); a reference local is always exact (O25a, O25b). A temporary is built where it lands
+#   (PLACE, 3.2, O6, O18a) - which is all placement is.
+# - CALL (3.3): each of a callee's scope variables is bound to a term of the caller (O17, O18a, O18b, E25), and the
+#   callee's obligations are judged through those bindings.
+# - Obligations are summaries over the call graph's strongly connected components (7.2): a component's bodies are
+#   judged until their obligations stop growing, then once more with their errors said, callees first.
+#
+# What the pass does not judge yet is recorded as a gap (Gaps), as check's are; compiler/PROGRESS notes say which.
+
+import "std/pair"
+import "source"
+import "diag"
+import "msgs"
+import "types"
+import "generic"
+import "typed"
+
+# ---- scope terms (docs/scope-model.md 2.1) ----
+
+# a scope term of one body
+type Term enum {
+    None                    # no term: a value holding no reference, or one not decided yet
+    Block(b typed.BlockId)  # a block's scope (O2); Block(0) the body's frame
+    Var(i I64)              # one of the body's scope variables, by its index in Vars
+    Program                 # the program's scope (O1b)
+    Derived(p I64, w I64)   # where the argument for parameter p (an index in Params) bound its type's variable w (O23a)
+    Set(id I64)             # not known here (O12): one of the terms of set id
+    Untraced                # not traced (O11)
+}
+
+# whether a term exists at run time, so that something can be built in it (2.3)
+fn (t Term) Runs() Bool {
+    return match t {
+        case Term.Block(_), Term.Var(_), Term.Program => true
+        case _ => false
+    }
+}
+
+# whether a term can be part of an obligation: a scope variable, a derived scope or the program's (O10b)
+fn (t Term) Relatable() Bool {
+    return match t {
+        case Term.Var(_), Term.Derived(_, _), Term.Program => true
+        case _ => false
+    }
+}
+
+# a relation of a body's obligations (O10b): Hi outlives Lo, both relatable terms of the body; Exact where it is one half
+# of an equality (O25b, O25c); At the statement of the body that required it, for the note O10c's error gives
+type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span) {
+    Hi
+    Lo
+    Exact
+    At
+}
+
+# what a judgment of "outlives" comes to (2.2): it holds; it is an obligation the body records; it fails because a
+# block is asked to outlive a scope variable (O10d) or another block it is nested in (O10); it cannot be judged here
+# (O11, O12)
+Holds I64 = 0
+Obliged I64 = 1
+FailsBlock I64 = 2
+FailsUnknown I64 = 3
+
+# what a value is to section 8 (docs/scope-model.md 2.5): holding no reference (Plain), null, a temporary built where it
+# landed (Fresh, T the term it was built in), or existing storage (Existing, T where its referent lives - for a
+# reference - or where its references are - for a value holding them)
+type ValKind enum {
+    Plain
+    Null
+    Fresh
+    Existing
+    Static      # constant data (T25d): it lives in the program's scope and fits every slot, as null does
+}
+
+type Val struct(K ValKind, T Term) {
+    K
+    T
+}
+
+fn plain() Val { return Val(ValKind.Plain, Term.None) }
+
+fn fresh(t Term) Val { return Val(ValKind.Fresh, t) }
+
+fn existing(t Term) Val { return Val(ValKind.Existing, t) }
+
+# ---- the pass over a program ----
+
+# a construct the pass met and does not judge yet: where, and what
+type Gap struct(File I64, Sp source.Span, What String&) {
+    File
+    Sp
+    What
+}
+
+# what a body's judgment says to its callers: its obligations (O10b), once its component has converged
+type summary struct() {
+    Rels List<rel>
+    Done Bool = false
+}
+
+# the scope pass over a checked program: P the program, Bodies check's typed bodies. Run judges every body and fills
+# Plans, one per body (an empty plan for a body with no code)
+type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
+    P
+    Bodies
+    Plans List<typed.Plan>
+    Gaps List<Gap>
+    sums List<mut summary&>
+    ctorOf Map<types.TypeId, I64>       # a type's constructor's body (twin 0)
+    stTypes Map<types.TypeId, I64>      # storeThrough, once asked: 1 being asked, 2 no, 3 yes
+    texts Map<I64, String&>             # a diag file's text, by file
+    judged List<Bool>                   # by body: whether its scopes were judged (it had code and no unknown type)
+    # the call graph (Tarjan): each body's callees in edgeTo from edgeFrom[b]; the components, callees' first, in
+    # compNodes from compFrom[k]
+    edgeFrom List<I64>
+    edgeTo List<I64>
+    tIndex List<I64>
+    tLow List<I64>
+    tOn List<Bool>
+    tStack List<I64>
+    tNext I64 = 0
+    compFrom List<I64>
+    compNodes List<I64>
+    # the body being judged
+    B typed.Body& = null
+    Id I64 = -1
+    report Bool = false
+    plan typed.Plan = typed.Plan(0, 0, 0)
+    terms List<Term>        # by local: where its referent lives (a reference) or its references (a value holding them)
+    stors List<Term>        # by local: where its own storage is
+    blocks List<typed.BlockId>  # the blocks entered, innermost last
+    gamma List<rel>         # the obligations found (O10b)
+    setFrom List<I64>       # the sets of terms not known here (O12): set k's terms in setTerms from setFrom[k]
+    setTerms List<Term>
+    stmtSp source.Span = source.Span(0, 0)   # the statement being judged
+    resultVar I64 = -1      # the result scope's index in Vars, -1 for none
+    held Map<I64, typed.Expr&>  # a held local's temporary initializer, built where its one use puts it
+    targets List<typed.Place&>  # the places of the Assigns being judged, innermost last (Place.Target)
+}
+
+# every body judged, callees before callers, a component of the call graph until its obligations stop growing
+fn (s mut Scoper&) Run() {
+    n := s.Bodies.Len()
+    for i in range n {
+        s.Plans.Push(typed.NewPlan(s.Bodies[i]))
+        s.sums.Push(summary())
+        s.judged.Push(false)
+        match s.Bodies[i].Of {
+            case typed.BodyOf.Ctor(t, twin) {
+                if twin == types.ListId(0) { s.ctorOf.Put(t, i) }
+            }
+            case _ { }
+        }
+    }
+    for m in s.P.L.Mods {
+        if m.Src != null and m.File >= 0 { s.texts.Put(m.File, m.Src.Text) }
+    }
+    s.components()
+    for k in range s.compFrom.Len() {
+        end := s.compFrom[k + 1] if k + 1 < s.compFrom.Len() else s.compNodes.Len()
+        comp := Array<I64>(end - s.compFrom[k])
+        for i in range comp.Len() { comp[i] = s.compNodes[s.compFrom[k] + i] }
+        s.component(comp)
+    }
+}
+
+# a component of the call graph judged: alone, once; with a cycle, until no body's obligations grow, then once more
+# saying its errors (docs/scope-model.md 7.2)
+fn (s mut Scoper&) component(comp Array<I64>&) {
+    cyclic := comp.Len() > 1 or s.callsItself(comp[0])
+    if cyclic {
+        for round in range 20 {
+            grew := false
+            for b in comp {
+                before := s.sums[b].Rels.Len()
+                s.judge(b, false)
+                if s.sums[b].Rels.Len() != before { grew = true }
+            }
+            if not grew { break }
+        }
+    }
+    for b in comp { s.judge(b, true) }
+    for b in comp { s.sums[b].Done = true }
+}
+
+fn (s mut Scoper&) callsItself(b I64) Bool {
+    for k in range s.edgeFrom[b], s.edgeFrom[b + 1] {
+        if s.edgeTo[k] == b { return true }
+    }
+    return false
+}
+
+# body b judged: its plan made and its obligations recorded - its errors said where report holds
+fn (s mut Scoper&) judge(b I64, report Bool) {
+    body := s.Bodies[b]
+    if body.Root == null { return }
+    for l in body.Locals {
+        if l.Ty == types.UnknownT { return }
+    }
+    s.judged[b] = true
+    s.B = body
+    s.Id = b
+    s.terms.Clear()
+    s.stors.Clear()
+    s.blocks.Clear()
+    s.gamma.Clear()
+    s.setFrom.Clear()
+    s.setTerms.Clear()
+    s.held.Clear()
+    s.targets.Clear()
+    s.resultVar = -1
+    s.report = report
+    s.plan = typed.NewPlan(body)
+    s.run()
+    # the obligations only grow: what a round found is kept for the next
+    for r in s.gamma {
+        if not hasRel(s.sums[b].Rels, r) { s.sums[b].Rels.Push(r) }
+    }
+    if report { s.Plans[b] = s.plan }
+}
+
+fn hasRel(rs List<rel>&, r rel) Bool {
+    for x in rs {
+        if x.Hi == r.Hi and x.Lo == r.Lo and x.Exact == r.Exact { return true }
+    }
+    return false
+}
+
+fn (s mut Scoper&) gap(file I64, sp source.Span, what String&) { s.Gaps.Push(Gap(file, sp, $what)) }
+
+# ---- types ----
+
+fn (s mut Scoper&) holds(t types.TypeId) Bool { return s.P.T.HoldsRefs(t) }
+
+fn (s mut Scoper&) isRef(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.Kind.Ref }
+
+fn (s mut Scoper&) isFunc(t types.TypeId) Bool { return s.P.T.KindOf(t) == types.Kind.Func }
+
+# whether something can be stored through a value of type t (O25g): a writable reference to storage with an assignable
+# part holding a reference; a value holding such a writable reference. Never a read-only reference or a function value
+fn (s mut Scoper&) storeThrough(t types.TypeId) Bool {
+    match s.P.T.KindOf(t) {
+        case types.Kind.Ref {
+            if (s.P.T.PermOf(t) & types.Writable) == 0 { return false }
+            return s.assignableHolds(s.P.T.Referent(t))
+        }
+        case types.Kind.Func { return false }
+        case types.Kind.Named, types.Kind.Tuple, types.Kind.Record, types.Kind.Array, types.Kind.AnonEnum { }
+        nomatch { return false }
+    }
+    state := try s.stTypes.Get(t) catch default 0
+    if state != 0 { return state == 3 }
+    s.stTypes.Put(t, 1)
+    r := false
+    for p in s.parts(t) {
+        if s.storeThrough(p) { r = true }
+    }
+    s.stTypes.Put(t, 3 if r else 2)
+    return r
+}
+
+# whether storage of type t has a part that can be assigned through a writable reference to it and holds a reference
+# (QC: every field is assignable through a writable instance; an element of an array; an enum's payload never is, so
+# only what its writable references reach counts)
+fn (s mut Scoper&) assignableHolds(t types.TypeId) Bool {
+    match s.P.T.KindOf(t) {
+        case types.Kind.Named {
+            if not s.P.T.HasBody(t) { return true }
+            match s.P.T.DeclKindOf(s.P.T.DeclOf(t)) {
+                case types.DeclKind.Struct {
+                    for f in s.P.T.Items(s.P.T.Fields(t)) {
+                        if s.holds(f) { return true }
+                    }
+                    return false
+                }
+                case types.DeclKind.Over { return s.assignableHolds(s.P.T.Base(t)) }
+                case types.DeclKind.Enum { return s.storeThrough(t) }
+                nomatch { return false }
+            }
+        }
+        case types.Kind.Array { return s.holds(s.P.T.Elem(t)) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for f in s.P.T.Items(s.P.T.Parts(t)) {
+                if s.holds(f) { return true }
+            }
+            return false
+        }
+        case types.Kind.Var { return true }
+        nomatch { return false }
+    }
+}
+
+# the parts a value of type t holds in place: a struct's fields, an enum's payloads' fields, an array's elements, a
+# tuple's or record's parts
+fn (s mut Scoper&) parts(t types.TypeId) List<types.TypeId> {
+    out List<types.TypeId>
+    match s.P.T.KindOf(t) {
+        case types.Kind.Named {
+            if not s.P.T.HasBody(t) { return out }
+            match s.P.T.DeclKindOf(s.P.T.DeclOf(t)) {
+                case types.DeclKind.Struct {
+                    for f in s.P.T.Items(s.P.T.Fields(t)) { out.Push(f) }
+                }
+                case types.DeclKind.Enum {
+                    for c in s.P.T.Items(s.P.T.Cases(t)) {
+                        if c != types.TypeId(0) {
+                            for f in s.parts(c) { out.Push(f) }
+                        }
+                    }
+                }
+                case types.DeclKind.Over { out.Push(s.P.T.Base(t)) }
+                nomatch { }
+            }
+        }
+        case types.Kind.Array { out.Push(s.P.T.Elem(t)) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for f in s.P.T.Items(s.P.T.Parts(t)) { out.Push(f) }
+        }
+        case types.Kind.AnonEnum {
+            for c in s.P.T.Items(s.P.T.ShapeCases(t)) {
+                if c != types.TypeId(0) {
+                    for f in s.parts(c) { out.Push(f) }
+                }
+            }
+        }
+        nomatch { }
+    }
+    return out
+}
+
+# the body of a function a callee reaches, -1 where there is none (an extern, a helper, a function value)
+fn (s mut Scoper&) bodyOf(c typed.Callee&) I64 {
+    return match c {
+        case typed.Callee.Body(id) => I64(id)
+        case _ => -1
+    }
+}
+
+# a struct type's field i's mark, as its constructor's Fields say (C2d): Bare for a bare field, Of(param) for one written
+# "&p"; None where the type has no constructor body
+fn (s mut Scoper&) fieldMark(t types.TypeId, i I64) typed.Mark {
+    id := try s.ctorOf.Get(t) catch default -1
+    if id < 0 { return typed.Mark.None }
+    b := s.Bodies[id]
+    if i >= b.Fields.Len() { return typed.Mark.None }
+    return b.Locals[I64(b.Fields[i])].Marked
+}
+
+# ---- the call graph and its components (Tarjan) ----
+
+# the bodies a body calls, makes a value of, or writes a lambda for
+fn calleesOf(s mut Scoper&, b I64) List<I64> {
+    out List<I64>
+    body := s.Bodies[b]
+    if body.Root != null { collectBlock(body.Root, out) }
+    return out
+}
+
+fn collectBlock(bl typed.Block&, out mut List<I64>&) {
+    if bl == null { return }
+    for st in bl.Stmts { collectStmt(st, out) }
+}
+
+fn collectStmt(st typed.Stmt&, out mut List<I64>&) {
+    if st == null { return }
+    match st {
+        case typed.Stmt.Let(_, _, x) { collectExpr(x, out) }
+        case typed.Stmt.Assign(_, p, x) {
+            collectPlace(p, out)
+            collectExpr(x, out)
+        }
+        case typed.Stmt.Eval(_, x) { collectExpr(x, out) }
+        case typed.Stmt.If(_, i) {
+            collectExpr(i.Test, out)
+            collectBlock(i.Then, out)
+            collectBlock(i.Else, out)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            collectBlock(body, out)
+            collectBlock(post, out)
+        }
+        case typed.Stmt.Return(_, x) { collectExpr(x, out) }
+        case typed.Stmt.Assert(_, c, m) {
+            collectExpr(c, out)
+            collectExpr(m, out)
+        }
+        case typed.Stmt.Block(_, b) { collectBlock(b, out) }
+        case typed.Stmt.Defer(_, b) { collectBlock(b, out) }
+        case typed.Stmt.Join(_, jn) {
+            collectBlock(jn.Code, out)
+            for c in jn.Clauses { collectBlock(c.Code, out) }
+        }
+        case typed.Stmt.Spawn(_, sp) {
+            for p in sp.Targets { collectPlace(p, out) }
+            collectExpr(sp.Task, out)
+            for c in sp.Clauses { collectExpr(c.Handler, out) }
+        }
+        case typed.Stmt.Yield(_, x) { collectExpr(x, out) }
+        case _ { }
+    }
+}
+
+fn collectPlace(p typed.Place&, out mut List<I64>&) {
+    if p == null { return }
+    match p {
+        case typed.Place.Deref(_, _, r) { collectExpr(r, out) }
+        case typed.Place.Field(_, _, b, _) { collectPlace(b, out) }
+        case typed.Place.Elem(_, _, e) {
+            collectPlace(e.Base, out)
+            collectExpr(e.Index, out)
+        }
+        case typed.Place.Payload(_, _, pl) { collectPlace(pl.Base, out) }
+        case typed.Place.Temp(_, _, v, _) { collectExpr(v, out) }
+        case _ { }
+    }
+}
+
+fn collectExpr(x typed.Expr&, out mut List<I64>&) {
+    if x == null { return }
+    match x {
+        case typed.Expr.Read(_, _, p, _) { collectPlace(p, out) }
+        case typed.Expr.Borrow(_, _, p) { collectPlace(p, out) }
+        case typed.Expr.Take(_, _, p) { collectPlace(p, out) }
+        case typed.Expr.Promote(_, _, pr) { collectExpr(pr.X, out) }
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Body(id) { out.Push(I64(id)) }
+                case typed.Callee.Value(v) { collectExpr(v, out) }
+                case _ { }
+            }
+            for a in c.Args { collectExpr(a, out) }
+        }
+        case typed.Expr.Make(_, _, m) {
+            for a in m.Items { collectExpr(a, out) }
+            collectExpr(m.Length, out)
+        }
+        case typed.Expr.Collect(_, _, c) {
+            collectExpr(c.Reserve, out)
+            collectBlock(c.Loop, out)
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args { collectExpr(a, out) }
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            collectPlace(sl.Base, out)
+            collectExpr(sl.Lo, out)
+            collectExpr(sl.Hi, out)
+        }
+        case typed.Expr.Cond(_, _, c) {
+            collectExpr(c.C, out)
+            collectExpr(c.A, out)
+            collectExpr(c.B, out)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts { collectStmt(st, out) }
+            collectExpr(q.X, out)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held { collectStmt(st, out) }
+            for a in m.Arms { collectArm(a, out) }
+            collectArm(m.NoMatch, out)
+        }
+        case typed.Expr.Try(_, _, t) {
+            collectExpr(t.X, out)
+            for c in t.Clauses {
+                collectBlock(c.Code, out)
+                for d in c.Defaults { collectExpr(d, out) }
+            }
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Named(id) { out.Push(I64(id)) }
+                case typed.FnVal.Lambda(id, caps, _) {
+                    out.Push(I64(id))
+                    for c in caps { collectExpr(c.Outer, out) }
+                }
+                case typed.FnVal.Adapter(id, r, _) {
+                    out.Push(I64(id))
+                    collectExpr(r, out)
+                }
+            }
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(r) { collectExpr(r, out) }
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { collectExpr(y, out) }
+        case _ { }
+    }
+}
+
+fn collectArm(a typed.Arm&, out mut List<I64>&) {
+    if a == null { return }
+    for alt in a.Alts {
+        collectExpr(alt.Test, out)
+        for bd in alt.Binds { collectExpr(bd.From, out) }
+    }
+    collectExpr(a.Guard, out)
+    collectBlock(a.Code, out)
+    collectExpr(a.Value, out)
+}
+
+# the program's bodies in components, callees' components before their callers' (Tarjan's order)
+fn (s mut Scoper&) components() {
+    n := s.Bodies.Len()
+    for i in range n {
+        s.edgeFrom.Push(s.edgeTo.Len())
+        for c in calleesOf(s, i) { s.edgeTo.Push(c) }
+        s.tIndex.Push(-1)
+        s.tLow.Push(0)
+        s.tOn.Push(false)
+    }
+    s.edgeFrom.Push(s.edgeTo.Len())
+    for i in range n {
+        if s.tIndex[i] < 0 { s.visit(i) }
+    }
+}
+
+fn (s mut Scoper&) visit(v I64) {
+    s.tIndex[v] = s.tNext
+    s.tLow[v] = s.tNext
+    s.tNext++
+    s.tStack.Push(v)
+    s.tOn[v] = true
+    for k in range s.edgeFrom[v], s.edgeFrom[v + 1] {
+        w := s.edgeTo[k]
+        if w < 0 or w >= s.tIndex.Len() { continue }
+        if s.tIndex[w] < 0 {
+            s.visit(w)
+            if s.tLow[w] < s.tLow[v] { s.tLow[v] = s.tLow[w] }
+        } else if s.tOn[w] and s.tIndex[w] < s.tLow[v] {
+            s.tLow[v] = s.tIndex[w]
+        }
+    }
+    if s.tLow[v] == s.tIndex[v] {
+        s.compFrom.Push(s.compNodes.Len())
+        for {
+            w := try s.tStack.Pop() catch { break }
+            s.tOn[w] = false
+            s.compNodes.Push(w)
+            if w == v { break }
+        }
+    }
+}
+
+# ---- judging one body ----
+
+fn (s mut Scoper&) run() {
+    b := s.B
+    for i in range b.Locals.Len() {
+        s.terms.Push(Term.None)
+        s.stors.Push(Term.Block(typed.BlockId(0)))
+    }
+    for k in range b.Vars.Len() {
+        match b.Vars[k] {
+            case typed.ScopeVar.Param(l) {
+                s.terms[I64(l)] = Term.Var(k)
+            }
+            case typed.ScopeVar.Capture(l) {
+                s.terms[I64(l)] = Term.Var(k)
+            }
+            case typed.ScopeVar.Result, typed.ScopeVar.Instance { s.resultVar = k }
+            case typed.ScopeVar.Closing {
+                # a destructor's instance lives in the closing scope (C9a)
+                if b.Params.Len() > 0 { s.terms[I64(b.Params[0])] = Term.Var(k) }
+            }
+        }
+    }
+    # a parameter sharing another's scope variable (O4a) lives where that one does
+    for i in range b.Params.Len() {
+        l := b.Params[i]
+        match b.Locals[I64(l)].Marked {
+            case typed.Mark.Of(x) {
+                if s.terms[I64(l)] == Term.None { s.terms[I64(l)] = s.terms[I64(x)] }
+            }
+            case _ { }
+        }
+    }
+    s.blocks.Push(typed.BlockId(0))
+    s.stmts(b.Root.Stmts)
+    s.landHeld()
+    try s.blocks.Pop() catch { }
+}
+
+fn (s mut Scoper&) block(bl typed.Block&) {
+    if bl == null { return }
+    s.blocks.Push(bl.Id)
+    s.stmts(bl.Stmts)
+    try s.blocks.Pop() catch { }
+}
+
+fn (s mut Scoper&) stmts(ss Array<typed.Stmt&>&) {
+    for st in ss { s.stmt(st) }
+}
+
+# the block statements stand in now: a temporary nothing else places is built there (O18a's last row)
+fn (s mut Scoper&) here() Term {
+    b := s.blocks[s.blocks.Len() - 1]
+    # what a constructor's top level builds is built in its instance scope (C2g); a global's initializer's in the
+    # program's (O1b)
+    if b == typed.BlockId(0) {
+        match s.B.Of {
+            case typed.BodyOf.Ctor(_, _) {
+                if s.resultVar >= 0 { return Term.Var(s.resultVar) }
+            }
+            case typed.BodyOf.Global(_, _) { return Term.Program }
+            case _ { }
+        }
+    }
+    return Term.Block(b)
+}
+
+fn (s mut Scoper&) gapAt(sp source.Span, what String&) { s.gap(s.B.File, sp, what) }
+
+# ---- statements ----
+
+fn (s mut Scoper&) stmt(st typed.Stmt&) {
+    if st == null { return }
+    saved := s.stmtSp
+    s.stmtSp = st.Span()
+    match st {
+        case typed.Stmt.Let(sp, l, x) { s.let(sp, l, x) }
+        case typed.Stmt.Assign(sp, p, x) { s.assign(sp, p, x) }
+        case typed.Stmt.Eval(_, x) { s.val(x, Term.None) }
+        case typed.Stmt.If(_, i) {
+            s.val(i.Test, Term.None)
+            s.block(i.Then)
+            s.block(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            s.block(body)
+            s.block(post)
+        }
+        case typed.Stmt.Jump(_, _, _) { }
+        case typed.Stmt.Return(sp, x) { s.ret(sp, x) }
+        case typed.Stmt.Raise(_, _, _) { }
+        case typed.Stmt.Exit(_, _) { }
+        case typed.Stmt.Assert(_, c, m) {
+            s.val(c, Term.None)
+            s.val(m, Term.None)
+        }
+        case typed.Stmt.Block(_, b) { s.block(b) }
+        case typed.Stmt.Defer(_, b) { s.block(b) }
+        case typed.Stmt.Join(_, jn) {
+            s.block(jn.Code)
+            for c in jn.Clauses { s.block(c.Code) }
+        }
+        case typed.Stmt.Spawn(sp, sw) { s.spawn(sp, sw) }
+        case typed.Stmt.Yield(_, x) { s.val(x, s.here()) }
+    }
+    s.stmtSp = saved
+}
+
+# a local declared (O25a, O25h): its claim fixed by its mark, its initializer judged against it
+fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
+    loc := s.B.Locals[I64(l)]
+    t := loc.Ty
+    s.stors[I64(l)] = s.blockTerm(loc.In)
+    if not s.holds(t) {
+        s.val(x, Term.None)
+        return
+    }
+    # a held local: its temporary is built where its one use puts it (typed.LocalKind.Held)
+    if loc.Kind == typed.LocalKind.Held and s.isFresh(x) {
+        s.held.Put(I64(l), x)
+        s.terms[I64(l)] = Term.None
+        return
+    }
+    claim := s.markTerm(loc.Marked, loc.In)
+    isRef := s.isRef(t) or s.isFunc(t)
+    if claim == Term.None {
+        # ":=", or no marker on a value holding references: the initializer's own term; a temporary is built in the
+        # local's block (O18a, O18c)
+        v := s.val(x, s.blockTerm(loc.In))
+        s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
+        return
+    }
+    s.terms[I64(l)] = claim
+    v := s.val(x, claim)
+    if v.K == ValKind.Existing {
+        exact := isRef and not s.isFunc(t)
+        if not isRef { exact = s.storeThrough(t) }
+        s.fit(v.T, claim, exact, x, FitLocal)
+    }
+}
+
+# what a value's term comes to where a local takes it: a temporary's where it was built, existing storage's own, a
+# value holding nothing none
+fn (s mut Scoper&) valTerm(v Val, built Term) Term {
+    return match v.K {
+        case ValKind.Fresh => v.T
+        case ValKind.Existing => v.T
+        case ValKind.Null => built
+        case ValKind.Plain => built
+        case ValKind.Static => Term.Program
+    }
+}
+
+# the term a mark names for a local declared in block in (O25a): None where the local takes its initializer's
+fn (s mut Scoper&) markTerm(m typed.Mark, inb typed.BlockId) Term {
+    return match m {
+        case typed.Mark.Bare => s.blockTerm(inb)
+        case typed.Mark.Of(x) => s.whereLives(x)
+        case typed.Mark.Global(_, _) => Term.Program
+        case typed.Mark.Return => Term.Var(s.resultVar) if s.resultVar >= 0 else Term.Untraced
+        case _ => Term.None
+    }
+}
+
+# where variable x lives (O4a): a reference's referent, a value's references - or its block, where it holds none yet
+fn (s mut Scoper&) whereLives(x typed.LocalId) Term {
+    t := s.terms[I64(x)]
+    if t != Term.None { return t }
+    return s.stors[I64(x)]
+}
+
+# a block's term: a constructor's top level is its instance scope (C2g), a global's initializer's the program's (O1b)
+fn (s mut Scoper&) blockTerm(b typed.BlockId) Term {
+    if b == typed.BlockId(0) {
+        match s.B.Of {
+            case typed.BodyOf.Ctor(_, _) {
+                if s.resultVar >= 0 { return Term.Var(s.resultVar) }
+            }
+            case typed.BodyOf.Global(_, _) { return Term.Program }
+            case _ { }
+        }
+    }
+    return Term.Block(b)
+}
+
+# a store (S4, O25b, O25c, O20): the slot's term from the target place, the value judged against it
+fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
+    t := p.Type()
+    s.targets.Push(p)
+    s.placeOperands(p)
+    if not s.holds(t) {
+        s.val(x, Term.None)
+        try s.targets.Pop() catch { }
+        return
+    }
+    slot, exact, kind := s.slotOf(p)
+    v := s.val(x, slot if slot.Runs() else s.here())
+    if v.K == ValKind.Existing { s.fit(v.T, slot, exact, x, kind) }
+    if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None {
+        s.gapAt(sp, "a temporary stored where its slot's scope is not known here (O12, O23a)")
+    }
+    try s.targets.Pop() catch { }
+}
+
+# the kinds of slot a fit is judged for: which error it gives
+FitLocal I64 = 0        # a reference local or parameter (O25b)
+FitField I64 = 1        # a field or an element reached through a container (O20, O25c)
+FitGlobal I64 = 2       # a global or what is reached from one (O1b)
+FitReturn I64 = 3       # a result (O14, O26)
+FitValue I64 = 4        # a value local holding references (O25h)
+
+# a place's slot: its term, whether a value put there must be exactly in it, and its kind
+fn (s mut Scoper&) slotOf(p typed.Place&) (Term, Bool, I64) {
+    t := p.Type()
+    isRef := s.isRef(t)
+    match p {
+        case typed.Place.Local(_, _, id) {
+            loc := s.B.Locals[I64(id)]
+            if isRef or s.isFunc(t) { return s.terms[I64(id)], isRef, FitLocal }
+            return s.terms[I64(id)], s.storeThrough(t), FitValue
+        }
+        case typed.Place.Global(_, _, _, _) { return Term.Program, isRef and s.storeThrough(t), FitGlobal }
+        case typed.Place.Field(_, _, base, i) {
+            bt := base.Type()
+            mark := typed.Mark.None
+            if s.P.T.KindOf(bt) == types.Kind.Named and s.isStruct(bt) { mark = s.fieldMark(bt, i) }
+            match mark {
+                case typed.Mark.Of(_) {
+                    # a field written "&p" keeps its argument's own scope: what is stored must outlive the instance (C2d)
+                    return s.partsTerm(base), false, FitField
+                }
+                case _ { }
+            }
+            return s.partsTerm(base), s.storeThrough(t), s.slotKind(base)
+        }
+        case typed.Place.Elem(_, _, e) { return s.partsTerm(e.Base), s.storeThrough(t), s.slotKind(e.Base) }
+        case typed.Place.Payload(_, _, pl) { return s.partsTerm(pl.Base), s.storeThrough(t), s.slotKind(pl.Base) }
+        case typed.Place.Deref(_, _, r) {
+            # the whole referent written over: its references are where it lives
+            return s.val(r, Term.None).T, s.storeThrough(t), FitField
+        }
+        case typed.Place.Temp(_, _, _, _) { return s.here(), false, FitValue }
+        case typed.Place.Target(_, _) {
+            if s.targets.Len() >= 2 { return s.slotOf(s.targets[s.targets.Len() - 2]) }
+            return Term.Untraced, false, FitValue
+        }
+    }
+}
+
+fn (s mut Scoper&) slotKind(base typed.Place&) I64 {
+    return match base {
+        case typed.Place.Global(_, _, _, _) => FitGlobal
+        case typed.Place.Field(_, _, b, _) => s.slotKind(b)
+        case typed.Place.Elem(_, _, e) => s.slotKind(e.Base)
+        case typed.Place.Payload(_, _, pl) => s.slotKind(pl.Base)
+        case typed.Place.Local(_, _, _) => FitValue
+        case _ => FitField
+    }
+}
+
+fn (s mut Scoper&) isStruct(t types.TypeId) Bool {
+    return s.P.T.KindOf(t) == types.Kind.Named and s.P.T.HasBody(t) and s.P.T.DeclKindOf(s.P.T.DeclOf(t)) == types.DeclKind.Struct
+}
+
+# where the references a place's parts hold live (O20, O25h, O5): through a reference, where it leads; a value local's
+# references; a global's, the program's; a field written "&q" where its binding says (C2d, O23a), else its container's
+fn (s mut Scoper&) partsTerm(p typed.Place&) Term {
+    match p {
+        case typed.Place.Local(_, _, id) {
+            t := s.terms[I64(id)]
+            return t if t != Term.None else s.stors[I64(id)]
+        }
+        case typed.Place.Global(_, _, _, _) { return Term.Program }
+        case typed.Place.Deref(_, _, r) { return s.val(r, Term.None).T }
+        case typed.Place.Field(_, _, base, i) { return s.fieldTerm(base, i) }
+        case typed.Place.Elem(_, _, e) { return s.partsTerm(e.Base) }
+        case typed.Place.Payload(_, _, pl) { return s.partsTerm(pl.Base) }
+        case typed.Place.Temp(_, _, v, site) {
+            x := s.val(v, s.here())
+            return x.T if x.T != Term.None else s.here()
+        }
+        case typed.Place.Target(_, _) {
+            if s.targets.Len() >= 2 { return s.partsTerm(s.targets[s.targets.Len() - 2]) }
+            return Term.Untraced
+        }
+    }
+}
+
+# what field i of the struct at base holds lives in: a bare field where the instance's references are, one written
+# "&q" where q's argument lived - its binding is not traced yet, so the container's term stands for it (O23)
+fn (s mut Scoper&) fieldTerm(base typed.Place&, i I64) Term {
+    return s.partsTerm(base)
+}
+
+# where a place's own storage is (E12c): a local's block, what a reference names, a part of a value where the value's
+# storage is - an element of a run-time-length array where its elements were built
+fn (s mut Scoper&) storOf(p typed.Place&) Term {
+    match p {
+        case typed.Place.Local(_, _, id) { return s.stors[I64(id)] }
+        case typed.Place.Global(_, _, _, _) { return Term.Program }
+        case typed.Place.Deref(_, _, r) { return s.val(r, Term.None).T }
+        case typed.Place.Field(_, _, base, _) { return s.storOf(base) }
+        case typed.Place.Elem(_, _, e) {
+            bt := e.Base.Type()
+                    if s.P.T.KindOf(bt) == types.Kind.Array and s.P.T.Length(bt) == types.TypeId(0) { return s.partsTerm(e.Base) }
+            return s.storOf(e.Base)
+        }
+        case typed.Place.Payload(_, _, pl) { return s.storOf(pl.Base) }
+        case typed.Place.Temp(_, _, _, site) {
+            h := s.here()
+            s.build(site, h)
+            return h
+        }
+        case typed.Place.Target(_, _) {
+            if s.targets.Len() >= 2 { return s.storOf(s.targets[s.targets.Len() - 2]) }
+            return Term.Untraced
+        }
+    }
+}
+
+# a place's own subexpressions judged as operands: a reference it goes through, an index
+fn (s mut Scoper&) placeOperands(p typed.Place&) {
+    match p {
+        case typed.Place.Deref(_, _, r) { s.val(r, Term.None) }
+        case typed.Place.Field(_, _, b, _) { s.placeOperands(b) }
+        case typed.Place.Elem(_, _, e) {
+            s.placeOperands(e.Base)
+            s.val(e.Index, Term.None)
+        }
+        case typed.Place.Payload(_, _, pl) { s.placeOperands(pl.Base) }
+        case typed.Place.Temp(_, _, v, _) { }
+        case _ { }
+    }
+}
+
+# a return (O13, O14, O26): the value judged against the result's term
+fn (s mut Scoper&) ret(sp source.Span, x typed.Expr&) {
+    if x == null { return }
+    rt := s.P.T.Result(s.B.Ty)
+    if s.P.T.KindOf(rt) == types.Kind.Tuple {
+        match x {
+            case typed.Expr.Make(_, _, m) {
+                if m.Kind == typed.MakeKind.Tuple {
+                    for k in range m.Items.Len() { s.retOne(k, m.Items[k]) }
+                    return
+                }
+            }
+            case _ { }
+        }
+        s.val(x, s.resultTerm(0))
+        return
+    }
+    s.retOne(0, x)
+}
+
+# the term result k is built or borrowed in
+fn (s mut Scoper&) resultTerm(k I64) Term {
+    m := s.B.ResultMark(s.P.T, k)
+    match m {
+        case typed.Mark.Of(p) { return s.terms[I64(p)] }
+        case _ { }
+    }
+    return Term.Var(s.resultVar) if s.resultVar >= 0 else s.here()
+}
+
+fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
+    t := x.Type()
+    if not s.holds(t) {
+        s.val(x, Term.None)
+        return
+    }
+    dest := s.resultTerm(k)
+    v := s.val(x, dest)
+    if v.K != ValKind.Existing { return }
+    m := s.B.ResultMark(s.P.T, k)
+    exact := s.storeThrough(t)
+    match m {
+        case typed.Mark.Of(_) { s.fit(v.T, dest, exact, x, FitReturn) }
+        case typed.Mark.TypeVar { s.fit(v.T, dest, exact, x, FitReturn) }
+        case _ {
+            # a built result: a value whose scope is the result scope (O26), else an obligation where the language
+            # allows one - a function value (O14a), a value holding references (O14c)
+            if s.isFunc(t) or not s.isRef(t) {
+                s.fit(v.T, dest, exact, x, FitReturn)
+            } else {
+                s.fit(v.T, dest, true, x, FitReturn)
+            }
+        }
+    }
+}
+
+# a task (P1, P1g, P2): its targets are assignments of its results; its call judged as any call, landing where its one
+# target is
+fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
+    for p in sw.Targets { s.placeOperands(p) }
+    dest := Term.None
+    if sw.Targets.Len() == 1 {
+        slot, _, _ := s.slotOf(sw.Targets[0])
+        dest = slot
+    }
+    s.val(sw.Task, dest)
+    for c in sw.Clauses { s.val(c.Handler, Term.None) }
+    if sw.Site >= typed.SiteId(0) { s.build(sw.Site, s.here()) }
+}
+
+# held locals no use placed: their temporaries are built in the block they were held in
+fn (s mut Scoper&) landHeld() {
+    for e in s.held {
+        s.val(e.Value, s.here())
+    }
+}
+
+# ---- expressions ----
+
+# whether an expression is a temporary (E12c): new storage, or a value with no storage of its own whose references
+# are new - not existing storage read, borrowed or copied, nor constant data
+fn (s mut Scoper&) isFresh(x typed.Expr&) Bool {
+    if x == null { return false }
+    return match x {
+        case typed.Expr.Promote(_, _, _), typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _) => true
+        case typed.Expr.Text(_, _, _) => true
+        case typed.Expr.Call(_, ty, c) => s.callBuilds(c, ty)
+        case typed.Expr.Seq(_, _, q) => s.isFresh(q.X)
+        case typed.Expr.Away(_, _, y) => s.isFresh(y)
+        case typed.Expr.Try(_, _, t) => s.isFresh(t.X)
+        case typed.Expr.Cond(_, _, c) => s.isFresh(c.A) and s.isFresh(c.B)
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() > 0 and s.isFresh(args[0])
+        case typed.Expr.Fn(_, _, f) => s.fnFresh(f)
+        case _ => false
+    }
+}
+
+fn (s mut Scoper&) fnFresh(f typed.FnVal&) Bool {
+    return match f {
+        case typed.FnVal.Lambda(_, caps, _) => s.capturesNothing(caps)
+        case _ => false
+    }
+}
+
+fn (s mut Scoper&) capturesNothing(caps Array<typed.Capture&>&) Bool {
+    for c in caps {
+        if s.holds(c.Outer.Type()) { return false }
+    }
+    return true
+}
+
+# whether a call's result is built (a temporary): a built result holding references, or a constructor's instance
+fn (s mut Scoper&) callBuilds(c typed.Call&, ty types.TypeId) Bool {
+    if not s.holds(ty) { return false }
+    fty := s.calleeType(c)
+    if fty == types.UnknownT { return true }
+    if s.P.T.Role(fty) == types.RoleCtor { return true }
+    e := s.P.T.ResultFrom(fty, 0)
+    return e < 0
+}
+
+fn (s mut Scoper&) calleeType(c typed.Call&) types.TypeId {
+    return match c.Target {
+        case typed.Callee.Body(id) => s.Bodies[I64(id)].Ty
+        case typed.Callee.Value(x) => x.Type()
+        case _ => types.UnknownT
+    }
+}
+
+# an expression judged: what it is to section 8, every temporary in it built where it lands - in dest where dest is a
+# run-time term, else where the expression stands (O18a's last row)
+fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
+    if x == null { return plain() }
+    d := dest if dest.Runs() else s.here()
+    match x {
+        case typed.Expr.Lit(_, ty, bits) {
+            if s.holds(ty) { return Val(ValKind.Null, Term.None) }
+            return plain()
+        }
+        case typed.Expr.Data(_, _, _, _) { return Val(ValKind.Static, Term.Program) }
+        case typed.Expr.Read(_, ty, p, _) { return s.read(p, ty, dest) }
+        case typed.Expr.Take(_, ty, p) { return s.read(p, ty, dest) }
+        case typed.Expr.Borrow(_, _, p) {
+            s.placeOperands(p)
+            return existing(s.storOf(p))
+        }
+        case typed.Expr.Promote(_, _, pr) {
+            s.build(pr.Site, d)
+            s.val(pr.X, d)
+            return fresh(d)
+        }
+        case typed.Expr.Call(sp, ty, c) { return s.call(sp, ty, c, dest) }
+        case typed.Expr.Make(_, ty, m) {
+            if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
+            s.val(m.Length, Term.None)
+            for it in m.Items { s.item(it, d) }
+            if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
+            return fresh(d)
+        }
+        case typed.Expr.Collect(_, _, c) {
+            s.build(c.Site, d)
+            s.val(c.Reserve, Term.None)
+            s.block(c.Loop)
+            return fresh(d)
+        }
+        case typed.Expr.Prim(_, ty, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() > 0 and s.holds(ty) { return s.val(args[0], dest) }
+            for a in args { s.val(a, Term.None) }
+            return plain()
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            s.placeOperands(sl.Base)
+            s.val(sl.Lo, Term.None)
+            s.val(sl.Hi, Term.None)
+            return existing(s.sliceTerm(sl.Base))
+        }
+        case typed.Expr.Cond(_, ty, c) {
+            s.val(c.C, Term.None)
+            a := s.val(c.A, dest)
+            b := s.val(c.B, dest)
+            return s.join(a, b, d)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            s.stmts(q.Stmts)
+            return s.val(q.X, dest)
+        }
+        case typed.Expr.Match(_, ty, m) { return s.match(m, dest) }
+        case typed.Expr.Try(_, _, t) {
+            v := s.val(t.X, dest)
+            for c in t.Clauses {
+                s.block(c.Code)
+                for df in c.Defaults { v = s.join(v, s.val(df, dest), d) }
+            }
+            return v
+        }
+        case typed.Expr.Fn(_, ty, f) { return s.fnVal(f, d) }
+        case typed.Expr.Text(_, _, t) {
+            s.build(t.Site, d)
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(r) { s.val(r, Term.None) }
+                    case _ { }
+                }
+            }
+            return fresh(d)
+        }
+        case typed.Expr.Away(_, _, y) { return s.val(y, dest) }
+    }
+}
+
+# an item of an array, tuple or case being built in d: a temporary built there too (O6), existing storage judged as a
+# slot of it (O25c, T17c)
+fn (s mut Scoper&) item(x typed.Expr&, d Term) {
+    v := s.val(x, d)
+    if v.K == ValKind.Existing { s.fit(v.T, d, s.storeThrough(x.Type()), x, FitField) }
+}
+
+# what reading a place gives (O20, O25h): a reference's referent's term, a value's references' - a held local's
+# temporary built where this one use puts it
+fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
+    s.placeOperands(p)
+    match p {
+        case typed.Place.Local(_, _, id) {
+            x := try s.held.Get(I64(id)) catch default null
+            if x != null {
+                s.held.Remove(I64(id))
+                v := s.val(x, dest)
+                s.terms[I64(id)] = v.T
+                return v
+            }
+        }
+        case _ { }
+    }
+    if not s.holds(ty) { return plain() }
+    match p {
+        case typed.Place.Local(_, _, id) { return existing(s.whereLives(id)) }
+        case typed.Place.Deref(_, _, r) { return existing(s.val(r, Term.None).T) }
+        case _ { return existing(s.partsTerm(p)) }
+    }
+}
+
+# a slice's term (E16a): where its base's elements are - of a temporary, the block it is written in
+fn (s mut Scoper&) sliceTerm(base typed.Place&) Term {
+    bt := base.Type()
+    if s.P.T.KindOf(bt) == types.Kind.Ref { return s.storOf(base) }
+    if s.P.T.KindOf(bt) == types.Kind.Array and s.P.T.Length(bt) == types.TypeId(0) { return s.partsTerm(base) }
+    return s.storOf(base)
+}
+
+# two values a choice can give, joined (E28, O12): one term where they agree, a set where they do not
+fn (s mut Scoper&) join(a Val, b Val, d Term) Val {
+    if a.K == ValKind.Plain { return b }
+    if b.K == ValKind.Plain { return a }
+    if a.K == ValKind.Null or a.K == ValKind.Static { return b }
+    if b.K == ValKind.Null or b.K == ValKind.Static { return a }
+    if a.T == b.T { return Val(ValKind.Existing if a.K == ValKind.Existing or b.K == ValKind.Existing else a.K, a.T) }
+    return existing(s.setOf(a.T, b.T))
+}
+
+fn (s mut Scoper&) setOf(a Term, b Term) Term {
+    xs List<Term>
+    s.addToSet(xs, a)
+    s.addToSet(xs, b)
+    if xs.Len() == 1 { return xs[0] }
+    s.setFrom.Push(s.setTerms.Len())
+    for t in xs { s.setTerms.Push(t) }
+    return Term.Set(s.setFrom.Len() - 1)
+}
+
+# where set id's terms end in setTerms
+fn (s mut Scoper&) setEnd(id I64) I64 { return s.setFrom[id + 1] if id + 1 < s.setFrom.Len() else s.setTerms.Len() }
+
+fn (s mut Scoper&) addToSet(xs mut List<Term>&, t Term) {
+    match t {
+        case Term.Set(id) {
+            for k in range s.setFrom[id], s.setEnd(id) { s.addToSet(xs, s.setTerms[k]) }
+            return
+        }
+        case _ { }
+    }
+    for u in xs {
+        if u == t { return }
+    }
+    xs.Push(t)
+}
+
+fn (s mut Scoper&) match(m typed.Match&, dest Term) Val {
+    s.stmts(m.Held)
+    d := dest if dest.Runs() else s.here()
+    v := plain()
+    first := true
+    for a in m.Arms {
+        av := s.arm(a, dest)
+        if m.IsValue {
+            v = av if first else s.join(v, av, d)
+            first = false
+        }
+    }
+    nv := s.arm(m.NoMatch, dest)
+    if m.IsValue and m.NoMatch != null and m.NoMatch.Value != null { v = s.join(v, nv, d) }
+    return v
+}
+
+fn (s mut Scoper&) arm(a typed.Arm&, dest Term) Val {
+    if a == null { return plain() }
+    for alt in a.Alts {
+        s.val(alt.Test, Term.None)
+        for bd in alt.Binds {
+            v := s.val(bd.From, Term.None)
+            s.terms[I64(bd.To)] = v.T
+        }
+    }
+    s.val(a.Guard, Term.None)
+    v := plain()
+    if a.Code != null {
+        s.blocks.Push(a.Code.Id)
+        s.stmts(a.Code.Stmts)
+        v = s.val(a.Value, dest)
+        try s.blocks.Pop() catch { }
+    } else {
+        v = s.val(a.Value, dest)
+    }
+    return v
+}
+
+# a function value (T21, D16c, D16d): a named function's static; a lambda capturing nothing is a temporary built where it
+# lands, one capturing references lives where they do; an adapter where its instance is (E31)
+fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term) Val {
+    match f {
+        case typed.FnVal.Named(_) { return existing(Term.Program) }
+        case typed.FnVal.Lambda(id, caps, site) {
+            home := Term.None
+            scopes List<typed.Scope>
+            for c in caps {
+                v := s.val(c.Outer, Term.None)
+                if s.holds(c.Outer.Type()) {
+                    t := s.valTerm(v, s.here())
+                    scopes.Push(s.scopeOf(t))
+                    home = t if home == Term.None else s.inner(home, t)
+                }
+            }
+            if home == Term.None {
+                s.build(site, d)
+                s.plan.Pass(site, scopes.ToArray())
+                return fresh(d)
+            }
+            s.build(site, home if home.Runs() else s.here())
+            s.plan.Pass(site, scopes.ToArray())
+            return existing(home)
+        }
+        case typed.FnVal.Adapter(_, r, site) {
+            v := s.val(r, Term.None)
+            t := s.valTerm(v, s.here())
+            s.build(site, t if t.Runs() else s.here())
+            s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
+            return existing(t)
+        }
+    }
+}
+
+# the shorter-lived of two terms where the order says (a closure's home among its captures', D16d), the first else
+fn (s mut Scoper&) inner(a Term, b Term) Term {
+    if s.order(a, b) == Holds { return b }
+    return a
+}
+
+# ---- calls (CALL, docs/scope-model.md 3.3) ----
+
+# a call judged: each of its callee's scope variables bound (O17, O18a, O18b, E25), its temporaries built where those
+# say, its callee's obligations judged through the bindings (O10c); what its result is to section 8
+fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Term) Val {
+    fty := s.calleeType(c)
+    match c.Target {
+        case typed.Callee.Value(x) { s.val(x, Term.None) }
+        case _ { }
+    }
+    if fty == types.UnknownT {
+        for a in c.Args { s.val(a, Term.None) }
+        return plain() if not s.holds(ty) else fresh(dest if dest.Runs() else s.here())
+    }
+    vars := s.P.T.ScopeVarsOf(fty)
+    n := c.Args.Len()
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    beta := Array<Term>(vars.Len())
+    owner := Array<I64>(n)          # by argument: the index in vars of its parameter's scope variable, -1 for none
+    for i in range n {
+        owner[i] = -1
+        if i >= ps.Len() { continue }
+        k := s.P.T.ShareOf(fty, i)
+        q := k if k >= 0 else i
+        for v in range vars.Len() {
+            if vars[v] == q { owner[i] = v }
+        }
+    }
+    # existing arguments determine their scope variables (O17, O25e)
+    vals := Array<Val>(n)
+    for i in range n {
+        vals[i] = plain()
+        a := c.Args[i]
+        if owner[i] < 0 or s.isFresh(a) or s.isHeldFresh(a) { continue }
+        v := s.val(a, Term.None)
+        vals[i] = v
+        if v.K != ValKind.Existing { continue }
+        k := owner[i]
+        if beta[k] == Term.None {
+            beta[k] = v.T
+        } else if beta[k] != v.T {
+            s.disagree(sp, a, beta[k], v.T)
+        }
+    }
+    # the result scope: a written scope argument (E25), else where the call lands (O18a)
+    here := s.here()
+    rv := -1
+    for v in range vars.Len() {
+        if vars[v] == types.ResultVar { rv = v }
+    }
+    if rv >= 0 {
+        match c.Scoped {
+            case typed.Mark.Of(x) { beta[rv] = s.whereLives(x) }
+            case typed.Mark.Return { beta[rv] = Term.Var(s.resultVar) if s.resultVar >= 0 else here }
+            case _ { beta[rv] = dest if dest.Runs() else here }
+        }
+    }
+    # a scope variable no argument determines: where the callee's obligations say it must live (O18b), else where the
+    # call's result lands, else where the call stands (O18a)
+    callee := s.bodyOf(c.Target)
+    for v in range vars.Len() {
+        if beta[v] != Term.None { continue }
+        t := s.requiredBy(callee, v, beta)
+        if t == Term.None { t = beta[rv] if rv >= 0 else here }
+        beta[v] = t
+    }
+    # the temporaries built where their scope variable is bound
+    for i in range n {
+        a := c.Args[i]
+        if owner[i] >= 0 and (s.isFresh(a) or s.isHeldFresh(a)) {
+            b := beta[owner[i]]
+            vals[i] = s.val(a, b if b.Runs() else here)
+        } else if owner[i] < 0 {
+            vals[i] = s.val(a, Term.None)
+        }
+    }
+    scopes := Array<typed.Scope>(vars.Len())
+    for v in range vars.Len() { scopes[v] = s.scopeOf(beta[v]) }
+    s.plan.Pass(c.Site, scopes)
+    # the callee's obligations, through the bindings (O10c)
+    if callee >= 0 { s.discharge(sp, callee, beta, c) }
+    if not s.holds(ty) { return plain() }
+    if s.P.T.Role(fty) == types.RoleCtor { return fresh(beta[rv] if rv >= 0 else here) }
+    e := s.P.T.ResultFrom(fty, 0)
+    if e >= 0 {
+        # a result borrowed from parameter e lives where its argument's referent does (O13)
+        for v in range vars.Len() {
+            if vars[v] == e or (e < n and owner[e] == v) { return existing(beta[v]) }
+        }
+        return existing(Term.Untraced)
+    }
+    return fresh(beta[rv] if rv >= 0 else here)
+}
+
+fn (s mut Scoper&) isHeldFresh(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Local(_, _, id) { return s.held.Has(I64(id)) }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
+# the term the callee's obligations require scope variable v to live in: a bound one it must outlive or equal (O18b);
+# None where none does, or where the callee's obligations are not final (a component of its own, 7.2)
+fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
+    if callee < 0 or not s.sums[callee].Done { return Term.None }
+    for r in s.sums[callee].Rels {
+        match r.Hi {
+            case Term.Var(i) {
+                if i == v {
+                    match r.Lo {
+                        case Term.Var(k) {
+                            if k < beta.Len() and beta[k] != Term.None and beta[k].Runs() { return beta[k] }
+                        }
+                        case Term.Program { return Term.Program }
+                        case _ { }
+                    }
+                }
+            }
+            case _ { }
+        }
+    }
+    return Term.None
+}
+
+# a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
+# at the call naming the callee's statement that required it
+fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&) {
+    for r in s.sums[callee].Rels {
+        hi := s.through(r.Hi, beta, c)
+        lo := s.through(r.Lo, beta, c)
+        if hi == Term.None or lo == Term.None { continue }
+        k := s.judgeOut(hi, lo)
+        if k == Holds { continue }
+        if k == Obliged {
+            s.oblige(hi, lo, r.Exact)
+            continue
+        }
+        if not s.report { continue }
+        m := msgs.ReferenceNarrowed() if r.Exact else msgs.ScopeObligationUnmet()
+        rec := s.err(s.nameSpan(sp), m)
+        cb := s.Bodies[callee]
+        s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
+    }
+}
+
+# a callee's term in the caller's, through a call's bindings
+fn (s mut Scoper&) through(t Term, beta Array<Term>&, c typed.Call&) Term {
+    return match t {
+        case Term.Var(i) => beta[i] if i < beta.Len() else Term.None
+        case Term.Program => Term.Program
+        case Term.Derived(p, w) => s.derivedAt(p, w, c)
+        case _ => Term.None
+    }
+}
+
+# a callee's derived scope through a call (O23a): the argument's binding - not traced yet, so its own term (O23)
+fn (s mut Scoper&) derivedAt(p I64, w I64, c typed.Call&) Term {
+    if p >= c.Args.Len() { return Term.None }
+    v := s.val(c.Args[p], Term.None)
+    return v.T if v.K == ValKind.Existing else Term.None
+}
+
+# two arguments determining one scope variable in different scopes (O25e)
+fn (s mut Scoper&) disagree(sp source.Span, a typed.Expr&, t Term, u Term) {
+    if s.judgeOut(t, u) == Obliged and s.judgeOut(u, t) == Obliged {
+        s.oblige(t, u, true)
+        return
+    }
+    if not s.report { return }
+    s.err(a.Span(), msgs.ScopeArgsDisagree())
+}
+
+# ---- the order and judging a fit ----
+
+# whether a outlives b, by the order of 2.2: Holds; Obliged where both are relatable terms the order does not decide
+# (and the body's obligations do not either); FailsBlock where a block is asked to outlive what it cannot; FailsUnknown
+# where a side is not known here
+fn (s mut Scoper&) order(a Term, b Term) I64 {
+    if a == b {
+        return match a {
+            case Term.Set(_), Term.Untraced, Term.None => FailsUnknown
+            case _ => Holds
+        }
+    }
+    match a {
+        case Term.Untraced, Term.None { return FailsUnknown }
+        case Term.Set(id) {
+            worst := Holds
+            for m in range s.setFrom[id], s.setEnd(id) {
+                k := s.order(s.setTerms[m], b)
+                if k > worst { worst = k }
+            }
+            return worst
+        }
+        case Term.Program { return Holds }
+        case _ { }
+    }
+    match b {
+        case Term.Untraced, Term.None { return FailsUnknown }
+        case Term.Set(id) {
+            worst := Holds
+            for m in range s.setFrom[id], s.setEnd(id) {
+                k := s.order(a, s.setTerms[m])
+                if k > worst { worst = k }
+            }
+            return worst
+        }
+        case Term.Block(bb) {
+            match a {
+                case Term.Var(_), Term.Derived(_, _) { return Holds }
+                case Term.Block(ab) { return Holds if s.B.Encloses(ab, bb) else FailsBlock }
+                case _ { return FailsUnknown }
+            }
+        }
+        case _ { }
+    }
+    # b a scope variable, a derived scope or the program's
+    match a {
+        case Term.Block(_) { return FailsBlock }
+        case _ { }
+    }
+    if s.gammaHolds(a, b) { return Holds }
+    return Obliged
+}
+
+# the order and the obligations already recorded
+fn (s mut Scoper&) judgeOut(a Term, b Term) I64 { return s.order(a, b) }
+
+# whether the body's obligations show hi outlives lo: a path of relations from hi to lo
+fn (s mut Scoper&) gammaHolds(hi Term, lo Term) Bool {
+    seen List<Term>
+    todo List<Term>
+    todo.Push(hi)
+    for todo.Len() > 0 {
+        t := try todo.Pop() catch { break }
+        if t == lo { return true }
+        if t == Term.Program { continue }
+        dup := false
+        for u in seen {
+            if u == t { dup = true }
+        }
+        if dup { continue }
+        seen.Push(t)
+        for r in s.gamma {
+            if r.Hi == t { todo.Push(r.Lo) }
+        }
+        # what the program's scope outlives, everything does not: only obligations lead on
+    }
+    return false
+}
+
+# an obligation recorded (O10b): hi outlives lo - both ways where exact
+fn (s mut Scoper&) oblige(hi Term, lo Term, exact Bool) {
+    s.addRel(rel(hi, lo, exact, s.stmtSp))
+    if exact { s.addRel(rel(lo, hi, exact, s.stmtSp)) }
+}
+
+fn (s mut Scoper&) addRel(r rel) {
+    if not hasRel(s.gamma, r) { s.gamma.Push(r) }
+}
+
+# a value of existing storage living at t put into a slot of term slot (FIT, 3.1): it must outlive the slot, and be
+# exactly in it where exact
+fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
+    if slot == Term.None or t == Term.None { return }
+    k := s.order(t, slot)
+    if k == Holds and exact and t != slot {
+        k = s.order(slot, t)
+        if k == FailsBlock and s.isBlock(slot) {
+            # a reference narrowed into a shorter block (O25)
+            s.fitError(x, kind, true)
+            return
+        }
+    }
+    if k == Holds { return }
+    if k == Obliged {
+        s.oblige(t, slot, false)
+        if exact and t != slot {
+            o := s.order(slot, t)
+            if o == Obliged { s.oblige(slot, t, false) }
+        }
+        return
+    }
+    s.fitError(x, kind, exact)
+}
+
+fn (s mut Scoper&) isBlock(t Term) Bool {
+    return match t {
+        case Term.Block(_) => true
+        case _ => false
+    }
+}
+
+fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
+    if not s.report { return }
+    sp := x.Span()
+    m := msgs.ScopeMayNotOutlive()
+    if kind == FitLocal {
+        m = msgs.ReferenceNarrowed()
+    } else if kind == FitField {
+        m = msgs.StoredRefOutlived()
+    } else if kind == FitGlobal {
+        m = msgs.GlobalHoldsShorter()
+    } else if kind == FitReturn {
+        m = msgs.ReturnOwnStorage()
+    } else if kind == FitValue {
+        m = msgs.ValueRefsOutlived()
+    }
+    s.err(sp, m)
+}
+
+# ---- placement ----
+
+# site built in term t: a run-time term's scope, else where the site stands (a static-only term is never built into,
+# docs/scope-model.md 2.3)
+fn (s mut Scoper&) build(site typed.SiteId, t Term) {
+    if site < typed.SiteId(0) or I64(site) >= s.plan.Built.Len() { return }
+    s.plan.Built[I64(site)] = s.scopeOf(t if t.Runs() else s.here())
+}
+
+# a term as the plan says it: Inert for one nothing exists for at run time
+fn (s mut Scoper&) scopeOf(t Term) typed.Scope {
+    return match t {
+        case Term.Block(b) => typed.Scope.Block(b)
+        case Term.Var(i) => typed.Scope.Var(i)
+        case Term.Program => typed.Scope.Program
+        case _ => typed.Scope.Inert
+    }
+}
+
+# ---- diagnostics ----
+
+fn (s mut Scoper&) err(sp source.Span, m msgs.Msg) I64 {
+    return s.P.L.Diags.Error(diag.Where.Span(s.B.File, I64(sp.Start), I64(sp.End)), m)
+}
+
+fn (s mut Scoper&) note(rec I64, file I64, sp source.Span, m msgs.Msg) {
+    s.P.L.Diags.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), m)
+}
+
+# a call's span as an error names it: its callee's name - the name before the argument list
+fn (s mut Scoper&) nameSpan(sp source.Span) source.Span {
+    text := try s.texts.Get(s.B.File) catch default ""
+    at := I64(sp.Start)
+    end := I64(sp.End)
+    if end > text.Len() { return sp }
+    # the last name before the first "(" at depth 0 that follows a name
+    k := at
+    name := sp
+    for k < end {
+        ch := text[k]
+        if ch == '(' { break }
+        if isNameChar(ch) {
+            from := k
+            for k < end and isNameChar(text[k]) { k++ }
+            name = source.Span(I32(from), I32(k))
+            continue
+        }
+        k++
+    }
+    return name
+}
+
+# the first token of a statement: a name, or one character
+fn (s mut Scoper&) firstToken(file I64, sp source.Span) source.Span {
+    text := try s.texts.Get(file) catch default ""
+    at := I64(sp.Start)
+    if at < 0 or at >= text.Len() { return sp }
+    k := at
+    for k < text.Len() and isNameChar(text[k]) { k++ }
+    if k == at { k = at + 1 }
+    return source.Span(I32(at), I32(k))
+}
+
+fn isNameChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# whether body b's scopes were judged: it has code, and no type in it is unknown (a check error)
+fn (s Scoper&) Judged(b I64) Bool { return s.judged[b] }
