@@ -7,7 +7,8 @@
 # by test: a row per file, "same N" where every test ends as stage 0's does, else what each run said - "stage0 P ok F
 # fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
 # run, its output and status compared - with -i against stage 0's interpret too. Then the totals. The compiler under
-# test is $OLANG (build/out), the evaluator build/compiler_tools_evaldump (or $EVALDUMP).
+# test is $OLANG (build/out), the evaluator build/compiler_tools_evaldump (or $EVALDUMP), each of its runs stopped
+# after $EVALTIMEOUT seconds (300): tasks run in sequence (K1), so one waiting for another that has not run never ends.
 
 import "std/os"
 import "toolkit"
@@ -64,7 +65,8 @@ fn compare(olang String&, evaldump String&, f String&, v Bool, interpret Bool) r
     r := result()
     program := f.StartsWith("checks/")
     s0 := toolkit.Run(String&["timeout", "600", $olang, $f]) if program else toolkit.Run(String&["timeout", "600", $olang, "test", $f])
-    p := toolkit.Run(String&["timeout", "600", $evaldump, $f]) if program else toolkit.Run(String&["timeout", "600", $evaldump, "-t", $f])
+    limit := toolkit.Env("EVALTIMEOUT", "300")
+    p := toolkit.Run(String&["timeout", $limit, $evaldump, $f]) if program else toolkit.Run(String&["timeout", $limit, $evaldump, "-t", $f])
     unlowered := count(p.Stderr, "unlowered ")
     if program {
         r.Equal = p.Stdout == s0.Stdout and p.Status == s0.Status

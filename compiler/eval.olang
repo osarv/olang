@@ -302,6 +302,8 @@ type Machine struct(T mut types.Table&, When Mode) {
     writableOf Map<types.TypeId, Bool>
     stopFile I64 = 0
     stopSp source.Span = source.Span(0, 0)
+    Args List<String&>          # -i: the interpreted program's command line, its file first (B3e)
+    lastErr I32 = 0
 }
 
 # a machine evaluating in the mode given, its budgets K1's (stage 0's): 20,000,000 steps, 256 MB, 2,000 frames while
@@ -2272,6 +2274,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         m.refuse(WhyExtern)
         return false
     }
+    if name.StartsWith("__olang_") { return m.runtimeFn(fi, name, args, ty, dst, hasDst) }
     kinds := Array<U8>(ps.Len())
     nwords I64 = 0
     for i in range ps.Len() {
@@ -2313,6 +2316,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         m.refuse(WhyFfiPass)
         return false
     }
+    m.lastErr = __olang_err()    # what the call left in errno, before the evaluator's own work can change it (X6)
     # what the function wrote into an array is copied back into its storage
     w = 0
     for i in range ps.Len() {
@@ -2332,6 +2336,114 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     }
     if hasDst and res != types.VoidT { m.wr(dst, m.width(res), I64(out)) }
     return not m.halted
+}
+
+# ---- the runtime's own functions (X6, B3f) ----
+
+# the runtime's functions live in the program built, and are this process's own here: -i calls them itself, over the
+# interpreted program's command line (Args) - each array argument copied in and out as an extern's is
+extern fn __olang_env(name Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_err() I32
+extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
+extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+extern fn __olang_mkdtemp(template Array<U8>) I32
+extern fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
+extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+
+fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.TypeId, dst Ptr, hasDst Bool) Bool {
+    f := m.fnOfFrame(fi)
+    x := fn(i I64) mir.Operand { return f.Ops[I64(args.At) + i] }
+    v I64 = 0
+    match name {
+        case "__olang_arg_count" { v = m.Args.Len() }
+        case "__olang_arg" {
+            i := m.intArg(fi, x(0))
+            if i < 0 or i >= m.Args.Len() {
+                v = -1
+            } else {
+                s := m.Args[i]
+                b := Array<U8>(s.Len())
+                for k in range s.Len() { b[k] = U8(s[k]) }
+                m.putBytes(fi, x(1), b, m.intArg(fi, x(2)))
+                v = s.Len()
+            }
+        }
+        case "__olang_env" {
+            buf := Array<U8>(m.intArg(fi, x(2)))
+            v = __olang_env(m.bytesOf(fi, x(0)), buf, buf.Len())
+            m.putBytes(fi, x(1), buf, buf.Len())
+        }
+        case "__olang_err" { v = I64(m.lastErr) }
+        case "__olang_stat" {
+            out := Array<I64>(3)
+            v = I64(__olang_stat(m.bytesOf(fi, x(0)), out))
+            b := Array<U8>(24)
+            for k in range 24 { b[k] = U8((out[k / 8] >> (8 * (k % 8))) & 0xFF) }
+            m.putBytes(fi, x(1), b, 24)
+        }
+        case "__olang_dir", "__olang_realpath" {
+            buf := Array<U8>(m.intArg(fi, x(2)))
+            path := m.bytesOf(fi, x(0))
+            v = __olang_dir(path, buf, buf.Len()) if name == "__olang_dir" else __olang_realpath(path, buf, buf.Len())
+            m.putBytes(fi, x(1), buf, buf.Len())
+        }
+        case "__olang_spawn" {
+            v = I64(__olang_spawn(m.bytesOf(fi, x(0)), m.intArg(fi, x(1)), I32(m.intArg(fi, x(2))), I32(m.intArg(fi, x(3)))
+                                  I32(m.intArg(fi, x(4))), m.bytesOf(fi, x(5))))
+        }
+        case "__olang_mkdtemp" {
+            b := m.bytesOf(fi, x(0))
+            v = I64(__olang_mkdtemp(b))
+            m.putBytes(fi, x(0), b, b.Len())
+        }
+        case "__olang_dyncall" {
+            wb := m.bytesOf(fi, x(2))
+            words := Array<U64>(wb.Len() / 8)
+            for k in range wb.Len() { words[k / 8] = words[k / 8] | (U64(wb[k]) << U64(8 * (k % 8))) }
+            v = I64(__olang_dyncall(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), words, U8(m.intArg(fi, x(3)))))
+            for k in range wb.Len() { wb[k] = U8((words[k / 8] >> U64(8 * (k % 8))) & 0xFF) }
+            m.putBytes(fi, x(2), wb, wb.Len())
+        }
+        case "__olang_dyncall_check" {
+            v = I64(__olang_dyncall_check(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), U8(m.intArg(fi, x(2)))))
+        }
+        case "__olang_on_crash" { }
+        case _ {
+            m.refuse(WhyFfiFind)
+            return false
+        }
+    }
+    if m.halted { return false }
+    res := m.T.Result(ty)
+    if hasDst and res != types.VoidT { m.wr(dst, m.width(res), v) }
+    return true
+}
+
+fn (m mut Machine&) intArg(fi I64, x mir.Operand) I64 { return m.intValue(m.scalar(fi, x), m.opType(fi, x)) }
+
+# an array operand's bytes, copied out of the machine
+fn (m mut Machine&) bytesOf(fi I64, x mir.Operand) Array<U8> {
+    xt := m.opType(fi, x)
+    data, n := m.arrayView(m.addr(fi, x, 1), xt)
+    if m.halted { return Array<U8>(0) }
+    bytes := n * m.size(m.elemOf(xt))
+    b := Array<U8>(bytes)
+    for k in range bytes { b[k] = U8(m.rd(Ptr(data.Id, data.Off + k), 1)) }
+    return b
+}
+
+# at most cap of b's bytes written into the array an operand names, as far as it reaches
+fn (m mut Machine&) putBytes(fi I64, x mir.Operand, b Array<U8>&, cap I64) {
+    xt := m.opType(fi, x)
+    data, n := m.arrayView(m.addr(fi, x, 1), xt)
+    if m.halted or m.allocOf(data.Id).ReadOnly { return }
+    room := n * m.size(m.elemOf(xt))
+    k := b.Len()
+    if cap < k { k = cap }
+    if room < k { k = room }
+    for i in range k { m.wr(Ptr(data.Id, data.Off + i), 1, I64(b[i])) }
 }
 
 fn (m mut Machine&) ffiKind(ty types.TypeId) ffi.Kind {
