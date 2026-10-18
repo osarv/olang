@@ -66,7 +66,8 @@ overrated".
   vs semantic.c's 31,350 (which also holds section 8); the finished port projected at 40-50k vs C's 56k.
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
-  self-hosting (stage 0 too): wt-noown (own/take removed, memory round 3); then the open STAGE-0 BUG FIXES (checked
+  self-hosting (stage 0 too): the open STAGE-0 BUG FIXES (wt-noown - own/take removed, memory round 3 - merged
+  2026-10-18, fcd2eae; the port's compiler/ still carries own/take until memory round 5) (checked
   2026-10-18): T22a lets a function whose parameters share a scope (`fn link(a mut N&, b N&a)`) become a function value
   - both /home/user/review/typed/repro/sharedscope*.olang still segfault under -debug -sanitize; S4d decided by types
   in C to match SPEC and E31b's M1 (both unverified - check them); the `f.Blocks[b].S.Push(x)` handle UAF no longer
