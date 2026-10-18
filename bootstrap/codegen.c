@@ -1837,9 +1837,11 @@ static char* cgValueSlot(struct cgCtx* ctx, struct type t, const char* ty) {
 //CONSISTENCY IS THE OBLIGATION: every access to the same storage must use the same family, or LLVM is told
 //two aliasing accesses do not alias. So an array literal's element stores are element-tagged exactly as a
 //later read of them is.
-//Deliberately narrow. Only Bool, the numeric primitives (each its own leaf, every one in the T4 table) and the
-//runtime-length array descriptor are tagged; aggregates and references stay untagged, which means "may alias
-//anything" and is always the safe answer. A DECLARED type over a number ("type Char extends U8", "type Meters I32")
+//Deliberately narrow. Only Bool, the numeric primitives (each its own leaf, every one in the T4 table), the
+//runtime-length array descriptor and a reference to a struct or an enum (one pointer, "ref") are tagged; aggregates,
+//function values and a fixed array's bare pointer stay untagged, which means "may alias anything" and is always the
+//safe answer. The runtime's scope and chunk headers have families of their own (std/runtime/runtime.ll's !59, !60), so
+//an element store never aliases the header a loop body's scope is: a scope that allocates nothing folds away. A DECLARED type over a number ("type Char extends U8", "type Meters I32")
 //has its base's bType and so its base's tag - which is what makes T29h's view of an Array<Char> as an Array<U8>
 //sound - and no conversion, view or flow ever reaches one primitive's storage as another's (an array conversion
 //compares element bTypes, T29a/T29h; E33's Bits/FromBits move values, never storage; X3 hands a foreign call a
@@ -1879,6 +1881,10 @@ static const char* cgTbaa(struct type t, bool elem) {
         //carries (T11), so the marker is irrelevant here; a compile-time-length array is inline storage or
         //a bare ptr and stays untagged. An element variant is needed too, for an array of arrays' elements.
         case BASETYPE_ARRAY: return t.arrMalloc ? (elem ? ", !tbaa !37" : ", !tbaa !27") : "";
+        //T36: a reference to a struct or an enum - one pointer - is a family of its own, split by the last step as a
+        //number's is. What it lets LLVM see is that a handle's reference (a Vec's, a List's "s") is not written by an
+        //element store, so a loop over a field's Vec loads it once
+        case BASETYPE_STRUCT: case BASETYPE_CHOICE: return t.structMAlloc ? (elem ? ", !tbaa !39" : ", !tbaa !29") : "";
         default: return "";
     }
 }
@@ -8883,6 +8889,14 @@ void emitTbaaTypeTree(FILE* out) {
           "!17 = !{!\"arraydesc\", !20, i64 0}\n"
           "!18 = !{!\"closure\", !20, i64 0}\n" //a closure's environment (cgCaptureTbaa)
           "!47 = !{!\"arraydesc[]\", !20, i64 0}\n"
+          "!19 = !{!\"ref\", !20, i64 0}\n" //a reference to a struct or an enum (cgTbaa)
+          "!48 = !{!\"ref[]\", !20, i64 0}\n"
+          "!49 = !{!\"scopehdr\", !20, i64 0}\n" //the runtime's scope headers and chunk headers (runtime.ll's !59, !60)
+          "!50 = !{!\"chunkhdr\", !20, i64 0}\n"
+          "!29 = !{!19, !19, i64 0}\n"
+          "!39 = !{!48, !48, i64 0}\n"
+          "!59 = !{!49, !49, i64 0}\n"
+          "!60 = !{!50, !50, i64 0}\n"
           "!27 = !{!17, !17, i64 0}\n"
           "!28 = !{!18, !18, i64 0}\n"
           "!37 = !{!47, !47, i64 0}\n", out);
