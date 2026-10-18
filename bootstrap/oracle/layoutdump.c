@@ -1,6 +1,6 @@
 // layoutdump [-t] [-D NAME=VALUE]... FILE - the C compiler's types and their layouts, the oracle the self-hosted
-// compiler's type table is compared with (compiler/DESIGN.md section 4, compiler/tools/layoutdiff.sh). The program
-// rooted at FILE is analyzed as "olang -c" analyzes it, as modgraph does, and every type it holds that has a layout is
+// compiler's type table is compared with (compiler/DESIGN.md section 4, compiler/tools/layoutdiff.olang). The program
+// rooted at FILE is analyzed as "olang compile" analyzes it, as modgraph does, and every type it holds that has a layout is
 // written once, sorted, one line each:
 //
 //     TYPE <tab> SIZE ALIGN <tab> LLVM <tab> BODY <tab> PARTS
@@ -64,7 +64,7 @@ static void canon(struct buf* b, struct type t);
 static bool namedDecl(struct type t) { return t.owner && t.name.len > 0 && t.bType != BASETYPE_TYPEVAR; }
 
 static void errorText(struct buf* b, struct type* e) {
-    if (e == SemanticGenericErrorType() || !e->owner || !e->name.len) {
+    if (!e->owner || !e->name.len) {
         adds(b, "default");
         return;
     }
@@ -144,8 +144,7 @@ static void canonInner(struct buf* b, struct type t) {
             }
             if (t.errors.len) {
                 adds(b, " ?");
-                bool onlyDefault = t.errors.len == 1 && *(struct type**)ListGetIdx(&t.errors, 0) == SemanticGenericErrorType();
-                for (int i = 0; !onlyDefault && i < t.errors.len; i++) {
+                for (int i = 0; i < t.errors.len; i++) {
                     adds(b, i ? " + " : " ");
                     errorText(b, *(struct type**)ListGetIdx(&t.errors, i));
                 }

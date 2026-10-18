@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # O38: ...nor by a spawn target given a borrowed result - its loans would end at the join (own4 N2)
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -22,5 +23,5 @@ fn main() ? {
         spawn r = id(b)
     }
     v.o = null
-    println($r.o.k)
+    try io.Println($r.o.k)
 }

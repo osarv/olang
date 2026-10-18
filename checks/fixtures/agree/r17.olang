@@ -1,5 +1,5 @@
-# R17: an error leaving a bare "?" function leaves as that function's own default error - so main reports it unnamed,
-# built or interpreted
+# R1a (was R17): an error leaving a bare "?" function keeps its name - the set is inferred - so main reports it by name,
+# built, built -d with its trace (S18d) and interpreted alike
 import "std/io"
 error Err {
     LOUD
@@ -12,6 +12,6 @@ fn outer(n I64) ? {
     try inner(n)
 }
 fn main() ? {
-    try io.Print("before\n") catch { }
+    try io.Print("before\n")
     try outer(run)
 }

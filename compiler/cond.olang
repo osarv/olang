@@ -73,12 +73,17 @@ fn (c mut Consts&) text(t String&) I64 {
     return c.Texts.Len() - 1
 }
 
+# a name that is not there: a build constant (Consts.find) or a global (Scope.find)
+error missing {
+    NAME
+}
+
 # the index of a build constant, or a miss
 fn (c Consts&) find(name String&) I64 ? {
     for i in range c.names.Len() {
         if c.names[i] == name { return i }
     }
-    error
+    error missing.NAME
 }
 
 # whether name is a build constant, and whether it is one of B10a's
@@ -94,7 +99,7 @@ fn (c Consts&) Defined(name String&) Bool {
 }
 
 # the eight build constants of B10a. A target's facts the driver has not resolved are left unknown
-fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I64, hasFma I64, debug Bool, race Bool,
+fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I64, hasFma I64, debug Bool, race Bool
                              testBuild Bool) {
     c.add("TargetOs", Value(ValueKind.Text, 0, 0.0, c.text(os), 0, false), true, false, os != "")
     c.add("TargetArch", Value(ValueKind.Text, 0, 0.0, c.text(arch), 0, false), true, false, arch != "")
@@ -155,6 +160,12 @@ fn (c mut Consts&) define(flag String&) ? DefineError {
     v, big := try c.literal(value)
     c.add(name, v, false, big, true)
     c.raws[c.raws.Len() - 1] = $value
+}
+
+# a build constant's value, and whether it is an integer above I64's maximum (a U64); a miss where there is none
+fn (c Consts&) ValueOf(name String&) (Value, Bool) ? {
+    i := try c.find(name)
+    return c.values[i], c.big[i]
 }
 
 # -D's value for name as written, for a message
@@ -265,7 +276,7 @@ fn (s Scope&) find(name String&) Global&s ? {
     for g in s.globals {
         if g.Name == name { return g }
     }
-    error
+    error missing.NAME
 }
 
 # ---- evaluation ----

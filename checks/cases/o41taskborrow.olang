@@ -1,6 +1,7 @@
 # check: fail error[O41]: assigning 's.cur' may release the Node the task spawned on line
 # a task borrowing through the holder it is handed, its use ordered after the spawner's release by channels
 import "std/chan"
+import "std/io"
 type Node struct(n I64) {
     n
     name String& = "node" $n
@@ -11,9 +12,9 @@ type Holder struct() {
 }
 fn work(h Holder&, a mut chan.Chan<I64>&, b mut chan.Chan<I64>&) {
     c := h.cur
-    chan.Send(a, 1)
+    try chan.Send(a, 1) catch { return }
     k := try chan.Recv(b) catch { return }
-    println(c.name)
+    try io.Println(c.name) catch io.IoError { }
 }
 fn main() ? {
     s := Holder()
@@ -26,6 +27,6 @@ fn main() ? {
         spawn work(s, a, b)
         k := try chan.Recv(a) catch { return }
         s.cur = null
-        chan.Send(b, 1)
+        try chan.Send(b, 1) catch { return }
     }
 }

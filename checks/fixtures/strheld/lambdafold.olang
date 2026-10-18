@@ -1,4 +1,5 @@
 # E11c/D16c: a Str folding its receiver's List with a lambda rendering a receiver field
+import "std/io"
 type Bag struct(k I64) {
     k
     l List<I64> = List<I64>()
@@ -13,5 +14,5 @@ fn (b Bag&) Str() String {
 fn main() ? {
     b := Bag(1)
     b.l.Push(4)
-    println($b)
+    try io.Println($b)
 }

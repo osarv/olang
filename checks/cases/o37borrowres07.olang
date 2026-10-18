@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it - stor
 # O37/O38 (Vec phase 1): a borrowed own result - ...captured by a lambda that is returned
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 2000 {
@@ -63,5 +64,5 @@ fn main() ? {
     g := mkf(v)
     v.o = null
     churn()
-    println($g())
+    try io.Println($g())
 }

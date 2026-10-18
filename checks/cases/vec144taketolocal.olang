@@ -1,0 +1,43 @@
+# check: run
+# flags: -debug -sanitize
+# Vec phase 2a review (O26a): a local a 'take' moves from flows where the taker goes - 'w := take l.toks; return w' and
+# 'l.toks = take v; return l' keep what l and v refer to in the result scope, as 'return take l.toks' did
+type Tok struct(text String&, n I64) {
+    text
+    n
+}
+type Lex2 struct() {
+    toks Vec<Tok> = Vec<Tok>()
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn viaLocal() Vec<Tok> {
+    t := "x" $5 "-function-block-text"
+    l := Lex2()
+    l.toks.Push(Tok(t, 1))
+    w := take l.toks
+    return w
+}
+fn viaField() Lex2 {
+    t := "y" $6 "-function-block-text"
+    v := Vec<Tok>()
+    v.Push(Tok(t, 1))
+    l := Lex2()
+    l.toks = take v
+    return l
+}
+fn main() ? {
+    a := viaLocal()
+    b := viaField()
+    churn()
+    s := a[0].text
+    u := b.toks[0].text
+    assert s == "x5-function-block-text"
+    assert u == "y6-function-block-text"
+}

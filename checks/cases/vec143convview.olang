@@ -1,0 +1,21 @@
+# check: run
+# flags: -debug -sanitize
+# Vec phase 2a review x1 (T29a): a conversion of a reference a call gives names the referent's storage - the run time
+# copied it, where the compile-time evaluator and -i named it
+fn viewed() I64 {
+    v := Vec<Char>()
+    v.Push('a')
+    v.Push('a')
+    w String&v = String(v.View())
+    v[0] = 'z'
+    return 1 if w[0] == 'z' else 0
+}
+Baked I64 = viewed()
+fn main() ? {
+    a := Array<Char>(2, 'a')
+    t String& = String(a)
+    a[0] = 'z'
+    assert t[0] == 'z'
+    assert viewed() == 1
+    assert Baked == 1
+}

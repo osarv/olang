@@ -2,8 +2,9 @@
 # also: compilation failed with 1 error
 # L14/L18: a literal never crosses a line - the newline that stops it ends the line, and so the statement, and the
 # next line is read on its own (the newline was taken into the literal, so the next line was read as its continuation)
+import "std/io"
 fn main() ? {
     a := "abc
     b := 2
-    println($b)
+    try io.Println($b)
 }

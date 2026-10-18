@@ -1,0 +1,8 @@
+# check: fail ntDist does not satisfy the constraint Float on T: Float is sealed
+# T29f/T35c: a declared type extending F64 inherits F64's methods but not Float - "match T" over the built-in floats
+# would have no case for it
+type ntDist extends F64
+fn ntHalf<T Float>(x T) T { return x / 2.0 }
+fn main() ? {
+    h := ntHalf(ntDist(4.0))
+}

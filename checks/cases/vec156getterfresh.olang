@@ -1,0 +1,31 @@
+# check: run
+# flags: -debug -sanitize
+# vec7 F2: a take through a call's reference result is refused only where the callee gives a borrowed own result (O37) -
+# one building a new object, its result held in a local, is taken from as any other reference
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn fresh(n I64) mut Lexer& {
+    l mut Lexer& = Lexer()
+    for i in range n { l.toks.Push($i "-fresh") }
+    return l
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    d := Parser()
+    d.lx = Lexer()
+    q := fresh(3)
+    d.lx.toks = take q.toks
+    churn()
+    assert d.lx.toks.Len() == 3 and d.lx.toks[1] == "1-fresh" and q.toks.Len() == 0
+}

@@ -1,0 +1,29 @@
+# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# R1: through a function taking the field out of its parameter's owned object
+import "std/io"
+type Lex3 struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type H struct() {
+    lx own mut Lex3& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn steal(h mut H&) Vec<String&> { return take h.lx.toks }
+fn main() ? {
+    h := H()
+    g := H()
+    h.lx = Lex3()
+    g.lx = Lex3()
+    for i in range 3 { h.lx.toks.Push($i "-built-into-h-region") }
+    g.lx.toks = steal(h)
+    h.lx = null
+    churn()
+    try io.Println(g.lx.toks[0])
+}

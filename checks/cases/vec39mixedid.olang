@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec3 F2: the unrecorded return is a generic pass-through, id(h(c))
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -13,18 +14,18 @@ type CB struct() {
     text own mut String& = "bb"
 }
 fn h(c CB&) String&c { return c.text }
-fn id(x <T>) T { return x }
+fn id<T>(x T) T { return x }
 fn f(c CB&, n I64) String&c {
     if n == 0 { return String(c.data) }
     return id(h(c))
 }
-fn use(c mut CB&) {
+fn use(c mut CB&) ? io.IoError {
     t := f(c, 1)
     c.text = "zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println(t)
+    try io.Println(t)
 }
 fn main() ? {
     c := CB()
-    use(c)
+    try use(c)
 }

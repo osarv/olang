@@ -1,12 +1,12 @@
-# check: fail has only the checked form of this operation
-# E31: a type with only TryAt is indexed under "try"
+# check: fail CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
+# E31a: a checked form needs its plain one - "try" never turns a check on, so no operation is reachable only under one
 error E {
     X
 }
 type Bag struct() {
     n I64 = 2
 }
-fn (b Bag&) TryAt(i I64) I32 ? E { return 1 }
+fn (b Bag&) CheckedAt(i I64) I32 ? E { return 1 }
 fn main() ? {
     b Bag& = Bag()
     x := b[0]

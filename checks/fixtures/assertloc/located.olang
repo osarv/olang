@@ -3,7 +3,7 @@ import "std/os"
 fn main() ? {
     n := os.Args().Len()
     assert n < 4, "never shown " $n
-    if n == 2 { abort }
+    if n == 2 { unreachable }
     if n == 3 { unreachable }
     assert n == 7, "n is " $n
 }

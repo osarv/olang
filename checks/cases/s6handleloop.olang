@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # E31b/O17b (study 6, r01): a call on a handle element in a loop - a List in a List, a List field of a struct element,
 # the List a Map gives - and a store into an element of one, builds where the handle's state lives, not in the loop
 # body's arena; read back after a churn

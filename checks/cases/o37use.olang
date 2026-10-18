@@ -1,5 +1,6 @@
 # check: fail error[O37]: 'mk' gives an owner, which only an own slot receives - 'x := mk(...)'
 # an owned result read in place would be owned by nothing
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -14,5 +15,5 @@ type Server struct() {
 }
 fn mk(n I64) own mut Conn& { return Conn(n) }
 fn main() ? {
-    println($mk(3).fd)
+    try io.Println($mk(3).fd)
 }

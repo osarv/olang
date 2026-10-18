@@ -4,9 +4,10 @@
 # in has run, as the built program would run it
 import "std/chan"
 import "std/os"
+import "std/io"
 
 fn produce(c mut chan.Chan<I32>&, n I32) {
-    for i in range n { chan.Send(c, i) }
+    for i in range n { chan.Send(c, i)! }
     chan.Close(c)
 }
 
@@ -17,12 +18,12 @@ fn consume(c mut chan.Chan<I32>&, total mut Array<I64>&) {
 fn square(n I64) I64 { return n * n }
 
 fn main() ? {
-    defer println("cleanup ran")
+    defer try io.Println("cleanup ran") catch io.IoError { }
     out := Array<I64>(4)
     join {
         for i in range 4 { spawn out[i] = square(i + 1) }
     }
-    println("squares " $out)
+    try io.Println("squares " $out)
     small mut chan.Chan<I32>& = chan.Chan<I32>(8)
     chan.Init(small)
     t mut Array<I64>& = Array<I64>(1)
@@ -30,7 +31,7 @@ fn main() ? {
         spawn produce(small, 5)
         spawn consume(small, t)
     }
-    println("sum " $t[0])
+    try io.Println("sum " $t[0])
     if os.Args().Len() > 1 {
         big mut chan.Chan<I32>& = chan.Chan<I32>(4)
         chan.Init(big)
@@ -38,6 +39,6 @@ fn main() ? {
             spawn produce(big, 100)
             spawn consume(big, t)
         }
-        println("sum " $t[0])
+        try io.Println("sum " $t[0])
     }
 }

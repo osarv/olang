@@ -1,6 +1,7 @@
 # check: fail error[E11c, T25c]: '$' renders read-only values too, so Str only reads its receiver
 # E11c/T25c: "$" renders read-only copies (an immutable global here), so a by-value receiver of Str may not lend what it
 # holds writably
+import "std/io"
 type Ctr struct() {
     n I64 = 0
 }
@@ -9,5 +10,5 @@ type B struct(c mut Ctr&) { c }
 G B = B(Ctr())
 fn (a B) Str() String { return $peek(a.c) }
 fn main() ? {
-    println($G)
+    try io.Println($G)
 }

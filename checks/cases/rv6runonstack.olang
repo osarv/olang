@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 (decision 48): os.RunOnStack - its thread builds as its caller would, the caller waiting: on the main thread into the
 # main thread's scope, on a task into that task's part of it, beside the main thread building there; and tasks spawned
 # from inside it
@@ -40,6 +40,6 @@ fn main() ? {
         spawn s1 = relay(f, 500)
         for i in range 50000 { z += f(i) }
     }
-    if got.Len() != 1001 or got[999] != 999 or got[1000] != 19900 + 44850 { fail }
-    if s1 != 124750 or z != 1249975000 { fail }
+    assert not (got.Len() != 1001 or got[999] != 999 or got[1000] != 19900 + 44850)
+    assert not (s1 != 124750 or z != 1249975000)
 }

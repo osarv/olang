@@ -4,7 +4,7 @@
 
 # whether x is one of the elements - what "x in a" asks (E29). Compared with "==", so by the element type's Eq
 # where it declares one (E10a): text is found by what it says, not by where it is stored.
-fn (a Array<<T>>&) Has(x T) Bool {
+fn (a Array<T>&) Has(x T) Bool {
     for y in a {
         if y == x { return true }
     }
@@ -13,7 +13,7 @@ fn (a Array<<T>>&) Has(x T) Bool {
 
 # whether the two hold equal elements in the same order - what "==" on two arrays, values or references, is when an
 # element type declares Eq (E10), which the compiler calls it for: each pair compared with "==", so by that Eq
-fn (a Array<<T>>&) Equal(b Array<T>&) Bool {
+fn (a Array<T>&) Equal(b Array<T>&) Bool {
     if a.Len() != b.Len() { return false }
     for i in range a.Len() {
         if a[i] != b[i] { return false }
@@ -24,7 +24,7 @@ fn (a Array<<T>>&) Equal(b Array<T>&) Bool {
 # the elements' hashes combined in order - the Hash the compiler supplies for an array value whose elements have one
 # (E10b), agreeing with "==" element by element. No Hashable constraint: an element type's Hash may be its private
 # hash, which the compiler judges where the array is hashed (M6b), not here
-fn (a Array<<T>>&) HashElements() I64 {
+fn (a Array<T>&) HashElements() I64 {
     h I64 = 0
     for y in a { h = h * 1099511628211 + y.Hash() }
     return h
@@ -32,7 +32,7 @@ fn (a Array<<T>>&) HashElements() I64 {
 
 # whether sub occurs in it as a contiguous run - what "sub in a" asks when sub is of the array's own type (E29):
 # a substring, for text. The empty run occurs in everything.
-fn (a Array<<T>>&) Contains(sub Array<T>&) Bool {
+fn (a Array<T>&) Contains(sub Array<T>&) Bool {
     for i in range a.Len() - sub.Len() + 1 {
         j I64 = 0
         for j < sub.Len() and a[i + j] == sub[j] { j++ }
@@ -42,7 +42,7 @@ fn (a Array<<T>>&) Contains(sub Array<T>&) Bool {
 }
 
 # true when keep holds for at least one element
-fn (a Array<<T>>&) Any(keep fn(x T) Bool) Bool {
+fn (a Array<T>&) Any(keep fn(x T) Bool) Bool {
     for x in a {
         if keep(x) { return true }
     }
@@ -50,24 +50,30 @@ fn (a Array<<T>>&) Any(keep fn(x T) Bool) Bool {
 }
 
 # true when keep holds for every element - so for none, of an empty array
-fn (a Array<<T>>&) All(keep fn(x T) Bool) Bool {
+fn (a Array<T>&) All(keep fn(x T) Bool) Bool {
     for x in a {
         if not keep(x) { return false }
     }
     return true
 }
 
-# the index of the first element keep holds for - failing with the default error when keep holds for none, so a miss
-# is never read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Any(f)" only asks
-fn (a Array<<T>>&) FindIndex(keep fn(x T) Bool) I64 ? {
+# what an array's FindIndex fails with: no element keep holds for (NOT_FOUND); and a ChunkSize below one (BAD_CHUNK)
+error ArrayError {
+    NOT_FOUND
+    BAD_CHUNK
+}
+
+# the index of the first element keep holds for - failing with NOT_FOUND when keep holds for none, so a miss is never
+# read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Any(f)" only asks
+fn (a Array<T>&) FindIndex(keep fn(x T) Bool) I64 ? ArrayError {
     for i, x in a {
         if keep(x) { return i }
     }
-    error
+    error ArrayError.NOT_FOUND
 }
 
 # how many elements keep holds for
-fn (a Array<<T>>&) Count(keep fn(x T) Bool) I64 {
+fn (a Array<T>&) Count(keep fn(x T) Bool) I64 {
     n I64 = 0
     for x in a {
         if keep(x) { n++ }
@@ -77,7 +83,7 @@ fn (a Array<<T>>&) Count(keep fn(x T) Bool) I64 {
 
 # a new array of f applied to every element, in order. Made filled with the first result rather than with U's zero value,
 # so a U without one (D13c) maps as any other
-fn (a Array<<T>>&) Map(f fn(x T) <U>) Array<U> {
+fn (a Array<T>&) Map<U>(f fn(x T) U) Array<U> {
     if a.Len() == 0 { return Array<U>(0) }           # no element, so no zero value of U is needed (D13c)
     out := Array<U>(a.Len(), f(a[0]))
     for i in range 1, a.Len() {
@@ -87,7 +93,7 @@ fn (a Array<<T>>&) Map(f fn(x T) <U>) Array<U> {
 }
 
 # a new array of the elements keep holds for, in order. keep runs once per element
-fn (a Array<<T>>&) Filter(keep fn(x T) Bool) Array<T> {
+fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
     marks := Array<Bool>(a.Len())
     n I64 = 0
     for i, x in a {
@@ -107,7 +113,7 @@ fn (a Array<<T>>&) Filter(keep fn(x T) Bool) Array<T> {
 }
 
 # the elements combined, in order, from init: f(f(f(init, a[0]), a[1]), ...)
-fn (a Array<<T>>&) Fold(init <U>, f fn(acc U, x T) U) U {
+fn (a Array<T>&) Fold<U>(init U, f fn(acc U, x T) U) U {
     acc U = init
     for x in a {
         acc = f(acc, x)
@@ -117,7 +123,7 @@ fn (a Array<<T>>&) Fold(init <U>, f fn(acc U, x T) U) U {
 
 # how many times sub occurs in it as a contiguous run - counted from the start, occurrences not overlapping, so "aaaa"
 # holds "aa" twice. The empty run occurs at every position, before each element and after the last: Len() + 1 times
-fn (a Array<<T>>&) CountOf(sub Array<T>&) I64 {
+fn (a Array<T>&) CountOf(sub Array<T>&) I64 {
     if sub.Len() == 0 { return a.Len() + 1 }
     n I64 = 0
     i I64 = 0
@@ -137,7 +143,7 @@ fn (a Array<<T>>&) CountOf(sub Array<T>&) I64 {
 # a new array with every occurrence of the run old - counted from the start, not overlapping, as CountOf counts them -
 # replaced by the run new: "a-b-c".Replace("-", ", ") is "a, b, c". The empty run occurs at every position, so an empty
 # old puts new before each element and after the last. Built at its exact length, once
-fn (a Array<<T>>&) Replace(old Array<T>&, new Array<T>&) Array<T> {
+fn (a Array<T>&) Replace(old Array<T>&, new Array<T>&) Array<T> {
     n := a.CountOf(old)
     out := Array<T>(a.Len() + n * (new.Len() - old.Len()))
     w I64 = 0
@@ -164,7 +170,7 @@ fn (a Array<<T>>&) Replace(old Array<T>&, new Array<T>&) Array<T> {
 }
 
 # a new array of n copies of the elements, one after another - empty for n of 0 or below: "ab".Repeat(3) is "ababab"
-fn (a Array<<T>>&) Repeat(n I64) Array<T> {
+fn (a Array<T>&) Repeat(n I64) Array<T> {
     k I64 = n if n > 0 else 0
     out := Array<T>(a.Len() * k)
     for r in range k {
@@ -174,7 +180,7 @@ fn (a Array<<T>>&) Repeat(n I64) Array<T> {
 }
 
 # the elements in the opposite order, in place
-fn (a mut Array<<T>>&) Reverse() {
+fn (a mut Array<T>&) Reverse() {
     i I64 = 0
     j I64 = a.Len() - 1
     for i < j {
@@ -188,7 +194,7 @@ fn (a mut Array<<T>>&) Reverse() {
 
 # a new List - in the caller's scope - holding the elements, in order: "I32[3, 1, 2].ToList()", or n copies of one value,
 # "Array<I32>(n, v).ToList()". The reverse of List's ToArray
-fn (a Array<<T>>&) ToList() List<T>& {
+fn (a Array<T>&) ToList() List<T>& {
     out mut List<T>&return = List<T>()
     out.PushAll(a)
     return out
@@ -205,7 +211,7 @@ fn (a Array<<T>>&) ToList() List<T>& {
 # then moved where it puts them, one cycle of the permutation at a time, while the block is in the cache - and the
 # blocks are merged in place by rotation (SymMerge, Go's sort.Stable), so it allocates only a block's positions and
 # costs O(n log n log(n / 12288)): a few times the plain merge on a million elements
-fn (a mut Array<<T>>&) Sort(less fn(x T, y T) Bool) {
+fn (a mut Array<T>&) Sort(less fn(x T, y T) Bool) {
     if a.Len() < 2 { return }
     match T {
         case I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64, Bool, Char { sortMergeBuffered(a, less) }
@@ -214,7 +220,7 @@ fn (a mut Array<<T>>&) Sort(less fn(x T, y T) Bool) {
 }
 
 # Sort for elements a scratch array cannot hold
-fn sortByPositions(a mut Array<<T>>&, less fn(x T, y T) Bool) {
+fn sortByPositions<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
     n I64 = a.Len()
     if n <= sortRun {                        # one run: insertion-sorted where it is, nothing allocated
         sortInsertion(a, 0, n, less)
@@ -245,7 +251,7 @@ fn sortByPositions(a mut Array<<T>>&, less fn(x T, y T) Bool) {
 }
 
 # the merge sort itself, over elements a scratch array of the call's own may hold (Sort)
-fn sortMergeBuffered(a mut Array<<T>>&, less fn(x T, y T) Bool) {
+fn sortMergeBuffered<T>(a mut Array<T>&, less fn(x T, y T) Bool) {
     n I64 = a.Len()
     run I64 = sortRun
     lo I64 = 0
@@ -268,7 +274,7 @@ fn sortMergeBuffered(a mut Array<<T>>&, less fn(x T, y T) Bool) {
 }
 
 # merges the sorted runs of a[from:to], each "run" long but the last, pairwise into runs twice as long until one is left
-fn sortMergeRuns(a mut Array<<T>>&, scratch mut Array<T>&, from I64, to I64, run I64, less fn(x T, y T) Bool) {
+fn sortMergeRuns<T>(a mut Array<T>&, scratch mut Array<T>&, from I64, to I64, run I64, less fn(x T, y T) Bool) {
     for run < to - from {
         lo I64 = from
         for lo + run < to {
@@ -290,7 +296,7 @@ fn sortMergeRuns(a mut Array<<T>>&, scratch mut Array<T>&, from I64, to I64, run
 
 # merges the sorted runs a[lo:m] and a[m:hi], the left one the shorter: it is copied into scratch and merged back from
 # the front, the right run's element taken only when strictly less - so equal ones keep their order
-fn sortMergeForward(a mut Array<<T>>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+fn sortMergeForward<T>(a mut Array<T>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
     nl I64 = m - lo
     for k in range nl { scratch[k] = a[lo + k] }
     i I64 = 0
@@ -315,7 +321,7 @@ fn sortMergeForward(a mut Array<<T>>&, scratch mut Array<T>&, lo I64, m I64, hi 
 
 # the same with the right run the shorter: it is copied into scratch and merged back from the end, the left run's
 # element taken only when the right one is strictly less than it
-fn sortMergeBackward(a mut Array<<T>>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+fn sortMergeBackward<T>(a mut Array<T>&, scratch mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
     nr I64 = hi - m
     for k in range nr { scratch[k] = a[m + k] }
     i I64 = m - 1
@@ -344,7 +350,7 @@ sortRun I64 = 24
 sortBlock I64 = sortRun << 9
 
 # sorts a[lo:hi] by insertion: each element shifted down past those it is less than
-fn sortInsertion(a mut Array<<T>>&, lo I64, hi I64, less fn(x T, y T) Bool) {
+fn sortInsertion<T>(a mut Array<T>&, lo I64, hi I64, less fn(x T, y T) Bool) {
     for i in range lo + 1, hi {
         x := a[i]
         j I64 = i
@@ -359,7 +365,7 @@ fn sortInsertion(a mut Array<<T>>&, lo I64, hi I64, less fn(x T, y T) Bool) {
 # moves each element of a[lo:lo + pos.Len()] to the place pos gives it - after it, a[lo + k] is what a[pos[k]] was -
 # following each cycle of the permutation from its start, so every element is moved once and one is held aside per
 # cycle. pos is used up
-fn sortPermute(a mut Array<<T>>&, lo I64, pos mut Array<I64>&) {
+fn sortPermute<T>(a mut Array<T>&, lo I64, pos mut Array<I64>&) {
     for start in range pos.Len() {
         if pos[start] == lo + start { continue }
         held := a[lo + start]
@@ -377,14 +383,14 @@ fn sortPermute(a mut Array<<T>>&, lo I64, pos mut Array<I64>&) {
     }
 }
 
-fn sortSwap(a mut Array<<T>>&, i I64, j I64) {
+fn sortSwap<T>(a mut Array<T>&, i I64, j I64) {
     t := a[i]
     a[i] = a[j]
     a[j] = t
 }
 
 # merges the sorted runs a[lo:m] and a[m:hi] in place (SymMerge)
-fn sortMerge(a mut Array<<T>>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
+fn sortMerge<T>(a mut Array<T>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
     if m - lo == 1 {
         i I64 = m
         j I64 = hi
@@ -429,7 +435,7 @@ fn sortMerge(a mut Array<<T>>&, lo I64, m I64, hi I64, less fn(x T, y T) Bool) {
 }
 
 # swaps the runs a[lo:m] and a[m:hi]
-fn sortRotate(a mut Array<<T>>&, lo I64, m I64, hi I64) {
+fn sortRotate<T>(a mut Array<T>&, lo I64, m I64, hi I64) {
     i I64 = m - lo
     j I64 = hi - m
     for i != j {
@@ -451,14 +457,37 @@ type ArrayIter<T> struct(of Array<T>&) {
     i I64 = 0
 }
 
-fn (it mut ArrayIter<<T>>&) Next() T ? Exhausted {
+fn (it mut ArrayIter<T>&) Next() T ? Exhausted {
     if it.i >= it.arr.Len() { error Exhausted.END }
     it.i++
     return it.arr[it.i - 1]
 }
 
 # a fresh position at the array's start - each call its own, so loops never disturb each other
-fn (a Array<<T>>&) Iter() ArrayIter<T> { return ArrayIter<T>(a) }
+fn (a Array<T>&) Iter() ArrayIter<T> { return ArrayIter<T>(a) }
+
+# how many elements a piece Chunks hands out holds: at least one. A literal is checked while compiling ("a.Chunks(4)",
+# and 0 is a compile-time error, T29d); a size computed while the program runs is made one with ChunkSize(n), which
+# fails with ArrayError.BAD_CHUNK below one - the one way a size is refused
+type ChunkSize I64(v I64) ? ArrayError.BAD_CHUNK {
+    if v < 1 { error ArrayError.BAD_CHUNK }
+}
+
+# the array cut into consecutive pieces of size elements each, the last holding what is left (fewer, never none): each
+# piece a writable view of the array's own storage (a slice, E16a), nothing copied, and no two sharing an element - so
+# "join { for part in a.Chunks(4) { spawn work(part) } }" hands every task a part of its own to write and cannot race on
+# the array. An empty array has no pieces. The pieces are held in an array that lives where the array does, as Split's
+# (so a piece outlives nothing it views), allocated once at its exact length
+fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>&a {
+    n := I64(size)
+    pieces mut Array<mut Array<T>&>&a = Array<mut Array<T>&>((a.Len() + n - 1) / n)
+    for k in range pieces.Len() {
+        start I64 = k * n
+        end I64 = start + n if a.Len() - start > n else a.Len()
+        pieces[k] = a[start:end]
+    }
+    return pieces
+}
 
 # the tests, and what only they use - under TestBuild, so a program that is not being tested compiles none of it: the
 # prelude is part of every program

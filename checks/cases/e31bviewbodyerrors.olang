@@ -1,0 +1,33 @@
+# check: fail this builds through a '&p' field whose scope is not known here
+# never: x[i] gives a copy of the element
+# B11 (D2): one cause, one error - the callee's own C2d error, and no E31b at the call because a body with errors is
+# no view
+import "std/io"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type E struct(h mut Node&, n I64) {
+    head mut Node&h = h
+    n
+}
+type Es struct(head mut Node&) {
+    head
+}
+fn (s Es&) At(i I64) E { return E(s.head, i) }
+fn hang(e mut E&, k I64) { e.head.next = Node(k) }
+fn churn() ? io.IoError {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+fn main() ? {
+    s := Es(Node(1))
+    for k in range 3 {
+
+        hang(s[k], 100 + k)
+    }
+    try churn()
+    try io.Println($s.head.next.v)
+}

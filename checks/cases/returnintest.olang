@@ -1,5 +1,5 @@
-# check: fail error[S15]: a test has nothing to return to
-# S15: a test has no caller to return to - done ends it early as passed
+# check: build
+# S15: a bare 'return' ends a test as passed (s15returnvalue: one with a value is an error)
 error E { X }
 fn main() ? E { }
 test "early" {

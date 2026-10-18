@@ -5,7 +5,7 @@
 # captures nothing (a static closure object in a constant global) is inlined and vectorized. Measured (100,000
 # I64 x 8,000 passes): a.Iter().Fold with a capturing lambda 1.9s, the hand loop 0.17s; marking the two closure
 # loads (code pointer, capture) !invariant.load by hand: 0.19s.
-# See it: repro/opt.sh closure_call, then  grep -n "call i64 %" build/closure_call.opt.ll
+# See it: bench/repro/opt.olang (build/bench_repro_opt closure_call), then  grep -n "call i64 %" build/closure_call.opt.ll
 # (the indirect call, once per element)
 import "std/io"
 import "std/os"

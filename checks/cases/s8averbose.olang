@@ -1,5 +1,5 @@
 # check: fail S8a
-# a constant global of a type no -D value has (B10c) - one of those would be a build constant's default, configuration
+# a constant global of a type no -define value has (B10c) - one of those would be a build constant's default, configuration
 error E { X }
 Verbose := U8(0)
 Level U8 = 2 + 1
@@ -7,5 +7,5 @@ FromBuild Bool = DebugBuild or false
 fn helper3() I32 { return 3 }
 fn main() ? E {
     x := 3
-    if Verbose == 1 { fail }
+    if Verbose == 1 { return }
 }

@@ -5,34 +5,21 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 7f2a5325-2cc9-4c97-9679-ec83bcdf63a5
-  modified: 2026-10-08
+  modified: 2026-10-17
 ---
 
 Every question I put to the user goes here the moment I ask it, and leaves only when they answer - the answer then goes
 into CLAUDE.md/HISTORY.md as any design decision does. Unanswered is not consent: the default stays in effect and the
 entry is re-raised when its area comes up or at the end of a report. One decision per number, each with the default in
 effect and my recommendation. See [[feedback-record-flagged-decisions]]. Rebuilt 2026-10-08 after an audit of
-CLAUDE.md, HISTORY.md and the old ledger (the full old ledger is in git at bc9f9c9). Recorded future work that asks
+CLAUDE.md, HISTORY.md and the old ledger (the full old ledger is in git at bc9f9c9). Slimmed 2026-10-17: answered questions and the numbered decisions 1-51 are in archive/decisions_log.md (not imported). Recorded future work that asks
 nothing of the user is in [[project-olang-next-steps]], not here.
 
-**Decided 2026-10-08, being built** (by parallel agents in worktrees; order in next-steps): os.Args/os.Env; files and
-file system in std; value-level bits for F16/BF16/F32/F64; List.At/SetAt + a text builder, keeping loops on iterators;
-several values per `case`, `case` guards, nested patterns (the user: "case guards are good", "I think the nested
-patterns are fine" - read as yes); `defer` (block-scoped). Float literals default to F64: DONE (b7c8986). Its follow-ups (the user 2026-10-08: "6) sure.
-7) yes make it an error 8) yes do that"): `$` prints a float's shortest round-trip text; a float literal beyond a
-narrower target's range is an error; a literal-only expression adapts to its target like one literal.
 **Decided 2026-10-08, next after the current batch:** runtime interfaces back as `any Trait&` (the user: "any widget is
 good"): a trait stays a constraint; `any Trait&` is a run-time value written on purpose, itself satisfying the trait;
 only structs/enums convert, no widening at first, defaults/overrides through the table, `is`/`as` kept; the removed
 code comes back from git (T30). GUI style (retained vs immediate mode) left to me (the user: "I don't know about GUI
 design. Do what you want") - nothing to decide until a GUI is written.
-**Declined 2026-10-08:** labeled `break`/`continue` (the user: doesn't like them; some loops have no variable).
-
-**Answered 2026-10-11 13:25 CEST:** QK (a new GitHub repository): "No GitHub Repo, you can put the settling experiment
-stuff in a OANN subdirectory" - then, superseding it: "create a new, private GitHub repo called oagent". Creating
-it through the integration failed (403: Resource not accessible by integration). The user created
-osarv/oagent (private); it is attached and has its first commit. Nothing goes there before the
-self-hosted compiler is done.
 
 **Asked 2026-10-11 (contract work, [[project-outreach]]):**
 - QL1. The company's name. Recommended: Osarv (also offered: O Labs/Olab, Hotpath, Measured, Cycles, Kvick, Rask). In
@@ -48,11 +35,362 @@ self-hosted compiler is done.
   companies first, so a reply can become a meeting.
 - QL4. Offered, no answer yet: drafting a compute-credits application.
 
+**Asked 2026-10-17 (the user: "Make sure you don't lose any work when the limits are hit"):**
+- QM. ANSWERED YES 2026-10-17 ("You can push to GitHub ... Else is rather run locally") - built, wipsnap.sh. Was: May I push agents' work branches (`wt-*`, or `refs/wip/*` snapshots) to GitHub as backups? Only a push survives a
+  lost container; the designated branch rule forbids other branches without the user's OK. In effect: local only
+  (2-hourly snapshots and commits survive restarts, as on 10-10 and 10-17). Recommended: yes, as `backup/<name>`
+  branches, pushed by the 2-hourly check-in, deleted once merged.
+
+**Asked/answered 2026-10-17 (syntax talk):**
+- QN (Python-like indentation instead of `{}`): ANSWERED - keep `{}` ("Ok we keep {}"), after my recommendation
+  against (blocks inside expressions - lambdas, catch-with-default, match values - and silent misindentation).
+- QO1 ANSWERED 2026-10-17 (the user: "Do 2. This fits nicely with main cleanliness and also olang decisions made so
+  far."): inferred error sets, as Zig's - a bare `?` is the set the body can produce (a fixed point over calls), `? E` a
+  written promise the body is held to, function types write their set. And (the user: "For using just error without an
+  error, that has to go. error should always require an actual error to throw"): the default error is removed - no bare
+  `error` statement, no generalization (R17); std's default-error failures get named errors. Details mine. QUEUED with
+  QO4 (std misuse as named errors) as one batch after wt-ioprint and wt-e31view merge; the port's checker told.
+- QO1 follow-up (the user: "No we just need one or maybe a few error sets in prelude for the compiler carve-out
+  errors like overflow division by zero etc that have hardware hooks and can't be written in code"). Reading taken:
+  no general-purpose error replaces the default error. The prelude's own error sets are the compiler's carve-outs only:
+  BuiltinError (OVERFLOW, DIVIDE_BY_ZERO, OUT_OF_BOUNDS, INVALID - raised by `try` checks) and Exhausted (the loop
+  protocol). Details mine: std's misuse checks reuse BuiltinError's words (RemoveAt/Insert out of range and Pop/First/
+  Last on an empty list OUT_OF_BOUNDS, a bad base INVALID); a "nothing there" failure that is no misuse (Map.Get's
+  missing key, Find/IndexOf with no match, os.Env unset) gets an error declared beside its function, in its own file.
+- QO1 follow-up 2, ANSWERED ("I agree btw", read as the reply to my "Agree?"): BuiltinError keeps its four words and is
+  raised only by `try` on built-in operations (the line is "the compiler writes the check", not "hardware"); std never
+  raises BuiltinError - every std failure, misuse included (RemoveAt/Insert out of range, Pop on empty, a bad base),
+  has an error declared beside its function. Supersedes follow-up 1's reuse of BuiltinError's words.
+- QO6 ANSWERED 2026-10-17 ("Yes. You could also add checks for more operations like << >>, etc"): INVALID keeps IEEE's
+  meaning - a shift amount out of range is OUT_OF_BOUNDS, a failed `as` WRONG_CASE. More checks under `try` (details
+  mine): `<<` shifting out set bits (the true value x*2^n does not fit) is OVERFLOW; every float narrowing - to F32,
+  F16 or BF16 - turning a finite value infinite is OVERFLOW (only F64->F32 was listed); any integer conversion changing
+  the value, sign changes of one width included (I64 -1 to U64), is OVERFLOW. `>>` can lose nothing but its amount.
+  Same batch as inferred sets.
+- QP1 ANSWERED 2026-10-17 ("I like all of this. Lock it in as the new rules."): one array constructor. `Array<T>(n)` /
+  `Array<T>(n, fill)` is an `Array<T, n>` when n is a compile-time constant (literal, constant, K1a-evaluable call),
+  else a run-time `Array<T>`; `Array<T, N>()` goes; `:=` keeps the fixed type (a field stored in place, a local on the
+  stack); `Array<T, N>` is written only as a type (parameters, results, elements, constructor parameters, generic
+  shapes); a written target type wins. QUEUED with the error batch; the port's checker told. The user next wants to
+  discuss how relevant `Array<T, N>` as a type is at all (QP2).
+- QP2 ANSWERED 2026-10-17: drop both - the written `Array<T, N>` and constant generics (G20-G28). The user: "This still
+  doesn't give more information than inferring a known size at compile time", and asked why the evaluator does not
+  simulate calls to learn a returned array's size. My answer: the evaluator runs calls only when every value is known;
+  what is wanted is a length followed through calls with the contents unknown, which is the checker's inference, not
+  evaluation. Proposed (QP3, asked): (1) fixed storage inferred where made (QP1); (2) a function's array result is fixed
+  when every return gives one length, inferred from the body as the error set is; (3) D9a relaxed - arrays passed by
+  value; a by-value array parameter makes the function, invisibly, one instance per known argument length (fixed in
+  that instance: registers, unrolled, its asserts on lengths decided at compile time, so a shape mismatch is a
+  compile-time error at that call); a reference parameter makes no instances. QP3 ANSWERED: "Do A for now and if it becomes a problem we will
+  expand to B" - a run-time-length array passed by value is a compile-time error (write `&` or copy explicitly). All of
+  QP1-QP3 QUEUED as the arrays batch, after the error batch (both rewrite semantic.c).
+- QP4 ASKED 2026-10-17 (the user: "add a cap on how long arrays you can pass as arguments to functions ... 64 bytes per
+  Array? Since they are all known at comptime it's always checkable"). Recommended: 128 bytes per by-value array
+  parameter - a 4x4 F64 transform fits, it is the size at which a by-value struct already goes through memory, two
+  cache lines; checked per instance, the error naming the size and `&`. Parameters only (a result is built where it
+  lands, no copy). The user, the same day: "That is pass as values" (the cap is for by-value parameters only; a
+  reference has none) and "Let's do a cap for structs as well the same one 128 bytes" -> DECIDED: every by-value
+  parameter of an aggregate type - struct, enum, array, a by-value receiver, a constructor's or lambda's parameter, a
+  generic's parameter checked per instantiation - holds at most 128 bytes as laid out (padding included); a larger one
+  is a compile-time error naming its size and `&`. Results are not capped. Part of the arrays batch; the corpus and std
+  migrated by the compiler's own errors.
+- Arrays phase 1 (wt-arrays f43feae..61603a4, docs/arrays.md, SPEC rewritten - merges only with phase 2, since checks
+  require errmsg's rules to exist in SPEC). Its two questions DECIDED by me (details within QP2/QP4): (1) a struct's
+  inline array never takes its length from a constructor argument - no inferred constant generics; the field declares
+  its length or holds a reference; (2) QP4's cap applies to parameters whose WRITTEN type is an aggregate (struct,
+  enum, array, by-value receiver); a bare type variable `x T` is exempt, so List/Map/Sort over big structs keep
+  working - the container's own semantics, not a copy the caller wrote. Phase 2 (3-4 rounds) after the errors batch.
+- QQ1 DECIDED 2026-10-17 (the user: "try (...) should cover all of ..."; "try f().g() should bind to both. Why did we
+  decide against that?" - answered: never decided, an artifact of the one-call allowance, E13b/E24 2026-10-07/09).
+  Proposed and confirmed in substance ("So try is for calls and checked for operators and calls?" - yes): `try` covers
+  every fallible call in its operand, a parenthesized expression or a chain included, and never turns on a check;
+  `checked (...)` / `checked a[i]` / `checked a[lo:hi]` / `checked x[i] = v` is try plus the E15a checks (built-in
+  operations, a type's Try forms), calls included; a type with only a Try form is usable only under `checked`
+  - SUPERSEDED, proposed: the user asked whether an operator with only an error version must always be written
+  `checked`; proposed instead that a plain operator method may declare errors (reversing E31a's rule), making the
+  operator fallible as written and written with `try`, like a call; Checked forms only as opt-in variants of
+  infallible operators. The user then: either operators under try never fail, or try has errors and checked has
+  extra ones - "I don't like that operators can sometimes have a try but no checked". RECOMMENDED (asked): the second -
+  a plain operator method may declare errors (`try` handles them, as for a call); its Checked form must declare a
+  superset of them (checked at the declaration), so checked only adds; with no Checked form, `checked` calls the plain
+  method (indexing keeps its derived Len check). DECIDED (the user: "This requires the checked version to have a
+  superset of errors right?" - yes - "Anything else is a compile error"; reading taken: the whole QQ1 design accepted):
+  try for what fails as written (calls, chains, operators whose plain method declares errors; covers every such call in
+  its operand); checked = try + every optional check; Checked forms' errors a superset of the plain method's, else a
+  compile error at the declaration; no try-block. QUEUED in the errors batch.
+  The Try forms are renamed to match (the user: "So then tryAt etc becomes checkedAt?" - yes): CheckedAt, CheckedPlus,
+  CheckedSetAt, CheckedSlice, ... (private checkedAt), reversing the user's own TryAt pick of 2026-10-07. `try { block }` declined for now (hides exits; arithmetic in it either checked or inconsistent). In effect: nothing
+  built; awaiting the user's go; then part of the errors batch (replaces E15a/E16c/E16d/R21's try spellings).
+- QR DECIDED 2026-10-17 (the user: "We need two more modes. One 'build and run' mode and a formatter"). Proposed:
+  (1) `olang main.olang [args...]` with NO mode flag builds as -b (cached objects), runs the binary with the remaining
+  arguments and exits with its status; modifiers apply; makes `#!/usr/bin/env olang` scripts work (`#` is a comment);
+  alternative a flag like `-x`. (2) `olang -f files...` formats in place, gofmt-style with no options: 4-space indent,
+  spaces around binary operators/after commas, blank lines kept (max one), comments kept, no automatic wrapping;
+  meaning-preserving and idempotent, tested over the corpus; `-f -c` to only check (CI) if wanted. Build-and-run goes
+  into the C driver now (tiny) and the port's; the formatter is written in olang on the port's scanner/parser
+  (compiler/), the C `-f` handing files to it until self-hosting. Asked: 1. no flag or a flag; 2. 4 spaces, no wrap.
+  DECIDED (the user: "1) and 2) are good. Is -f unused today?" - yes, free): no flag runs; `-f` formats, 4 spaces,
+  no wrapping. Being built (wt-runfmt). And (the user: "add an option to decide output file for building and compiling"): `-o PATH`
+  names the executable (-b) or object (-c); default unchanged. Being built in wt-runfmt.
+  ASKED: the user objected to `-f -c` (clashes with -c) and suggested `-fc`; proposed `-l` instead (gofmt's name, one
+  character, no clash). DECIDED (the user: "Do that for now yes"): `olang -l files...`.
+- QS DECIDED 2026-10-17 (the user: "Is there any reason why we should not have longer option names really? Could you
+  give me some alternatives"): reverses B1 (the user's 2026-10-08 one-character rule) if taken. Options: (1) keep one
+  character; (2) GNU short+long; (3) Go-style single-dash words; (4) subcommands for modes (`olang build/compile/test/
+  interpret/format/explain`, bare `olang FILE` runs) with single-dash word modifiers (-debug -race -sanitize -target
+  -define -update -o). Recommended 4. In effect: one-character flags (B1).
+  The user chose 4 ("mutually exclusive options like build compile interpret etc have their own branches ... Full
+  names are readable"). Proposed list (awaiting OK): modes - bare FILE (run, new), build (-b), compile (-c), test (-t),
+  interpret (-i), format (-f), explain (-e), help (new); options - -output (-o: build, compile), -debug (-d), -race (-r),
+  -sanitize (-s) (run build compile test), -target (-a: build, compile), -define (-D) and -update (-u) (run build compile
+  test interpret), -check (-l: format); single dash, no aliases for the old flags. DECIDED (the user: "The list is good 1) and 2)
+  are good"). Being built in wt-runfmt after its current work.
+- QT ANSWERED 2026-10-17 ("make can stay make"): the makefile stays. Was asked (after "Write everything in Olang"): should the makefile also become an olang program
+  (`olang build.olang verify`)? Recommended yes (its job is running olang; object caching already does make's
+  incremental part). In effect: the makefile stays.
+- QU DECIDED 2026-10-17 (the user: "Now that we have os.exit() and I would assume os.abort() should we really still have
+  done fail abort as keywords? This runs against the no-duplicates rule which is held very strongly"). No os.Abort exists.
+  Proposed: (1) remove `abort` (`assert false, "why"`); (2) remove `done`/`fail`, os.Exit test-aware (in a test 0 ends it
+  passed, else failed; else the process) - reverses B5b; (3) a prelude result type `Never` (fn Exit(code I32) Never) -
+  D10a counts a call to one as leaving, its body checked never to return (Zig noreturn, Rust !); (4) keep `unreachable`
+  (the checker inserts and needs it). Asked: all four, or unreachable gone too. In effect: the four keywords stay.
+  REVISED after the user: "I think a test structure where every test is a rejection is both exhaustive and more
+  natural right? ... we pass the test when we don't fail any asserts". Counted: fail ~180 (125 `catch { fail }`, 51
+  `if c { fail }`), done ~20 (expected error, skips, done's own tests), abort 5. Proposed: (1) remove done/fail/abort;
+  (2) a test passes by reaching its end or `return` (S15's error reversed), fails on a failed assert, unreachable, `!`,
+  or an error leaving it (tests may `try` without catching); (3) programs: main normal 0, error 1, os.Exit(code) -
+  os.Exit stays process-wide (B5b kept); (4) keep unreachable; (5) Never result type for os.Exit (recommended). Early
+  exits from helpers (P1d unwinding tests) move to checks/ cases. ~200 sites, in the errors batch. Awaiting the user.
+  The user then asked: os.Abort? main without ?? why exit/abort library but assert not? free done/fail as names;
+  Never vs a keyword (exits/leaves). Answered: (1) no os.Abort - `assert false, "why"`/unreachable cover it; (2) main may
+  omit `?`; (3) the line: language = what the compiler understands (assert is decided while compiling, its message
+  evaluated only on failure, reports its line, test-aware); library = OS calls (Exit) - so the language keeps assert and
+  unreachable only; done/fail/abort freed as names; (4) Never as a type (Swift Never, Kotlin Nothing, Zig noreturn, Rust
+  !): fits result positions, function types and generics, a call to one fits where a value is expected. Awaiting OK.
+  The user: "Not final shape yet. Still thinking"; Never as a type allows `n Never` (nonsense) - agreed: a marker in
+  the result position, lowercase `never` (fn Exit(code I32) never; also in function types; a call to one fits where a
+  value is expected). Asked how os.Exit differs from halting: in a program done/fail are os.Exit(0/1) exactly; in a
+  test they end the test, unwinding its scopes; an unwinding halt in production (defers, destructors) would need
+  open-scope tracking on every block (2.4x measured in test builds) - principle 2 says no. Options: keep halting
+  (differs only in tests) or tests-pass-by-ending (recommended). THE USER IS STILL THINKING - do not build.
+  DECIDED (the user: "noreturn is a lot better for this keyword than never. Do 2) I want to free up fail and done.
+  Also don't have abort."): `noreturn` result marker (functions and function types; a call to one leaves the path and
+  fits where a value is expected); done/fail/abort removed, free as names; tests pass by reaching their end or `return`,
+  fail on a failed assert, unreachable, `!` or an error leaving them; main may omit `?`; os.Exit(code) noreturn stays
+  process-wide. Part of the errors batch. ASKED: keep `unreachable` (recommended - a checked claim the checker inserts
+  and requires; `abort` would read as a fourth way to stop) or rename it `abort`. In effect: unreachable. ANSWERED (the user: "the abort fail done unreachable
+  logic is all good the way you proposed. Build it"): `unreachable` kept. Plus the error return trace (test and -d
+  builds). All in the errors batch (wt-errors), being built.
+- QV DECIDED 2026-10-17 (the user: "Since ! is now free, can we do something fun with it?"). Options: (1) postfix `!` =
+  must be evaluated at compile time, else a compile error naming why (K1a's reason) - Zig's comptime at the use site,
+  no colouring; (2) `!` as the Never type (QU) - prefer the word Never; (3) unwrap-or-abort `f()!` - against errors are
+  errors / no std exits, rejected; (4) non-null assertion - unneeded (T2b). Recommended 1; `!` directly before `=`
+  lexes as `!=`. In effect: `!` unused.
+  DECIDED (the user: "I like it as a 'don't fail or abort' thing. This way we can call io.Print()! without try"):
+  postfix `!` handles what fails as written (a call, a chain, a parenthesized expression - try's reach) by ending the
+  program as a failed assert does (in a test, failing it; `FILE:LINE: Type.WORD`); never turns on a check; `!` on
+  nothing fallible is an error; the enclosing function needs no `?` for it; `!` before `=` still lexes `!=`. Hello
+  world: `fn main() { io.Println("Hello World!")! }`. Part of the errors batch. Option 1 (compile-time) loses `!`.
+- QW DECIDED 2026-10-17 (the user: "nested generics produce really ugly code <<<T>>, G> is a mess"). Proposed: a
+  function introduces its type variables in a list after its name (`fn max<T>(a T, b T) T`, constraints in the list
+  `fn area<T Shape>(x T)`, order free within it); a method on a generic type gets the type's parameters from its
+  receiver's type arguments (Go's rule: `fn (l List<T>&) Push(x T)`), a list only for variables of its own (`fn (l
+  List<T>&) Map<U>(...)`); type arguments at calls stay inferred. Reverses G8b and G3's no-list rule; ~860 sites by an
+  olang tool; folded into arrays phase 2 (it drops constant generics). In effect: G8b.
+  DECIDED (the user: "I don't really understand what would change if we do this. I think I want the change tho" -
+  explained with std's own lines; signatures only, bodies/calls/type declarations unchanged). In arrays phase 2.
+- QX ASKED 2026-10-17 (the user: "Any other really cool language features from other languages I should consider?"):
+  offered generators (`yield`, lowered to an iterator struct), compile-time reflection (unlocks serialization), units
+  of measure (F#), portable SIMD vectors, arbitrary-width ints and fixed point (FPGA), embed a file, errdefer,
+  contracts (requires/ensures), doc tests; declined async, exceptions, macros, |>, ?. chaining. Recommended top 3:
+  generators, reflection, units. Ideas only - nothing built until the user picks. Written out one per section in
+  docs/ideas.md (the user: "Record all the new languages so I can work through them one by one").
+- QY DECIDED 2026-10-17 (the user: "in general 'listing' is done with commas on the same line and newline marker on a
+  new line. This should go for struct members, error set members, function arguments. Return types and error types too.
+  Anywhere we list things. Literal lists too. Change error set unions in return types from '+' to normal listing rules
+  ... Migrate the corpus"). One listing rule everywhere a list appears - parameters, arguments, results, error sets,
+  error words, enum cases, constructor fields, type parameter/argument lists, array literals, catch items: items on one
+  line are separated by `,`, items on different lines by the line break. Details mine: a line break separates where it
+  would end a statement (L18's test), so a line ending in an operator continues the item; a comma directly before a line
+  break is an error (one way to write it; reverses L18a's trailing comma and T17/T19/C2's comma-is-an-error); `+` in
+  error sets and catch items is gone (`? IoError, ParseError`, `catch A, B.X`); in a function TYPE inside another list a
+  multi-item error set is parenthesized (`f fn(I64) ? (A, B)`); `x, y I64` (D12b several names, one declaration) is
+  unchanged. Core syntax: both compilers. Planned as a syntax batch after the errors batch, together with QW (moved out
+  of arrays phase 2); migration by an olang tool, then oann.
+- QZ ASKED 2026-10-17 (the user: "Should std be part of prelude?"): answered no - the prelude stays what built-in
+  types and language protocols need (prelude names are reserved everywhere under D3a; every build parses and checks it;
+  imports show what a file touches; ffi/http carry link and tool needs; only the prelude may add methods to built-in
+  types). Asked: move std/math into the prelude as methods on the floats (`x.Sqrt()` instead of `math.Sqrt(x)`)?
+  Recommended yes (reserves no type names). ANSWERED YES ("Yes move math into the prelude"). Details mine: functions
+  become methods on the numbers (`x.Sqrt()`, `a.Min(b)`, integer `x.Abs()`); the constants stay `math.Pi`/`math.E` in
+  std/math (a bare prelude `E` would be reserved everywhere - a common type-parameter and enum name). The user then:
+  "don't move math as much as move the math stuff onto the types themselves" - same plan, and the free functions
+  `math.Sqrt(x)` go (one way to write it). The user then: "a bunch of repeated code? a module with just math constants
+  is kinda lame". Plan given (in effect unless they object): one generic method per operation over a sealed prelude
+  trait only the four floats satisfy (`fn (x T) Sqrt() T`, the match T inside as today); std/math removed; `Pi`, `Inf`,
+  `NaN` prelude constants; the rest computed in place and folded while compiling (`1.0.Exp()`, `2.0.Sqrt()`,
+  `2.0.Log()`); E4a extended: an immutable global whose value is literal-only adapts like that literal (so `f F32 = Pi`).
+  The user then: "calling methods on literals makes zero sense" - so no `1.0.Exp()` constants. ASKED: (1) prelude
+  constants `Pi Euler Sqrt2 Ln2 Ln10 Inf NaN` (no bare `E` - a common type-parameter/enum name), or (2) std/math kept
+  with constants only (`math.Pi`, `math.E`). Recommended 1, with the E4a extension either way. Also offered: a method
+  call on a number literal as a compile error (text literals keep methods). In effect: nothing built.
+  The user then proposed both: std/math's functions back, and methods on the types calling them. Answered: two
+  spellings per operation (against one-way) and the prelude importing std. ASKED: (1) std/math as today - free
+  functions + constants, nothing built (recommended); (2) methods only. ANSWERED (1) ("Yes drop the move"): std/math
+  stays as it is - free functions and constants; nothing built. QZ is closed.
+  Queued after
+  wt-errors2 merges (std files).
+- QAA DECIDED 2026-10-17 (the user: "Literals cant call methods, only variables can"): a method call whose receiver is
+  a literal - number, text, array, comprehension - is a compile-time error (`"a,b".Split(",")`, `7.Hash()`); reading
+  taken (stated to the user): any non-literal receiver stays legal (`f().g()`, `x[i].M()`). Both compilers; corpus
+  migrated (receiver into a local); queued after the syntax batch.
+  The user then: "Maybe we should allow on literals tho. It makes sense for Strings doesn't it?" ASKED: (1) allow on
+  every literal, as today (no rule - recommended), or (2) text and array literals only, numbers refused. ON HOLD until
+  answered; nothing built.
+  The user then: "What does .Hash do on a number? 2.0.Sqrt reads really bad because 2.0 is a float with a dot
+  already. Math stuff isn't supposed to be defined on numbers tho right?" Answered (Hash is Map's protocol; math stays
+  free functions); recommendation changed to (2): refuse methods on number literals, keep them on text/array literals.
+  DECIDED (the user: "Do that, disallow for numbers, allow for array and text"): a method call on a number literal is a
+  compile-time error (written through a variable); text, array literals and comprehensions keep methods. Both
+  compilers, queued after the syntax batch with the Pair move.
+- QL1 (company name): the user, 2026-10-17: "don't worry about the name" - dropped.
+- QJ1/QJ2/QF explained again 2026-10-17 (the user asked "tell me about 2-4"); recommendations unchanged (QJ1 keep -
+  or a bare `b := a` on a Vec an error; QJ2 keep; QF open until Vec phase 2b's move-aware collections, closed with a
+  test of a long-running Map of owned objects staying flat).
+- QJ2 ANSWERED 2026-10-17 ("sounds right the way you have done it yes, although I am not sure exactly"): kept - a
+  callback frees nothing through its captures (O40); the handler takes the owner as a parameter. Revisit (additive) if
+  real code keeps hitting it.
+- QF CLOSED as a question 2026-10-17 (the user: "no decision for me to make ... wait for the right time to build it"):
+  covered by `own` once Vec phase 2b makes List/Map move-aware; a work item, closed by a test of a long-running Map of
+  owned objects staying flat.
+- QJ1 revised 2026-10-17 (the user: "isn't it best not to allow copies of owned things in general? So if you want to
+  move it you use take always?"). Proposed: a value that owns something (Vec, a struct holding an owner) is never
+  copied implicitly - `b := a`, `b = a`, a by-value argument, a store into a field/element are errors; write `take a`
+  (move), `a.Clone()` (copy) or a reference (`b Vec<T>& = a`, parameter `v Vec<T>&`, as D9a for arrays). Removes
+  borrowed copies (QJ1's asymmetry, and the source of own4-own6's findings). List (a handle) unchanged. ASKED: agreed?
+  Then it goes into the Vec phase 2b design. In effect: borrowed copies.
+  MOOT 2026-10-17: owned values themselves go with `own` (QAB).
+- QAB ASKED 2026-10-17 (the user, on ownership: "I am just worried we are introducing a lot of complexity now that
+  doesn't feel very smooth", "Can we hide reallocating away from the user completely?", "it's always the growing,
+  lessening part that is the problem", then "I want it gone completely somehow and the memory model more
+  streamlined"). Proposed: remove `own`/`take`/borrows from the language; one memory model - everything lives in a
+  scope: (1) blocks and the program, as today; (2) Vec as a handle (header + buffer, like List): growth keeps old
+  buffers until the scope closes (bounded ~2x peak), shrinking keeps capacity, a view held across a growth goes stale
+  (Go's append footgun; the local case refused); (3) a resettable scope as a std value `Slot<T>` (name open):
+  `s.Set(...)` builds into its own arena and frees the old one, `s.With(fn(c mut T&) {...})` gives access - the existing
+  scope rules keep references from escaping (a lambda parameter's scope cannot be named outside); `Set` inside its own
+  `With` aborts (one compare per Set). Reverses the user's own design (QG-QI, 2026-10-10); a large removal in both
+  compilers. ASKED: write it up first in docs/memory.md (server and interpreter worked through) for review? In effect:
+  own stays; ownership work frozen (no Vec phase 2b) until answered.
+  The user then: "The compiler is allowed to do tricks all it wants, but the user should not have to deal with it".
+  Revised proposal: no user-visible mechanism at all (no Slot either) - the language rule is only "everything lives in
+  a scope"; freeing earlier is an optimization the compiler makes wherever it proves nothing still refers to the old
+  storage (an overwritten slot, a Vec's old buffer, a removed Map entry - region inference, run on the analysis the
+  own checker does today), else it keeps it until the scope closes (always safe, never an error). Unobservable except
+  in memory, so stage 0 just drops `own` and never frees early; the port does the analysis in its scope pass. A report
+  (`olang build -memory`) lists where replaced storage is kept and why. ASKED: write docs/memory.md for review?
+  ANSWERED ("I think this is a good idea yes, as long as we can make it effective at actually finding the places
+  where memory can be freed and the rules to trigger it somewhat explicit so a programmer can make it happen at will";
+  then on Vec: two loads per access are fine if hoisted, loops are why Vec exists). Being written: docs/memory.md
+  (wt-memory) - the one-sentence rule, Vec as a handle and its hoisting, the report, removal of own from both
+  compilers, migration. Nothing removed before the user reviews it.
+  The user then: "I feel like there is a simpler solution here somehow". Proposed (recommended): drop Vec - Array for
+  fixed sizes, List for growing (never moves: no stale views, growth frees nothing), `l.ToArray()` (one visible copy)
+  where contiguity is needed; early freeing stays as the compiler's optimization for long-lived structures. Costs:
+  List random indexing ~5-6x an array's instructions; Vec phase 1 removed. The doc compares it with the handle design.
+  ANSWERED: "No don't drop vec yet" - Vec stays (the handle design is the doc's main design; drop-Vec only a note).
+  The user then: "Vec is basically a normal array hidden behind an access gate. The error we get when vec moves is a
+  correctness bug not a memory bug. This is kinda inevitable and what makes Vec problematic is how hidden it is".
+  Decided (in the doc): make it visible, not analysed - no implicit Vec -> Array<T>& conversion; `v.View()` explicit
+  ("a window on the current buffer, valid until v grows"); a view used after a growth of the same Vec in the same
+  function is a compile error; no cross-call may-grow analysis (a documented hazard, memory-safe).
+  Then ("Why drop the cross call error check?" ... "Ye let's add it. Make this part of the comptime analysis"):
+  a narrow exact cross-call check - the same Vec seen on both sides of a call (its view plus v or a writable holder of
+  v; or v a mutable global the callee may grow, by name) - in the compile-time checks; reading taken: also the
+  compile-time evaluator and `interpret` report a stale view read exactly (they know each view's Vec), and
+  `-sanitize` poisons old buffers on growth. In the doc.
+- QAC OPEN 2026-10-17: the static race-safety idea (next steps, recorded the same day) was built on `own`/`take` (a
+  task's writable arguments moved in); with own removed (QAB) it needs a version without ownership, or dropping in
+  favour of `-race`. Mine to bring back once docs/memory.md is settled.
+  The user: "2) good, do that" - rethought: without ownership the compiler cannot know two writable references are
+  distinct (why P3 was withdrawn), so static race safety is dropped; `-race` stays the checker (Go's position); safe
+  shapes made easy: `spawn out[i] = f(i)` (race-free by construction) and a std helper splitting an array into
+  disjoint pieces (`a.Chunks(n)`, as Rust's chunks_mut). In effect unless the user objects.
+- QAB APPROVED IN ADVANCE 2026-10-17 (the user, on docs/memory.md: "1) do it"): build as soon as the doc lands - own
+  and take removed from both compilers, Vec as a handle with explicit `v.View()`, early freeing by the compiler,
+  destructors unchanged at scope close, idempotent Close in std; come back only for a real direction question.
+- QAD ASKED (for the morning) from docs/memory.md (merged cb80059, section 6): (1) pins - a view held across a call
+  that may let go makes that place keep everything; pins (two stores at each such call, listed by the report) would
+  make it exact. Recommended: no pins in the first version (additive later). (2) disarming a destructor - a type's own
+  methods may cancel its destructor once Close() has done its work (`x.Disarm()`), so a closed resource's storage can be
+  freed when removed; without it long-lived structures holding std resources grow with every resource ever held.
+  Recommended yes. In effect: neither; both matter only for round 6 (the port's early freeing). Rounds 1-4 proceed.
+- QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
+- QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
+  Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
+  things kept together") is used ~100 times (tests, the port's names/parse/generic/load, list tests). Options: (1) remove
+  Pair, each use a small named struct (`type Span struct(Start I64, End I64) { Start End }`) - it is the tuple olang
+  chose not to have, `First`/`Second` naming nothing; (2) move it to std/pair. Recommended 1. In effect: Pair in the
+  prelude. (The prelude line otherwise: Vec, Map, String, StringBuilder in; List and future containers to std.)
+  ANSWERED (2): "Pair goes in Std not prelude" - std/pair (`pair.Pair<A, B>`), uses gaining the import. Queued after
+  the syntax batch (it touches the port and tests, as that batch does).
+- QZ3 ASKED 2026-10-17 (the user: "Do we have traits that only integers satisfy? Floats? Signed unsigned?"): no -
+  only Hashable, Iterator, Indexable; std/math limits types by `match T` exhaustiveness (an error at the call, worded as
+  a non-exhaustive match with a note into std). Proposed: prelude traits `Integer`, `Signed`, `Unsigned`, `Float`
+  (maybe `Number`), sealed by a private method so only the primitives satisfy them (and declared types extending one),
+  used as `fn Sqrt(x <T Float>) T`. Reverses the user's 2026-10-07 deferral. Recommended yes. In effect: none.
+  ANSWERED ("Yes, add those traits in the prelude. Do one for Float Integer Number. Are SignedInteger and
+  UnsignedInteger worth it?"): Float, Integer, Number built (wt-numtraits); Signed/UnsignedInteger not now - no std
+  function splits them (only inside math.Abs, which takes both); additive later, named SignedInteger/UnsignedInteger.
+- QZ2 ASKED 2026-10-17 (the user: "Why is List map and vec in prelude? Isn't array the one that has to be there"):
+  Array is built in (the prelude only gives it methods); List/Map/Vec are there because the prelude's iterator helpers
+  and `a.ToList()` build Lists (M19d: methods on built-ins live only in the prelude) and for convenience. Options: (a)
+  keep all three; (b) minimal prelude - helpers return `Array<T>`, List/Map/Vec move to std/list, std/map, std/vec,
+  `a.ToList()` becomes `List(a)`; (c) keep Vec and Map, move List out once Vec can be a type argument (Vec phase 2b) so
+  the helpers return Vec. Recommended (c). In effect: (a).
+  The user then: "do we run into a lot of problems if we remove them from the prelude and only have array? I don't
+  want the stdlib quality to drop". Answered (measured): no compiler knows the names; ~250/110/70/45 files use
+  List/Vec/Map/StringBuilder (an import line each, by a tool); the real cost is the prelude needing a growable buffer
+  (iterator Map/Filter/ToList and StringBuilder grow as they go) - with Array only it would be a hidden second Vec.
+  Recommended: keep Vec in the prelude, rebuild the helpers and StringBuilder on it (`a.ToVec()`), move List and Map
+  to std/list and std/map; after Vec phase 2b (Vec as a type argument, in tasks/lambdas), benchmarks before/after.
+  ASKED: plan it that way? In effect: (a).
+  The user then: "will there be more very basic data types like vec and map ... or will these stay the four main
+  ones?" Answered: a rule keeps the prelude fixed - only what the language and built-in types need plus the
+  everyday containers; future containers (Set, Deque, Heap, ordered map, Utf8 text) go to std. Revised: moving Map
+  out means `map.Map<K, V>` everywhere (imports are whole modules, names qualified), so keep Map in the prelude (as Go
+  and Python build it in). Recommended now: prelude = methods on built-ins, protocol traits/errors, Vec, Map,
+  String, StringBuilder, Pair; std = List and every future container (Set starts in std). After Vec phase 2b.
+  ANSWERED ("I think that is good yes", after Pair went to std): prelude = methods on built-in types, protocol traits
+  and errors, Vec, Map, StringBuilder (String and Array are built in); std = List (std/list), Pair (std/pair) and
+  every future container (Set, Deque, Heap, a sorted map). The iterator helpers and StringBuilder move onto Vec
+  (`a.ToVec()`). List moves after Vec phase 2b; Pair after the syntax batch. QZ2 closed.
+- (QO1's history: `? IoError` read as fewer errors than bare `?`; options were keep, inferred, open named, `? E + error`.)
+- PRINT, DECIDED 2026-10-17 (the user: "We only want one Print pathway and it should be in IO. We really do not want
+  to go the path of other languages where there is a compiler artifact print that gets used"): io.Print/Println/
+  PrintErr/PrintErrln, no try, stop the program on a failed write; io.Write stays fallible; the prelude's
+  print/println/eprint/eprintln and M19f's exception removed; tools/io_print (now olang) migrates (wt-ioprint, started).
+- QO3 WITHDRAWN 2026-10-17. The user first chose bare `?` = the built-in errors (BuiltinError + the default error,
+  named errors on top), then, told the cost (every callee may fail with the built-ins, so a complete `catch Named` in a
+  function without `?` needs another catch), said "Ok nvm. Let's just not have built in errors". Reading taken: the
+  built-in set is dropped and error sets stay as they are (bare `?` = the default error, named sets closed,
+  BuiltinError only under `try`). Still standing from the user: "No std function may ever exit" (so Print's
+  stop-the-program is provisional and Print becomes fallible, "another story"), and callbacks may carry `?`. Open:
+  QO4 ANSWERED the same day (reading taken, stated to the user): "if try is fine for Print then it's basically always
+  fine" -> (a): std's misuse checks (RemoveAt/Insert out of range, Send on a closed channel, a bad base, a percentile
+  outside 0..100, ...) fail with a named error and callers write `try`; language guarantees (a failed assert,
+  unreachable, out of memory, a thread that will not start) still abort; plain indexing stays unchecked. QUEUED after
+  wt-ioprint merges.
+- QO5 ANSWERED 2026-10-17: the user, after the no-try proposal: "I guess try for Print isn't that bad after all". So
+  io.Print/Println/PrintErr/PrintErrln fail with IoError and are written `try io.Print(...)`; nothing stops the program;
+  main keeps its rule. Hello world: `fn main() ? { try io.Println("Hello World!") }`. wt-ioprint changed course to this.
+- QO2 CLOSED 2026-10-17 (the user: try "is basically always fine"). Was: too many `try`s. Measured: 320 of them are `try io.Print(...)`, which `print`/`println` (M19f, no try) already
+  replace. Options: (a) migrate those, and make std calls whose failure a program cannot usefully handle abort, keeping
+  Try forms; (b) a `try { }` block propagating every failure inside it; (c) implicit propagation (rejected: hidden
+  control flow). Recommended: (a) now, (b) only if real code still reads noisy.
+
 **QUESTIONS for the user** - direction-level only since 2026-10-08 ([[feedback-decide-details]]):
-**Answered 2026-10-10 08:15 CEST:**
-- QD (integer literal's own type I64): YES ("1) yes"). BUILT 43ce396 (T6a; oann migrates with tools/int_literal_i64.py).
-- QE (spawned functions failing): the user: "We need some way to make spawn functions fail, exactly how that would be
-  done is harder since not all variables may be fine to use anymore. Solve it." -> decision 50 below, mine.
+(Answered questions - QA-QE, QG-QI, Q1-Q21, the user's oann and settling-network decisions - are in archive/decisions_log.md.)
 **Asked 2026-10-10 (from usage study 6, /home/user/review/study6 r08/r09/r10):**
 - QF. Long-lived, mutated structures only ever grow: what is removed from or replaced in a List/Map/struct that lives
   for the whole program (an interpreter's frames and values, an ECS world, an editor's undo stack) stays in its scope
@@ -80,62 +418,8 @@ self-hosted compiler is done.
   the reference when we free because we always know where the one reference is. Null variables are already a "the
   problem might fail like this"-gap so it doesn't really introduce anything new" -> taken as GO, with their early free:
   decision 51 below. Queued after decision 50 (QE).
-
-**Answered 2026-10-10 12:15 CEST (the user: "1) good .2) yes. 3. Okay."):**
-- Decision 50 (failing spawns, the design as given) - APPROVED; BUILT 9802fc3 (P4-P4d, `try join`), merged 40fb1c5.
-- QG question 2: owned objects may also move out with an explicit `take` - YES. QG question 1 was answered earlier by
-  the user's own no-borrowing refinement (compile-time, strict start).
-- Decision 49 (`$` calls Str exactly once, Str may have effects - my reversal) - accepted; MERGED 2fdb262 after six rounds.
-**Asked 2026-10-10 12:20 CEST (the user: "Given the new borrowing rules, it is now possible to create the dynamic
-length Vec<T> again right?"):**
-- QH. Yes, once `owned` exists. `Vec<T>` is library code: its buffer is an owned array, growth makes the next buffer,
-  copies, and frees the old one at once, and the no-free-while-borrowed rule makes that safe (Rust's rule: no Push
-  while a view of v is in use). Two questions:
-  1. Numeric code wants `data := v.View()` held across a loop, which the strict start refuses. Allow local borrows
-     checked by liveness (refused only if something that may free v runs before the borrow's last use) together with
-     Vec? Recommended yes.
-  2. Should Vec sit beside List, or replace it as the growable type? Recommended beside for now: List keeps stable
-     addresses and no copy on growth; decide after measuring.
-  In effect: nothing; order is failing spawns, owned + take, then Vec.
-  ANSWERED 12:40 CEST, the user:
-  1. "is that a general principle? If so yes ... Not sure about the comptime carveout, I guess its fine too" -> YES.
-     It is general: every borrow of an owned object lasts from where it is taken to its last use (Rust's non-lexical
-     lifetimes), and anything that may free what it points into is refused inside that span. It is checked at compile
-     time only, which is not a carve-out.
-  2. "vec is the natural growable array; if there is a case for list do both with Vec as the default" -> Vec is the
-     default growable type, and List stays only where it earns its place (stable element addresses, no copy on
-     growth).
-- QI. "Can we find another name than owned for this rule?" Proposed, recommended first: `unique` (C++'s unique_ptr is
-  the same concept: one owner, moved not copied, freed when the owner lets go), `box` (Rust's Box), `sole`. In effect:
-  `owned` until answered.
-  ANSWERED 12:50 CEST, the user: "Is the Box the natural Rust equivalent? Do these do basically the same thing? If so,
-  use it" -> YES, it is `box`.
-  - It is Rust's Box: one owner, a heap allocation, moved rather than copied (`take`), freed when its owner lets go,
-    and no borrow outlives it.
-  - Two differences: the box also holds what the object builds into itself, and only freeing is checked, not Rust's
-    aliasing-XOR-mutation.
-  - Spelled as a reference modifier like `mut` (`Map<I64, box Conn&>`, `box mut Conn&`), not a `Box<T>` type. That way
-    method calls and every other reference rule apply unchanged, with no deref rules.
-  - RENAMED 13:20 CEST: I argued `owned` reads better than `box` (it says the rule; `box` is a common variable name in
-    vision and GUI code), and the user proposed "just own" -> the modifier is `own` (`Map<I64, own Conn&>`,
-    `own mut Conn&`), beside `mut`. No identifier in the repository or oann is named `own`. Read "box" below as `own`.
-  - Moving out of a container: `Map.Take(k)` (fails with the default error on a miss, as Get does) and `List.TakeAt(i)`
-    remove the entry and hand the caller the owned object (the user: "that would read better"). A call's result never
-    needs `take`: it belongs to nobody yet. `take` is for a named place that would otherwise still hold it (field,
-    element, global, a local used again); `return c` of a local needs none.
-  - Freeing (the user asked "is it take only or a free keyword as well?"): no `free` keyword. A box is freed when its
-    owner lets go of it:
-    - removed from its container (`Remove`, `RemoveAt`, `Clear`, `Truncate`);
-    - its slot set to `null` - the explicit "free now";
-    - its slot overwritten - the old one is freed;
-    - the local owning it (after `take`) reaching the end of its block, unless moved on again;
-    - at the latest, its container's scope closing.
-    `take` only moves. This keeps "no manual free": nothing frees memory, an owner lets go.
-
-**Decided 2026-10-10 18:20 CEST (the user):** "You should probably build it into the C compiler because they are such
-central parts to the language that will be useful for the compiler" -> `own`, `take`, the liveness-checked local
-borrows and Vec<T> (the default growable array) are built in the C compiler BEFORE the port starts, so the port can be
-written with them. Order: decision 49 merges, then `own` (spec first), then Vec, then the port.
+  STATUS 2026-10-17: redirected by the user into `own` (QG, then QH/QI; decision 51 and QG are in
+  archive/decisions_log.md); own and Vec are built (CLAUDE.md, ownership). Close QF once the user confirms own covers it.
 
 **Asked 2026-10-10 20:00 CEST (from the own spec, wt-own fdc5848, docs/own.md):**
 - QJ1. `b := a` means different things for the two growable types: on a `Vec` it is a borrowed copy (b cannot push;
@@ -146,359 +430,23 @@ written with them. Order: decision 49 merges, then `own` (spec first), then Vec,
   function value (Fold, Map, Any) conflicts with every live borrow.
 In effect: both as recommended; implementation waits for decision 49 to merge.
 
-**Asked 2026-10-10 08:55 CEST:**
-- QG. `owned` references (the user's design; replaces Region<T>/With, decision 51). `conns Map<I64, owned Conn&>`.
-  - An object built into an owned slot lives in a small region of its own. Its parts live there too.
-  - It is used in place.
-  - It is freed when its slot is removed, overwritten or set to `null`, and at latest when the container's scope closes.
-  - A reference read out of it (`c := try conns.Get(id)`) is a BORROW. Its scope outlives nothing, so the existing
-    section-8 rules already stop it being stored anywhere outside the object.
-  - What Rust's borrow checker does is done here only for owned objects, at compile time, with zero run-time cost.
-    The compiler refuses a free that may happen while a borrow is in use:
-    - locals: by liveness within the function;
-    - calls: by a "may free an owned T reachable from this parameter/global" fact read off bodies (a fixed point, as
-      O17's);
-    - tasks: by the join rule.
-  - Considered and REJECTED: generation stamps, a compare on every use. They would still need the same effect rule for
-    plain borrows passed to calls, and they leave a cross-thread check-then-use race.
-  - Containers move elements with an explicit `take` (the source is left null). The prelude's List/Map are made
-    move-aware once.
-  - Questions put to the user:
-    1. compile-time checks (Rust-like errors, only where `owned` is written) - recommended yes;
-    2. may an owned object also leave by MOVING out (`Pop` hands it to the caller, who then owns it), besides copying -
-       recommended yes, explicit `take` rather than Rust's implicit moves (`x = y` keeps meaning `x == y`).
-  - In effect: nothing built. The decision-48 fix and failing spawns (decision 50) go first.
-  - The user, 09:20 CEST (dictated, read as heap): "Then we have a normal heap for this memory. So it's a special case of
-    the language where we restrict ourselves to not borrowing." My answer, recommended:
-    - The memory is the ordinary heap: one allocation per object, from the chunk pool's size classes, holding the
-      object and what it builds into itself, freed in one step.
-    - Adopt the restriction in its workable form: no borrow outlives the expression or statement that takes it.
-      - No local, field or element may hold a reference into an owned object (`c := try conns.Get(id)` is refused).
-      - Use goes through the path: `(try s.conns.Get(id)).Handle(msg)`, or one call `handle(try s.conns.Get(id), msg)`.
-      - This drops my liveness analysis of locals entirely.
-    - Two borrows cannot be avoided, because the object would be unusable without them, and both keep the "may free"
-      rule:
-      - a method call or argument: the callee may not free an owned object of that type;
-      - a for-in over owned elements: the loop variable is the one named borrow, and the body may not free one.
-    - Allowing local borrows later (with liveness) is additive, so start strict.
-
-**Answered 2026-10-09 23:05 CEST (the user: "Do all questions as you advised"):**
-- QA (`Name<` whitespace-significant so a file parses alone): NO for now - the declared-name oracle stays; revisit when
-  tooling (formatter, editor support) is built.
-- QB (pause C compiler feature work while the port builds its checker, DESIGN.md M5-M12): YES - from the start of the
-  port the C compiler takes fixes only; features are built once, in olang. Soundness fixes and the decided QC count as fixes.
-- QC (a copy of a read-only List/Map was writable through its `mut` reference fields): CLOSE IT - a value whose type
-  holds `mut` references, copied out of a place reached read-only, is read-only itself; a typed copy from read-only is
-  an error naming Clone() or a read-only borrow. Permission otherwise stays shallow. Being built: wt-qc (started 23:05).
-**Answered 2026-10-09 (the user, two messages numbering my questions 1-21 as 1-13):**
-- Q1 protocol methods follow privacy: "call private ones if in private and public if in public, if calling a private in
-  public it can't be found and is an error. One may not declare both public and private" (being built, wt-langb).
-- Q2 keep integer wrapping (E6c), its `nsw` cost accepted.
-- Q3 `:=` infers from any expression whose type is determined (wt-langb).
-- Q4/Q5 "Do 4 and 5 as you want" - MY DESIGN, queued as the permissions batch (after langb + constgen merge): `mut`
-  speaks only about what a reference reaches - `mut T&` writable, `T&` read-only, in every position including locals
-  (`x mut T& = ...`; D11a still forbids `mut` before a value type on a local) and fields; a binding's reassignability
-  is never written: locals and parameters always (a parameter is the callee's own copy/cursor, so `mut` on a by-value
-  parameter becomes an error), a field through a writable instance (Rust's model - so per-field immutability (C3) goes:
-  `x mut I32` fields become `x I32`, X3a's mutex-blob opacity then rests on privacy), and a global keeps `mut` as its
-  binding (`X mut I32`; a reference global's single `mut` stays both, T25c - a mutable global with a read-only referent
-  remains inexpressible, recorded). `:=` copies the initializer's permission. Flag the lost per-field immutability to
-  the user in the report.
-- Q6 prelude `print`/`println` aborting on a write failure: yes (wt-langb). The user's "methods with errors called
-  without try abort?" - agreed with me that it is a bad idea ("Ye it's a bad idea").
-- Q7 linalg in std, oann on top: built (9b88d44).
-- Q11 the Nested-Learning projection: normalized by |x|^2 ("Normalize"); oann's AdamWProjected defaults are normalized,
-  alpha 1e-3 (89c8585, 97.79% MNIST). Which layers / alpha vs learning rate stay oann design questions, not the user's.
-- Q12 run-time dimensions: library `Dynamic` ("Do dynamic the way you want it").
-- Q13 `Array<T, N>&` carries its length (D9a kept): yes.
-- Q14 the user: "can we make Ts appear as T after being given as generics with <T>?" -> DECIDED: a type variable or a
-  constant is introduced by its first `<X>` (a type's parameter list; in a function the first `<X>` left to right:
-  receiver, parameters, results) and written bare `X` everywhere after (signature and body); `<X>` again is an error.
-  Replaces G8b's `<T>` everywhere. Constants: built in constgen phase 2 (told 13:05); type variables: a follow-up
-  agent switches them and migrates corpus/std after constgen merges.
-- Q18 spiking: answered ("We want spiking set up").
-- Q19/Q21 the user: "by default compilation is always for the machine you are on. To cross compile, use the -arch= ...
-  syntax. If fast math is its own functions then don't add the compiler option yet." -> native by default; flag
-  spelled `-a TARGET` (B1's one-character rule - tell the user, they may object); no fast-math/contraction option
-  (FastExp etc. stay functions; FMA only where code writes math.Fma). Being built: wt-native (started 13:10).
-- Q20 `assert cond, "message"`: yes (wt-smallfix).
-**Decided 2026-10-09 (the user):** a 2-D Matrix, not a tensor - "Matrix cuz then we don't interpret data in two
-places (both Tensor and Operation)". And: "make the language generics take constants (and comp time expressions) as
-parameters ... Expand it across arrays too ... Array<T, size>. Then re-evaluate the matrix question on the new basis."
-Being designed (wt-constgen, phase 1 spec only until the checker agents merge); my re-evaluation: Matrix<T, R, C> with
-each dimension a constant or run-time-known (Eigen's Dynamic) - the matrix choice gets stronger, not weaker. Note:
-`Array<T, N>` partly revisits the user's earlier T11a ("make the size in the type irrelevant") - their call now.
-**Decided 2026-10-09 (the user, oann):** static graph only for now, eager mode possible later (keep the op set and
-kernels shared so an eager tape can be added - olang's arenas make a per-step tape cheap: one scope per step);
-transformers first after the MNIST MLP; optimizers: plain AdamW AND "AdamW with the regularisation of orthonormal
-projection as (I - alpha x x^T)".
-**Decided 2026-10-09 (the user, on settling networks):** "Don't do licenses. Take inspiration from [the source] but
-don't mention it specifically. We are really only interested in the dynamics, not the actual implementation. Don't
-call it [that], call it something else." -> the paradigm is "settling networks" (reciprocal regions iterating to an
-equilibrium, local free/nudged-phase learning, eligibility traces with a broadcast reward signal, associative memory,
-arousal gating, offline consolidation); oann/docs/settling.md describes the dynamics as oann's own model, never naming
-or linking the inspiration (also not in code, comments, commits or memory); no licence work. Transformers first, then
-settling networks. FPGA target: PYNQ-Z2 (Zynq-7020). Details mine: Circuit<T> beside Graph<T> in oann sharing Matrix,
-planner and optimizers; one stream first; validation by finite differences and analytic fixed points.
-Licence workaround (the user: "I really don't want to make myself forced to license"): clean room - copyright covers
-code, not ideas, equations or dynamics. docs/settling.md is the spec: dynamics only, each mechanism cited to the public
-literature (equilibrium propagation, centered EP, Hopfield relaxation, TD(lambda)/eligibility traces, three-factor
-rules, delta-rule associative memory, complementary learning systems), oann's own constants and API. RULE for every
-future agent implementing settling networks: work only from docs/settling.md and the papers - never open the original
-repository or its code. Not legal advice; told the user so.
-**Decided 2026-10-09 (the user): "18. Do that yes. We want spiking set up."** The settling networks' neuron model is
-a pluggable enum from the start - continuous neurons first, leaky integrate-and-fire (LIF) neurons learning from
-spike-count differences between the free and nudged phases set up as a real variant, aimed at the PYNQ-Z2. "We don't
-license either Oann or Olang" (may change; no licence files for now).
-**Done 2026-10-09 (b7e5fa4):** `same(a, b)` is `a is b` (and `is not`), the atomics are `x.AtomicLoad()` ...
-`AtomicCompareSwap(e, v)` methods, and D3a/D2 keep type names apart from locals, parameters, functions and globals.
-Decided by me under that authority the same day (recorded in CLAUDE.md/HISTORY.md as they land): `match` as an
-expression is `case X => value` (being built by the match agent); a literal the other operand cannot hold meets it by
-T6b at the literal's own type instead of erroring (`b + 300` is an I32; being built by the lit agent); a `try` default
-for a by-value result holding references stays rejected until real code needs it; Split on an empty separator keeps
-Go's single bytes; pushing to a List during a loop over it is specified as built (the iterator re-reads the count);
-`-i`'s next stage, when -i matters, is the redesign (compact values, scope-mirroring freeing, destructors) - in
-next-steps.
-
 **DECIDED OVERNIGHT 2026-10-09/10, FOR THE USER'S REVIEW** (the user: "make some hard decisions yourself ... record
-them and tell me tomorrow/tonight"): append each hard decision here as it is made, numbered, one or two lines with the
-rule and where it is recorded; the morning report lists them all, then they move out of the ledger.
-1. (wt-langb, M19f) `print`/`println`/`eprint`/`eprintln` are LOWERCASE and reached bare in every module - stated as
-   "the one exception to M6" (capitalized = exported). Alternative: `Print`/`Println`. Kept: the user asked for
-   "print/println" by those names and they read like Python's; recorded in CLAUDE.md/SPEC.md.
-2. (wt-langb, M6b) a private protocol method (`eq`, `hash`, `str`...) is invisible to the prelude's generics, so a
-   `Map` keyed by a type with a private `eq` is an error at the program's use - the user's rule taken literally.
-3. (wt-langb, D15) `x := 1 + 2` declares an `I32` (what the value written as one literal would be).
-4. (wt-constgen, T7c) the C2e inline-field form (`m Array<F32> = Array<F32>(16)` stored inline) is gone: an inline
-   array is `Array<T, N>` now; typed introductions `<N I64>`.
-5. (wt-chunkpool, O8b) each thread's chunk pool keeps at most 1/8 of physical memory, least-recently-used returned.
-6. (wt-native, B12) native code uses the widest vectors the CPU has (512-bit on AVX-512), not LLVM's tuned 256 -
-   faster everywhere measured (GEMM 57-71 vs 41-46 GFLOPS) but a kernel tiled for another width can fall off a cliff;
-   AVX512-BF16 conversions switched off (they flush subnormals, breaking evaluator agreement); cross-architecture
-   builds are -c only.
-7. (mine, from study2 r02) a value local holding references that a function returns lives (its references) in the
-   result scope - Go's escape analysis made static: `fn mk() List<I64> { l := List<I64>(); ...; return l }` works;
-   O26's hole for generic containers is closed under it. Being built in wt-chk3.
-8. (mine, from study2 grammar point 7) outside brackets, a line beginning with `if` always begins a statement - it
-   never continues a conditional expression (`a if c else b` keeps `if` on its line or inside parentheses).
-
-9. (wt-stdport) `io.Writer` never fails on Write: the first refused write is remembered and every `Flush` fails with
-   it (C stdio, Go bufio); `print`/`println` stay unbuffered; paths in `std/filepath` (not `path`, which M20 would
-   reserve in every importer); `ParseInt(0)` reads olang literal syntax.
-
-10. (wt-cgfix2, T7c) storage over 64KB (Go's bound) never goes on the stack: locals, zero values, literals and
-   by-value copies that large come from the current block's arena. And (T29a/E32b) converting a run-time array to a
-   declared `Array<T, N>` type is a view checked once, never a copy.
-
-11. (wt-chk3, O26a) a value local the function returns - read off the rest of its declaring block - lives in the
-   result scope, its own storage included (an arena slot, not the stack): `l := List<I64>(); ...; return l` and a
-   struct holding one filled through a method are correct as written. Closes a pre-existing UAF.
-12. (wt-chk3, C2d/C2g) a constructor argument binds the instance only when the constructor's body can make the
-   instance hold it; a constructor's top level allocates into the instance's scope (oann's ctorpush UAF).
-13. (wt-chk3, C2d) a `:=` reference field takes its initializer's scope (`x := text.Trim()` is `x String&text`).
-14. (wt-chk3, E28) a conditional or match of references lives where its values share a scope.
-15. (wt-poolfix, O8b/P2a) a parked worker keeps at most a 1MB batch of its chunk pool and moves the rest into one pool
-   all threads share (locked, RAM/8 bound); a thread finding nothing that fits takes a batch from it before mapping.
-16. (wt-perm, T25b/D9/C3/D11a - the user confirmed the design) `mut` speaks only about what a reference reaches; per-field
-   immutability is gone (X3a's pthread blobs rest on privacy); a pun takes no `mut`; a match binding is assignable; a
-   generic by-value array parameter is copied only when the body writes it (D9b, `paramWritten`); `tools/perm_mut.py`
-   migrates (oann not yet - after its agents finish).
-17. (mine, E31 revisited under the revisit rule) a method takes an operator only when it has the operator's shape;
-   `g.Mul(a, b)` on a graph builder is an ordinary method (oann had to rename). Being built in wt-chk4.
-18. (mine, G3) a non-generic struct's constructor may introduce type variables its fields do not mention (oann's
-   layers built from a generic graph). Being built in wt-chk4.
-19. (wt-portgaps, X2) only the runtime's own `__olang_` functions take a function value (`fn()` only); C functions
-   never receive olang callbacks (`extern fn f(cb fn())` stays an error), so olang code never runs on a thread the
-   runtime did not set up. The agent's direction question; kept closed - raise only if a C API needs it.
-20. (wt-portgaps) std/ffi is its own module (libffi linked only where declared); RunOnStack in a test passes a failed
-   check/done/fail on to the caller's test after the join; `Format(base)` lowercase, base outside 2-36 aborts;
-   O8a revised: a struct/enum allocation takes its own alignment (trees of 40-byte nodes 0.53 -> 0.36 s, 167 -> 105 MB).
-21. (mine, from study3 #1) `List`/`Map` become handles: a copy is a second name for the same collection (Go's maps),
-   `Clone()` for a real copy - copying a value used to share storage but not counts (silent wrong answers). wt-s3std.
-22. (mine, revisit rule, study3 #3) `==` on an array reference compares lengths and elements (each by its own `==`);
-   identity is `is`. Struct/enum references keep identity unless `Eq`. wt-s3std.
-23. (mine, study3 #4) O26a extended to reference locals - `e := p.sum(); return e` and the Pratt `lhs = E.Add(lhs, rhs)`
-   loop live in the result scope (the port's parser idiom). O17 judged by the callee's body. G4 covers constants. wt-s3scope.
-24. (mine, study3 #29/#30) `case _ if cond` on any match; keywords allowed as method names (`w.spawn()`). wt-s3std.
-   Not built (deferred): raw/multi-line text literals (#35) - candidate Go-style backtick raw strings, to raise with the
-   user; comprehensions of text (#34, user-deferred relaxation); lambdas capturing a List (#28); deep permission (#33,
-   the user chose shallow).
-25. (wt-s3std, details of 21/22/24) a null array reference equals only null; a struct value's array-reference field
-   compares by contents (E10 field by field); an array reference hashes by its elements; an unguarded `case _` covers
-   every value and anything after it is dead code; `case v` naming the subject or an unknown name says `case _ if`;
-   keywords (not true/false/null) as method names (L9a); a List's zero value runs its constructor per declaration, so
-   `Array<List<T>>(n)` with no fill is D13c's "no zero value".
-26. (wt-chk4, G10d/E31/O26a) a plain type's constructor may introduce type variables (one type, "twins" per binding);
-   a protocol role (operator, Eq/Hash/Str/Next/Iter/Has/Contains/RunFrom/Len/Try forms) is decided by parameter count
-   only - another shape is an ordinary method, and using the operator names it; a local passed in a return to a call
-   that can keep it lives in the result scope.
-27. (wt-cgfix3) `spawn fn(){...}()` made correct (same path as the uncalled form; it built its closure in the loop
-   body - wrong answers); a task's temporary callee held to P2; F32->BF16 narrowing inline integer arithmetic (10-20 ->
-   0.7-1.0 ns, linalg BF16 product 3x faster; F64->BF16 still a libcall); function values cross calls as two words
-   (captured lambda 19-32 -> 1.4-2.7 ns); evaluator try-clause fix; linalg direct path only where measured faster.
-28. (wt-s3scope) a reference local the function returns (or that flows into what is returned) lives in the result
-   home; O17 by what the callee's body keeps (a fixed point after all bodies); R11 by-value defaults holding references
-   when the default builds everything it holds. Limits recorded: r06 (obligations can't tell storage from contents),
-   r10 (G11 one scope for chunks and element referents).
-29. (wt-rvfix) review1's eight fixed: RunOnStack in a task uses the task's program-scope stand-in; building through
-   a by-value parameter's reference field builds in its O4b scope (decided by the parameter's type); `==` on
-   self-referential types is one function per type, evaluator/-i stop on cyclic data (depth limit 2000 compiling,
-   100,000 -i); every program links -ldl; comdats for runtime globals; `type Nest Array<Nest&>` an error; conditional of
-   literals adapts like a literal (linalg ActivationSlope at F32); O17a: a value whose references live outside its own
-   storage cannot be held by reference (only lent as a call argument); for-in over one hands elements the references'
-   scope.
-30. (wt-rv2fix, S4d) in an assignment over a value place, a value that borrows storage within the place (the place,
-   a field, an element of the same array, reached without a reference) takes the place's OLD value as a copy - so
-   `x = E.Neg(x)` no longer builds a cycle; only where what is built can keep the borrow (payload, held ctor arg, array
-   literal element, a call that can hand it back). Parallel assignment builds targets before values (n, e = 5, E.Lit(n)
-   gave Lit(5)). O17 lend checks decided after the fixed point; P2 for any computed callee; `Call` follows T22.
-31. (wt-qc, the user's QC, details mine) a value holding `mut` references copied from a place reached read-only
-   (immutable global, through a read-only reference, a capture, another read-only copy) is read-only: not lent writably,
-   not written through, not stored where writable; `x T = G` is an error naming `G.Clone()`; for-in elements and match
-   bindings follow their source; a by-value parameter's need is read off the callee's body (fixed point) so readers
-   accept read-only copies; a function used as a value may not have a parameter that needs writable; std/linalg's
-   destination forms take `mut` (views keep read-only receivers). Left: a view of a read-only copy (`x.Block().Fill`)
-   still writes - views are a known hole of shallow permission, recorded.
-32. (wt-s4cg) a null read traps (T2b, `null_pointer_is_valid` on every function; +0.02%, text +0.78%); a Send on a
-   closed channel stops the program (as Go panics), `Recv` now `? ChanError` (CLOSED), `for v in c` ends at the close;
-   `os.ExecUntil`, `os.Start`/Process, `Exec(dir)`; `-i` runs joins sequentially; B10c: an immutable top-level global
-   (outside std) of a -D-able type is a default `-D` replaces. REVERSES a consequence the user confirmed (2026-10-0x,
-   S8a): `Verbose := false; if Verbose` is configuration now (S8b decides it), no longer a dead-branch error -
-   tell the user.
-
-33. (mine, study5 r02) a write through `x[i]` on a type with At and SetAt - `x[i].f = v`, a `mut` receiver method, a
-   `mut &` argument - reads, modifies and writes back (Swift's get/set), as `x[i] += v` already did; it was a silent
-   lost write into a temporary copy (field stores were E31's error). Being built in wt-s5scope.
-34. (mine, study5 r12) a numeric literal does not adapt to a declared type through an operator method's parameter -
-   `d / 2.0` with Meters declaring `Div(t Seconds) Speed` silently made a Speed; now an error naming `Seconds(2.0)`.
-
-35. (wt-tbaa, T36) every numeric primitive has its own alias-tag leaves (I8, I16, U16, U32, U64, F16, BF16 were
-   untagged); a declared number takes its base's. BF16 loops through a struct 2.1-5.1 -> 0.30-0.78 ns an element.
-36. (wt-scopesan, B2f) `-s` is the scope sanitizer: closed chunks poisoned (0x7FF5...), PROT_NONE, held in a 256MB FIFO;
-   a use reports "use after scope closed" through the failed-check path; zero cost without `-s`; `make scopesan` /
-   `make scopefuzz` (not in verify - two shared.olang tests fail under it from a real UAF, handed to rv3fix).
-37. (wt-s4sem, O17b/O26a/E16/T20) a handle (a struct of one field, a reference or another handle) is lent as its
-   reference when the callee's checked body uses it only through that reference (every read accounted for, cycles
-   re-checked); O26a follows views of a returned local; numbers carry no scope; under `try` a known out-of-range index is
-   checked where it runs; an error type is no value type; keywords may name fields.
-
-38. (wt-s5std) std/csv strict as Go's reader (a bare quote is an error; an empty line is one empty field), fields
-   borrow the text unless unquoted; std/stats' default variance is the sample one (n-1), percentiles numpy's linear
-   method, pairwise sums; Array.Sort a stable O(n log n) merge with an n/2 scratch for numbers, blocks of positions for
-   the rest; List.Truncate(n) changes nothing past the length.
-
-39. (wt-rv3fix) a spawned lambda's captured scopes get P2 stand-ins folded at the join (RunOnStack too); O25h holds a
-   copy out of whatever expression gives the reference; a conditional of references from different scopes is "not known
-   here" (building into it is O12); slices/views of split values refused; an instantiation's read-only reference
-   parameter is as read-only as its argument, so `ro.Clone()` on a read-only `List<List<I64>>&` is an error; a `Str` may
-   not write through a reference to anything that existed before it ran; S4d covers `+=`/`++`; a binding an argument
-   determines at depth 0 means the body's top level (in a constructor, the instance's scope).
-40. (mine, rv3fix's open item 1) a closure held in a struct given to a task builds into its captured scope from the
-   task's thread (heap corruption): decided to REFUSE it statically under P2 - a task argument may not reach a function
-   value that captures a writable reference (it could build into that scope off-thread); read-only captures stay
-   allowed. Chosen over a per-allocation owner check (a run-time cost on every allocation). To be built next batch.
-
-41. (wt-s5scope, E31b/O18c/O26a/E25/D16c/O17) decision 33 built: a write through `x[i]` reads the element where the
-   place is evaluated and writes it back by SetAt, one level at a time for nested collections; a fallible or
-   multi-result call is not written back (an error saying how); a call that builds into the element's copy is refused
-   (no hidden per-write allocation). r01 fixed at the root (a landed call result sets the by-value parameter's scope);
-   O17's region facts belong to each function, not the shared scope variable; a lambda capturing a value holding
-   references gets an implicit scope (D16c); destructured results keep a scope argument's placement (E25).
-
-42. (mine, revising 33 after the s5scope soundness review, /home/user/review/tonight6) the hidden copy through x[i]
-   is sound only where no user code runs between reading the element and writing it back: a FIELD store
-   (`x[i].f = v`, op=, ++) keeps the write-back, place held and value evaluated first; a `mut` method or `mut &`
-   argument on x[i] is a compile-time error naming `t := l[i]; t.M(); l[i] = t` (the callee could reach the collection
-   another way - heap corruption, lost writes; exclusivity checking would be needed). Being built in wt-s5scope.
-
-43. (wt-s6std) `$` renders a List as `List<I64>[1, 2, 3]`, a Map as `Map<K, V>{k: v}` (walk order), a StringBuilder as
-   its text; a List's first chunk held on its own (a list up to 8 elements is one allocation; 3-element walk 195 -> 66
-   instructions); `IndexOf` fails on a miss, `Remove(x)` returns a Bool like Map.Remove, `SwapRemove(i)` returns the
-   element; `chan.Chan(cap I64)`. Merge only after rv3fix (its c3Holder test needs rv3fix's C2g fix).
-
-44. (mine, s5scope follow-up review G1-G3) handle elements: every level of `users[i][j].Push(t)` is held and lent;
-   the handle exemption from E31b applies only when the callee uses the handle only through its reference (O17b's
-   checked-body analysis) - a mut method repointing the handle's own field is E31b's error; a value that shrinks the
-   collection before an At/SetAt store (`v[0].E = shrink(v)`) makes the program's index out of range at the access -
-   E16e's unchecked index, stated in SPEC, no check added. Spawn on a handle element is E31b/P2's error (s5scope).
-
-45. (wt-render, E11a/T29h/E21) a declared type over Char renders as a character (an Array<Letter> as `Letter['a']`,
-   only Char/String as text); an array of fixed arrays renders as `Array<I64, 3>[I64[1, 2, 3], ...]` (the 2-D row
-   rendering removed); inner `mut` is written in rendered types (`List<mut Node&>`), cleared at the outermost level of
-   diagnostics, parameters and a literal's element type. Pushed 12eea59.
-46. (wt-rv3fix round 2) P2 stand-ins live as long as the scope they stand in for and forward to it once folded (slow
-   path only); function values handed to a task are copied once per spawn but keep their identity; decision 40 narrowed
-   to refusing a task that CALLS a function value held in what it is handed (carrying/storing allowed); a constructor's
-   top level is depth 1, its by-value parameters depth 2; a match binding lives in its clause's block.
-
-47. (mine, after rv3fix round 2's review h1-h4) a scope belongs to the thread that opened it; an allocation or
-   destructor registration into it from another thread is SYNCHRONIZED (one owner compare per allocation - a
-   per-construction check - and a lock in the scope header off the owner), so a closure may build into its captured
-   scope from any task; REPLACES decision 40's static refusal (evadable: helpers, lambdas, own lists). Stand-ins stay
-   the uncontended fast path. To be built as rv3fix round 3; abandon if the compare costs >2% on allocation-heavy code.
-48. (mine, replacing 47 after measuring it: the owner check cost +9.7% instructions on binarytrees and +13.8% on a
-   scope-churn loop - over the 2% gate, prototype kept on wt-rv3fix-p2b 55cf0d5) a scope belongs to the thread that
-   opened it (owner, parts, parent in its 48-byte header); the check moves from every allocation to the closure call: a
-   closure that may build into what it captured (codegen's marking AND `SemanticMayBuild`, a coarse greatest fixed point
-   over bodies - any allocation, promotion, task, closure made or call through a function value counts) calls
-   `__olang_capture_scope` at entry, building into the scope on its owner's thread and into that thread's own part of it
-   elsewhere (made once per thread, linked without a lock, folded at the scope's close, its destructors first); reading
-   lambdas and named functions pay nothing, at creation either. Each worker has a program-scope part that is never
-   folded (the program scope never closes); RunOnStack's thread takes its caller's identity; thread identities come from
-   a counter (glibc reuses a dead thread's TLS). Environment copies and decision 40's static refusal are removed.
-   Measured (callgrind): 0% on reading lambdas and plain allocation, +7% (2 instructions a call) on closures that build
-   on every call. Built on wt-rv3fix 45eea97; review tonight8 found F1 (fixed 91ab3ba); MERGED 5ebd16f; follow-up review tonight9.
-   Option 3 (keep 40's static refusal and close evasions one by one) rejected as evadable by design.
-49. (mine, under the revisit rule, from review tonight7: 3 new + ~12 older E11c holes, baked globals disagreeing with
-   the run time, and over-rejection of `r.l.Iter().Fold(...)` in a Str) `$` calls a declared Str EXACTLY ONCE per
-   rendering, in rendering order, and E11c's no-effect requirement (and its effect analysis) goes: Str is an ordinary
-   method. Sound because K1 already refuses every effect that would be observable if a run-time call were skipped
-   (global writes, mutable-global reads), so S18c/K2 skipping stays unobservable. The purity rule was my own reasoning
-   (2026-10-08), not the user's.
-50. (mine, the user's QE "solve it") a spawned call may fail: `spawn try f(a)` / `spawn x = try f(a)` - its errors leave
-   the task and reach its join; a task's own clauses (`spawn x = try f(a) catch E default v`, or a block that may not
-   leave the task) run on its thread as a spawned lambda's body would, captures copied. The join waits for every task
-   on every exit (P1b, unchanged), then fails with the error of the EARLIEST-SPAWNED failed task (deterministic; the
-   rest dropped; siblings are not cancelled - cooperative std/cancel as today). A join that can fail is written
-   `try join { } [catch ...]`, propagating or caught like any try statement. Which variables are fine afterwards
-   (the user's worry), as R9b says for a value-position try: a spawn TARGET whose task can fail into the join is left
-   unwritten, so if the join holds one, every clause on it must provably leave - code after the join runs only when
-   every task succeeded; a join whose failing tasks bind no targets may fall through, as a sequential `try f(buf) catch
-   E { }` leaves buf partly written. Partial results: a per-task default. Memory is unaffected (every task joined,
-   stand-ins/parts folded on every exit). Evaluator/-i: tasks in spawn order to completion, then the first failure.
-   Replaces P4. To be built after decision 48 merges (it rewrites the same spawn runtime).
-51. (the user's regions + their early free, revised 08:40 CEST after the user asked to generalize to "any reference
-   (maybe just in structs) might hold a shorter lived value ... whenever that thing goes out of scope the ref is
-   nulled. This would need a new keyword. Or is this a bad idea?") `Region<T>`: a value in its own arena, reached only
-   inside `r.With(fn(w mut T&) ...)` (w's scope opaque, as every lambda parameter's is, so nothing outside points in).
-   The HANDLE is plain data - {pooled header, generation}, headers recycled and never unmapped - so it can be stored in
-   any struct, List, Map or global however long-lived. The region dies at `r.Drop()` or when the scope its constructor
-   result landed in closes (O18a: `app.dialog = Region<Dialog>(...)` lives with app, `d := Region<Dialog>(...)` in a
-   handler block dies when the handler returns), whichever is first; after that every copy of the handle compares equal
-   to `null` and `With` on it traps as a null read does (the user's "nulled" semantics, one compare per With). `Set`/
-   `Compact(fn(old T&) T)` replace the contents and free the old arena (Compact forbids new->old pointers). Threads:
-   With takes a reader count by CAS on the header; a death (Drop or scope close) while readers are inside is deferred
-   to the last reader's exit - no trap, no wait, no UAF; Drop/Set/Compact inside its own With traps. Contents may point
-   outside only at program-scope data; a region made inside another's With lives in that arena and dies with it.
-   NOT a weak modifier on arbitrary references (the user's generalization, answered as the region generalized instead):
-   nulling plain references needs the runtime to find every holder (registration on every store and every struct copy -
-   hidden per-operation cost, or a ban on copying), a value read out of such a field is a second reference the nulling
-   cannot reach, and another thread can be using the value when its scope closes. Revisit a `weak` reference with a
-   `try` read only if real code needs one regions do not cover. Queued after decision 50 (QE).
-   REDIRECTED 2026-10-10 08:50 CEST - the user: "I want something like the rusts ownership rule for references we can't
-   guarantee outlive the scope. My struct Queue can not hold references that don't outlive queue today. What if we make
-   it able to hold such references with a special keyword like "owned" maybe. Then we can create objects in the queue,
-   put them in the queue and free them at will without them ever being able to leave the queue. If we need them to
-   leave, we copy into a larger scope. This would be great for things like network loops etc. Or is that basically
-   what you are already doing?" -> QG below; decision 51 becomes the `owned` design once answered.
+them and tell me tomorrow/tonight"): decisions 1-51, each recorded in CLAUDE.md/HISTORY.md, are listed in
+archive/decisions_log.md. Append new hard decisions here, numbered from 52, one or two lines each with the rule and
+where it is recorded; the morning report lists them, then they move to the archive.
+52. (2026-10-17, from the errors batch's spec review /home/user/review/errors1) IEEE's invalid operation is INVALID
+   (NaN results, 0.0/0.0, inf-inf, NaN/inf to an integer); DIVIDE_BY_ZERO only for finite/0 and integers; `<<` checked by
+   value fit; int-to-narrow-float infinity is OVERFLOW; noreturn fits any value position, takes no part in inference, no
+   noreturn lambdas, T31 matches noreturn, extern may be noreturn; `!`/`try` take a clause-less `checked` operand;
+   `spawn f()!` allowed (ends the program); a Checked form requires its plain form; superset rule per instantiation;
+   lambdas infer errors without `?` in canonical order; error words may be written in a set (`? ListError.EMPTY`) so
+   catches are complete; one bad-base error for ParseInt/Format. Being built in wt-errors2.
 
 **OWED BY ME to the user**: a detailed proposal for R4 (a local's scope taken from where it is later installed -
 built-then-installed temps, null-initialized cursors) - partly overtaken by O25h/O18c (2026-10-09); bring it with the
 permissions batch if friction remains. Answered 2026-10-09 15:30 CEST: "List<Counter> should work for most counters?"
 (yes - only a constructor with an effect has no zero value; hold those as `List<T&>`) and "any more overrides?" (none
 worth it; struct patterns in `match` later if code needs them).
-**Confirmed 2026-10-09 15:35 CEST (the user: "Your decisions are fine"):** `-a TARGET` (not `-arch=`), and the
-permissions design for Q4/Q5 including losing per-field immutability.
 
 **MY CALLS (10-71)** - the details I decided while building and listed for review on 2026-10-08. Since the user gave
 me authority over details the same day, they stand as decisions; each is recorded in CLAUDE.md/HISTORY.md with its

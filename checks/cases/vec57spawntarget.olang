@@ -1,5 +1,9 @@
 # check: fail error[O39]: calling 'Push' may release the Array<I64> borrowed on line
 # vec4 (f1h_spawn_target_index_write): the review's repro
+import "std/io"
+error Stop {
+    HERE
+}
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -9,9 +13,9 @@ fn churn() I64 {
     return t
 }
 # F1: the local's assignment hidden in a spawn target's index expression (ownFreshStmtWrites checks only the target itself)
-fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 fn g(k I64) I64 ? {
-    if k < 5 { error }
+    if k < 5 { error Stop.HERE }
     return k
 }
 fn fz() I64 { return 3 }
@@ -29,5 +33,5 @@ fn main() ? {
     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
     for i in range 1000 { v.Push(i) } # frees the buffer
     churn()
-    println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
 }

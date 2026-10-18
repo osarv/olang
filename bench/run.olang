@@ -1,0 +1,283 @@
+# bench/run.olang - olang against C on the programs in this directory: builds both versions of each, checks that
+# their outputs agree byte for byte at the timed size, then times them with interleaved repetitions and prints the
+# median of each. Not part of "make verify" (and nothing here is a test: "make test" never sees this directory).
+# Run from the repository root:
+#
+#   build/out build bench/run.olang && build/bench_run [-r REPS] [-x] [-q] [NAME ...]
+#     -r REPS  timed repetitions of every program, interleaved (default 7); the table gives the median and the minimum
+#     -x       also build both for baseline x86-64 and time those (olang -target x86-64, C with no -march)
+#     -q       build and check the outputs only, no timing
+#     NAME     only the rows whose name contains NAME
+#   BENCH_LOCK=FILE  take this flock for the checking and timing runs - on a shared machine, the lock that other
+#                    heavy jobs take, so nothing heavy runs beside the measurements
+#   OLANG=PATH       the compiler to build with (default build/out)
+#
+# The table is also written to bench/build/results.txt. A timed program's output is gathered and dropped.
+
+import "std/os"
+import "std/time"
+import "benchlib"
+
+# what olang compiles and links its own output with (main.c, addModeFlags): -O3 and whole-program LTO, for this
+# machine (B12: native by default) - and -ffp-contract=off keeps C's floating point exactly as written, as olang's is
+# (B12c): clang's default would fuse a*b+c into one FMA wherever the target has one, which changes results (and so the
+# outputs would no longer agree)
+fn cflags() Array<String&>& { return String&["-O3", "-flto", "-march=native", "-ffp-contract=off"] }
+
+# baseline x86-64: olang -target x86-64, and C with no -march
+fn baseFlags() Array<String&>& { return String&["-O3", "-flto"] }
+
+# name | olang program | C program | arguments (the same for both)
+fn table() Array<String&>& {
+    return String&[
+        "nbody|nbody|nbody|10000000"
+        "spectral-norm|spectral|spectral|3000"
+        "mandelbrot|mandelbrot|mandelbrot|3000"
+        "fannkuch-redux|fannkuch|fannkuch|10 4"
+        "binary-trees|binarytrees|binarytrees|18"
+        "binary-trees, C arena|binarytrees|binarytrees_arena|18"
+        "k-nucleotide|knucleotide|knucleotide|2000000"
+        "matmul F32|matmul|matmul|1536"
+        "List push|sum|sum|push 20000000 0"
+        "sum: for x in List|sum|sum|list 100000 8000"
+        "sum: List.Iter().Fold|sum|sum|listfold 100000 8000"
+        "sum: for x in Array|sum|sum|array 100000 8000"
+        "sum: Array.Iter().Fold|sum|sum|arrayfold 100000 8000"
+        "parallel, 4 tasks|parallel|parallel|10000000 4"
+        "text|text|text|5000000"
+    ]
+}
+
+# what the command line asks for
+type options struct() {
+    reps I64 = 7
+    base Bool = false
+    quick Bool = false
+    names List<String&> = List<String&>()
+}
+
+# the command line as getopts "r:xq" reads it: options up to the first word that is none, or "--"; a bad option is
+# status 2
+fn parse(args Array<String&>&) options {
+    o := options()
+    i I64 = 1
+    for i < args.Len() {
+        a := args[i]
+        if a == "--" {
+            i++
+            break
+        }
+        if not a.StartsWith("-") or a.Len() == 1 { break }
+        j I64 = 1
+        for j < a.Len() {
+            c := a[j]
+            if c == 'x' {
+                o.base = true
+            } else if c == 'q' {
+                o.quick = true
+            } else if c == 'r' {
+                v String = $a[j + 1:]
+                if v.Len() == 0 {
+                    i++
+                    if i >= args.Len() { benchlib.Fail("run: option requires an argument -- r", 2) }
+                    v = $args[i]
+                }
+                o.reps = try v.ParseInt() catch default 0
+                if o.reps < 1 { benchlib.Fail("run: bad repetition count " $v, 2) }
+                break
+            } else {
+                benchlib.Fail("run: illegal option -- " $Char(c), 2)
+            }
+            j++
+        }
+        i++
+    }
+    for i < args.Len() {
+        o.names.Push($args[i])
+        i++
+    }
+    return o
+}
+
+fn main() {
+    o := parse(os.Args())
+    rows := List<String&>()
+    for row in table() {
+        name := row.Split("|")[0]
+        if o.names.Len() == 0 {
+            rows.Push($row)
+            continue
+        }
+        for want in o.names {
+            if name.Contains(want) {
+                rows.Push($row)
+                break
+            }
+        }
+    }
+    if rows.Len() == 0 {
+        benchlib.Fail("no benchmark matches " $o.names.ToArray().Join(" "), 2)
+    }
+    olang := benchlib.Compiler()
+    try os.MkDirAll($benchlib.Dir "/build") catch os.OsError { benchlib.Fail("cannot make bench/build", 1) }
+    build(olang, rows, o.base)
+    benchlib.TakeLock()
+    check(rows, o.base)
+    if o.quick { return }
+    results := timing(rows, o.base, o.reps)
+    report(rows, o.base, o.reps, results)
+}
+
+# ---- build ----
+
+# both versions of every selected program: olang once for each program, C once for each C program
+fn build(olang String&, rows List<String&>&, base Bool) {
+    built := Map<String&, Bool>()
+    for row in rows {
+        f := row.Split("|")
+        prog := $f[1]
+        cprog := $f[2]
+        if "o." $prog not in built {
+            if base {
+                # baseline x86-64
+                buildOlang(olang, prog, String&["-target", "x86-64"])
+                try os.Exec(String&["cp", "build/" $prog, "build/" $prog ".base"], "", true, benchlib.Dir) catch os.OsError { }
+            }
+            buildOlang(olang, prog, Array<String&>(0))
+            built.Put("o." $prog, true)
+        }
+        if "c." $cprog not in built {
+            clang(cflags(), "build/" $cprog "_c", cprog)
+            if base { clang(baseFlags(), "build/" $cprog "_c.base", cprog) }
+            built.Put("c." $cprog, true)
+        }
+    }
+}
+
+fn buildOlang(olang String&, prog String&, extra Array<String&>&) {
+    args := List<String&>()
+    args.Push(olang)
+    args.Push("build")
+    for e in extra { args.Push($e) }
+    args.Push($prog ".olang")
+    o := benchlib.Capture(args.ToArray(), benchlib.Dir)
+    if o.Status != 0 { benchlib.Fail("olang build of " $prog " failed", 1) }
+}
+
+fn clang(opts Array<String&>&, out String&, cprog String&) {
+    args := List<String&>()
+    args.Push("clang")
+    for f in opts { args.Push($f) }
+    for a in String&["-o", out, "c/" $cprog ".c", "-lm", "-lpthread"] { args.Push($a) }
+    benchlib.Must(args.ToArray())
+}
+
+# ---- check: both versions, at the timed size, must print the same ----
+
+# the command for a binary and the row's arguments
+fn command(bin String&, args String&) Array<String&>& {
+    l := List<String&>()
+    l.Push($bin)
+    for w in benchlib.Words(args) { l.Push($w) }
+    return l.ToArray()
+}
+
+fn check(rows List<String&>&, base Bool) {
+    for row in rows {
+        f := row.Split("|")
+        name := f[0]
+        prog := f[1]
+        cprog := f[2]
+        args := f[3]
+        variants := List<String&>()
+        variants.Push("build/" $prog "|build/" $cprog "_c")
+        if base { variants.Push("build/" $prog ".base|build/" $cprog "_c.base") }
+        for v in variants {
+            pair := v.Split("|")
+            a := benchlib.Capture(command(pair[0], args), benchlib.Dir)
+            b := benchlib.Capture(command(pair[1], args), benchlib.Dir)
+            if a.Stderr.Len() > 0 { benchlib.Warn(a.Stderr) }
+            if b.Stderr.Len() > 0 { benchlib.Warn(b.Stderr) }
+            if a.Stdout != b.Stdout {
+                benchlib.Fail("OUTPUTS DIFFER: " $name " (" $v " " $args ")", 1)
+            }
+        }
+    }
+    benchlib.Warn("outputs agree\n")
+}
+
+# ---- time: every program once per repetition, interleaved, so drift hits all of them alike ----
+
+# the microseconds each run took, under "NAME|KIND" - o: olang, c: C, on, cn: the baseline x86-64 builds
+fn timing(rows List<String&>&, base Bool, reps I64) Map<String&, List<I64>> {
+    times := Map<String&, List<I64>>()
+    for r in range 1, reps + 1 {
+        benchlib.Warn("repetition " $r "/" $reps "\n")
+        for row in rows {
+            f := row.Split("|")
+            name := f[0]
+            prog := f[1]
+            cprog := f[2]
+            args := f[3]
+            bins := List<String&>()
+            bins.Push("o|build/" $prog)
+            bins.Push("c|build/" $cprog "_c")
+            if base {
+                bins.Push("on|build/" $prog ".base")
+                bins.Push("cn|build/" $cprog "_c.base")
+            }
+            for b in bins {
+                bar := try b.FindByte('|') catch default 0
+                key := $name "|" $b[0:bar]
+                t0 := time.Now()
+                o := benchlib.Capture(command(b[bar + 1:], args), benchlib.Dir)
+                t1 := time.Now()
+                if o.Stderr.Len() > 0 { benchlib.Warn(o.Stderr) }
+                if key not in times { times.Put(key, List<I64>()) }
+                (try times.Get(key) catch default List<I64>()).Push((t1 - t0) / 1000)
+            }
+        }
+    }
+    return times
+}
+
+# the median and the minimum of a list of microsecond counts
+fn stat(us List<I64>&) (I64, I64) {
+    sorted := us.Clone()
+    sorted.Sort(fn(a I64, b I64) Bool { return a < b })
+    n := sorted.Len()
+    med := sorted[n / 2]
+    if n % 2 == 0 { med = (sorted[n / 2 - 1] + sorted[n / 2]) / 2 }
+    return med, sorted[0]
+}
+
+# microseconds as seconds, three places
+fn secs(us I64) String { return (F64(us) / 1e6).Fixed(3) }
+
+# a over b, two places
+fn ratio(a I64, b I64) String { return (F64(a) / F64(b)).Fixed(2) }
+
+# text padded on the right / the left to a width
+fn left(t String&, w I64) String { return t.PadEnd(w) }
+fn right(t String&, w I64) String { return t.PadStart(w) }
+
+fn report(rows List<String&>&, base Bool, reps I64, times Map<String&, List<I64>>&) {
+    out := StringBuilder()
+    out.Push($left("benchmark", 26) " " $right("olang", 9) " " $right("C", 9) " " $right("olang/C", 7))
+    if base { out.Push(" " $right("olang x86-64", 10) " " $right("C x86-64", 10) " " $right("ratio", 7)) }
+    out.Push("     (median of " $reps "; min in parentheses)\n")
+    for row in rows {
+        name := row.Split("|")[0]
+        om, omin := stat(try times.Get($name "|o") catch default List<I64>())
+        cm, cmin := stat(try times.Get($name "|c") catch default List<I64>())
+        out.Push($left(name, 26) " " $right(secs(om), 9) " " $right(secs(cm), 9) " " $right(ratio(om, cm), 7))
+        if base {
+            onm, onmin := stat(try times.Get($name "|on") catch default List<I64>())
+            cnm, cnmin := stat(try times.Get($name "|cn") catch default List<I64>())
+            out.Push(" " $right(secs(onm), 10) " " $right(secs(cnm), 10) " " $right(ratio(onm, cnm), 7))
+        }
+        out.Push("     (" $secs(omin) " / " $secs(cmin) ")\n")
+    }
+    benchlib.Say(out.ToString())
+    try os.WriteFile($benchlib.Dir "/build/results.txt", out.ToString()) catch os.OsError { }
+}

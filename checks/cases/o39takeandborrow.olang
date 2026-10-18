@@ -1,5 +1,6 @@
 # check: fail error[O39]: taking 'x' moves the Conn borrowed on line
 # one call borrowing an owner and taking it
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -15,5 +16,5 @@ type Server struct() {
 fn both(a Conn&, c own mut Conn&) I64 { return a.fd + c.fd }
 fn main() ? {
     x own mut Conn& = Conn(1)
-    println($both(x, take x))
+    try io.Println($both(x, take x))
 }

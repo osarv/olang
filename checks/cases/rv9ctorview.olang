@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # E16a/C2d (tonight9's review): a constructor field the instance keeps a view of - a slice, an "as" view, a conditional
 # of slices, a slice a nested instance keeps - is stored where the instance lands. It stayed the constructor's frame
 # storage: for a field over 64KB its own scope, closed as it returned ("use after scope closed" here)
@@ -26,5 +26,5 @@ fn churn() I64 {
 fn main() ? {
     k := K(7)
     x := churn()
-    if k.view[1] != 8 or k.w[1] != 8 or k.c[1] != 8 or k.h.a[1] != 8 or x != 190 { fail }
+    assert not (k.view[1] != 8 or k.w[1] != 8 or k.c[1] != 8 or k.h.a[1] != 8 or x != 190)
 }

@@ -1,5 +1,6 @@
 # check: fail error[O37]: 'mk' gives an owner, which only an own slot receives
 # an owned result handed to a borrowing parameter
+import "std/io"
 type Sock struct(n I64) {
     n
 }
@@ -15,5 +16,5 @@ type Server struct() {
 fn mk(n I64) own mut Conn& { return Conn(n) }
 fn fdOf(c Conn&) I64 { return c.fd }
 fn main() ? {
-    println($fdOf(mk(3)))
+    try io.Println($fdOf(mk(3)))
 }

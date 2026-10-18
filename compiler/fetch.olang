@@ -12,6 +12,7 @@
 # sorted. -u resolves every repository the build reaches as if unlocked, once each.
 import "std/os"
 import "std/filepath"
+import "std/io"
 
 error FetchError {
     BAD_NAME        # M23a: a part of the path git and the cache cannot be trusted with
@@ -56,7 +57,7 @@ fn IsCommit(c String&) Bool {
 
 fn (f mut Fetcher&) say(line String&) {
     f.Said.Push($line)
-    if not f.Quiet { eprintln(line) }
+    if not f.Quiet { try io.PrintErrln(line) catch io.IoError { } }
 }
 
 fn (f mut Fetcher&) load() {
@@ -78,13 +79,18 @@ fn (f mut Fetcher&) load() {
     }
 }
 
+# Locked's miss: the lock file has no line for the key
+error unlocked {
+    KEY
+}
+
 # the commit the lock file names for key, or a miss
 fn (f mut Fetcher&) Locked(key String&) String&f ? {
     f.load()
     for i in range f.keys.Len() {
         if f.keys[i] == key { return f.commits[i] }
     }
-    error
+    error unlocked.KEY
 }
 
 # records key at commit and writes the whole file back, sorted, so it reads the same however it was built up - a line
@@ -257,7 +263,7 @@ fn makeRepo(base String&, name String&, text String&) String {
     try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
     ok := sh(dir, String&["git", "init", "-q"]) and
           sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
-          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q",
+          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
                           "-m", "x"])
     return head(dir) if ok else ""
 }
@@ -265,7 +271,7 @@ fn makeRepo(base String&, name String&, text String&) String {
 fn commitAgain(base String&, name String&, text String&) String {
     dir := $base "/example.com/me/" $name
     try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
-    ok := sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q",
+    ok := sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
                           "-a", "-m", "y"])
     return head(dir) if ok else ""
 }
@@ -282,7 +288,7 @@ test "fetching locks a commit, a locked build is offline, deleting a line or -u 
     defer { try os.RemoveAll(scratch) catch os.OsError { } }
     base := $scratch "/remote"
     c1 := makeRepo(base, "tools", "fn F() I64 { return 1 }\n")
-    if c1 == "" { done }   # no git here: nothing to fetch with
+    if c1 == "" { return }   # no git here: nothing to fetch with
     cache := $scratch "/cache"
     lockPath := $scratch "/olang.lock"
     f := Fetcher(lockPath, cache, "file://" $base "/", false, true)

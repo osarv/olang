@@ -1,16 +1,17 @@
 # G9d: generic Map and List builders over destructor values destruct each once
+import "std/io"
 Made mut I64 = 0
 Gone mut I64 = 0
 type Res struct(k I64) {
     k
     Made++
 } destruct { Gone++ }
-fn mk(k <K>, v <V>) Map<K, V> {
+fn mk<K, V>(k K, v V) Map<K, V> {
     m := Map<K, V>()
     m.Put(k, v)
     return m
 }
-fn lst(v <V>) List<V> {
+fn lst<V>(v V) List<V> {
     l := List<V>()
     l.Push(v)
     return l
@@ -21,5 +22,5 @@ fn main() ? {
         l := lst(Res(i))
         x := try m.Get(i) catch { unreachable }
     }
-    println("made " $Made " gone " $Gone)
+    try io.Println("made " $Made " gone " $Gone)
 }

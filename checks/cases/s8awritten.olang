@@ -7,5 +7,5 @@ fn helper3() I32 { return 3 }
 fn main() ? E {
     x := 3
     x = x + 1
-    if x > Level { fail }
+    assert not x > Level
 }

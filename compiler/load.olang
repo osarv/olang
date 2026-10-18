@@ -11,6 +11,7 @@
 # imports of chosen branches are loaded; a condition B9a cannot decide is pending - its imports wait, and its branches'
 # diagnostics stay held - until the checker decides it by compile-time evaluation (B9c) and calls Decide. Every branch
 # is parsed (DESIGN.md point 12); a branch not chosen has its diagnostics dropped.
+import "std/pair"
 import "std/os"
 import "std/filepath"
 import "source"
@@ -76,7 +77,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
 
 # a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
 # repositories; Names and Diags the compilation's
-type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher&, Names mut source.Names&,
+type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher&, Names mut source.Names&
                    Diags mut diag.Diagnostics&) {
     Std
     Consts
@@ -478,6 +479,11 @@ fn (l mut Loader&) loadImports(mi I64) {
     }
 }
 
+# resolve's failure, already reported: an import that names no file it may reach
+error unresolved {
+    IMPORT
+}
+
 # where an import's file is, and the identity of its module (M23, M22a); what is wrong is reported
 fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
     m := l.Mods[mi]
@@ -485,11 +491,11 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
     spec := imp.Spec
     if spec.Len() >= 4096 {
         l.Diags.Error(at, msgs.ImportPathTooLong())
-        error
+        error unresolved.IMPORT
     }
     if spec.EndsWith(".olang") {
         l.Diags.Error(at, msgs.ImportHasExtension())
-        error
+        error unresolved.IMPORT
     }
     slash := try spec.FindByte('/') catch default spec.Len()
     first := spec[:slash]
@@ -500,21 +506,21 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
         identity = $Normalize(spec)
         if not identity.StartsWith("std/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot("std"))
-            error
+            error unresolved.IMPORT
         }
     } else if first.Contains(".") and first != "." and first != ".." {
         # host/owner/repo[@ref]/path - a host always has a dot, which a relative path's first element never does
         parts := spec.Split("/")
         if parts.Len() < 4 {
             l.Diags.Error(at, msgs.ImportRemoteNeedsFile())
-            error
+            error unresolved.IMPORT
         }
         dir := try l.Fetch.Fetch(parts[0], parts[1], parts[2])
             catch fetch.FetchError.BAD_NAME { l.Diags.Error(at, msgs.ImportRemoteBadName()) } default ""
             catch fetch.FetchError.NOT_A_COMMIT { l.Diags.Error(at, msgs.ImportLockNotACommit(key(parts))) } default ""
             catch fetch.FetchError.FAILED { l.Diags.Error(at, msgs.ImportFetchFailed(key(parts))) } default ""
             catch fetch.FetchError.LOCKED_FAILED { l.Diags.Error(at, msgs.ImportLockedFetchFailed(key(parts))) } default ""
-        if dir == "" { error }
+        if dir == "" { error unresolved.IMPORT }
         b := StringBuilder()
         b.Push(dir)
         for i in range 3, parts.Len() {
@@ -527,7 +533,7 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
         root := key(parts)
         if not identity.StartsWith($root "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
-            error
+            error unresolved.IMPORT
         }
     } else {
         rel := moduleDir(m.Path)
@@ -548,12 +554,12 @@ fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
         }
         if root != "" and not identity.StartsWith($root "/") {
             l.Diags.Error(at, msgs.ImportLeavesRoot(root))
-            error
+            error unresolved.IMPORT
         }
     }
     if not os.Exists(path) or os.IsDir(path) {
         l.Diags.Error(at, msgs.ImportFileNotFound(path))
-        error
+        error unresolved.IMPORT
     }
     return path, identity
 }
@@ -729,13 +735,13 @@ fn (l mut Loader&) Chosen(mi I64, condStart I32) I64 {
 
 # the top-level ifs B9a left to compile-time evaluation (B9c) whose own branch is part of the module: each as its
 # module and the offset of its first condition
-fn (l mut Loader&) PendingIfs() List<Pair<I64, I32>> {
-    out List<Pair<I64, I32>>
+fn (l mut Loader&) PendingIfs() List<pair.Pair<I64, I32>> {
+    out List<pair.Pair<I64, I32>>
     for mi in range l.Mods.Len() {
         m := l.Mods[mi]
         for c in range m.chainAt.Len() {
             l.decide(mi, c)
-            if m.chainChosen[c] == Pending and l.taken(mi, m.chainParent[c]) == 1 { out.Push(Pair(mi, m.chainAt[c])) }
+            if m.chainChosen[c] == Pending and l.taken(mi, m.chainParent[c]) == 1 { out.Push(pair.Pair(mi, m.chainAt[c])) }
         }
     }
     return out
@@ -785,7 +791,7 @@ fn (l Loader&) Graph() String {
 fn testLoader(lock String&) Loader {
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    return Loader("std", consts, fetch.Fetcher(lock, $lock ".cache", "file:///nowhere/", false, true), source.Names(),
+    return Loader("std", consts, fetch.Fetcher(lock, $lock ".cache", "file:///nowhere/", false, true), source.Names()
                   diag.Diagnostics(false))
 }
 
@@ -884,9 +890,9 @@ test "a remote import is fetched, locked, and its relative imports stay inside i
     write(repo, "part/inner.olang", "import \"../lib\"\n")
     ok := git(repo, String&["git", "init", "-q"]) and
           git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
-          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit",
+          git(repo, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit"
                             "-q", "-m", "x"])
-    if not ok { done }   # no git here: nothing to fetch with
+    if not ok { return }   # no git here: nothing to fetch with
     write(dir, "main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)

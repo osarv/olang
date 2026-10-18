@@ -1,4 +1,5 @@
 # E11c/E31: the same inside a helper handed the part
+import "std/io"
 type Ctr struct(v I64) {
     v
 }
@@ -14,4 +15,4 @@ type Bag struct(c Ctr&) {
     c
 }
 fn (b Bag&) Str() String { return "b" $hh(b.c) }
-fn main() ? { println($Bag(Ctr(5))) }
+fn main() ? { try io.Println($Bag(Ctr(5))) }

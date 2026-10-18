@@ -3,6 +3,7 @@
 # never: Node<I64, I64>&c
 # G16b/B11: a scope error in a generic method is one error for every instantiation, and its note writes the generic's
 # own variables - here the first instantiation binds K and V to one type, so the second's spelling is the one written
+import "std/io"
 type Node<K, V> struct(key K, value V) {
     key
     value
@@ -13,11 +14,11 @@ type Lru<K Hashable<K>, V> struct() {
     nodes Map<K, mut Node<K, V>&>
     head mut Node<K, V>&
 }
-fn (c mut Lru<<K>, <V>>&) pushFront(n mut Node<K, V>&) {
+fn (c mut Lru<K, V>&) pushFront(n mut Node<K, V>&) {
     n.next = c.head
     c.head = n
 }
-fn (c mut Lru<<K>, <V>>&) Put(key K, value V) {
+fn (c mut Lru<K, V>&) Put(key K, value V) {
     n := Node(key, value)
     c.nodes.Put(key, n)
     c.pushFront(n)
@@ -27,5 +28,5 @@ fn main() ? {
     a.Put(1, 2)
     b := Lru<String&, I32>()
     b.Put("x", 3)
-    println($a.nodes.Len() $b.nodes.Len())
+    try io.Println($a.nodes.Len() $b.nodes.Len())
 }

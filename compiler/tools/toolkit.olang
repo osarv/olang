@@ -1,0 +1,243 @@
+# toolkit - what the compiler's acceptance tools share (they were shell scripts: tokdiff, astdiff, namesdiff, layoutdiff,
+# layoutgold, modgraph, diaggold_capture). Running a program without a shell, reading a program's text as rows, a
+# scratch directory, the files an acceptance tool runs over, and diff(1)'s report of two texts.
+
+import "std/os"
+import "std/io"
+
+# ---- saying ----
+
+# t on standard output, whole - a failed write is not worth stopping a report for
+fn Say(t String&) {
+    try io.Print(t) catch io.IoError { }
+}
+
+# t on standard error
+fn Warn(t String&) {
+    try io.PrintErr(t) catch io.IoError { }
+}
+
+# says why on standard output and ends with status 1: the tool did not run to its end
+fn Die(why String&) noreturn {
+    Say($why "\n")
+    os.Exit(1)
+}
+
+# ---- running programs ----
+
+# runs args[0] with args, in dir when it is not "", with the environment extended by env ("NAME=value" each), and gives
+# what it did. A program that cannot be started ends the tool, saying so
+fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String& = "") os.Output {
+    full := List<String&>()
+    if env.Len() > 0 {
+        full.Push("env")
+        for e in env { full.Push(e) }
+    }
+    for a in args { full.Push(a) }
+    o := try os.Exec(full.ToArray(), "", true, dir) catch os.OsError {
+        Die("cannot run " $args[0])
+        unreachable
+    }
+    return o
+}
+
+# the same, with what the program wrote to standard error passed on to ours
+fn RunShowing(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String& = "") os.Output {
+    o := Run(args, env, dir)
+    if o.Stderr.Len() > 0 { Warn(o.Stderr) }
+    return o
+}
+
+# the value of an environment variable, else fallback
+fn Env(name String&, fallback String&) String {
+    v := try os.Env(name) catch os.OsError { return $fallback }
+    if v.Len() > 0 { return $v }
+    return $fallback
+}
+
+# ---- text as rows ----
+
+# the rows of a text as awk reads them: split at each newline, the last row needing none, an empty text having none
+fn Rows(t String&) List<String&> {
+    rows := List<String&>()
+    at I64 = 0
+    for at < t.Len() {
+        nl := try t[at:].FindByte('\n') catch default (t.Len() - at)
+        rows.Push(t[at:at + nl])
+        at += nl + 1
+    }
+    return rows
+}
+
+# the rows joined, a newline after each
+fn Text(rows List<String&>&) String {
+    b := StringBuilder()
+    for r in rows {
+        b.Push(r)
+        b.PushChar('\n')
+    }
+    return b.ToString()
+}
+
+# the rows sorted by bytes (LC_ALL=C sort)
+fn Sorted(rows List<String&>&) List<String&> {
+    l := List<String&>()
+    for r in rows { l.Push(r) }
+    l.Sort(fn(a String&, b String&) Bool { return a < b })
+    return l
+}
+
+# where text starts after its first space, else the whole of it - awk's substr($0, index($0, " ") + 1)
+fn AfterSpace(t String&) String&t {
+    sp := try t.FindByte(' ') catch default -1
+    return t[sp + 1:]
+}
+
+# whether t is a nonempty run of digits
+fn IsNumber(t String&) Bool {
+    if t.Len() == 0 { return false }
+    for c in t {
+        if not c.IsDigit() { return false }
+    }
+    return true
+}
+
+# the whitespace-separated words of a row, as awk's fields are
+fn Fields(t String&) List<String&> {
+    f := List<String&>()
+    i I64 = 0
+    for i < t.Len() {
+        for i < t.Len() and (t[i] == ' ' or t[i] == '\t') { i++ }
+        s := i
+        for i < t.Len() and t[i] != ' ' and t[i] != '\t' { i++ }
+        if i > s { f.Push(t[s:i]) }
+    }
+    return f
+}
+
+# ---- files ----
+
+# a new scratch directory; the tool ends if there is none. Removing it is the caller's (Clean)
+fn Scratch(name String&) String& {
+    return try os.MkTemp("", $name ".") catch os.OsError {
+        Die($name ": no scratch directory")
+        unreachable
+    }
+}
+
+# removes a scratch directory
+fn Clean(dir String&) {
+    try os.RemoveAll(dir) catch os.OsError { }
+}
+
+# writes a file; the tool ends if it cannot
+fn Write(path String&, text String&) {
+    try os.WriteFile(path, text) catch os.OsError { Die("cannot write " $path) }
+}
+
+# reads a file; the tool ends if it cannot
+fn Read(path String&) String& {
+    return try os.ReadFile(path) catch os.OsError {
+        Die("cannot read " $path)
+        unreachable
+    }
+}
+
+# the files git tracks that match pattern ("*.olang"), sorted
+fn Tracked(pattern String&) List<String&> {
+    o := Run(String&["git", "ls-files", pattern])
+    return Sorted(Rows(o.Stdout))
+}
+
+# the names in dir that end in suffix, in byte order, each with dir/ before it; none for a directory that is not there
+fn Matching(dir String&, suffix String&) List<String&> {
+    l := List<String&>()
+    names := try os.ReadDir(dir) catch os.OsError { return l }
+    for n in names {
+        if n.EndsWith(suffix) { l.Push($dir "/" $n) }
+    }
+    return l
+}
+
+# the files of an acceptance tool's command line, else the default list
+fn FilesOr(args Array<String&>&, fallback List<String&>&) List<String&> {
+    l := List<String&>()
+    if args.Len() > 1 {
+        for i in range 1, args.Len() { l.Push(args[i]) }
+        return l
+    }
+    for f in fallback { l.Push(f) }
+    return l
+}
+
+# whether a tool is there to run (the file exists)
+fn Built(path String&) Bool {
+    return os.Exists(path)
+}
+
+# ---- comparing ----
+
+# diff(1)'s report of two texts, "" for none - the texts go through files in dir
+fn Diff(dir String&, a String&, b String&) String {
+    Write($dir "/diff.a", a)
+    Write($dir "/diff.b", b)
+    o := Run(String&["diff", $dir "/diff.a", $dir "/diff.b"])
+    return $o.Stdout
+}
+
+# the first n rows of a text
+fn Head(t String&, n I64) String {
+    out := StringBuilder()
+    k I64 = 0
+    for r in Rows(t) {
+        if k >= n { break }
+        out.Push(r)
+        out.PushChar('\n')
+        k++
+    }
+    return out.ToString()
+}
+
+# the rows of a diff report that are changes ("<" or ">")
+fn Changes(report String&) String {
+    out := StringBuilder()
+    for r in Rows(report) {
+        if r.StartsWith("<") or r.StartsWith(">") {
+            out.Push(r)
+            out.PushChar('\n')
+        }
+    }
+    return out.ToString()
+}
+
+# how many "== " headers a rendering holds - one for each file a dump tool was given
+fn Sections(t String&) I64 {
+    n I64 = 0
+    for r in Rows(t) {
+        if r.StartsWith("== ") { n++ }
+    }
+    return n
+}
+
+test "rows are awk's" {
+    assert Rows("a\nb\n").Len() == 2
+    assert Rows("a\nb").Len() == 2
+    assert Rows("").Len() == 0
+    assert Rows("a\n\n").Len() == 2
+    assert Rows("a\n\n")[1] == ""
+    assert Text(Rows("x\ny")) == "x\ny\n"
+}
+
+test "fields split on runs of blanks" {
+    f := Fields("  a  b\tc ")
+    assert f.Len() == 3
+    assert f[2] == "c"
+    assert AfterSpace("12 catch") == "catch"
+    assert AfterSpace("catch") == "catch"
+}
+
+test "sorting is by bytes" {
+    s := Sorted(Rows("b\nB\na\n"))
+    assert s[0] == "B"
+    assert s[2] == "b"
+}

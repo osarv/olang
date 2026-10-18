@@ -1,0 +1,42 @@
+# check: run
+# flags: -debug -sanitize
+# Vec phase 2a review vec7 F1: what the same-path move still allows - both reads of the own slot in the one statement,
+# by a variable that is no global and then fields only: through an owner value local, and through a reference local
+# repointed only after the statement (nothing in a statement repoints a local between its reads)
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+    more Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+    next mut Parser& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn shift(p mut Parser&) { p.lx.more = take p.lx.toks }
+fn main() ? {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-in-p's-region") }
+    p.lx.more = take p.lx.toks
+    a mut Parser& = Parser()
+    a.lx = Lexer()
+    a.next = Parser()
+    a.next.lx = Lexer()
+    for i in range 3 { a.next.lx.toks.Push($i "-in-the-second-region") }
+    c mut Parser& = a.next
+    c.lx.more = take c.lx.toks
+    c = a
+    c.lx.toks.Push("first")
+    shift(c)
+    churn()
+    assert p.lx.more.Len() == 3 and p.lx.toks.Len() == 0 and p.lx.more[2] == "2-in-p's-region"
+    assert a.next.lx.more[0] == "0-in-the-second-region" and a.next.lx.toks.Len() == 0
+    assert a.lx.more.Len() == 1 and a.lx.more[0] == "first"
+}

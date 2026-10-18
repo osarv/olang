@@ -8,9 +8,12 @@
 //function value holds the function it names.
 enum ctKind { CT_INT, CT_FLOAT, CT_BOOL, CT_AGG, CT_NULL, CT_REF, CT_FUNC };
 
+//the one copy of a value's type every value of that type shares (struct ctVal's type)
+const struct type* CtType(struct type t);
+
 struct ctVal {
     enum ctKind kind;
-    struct type type;
+    const struct type* type; //CtType's copy, one for every value of its type, never written through
     long long i;          //CT_INT (also a payload-free enum's ordinal), CT_BOOL
     double f;             //CT_FLOAT - a narrower type's NaN with its payload at the top of the double's (E33)
     bool nanExact;        //CT_FLOAT, E33: a NaN whose sign and payload are its own - made from bits, or written in the
@@ -85,7 +88,7 @@ bool CtIsPlainData(struct ctVal* v);
 bool CtIsZero(struct ctVal* v);
 
 //B3e: "-i" - runs mainFunc (and every global's initializer before it, imports first) as the built program would,
-//performing what compile-time evaluation refuses; returns the process's exit status. done/fail and a failed check
+//performing what compile-time evaluation refuses; returns the process's exit status. os.Exit and a failed check
 //end the process from inside, as they would there. argv (argc of them) is the program's command line (B3f), the
 //file first
 int CtRunProgram(struct var* mainFunc, int argc, char** argv);

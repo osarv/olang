@@ -2,7 +2,7 @@
 # item 3).
 #
 # compiler/goldens/diag.txt is what stage 0 (build/out) printed for every checks/cases program that must fail to
-# compile, captured by compiler/tools/diaggold_capture.sh. Each row there - "path:line:col: error[RULE]: text", a note,
+# compile, captured by compiler/tools/diaggold_capture.olang. Each row there - "path:line:col: error[RULE]: text", a note,
 # a file's or the compilation's - is read back into a record (the span from its line, column and caret, the rule, the
 # text) and reported to diag again, and what diag renders must be the case's output byte for byte: the rows, their
 # order, the source lines, the carets and the summary. -e is held to stage 0 the same way, for every rule msgs.olang
@@ -11,6 +11,7 @@
 import "std/os"
 import "../diag"
 import "../msgs"
+import "std/io"
 
 # a case's golden output, row by row, and what diag makes of it
 type golden struct(name String&, text String&) {
@@ -160,14 +161,14 @@ fn check(c golden&) String {
 
 test "diag renders stage 0's diagnostics on every checks/cases program byte for byte" {
     all := try os.ReadFile("compiler/goldens/diag.txt") catch default ""
-    assert all.Len() > 0, "no compiler/goldens/diag.txt - run compiler/tools/diaggold_capture.sh"
+    assert all.Len() > 0, "no compiler/goldens/diag.txt - run make diaggold"
     bad := 0
     count := 0
     for c in cases(all) {
         count++
         why := check(c)
         if why.Len() > 0 {
-            eprintln($c.name ": " $why)
+            try io.PrintErrln($c.name ": " $why) catch io.IoError { }
             bad++
         }
     }
@@ -202,18 +203,18 @@ test "-e prints each rule a message names as stage 0 does" {
     count := 0
     for r in rules(src) {
         count++
-        os.Run($os.Quote(olang) " -e " $r " > " $os.Quote($out "/e.txt") " 2>&1")
+        os.Run($os.Quote(olang) " explain " $r " > " $os.Quote($out "/e.txt") " 2>&1")
         want := try os.ReadFile($out "/e.txt") catch default ""
         got := try diag.Explain(spec, r) catch default "(none)"
         if got != want {
-            eprintln("-e " $r ": differs")
+            try io.PrintErrln("-e " $r ": differs") catch io.IoError { }
             bad++
         }
     }
     # a first letter in lowercase is read as uppercase; a rule the specification does not state is a usage error
-    os.Run($os.Quote(olang) " -e t6b > " $os.Quote($out "/e.txt") " 2>&1")
+    os.Run($os.Quote(olang) " explain t6b > " $os.Quote($out "/e.txt") " 2>&1")
     assert try diag.Explain(spec, "t6b") catch default "" == try os.ReadFile($out "/e.txt") catch default "-"
-    os.Run($os.Quote(olang) " -e Q99 > " $os.Quote($out "/e.txt") " 2>&1")
+    os.Run($os.Quote(olang) " explain Q99 > " $os.Quote($out "/e.txt") " 2>&1")
     nowhere := false
     try diag.Explain(spec, "Q99") catch { nowhere = true }
     assert nowhere

@@ -1,5 +1,5 @@
 # check: run
-# flags: -s
+# flags: -sanitize
 # P2: a task's callee hands on a callback parameter it reassigned to one that builds - every task gets its stand-ins,
 # so the four never share an arena (C7b)
 type Node struct(v I64) {

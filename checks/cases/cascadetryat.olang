@@ -1,10 +1,16 @@
-# check: fail error[E31a]: Box has only the checked form of this operation, TryAt - write it under 'try'
+# check: fail error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
 # also: compilation failed with 1 error
-# a type with only the checked form, indexed without 'try': one error, not one more for every later index in the chain
+# E31a: a type with only the checked form is an error at the form, not again at every index in the chain
 type Box struct() {
     n I64 = 0
 }
-fn (b Box&) TryAt(i I64) Box&b ? { return b }
+error Gone {
+    AWAY
+}
+fn (b Box&) CheckedAt(i I64) Box&b ? {
+    if i < 0 { error Gone.AWAY }
+    return b
+}
 fn main() ? {
     b := Box()
     c := b[0][1][2]

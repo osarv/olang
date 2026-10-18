@@ -22,5 +22,5 @@ Spun I64 = spin(1)
 Big I64 = big(100000000)
 Grown I64 = grow(1)
 fn main() ? {
-    if Spun + Grown + Big == 100000003 { done }
+    if Spun + Grown + Big == 100000003 { return }
 }

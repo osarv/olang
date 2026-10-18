@@ -1,6 +1,7 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c: a callback handed to a higher-order function over what the receiver reaches - the callback's own body is
 # asked about the scope it is called with, directly and through a helper passing it on
+import "std/io"
 type Bag struct(words Array<String&>&) {
     words
 }
@@ -23,6 +24,6 @@ fn (b Bag2&) Str() String {
     return "n" $n
 }
 fn main() ? {
-    println($Bag(String&["ab", "c"]))
-    println($Bag2(String&["ab", "c"]))
+    try io.Println($Bag(String&["ab", "c"]))
+    try io.Println($Bag2(String&["ab", "c"]))
 }

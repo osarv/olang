@@ -2,6 +2,7 @@
 # vec5 R2b: what stays legal - a scope naming a borrow whose region is live: a typed local and a scope argument before
 # the
 # release, and in a loop a borrow taken again each turn before its region is replaced
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -31,5 +32,5 @@ fn main() ? {
         c.text = $i "-replaced"
     }
     assert c.text == "2-replaced"
-    println("ok")
+    try io.Println("ok")
 }

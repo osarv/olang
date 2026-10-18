@@ -1,5 +1,6 @@
-# check: fail error[O39]: calling 'grow' may release the Array<I64> borrowed on line 10
+# check: fail error[O39]: calling 'grow' may release the Array<I64> borrowed on line 11
 # Vec phase 1 (f1d's shape, O38/O39): a Vec's view lent to a callee that grows the same Vec
+import "std/io"
 fn grow(v mut Vec<I64>&, d Array<I64>&) I64 {
     for i in range 100 { v.Push(i) }
     return d[0]
@@ -7,5 +8,5 @@ fn grow(v mut Vec<I64>&, d Array<I64>&) I64 {
 fn main() ? {
     v := Vec<I64>()
     v.Push(4)
-    println($grow(v, v.View()))
+    try io.Println($grow(v, v.View()))
 }

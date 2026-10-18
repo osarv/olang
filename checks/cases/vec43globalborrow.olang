@@ -1,6 +1,7 @@
 # check: fail error[O1b]: a global holds only what lives as long as the program
 # vec3 F4: a borrow of a global's own object is in the object's region, which may be released at any time - not the
 # program's scope
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -20,5 +21,5 @@ fn main() ? {
     remember()
     rename()
     churn()
-    println(Current)
+    try io.Println(Current)
 }

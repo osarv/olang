@@ -1,6 +1,10 @@
 # E11b/E11c: joins reaching a Str in a lambda, a global initializer, a destructor, defer, a match block, constructors,
 # a catch
 # default, tasks and a for condition
+import "std/io"
+error Stop {
+    HERE
+}
 type Big struct(n I64) {
     n
 }
@@ -13,7 +17,7 @@ fn (b Big&) Str() String {
 G String& = $Big(1) "g"
 type Res struct(k I64) {
     k
-} destruct { println("dtor " $Big(k) "!") }
+} destruct { try io.Println("dtor " $Big(k) "!") catch io.IoError { } }
 type Holder struct(k I64) {
     k
     t String& = $Big(k) "h"
@@ -27,33 +31,33 @@ type Holder2 struct(k I64) {
     }
 }
 fn fails(k I64) String ? {
-    if k > 0 { error }
+    if k > 0 { error Stop.HERE }
     return "ok"
 }
 fn main() ? {
     f := fn(k I64) I64 { s := $Big(k) "lam"
         return s.Len() }
-    println($f(3) " " $G.Len())
+    try io.Println($f(3) " " $G.Len())
     {
         r := Res(4)
-        defer { println("defer " $Big(5) "!") }
+        defer { try io.Println("defer " $Big(5) "!") catch io.IoError { } }
         match r.k {
             case 4 {
                 x := $Big(6) "m"
-                println(x)
+                try io.Println(x)
             }
             nomatch { }
         }
     }
     h := Holder(7)
     h2 := Holder2(8)
-    println($h.t " " $h2.t)
+    try io.Println($h.t " " $h2.t)
     d := try fails(1) catch default $Big(9) "d"
-    println(d)
+    try io.Println(d)
     out := Array<I64>(2)
     join { for k in range 2 { spawn out[k] = f(10 + k) } }
-    println($out)
+    try io.Println($out)
     i I64 = 0
     for ($Big(11) " " $i).Len() > 0 and i < 3 { i++ }
-    println($i)
+    try io.Println($i)
 }

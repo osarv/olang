@@ -1,0 +1,29 @@
+# bench/repro/opt.olang NAME - builds bench/repro/NAME.olang and writes the whole-program optimized IR (what link-time
+# optimization hands to code generation) to bench/repro/build/NAME.opt.ll, for reading what a reproducer's loop became.
+# From the repository root:
+#
+#   build/out build bench/repro/opt.olang && build/bench_repro_opt closure_call
+#
+# OLANG=PATH names the compiler to build with (default build/out).
+
+import "std/os"
+import "../benchlib"
+
+fn main() {
+    args := os.Args()
+    if args.Len() < 2 { benchlib.Fail("usage: opt NAME", 1) }
+    name := $args[1]
+    dir := "bench/repro"
+    olang := benchlib.Compiler()
+    benchlib.MustQuietly(String&[olang, "build", $name ".olang"], dir)
+    others := benchlib.Objects(dir, String&[".main.ll", ".opt.ll"])
+    try os.MkDirAll($dir "/build/lto") catch os.OsError { benchlib.Fail("cannot make " $dir "/build/lto", 1) }
+    link := List<String&>()
+    for a in String&["clang", "-O3", "-flto", "-o", "build/lto/" $name, "build/" $name ".main.ll"] { link.Push($a) }
+    for o in others { link.Push($o) }
+    for a in String&["-lm", "-lpthread", "-Wl,-plugin-opt=save-temps"] { link.Push($a) }
+    benchlib.Must(link.ToArray(), dir)
+    benchlib.Must(String&["llvm-dis", "build/lto/" $name ".0.5.precodegen.bc", "-o", "build/" $name ".opt.ll"], dir)
+    try os.RemoveAll($dir "/build/lto") catch os.OsError { }
+    benchlib.Say("build/" $name ".opt.ll\n")
+}

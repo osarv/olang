@@ -2,6 +2,7 @@
 # that block closes, once per iteration - leaves only its text there: the builder grows in a scope of its own, closed once
 # the text is copied where the join lands (grown in that block, what it outgrew stayed beside the text: 64 bytes, then
 # 1000, then 2000 for 1001 bytes of text, four times the memory)
+import "std/io"
 type Big struct(n I64) {
     n
 }
@@ -14,5 +15,5 @@ fn main() ? {
     b := Big(1)
     i I64 = 0
     for ($b " " $i).Len() > 0 and i < 50000 { i++ }
-    println($i)
+    try io.Println($i)
 }

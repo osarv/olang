@@ -1,5 +1,5 @@
 // astdump FILE... - the C parser's structure, the oracle the self-hosted parser is compared with (compiler/DESIGN.md
-// section 4, compiler/tools/astdiff.sh). For each file: "== FILE", one line per declaration and statement anywhere in its
+// section 4, compiler/tools/astdiff.olang). For each file: "== FILE", one line per declaration and statement anywhere in its
 // syntax tree - "KIND LINE:COL-LINE:COL", the span of its tokens (statement ends left out), the end just past its last
 // token - then the diagnostics the tokenizer and the parser reported, as the compiler writes them, after "-- diagnostics".
 //
@@ -269,10 +269,7 @@ static const char* kindOf(enum syntaxType t) {
         case SNTX_STMNT_DEFER: return "DEFER";
         case SNTX_STMNT_BREAK: return "BREAK";
         case SNTX_STMNT_CONTINUE: return "CONTINUE";
-        case SNTX_STMNT_ABORT: return "ABORT";
         case SNTX_STMNT_UNREACHABLE: return "UNREACHABLE";
-        case SNTX_STMNT_DONE: return "DONE";
-        case SNTX_STMNT_FAIL: return "FAIL";
         case SNTX_STMNT_ASSERT: return "ASSERT";
         case SNTX_STMNT_ERROR: return "RAISE";
         case SNTX_STMNT_TRY_CATCH: return "TRY";

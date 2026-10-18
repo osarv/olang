@@ -3,7 +3,7 @@
 type Shape trait {
     Area() I32
 }
-fn (s <S Shape>&) Twice() I32 { return s.Area() * 2 }
+fn (s S&) Twice<S Shape>() I32 { return s.Area() * 2 }
 type Sq struct(n I32) {
     n
 }

@@ -7,7 +7,7 @@ type Cell struct() {
 type Bag struct(c mut Cell&) {
     c
 }
-fn id(x <T>) T { return x }
+fn id<T>(x T) T { return x }
 fn bump(c mut Cell&) { c.v++ }
 fn (b Bag&) Str() String {
     bump(id(b.c))

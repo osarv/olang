@@ -1,0 +1,12 @@
+# check: fail error[E12]: expected fn(n I64) I64 ? LE.EMPTY, found fn(n I64) I64 ? LE.GONE
+# R1c/T22: a function value fits a type whose set holds every word it can fail with
+error LE {
+    EMPTY
+    GONE
+}
+fn g(n I64) I64 ? LE.GONE {
+    if n == 0 { error LE.GONE }
+    return n
+}
+fn run(f fn(n I64) I64 ? LE.EMPTY) I64 { return try f(0) catch default 3 }
+fn main() { x := run(g) }

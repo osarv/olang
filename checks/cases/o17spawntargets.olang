@@ -1,6 +1,7 @@
 # check: fail error[O17]: this value's references live where its own storage does not
 # O17/P1g: a spawn with several targets stores each result as an assignment would - "spawn b.head.next, k = two()" is a
 # store into the lent value's region, as the single-target form and a destructuring are
+import "std/io"
 type Node struct() {
     next mut Node& = null
     v I64 = 0
@@ -38,5 +39,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    println($w.b.head.next.v)
+    try io.Println($w.b.head.next.v)
 }

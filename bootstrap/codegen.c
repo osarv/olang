@@ -120,8 +120,9 @@ struct cgJoinFail { char* head; char* lbl; char* slot; };
 
 struct cgCtorOwner { char* slot; struct type t; }; //O35/N6: a constructor's own field, held by its frame until assembly
 
+struct cgFnValue { struct var* f; struct list* errs; }; //D16/R1b: errs NULL when the function's own
 struct cgCtx {
-    struct list fnValues; //D16: struct var* - named functions used as values, each needing a static closure
+    struct list fnValues; //D16: struct cgFnValue - named functions used as values, each needing an adapter
     //B2e: -d's DWARF metadata. Collected into dbgOut and appended to the module at the end; every id
     //comes from dbgNext, which starts far above anything the TBAA metadata uses.
     bool debug;
@@ -151,6 +152,7 @@ struct cgCtx {
     //(globals, the program-main wrapper, the test harness's own non-per-test code), where "own" is never
     //reachable (checked in semantic.c via ctx->hasOwnScope) so this is never read there.
     char* ownScopeSlot;
+    char* testPassLbl; //S16: while a test body is emitted, where a "return" in it goes - the test passed
     //O2: one arena per BLOCK. ownScopeSlot is the body's own (depth 1); blockSlots holds the open nested
     //ones, innermost last, so blockSlots[d-2] is depth d's. A bare "&" resolves by the depth its type
     //recorded, never by "innermost" - "r = Box(7)" inside an if must allocate where r was DECLARED, or the
@@ -566,14 +568,8 @@ int errorTypeOrdinal(struct type funcType, struct type errType) {
 //packs (typeOrdinal, wordOrdinal) into the single i32 code a fallible function's return communicates.
 //wordOrdinal is itself local to errType's own declaration (see OperandErrorLiteral) - so this whole value
 //is computable from two single declarations and needs zero whole-program coordination
-static bool cgFuncIsBareFallible(struct type funcType) {
-    return funcType.errors.len == 1
-           && TypeIsSame(**(struct type**)ListGetIdx(&funcType.errors, 0), *SemanticGenericErrorType());
-}
 
 long long errorCode(struct type funcType, struct type errType, long long wordOrdinal) {
-    //R17: a bare "?" function fails with its default error, whatever the failure inside it was
-    if (cgFuncIsBareFallible(funcType)) return 1LL << 16;
     long long typeOrdinal = errorTypeOrdinal(funcType, errType);
     return (typeOrdinal << 16) | wordOrdinal;
 }
@@ -829,7 +825,7 @@ static void cgCloseOwnScopeWithError(struct cgCtx* ctx) {
 }
 
 void cgCloseOwnScope(struct cgCtx* ctx) {
-    //nothing to emit after a terminator: a body ending in "done"/"fail" already left via __olang_end, so
+    //nothing to emit after a terminator: a body ending in "unreachable" or a noreturn call already left, so
     //these closes would land after an "unreachable" in the same basic block - invalid IR, and the block
     //that followed would have no terminator before its label. (Under a test the scopes are still closed:
     //the longjmp lands on the harness's unwind block, which closes them there.)
@@ -1133,14 +1129,8 @@ static void cgRetErrorCode(struct cgCtx* ctx, const char* code) {
     cgEmitRet(ctx, wrapTy, v);
 }
 
+static void cgTrace(struct cgCtx* ctx, struct operand* op, const char* what, bool raise);
 void cgPropagateError(struct cgCtx* ctx, struct type calleeType, char* code) {
-    //R17: through a bare "?" function, any error leaves as that function's own default error
-    if (cgFuncIsBareFallible(ctx->curFunc->type)) {
-        cgCloseOwnScopeWithError(ctx);
-        cgRetErrorCode(ctx, "65536"); //(1 << 16) | 0: the default error, its one word
-        ctx->terminated = true;
-        return;
-    }
     char* calleeOrd = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = lshr i32 %s, 16\n", calleeOrd, code);
 
@@ -2405,8 +2395,8 @@ char* cgIndexAddr(struct cgCtx* ctx, struct operand* op) {
         strcpy(idxTy, "i64");
     }
 
-    //E16: an ordinary index is NOT checked at run time - the same reading C gives it. E16d's "try a[i]" is
-    //the opt-in: it asks for the check and takes the failure as the bare error, so a checked access is
+    //E16: an ordinary index is NOT checked at run time - the same reading C gives it. E16d's "checked a[i]" is
+    //the opt-in: it asks for the check and takes the failure as BuiltinError.OUT_OF_BOUNDS, so a checked access is
     //visible both where it is written and in the enclosing signature. What is free stays free either way -
     //a constant index into a fixed-size array is settled at compile time (see OperandIndex), and a SLICE
     //is still always checked (E16b) because that cost is per slice expression, never per element access.
@@ -3338,8 +3328,13 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
                                      a->type, av, bv);
         if (op->opType == OPERATION_DIV || op->opType == OPERATION_MOD) {
             char* z;
-            if (isF) z = cgFcmp(ctx, "oeq", aty, bv, "0.0");
-            else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
+            if (isF) { //IEEE's division by zero: a finite nonzero dividend - 0/0 and NaN/0 are INVALID or NaN, inf/0 exact
+                char* bz = cgFcmp(ctx, "oeq", aty, bv, "0.0");
+                char* aFin = cgIsFinite(ctx, aty, av);
+                char* aNz = cgFcmp(ctx, "one", aty, av, "0.0");
+                char* an = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", an, aFin, aNz);
+                z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = and i1 %s, %s\n", z, bz, an);
+            } else { z = cgNewTmp(ctx); fprintf(ctx->fnOut, "  %s = icmp eq %s %s, 0\n", z, aty, bv); }
             cgFailIf(ctx, op, z, "DIVIDE_BY_ZERO");
             if (!isF && !isU) { //the most negative value by -1: the true quotient is one past the maximum
                 char minv[32];
@@ -3355,7 +3350,7 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
             char* tooFar = cgNewTmp(ctx);
             //unsigned compare: a negative amount reads as huge, so one compare covers both ends
             fprintf(ctx->fnOut, "  %s = icmp uge %s %s, %s\n", tooFar, bty, bv, wv);
-            cgFailIf(ctx, op, tooFar, "INVALID");
+            cgFailIf(ctx, op, tooFar, "OUT_OF_BOUNDS"); //QO6: the amount is a position in the value
         }
         if (isF && (op->opType == OPERATION_ADD || op->opType == OPERATION_SUB || op->opType == OPERATION_MUL
                     || op->opType == OPERATION_DIV)) {
@@ -3401,6 +3396,15 @@ char* cgBinaryOp(struct cgCtx* ctx, struct operand* op) {
     if (instr && !strcmp(aty, "bfloat")) return cgBF16Arith(ctx, instr, av, bv);
     if (instr) {
         fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", r, instr, aty, av, bv);
+        //QO6: "<<" checked - set bits shifted out, the true value x * 2^n not fitting, is OVERFLOW: shifted back, it is
+        //not what it was
+        if (op->checkRoot && op->opType == OPERATION_BTSFT_L) {
+            char* back = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = %s %s %s, %s\n", back, isU ? "lshr" : "ashr", aty, r, bv);
+            char* lost = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = icmp ne %s %s, %s\n", lost, aty, back, av);
+            cgFailIf(ctx, op, lost, "OVERFLOW");
+        }
         return r;
     }
 
@@ -3550,27 +3554,60 @@ static char* cgClosure(struct cgCtx* ctx, struct operand* op, char* sym) {
 }
 
 void cgEmitParamList(FILE* out, struct var* func, bool named);
-static char* cgFuncValue(struct cgCtx* ctx, struct var* f, char* sym) {
+static char* cgReencodeInto(FILE* out, const char* code, struct list* from, struct list* to, const char* pfx);
+//R1b: whether two error lists are one, in order - else a named function's value, fitted to a function type naming more
+//errors or the same ones in another order, re-encodes its codes for that type in an adapter of its own
+static bool cgSameErrs(struct list* a, struct list* b) {
+    if (a->len != b->len) return false;
+    for (int i = 0; i < a->len; i++)
+        if (!TypeIsSame(**(struct type**)ListGetIdx(a, i), **(struct type**)ListGetIdx(b, i))) return false;
+    return true;
+}
+//...the adapter's name: the function's, then a hash of the list it re-encodes for
+static char* cgFnValueName(char* sym, struct var* f, struct list* errs) {
+    if (!errs || cgSameErrs(errs, &f->type.errors)) return StrFmt("%s.fvt", sym);
+    unsigned long long h = 1469598103934665603ULL;
+    for (int i = 0; i < errs->len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(errs, i);
+        struct str parts[2] = { e->owner ? e->owner->identity : (struct str){0}, e->name };
+        for (int k = 0; k < 2; k++) {
+            for (int c = 0; c < parts[k].len; c++) h = (h ^ (unsigned char)parts[k].ptr[c]) * 1099511628211ULL;
+            h = (h ^ 0xFF) * 1099511628211ULL;
+        }
+    }
+    return StrFmt("%s.fvt.%016llx", sym, h);
+}
+
+static char* cgFuncValue(struct cgCtx* ctx, struct var* f, char* sym, struct list* errs) {
     if (f->isLambda && f->lambdaCaptures.len) return NULL; //made by cgClosure instead
     if (f->isLambda) return cgFnPair(ctx, sym, "null"); //its code takes the (absent) environment already
-    char* code = MallocOrCrash(strlen(sym) + 8);
-    sprintf(code, "%s.fvt", sym);
+    if (errs && cgSameErrs(errs, &f->type.errors)) errs = NULL;
+    char* code = cgFnValueName(sym, f, errs);
     bool have = false;
-    for (int i = 0; i < ctx->fnValues.len && !have; i++) have = *(struct var**)ListGetIdx(&ctx->fnValues, i) == f;
-    if (!have) ListAdd(&ctx->fnValues, &f);
+    for (int i = 0; i < ctx->fnValues.len && !have; i++) {
+        struct cgFnValue* v = ListGetIdx(&ctx->fnValues, i);
+        have = v->f == f && (v->errs == errs || (v->errs && errs && cgSameErrs(v->errs, errs)));
+    }
+    struct cgFnValue v = { f, errs };
+    if (!have) ListAdd(&ctx->fnValues, &v);
     return cgFnPair(ctx, code, "null");
 }
 
 //D16: the adapters of every named function this object used as a value
 void cgEmitFuncValues(struct cgCtx* ctx) {
     for (int i = 0; i < ctx->fnValues.len; i++) {
-        struct var* f = *(struct var**)ListGetIdx(&ctx->fnValues, i);
+        struct cgFnValue* fv = ListGetIdx(&ctx->fnValues, i);
+        struct var* f = fv->f;
         char sym[256];
         mangleFuncSym(f, sym, sizeof(sym));
-        char retTy[256];
-        llvmFuncRetType(f->type, retTy, sizeof(retTy));
+        char retTy[256], fRetTy[256];
+        llvmFuncRetType(f->type, fRetTy, sizeof(fRetTy));
+        struct type tt = f->type;
+        if (fv->errs) tt.errors = *fv->errs;
+        llvmFuncRetType(tt, retTy, sizeof(retTy));
         bool outFirst = cgRetViaMemory(f->type); //its result's storage comes before the closure, as at every call
-        fprintf(ctx->out, "define linkonce_odr %s %s.fvt(%sptr %%closure", retTy, sym, outFirst ? "ptr %out, " : "");
+        fprintf(ctx->out, "define linkonce_odr %s %s(%sptr %%closure", retTy, cgFnValueName(sym, f, fv->errs),
+                outFirst ? "ptr %out, " : "");
         struct cgBuf params = {0};
         for (int k = 0; k < f->type.scopeVars.len; k++) cgBufAdd(&params, ", ptr %%sarg%d", k);
         struct cgBuf args = {0};
@@ -3585,8 +3622,26 @@ void cgEmitFuncValues(struct cgCtx* ctx) {
         }
         fprintf(ctx->out, "%s) {\nentry:\n", cgBufStr(&params));
         char* argsText = cgBufStr(&args);
-        if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n  ret void\n}\n\n", sym, argsText);
-        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n  ret %s %%r\n}\n\n", retTy, sym, argsText, retTy);
+        if (strcmp(fRetTy, "void") == 0) fprintf(ctx->out, "  call void %s(%s)\n", sym, argsText);
+        else fprintf(ctx->out, "  %%r = call %s %s(%s)\n", fRetTy, sym, argsText);
+        bool aggregate = f->type.hasRetType && !outFirst;
+        if (!fv->errs) {
+            if (strcmp(retTy, "void") == 0) fprintf(ctx->out, "  ret void\n}\n\n");
+            else fprintf(ctx->out, "  ret %s %%r\n}\n\n", retTy);
+        } else if (f->type.errors.len == 0) { //R1b: what cannot fail, as a type that can - its code 0
+            if (!aggregate) fprintf(ctx->out, "  ret i32 0\n}\n\n");
+            else {
+                char rt[256];
+                llvmType(*f->type.retType, rt, sizeof(rt));
+                fprintf(ctx->out, "  %%w = insertvalue %s undef, i32 0, 0\n  %%w2 = insertvalue %s %%w, %s %%r, 1\n"
+                        "  ret %s %%w2\n}\n\n", retTy, retTy, rt, retTy);
+            }
+        } else { //R1b: its codes, re-encoded for the type's list (R6)
+            if (aggregate) fprintf(ctx->out, "  %%c = extractvalue %s %%r, 0\n", fRetTy);
+            char* nc = cgReencodeInto(ctx->out, aggregate ? "%c" : "%r", &f->type.errors, fv->errs, "fv");
+            if (!aggregate) fprintf(ctx->out, "  ret i32 %s\n}\n\n", nc);
+            else fprintf(ctx->out, "  %%r2 = insertvalue %s %%r, i32 %s, 0\n  ret %s %%r2\n}\n\n", fRetTy, nc, fRetTy);
+        }
     }
 }
 
@@ -3786,6 +3841,10 @@ static char* cgCallTargetAndArgs(struct cgCtx* ctx, struct operand* op, struct l
         if (!argBuilds) ctx->capReadOnly++; //P2: where a temporary would be built, and nothing is
         char* scopeOverride = cgResolveParamScopeOverride(ctx, func, op, paramT);
         if (!argBuilds) ctx->capReadOnly--;
+        //O17b: a handle a call gave, lent as its reference - the variable bound where that leads; the handle's own copy
+        //is a temporary of this block (the callee uses it only through its reference)
+        if ((argOp->handleLent || argOp->splitLent) && !OperandIsLvalue(argOp) && !argOp->type.structMAlloc)
+            scopeOverride = cgScopeSlotAt(ctx, ctx->blockDepth);
         //C2d: a constructor parameter whose reference names no scope fills a field of the instance, so
         //an argument with no storage of its own is built where the instance lands
         if (ctor && ((!scopeOverride && !paramT.scopeParam)
@@ -3837,6 +3896,16 @@ char* cgFuncCall(struct cgCtx* ctx, struct operand* op) {
     if (promoted) ctx->promotedOp = NULL;
     char* v = cgFuncCallValue(ctx, op);
     struct var* func = op->readVar;
+    //D8e: control never comes back from a noreturn call - what follows is a block nothing reaches, where the value the
+    //call stands for (it fits any type) is poison
+    if (func && func->type.bType == BASETYPE_FUNC && func->type.noReturn) {
+        fputs("  unreachable\n", ctx->fnOut);
+        char dead[32];
+        snprintf(dead, sizeof(dead), "noret.%d", ctx->lblCtr++);
+        ctx->terminated = true;
+        cgLabel(ctx, dead);
+        return op->type.bType == BASETYPE_VOID ? "" : "poison";
+    }
     //O35: an owning type's instance no promotion and no owner value local takes ("$Buf(4)", "Buf(4).n") likewise, its
     //owners released as that scope closes - one moved to an owner (ownMoved) is that owner's
     if (promoted || !cgIsCtor(func) || op->type.bType != BASETYPE_STRUCT || op->type.structMAlloc
@@ -3930,6 +3999,7 @@ static char* cgFuncCallValue(struct cgCtx* ctx, struct operand* op) {
             fputs("  unreachable\n", ctx->fnOut);
             ctx->terminated = true;
         } else {
+            cgTrace(ctx, root, "try passed it on", false);
             cgPropagateError(ctx, func->type, code);
         }
     }
@@ -4643,8 +4713,8 @@ static char* cgToI64(struct cgCtx* ctx, struct operand* v) {
 
 //E16/E16b: what happens when a bounds check fails. Without "try" this is the same hard abort a failed
 //assert produces - __olang_check_failed never returns (it longjmps out of the enclosing test under -t and
-//aborts otherwise), so nothing ever continues with an out-of-range access. With "try" (E16c/E16d) it
-//propagates the bare error under THIS function's own signature instead, which is the same encode-and-return
+//aborts otherwise), so nothing ever continues with an out-of-range access. With "checked" (E16c/E16d) it
+//propagates BuiltinError.OUT_OF_BOUNDS under THIS function's own signature instead, which is the same encode-and-return
 //an "error" statement performs: there is no callee whose code would need decoding first.
 //Shared by the slice and index checks, which differ only in what they compare.
 static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, char* badLbl, char* word,
@@ -4665,6 +4735,7 @@ static void cgCheckFailed(struct cgCtx* ctx, struct operand* op, char* okLbl, ch
     int wordOrd = SemanticBuiltinErrorWord(word);
     ctx->staticErrType = builtin;
     ctx->staticErrWord = wordOrd;
+    if (op->catchClauses.len || op->isTried) cgTrace(ctx, op, "raised here", true); //S18d: a checked operation failed
     if (op->catchClauses.len && !cgCatchDispatch(ctx, op, &op->catchClauses, NULL, NULL, op->cgEndLbl)) {
         //R9b: a clause took the error - its default stands in for the result
     } else if (op->isTried) {
@@ -4775,7 +4846,7 @@ static char* cgIsAs(struct cgCtx* ctx, struct operand* op) {
         snprintf(badLbl, sizeof(badLbl), "as.bad.%d", id);
         fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", hit, okLbl, badLbl);
         ctx->terminated = true;
-        cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "INVALID",
+        cgCheckFailed(ctx, op->checkRoot ? op->checkRoot : op, okLbl, badLbl, "WRONG_CASE",
                       cgCheckMsg(ctx, op, "'as' named what the value is not"));
     }
     //the payload: in place behind a reference, else spilled - then its one field, or all of them as several results
@@ -4978,13 +5049,14 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
         cgBufAdd(b, " ");
         rdSpellTypeB(*f.retType, b);
     }
-    //R16: the default error is spelled by the "?" itself, and never by name
-    int written = 0;
+    if (f.noReturn) cgBufAdd(b, " noreturn"); //D8e
+    //R1a: an inferred set is rendered as what it was found to be
     if (f.errors.len) cgBufAdd(b, " ?");
     for (int i = 0; i < f.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&f.errors, i);
-        if (TypeIsSame(*e, *SemanticGenericErrorType())) continue;
-        cgBufAdd(b, "%s%.*s", written++ ? " + " : " ", e->name.len, e->name.ptr);
+        char item[2048];
+        ErrSpellItems(*e, item, sizeof(item)); //R1c: "T", or the words it names
+        cgBufAdd(b, "%s%s", i ? " + " : " ", item);
     }
     rdSigDepth--;
 }
@@ -5100,6 +5172,8 @@ char* RdSpelled(struct type t) { //the same, in storage of its own (freed by the
 void RdSpellSig(struct type f, char* buf, size_t n) { rdSpellSig(f, buf, n); }
 //a type as a diagnostic names it (errmsg.c's "%t")
 void DiagSpellType(struct type t, char* buf, size_t n) {
+    if (t.bType == BASETYPE_VOID) { snprintf(buf, n, "no value"); return; } //a call returning nothing, never a type
+    if (t.bType == BASETYPE_ERROR && t.errWords) { ErrSpellItems(t, buf, n); return; } //R1c: the words an error set names
     rdForDiag = true;
     t.refMut = false; //a reference's own permission is T25c's to report, in words - inner levels' are part of the type
     rdSpellType(t, buf, n);
@@ -5209,7 +5283,7 @@ static void rdPutNumber(struct cgCtx* ctx, struct type t, char* addr) {
 }
 
 //a scope of an expression's own, opened in the code being emitted and closed by cgScratchScopeClose before the expression is
-//done with - while a test runs it is on the unwind chain (P1d), so a "done", "fail" or failed check before the close still
+//done with - while a test runs it is on the unwind chain (P1d), so an "unreachable", a "!" or a failed check before the close still
 //reclaims it (and runs what was registered in it)
 static char* cgScratchScopeOpen(struct cgCtx* ctx, char** nodeOut, char** prevTopOut) {
     char* scope = cgNewTmp(ctx);
@@ -5243,7 +5317,7 @@ static void cgScratchScopeClose(struct cgCtx* ctx, char* scope, char* node, char
 
 //E11c: the text the type's own Str gives for the value at addr - called once, where the rendering reaches it, which is
 //only ever while one is built in one pass (a rendering reaching a Str always is). Its result lives in a scope of its
-//own, closed once the text is copied; while a test runs that scope is on the unwind chain (P1d), so a "done", "fail" or
+//own, closed once the text is copied; while a test runs that scope is on the unwind chain (P1d), so an "unreachable", a "!" or
 //failed check inside Str still runs what it registered. Where the receiver lives is not known in Str's body (O12), so
 //nothing is built there - the checker's walk (SemanticMayBuildInto) found nothing, and codegen holds every body to that
 //(cgCheckMayBuild) - and the receiver's scope variables are handed that same scope: a real one, which a closure's or an
@@ -5990,8 +6064,80 @@ static void cgTryDefaultStore(struct cgCtx* ctx, struct operand* op, struct oper
     cgBr(ctx, join);
 }
 
+//E35: "x!" took an error - the test, or the program, ends as a failed check does, its message the place and the error
+//("main.olang:4: io.IoError.FAILED"), picked by the code among the words of what failed (funcType's list; a bounds
+//check, which "!" never turns on, has no code)
+static char* cgCheckMsg(struct cgCtx* ctx, struct operand* op, const char* what);
+//S18d: the error return trace is kept in test builds and -d builds - where an error is raised (what, "raised here"
+//restarting it) or passed on, as a "FILE:LINE: what" line; nothing at all is emitted in any other build
+static void cgTrace(struct cgCtx* ctx, struct operand* op, const char* what, bool raise) {
+    if (!ctx->emitUnwind && !ctx->debug) return;
+    fprintf(ctx->fnOut, "  call void @__olang_ert_%s(ptr %s)\n", raise ? "raise" : "pass", cgCheckMsg(ctx, op, what));
+}
+
+//S18d: where no trace is kept, how to get one - after a "!"'s message
+static void cgTraceHint(struct cgCtx* ctx, char* text, size_t n) {
+    if (ctx->emitUnwind || ctx->debug) return;
+    size_t l = strlen(text);
+    snprintf(text + l, n - l, "\n(build with -debug to see where it came from)");
+}
+
+//E35/S16: the error a failure path holds, named as a program writes it: one of funcType's words picked by code, or the
+//static one a failed check raised (code NULL). located: "FILE:LINE: Type.WORD\n" at op, else "Type.WORD" alone
+static char* cgErrorName(struct cgCtx* ctx, struct operand* op, char* code, struct type* funcType, bool located) {
+    char* msg = located ? cgCheckMsg(ctx, op, "unhandled error") : cgGlobalStringConst(ctx, "unhandled error");
+    if (!code && ctx->staticErrType) {
+        struct token wt = *(struct token*)ListGetIdx(&ctx->staticErrType->words, ctx->staticErrWord);
+        char text[400];
+        snprintf(text, sizeof(text), "%.*s.%.*s", ctx->staticErrType->name.len, ctx->staticErrType->name.ptr,
+                 wt.str.len, wt.str.ptr);
+        if (located) cgTraceHint(ctx, text, sizeof(text));
+        return located ? cgCheckMsg(ctx, op, text) : cgGlobalStringConst(ctx, text);
+    }
+    for (int i = 0; code && funcType && i < funcType->errors.len; i++) {
+        struct type* e = *(struct type**)ListGetIdx(&funcType->errors, i);
+        int ord = errorTypeOrdinal(*funcType, *e);
+        //a type of another module is named by its alias's base name, as a program writes it - the prelude's bare
+        struct str q = (struct str){0};
+        if (e->owner && e->owner->identity.len && ctx->curMod && e->owner != ctx->curMod
+                && !(e->owner->identity.len >= 11 && !strncmp(e->owner->identity.ptr, "std/prelude", 11))) {
+            q = e->owner->identity;
+            for (int k = q.len - 1; k >= 0; k--)
+                if (q.ptr[k] == '/') { q.ptr += k + 1; q.len -= k + 1; break; }
+        }
+        for (int w = 0; w < e->words.len; w++) {
+            struct token wt = *(struct token*)ListGetIdx(&e->words, w);
+            char text[400];
+            snprintf(text, sizeof(text), "%.*s%s%.*s.%.*s", q.len, q.ptr, q.len ? "." : "", e->name.len, e->name.ptr,
+                     wt.str.len, wt.str.ptr);
+            if (located) cgTraceHint(ctx, text, sizeof(text));
+            char* candidate = located ? cgCheckMsg(ctx, op, text) : cgGlobalStringConst(ctx, text);
+            char* cmp = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = icmp eq i32 %s, %lld\n", cmp, code, ((long long)ord << 16) | w);
+            char* next = cgNewTmp(ctx);
+            fprintf(ctx->fnOut, "  %s = select i1 %s, ptr %s, ptr %s\n", next, cmp, candidate, msg);
+            msg = next;
+        }
+    }
+    return msg;
+}
+
+static void cgBangEnd(struct cgCtx* ctx, struct operand* op, char* code, struct type* funcType) {
+    fprintf(ctx->fnOut, "  call void @__olang_bang_failed(ptr %s)\n", cgErrorName(ctx, op, code, funcType, true));
+    fputs("  unreachable\n", ctx->fnOut);
+    ctx->terminated = true;
+}
+
+//S16: an error a try lets out of a test body fails the test - its FAIL line names the error, and the trace follows
+static void cgTestEscape(struct cgCtx* ctx, struct operand* op, char* code, struct type* funcType) {
+    cgTrace(ctx, op, "left the test", false);
+    fprintf(ctx->fnOut, "  call void @__olang_test_error(ptr %s)\n", cgErrorName(ctx, op, code, funcType, false));
+    fputs("  unreachable\n", ctx->fnOut);
+    ctx->terminated = true;
+}
+
 //R9b: the failure path of a try with catch clauses, tried in order. code is the error code, or NULL for a
-//failed bounds check, whose one possible error (the bare error) makes every match static. Each clause runs
+//failed bounds check, whose one possible error (OUT_OF_BOUNDS) makes every match static. Each clause runs
 //its block; one with a default then stores it as the try's value (value position), and a statement's clause
 //falling off its block continues after the statement (endLbl). Returns true when an error no clause names
 //can reach the current position, where the caller emits its propagation - which differs between a call and
@@ -6066,6 +6212,9 @@ static bool cgCatchDispatch(struct cgCtx* ctx, struct operand* op, struct list* 
             ctx->blockJoins.len = op->cgSlots;
             ctx->blockDepth = op->cgDepth;
         }
+        if (cc->ends == 2) cgTestEscape(ctx, op, code, funcType);
+        else if (cc->ends) cgBangEnd(ctx, op, code, funcType);
+        else if (ctx->emitUnwind || ctx->debug) fputs("  call void @__olang_ert_clear()\n", ctx->fnOut); //S18d: taken
         if (cc->hasBlock) cgBlock(ctx, &cc->block);
         if (cc->dflt) cgTryDefaultStore(ctx, op, cc->dflt);
         else if (endLbl) cgBr(ctx, endLbl);
@@ -6223,7 +6372,7 @@ char* cgValue(struct cgCtx* ctx, struct operand* op) {
             if (op->opType == OPERATION_READ_VAR && op->type.bType == BASETYPE_FUNC && !op->readVar->isGlobalVar
                     && !cgFindLocal(ctx, op->readVar->name)) {
                 if (op->readVar->isLambda && op->readVar->lambdaCaptures.len) return cgClosure(ctx, op, addr); //D16c
-                return cgFuncValue(ctx, op->readVar, addr);
+                return cgFuncValue(ctx, op->readVar, addr, &op->type.errors);
             }
             char* r = cgLoadOrAddr(ctx, op->type, addr, op->opType == OPERATION_INDEX);
             if (op->ownRegion && op->ownRegion->isRegion) cgOwnBorrowHeader(ctx, op, r); //O32
@@ -6443,6 +6592,23 @@ void cgSpawnTask(struct cgCtx* ctx, struct statement* s, struct list* merges) {
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", oldHead, nslot);
     fprintf(ctx->fnOut, "  store ptr %s, ptr %s\n", node, ctx->joinTaskHead);
 
+    //E35/P6: "spawn f(x)!" - what the call lets through ends the program from the task's thread, by a function of its own
+    //made here, before the trampoline: what it names is written as module constants, which no function body may hold
+    bool bangTask = false;
+    for (int c = 0; c < nClauses; c++) if (((struct catchClause*)ListGetIdx(&s->catchClauses, c))->ends) bangTask = true;
+    if (bangTask) {
+        char* body = NULL;
+        size_t bodyLen = 0;
+        FILE* prevOut = ctx->fnOut;
+        bool prevTerm = ctx->terminated;
+        ctx->fnOut = open_memstream(&body, &bodyLen);
+        cgBangEnd(ctx, op, "%code", &func->type);
+        fclose(ctx->fnOut);
+        ctx->fnOut = prevOut;
+        ctx->terminated = prevTerm;
+        fprintf(ctx->out, "define internal void @olang.taskbang.%d(i32 %%code) {\nentry:\n%s}\n\n", id, body);
+        free(body);
+    }
     //the trampoline, written straight to the module stream: pthread hands it one void* and wants one back
     fprintf(ctx->out, "define internal ptr @olang.task.%d(ptr %%env) {\nentry:\n", id);
     fprintf(ctx->out, "  %%fnslot = getelementptr %s, ptr %%env, i32 0, i32 0\n", envTy);
@@ -6529,9 +6695,12 @@ void cgSpawnTask(struct cgCtx* ctx, struct statement* s, struct list* merges) {
                 fprintf(ctx->out, "  br i1 %%m%d.%d, label %%clause.%d, label %%next.%d\n", c, k, c, c);
             }
             fprintf(ctx->out, "clause.%d:\n", c);
-            if (clauseIdx[c] >= 0) cgTaskCallClause(ctx->out, cc, argVal[clauseIdx[c]], argVal[clauseIdx[c] + 1],
-                                                    op->cgTaskResultArg ? argVal[op->cgTaskResultArg - 1] : NULL, nDst, dstIdx, c);
-            fputs("  ret ptr null\n", ctx->out);
+            if (cc->ends) fprintf(ctx->out, "  call void @olang.taskbang.%d(i32 %%code)\n  unreachable\n", id);
+            else {
+                if (clauseIdx[c] >= 0) cgTaskCallClause(ctx->out, cc, argVal[clauseIdx[c]], argVal[clauseIdx[c] + 1],
+                                                        op->cgTaskResultArg ? argVal[op->cgTaskResultArg - 1] : NULL, nDst, dstIdx, c);
+                fputs("  ret ptr null\n", ctx->out);
+            }
             if (!cc->catchAll) fprintf(ctx->out, "next.%d:\n", c);
         }
         if (!all) {
@@ -6601,6 +6770,8 @@ void cgJoin(struct cgCtx* ctx, struct statement* s) {
     struct type jt = (struct type){0};
     jt.errors = *s->joinErrors;
     struct operand at = (struct operand){0};
+    at.tok = s->startTok;
+    cgTrace(ctx, &at, "a task failed, and its join passed it on", true); //S18d: the task's own trace is its thread's
     if (!s->catchClauses.len || cgCatchDispatch(ctx, &at, &s->catchClauses, code, &jt, endLbl)) {
         if (ctx->curFunc) cgPropagateError(ctx, jt, code);
         else { fputs("  unreachable\n", ctx->fnOut); ctx->terminated = true; } //a test catches everything (R13)
@@ -6937,11 +7108,22 @@ static char* cgOwnDropFn(struct cgCtx* ctx, struct type t) {
     free(key.p);
     char* sym = cgBufStr(&symB);
     if (cgSymAlreadyEmitted(ctx, sym)) return sym;
+    //(a field holding an owning type by value - a Vec field - is released by that type's own drop, emitted first)
+    char** fieldDrops = MallocOrCrash(sizeof(char*) * (t.vars.len + 1));
+    for (int i = 0; i < t.vars.len; i++) {
+        struct var* f = ListGetIdx(&t.vars, i);
+        fieldDrops[i] = !f->type.refOwn && TypeIsOwnValue(f->type) ? cgOwnDropFn(ctx, f->type) : NULL;
+    }
     char agg[1024];
     structAggSpelling(keyT, agg, sizeof(agg));
     fprintf(ctx->out, "define linkonce_odr void %s(ptr %%inst, ptr %%scope) {\nentry:\n", sym);
     for (int i = t.vars.len - 1; i >= 0; i--) {
         struct var* f = ListGetIdx(&t.vars, i);
+        if (fieldDrops[i]) {
+            fprintf(ctx->out, "  %%f%d = getelementptr %s, ptr %%inst, i32 0, i32 %d\n", i, agg, i);
+            fprintf(ctx->out, "  call void %s(ptr %%f%d, ptr %%scope)\n", fieldDrops[i], i);
+            continue;
+        }
         if (!f->type.refOwn) continue;
         fprintf(ctx->out, "  %%f%d = getelementptr %s, ptr %%inst, i32 0, i32 %d\n", i, agg, i);
         if (cgOwnIsArray(f->type)) { //an own array: its buffer, the pointer half of the field's { len, ptr }
@@ -7059,11 +7241,12 @@ void cgAssign(struct cgCtx* ctx, struct statement* s) {
         cgOwnAssign(ctx, s);
         return;
     }
-    if (OwnValueLocalOf(s->target)) { //O35: an owner value local - the place, the new owner, the old owners released, the store
+    if (OwnValuePlace(s->target)) { //O35: an owner value place - the place, the new owner, the old owners released, the store
         struct type t = s->target->type;
         char* addr = cgAddr(ctx, s->target);
-        struct var* tv = canonicalVar(s->target->readVar);
-        char* scopeOverride = tv->valueHomeSet && !tv->refsHomeSet ? cgResolveScope(ctx, tv->valueHome, tv->valueHomeDepth) : NULL;
+        struct var* tv = OwnValueLocalOf(s->target);
+        char* scopeOverride = tv && tv->valueHomeSet && !tv->refsHomeSet ? cgResolveScope(ctx, tv->valueHome, tv->valueHomeDepth)
+                              : cgIsGlobalRead(s->target) ? cgProgramScope(ctx) : NULL;
         char ty[256];
         llvmType(t, ty, sizeof(ty));
         char* fresh = cgValueSlot(ctx, t, ty);
@@ -7429,6 +7612,7 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     bool fallible = ctx->curFunc && ctx->curFunc->type.errors.len > 0;
     if (!s->op) {
         cgCloseOwnScope(ctx);
+        if (!ctx->curFunc && ctx->testPassLbl) { cgBr(ctx, ctx->testPassLbl); return; } //S16: the test passed
         fputs(fallible ? "  ret i32 0\n" : "  ret void\n", ctx->fnOut);
         ctx->terminated = true;
         return;
@@ -7498,21 +7682,8 @@ void cgRet(struct cgCtx* ctx, struct statement* s) {
     ctx->terminated = true;
 }
 
-//exit is treated as a plain OS process exit (like C's exit()), unrelated to the function's declared error
-//list - see the report for why (this is an assumption about language semantics, not yet confirmed)
-//done/fail are a plain OS process exit with a fixed status, from anywhere - unrelated to the enclosing
-//function's declared error union on purpose (see the report: terminating the whole process is a
-//different operation from returning to a caller, same as Zig's/Rust's process-exit functions)
-void cgDone(struct cgCtx* ctx, struct statement* s) {
-    (void)s;
-    fputs("  call void @__olang_end(i32 0)\n", ctx->fnOut);
-    fputs("  unreachable\n", ctx->fnOut);
-    ctx->terminated = true;
-}
-
-//S16c/S16d: both go through the same path a failed check does - abort with a message outside a test,
-//recoverable inside one, exactly as "assert(false)" already behaved. That is the point: "abort" is
-//assert(false) with its intent stated, and "unreachable" states a different intent again.
+//S16d: "unreachable" goes through the same path a failed check does - abort with a message outside a test, recoverable
+//inside one
 //S18a: where a written check failed, as its message's prefix - "FILE:LINE: what" and then sep ("\n", or ": " before a
 //message of the program's own). A statement the compiler made has no line of its own, and says only what failed
 static char* cgCheckWhere(struct cgCtx* ctx, struct statement* s, const char* what, const char* sep) {
@@ -7549,13 +7720,6 @@ void cgAbortLike(struct cgCtx* ctx, struct statement* s, bool isUnreachable) {
     ctx->terminated = true;
 }
 
-void cgFail(struct cgCtx* ctx, struct statement* s) {
-    (void)s;
-    fputs("  call void @__olang_end(i32 1)\n", ctx->fnOut);
-    fputs("  unreachable\n", ctx->fnOut);
-    ctx->terminated = true;
-}
-
 //"assert EXPR" - a statement now, not a call (see the report); the failure path is shared with the
 //see std/runtime/runtime.ll for its longjmp-in-test-mode-else-hard-abort behavior
 void cgAssert(struct cgCtx* ctx, struct statement* s) {
@@ -7586,8 +7750,10 @@ void cgAssert(struct cgCtx* ctx, struct statement* s) {
 //word) into the single i32 code an unhandled caller checks (see errorCode/the report). No try/catch exists
 //yet, so this always genuinely returns to the caller now - the caller decides what "unhandled" means
 //(cgFuncCall's fallible path, currently a hard failure, same as a failed assert()).
+static void cgTrace(struct cgCtx* ctx, struct operand* op, const char* what, bool raise);
 void cgError(struct cgCtx* ctx, struct statement* s) {
     long long code = errorCode(ctx->curFunc->type, s->op->type, s->op->intLiteralVal);
+    cgTrace(ctx, NULL, "raised here", true); //S18d
     cgCloseOwnScopeWithError(ctx);
     char codeText[32];
     snprintf(codeText, sizeof(codeText), "%lld", code);
@@ -7637,6 +7803,7 @@ void cgTryCatch(struct cgCtx* ctx, struct statement* s) {
     //path is only reachable when some error is left unnamed, which the semantic layer allows only when the
     //enclosing function declares it.
     if (cgCatchDispatch(ctx, callOp, &s->catchClauses, code, &func->type, endLbl)) {
+        cgTrace(ctx, callOp, "try passed it on", false);
         cgPropagateError(ctx, func->type, code);
     }
 
@@ -7678,14 +7845,11 @@ static void cgStatementIn(struct cgCtx* ctx, struct statement* s) {
         case STATEMENT_DO: cgDo(ctx, s); return;
         case STATEMENT_MATCH: cgMatch(ctx, s); return;
         case STATEMENT_RET: cgRet(ctx, s); return;
-        case STATEMENT_ABORT: cgAbortLike(ctx, s, false); return;
         case STATEMENT_UNREACHABLE: cgAbortLike(ctx, s, true); return;
         case STATEMENT_BREAK: cgBreakOrContinue(ctx, true); return;
         case STATEMENT_CONTINUE: cgBreakOrContinue(ctx, false); return;
         case STATEMENT_JOIN: cgJoin(ctx, s); return;
         case STATEMENT_SPAWN: cgSpawn(ctx, s); return;
-        case STATEMENT_DONE: cgDone(ctx, s); return;
-        case STATEMENT_FAIL: cgFail(ctx, s); return;
         case STATEMENT_ASSERT: cgAssert(ctx, s); return;
         case STATEMENT_ERROR: cgError(ctx, s); return;
         case STATEMENT_TRY_CATCH: cgTryCatch(ctx, s); return;
@@ -7867,7 +8031,7 @@ static bool cgConstBytes(struct ctVal* v, struct type t, unsigned char* buf, lon
             if (v->kind != CT_AGG) return true;
             struct type c = ((struct var*)ListGetIdx(&t.vars, (int)v->i))->type;
             struct ctVal shape = *v;
-            shape.type = c;
+            shape.type = CtType(c);
             return cgConstBytes(&shape, c, buf + 8, ChoicePayloadSize(t));
         }
         case BASETYPE_STRUCT: {
@@ -8745,8 +8909,11 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     char mname[256];
     mangleFuncSym(mainFunc, mname, sizeof(mname));
 
-    char* code = cgNewTmp(ctx);
-    fprintf(ctx->fnOut, "  %s = call i32 %s()\n", code, mname);
+    char* code = "0"; //R1a: a main written "?" may turn out unable to fail
+    if (mainFunc->type.errors.len) {
+        code = cgNewTmp(ctx);
+        fprintf(ctx->fnOut, "  %s = call i32 %s()\n", code, mname);
+    } else fprintf(ctx->fnOut, "  call void %s()\n", mname);
     char* isErr = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = icmp ne i32 %s, 0\n", isErr, code);
     int id = ctx->lblCtr++;
@@ -8760,21 +8927,14 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     //pick the message matching this specific (declared error type, word) via a chain of selects, same
     //shape as cgPropagateError's ordinal remap - main's declared error set is small and fully known here
     char* msg = cgGlobalStringConst(ctx, "unhandled error\n"); //defensive fallback, never actually selected
-    struct type* genericErr = SemanticGenericErrorType();
     for (int i = 0; i < mainFunc->type.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&mainFunc->type.errors, i);
         int typeOrdinal = i +1;
         for (int w = 0; w < e->words.len; w++) {
             char text[300];
-            //the bare error (R19) carries no real type/word to name - print it plainly instead of the
-            //otherwise-generic "TypeName.word" shape, which would read as the redundant "error.error"
-            if (e == genericErr) {
-                snprintf(text, sizeof(text), "unhandled error\n"); //R19: the default error has no name
-            } else {
-                struct token wordTok = *(struct token*)ListGetIdx(&e->words, w);
-                snprintf(text, sizeof(text), "unhandled error: %.*s.%.*s\n",
-                    e->name.len, e->name.ptr, wordTok.str.len, wordTok.str.ptr);
-            }
+            struct token wordTok = *(struct token*)ListGetIdx(&e->words, w);
+            snprintf(text, sizeof(text), "unhandled error: %.*s.%.*s\n",
+                e->name.len, e->name.ptr, wordTok.str.len, wordTok.str.ptr);
             char* candidate = cgGlobalStringConst(ctx, text);
             long long exact = ((long long)typeOrdinal << 16) | w;
             char* cmp = cgNewTmp(ctx);
@@ -8787,6 +8947,10 @@ void cgProgramMain(struct cgCtx* ctx, struct semaModule* root) {
     char* errStream = cgNewTmp(ctx);
     fprintf(ctx->fnOut, "  %s = load ptr, ptr @stderr\n", errStream);
     fprintf(ctx->fnOut, "  call i32 @fputs(ptr %s, ptr %s)\n", msg, errStream);
+    //S18d: where it came from, in a build that keeps the trace; elsewhere how to get it
+    if (ctx->emitUnwind || ctx->debug) fprintf(ctx->fnOut, "  call void @__olang_ert_print(ptr %s)\n", errStream);
+    else fprintf(ctx->fnOut, "  call i32 @fputs(ptr %s, ptr %s)\n",
+                 cgGlobalStringConst(ctx, "(build with -debug to see where it came from)\n"), errStream);
     fputs("  ret i32 1\n", ctx->fnOut);
 
     cgLabel(ctx, okLbl);
@@ -8875,10 +9039,9 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         snprintf(passLbl, sizeof(passLbl), "test.pass.%d", id);
         snprintf(nextLbl, sizeof(nextLbl), "test.next.%d", id);
         snprintf(unwoundLbl, sizeof(unwoundLbl), "test.unwound.%d", id);
-        //0 is the first arrival; 2 is "done" (S16a), which ends the test as PASSED; anything else is a
-        //failure - a failed assert, a failed runtime check, or an explicit "fail"
-        fprintf(ctx->fnOut, "  switch i32 %s, label %%%s [ i32 0, label %%%s i32 2, label %%%s ]\n",
-                setjmpRes, unwoundLbl, runLbl, unwoundLbl);
+        //0 is the first arrival; anything else is a failure - a failed assert or check, unreachable, a "!", or an error
+        //leaving the test (S16)
+        fprintf(ctx->fnOut, "  switch i32 %s, label %%%s [ i32 0, label %%%s ]\n", setjmpRes, unwoundLbl, runLbl);
         ctx->terminated = true;
 
         //the landing block for every longjmp: sort passed from failed on the setjmp value.
@@ -8892,14 +9055,13 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
         //i.e. on the per-block path O2 just made hot. Left as a deliberate, costed decision rather than a
         //simplification nobody looked at.
         cgLabel(ctx, unwoundLbl);
-        char* wasDone = cgNewTmp(ctx);
-        fprintf(ctx->fnOut, "  %s = icmp eq i32 %s, 2\n", wasDone, setjmpRes);
-        fprintf(ctx->fnOut, "  br i1 %s, label %%%s, label %%%s\n", wasDone, passLbl, failLbl);
-        ctx->terminated = true;
+        cgBr(ctx, failLbl);
 
         cgLabel(ctx, runLbl);
         ctx->ownScopeSlot = testScope;
+        ctx->testPassLbl = passLbl;
         cgBlock(ctx, &t->codeBlock);
+        ctx->testPassLbl = NULL;
         cgCloseOwnScope(ctx);
         ctx->ownScopeSlot = NULL;
         cgBr(ctx, passLbl);
@@ -8923,7 +9085,14 @@ void cgTestHarnessMain(struct cgCtx* ctx, struct semaModule* root) {
             fprintf(ctx->fnOut, "  %s = add i32 %s, 1\n", fv2, fv);
             fprintf(ctx->fnOut, "  store i32 %s, ptr %s\n", fv2, failedSlot);
         }
-        emitTestResultPrint(ctx, t->description, false);
+        { //S16: the FAIL line, naming the error that ended the test when one did, and its trace
+            char cbuf[512];
+            int n = t->description.len < 500 ? t->description.len : 500;
+            memcpy(cbuf, t->description.ptr, (size_t)n);
+            cbuf[n] = '\0';
+            fprintf(ctx->fnOut, "  call void @__olang_test_failed(ptr %s)\n", cgGlobalStringConst(ctx, cbuf));
+            fputs("  call i32 @fflush(ptr null)\n", ctx->fnOut);
+        }
         cgBr(ctx, nextLbl);
 
         cgLabel(ctx, nextLbl);
@@ -9050,7 +9219,7 @@ void CodegenModule(struct semaModule* mod, char* outPath, enum cgEntry entry, bo
 
     ctx.debug = debug;
     ctx.bf16Opaque = debug || race;
-    ctx.fnValues = ListInit(sizeof(struct var*));
+    ctx.fnValues = ListInit(sizeof(struct cgFnValue));
     ctx.capScopes = ListInit(sizeof(struct cgCapScope));
     ctx.handed = ListInit(sizeof(struct cgHanded));
     ctx.staticLits = ListInit(sizeof(struct cgStaticLit));

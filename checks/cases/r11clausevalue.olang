@@ -4,15 +4,19 @@
 # never: error[S3]
 # R11: a catch clause in value position whose block ends in a value, as Rust or Kotlin write it, is one error saying to
 # give the value with "default" (study 4's r20)
+import "std/io"
+error Stop {
+    HERE
+}
 fn half(n I64) I64 ? {
-    if n % 2 != 0 { error }
+    if n % 2 != 0 { error Stop.HERE }
     return n / 2
 }
 fn main() ? {
     a := try half(3) catch {
-        eprintln("odd")
+        try io.PrintErrln("odd")
         -1
     }
     b := try half(5) catch { 0 }
-    println($a " " $b)
+    try io.Println($a " " $b)
 }

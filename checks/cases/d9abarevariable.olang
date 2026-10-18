@@ -1,9 +1,10 @@
 # check: fail error[D9a]: array parameter 'taps' is passed by reference - write Array<I16, N>&
 # D9a/G22: the suggestion writes a variable as the program does after its introduction - bare
+import "std/io"
 type Fir<N I64> struct(taps Array<I16, N>) {
     taps
 }
 fn main() ? {
     f := Fir<3>(I16[1, 2, 3])
-    println($f.taps.Len())
+    try io.Println($f.taps.Len())
 }

@@ -2,8 +2,9 @@
 # never: is not a function
 # never: this function returns
 # E11b: a parenthesized value after a piece of a join is a call of the piece, never what was meant
+import "std/io"
 fn a(tried Bool, op String&) String { return "(" $op (" try" if tried else "") }
 fn b(negated Bool) String { return "(is" (" not " if negated else " ") }
 fn main() ? {
-    println($a(true, "=") $b(false))
+    try io.Println($a(true, "=") $b(false))
 }

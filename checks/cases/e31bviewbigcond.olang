@@ -1,0 +1,25 @@
+# check: run
+# E31b/T7c (the review of the view lend, M1, recorded): an element over 64KB lent as a view in a loop's condition - At's
+# result and the view's hidden copy each come from the enclosing block's arena, which does not close while the loop
+# runs, so each turn keeps two 72KB copies until the loop ends; kept short here, it pins that it builds and runs
+type Big struct() {
+    a Array<I64, 9000> = Array<I64, 9000>()
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    big Big = Big()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V { return V(s.d, i) }
+fn put(v mut V&, x I64) I64 {
+    v.d[v.n] = v.d[v.n] + x
+    return v.d[v.n]
+}
+fn main() ? {
+    s := Vs(Array<I64>(8))
+    for put(s[0], 1) < 50 { }
+    assert s.d[0] == 50, $s.d[0]
+}

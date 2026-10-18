@@ -6,8 +6,8 @@ type Named trait {
 type Labelled trait {
     Name() I32
 }
-fn (n <N Named>) Shout() I32 { return n.Name() * 2 }
-fn (l <L Labelled>) Shout() I32 { return l.Name() * 3 }
+fn (n N) Shout<N Named>() I32 { return n.Name() * 2 }
+fn (l L) Shout<L Labelled>() I32 { return l.Name() * 3 }
 type P struct(v I32) {
     v
 }

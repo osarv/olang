@@ -1,0 +1,7 @@
+# check: fail error[D8e]: an operator's method cannot be 'noreturn'
+# D8e: an operator's method gives a value, so it cannot be noreturn
+type V struct(x I64) {
+    x
+}
+fn (a V) Plus(b V) noreturn { unreachable }
+fn main() { a := V(1) }

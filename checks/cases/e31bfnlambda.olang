@@ -1,0 +1,10 @@
+# check: fail x[i] gives a copy of the element, which this call would write
+# E31b (P1): l[0] for a writable reference parameter of a lambda called where it is written - a function value
+type Acc struct() {
+    N I64 = 0
+}
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    fn(c mut Acc&) { c.N++ }(l[0])
+}

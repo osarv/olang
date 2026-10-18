@@ -1,0 +1,7 @@
+# check: fail error[E13c]: the receiver of 'Fixed' is a number written as a literal
+# also: compilation failed with 1 error
+# L12/E13c: a second "." before a name is a member access on the float "2.5" (not a second decimal point, L12), and a
+# number written as a literal is no method's receiver
+fn main() ? {
+    assert 2.5.Fixed(1) == "2.5"
+}

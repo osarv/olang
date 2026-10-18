@@ -1,7 +1,8 @@
 # check: fail error[T17]: FileKind has no case 'Other' - did you mean 'OTHER'?
 # T17/B11: an unknown case gets the nearest case's name
 import "std/os"
+import "std/io"
 fn main() ? {
     k := os.FileKind.Other
-    println($k)
+    try io.Println($k)
 }

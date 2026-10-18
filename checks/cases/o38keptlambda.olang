@@ -1,5 +1,6 @@
 # check: fail error[O38]: this argument borrows an own object, and the callee may keep it beyond the call
 # O38: ...a lambda capturing it, pushed into a List of function values
+import "std/io"
 type Leaf struct(n I64) {
     n
     text String& = "leaf" $n
@@ -19,5 +20,5 @@ fn main() ? {
     fs := List<fn() I64>()
     fs.Push(fn() I64 { return b.o.deep.text.Len() })
     v.o = null
-    println($fs[0]())
+    try io.Println($fs[0]())
 }

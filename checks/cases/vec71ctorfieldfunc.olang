@@ -1,6 +1,7 @@
 # check: fail error[C2d]: this instance holds a reference to an argument it would outlive
 # vec5 (r2a_ctor_field_no_own_function): the same instance made through a function - the function's result keeps its
 # argument (C2d, O10c)
+import "std/io"
 type H struct(x String&, n I64) {
     y String&x = $n "-new-text-in-x's-scope"
 }
@@ -12,7 +13,7 @@ fn main() ? {
         h = mk(t)
     }
     churn()
-    println(h.y)
+    try io.Println(h.y)
 }
 fn churn() I64 {
     t := 0

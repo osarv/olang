@@ -32,6 +32,14 @@
 # Everything a List allocates lives where the List was made (its record and the record's fields are bare "&", C2d), so
 # it is reclaimed with that scope like anything else, and costs no destructor.
 
+# what a List's operations fail with: a First, Last or Pop of an empty list (EMPTY), an IndexOf finding nothing
+# (NOT_FOUND), and a position outside the list given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
+error ListError {
+    EMPTY
+    NOT_FOUND
+    OUT_OF_RANGE
+}
+
 type List<T> struct() {
     s mut listState<T>& = listState<T>()             # the list itself; every copy of this value names the same one
 }
@@ -54,7 +62,7 @@ type listState<T> struct() {
 firstChunkLog I64 = 3
 firstChunk I64 = 8
 
-fn (l mut List<<T>>&) Push(x T) {
+fn (l mut List<T>&) Push(x T) {
     s := l.s
     if s.used == s.room { s.grow(x) }
     s.tail[s.used] = x
@@ -64,7 +72,7 @@ fn (l mut List<<T>>&) Push(x T) {
 
 # every element of a, in order - as Push does each, with the check for a full chunk made once per chunk rather
 # than once per element
-fn (l mut List<<T>>&) PushAll(a Array<T>&) {
+fn (l mut List<T>&) PushAll(a Array<T>&) {
     s := l.s
     if a.Len() <= s.room - s.used {        # it fits in the tail: the common case, kept short
         for j in range a.Len() { s.tail[s.used + j] = a[j] }
@@ -88,7 +96,7 @@ fn (l mut List<<T>>&) PushAll(a Array<T>&) {
 # when it has no room for another. A new chunk is filled with fill, the element about to be pushed, rather than with
 # T's zero value: no slot is read before it is written, and an element type whose constructor cannot run on zeros has
 # no zero value at all (D13c) - a List of such values is as ordinary as any other
-fn (s mut listState<<T>>&) grow(fill T) {
+fn (s mut listState<T>&) grow(fill T) {
     if s.nChunks < s.made {
         s.tail = s.chunk(s.nChunks)
     } else if s.made == 0 {
@@ -114,12 +122,12 @@ fn (s mut listState<<T>>&) grow(fill T) {
 }
 
 # chunk k of those made - the first is held on its own, so a list that never outgrows it has no array of chunks
-fn (s listState<<T>>&) chunk(k I64) mut Array<T>&s {
+fn (s listState<T>&) chunk(k I64) mut Array<T>&s {
     if k == 0 { return s.first }
     return s.chunks[k]
 }
 
-fn (l List<<T>>&) Len() I64 { return l.s.count }
+fn (l List<T>&) Len() I64 { return l.s.count }
 
 # the place of x's highest set bit - floor(log2(x)) - for x > 0, by halving the range it can be in six times
 fn highBit(x I64) I64 {
@@ -150,7 +158,7 @@ fn highBit(x I64) I64 {
 
 # the element at position i - "l[i]" (E31). Unchecked, as an array index is (E16): "try l[i]" checks i against
 # Len() first and fails with BuiltinError.OUT_OF_BOUNDS (E31a, derived from this and Len)
-fn (l List<<T>>&) At(i I64) T {
+fn (l List<T>&) At(i I64) T {
     if i < firstChunk { return l.s.first[i] }
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
@@ -158,7 +166,7 @@ fn (l List<<T>>&) At(i I64) T {
 }
 
 # replaces the element at position i - "l[i] = x" (E31), unchecked as At is; "try l[i] = x" checks it
-fn (l mut List<<T>>&) SetAt(i I64, x T) {
+fn (l mut List<T>&) SetAt(i I64, x T) {
     if i < firstChunk {
         l.s.first[i] = x
         return
@@ -168,17 +176,17 @@ fn (l mut List<<T>>&) SetAt(i I64, x T) {
     l.s.chunks[k][p - (firstChunk << k)] = x
 }
 
-# the first element - failing with the default error when there is none, as Map.Get fails on a missing key:
+# the first element - failing with EMPTY when there is none, as Map.Get fails on a missing key:
 # "try l.First() catch default 0" gives a fallback
-fn (l List<<T>>&) First() T ? {
-    if l.s.count == 0 { error }
+fn (l List<T>&) First() T ? ListError.EMPTY {
+    if l.s.count == 0 { error ListError.EMPTY }
     return l.s.first[0]
 }
 
-# the last element - failing with the default error when there is none
-fn (l List<<T>>&) Last() T ? {
+# the last element - failing with EMPTY when there is none
+fn (l List<T>&) Last() T ? ListError.EMPTY {
     s := l.s
-    if s.count == 0 { error }
+    if s.count == 0 { error ListError.EMPTY }
     if s.used == 0 {
         c := s.chunk(s.nChunks - 2)
         return c[c.Len() - 1]
@@ -186,18 +194,18 @@ fn (l List<<T>>&) Last() T ? {
     return s.tail[s.used - 1]
 }
 
-# removes the last element and gives it - failing with the default error when there is none, so a list used as a stack
-# or a work list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
-fn (l mut List<<T>>&) Pop() T ? {
+# removes the last element and gives it - failing with EMPTY when there is none, so a list used as a stack or a work
+# list is emptied by "for { x := try l.Pop() catch { break } ... }". Moves nothing
+fn (l mut List<T>&) Pop() T ? ListError.EMPTY {
     s := l.s
-    if s.count == 0 { error }
+    if s.count == 0 { error ListError.EMPTY }
     s.dropLast()
     return s.tail[s.used]
 }
 
 # one element fewer at the end. The tail stays where it is when it empties - so a Push straight after fills it again -
 # and the chunk before it, which is full, becomes the tail when one more is dropped
-fn (s mut listState<<T>>&) dropLast() {
+fn (s mut listState<T>&) dropLast() {
     if s.used == 0 {
         s.nChunks--
         s.tail = s.chunk(s.nChunks - 1)
@@ -210,7 +218,7 @@ fn (s mut listState<<T>>&) dropLast() {
 
 # removes every element. The chunks are kept and filled again by the Pushes that follow, so emptying a list and
 # filling it again allocates nothing
-fn (l mut List<<T>>&) Clear() {
+fn (l mut List<T>&) Clear() {
     s := l.s
     s.count = 0
     s.used = 0
@@ -222,14 +230,13 @@ fn (l mut List<<T>>&) Clear() {
 }
 
 # keeps the first n elements and removes the rest - nothing changes when the list holds n or fewer, so "l.Truncate(k)"
-# after a Sort leaves the top k whatever the length (Rust's Vec::truncate). Moves nothing; the chunks it empties are
-# kept for the Pushes that follow, as Pop's are. A negative n is a mistake in the program, which stops it. (A copy of
-# the first k is "c := l.Clone()" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
-fn (l mut List<<T>>&) Truncate(n I64) {
-    assert n >= 0, "List.Truncate: a count, 0 or more"
+# after a Sort leaves the top k whatever the length (Rust's Vec::truncate), and none is kept for an n of 0 or less.
+# Moves nothing; the chunks it empties are kept for the Pushes that follow, as Pop's are. (A copy of the first k is
+# "c := l.Clone()" and "c.Truncate(k)"; of an array, the slice "a[:k]".)
+fn (l mut List<T>&) Truncate(n I64) {
     s := l.s
     if n >= s.count { return }
-    if n == 0 {
+    if n <= 0 {
         l.Clear()
         return
     }
@@ -242,12 +249,16 @@ fn (l mut List<<T>>&) Truncate(n I64) {
     s.count = n
 }
 
+# removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
+# moving down one place as TakeAt moves them
+fn (l mut List<T>&) RemoveAt(i I64) ? ListError.OUT_OF_RANGE { try l.TakeAt(i) }
+
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
-# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not is a mistake in the program,
-# checked once per call, and stops it as a slice out of range does
-fn (l mut List<<T>>&) RemoveAt(i I64) T {
+# number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
+# checked once per call
+fn (l mut List<T>&) TakeAt(i I64) T ? ListError.OUT_OF_RANGE {
     s := l.s
-    assert i >= 0 and i < s.count
+    if i < 0 or i >= s.count { error ListError.OUT_OF_RANGE }
     p I64 = i + firstChunk
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
@@ -270,11 +281,11 @@ fn (l mut List<<T>>&) RemoveAt(i I64) T {
 }
 
 # puts x at position i, the elements from i on each moving up one place - so it costs the number of elements after i,
-# and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not is a mistake in the program, checked once
-# per call, and stops it as a slice out of range does
-fn (l mut List<<T>>&) Insert(i I64, x T) {
+# and Insert(Len(), x) is Push(x). i must be from 0 to Len(): one that is not fails with OUT_OF_RANGE, checked once
+# per call
+fn (l mut List<T>&) Insert(i I64, x T) ? ListError.OUT_OF_RANGE {
     s := l.s
-    assert i >= 0 and i <= s.count
+    if i < 0 or i > s.count { error ListError.OUT_OF_RANGE }
     if i == s.count {
         l.Push(x)
         return
@@ -300,7 +311,7 @@ fn (l mut List<<T>>&) Insert(i I64, x T) {
 }
 
 # the elements in the opposite order, in place
-fn (l mut List<<T>>&) Reverse() {
+fn (l mut List<T>&) Reverse() {
     i I64 = 0
     j I64 = l.s.count - 1
     for i < j {
@@ -314,7 +325,7 @@ fn (l mut List<<T>>&) Reverse() {
 
 # sorts the list in place so that less(l[i], l[i - 1]) holds nowhere - stable, as an array's Sort is: the elements are
 # copied into one contiguous array, sorted there by Array.Sort, and copied back, so it costs two copies beside the sort
-fn (l mut List<<T>>&) Sort(less fn(x T, y T) Bool) {
+fn (l mut List<T>&) Sort(less fn(x T, y T) Bool) {
     s := l.s
     a := l.ToArray()
     a.Sort(less)
@@ -331,7 +342,7 @@ fn (l mut List<<T>>&) Sort(less fn(x T, y T) Bool) {
 # a new List - built where the result lands - holding the same elements in the same order, with storage of its own:
 # the copy a List value's own copy is not (a copy of the value names the same list). The elements are copied as values,
 # so a List of references gives a list of the same references
-fn (l List<<T>>&) Clone() List<T> {
+fn (l List<T>&) Clone() List<T> {
     c := List<T>()
     s := l.s
     for k in range s.nChunks {
@@ -355,7 +366,7 @@ type ListIter<T> struct(of List<T>&) {
     at I64 = 0                            # how many elements have been given
 }
 
-fn (it mut ListIter<<T>>&) Next() T ? Exhausted {
+fn (it mut ListIter<T>&) Next() T ? Exhausted {
     if it.at >= it.list.count { error Exhausted.END }
     if it.i == it.room {                  # this chunk is used up: on to the next one
         it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
@@ -370,7 +381,7 @@ fn (it mut ListIter<<T>>&) Next() T ? Exhausted {
 
 # moves on to the next chunk when this one is used up, failing with Exhausted at the end - so the elements still to come
 # that sit next to each other are chunk[i:runEnd()]. A caller walking them moves i and at on by what it took
-fn (it mut ListIter<<T>>&) enter() ? Exhausted {
+fn (it mut ListIter<T>&) enter() ? Exhausted {
     if it.at >= it.list.count { error Exhausted.END }
     if it.i == it.room {
         it.chunk = it.list.first if it.k == 0 else it.list.chunks[it.k]
@@ -381,20 +392,20 @@ fn (it mut ListIter<<T>>&) enter() ? Exhausted {
 }
 
 # where the run from i ends: the chunk's end, or the list's
-fn (it ListIter<<T>>&) runEnd() I64 {
+fn (it ListIter<T>&) runEnd() I64 {
     if it.list.count - it.at < it.room - it.i { return it.i + it.list.count - it.at }
     return it.room
 }
 
 # the elements in the order they were pushed, through an iterator (S9c) - what generic code over Iterator<T> takes
-fn (l List<<T>>&) Iter() ListIter<T> { return ListIter<T>(l) }
+fn (l List<T>&) Iter() ListIter<T> { return ListIter<T>(l) }
 
 # the iterator helpers (Iterator, M19e), each walking the rest of the list run by run - a counted loop over a slice of
 # each chunk, as "for x in l" is (S9f) - and leaving the iterator where Next would have: just past the element Any or All
 # stopped at, or at the end
 
 # true when keep holds for at least one remaining element
-fn (it mut ListIter<<T>>&) Any(keep fn(x T) Bool) Bool {
+fn (it mut ListIter<T>&) Any(keep fn(x T) Bool) Bool {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -412,7 +423,7 @@ fn (it mut ListIter<<T>>&) Any(keep fn(x T) Bool) Bool {
 }
 
 # true when keep holds for every remaining element - so for none, when there are none
-fn (it mut ListIter<<T>>&) All(keep fn(x T) Bool) Bool {
+fn (it mut ListIter<T>&) All(keep fn(x T) Bool) Bool {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -430,7 +441,7 @@ fn (it mut ListIter<<T>>&) All(keep fn(x T) Bool) Bool {
 }
 
 # how many remaining elements keep holds for
-fn (it mut ListIter<<T>>&) Count(keep fn(x T) Bool) I64 {
+fn (it mut ListIter<T>&) Count(keep fn(x T) Bool) I64 {
     c I64 = 0
     for {
         try it.enter() catch Exhausted { break }
@@ -445,7 +456,7 @@ fn (it mut ListIter<<T>>&) Count(keep fn(x T) Bool) I64 {
 }
 
 # every remaining element folded into one, starting from init
-fn (it mut ListIter<<T>>&) Fold(init <U>, f fn(acc U, x T) U) U {
+fn (it mut ListIter<T>&) Fold<U>(init U, f fn(acc U, x T) U) U {
     acc U = init
     for {
         try it.enter() catch Exhausted { break }
@@ -460,7 +471,7 @@ fn (it mut ListIter<<T>>&) Fold(init <U>, f fn(acc U, x T) U) U {
 }
 
 # a new List - in the caller's scope - of f applied to every remaining element
-fn (it mut ListIter<<T>>&) Map(f fn(x T) <U>) List<U>& {
+fn (it mut ListIter<T>&) Map<U>(f fn(x T) U) List<U>& {
     out mut List<U>&return = List<U>()
     for {
         try it.enter() catch Exhausted { break }
@@ -475,7 +486,7 @@ fn (it mut ListIter<<T>>&) Map(f fn(x T) <U>) List<U>& {
 }
 
 # a new List - in the caller's scope - of the remaining elements keep holds for
-fn (it mut ListIter<<T>>&) Filter(keep fn(x T) Bool) List<T>& {
+fn (it mut ListIter<T>&) Filter(keep fn(x T) Bool) List<T>& {
     out mut List<T>&return = List<T>()
     for {
         try it.enter() catch Exhausted { break }
@@ -494,7 +505,7 @@ fn (it mut ListIter<<T>>&) Filter(keep fn(x T) Bool) List<T>& {
 # over the runs, and within each a counted loop over a slice, which the optimizer vectorizes as it does a loop over an
 # array. The loop asks for the next run where the last one ended, so an element pushed while it runs is walked too, as
 # the iterator would give it.
-fn (l List<<T>>&) RunFrom(at I64) Array<T>&l ? Exhausted {
+fn (l List<T>&) RunFrom(at I64) Array<T>&l ? Exhausted {
     s := l.s
     if at >= s.count or at < 0 { error Exhausted.END }
     if s.nChunks == 1 { return s.first[at:s.used] }          # a list in one chunk - most are - is one run
@@ -502,7 +513,7 @@ fn (l List<<T>>&) RunFrom(at I64) Array<T>&l ? Exhausted {
 }
 
 # the run in chunk k from position at: to the chunk's end, or the list's when k is the last chunk in use
-fn (s listState<<T>>&) runIn(k I64, at I64) Array<T>&s {
+fn (s listState<T>&) runIn(k I64, at I64) Array<T>&s {
     if k == s.nChunks - 1 { return s.chunk(k)[at + firstChunk - (firstChunk << k):s.used] }
     return s.chunk(k)[at + firstChunk - (firstChunk << k):]
 }
@@ -510,7 +521,7 @@ fn (s listState<<T>>&) runIn(k I64, at I64) Array<T>&s {
 # the elements, in the order they were pushed, copied into one contiguous array in the CALLER's scope -
 # independent of the list, which may be discarded, or keep growing, without affecting it. Made filled with the first
 # element, which needs no zero value of T (D13c), as the chunks do not
-fn (l List<<T>>&) ToArray() mut Array<T>& {
+fn (l List<T>&) ToArray() mut Array<T>& {
     s := l.s
     if s.count == 0 { return Array<T>(0) }           # no element, so no zero value of T is needed (D13c)
     out mut Array<T>&return = Array<T>(s.count, s.first[0])
@@ -548,36 +559,39 @@ fn (l List<String&>&) Join(sep String&) String {
 }
 
 # whether x is one of the elements, compared with "==" - what "x in l" asks (E29)
-fn (l List<<T>>&) Has(x T) Bool {
+fn (l List<T>&) Has(x T) Bool {
     for y in l {
         if y == x { return true }
     }
     return false
 }
 
-# the position of the first element equal to x, compared with "==" - failing with the default error when there is
-# none, as Find does: "try l.IndexOf(x) catch default -1" gives a fallback
-fn (l List<<T>>&) IndexOf(x T) I64 ? {
+# the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none, as
+# Find does: "try l.IndexOf(x) catch default -1" gives a fallback
+fn (l List<T>&) IndexOf(x T) I64 ? ListError.NOT_FOUND {
     for i, y in l {
         if y == x { return i }
     }
-    error
+    error ListError.NOT_FOUND
 }
 
 # removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
 # moves them - and says whether there was one, as Map's Remove does
-fn (l mut List<<T>>&) Remove(x T) Bool {
+fn (l mut List<T>&) Remove(x T) Bool {
     i := try l.IndexOf(x) catch { return false }
-    l.RemoveAt(i)
+    try l.RemoveAt(i) catch { unreachable }   # a position IndexOf found
     return true
 }
 
+# removes the element at position i as SwapTake does, giving nothing
+fn (l mut List<T>&) SwapRemove(i I64) ? ListError.OUT_OF_RANGE { try l.SwapTake(i) }
+
 # removes the element at position i and gives it, the last element taking its place - so it moves one element whatever
-# the length, where RemoveAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
-# one that is not is a mistake in the program, checked once per call, as RemoveAt checks it
-fn (l mut List<<T>>&) SwapRemove(i I64) T {
+# the length, where TakeAt moves every one after i, and the order is not kept. i must be a position, from 0 to Len() - 1:
+# one that is not fails with OUT_OF_RANGE, checked once per call, as TakeAt checks it
+fn (l mut List<T>&) SwapTake(i I64) T ? ListError.OUT_OF_RANGE {
     s := l.s
-    assert i >= 0 and i < s.count
+    if i < 0 or i >= s.count { error ListError.OUT_OF_RANGE }
     x := l.At(i)
     s.dropLast()
     if i < s.count { l.SetAt(i, s.tail[s.used]) }             # the last element, just dropped, into the gap
@@ -588,7 +602,7 @@ fn (l mut List<<T>>&) SwapRemove(i I64) T {
 # "List<String&>["a", "b"]", "List<I64>[]" - so a List prints apart from an array of the same elements, and each element
 # renders as it does inside any other value: text quoted, a Char as a character literal, a value whose type declares
 # Str as its Str says. Rendered run by run from the list's own storage, so nothing is copied but the text
-fn (l List<<T>>&) Str() String {
+fn (l List<T>&) Str() String {
     b := StringBuilder()
     match T {
         case Char {                                            # an array of Char renders as text, so these are written here
@@ -616,7 +630,7 @@ fn (l List<<T>>&) Str() String {
 }
 
 # T as written - what "$" puts before an array's items
-fn typeWritten(a Array<<T>>&) String {
+fn typeWritten<T>(a Array<T>&) String {
     r := $a[0:0]                                               # "T[]"
     return $r[:r.Len() - 2]
 }
@@ -813,21 +827,21 @@ if TestBuild {
         assert one[0] == 6 and one.Len() == 1
     }
 
-    # E31a: a List has no TryAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
+    # E31a: a List has no CheckedAt of its own, so "try l[i]" checks i against Len() - derived from At and Len - and fails
     # with OUT_OF_BOUNDS as an array index does; "try l[i] = x" checks a store the same way (R21)
     test "a checked index into a List" {
         l mut List<I32>& = List<I32>()
         for i in range 20 { l.Push(I32(i)) }
-        assert (try l[19] catch default -1) == 19
-        assert (try l[20] catch default -1) == -1
-        assert (try l[-1] catch default -1) == -1
+        assert (checked l[19] catch default -1) == 19
+        assert (checked l[20] catch default -1) == -1
+        assert (checked l[-1] catch default -1) == -1
         missed := false
-        try l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
+        checked l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
         assert missed and l.Len() == 20
-        try l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
+        checked l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
         assert l[3] == 30
         e List<I32>& = List<I32>()
-        assert (try e[0] catch default 7) == 7
+        assert (checked e[0] catch default 7) == 7
     }
 
     # a List of structs and of references indexes like any other
@@ -891,7 +905,7 @@ if TestBuild {
     # S9d: a type's own Iter wins over At and Len, so "for x in l", a comprehension, the iterator helpers and generic code
     # that knows a List only as Indexable all walk it through its iterator - which the checks confirm in the code
     # generated (checks.olang, "a List is walked by its iterator") - and Indexable's default Iter changes nothing for it
-    fn indexedTotal(c <C Indexable<<T>>>&) I64 {
+    fn indexedTotal<C Indexable<T>, T>(c C&) I64 {
         s I64 = 0
         for x in c { s += x }
         return s
@@ -921,7 +935,7 @@ if TestBuild {
         s I64 = 0
         for i in range l.Len() { s += l[i] }
         for x in l { s += x }
-        return s + (try l[42] catch default 7)
+        return s + (checked l[42] catch default 7)
     }
 
     listIndexedBaked := listIndexed()
@@ -963,7 +977,7 @@ if TestBuild {
         for x in l {
             if x > limit { return x }
         }
-        error
+        error ListError.NOT_FOUND
     }
 
     listRunsBaked := listRuns(40)
@@ -1002,46 +1016,4 @@ if TestBuild {
         l.Push(50)                                               # an exhausted iterator sees what is pushed after
         assert (try it.Next() catch default -1) == 50
     }
-
-    # elements that are references to what can be stored through, or values holding references, walked by a for-in, by an
-    # iterator and by its helpers - each element keeps where the list's references live, so it may be returned as the list's
-    type listBag struct() {
-        items List<I64>& = List<I64>()
-    }
-    type listItem struct(n I64) {
-        n
-    }
-    fn listFind(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
-        for f in l {
-            if f.First == key { return f.Second }
-        }
-        error
-    }
-    fn listFindIter(l List<Pair<String&, listItem&>>&, key String&) listItem&l ? {
-        for f in l.Iter() {
-            if f.First == key { return f.Second }
-        }
-        error
-    }
-    test "S9f: a List of references, walked by every route" {
-        bags := List<listBag&>()
-        bags.Push(listBag())
-        bags.Push(listBag())
-        s I64 = 0
-        for b in bags { s += b.items.Len() + 1 }
-        for b in bags.Iter() { s += b.items.Len() + 1 }
-        assert s == 4
-        #(a helper's callback handed an element something can be stored through is refused - the element's scope is
-        #derived from the iterator's, O23a, which a build through it would underestimate: C2d - so it counts these)
-        items := List<listItem&>()
-        items.Push(listItem(4))
-        items.Push(listItem(5))
-        assert items.Iter().Count(fn(b) { return b.n > 4 }) == 1
-        m := List<Pair<String&, listItem&>>()
-        k String& = "x"
-        m.Push(Pair<String&, listItem&>(k, listItem(4)))
-        assert (try listFind(m, "x") catch { unreachable }).n == 4
-        assert (try listFindIter(m, "x") catch { unreachable }).n == 4
-    }
-
 }

@@ -1,6 +1,7 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c/E31: a Call adapter made of a receiver part runs Call with its receiver where the part lives - a Call building there
 # is refused through the adapter as it is called directly (the walk reads Call's body)
+import "std/io"
 type Ctr struct(v I64) {
     v
 }
@@ -17,5 +18,5 @@ fn (b Bag&) Str() String {
 }
 fn main() ? {
     b := Bag(Ctr(2))
-    println($b)
+    try io.Println($b)
 }

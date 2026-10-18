@@ -1,0 +1,31 @@
+# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# R1, the natural form: 'return take p.lx.toks' - the words die with p's lexer; 'take p.lx' moves the lexer whole
+import "std/io"
+type Lexer struct() {
+    toks Vec<String&> = Vec<String&>()
+}
+type Parser struct() {
+    lx own mut Lexer& = null
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn words() Vec<String&> {
+    p := Parser()
+    p.lx = Lexer()
+    for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
+    return take p.lx.toks
+}
+fn main() ? {
+    w := words()
+    q := Parser()
+    q.lx = Lexer()
+    for i in range 3 { q.lx.toks.Push($(i + 7) "-another-lexer's-word-overwriting") }
+    churn()
+    try io.Println(w[0])
+}

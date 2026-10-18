@@ -197,7 +197,10 @@ void ListDestroy(struct list l) {
     if (l.ptr) free(l.ptr);
 }
 
-#define LIST_ALLOC_MIN_CAP 16
+//a list's first allocation holds one element, doubling from there: at 16, every block with one statement took 26 KB
+//and every syntax node with one part 900 bytes - half of what a build held. A pointer into a list, or a copy of its
+//header, is valid only until the next add to it
+#define LIST_ALLOC_MIN_CAP 1
 void ListAdd(struct list* l, void* elem) {
     if (l->elemSize == 0) ErrorBugFound();
     if (l->len >= l->cap) {

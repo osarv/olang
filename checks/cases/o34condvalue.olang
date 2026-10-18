@@ -1,6 +1,7 @@
 # check: fail error[O34]: a conditional's or a match's values own objects (Outer), and one is chosen by copying it
 # O34 (own6 N2): a conditional of owner value locals chooses one by copying it - a second owner of what it owns, or a
 # borrow built as a copy; a reference to one, repointed in a branch, says which
+import "std/io"
 type Inner struct(k I64) {
     k
 }
@@ -17,5 +18,5 @@ fn pick(c Bool) I64 {
     return 0 if v.o == null else v.o.k
 }
 fn main() ? {
-    println($pick(true))
+    try io.Println($pick(true))
 }

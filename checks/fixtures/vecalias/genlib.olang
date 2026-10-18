@@ -1,1 +1,1 @@
-fn Id(x <T>) T { return x }
+fn Id<T>(x T) T { return x }

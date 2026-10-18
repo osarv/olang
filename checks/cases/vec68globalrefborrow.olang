@@ -1,5 +1,6 @@
 # check: fail error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it
 # vec4 (over-rejection 1's counterpart): a global reference made from a global's own text keeps the loan, which nothing here sees
+import "std/io"
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -17,5 +18,5 @@ T String& = Docs.title
 fn main() ? {
     Docs.title = $2 "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
-    println("x")
+    try io.Println("x")
 }

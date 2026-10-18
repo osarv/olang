@@ -1,0 +1,4 @@
+# check: fail nothing here can fail - write it without '!'
+# E35: "!" on what cannot fail as written is an error, as try there is
+fn inc(n I64) I64 { return n + 1 }
+fn main() { x := inc(1)! }

@@ -42,13 +42,18 @@ type Response struct(Status I32, Headers Array<Header>&, Body String&) {
     Body
 }
 
+# what a response's Header fails with: no field by that name
+error HeaderError {
+    MISSING
+}
+
 # the value of the response's first header field named "name", compared without regard to case as HTTP has it -
-# failing with the default error when it has none
-fn (r Response&) Header(name String&) String&r ? {
+# failing with MISSING when it has none
+fn (r Response&) Header(name String&) String&r ? HeaderError {
     for h in r.Headers {
         if sameName(h.Name, name) { return h.Value }
     }
-    error
+    error HeaderError.MISSING
 }
 
 fn sameName(a String&, b String&) Bool {
@@ -78,7 +83,7 @@ fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>
 fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? HttpError {
     if method.Len() == 0 or not method.All(fn(c Char) Bool { return c.IsLetter() }) { error HttpError.INVALID }
     args := List<String&>()
-    for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L",
+    for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
         "--max-redirs", "10", "-D", "/dev/stderr"] { args.Push(a) }
     head Bool = method == "HEAD"
     if head {                                       # a HEAD's response has no body; curl would write its fields there
@@ -116,7 +121,7 @@ fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, ti
     args.Push(url)
     if url.Has(0) { error HttpError.INVALID }      # no command line can carry a zero byte
     run os.Output&return = try os.Exec(args.ToArray(), body if sending else "")
-        catch os.OsError.NOT_FOUND + os.OsError.DENIED { error HttpError.NO_CURL }
+        catch os.OsError.NOT_FOUND, os.OsError.DENIED { error HttpError.NO_CURL }
         catch os.OsError { error HttpError.FAILED }
     if run.Status != 0 { try transportError(run.Status) }
     return try response(run.Stderr, run.Stdout)
@@ -192,7 +197,7 @@ if TestBuild {
     }
 
     test "the response is the last of what curl received" {
-        plain := try response("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Two:  a b \r\n\r\n", "body") catch { fail }
+        plain := try response("HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nX-Two:  a b \r\n\r\n", "body")
         assert plain.Status == 200 and plain.Body == "body" and plain.Headers.Len() == 2
         assert plain.Headers[1].Name == "X-Two" and plain.Headers[1].Value == "a b"
         assert (try plain.Header("content-type") catch default "") == "text/plain"
@@ -201,7 +206,7 @@ if TestBuild {
         try plain.Header("X-None") catch { missing = true }
         assert missing
         chain := "HTTP/1.1 200 Connection established\r\n\r\nHTTP/1.1 100 Continue\r\n\r\n" "HTTP/1.1 302 Found\r\nLocation: /b\r\n\r\nHTTP/2 404 \r\nserver: x\r\nset-cookie: a=1\r\nset-cookie: b=2\r\n\r\n"
-        last := try response(chain, "") catch { fail }
+        last := try response(chain, "")
         assert last.Status == 404 and last.Headers.Len() == 3 and (try last.Header("Set-Cookie") catch default "") == "a=1"
         assert last.Headers[2].Value == "b=2" and "Location" != last.Headers[0].Name
         bad := false
@@ -225,21 +230,24 @@ if TestBuild {
         assert failure("GET", "http://127.0.0.1:1/" $Char(0), none, 0) == "INVALID"
     }
 
-    # the port the test server, started in the background, answers on - or -1 when curl or python3 is missing, or it
-    # did not start
+    # the port the test server, started in the background, answers on - or -1 when curl is missing, or -2 when the server
+    # (checks/fixtures/http/server.olang, built here with the compiler running the tests: $OLANG, else build/out) could
+    # not be built or did not start
     fn startServer() I64 {
-        if os.Run("command -v curl >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1") != 0 { return -1 }
+        if os.Run("command -v curl >/dev/null 2>&1") != 0 { return -1 }
         try os.Remove("build/http_port") catch { }      # a port written by an earlier run is not this server's
-        os.Run("python3 checks/fixtures/http/server.py build/http_port >/dev/null 2>&1 &")
-        for i in range 100 {
+        compiler := try os.RealPath(try os.Env("OLANG") catch default "build/out") catch { return -2 }
+        if os.Run($os.Quote(compiler) " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
+        os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")
+        for i in range 200 {
             if os.Exists("build/http_port") { break }
             os.Run("sleep 0.05")
         }
-        text := try os.ReadFile("build/http_port") catch { return -1 }
-        return try text.Trim().ParseInt() catch default -1
+        text := try os.ReadFile("build/http_port") catch { return -2 }
+        return try text.Trim().ParseInt() catch default -2
     }
 
-    # one request of each kind against the test server - skipped, as passed, where curl or python3 is missing
+    # one request of each kind against the test server - skipped, as passed, where curl is missing
     fn live(port I64) ? HttpError {
         base := "http://127.0.0.1:" $port
         hello := try Get($base "/hello")
@@ -272,7 +280,8 @@ if TestBuild {
 
     test "requests against a local server" {
         port := startServer()
-        if port < 0 { done }
-        try live(port) catch { fail }
+        if port == -1 { return }
+        assert port > 0, "the test server did not start"
+        try live(port)
     }
 }

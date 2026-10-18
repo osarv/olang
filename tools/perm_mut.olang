@@ -1,0 +1,355 @@
+# T25b/D9/C3/D11a (2026-10-09): "mut" speaks only about what a reference reaches - "mut T&" is writable, "T&" read-only,
+# in every position - and a binding's reassignability is never written (a global's "mut" excepted). This rewrites
+# olang sources written under the old rule, where "mut" at the top of a parameter, field or receiver also made the
+# binding assignable, and a local's reference took its initializer's permission:
+#   - a bare-pun field takes its parameter's type, permission included, and has no "mut": "x mut" becomes "x" (text);
+#   - "mut" before a by-value parameter's, receiver's or field's type is removed (the compiler's D9/C3 errors);
+#   - "mut" before a local's value type, or before its ":=", is removed (D11a);
+#   - a local declared with a reference type and written through, or passed where a writable reference is wanted,
+#     becomes "x mut T& = ..." (the note the compiler gives at such a local).
+# The last three are driven by the compiler's own diagnostics: each file is compiled (-c, or -t for one that tests on
+# TestBuild), what it reports is applied, and that repeats until nothing more changes. Only files under the paths given
+# are edited; a diagnostic about another file (the standard library, imported) is left alone. A checks/cases program
+# that must fail keeps the failure it is about: nothing is applied from a diagnostic carrying its expected text.
+# Comments and string literals are left alone, and so is a file holding the line "# perm_mut: skip" (a program about
+# the old spelling itself). Files are rewritten in place.
+#
+# Not found by either pass, so worth a look by hand: "mut" before a by-value type variable at the top of a parameter or
+# field ("x mut <T>", "v mut T = n") meant the binding's before and means "writable when bound to a reference" now -
+# drop it where it meant the binding.
+#
+#     build/out build tools/perm_mut.olang && build/tools_perm_mut [--olang PATH] [-j N] FILE|DIR...
+#
+#   --olang  the compiler to run (default: build/out in the repository this tool is in)
+#   -j       how many compilations run at once (default 3)
+#
+# A port of the Python script of the same name (same arguments, same edits, same output); the files it writes get Python's
+# text-mode newlines ("\r\n" and "\r" become "\n"). Each compilation worker has a directory of its own (the Python script
+# gave a file the directory numbered by its place in the list, which two files compiling at once could share).
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+
+# words a bare list of names before "mut" must not contain, or it is no pun
+Blockers Array<String&>& = String&["return", "error", "break", "continue", "done", "fail", "mut", "fn", "type"]
+
+# the first rule of a diagnostic and the start of its message, for the "mut" the compiler says to remove
+DropRules Array<String&>& = String&["D9", "C3", "D11a", "D11a"]
+DropTexts Array<String&>& = String&["a by-value parameter is the callee's own copy", "a field is writable wherever its instance is"
+                                    "a local is always writable - 'mut' is for a reference"
+                                    "':=' gives a local its initializer's permission"]
+
+# the message of a note at a local declared read-only, up to the name it asks to declare "mut"
+DeclarePrefix String& = "' is declared read-only here - declare it '"
+
+# ---- the text pass: puns ----
+
+# what punAt fails with: no pun starts there
+error noPun {
+    HERE
+}
+
+# the end of the names and of the "mut" after them, when a pun's names start at q: [ \t]*NAMES[ \t]+mut followed only by
+# spaces and a "}", a "#" or the end of the line - NAMES being NAME(\s*,\s*NAME)*. Fails when there is none
+fn punAt(src String&, q I64) (I64, I64) ? {
+    n := src.Len()
+    p := q
+    for p < n and (src[p] == ' ' or src[p] == '\t') { p++ }
+    if p >= n or not srcmask.IsIdStart(src[p]) { error noPun.HERE }
+    ends List<I64>
+    for p < n and srcmask.IsWord(src[p]) { p++ }
+    ends.Push(p)
+    for {
+        r := p
+        for r < n and srcmask.IsPySpace(src[r]) { r++ }
+        if r >= n or src[r] != ',' { break }
+        r++
+        for r < n and srcmask.IsPySpace(src[r]) { r++ }
+        if r >= n or not srcmask.IsIdStart(src[r]) { break }
+        for r < n and srcmask.IsWord(src[r]) { r++ }
+        p = r
+        ends.Push(p)
+    }
+    # the longest list that is followed by the "mut" comes first
+    for k in range ends.Len() {
+        e := ends[ends.Len() - 1 - k]
+        w := e
+        for w < n and (src[w] == ' ' or src[w] == '\t') { w++ }
+        if w == e or not src[w:].StartsWith("mut") { continue }
+        w += 3
+        r := w
+        for r < n and (src[r] == ' ' or src[r] == '\t') { r++ }
+        if r >= n or src[r] == '\n' or src[r] == '}' or src[r] == '#' { return e, w }
+    }
+    error noPun.HERE
+}
+
+# src with the "mut" of every pun removed, and how many
+fn dropPunMut(src String&) (String, I64) {
+    mask := srcmask.Mask(src, true)
+    n := src.Len()
+    out := StringBuilder()
+    last I64 = 0
+    count I64 = 0
+    p I64 = 0
+    for p < n {
+        names I64 = -1
+        ne I64 = 0
+        e I64 = 0
+        if p == 0 or src[p - 1] == '\n' {
+            ne, e = try punAt(src, p) catch default 0, 0
+            if e > 0 { names = p }
+        }
+        if names < 0 and src[p] == '{' {
+            ne, e = try punAt(src, p + 1) catch default 0, 0
+            if e > 0 { names = p + 1 }
+        }
+        if names < 0 {
+            p++
+            continue
+        }
+        p = e
+        # the whole of the names and the "mut" must be code
+        isCode := true
+        for k in range names, e {
+            if mask[k] != 'c' { isCode = false }
+        }
+        if not isCode { continue }
+        # "mut" alone on a line, or a keyword list, is no pun
+        words I64 = 0
+        blocked := false
+        i := names
+        for i < ne {
+            if srcmask.IsIdStart(src[i]) {
+                j := i
+                for j < ne and srcmask.IsWord(src[j]) { j++ }
+                words++
+                if src[i:j] in Blockers { blocked = true }
+                i = j
+            } else {
+                i++
+            }
+        }
+        if words == 0 or blocked { continue }
+        out.Push(src[last:ne])
+        # a trailing comment stays where it was
+        w := e
+        for w < n and (src[w] == ' ' or src[w] == '\t') { w++ }
+        if w < n and src[w] == '#' and w - e + 1 > 2 {
+            for k in range e - ne { out.PushChar(' ') }
+        }
+        last = e
+        count++
+    }
+    out.Push(src[last:])
+    return out.ToString(), count
+}
+
+# ---- the compiler pass ----
+
+# the edits the compiler's output asks for in the allowed paths
+fn editsFrom(output String&, allowed List<String&>&, out mut List<diagedit.Request>&) {
+    current := ""
+    for row in output.Split("\n") {
+        path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
+        full := diagedit.RealPathOf(path)
+        if isError {
+            current = $row
+            for k in range DropRules.Len() {
+                if rule == DropRules[k] and msg.StartsWith(DropTexts[k]) and diagedit.Allowed(full, allowed) {
+                    out.Push(diagedit.Request($full, line, col, "drop", "", $row))
+                }
+            }
+            continue
+        }
+        # a note: "'NAME' is declared read-only here - declare it '" anywhere in it
+        at := try msg.Find(DeclarePrefix) catch default -1
+        if at > 0 and current.Len() > 0 and diagedit.Allowed(full, allowed) {
+            start := at
+            for start > 0 and srcmask.IsWord(msg[start - 1]) { start-- }
+            if start > 0 and msg[start - 1] == '\'' and srcmask.IsIdStart(msg[start]) {
+                out.Push(diagedit.Request($full, line, col, "add", $msg[start:at], $current))
+            }
+        }
+    }
+}
+
+# the edits applied to their files; how many "mut" were removed and added
+fn apply(requests List<diagedit.Request>&) (I64, I64) {
+    paths List<String&>
+    for r in requests {
+        if not (r.Path in paths) { paths.Push($r.Path) }
+    }
+    drops I64 = 0
+    adds I64 = 0
+    for path in paths {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("perm_mut: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        expect List<String&>
+        diagedit.ExpectedTexts(src, expect)
+        lines := src.Split("\n")
+        mine List<diagedit.Request>
+        for r in requests {
+            if r.Path == path { mine.Push(r) }
+        }
+        # by line, and right to left within a line, so earlier columns stay put
+        mine.Sort(fn(a, b) {
+            if a.Line != b.Line { return a.Line < b.Line }
+            return a.Col > b.Col
+        })
+        seen List<String&>
+        shLine List<I64>
+        shAt List<I64>
+        shDelta List<I64>
+        for r in mine {
+            if diagedit.ContainsAny(r.Why, expect) { continue }
+            key := $r.Line ":" $r.Col ":" $r.Kind
+            if key in seen or r.Line - 1 >= lines.Len() { continue }
+            seen.Push($key)
+            idx := r.Line - 1
+            text := $lines[idx]
+            at := r.Col - 1
+            if r.Kind == "drop" {
+                if diagedit.Sub(text, at, at + 3) != "mut" or (at + 3 < text.Len() and srcmask.IsWord(text[at + 3])) { continue }
+                end := at + 3
+                for end < text.Len() and (text[end] == ' ' or text[end] == '\t') { end++ }
+                if end >= text.Len() or text[end] == '#' or text[end] == '}' {
+                    # nothing after it: take the space before instead
+                    start := at
+                    for start > 0 and (text[start - 1] == ' ' or text[start - 1] == '\t') { start-- }
+                    lines[idx] = $text[:start] $text[at + 3:]
+                } else {
+                    lines[idx] = $text[:at] $text[end:]
+                }
+            } else {
+                name := r.Arg
+                if diagedit.Sub(text, at, at + name.Len()) != name { continue }
+                after := at + name.Len()
+                # one of several names sharing a type (D12b): "mut" goes once, before the type, after the last name
+                for {
+                    p := after
+                    for p < text.Len() and (text[p] == ' ' or text[p] == '\t') { p++ }
+                    if p >= text.Len() or text[p] != ',' { break }
+                    p++
+                    for p < text.Len() and (text[p] == ' ' or text[p] == '\t') { p++ }
+                    if p >= text.Len() or not srcmask.IsIdStart(text[p]) { break }
+                    for p < text.Len() and srcmask.IsWord(text[p]) { p++ }
+                    after = p
+                }
+                if diagedit.Sub(text, after, after + 4) == " mut" { continue }
+                lines[idx] = $text[:after] " mut" $text[after:]
+            }
+            diagedit.Realign(lines, idx, lines[idx].Len() - text.Len(), at)
+            shLine.Push(r.Line)
+            shAt.Push(at)
+            shDelta.Push(lines[idx].Len() - text.Len())
+            if r.Kind == "drop" { drops++ } else { adds++ }
+        }
+        diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
+        try os.WriteFile(path, lines.Join("\n")) catch {
+            srcmask.SayErr("perm_mut: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    return drops, adds
+}
+
+fn main() ? {
+    olang := $srcmask.RepoRoot() "/build/out"
+    jobs I64 = 3
+    paths List<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        if args[i] == "--olang" or args[i] == "-j" {
+            if i + 1 >= args.Len() {
+                srcmask.SayErr("perm_mut: " $args[i] " needs a value")
+                os.Exit(1)
+            }
+            if args[i] == "--olang" {
+                olang = $args[i + 1]
+            } else {
+                jobs = try args[i + 1].ParseInt() catch {
+                    srcmask.SayErr("perm_mut: -j needs a number")
+                    os.Exit(1)
+                    unreachable
+                }
+            }
+            i += 2
+        } else {
+            paths.Push($args[i])
+            i++
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_perm_mut [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    if jobs < 1 {
+        srcmask.SayErr("perm_mut: -j needs a positive number")
+        os.Exit(1)
+    }
+    olang = $diagedit.RealPathOf(olang)
+    files List<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed List<String&>
+    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+
+    puns I64 = 0
+    for f in files {
+        src := try srcmask.ReadText(f) catch {
+            srcmask.SayErr("perm_mut: cannot read " $f)
+            os.Exit(1)
+            unreachable
+        }
+        if src.Contains("# perm_mut: skip") { continue }
+        changed, n := dropPunMut(src)
+        if n > 0 {
+            try os.WriteFile(f, changed) catch {
+                srcmask.SayErr("perm_mut: cannot write " $f)
+                os.Exit(1)
+            }
+            puns += n
+        }
+    }
+    srcmask.Say("puns: " $puns " 'mut' removed")
+
+    tmp := try os.MkTemp("", "perm_mut") catch {
+        srcmask.SayErr("perm_mut: cannot make a temporary directory")
+        os.Exit(1)
+        unreachable
+    }
+    defer try os.RemoveAll(tmp) catch { }
+    work mut Array<String&>& = Array<String&>(jobs)
+    for k in range jobs {
+        work[k] = $tmp "/w" $k
+        try os.MkDirAll(work[k]) catch {
+            srcmask.SayErr("perm_mut: cannot make " $work[k])
+            os.Exit(1)
+        }
+    }
+    totalDrop I64 = 0
+    totalAdd I64 = 0
+    fileArray := files.ToArray()
+    for round in range 1, 9 {
+        outputs := diagedit.CompileAll(olang, fileArray, work, false)
+        requests List<diagedit.Request>
+        for o in outputs { editsFrom(o, allowed, requests) }
+        drops, adds := apply(requests)
+        srcmask.Say("round " $round ": " $drops " 'mut' removed, " $adds " 'mut' added")
+        totalDrop += drops
+        totalAdd += adds
+        if drops == 0 and adds == 0 { break }
+    }
+    srcmask.Say("total: " $puns " pun 'mut' removed, " $totalDrop " other 'mut' removed, " $totalAdd " 'mut' added to locals")
+}
+
+test "a pun loses its mut, a keyword list does not" {
+    out, n := dropPunMut("type P struct(x mut I64) {\n    x mut\n    return y mut\n    a, b mut   # c\n}\n")
+    assert n == 2
+    assert out == "type P struct(x mut I64) {\n    x\n    return y mut\n    a, b       # c\n}\n"
+}

@@ -1,0 +1,42 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# never: the index is held here
+# B11 (the review of the view lend, D1): refused by O10c - the callee keeps a borrow of the view's hidden copy in an
+# outer list - but no index is held and nothing is written back, so the held-index note is not said
+import "std/io"
+type Pt struct() {
+    X I64 = 0
+}
+type V struct(d mut Array<I64>&, n I64) {
+    d
+    n
+    p Pt = Pt()
+}
+type Vs struct(d mut Array<I64>&) {
+    d
+}
+fn (s Vs&) At(i I64) V {
+    v := V(s.d, i)
+    v.p.X = 100 + i
+    return v
+}
+fn id(p Pt&) Pt&p { return p }
+fn churn() ? io.IoError {
+    for k in range 100 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+fn clobber(n I64) I64 {
+    a := Array<I64, 64>()
+    for k in range 64 { a[k] = n * 1000 + k }
+    if n > 0 { return clobber(n - 1) + a[3] }
+    return a[5]
+}
+fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
+fn main() ? {
+    s := Vs(Array<I64>(4))
+    out := List<Pt&>()
+    for k in range 3 { f(s[k], out) }
+    try churn()
+    try io.Println($clobber(10) " " $out[0].X)
+}

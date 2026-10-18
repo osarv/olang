@@ -12,7 +12,7 @@
 - [olang: natural-language direction](user_olang_natural_language.md) — user wants olang syntax to read more like natural language (for x in a); weigh that in syntax proposals
 - [Language-change checklist](feedback_keep_evaluator_current.md) — walk the checklist in the repo CLAUDE.md for every language change; keep comptime.c current
 - [Errors are errors](feedback_errors_are_errors.md) — never (value, Bool) in olang APIs; empty/exhausted/missing is an error
-- [No per-operation runtime checks](feedback_no_runtime_checks.md) — olang never checks per operation; opt-in via try only; do not even offer it
+- [No per-operation runtime checks](feedback_no_runtime_checks.md) — olang never checks per operation; opt-in via `checked` only; do not even offer it
 - [Number the questions](feedback_numbered_questions.md) — flagged calls and open questions always as a numbered list
 - [No Claude attribution in commits](feedback_no_claude_attribution.md) — author as the user, no Co-Authored-By / Claude-Session lines
 - [Dictated messages](user_dictation.md) — expect misheard words and spoken self-corrections; read for intent, state the reading taken when ambiguous
@@ -22,5 +22,9 @@
 - [Decide details myself](feedback_decide_details.md) — authority over details within the direction; record as decisions, ask only direction questions; short reports
 - [Revisit rigid decisions](feedback_revisit_decisions.md) — the user's own past calls may be changed when they prove really rigid in real code, by PRINCIPLES.md; record as a reversal and report it
 - [Times in CEST](user_timezone.md) — the user is in Gothenburg: report times as Swedish local time (CEST, CET after 2026-10-25)
-- [Agent effort per task](feedback_agent_effort.md) — set each subagent's effort to its task: xhigh for soundness reviews, low for searches
+- [Agent model and effort per task](feedback_agent_effort.md) — pick model AND effort per agent: opus/xhigh soundness, opus/high compiler, sonnet/medium std/docs/migrations, haiku/low searches
 - [Contract work and outreach](project_outreach.md) — fixed-price measured speedups; outreach doc, 14 targets, 8 letters; I send from the company Gmail once set up; QL pending
+- [README per folder](feedback_folder_readmes.md) — every top-level folder that is its own thing has a README.md; add it when the folder appears, keep it current
+- [Everything in olang](feedback_olang_only.md) — no Python/shell scripts in the repos; tools, migrations, test servers, drivers are olang
+- [What goes into the C compiler](feedback_c_only_for_port.md) — core language, fundamentals (CLI) and all bug fixes in both compilers; extra domain features (arbitrary precision, FPGA...) only in the self-hosted one
+- [oann waits for the compiler](feedback_oann_after_compiler.md) — no oann work until the self-hosted compiler is done and mostly settled; catch it up in one go then

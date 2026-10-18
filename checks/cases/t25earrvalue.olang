@@ -1,8 +1,26 @@
-# check: fail error[T25e]: 'own' on Array<P>& is not supported yet - own a struct ('own Conn&') or an array of a run-time length whose elements are numbers, plain values or references ('own Array<I64>&', 'own Array<Node&>&')
-# a value element holding a reference: not yet (T25e)
+# check: run
+# Vec phase 2a (T25e): an own array's elements may be values holding references - the buffer lives in its region, what
+# its elements refer to where the slot's container keeps it (O33) - so an element read out is kept across the buffer's
+# release, and the text it holds is read back after the arena churns
 type P struct(s String&, n I64) { s
  n }
 type B struct() {
     data own mut Array<P>& = null
 }
-fn main() ? { b := B() }
+fn churn() I64 {
+    t := 0
+    for i in range 2000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len()
+    }
+    return t
+}
+fn main() ? {
+    b := B()
+    b.data = Array<P>(3)
+    for i in range 3 { b.data[i] = P("p" $i, i) }
+    e := b.data[1]
+    b.data = Array<P>(5)
+    churn()
+    assert e.s == "p1" and e.n == 1 and b.data.Len() == 5 and b.data[0].n == 0
+}

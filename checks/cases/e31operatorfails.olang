@@ -1,0 +1,15 @@
+# check: fail this operator calls Minus, which can fail - write 'try' before the expression
+# E31: an operator whose method can fail fails as written, so it is written under try as a call is
+error MoneyError {
+    NEGATIVE
+}
+type Money struct(c I64) {
+    c
+}
+fn (a Money&) Minus(b Money&) Money ? MoneyError {
+    if b.c > a.c { error MoneyError.NEGATIVE }
+    return Money(a.c - b.c)
+}
+fn main() {
+    m := Money(3) - Money(1)
+}

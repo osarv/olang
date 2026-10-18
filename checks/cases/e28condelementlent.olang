@@ -1,0 +1,21 @@
+# check: fail a conditional or a match gives a copy of the value it chooses
+# E28/E31b (the second review of the view lend, C1): "bump(l[0] if k > 0 else l[1])" for a writable reference - the
+# conditional is a value, a copy of the element it chooses, and the write was lost
+import "std/io"
+type Pt struct() {
+    X I64 = 0
+}
+type Acc struct() {
+    N I64 = 0
+    P Pt = Pt()
+}
+fn bump(c mut Acc&) { c.N++ }
+fn bumpPt(p mut Pt&) { p.X++ }
+fn main() ? {
+    l := List<Acc>()
+    l.Push(Acc())
+    l.Push(Acc())
+    k := l.Len()
+    bump(l[0] if k > 0 else l[1])
+    try io.Println("list N " $l[0].N)
+}

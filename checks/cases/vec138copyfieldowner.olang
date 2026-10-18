@@ -1,0 +1,30 @@
+# check: fail error[O32]: 'c.a' belongs to what 't' was copied from - assign it there
+# Vec phase 2a review L1 (O32): a borrowed copy's owning field is not given an owner - nothing would release it
+import "std/io"
+Made mut I64 = 0
+Dropped mut I64 = 0
+type X struct(k I64) {
+    k
+    Made++
+} destruct { Dropped++ }
+type Lexer struct(n I64) {
+    n
+    o own mut X& = X(n)
+    toks Vec<I64> = Vec<I64>()
+}
+type Two struct() {
+    a Lexer = Lexer(1)
+}
+fn work() ? io.IoError {
+    defer { try io.Println("at work end: made " $Made " dropped " $Dropped) catch io.IoError { } }
+    t := Two()
+    for i in range 3 {
+        c := t
+        c.a = Lexer(7 + i)
+        try io.Println("turn: made " $Made " dropped " $Dropped)
+    }
+}
+fn main() ? {
+    try work()
+    try io.Println("made " $Made " dropped " $Dropped)
+}

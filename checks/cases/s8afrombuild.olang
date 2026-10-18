@@ -6,5 +6,5 @@ FromBuild Bool = DebugBuild or false
 fn helper3() I32 { return 3 }
 fn main() ? E {
     x := 3
-    if FromBuild and Level > 1 { fail }
+    assert not (FromBuild and Level > 1)
 }

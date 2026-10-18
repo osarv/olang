@@ -164,8 +164,10 @@ struct token acceptTok(SyntaxCtx sc, enum tokenType type) {
 struct token prevTok(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     if (cur == 0) return (struct token){0};
+    bool skip = TokenSkipEnds(sc->tc, false); //the token itself, a statement end included
     TokenSetCursor(sc->tc, cur - 1);
     struct token t = TokenFeed(sc->tc); //advances back to `cur`
+    TokenSkipEnds(sc->tc, skip);
     return t;
 }
 
@@ -200,6 +202,71 @@ bool acceptStmntEnd(SyntaxCtx sc) {
     struct token next = peekTok(sc);
     return next.type == TOK_NONE || next.lineNr > prevTok(sc).lineNr;
 }
+
+void addTok(struct syntax* s, struct token t);
+void addSntx(struct syntax* s, struct syntax* child);
+
+//L18a: after a list's comma, whether the list ends there - "a, b," with its closing bracket beginning a line of its
+//own, as a list running over several lines may end. On the same line the comma is left for the caller to fail at
+//(reported as a trailing comma by syntaxHint)
+static bool trailingComma(SyntaxCtx sc, struct token comma, enum tokenType closer) {
+    struct token next = peekTok(sc);
+    return next.type == closer && next.lineNr > comma.lineNr;
+}
+
+//QY/L18a: what separates one item of a list from the next. Items on one line are separated by ",", items on different
+//lines by the line break - a statement end L18 put there, or, after an item ending in "}", ">" or a bare "&" (after
+//which L18 puts none), the next token beginning a later line. A separator before the list's closer ends the list
+//(SEP_END, the closer left for the caller), except a "," on the closer's own line, left unread for the caller to fail
+//at - a trailing comma (syntaxHint). A comma ending a line was reported by the tokenizer, and is read as the line break
+enum listSep { SEP_NONE, SEP_COMMA, SEP_LINE, SEP_END };
+static enum listSep acceptListSep(SyntaxCtx sc, enum tokenType closer, struct token* comma) {
+    int before = TokenGetCursor(sc->tc);
+    struct token prev = prevTok(sc);
+    struct token t = TokenFeed(sc->tc);
+    if (t.type == TOK_COMMA) {
+        *comma = t;
+        if (closer != TOK_NONE && peekTok(sc).type == closer) {
+            if (trailingComma(sc, t, closer)) return SEP_END;
+            TokenSetCursor(sc->tc, before);
+            return SEP_NONE;
+        }
+        return SEP_COMMA;
+    }
+    if (t.type == TOK_STMNT_END) {
+        while (peekTok(sc).type == TOK_STMNT_END) TokenFeed(sc->tc);
+        if (closer != TOK_NONE && peekTok(sc).type == closer) return SEP_END;
+        return SEP_LINE;
+    }
+    TokenSetCursor(sc->tc, before);
+    bool ends = prev.type == TOK_CURLY_C || prev.type == TOK_GRT || prev.type == TOK_BTSFT_R || prev.type == TOK_BTWSE_AND;
+    if (ends && t.type != TOK_NONE && t.type != closer && t.lineNr > prev.lineNr) return SEP_LINE;
+    return SEP_NONE;
+}
+
+//how many of s's parts are nodes
+static int countSntx(struct syntax* s) {
+    int n = 0;
+    for (int i = 0; i < s->parts.len; i++) if (!((struct syntaxPart*)ListGetIdx(&s->parts, i))->isToken) n++;
+    return n;
+}
+
+//QY/L18a: the items after a list's first, each read by item and added to s (a "," separating them kept before it),
+//until no separator follows or the next item does not parse - which leaves the cursor at that separator
+static void parseListTail(SyntaxCtx sc, struct syntax* s, struct syntax* (*item)(SyntaxCtx), enum tokenType closer) {
+    while (true) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = {0};
+        enum listSep sep = acceptListSep(sc, closer, &comma);
+        if (sep == SEP_NONE || sep == SEP_END) break;
+        struct syntax* e = item(sc);
+        if (!e) { TokenSetCursor(sc->tc, before); break; }
+        if (sep == SEP_COMMA) addTok(s, comma);
+        addSntx(s, e);
+    }
+}
+
+static bool sigIsValue; //a function type's or a lambda's signature is being read - see parseFuncErrorListKind
 
 //a "{ }" whose "}" was wanted next: nothing inside braces starts with a declaration ("fn name", "type", "test", "import",
 //"extern"), so finding one there means this "}" is missing - which the item reports at the brace, rather than
@@ -246,7 +313,6 @@ void addSntx(struct syntax* s, struct syntax* child) {
 struct syntax* parseName(SyntaxCtx sc);
 struct syntax* parseTypeRef(SyntaxCtx sc);
 struct syntax* parseTypeExpr(SyntaxCtx sc);
-struct syntax* parseTypeVar(SyntaxCtx sc);
 struct syntax* parseTypeArgs(SyntaxCtx sc);
 struct syntax* parseConstArg(SyntaxCtx sc);
 struct syntax* parseBlock(SyntaxCtx sc);
@@ -280,14 +346,13 @@ static struct token acceptFnKeyword(SyntaxCtx sc) {
 //"fn (p mut Parser&) fail(t Token)". A field is no method: its name is a constructor's local, and stays a name. A
 //keyword after "." is taken only when "(" follows it (wantCall), so "x.done" is still read as it always was
 static bool isKeywordTok(struct token t);
-//L9a: a keyword a field may be named by - one that is a whole statement by itself ("done", "fail", "break", "continue",
-//"abort", "unreachable"), so nothing can follow it on its line, or one that begins no statement and no value ("in",
-//"is", "range", "type", "test", ...): a field's declaration ("done I64 = 0", "type := Kind.A") can be told from a
-//statement, and the field is reached after "." ("s.done"). A keyword beginning a statement with more after it ("if",
+//L9a: a keyword a field may be named by - one that is a whole statement by itself ("break", "continue", "unreachable"), so nothing can follow it on its line, or one that begins no statement and no value ("in",
+//"is", "range", "type", "test", ...): a field's declaration ("range I64 = 0", "type := Kind.A") can be told from a
+//statement, and the field is reached after "." ("s.range"). A keyword beginning a statement with more after it ("if",
 //"return", "spawn"), or a value ("fn", "not", "try"), or written inside one ("else", "mut", "destruct") is not one
 static bool keywordMayNameField(enum tokenType t) {
     switch (t) {
-        case TOK_DONE: case TOK_FAIL: case TOK_BREAK: case TOK_CONTINUE: case TOK_ABORT: case TOK_UNREACHABLE:
+        case TOK_BREAK: case TOK_CONTINUE: case TOK_UNREACHABLE:
         case TOK_IN: case TOK_IS: case TOK_AS: case TOK_AND: case TOK_OR: case TOK_XOR: case TOK_RANGE: case TOK_CASE:
         case TOK_NOMATCH: case TOK_TYPE: case TOK_STRUCT: case TOK_CHOICE: case TOK_INTERFACE: case TOK_EXTENDS:
         case TOK_IMPORT: case TOK_TEST: case TOK_EXTERN: case TOK_DEFAULT:
@@ -355,30 +420,49 @@ static struct token firstIdenAnywhere(struct syntax* s) {
     return (struct token){0};
 }
 
-//"<" IDEN ">" - a generic type variable written where a whole type expression would go (G1). Only ever
-//tried at the START of a type expression, so it can never be confused with a type-args list (which always
-//follows a name) or with the reference marker (now "&", see below).
-struct syntax* parseTypeVar(SyntaxCtx sc) {
+//one item of a function's or a constructor's type parameter list (G3, G10d): "IDEN [type-expr]" - a type variable,
+//with the trait constraining it (G19) or, a constant variable, its type (G22) - as a SNTX_TYPE_VAR node
+static struct syntax* parseTypeParamItem(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token open = acceptTok(sc, TOK_LST);
-    if (open.type == TOK_NONE) return NULL;
     struct token name = acceptTok(sc, TOK_IDEN);
-    if (name.type == TOK_NONE) return parseFail(sc, cur);
-    //G19: "<T Iterator<I32>>" - a constraint, a trait T must satisfy
+    if (name.type == TOK_NONE) return NULL;
     struct syntax* constraint = NULL;
-    enum tokenType next = peekTok(sc).type;
-    if (next != TOK_GRT && next != TOK_BTSFT_R) {
+    struct token nt = peekTok(sc);
+    if (nt.type != TOK_GRT && nt.type != TOK_BTSFT_R && nt.type != TOK_COMMA && nt.type != TOK_STMNT_END
+            && nt.lineNr == name.lineNr) {
         constraint = parseTypeExpr(sc);
         if (!constraint) return parseFail(sc, cur);
     }
-    struct token close = acceptTok(sc, TOK_GRT);
-    //"List<<T>>": the variable's ">" and the list's ">" lex as one ">>"
-    if (close.type == TOK_NONE && TokenSplitShiftRight(sc->tc)) close = acceptTok(sc, TOK_GRT);
-    if (close.type == TOK_NONE) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_TYPE_VAR);
     addTok(s, name);
     if (constraint) addSntx(s, constraint);
     ListAdd(&sc->genericNames, &name.str); //G26
+    return s;
+}
+
+//QW: "<" item { sep item } ">" after a function's name ("fn max<T>(a T, b T) T") or a constructor's "struct" (G10d):
+//the variables it introduces, in scope, bare, for the whole declaration - its receiver included
+static struct syntax* parseFnTypeParams(SyntaxCtx sc) {
+    int cur = TokenGetCursor(sc->tc);
+    int mark = TokenEditMark(sc->tc);
+    struct token open = acceptTok(sc, TOK_LST);
+    if (open.type == TOK_NONE) return NULL;
+    struct syntax* s = newNode(SNTX_FN_TYPE_PARAMS);
+    addTok(s, open);
+    bool skip = TokenSkipEnds(sc->tc, false);
+    struct syntax* first = parseTypeParamItem(sc);
+    if (first) {
+        addSntx(s, first);
+        parseListTail(sc, s, parseTypeParamItem, TOK_GRT);
+    }
+    TokenSkipEnds(sc->tc, skip);
+    struct token close = acceptTok(sc, TOK_GRT);
+    if (close.type == TOK_NONE && TokenSplitShiftRight(sc->tc)) close = acceptTok(sc, TOK_GRT);
+    if (!first || close.type == TOK_NONE) {
+        TokenEditRewind(sc->tc, mark);
+        return parseFail(sc, cur);
+    }
+    addTok(s, close);
     return s;
 }
 
@@ -389,12 +473,10 @@ struct syntax* parseTypeVar(SyntaxCtx sc) {
 //Rust, Java and C# all make, and the only place this grammar needs it.
 struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
     int cur = TokenGetCursor(sc->tc);
-    //"List<<T>>": a list whose first item is a type variable opens with the "<<" token - split it, and
-    //join it back on any failure so an ordinary shift is never disturbed
     int mark = TokenEditMark(sc->tc);
-    TokenSplitShiftLeft(sc->tc);
     struct token open = acceptTok(sc, TOK_LST);
-    if (open.type == TOK_NONE) { TokenEditRewind(sc->tc, mark); return NULL; }
+    if (open.type == TOK_NONE) return NULL;
+    bool skip = TokenSkipEnds(sc->tc, false);
     struct syntax* s = newNode(nodeType);
     while (true) {
         int itemAt = TokenGetCursor(sc->tc);
@@ -404,10 +486,12 @@ struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
         //up to the list's "," or ">"; which a bare name or "<N>" is, a type or a value, the checker decides by the
         //parameter it is written for
         if (nodeType == SNTX_TYPE_ARGS) {
-            enum tokenType next = peekTok(sc).type;
-            //the list closes on ">", or on the first ">" of ">>", ">=" or ">>=" (split below)
+            struct token nt = peekTok(sc);
+            enum tokenType next = nt.type;
+            //the list closes on ">", or on the first ">" of ">>", ">=" or ">>=" (split below); an item ends at "," or
+            //at its line's end (QY)
             bool closes = next == TOK_COMMA || next == TOK_GRT || next == TOK_BTSFT_R || next == TOK_GRE
-                          || next == TOK_ASS_BTSFT_R;
+                          || next == TOK_ASS_BTSFT_R || next == TOK_STMNT_END || (item && nt.lineNr > prevTok(sc).lineNr);
             if (!item || !closes) {
                 TokenSetCursor(sc->tc, itemAt);
                 TokenEditRewind(sc->tc, itemMark);
@@ -420,8 +504,10 @@ struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
         if (nodeType == SNTX_TYPE_PARAMS) {
             struct token pn = firstIdenAnywhere(item);
             if (pn.type != TOK_NONE) ListAdd(&sc->genericNames, &pn.str); //G26
-            enum tokenType next = peekTok(sc).type;
-            if (next != TOK_COMMA && next != TOK_GRT && next != TOK_BTSFT_R) {
+            struct token nt = peekTok(sc);
+            enum tokenType next = nt.type;
+            if (next != TOK_COMMA && next != TOK_GRT && next != TOK_BTSFT_R && next != TOK_STMNT_END
+                    && nt.lineNr == prevTok(sc).lineNr) {
                 struct syntax* constraint = parseTypeExpr(sc);
                 if (!constraint) break;
                 struct syntax* cn = newNode(SNTX_TYPE_CONSTRAINT);
@@ -429,13 +515,16 @@ struct syntax* parseTypeArgsInto(SyntaxCtx sc, enum syntaxType nodeType) {
                 addSntx(s, cn);
             }
         }
-        if (acceptTok(sc, TOK_COMMA).type != TOK_NONE) continue;
-        if (acceptTok(sc, TOK_GRT).type != TOK_NONE) return s;
+        struct token comma = {0};
+        enum listSep sep = acceptListSep(sc, TOK_GRT, &comma);
+        if (sep == SEP_COMMA || sep == SEP_LINE) continue;
+        if (acceptTok(sc, TOK_GRT).type != TOK_NONE) { TokenSkipEnds(sc->tc, skip); return s; }
         if (TokenSplitShiftRight(sc->tc)) { //">>" closing a nested list - consume one ">", leave the other
-            if (acceptTok(sc, TOK_GRT).type != TOK_NONE) return s;
+            if (acceptTok(sc, TOK_GRT).type != TOK_NONE) { TokenSkipEnds(sc->tc, skip); return s; }
         }
         break;
     }
+    TokenSkipEnds(sc->tc, skip);
     TokenSetCursor(sc->tc, cur);
     TokenEditRewind(sc->tc, mark); //every split made inside, nested lists' included
     return NULL;
@@ -500,11 +589,8 @@ struct syntax* parseRefMarker(SyntaxCtx sc, enum syntaxType nodeType) {
 
 struct syntax* parseTypeRef(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    //the head is either a type variable ("<T>") or a name, optionally instantiated ("List<I32>"). Both
-    //then share the identical tail below - a reference marker applies to a type variable exactly as to a
-    //named type (G2), so "<T>&" is well-formed and needs no separate grammar.
-    struct syntax* head = parseTypeVar(sc);
-    if (!head) head = parseName(sc);
+    //the head is a name, optionally instantiated ("List<I32>") - a type variable is written bare, as a type's name is
+    struct syntax* head = parseName(sc);
     if (!head) return NULL;
     struct syntax* s = newNode(SNTX_TYPE_REF);
     addSntx(s, head);
@@ -547,22 +633,6 @@ struct syntax* parseChoiceCase(SyntaxCtx sc) {
     return s;
 }
 
-//L18a: after a list's comma, whether the list ends there - "a, b," with its closing bracket beginning a line of its
-//own, as a list running over several lines may end. On the same line the comma is left for the caller to fail at
-//(reported as a trailing comma by syntaxHint)
-static bool trailingComma(SyntaxCtx sc, struct token comma, enum tokenType closer) {
-    struct token next = peekTok(sc);
-    return next.type == closer && next.lineNr > comma.lineNr;
-}
-
-//T17/T19/C2: a comma where line ends separate entries (an enum's cases, an error type's words, a constructor's
-//fields) is reported and then read past as though it were the line end it stands for, so one stray comma is one error
-static bool rejectSeparatorComma(SyntaxCtx sc) {
-    if (peekTok(sc).type != TOK_COMMA) return false;
-    Err(TokenFeed(sc->tc), ERR_SEPARATOR_COMMA);
-    return true;
-}
-
 struct syntax* parseChoiceBody(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_CHOICE);
@@ -585,8 +655,10 @@ struct syntax* parseChoiceBody(SyntaxCtx sc) {
         if (!c) break;
         addSntx(s, c);
         any = true;
-        if (rejectSeparatorComma(sc)) continue;
-        //T17: a case ends at its line's end, or at the body's "}" - "enum { North South }" is not two cases
+        //T17/QY: cases on one line are separated by ",", on different lines by the line's end, and the last ends at the
+        //body's "}" - "enum { North South }" is not two cases
+        struct token comma = acceptTok(sc, TOK_COMMA);
+        if (comma.type != TOK_NONE) { addTok(s, comma); continue; }
         if (!acceptStmntEnd(sc)) break;
     }
     if (!any) return parseFail(sc, cur);
@@ -656,7 +728,10 @@ struct syntax* parseFuncType(SyntaxCtx sc) {
     if (kw.type == TOK_NONE) return NULL;
     bool prevLambda = lambdaParams; //a function TYPE written inside a lambda's parameters types every parameter
     lambdaParams = false;
+    bool prevValue = sigIsValue;
+    sigIsValue = true;
     struct syntax* sig = parseFuncSig(sc);
+    sigIsValue = prevValue;
     lambdaParams = prevLambda;
     if (!sig) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_FUNC_TYPE);
@@ -779,7 +854,9 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
         if (iden.type == TOK_NONE) break;
         addTok(s, iden);
         any = true;
-        if (rejectSeparatorComma(sc)) continue;
+        //T19/QY: words on one line are separated by ",", on different lines by the line's end
+        struct token comma = acceptTok(sc, TOK_COMMA);
+        if (comma.type != TOK_NONE) { addTok(s, comma); continue; }
         if (peekTok(sc).type != TOK_CURLY_C && acceptTok(sc, TOK_STMNT_END).type == TOK_NONE) break;
     }
     if (!any) return parseFail(sc, cur);
@@ -789,44 +866,55 @@ struct syntax* parseErrorDecl(SyntaxCtx sc) {
     return s;
 }
 
-//one "error-list-item": a declared error type's name, possibly through an alias chain - "?" alone already stands for
-//the default error (R15), which no name spells
+//one "error-list-item": a declared error type's name, possibly through an alias chain - "?" alone is an inferred set
+//(R1a)
 struct syntax* parseErrorListItem(SyntaxCtx sc) {
     return parseName(sc);
 }
 
-//appends "(+ error-list-item)*" onto s, whose first item has already been parsed and added by the
-//caller - factored out because both an ordinary function's signature and a constructor's build the
-//same '?'-marked list (parseFuncErrorList), differing only in where it sits in the declaration
-void addErrorListTail(SyntaxCtx sc, struct syntax* s) {
-    while (true) {
-        int before = TokenGetCursor(sc->tc);
-        struct token plus = TokenFeed(sc->tc);
-        if (plus.type != TOK_ADD) { TokenSetCursor(sc->tc, before); break; }
-        struct syntax* item = parseErrorListItem(sc);
-        if (!item) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, plus);
-        addSntx(s, item);
-    }
-}
-
-//a constructor's own error-list, e.g. "struct(params) ErrA + ErrB { ... }" - bare, no leading marker,
-//an ordinary function's error-list is marked with a leading '?' - the marker moved here (from ret-type,
-//see parseRetType) so a signature reads "(params) [ret-type] [? errors]": the return value first, then,
-//if there is one, the error set
-struct syntax* parseFuncErrorList(SyntaxCtx sc) {
+//"? item [, item ...]" after a signature - the result first, then, if there is one, the error set. Its items are
+//separated by "," on one line (QY). A function type's or a lambda's (value) is one item or a parenthesized list, so a
+//"," after it is never read as the next item of a list it stands in ("f fn(I64) ? (A, B)", R1b)
+static struct syntax* parseFuncErrorListKind(SyntaxCtx sc, bool value) {
     int cur = TokenGetCursor(sc->tc);
     struct token q = acceptTok(sc, TOK_QSNTMRK);
     if (q.type == TOK_NONE) return NULL;
-    (void)cur;
     struct syntax* s = newNode(SNTX_ERROR_LIST);
     addTok(s, q);
-    //R16: "?" alone is the default error; any types named after it are added to it
+    if (value && peekTok(sc).type == TOK_PAREN_O && peekTok(sc).lineNr == q.lineNr) {
+        struct token open = TokenFeed(sc->tc);
+        addTok(s, open);
+        bool skip = TokenSkipEnds(sc->tc, false);
+        struct syntax* first = parseErrorListItem(sc);
+        if (first) {
+            addSntx(s, first);
+            parseListTail(sc, s, parseErrorListItem, TOK_PAREN_C);
+        }
+        TokenSkipEnds(sc->tc, skip);
+        struct token close = acceptTok(sc, TOK_PAREN_C);
+        if (!first || close.type == TOK_NONE) return parseFail(sc, cur);
+        addTok(s, close);
+        return s;
+    }
+    //R1a: "?" alone is the set the body can fail with; a list after it is a written promise
     struct syntax* first = parseErrorListItem(sc);
     if (!first) return s;
     addSntx(s, first);
-    addErrorListTail(sc, s);
+    while (!value) {
+        int before = TokenGetCursor(sc->tc);
+        struct token comma = TokenFeed(sc->tc);
+        struct token next = peekTok(sc);
+        if (comma.type != TOK_COMMA || next.lineNr != comma.lineNr) { TokenSetCursor(sc->tc, before); break; }
+        struct syntax* item = parseErrorListItem(sc);
+        if (!item) { TokenSetCursor(sc->tc, before); break; }
+        addTok(s, comma);
+        addSntx(s, item);
+    }
     return s;
+}
+
+struct syntax* parseFuncErrorList(SyntaxCtx sc) {
+    return parseFuncErrorListKind(sc, false);
 }
 
 //bare, no marker - unlike before, nothing here distinguishes it from a following error-list positionally
@@ -838,14 +926,14 @@ struct syntax* parseRetType(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     if (acceptTok(sc, TOK_PAREN_O).type != TOK_NONE) {
         struct syntax* s = newNode(SNTX_RET_TYPE);
-        int n = 0;
-        do {
-            struct syntax* type = parseTypeExpr(sc);
-            if (!type) return parseFail(sc, cur);
+        bool skip = TokenSkipEnds(sc->tc, false);
+        struct syntax* type = parseTypeExpr(sc);
+        if (type) {
             addSntx(s, type);
-            n++;
-        } while (acceptTok(sc, TOK_COMMA).type != TOK_NONE);
-        if (n < 2 || acceptTok(sc, TOK_PAREN_C).type == TOK_NONE) return parseFail(sc, cur);
+            parseListTail(sc, s, parseTypeExpr, TOK_PAREN_C);
+        }
+        TokenSkipEnds(sc->tc, skip);
+        if (countSntx(s) < 2 || acceptTok(sc, TOK_PAREN_C).type == TOK_NONE) return parseFail(sc, cur);
         return s;
     }
     struct syntax* type = parseTypeExpr(sc);
@@ -867,7 +955,8 @@ struct syntax* parseParam(SyntaxCtx sc) {
     //a lambda's parameter may leave its type out ("fn(a, b)"), to be taken from where it is passed - permission
     //included, so such a parameter has no "mut" of its own (D16)
     struct token nextTok = peekTok(sc);
-    if (lambdaParams && (nextTok.type == TOK_COMMA || nextTok.type == TOK_PAREN_C)) {
+    bool lineEnds = nextTok.type == TOK_STMNT_END || nextTok.lineNr > name.lineNr;
+    if (lambdaParams && (nextTok.type == TOK_COMMA || nextTok.type == TOK_PAREN_C || lineEnds)) {
         if (mut.type == TOK_MUT) return parseFail(sc, cur);
         ListAdd(&sc->localNames, &name.str); //S8b
         return s;
@@ -889,26 +978,22 @@ struct syntax* parseParam(SyntaxCtx sc) {
     return s;
 }
 
-//"(PARAM (COMMA PARAM)*)?" - always succeeds (possibly with zero params)
+//"(PARAM (SEP PARAM)*)?" - always succeeds (possibly with zero params); SEP is QY's (acceptListSep)
 struct syntax* parseParamList(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_PARAM_LIST);
+    bool skip = TokenSkipEnds(sc->tc, false);
     struct syntax* first = parseParam(sc);
-    if (!first) return s;
-    addSntx(s, first);
-    while (true) {
-        int before = TokenGetCursor(sc->tc);
-        struct token comma = TokenFeed(sc->tc);
-        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
-        if (trailingComma(sc, comma, TOK_PAREN_C)) break; //L18a
-        struct syntax* p = parseParam(sc);
-        if (!p) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, comma);
-        addSntx(s, p);
+    if (first) {
+        addSntx(s, first);
+        parseListTail(sc, s, parseParam, TOK_PAREN_C);
     }
+    TokenSkipEnds(sc->tc, skip);
     return s;
 }
 
 struct syntax* parseFuncSig(SyntaxCtx sc) {
+    bool value = sigIsValue;
+    sigIsValue = false; //a parameter's function type sets it again for its own signature
     int cur = TokenGetCursor(sc->tc);
     struct token open = acceptTok(sc, TOK_PAREN_O);
     if (open.type == TOK_NONE) return NULL;
@@ -919,9 +1004,14 @@ struct syntax* parseFuncSig(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* ret = parseRetType(sc);
-    if (ret) addSntx(s, ret);
-    struct syntax* errs = parseFuncErrorList(sc);
+    //D8e: "noreturn" stands where a result would
+    struct token nr = acceptTok(sc, TOK_NORETURN);
+    if (nr.type != TOK_NONE) addTok(s, nr);
+    else {
+        struct syntax* ret = parseRetType(sc);
+        if (ret) addSntx(s, ret);
+    }
+    struct syntax* errs = parseFuncErrorListKind(sc, value);
     if (errs) addSntx(s, errs);
     return s;
 }
@@ -1009,10 +1099,10 @@ struct syntax* parseCtorBody(SyntaxCtx sc) {
         TokenSetCursor(sc->tc, cur);
         struct syntax* stmt = parseStmnt(sc);
         if (stmt) { addSntx(s, stmt); continue; }
-        //T17/C2: only now is a comma after a field a separator written where a line end belongs - "a, b = b, a" is a
-        //parallel assignment (S4c), read as the statement it is above
+        //C2/QY: fields on one line are separated by "," - tried only now, so "a, b = b, a" is the parallel assignment
+        //(S4c) it is above
         f = parseCtorField(sc);
-        if (f && rejectSeparatorComma(sc)) { addSntx(s, f); continue; }
+        if (f && acceptTok(sc, TOK_COMMA).type != TOK_NONE) { addSntx(s, f); continue; }
         TokenSetCursor(sc->tc, cur);
         break;
     }
@@ -1038,6 +1128,8 @@ struct syntax* parseStructCtor(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_STRUCT);
     if (kw.type == TOK_NONE) return NULL;
+    //G10d/QW: "struct<T>(g Graph<T>&)" - the constructor's own type variables
+    struct syntax* typeParams = parseFnTypeParams(sc);
     struct token open = acceptTok(sc, TOK_PAREN_O);
     if (open.type == TOK_NONE) return parseFail(sc, cur);
     struct syntax* params = parseParamList(sc);
@@ -1060,11 +1152,29 @@ struct syntax* parseStructCtor(SyntaxCtx sc) {
     addTok(s, curlyC);
     struct syntax* destruct = parseDestruct(sc);
     if (destruct) addSntx(s, destruct);
+    if (typeParams) addSntx(s, typeParams);
     return s;
 }
 
 //"fn [(receiver)] NAME [scope declarations] SIG" - everything of a function definition but its body. Leaves the cursor
 //after the signature and returns the definition node without its block, or NULL (cursor restored) on failure.
+bool nameIsKnownType(SyntaxCtx sc, struct syntax* name);
+bool nameIsPrimitiveTypeName(struct syntax* name);
+//QW: every name a receiver's type writes as a type argument that no type has (nameIsKnownType) is a variable the
+//receiver introduces - for "T[a, b]" and "match T" in the body (genericNames). The checker decides for itself
+static void addReceiverNames(SyntaxCtx sc, struct syntax* n, bool inArgs) {
+    if (!n) return;
+    if (inArgs && n->type == SNTX_NAME && n->parts.len == 1 && !nameIsKnownType(sc, n) && !nameIsPrimitiveTypeName(n)) {
+        ListAdd(&sc->genericNames, &((struct syntaxPart*)ListGetIdx(&n->parts, 0))->tok.str);
+        return;
+    }
+    for (int i = 0; i < n->parts.len; i++) {
+        struct syntaxPart* p = ListGetIdx(&n->parts, i);
+        if (!p->isToken) addReceiverNames(sc, p->sntx, inArgs || n->type == SNTX_TYPE_ARGS);
+    }
+}
+static void addReceiverVars(SyntaxCtx sc, struct syntax* receiver) { addReceiverNames(sc, receiver, false); }
+
 static struct syntax* parseFuncHead(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptFnKeyword(sc);
@@ -1085,12 +1195,17 @@ static struct syntax* parseFuncHead(SyntaxCtx sc) {
     }
     struct token name = receiver ? acceptMethodName(sc, false) : acceptTok(sc, TOK_IDEN);
     if (name.type == TOK_NONE) return parseFail(sc, cur);
+    //QW: "fn max<T>(...)" - the function's own type variables (G3); a method's receiver introduces its type's
+    //variables bare ("fn (l List<T>&) Push(x T)"), names no type has written as its type's arguments
+    struct syntax* typeParams = parseFnTypeParams(sc);
+    if (receiver) addReceiverVars(sc, receiver);
     //"fn f&b(...)" - a scope is never named (O3), so this is parsed only so that it is reported, from the
     //signature node where resolveFuncSig finds it
     struct list scopeDecls = parseScopeDecls(sc);
     struct syntax* sig = parseFuncSig(sc);
     if (!sig) return parseFail(sc, cur);
     for (int i = 0; i < scopeDecls.len; i++) addSntx(sig, *(struct syntax**)ListGetIdx(&scopeDecls, i));
+    if (typeParams) addSntx(sig, typeParams);
     //the receiver becomes parameter 0 of the signature. Every rule that governs a parameter - D9's axes,
     //E12's conversions, §8's containment - then governs it with no special case, which is the property M19
     //was built on; only where it is WRITTEN moved.
@@ -1188,19 +1303,13 @@ struct syntax* parseExternParam(SyntaxCtx sc) {
 //parseParamList
 struct syntax* parseExternParamList(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_EXTERN_PARAM_LIST);
+    bool skip = TokenSkipEnds(sc->tc, false);
     struct syntax* first = parseExternParam(sc);
-    if (!first) return s;
-    addSntx(s, first);
-    while (true) {
-        int before = TokenGetCursor(sc->tc);
-        struct token comma = TokenFeed(sc->tc);
-        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
-        if (trailingComma(sc, comma, TOK_PAREN_C)) break; //L18a
-        struct syntax* p = parseExternParam(sc);
-        if (!p) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, comma);
-        addSntx(s, p);
+    if (first) {
+        addSntx(s, first);
+        parseListTail(sc, s, parseExternParam, TOK_PAREN_C);
     }
+    TokenSkipEnds(sc->tc, skip);
     return s;
 }
 
@@ -1229,8 +1338,12 @@ struct syntax* parseExternFuncDecl(SyntaxCtx sc) {
     addTok(s, open);
     addSntx(s, params);
     addTok(s, close);
-    struct syntax* retType = parseRetType(sc);
-    if (retType) addSntx(s, retType);
+    struct token nr = acceptTok(sc, TOK_NORETURN); //D8e
+    if (nr.type != TOK_NONE) addTok(s, nr);
+    else {
+        struct syntax* retType = parseRetType(sc);
+        if (retType) addSntx(s, retType);
+    }
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     return s;
 }
@@ -1787,14 +1900,14 @@ struct syntax* parseCasePattern(SyntaxCtx sc) {
     struct token open = acceptTok(sc, TOK_PAREN_O);
     if (open.type == TOK_NONE) return s; //the case whatever its payload holds
     addTok(s, open);
-    while (peekTok(sc).type != TOK_PAREN_C) {
+    bool skip = TokenSkipEnds(sc->tc, false);
+    if (peekTok(sc).type != TOK_PAREN_C) {
         struct syntax* sub = parseSubPattern(sc);
-        if (!sub) return parseFail(sc, cur);
+        if (!sub) { TokenSkipEnds(sc->tc, skip); return parseFail(sc, cur); }
         addSntx(s, sub);
-        struct token comma = acceptTok(sc, TOK_COMMA);
-        if (comma.type == TOK_NONE) break;
-        addTok(s, comma);
+        parseListTail(sc, s, parseSubPattern, TOK_PAREN_C);
     }
+    TokenSkipEnds(sc->tc, skip);
     struct token close = acceptTok(sc, TOK_PAREN_C);
     if (close.type == TOK_NONE) return parseFail(sc, cur);
     addTok(s, close);
@@ -1843,8 +1956,10 @@ static struct syntax* parseSubPattern(SyntaxCtx sc) {
             addSntx(s, e);
         }
     }
-    enum tokenType next = peekTok(sc).type;
-    if (!s || (next != TOK_COMMA && next != TOK_PAREN_C)) return parseFail(sc, cur);
+    struct token nt = peekTok(sc);
+    enum tokenType next = nt.type;
+    bool lineEnds = next == TOK_STMNT_END || (s && nt.lineNr > prevTok(sc).lineNr);
+    if (!s || (next != TOK_COMMA && next != TOK_PAREN_C && !lineEnds)) return parseFail(sc, cur);
     return s;
 }
 
@@ -1886,7 +2001,8 @@ struct syntax* parseStmntCaseKind(SyntaxCtx sc, bool typeMatch) {
             int mark = TokenEditMark(sc->tc);
             alt = parseTypeExpr(sc);
             enum tokenType next = peekTok(sc).type;
-            if (!alt || (next != TOK_COMMA && next != TOK_IF && next != TOK_CURLY_O && next != TOK_ARROW)) {
+            if (!alt || (next != TOK_COMMA && next != TOK_IF && next != TOK_CURLY_O && next != TOK_ARROW
+                         && next != TOK_STMNT_END)) {
                 TokenSetCursor(sc->tc, at);
                 TokenEditRewind(sc->tc, mark);
                 alt = parseExprNoCond(sc);
@@ -1895,7 +2011,8 @@ struct syntax* parseStmntCaseKind(SyntaxCtx sc, bool typeMatch) {
             int at = TokenGetCursor(sc->tc);
             alt = parseCasePattern(sc);
             enum tokenType next = peekTok(sc).type;
-            if (alt && next != TOK_COMMA && next != TOK_IF && next != TOK_CURLY_O && next != TOK_ARROW) {
+            if (alt && next != TOK_COMMA && next != TOK_IF && next != TOK_CURLY_O && next != TOK_ARROW
+                    && next != TOK_STMNT_END) {
                 TokenSetCursor(sc->tc, at);
                 alt = NULL;
             }
@@ -1903,9 +2020,18 @@ struct syntax* parseStmntCaseKind(SyntaxCtx sc, bool typeMatch) {
         }
         if (!alt) return parseFail(sc, cur);
         addSntx(s, alt);
+        //QY: alternatives on one line are separated by ",", on different lines by the line break - a header goes on
+        //to its "{", "=>" or guard, so a line ending in an alternative continues it
         struct token comma = acceptTok(sc, TOK_COMMA);
-        if (comma.type == TOK_NONE) break;
-        addTok(s, comma);
+        if (comma.type != TOK_NONE) { addTok(s, comma); continue; }
+        int beforeEnd = TokenGetCursor(sc->tc);
+        if (acceptTok(sc, TOK_STMNT_END).type == TOK_NONE) break;
+        enum tokenType next = peekTok(sc).type;
+        if (next == TOK_CURLY_O || next == TOK_ARROW || next == TOK_IF || next == TOK_CURLY_C || next == TOK_CASE
+                || next == TOK_NOMATCH || next == TOK_NONE) {
+            TokenSetCursor(sc->tc, beforeEnd);
+            break;
+        }
     }
     struct token ifKw = acceptTok(sc, TOK_IF);
     if (ifKw.type != TOK_NONE) {
@@ -1941,13 +2067,10 @@ static struct syntax* parseMatch(SyntaxCtx sc, bool asValue) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_MATCH);
     if (kw.type == TOK_NONE) return NULL;
-    //"match <T>" (G13) - the operand is a type variable, not a value. Unambiguous: "<" never opens an
-    //expression, so seeing one here settles that this is a type match and that the cases are types too.
-    struct syntax* typeOperand = parseTypeVar(sc);
-    struct syntax* val = typeOperand ? typeOperand : parseExpr(sc);
+    struct syntax* val = parseExpr(sc);
     if (!val) return parseFail(sc, cur);
-    //G22: after its introduction a variable is written bare - "match N" over a constant, its cases read as "match <T>"'s
-    bool typeCases = typeOperand != NULL;
+    //G13/G22: "match T" over a type variable, or "match N" over a constant one - its cases are read as types
+    bool typeCases = false;
     struct syntax* leaf = val;
     while (!typeCases && leaf->parts.len == 1 && !((struct syntaxPart*)ListGetIdx(&leaf->parts, 0))->isToken)
         leaf = ((struct syntaxPart*)ListGetIdx(&leaf->parts, 0))->sntx;
@@ -1964,6 +2087,7 @@ static struct syntax* parseMatch(SyntaxCtx sc, bool asValue) {
     addTok(s, kw);
     addSntx(s, val);
     addTok(s, open);
+    bool skip = TokenSkipEnds(sc->tc, false); //a match used as a value inside parentheses holds statements again
     while (true) {
         struct syntax* c = parseStmntCaseKind(sc, typeCases);
         if (!c) break;
@@ -1971,6 +2095,7 @@ static struct syntax* parseMatch(SyntaxCtx sc, bool asValue) {
     }
     struct syntax* nomatch = parseStmntNomatch(sc);
     if (nomatch) addSntx(s, nomatch);
+    TokenSkipEnds(sc->tc, skip);
     struct token close = acceptTok(sc, TOK_CURLY_C);
     if (close.type == TOK_NONE) { noteUnclosed(sc, open); return parseFail(sc, cur); }
     addTok(s, close);
@@ -2083,7 +2208,7 @@ struct syntax* parseStmntDefer(SyntaxCtx sc) {
     return s;
 }
 
-//S11: bare statements, the same shape as done/fail. Whether they sit inside a loop is a semantic
+//S11: bare statements, the same shape as unreachable. Whether they sit inside a loop is a semantic
 //question (buildBreakStmnt), not a grammatical one.
 struct syntax* parseStmntBreak(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
@@ -2105,43 +2230,12 @@ struct syntax* parseStmntContinue(SyntaxCtx sc) {
     return s;
 }
 
-//S16c/S16d: bare statements, the same shape as done/fail
-struct syntax* parseStmntAbort(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_ABORT);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_ABORT);
-    addTok(s, kw);
-    return s;
-}
-
 struct syntax* parseStmntUnreachable(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_UNREACHABLE);
     if (kw.type == TOK_NONE) return NULL;
     if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_STMNT_UNREACHABLE);
-    addTok(s, kw);
-    return s;
-}
-
-struct syntax* parseStmntDone(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_DONE);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_DONE);
-    addTok(s, kw);
-    return s;
-}
-
-struct syntax* parseStmntFail(SyntaxCtx sc) {
-    int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_FAIL);
-    if (kw.type == TOK_NONE) return NULL;
-    if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-    struct syntax* s = newNode(SNTX_STMNT_FAIL);
     addTok(s, kw);
     return s;
 }
@@ -2172,19 +2266,13 @@ struct syntax* parseStmntAssert(SyntaxCtx sc) {
 //"error TYPE.word" (same-module) or "error alias...TYPE.word" (cross-module, through an alias chain of
 //any length, originating a foreign module's own error type directly - see the report) - always ends in
 //exactly "TYPE.word" (never a bare type alone), so every identifier before the last two is unambiguously
-//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity. A bare "error", with no
-//operand at all, raises the default error (R16) - a separate, simpler shape entirely, so it's tried first.
+//an alias hop, unlike a catch clause's own "TYPE.word"/"alias.TYPE" ambiguity (R3: every error names its type).
 struct syntax* parseStmntError(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token kw = acceptTok(sc, TOK_ERROR);
     if (kw.type == TOK_NONE) return NULL;
     struct token first = acceptTok(sc, TOK_IDEN);
-    if (first.type == TOK_NONE) {
-        struct syntax* bare = newNode(SNTX_STMNT_ERROR);
-        addTok(bare, kw);
-        if (!acceptStmntEnd(sc)) return parseFail(sc, cur);
-        return bare;
-    }
+    if (first.type == TOK_NONE) return parseFail(sc, cur);
     struct token dot1 = acceptTok(sc, TOK_DOT);
     if (dot1.type == TOK_NONE) return parseFail(sc, cur);
     struct token second = acceptTok(sc, TOK_IDEN);
@@ -2230,11 +2318,7 @@ struct syntax* parseCatchErr(SyntaxCtx sc) {
     return s;
 }
 
-//"+" joins entries here, not "||" - a catch clause is matching against a *set* of error types/words, the
-//same thing "+" already means combining in a function signature's error list ("ErrA + ErrB ? T"); "||"
-//would misleadingly read as a boolean-OR condition rather than "these belong to one combined set" (it
-//never actually produces a new set value the way this reads, per the report - kept only as the general
-//boolean-OR expression operator elsewhere in the language, unrelated to this).
+//QY: a catch clause's items are a list on its line, separated by "," as an error set's are ("catch A, B.X")
 struct syntax* parseCatchErrList(SyntaxCtx sc) {
     struct syntax* first = parseCatchErr(sc);
     if (!first) return NULL;
@@ -2243,7 +2327,7 @@ struct syntax* parseCatchErrList(SyntaxCtx sc) {
     while (true) {
         int before = TokenGetCursor(sc->tc);
         struct token sepTok = TokenFeed(sc->tc);
-        if (sepTok.type != TOK_ADD) { TokenSetCursor(sc->tc, before); break; }
+        if (sepTok.type != TOK_COMMA || peekTok(sc).lineNr != sepTok.lineNr) { TokenSetCursor(sc->tc, before); break; }
         struct syntax* e = parseCatchErr(sc);
         if (!e) { TokenSetCursor(sc->tc, before); break; }
         addTok(s, sepTok);
@@ -2283,11 +2367,17 @@ struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk) {
     return s;
 }
 
+//E15a/QQ1: "try", or "checked" - try with every optional check inside turned on - before an operand or a statement
+static struct token acceptTryKw(SyntaxCtx sc) {
+    struct token kw = acceptTok(sc, TOK_TRY);
+    return kw.type != TOK_NONE ? kw : acceptTok(sc, TOK_CHECKED);
+}
+
 //"try f()" alone propagates (see parseExprTry, a general expression); this is the catch-handling
 //statement form - control flow only, the caught error is never exposed as a value
 struct syntax* parseStmntTryCatch(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     //postfix, for the same reason parseExprTry takes one: a slice is a postfix on a primary (E16c)
     struct syntax* primary = parseExprPostfix(sc);
@@ -2321,7 +2411,7 @@ static bool syntaxIsIncDec(struct syntax* n) {
 //store, the value and the operator it implies - with catch clauses, as a try-catch statement has, after it
 struct syntax* parseStmntTryStore(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     struct syntax* inner = NULL;
     int at = TokenGetCursor(sc->tc);
@@ -2405,7 +2495,7 @@ static struct syntax* parseMultiDeclStmnt(SyntaxCtx sc) {
 static struct syntax* (*const stmntForms[])(SyntaxCtx) = {
     parseStmntDestruct, parseMultiDeclStmnt, parseVarDecl, parseStmntTryStore, parseStmntAssign, parseStmntIf,
     parseStmntFor, parseStmntDo, parseStmntMatch, parseStmntRet, parseStmntJoin, parseStmntBlock, parseStmntSpawn, parseStmntDefer,
-    parseStmntBreak, parseStmntContinue, parseStmntAbort, parseStmntUnreachable, parseStmntDone, parseStmntFail,
+    parseStmntBreak, parseStmntContinue, parseStmntUnreachable,
     parseStmntAssert, parseStmntError, parseStmntTryCatch, parseStmntExpr,
 };
 
@@ -2473,19 +2563,13 @@ struct syntax* parseExprArg(SyntaxCtx sc) {
 
 struct syntax* parseExprArgs(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_EXPR_ARGS);
+    bool skip = TokenSkipEnds(sc->tc, false);
     struct syntax* first = parseExprArg(sc);
-    if (!first) return s;
-    addSntx(s, first);
-    while (true) {
-        int before = TokenGetCursor(sc->tc);
-        struct token comma = TokenFeed(sc->tc);
-        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
-        if (trailingComma(sc, comma, TOK_PAREN_C)) break; //L18a
-        struct syntax* e = parseExprArg(sc);
-        if (!e) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, comma);
-        addSntx(s, e);
+    if (first) {
+        addSntx(s, first);
+        parseListTail(sc, s, parseExprArg, TOK_PAREN_C);
     }
+    TokenSkipEnds(sc->tc, skip);
     return s;
 }
 
@@ -2541,7 +2625,7 @@ struct syntax* parseExprUnary(SyntaxCtx sc);
 struct syntax* parseCatchClause(SyntaxCtx sc, bool listOk);
 struct syntax* parseExprTry(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
-    struct token kw = acceptTok(sc, TOK_TRY);
+    struct token kw = acceptTryKw(sc);
     if (kw.type == TOK_NONE) return NULL;
     //R9a: decided before the operand is read - a return statement inside it (in a lambda) resets defaultListAt
     bool listOk = cur == sc->defaultListAt;
@@ -2596,23 +2680,20 @@ struct syntax* parseArrLiteralNestedGroup(SyntaxCtx sc) {
 //"(ITEM (COMMA ITEM)*)?" where ITEM is either a nested bracket group (parseArrLiteralNestedGroup, tried
 //first) or a plain EXPR - always succeeds, possibly with zero items. Mirrors parseExprArgs exactly, just
 //with the one extra alternative per item.
+static struct syntax* parseArrLiteralItem(SyntaxCtx sc) {
+    struct syntax* e = parseArrLiteralNestedGroup(sc);
+    return e ? e : parseExpr(sc);
+}
+
 struct syntax* parseArrLiteralArgs(SyntaxCtx sc) {
     struct syntax* s = newNode(SNTX_ARR_LIT_ARGS);
-    struct syntax* first = parseArrLiteralNestedGroup(sc);
-    if (!first) first = parseExpr(sc);
-    if (!first) return s;
-    addSntx(s, first);
-    while (true) {
-        int before = TokenGetCursor(sc->tc);
-        struct token comma = TokenFeed(sc->tc);
-        if (comma.type != TOK_COMMA) { TokenSetCursor(sc->tc, before); break; }
-        if (trailingComma(sc, comma, TOK_SQUARE_C)) break; //L18a
-        struct syntax* e = parseArrLiteralNestedGroup(sc);
-        if (!e) e = parseExpr(sc);
-        if (!e) { TokenSetCursor(sc->tc, before); break; }
-        addTok(s, comma);
-        addSntx(s, e);
+    bool skip = TokenSkipEnds(sc->tc, false);
+    struct syntax* first = parseArrLiteralItem(sc);
+    if (first) {
+        addSntx(s, first);
+        parseListTail(sc, s, parseArrLiteralItem, TOK_SQUARE_C);
     }
+    TokenSkipEnds(sc->tc, skip);
     return s;
 }
 
@@ -2648,13 +2729,16 @@ static bool nameIsGenericVar(SyntaxCtx sc, struct syntax* name) {
 //load-bearing here, not just a convenience. NAME states the element type once; the length is the item count.
 struct syntax* parseArrayLiteralTail(SyntaxCtx sc, struct syntax* name, struct token open) {
     struct syntax* args = parseArrLiteralArgs(sc);
-    //E27: one item followed by "for" is a comprehension - "I32[x * 2 for x in a if x > 3]"
+    //E27: one item followed by "for" is a comprehension - "I32[x * 2 for x in a if x > 3]". It is no list: a line's end
+    //before its "for" or inside its clause separates nothing (QY)
     struct syntax* compr = NULL;
+    bool skip = TokenSkipEnds(sc->tc, true);
     if (args->parts.len == 1 && peekTok(sc).type == TOK_FOR) {
         compr = parseComprehensionClause(sc);
-        if (!compr) return NULL;
+        if (!compr) { TokenSkipEnds(sc->tc, skip); return NULL; }
     }
     struct token close = acceptTok(sc, TOK_SQUARE_C);
+    TokenSkipEnds(sc->tc, skip);
     if (close.type == TOK_NONE) return NULL;
     struct syntax* s = newNode(SNTX_EXPR_LITERAL);
     addSntx(s, name);
@@ -2717,7 +2801,10 @@ static struct syntax* parseLambda(SyntaxCtx sc) {
     if (kw.type == TOK_NONE) return NULL;
     bool prev = lambdaParams;
     lambdaParams = true;
+    bool prevValue = sigIsValue;
+    sigIsValue = true;
     struct syntax* sig = parseFuncSig(sc);
+    sigIsValue = prevValue;
     lambdaParams = prev;
     if (!sig) return parseFail(sc, cur);
     struct syntax* block = parseBlock(sc);
@@ -2753,34 +2840,22 @@ struct syntax* parseExprPrimary(SyntaxCtx sc) {
             addSntx(s, m);
             return s;
         }
-        case TOK_TRY: {
+        case TOK_TRY: case TOK_CHECKED: {
             struct syntax* tryExpr = parseExprTry(sc);
             if (!tryExpr) return NULL;
             struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
             addSntx(s, tryExpr);
             return s;
         }
-        case TOK_LST: { //G23: "<N>" - a generic's constant variable, as a value
-            int cur = TokenGetCursor(sc->tc);
-            advanceTok(sc);
-            struct token name = acceptTok(sc, TOK_IDEN);
-            if (name.type == TOK_NONE) return parseFail(sc, cur);
-            struct token close = acceptTok(sc, TOK_GRT);
-            //"<N>>2", "Array<F32, <N>>": the variable's ">" and what follows lex as one ">>"
-            if (close.type == TOK_NONE && TokenSplitShiftRight(sc->tc)) close = acceptTok(sc, TOK_GRT);
-            if (close.type == TOK_NONE) return parseFail(sc, cur);
-            struct syntax* v = newNode(SNTX_CONST_VAR);
-            addTok(v, name);
-            struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
-            addSntx(s, v);
-            return s;
-        }
         case TOK_PAREN_O: {
             int cur = TokenGetCursor(sc->tc);
             struct token open = advanceTok(sc);
+            //L18a: a parenthesized expression is one item, not a list - a line's end inside it separates nothing
+            bool skip = TokenSkipEnds(sc->tc, true);
             struct syntax* e = parseExpr(sc);
+            struct token close = e ? acceptTok(sc, TOK_PAREN_C) : (struct token){0};
+            TokenSkipEnds(sc->tc, skip);
             if (!e) return parseFail(sc, cur);
-            struct token close = acceptTok(sc, TOK_PAREN_C);
             if (close.type == TOK_NONE) return parseFail(sc, cur);
             struct syntax* s = newNode(SNTX_EXPR_PRIMARY);
             addTok(s, open);
@@ -2987,22 +3062,19 @@ struct syntax* parseExprIndex(SyntaxCtx sc) {
     int cur = TokenGetCursor(sc->tc);
     struct token open = acceptTok(sc, TOK_SQUARE_O);
     if (open.type == TOK_NONE) return NULL;
+    bool skip = TokenSkipEnds(sc->tc, false); //an index's arguments are a list (QY)
     int beforeLo = TokenGetCursor(sc->tc);
     struct syntax* lo = parseExpr(sc);
     if (!lo) TokenSetCursor(sc->tc, beforeLo);
     struct token colon = acceptTok(sc, TOK_COLON);
     if (colon.type == TOK_NONE) {
         //an ordinary index - its first expression is mandatory, and E31 lets a type's At take several: "m[i, j]"
-        if (!lo) return parseFail(sc, cur);
+        if (!lo) { TokenSkipEnds(sc->tc, skip); return parseFail(sc, cur); }
         struct syntax* s = newNode(SNTX_EXPR_INDEX);
         addTok(s, open);
         addSntx(s, lo);
-        for (struct token comma = acceptTok(sc, TOK_COMMA); comma.type != TOK_NONE; comma = acceptTok(sc, TOK_COMMA)) {
-            struct syntax* more = parseExpr(sc);
-            if (!more) return parseFail(sc, cur);
-            addTok(s, comma);
-            addSntx(s, more);
-        }
+        parseListTail(sc, s, parseExpr, TOK_SQUARE_C);
+        TokenSkipEnds(sc->tc, skip);
         struct token close = acceptTok(sc, TOK_SQUARE_C);
         if (close.type == TOK_NONE) return parseFail(sc, cur);
         addTok(s, close);
@@ -3011,6 +3083,7 @@ struct syntax* parseExprIndex(SyntaxCtx sc) {
     int beforeHi = TokenGetCursor(sc->tc);
     struct syntax* hi = parseExpr(sc);
     if (!hi) TokenSetCursor(sc->tc, beforeHi);
+    TokenSkipEnds(sc->tc, skip);
     struct token close = acceptTok(sc, TOK_SQUARE_C);
     if (close.type == TOK_NONE) return parseFail(sc, cur);
     struct syntax* s = newNode(SNTX_EXPR_SLICE);
@@ -3079,6 +3152,15 @@ static struct syntax* parseExprPostfixUncached(SyntaxCtx sc) {
         int before = TokenGetCursor(sc->tc);
         struct token t = TokenFeed(sc->tc);
         if (t.type == TOK_INC || t.type == TOK_DEC) { addTok(s, t); continue; }
+        //E35: "x!" - what fails in the chain so far ends the program; the chain may go on after it
+        if (t.type == TOK_BANG) {
+            struct syntax* b = newNode(SNTX_EXPR_BANG);
+            addSntx(b, s);
+            addTok(b, t);
+            s = newNode(SNTX_EXPR_POSTFIX);
+            addSntx(s, b);
+            continue;
+        }
         TokenSetCursor(sc->tc, before);
         break;
     }
@@ -4508,9 +4590,9 @@ static void scanRegion(TokenCtx tc, struct scanResult* r, bool inBranch) {
                 ListAdd(&r->typeNames, &n);
             }
         } else if (t.type == TOK_ERROR) {
-            //a real error-decl ("error IDEN { ... }") registers a type name. "error" alone - the statement raising
-            //the default error - is followed by no name, and what does follow it is left for the main loop, which
-            //tracks brace depth: consuming it unread once desynced the depth for the rest of the scan
+            //a real error-decl ("error IDEN { ... }") registers a type name. "error" followed by no name (a statement
+            //written wrongly) leaves what follows it for the main loop, which tracks brace depth: consuming it unread
+            //once desynced the depth for the rest of the scan
             int before = TokenGetCursor(tc);
             struct token name = TokenFeed(tc);
             if (name.type == TOK_IDEN) {
@@ -4737,7 +4819,7 @@ static bool caseValueComma(struct token found) {
 
 static bool syntaxHint(struct token found, char* expected) {
     struct token prev = TokenBefore(found);
-    //L9a: "x := done + 1" in a constructor declaring a field "done" - a keyword names a field only after "."
+    //L9a: "x := range + 1" in a constructor declaring a field "range" - a keyword names a field only after "."
     if (keywordMayNameField(found.type) && expected && !strcmp(expected, "an expression") && prev.type != TOK_ARROW) {
         ErrSyntax(found, ERR_KEYWORD_FIELD_READ, found);
         return true;
@@ -4746,19 +4828,19 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(found, ERR_MATCH_VALUE_ONE);
         return true;
     }
-    //"done mut Bool = false" - a keyword beginning a line as a name would ("done" ended the statement there)
+    //"range mut Bool = false" - a keyword beginning a line as a name would ("range" ended the statement there)
     if (isKeywordTok(prev) && prev.lineNr == found.lineNr && TokenBefore(prev).lineNr < prev.lineNr
         && (found.type == TOK_MUT || found.type == TOK_ASS_INFER || found.type == TOK_ASS || found.type == TOK_COMMA
-            || (found.type == TOK_IDEN && (prev.type == TOK_DONE || prev.type == TOK_FAIL || prev.type == TOK_BREAK
-                                           || prev.type == TOK_CONTINUE || prev.type == TOK_ABORT || prev.type == TOK_UNREACHABLE
+            || (found.type == TOK_IDEN && (prev.type == TOK_BREAK
+                                           || prev.type == TOK_CONTINUE || prev.type == TOK_UNREACHABLE
                                            || prev.type == TOK_JOIN)))) {
         ErrSyntax(prev, ERR_KEYWORD_AS_NAME, prev);
         return true;
     }
     //S12b: "nomatch => unreachable" - a clause that leaves gives no value, so it is a block (before L9's keyword-as-name:
     //"case X => return f(x)" is the same mistake as "=> return 1", not a name)
-    if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_ABORT || found.type == TOK_RET
-            || found.type == TOK_FAIL || found.type == TOK_DONE || found.type == TOK_BREAK || found.type == TOK_CONTINUE
+    if (prev.type == TOK_ARROW && (found.type == TOK_UNREACHABLE || found.type == TOK_RET
+            || found.type == TOK_BREAK || found.type == TOK_CONTINUE
             || found.type == TOK_ERROR)) {
         TokenCtx tc = found.owner;
         int from = TokenGetStrStart(found);
@@ -4803,9 +4885,15 @@ static bool syntaxHint(struct token found, char* expected) {
         && (isOperandEndTok(found.type) || found.type == TOK_PAREN_O) && found.type != TOK_PAREN_C && found.type != TOK_SQUARE_C
         && joinPieceHint(found, operandEndAfter(found))) return true;
     if (textPieceCalled(found)) return true;
-    //"f(a, b,)" - a trailing comma ends a list only where its closing bracket begins a line (L18a)
+    //"f(a, b,)" - a comma before a list's closing bracket separates nothing (L18a); the list stops at the comma, so the
+    //parse fails there or, after one item that took it, at the bracket
     if ((found.type == TOK_PAREN_C || found.type == TOK_SQUARE_C) && prev.type == TOK_COMMA && prev.lineNr == found.lineNr) {
-        ErrSyntax(prev, ERR_TRAILING_COMMA, found, found);
+        ErrSyntax(prev, ERR_TRAILING_COMMA, found);
+        return true;
+    }
+    struct token next = TokenAfter(found);
+    if (found.type == TOK_COMMA && (next.type == TOK_PAREN_C || next.type == TOK_SQUARE_C) && next.lineNr == found.lineNr) {
+        ErrSyntax(found, ERR_TRAILING_COMMA, next);
         return true;
     }
     //G21: "Array<U8, 1 << 12>" - a comparison or shift in a constant argument reads across the list's own '>'
@@ -4814,7 +4902,7 @@ static bool syntaxHint(struct token found, char* expected) {
         ErrSyntax(found, ERR_CONST_ARG_PAREN, found);
         return true;
     }
-    //"fn f() ?error {" - '?' is the whole of the default error, and 'error' names no error type
+    //"fn f() ?error {" - '?' alone is the inferred set (R1a), and 'error' names no error type
     if (found.type == TOK_ERROR && prev.type == TOK_QSNTMRK) {
         ErrSyntax(found, ERR_ERROR_AFTER_QUESTION);
         return true;

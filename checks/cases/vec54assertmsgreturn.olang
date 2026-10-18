@@ -1,5 +1,9 @@
 # check: fail error[S17]: an assert's message may not return
 # vec4 (f1e_assert_message_return): the review's repro
+import "std/io"
+error Stop {
+    HERE
+}
 fn churn() I64 {
     t := 0
     for i in range 3000 {
@@ -9,13 +13,13 @@ fn churn() I64 {
     return t
 }
 # F1 evasion: a return hidden in an assert message's catch block
-fn pick(c Bool, x <T>, y T) T { return x if c else y }
+fn pick<T>(c Bool, x T, y T) T { return x if c else y }
 fn g(k I64) I64 ? {
-    if k < 5 { error }
+    if k < 5 { error Stop.HERE }
     return k
 }
 fn h(k I64) String ? {
-    if k < 5 { error }
+    if k < 5 { error Stop.HERE }
     return "ok"
 }
 fn longer(a mut Array<I64>&, b mut Array<I64>&) mut Array<I64>& {
@@ -30,5 +34,5 @@ fn main() ? {
     d := longer(v.ViewMut(), other)   # the Vec own buffer - and no loan on it?
     for i in range 1000 { v.Push(i) } # frees the buffer
     churn()
-    println($d[0] " " $d[1])
+    try io.Println($d[0] " " $d[1])
 }

@@ -1,0 +1,35 @@
+# check: run
+# flags: -debug -sanitize
+# O17b (U2): the default taken - a handle built where the element's references are, kept by the callee and pushed on
+import "std/io"
+fn churn() ? io.IoError {
+    for k in range 200 {
+        a := Array<I64>(64, k * 1000 + 7)
+        if a[0] == 3 { try io.Println("x") }
+    }
+}
+type Node struct(v I64, next mut Node&) {
+    v
+    next
+}
+type BagState struct() {
+    head mut Node& = null
+}
+type Bag struct() {
+    s mut BagState& = BagState()
+}
+fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
+fn (b Bag&) Keep(l mut List<mut BagState&>&) { l.Push(b.s) }
+fn main() ? {
+    a := Array<Bag>(1, Bag())
+    kept := List<mut BagState&>()
+    for i in range 3 {
+        (checked a[i] catch default Bag()).Sneak(i + 1)
+        (checked a[i] catch default Bag()).Keep(kept)
+        try churn()
+    }
+    try churn()
+    t := 0
+    for st in kept { if st.head != null { t = t * 10 + st.head.v } }
+    assert kept.Len() == 3 and t == 1, $kept.Len() " " $t
+}

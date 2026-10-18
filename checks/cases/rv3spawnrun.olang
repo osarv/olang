@@ -1,5 +1,5 @@
 # check: run
-# flags: -d -s
+# flags: -debug -sanitize
 # P2 unoptimized: four spawned lambdas pushing into lists they captured from the spawner's block each build into a stand-in
 # of their own - they bumped the spawner's arena from four threads at once, and elements came back overwritten
 type N struct(v I64) {
@@ -22,5 +22,5 @@ fn main() ? {
     for i, x in b { if x.v != i + 1000000 or x.w != 3 * (i + 1000000) { bad++ } }
     for i, x in c { if x.v != i + 2000000 or x.w != 3 * (i + 2000000) { bad++ } }
     for i, x in d { if x.v != i + 3000000 or x.w != 3 * (i + 3000000) { bad++ } }
-    if bad != 0 or a.Len() + b.Len() + c.Len() + d.Len() != 120000 { fail }
+    assert not (bad != 0 or a.Len() + b.Len() + c.Len() + d.Len() != 120000)
 }

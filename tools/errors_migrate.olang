@@ -1,0 +1,343 @@
+# errors_migrate - moves olang code to the errors batch (SPEC R1a, R8, E15a, E24, E31a), driven by the compiler's own
+# diagnostics:
+#
+#   - a checked form's old name (TryAt, TryPlus, tryAt, ...) becomes its new one (CheckedAt, CheckedPlus, checkedAt);
+#   - a "try" that only turned checks on - "nothing here fails as written - write 'checked' to check it" (E15a), or one
+#     before a type that has only the checked form of an operation (E31a) - becomes "checked";
+#   - a call that can now fail - a std function that used to stop the program on a caller's mistake (Format with a bad
+#     base, List.Insert out of range, chan.Send on a closed channel, a linalg shape) - is written "try CALL" - in a
+#     test block too, where an error it lets through fails the test (S16), as the old stop did - and a function then
+#     declares what it lets through (R9: "?" is added, or the error type after its list).
+#
+# Run from anywhere, on files or directories; each file is compiled with "-t" (a test build reaches everything the file
+# imports), what the diagnostics name is rewritten wherever they point, and that repeats until nothing more changes:
+#
+#     build/out build tools/errors_migrate.olang && build/tools_errors_migrate build/out shared.olang std/ ...
+#
+# What it cannot decide - an operator that can now fail (E31: where the expression starts), a signature over several
+# lines, a bare "error" statement (each needs an error type of its own) - is listed at the end for a person.
+
+import "std/os"
+import "std/io"
+import "std/filepath"
+
+Forms := String&["At", "SetAt", "Slice", "Plus", "Minus", "Mul", "Div", "Rem", "MatMul", "Neg", "ShiftLeft"
+                 "ShiftRight", "Inc", "Dec"]
+
+# one diagnostic: where it points, its rule and its message
+type diagnostic struct(File String&, Line I64, Col I64, Rule String&, Msg String&) {
+    File
+    Line
+    Col
+    Rule
+    Msg
+}
+
+fn isIdent(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# text with the length-n piece at off replaced by with
+fn splice(text String&, off I64, n I64, with String&) String {
+    b := StringBuilder()
+    b.Push(text[:off])
+    b.Push(with)
+    b.Push(text[off + n:])
+    return b.ToString()
+}
+
+# the offset line (from 1) starts at, and where it ends (its line break, or the end)
+fn lineSpan(text String&, line I64) (I64, I64) {
+    l I64 = 1
+    i I64 = 0
+    for l < line and i < text.Len() {
+        if text[i] == '\n' { l++ }
+        i++
+    }
+    e := i
+    for e < text.Len() and text[e] != '\n' { e++ }
+    return i, e
+}
+
+# the old checked forms' names, Try and try, renamed Checked and checked - whole words only
+fn renameTryForms(text String&) String {
+    b := StringBuilder()
+    i I64 = 0
+    for i < text.Len() {
+        if isIdent(text[i]) {
+            j := i
+            for j < text.Len() and isIdent(text[j]) { j++ }
+            w := text[i:j]
+            kept Bool = true
+            if w.Len() > 3 and (w[0] == 'T' or w[0] == 't') and w[1] == 'r' and w[2] == 'y' {
+                rest := w[3:]
+                if rest in Forms {
+                    b.Push("Checked" if w[0] == 'T' else "checked")
+                    b.Push(rest)
+                    kept = false
+                }
+            }
+            if kept { b.Push(w) }
+            i = j
+        } else {
+            b.PushChar(text[i])
+            i++
+        }
+    }
+    return b.ToString()
+}
+
+# a line without its comment, its text and character literals emptied - for counting braces
+fn codeOf(l String&) String {
+    b := StringBuilder()
+    k I64 = 0
+    for k < l.Len() {
+        c := l[k]
+        if c == '#' { break }
+        if c == '"' or c == '\'' {
+            k++
+            for k < l.Len() and l[k] != c {
+                if l[k] == '\\' { k++ }
+                k++
+            }
+            b.PushChar(c)
+            b.PushChar(c)
+        } else { b.PushChar(c) }
+        k++
+    }
+    return b.ToString()
+}
+
+# whether line (from 1) is inside a test block
+fn inTest(text String&, line I64) Bool {
+    depth I64 = 0
+    testAt I64 = -1
+    n I64 = 1
+    for l in text.Lines() {
+        if testAt < 0 and l.Trim().StartsWith("test \"") { testAt = depth }
+        if n == line { return testAt >= 0 }
+        for c in codeOf(l) {
+            if c == '{' { depth++ }
+            if c == '}' { depth-- }
+        }
+        if testAt >= 0 and depth <= testAt { testAt = -1 }
+        n++
+    }
+    return false
+}
+
+# where the call whose name begins at col (from 1) in l starts and ends (from 0, the end not included): its receiver
+# chain included - "a.b(x)[i].f(y)" for f's column starts at a
+fn callExtent(l String&, col I64) (I64, I64) ? {
+    j := col - 1
+    for j < l.Len() and isIdent(l[j]) { j++ }
+    if j >= l.Len() or l[j] != '(' { error Unparsed.CALL }
+    depth I64 = 0
+    k := j
+    for k < l.Len() {
+        c := l[k]
+        if c == '(' or c == '[' { depth++ }
+        if c == ')' or c == ']' {
+            depth--
+            if depth == 0 { break }
+        }
+        if c == '"' {
+            k++
+            for k < l.Len() and l[k] != '"' {
+                if l[k] == '\\' { k++ }
+                k++
+            }
+        }
+        k++
+    }
+    if k >= l.Len() { error Unparsed.CALL }
+    start := col - 1
+    for start > 0 and l[start - 1] == '.' {
+        s := start - 1
+        if s > 0 and (l[s - 1] == ')' or l[s - 1] == ']') {
+            close := l[s - 1]
+            open := '(' if close == ')' else '['
+            d I64 = 0
+            m := s - 1
+            for m >= 0 {
+                if l[m] == close { d++ }
+                if l[m] == open {
+                    d--
+                    if d == 0 { break }
+                }
+                m--
+            }
+            if m < 0 { error Unparsed.CALL }
+            s = m
+        }
+        for s > 0 and isIdent(l[s - 1]) { s-- }
+        start = s
+    }
+    return start, k + 1
+}
+
+error Unparsed {
+    CALL
+    SIGNATURE
+}
+
+# a call that can now fail, written "try CALL" - in a test too, where what it lets through fails the test (S16)
+fn tryCall(text String&, line I64, col I64) String ? {
+    ls, le := lineSpan(text, line)
+    l := text[ls:le]
+    a, b := try callExtent(l, col)
+    if b < a { error Unparsed.CALL }
+    return splice(text, ls + a, 0, "try ")
+}
+
+# the "try" at col, or the last one before col on its line, made "checked"
+fn checkedAt(text String&, line I64, col I64) String ? {
+    ls, le := lineSpan(text, line)
+    l := text[ls:le]
+    k := col - 1
+    for k >= 0 {
+        if (k + 3 <= l.Len() and l[k:k + 3] == "try" and (k == 0 or not isIdent(l[k - 1]))
+                and (k + 3 == l.Len() or not isIdent(l[k + 3]))) {
+            return splice(text, ls + k, 3, "checked")
+        }
+        k--
+    }
+    error Unparsed.CALL
+}
+
+# errType added to the error list of the function the line is in - "? errType" written, or "+ errType" after a list
+fn declareError(text String&, line I64, errType String&) String ? {
+    n := line
+    for n > 0 {
+        ls, le := lineSpan(text, n)
+        l := text[ls:le]
+        if l.StartsWith("fn ") or l.StartsWith("type ") {
+            code := codeOf(l).TrimEnd()
+            if not code.EndsWith(" {") { error Unparsed.SIGNATURE }
+            at := ls + code.Len() - 2
+            if code.EndsWith(" ? {") { error Unparsed.SIGNATURE }         # inferred: nothing to add
+            q := try code.FindLast(" ? ") catch default -1
+            if q < 0 { return splice(text, at, 0, " ?") }                  # no set yet: let it be inferred (R1a)
+            for w in code[q + 3:code.Len() - 2].Split(" + ") {
+                if w.Trim() == errType { error Unparsed.SIGNATURE }         # already listed
+            }
+            if not text.Contains("error " $errType " {") { error Unparsed.SIGNATURE }   # another module's: written by hand
+            return splice(text, at, 0, " + " $errType)
+        }
+        n--
+    }
+    error Unparsed.SIGNATURE
+}
+
+# the diagnostics compiling path (with -t, from its own directory) gives
+fn diagnostics(olang String&, path String&) List<diagnostic> ? {
+    out := List<diagnostic>()
+    dir := filepath.Dir(path)
+    r := try os.Exec(String&[olang, "-t", filepath.Base(path)], "", true, dir)
+    for row in r.Stdout.Lines() {
+        # "FILE:LINE:COL: error[RULE]: MESSAGE"
+        e := try row.Find(": error[") catch { continue }
+        loc := row[:e].Split(":")
+        if loc.Len() != 3 { continue }
+        close := try row.Find("]: ") catch { continue }
+        line := try loc[1].ParseInt() catch { continue }
+        col := try loc[2].ParseInt() catch { continue }
+        file := loc[0] if filepath.IsAbs(loc[0]) else filepath.Join(dir, loc[0])
+        out.Push(diagnostic($file, line, col, $row[e + 8:close], $row[close + 3:]))
+    }
+    return out
+}
+
+# one file's diagnostics applied, bottom to top so an edit moves nothing still to be applied; what could not be is put
+# in left. How many edits were made
+fn apply(file String&, ds mut List<diagnostic>&, left mut List<String&>&) I64 ? {
+    text := try os.ReadFile(file)
+    edits I64 = 0
+    ds.Sort(fn(a diagnostic, b diagnostic) { return a.Line > b.Line or (a.Line == b.Line and a.Col > b.Col) })
+    lastLine I64 = -1
+    for d in ds {
+        edited Bool = false
+        if d.Line != lastLine {                                    # one edit a line a round: its columns move
+            if d.Msg.EndsWith("write 'checked' to check it") or (d.Rule == "E31a" and d.Msg.EndsWith("under 'checked'")) {
+                edited = true
+                text = try checkedAt(text, d.Line, d.Col) catch { edited = false } default text
+            } else if d.Rule == "E15" and d.Msg.StartsWith("this call can fail") {
+                edited = true
+                text = try tryCall(text, d.Line, d.Col) catch { edited = false } default text
+            } else if d.Rule == "R9" and d.Msg.Contains(" can escape here, and this function does not declare it") {
+                t := d.Msg[:try d.Msg.Find(" can escape") catch default 0]
+                edited = true
+                text = try declareError(text, d.Line, t) catch { edited = false } default text
+            }
+        }
+        if edited {
+            edits++
+            lastLine = d.Line
+        } else { left.Push($d.File ":" $d.Line ":" $d.Col ": [" $d.Rule "] " $d.Msg) }
+    }
+    if edits > 0 { try os.WriteFile(file, text) }
+    return edits
+}
+
+# the .olang files of the paths given, directories walked
+fn filesOf(paths Array<String&>&) List<String&> ? {
+    out := List<String&>()
+    for p in paths {
+        if os.IsDir(p) {
+            sub := List<String&>()
+            for n in try os.ReadDir(p) { sub.Push(filepath.Join(p, n)) }
+            for f in try filesOf(sub.ToArray()) { out.Push($f) }
+        } else if p.EndsWith(".olang") { out.Push(p) }
+    }
+    return out
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 3 {
+        try io.PrintErrln("usage: errors_migrate OLANG PATH...")
+        os.Exit(2)
+    }
+    olang := try os.RealPath(args[1])
+    files := try filesOf(args[2:])
+    for f in files {
+        text := try os.ReadFile(f)
+        renamed := renameTryForms(text)
+        if renamed != text { try os.WriteFile(f, renamed) }
+    }
+    left := List<String&>()
+    for round in range 1, 21 {
+        left.Clear()
+        all := List<diagnostic>()
+        names := List<String&>()
+        for f in files {
+            for d in try diagnostics(olang, f) {
+                all.Push(diagnostic($d.File, d.Line, d.Col, $d.Rule, $d.Msg))
+                if d.File not in names { names.Push($d.File) }
+            }
+        }
+        edits I64 = 0
+        for name in names {
+            ds := List<diagnostic>()
+            for d in all {
+                if d.File == name { ds.Push(diagnostic($d.File, d.Line, d.Col, $d.Rule, $d.Msg)) }
+            }
+            edits += try apply(name, ds, left)
+        }
+        try io.PrintErrln("round " $round ": " $edits " edits")
+        if edits == 0 { break }
+    }
+    for l in left { try io.Println(l) }
+}
+
+test "the checked forms are renamed as whole words" {
+    assert renameTryForms("fn (b Bag&) TryAt(i I64) I32 ? E") == "fn (b Bag&) CheckedAt(i I64) I32 ? E"
+    assert renameTryForms("x.trySlice(1, 2) + TryAtAll + Retry") == "x.checkedSlice(1, 2) + TryAtAll + Retry"
+}
+
+test "a call is tried, a try made checked, an error declared" {
+    assert try tryCall("fn f() ? {\n    g(1)\n}\n", 2, 5) catch default "" == "fn f() ? {\n    try g(1)\n}\n"
+    assert try checkedAt("    x := try (a + b)\n", 1, 10) catch default "" == "    x := checked (a + b)\n"
+    assert try declareError("fn f() {\n    try g()\n}\n", 2, "E") catch default "" == "fn f() ? {\n    try g()\n}\n"
+    src := "error E {\n    X\n}\nfn f() ? F {\n    try g()\n}\n"
+    assert try declareError(src, 5, "E") catch default "" == "error E {\n    X\n}\nfn f() ? F + E {\n    try g()\n}\n"
+    assert (try declareError("fn f() ? {\n}\n", 2, "E") catch default "none") == "none"
+}

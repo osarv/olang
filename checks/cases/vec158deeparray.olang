@@ -1,0 +1,13 @@
+# check: fail error[O31]: this type nests more than 64 levels of values and arrays - too deep to check
+# vec7 N2: a field 70 array levels deep is too deep to check - said as that, not as owning objects
+import "std/io"
+type H struct() {
+    a Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<Array<I64>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>&>& = null
+    n I64 = 0
+}
+fn main() ? {
+    h := H()
+    h.n = 3
+    c := h
+    try io.Println($c.n)
+}
