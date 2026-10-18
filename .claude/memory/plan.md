@@ -68,6 +68,11 @@ overrated".
   (stage-0 open bug fixes: T22a sharedscope, S4d by types, E31b M1) and wt-emit (port M9: compiler/emit.olang, an
   emitdiff against stage 0). Freed ~8GB of merged worktrees' build/. Next when one finishes: M6 scope pass (xhigh),
   then eval wired to lower (M8). Stop new work at 0.90 weekly.
+- 2026-10-18 17:20 CEST: wt-s0fix merged (f0291f3; its verify passed; master differed only in memory): T22a function
+  types carry where their references live (funcPosShares, the port too); S4d decided by types (s4dResultCanHold); E31b
+  M1 - a loop's condition runs in the turn it decides (do lowered to three clauses). Port leftovers: the port refuses
+  `keep(link)` (instance arguments plain), its type spelling shows no scopes. Found, not fixed: a constructor field
+  `v := w + f(r)` where f reads v on another instance says "expected no value" (a type cycle; name it).
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
   self-hosting (stage 0 too): the open STAGE-0 BUG FIXES (wt-noown - own/take removed, memory round 3 - merged
