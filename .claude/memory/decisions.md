@@ -379,6 +379,15 @@ design. Do what you want") - nothing to decide until a GUI is written.
   absence by errors - null remains only in stored absence (next, parent, AST parts, zero values). ASKED: (1) want it
   at all - recommended yes, light form; (2) the word - recommended `maybe` (or nullable, optional). In effect: nullable
   references (T2a/T2b).
+  PARKED 2026-10-18 (the user, overwhelmed: "? is exactly the tool for the job no?", "maybe is Option by proxy",
+  "I don't get why we want to not just crash on null", "it kinda lines up with Result and I like the uniformity").
+  Answered: `?` would be ideal but for the clash; no compile-time-evaluation gain; `maybe` = Option by another name;
+  the gain is only that the compiler points at every unhandled null - a nice-to-have. Parked until after self-hosting;
+  nothing changes (nullable references, T2a/T2b). Bring back then, briefly.
+- QAP ASKED 2026-10-18 (the user: "is null should not be valid code right since we can do == null? Or ... maybe is
+  is just a really bad word in general. Record that as a question"): `x is null` and `x == null` are two spellings of
+  one test (against one-way), and is `is` a good word at all (it is identity, E10c, and the case/type test, E32)?
+  In effect: both spellings valid. Not discussed yet.
 - QAN DECIDED 2026-10-18 (the user: "Nah, let's do it"; earlier not sure): `T ? E` is a type - the
   outcome of a fallible call held as a value, `Result` its name, a generic enum with cases Ok(value)/Failed(error);
   `fn f() T ? E` returns one; a call must still say what happens to its failure (`try`, `!`, catch, or postfix `?` =
