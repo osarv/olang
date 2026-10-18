@@ -146,6 +146,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     Plans List<typed.Plan>
     Gaps List<Gap>
     InstNote fn(inst I64) String = null # the checker's note for an instance's context ("instantiated here, with T = ...")
+    Spell fn(t types.TypeId) String = null # a type as source writes it, for a message (the checker's)
     sums List<mut summary&>
     ctorOf Map<types.TypeId, I64>  # a type's constructor's body (twin 0)
     stTypes Map<types.TypeId, I64> # storeThrough, once asked: 1 being asked, 2 no, 3 yes
@@ -3420,8 +3421,14 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
     }
     dest := s.resultTerm(k)
     v := s.val(x, dest)
-    if v.K != ValKind.Existing { return }
     m := s.resultMark(k)
+    built := match m {
+        case typed.Mark.Of(_), typed.Mark.TypeVar => false
+        case _ => s.isRef(t) and not s.isFunc(t)
+    }
+    # a read-only reference to existing storage returned as a built result, which is new and writable (T25c, O14)
+    if built and v.K == ValKind.Fresh and s.handsBackExisting(x) and s.readOnlyAsBuilt(x) { return }
+    if v.K != ValKind.Existing { return }
     exact := s.storeThrough(t)
     match m {
         case typed.Mark.Of(_) { s.fit(v.T, dest, exact, x, FitReturn) }
@@ -3431,11 +3438,83 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
             # allows one - a function value (O14a), a value holding references (O14c)
             if s.isFunc(t) or not s.isRef(t) {
                 s.fit(v.T, dest, exact, x, FitReturn)
-            } else {
+            } else if v.T == dest or not s.builtFromParam(x, v.T) {
                 s.fit(v.T, dest, true, x, FitReturn)
             }
         }
     }
+}
+
+# O14, T25c: existing storage a parameter's reference reaches, returned as a built result - which is new storage, in
+# the result scope, and writable - is a borrowed result, and the error says how to write it: true when it said so
+fn (s mut Scoper&) builtFromParam(x typed.Expr&, t Term) Bool {
+    if not s.report { return false }
+    u := s.unAway(x)
+    param := match t {
+        case Term.Var(k) => k < s.B.Vars.Len() and s.isParamVar(s.B.Vars[k])
+        case Term.Derived(p, _) => p >= 0
+        case _ => false
+    }
+    lvalue := match u {
+        case typed.Expr.Read(_, _, _, _), typed.Expr.Borrow(_, _, _) => true
+        case _ => false
+    }
+    if param and lvalue {
+        s.err(s.opTok(x), msgs.ReturnBorrowAsBuilt())
+        return true
+    }
+    if param { return s.readOnlyAsBuilt(x) }
+    return false
+}
+
+# T25c, O14: a read-only reference returned as a built result: borrow it from the parameter it is read through - true
+# when it said so
+fn (s mut Scoper&) readOnlyAsBuilt(x typed.Expr&) Bool {
+    rt := x.Type()
+    if not s.isRef(rt) or (s.P.T.PermOf(rt) & types.Writable) != 0 { return false }
+    p := s.paramRoot(s.unAway(x))
+    if p < 0 or s.Spell == null {
+        s.err(s.opTok(x), msgs.ReadOnlyToBuiltResultNo())
+    } else {
+        s.err(s.opTok(x), msgs.ReadOnlyToBuiltResult($s.Spell(s.P.T.Referent(rt)) "&" $s.P.L.Names.Text(s.B.Locals[p].Name)))
+    }
+    return true
+}
+
+# whether a call hands back existing storage: its result borrowed from a parameter, or written as a type variable
+# (O13, O14b)
+fn (s mut Scoper&) handsBackExisting(x typed.Expr&) Bool {
+    c := s.callOf(s.unAway(x))
+    if c == null { return false }
+    fty := s.calleeType(c)
+    if fty == types.UnknownT { return false }
+    r := s.P.T.ResultFrom(fty, 0)
+    return r >= 0 or r == types.FromTypeVar
+}
+
+fn (s mut Scoper&) isParamVar(v typed.ScopeVar) Bool {
+    return match v {
+        case typed.ScopeVar.Param(_) => true
+        case _ => false
+    }
+}
+
+# the parameter a value is read through - a member, an element, a slice or an At call of it; -1 for none
+fn (s mut Scoper&) paramRoot(x typed.Expr&) I64 {
+    u := s.unAway(x)
+    match u {
+        case typed.Expr.Call(_, _, c) {
+            if c.Args.Len() > 0 { return s.paramRoot(c.Args[0]) }
+            return -1
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            r := flRoot(sl.Base)
+            return r if r >= 0 and s.B.Locals[r].Kind == typed.LocalKind.Param else -1
+        }
+        case _ { }
+    }
+    r := flRootExpr(u)
+    return r if r >= 0 and s.B.Locals[r].Kind == typed.LocalKind.Param else -1
 }
 
 # a task (P1, P1g, P2): its targets are assignments of its results; its call judged as any call, landing where its one
@@ -4892,6 +4971,7 @@ fn (s mut Scoper&) nameSpan(sp source.Span) source.Span {
     depth := 0
     angle := 0
     beforeAngle := source.Span(0, 0)
+    bracket := source.Span(0, 0)
     for k < end {
         ch := text[k]
         if ch == '"' or ch == '\'' {
@@ -4909,6 +4989,8 @@ fn (s mut Scoper&) nameSpan(sp source.Span) source.Span {
                 name = last
                 found = true
             }
+            # an index written "x[i]" calls At: said at its "["
+            if ch == '[' and depth == 0 { bracket = source.Span(I32(k), I32(k + 1)) }
             depth++
             last = source.Span(0, 0)
             k++
@@ -4945,6 +5027,7 @@ fn (s mut Scoper&) nameSpan(sp source.Span) source.Span {
         }
         k++
     }
+    if not found and bracket.End > bracket.Start { return bracket }
     return name
 }
 

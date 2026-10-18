@@ -1363,8 +1363,10 @@ fn (c mut Checker&) instContexts(inst I64) I64 {
     return chain.Len()
 }
 
-# the note an instance's context gives, for the passes after checking (G16b)
+# the note an instance's context gives, and a type as source writes it, for the passes after checking (G16b, B11)
 fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
+
+fn (c mut Checker&) Ty(t types.TypeId) String { return c.ty(t) }
 
 # "instantiated here, with K = K, V = I32"
 fn (c mut Checker&) instNote(inst I64) String {
