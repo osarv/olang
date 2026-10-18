@@ -73,6 +73,10 @@ overrated".
   M1 - a loop's condition runs in the turn it decides (do lowered to three clauses). Port leftovers: the port refuses
   `keep(link)` (instance arguments plain), its type spelling shows no scopes. Found, not fixed: a constructor field
   `v := w + f(r)` where f reads v on another instance says "expected no value" (a type cycle; name it).
+- 2026-10-18 20:40 CEST (weekly 0.81): wt-emit merged and verified (6dbc392): M9 first round - the port's pipeline
+  builds and runs programs, `make emitdiff` 929/1009 tests as stage 0 (shared.olang's differences: destructors (M6),
+  compile-time decisions (M8), check gaps; PROGRESS.md in /home/user/wt/emit has the rest). Running: wt-scope6 (M6),
+  wt-eval (M8 on lowered MIR).
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
   self-hosting (stage 0 too): the open STAGE-0 BUG FIXES (wt-noown - own/take removed, memory round 3 - merged
