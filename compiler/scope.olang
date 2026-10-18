@@ -5081,3 +5081,116 @@ fn isNameChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 
 # whether body b's scopes were judged: it has code, and no type in it is unknown (a check error)
 fn (s Scoper&) Judged(b I64) Bool { return s.judged[b] }
+
+# ---- tests: the plan and the summaries, which compiler/tools/scopediff.olang cannot show ----
+
+if TestBuild {
+    import "std/os"
+    import "cond"
+    import "fetch"
+    import "load"
+    import "names"
+    import typecheck "check"
+
+    # the rules of the errors said in the root module, in order
+    fn rootRules(l mut load.Loader&) String {
+        b := StringBuilder()
+        for d in l.Diags.AllSaid() {
+            if d.File == l.Mods[l.Root].File { b.Push($d.Rule " ") }
+        }
+        return b.ToString()
+    }
+
+    # the body of the root module's function declared at the start of line n
+    fn bodyAt(l mut load.Loader&, bodies List<mut typed.Body&>&, n I64) I64 {
+        root := l.Mods[l.Root].File
+        for k in range bodies.Len() {
+            body := bodies[k]
+            if body.File == root and l.Diags.Locate(body.File, I64(body.Sp.Start)).EndsWith(":" $n ":1") { return k }
+        }
+        return -1
+    }
+
+    jpTasks String& = ("type P struct(v I64) { v }\n"
+                       "fn work(p P&) I64 { return p.v }\n"
+                       "fn spawnOne() I64 {\n"
+                       "    r I64 = 0\n"
+                       "    join {\n"
+                       "        spawn r = work(P(1))\n"
+                       "    }\n"
+                       "    return r\n"
+                       "}\n"
+                       "fn keep(l mut List<P&>&, n I64) {\n"
+                       "    for i in range n { l.Push(P(i)) }\n"
+                       "}\n"
+                       "fn grow(l mut List<P&>&) { l.Push(P(1)) }\n"
+                       "fn peek(l List<P&>&) I64 { return l.Len() }\n"
+                       "fn fanPeek(l List<P&>&) {\n"
+                       "    join {\n"
+                       "        spawn peek(l)\n"
+                       "    }\n"
+                       "}\n"
+                       "fn fanGrow(l mut List<P&>&) {\n"
+                       "    join {\n"
+                       "        spawn grow(l)\n"
+                       "    }\n"
+                       "}\n"
+                       "fn main() {\n"
+                       "    l := List<P&>()\n"
+                       "    keep(l, 3)\n"
+                       "    fanPeek(l)\n"
+                       "    fanGrow(l)\n"
+                       "    assert spawnOne() == 1\n"
+                       "}\n")
+
+    test "plans and summaries: a task's temporary built in its join block, an element where its list lives (O18b), a build through a stand-in apart from one into the scope itself (P2)" {
+        dir := try os.MkTemp() catch os.OsError { unreachable }
+        defer { try os.RemoveAll(dir) catch os.OsError { } }
+        try os.WriteFile($dir "/main.olang", jpTasks) catch os.OsError { }
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                         source.Names(), diag.Diagnostics(false))
+        l.Load($dir "/main.olang")
+        r := names.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, false)
+        c.CheckProgram()
+        s := Scoper(p, c.Bodies)
+        s.Run()
+        assert rootRules(l) == "", rootRules(l)
+        # the task's P(1) is built in the join block, where the task is made, not in the spawn's own block
+        b := bodyAt(l, c.Bodies, 3)
+        assert b >= 0
+        body := c.Bodies[b]
+        promotes I64 = 0
+        for i in range body.Sites.Len() {
+            if body.Sites[i].Kind != typed.SiteKind.Promote { continue }
+            promotes++
+            match s.Plans[b].Built[i] {
+                case typed.Scope.Block(k) { assert body.Blocks[I64(k)].Kind == typed.BlockKind.Join, $body.Blocks[I64(k)].Kind }
+                case _ { assert s.Plans[b].Built[i] is typed.Scope.Block, $s.Plans[b].Built[i] }
+            }
+        }
+        assert promotes == 1, $promotes
+        # each P(i) pushed is built where the list lives: its parameter's scope variable
+        k := bodyAt(l, c.Bodies, 10)
+        assert k >= 0
+        kb := c.Bodies[k]
+        assert kb.Vars[0] == typed.ScopeVar.Param(kb.Params[0]), $kb.Vars[0]
+        for i in range kb.Sites.Len() {
+            if kb.Sites[i].Kind == typed.SiteKind.Promote { assert s.Plans[k].Built[i] == typed.Scope.Var(0), $s.Plans[k].Built[i] }
+        }
+        # grow builds into its list's scope, and so does a task spawned on it; one spawned on peek, which builds nothing,
+        # is handed a stand-in of it all the same, which is no build into the scope itself
+        g := bodyAt(l, c.Bodies, 13)
+        fp := bodyAt(l, c.Bodies, 15)
+        fg := bodyAt(l, c.Bodies, 20)
+        assert g >= 0 and fp >= 0 and fg >= 0
+        assert s.sums[g].Builds[0] and s.sums[g].Real[0]
+        assert s.sums[fg].Builds[0] and s.sums[fg].Real[0]
+        assert s.sums[fp].Builds[0], "fanPeek makes a stand-in of its list's scope"
+        assert not s.sums[fp].Real[0], "fanPeek builds into no real scope"
+    }
+}
