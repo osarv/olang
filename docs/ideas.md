@@ -20,6 +20,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 9 | Doc tests | Rust | open |
 | 10 | Method overloading by parameters | C++, Java, C# | open (the user, 2026-10-18: maybe) |
 | 11 | Constructor overloading | C++, Java, C# | open (the user, 2026-10-18: maybe) |
+| 12 | Generic enums | Rust, Swift, ML | recommended 2026-10-18, after self-hosting |
 
 ## 1. Generators (`yield`)
 
@@ -332,4 +333,16 @@ constructor (C2), and defaults cover its variants.
 constructor from its defaults. The usual alternatives are named functions that build the value (`ColorFromHex(s)`,
 Go's and Rust's way), which need nothing new, or named constructors (`Color.FromHex(s)`), which would need reaching a
 function through a type name (as reflection's `T.Fields` already does).
+
+## 12. Generic enums
+
+**What:** `type Tree<T> enum { Leaf(v T)  Node(l Tree<T>&, r Tree<T>&) }`, monomorphized exactly as a generic struct is
+(SPEC section 12 forbids it today: "an enum's payloads name their types as written" is the rule, not a reason). Case
+constructors infer their arguments as a generic constructor does (G10c: `Tree.Leaf(3)` is a `Tree<I64>`); exhaustiveness,
+layout and `match` patterns are per instance; reflection's `T.Cases` sees the instance's payload types.
+
+**Why:** generic recursive data (trees, tries, rope text), `Either`-like choices, generic message types for channels.
+It reuses the struct machinery wholesale.
+
+**Not:** std gets no `Option<T>` or `Result<T, E>` - those are `null` and `? E` in olang, and stay so.
 
