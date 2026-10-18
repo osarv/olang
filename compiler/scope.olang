@@ -221,6 +221,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     flMode I64 = 0
     flBlock typed.BlockId = typed.BlockId(0)
     flGrew Bool = false
+    flCaps Bool = true                     # whether carried follows what a function value captured
 }
 
 # every body judged, callees before callers, a component of the call graph until its obligations stop growing
@@ -964,7 +965,9 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
         rt := s.resultTerm(0)
         if rt.Runs() and not s.isBlock(rt) {
             s.flowStart(l, 0)
+            s.flCaps = false
             s.flowRun(ss, from)
+            s.flCaps = true
             if flHas(s.flDirect, I64(l)) or (flHas(s.fl, I64(l)) and not s.tiedToBlock(x)) {
                 s.moveTo = rt
                 return
@@ -1628,8 +1631,11 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
         }
         case typed.Expr.Away(_, _, y) { s.carried(y, out) }
         case typed.Expr.Fn(_, _, f) {
+            # a lambda returned moves nothing it captured into the result scope: each capture is an obligation (D16d);
+            # an instance adapted through its Call is the value itself (E31)
             match f {
                 case typed.FnVal.Lambda(_, caps, _) {
+                    if not s.flCaps { return }
                     for cp in caps { s.carried(cp.Outer, out) }
                 }
                 case typed.FnVal.Adapter(_, r, _) { s.carried(r, out) }
@@ -3150,6 +3156,7 @@ FitReturn I64 = 3 # a result (O14, O26)
 FitValue I64 = 4  # a value local holding references (O25h)
 FitPayload I64 = 5 # an enum case's payload (T17c)
 FitDecl I64 = 6   # a constructor's field declared (C2d): where nothing can be stored through it, outliving (O10)
+FitOwn I64 = 7    # a reference or function value returned, living in this function's own scope (O10d)
 
 # a place's slot: its term, whether a value put there must be exactly in it, and its kind
 fn (s mut Scoper&) slotOf(p typed.Place&) (Term, Bool, I64) {
@@ -4714,6 +4721,33 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
     s.fitError(x, kind, exact)
 }
 
+# whether x is a lambda capturing references from several scopes: returned, it is built in the result scope with each
+# capture held to it (D16d), so what refers to this function's storage is said as O26 says it
+fn (s mut Scoper&) capsDiffer(x typed.Expr&) Bool {
+    match s.unAway(x) {
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Lambda(_, caps, _) {
+                    first := Term.None
+                    for cp in caps {
+                        if not s.holds(cp.Outer.Type()) { continue }
+                        t := s.peekTerm(cp.Outer)
+                        if t == Term.None { continue }
+                        if first == Term.None {
+                            first = t
+                        } else if t != first {
+                            return true
+                        }
+                    }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
 # whether a local of type t must hold exactly what it is given (O25, O25g): a reference through which, at any depth,
 # something could be stored; a value holding such a reference
 fn (s mut Scoper&) narrowingMatters(t types.TypeId) Bool {
@@ -4737,6 +4771,9 @@ fn (s mut Scoper&) isBlock(t Term) Bool {
 
 fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     if not s.report { return }
+    # a reference or a function value returned that lives in this function's own scope (O10d); a value referring to it,
+    # O26's
+    if kind == FitReturn and (s.isRef(x.Type()) or s.isFunc(x.Type())) and not s.capsDiffer(x) { kind = FitOwn }
     s.fitErrorAt(s.fitSp if s.fitAt else s.opTok(x), kind, exact)
 }
 
@@ -4752,6 +4789,8 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) {
         if exact { m = msgs.ReferenceNarrowed() }
     } else if kind == FitPayload {
         m = msgs.PayloadOutlived()
+    } else if kind == FitOwn {
+        m = msgs.OwnCannotOutlive()
     } else if kind == FitField {
         m = msgs.StoredRefOutlived()
     } else if kind == FitGlobal {
