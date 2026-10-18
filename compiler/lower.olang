@@ -45,6 +45,12 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     Bodies
     Gaps List<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
+    # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
+    # order first referred to, each once: what LowerKey makes next
+    Wanted List<mir.FnKey>
+    wanted Map<mir.FnKey, Bool>
+    ctorOf Map<types.TypeId, I64>   # a type's constructor's body (twin 0), once looked up
+    indexed Bool = false
     builtinT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
     textT types.TypeId = types.TypeId(-1)
@@ -92,6 +98,46 @@ fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
     ln.run()
     lw.Gapped = ln.gapped
     return ln.F
+}
+
+# a function lowering refers to, to be made by LowerKey
+fn (lw mut Lowerer&) Want(k mir.FnKey) {
+    if lw.wanted.Has(k) { return }
+    lw.wanted.Put(k, true)
+    lw.Wanted.Push(k)
+}
+
+# the function a key names, lowered: a typed body, a helper, an adapter or a module's initialization. Gapped as Lower's
+fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
+    match k {
+        case mir.FnKey.Body(id) { return lw.Lower(I64(id)) }
+        case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
+        case mir.FnKey.Adapter(call) { return lw.adapterFn(call) }
+        case mir.FnKey.Init(m) { return lw.initFn(m) }
+    }
+}
+
+# what LowerKey makes of k, held to the verifier, as Verified
+fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) (Bool, String, String) {
+    f mir.Fn&lw = lw.LowerKey(k)
+    if lw.Gapped { return true, "", "" }
+    problems := f.Verify(lw.P.T)
+    text := f.Dump(lw.P.T) if dump else ""
+    return false, problems, text
+}
+
+# the modules whose initialization runs a global's initializer, in order
+fn (lw mut Lowerer&) InitModules() List<I64> {
+    out List<I64>
+    for i in range lw.Bodies.Len() {
+        match lw.Bodies[i].Of {
+            case typed.BodyOf.Global(m, _) {
+                if m not in out { out.Push(m) }
+            }
+            case _ { }
+        }
+    }
+    return out
 }
 
 # body id lowered and held to the verifier: whether lowering met a gap (or a body with errors), the verifier's problems
@@ -1178,6 +1224,7 @@ fn (ln mut lowering&) valueCallee(x typed.Expr&) (mir.Callee, types.TypeId) {
 fn (ln mut lowering&) helperCallee(k typed.Helper, ht types.TypeId) (mir.Callee, types.TypeId) {
     kind := mir.HelperKind.Equal if k == typed.Helper.Equal else mir.HelperKind.Hash
     ty := mir.HelperType(ln.T, kind, ht)
+    ln.L.Want(mir.FnKey.Helper(kind, ht))
     return mir.Callee.Fn(mir.FnKey.Helper(kind, ht), ty), ty
 }
 
@@ -1244,6 +1291,7 @@ fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
     hty := mir.HelperType(t, mir.HelperKind.Zero, ty)
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Zero, ty), hty)
+    ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Zero, ty))
     ok := ln.F.NewBlock()
     dest := ln.temp(ty, sp)
     k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.passed(mir.PassedCount(t, callee, hty)), mir.L(dest), true, ok
@@ -1608,6 +1656,7 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
 fn (ln mut lowering&) adapter(call typed.BodyId, recv typed.Expr&, site typed.SiteId, ty types.TypeId, sp source.Span) mir.Operand {
     r := ln.val(recv)
     if ln.dead { return mir.Operand.None }
+    ln.L.Want(mir.FnKey.Adapter(call))
     return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Adapter(call), ty, ln.built(site), ln.F.Args(mir.Operand[r])), sp)
 }
 
@@ -1678,6 +1727,7 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
     hty := mir.HelperType(t, mir.HelperKind.Render, ty)
     ref := ln.into(t.Items(t.Params(hty))[0], mir.Rvalue.Ref(mir.L(ln.local(v, ty, sp)), t.Items(t.Params(hty))[0]), sp)
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Render, ty), hty)
+    ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Render, ty))
     ok := ln.F.NewBlock()
     k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[ref]), ln.F.ScopeRefs(mir.ScopeRef[b]), mir.NoPlace, false, ok
                                mir.NoLocal, mir.NoBlock))
@@ -1692,4 +1742,472 @@ fn (ln mut lowering&) isText(ty types.TypeId) Bool {
     if t.IsRef(x) { x = t.Repr(t.Referent(x)) }
     if t.KindOf(x) != types.Kind.Array { return false }
     return t.Same(t.Elem(x), ln.L.char())
+}
+
+# ---- helpers, adapters, modules' initializations (DESIGN.md 1.8, 1.8.1) ----
+
+# a lowering of no typed body: for a function lowering makes itself, its parameters and blocks written here
+fn (lw mut Lowerer&) bare(k mir.FnKey, ty types.TypeId) mir.Fn { return mir.Fn(k, ty, 0, source.Span(0, 0)) }
+
+# a typed body standing in for a function lowering makes itself: its type, no locals and no code
+fn standIn(ty types.TypeId) typed.Body { return typed.Body(typed.BodyId(-1), typed.BodyOf.Test(-1), ty, 0, source.Span(0, 0)) }
+
+# the bodies by what they are, once: a type's constructor's (twin 0)
+fn (lw mut Lowerer&) index() {
+    if lw.indexed { return }
+    lw.indexed = true
+    for i in range lw.Bodies.Len() {
+        match lw.Bodies[i].Of {
+            case typed.BodyOf.Ctor(t, twin) {
+                if twin == types.ListId(0) { lw.ctorOf.Put(t, i) }
+            }
+            case _ { }
+        }
+    }
+}
+
+# a helper for type t (DESIGN.md 1.8.1): its ABI its kind's (mir.HelperType), its code what the kind says of t's parts
+fn (lw mut Lowerer&) helper(kind mir.HelperKind, t types.TypeId) mir.Fn {
+    hty := mir.HelperType(lw.P.T, kind, t)
+    b := standIn(hty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Helper(kind, t), hty))
+    ln.helper(kind, t)
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+# the parameters of a function lowering makes, from its type, and its scope variables; the entry block opening the frame
+fn (ln mut lowering&) prologue(vars Array<mir.VarKind>&) {
+    t := ln.T
+    for p in t.Items(t.Params(ln.F.Ty)) { ln.F.AddParam(source.NameId(0), ln.B.Sp, p) }
+    for v in vars { ln.F.Vars.Push(v) }
+    ln.F.NewBlock()
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), ln.B.Sp)
+    ln.emit(mir.Stmt.Open(ln.B.Sp, frame))
+    ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
+}
+
+fn (ln mut lowering&) epilogue(x mir.Operand) {
+    ln.leave(0)
+    ln.end(mir.Term.Return(ln.B.Sp, x))
+}
+
+fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
+    t := ln.T
+    sp := ln.B.Sp
+    match kind {
+        case mir.HelperKind.Equal {
+            ln.prologue(mir.VarKind[])
+            a := ln.at(mir.LocalId(0))
+            b := ln.at(mir.LocalId(1))
+            ln.epilogue(ln.equalAt(a, b, ty, sp))
+        }
+        case mir.HelperKind.Hash {
+            ln.prologue(mir.VarKind[])
+            ln.epilogue(ln.hashAt(ln.at(mir.LocalId(0)), ty, sp))
+        }
+        case mir.HelperKind.Zero {
+            vs := t.ScopeVarsOf(ln.F.Ty)
+            ln.prologue(mir.VarKind[mir.VarKind.Result] if vs.Len() > 0 else mir.VarKind[])
+            ln.epilogue(ln.zeroOf(ty, sp))
+        }
+        case mir.HelperKind.Render {
+            ln.prologue(mir.VarKind[mir.VarKind.Builder])
+            ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp)
+            ln.epilogue(mir.Operand.None)
+        }
+    }
+}
+
+# what reference parameter l names, as a place
+fn (ln mut lowering&) at(l mir.LocalId) pl { return ln.with(pl(mir.Base.Local(l)), mir.Proj.Deref) }
+
+# a reference to a place, of type "T&" read-only, for a helper's parameter
+fn (ln mut lowering&) refTo(p pl, ty types.TypeId, sp source.Span) mir.Operand {
+    rt := ln.T.Ref(ty, types.ReadOnly)
+    return ln.into(rt, mir.Rvalue.Ref(ln.mk(p), rt), sp)
+}
+
+# a helper of kind for type ty called with args (and its kind's scopes), its result, if any, into a temporary of res
+fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Array<mir.Operand>&, scopes Array<mir.ScopeRef>&
+                                 res types.TypeId, sp source.Span) mir.Operand {
+    hty := mir.HelperType(ln.T, kind, ty)
+    k := mir.FnKey.Helper(kind, ty)
+    ln.L.Want(k)
+    ok := ln.F.NewBlock()
+    dest := mir.NoLocal
+    if res != types.VoidT { dest = ln.temp(res, sp) }
+    c := ln.F.AddCall(mir.Call(mir.Callee.Fn(k, hty), ln.F.Args(args), ln.F.ScopeRefs(scopes)
+                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, mir.NoLocal
+                               mir.NoBlock))
+    ln.end(mir.Term.Call(sp, c))
+    ln.start(ok)
+    return mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest))
+}
+
+# what a type's value is made of, for the helpers: a struct's, a tuple's or a record's fields; ok false for none
+fn (ln mut lowering&) partsOf(ty types.TypeId) (Array<types.TypeId>, Bool) {
+    t := ln.T
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k == types.Kind.Tuple or k == types.Kind.Record { return ln.items(t.Parts(r)), true }
+    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r) {
+        return ln.items(t.Fields(r)), true
+    }
+    return Array<types.TypeId>(0), false
+}
+
+fn (ln mut lowering&) items(l types.ListId) Array<types.TypeId> {
+    xs := ln.T.Items(l)
+    out := Array<types.TypeId>(xs.Len())
+    for i in range xs.Len() { out[i] = xs[i] }
+    return out
+}
+
+# an enum's cases' payloads (a record, or 0 for none); ok false for no enum
+fn (ln mut lowering&) casesOf(ty types.TypeId) (Array<types.TypeId>, Bool) {
+    t := ln.T
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.AnonEnum { return ln.items(t.ShapeCases(r)), true }
+    if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r) {
+        return ln.items(t.Cases(r)), true
+    }
+    return Array<types.TypeId>(0), false
+}
+
+# whether a value of the type is compared, hashed and rendered as itself: a number, a Bool, a Char
+fn (ln mut lowering&) scalar(ty types.TypeId) Bool {
+    r := ln.T.Repr(ty)
+    return r == types.BoolT or ln.T.IsNumber(r)
+}
+
+# a Bool slot set true, then false along the way where a test fails; its value at the end
+fn (ln mut lowering&) flag(v Bool, sp source.Span) mir.LocalId {
+    f := ln.temp(types.BoolT, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(f), mir.Rvalue.Use(ln.constBool(v, sp))))
+    return f
+}
+
+# "==" part by part (E10): numbers, Bools and Chars by their own "==", references to arrays by their contents and every
+# other reference or function value by identity, a null equal only to a null; a struct's, tuple's or record's fields in
+# order, an enum's case then its payload, an array's length then its elements - an aggregate part through its own
+# Equal helper, so a type that comes round to itself is one function
+fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    r := t.Repr(ty)
+    if ln.scalar(ty) {
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        y := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(b))), sp)
+        return ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[x, y], sp)
+    }
+    if t.KindOf(r) == types.Kind.Func or (t.IsRef(r) and ln.arrayOf(t.Referent(r)) == types.UnknownT) {
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        y := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(b))), sp)
+        return ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[x, y], sp)
+    }
+    if t.IsRef(r) {
+        # a reference to an array: both null, or neither and the arrays equal
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        y := ln.local(mir.Operand.Copy(ln.mk(b)), ty, sp)
+        res := ln.flag(false, sp)
+        xn := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        yn := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(y)), mir.Operand.Const(ty, 0)], sp)
+        both := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[xn, yn], sp)
+        either := ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[xn, yn], sp)
+        bothB, notBoth, neither, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(both, bothB, notBoth))
+        ln.start(bothB)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constBool(true, sp))))
+        ln.goto(after)
+        ln.start(notBoth)
+        ln.end(mir.Term.Branch(either, after, neither))
+        ln.start(neither)
+        e := ln.equalAt(ln.at(x), ln.at(y), t.Referent(r), sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(e)))
+        ln.goto(after)
+        ln.start(after)
+        return mir.Operand.Copy(mir.L(res))
+    }
+    if not ln.isTop(ty) {
+        return ln.helperCall(mir.HelperKind.Equal, ty, mir.Operand[ln.refTo(a, ty, sp), ln.refTo(b, ty, sp)], mir.ScopeRef[]
+                             types.BoolT, sp)
+    }
+    res := ln.flag(true, sp)
+    no := ln.F.NewBlock()
+    ends List<mir.BlockId>
+    parts, isParts := ln.partsOf(ty)
+    cases, isEnum := ln.casesOf(ty)
+    if isParts {
+        for i in range parts.Len() {
+            e := ln.equalAt(ln.with(a, mir.Proj.Field(i)), ln.with(b, mir.Proj.Field(i)), parts[i], sp)
+            next := ln.F.NewBlock()
+            ln.end(mir.Term.Branch(e, next, no))
+            ln.start(next)
+        }
+    } else if isEnum {
+        ta := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
+        tb := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(b)), sp)
+        same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[ta, tb], sp)
+        next := ln.F.NewBlock()
+        ln.end(mir.Term.Branch(same, next, no))
+        ln.start(next)
+        ln.payloads(cases, ta, sp, fn(tag I64, rec types.TypeId) {
+            fs := ln.items(ln.T.Parts(rec))
+            for i in range fs.Len() {
+                pa := ln.with(ln.with(a, mir.Proj.Payload(tag)), mir.Proj.Field(i))
+                pb := ln.with(ln.with(b, mir.Proj.Payload(tag)), mir.Proj.Field(i))
+                e := ln.equalAt(pa, pb, fs[i], sp)
+                go := ln.F.NewBlock()
+                ln.end(mir.Term.Branch(e, go, no))
+                ln.start(go)
+            }
+        })
+    } else if ln.arrayOf(ty) != types.UnknownT {
+        el := t.Elem(ln.arrayOf(ty))
+        na := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
+        nb := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(b))], sp)
+        same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[na, nb], sp)
+        next := ln.F.NewBlock()
+        ln.end(mir.Term.Branch(same, next, no))
+        ln.start(next)
+        ln.eachIndex(na, sp, fn(i mir.LocalId) {
+            e := ln.equalAt(ln.with(a, mir.Proj.Index(i)), ln.with(b, mir.Proj.Index(i)), el, sp)
+            go := ln.F.NewBlock()
+            ln.end(mir.Term.Branch(e, go, no))
+            ln.start(go)
+        })
+    } else {
+        ln.gap(sp, "an Equal helper for a type with no parts")
+    }
+    ln.leaveOpen(ends)
+    ln.start(no)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constBool(false, sp))))
+    ln.leaveOpen(ends)
+    ln.patch(ends)
+    return mir.Operand.Copy(mir.L(res))
+}
+
+# whether ty is the type this helper is for: its parts are lowered here, any other aggregate through its own helper
+fn (ln mut lowering&) isTop(ty types.TypeId) Bool {
+    t := ln.T
+    match ln.F.Of {
+        case mir.FnKey.Helper(_, h) { return t.Same(t.Repr(h), t.Repr(ty)) }
+        case _ { return false }
+    }
+}
+
+# for each case of an enum with a payload: the code each gives, run where the tag tag (an I64) is that case's
+fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp source.Span, each fn(tag I64, rec types.TypeId)) {
+    with List<I64>
+    for i in range cases.Len() {
+        if cases[i] != types.TypeId(0) and ln.T.Items(ln.T.Parts(cases[i])).Len() > 0 { with.Push(i) }
+    }
+    if with.Len() == 0 { return }
+    after := ln.F.NewBlock()
+    cs := Array<mir.Case>(with.Len())
+    bs := Array<mir.BlockId>(with.Len())
+    for k in range with.Len() {
+        bs[k] = ln.F.NewBlock()
+        cs[k] = mir.Case(with[k], bs[k])
+    }
+    ln.end(mir.Term.Switch(tag, ln.F.AddCases(cs), after))
+    for k in range with.Len() {
+        ln.start(bs[k])
+        each(with[k], cases[with[k]])
+        ln.goto(after)
+    }
+    ln.start(after)
+}
+
+# a counted loop, i from 0 below n: the code each gives run for each i
+fn (ln mut lowering&) eachIndex(n mir.Operand, sp source.Span, each fn(i mir.LocalId)) {
+    i := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(i), mir.Rvalue.Use(ln.constI64(0))))
+    head, body, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.goto(head)
+    ln.start(head)
+    more := ln.prim(typed.PrimOp.Lt, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), n], sp)
+    ln.end(mir.Term.Branch(more, body, after))
+    ln.start(body)
+    each(i)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(i), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T
+                                                         ln.F.Args(mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(1)]))))
+    ln.goto(head)
+    ln.start(after)
+}
+
+# the prelude's mixHash of an I64 (std/prelude/hash.olang): a multiply by the golden-ratio constant, the high bits
+# folded into the low ones
+fn (ln mut lowering&) mix(x mir.Operand, sp source.Span) mir.Operand {
+    h := ln.prim(typed.PrimOp.Mul, mir.I64T, mir.Operand[x, ln.constI64(-7046029254386353131)], sp)
+    return ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[h, ln.prim(typed.PrimOp.Shr, mir.I64T, mir.Operand[h, ln.constI64(29)], sp)], sp)
+}
+
+# h, then one more part's hash combined in, as the prelude's HashElements combines an array's
+fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
+    m := ln.prim(typed.PrimOp.Mul, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(h)), ln.constI64(1099511628211)], sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[m, x]))))
+}
+
+# the supplied Hash (E10b): an integer, Bool or Char by the prelude's mixHash, a reference to an array by its
+# elements' (a null 0); a struct's, tuple's or record's fields combined in order, an enum's case then its payload's, an
+# array's elements - an aggregate part through its own Hash helper
+fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    r := t.Repr(ty)
+    if ln.scalar(ty) {
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        return ln.mix(ln.asI64(x, ty, sp), sp)
+    }
+    if t.IsRef(r) {
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        res := ln.temp(mir.I64T, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constI64(0))))
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        some, after := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(nn, some, after))
+        ln.start(some)
+        h := ln.hashAt(ln.at(x), t.Referent(r), sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(h)))
+        ln.goto(after)
+        ln.start(after)
+        return mir.Operand.Copy(mir.L(res))
+    }
+    if not ln.isTop(ty) { return ln.helperCall(mir.HelperKind.Hash, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[], mir.I64T, sp) }
+    h := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Use(ln.constI64(0))))
+    parts, isParts := ln.partsOf(ty)
+    cases, isEnum := ln.casesOf(ty)
+    if isParts {
+        for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.with(a, mir.Proj.Field(i)), parts[i], sp), sp) }
+    } else if isEnum {
+        tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
+        ln.combine(h, ln.mix(tag, sp), sp)
+        ln.payloads(cases, tag, sp, fn(k I64, rec types.TypeId) {
+            fs := ln.items(ln.T.Parts(rec))
+            for i in range fs.Len() {
+                ln.combine(h, ln.hashAt(ln.with(ln.with(a, mir.Proj.Payload(k)), mir.Proj.Field(i)), fs[i], sp), sp)
+            }
+        })
+    } else if ln.arrayOf(ty) != types.UnknownT {
+        el := t.Elem(ln.arrayOf(ty))
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
+        ln.eachIndex(n, sp, fn(i mir.LocalId) { ln.combine(h, ln.hashAt(ln.with(a, mir.Proj.Index(i)), el, sp), sp) })
+    } else {
+        ln.gap(sp, "a Hash helper for a type with no parts")
+    }
+    return mir.Operand.Copy(mir.L(h))
+}
+
+# a type's zero value (D13c): a constructor with no parameters called, else all zero bits - which of these, or the
+# constructor on its parameters' defaults, is eval's to decide once per type (Key.Zero, M8)
+fn (ln mut lowering&) zeroOf(ty types.TypeId, sp source.Span) mir.Operand {
+    lw := ln.L
+    lw.index()
+    id := try lw.ctorOf.Get(ty) catch default -1
+    t := ln.T
+    if id >= 0 and t.Items(t.Params(lw.Bodies[id].Ty)).Len() == 0 {
+        callee, fty := ln.bodyCallee(typed.BodyId(I32(id)))
+        ok := ln.F.NewBlock()
+        dest := ln.temp(ty, sp)
+        errs := t.Errors(fty)
+        if t.Items(errs).Len() > 0 {
+            ln.gap(sp, "a zero value whose constructor can fail")
+            return mir.Operand.None
+        }
+        k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest), true, ok
+                                   mir.NoLocal, mir.NoBlock))
+        ln.end(mir.Term.Call(sp, k))
+        ln.start(ok)
+        return mir.Operand.Copy(mir.L(dest))
+    }
+    return mir.Operand.Const(ty, 0)
+}
+
+# an instance's Call as a function value (E31): its environment the instance, its code calling Call on it with the
+# value's own arguments, its result and its errors Call's
+fn (lw mut Lowerer&) adapterFn(call typed.BodyId) mir.Fn {
+    cty := lw.Bodies[I64(call)].Ty
+    ps := lw.P.T.Items(lw.P.T.Params(cty))
+    rest := Array<types.TypeId>(ps.Len() - 1)
+    for i in range rest.Len() { rest[i] = ps[i + 1] }
+    ty := lw.P.T.Func(lw.P.T.List(rest), lw.P.T.Result(cty), lw.P.T.Errors(cty))
+    b := standIn(ty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Adapter(call), ty))
+    ln.adapterBody(call, cty, ps[0])
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv types.TypeId) {
+    t := ln.T
+    sp := ln.B.Sp
+    for p in t.Items(t.Params(ln.F.Ty)) { ln.F.AddParam(source.NameId(0), sp, p) }
+    inst := ln.F.AddLocal(mir.Local(source.NameId(0), sp, recv, mir.LocalKind.Capture, mir.ScopeRef.Frame))
+    ln.F.Captures.Push(inst)
+    for v in t.ScopeVarsOf(ln.F.Ty) { ln.F.Vars.Push(mir.VarKind.Result if v < 0 else mir.VarKind.Param(v)) }
+    if t.HoldsRefs(recv) { ln.F.Vars.Push(mir.VarKind.Capture(0)) }
+    ln.F.NewBlock()
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, frame))
+    ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
+    args := Array<mir.Operand>(ln.F.Params.Len() + 1)
+    args[0] = mir.Operand.Copy(mir.L(inst))
+    for i in range ln.F.Params.Len() { args[i + 1] = mir.Operand.Copy(mir.L(ln.F.Params[i])) }
+    res := t.Result(cty)
+    ok := ln.F.NewBlock()
+    dest := mir.NoLocal
+    if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(res, sp) }
+    code := mir.NoLocal
+    eb := mir.NoBlock
+    if t.Items(t.Errors(cty)).Len() > 0 {
+        code = ln.temp(mir.I32T, sp)
+        eb = ln.F.NewBlock()
+    }
+    callee := mir.Callee.Fn(mir.FnKey.Body(call), cty)
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(args), ln.passed(mir.PassedCount(t, callee, cty))
+                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
+    ln.end(mir.Term.Call(sp, k))
+    if eb != mir.NoBlock {
+        ln.start(eb)
+        ln.leave(0)
+        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(code))))
+    }
+    ln.start(ok)
+    if res == types.NoreturnT {
+        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
+        return
+    }
+    ln.epilogue(mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest)))
+}
+
+# a module's initialization (B5a): each of its globals' initializers run, in the order the bodies were checked - B5a's
+# order is a summary of their reads, computed once a module's bodies are checked (DESIGN.md 1.6), which is to come
+fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
+    ty := lw.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0))
+    b := standIn(ty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Init(m), ty))
+    ln.prologue(mir.VarKind[])
+    for i in range lw.Bodies.Len() {
+        match lw.Bodies[i].Of {
+            case typed.BodyOf.Global(gm, _) {
+                if gm == m and lw.Bodies[i].Root != null {
+                    ok := ln.F.NewBlock()
+                    callee := mir.Callee.Fn(mir.FnKey.Body(typed.BodyId(I32(i))), lw.Bodies[i].Ty)
+                    k := ln.F.AddCall(mir.Call(callee, mir.Empty, mir.Empty, mir.NoPlace, false, ok, mir.NoLocal, mir.NoBlock))
+                    ln.end(mir.Term.Call(lw.Bodies[i].Sp, k))
+                    ln.start(ok)
+                }
+            }
+            case _ { }
+        }
+    }
+    ln.epilogue(mir.Operand.None)
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+# "$x" of a value of the type, written into builder b (E11a): to come
+fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span) {
+    ln.gap(sp, "a Render helper")
 }

@@ -22,6 +22,7 @@ import "../load"
 import resolver "../names"
 import "../generic"
 import typecheck "../check"
+import "../mir"
 import "../lower"
 
 fn main() ? {
@@ -41,6 +42,9 @@ type totals struct() {
     bad I64 = 0
     gapped I64 = 0
     unchecked I64 = 0
+    made I64 = 0
+    madeClean I64 = 0
+    madeGapped I64 = 0
     whats List<String&>
     counts List<I64>
 }
@@ -123,6 +127,30 @@ fn run(args Array<String&>&) {
                 if not verbose { break }
             }
         }
+        # the functions the bodies refer to that lowering makes itself: helpers, adapters, modules' initializations
+        for m in lw.InitModules() { lw.Want(mir.FnKey.Init(m)) }
+        w I64 = 0
+        for w < lw.Wanted.Len() {
+            key := lw.Wanted[w]
+            w++
+            n.made++
+            name := $key
+            gapped, problems, dump := lw.VerifiedKey(key, mirAt.Len() > 0 and (try name.Find(mirAt) catch default -1) >= 0)
+            if gapped {
+                n.madeGapped++
+                continue
+            }
+            if dump.Len() > 0 { out.Write("-- mir " $key "\n" $dump) }
+            if problems.Len() == 0 {
+                n.madeClean++
+                continue
+            }
+            for line in problems.Split("\n") {
+                if line.Len() == 0 { continue }
+                out.Write("bad " $key ": " $line "\n")
+                if not verbose { break }
+            }
+        }
         for g in lw.Gaps {
             if g.What.StartsWith("an unknown type") { continue }
             out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n")
@@ -138,7 +166,7 @@ fn run(args Array<String&>&) {
             }
         }
         out.Write(("errors " $errs " bodies " $n.bodies " lowered " $n.lowered " clean " $n.clean " bad " $n.bad " gapped " $n.gapped
-                   " unchecked " $n.unchecked "\n"))
+                   " unchecked " $n.unchecked "; made " $n.made " clean " $n.madeClean " gapped " $n.madeGapped "\n"))
         try out.Flush() catch io.IoError { os.Exit(1) }
         all.bodies += n.bodies
         all.lowered += n.lowered
@@ -146,9 +174,13 @@ fn run(args Array<String&>&) {
         all.bad += n.bad
         all.gapped += n.gapped
         all.unchecked += n.unchecked
+        all.made += n.made
+        all.madeClean += n.madeClean
+        all.madeGapped += n.madeGapped
     }
     out.Write(("== total: bodies " $all.bodies " lowered " $all.lowered " clean " $all.clean " bad " $all.bad " gapped "
-               $all.gapped " unchecked " $all.unchecked "\n"))
+               $all.gapped " unchecked " $all.unchecked "; made " $all.made " clean " $all.madeClean " gapped " $all.madeGapped
+               "\n"))
     for j in range all.whats.Len() { out.Write("  " $all.counts[j] " " $all.whats[j] "\n") }
     try out.Flush() catch io.IoError { os.Exit(1) }
 }
