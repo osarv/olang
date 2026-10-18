@@ -93,7 +93,7 @@ overrated".
   13. Memory rounds 4-7 (docs/memory.md: prelude let-go and Map.Take, the port's early freeing, `x.Destroy()`), M19g in
       the port, QZ2's prelude moves (helpers onto Vec, List to std/list), a test that a long-running Map stays flat (QF).
   14. Errors as values and `T ? E` as a type (decisions.md QAM, QAN; postfix `?` keeps a call's outcome): `type X error { }` and named sets, catch bindings, `error e`, no error
-      among several results, the zero `null` as "no error" (raising a null error aborts); error types
+      among several results, methods on error types, the zero `null` as "no error" (raising a null error aborts); error types
       declared `type IoError error { ... }`; `fn(I64) ? (A, B)` removed for a named set.
   15. The port verbosity audit; SPEC section 5 renumbered; SPEC section 8 restated in the scope model's form beside M6
       (QAE).

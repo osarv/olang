@@ -374,9 +374,9 @@ design. Do what you want") - nothing to decide until a GUI is written.
   clauses (no r.Get()); both spellings allowed, `T ? E` and `Result<T, E>` ("one would never use Result<T, E> but
   making it an error feels kinda extreme"). `save(f)?` on a function with no result gives the error value itself (`e := save(f)?` is an IoError, null when
   it succeeded - the user: "That's even better"). An error value compares only with its own words, its set's words and
-  null (`e == 0`, or a word of a type outside the set, is a compile-time error - the user's point). ASKED: methods on
-  error types (`fn (e IoError) Transient() Bool`), declared in the type's module as for any type, a named set's own
-  methods not inherited from its members; recommended yes.
+  null (`e == 0`, or a word of a type outside the set, is a compile-time error - the user's point). DECIDED (the user: "Yes,
+  do it"): methods on error types (`fn (e IoError) Transient() Bool`), declared in the type's module as for any type;
+  a named set has its own methods, none inherited from its members; `Str` may give `$e` a message, `==`/`Hash` built in.
 - QAM 2026-10-18 (errors as values; the user: "1) ... I want this feature tho 2) yes, disallow this 3) reserve the
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
