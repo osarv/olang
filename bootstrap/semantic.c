@@ -30802,8 +30802,10 @@ struct vgPlace {
 };
 //one fact of a summary: a place below a parameter (param >= 0) or a global (global set) its body may grow, or hand back
 //a view of; tok is where in that body, for a note
-struct vgFact { int param; struct var* global; char* path; int show; bool any; struct token tok; };
-struct vgSum { struct list grows; struct list views; }; //struct vgFact
+struct vgFact { int param; struct var* global; char* path; int show; bool any; struct token tok; int into; };
+//(keeps: a parameter's value its body stores where another parameter leads - param kept, into the one it is kept in,
+//as "l.Push(x)" keeps x in l: a view handed in there is held by what the second argument is)
+struct vgSum { struct list grows; struct list views; struct list keeps; }; //struct vgFact
 //a view held: of place p, made at site; stale from the growth at growTok (in growIn, a callee's name - NULL for a body
 //not known), whose callee grows it at innerTok (no owner where not worth a note)
 struct vgRef { struct vgPlace p; struct token site; bool stale; struct token growTok; struct str growIn; struct token innerTok; };
@@ -30841,6 +30843,7 @@ static struct vgSum* vgSumOf(struct var* f) {
         f->vecViews = MallocOrCrash(sizeof(struct vgSum));
         f->vecViews->grows = ListInit(sizeof(struct vgFact));
         f->vecViews->views = ListInit(sizeof(struct vgFact));
+        f->vecViews->keeps = ListInit(sizeof(struct vgFact));
     }
     return f->vecViews;
 }
@@ -30886,8 +30889,10 @@ static bool vgRecordType(struct type t) {
            && StrCmp(c->genericOrigin->name, StrFromCStr("vecState"));
 }
 //whether a value of type t can carry a view - a reference, an array reference, or something holding one
+//(an array held by value is storage made where it is - a copy of what it is given, T7b - so it holds a view only through
+//references among its elements)
 static bool vgCarries(struct type t) {
-    return t.structMAlloc || (t.bType == BASETYPE_ARRAY && t.arrMalloc) || t.bType == BASETYPE_FUNC || TypeHoldsReferences(t);
+    return t.structMAlloc || t.bType == BASETYPE_FUNC || TypeHoldsReferences(t);
 }
 
 //a summary's fact, added unless one already covers it - a path deeper than eight fields is cut to "something below"
@@ -30910,7 +30915,7 @@ static void vgFactPut(struct list* l, int param, struct var* global, const char*
         if (f->any && vgPrefix(f->path, p)) return;
     }
     if (show > (int)strlen(p)) show = (int)strlen(p);
-    struct vgFact f = { param, global, p, show, any, tok };
+    struct vgFact f = { param, global, p, show, any, tok, -1 };
     ListAdd(l, &f);
     vg.changed = true;
 }
@@ -30940,7 +30945,7 @@ static struct vgState vgCopy(struct vgState* s) {
     return c;
 }
 static bool vgSamePlace(struct vgPlace a, struct vgPlace b) {
-    return a.root == b.root && a.any == b.any && !strcmp(a.path, b.path);
+    return a.root == b.root && a.param == b.param && a.any == b.any && !strcmp(a.path, b.path);
 }
 static bool vgRefAdd(struct list* refs, struct vgRef r) {
     for (int i = 0; i < refs->len; i++) {
@@ -31130,6 +31135,46 @@ static struct var* vgRootLocal(struct operand* op) {
     return c;
 }
 
+//the places a store's target is below - its base variable's, through fields, elements and slices
+static void vgTargetRoots(struct operand* target, struct vgState* st, struct list* out) {
+    while (target && (target->opType == OPERATION_MEMBER || target->opType == OPERATION_INDEX
+                      || target->opType == OPERATION_SLICE) && target->args.len)
+        target = *(struct operand**)ListGetIdx(&target->args, 0);
+    if (target && target->opType == OPERATION_READ_VAR) vgPlacesOf(target, st, out);
+}
+
+//what a store into place `into` puts there: the views it holds are held by the local the place is below; a parameter's
+//own value (a summary's seed) stored below another parameter is what the body keeps (keeps)
+static void vgKeepIn(struct operand* into, struct list* refs, struct vgState* st) {
+    if (!vgCarries(into->type)) return; //(a copy is put there)
+    struct var* holder = vgRootLocal(into);
+    if (holder) {
+        struct vgLocal* l = vgLocalOf(st, holder, true);
+        for (int k = 0; k < refs->len; k++) vgRefAdd(&l->refs, *(struct vgRef*)ListGetIdx(refs, k));
+    }
+    if (vg.check || !vg.sum) return;
+    struct list roots = ListInit(sizeof(struct vgPlace));
+    vgTargetRoots(into, st, &roots);
+    for (int i = 0; i < roots.len; i++) {
+        struct vgPlace* r = ListGetIdx(&roots, i);
+        if (!r->root || r->param < 0) continue;
+        for (int k = 0; k < refs->len; k++) {
+            struct vgRef* f = ListGetIdx(refs, k);
+            if (f->p.root || f->p.param < 0 || f->p.param == r->param) continue;
+            bool have = false;
+            for (int q = 0; q < vg.sum->keeps.len && !have; q++) {
+                struct vgFact* o = ListGetIdx(&vg.sum->keeps, q);
+                have = o->param == f->p.param && o->into == r->param;
+            }
+            if (have) continue;
+            struct vgFact kf = { f->p.param, NULL, "", 0, false, f->site, r->param };
+            ListAdd(&vg.sum->keeps, &kf);
+            vg.changed = true;
+        }
+    }
+    ListDestroy(roots);
+}
+
 static void vgClauses(struct list* clauses, struct vgState* st, struct list* out) {
     if (!clauses->len) return;
     struct vgState after = vgCopy(st);
@@ -31273,19 +31318,11 @@ static void vgCall(struct operand* op, struct vgState* st, struct list* out) {
     }
     //a view given to a call that keeps it in another of its arguments - "l.Push(String(v.View()))": what holds that
     //argument holds the view
-    if (fn && !vg.quiet)
-        for (int i = 0; i < n; i++) {
-            if (!argRefs[i].len || !calleeMayHoldArg(fn, i) || calleeMayKeepArg(fn, i)) continue;
-            for (int j = 0; j < n; j++) {
-                if (j == i) continue;
-                struct operand* a = *(struct operand**)ListGetIdx(&op->args, j);
-                if (!a || (!vgCarries(a->type) && a->type.bType != BASETYPE_STRUCT)) continue;
-                struct var* holder = vgRootLocal(a);
-                if (!holder) continue;
-                struct vgLocal* l = vgLocalOf(st, holder, true);
-                for (int k = 0; k < argRefs[i].len; k++) vgRefAdd(&l->refs, *(struct vgRef*)ListGetIdx(&argRefs[i], k));
-            }
-        }
+    for (int k = 0; S && !vg.quiet && k < S->keeps.len; k++) {
+        struct vgFact* kf = ListGetIdx(&S->keeps, k);
+        if (kf->param < 0 || kf->param >= n || kf->into < 0 || kf->into >= n || !argRefs[kf->param].len) continue;
+        vgKeepIn(*(struct operand**)ListGetIdx(&op->args, kf->into), &argRefs[kf->param], st);
+    }
     vgClauses(&op->catchClauses, st, out);
 }
 
@@ -31362,7 +31399,12 @@ static void vgEval(struct operand* op, struct vgState* st, struct list* out) {
             case OPERATION_SLICE: case OPERATION_NOMINAL_CONVERT: case OPERATION_AS: case OPERATION_NONE:
                 keep = i == 0 || op->opType == OPERATION_NONE;
                 break;
-            case OPERATION_INDEX: case OPERATION_MEMBER:
+            //an element read out of a view is a value apart from the buffer, a reference element included (it refers
+            //where the Vec's elements do, M19d) - only one borrowed in place is the buffer's storage
+            case OPERATION_INDEX:
+                keep = i == 0 && (op->inPlaceBorrow || op == vg.inPlace);
+                break;
+            case OPERATION_MEMBER:
                 keep = i == 0 && (vgCarries(op->type) || op->inPlaceBorrow || op == vg.inPlace);
                 break;
             default:
@@ -31422,6 +31464,9 @@ static void vgBind(struct var* v, struct operand* val, struct list* refs, struct
             }
         }
     }
+    //(a local whose type can hold no view - an array or a struct by value with no reference in it - has its value
+    //copied in: "copied String = String(v.View())" is text of its own)
+    if (!vgCarries(l->v->type)) return;
     for (int k = 0; refs && k < refs->len; k++) vgRefAdd(&l->refs, *(struct vgRef*)ListGetIdx(refs, k));
 }
 
@@ -31441,6 +31486,7 @@ static void vgStoreInto(struct operand* target, struct list* refs, struct vgStat
         }
     }
     ListDestroy(ps);
+    if (refs) vgKeepIn(target, refs, st);
     if (!root) return;
     struct vgLocal* l = vgLocalOf(st, root, true);
     //a field of a second name assigned: no longer a second name as a whole
@@ -31448,7 +31494,6 @@ static void vgStoreInto(struct operand* target, struct list* refs, struct vgStat
         l->alias.len = 0;
         l->aliasSet = false;
     }
-    for (int k = 0; refs && k < refs->len; k++) vgRefAdd(&l->refs, *(struct vgRef*)ListGetIdx(refs, k));
 }
 
 static void vgAssign(struct operand* target, struct operand* val, struct list* refs, struct vgState* st) {
@@ -31683,6 +31728,15 @@ static void vgBody(struct var* func, struct list* block) {
     vg.skip = func && vg.vecMod && canonicalVar(func)->owner == vg.vecMod;
     vg.loops.len = 0;
     struct vgState st = { false, ListInit(sizeof(struct vgLocal)), ListInit(sizeof(struct vgHeld)) };
+    //(finding what a body keeps: each parameter that can hold a view starts out holding a mark of its own - no place,
+    //so nothing grows it and nothing reports it)
+    for (int i = 0; func && !vg.check && i < func->type.vars.len; i++) {
+        struct var* p = canonicalVar(ListGetIdx(&func->type.vars, i));
+        if (!vgCarries(p->type)) continue;
+        struct vgRef r = { (struct vgPlace){ NULL, i, "", 0, false }, p->tok, false, (struct token){0}, (struct str){0},
+                           (struct token){0} };
+        vgRefAdd(&vgLocalOf(&st, p, true)->refs, r);
+    }
     vgBlock(block, &st);
 }
 

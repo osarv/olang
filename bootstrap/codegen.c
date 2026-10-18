@@ -8882,21 +8882,24 @@ void emitTargetTriple(FILE* out) {
     fprintf(out, "target triple = \"%s\"\n\n", cgTriple);
 }
 
+//T36: the runtime's scope headers and chunk headers, whose accesses in its inlined bodies (__olang_scope_close,
+//__olang_scope_alloc_a) carry these tags - written into every module beside the tree below, and into the dynamic call's
+//part of the runtime, which inlines them too; runtime.ll defines the same for its own object
+static const char* cgHeaderTbaa = "!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\", !20, i64 0}\n"
+                                  "!59 = !{!49, !49, i64 0}\n!60 = !{!50, !50, i64 0}\n";
+
 //the type tree cgTbaa's tags refer to: one root, one leaf per tagged type, all siblings - so any two
 //different tagged types are proven not to alias, and anything untagged still aliases everything.
 void emitTbaaTypeTree(FILE* out) {
+    fputs(cgHeaderTbaa, out);
     fputs("!20 = !{!\"olang\"}\n"
           "!17 = !{!\"arraydesc\", !20, i64 0}\n"
           "!18 = !{!\"closure\", !20, i64 0}\n" //a closure's environment (cgCaptureTbaa)
           "!47 = !{!\"arraydesc[]\", !20, i64 0}\n"
           "!19 = !{!\"ref\", !20, i64 0}\n" //a reference to a struct or an enum (cgTbaa)
           "!48 = !{!\"ref[]\", !20, i64 0}\n"
-          "!49 = !{!\"scopehdr\", !20, i64 0}\n" //the runtime's scope headers and chunk headers (runtime.ll's !59, !60)
-          "!50 = !{!\"chunkhdr\", !20, i64 0}\n"
           "!29 = !{!19, !19, i64 0}\n"
           "!39 = !{!48, !48, i64 0}\n"
-          "!59 = !{!49, !49, i64 0}\n"
-          "!60 = !{!50, !50, i64 0}\n"
           "!27 = !{!17, !17, i64 0}\n"
           "!28 = !{!18, !18, i64 0}\n"
           "!37 = !{!47, !47, i64 0}\n", out);
@@ -9225,6 +9228,7 @@ void CodegenRuntime(FILE* dst, bool dyncall, bool race) {
     //the dynamic call's part calls into the rest of the runtime, which it reaches as any module does
     if (dyncall) emitRuntimeDecls(out, cgArch, cgScopeSan, false);
     fputs(RuntimeText(cgArch, cgScopeSan, dyncall), out);
+    if (dyncall) fprintf(out, "\n!20 = !{!\"olang\"}\n%s", cgHeaderTbaa); //(the inlined bodies' tags)
     fclose(out);
     cgWriteWithAttributes(dst, buf, len, race);
     free(buf);

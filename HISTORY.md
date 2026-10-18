@@ -19920,7 +19920,8 @@ release effects were settled: `ownForEachBody` walks every body, instantiations 
 changes; a path deeper than eight fields is cut to "something below there", so a recursion over a chain of fields
 settles). Then each body is walked once more, in order, with a state per program point: which views each local holds
 (a view, a slice or conversion of one, an element of one borrowed in place by a reference parameter, a struct built
-from one, a lambda capturing one, a collection a call is known to keep it in - `calleeMayHoldArg`), which place each
+from one, a lambda capturing one, a collection a call keeps it in - the third part of a summary, a body storing one
+parameter's value below another, as `l.Push(x)` does, found by seeding each parameter with a mark of its own), which place each
 local is a second name of (`w := v`, `r Lexer& = l`, flow-sensitive: reassigned, it is no longer), and which views
 tasks hold until their join. A growth - a call whose summary grows a place its argument is at, a global it grows by
 name, or a call through a function value given a value or a writable reference (a body not known grows what it is
@@ -19937,7 +19938,10 @@ replaced, on purpose). **Decided (mine)**: a place through an index or a call's 
 same Vec for sure; a struct copy is a second name of the struct (its Vec fields are second names, M19d), until a field
 of it is assigned; a view inside an inner `Vec` of a `Vec<Vec<T>>` is not stale when the outer one grows (the outer
 buffer's handles still name the same inner Vecs); a by-value `Vec` parameter grows the caller's Vec (a handle); a parameter given another value is a root of its own from then
-on, so its growth is no growth of the caller's; the
+on, so its growth is no growth of the caller's; an element read out of a view is a value apart from the buffer, a
+reference element included (it refers where the Vec's elements do) - only one borrowed in place is the buffer's; a
+local or field whose type holds no reference (an array or struct by value) takes a copy and holds no view
+(`copied String = String(v.View())`, vec20); the
 summary of a function is per function, never per element type. The rule has no run-time part and the evaluator needed
 nothing: it already stops on every stale view it reaches (round 1).
 
@@ -19983,5 +19987,5 @@ cannot see through are expected (4.2).
 
 **For round 3** (`own` removed): M19g has no part in own and needs nothing from it; `settleVecViews` runs beside
 `settleOwnBorrows` in the block that runs once a program checks cleanly, and reuses only `ownForEachBody`,
-`ownParamIndex`, `ownFuncName`/`ownQuoted` (rename them when own's code goes) and O26a's `calleeMayKeepArg` /
-`calleeMayHoldArg` (which read `ownObligationsKnown`).
+`ownParamIndex`, `ownFuncName`/`ownQuoted` (rename them when own's code goes) and O26a's `calleeMayKeepArg` (which
+reads `ownObligationsKnown`).
