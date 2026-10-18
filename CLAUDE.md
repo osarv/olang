@@ -603,7 +603,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 ### The C compiler and the port
 
 - **The C compiler is `bootstrap/`, stage 0 (the user's call, 2026-10-10).** It builds `build/out`; `make bootstrap`
-  rebuilds it from C with no committed binary, in one run - always, with no chain of intermediate compilers (the user, 2026-10-18). From the port's
+  rebuilds it from C with no committed binary,; after self-hosting it is frozen and a generated seed (LLVM IR the olang compiler writes of itself, committed) rebuilds from nothing in one run (the user, 2026-10-18). From the port's
   start it takes fixes only (QB, the user's call). The refactor was modest: no splitting files for size (the user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
   demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`

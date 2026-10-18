@@ -364,7 +364,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
-- QAK ASKED 2026-10-18 (the user: one-step bootstrap from C, always; "Start with removing own for sure"). Recommended:
+- QAK RESOLVED 2026-10-18: bootstrap by a generated, committed seed (the user: "I want it that way yes"); C frozen at
+  self-hosting; features after it built once. Was: QAK ASKED 2026-10-18 (the user: one-step bootstrap from C, always; "Start with removing own for sure"). Recommended:
   features compiler/ does not use go into the self-hosted compiler only (built once), compiler/ written in the subset
   stage 0 accepts; a feature the compiler wants goes into stage 0 first. Alternative: every feature into both, always.
   In effect: both (the user's earlier "syntax goes in both"). Order: memory round 3 (own/take removed) first.
