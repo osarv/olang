@@ -23,9 +23,9 @@ type FRes struct(k I64) ? E {
     gone = true
     Gone++
 }
-fn id(x <T>) T { return x }
-fn pick(a <T>, b T, c Bool) T { return a if c else b }
-fn first(a <T>, b <U>) T { return a }
+fn id<T>(x T) T { return x }
+fn pick<T>(a T, b T, c Bool) T { return a if c else b }
+fn first<T, U>(a T, b U) T { return a }
 type Box<T> struct(x T) {
     x
 }

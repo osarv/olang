@@ -73,7 +73,7 @@ fn (p Position&) Str() String { return $p.Line ":" $p.Col }
 # "try doc[0]". Only under try - a JSON text can always lack what is asked of it - and a "try" over a chain of them
 # checks each: "try doc["users"][0]["name"]". Fails with MISSING when there is no such member or item, WRONG_KIND
 # when the value is not an object (a name asked) or an array (an index).
-fn (j Json&) At(key <K>) Json&j ? JsonError {
+fn (j Json&) At<K>(key K) Json&j ? JsonError {
     match K {
         case String {
             match j {
@@ -185,7 +185,7 @@ fn (o Object&) Has(key String&) Bool {
 
 # where the last member named key is, failing with MISSING when none is. Names are compared byte by
 # byte rather than with "==", so that key may be text passed by value (a generic's String), which it can only index
-fn (o Object&) find(key <K>) I64 ? JsonError {
+fn (o Object&) find<K>(key K) I64 ? JsonError {
     if o.index.Len() == 0 {
         i I64 = o.Keys.Len() - 1
         for i >= 0 {
@@ -205,7 +205,7 @@ fn (o Object&) find(key <K>) I64 ? JsonError {
     error JsonError.MISSING
 }
 
-fn sameName(a String&, b <K>) Bool {
+fn sameName<K>(a String&, b K) Bool {
     if a.Len() != b.Len() { return false }
     for i in range a.Len() {
         if a[i] != b[i] { return false }
@@ -214,7 +214,7 @@ fn sameName(a String&, b <K>) Bool {
 }
 
 # FNV-1a over the name's bytes
-fn nameHash(t <K>) I64 {
+fn nameHash<K>(t K) I64 {
     h I64 = -3750763034362895579
     for i in range t.Len() { h = (h ^ I64(t[i])) * 1099511628211 }
     return h
@@ -907,7 +907,7 @@ if TestBuild {
     }
 
     # the word a question about j fails with, or "ok"
-    fn asking(j Json&, key <K>) String& {
+    fn asking<K>(j Json&, key K) String& {
         try j[key] catch JsonError.MISSING { return "MISSING" } catch JsonError.WRONG_KIND { return "WRONG_KIND" }
             catch JsonError { return "OTHER" }
         return "ok"
@@ -1027,13 +1027,13 @@ if TestBuild {
         assert $doc == Encode(doc)
         control := Json.Str(String(U8['"', '\\', 1, 0x1F, 0x7F, 'q']))
         assert Encode(control) == "\"\\\"\\\\\\u0001\\u001f" $Char(0x7F) "q\""
-        nums := Json&[Json.Num(0.1), Json.Num(100.0), Json.Num(-0.0), Json.Num(1e21), Json.Num(1.5e-7), Json.Num(5e-324),
+        nums := Json&[Json.Num(0.1), Json.Num(100.0), Json.Num(-0.0), Json.Num(1e21), Json.Num(1.5e-7), Json.Num(5e-324)
             Json.Num(123456789.125), Json.Num(1e16), Json.Num(1e17), Json.Num(0.0 / 0.0), Json.Num(1.0 / 0.0)]
         assert Encode(Json.Arr(nums)) == "[0.1,100,-0,1e+21,1.5e-07,5e-324,123456789.125,10000000000000000,1e+17,null,null]"
     }
 
     test "a number is written as the shortest text that reads back as it" {
-        for x in F64[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 4.9406564584124654e-324,
+        for x in F64[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 4.9406564584124654e-324
             1.7976931348623157e308, 7.120236347223045e-307, 123.456, -98765.4321e-12, 3.141592653589793] {
             text := Encode(Json.Num(x))
             assert num(text) == x and text.Len() <= ($x).Len()
@@ -1081,7 +1081,7 @@ if TestBuild {
     }
 
     test "values built in code" {
-        o := try Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null]),
+        o := try Object(String&["name", "tags", "ok"], Json&[Json.Str("olang"), Json.Arr(Json&[Json.Num(1.0), Json.Null])
             Json.Bool(true)])
         uneven := try Object(String&["a", "b"], Json&[Json.Null]).Len() catch JsonError.UNEVEN default -1
         assert uneven == -1

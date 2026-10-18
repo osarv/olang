@@ -17,7 +17,7 @@ type Iterator<T> trait {
 # Each walks the iterator onward from where it stands.
 
 # true when keep holds for at least one value
-fn (it mut <I Iterator<<T>>>&) Any(keep fn(x T) Bool) Bool {
+fn (it mut I&) Any<I Iterator<T>, T>(keep fn(x T) Bool) Bool {
     for x in it {
         if keep(x) { return true }
     }
@@ -25,7 +25,7 @@ fn (it mut <I Iterator<<T>>>&) Any(keep fn(x T) Bool) Bool {
 }
 
 # true when keep holds for every value - so for none, when there are none
-fn (it mut <I Iterator<<T>>>&) All(keep fn(x T) Bool) Bool {
+fn (it mut I&) All<I Iterator<T>, T>(keep fn(x T) Bool) Bool {
     for x in it {
         if not keep(x) { return false }
     }
@@ -33,7 +33,7 @@ fn (it mut <I Iterator<<T>>>&) All(keep fn(x T) Bool) Bool {
 }
 
 # how many values keep holds for
-fn (it mut <I Iterator<<T>>>&) Count(keep fn(x T) Bool) I64 {
+fn (it mut I&) Count<I Iterator<T>, T>(keep fn(x T) Bool) I64 {
     n I64 = 0
     for x in it {
         if keep(x) { n++ }
@@ -42,7 +42,7 @@ fn (it mut <I Iterator<<T>>>&) Count(keep fn(x T) Bool) I64 {
 }
 
 # every value folded into one, starting from init
-fn (it mut <I Iterator<<T>>>&) Fold(init <U>, f fn(acc U, x T) U) U {
+fn (it mut I&) Fold<I Iterator<T>, T, U>(init U, f fn(acc U, x T) U) U {
     acc U = init
     for x in it {
         acc = f(acc, x)
@@ -51,7 +51,7 @@ fn (it mut <I Iterator<<T>>>&) Fold(init <U>, f fn(acc U, x T) U) U {
 }
 
 # a new List - in the caller's scope - of f applied to every element
-fn (it mut <I Iterator<<T>>>&) Map(f fn(x T) <U>) List<U>& {
+fn (it mut I&) Map<I Iterator<T>, T, U>(f fn(x T) U) List<U>& {
     out List<U>&return = List<U>()
     for x in it {
         out.Push(f(x))
@@ -60,7 +60,7 @@ fn (it mut <I Iterator<<T>>>&) Map(f fn(x T) <U>) List<U>& {
 }
 
 # a new List - in the caller's scope - of the elements keep holds for
-fn (it mut <I Iterator<<T>>>&) Filter(keep fn(x T) Bool) List<T>& {
+fn (it mut I&) Filter<I Iterator<T>, T>(keep fn(x T) Bool) List<T>& {
     out mut List<T>&return = List<T>()
     for x in it {
         if keep(x) { out.Push(x) }
@@ -69,7 +69,7 @@ fn (it mut <I Iterator<<T>>>&) Filter(keep fn(x T) Bool) List<T>& {
 }
 
 # a new List - in the caller's scope - of every value, in order: "m.Keys().ToList()"
-fn (it mut <I Iterator<<T>>>&) ToList() List<T>& {
+fn (it mut I&) ToList<I Iterator<T>, T>() List<T>& {
     out mut List<T>&return = List<T>()
     for x in it {
         out.Push(x)
@@ -90,11 +90,11 @@ type IndexIter<T, C Indexable<T>> struct(of C&) {
     i I64 = 0
 }
 
-fn (it mut IndexIter<<T>, <C>>&) Next() T ? Exhausted {
+fn (it mut IndexIter<T, C>&) Next() T ? Exhausted {
     if it.i >= it.c.Len() { error Exhausted.END }
     it.i++
     return it.c.At(it.i - 1)
 }
 
 # a fresh position at the start, for any type with At and Len and no Iter of its own (M19e)
-fn (c <C Indexable<<T>>>&) Iter() IndexIter<T, C> { return IndexIter<T, C>(c) }
+fn (c C&) Iter<C Indexable<T>, T>() IndexIter<T, C> { return IndexIter<T, C>(c) }

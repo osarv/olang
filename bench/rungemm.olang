@@ -25,9 +25,9 @@ fn main() {
         benchlib.MustQuietly(String&["cp", "build/" $p, "build/" $p ".base"], pdir)
         benchlib.MustQuietly(String&[olang, "build", "../../../" $p ".olang"], pdir)
     }
-    benchlib.Must(String&["clang", "-O3", "-flto", "-march=native", "-ffp-contract=off", "-o", "build/la/gemm_c", "c/gemm.c",
+    benchlib.Must(String&["clang", "-O3", "-flto", "-march=native", "-ffp-contract=off", "-o", "build/la/gemm_c", "c/gemm.c"
                           "-lopenblas", "-lpthread"])
-    benchlib.Must(String&["clang", "-O3", "-flto", "-march=native", "-ffp-contract=off", "-o", "build/la/mlp_c", "c/mlp.c",
+    benchlib.Must(String&["clang", "-O3", "-flto", "-march=native", "-ffp-contract=off", "-o", "build/la/mlp_c", "c/mlp.c"
                           "-lopenblas", "-lpthread", "-lm"])
     args := os.Args()
     if args.Len() > 1 and args[1] == "-q" { return }

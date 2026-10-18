@@ -918,7 +918,7 @@ fn (g mut Gen&) fallibleCall(t I32, d I64) String& {
     p := g.r(4)
     if g.fallible and p == 0 { return "(try " $call ")" }
     if g.fallible and p == 1 { return "(try " $call " catch " $e ".B default " $g.lit(t) ")" }
-    if p == 2 { return "(try " $call " catch " $e ".A + " $e ".C default " $g.lit(t) " catch default " $g.lit(t) ")" }
+    if p == 2 { return "(try " $call " catch " $e ".A, " $e ".C default " $g.lit(t) " catch default " $g.lit(t) ")" }
     return "(try " $call " catch default " $g.lit(t) ")"
 }
 
@@ -1503,12 +1503,12 @@ fn (g mut Gen&) listStmt(d I64, ind String&) String& {
     if g.vref[l] and (p == 5 or p == 6 or p == 8) { p = 2 }
     if p == 1 { return g.sameOrClone(l, ind) }
     if p == 2 or p == 3 { return $ind $x ".Push(" $g.fit(et, 2) ")\n" }
-    if p == 4 { return $ind $x ".Insert(I64(" $g.solid(g.intT(), 2) " & 7) % (" $x ".Len() + 1), " $g.fit(et, 2) ")\n" }
+    if p == 4 { return $ind $x ".Insert(I64(" $g.solid(g.intT(), 2) " & 7) % (" $x ".Len() + 1), " $g.fit(et, 2) ")!\n" }
     if p == 5 {
         at String& = $g.plainIdx() " % " $x ".Len()"
         v := g.pick(et, 6)
-        if v >= 0 and g.chance(60) { return $ind "if " $x ".Len() > 0 { " $g.use(v) " = " $x ".TakeAt(" $at ") }\n" }
-        return $ind "if " $x ".Len() > 0 { " $x ".RemoveAt(" $at ") }\n"
+        if v >= 0 and g.chance(60) { return $ind "if " $x ".Len() > 0 { " $g.use(v) " = " $x ".TakeAt(" $at ")! }\n" }
+        return $ind "if " $x ".Len() > 0 { " $x ".RemoveAt(" $at ")! }\n"
     }
     if p == 6 {
         k := g.reserve()
@@ -1999,13 +1999,13 @@ fn (g mut Gen&) constCall(t I32, d I64) String& {
         g.np = 0
         ops := String&["+", "-", "*", "^", "&", "|"]
         op := ops[g.r(6) if isInt(et) else g.r(3)]
-        b.Push("fn " $name "(x" $a " Array<" $Prims[et] ", <N>>&) " $Prims[t] " {\n")
+        b.Push("fn " $name "<N>(x" $a " Array<" $Prims[et] ", N>&) " $Prims[t] " {\n")
         b.Push("    if N == 0 { return " $g.lit(t) " } else { return x" $a "[0] " $op " " $name "(x" $a "[1:] as Array<" $Prims[et] ", N - 1>&) }\n}\n")
     } else {
         p := g.push(pt, -1, false, true)
         a := g.push(I32(2000 + et * 16 + 15), -1, false, true)
         g.np = 1
-        b.Push("fn " $name "(x" $p " " $Prims[pt] ", x" $a " Array<" $Prims[et] ", <N>>&) " $Prims[t] " {\n")
+        b.Push("fn " $name "<N>(x" $p " " $Prims[pt] ", x" $a " Array<" $Prims[et] ", N>&) " $Prims[t] " {\n")
         g.hdepth += 1
         b.Push(g.stmts(1 + g.r(3), 1, "    "))
         b.Push(g.constIf(a, 1, "    "))
@@ -2083,9 +2083,9 @@ fn (g mut Gen&) gDecl() {
     n String& = "G" $g.ci
     b := StringBuilder()
     b.Push("type " $n "<T, N I64> struct(v T) {\n    v\n    a Array<T, N>\n}\n")
-    b.Push("fn (b mut " $n "<<T>, <N>>&) put(i I64, x T) {\n    if N > 0 { b.a[(i & 7) % N] = x }\n}\n")
-    b.Push("fn (b " $n "<<T>, <N>>&) sum() T {\n    s T = b.v\n    for x in b.a { s = s + x }\n    return s\n}\n")
-    b.Push("fn (b " $n "<<T>, <N>>&) at(i I64) T { return b.a[(i & 7) % N] if N > 0 else b.v }\n")
+    b.Push("fn (b mut " $n "<T, N>&) put(i I64, x T) {\n    if N > 0 { b.a[(i & 7) % N] = x }\n}\n")
+    b.Push("fn (b " $n "<T, N>&) sum() T {\n    s T = b.v\n    for x in b.a { s = s + x }\n    return s\n}\n")
+    b.Push("fn (b " $n "<T, N>&) at(i I64) T { return b.a[(i & 7) % N] if N > 0 else b.v }\n")
     g.decls = $g.decls $b.ToString()
 }
 

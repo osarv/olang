@@ -5,7 +5,7 @@
 error Stop {
     HERE
 }
-fn total(c <C Indexable<<T>>>&) I64 {
+fn total<C Indexable<T>, T>(c C&) I64 {
     s I64 = 0
     for x in c { s += x }
     return s

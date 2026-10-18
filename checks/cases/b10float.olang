@@ -3,7 +3,7 @@
 # B10/T6a: a float build constant is typed as the literal would be - an F64, so it holds the double nearest 0.1 -
 # while compiling (the first assert, decided by the evaluator) and at run time (the second, on a mutable global)
 error E { X }
-fn width(v <T>) I32 {
+fn width<T>(v T) I32 {
     match T {
         case F32 { return 32 }
         case F64 { return 64 }

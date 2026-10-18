@@ -142,7 +142,7 @@ type Lines struct(fd I32, size I64 = 65536) {
     end I64 = 0
 }
 
-fn (l mut Lines&) Next() String& ? IoError + Exhausted {
+fn (l mut Lines&) Next() String& ? IoError, Exhausted {
     from I64 = l.start               # buf[l.start:from] holds no newline
     for {
         for i in range from, l.end {

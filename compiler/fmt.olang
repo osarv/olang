@@ -3,7 +3,7 @@
 # The formatter works on the scanner's tokens, never on the tree: only what stands between two tokens changes - the
 # spaces on a line and the indentation before it - so the tokens, and with them the tree, are the file's own. The
 # author's line breaks are kept, and with them every statement end (L18). The parser says one thing the tokens
-# alone cannot: which angle brackets are type brackets (Parser.ArgAngles, VarAngles, CloseAngles).
+# alone cannot: which angle brackets are type brackets (Parser.ArgAngles, CloseAngles).
 #
 # The layout:
 # - indentation is four spaces a level. A block's lines are one level in from the line its "{" ends, and a bracket's
@@ -28,11 +28,10 @@ import "source"
 
 # the file's text written in the layout: ts is its scan, the lists the parser's type brackets by token index, held the
 # spans of the branches to leave as written
-fn Format(text String&, ts scan.Tokens&, argAngles List<I64>&, varAngles List<I64>&, closeAngles List<I64>&,
+fn Format(text String&, ts scan.Tokens&, argAngles List<I64>&, closeAngles List<I64>&
           held Array<source.Span>&) String {
     f := formatter(text, ts.Toks)
     for i in argAngles { f.argOpen[i] = f.argOpen[i] + 1 }
-    for i in varAngles { f.varOpen[i] = f.varOpen[i] + 1 }
     for i in closeAngles { f.closes[i] = f.closes[i] + 1 }
     for sp in held {
         f.heldS.Push(lineStartOf(text, I64(sp.Start)))
@@ -59,7 +58,6 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     text
     toks
     argOpen mut Array<I64>& = Array<I64>(toks.Len())
-    varOpen mut Array<I64>& = Array<I64>(toks.Len())
     closes mut Array<I64>& = Array<I64>(toks.Len())
     # the tokens with text, by index into toks, and beside each whether a statement end stands before it
     real List<I64>
@@ -235,7 +233,7 @@ fn (f formatter&) cont(r I64) I64 {
     p := f.real[r - 1]
     k := f.kind(p)
     if k == token.Tok.LBrace or k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.RBrace { return 0 }
-    if f.argOpen[p] + f.varOpen[p] > 0 or f.closes[p] > 0 { return 0 }
+    if f.argOpen[p] > 0 or f.closes[p] > 0 { return 0 }
     if k == token.Tok.Amp and not f.toks[p].Has(token.Space) { return 0 }
     if k == token.Tok.Comma {
         n := f.stKind.Len()
@@ -373,7 +371,7 @@ fn (f mut formatter&) track(j I64) {
     } else if k == token.Tok.LParen or k == token.Tok.LBrack {
         f.push(1, f.curIndent + 1, f.curIndent)
     } else {
-        for c in range f.argOpen[j] + f.varOpen[j] { f.push(1, f.curIndent + 1, f.curIndent) }
+        for c in range f.argOpen[j] { f.push(1, f.curIndent + 1, f.curIndent) }
     }
 }
 
@@ -485,7 +483,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     if kb == token.Tok.RParen or kb == token.Tok.RBrack { return "" }
     if ka == token.Tok.LParen or ka == token.Tok.LBrack { return "" }
     if f.closes[b] > 0 { return "" }
-    if f.argOpen[a] + f.varOpen[a] > 0 { return "" }
+    if f.argOpen[a] > 0 { return "" }
     # a reference marker, and the scope name after it (T24, E25): as the file had them
     if ka == token.Tok.Amp and not f.toks[a].Has(token.Space) { return f.asWritten(b) }
     if kb == token.Tok.Amp { return f.asWritten(b) }

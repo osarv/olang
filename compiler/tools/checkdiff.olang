@@ -85,9 +85,9 @@ fn run(args Array<String&>&) {
             missed.PushChar('\n')
         }
     }
-    out.Write("checkdiff: refused programs: " $first " of " $mine " checker cases give stage 0's first error (" $exact
+    out.Write(("checkdiff: refused programs: " $first " of " $mine " checker cases give stage 0's first error (" $exact
               " give exactly its errors; " $(total - mine - decided) " are other passes', " $decided
-              " rules decided away)\n")
+              " rules decided away)\n"))
 
     # ---- 2. the programs stage 0 accepts ----
     said2 := StringBuilder()
@@ -245,7 +245,7 @@ fn ownedElsewhere(what String&) Bool {
 # compilation (B), a code generator's or the race detector's
 fn otherPass(r String&) Bool {
     if r.StartsWith("O") or r.StartsWith("K") or r.StartsWith("B") { return true }
-    for x in String&["C2d", "C2g", "T17c", "D16d", "P2", "T22a", "E12c", "E31b", "S8a", "S8b", "S8c", "S18c", "D13c", "G21",
+    for x in String&["C2d", "C2g", "T17c", "D16d", "P2", "T22a", "E12c", "E31b", "S8a", "S8b", "S8c", "S18c", "D13c", "G21"
                      "T29d", "P7", "P1c"] {
         if r == x { return true }
     }
@@ -256,7 +256,7 @@ fn otherPass(r String&) Bool {
 # and their arrays' spelling (QP2: G20-G28), the introduction rule (QW: G8b), the default error (QO1: R15-R17),
 # done/fail/abort and a test's return (QU: S15, S16-S16b)
 fn decidedAway(r String&) Bool {
-    for x in String&["G8b", "G20", "G22", "G23", "G24", "G25", "G26", "G27", "G28", "R15", "R16", "R17", "R18", "R19",
+    for x in String&["G8b", "G20", "G22", "G23", "G24", "G25", "G26", "G27", "G28", "R15", "R16", "R17", "R18", "R19"
                      "S16a", "S16b", "S16c"] {
         if r == x { return true }
     }

@@ -146,6 +146,7 @@ struct tokenContext {
     int version;                //changes whenever the token list does - see TokenListVersion
     struct list brackets;       //L18a: the brackets open here, innermost last - '(' '[' '{' - see insideBrackets
     struct list lineIfs;        //L18b: where each "if" beginning a line outside brackets is (char*, in order)
+    bool skipEnds;              //L18a: the parser reads a parenthesized expression, where a line's end separates nothing
 };
 
 //the byte at idx, or '\0' past the end - the cursor may step past the terminating '\0' and back
@@ -558,7 +559,7 @@ enum tokenType tokenizeOperator(TokenCtx tc) {
         //after it on the line is read as the next one rather than reported again
         if (c == ';') {
             ErrSyntax(charSpan(tc, startIdx, 1), ERR_SEMICOLON);
-            return !insideBrackets(tc) && stmntEndTriggerType(tc->lastTokType) ? TOK_STMNT_END : TOK_NONE;
+            return stmntEndTriggerType(tc->lastTokType) ? TOK_STMNT_END : TOK_NONE;
         }
         while (!atEnd(tc) && !canStartToken(tc) && peekChar(tc, 0) != '\r') feedChar(tc);
         struct token run = charSpan(tc, startIdx, tc->charIdx - startIdx);
@@ -624,13 +625,24 @@ struct token synthesizeStmntEnd(TokenCtx tc) {
     return tok;
 }
 
-//L18a: a newline inside parentheses or square brackets ends no statement - an argument list, an array literal or a
-//parenthesized expression may run over several lines, its closing bracket on a line of its own - while a block opened
+//L18b: inside parentheses or square brackets a line beginning with "if" may continue a conditional - a block opened
 //inside them ("f(fn(x) {", a match used as a value) holds statements again
 static bool insideBrackets(TokenCtx tc) {
     if (!tc->brackets.len) return false;
     char top = *(char*)ListGetIdx(&tc->brackets, tc->brackets.len - 1);
     return top == '(' || top == '[';
+}
+
+//L18a: the comma just before a line's end, reported - and then read as the separator it was meant as, so it is one error
+static void commaEndsLine(TokenCtx tc) {
+    struct token t = {0};
+    t.type = TOK_COMMA;
+    t.str.ptr = tc->lastTokEnd - 1;
+    t.str.len = 1;
+    t.lineNr = tc->lastTokLine;
+    t.owner = tc;
+    t.tokId = -1;
+    ErrSyntax(t, ERR_COMMA_ENDS_LINE);
 }
 
 static void trackBracket(TokenCtx tc, enum tokenType t) {
@@ -667,6 +679,8 @@ void tokenizeTokensFromChars(TokenCtx tc) {
     tc->sawNewline = false;
     while (!atEnd(tc)) {
         if (!findNextTokStart(tc)) break;
+        //L18a: a comma never ends a line - items on different lines are separated by the line break
+        if (tc->sawNewline && tc->lastTokType == TOK_COMMA) commaEndsLine(tc);
         bool endHere = tc->sawNewline && stmntEndTriggerType(tc->lastTokType);
         struct token stmntEnd = endHere ? synthesizeStmntEnd(tc) : (struct token){0};
 
@@ -675,7 +689,7 @@ void tokenizeTokensFromChars(TokenCtx tc) {
         //line's end before them still waits for the next token - one statement end, not one per run of such bytes
         if (tok.type == TOK_NONE) continue;
         closeBracketsBeforeDecl(tc, tok);
-        if (endHere && !insideBrackets(tc)) {
+        if (endHere) {
             ListAdd(&tc->tokens, &stmntEnd);
             //L18: a ';' after a line's end that ended the statement already ends nothing more
             if (tok.type == TOK_STMNT_END) {
@@ -698,6 +712,7 @@ void tokenizeTokensFromChars(TokenCtx tc) {
     //the end of the file ends a statement exactly as a newline does. Without this a file whose last line is
     //a statement - a global declaration, say - with no newline-and-more-code after it failed to parse, since
     //the loop above only synthesizes the terminator when another token follows.
+    if (tc->lastTokType == TOK_COMMA) commaEndsLine(tc);
     if (stmntEndTriggerType(tc->lastTokType)) {
         struct token stmntEnd = synthesizeStmntEnd(tc);
         ListAdd(&tc->tokens, &stmntEnd);
@@ -751,7 +766,24 @@ struct token tokenEOF(TokenCtx tc) {
     return tok;
 }
 
+//L18a: inside a parenthesized expression the statement ends L18 put at a line's end are passed over
+static void skipEndsAtCursor(TokenCtx tc) {
+    while (tc->skipEnds && tc->tokIdx < tc->tokens.len
+           && ((struct token*)ListGetIdx(&tc->tokens, tc->tokIdx))->type == TOK_STMNT_END) tc->tokIdx++;
+}
+
+bool TokenSkipEnds(TokenCtx tc, bool skip) {
+    bool was = tc->skipEnds;
+    tc->skipEnds = skip;
+    return was;
+}
+
+bool TokenSkippingEnds(TokenCtx tc) {
+    return tc->skipEnds;
+}
+
 struct token TokenFeed(TokenCtx tc) {
+    skipEndsAtCursor(tc);
     if (tc->tokIdx >= tc->tokens.len) return tokenEOF(tc);
     struct token* tokPtr = ListGetIdx(&tc->tokens, tc->tokIdx);
     tc->tokIdx++;
@@ -827,6 +859,7 @@ static void splitTokenAtCursor(TokenCtx tc, enum tokenType first, enum tokenType
 //correct; a parse that splits and then fails puts the token back with TokenEditRewind, so an expression read
 //afterwards ("a < B >> c") still sees its shift.
 bool TokenSplitShiftRight(TokenCtx tc) {
+    skipEndsAtCursor(tc);
     if (tc->tokIdx >= tc->tokens.len) return false;
     enum tokenType t = ((struct token*)ListGetIdx(&tc->tokens, tc->tokIdx))->type;
     enum tokenType rest = t == TOK_BTSFT_R ? TOK_GRT : t == TOK_GRE ? TOK_ASS : t == TOK_ASS_BTSFT_R ? TOK_GRE : TOK_NONE;
@@ -838,6 +871,7 @@ bool TokenSplitShiftRight(TokenCtx tc) {
 //the opening counterpart: "List<<T>>" lexes its opening as one "<<" token, where a type-args list whose first item is
 //a type variable needs "<" "<"
 bool TokenSplitShiftLeft(TokenCtx tc) {
+    skipEndsAtCursor(tc);
     if (tc->tokIdx >= tc->tokens.len) return false;
     if (((struct token*)ListGetIdx(&tc->tokens, tc->tokIdx))->type != TOK_BTSFT_L) return false;
     splitTokenAtCursor(tc, TOK_LST, TOK_LST);

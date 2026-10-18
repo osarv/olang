@@ -25,7 +25,7 @@ error InputError {
     TOO_BIG
 }
 
-fn Classify(n I32) I32 ? sh.RangeError + WorkerError {
+fn Classify(n I32) I32 ? sh.RangeError, WorkerError {
     if n < 0 {
         error WorkerError.BAD_INPUT
     }
@@ -35,7 +35,7 @@ fn Classify(n I32) I32 ? sh.RangeError + WorkerError {
 # combines this file's own two error types in declaration order (WorkerError first) - Reclassify below
 # re-declares the same pair in the OPPOSITE order when it propagates this, exercising the error-union
 # ABI's ordinal remap the same way shared.ComputeChecked/worker.Reclassify do across modules
-fn classifyInput(n I32) I32 ? WorkerError + InputError {
+fn classifyInput(n I32) I32 ? WorkerError, InputError {
     if n < 0 {
         error InputError.NEGATIVE
     }
@@ -48,7 +48,7 @@ fn classifyInput(n I32) I32 ? WorkerError + InputError {
     return n
 }
 
-fn reclassifyInput(n I32) I32 ? InputError + WorkerError {
+fn reclassifyInput(n I32) I32 ? InputError, WorkerError {
     return try classifyInput(n)
 }
 
@@ -73,7 +73,7 @@ fn AskRunner(n I32) I32 {
 
 test "Classify accepts values inside the range" {
     ok Bool = true
-    try Classify(50) catch sh.RangeError + WorkerError {
+    try Classify(50) catch sh.RangeError, WorkerError {
         ok = false
     }
     assert ok
@@ -81,7 +81,7 @@ test "Classify accepts values inside the range" {
 
 test "Classify rejects negative input with its own error" {
     caught Bool = false
-    try Classify(-1) catch sh.RangeError + WorkerError {
+    try Classify(-1) catch sh.RangeError, WorkerError {
         caught = true
     }
     assert caught
@@ -89,7 +89,7 @@ test "Classify rejects negative input with its own error" {
 
 test "Classify rejects out-of-range input with the shared error" {
     caught Bool = false
-    try Classify(500) catch sh.RangeError + WorkerError {
+    try Classify(500) catch sh.RangeError, WorkerError {
         caught = true
     }
     assert caught
@@ -102,7 +102,7 @@ test "checkRangeOk reports success and failure correctly" {
 
 test "reordered propagation identifies negative correctly" {
     caught Bool = false
-    try reclassifyInput(-1) catch InputError + WorkerError {
+    try reclassifyInput(-1) catch InputError, WorkerError {
         caught = true
     }
     assert caught
@@ -110,7 +110,7 @@ test "reordered propagation identifies negative correctly" {
 
 test "reordered propagation identifies too-big correctly" {
     caught Bool = false
-    try reclassifyInput(2000) catch InputError + WorkerError {
+    try reclassifyInput(2000) catch InputError, WorkerError {
         caught = true
     }
     assert caught
@@ -118,7 +118,7 @@ test "reordered propagation identifies too-big correctly" {
 
 test "reordered propagation identifies bad-input correctly" {
     caught Bool = false
-    try reclassifyInput(0) catch InputError + WorkerError {
+    try reclassifyInput(0) catch InputError, WorkerError {
         caught = true
     }
     assert caught
@@ -126,7 +126,7 @@ test "reordered propagation identifies bad-input correctly" {
 
 test "reordered propagation: catching both combined error types with +" {
     caught Bool = false
-    try reclassifyInput(-1) catch InputError + WorkerError {
+    try reclassifyInput(-1) catch InputError, WorkerError {
         caught = true
     }
     assert caught
@@ -134,7 +134,7 @@ test "reordered propagation: catching both combined error types with +" {
 
 test "reordered propagation: success path is unaffected by the reordering" {
     caught Bool = false
-    try reclassifyInput(50) catch InputError + WorkerError {
+    try reclassifyInput(50) catch InputError, WorkerError {
         caught = true
     }
     assert not caught
@@ -142,7 +142,7 @@ test "reordered propagation: success path is unaffected by the reordering" {
 
 test "cross-module: ComputeChecked identifies div-by-zero correctly" {
     caught Bool = false
-    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError + sh.RangeError {
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError, sh.RangeError {
         caught = true
     }
     assert caught
@@ -150,7 +150,7 @@ test "cross-module: ComputeChecked identifies div-by-zero correctly" {
 
 test "cross-module: ComputeChecked identifies too-small correctly" {
     caught Bool = false
-    try sh.ComputeChecked(2, 1, 10, 100) catch sh.MathError + sh.RangeError {
+    try sh.ComputeChecked(2, 1, 10, 100) catch sh.MathError, sh.RangeError {
         caught = true
     }
     assert caught
@@ -160,7 +160,7 @@ test "cross-module: ComputeChecked identifies too-small correctly" {
 # catch in this file uses the whole-type "alias.Type" form (2 identifiers) instead
 test "cross-module: catching a specific word by its full alias.Type.word name" {
     caught Bool = false
-    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DIV_BY_ZERO + sh.MathError.OVERFLOW + sh.RangeError {
+    try sh.ComputeChecked(10, 0, 0, 100) catch sh.MathError.DIV_BY_ZERO, sh.MathError.OVERFLOW, sh.RangeError {
         caught = true
     }
     assert caught
@@ -173,17 +173,17 @@ test "calling across the worker/runner import cycle" {
 
 # G16: instantiated from runner.olang, whose bodies are checked before this module's - the case that used
 # to hand the instantiation an empty body and return a zero value silently
-fn GenericEcho(x <T>) T {
+fn GenericEcho<T>(x T) T {
     return x
 }
 
 # D8a: shared.olang's default reads its own global "rv9Base" - inside these instantiations, whose constant variable has that
 # name too, it read the caller's (6 for 4; and a Bool's "+" was two errors reported in shared.olang)
-fn rv9ViaConst(a Array<I64, <rv9Base>>&) I64 { return sh.Rv9Plus() }
+fn rv9ViaConst<rv9Base>(a Array<I64, rv9Base>&) I64 { return sh.Rv9Plus() }
 type Rv9Flag<rv9Base Bool> struct(k I64) {
     k
 }
-fn (f Rv9Flag<<rv9Base>>&) Get() I64 { return sh.Rv9Plus() + f.k }
+fn (f Rv9Flag<rv9Base>&) Get() I64 { return sh.Rv9Plus() + f.k }
 test "D8a: another module's default reads its own global, never a caller's constant variable of that name" {
     b := Array<I64, 5>()
     assert rv9ViaConst(b) == 4

@@ -83,7 +83,7 @@ fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>
 fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? HttpError {
     if method.Len() == 0 or not method.All(fn(c Char) Bool { return c.IsLetter() }) { error HttpError.INVALID }
     args := List<String&>()
-    for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L",
+    for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
         "--max-redirs", "10", "-D", "/dev/stderr"] { args.Push(a) }
     head Bool = method == "HEAD"
     if head {                                       # a HEAD's response has no body; curl would write its fields there
@@ -121,7 +121,7 @@ fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, ti
     args.Push(url)
     if url.Has(0) { error HttpError.INVALID }      # no command line can carry a zero byte
     run os.Output&return = try os.Exec(args.ToArray(), body if sending else "")
-        catch os.OsError.NOT_FOUND + os.OsError.DENIED { error HttpError.NO_CURL }
+        catch os.OsError.NOT_FOUND, os.OsError.DENIED { error HttpError.NO_CURL }
         catch os.OsError { error HttpError.FAILED }
     if run.Status != 0 { try transportError(run.Status) }
     return try response(run.Stderr, run.Stdout)

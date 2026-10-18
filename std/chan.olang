@@ -70,14 +70,14 @@ type Chan<T> struct(cap I64) {
 
 # a channel must be initialised before use: a constructor cannot call these, because pthread wants the
 # final address of the mutex and the constructed value has not reached its home yet.
-fn Init(c mut Chan<<T>>&) {
+fn Init<T>(c mut Chan<T>&) {
     pthread_mutex_init(c.lock, 0)
     pthread_cond_init(c.notEmpty, 0)
     pthread_cond_init(c.notFull, 0)
 }
 
 # v into the ring, the lock held and a slot free; returns its ticket - how many values were placed before it
-fn place(c mut Chan<<T>>&, v T) I64 {
+fn place<T>(c mut Chan<T>&, v T) I64 {
     c.data[c.tail] = v
     c.tail = (c.tail + 1) % c.data.Len()
     c.count = c.count + 1
@@ -87,7 +87,7 @@ fn place(c mut Chan<<T>>&, v T) I64 {
 }
 
 # the oldest value out of the ring, the lock held and the ring not empty
-fn oldest(c mut Chan<<T>>&) T {
+fn oldest<T>(c mut Chan<T>&) T {
     v := c.data[c.head]
     c.head = (c.head + 1) % c.data.Len()
     c.count = c.count - 1
@@ -103,7 +103,7 @@ error ChanError {
 
 # no more values will be sent: what is buffered is still received, then Recv fails with ChanError.CLOSED. Wakes every
 # task waiting on the channel. Closing a closed channel changes nothing.
-fn Close(c mut Chan<<T>>&) {
+fn Close<T>(c mut Chan<T>&) {
     pthread_mutex_lock(c.lock)
     c.closed = true
     pthread_cond_broadcast(c.notEmpty)
@@ -113,7 +113,7 @@ fn Close(c mut Chan<<T>>&) {
 
 # whether Close has been called. A channel open now may be closed by the time the answer is used - a receiver learns
 # that it has ended from Recv's error, never from this
-fn IsClosed(c mut Chan<<T>>&) Bool {
+fn IsClosed<T>(c mut Chan<T>&) Bool {
     pthread_mutex_lock(c.lock)
     closed := c.closed
     pthread_mutex_unlock(c.lock)
@@ -121,7 +121,7 @@ fn IsClosed(c mut Chan<<T>>&) Bool {
 }
 
 # a Send, the lock held: fails with CLOSED if the channel is closed - the lock let go first, so the channel stays usable
-fn sendOpen(c mut Chan<<T>>&) ? ChanError {
+fn sendOpen<T>(c mut Chan<T>&) ? ChanError {
     if c.closed {
         pthread_mutex_unlock(c.lock)
         error ChanError.CLOSED
@@ -130,7 +130,7 @@ fn sendOpen(c mut Chan<<T>>&) ? ChanError {
 
 # a rendezvous Send whose value is still in the slot when the channel closes withdraws it - the slot holds only that
 # value, as values leave in order and none was placed after it while the slot was full - and so never completed
-fn withdraw(c mut Chan<<T>>&) {
+fn withdraw<T>(c mut Chan<T>&) {
     c.tail = 0
     c.count = 0
     c.sent = c.sent - 1
@@ -139,7 +139,7 @@ fn withdraw(c mut Chan<<T>>&) {
 
 # blocks while the channel is full, then appends - and on a rendezvous channel, blocks again until the value has been
 # taken. A condition variable may wake spuriously, so each wait is in a loop re-reading the count under the lock.
-fn Send(c mut Chan<<T>>&, v T) ? ChanError {
+fn Send<T>(c mut Chan<T>&, v T) ? ChanError {
     pthread_mutex_lock(c.lock)
     for c.count == c.data.Len() and not c.closed {
         pthread_cond_wait(c.notFull, c.lock)
@@ -158,7 +158,7 @@ fn Send(c mut Chan<<T>>&, v T) ? ChanError {
 
 # blocks while the channel is empty and open, then takes the oldest value; fails with ChanError.CLOSED once the
 # channel is closed and everything sent before has been taken
-fn Recv(c mut Chan<<T>>&) T ? ChanError {
+fn Recv<T>(c mut Chan<T>&) T ? ChanError {
     pthread_mutex_lock(c.lock)
     for c.count == 0 and not c.closed {
         pthread_cond_wait(c.notEmpty, c.lock)
@@ -174,7 +174,7 @@ fn Recv(c mut Chan<<T>>&) T ? ChanError {
 
 # a channel is its own iterator (S9a): "for v in c" receives until the channel is closed and drained - Recv, with the
 # end of a closed channel as the end of the walk
-fn (c mut Chan<<T>>&) Next() T ? Exhausted {
+fn (c mut Chan<T>&) Next() T ? Exhausted {
     return try Recv(c) catch ChanError { error Exhausted.END }
 }
 
@@ -182,7 +182,7 @@ fn (c mut Chan<<T>>&) Next() T ? Exhausted {
 # rendezvous channel, while the value has not been taken yet: it is withdrawn, so a value either reached a Recv or
 # was never sent. The wait wakes at the token's deadline, and every few milliseconds besides to notice a Cancel()
 # (cancel.WakeAt).
-fn SendUntil(c mut Chan<<T>>&, v T, tok cancel.Token&) ? cancel.Stopped + ChanError {
+fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, ChanError {
     ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
     for c.count == c.data.Len() and not c.closed {
@@ -213,7 +213,7 @@ fn SendUntil(c mut Chan<<T>>&, v T, tok cancel.Token&) ? cancel.Stopped + ChanEr
 
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty and open; fails
 # with ChanError.CLOSED once it is closed and drained
-fn RecvUntil(c mut Chan<<T>>&, tok cancel.Token&) T ? cancel.Stopped + ChanError {
+fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, ChanError {
     ts Array<I64, 2>
     pthread_mutex_lock(c.lock)
     for c.count == 0 and not c.closed {

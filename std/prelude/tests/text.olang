@@ -131,7 +131,7 @@ test "ParseFloat reads the infinities and NaN, so what $ writes reads back" {
 
 test "ParseFloat names what was wrong" {
     assert floatProblem("") == "EMPTY" and floatProblem("1.5") == "ok"
-    for bad in String&["-", "+", ".", "-.", "e5", "1e", "1e+", "1.5x", " 1", "1 ", "1_000", "0x10", "--1", "1.2.3", "infin",
+    for bad in String&["-", "+", ".", "-.", "e5", "1e", "1e+", "1.5x", " 1", "1 ", "1_000", "0x10", "--1", "1.2.3", "infin"
         "nana", "in", "1e5e5", "+-1"] {
         assert floatProblem(bad) == "INVALID"
     }
@@ -174,7 +174,7 @@ test "ShortestDecimal gives the fewest digits that read back" {
 # and the shortest digits, exactly as at run time
 fn floatsRead() U64 {
     h U64 = 0
-    for t in String&["0.1", "1e23", "9007199254740993", "2.4703282292062328e-324", "123456789012345678901234567890",
+    for t in String&["0.1", "1e23", "9007199254740993", "2.4703282292062328e-324", "123456789012345678901234567890"
         "0.1000000000000000055511151231257827021181583404541015625", "-1.5e-300", "inf"] {
         h = h * 1099511628211 + (try t.ParseFloat() catch default 0.0).Bits()
     }
@@ -230,7 +230,7 @@ test "base 0 reads an integer as olang writes its literal (L10)" {
     assert uintIn("0xFFFF_FFFF_FFFF_FFFF", 0) == "18446744073709551615" and uintIn("0x1_0000_0000_0000_0000", 0) == "OVERFLOW"
     assert uintIn("0b" $"1".Repeat(64), 0) == "18446744073709551615" and uintIn("0b1" $"0".Repeat(64), 0) == "OVERFLOW"
     # a '_' stands between two digits (L10b), and a prefix needs digits of its own base after it
-    for bad in String&["0x", "0b", "0x_FF", "0b_1", "1_", "_1", "1__0", "1_x", "0xFG", "0b12", "1e3", "1.0", "0o7", " 1",
+    for bad in String&["0x", "0b", "0x_FF", "0b_1", "1_", "_1", "1__0", "1_x", "0xFG", "0b12", "1e3", "1.0", "0o7", " 1"
                        "0x-1", "--1", "0_x1"] {
         assert intIn(bad, 0) == "INVALID" and uintIn(bad, 0) == "INVALID"
     }

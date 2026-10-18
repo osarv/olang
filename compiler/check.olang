@@ -203,13 +203,13 @@ type opShape struct(Name String&, Operands I64, Result Bool, MayFail Bool) {
     MayFail
 }
 
-OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus", 1, true, true),
-    opShape("Mul", 1, true, true), opShape("Div", 1, true, true), opShape("Rem", 1, true, true),
-    opShape("MatMul", 1, true, true), opShape("Neg", 0, true, true), opShape("Less", 1, true, true),
-    opShape("At", 1, true, true), opShape("SetAt", 2, false, true), opShape("Slice", 2, true, true),
-    opShape("BitAnd", 1, true, true), opShape("BitOr", 1, true, true), opShape("BitXor", 1, true, true),
-    opShape("ShiftLeft", 1, true, true), opShape("ShiftRight", 1, true, true), opShape("BitNot", 0, true, true),
-    opShape("Inc", 0, true, true), opShape("Dec", 0, true, true), opShape("Len", 0, true, false),
+OpShapes Array<opShape> = opShape[opShape("Plus", 1, true, true), opShape("Minus", 1, true, true)
+    opShape("Mul", 1, true, true), opShape("Div", 1, true, true), opShape("Rem", 1, true, true)
+    opShape("MatMul", 1, true, true), opShape("Neg", 0, true, true), opShape("Less", 1, true, true)
+    opShape("At", 1, true, true), opShape("SetAt", 2, false, true), opShape("Slice", 2, true, true)
+    opShape("BitAnd", 1, true, true), opShape("BitOr", 1, true, true), opShape("BitXor", 1, true, true)
+    opShape("ShiftLeft", 1, true, true), opShape("ShiftRight", 1, true, true), opShape("BitNot", 0, true, true)
+    opShape("Inc", 0, true, true), opShape("Dec", 0, true, true), opShape("Len", 0, true, false)
     opShape("Eq", 1, true, false), opShape("Str", 0, true, false)]
 
 # a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
@@ -393,47 +393,18 @@ fn (c mut Checker&) traitSets(mi I64, td ast.TypeDecl&) {
 # declares one - neither a generic's (checked per instance, G16) nor one whose parameters introduce variables (G10d)
 fn (c mut Checker&) declaredCtor(mi I64, td ast.TypeDecl&) {
     if td == null or td.Body == null or (td.Params != null and td.Params.Len() > 0) { return }
-    ps Array<ast.Param&>&td = null
     match td.Body {
-        case ast.TypeBody.Struct(s) { ps = s.Params }
+        case ast.TypeBody.Struct(s) {
+            if s.TypeParams != null and s.TypeParams.Len() > 0 { return }
+        }
         case ast.TypeBody.Over(_, ctor) {
-            if ctor == null { return }
-            ps = ctor.S.Params
+            if ctor == null or (ctor.TypeParams != null and ctor.TypeParams.Len() > 0) { return }
         }
         nomatch { return }
-    }
-    if ps != null {
-        for p in ps {
-            if introduces(p.Ty) { return }
-        }
     }
     ei := c.P.TypeEntry(mi, td.Name)
     if ei < 0 { return }
     c.ctorBody(c.P.T.Named(c.P.DeclFor(mi, ei), types.ListId(0)))
-}
-
-# whether a written type introduces a variable anywhere in it (G8b's "<T>")
-fn introduces(t ast.TypeRef&) Bool {
-    if t == null { return false }
-    match t {
-        case ast.TypeRef.Var(_, _, _) { return true }
-        case ast.TypeRef.Named(_, _, args) {
-            for a in args {
-                if introduces(a) { return true }
-            }
-        }
-        case ast.TypeRef.Ref(_, of, _), ast.TypeRef.Perm(_, of, _, _) { return introduces(of) }
-        case ast.TypeRef.Func(_, sg) {
-            for p in sg.Params {
-                if introduces(p.Ty) { return true }
-            }
-            for r in sg.Results {
-                if introduces(r) { return true }
-            }
-        }
-        nomatch { }
-    }
-    return false
 }
 
 fn (c mut Checker&) declsIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
@@ -628,7 +599,7 @@ fn (c mut Checker&) twinCall(sp source.Span, nsp source.Span, t types.TypeId, ar
         e typed.Expr&c = null
         v := c.fold(args[i])
         if v.Ok or c.litLike(args[i]) {
-            fl := v.Float if v.Ok else c.litFloat(args[i])
+            fl := v.IsFloat if v.Ok else c.litFloat(args[i])
             if i < ps.Len() { c.unify(ps[i], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
         } else {
             match args[i] {
@@ -868,7 +839,7 @@ fn (c mut Checker&) dtorBody(t types.TypeId, mi I64) I64 {
             nomatch { }
         }
     }
-    ty := c.P.T.Func(c.P.T.List1(c.P.T.Ref(t, types.Writable)), types.VoidT, types.ListId(0),
+    ty := c.P.T.Func(c.P.T.List1(c.P.T.Ref(t, types.Writable)), types.VoidT, types.ListId(0)
                      c.P.T.Scopes(types.RoleDtor, I64[types.OwnScope], Array<I64>(0)))
     return c.newBody(typed.BodyOf.Dtor(t), ty, mi, source.Span(0, 0))
 }
@@ -1114,7 +1085,7 @@ fn (c mut Checker&) captureIn(fi I64, n source.NameId, sp source.Span) I64 {
     return inner
 }
 
-fn gather(stack mut List<<T>>&, from I64) Array<T>&stack {
+fn gather<T>(stack mut List<T>&, from I64) Array<T>&stack {
     a mut Array<T>&stack = Array<T>(stack.Len() - from)
     for i in range a.Len() { a[i] = stack[from + i] }
     stack.Truncate(from)
@@ -1221,12 +1192,11 @@ fn (c mut Checker&) mutBefore(tr ast.TypeRef&, t types.TypeId) source.Span {
     }
 }
 
-# whether a written type is a type variable, bare (G8b) or introduced: "mut T" is writable when T is bound to a
-# reference (T2), whatever an instance binds it to
+# whether a written type is a type variable (G8b): "mut T" is writable when T is bound to a reference (T2), whatever an
+# instance binds it to
 fn (c mut Checker&) namesTypeVar(t ast.TypeRef&) Bool {
     if t == null { return false }
     match t {
-        case ast.TypeRef.Var(_, _, _) { return true }
         case ast.TypeRef.Named(sp, path, args) {
             if path.Len() != 1 or args.Len() > 0 { return false }
             return c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.TypeVar
@@ -1451,7 +1421,10 @@ fn (c mut Checker&) markOf(t ast.TypeRef&) typed.Mark {
             return typed.Mark.Global(c.fr().Mi, sc)
         }
         case ast.TypeRef.Perm(_, of, _, _) { return c.markOf(of) }
-        case ast.TypeRef.Var(_, _, _) { return typed.Mark.Infer }
+        case ast.TypeRef.Named(_, _, _) {
+            # a local written as a bare type variable takes its initializer's scope (O25a)
+            return typed.Mark.Infer if c.namesTypeVar(t) else typed.Mark.None
+        }
         nomatch { return typed.Mark.None }
     }
 }
@@ -1617,9 +1590,9 @@ fn (c mut Checker&) callOf(sp source.Span, t types.TypeId, target typed.Callee&c
 # ---- literals (L10-L14, T6, T6a, E4a) ----
 
 # a literal-only expression's value (E4a): an integer exactly, a float in F64; Ok false where it is no such expression
-type litv struct(Ok Bool, Float Bool, Big Bool, I I64, F F64) {
+type litv struct(Ok Bool, IsFloat Bool, Big Bool, I I64, F F64) {
     Ok
-    Float
+    IsFloat
     Big        # an integer above I64's maximum: I holds a U64's bits (L10)
     I
     F
@@ -1662,11 +1635,11 @@ fn (c mut Checker&) fold(x ast.Expr&) litv {
             v := c.fold(y)
             if not v.Ok { return noLit() }
             if op == token.Tok.Minus {
-                if v.Float { return floatLit(-v.F) }
+                if v.IsFloat { return floatLit(-v.F) }
                 n, m := magOf(v)
                 return ofMag(not n, m) if m != U64(0) else intLit(0)
             }
-            if op == token.Tok.Tilde and not v.Float and not v.Big {
+            if op == token.Tok.Tilde and not v.IsFloat and not v.Big {
                 r := intLit(~v.I)
                 r.Hex = v.Hex
                 return r
@@ -1677,10 +1650,10 @@ fn (c mut Checker&) fold(x ast.Expr&) litv {
             va := c.fold(a)
             vb := c.fold(b)
             if not va.Ok or not vb.Ok { return noLit() }
-            if va.Float or vb.Float {
+            if va.IsFloat or vb.IsFloat {
                 if va.Big or vb.Big { return noLit() }
-                fa := va.F if va.Float else F64(va.I)
-                fb := vb.F if vb.Float else F64(vb.I)
+                fa := va.F if va.IsFloat else F64(va.I)
+                fb := vb.F if vb.IsFloat else F64(vb.I)
                 if op == token.Tok.Plus { return floatLit(fa + fb) }
                 if op == token.Tok.Minus { return floatLit(fa - fb) }
                 if op == token.Tok.Star { return floatLit(fa * fb) }
@@ -1754,10 +1727,10 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     sp := x.Span()
     target := c.under(want)
     if not c.P.T.IsNumber(target) {
-        want = c.P.T.Prim("F64") if v.Float else c.P.T.Prim("U64") if v.Big else c.i64()
+        want = c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big else c.i64()
         target = want
     }
-    if v.Float {
+    if v.IsFloat {
         if not c.P.T.IsFloat(target) {
             c.err(sp, msgs.TypeMismatch(c.ty(want), "F64"))
             return c.unknown(sp)
@@ -1800,7 +1773,7 @@ fn intFits(tt types.Table&, v litv, t types.TypeId) Bool {
 fn (c mut Checker&) litFits(v litv, t types.TypeId) Bool {
     u := c.under(t)
     if not c.P.T.IsNumber(u) { return false }
-    if v.Float { return c.P.T.IsFloat(u) }
+    if v.IsFloat { return c.P.T.IsFloat(u) }
     if c.P.T.IsFloat(u) { return true }
     return intFits(c.P.T, v, u)
 }
@@ -2136,7 +2109,7 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr&c {
     if c.isStruct(t) {
         id := c.ctorBody(t)
         args := Array<typed.Expr&>(0)
-        return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), args, typed.Mark.None,
+        return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), args, typed.Mark.None
                                                  c.site(typed.SiteKind.Call, sp), true))
     }
     return c.lit(sp, t, 0)
@@ -2393,7 +2366,7 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     la := c.fold(a)
     lb := c.fold(b)
     # E4a, E6a: an integer division by a literal-only zero is an error wherever it is written
-    if (op == token.Tok.Slash or op == token.Tok.Percent) and lb.Ok and not lb.Float and not lb.Big and lb.I == 0 and not (la.Ok and la.Float) {
+    if (op == token.Tok.Slash or op == token.Tok.Percent) and lb.Ok and not lb.IsFloat and not lb.Big and lb.I == 0 and not (la.Ok and la.IsFloat) {
         c.err(c.opOf(b), msgs.DivideByZero())
         return c.unknown(sp)
     }
@@ -2473,7 +2446,7 @@ fn (c mut Checker&) opParam(t types.TypeId, op token.Tok) types.TypeId {
 
 # a binary operator applied to two checked values: on numbers a Prim at the type they meet at (T6b), on a declared
 # type's values its operator method (E31), on Bools "==", "!=" and xor; "==" on anything else equality's
-fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x typed.Expr&c, y typed.Expr&c, aSp source.Span,
+fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x typed.Expr&c, y typed.Expr&c, aSp source.Span
                              bSp source.Span) typed.Expr&c {
     ta := typeOf(x)
     tb := typeOf(y)
@@ -2629,7 +2602,7 @@ fn (c mut Checker&) litLike(x ast.Expr&) Bool {
 # whether a literal-like expression gives a float
 fn (c mut Checker&) litFloat(x ast.Expr&) Bool {
     v := c.fold(x)
-    if v.Ok { return v.Float }
+    if v.Ok { return v.IsFloat }
     match x {
         case ast.Expr.Paren(_, y) { return c.litFloat(y) }
         case ast.Expr.Cond(_, a, _, b) { return c.litFloat(a) or c.litFloat(b) }
@@ -2756,7 +2729,7 @@ fn (c mut Checker&) partsEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, t
     ts := c.P.T.Items(fs)
     r typed.Expr&c = c.lit(sp, types.BoolT, 1)
     for i in range ts.Len() {
-        e := c.equality(sp, token.Tok.EqEq, c.read(sp, typed.Place.Field(sp, ts[i], px, i)),
+        e := c.equality(sp, token.Tok.EqEq, c.read(sp, typed.Place.Field(sp, ts[i], px, i))
                         c.read(sp, typed.Place.Field(sp, ts[i], py, i)))
         r = e if i == 0 else typed.Expr.Cond(sp, types.BoolT, typed.Cond(r, e, c.lit(sp, types.BoolT, 0)))
     }
@@ -2776,7 +2749,7 @@ fn (c mut Checker&) arraysEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, 
     n := c.hidden(sp, c.i64())
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(n)), c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, a), null)))
     r := c.hidden(sp, types.BoolT)
-    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(r)), c.prim(sp, types.BoolT, typed.PrimOp.Eq, c.readLocal(sp, n),
+    c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(r)), c.prim(sp, types.BoolT, typed.PrimOp.Eq, c.readLocal(sp, n)
                                                           c.prim(sp, c.i64(), typed.PrimOp.Len, c.readLocal(sp, b), null))))
     k := c.hidden(sp, c.i64())
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(k)), c.lit(sp, c.i64(), 0)))
@@ -2791,7 +2764,7 @@ fn (c mut Checker&) arraysEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, 
     body := c.close(id, outer, mark, from)
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
-    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k)))
                              c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
     post := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, body, post))
@@ -2813,7 +2786,7 @@ fn (c mut Checker&) enumsEqual(sp source.Span, x typed.Expr&c, y typed.Expr&c, e
         qx := typed.Place.Payload(sp, cases[k], typed.Payload(px, k, typed.Check.None))
         qy := typed.Place.Payload(sp, cases[k], typed.Payload(py, k, typed.Check.None))
         for i in range ps.Len() {
-            e := c.equality(sp, token.Tok.EqEq, c.read(sp, typed.Place.Field(sp, ps[i], qx, i)),
+            e := c.equality(sp, token.Tok.EqEq, c.read(sp, typed.Place.Field(sp, ps[i], qx, i))
                             c.read(sp, typed.Place.Field(sp, ps[i], qy, i)))
             same = c.and2(sp, same, e)
         }
@@ -2881,7 +2854,7 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
     # x is E.Case (E32): which case an enum holds, whatever its payload; a null reference holds none
     k := c.caseTag(b, c.deref(typeOf(x)))
     if k >= 0 {
-        r0 := c.prim(sp, types.BoolT, typed.PrimOp.IsCase, c.value(x, a.Span()) if not c.isRef(typeOf(x)) else x,
+        r0 := c.prim(sp, types.BoolT, typed.PrimOp.IsCase, c.value(x, a.Span()) if not c.isRef(typeOf(x)) else x
                      c.lit(sp, c.i64(), k))
         return c.negate(sp, r0) if negated else r0
     }
@@ -3136,7 +3109,6 @@ fn exprKindName(x ast.Expr&) String& {
         case ast.Expr.MatchE(_, _) => "a match value (S12b)"
         case ast.Expr.Range(_, _) => "a range outside a for (S9b)"
         case ast.Expr.Default(_) => "'default' outside a call (E14a)"
-        case ast.Expr.TypeVar(_, _) => "a type variable written again (G8b)"
         case ast.Expr.Index(_, _, _) => "an index of this kind"
         case _ => "an expression of this kind"
     }
@@ -3368,7 +3340,7 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     items := gather(c.exprs, from)
     # its length checked once (D14b), under try failing into the try (E15a)
     lchk := c.checkOp(typed.Check.Abort)
-    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0,
+    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Fill, 0, items, n0
                                               c.site(typed.SiteKind.Make, sp), lchk))
 }
 
@@ -3394,8 +3366,8 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 elem := c.resolve(targs[0])
                 length := c.P.ConstArg(c.fr().Ctx, targs[1], c.i64())
                 if elem == types.UnknownT { return c.unknown(sp) }
-                return typed.Expr.Make(sp, c.P.T.Array(elem, length), typed.Make(typed.MakeKind.Fill, 0, Array<typed.Expr&>(0),
-                                       c.lit(sp, c.i64(), c.P.T.ConstValue(length) if c.P.T.KindOf(length) == types.Kind.Const else 0),
+                return typed.Expr.Make(sp, c.P.T.Array(elem, length), typed.Make(typed.MakeKind.Fill, 0, Array<typed.Expr&>(0)
+                                       c.lit(sp, c.i64(), c.P.T.ConstValue(length) if c.P.T.KindOf(length) == types.Kind.Const else 0)
                                        c.site(typed.SiteKind.Make, sp), typed.Check.Abort))
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 {
@@ -3476,7 +3448,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
         e typed.Expr&c = null
         v := c.fold(args[i])
         if v.Ok or c.litLike(args[i]) {
-            fl := v.Float if v.Ok else c.litFloat(args[i])
+            fl := v.IsFloat if v.Ok else c.litFloat(args[i])
             if i < ps.Len() { c.unify(ps[i], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
         } else {
             match args[i] {
@@ -3612,7 +3584,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         } else {
             v := c.fold(args[i])
             if v.Ok or c.litLike(args[i]) {
-                fl := v.Float if v.Ok else c.litFloat(args[i])
+                fl := v.IsFloat if v.Ok else c.litFloat(args[i])
                 if k < ps.Len() { c.unify(ps[k], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
             } else {
                 match args[i] {
@@ -4064,7 +4036,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
 }
 
 fn supplied(name String&) Bool {
-    for s in String&["Bits", "F16FromBits", "BF16FromBits", "F32FromBits", "F64FromBits", "AtomicLoad", "AtomicStore",
+    for s in String&["Bits", "F16FromBits", "BF16FromBits", "F32FromBits", "F64FromBits", "AtomicLoad", "AtomicStore"
                      "AtomicAdd", "AtomicSwap", "AtomicCompareSwap", "Hash", "Eq", "Str", "Len", "Iter"] {
         if s == name { return true }
     }
@@ -4302,7 +4274,7 @@ fn (c mut Checker&) arrayLit(sp source.Span, elem types.TypeId, items Array<ast.
     n := items.Len()
     xs := gather(c.exprs, from)
     at := c.P.T.Array(elem, c.P.T.Const(c.i64(), n))
-    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, xs, null, c.site(typed.SiteKind.Make, sp),
+    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, xs, null, c.site(typed.SiteKind.Make, sp)
                                               typed.Check.None))
 }
 
@@ -5106,7 +5078,7 @@ fn (c mut Checker&) clauseHandler(cl ast.Catch&, rt types.TypeId, nt I64) typed.
                 xf := c.exprs.Len()
                 for i in range parts.Len() { c.exprs.Push(c.exprTo(cl.Defaults[i], parts[i])) }
                 xs := gather(c.exprs, xf)
-                c.emit(typed.Stmt.Return(cl.Sp, typed.Expr.Make(cl.Sp, rt, typed.Make(typed.MakeKind.Tuple, 0, xs, null,
+                c.emit(typed.Stmt.Return(cl.Sp, typed.Expr.Make(cl.Sp, rt, typed.Make(typed.MakeKind.Tuple, 0, xs, null
                                                                                       typed.SiteId(-1), typed.Check.None))))
             }
         }
@@ -6177,7 +6149,7 @@ fn (c mut Checker&) countPost(sp source.Span, k I64) typed.Block&c {
     if k < 0 { return null }
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
-    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k)))
                              c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
     return c.close(pid, pouter, pmark, pfrom)
 }
@@ -6230,15 +6202,15 @@ fn (c mut Checker&) walkRuns(sp source.Span, f ast.ForIn&, src typed.Expr&c, run
     ib := c.close(iid, iouter, imark, ifrom)
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
-    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(j))),
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(j)))
                              c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, j), c.lit(sp, c.i64(), 1))))
     if k >= 0 {
-        c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+        c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k)))
                                  c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
     }
     pb := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, ib, pb))
-    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(at))),
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(at)))
                              c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, at), c.readLocal(sp, n))))
     ob := c.close(oid, oouter, omark, ofrom)
     c.emit(typed.Stmt.Loop(sp, ob, null))
@@ -6266,7 +6238,7 @@ fn (c mut Checker&) walkIndexed(sp source.Span, f ast.ForIn&, src typed.Expr&c, 
     b := c.close(id, outer, mark, from)
     pfrom := c.stmts.Len()
     pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
-    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k))),
+    c.emit(typed.Stmt.Assign(sp, typed.Place.Local(sp, c.i64(), typed.LocalId(I32(k)))
                              c.prim(sp, c.i64(), typed.PrimOp.Add, c.readLocal(sp, k), c.lit(sp, c.i64(), 1))))
     pb := c.close(pid, pouter, pmark, pfrom)
     c.emit(typed.Stmt.Loop(sp, b, pb))
@@ -6279,7 +6251,7 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
     vfrom := c.exprs.Len()
     for a in rargs {
         fa := c.fold(a)
-        if fa.Ok and fa.Float {
+        if fa.Ok and fa.IsFloat {
             c.err(a.Span(), msgs.RangeNotInt("F64"))
             return null
         }
@@ -6440,7 +6412,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
     from := c.exprs.Len()
     for i in range values.Len() { c.exprs.Push(c.exprTo(values[i], ps[i])) }
     xs := gather(c.exprs, from)
-    c.emit(typed.Stmt.Return(sp, typed.Expr.Make(sp, rt, typed.Make(typed.MakeKind.Tuple, 0, xs, null, typed.SiteId(-1),
+    c.emit(typed.Stmt.Return(sp, typed.Expr.Make(sp, rt, typed.Make(typed.MakeKind.Tuple, 0, xs, null, typed.SiteId(-1)
                                                                    typed.Check.None))))
 }
 
@@ -6477,7 +6449,7 @@ fn (c mut Checker&) inferReturn(sp source.Span, values Array<ast.Expr&>&) {
         return
     }
     fr.Result = c.P.T.Tuple(c.P.T.List(ts))
-    c.emit(typed.Stmt.Return(sp, typed.Expr.Make(sp, fr.Result, typed.Make(typed.MakeKind.Tuple, 0, xs, null,
+    c.emit(typed.Stmt.Return(sp, typed.Expr.Make(sp, fr.Result, typed.Make(typed.MakeKind.Tuple, 0, xs, null
                                                                           typed.SiteId(-1), typed.Check.None))))
 }
 
@@ -7131,7 +7103,7 @@ fn testLoad(dir String&, text String&) load.Loader {
     try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
-    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true),
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
                      source.Names(), diag.Diagnostics(false))
     l.Load($dir "/main.olang")
     return l
@@ -7164,9 +7136,9 @@ fn rootGaps(c Checker&, file I64) String {
 test "a small program checks clean, and its main is checked" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "fn add(a I32, b I32) I32 { return a + b }\n"
+    l := testLoad(dir, ("fn add(a I32, b I32) I32 { return a + b }\n"
                        "fn main() ? {\n    x I32 = 3\n    y := add(x, 4)\n    for i in range 10 { y += I32(i) }\n"
-                       "    if y > 3 { y = y - 1 } else { y = 0 }\n    z I64 = y\n    assert z > 0\n}\n")
+                       "    if y > 3 { y = y - 1 } else { y = 0 }\n    z I64 = y\n    assert z > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7181,8 +7153,8 @@ test "a small program checks clean, and its main is checked" {
 test "type errors: E12, T6b, D10a, S3" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "fn f(x Bool) I32 {\n    if x { return 1 }\n}\n"
-                       "fn main() ? {\n    a I32 = true\n    b I64 = 3\n    c I32 = b\n    a + 1\n}\n")
+    l := testLoad(dir, ("fn f(x Bool) I32 {\n    if x { return 1 }\n}\n"
+                       "fn main() ? {\n    a I32 = true\n    b I64 = 3\n    c I32 = b\n    a + 1\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7195,11 +7167,11 @@ test "type errors: E12, T6b, D10a, S3" {
 test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9a, S9c, S9d, S9f, E27)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n"
+    l := testLoad(dir, ("type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n"
                        "fn main() ? {\n    l := List<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n"
                        "    for k, x in l.Iter() { t += x + k }\n    for x in Ix() { t += x }\n"
                        "    a := I64[x * 2 for x in range 4 if x > 1]\n    b := I64[x for x in l]\n"
-                       "    for x in a { if x > 3 { break }\n        t += x }\n    assert t + b.Len() > 0\n}\n")
+                       "    for x in a { if x > 3 { break }\n        t += x }\n    assert t + b.Len() > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7213,13 +7185,13 @@ test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9
 test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16c, G9a, G9c)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }\n"
+    l := testLoad(dir, ("fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }\n"
                        "fn main() ? {\n    k I64 = 3\n    a := apply(fn(x) { return x + k }, 4)\n"
                        "    g := fn(x I64) { return x * 2 }\n    b := g(5)\n"
                        "    xs := I64[1, 2, 3]\n    n := xs.Count(fn(x) { return x > 1 })\n"
                        "    t := xs.Fold(0, fn(acc I32, x I64) I32 { return acc + I32(x) })\n"
                        "    m := xs.Iter().Count(fn(x) { return x > k })\n"
-                       "    assert a + b + n + I64(t) + m > 0\n}\n")
+                       "    assert a + b + n + I64(t) + m > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7233,8 +7205,8 @@ test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16
 test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "fn main() ? {\n    k I64 = 3\n    g := fn(x) { return x }\n"
-                       "    h := fn() { k = 4 }\n    h()\n}\n")
+    l := testLoad(dir, ("fn main() ? {\n    k I64 = 3\n    g := fn(x) { return x }\n"
+                       "    h := fn() { k = 4 }\n    h()\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7247,10 +7219,10 @@ test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
 test "x[i] through At and SetAt: reads, stores, compound stores and increments written back (E31, E31b)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type P struct(x I64, y I64) { x\n    y }\n"
+    l := testLoad(dir, ("type P struct(x I64, y I64) { x\n    y }\n"
                        "fn main() ? {\n    l := List<P>()\n    l.Push(P(1, 2))\n    l[0].x = 5\n    l[0].y += 3\n"
                        "    n := List<I64>()\n    n.Push(4)\n    n[0] += 2\n    n[0]++\n    n[0] = 9\n"
-                       "    assert l[0].x + l[0].y + n[0] > 0\n}\n")
+                       "    assert l[0].x + l[0].y + n[0] > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7264,11 +7236,11 @@ test "x[i] through At and SetAt: reads, stores, compound stores and increments w
 test "join and spawn: targets, failing tasks, clauses on the task, try join (P1, P1a, P1g, P4, P4a-P4c)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "error E {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
+    l := testLoad(dir, ("error E {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
                        "fn work(n I64) { }\n"
                        "fn main() ? {\n    out := Array<I64>(3)\n    join {\n        for i in range 3 { spawn out[i] = try sq(i) catch E.A default 0 catch E.B default 1 }\n    }\n"
                        "    x I64 = 0\n    try join {\n        spawn x = try sq(4)\n        spawn work(2)\n        spawn fn() { work(3) }\n    } catch E { return }\n"
-                       "    assert out[2] + x > 0\n}\n")
+                       "    assert out[2] + x > 0\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7282,8 +7254,8 @@ test "join and spawn: targets, failing tasks, clauses on the task, try join (P1,
 test "join and spawn errors (P1, P1a, P4, P4c)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "error E {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n"
-                       "fn main() ? {\n    spawn g()\n    join { g() }\n    join {\n        spawn f()\n    }\n    join {\n        spawn try f()\n    }\n}\n")
+    l := testLoad(dir, ("error E {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n"
+                       "fn main() ? {\n    spawn g()\n    join { g() }\n    join {\n        spawn f()\n    }\n    join {\n        spawn try f()\n    }\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7296,14 +7268,14 @@ test "join and spawn errors (P1, P1a, P4, P4c)" {
 test "errors: inferred sets across a cycle, checked, words, noreturn and ! (R1a, R1c, E15a, D8e, E35)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "error E {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
+    l := testLoad(dir, ("error E {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
                        "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n"
                        "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n"
                        "fn half(a I32, b I32) I32 ? E.B { return checked (a / b) catch BuiltinError default 0 }\n"
                        "fn never() ? { }\n"
                        "fn pick(n I64) I64 {\n    if n > 0 { return n }\n    die()\n}\n"
                        "fn main() {\n    never()\n    x := try even(4) catch E.A default false\n"
-                       "    y := odd(3)!\n    z := try half(1, 0) catch E.B default die()\n}\n")
+                       "    y := odd(3)!\n    z := try half(1, 0) catch E.B default die()\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7317,11 +7289,11 @@ test "errors: inferred sets across a cycle, checked, words, noreturn and ! (R1a,
 test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "error E {\n    A\n    B\n}\nerror F {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
+    l := testLoad(dir, ("error E {\n    A\n    B\n}\nerror F {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
                        "fn g() I32 ? E.A { error E.B }\nfn h() I32 { return try f() catch E.A default 1 }\n"
                        "fn k() ? E { try f() catch F { } }\nfn m() ? E {\n    try f() catch { } catch E { }\n}\n"
                        "fn n() I32 { return try (1 + 2) catch default 0 }\nfn q() I32 { return 3! }\n"
-                       "fn s() noreturn { }\nfn main() { }\n")
+                       "fn s() noreturn { }\nfn main() { }\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7334,9 +7306,9 @@ test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11,
 test "writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn mk() P { return P(1) }\n"
+    l := testLoad(dir, ("type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn mk() P { return P(1) }\n"
                        "fn f(p P&, q mut P&) {\n    q.x = 2\n    p.x = 3\n}\n"
-                       "fn main() ? {\n    M = 5\n    G = 6\n    mk().x = 4\n}\n")
+                       "fn main() ? {\n    M = 5\n    G = 6\n    mk().x = 4\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)
@@ -7349,8 +7321,8 @@ test "writes: an immutable global, a read-only reference, a value a call gave ba
 test "a destructor reads its fields bare (C9, C10)" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, "Closed mut I64 = 0\ntype R struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n}\n"
-                       "fn main() ? {\n    r := R(3)\n    assert r.n == 3\n}\n")
+    l := testLoad(dir, ("Closed mut I64 = 0\ntype R struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n}\n"
+                       "fn main() ? {\n    r := R(3)\n    assert r.n == 3\n}\n"))
     r := names.Resolver(l)
     r.Resolve()
     p := generic.Program(l, r)

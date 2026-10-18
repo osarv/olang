@@ -6,7 +6,7 @@ type Keyed<K Hashable<K>> struct(k K) {
   k
   h I64 = k.Hash()
 }
-fn wrap(x <T>) Keyed<T> { return Keyed<T>(x) }
+fn wrap<T>(x T) Keyed<T> { return Keyed<T>(x) }
 fn main() ? {
   a := wrap(5)
   b := wrap(2.5)

@@ -12,8 +12,6 @@ import "token"
 type TypeRef enum {
     # alias.Name<args> - the path's last part is the name, the rest its alias chain
     Named(sp source.Span, path Array<source.NameId>&, args Array<TypeRef&>&)
-    # <T constraint> - a type variable's introduction (G8b); a later bare T is a Named of one part
-    Var(sp source.Span, name source.NameId, constraint TypeRef&)
     # fn(params) results ? errors
     Func(sp source.Span, sig Sig&)
     # a constant type argument: the "N + 1" of Array<T, N + 1> (G21)
@@ -82,7 +80,6 @@ type Expr enum {
     MatchE(sp source.Span, m Match&)
     Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
     Default(sp source.Span)                            # "default" as an argument (E14a)
-    TypeVar(sp source.Span, name source.NameId)        # "<N>" in an expression, an introduction written again (G8b)
 }
 
 type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
@@ -118,7 +115,7 @@ type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>
 }
 
 # one case: its alternatives (patterns, or types for "match T"), its guard, and a block or a value ("=> v")
-type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr&, Body Array<Stmt&>&,
+type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr&, Body Array<Stmt&>&
                  Value Expr&) {
     Sp
     Alts
@@ -139,7 +136,7 @@ type Pattern enum {
 
 # a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
 # "x, y"), which have no type and no value. NameSps gives each name's span, Values one value per name or none
-type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef&, Values Array<Expr&>&,
+type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef&, Values Array<Expr&>&
                     Infer Bool, Field Bool) {
     Names
     NameSps
@@ -171,7 +168,7 @@ type For3 struct(Init Stmt&, Cond Expr&, Post Stmt&, Body Array<Stmt&>&) {
 }
 
 # for [key,] name in [try] source { body } [catch ...] (S9a, S9e)
-type ForIn struct(Key source.NameId, Name source.NameId, Source Expr&, Tried Bool, Body Array<Stmt&>&,
+type ForIn struct(Key source.NameId, Name source.NameId, Source Expr&, Tried Bool, Body Array<Stmt&>&
                   Clauses Array<Catch&>&) {
     Key
     Name
@@ -220,13 +217,16 @@ type Stmt enum {
 
 # a function, method, lambda, extern or trait method: receiver (null for none; a trait method's "mut" is a receiver of
 # no name whose type is "mut" alone), name (0 for a lambda), signature, body (null for an extern, a trait method, and a
-# function whose body did not parse - declared by its signature alone)
-type Func struct(Sp source.Span, Recv Param&, Name source.NameId, S Sig&, Body Array<Stmt&>&) {
+# function whose body did not parse - declared by its signature alone), and the type variables its list after the name
+# introduces (G3, QW: "fn max<T>(...)"; null for none)
+type Func struct(Sp source.Span, Recv Param&, Name source.NameId, S Sig&, Body Array<Stmt&>&
+                 TypeParams Array<TypeParam&>& = null) {
     Sp
     Recv
     Name
     S
     Body
+    TypeParams
 }
 
 # an enum case: name and payload
@@ -245,13 +245,16 @@ type TypeBody enum {
     Over(base TypeRef&, ctor Func&)
 }
 
-# struct(params) ? errors { body } [destruct { ... }] - the destructor's span DtorSp, its body null for none
-type StructBody struct(Params Array<Param&>&, Errs Sig&, Body Array<Stmt&>&, DtorSp source.Span, Dtor Array<Stmt&>&) {
+# struct[<T, ...>](params) ? errors { body } [destruct { ... }] - the destructor's span DtorSp, its body null for none;
+# the constructor's own type variables (G10d) null for none
+type StructBody struct(Params Array<Param&>&, Errs Sig&, Body Array<Stmt&>&, DtorSp source.Span, Dtor Array<Stmt&>&
+                       TypeParams Array<TypeParam&>& = null) {
     Params
     Errs
     Body
     DtorSp
     Dtor
+    TypeParams
 }
 
 # a type parameter: its name and its constraint or constant type (null for neither)
@@ -302,13 +305,13 @@ fn (e Expr&) Span() source.Span {
         case Expr.ScopeCall(sp, _, _, _), Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _) => sp
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _) => sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
-        case Expr.Default(sp), Expr.TypeVar(sp, _) => sp
+        case Expr.Default(sp) => sp
     }
 }
 
 fn (t TypeRef&) Span() source.Span {
     return match t {
-        case TypeRef.Named(sp, _, _), TypeRef.Var(sp, _, _), TypeRef.Func(sp, _), TypeRef.Const(sp, _) => sp
+        case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _), TypeRef.Const(sp, _) => sp
         case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _), TypeRef.Perm(sp, _, _, _) => sp
     }
 }

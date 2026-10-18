@@ -9,14 +9,14 @@ import "std/os"
 import "std/time"
 import "std/linalg"
 
-fn conv(x F64, like <T>) T {
+fn conv<T>(x F64, like T) T {
     return match T {
         case F32 => F32(x)
         case F64 => x
     }
 }
 
-fn run(n I64, m I64, threads I64, reps I64, mode String&, like <T>) ? io.IoError + linalg.ShapeError {
+fn run<T>(n I64, m I64, threads I64, reps I64, mode String&, like T) ? io.IoError, linalg.ShapeError {
     a := linalg.Matrix<T>(n, m)
     b := linalg.Matrix<T>(n, m)
     c := linalg.Matrix<T>(n, m)

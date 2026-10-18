@@ -22,10 +22,10 @@ import "std/filepath"
 import "srcmask"
 
 # words that are never a type variable's name
-Keywords Array<String&>& = String&["mut", "fn", "and", "or", "not", "in", "is", "as", "if", "else", "for", "range", "try",
+Keywords Array<String&>& = String&["mut", "fn", "and", "or", "not", "in", "is", "as", "if", "else", "for", "range", "try"
                                    "null", "true", "false", "default", "return", "match", "case"]
 # the built-in types' names
-BuiltinTypes Array<String&>& = String&["Array", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16",
+BuiltinTypes Array<String&>& = String&["Array", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16"
                                        "F32", "F64"]
 # words that, in a constraint's place, show it is no constraint
 NotConstraint Array<String&>& = String&["and", "or", "not", "in", "is", "as", "if", "else", "for", "range"]
@@ -92,7 +92,7 @@ error notVariable {
 # the type variable written with its "<" at i, else notVariable.HERE. names: the variables of the item when known (then
 # only those are taken) - hasNames says whether it is. A "<" right after a name is one only after a parameter's name
 # ("a<T>"), never after a type's ("Box<T>" is type arguments) and never for a name a type has
-fn occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names Map<String&, Bool>&,
+fn occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names Map<String&, Bool>&
                 known Map<String&, Bool>&) Occ ? {
     if src[i] != '<' or mask[i] != 'c' or i + 1 >= hi or not srcmask.IsIdStart(src[i + 1]) { error notVariable.HERE }
     prev := ' '
@@ -126,7 +126,7 @@ fn occurrenceAt(src String&, mask String&, i I64, hi I64, hasNames Bool, names M
 }
 
 # every type variable written between lo and hi, in order
-fn occurrences(src String&, mask String&, lo I64, hi I64, hasNames Bool, names Map<String&, Bool>&,
+fn occurrences(src String&, mask String&, lo I64, hi I64, hasNames Bool, names Map<String&, Bool>&
                known Map<String&, Bool>&) List<Occ> {
     out List<Occ>
     for i in range lo, hi {
@@ -322,7 +322,7 @@ fn lineOf(src String&, pos I64) I64 {
 }
 
 # the edits of one item, added to edits and reps; what was changed that deserves a word is added to report
-fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known Map<String&, Bool>&,
+fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known Map<String&, Bool>&
                edits mut List<Edit>&, reps mut List<String&>&, report mut List<String&>&, path String&) {
     none Map<String&, Bool>
     if kind == 't' {
@@ -331,8 +331,8 @@ fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known M
         if names.Len() == 0 { return }
         for o in outermost(occurrences(src, mask, after, end, true, names, known)) {
             if o.cstart != NoC {
-                report.Push($path ":" $lineOf(src, o.start) ": constraint on '" $src[o.nameAt:o.nameEnd]
-                            "' dropped (the header carries it): " $src[o.cstart:o.cend])
+                report.Push(($path ":" $lineOf(src, o.start) ": constraint on '" $src[o.nameAt:o.nameEnd]
+                            "' dropped (the header carries it): " $src[o.cstart:o.cend]))
             }
             edits.Push(Edit(o.start, o.end, reps.Len()))
             reps.Push(bare(src, o))
@@ -365,8 +365,8 @@ fn rewriteItem(src String&, mask String&, kind Char, start I64, end I64, known M
                 occs[fi].cstart = -1        # moved: a further one is a second constraint
                 report.Push($path ":" $lineOf(src, o.start) ": constraint on '" $name "' moved to its introduction")
             } else {
-                report.Push($path ":" $lineOf(src, o.start) ": a second constraint on '" $name "' dropped: "
-                            $src[o.cstart:o.cend])
+                report.Push(($path ":" $lineOf(src, o.start) ": a second constraint on '" $name "' dropped: "
+                            $src[o.cstart:o.cend]))
             }
             skipUntil = o.end
         }
@@ -531,8 +531,8 @@ fn main() ? {
         }
     }
     for r in report { srcmask.Say(r) }
-    srcmask.Say($("would rewrite " if check else "rewrote ") $totalEdits " occurrences on " $totalLines " lines in " $totalFiles
-                " files")
+    srcmask.Say(($("would rewrite " if check else "rewrote ") $totalEdits " occurrences on " $totalLines " lines in " $totalFiles
+                " files"))
     if check and totalEdits > 0 { os.Exit(1) }
 }
 

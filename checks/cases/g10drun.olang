@@ -4,7 +4,7 @@ type G<T> struct(seed T) {
     seed
     vals List<T> = List<T>()
 }
-type Layer struct(g mut G<<T>>&, width I64) {
+type Layer struct<T>(g mut G<T>&, width I64) {
     {
         g.vals.Push(g.seed)
     }

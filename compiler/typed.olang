@@ -836,7 +836,7 @@ test "a body: locals, blocks and sites, read back and printed" {
     b.Params.Push(a)
     b.Params.Push(c)
     none := SiteId(-1)
-    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Expr&[Expr.Read(sp, i32, Place.Local(sp, i32, a), none),
+    sum := Expr.Prim(sp, i32, PrimOp.Add, Check.None, Expr&[Expr.Read(sp, i32, Place.Local(sp, i32, a), none)
                                                               Expr.Read(sp, i32, Place.Local(sp, i32, c), none)])
     b.Root = Block(root, Stmt&[Stmt.Let(sp, s, sum), Stmt.Return(sp, Expr.Read(sp, i32, Place.Local(sp, i32, s), none))])
     assert sum.Type() == i32 and sum.Span() == sp
@@ -873,7 +873,7 @@ test "a body's marks and scope variables come from its type; constants, temporar
     i64 := t.Prim("I64")
     t.SetStructBody(n, t.List1(i64), false)
     mutN, roN := t.Ref(n, types.Writable), t.Ref(n, types.ReadOnly)
-    ty := t.Func(t.List(types.TypeId[mutN, roN]), roN, types.ListId(0),
+    ty := t.Func(t.List(types.TypeId[mutN, roN]), roN, types.ListId(0)
                  t.Scopes(types.RoleFn, I64[types.OwnScope, 0], I64[0]))
     sp := source.Span(0, 4)
     b := Body(BodyId(1), BodyOf.Fn(0), ty, 0, sp)
@@ -887,8 +887,8 @@ test "a body's marks and scope variables come from its type; constants, temporar
     assert b.ParamMark(t, 0) == Mark.Bare and b.ParamMark(t, 1) == Mark.Of(a) and b.Local(c).Marked == b.ParamMark(t, 1)
     assert b.ResultMark(t, 0) == Mark.Of(a)
     # a constructor's result scope is its instance's
-    k := Body(BodyId(2), BodyOf.Ctor(n, types.ListId(0)),
-              t.Func(t.List1(i64), n, types.ListId(0), t.Scopes(types.RoleCtor, I64[types.OwnScope], I64[types.OwnScope])),
+    k := Body(BodyId(2), BodyOf.Ctor(n, types.ListId(0))
+              t.Func(t.List1(i64), n, types.ListId(0), t.Scopes(types.RoleCtor, I64[types.OwnScope], I64[types.OwnScope]))
               0, sp)
     k.Params.Push(k.AddLocal(Local(names.Intern("v"), sp, i64, BlockId(0), LocalKind.Param, Mark.None)))
     k.SetVars(t.ScopeVarsOf(k.Ty))
@@ -903,7 +903,7 @@ test "a body's marks and scope variables come from its type; constants, temporar
     temp := Place.Temp(sp, i64, Expr.Lit(sp, i64, 7), tmp)
     assert w.place(temp) == "tmp (lit I64 7) site 1" and temp.Type() == i64
     chars := t.Ref(t.Array(t.Prim("U8"), types.TypeId(0)), types.ReadOnly)
-    words := Expr.Data(sp, t.Ref(t.Array(chars, types.TypeId(0)), types.ReadOnly), 3,
+    words := Expr.Data(sp, t.Ref(t.Array(chars, types.TypeId(0)), types.ReadOnly), 3
                        Const.Items(Const&[Const.Bytes(U8[104, 105]), Const.Bytes(U8[])]))
     assert w.expr(words) == "(data Array<Array<U8>&>& 3 [text 2 text 0])", w.expr(words)
     # a valueless Seq, and a match whose nomatch is an empty arm where nothing happens

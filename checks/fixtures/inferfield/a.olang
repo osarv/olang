@@ -12,8 +12,8 @@ fn (s mut S&) Add(x I64) {
     s.ys.Push($x)
 }
 
-fn (b mut Box<<T>>&) Put(x T) { b.vs.Push(x) }
-fn (b Box<<T>>&) Count() I64 { return b.vs.Len() }
+fn (b mut Box<T>&) Put(x T) { b.vs.Push(x) }
+fn (b Box<T>&) Count() I64 { return b.vs.Len() }
 
 # evaluable while compiling: an assert on it is decided there (S18c), and the same call runs in b.olang's test
 fn Three() I64 {

@@ -21,7 +21,7 @@ import "std/os"
 import "std/io"
 import "std/filepath"
 
-Forms := String&["At", "SetAt", "Slice", "Plus", "Minus", "Mul", "Div", "Rem", "MatMul", "Neg", "ShiftLeft",
+Forms := String&["At", "SetAt", "Slice", "Plus", "Minus", "Mul", "Div", "Rem", "MatMul", "Neg", "ShiftLeft"
                  "ShiftRight", "Inc", "Dec"]
 
 # one diagnostic: where it points, its rule and its message

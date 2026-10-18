@@ -503,6 +503,11 @@ cascadetryat.olang:10:13: error[E31a]: CheckedAt is a checked form, which only a
    10 | fn (b Box&) CheckedAt(i I64) Box&b ? {
       |             ^~~~~~~~~
 compilation failed with 1 error
+=== commaendsline.olang
+commaendsline.olang:5:17: error[L18a]: a comma never ends a line - items on different lines are separated by the line break; remove it
+    5 |     assert add(1,
+      |                 ^
+compilation failed with 1 error
 === compoundnarrow.olang
 compoundnarrow.olang:7:7: error[T6b]: I32 does not flow into U8 - convert it, as U8(x)
     7 |     b += x
@@ -585,9 +590,9 @@ constraintcall.olang:8:10: error[G19]: I64 does not satisfy the constraint CtSha
       |          ^~~~~~
 compilation failed with 1 error
 === constraintnotiface.olang
-constraintnotiface.olang:3:11: error[G19]: I32 is not a trait, so it cannot constrain a type variable
-    3 | fn f(x <T I32>) I32 { return 1 }
-      |           ^~~
+constraintnotiface.olang:3:8: error[G19]: I32 is not a trait, so it cannot constrain a type variable
+    3 | fn f<T I32>(x T) I32 { return 1 }
+      |        ^~~
 compilation failed with 1 error
 === copyoutrefs.olang
 copyoutrefs.olang:15:9: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
@@ -1000,7 +1005,7 @@ e28condlocallent.olang:25:11: error[E28]: a conditional or a match gives a copy 
 compilation failed with 5 errors
 === e31acheckedonly.olang
 e31acheckedonly.olang:11:11: error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
-   11 | fn (c C&) CheckedAt(i I64) I64 ? E + BuiltinError {
+   11 | fn (c C&) CheckedAt(i I64) I64 ? E, BuiltinError {
       |           ^~~~~~~~~
 compilation failed with 1 error
 === e31anotsuperset.olang
@@ -1009,9 +1014,9 @@ e31anotsuperset.olang:13:15: error[E31a]: CheckedMinus is Minus's checked form, 
       |               ^~~~~~~~~~~~
 compilation failed with 1 error
 === e31asupersetinst.olang
-e31asupersetinst.olang:21:17: error[E31a]: CheckedPlus is Plus's checked form, so it fails with every error Plus can - add VErr after its '?'
-   21 | fn (a Box<<T>>) CheckedPlus(b Box<T>) Box<T> ? BuiltinError {
-      |                 ^~~~~~~~~~~
+e31asupersetinst.olang:21:15: error[E31a]: CheckedPlus is Plus's checked form, so it fails with every error Plus can - add VErr after its '?'
+   21 | fn (a Box<T>) CheckedPlus(b Box<T>) Box<T> ? BuiltinError {
+      |               ^~~~~~~~~~~
 e31asupersetinst.olang:28:29: note: instantiated here, with T = V
    28 |     y := checked (Box(V(1)) + Box(V(Neg))) catch default Box(V(0))
       |                             ^
@@ -1379,11 +1384,6 @@ e6dnomeet.olang:6:15: error[E6d]: this literal does not fit U64, and U64 does no
     6 |     v U64 = u - (-1)
       |               ^
 compilation failed with 1 error
-=== enumcomma.olang
-enumcomma.olang:3:16: error[T17, T19, C2]: entries are separated by line ends, not commas
-    3 | type D enum { N, S }
-      |                ^
-compilation failed with 1 error
 === eqshape.olang
 eqshape.olang:6:12: error[E10a]: Eq takes one parameter of its receiver's own type and gives a Bool
     6 | fn (p Pt&) Eq(n I32) Bool { return p.n == n }
@@ -1402,11 +1402,6 @@ eqwrites.olang:6:16: error[E10a, E11c]: Eq takes what it is given read-only - ne
     6 | fn (p mut Pt&) Eq(q Pt&) Bool { return p.n == q.n }
       |                ^~
 compilation failed with 1 error
-=== errcomma.olang
-errcomma.olang:3:12: error[T17, T19, C2]: entries are separated by line ends, not commas
-    3 | error E { A, B }
-      |            ^
-compilation failed with 1 error
 === extendsstruct.olang
 extendsstruct.olang:3:8: error[T29f]: only a type over a number or an array extends its base
     3 | type P extends struct(x I32) {
@@ -1421,11 +1416,6 @@ compilation failed with 1 error
 externfnvalue.olang:5:18: error[X2]: fn() cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers
     5 | extern fn atexit(f fn()) I32
       |                  ^
-compilation failed with 1 error
-=== fieldcomma.olang
-fieldcomma.olang:3:40: error[T17, T19, C2]: entries are separated by line ends, not commas
-    3 | type P struct(x I32, y I32) { a I32 = x, b I32 = y }
-      |                                        ^
 compilation failed with 1 error
 === forinclausebreak.olang
 forinclausebreak.olang:15:36: error[S9e]: a loop's catch clause runs after the loop has ended, so it has no loop to break or continue - set a flag
@@ -1478,9 +1468,9 @@ g10dfieldvar.olang:9:5: error[G10d]: the type of field 'g' names T, which only t
       |     ^
 compilation failed with 1 error
 === g10dgenericextra.olang
-g10dgenericextra.olang:4:26: error[G10d]: U is not one of B's parameters, and a generic type's constructor introduces none of its own - add U to the type's list
-    4 | type B<T> struct(x T, f <U>) {
-      |                          ^
+g10dgenericextra.olang:4:18: error[G10d]: U is not one of B's parameters, and a generic type's constructor introduces none of its own - add U to the type's list
+    4 | type B<T> struct<U>(x T, f U) {
+      |                  ^
 g10dgenericextra.olang:7:30: error[E12]: expected U, found I64
     7 | fn main() ? { b := B<I64>(1, 2) }
       |                              ^
@@ -1598,7 +1588,7 @@ g16note.olang:13:8: note: instantiated here, with T = Bool
 compilation failed with 2 errors
 === g17constchain.olang
 g17constchain.olang:3:4: error[G17]: this generic's instantiations never end - each one requires a larger one
-    3 | fn grow(a Array<I64, <N>>&) I64 {
+    3 | fn grow<N>(a Array<I64, N>&) I64 {
       |    ^~~~
 g17constchain.olang:5:12: note: instantiated here, with N = 1000
     5 |     return grow(b)
@@ -1612,7 +1602,7 @@ g17constchain.olang:5:12: note: instantiated here, with N = 980
 compilation failed with 1 error
 === g17func.olang
 g17func.olang:4:4: error[G17]: this generic's instantiations never end - each one requires a larger one
-    4 | fn deep(x <T>, n I32) I32 {
+    4 | fn deep<T>(x T, n I32) I32 {
       |    ^~~~
 g17func.olang:6:10: note: instantiated here, with T = Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<I64>>>>
     6 |   return deep(Box<T>(x), n - 1)
@@ -1656,22 +1646,22 @@ g19substituted.olang:12:8: error[G19, E10b]: F64 does not satisfy the constraint
       |        ^~~~
 compilation failed with 1 error
 === g19unknowntrait.olang
-g19unknowntrait.olang:5:11: error: unknown type 'Nope'
-    5 | fn f(m <V Nope>&) I64 { return 1 }
-      |           ^~~~
+g19unknowntrait.olang:5:8: error: unknown type 'Nope'
+    5 | fn f<V Nope>(m V&) I64 { return 1 }
+      |        ^~~~
 compilation failed with 1 error
 === g1primname.olang
 g1primname.olang:5:10: error[G1]: type variable 'P' is named after a type - choose a name no type has, as '<T>'
     5 | type Box<P> struct(v P) { v }
       |          ^
-g1primname.olang:6:9: error[G1]: type variable 'I32' is named after a type - choose a name no type has, as '<T>'
-    6 | fn g(a <I32>) I32 { return 1 }
-      |         ^~~
+g1primname.olang:6:6: error[G1]: type variable 'I32' is named after a type - choose a name no type has, as '<T>'
+    6 | fn g<I32>(a I32) I32 { return 1 }
+      |      ^~~
 compilation failed with 2 errors
 === g1typename.olang
-g1typename.olang:6:9: error[G1]: type variable 'P' is named after a type - choose a name no type has, as '<T>'
-    6 | fn f(a <P>) P { return a }
-      |         ^
+g1typename.olang:6:6: error[G1]: type variable 'P' is named after a type - choose a name no type has, as '<T>'
+    6 | fn f<P>(a P) P { return a }
+      |      ^
 compilation failed with 1 error
 === g20eqafter.olang
 g20eqafter.olang:5:12: error[G20]: K declares Eq - a constant parameter's type compares by its value alone
@@ -1724,49 +1714,26 @@ g21typeargs.olang:9:12: error[G21]: Ring's parameter T is a type, and this is a 
     9 |     g Ring<3, 4>
       |            ^
 compilation failed with 2 errors
-=== g22again.olang
-g22again.olang:3:44: error[G22]: N was introduced already - write it 'N', not '<N>'
-    3 | fn count(a Array<I32, <N>>&, b Array<I32, <N>>&) I64 { return N }
-      |                                            ^
-compilation failed with 1 error
-=== g22againbody.olang
-g22againbody.olang:3:44: error[G22]: N was introduced already - write it 'N', not '<N>'
-    3 | fn count(a Array<I32, <N>>&) I64 { return <N> }
-      |                                            ^
-compilation failed with 1 error
-=== g22againtype.olang
-g22againtype.olang:4:21: error[G22]: K was introduced already - write it 'K', not '<K>'
-    4 |     items Array<T, <K>>
-      |                     ^
-compilation failed with 1 error
 === g22asttype.olang
-g22asttype.olang:3:35: error[G22]: N is a constant, not a type
-    3 | fn asType(a Array<I32, <N>>&) { x N = 3 }
-      |                                   ^
+g22asttype.olang:3:36: error[G22]: N is a constant, not a type
+    3 | fn asType<N>(a Array<I32, N>&) { x N = 3 }
+      |                                    ^
 g22asttype.olang:6:5: note: instantiated here, with N = 3
     6 |     asType(a)
       |     ^~~~~~
 compilation failed with 1 error
-=== g22before.olang
-g22before.olang:3:23: error[G22]: 'N' is introduced later in this signature - its first use is written '<N>'
-    3 | fn first(a Array<I32, N>&, b Array<I32, <N>>&) I64 { return N }
-      |                       ^
-g22before.olang:3:42: note: N is introduced here
-    3 | fn first(a Array<I32, N>&, b Array<I32, <N>>&) I64 { return N }
-      |                                          ^
-compilation failed with 1 error
 === g22constrained.olang
-g22constrained.olang:4:32: error[T30]: Shaped is a trait - a constraint on a type variable, never the type of a value
-    4 | fn constrained(a Array<I32, <N Shaped>>&) { }
-      |                                ^~~~~~
-g22constrained.olang:4:30: error[G22]: a constant variable takes no constraint - N's type is its parameter's, or one written '<N I64>' where it is introduced
-    4 | fn constrained(a Array<I32, <N Shaped>>&) { }
-      |                              ^
+g22constrained.olang:4:18: error[T30]: Shaped is a trait - a constraint on a type variable, never the type of a value
+    4 | fn constrained<N Shaped>(a Array<I32, N>&) { }
+      |                  ^~~~~~
+g22constrained.olang:4:39: error[G22]: a constant variable takes no constraint - N's type is its parameter's, or one written '<N I64>' where it is introduced
+    4 | fn constrained<N Shaped>(a Array<I32, N>&) { }
+      |                                       ^
 compilation failed with 2 errors
 === g22global.olang
-g22global.olang:4:24: error[D3a]: 'N' is already declared in this module - a name means one thing in it
-    4 | fn total(a Array<I64, <N>>&) I64 {
-      |                        ^
+g22global.olang:4:10: error[D3a]: 'N' is already declared in this module - a name means one thing in it
+    4 | fn total<N>(a Array<I64, N>&) I64 {
+      |          ^
 g22global.olang:3:1: note: 'N' is declared here
     3 | N I64 = 3
       | ^
@@ -1788,22 +1755,22 @@ g22param.olang:6:25: note: instantiated here, with T = I32, K = 3
       |                         ^~~
 compilation failed with 1 error
 === g22twotypes.olang
-g22twotypes.olang:6:45: error[G22]: N fills constant parameters of two types, I64 and I32
-    6 | fn twoTypes(a Array<I32, <N>>&, b Ring<I32, N>&) { }
-      |                                             ^
+g22twotypes.olang:6:46: error[G22]: N fills constant parameters of two types, I64 and I32
+    6 | fn twoTypes<N>(a Array<I32, N>&, b Ring<I32, N>&) { }
+      |                                              ^
 compilation failed with 1 error
 === g22typeandconst.olang
-g22typeandconst.olang:3:18: error[G22]: N is a type in one place and a constant in another
-    3 | fn both(a Array<<N>, N>&) { }
-      |                  ^
+g22typeandconst.olang:3:20: error[G22]: N is a type in one place and a constant in another
+    3 | fn both<N>(a Array<N, N>&) { }
+      |                    ^
 compilation failed with 1 error
 === g22typed.olang
-g22typed.olang:3:24: error[G22]: N fills constant parameters of two types, I32 and I64
-    3 | fn typed(a Array<I32, <N I32>>&) I64 { return N }
-      |                        ^
-g22typed.olang:3:47: error: unknown name 'N'
-    3 | fn typed(a Array<I32, <N I32>>&) I64 { return N }
-      |                                               ^
+g22typed.olang:3:30: error[G22]: N fills constant parameters of two types, I32 and I64
+    3 | fn typed<N I32>(a Array<I32, N>&) I64 { return N }
+      |                              ^
+g22typed.olang:3:48: error: unknown name 'N'
+    3 | fn typed<N I32>(a Array<I32, N>&) I64 { return N }
+      |                                                ^
 compilation failed with 2 errors
 === g23narrow.olang
 g23narrow.olang:4:12: error[T6b]: I64 does not flow into U8 - convert it, as U8(x)
@@ -1814,9 +1781,9 @@ g23narrow.olang:9:10: note: instantiated here, with N = 3
       |          ^~~~~
 compilation failed with 1 error
 === g23typevar.olang
-g23typevar.olang:3:36: error[G23]: T is a type variable, not a value
-    3 | fn typeAsValue(a <T>) I64 { return T }
-      |                                    ^
+g23typevar.olang:3:37: error[G23]: T is a type variable, not a value
+    3 | fn typeAsValue<T>(a T) I64 { return T }
+      |                                     ^
 g23typevar.olang:5:10: note: instantiated here, with T = I64
     5 |     r := typeAsValue(3)
       |          ^~~~~~~~~~~
@@ -1840,60 +1807,32 @@ g27assert.olang:10:17: note: instantiated here, with T = I32, N = 6
       |                 ^~~
 compilation failed with 1 error
 === g4constexpr.olang
-g4constexpr.olang:3:27: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
-    3 | fn onlyExpr(a Array<I32, <N> + 1>&) { }
-      |                           ^
+g4constexpr.olang:3:29: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
+    3 | fn onlyExpr<N>(a Array<I32, N + 1>&) { }
+      |                             ^
 compilation failed with 1 error
 === g4constgenericbody.olang
-g4constgenericbody.olang:7:21: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
-    7 | fn mk() Array<I64, <N>> {
-      |                     ^
-g4constgenericbody.olang:11:25: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
-   11 | fn mk2(x <T>) Array<T, <N I64>> {
-      |                         ^
+g4constgenericbody.olang:7:23: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
+    7 | fn mk<N>() Array<I64, N> {
+      |                       ^
+g4constgenericbody.olang:11:32: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
+   11 | fn mk2<T, N I64>(x T) Array<T, N> {
+      |                                ^
 compilation failed with 2 errors
 === g4resultbare.olang
-g4resultbare.olang:4:15: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
-    4 | fn mk(n I32) <T> { return n }
-      |               ^
+g4resultbare.olang:4:17: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
+    4 | fn mk<T>(n I32) T { return n }
+      |                 ^
 compilation failed with 1 error
 === g4resultonly.olang
-g4resultonly.olang:4:14: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
-    4 | fn mk(n I64) Array<<T>> { return Array<T>(n) }
-      |              ^~~~~
+g4resultonly.olang:4:17: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
+    4 | fn mk<T>(n I64) Array<T> { return Array<T>(n) }
+      |                 ^~~~~
 compilation failed with 1 error
 === g7argcount.olang
 g7argcount.olang:5:21: error[G7]: type arguments for Box: expected 1, found 2
     5 | fn main() ? { b Box<I32, I64> = Box<I32>(1) }
       |                     ^~~
-compilation failed with 1 error
-=== g8bagain.olang
-g8bagain.olang:4:19: error[G8b]: T was introduced already - write it 'T', not '<T>'
-    4 | fn pick(a <T>, b <T>) T { return a }
-      |                   ^
-compilation failed with 1 error
-=== g8bagainbody.olang
-g8bagainbody.olang:5:8: error[G8b]: T was introduced already - write it 'T', not '<T>'
-    5 |     x <T> = a
-      |        ^
-compilation failed with 1 error
-=== g8bagainconstraint.olang
-g8bagainconstraint.olang:4:24: error[G8b]: K was introduced already - write it 'K', not '<K>'
-    4 | type Keyed<K Hashable<<K>>> struct(k K) { k }
-      |                        ^
-compilation failed with 1 error
-=== g8bagaintype.olang
-g8bagaintype.olang:6:8: error[G8b]: T was introduced already - write it 'T', not '<T>'
-    6 |     w <T> = v
-      |        ^
-compilation failed with 1 error
-=== g8bbefore.olang
-g8bbefore.olang:5:18: error[G8b]: 'T' is introduced later in this signature - its first use is written '<T>'
-    5 | fn second(a List<T>&, b <T>) T { return b }
-      |                  ^
-g8bbefore.olang:5:26: note: T is introduced here
-    5 | fn second(a List<T>&, b <T>) T { return b }
-      |                          ^
 compilation failed with 1 error
 === g8bunknown.olang
 g8bunknown.olang:4:17: error: unknown type 'T'
@@ -2087,7 +2026,7 @@ l16unknown.olang:6:8: error[L16]: unexpected character '`'
       |        ^
 compilation failed with 1 error
 === l18atrailing.olang
-l18atrailing.olang:4:19: error[L18a]: a comma before ']' ends a list only where ']' begins a line of its own - remove it
+l18atrailing.olang:4:19: error[L18a]: a comma before ']' separates nothing - remove it
     4 |     xs := I32[1, 2,]
       |                   ^
 compilation failed with 1 error
@@ -2271,6 +2210,31 @@ nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - 
     3 | fn main() ?error {
       |            ^~~~~
 compilation failed with 1 error
+=== numtraitbool.olang
+numtraitbool.olang:5:10: error[G19, T31]: Bool does not satisfy the constraint Number on T: Number is sealed - only the types its own module gives 'numberType' satisfy it
+    5 |     r := nbTwice(true)
+      |          ^~~~~~~
+compilation failed with 1 error
+=== numtraitchar.olang
+numtraitchar.olang:5:10: error[G19, T31]: Char does not satisfy the constraint Integer on T: Integer is sealed - only the types its own module gives 'integerType' satisfy it
+    5 |     c := ncNext('a')
+      |          ^~~~~~
+compilation failed with 1 error
+=== numtraitclaim.olang
+numtraitclaim.olang:9:10: error[G19, T31]: nfFake does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    9 |     h := nfHalf(nfFake(1.0))
+      |          ^~~~~~
+compilation failed with 1 error
+=== numtraitextends.olang
+numtraitextends.olang:7:10: error[G19, T31]: ntDist does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    7 |     h := ntHalf(ntDist(4.0))
+      |          ^~~~~~
+compilation failed with 1 error
+=== numtraitsqrtint.olang
+numtraitsqrtint.olang:6:15: error[G19, T31]: I64 does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+    6 |     r := math.Sqrt(4)
+      |               ^~~~
+compilation failed with 1 error
 === o10ccycle.olang
 o10ccycle.olang:21:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    21 |         g(h, it, 2)
@@ -2405,9 +2369,9 @@ compilation failed with 1 error
 o14btypevar.olang:13:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    13 |         y = id(n)
       |             ^~
-o14btypevar.olang:8:18: note: the callee requires it because of this statement
-    8 | fn id(x <T>) T { return x }
-      |                  ^~~~~~
+o14btypevar.olang:8:19: note: the callee requires it because of this statement
+    8 | fn id<T>(x T) T { return x }
+      |                   ^~~~~~
 compilation failed with 1 error
 === o14ccopyslice.olang
 o14ccopyslice.olang:8:13: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
@@ -4104,9 +4068,9 @@ compilation failed with 1 error
 o4bvalueparamgeneric.olang:16:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    16 |         keep = id(h2)
       |                ^~
-o4bvalueparamgeneric.olang:9:18: note: the callee requires it because of this statement
-    9 | fn id(x <T>) T { return x }
-      |                  ^~~~~~
+o4bvalueparamgeneric.olang:9:19: note: the callee requires it because of this statement
+    9 | fn id<T>(x T) T { return x }
+      |                   ^~~~~~
 compilation failed with 1 error
 === oparity.olang
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
@@ -4362,6 +4326,11 @@ qerror.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write 
     3 | fn main() ?error {
       |            ^~~~~
 compilation failed with 1 error
+=== qwnointro.olang
+qwnointro.olang:4:11: error: expected a name, found '<'
+    4 | fn pick(a <T>, b T) T { return a }
+      |           ^
+compilation failed with 1 error
 === r11clausevalue.olang
 r11clausevalue.olang:18:9: error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
    18 |         -1
@@ -4573,7 +4542,7 @@ rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'l' reaches
     6 |     c := ro.Clone()
       |          ^~
 $ROOT/std/prelude/list.olang:345:5: note: 'l' is declared here
-  345 | fn (l List<<T>>&) Clone() List<T> {
+  345 | fn (l List<T>&) Clone() List<T> {
       |     ^
 compilation failed with 1 error
 === rv3rofilter.olang
@@ -4581,7 +4550,7 @@ rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reach
     4 |     return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
       |            ^~
 $ROOT/std/prelude/array.olang:95:5: note: 'a' is declared here
-   95 | fn (a Array<<T>>&) Filter(keep fn(x T) Bool) Array<T> {
+   95 | fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
       |     ^
 compilation failed with 1 error
 === rv3roforin.olang
@@ -5679,15 +5648,15 @@ t25bglobal.olang:7:6: error[T25b]: this writes through a read-only reference - o
       |      ^
 compilation failed with 1 error
 === t25biface.olang
-t25biface.olang:8:26: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    8 | fn feed(w <W Writer>&) { w.Put(1) }
-      |                          ^
+t25biface.olang:8:27: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    8 | fn feed<W Writer>(w W&) { w.Put(1) }
+      |                           ^
 t25biface.olang:12:5: note: instantiated here, with W = Box
    12 |     feed(b)
       |     ^~~~
-t25biface.olang:8:9: note: 'w' is declared read-only here - declare it 'w mut Box&' to write through it
-    8 | fn feed(w <W Writer>&) { w.Put(1) }
-      |         ^
+t25biface.olang:8:19: note: 'w' is declared read-only here - declare it 'w mut Box&' to write through it
+    8 | fn feed<W Writer>(w W&) { w.Put(1) }
+      |                   ^
 compilation failed with 1 error
 === t25blocalmutinit.olang
 t25blocalmutinit.olang:5:16: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'

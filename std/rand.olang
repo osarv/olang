@@ -100,7 +100,7 @@ fn (r mut Rand&) Normal() F64 {
 }
 
 # puts the elements of "a" in a uniformly random order (Fisher-Yates), in place
-fn (r mut Rand&) Shuffle(a mut Array<<T>>&) {
+fn (r mut Rand&) Shuffle<T>(a mut Array<T>&) {
     i I64 = a.Len() - 1
     for i > 0 {
         j := r.Below(i + 1)

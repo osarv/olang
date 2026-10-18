@@ -23,7 +23,7 @@ fn main() {
     benchlib.Must(link.ToArray())
     benchlib.Must(String&["llvm-dis", "build/lto/" $prog ".olang.0.5.precodegen.bc", "-o", "build/lto/" $prog ".olang.ll"])
     benchlib.MustInto(String&["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $prog ".olang"], dir, "build/lto/" $prog ".olang.s")
-    benchlib.Must(String&["clang", "-O3", "-flto", "-o", "build/lto/" $cprog ".c", "c/" $cprog ".c", "-lm", "-lpthread",
+    benchlib.Must(String&["clang", "-O3", "-flto", "-o", "build/lto/" $cprog ".c", "c/" $cprog ".c", "-lm", "-lpthread"
                           "-Wl,-plugin-opt=save-temps"])
     benchlib.Must(String&["llvm-dis", "build/lto/" $cprog ".c.0.5.precodegen.bc", "-o", "build/lto/" $cprog ".c.ll"])
     benchlib.MustInto(String&["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" $cprog ".c"], dir, "build/lto/" $cprog ".c.s")

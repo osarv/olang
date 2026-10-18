@@ -36,8 +36,8 @@ Blockers Array<String&>& = String&["return", "error", "break", "continue", "done
 
 # the first rule of a diagnostic and the start of its message, for the "mut" the compiler says to remove
 DropRules Array<String&>& = String&["D9", "C3", "D11a", "D11a"]
-DropTexts Array<String&>& = String&["a by-value parameter is the callee's own copy", "a field is writable wherever its instance is",
-                                    "a local is always writable - 'mut' is for a reference",
+DropTexts Array<String&>& = String&["a by-value parameter is the callee's own copy", "a field is writable wherever its instance is"
+                                    "a local is always writable - 'mut' is for a reference"
                                     "':=' gives a local its initializer's permission"]
 
 # the message of a note at a local declared read-only, up to the name it asks to declare "mut"

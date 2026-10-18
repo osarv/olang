@@ -181,7 +181,7 @@ fn NewTable(names mut source.Names&) Table {
     t := Table(names)
     t.lists.Push(Array<TypeId>(0))
     t.scopes.Push(Array<I64>(0))
-    for k in Kind[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32,
+    for k in Kind[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32
                   Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
         t.intern(data(k, 0, 0, 0), 1)
     }
@@ -213,7 +213,7 @@ fn (t Table&) Prim(name String&) TypeId {
 }
 
 primNames := String&["", "", "Bool", "I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64"]
-primLlvm := String&["", "void", "i1", "i8", "i16", "i32", "i64", "i8", "i16", "i32", "i64", "half", "bfloat", "float",
+primLlvm := String&["", "void", "i1", "i8", "i16", "i32", "i64", "i8", "i16", "i32", "i64", "half", "bfloat", "float"
                     "double"]
 primBits := I64[0, 0, 1, 8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64]
 
@@ -697,7 +697,7 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
     size, align I64 = 0, 1
     match d.K {
         case Kind.Void, Kind.Noreturn { }
-        case Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16, Kind.BF16,
+        case Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16, Kind.BF16
              Kind.F32, Kind.F64 {
             size = primBits[I64(id)] / 8 if id != BoolT else 1
             align = size
@@ -810,7 +810,7 @@ fn (t mut Table&) Llvm(id TypeId) String&t {
 fn (t mut Table&) spellLlvm(id TypeId) String {
     d := t.at(id)
     return match d.K {
-        case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16,
+        case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
              Kind.BF16, Kind.F32, Kind.F64 => $primLlvm[I64(id)]
         case Kind.DefaultErr => "i32"
         case Kind.Noreturn => "void"
@@ -914,7 +914,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             t.canon(b, t.ErrOf(id))
             b.Push(".#" $t.ErrMask(id))
         }
-        case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16,
+        case Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32, Kind.U64, Kind.F16
              Kind.BF16, Kind.F32, Kind.F64 {
             b.Push("void" if id == VoidT else primNames[I64(id)])
         }

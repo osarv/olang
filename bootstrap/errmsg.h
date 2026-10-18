@@ -68,6 +68,7 @@ struct type;
     X(ERR_LINK_FAILED,                  "",      "linking %s failed") \
     /* ---- characters and tokens ---- */ \
     X(ERR_UNKNOWN_CHAR,                 "L16",   "unexpected character '%c'") \
+    X(ERR_COMMA_ENDS_LINE,              "L18a",  "a comma never ends a line - items on different lines are separated by the line break; remove it") \
     X(ERR_SEMICOLON,                    "L18",   "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") \
     X(ERR_NON_ASCII,                    "L1",    "non-ASCII byte '%c' - olang source is ASCII") \
     X(ERR_CARRIAGE_RETURN,              "L3",    "carriage return - save the file with LF line endings") \
@@ -91,12 +92,11 @@ struct type;
     X(ERR_EXPECTED,                     "",      "expected %s, found %n") \
     X(ERR_BLOCK_NOT_CLOSED,             "",      "the block opened on line %d has no '}' - found %n") \
     X(ERR_NESTING,                      "L21",   "nested more than %d levels deep - split it into locals or functions") \
-    X(ERR_SEPARATOR_COMMA,              "T17, T19, C2", "entries are separated by line ends, not commas") \
     X(ERR_KEYWORD_AS_NAME,              "L9",    "%n is a keyword, not a name - choose another") \
     X(ERR_KEYWORD_FIELD_READ,           "L9a",   "%n is a keyword, not a name - a field named by one is reached only after '.', never by the name alone") \
     X(ERR_DESTRUCT_IN_BODY,             "C7",    "'destruct' follows the constructor's body - close the body first: 'type T struct(...) { ... } destruct { ... }'") \
     X(ERR_JOIN_PIECE,                   "E11b",  "a join piece is a text literal or a '$' rendering - write '$%S'") \
-    X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n ends a list only where %n begins a line of its own - remove it") \
+    X(ERR_TRAILING_COMMA,               "L18a",  "a comma before %n separates nothing - remove it") \
     X(ERR_VAR_LIST_COUNT,               "D12b",  "%d names need as many values, found %d") \
     X(ERR_ERROR_AFTER_QUESTION,         "R1a",   "'?' alone is what the body can fail with - write '?', or name the types: '? IoError'") \
     X(ERR_VALUE_AFTER_EQ,               "D12",   "a declaration's value follows '=' - write '%s = %s', or '%s := %s'") \
@@ -154,6 +154,7 @@ struct type;
     X(ERR_CONSTRAINT_DISAGREES,         "G19",   "%n is constrained differently elsewhere in this declaration - one constraint per variable") \
     X(ERR_CONSTRAINT_UNMET,             "G19",   "%t does not satisfy the constraint %S on %S") \
     X(ERR_CONSTRAINT_UNMET_METHOD,      "G19",   "%t does not satisfy the constraint %S on %S: it has no method %S that fits") \
+    X(ERR_CONSTRAINT_SEALED,            "G19, T31", "%t does not satisfy the constraint %S on %S: %S is sealed - only the types its own module gives '%S' satisfy it") \
     X(ERR_CONSTRAINT_UNMET_HASH,        "G19, E10b", "%t does not satisfy the constraint %S on %S: it has no Hash - declare 'Hash() I64', agreeing with '=='") \
     X(ERR_UNBOUNDED_INSTANTIATION,      "G17",   "this generic's instantiations never end - each one requires a larger one") \
     X(ERR_TYPE_HOLDS_ITSELF,            "T16",   "%t cannot hold itself by value - hold it through a reference ('&')") \
@@ -180,8 +181,6 @@ struct type;
     X(ERR_ARRAY_LENGTH_RANGE,           "T7c",   "an array's length is from 0 to the largest whose bytes fit an I64, found %l") \
     X(ERR_AS_ARRAY_SHAPE,               "E32b",  "an array is viewed with 'as' only as a reference to one of a known length and the same element type - %t is not %t") \
     X(ERR_AS_ARRAY_LENGTH,              "E32b",  "this array's length is %l, not %l") \
-    X(ERR_VAR_WRITTEN_AGAIN,            "G22",   "%S was introduced already - write it '%S', not '<%S>'") \
-    X(ERR_VAR_BEFORE_INTRO,             "G22",   "%n is introduced later in this signature - its first use is written '<%S>'") \
     X(ERR_CONST_VAR_SHADOWED,           "G22, D3a", "%n is a constant variable of this declaration - a name means one thing, so name this apart") \
     X(ERR_CONST_ARG_PAREN,              "G21",   "%n in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own") \
     X(ERR_TYPE_MATCH_VALUE_CASE,        "G13",   "%S is a type variable, so its cases are types") \
@@ -191,8 +190,6 @@ struct type;
     X(ERR_ARRAY_NESTED_BY_VALUE,        "T7a, T7c", "an array inside an array or a struct is held by reference - write %t&, or a length, Array<T, N>, to hold it in place") \
     X(ERR_LAMBDA_RESULT_HELD,           "T7a",   "this result binds %S to %t, which the call holds in an array, where an array is held by reference - write the result as %t&") \
     X(ERR_CONSTRAINT_NOT_TRAIT,         "G19",   "%t is not a trait, so it cannot constrain a type variable") \
-    X(ERR_TYPE_VAR_WRITTEN_AGAIN,       "G8b",   "%S was introduced already - write it '%S', not '<%S>'") \
-    X(ERR_TYPE_VAR_BEFORE_INTRO,        "G8b",   "%n is introduced later in this signature - its first use is written '<%S>'") \
     X(ERR_TYPE_ARG_NAMED_SCOPE,         "G11",   "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") \
     X(ERR_INVALID_REFERENCE_TARGET,     "T24",   "%t cannot be a reference - only a struct, an enum or an array can") \
     X(ERR_DOUBLE_REFERENCE_MARKER,      "T24",   "a type takes at most one reference marker") \
@@ -403,7 +400,6 @@ struct type;
     X(NOTE_LITERAL_LOCAL,               "",      "'%S' is %t, its literal's own type - declare the type it should have, '%S %t = ...'") \
     X(NOTE_LITERAL_RANGE,               "",      "the range's literals make '%S' %t - write '%t(%S)' here for %t values") \
     X(NOTE_LITERAL_RANGE_EXPR,          "",      "the range's literals make '%S' %t - convert its end, '%t(...)', for %t values") \
-    X(NOTE_INTRODUCED_HERE,             "",      "%S is introduced here") \
     X(ERR_STR_OF_NOTHING,               "E11a",  "'$' has nothing to render - this call returns no value") \
     X(ERR_INT_LITERAL_TOO_LARGE,        "L10",   "%n is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615") \
     X(ERR_NEG_LITERAL_TOO_LARGE,        "L10",   "-%n is below I64's minimum") \

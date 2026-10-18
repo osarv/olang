@@ -12,7 +12,7 @@ type Inner struct(k I64) {
 type Outer struct() {
     o own mut Inner&
 }
-fn keep(l mut List<<T>>&, x T) { l.Push(x) }
+fn keep<T>(l mut List<T>&, x T) { l.Push(x) }
 fn main() ? {
     v := Outer()
     v.o = Inner(1)

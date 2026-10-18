@@ -263,7 +263,7 @@ fn makeRepo(base String&, name String&, text String&) String {
     try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
     ok := sh(dir, String&["git", "init", "-q"]) and
           sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
-          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q",
+          sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
                           "-m", "x"])
     return head(dir) if ok else ""
 }
@@ -271,7 +271,7 @@ fn makeRepo(base String&, name String&, text String&) String {
 fn commitAgain(base String&, name String&, text String&) String {
     dir := $base "/example.com/me/" $name
     try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
-    ok := sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q",
+    ok := sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
                           "-a", "-m", "y"])
     return head(dir) if ok else ""
 }

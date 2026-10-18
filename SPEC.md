@@ -254,39 +254,56 @@ IDEN, INT_LIT, FLOAT_LIT, CHAR_LIT, STR_LIT, BOOL_LIT, NULL_LIT,
 ```
 
 if the next non-whitespace input is a newline or a comment (L4), the tokenizer synthesizes an
-implicit end-of-statement token before continuing - except inside brackets (L18a). This token has no literal spelling; it exists
+implicit end-of-statement token before continuing - inside brackets too, where it separates a list's items (L18a). This
+token has no literal spelling; it exists
 only in the token stream produced by the tokenizer, and appears in the grammar as `STMNT_END`
 wherever a rule below requires it. It stands at the end of the line it ends - just past that line's last token - and
 a diagnostic about one names that line, as "end of line". There is no `;`: one written as C writes it is a compile-time
-error, which - after one of the tokens above, outside brackets - also ends the statement, so what follows it on the line
-is read as the next statement and not reported again.
+error, which - after one of the tokens above - also ends the statement, so what follows it on the line is read as the
+next statement and not reported again.
 
-**L18a (brackets).** Inside parentheses or square brackets a newline ends nothing: L18 synthesizes no end-of-statement
-while the innermost bracket open at that point is a `(` or a `[`. A `{` opened inside them - a lambda's body, a `match`
-used as a value - holds statements again until its `}`, and a `}` closes every bracket left open inside its block. So
-an argument or parameter list, an array literal, a comprehension or a parenthesized expression - a join among them -
-may run over several lines, its closing bracket on a line of its own:
+**L18a (the listing rule).** The items of a list are separated by a comma where they stand on one line and by the
+line break where they stand on different lines - every list in the language: a function's parameters, results and
+arguments, an index's arguments, an array literal's items, a type parameter or type argument list, an error set and a
+catch clause's items (§7), a `case`'s alternatives and a payload pattern's positions (§6.4), an enum's cases (T17), an
+error type's words (T19) and a constructor's fields (C2). In the grammar `list(X)` stands for this:
+
+```
+list(X)  ::= [ X { sep X } [ line-sep ] ]
+sep      ::= "," | line-sep
+line-sep ::= STMNT_END | (a line break after an item ending in "}", ">" or a bare "&" - L20a)
+```
+
+A line break separates exactly where it would end a statement (L18), so a line ending in an operator continues its item
+on the next line, and a line ending in a name, a literal or a closing bracket ends it. A comma is never the last token on
+its line: one that is is a compile-time error - reported once, and then read as the line break it stands before. A list
+running over several lines may end with a line break before its closing bracket; a comma there, on the bracket's own
+line (`I32[1, 2,]`), is a compile-time error.
 
 ```
 xs := I32[
-    1,
-    2,
+    1, 2, 3
+    4, 5, 6
 ]
-total := add(first,
+total := add(first
              second)
+ok := assertAll(a +
+                b)               # a line ending in an operator continues the item
 line := ("n=" $n
-         " of " $total)
+         " of " $total)          # a parenthesized expression is one item, not a list
 ```
 
-A list (arguments, parameters, an array literal's items) may end with a comma before its closing bracket where that
-bracket begins a line of its own, as above; on one line (`I32[1, 2,]`) such a comma is a compile-time error. A
-declaration starting a line - `type`, `test`, `import`, `extern`, or `fn` followed by a name - ends a bracket still
-open from before it outside any block, so a missing `)` is one error and not one per declaration after it.
+A parenthesized expression (`( expr )`, E1) holds one item and no list, and so does a comprehension (E27): inside them
+a line break separates nothing, so an expression - a text join (E11b), a conditional (E28), a chain of operators - may
+run over several lines there. A block opened inside brackets (a lambda's body, a `match` used as a value) holds
+statements again until its `}`, and a `}` closes every bracket left open inside its block. A declaration starting a
+line - `type`, `test`, `import`, `extern`, or `fn` followed by a name - ends a bracket still open from before it
+outside any block, so a missing `)` is one error and not one per declaration after it.
 
-**L18b (a line beginning with `if`).** Outside brackets (L18a), an `if` that begins a line begins a statement: it never
+**L18b (a line beginning with `if`).** Outside brackets, an `if` that begins a line begins a statement: it never
 continues a conditional expression (E28) on the line before, even where nothing ends that line's statement - after a
 `}` closing a lambda's body or a `match` value, which synthesizes no end (L18). A conditional runs over several lines
-only inside brackets:
+only inside a parenthesized expression (L18a):
 
 ```
 f := fn() I32 { return 1 }
@@ -295,8 +312,9 @@ x := (small
       if n < 10 else big)     # inside parentheses a line may begin with "if"
 ```
 
-**L19.** Consequently, outside brackets (L18a), an operator or continuation that is meant to extend an expression onto
-the next line must appear at the *end* of the first line, not the start of the next:
+**L19.** Consequently, outside a parenthesized expression (L18a), an operator or continuation that is meant to extend
+an expression onto the next line must appear at the *end* of the first line, not the start of the next - in a list as
+in a statement:
 
 ```
 x := 1 +
@@ -353,7 +371,7 @@ code; a function either declares a success type or declares none (see §3.4).
 a parameter's type, a return type, an array's element type) — is one of:
 
 ```
-type-expr ::= [ "own" ] [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | type-var )
+type-expr ::= [ "own" ] [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref )
 ```
 
 A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type and on a type
@@ -364,9 +382,8 @@ makes a reference type an own reference (T25e; §8.8).
 `enum-body`, `struct-body`, `trait-body`, and `func-type` are anonymous type *shapes*,
 constructible inline anywhere a type expression is expected (§2.4, §2.5, §2.7, §2.11). `type-ref`
 (§2.9) names an existing primitive, or a previously declared struct, enum, error, or (in a constraint) trait,
-with an optional array suffix and reference marker. `type-var` (§12.1 G1) introduces a type parameter and is valid only
-in a generic declaration's signature or parameter list; after its introduction the parameter is written as its bare name,
-a `type-ref` (G8b).
+with an optional array suffix and reference marker. A type variable (§12.1 G1), introduced by a type parameter list or a
+method's receiver, is written as its bare name, a `type-ref` (G8b).
 
 **T2a (`null`).** `null` is a literal denoting the **absent reference**. It has no type of its own: like a
 numeric literal (T6), it adapts to whatever type it is used against, and the types it may adapt to are
@@ -550,7 +567,7 @@ direction is implicit; the other is a claim about a length, checked once where i
   conversion to a declared type over an `Array<T, N>` (`V3(x)`, T29a).
 - An array **literal** of `k` items (E20), and written text of `k` bytes (T29c), adapts to a length as a numeric
   literal adapts to a type (T6): written against an `Array<T, N>` it is one when `k` is `N`, and a compile-time
-  error otherwise; given for a parameter's `Array<<T>, <N>>` it binds `N` to `k` (G24); anywhere else - a `:=`
+  error otherwise; given for a parameter's `Array<T, N>` it binds `N` to `k` (G24); anywhere else - a `:=`
   (D15), a bare type variable (G9), an `Array<T>` - it is an `Array<T>`.
 - Beside an `Array<T>` in `==` or `!=`, an `Array<T, N>` meets it as an `Array<T>`, the lengths compared first
   (E10).
@@ -595,7 +612,7 @@ agree on reference-shapedness (T25a), and either neither has a length in its typ
 
 ### 2.4 Struct types
 
-**T13.** Every struct type is declared with a constructor (§9): `type Name struct( params ) [ error-list ]
+**T13.** Every struct type is declared with a constructor (§9): `type Name struct[ fn-type-params ]( params ) [ error-list ]
 { ctor-body } [ destruct-block ]`. Its fields are the ones its `ctor-body` declares (§9.1 C2), and every
 instance is built by calling it (§9.3 C6). There is no field-list form and no struct literal. A struct
 whose fields are meant to be set by its user declares an empty parameter list and fields that take their zero
@@ -613,20 +630,19 @@ compile-time error, reported at the member that closes it. A generic type is jud
 
 ### 2.5 Enum types
 
-**T17.** `enum-body ::= "enum" "{" [ STMNT_END ] { IDEN STMNT_END } "}"`. An enum type declares a
+**T17.** `enum-body ::= "enum" "{" list(IDEN) "}"`. An enum type declares a
 **closed, ordered set of named cases**, of which a value holds exactly one. It has no numeric
 representation available to a program: it supports only equality (`==`/`!=`) and structural matching
 (`match`/`case`, §6.4) — no ordering, no arithmetic, no explicit conversion to or from any integer type.
 
-Cases are separated by statement ends, not commas (L18/L20) - a comma between two is a compile-time error, and so are
-two written on one line with nothing between them - the same way a constructor body's fields and an error type's words
-(T19) are: a case is a declaration rather than an item in a list.
+Cases follow the listing rule (L18a), as every list does: on one line they are separated by `,` (`enum { North, South
+}`), on different lines by the line break, and two on one line with nothing between them are a compile-time error.
 
 **T17a.** A case may carry a **payload**, written as a parameter list after its name:
 
 ```
-enum-body ::= "enum" "{" [ STMNT_END ] { case-decl STMNT_END } "}"
-case-decl   ::= IDEN [ "(" [ param { "," param } ] ")" ]
+enum-body ::= "enum" "{" list(case-decl) "}"
+case-decl   ::= IDEN [ "(" param-list ")" ]
 ```
 
 A case with no parameter list is a bare tag — what every case was before payloads existed. A value of the
@@ -694,28 +710,28 @@ of another — `Vec<T>` inside a declaration that has a `T`. This is what makes 
 helpers and methods writable once rather than once per instantiation.
 
 **G8b (the introduction rule).** A generic's variable - a type variable, or a constant one (§12.7) - is
-**introduced** once, by a `type-var` (G1), and written as its bare `IDEN` everywhere after:
+**introduced** by a type parameter list, or by a method's receiver, and written as its bare `IDEN` everywhere in its
+declaration:
 
 - In a struct type or a trait, the `type-params` list (G6) introduces every parameter, so the rest of the declaration -
   the list's own constraints (`type Map<K Hashable<K>, V>`), the constructor, the fields, the destructor, a trait's
   method signatures - writes each bare: `type Buf<T> struct(cap I64) { items mut Array<T>& = Array<T>(cap) }`.
-- In a function, a variable is introduced by its **first** `type-var` reading the signature left to right - the
-  receiver, the parameters in order, the results - and is written bare everywhere after it, in the rest of the
-  signature and in the body: `fn max(a <T>, b T) T`, and a method over a generic type introduces its variables in its
-  receiver, `fn (l List<<T>>&) Push(x T)`. A `type-var` inside a constraint introduces a variable too (`<I
-  Iterator<<E>>>`, G19). The introduction carries the variable's constraint (`<T Shape>`, G19) and a constant
-  variable's type (`<N I64>`, G22).
+- In a function, its `fn-type-params` list after its name introduces its variables (G3) - `fn max<T>(a T, b T) T` -
+  for the whole declaration, receiver included, in any order, and for its body. A method on a generic type takes the
+  type's variables from its receiver's type arguments (`fn (l List<T>&) Push(x T)`, G3b) and lists only variables of
+  its own (`fn (l List<T>&) Map<U>(f fn(x T) U) List<U>&`). A list item carries the variable's constraint (`<T Shape>`,
+  G19) or a constant variable's type (`<N I64>`, G22).
+- A constructor's list after `struct` introduces the variables a plain type's constructor writes (G10d).
 - A function type (G3a) and a lambda (D16) introduce nothing: a variable written in one is the enclosing
   declaration's.
 
-`<T>` written after the introduction is a compile-time error saying to write `T`, reported once, at the declaration,
-however many instantiations it has; a bare `T` before its introduction in a signature is a compile-time error naming
-where it is introduced. Anywhere else a bare name that is no variable in scope is a type's name, as always, so a
-misspelled type stays an unknown type rather than becoming a variable. A type variable is written bare wherever a type's
-name is: in a type, as a type argument (`Cell<T>`, `Pair<K, V>`), as an array literal's element type (`T[a, b]`, E19),
-after `is` and `as` (E32), and as a type `match`'s operand (`match T`, G13). The opening `<<` and the closing `>>` of a
-type-argument list lex as the shift tokens and are split where a type-argument list is being parsed, and only there,
-so `x << 3 >> 1` is unaffected.
+`<` never opens a type, so no type is a type variable written in brackets. A bare name that is no variable in scope is a
+type's name, as always, so a misspelled type stays an unknown type rather than becoming a variable - except in a
+receiver's type arguments, where a name no type has is the variable it introduces (G3b). A type variable is written
+bare wherever a type's name is: in a type, as a type argument (`Cell<T>`, `Pair<K, V>`), as an array literal's element
+type (`T[a, b]`, E19), after `is` and `as` (E32), and as a type `match`'s operand (`match T`, G13). The closing `>>` of
+a nested type-argument list lexes as the shift token and is split where a type-argument list is being parsed, and only
+there, so `x >> 1` is unaffected. A type parameter or type argument list follows the listing rule (L18a).
 
 An application whose arguments are not all known is a **pattern**, not a type: it has no layout, nothing is
 emitted for it, and its constructor is not monomorphized — the same treatment G16 gives a generic function's
@@ -746,11 +762,10 @@ itself: a type variable contains no reference and no destructor-bearing struct, 
 asking what a field of type `T` holds is answered vacuously at declaration, for every `T`, and would stay
 answered vacuously forever. The instantiation is where the question has an answer.
 
-**G19 (constraints).** A type variable may carry a **constraint**, a trait (§2.11) its type must satisfy:
-`type-var ::= "<" IDEN [ type-expr ] ">"` (`<T Shape>`, `<I Iterator<<E>>>`), and a generic type's declared
-parameter likewise (`type Map<K Hashable<K>, V>`). The `type-expr` must name a trait; it is a requirement, not a
-value, so it carries no reference marker. A constraint is written where its variable is introduced (G8b) - a
-function's first `<T Shape>`, or a type's parameter list - since every later occurrence is the bare name.
+**G19 (constraints).** A type variable may carry a **constraint**, a trait (§2.11) its type must satisfy, written
+after its name in the list introducing it: a function's (`fn area<S Shape>(s S)`, `fn drain<I Iterator<E>, E>(it mut
+I&) E`) or a generic type's (`type Map<K Hashable<K>, V>`). The `type-expr` must name a trait; it is a requirement, not a
+value, so it carries no reference marker. Every occurrence of the variable is its bare name (G8b).
 
 Where the variable is bound - by inference at a call (G9), by written type arguments (G7), by a constructor's
 inferred ones (G10c), or by substitution into another generic's signature or fields, reported at the call or type that
@@ -762,11 +777,11 @@ Satisfaction is T31's, and a method the compiler supplies counts as one declared
 every array's `Len() I64` (E23) and a float's or unsigned integer's bit methods (E33), as does a method a type inherits
 through `extends` (T29e).
 
-A type variable may carry a reference marker (`x <T>&`, `it mut <I Iterator<<E>>>&`): a reference to whatever the
+A type variable may carry a reference marker (`x T&`, `it mut I&`): a reference to whatever the
 variable is bound to, which must then be a struct, an enum or an array - a number or another type that cannot be a
 reference is a compile-time error where the variable is bound (G11a).
 
-A variable named only in a constraint (`E` in `<I Iterator<<E>>>`) counts as appearing in the signature (G4): it is
+A variable named only in a constraint (`E` in `<I Iterator<E>, E>`) counts as appearing in the signature (G4): it is
 bound through the methods of the type its constrained variable is bound to (G9c).
 
 A constraint changes nothing else: the body is still compiled per instantiation (G16), with direct calls.
@@ -780,12 +795,12 @@ null (T2a), as a reference to the enum itself is (T17d) - which a nested pattern
 
 ### 2.6 Error types
 
-**T19.** `error-decl ::= "error" IDEN "{" [ STMNT_END ] IDEN { STMNT_END IDEN } [ STMNT_END ] "}"` is a **top-level**
+**T19.** `error-decl ::= "error" IDEN "{" list(IDEN) "}"` is a **top-level**
 declaration in its own right — not a `type Name error { ... }` form, and not reachable from a
 general `type-expr` position (T2). An error type declares a closed, ordered set of named words,
 similar in shape to an enum body but declared with its own keyword and usable only
-in the specific positions described in §7. Its words are separated by statement ends, as an enum's cases are (T17):
-one per line, or a single word on the declaration's own line; a comma between two is a compile-time error.
+in the specific positions described in §7. Its words follow the listing rule (L18a), as an enum's cases do (T17):
+`error E { A, B }` on one line, one per line otherwise.
 
 **T20.** An error type's values (words) carry no data; the full semantics of error types — the
 error-union return convention, `try`/`catch`, and the `error` statement — are specified in
@@ -1180,8 +1195,8 @@ L20a's declarations do - or at the body's `}`; two on one line are a compile-tim
 satisfied by every type, built-in types included. The leading `mut` marks a method that needs a **mutable
 receiver**, one that writes through to the value it is called on - the receiver half of D9's two axes.
 
-A trait is **only a constraint** (G19): it is written where a type variable is constrained - `fn area(s <S Shape>)`,
-`<I Iterator<<E>>>`, `type Map<K Hashable<K>, V>` - and nowhere else. It is never the type of a value, a
+A trait is **only a constraint** (G19): it is written where a type variable is constrained - `fn area<S Shape>(s S)`,
+`fn drain<I Iterator<E>, E>(it mut I&) E`, `type Map<K Hashable<K>, V>` - and nowhere else. It is never the type of a value, a
 reference, a parameter, a field, a local, an element or a result, and writing it as one is a compile-time error.
 Code over a trait is generic (§12): compiled for each type it is used with, every call a direct one. A value of one
 of several types is an enum of them (T17); one thing that can be called is a function value (T21).
@@ -1201,8 +1216,10 @@ of that name whose
   as leaving (D10a) - and a `noreturn` method meets a signature with no result and no errors, which it does all of by
   never returning (T22).
 
-A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module can
-supply it. A trait with a private method is therefore **sealed**: no other module's type can satisfy it.
+A private method name (M6) belongs to the module that wrote it, so only a type declared in *that* module, or a
+built-in type it gives the method, can supply it - a type declared elsewhere that inherits the method through
+`extends` (T29f) supplies nothing. A trait with a private method is therefore **sealed**: no other module's type can
+satisfy it.
 
 Satisfaction is **structural and implicit**: a type declares no intent to satisfy a trait, a trait names no
 satisfying types, and satisfaction is decided from the two declarations alone, where a type variable is bound
@@ -1217,8 +1234,8 @@ with one method per name, and a generic signature names a family of them.
 (G6): `type Source<T> trait { mut Next() T ? Exhausted }`. Its method signatures may use them, including in a
 result alone. An **application** such as `Source<I32>` is an ordinary trait — its methods concrete — and two
 applications are the same trait exactly when their arguments are (G16a). A constraint may name the application's
-arguments as type variables, bound through the constrained type's methods (`<I Iterator<<E>>>` binds `E`, G9c). A
-method of a generic type (`fn (b mut Box<<T>>&) Next() T ? Exhausted`) satisfies a trait through the
+arguments as type variables, bound through the constrained type's methods (`<I Iterator<E>, E>` binds `E`, G9c). A
+method of a generic type (`fn (b mut Box<T>&) Next() T ? Exhausted`) satisfies a trait through the
 instantiation the receiver determines.
 
 **T35b (built-in traits).** The prelude (M19d) declares `error Exhausted { END }` and `type Iterator<T> trait {
@@ -1233,9 +1250,18 @@ and no `Iter` of its own reaches the iterator defaults (`g.Iter().Count(f)`).
 Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its start that satisfies
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
 (`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
-`it mut <I Iterator<<T>>>&` and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
+`it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
 `Iterator<T>` (M19e) are `Any`, `All`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
 left - `m.Keys().ToList()`.
+
+**T35c (the numeric traits).** The prelude declares three sealed traits (T31) naming the built-in numbers (T4):
+`Float`, satisfied by `F16`, `BF16`, `F32` and `F64`; `Integer`, by `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32` and
+`U64`; and `Number`, by all twelve. `Bool` satisfies none of them. Each trait's one method is private to the prelude
+module declaring the three, which gives it to those types and no others, so no type a program declares satisfies one
+- not by declaring a method of that name, and not by `extends` (T29f): `Char`, `type Meters extends I32` and
+`type Dist extends F64` inherit the method but satisfy nothing, so code constrained by a numeric trait may pick its
+behaviour with `match T` over the built-in types alone. Generic numeric code says which numbers it takes -
+`fn Sqrt<T Float>(x T) T` - so a call with any other type is an error at the call naming the trait (G19).
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
 no union, no cast between a reference and anything else, and no reinterpretation of one type's bytes as
@@ -1319,8 +1345,9 @@ through a reference marker at some point in the chain (T16, T17d). An error type
 
 ### 3.4 Function declarations
 
-**D7.** `func-decl ::= "fn" [ receiver ] IDEN func-sig block`, with `receiver ::= "(" param ")"`. The
-declared name enters the module's `vars` set (D2). `block` is specified in §6.1.
+**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig block`, with `receiver ::= "(" param ")"`.
+The declared name enters the module's `vars` set (D2). `block` is specified in §6.1. `fn-type-params` lists the
+function's own type variables (§12.2 G3).
 
 A `receiver` makes the declaration a **method** (§4.4 M19): its `param` becomes parameter 0 of `func-sig`,
 ahead of those in the parameter list, and is in every other respect an ordinary parameter — `mut`, a
@@ -1330,10 +1357,10 @@ a method, whatever its first parameter's type.
 **D8.** `func-sig ::= "(" param-list ")" ( [ ret-type ] [ "?" [ error-list ] ] | "noreturn" )`, where:
 
 ```
-param-list      ::= [ param { "," param } [ "," ] ]   (a trailing "," only as L18a allows)
+param-list      ::= list(param)                         (L18a)
 param           ::= IDEN type-expr [ "=" expr ]
-ret-type        ::= type-expr | "(" type-expr "," type-expr { "," type-expr } ")"
-error-list      ::= error-list-item { "+" error-list-item }
+ret-type        ::= type-expr | "(" type-expr sep type-expr { sep type-expr } [ line-sep ] ")"
+error-list      ::= error-list-item { "," error-list-item }     (on one line)
 error-list-item ::= alias-chain IDEN [ "." IDEN ]
 ```
 
@@ -1347,7 +1374,10 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
 `error-list-item` must name a declared error type (§2.6), or one of its words (`ListError.EMPTY`, R1c). `?` with
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
-See §7 for what a `error-list`'s combined set means.
+See §7 for what a `error-list`'s combined set means. A function type's and a lambda's error set (T2, D16) is one
+`error-list-item` or a parenthesized list, `"?" ( error-list-item | "(" list(error-list-item) ")" )`: written inside
+another list, as a parameter's type or an argument, a bare comma would be read as that list's separator
+(`f fn(I64) ? (ParseError, IoError)`).
 
 **D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
 noreturn`) **never returns to its caller**: no path through its body may reach a `return` or fall off its end. Its body is
@@ -1401,7 +1431,7 @@ constructor call (`p Point = Point(0, 0)`). It is evaluated on behalf of callers
 see, so it must have a value and no other behaviour - it reads no mutable global, calls no `extern fn`,
 and builds nothing with a destructor. It is checked in the declaring module, and one that cannot be
 computed is a compile-time error naming what stops it. A literal default for a parameter whose type is a type
-variable (`alpha <T> = 1`) has no type to fit there: it is fitted at each call against the instantiation's type, adapting
+variable (`alpha T = 1`) has no type to fit there: it is fitted at each call against the instantiation's type, adapting
 as a literal argument does (G18), and a call whose instantiation it does not fit is the error. A default may read the
 constant (and type) variables its declaration introduced before it - a constructor's type's own (`struct(k I64 = N *
 10)`), a function's (`F(x I64 = N + 1)`, G22): it is then each instantiation's, computed with that instantiation's
@@ -1433,7 +1463,7 @@ parameter whose type is not written (D16a): that type is the expected function t
 parameter bound to an array, say (`a.Any(fn(x) { ... })` over an `Array<Array<I32, 2>>`) - and has D9b's meaning there.
 A lambda parameter written with an array type by value is the error, as any other parameter's.
 
-**D9b.** Nor does it apply to a generic's by-value parameter (`x <T>`) instantiated with an array: the declaration
+**D9b.** Nor does it apply to a generic's by-value parameter (`x T`) instantiated with an array: the declaration
 does not say array, and its meaning is the by-value parameter's, as for a struct - the callee's own (D9). The callee
 gets its own copy of the elements exactly when its body may write the parameter: assigns it or one of its elements,
 or makes a writable reference to its storage (a slice of it, a borrow into a `mut` reference parameter). Otherwise it
@@ -1454,7 +1484,8 @@ name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then li
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```
-lambda       ::= "fn" "(" [ lambda-param { "," lambda-param } ] ")" [ ret-type ] [ "?" [ error-list ] ] block
+lambda       ::= "fn" "(" list(lambda-param) ")" [ ret-type ] [ "?" [ fn-error-set ] ] block
+fn-error-set ::= error-list-item | "(" list(error-list-item) ")"           (D8)
 lambda-param ::= IDEN [ type-expr ]
 ```
 
@@ -1799,7 +1830,7 @@ The receiver type may be:
   **prelude** (M19d) and by no other module, and are visible everywhere. An array receiver
   is identified by its **element type** alone — `Array<I32>&` and `Array<I32, 4>` are receivers of the same
   method, the call's E12 conversions deciding whether a given array reaches it — and an element that is a type
-  variable (`Array<<T>>&`) makes the method one of every array. A method over a specific element type is a
+  variable (`Array<T>&`) makes the method one of every array. A method over a specific element type is a
   different receiver from the generic one and takes precedence where both apply, as G8a's concrete
   application does.
 
@@ -1824,7 +1855,8 @@ one to a foreign type and no two modules can disagree about what `x.f` means. No
 `prelude` directory, each an ordinary module, loaded before any other module. Their exported types are
 visible in every module by their bare names, with no import, and no module may declare a type of the same
 name (D3a). They are the only modules that may declare methods on a built-in type, which is how the built-in
-types get their methods; those methods are visible in every module. A program wanting methods over a built-in type declares a type of its own over it
+types get their methods; those methods are visible in every module. The prelude's traits are `Iterator` and `Indexable`
+(T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods.
 
 Among the prelude's types is `type Pair<A, B> struct(First A, Second B)`, two values of any types held as
@@ -2021,8 +2053,8 @@ of one is never evaluated while compiling (K1) and is performed under `interpret
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
 `x.f` names exactly one thing.
 
-**M19e (defaults).** A method whose receiver is a type variable constrained by a trait - `fn (s <S Shape>) Describe()
-I32`, `fn (it mut <I Iterator<<T>>>&) Count(keep fn(x T) Bool) I64` - is a **default** of that trait: a method of
+**M19e (defaults).** A method whose receiver is a type variable constrained by a trait - `fn (s S) Describe<S Shape>()
+I32`, `fn (it mut I&) Count<I Iterator<T>, T>(keep fn(x T) Bool) I64` (G3b) - is a **default** of that trait: a method of
 every type that satisfies it, written once. It is declared in the trait's own module, and may not reuse the name of a
 method the trait requires. `l.Iter().Count(f)` calls the `Count` declared for `Iterator<T>`, since a `List`'s
 iterator satisfies it: the call is an ordinary generic one (§12), its receiver's variable bound to the value's type
@@ -2165,11 +2197,11 @@ primary  ::= literal | try-expr | call-expr | struct-literal
 
 An `IDEN` may be a generic's constant variable, read as a value (§12.7 G23).
 
-`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr { "," expr } "]"` (several indices only
-for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" [ arg { "," arg } [ "," ] ] ")" ]`. A `member` carrying an
+`match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
+indices only for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
-`call-on ::= "(" [ arg { "," arg } [ "," ] ] ")"` calls the function value everything to its left gives (E13b).
-A trailing `","` in any of these lists is allowed only where the closing bracket begins a line of its own (L18a).
+`call-on ::= "(" list(arg) ")"` calls the function value everything to its left gives (E13b). Every one of these lists
+follows the listing rule (L18a); a parenthesized expression, `"(" expr ")"`, is no list.
 Postfix `++`/`--` and unary `++`/`--` are the same
 two operators in prefix and postfix position (E5); both require the operand to be an assignable
 lvalue (§6.2).
@@ -2180,7 +2212,7 @@ A bare `IDEN` immediately followed by `member` is additionally checked, before o
 resolution, against every rule in §4.4 for a cross-module alias
 chain; if it resolves as one, ordinary member resolution does not apply to that leading identifier.
 
-**E3.** `call-expr ::= alias-chain IDEN [ type-args ] [ scope-arg ] "(" [ arg { "," arg } [ "," ] ] ")"`,
+**E3.** `call-expr ::= alias-chain IDEN [ type-args ] [ scope-arg ] "(" list(arg) ")"`,
 where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
 `arg ::= expr | "default"` (E14a) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
@@ -2706,7 +2738,7 @@ Where the index and the length are **both known at compile time** — a constant
 compile-time-length array — an out-of-range index written without `checked` is a **compile-time error**. That check
 costs nothing at run time and is not affected by the above. Under `checked` (E16d) the index is the checked form,
 whose failure is defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a generic over the length
-(`fn third(a Array<I32, <N>>&) I32 { return checked a[2] catch default -1 }`) one instantiation may have the element
+(`fn third<N I64>(a Array<I32, N>&) I32 { return checked a[2] catch default -1 }`) one instantiation may have the element
 and another not.
 
 **E16d.** `checked base [ index ]` (E15a) **opts in to a bounds check**: the index is checked against
@@ -2778,7 +2810,7 @@ type is that field's declared type.
 
 ### 5.7 Array literals
 
-**E19.** `array-literal ::= elem-type "[" [ arr-item { "," arr-item } [ "," ] ] "]"`, where
+**E19.** `array-literal ::= elem-type "[" list(arr-item) "]"` (L18a), where
 `elem-type ::= PRIMITIVE-NAME | scalar-name [ type-args ] [ reference-marker ]` and
 `scalar-name ::= alias-chain IDEN`
 (§4.4 M8) names the literal's
@@ -2890,7 +2922,7 @@ but that is the hardware's behaviour rather than the language's.
 a new array holding the first `expr` once for each value `for ... in` (S9a/S9b) would walk, in order — only those for
 which the condition after `if` is `true`, when there is one. It is an `array-literal` (E19) whose one item is followed
 by the `for` clause, and its `elem-type` is written as a literal's is; every element must fit it as a literal's items
-must. The names are bound for each value exactly as in a `for ... in` loop (copied out of an array, an index counting
+must. It is no list: a line break before its `for`, or anywhere in its clause, separates nothing (L18a). The names are bound for each value exactly as in a `for ... in` loop (copied out of an array, an index counting
 from 0 for the two-name form) and are visible in the element expression and the condition only. What may follow `in`
 is what a `for ... in` takes: an array, a range, an iterator or an iterable.
 
@@ -3509,17 +3541,19 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 **S12.** `match-stmnt ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"`, where:
 
 ```
-case-clause    ::= "case" case-alt { "," case-alt } [ "if" expr ] case-body
+case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
 case-alt       ::= pattern | "_" | binary
 nomatch-clause ::= "nomatch" case-body
 case-body      ::= block | "=>" expr [ STMNT_END ]
-pattern        ::= alias-chain IDEN "." IDEN [ "(" [ sub-pattern { "," sub-pattern } ] ")" ]
+pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]
 sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
-one, followed by `,`, `if`, `{` or `=>`; `_` alone takes every value (S13f); anything else is a value, a `binary`
-expression (E1) - so the `if` of a guard is never read as a conditional (E28). In a match statement every `case-body`
+one, followed by `,`, `if`, `{`, `=>` or its line's end; `_` alone takes every value (S13f); anything else is a value,
+a `binary` expression (E1) - so the `if` of a guard is never read as a conditional (E28). Alternatives follow the
+listing rule (L18a): `,` between two on one line, the line break between lines - a clause's header runs on to its
+guard, `{` or `=>`, so a line ending in an alternative is followed by the next. In a match statement every `case-body`
 is a block; `=>` is an error there.
 
 **S12b (a match used as a value).** `match-expr ::= "match" expr "{" { case-clause } [ nomatch-clause ] "}"` in
@@ -4173,14 +4207,14 @@ signature declares it may produce; propagation and handling are both explicit.
 
 **R1.** A function or constructor's own signature (§3.4,
 §9) may declare zero or more
-error types via its `error-list` (D8): `? ErrA + ErrB + ...`. This is the function's own **error
+error types via its `error-list` (D8): `? ErrA, ErrB, ...`. This is the function's own **error
 union** — the complete set of errors it may produce, to `try` callers (§7.4) and to a coverage-checking `catch`
 (§7.5): every word of a type the list names, or the words it names of one (R1c). A written list is a
 **promise** the body is held to: an error the body can produce that the list does not name is a compile-time error
 naming it (R9).
 
 **R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.EMPTY`,
-`? ListError.EMPTY + IoError`, `? TextError.NOT_FOUND + TextError.BAD_BASE` - and the set then holds that word of the
+`? ListError.EMPTY, IoError`, `? TextError.NOT_FOUND, TextError.BAD_BASE` - and the set then holds that word of the
 type and no other, so a function promises exactly the words it raises: `fn (l mut List<T>&) Pop() T ?
 ListError.EMPTY` fails only with `EMPTY`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
 type are one entry of the set, holding each; a type named whole holds every word, whatever words of it are named
@@ -4330,11 +4364,11 @@ terms too, run on the task's thread.
 ### 7.5 `catch`
 
 **R11.** `catch-clause ::= "catch" [ catch-list ] [ block ] [ "default" unary { "," unary } ]`, with at
-least one of the block and the default written, where `catch-list ::= catch-item { "+" catch-item }` and
+least one of the block and the default written, where `catch-list ::= catch-item { "," catch-item }` (on one line) and
 `catch-item ::= IDEN { "." IDEN }` — a type name, optionally preceded by one or more alias hops and/or
 followed by `.WORD` to match only that one word; without a trailing word, the item matches every word of
-that error type. `+` combines multiple `catch-item`s into one set, exactly as `error-list` combines error
-types in a signature (R1). A clause may begin on a line after the one before it.
+that error type. Several `catch-item`s make one set, as an `error-list` does in a signature (R1) - separated by `,`, on
+the clause's line (`catch A, B.X`). A clause may begin on a line after the one before it.
 
 **R11a.** A `try` may carry **several clauses**, and an error runs the **first** that handles it, in the
 order written. A clause with no `catch-list` handles every error no earlier clause did, and so may only be
@@ -4860,7 +4894,7 @@ where `y`'s closure lives in a block `keep` outlives.
 holding references, by instantiation - is another exception: there is no borrowed form to write for it (`T&p`
 would be a reference to what `T` is). Such a result may hand back existing storage of one of the function's scopes;
 that storage must outlive the result scope - be exactly it where something can be stored through it (O25g) - as an
-obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id(x <T>) T {
+obligation of the instantiation, checked at every call once the result has landed (O18a). `fn id<T>(x T) T {
 return x }` is legal for every `T`, and with `T` a reference, `y = id(n)` is a compile-time error where `n` dies before
 `y`.
 
@@ -5661,7 +5695,7 @@ compiler-recognized blocks a struct type can declare; its methods are ordinary f
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN [ type-params ] "struct" "(" param-list ")" [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
 ```
 
 `param-list` and `error-list` are as in a function signature
@@ -5671,9 +5705,9 @@ same, so that one spelling of an error set holds everywhere in the language.
 
 **C2.** `ctor-body ::= { ctor-field STMNT_END | stmnt }` — a constructor's body is an ordinary
 statement block (§6) in which a field declaration is one more kind of statement, so fields and
-statements interleave freely in textual order. Fields are separated by statement ends like any statement; a comma
-between two is a compile-time error (several names sharing one declaration, `x, y`, are D12b's). A `ctor-field`
-is exactly one of:
+statements interleave freely in textual order. Fields follow the listing rule (L18a): on different lines they are
+separated by the line's end, as any statement is, and on one line by `,` (`{ x, y }`, `{ a := 1, b I64 = 2 }` - several
+puns sharing one line are also D12b's several names). A `ctor-field` is exactly one of:
 
 ```
 IDEN [ "mut" ] ":=" expr           # inferred: type read from expr, as D15 reads it
@@ -6327,7 +6361,8 @@ layout, which has no options:
   before a closing one, a type-argument `>`, `,` or a postfix `++`/`--`; around `.` and a slice's `:`; after a prefix
   operator (`-x`, `~x`, `$x`, `++x`); before a call's `(` and an index's `[`, a lambda's or function type's `fn(` and a
   constructor's `struct(` included - but `fn (receiver)`, and `) (results)` after a parameter list, take one. A type
-  variable's introduction is a type like any other (`a <T>`). A reference marker `&`, and a scope after it (`T&x`,
+  variable is a type like any other (`a T`), and a type parameter list sits against the name it follows (`fn
+  max<T>(`, `struct<T>(`). A reference marker `&`, and a scope after it (`T&x`,
   `f&x(`), keeps the spacing it was written with, since that spacing decides what it is (T24, E25).
 - A `{` has one space before it; a block on one line has one space inside each brace (`{ }` when empty).
 - A comment stays where it is, as written; a line comment's trailing spaces go. Consecutive lines each ending in a line
@@ -6503,39 +6538,55 @@ compile-time error at its declaration. A trait may be (T35a).
 
 ### 12.1 Type variables
 
-**G1.** `type-var ::= "<" IDEN [ type-expr ] ">"` (the `type-expr` a constraint, G19 - or, introducing a constant variable, its type, G22), written where an entire `type-expr` (T2) would otherwise
-appear. It introduces a **type variable**: a type that is not known at the declaration and is supplied
-per instantiation. A variable is introduced once and written as its bare `IDEN` - a `type-ref` (T24) - everywhere after
-(G8b). `IDEN` must not name a type the referencing module can name - one it declares or imports by
-bare name (D2), a prelude type, `Array` or a primitive; writing such a name inside a `type-var` (or as a generic
-type's parameter) is a compile-time error, reported once where it is first written, since `<Point>` would otherwise
-read as parameterizing over something already concrete.
+**G1.** A **type variable** is a type not known at the declaration, supplied per instantiation. It is introduced by a
+type parameter list - a struct type's or a trait's `type-params` (G6), a function's `fn-type-params` (G3), a
+constructor's (G10d) - or by a method's receiver (G3b), and written as its bare `IDEN`, a `type-ref` (T24), everywhere in
+its declaration (G8b):
+
+```
+fn-type-params ::= "<" list(type-param) ">"
+type-param     ::= IDEN [ type-expr ]
+```
+
+An `IDEN` alone, or followed by a trait, introduces a type variable (the trait its constraint, G19); followed by any
+other type it introduces a constant variable of that type (G22). The names of one list are distinct. `IDEN` must not
+name a type the referencing module can name - one it declares or imports by bare name (D2), a prelude type, `Array` or
+a primitive; listing such a name (or declaring it as a generic type's parameter) is a compile-time error, reported once
+where it is written, since `<Point>` would otherwise read as parameterizing over something already concrete.
 
 **G2.** A type variable may carry a reference marker exactly as any type does (T24), and is written as an array's
-element as any type is — `<T>&` where it is introduced, `T&`, `Array<T>&` and `Array<T&>&` after — and the marker rules
-of §2.9 apply to it unchanged once the variable is bound to a concrete type by instantiation.
+element as any type is — `T&`, `Array<T>&`, `Array<T&>&` — and the marker rules of §2.9 apply to it unchanged once the
+variable is bound to a concrete type by instantiation.
 
 ### 12.2 Generic functions
 
-**G3.** A function is generic exactly when a `type-var` (G1) appears anywhere in its signature
-(`func-sig`, D8). It declares no type-parameter list: its set of type parameters is every variable its signature
-introduces, each by its first `<T>` (G8b), and every later `T` in the signature or the body - bare - is that one and
-the same type. A `type-var` written as the argument of a constant parameter is a constant variable (G22), one of the
-function's parameters in the same way - introduced by its first `<N>` and written `N` after it.
+**G3.** A function is generic exactly when it introduces a variable: by its `fn-type-params` after its name (D7), or by
+its receiver (G3b). Its variables are in scope, written bare, in its whole signature - receiver, parameters, results,
+error set, in any order - and in its body, and every `T` there is one and the same type. A constant variable (G22) is
+one of the function's parameters in the same way. Type arguments are never written at a call (G9).
 
 ```
-fn max(a <T>, b T) T { ... }
-fn pairUp(a <A>, b <B>) A { ... }
+fn max<T>(a T, b T) T { ... }
+fn pairUp<A, B>(a A, b B) A { ... }
 ```
+
+**G3b (a method's receiver).** A method whose receiver's type is an application of a generic type introduces, bare,
+every name written as one of that type's arguments, at any depth, that names no type and that its own list does not
+introduce - as Go's methods do: `fn (l List<T>&) Push(x T)`, `fn (m Map<K, V>&) Len() I64`, `fn (m Matrix<T, R, C>&)
+Rows() I64` (a constant variable, G22, by the type's parameter). Such a method is a method of every application of the
+type (G8a). Its own list introduces only what the receiver does not - a variable of its own (`fn (l List<T>&) Map<U>(f
+fn(x T) U) List<U>&`), or a receiver variable's constraint (`fn (c Cell<T>&) Show<T Shape>()`). A receiver that is a
+type variable itself - a trait's default (M19e) - is introduced by the method's list, with its constraint and the
+constraint's own variables: `fn (it mut I&) Count<I Iterator<T>, T>(keep fn(x T) Bool) I64`.
 
 **G3a.** G3 applies to a function **declaration** only. A function **type** (T2's `func-type`, written as a
 parameter's or variable's type) is never generic in its own right: a variable written in one is the *enclosing*
-declaration's, introduced there or by the function type's own position in its signature (G8b), and the function type
-has an empty type-parameter list. There is no higher-rank polymorphism — a parameter cannot demand "any generic
-function", only a function at the enclosing declaration's own (possibly generic) types.
+declaration's, and the function type has an empty type-parameter list. There is no higher-rank polymorphism — a
+parameter cannot demand "any generic function", only a function at the enclosing declaration's own (possibly generic)
+types.
 
 ```
-fn sortBy(v mut Array<<T>>&, less fn(a T, b T) Bool) { ... }
+fn sortBy<T>(v mut Array<T>&, less fn(a T, b T) Bool) { ... }
 ```
 
 `T` here is `sortBy`'s, inferred from the call as usual (G9, which unifies through a function type's own
@@ -6555,7 +6606,7 @@ is the same for every instantiation.
 
 **G6.** `type-decl` (D4) is extended to
 `"type" IDEN [ type-params ] type-expr [ STMNT_END ]`, where
-`type-params ::= "<" type-param { "," type-param } ">"` and `type-param ::= IDEN [ type-expr ]`. Each `IDEN`
+`type-params ::= "<" list(type-param) ">"` and `type-param ::= IDEN [ type-expr ]` (G1). Each `IDEN`
 declares a parameter, unique within the list, in scope throughout the whole declaration - the list's own constraints,
 the constructor's `param-list` and error list (C1), every field, and the `destruct` block (C7) - written there as its
 bare `IDEN` (G8b). An `IDEN` alone, or followed by a
@@ -6570,21 +6621,20 @@ type Buf<T> struct(cap I64) {
 ```
 
 **G7.** Within such a declaration a type parameter is written bare — `T` — the list having introduced it
-(G8b), as a generic function writes its variables after their introduction; `<T>` there is written again. The
-`type-params` list fixes the parameters' **order**, which is what a
-type argument list (G8) supplies positionally; a function needs no such list because its arguments
-are inferred (G9) and order therefore never arises.
+(G8b), as a generic function writes its variables. The `type-params` list fixes the parameters' **order**, which is
+what a type argument list (G8) supplies positionally; a function's list fixes no order anything relies on, since its
+arguments are inferred (G9) and never written.
 
 **G8.** `type-ref` (T24) is extended to accept a **type argument list**:
-`type-args ::= "<" type-arg { "," type-arg } ">"`, `type-arg ::= type-expr | const-arg`, written immediately after
+`type-args ::= "<" list(type-arg) ">"`, `type-arg ::= type-expr | const-arg`, written immediately after
 the name and before any reference marker. A type parameter takes a `type-expr`, a constant parameter a `const-arg`
 (G21). The count must equal the named type's own `type-params` count exactly. A generic
 type is never valid without one — a bare reference to a generic type name is a compile-time error.
-Within a `type-args` list a type variable is written as anywhere else (G8b) - bare after its introduction, so a
+Within a `type-args` list a type variable is written as anywhere else (G8b) - bare, so a
 generic declaration may instantiate another generic with its own parameter (`Vec<T>` inside a declaration that
-declares `T`) or itself, through a reference marker (`next Node<T>&` inside `type Node<T>`), and as `<T>` where it is
-introduced (`fn (l List<<T>>&) Len()`). In a function's body, the variables its signature introduced are in scope,
-written bare.
+declares `T`) or itself, through a reference marker (`next Node<T>&` inside `type Node<T>`); a method's receiver
+introduces its type's variables so (`fn (l List<T>&) Len()`, G3b). In a function's body, the variables its
+declaration introduced are in scope, written bare.
 
 ### 12.4 Inference and instantiation
 
@@ -6623,7 +6673,7 @@ variable already bound by an earlier argument takes no part in it: the argument 
 bound type as in any call, with E12's conversions - so `m.Get(key)` with `K` bound to `String&` borrows a `String`
 value `key` as any `String&` parameter would.
 
-**G9c.** A type bound to a variable constrained by an application of a generic trait (`<I Iterator<<T>>>`) binds
+**G9c.** A type bound to a variable constrained by an application of a generic trait (`<I Iterator<T>, T>`) binds
 that application's variables through the methods that make it satisfy the trait (T31): each trait method's
 parameter types and result are matched against those of the method the type supplies under the same name. So a
 `ListIter<I32>` bound to `I` binds `T` to `I32`. Whether the type then satisfies the trait the bindings give is the
@@ -6632,7 +6682,7 @@ constraint's check (G19).
 **G9d.** A value of a struct type declaring a destructor (C11) that reaches a bare type-variable parameter binds the
 variable to a reference to its type, writable as any built value is (T25c) - never to the value type. C11 holds no
 value of such a type anywhere else, so the argument is a temporary: it is promoted into the parameter (E12), built where
-the parameter's scope says (O18b), and its destructor registered there, once (O16). `fn id(x <T>) T` called as
+the parameter's scope says (O18b), and its destructor registered there, once (O16). `fn id<T>(x T) T` called as
 `id(Res(1))` is `id` at `mut Res&`. A generic constructor binds it read-only, as it binds every reference (G10c), so
 `Box(Res(1))` is a `Box<Res&>`.
 
@@ -6680,7 +6730,8 @@ instantiation's substituted types. C11 applies unchanged — an instantiation of
 instances of that instantiation only.
 
 **G10d (a generic constructor).** The constructor of a struct type that declares **no** type parameters is generic
-when its parameters introduce a type variable (G3, G8b): `type Dense struct(g mut Graph<<T>>&, n I64) { ... }`. It
+when it introduces a type variable, in a list after `struct` (G1, G8b): `type Dense struct<T>(g mut Graph<T>&, n I64) { ...
+}`. It
 is instantiated per call as a generic function is - its variables inferred from the arguments (G9), never written,
 since the type takes none (G7), and a call binding none of them a compile-time error - and its body is checked once
 per instantiation, with the variables bound (G16). The type itself is **not** generic: every instantiation
@@ -6706,14 +6757,14 @@ value and may be used wherever a function value is expected.
 
 ### 12.5 Dispatching on a type parameter
 
-**G13.** `match` (S12) accepts a type variable as its own operand - written bare, `match T`, the signature or the
-type's parameter list having introduced it (G8b) - with each `case` naming one or more
+**G13.** `match` (S12) accepts a type variable as its own operand - written bare, `match T`, its function's list, its receiver or its
+type's parameter list having introduced it (G3) - with each `case` naming one or more
 `type-expr`s (S13c: `case I32, U32 { }`) instead of value expressions, and no guard (S13e). This form is resolved
 when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
 `match N` over a constant variable takes values in its cases instead, decided per instantiation (G26).
 
 ```
-fn writeVal(fd I32, v <T>) I64 ? error {
+fn writeVal<T>(fd I32, v T) I64 ? IoError {
     match T {
         case I32  { return write(fd, i32Bytes(v)) }
         case Array<U8> { return write(fd, v) }
@@ -6798,24 +6849,21 @@ type-argument list the comparison and shift operators `<`, `<=`, `>`, `>=`, `<<`
 parentheses, since a bare `>` there ends the list: `Array<U8, (1 << 12)>`, `Flag<(Width > 64)>`.
 
 **G22 (constant variables).** A generic's constant variable follows the introduction rule (G8b): it is
-**introduced** once and written bare after that. In a struct type or trait the parameter list introduces its constant parameters, and the whole
-declaration - fields, constructor, destructor, a trait's method signatures - writes each bare: `R`, `C`. In a function a
-constant variable is introduced by its **first** `type-var` `<N>`, reading the signature left to right - the receiver,
-the parameters, the results - and is written `N` everywhere after it, in the rest of the signature and in the body. An
-introduction stands as the whole argument of a constant parameter, or within a constant argument, and may carry the
-variable's type, `<N I64>`. Its type is that type, else that of the constant parameters it fills; a function's variable
-standing as no whole argument and carrying no type has none, and is G4's error anyway.
+**introduced** by a list, or by a method's receiver, and written bare everywhere. In a struct type or trait the
+parameter list introduces its constant parameters, and the whole declaration - fields, constructor, destructor, a trait's
+method signatures - writes each bare: `R`, `C`. In a function its list after the name introduces it (`N`, or `N I64`
+carrying its type), or a receiver does (`fn (m Matrix<T, R, C>&)`, G3b), and the signature and body write `N`. Its type
+is the one its list item writes, else that of the constant parameters it fills; a function's variable standing as no
+whole argument and carrying no type has none, and is G4's error anyway.
 
 ```
-fn Dot(a Array<<T>, <N>>&, b Array<T, N>&) T { ... }
-fn (a Matrix<<T>, <M>, <K>>&) Mul(b Matrix<T, K, <N>>&) Matrix<T, M, N> { ... }
-fn Concat(a Array<<T>, <N>>&, b Array<T, <M>>&) Array<T, N + M> { ... }
-fn Widen(a Array<I32, <N I64>>&) Array<I32, twice(N)> { ... }
+fn Dot<T, N>(a Array<T, N>&, b Array<T, N>&) T { ... }
+fn (a Matrix<T, M, K>&) Mul<N>(b Matrix<T, K, N>&) Matrix<T, M, N> { ... }
+fn Concat<T, N, M>(a Array<T, N>&, b Array<T, M>&) Array<T, N + M> { ... }
+fn Widen<N I64>(a Array<I32, N>&) Array<I32, twice(N)> { ... }
 ```
 
-`<N>` written after the introduction - again in the signature, in the body, or in a type's own declaration - is a
-compile-time error saying to write `N`, and a bare `N` before its introduction in a signature one naming where it is
-introduced (G8b). A name is a type variable or a constant variable, never both; every constant
+A name is a type variable or a constant variable, never both; every constant
 parameter one constant variable fills has its type, and the type written at an introduction is never a trait (G19
 constrains types; what values a constant may take is G27's). Each is a compile-time error at the declaration. A
 constant variable's name may not be that of a value the declaration can see - a global, a function, a build constant,
@@ -6838,8 +6886,8 @@ A type variable is no value: reading one as a constant is a compile-time error (
 as its operand by a form of its own).
 
 **G24 (inference by value).** At a call, constant variables are bound by the same matching that binds type variables
-(G9): where a constant variable is the whole argument of a constant parameter in a parameter's type - `<N>` or `N` -
-the value the actual argument's type has there binds it. An `Array<F32, 3>` given for `Array<<T>, <N>>&` binds `T` to
+(G9): where a constant variable is the whole argument of a constant parameter in a parameter's type - `N` -
+the value the actual argument's type has there binds it. An `Array<F32, 3>` given for `Array<T, N>&` binds `T` to
 `F32` and `N` to 3; a `Matrix<F32, 32, 784>` and a `Matrix<F32, 784, 128>` given to `Mul` bind `M`, `K` and `N` to 32, 784 and 128.
 Two positions binding one variable to different values is a compile-time error at the call, naming both values - a
 `Matrix<F32, 32, 784>` times a `Matrix<F32, 10, 128>` is that error, with nothing run. An argument whose type does
@@ -6848,7 +6896,7 @@ compile-time error saying to write `x as Array<T, N>&` (E32b). An array literal 
 
 A constant argument that is an expression of constant variables (`N + M`) is never solved for: it is computed
 once its variables are bound, and the argument written at that position must then have exactly that type. A call
-writes no arguments for its callee's variables, so a constant no parameter carries - `fn Identity() Matrix<<T>, <N>,
+writes no arguments for its callee's variables, so a constant no parameter carries - `fn Identity<T, N>() Matrix<T, N,
 N>` - is G4's error; a value of such a type comes from its constructor, whose type's arguments are written
 (`Matrix<F32, 3, 3>()`, G10a) or inferred from its own arguments as here (G10c).
 
@@ -6874,7 +6922,7 @@ used as a value (S12b) choosing nothing is a compile-time error at the instantia
 That is what lets one generic do what only some of its instantiations can, and what ends a recursion on a constant:
 
 ```
-fn Total(a Array<I64, <N>>&) I64 {
+fn Total<N I64>(a Array<I64, N>&) I64 {
     if N == 0 { return 0 } else { return a[0] + Total(a[1:] as Array<I64, N - 1>&) }
 }
 ```
@@ -6897,8 +6945,8 @@ type Ring<T, N I64> struct() {
 ```
 
 **G28 (traits and constants).** A trait may declare constant parameters too (G20), its applications told apart by them
-as a struct type's are (G25), and a constant variable introduced in a constraint's arguments (`<V Shaped<<R>, <C>>>`,
-written `R` and `C` after it) is bound through the constrained type's methods, as G9c binds a type variable. No trait constrains a constant: what
+as a struct type's are (G25), and a constant variable introduced in a constraint's arguments (`<V Shaped<R, C>, R, C>`,
+each listed) is bound through the constrained type's methods, as G9c binds a type variable. No trait constrains a constant: what
 values a constant may take is G27's.
 
 ## 13. Compile-time evaluation

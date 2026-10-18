@@ -14,7 +14,7 @@ type CB struct() {
     text own mut String& = "bb"
 }
 fn h(c CB&) String&c { return c.text }
-fn id(x <T>) T { return x }
+fn id<T>(x T) T { return x }
 fn f(c CB&, n I64) String&c {
     if n == 0 { return String(c.data) }
     return id(h(c))

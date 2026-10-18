@@ -5,4 +5,4 @@ type Wrap<T> struct(v T) {
     v
     Twin T = v
 }
-fn ReadB(x b.Pack<<T>>&) T { return x.Copy }
+fn ReadB<T>(x b.Pack<T>&) T { return x.Copy }

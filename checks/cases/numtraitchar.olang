@@ -1,0 +1,6 @@
+# check: fail Char does not satisfy the constraint Integer on T: Integer is sealed
+# T35c: a Char extends U8 but is no Integer - text is not a number to generic numeric code
+fn ncNext<T Integer>(x T) T { return x + 1 }
+fn main() ? {
+    c := ncNext('a')
+}

@@ -8,11 +8,11 @@ type Stopper trait {
 }
 type Q struct() { }
 fn (q Q&) Stop() noreturn { os.Exit(9) }
-fn halt(q <T Stopper>&, n I64) I64 {
+fn halt<T Stopper>(q T&, n I64) I64 {
     if n > 100 { q.Stop() }
     return n
 }
-fn pick(a <T>, b T) T { return a }
+fn pick<T>(a T, b T) T { return a }
 fn c(x I64) I64 { return match x { case 1 => os.Exit(5) case _ => 2 } }
 fn d(x I64) I64 { return match x { case 1 => 7 case _ => os.Exit(5) } }
 fn e(x I64) I64 { return match x { case 1 => os.Exit(5) case _ => os.Exit(6) } }

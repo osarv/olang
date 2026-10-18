@@ -6,13 +6,13 @@ type Res struct(k I64) {
 } destruct {
     Made++
 }
-fn id(x <T>) T { return x }
-fn pick(a <T>, b T, c Bool) T { return a if c else b }
-fn twice(x <T>) Array<T> { return T[x, x] }
+fn id<T>(x T) T { return x }
+fn pick<T>(a T, b T, c Bool) T { return a if c else b }
+fn twice<T>(x T) Array<T> { return T[x, x] }
 G := id(Res(5))
 H := pick(Res(6), Res(7), false)
 A := twice(Res(8))
-fn count(l List<<T>>&, x T) I64 { return l.Len() }
+fn count<T>(l List<T>&, x T) I64 { return l.Len() }
 fn main() ? {
     l := List<Res&>()
     l.Push(Res(1))

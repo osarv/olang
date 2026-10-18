@@ -13,7 +13,7 @@ type MS<K, V> struct(key K, value V) {
 type MM<K, V> struct() {
     slot mut MS<K, V>& = null
 }
-fn (m mut MM<<K>, <V>>&) set(key K, value V) {
+fn (m mut MM<K, V>&) set(key K, value V) {
     if m.slot == null { m.slot = MS<K, V>(key, value) }
     else { m.slot.entry = ME<K, V>(key, value) }
 }

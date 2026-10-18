@@ -19476,6 +19476,45 @@ function declaring errors"; R5-R7 and R14 knew only a declared list read left to
 call" where arguments are checked; PRINCIPLES.md had `try` opting into checks, `done`/`fail` among the words and `-i`;
 CLAUDE.md had `chan.Send` stopping the program and checks opted into with `try`.
 
+### Numeric traits: `Float`, `Integer` and `Number` in the prelude (T35c, T31, G19, 2026-10-17; the user's decision, details mine)
+
+The user asked for three prelude traits naming the built-in numbers, so generic numeric code says what it takes and a
+wrong type is an error at the caller's call naming the trait, rather than a `match T` with no case for it inside std
+(`math.Sqrt(4)` used to report G15 at std/math's line 92, with the program's call only a note).
+
+**How they are sealed.** `std/prelude/number.olang` declares each trait with one private method (`floatType`,
+`integerType`, `numberType`) and gives that method, with an empty body, to the built-in types that satisfy it. T31
+already said a private method seals a trait. Stage 0 checked only that the method was declared in the trait's module,
+so a program's `type Dist extends F64` - which inherits F64's methods (T29f), the private one included - satisfied
+`Float`, and then failed inside `math.Sqrt` at its `match T`. The port's checker looked methods up by name alone, so a
+program's own `fn (f Fake) floatType()` satisfied it there too.
+
+**Decided (mine): no declared type satisfies them, `Char` and `extends` types included.** The coordinator's lean was
+that an extending type should inherit the trait as it inherits the method. Measured against the bodies, that is the
+wrong answer. Every numeric body in std picks per type with `match T` over the built-in types, and an extending type
+matches none of their cases. Its result would also be the base type where the body returns `T`. So a trait it satisfied
+would promise what the bodies cannot keep, which is the very error the traits exist to move. T31 now reads: a private
+method is supplied only for a type declared in its own module, or a built-in type that module gives it - an inherited
+one supplies nothing. Both compilers enforce this (`InterfaceMethodImpl` in bootstrap/semantic.c, `sealedBy` in
+compiler/generic.olang). A program's numeric type that wants generic numeric code converts at the call (`math.Sqrt(F64(d))`).
+`Char` is text to generic numeric code, which also reads right.
+
+**The diagnostic.** A sealed trait's miss is its own error, `G19, T31`: "Dist does not satisfy the constraint Float on
+T: Float is sealed - only the types its own module gives 'floatType' satisfy it". It replaced "it has no method
+floatType that fits" plus a note saying the inherited or same-named method had "another signature", which was false.
+
+**Where they are used.** std/math: every float function takes `<T Float>`. Abs, Min, Max and Clamp stay unconstrained,
+since Min/Max take any type declaring `Less` (the corpus has one) and Abs any type with `<` and unary `-`. std/stats:
+the public functions take `Array<<T Number>>&` (they convert each element with `F64(x)`). std/linalg: FastExp,
+FastTanh and FastSigmoid take `<T Float>`. FastExp covered only F32 and F64, so F16 and BF16 now compute in F32 and
+round once, which keeps the constraint exact. The Matrix operations stay open: they take the prelude's F8 structs and
+the integers as well, which no trait names. No prelude method was limited by an exhaustive `match T`.
+
+**The evaluator** needed nothing: constraints are resolved before anything runs. The corpus test (tests/shared.olang,
+T35c) bakes globals through constrained calls and decides asserts on literals while compiling, beside the same calls
+on mutable globals at run time. checks/cases/numtrait*.olang hold the five refusals: an integer to math.Sqrt, a Bool
+as a Number, a program type declaring `floatType`, an `extends F64` type, and a Char as an Integer.
+
 ## The shell and awk scripts are olang programs (2026-10-17, the user's rule: nothing in the repository but C for stage 0 and the benchmarks)
 
 Ported after the Python scripts: `compiler/tools/{tokdiff,astdiff,namesdiff,layoutdiff,layoutgold,modgraph,diaggold_capture}`
@@ -19497,6 +19536,99 @@ script used `xargs -P 4`); a timed benchmark's output is gathered in a memory fi
 **Found on the way**: `catch default a - b` reads as `(... catch default a) - b` (a default is a unary), which made a
 first `Rows` slice out of range. Not ported: the inline `awk` in the makefile's `checkir` and in two commands of
 `checks/checks.olang` (one-liners in a recipe and a test, no script file).
+
+## One listing rule and type parameter lists (QY, QW, L18a, G3, G8b, G22, T17, T19, C2, R1, R11, 2026-10-17)
+
+**The user's two decisions.** QY: "in general 'listing' is done with commas on the same line and newline marker on a new
+line ... Anywhere we list things. Literal lists too. Change error set unions in return types from '+' to normal listing
+rules". QW: "nested generics produce really ugly code - `<<<T>>, G>` is a mess"; a function's type variables go in a
+list after its name, as Go, Rust and C# write them, and a method takes its type's parameters from its receiver. Both
+compilers, the corpus migrated by a tool.
+
+**The listing rule (L18a).** One rule for every list: parameters, arguments, results, error sets, error words, enum
+cases, constructor fields, type parameters and arguments, array literals, indexes, case alternatives and catch items.
+On one line items are separated by `,`; on different lines by the line break. Decided (mine):
+- A line break separates exactly where L18 would end a statement, so `f(a +` continues the item on the next line; and
+  after an item ending in `}`, `>` or a bare `&` (after which L18 puts no end), the next token beginning a later line
+  separates too - L20a's own rule, applied to lists.
+- So the scanner puts statement ends inside brackets as well (both compilers); a comma before a line break is an error,
+  reported once by the scanner and read as the line break (one way to write each thing), and a comma before the
+  closing bracket on its own line separates nothing - also an error. This reverses L18a's trailing comma and
+  T17/T19/C2's "a separating comma is an error": enum cases, error words and constructor fields take commas on a line.
+- A parenthesized expression and a comprehension are one item, not lists, so a line break inside them separates
+  nothing: the parser passes statement ends there (stage 0's `TokenSkipEnds`, the port's `skip`). A block inside them
+  - a lambda's, a match's, a catch's - reads statements again. That is how a long join or condition still runs over
+  lines: in parentheses.
+- `+` in error sets and catch items is gone: `? IoError, ParseError`, `catch A, B.X`. A declaration's error set is a
+  list on its line. A function type's and a lambda's error set is one item or a parenthesized list (`f fn(I64) ? (A,
+  B)`) - always, not only inside another list, so it reads the same wherever it stands and a `,` after it separates the
+  list it is in.
+- Case alternatives are a list: `case A, B` on one line, or one per line until the header's `{`, `=>` or guard.
+- `x, y I64` (D12b) is one declaration of several names, not a list, and is unchanged; so is `return a, b` and a
+  parallel assignment.
+- In a constructor body fields on one line are separated by `,` once nothing else reads the line (`a, b = b, a` stays
+  a parallel assignment): `a I32 = x, b I32 = y`.
+
+**Type parameter lists (QW, G3, G8b, G22).** Replaces G8b's "introduced by its first `<T>`, written bare after" and
+G3's "a function declares no list":
+- `fn max<T>(a T, b T) T`, `fn area<T Shape>(x T)`, `fn count<N I64>(a Array<I32, N>&) I64` - constraints and
+  constants' types in the list, order free within it (every item is declared before any constraint is read).
+- A method's receiver introduces its type's parameters bare: `fn (l List<T>&) Push(x T)` - a name in the receiver's
+  type arguments that names no type and no listed variable is one (a constant where the type's parameter is one). Its
+  own variables are a list after the method name: `fn (l List<T>&) Map<U>(f fn(x T) U) List<U>`.
+- Decided (mine): a constrained receiver (M19e's defaults on a trait) is written with the list after the method name -
+  `fn (it mut I&) Count<I Iterator<T>, T>(...)` - a listed name taking its list item's constraint wherever it is
+  written, receiver included. The alternative, `fn <I Iterator<T>> (it mut I&) Count(...)`, puts a list where only
+  the receiver clause stands today; one place for lists is simpler, and the receiver clause stays a parameter.
+- A plain type's constructor introducing variables (G10d) is `struct<T>(g Graph<T>&)`; a generic type's constructor
+  may not have a list (G10d's error, now said at the list - stage 0 used to report an unknown type there).
+- Type declarations are unchanged; calls infer as before (G4); a type variable is never written `<T>` anywhere else:
+  `<T>` where a type stands is a syntax error, and `<<` never opens a list (so the parser's `<<` splitting went; `>>`
+  closing two lists is still split).
+- Gone with G8b: its "written again" and "introduced later" errors (ERR_TYPE_VAR_WRITTEN_AGAIN, ERR_VAR_WRITTEN_AGAIN,
+  ERR_TYPE_VAR_BEFORE_INTRO, ERR_VAR_BEFORE_INTRO, NOTE_INTRODUCED_HERE) and their checks cases (g8b*, g22again*,
+  g22before) - nothing can be written that they would say.
+
+**Stage 0.** The tokenizer's statement ends inside brackets and `ERR_COMMA_ENDS_LINE`; the parser's `acceptListSep` and
+`parseListTail` for every list, `TokenSkipEnds` for parenthesized expressions and comprehensions, `parseFnTypeParams`
+after a function's name and after `struct`; the checker's list introductions (SNTX_FN_TYPE_PARAMS), receiver-introduced
+variables (`collectReceiverVars`), constraints attached to a bare use from its list item (`introConstraintOf`), all
+position independent. The trailing-comma hint now also fires where the list stops at the comma.
+
+**The port.** The scanner (statement ends inside brackets, `CommaEndsLine`); the parser's `sep` (the separator above),
+its `skip` mode (statement ends passed over in parentheses and comprehensions, reset in every block), `typeParams` for
+types, functions and constructors, `receiverVars`, error sets with commas and parenthesized value sets; the AST's
+`TypeRef.Var` and `Expr.TypeVar` are gone and `Func`/`StructBody` carry `TypeParams`; names declares a list's items
+before reading their constraints and a receiver's variables; generic's signatures take their variables from the
+receiver then the list. The tree dump compares a written tree with commas and statement ends both left out (a list
+written back is one line of commas), and attributes each syntax error to the item that said it (`Parser.SaidIn`): an
+item can read into the next line's declaration before it fails, which its recovery then reads as an item of its own -
+stage 0 does the same, and the dump hid that declaration.
+
+**Found on the way.** The fuzz generator wrote `RemoveAt`/`Insert`/`TakeAt` without handling their errors (R22) - a
+program it made did not compile on some seeds; they are written with `!` now. HISTORY.md had been emptied by a merge on
+master (430c5ef); it is restored from its parent.
+
+**The migration (`tools/syntax_migrate.olang`).** Token-based, on the port's scanner, written in syntax old and new
+compilers both read, so it builds with either; idempotent; reports what it changed. It removes line-end commas (and a
+comma before a closing bracket on its own line), joins a statement continued after a comma (`assert c,\n msg`), moves a
+line-ending binary operator's continuation up where it would now separate, parenthesizes a multi-line item that has
+no other way to continue, turns `+` in error sets and catch items into `,` (parenthesizing a function type's or a
+lambda's set), and writes type parameter lists (`fn f(a <T>, b T)` -> `fn f<T>(a T, b T)`, `fn (l List<<T>>&)` ->
+`fn (l List<T>&)`, a constructor's `<T>` into `struct<T>(`). A line-ending operator whose continuation is ambiguous
+(a unary `-`) is moved only where its list is old (it has line-end commas) or with `--old`, for a tree written wholly in
+the old syntax (a branch, oann). Strings are never touched: programs inside strings (tests, generators) were migrated
+by hand.
+
+**Merged with the checker's errors batch (361fa14).** `check.olang`, `checkdiff` and `checkdump` came in written in the
+old syntax and were migrated by the tool with `--old` (31 line-end commas, 13 items parenthesized, one type parameter
+list), the merged lines of `types.olang` without it (3 commas). The checker reads the new AST: a constructor that
+introduces variables is one with a `struct<...>` list (`StructBody.TypeParams`), a bare type variable in a local's type
+takes its initializer's scope (O25a, `Mark.Infer`; it was the `<U>` spelling), and G8b's "written again" gap is gone with
+`Expr.TypeVar`. `generic.CtorVars` (G10d, new on master) takes the constructor's variables from that list, with their
+constraints. `checkdiff`: 232 of 413 refused checker cases give stage 0's first error and 278 of 282 accepted programs
+check clean - master's run on the same day gave 234 of 415 and 274 of 278, with the same 181 cases failing in both; the
+difference is the removed G8b/G22 cases and the three `T17, T19, C2` comma cases, which now build.
 
 ## Vec as a handle: round 1 of docs/memory.md (M19d, B2f, K1, 2026-10-17)
 

@@ -1,0 +1,15 @@
+# check: run
+# QW: type variables in a list after the function's name, constraints and constants in the list, a method's receiver
+# introducing its type's parameters bare
+type Box<T> struct(v T) { v }
+fn (b Box<T>&) Get() T { return b.v }
+fn (b Box<T>&) Map<U>(f fn(x T) U) Box<U> { return Box(f(b.v)) }
+fn pick<T>(a T, b T) T { return a }
+fn count<N I64>(a Array<I32, N>&) I64 { return N }
+fn biggest<T Hashable<T>>(a T) I64 { return a.Hash() }
+fn main() ? {
+    assert pick(1, 2) == 1
+    assert Box(3).Map(fn(x I64) I64 { return x * 2 }).Get() == 6
+    assert count(I32[1, 2, 3]) == 3
+    assert biggest(I64(4)) == I64(4).Hash()
+}

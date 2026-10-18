@@ -43,7 +43,7 @@ type vecState<T> struct(cap I64) {
 # element about to be stored, rather than with T's zero value: no slot is read before it is written, and a T with no
 # zero value - a Vec, a List - is as ordinary an element as any other (D13c). The old buffer is retired (M19d): nothing
 # here uses it again
-fn (s mut vecState<<T>>&) room(need I64, fill T) {
+fn (s mut vecState<T>&) room(need I64, fill T) {
     if need <= s.data.Len() { return }
     r I64 = 8 if s.data.Len() < 4 else s.data.Len() * 2
     if r < need { r = need }
@@ -56,7 +56,7 @@ fn (s mut vecState<<T>>&) room(need I64, fill T) {
 }
 
 # x after the last element - into the room left, or into a buffer twice the size, the elements moved into it
-fn (v mut Vec<<T>>&) Push(x T) {
+fn (v mut Vec<T>&) Push(x T) {
     s := v.s
     if s.n == s.data.Len() { s.room(s.n + 1, x) }
     s.data[s.n] = x
@@ -64,7 +64,7 @@ fn (v mut Vec<<T>>&) Push(x T) {
 }
 
 # every element of a, in order - with one grow at most
-fn (v mut Vec<<T>>&) PushAll(a Array<T>&) {
+fn (v mut Vec<T>&) PushAll(a Array<T>&) {
     if a.Len() == 0 { return }
     s := v.s
     if s.n + a.Len() > s.data.Len() {
@@ -76,15 +76,15 @@ fn (v mut Vec<<T>>&) PushAll(a Array<T>&) {
     s.n += a.Len()
 }
 
-fn (v Vec<<T>>&) Len() I64 { return v.s.n }
+fn (v Vec<T>&) Len() I64 { return v.s.n }
 
 # how many elements fit before the buffer is replaced
-fn (v Vec<<T>>&) Cap() I64 { return v.s.data.Len() if v.s.data.Len() > v.s.want else v.s.want }
+fn (v Vec<T>&) Cap() I64 { return v.s.data.Len() if v.s.data.Len() > v.s.want else v.s.want }
 
 # room for n more elements, the buffer replaced at most once - by one at least twice the size when it is (so a Push
 # after a Reserve costs as one after doubling would). With no element to fill a new buffer with, an empty Vec only
 # remembers the room, and its first Push makes it
-fn (v mut Vec<<T>>&) Reserve(n I64) {
+fn (v mut Vec<T>&) Reserve(n I64) {
     s := v.s
     if s.n + n <= v.Cap() { return }
     r I64 = v.Cap() * 2
@@ -98,25 +98,25 @@ fn (v mut Vec<<T>>&) Reserve(n I64) {
 
 # the element at position i - "v[i]" (E31). Unchecked, as an array index is (E16): "checked v[i]" checks i against Len()
 # first and fails with BuiltinError.OUT_OF_BOUNDS (E31a, derived from this and Len)
-fn (v Vec<<T>>&) At(i I64) T { return v.s.data[i] }
+fn (v Vec<T>&) At(i I64) T { return v.s.data[i] }
 
 # replaces the element at position i - "v[i] = x" (E31), unchecked as At is; "checked v[i] = x" checks it
-fn (v mut Vec<<T>>&) SetAt(i I64, x T) { v.s.data[i] = x }
+fn (v mut Vec<T>&) SetAt(i I64, x T) { v.s.data[i] = x }
 
 # the first element - failing with EMPTY when there is none, as List's First does
-fn (v Vec<<T>>&) First() T ? VecError.EMPTY {
+fn (v Vec<T>&) First() T ? VecError.EMPTY {
     if v.s.n == 0 { error VecError.EMPTY }
     return v.s.data[0]
 }
 
 # the last element - failing with EMPTY when there is none
-fn (v Vec<<T>>&) Last() T ? VecError.EMPTY {
+fn (v Vec<T>&) Last() T ? VecError.EMPTY {
     if v.s.n == 0 { error VecError.EMPTY }
     return v.s.data[v.s.n - 1]
 }
 
 # removes the last element and gives it - failing with EMPTY when there is none. Moves nothing, and keeps the buffer
-fn (v mut Vec<<T>>&) Pop() T ? VecError.EMPTY {
+fn (v mut Vec<T>&) Pop() T ? VecError.EMPTY {
     s := v.s
     if s.n == 0 { error VecError.EMPTY }
     s.n--
@@ -124,30 +124,30 @@ fn (v mut Vec<<T>>&) Pop() T ? VecError.EMPTY {
 }
 
 # removes every element, keeping the buffer for the Pushes that follow
-fn (v mut Vec<<T>>&) Clear() { v.s.n = 0 }
+fn (v mut Vec<T>&) Clear() { v.s.n = 0 }
 
 # keeps the first k elements and removes the rest - nothing changes when there are k or fewer, and none is kept for a k of
 # 0 or less
-fn (v mut Vec<<T>>&) Truncate(k I64) {
+fn (v mut Vec<T>&) Truncate(k I64) {
     s := v.s
     if k < s.n { s.n = k if k > 0 else 0 }
 }
 
 # the elements, lent as an array - a window on the buffer as it is now, good until the Vec grows (a Push, a PushAll, an
 # Insert, a Reserve may replace the buffer, and the view goes on showing the old one)
-fn (v Vec<<T>>&) View() Array<T>&v { return v.s.data[:v.s.n] }
+fn (v Vec<T>&) View() Array<T>&v { return v.s.data[:v.s.n] }
 
 # ...writable
-fn (v mut Vec<<T>>&) ViewMut() mut Array<T>&v { return v.s.data[:v.s.n] }
+fn (v mut Vec<T>&) ViewMut() mut Array<T>&v { return v.s.data[:v.s.n] }
 
 # removes the element at position i, giving nothing (Remove lets go, Take gives - TakeAt below), the elements after it each
 # moving down one place as TakeAt moves them
-fn (v mut Vec<<T>>&) RemoveAt(i I64) ? VecError.OUT_OF_RANGE { try v.TakeAt(i) }
+fn (v mut Vec<T>&) RemoveAt(i I64) ? VecError.OUT_OF_RANGE { try v.TakeAt(i) }
 
 # removes the element at position i and gives it, the elements after it each moving down one place - so it costs the
 # number of elements after i. i must be a position, from 0 to Len() - 1: one that is not fails with OUT_OF_RANGE,
 # checked once per call
-fn (v mut Vec<<T>>&) TakeAt(i I64) T ? VecError.OUT_OF_RANGE {
+fn (v mut Vec<T>&) TakeAt(i I64) T ? VecError.OUT_OF_RANGE {
     s := v.s
     if i < 0 or i >= s.n { error VecError.OUT_OF_RANGE }
     x := s.data[i]
@@ -157,11 +157,11 @@ fn (v mut Vec<<T>>&) TakeAt(i I64) T ? VecError.OUT_OF_RANGE {
 }
 
 # removes the element at position i as SwapTake does, giving nothing
-fn (v mut Vec<<T>>&) SwapRemove(i I64) ? VecError.OUT_OF_RANGE { try v.SwapTake(i) }
+fn (v mut Vec<T>&) SwapRemove(i I64) ? VecError.OUT_OF_RANGE { try v.SwapTake(i) }
 
 # removes the element at position i and gives it, the last element taking its place - so it moves one element, and the
 # order is not kept. i must be a position, checked once per call: one that is not fails with OUT_OF_RANGE
-fn (v mut Vec<<T>>&) SwapTake(i I64) T ? VecError.OUT_OF_RANGE {
+fn (v mut Vec<T>&) SwapTake(i I64) T ? VecError.OUT_OF_RANGE {
     s := v.s
     if i < 0 or i >= s.n { error VecError.OUT_OF_RANGE }
     x := s.data[i]
@@ -172,7 +172,7 @@ fn (v mut Vec<<T>>&) SwapTake(i I64) T ? VecError.OUT_OF_RANGE {
 
 # puts x at position i, the elements from i on each moving up one place - so Insert(Len(), x) is Push(x). i must be from
 # 0 to Len(), checked once per call: one that is not fails with OUT_OF_RANGE
-fn (v mut Vec<<T>>&) Insert(i I64, x T) ? VecError.OUT_OF_RANGE {
+fn (v mut Vec<T>&) Insert(i I64, x T) ? VecError.OUT_OF_RANGE {
     s := v.s
     if i < 0 or i > s.n { error VecError.OUT_OF_RANGE }
     if s.n == s.data.Len() { s.room(s.n + 1, x) }
@@ -186,13 +186,13 @@ fn (v mut Vec<<T>>&) Insert(i I64, x T) ? VecError.OUT_OF_RANGE {
 }
 
 # the elements in the opposite order, in place
-fn (v mut Vec<<T>>&) Reverse() { v.s.data[:v.s.n].Reverse() }
+fn (v mut Vec<T>&) Reverse() { v.s.data[:v.s.n].Reverse() }
 
 # sorts the elements in place so that less(v[i], v[i - 1]) holds nowhere - stable, as an array's Sort is, and done by it
-fn (v mut Vec<<T>>&) Sort(less fn(x T, y T) Bool) { v.s.data[:v.s.n].Sort(less) }
+fn (v mut Vec<T>&) Sort(less fn(x T, y T) Bool) { v.s.data[:v.s.n].Sort(less) }
 
 # the position of the first element equal to x, compared with "==" - failing with NOT_FOUND when there is none
-fn (v Vec<<T>>&) IndexOf(x T) I64 ? VecError.NOT_FOUND {
+fn (v Vec<T>&) IndexOf(x T) I64 ? VecError.NOT_FOUND {
     for i in range v.s.n {
         if v.s.data[i] == x { return i }
     }
@@ -201,14 +201,14 @@ fn (v Vec<<T>>&) IndexOf(x T) I64 ? VecError.NOT_FOUND {
 
 # removes the first element equal to x, compared with "==", the elements after it each moving down one place as RemoveAt
 # moves them - and says whether there was one, as List's Remove does
-fn (v mut Vec<<T>>&) Remove(x T) Bool {
+fn (v mut Vec<T>&) Remove(x T) Bool {
     i := try v.IndexOf(x) catch { return false }
     try v.RemoveAt(i) catch { unreachable }   # a position IndexOf found
     return true
 }
 
 # whether x is one of the elements, compared with "==" - what "x in v" asks (E29)
-fn (v Vec<<T>>&) Has(x T) Bool {
+fn (v Vec<T>&) Has(x T) Bool {
     for i in range v.s.n {
         if v.s.data[i] == x { return true }
     }
@@ -219,14 +219,14 @@ fn (v Vec<<T>>&) Has(x T) Bool {
 fn (v Vec<String&>&) Join(sep String&) String { return v.s.data[:v.s.n].Join(sep) }
 
 # a new Vec holding the same elements in the same order, with a buffer of its own
-fn (v Vec<<T>>&) Clone() Vec<T> {
+fn (v Vec<T>&) Clone() Vec<T> {
     c := Vec<T>()
     c.PushAll(v.s.data[:v.s.n])
     return c
 }
 
 # the elements copied into one array in the CALLER's scope - independent of the Vec, which may grow
-fn (v Vec<<T>>&) ToArray() mut Array<T>& {
+fn (v Vec<T>&) ToArray() mut Array<T>& {
     if v.s.n == 0 { return Array<T>(0) }
     out mut Array<T>&return = Array<T>(v.s.n, v.s.data[0])
     for i in range v.s.n { out[i] = v.s.data[i] }
@@ -234,13 +234,13 @@ fn (v Vec<<T>>&) ToArray() mut Array<T>& {
 }
 
 # whether two Vecs hold equal elements in the same order - "==" (E10a), as two arrays compare
-fn (v Vec<<T>>&) Eq(o Vec<T>&) Bool { return v.s.data[:v.s.n] == o.s.data[:o.s.n] }
+fn (v Vec<T>&) Eq(o Vec<T>&) Bool { return v.s.data[:v.s.n] == o.s.data[:o.s.n] }
 
 # the elements' hash, as an array of them hashes - so equal Vecs hash alike (E10b)
-fn (v Vec<<T>>&) Hash() I64 { return v.s.data[:v.s.n].HashElements() }
+fn (v Vec<T>&) Hash() I64 { return v.s.data[:v.s.n].HashElements() }
 
 # how "$" renders a Vec (E11c): as an array of its elements renders, with the Vec named in front - "Vec<I64>[1, 2, 3]"
-fn (v Vec<<T>>&) Str() String {
+fn (v Vec<T>&) Str() String {
     r := $v.s.data[:v.s.n]
     o := try r.FindByte('[') catch { unreachable }
     return "Vec<" $r[:o] ">" $r[o:]

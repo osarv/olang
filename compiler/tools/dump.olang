@@ -658,7 +658,7 @@ fn (w mut walker&) exprs(xs Array<ast.Expr&>&) {
 fn (w mut walker&) expr(x ast.Expr&) {
     if x == null { return }
     match x {
-        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.IsType(_, a, _, _),
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.IsType(_, a, _, _)
              ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _), ast.Expr.Member(_, a, _) {
             w.expr(a)
         }
@@ -709,9 +709,10 @@ fn (w mut walker&) expr(x ast.Expr&) {
 fn leavesWhole(rule String&) Bool { return rule == "T17, T19, C2" or rule == "D12b" or rule == "O3" }
 
 # the item a diagnostic belongs to: an unclosed block's is said at the declaration after it, and is the one before
-fn itemOfSaid(starts List<I32>&, s diag.Said&) I64 {
+fn itemOfSaid(starts List<I32>&, s diag.Said&, p parse.Parser&) I64 {
     if s.Text.StartsWith("the block opened on line") { return itemOf(starts, s.Start - 1) }
-    return itemOf(starts, s.Start)
+    i := try p.SaidIn.Get(I32(s.Start)) catch default -1
+    return i if i >= 0 else itemOf(starts, s.Start)
 }
 
 # a file's tree and its first syntax error an item, as "dump ast" prints them
@@ -736,7 +737,7 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
     w.failed.Push(false)
     for s in said {
         if s.File != file or s.Start < 0 or leavesWhole(s.Rule) { continue }
-        i := itemOfSaid(w.starts, s)
+        i := itemOfSaid(w.starts, s, p)
         # L21 is said at a statement met at the limit, and stage 0 keeps the item when that statement nests nothing
         if s.Rule == "L21" and i < p.ItemKept.Len() and p.ItemKept[i] { continue }
         w.failed[i] = true
@@ -756,7 +757,7 @@ fn astDump(out mut io.Writer&, src source.Source&, std String&, prelude String&)
         }
         # O3 is stage 0's checker's to report; the self-hosted parser reports it where it reads it
         if s.Rule == "O3" { continue }
-        i := itemOfSaid(w.starts, s)
+        i := itemOfSaid(w.starts, s, p)
         if not leavesWhole(s.Rule) {
             if shown[i] { continue }
             shown[i] = true
@@ -817,8 +818,8 @@ fn roundTrip(out mut io.Writer&, src source.Source&, std String&, prelude String
     n := a.Len() if a.Len() < b.Len() else b.Len()
     for i in range n {
         if a[i].Text != b[i].Text {
-            out.Write("tokens differ: " $lineCol(src, a[i].Start) " " $a[i].Text " in the file, "
-                      $lineCol(written, b[i].Start) " " $b[i].Text " written\n")
+            out.Write(("tokens differ: " $lineCol(src, a[i].Start) " " $a[i].Text " in the file, "
+                      $lineCol(written, b[i].Start) " " $b[i].Text " written\n"))
             return
         }
     }
@@ -851,19 +852,14 @@ type tokText struct(Text String&, Start I64) {
     Start
 }
 
-# a file's tokens as their texts, statement ends and a comma before a closing bracket left out, angles a character each
+# a file's tokens as their texts, statement ends and commas left out - a list's items are separated by either (QY,
+# L18a), and the text written puts each list on one line - angles a character each
 fn tokenTexts(text String&, ts scan.Tokens&) List<tokText> {
     l := List<tokText>()
-    for i, t in ts.Toks {
+    for t in ts.Toks {
         k := t.Kind
         if k == token.Tok.Eof { break }
-        if k == token.Tok.StmtEnd { continue }
-        if k == token.Tok.Comma {
-            j := i + 1
-            for ts.Toks[j].Kind == token.Tok.StmtEnd { j++ }
-            nk := ts.Toks[j].Kind
-            if nk == token.Tok.RParen or nk == token.Tok.RBrack { continue }
-        }
+        if k == token.Tok.StmtEnd or k == token.Tok.Comma { continue }
         if angles(text[t.Start:t.End]) {
             for j in range t.Start, t.End { l.Push(tokText(text[j:j + 1], I64(j))) }
             continue

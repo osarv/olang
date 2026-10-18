@@ -90,6 +90,7 @@ type Diag enum {
     ClangFailed
     LinkFailed
     UnknownChar
+    CommaEndsLine
     Semicolon
     NonAscii
     CarriageReturn
@@ -112,7 +113,6 @@ type Diag enum {
     Expected
     BlockNotClosed
     Nesting
-    SeparatorComma
     KeywordAsName
     KeywordFieldRead
     DestructInBody
@@ -171,6 +171,7 @@ type Diag enum {
     ConstraintDisagrees
     ConstraintUnmet
     ConstraintUnmetMethod
+    ConstraintSealed
     ConstraintUnmetHash
     UnboundedInstantiation
     TypeHoldsItself
@@ -197,8 +198,6 @@ type Diag enum {
     ArrayLengthRange
     AsArrayShape
     AsArrayLength
-    VarWrittenAgain
-    VarBeforeIntro
     ConstVarShadowed
     ConstArgParen
     TypeMatchValueCase
@@ -208,8 +207,6 @@ type Diag enum {
     ArrayNestedByValue
     LambdaResultHeld
     ConstraintNotTrait
-    TypeVarWrittenAgain
-    TypeVarBeforeIntro
     TypeArgNamedScope
     InvalidReferenceTarget
     DoubleReferenceMarker
@@ -415,7 +412,6 @@ type Diag enum {
     NoteLiteralLocal
     NoteLiteralRange
     NoteLiteralRangeExpr
-    NoteIntroducedHere
     StrOfNothing
     IntLiteralTooLarge
     NegLiteralTooLarge
@@ -774,6 +770,9 @@ fn LinkFailed(text String&) Msg { return Msg(Diag.LinkFailed, "", "linking " $te
 # ERR_UNKNOWN_CHAR
 fn UnknownChar(ch Char) Msg { return Msg(Diag.UnknownChar, "L16", "unexpected character '" $Esc(ch) "'") }
 
+# ERR_COMMA_ENDS_LINE
+fn CommaEndsLine() Msg { return Msg(Diag.CommaEndsLine, "L18a", "a comma never ends a line - items on different lines are separated by the line break; remove it") }
+
 # ERR_SEMICOLON
 fn Semicolon() Msg { return Msg(Diag.Semicolon, "L18", "olang has no ';' - a statement ends where its line does; put the next one on a line of its own") }
 
@@ -840,9 +839,6 @@ fn BlockNotClosed(n I64, tok String&) Msg { return Msg(Diag.BlockNotClosed, "", 
 # ERR_NESTING
 fn Nesting(n I64) Msg { return Msg(Diag.Nesting, "L21", "nested more than " $n " levels deep - split it into locals or functions") }
 
-# ERR_SEPARATOR_COMMA
-fn SeparatorComma() Msg { return Msg(Diag.SeparatorComma, "T17, T19, C2", "entries are separated by line ends, not commas") }
-
 # ERR_KEYWORD_AS_NAME
 fn KeywordAsName(tok String&) Msg { return Msg(Diag.KeywordAsName, "L9", $tok " is a keyword, not a name - choose another") }
 
@@ -856,7 +852,7 @@ fn DestructInBody() Msg { return Msg(Diag.DestructInBody, "C7", "'destruct' foll
 fn JoinPiece(text String&) Msg { return Msg(Diag.JoinPiece, "E11b", "a join piece is a text literal or a '$' rendering - write '$" $text "'") }
 
 # ERR_TRAILING_COMMA
-fn TrailingComma(tok1 String&, tok2 String&) Msg { return Msg(Diag.TrailingComma, "L18a", "a comma before " $tok1 " ends a list only where " $tok2 " begins a line of its own - remove it") }
+fn TrailingComma(tok String&) Msg { return Msg(Diag.TrailingComma, "L18a", "a comma before " $tok " separates nothing - remove it") }
 
 # ERR_VAR_LIST_COUNT
 fn VarListCount(n1 I64, n2 I64) Msg { return Msg(Diag.VarListCount, "D12b", $n1 " names need as many values, found " $n2) }
@@ -1017,6 +1013,9 @@ fn ConstraintUnmet(ty String&, text1 String&, text2 String&) Msg { return Msg(Di
 # ERR_CONSTRAINT_UNMET_METHOD
 fn ConstraintUnmetMethod(ty String&, text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.ConstraintUnmetMethod, "G19", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no method " $text3 " that fits") }
 
+# ERR_CONSTRAINT_SEALED
+fn ConstraintSealed(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.ConstraintSealed, "G19, T31", $ty " does not satisfy the constraint " $text1 " on " $text2 ": " $text3 " is sealed - only the types its own module gives '" $text4 "' satisfy it") }
+
 # ERR_CONSTRAINT_UNMET_HASH
 fn ConstraintUnmetHash(ty String&, text1 String&, text2 String&) Msg { return Msg(Diag.ConstraintUnmetHash, "G19, E10b", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no Hash - declare 'Hash() I64', agreeing with '=='") }
 
@@ -1095,12 +1094,6 @@ fn AsArrayShape(ty1 String&, ty2 String&) Msg { return Msg(Diag.AsArrayShape, "E
 # ERR_AS_ARRAY_LENGTH
 fn AsArrayLength(n1 I64, n2 I64) Msg { return Msg(Diag.AsArrayLength, "E32b", "this array's length is " $n1 ", not " $n2) }
 
-# ERR_VAR_WRITTEN_AGAIN
-fn VarWrittenAgain(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.VarWrittenAgain, "G22", $text1 " was introduced already - write it '" $text2 "', not '<" $text3 ">'") }
-
-# ERR_VAR_BEFORE_INTRO
-fn VarBeforeIntro(tok String&, text String&) Msg { return Msg(Diag.VarBeforeIntro, "G22", $tok " is introduced later in this signature - its first use is written '<" $text ">'") }
-
 # ERR_CONST_VAR_SHADOWED
 fn ConstVarShadowed(tok String&) Msg { return Msg(Diag.ConstVarShadowed, "G22, D3a", $tok " is a constant variable of this declaration - a name means one thing, so name this apart") }
 
@@ -1127,12 +1120,6 @@ fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Dia
 
 # ERR_CONSTRAINT_NOT_TRAIT
 fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G19", $ty " is not a trait, so it cannot constrain a type variable") }
-
-# ERR_TYPE_VAR_WRITTEN_AGAIN
-fn TypeVarWrittenAgain(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.TypeVarWrittenAgain, "G8b", $text1 " was introduced already - write it '" $text2 "', not '<" $text3 ">'") }
-
-# ERR_TYPE_VAR_BEFORE_INTRO
-fn TypeVarBeforeIntro(tok String&, text String&) Msg { return Msg(Diag.TypeVarBeforeIntro, "G8b", $tok " is introduced later in this signature - its first use is written '<" $text ">'") }
 
 # ERR_TYPE_ARG_NAMED_SCOPE
 fn TypeArgNamedScope() Msg { return Msg(Diag.TypeArgNamedScope, "G11", "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") }
@@ -1748,9 +1735,6 @@ fn NoteLiteralRange(text1 String&, ty1 String&, ty2 String&, text2 String&, ty3 
 
 # NOTE_LITERAL_RANGE_EXPR
 fn NoteLiteralRangeExpr(text String&, ty1 String&, ty2 String&, ty3 String&) Msg { return Msg(Diag.NoteLiteralRangeExpr, "", "the range's literals make '" $text "' " $ty1 " - convert its end, '" $ty2 "(...)', for " $ty3 " values") }
-
-# NOTE_INTRODUCED_HERE
-fn NoteIntroducedHere(text String&) Msg { return Msg(Diag.NoteIntroducedHere, "", $text " is introduced here") }
 
 # ERR_STR_OF_NOTHING
 fn StrOfNothing() Msg { return Msg(Diag.StrOfNothing, "E11a", "'$' has nothing to render - this call returns no value") }
