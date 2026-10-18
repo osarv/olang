@@ -57,7 +57,8 @@ overrated".
   section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
 - QUEUED (QAH, 2026-10-18): error-set parameters `<T ? E>` in both compilers - spec first (G-rules, R1b), inference,
   Iterator<T ? E>, std helpers taking fallible callbacks, checks; with QAI's checked versions; after wt-mathmeth and
-  wt-mem2 merge. Then generators (fn ... Iterator<T ? E> with yield) in both compilers.
+  wt-mem2 merge. Then generators (fn ... Iterator<T ? E> with yield) in both compilers. Then reflection (docs/ideas.md
+  #2, decided 2026-10-18: T.Name/Kind/Base/Fields/Cases/Params), both compilers; std's JSON/printing/Hash onto it.
 - QUEUED after the 2026-10-24 reset (the user, 2026-10-18: "C is verbose as fuck, we aren't supposed to be verbose"):
   a verbosity audit of the port (sonnet/medium): where compiler/*.olang's lines go, file by file (code, tests,
   comments, the generated msgs table), which patterns repeat, and which language features would shrink them - evidence

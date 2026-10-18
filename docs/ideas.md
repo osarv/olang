@@ -2,15 +2,15 @@
 
 Features from other languages that could suit olang, gathered 2026-10-17 for the user to go through one at a time.
 None of them is decided or built. Each entry says what it is, what it would look like, why it fits, what it costs, and
-the questions to settle. They are ordered by my estimate of value, highest first. They are extras, so under the
-compiler rule each would be built in the self-hosted compiler only, unless that compiler itself needs it.
+the questions to settle. They are ordered by my estimate of value, highest first. Language constructs go into both compilers
+(the user, 2026-10-18); only domain extras would be port-only.
 
 When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `HISTORY.md` like any other decision.
 
 | # | Feature | From | Status |
 |---|---|---|---|
 | 1 | Generators (`yield`) | C#, Python | decided 2026-10-18: `fn f(...) Iterator<T>` with `yield`, both compilers |
-| 2 | Compile-time reflection | Zig, Rust derive | open |
+| 2 | Compile-time reflection | Zig, Rust derive | decided 2026-10-18: `T.Name/Kind/Base/Fields/Cases/Params`, both compilers |
 | 3 | Units of measure | F# | open |
 | 4 | Portable SIMD vectors | Zig, Rust | open |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | open |
@@ -57,6 +57,16 @@ and `defer` blocks open across one.
 3. Does `yield` inside a `join` make sense, or is it an error?
 
 ## 2. Compile-time reflection
+
+**Decided 2026-10-18 (the user: "I like the T.Fields style. We avoid intrinsics as much as possible", "do both"):**
+compile-time only, asked through the type: `T.Name` (text), `T.Kind` (a prelude enum `Kind { Struct, Enum, Integer,
+Float, Bool, Array, Function }` - coarse: I32 and I64 are both Integer, the exact type is `match T`), `T.Base` (what a
+declared type is over, else T), `T.Fields` (a struct's fields: `f.Name`, `f.Type`, `f.Of(v)`; on an enum an error naming
+Cases), `T.Cases` (an enum's cases, each with its Name and Fields; on a struct its one case, so one loop covers both),
+`T.Params` (the constructor's parameters: name, type, has a default - decoding builds through the constructor so its
+checks run). A loop over them is unrolled per instantiation; a `match T.Kind` is decided per instantiation and only the
+chosen arm checked; counts are `.Len()`, constants. Private fields show only inside their own module. Not now: methods,
+field attributes. Both compilers (a language construct). The text below is the original idea.
 
 **What:** generic code that walks a type's fields and enum cases while compiling, with no run-time type information.
 
