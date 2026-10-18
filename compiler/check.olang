@@ -4195,7 +4195,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     c.err(c.calleeSpan(args[i]), msgs.TupleNotAValue())
                     e = c.unknown(asp)
                 } else {
-                    e = c.fit(e, ps[k], args[i].Span())
+                    e = c.fit(e, ps[k], c.argSpan(args[i]))
                 }
             }
         } else {
@@ -4243,6 +4243,23 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     call := typed.Expr.Call(sp, r, typed.Call(target, gather(c.exprs, from), typed.Mark.None, c.site(typed.SiteKind.Call, sp)))
     if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return call
+}
+
+# where an argument that does not fit is said (stage 0's token for it): an "as" at its keyword, a conversion to a
+# declared type over another at what it converts (T29a), else the argument
+fn (c mut Checker&) argSpan(x ast.Expr&) source.Span {
+    match x {
+        case ast.Expr.As(_, y, t) { return c.between(y.Span(), t.Span(), 2) }
+        case ast.Expr.Paren(_, y) { return c.argSpan(y) }
+        case ast.Expr.Call(_, f, args) {
+            if args.Len() == 1 {
+                t := c.typeNamed(f)
+                if t >= types.TypeId(0) and c.isNamed(t) and c.declKind(t) == types.DeclKind.Over { return c.argSpan(args[0]) }
+            }
+        }
+        nomatch { }
+    }
+    return x.Span()
 }
 
 # the body a call reaches, -1 for none checked here
@@ -5872,7 +5889,9 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     c.notCapture(p, c.writeAt(target))
     t := p.Type()
     if op == token.Tok.Assign {
-        x := c.exprTo(value, t)
+        # E12: the value fits the target, said at the "=" as stage 0 says it
+        x := c.expr(value, t)
+        if t != types.UnknownT { x = c.fit(x, t, osp) }
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, t, x)) }
         # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
         if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
