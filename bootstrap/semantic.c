@@ -494,6 +494,31 @@ bool TypeIsSameRepr(struct type a, struct type b) {
 static bool typeSameNested(struct type a, struct type b);
 
 static bool constPatternSame(struct type a, struct type b);
+
+//T22: where a function type's references live is part of it. Position i (a parameter, or the result at vars.len) is a
+//reference whose scope is that of the first earlier position sharing its scope variable - "b N&a" lives where "a" does,
+//a borrowed "T&p" result where p does - or none (-1): its own, or a built result's. Two function types whose positions
+//relate differently are different types: a call through the value establishes only what its type says, and passes one
+//hidden scope argument per scope variable, so a "fn link(a mut N&, b N&a)" called as a "fn(a mut N&, b N&)" stored b
+//where a lives with nothing checked, and read its hidden arguments out of place
+static struct var* funcPosScope(struct type f, int i) {
+    struct type* t = i < f.vars.len ? &((struct var*)ListGetIdx(&f.vars, i))->type : (f.hasRetType ? f.retType : NULL);
+    if (!t || !t->structMAlloc || !t->scopeParam) return NULL;
+    struct var* sv = canonicalVar(t->scopeParam);
+    return i == f.vars.len && f.resultScope && sv == canonicalVar(f.resultScope) ? NULL : sv;
+}
+static int funcPosShares(struct type f, int i) {
+    struct var* sv = funcPosScope(f, i);
+    if (!sv) return -1;
+    for (int k = 0; k < i; k++) if (funcPosScope(f, k) == sv) return k;
+    return -1;
+}
+static bool funcScopesSame(struct type a, struct type b) {
+    if (a.vars.len != b.vars.len) return false;
+    for (int i = 0; i <= a.vars.len; i++) if (funcPosShares(a, i) != funcPosShares(b, i)) return false;
+    return true;
+}
+
 bool TypeIsSame(struct type a, struct type b) {
     if (a.bType != b.bType) return false;
     //T27: reference-shapedness is part of a type's identity. "Point" and "Point&" are different types - one
@@ -559,6 +584,7 @@ bool TypeIsSame(struct type a, struct type b) {
             }
             if (a.hasRetType != b.hasRetType || a.noReturn != b.noReturn) return false;
             if (a.hasRetType && !typeSameNested(*a.retType, *b.retType)) return false;
+            if (!funcScopesSame(a, b)) return false;
             //T22: the same errors in the same order - a fallible call reports an error by its position - and the same words
             //of each (R1c)
             if (a.errors.len != b.errors.len) return false;
@@ -2761,8 +2787,17 @@ static struct str sbufTake(struct sbuf* b) {
 //A declared type is its module and name ("std_map.Node"; a generic one's instance "G-std_map.Box$I32-g"), a
 //primitive its name; the rest are spelled by structure, each compound form bracketed so that what follows it can never
 //be read as part of it: "A-" element "-n" (or "-<length>") "-e" an array, "F-" ... "-f" a function ("m-" a "mut"
-//parameter, each parameter closed by "-p", the result in "R-" ... "-q", each error in "E-" ... "-x"), "T-" ... "-u" a
-//tuple or an anonymous struct, "C-" ... "-d" an anonymous enum. A reference ends "-r", a writable one "-w" (T25b).
+//parameter, each parameter closed by "-p", the result in "R-" ... "-q", "-s<k>" before either
+//closing one living where position k does - T22), each error in "E-" ... "-x"), "T-" ... "-u" a tuple or an anonymous
+//struct, "C-" ... "-d" an anonymous enum. A reference ends "-r", a writable one "-w" (T25b).
+//T22: a position living where an earlier one does is spelled so ("-s0": where parameter 0 lives)
+static void spellShares(struct sbuf* b, struct type f, int i) {
+    int k = funcPosShares(f, i);
+    if (k < 0) return;
+    char s[32];
+    snprintf(s, sizeof(s), "-s%d", k);
+    sbufStr(b, s);
+}
 static struct str constPatternText(struct type t);
 static void typeSpell(struct sbuf* b, struct type t) {
     if (t.unknown) {
@@ -2802,11 +2837,13 @@ static void typeSpell(struct sbuf* b, struct type t) {
             struct var* v = ListGetIdx(&t.vars, i);
             if (v->mut) sbufStr(b, "m-");
             typeSpell(b, v->type);
+            spellShares(b, t, i);
             sbufStr(b, "-p");
         }
         if (t.hasRetType) {
             sbufStr(b, "R-");
             typeSpell(b, *t.retType);
+            spellShares(b, t, t.vars.len);
             sbufStr(b, "-q");
         }
         for (int i = 0; i < t.errors.len; i++) {
@@ -8415,6 +8452,7 @@ static bool funcFitsByPermission(struct type want, struct type have) {
         if (TypeIsPermRef(*want.retType) && TypeIsPermRef(b) && !want.retType->refMut) b.refMut = false;
         if (!TypeIsSameStrict(*want.retType, b)) return false;
     }
+    if (!funcScopesSame(want, have)) return false;
     if (want.errors.len != have.errors.len) return false;
     for (int i = 0; i < want.errors.len; i++) {
         struct type* ew = *(struct type**)ListGetIdx(&want.errors, i);
@@ -8905,7 +8943,12 @@ void reportTypeFit(enum typeFit fit, struct token tok, struct operand* op, struc
     else if (fit == TYPE_FIT_ARRAY_SIZE_MISMATCH) Err(tok, ERR_ARRAY_SIZE_MISMATCH, &op->type, &want);
     else if (fit == TYPE_FIT_LITERAL_RANGE) Err(tok, ERR_LITERAL_RANGE, op->tok, &want);
     else if (fit == TYPE_FIT_ELEM_REF_SHAPE) Err(tok, ERR_ELEM_REF_SHAPE, &want, &op->type);
-    else if (fit == TYPE_FIT_MISMATCH) Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
+    else if (fit == TYPE_FIT_MISMATCH) {
+        Err(tok, ERR_TYPE_MISMATCH, &want, &op->type);
+        //T22: where its references live is part of a function type - say so where that differs
+        if (want.bType == BASETYPE_FUNC && op->type.bType == BASETYPE_FUNC && !funcScopesSame(want, op->type))
+            Note(tok, NOTE_FUNC_TYPE_SCOPES, &op->type);
+    }
     else if (fit == TYPE_FIT_NUMBER) { Err(tok, ERR_NUMBER_DOES_NOT_FLOW, &op->type, &want, &want); noteLiteralOwnType(op, want); }
     else if (fit == TYPE_FIT_LITERAL_EXPR) Err(tok, ERR_LITERAL_EXPR_RANGE, &want);
     else if (fit == TYPE_FIT_CTOR) Err(tok, ERR_LITERAL_NEEDS_CTOR, &want, &want);

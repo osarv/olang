@@ -343,6 +343,7 @@ type Diag enum {
     StrStoresInReceiver
     StrReceiverWritable
     NoteHere
+    NoteFuncTypeScopes
     NoteVecGrewHere
     NoteVecGrowsHere
     NoteVecGrowsInside
@@ -1480,6 +1481,9 @@ fn StrReceiverWritable() Msg { return Msg(Diag.StrReceiverWritable, "E11c, T25c"
 
 # NOTE_HERE
 fn NoteHere() Msg { return Msg(Diag.NoteHere, "", "here") }
+
+# NOTE_FUNC_TYPE_SCOPES
+fn NoteFuncTypeScopes(ty String&) Msg { return Msg(Diag.NoteFuncTypeScopes, "", "a function type says where each reference argument and the result live, as the function does - write '" $ty "', or pass a lambda calling it") }
 
 # NOTE_VEC_GREW_HERE
 fn NoteVecGrewHere() Msg { return Msg(Diag.NoteVecGrewHere, "", "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") }

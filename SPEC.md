@@ -745,10 +745,10 @@ arguments always name distinct instantiations. A declared type argument is disti
 and name** (T29), matching the identity rule the type itself has, so two modules each declaring a `Point`
 give two instantiations of `Vec<Point>` rather than one. An array argument is distinguished by its element
 type, its length, and whether it is reference-shaped — every part of what makes an array type distinct
-(T25a). A function type argument is distinguished by its parameters (each one's `mut` included), result and errors
-(T22); a reference argument by its permission (T25b), so `List<Node&>` and `List<mut Node&>` are two; and a declared
-array type from the array it is declared over (T29a). No argument is too long to tell apart: there is no limit on how
-deeply type arguments nest short of G17's.
+(T25a). A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
+and where its references live (T22); a reference argument by its permission (T25b), so `List<Node&>` and
+`List<mut Node&>` are two; and a declared array type from the array it is declared over (T29a). No argument is too long to tell
+apart: there is no limit on how deeply type arguments nest short of G17's.
 
 Instantiations are emitted by every object that uses one and deduplicated at link time, so several modules
 instantiating one generic over one type is ordinary and costs nothing beyond the duplicate compilation.
@@ -829,12 +829,18 @@ the result writable where the type gives a read-only one - so `fn(acc I32, b Box
 `fn(acc I32, b mut Box&) I32`. A **named function** used as a value fits a type whose error list holds every error
 the function can fail with, in any order and with more beside them (§7 R1b): its value re-encodes its codes for the
 type's list. A `noreturn` function value also fits a type with the same parameters, no result, no error
-list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same.
+list and no `noreturn`: never returning, it does all such a type promises (D8e). Every other part must be the same,
+**where its references live** included: a parameter written `b N&a` lives where `a` does and a result written `T&p` where
+`p` does (O4a, O14), so `fn link(a mut N&, b N&a)` is a value of `fn(a mut N&, b N&a)` and of no type whose `b` lives
+apart - a call through `fn(a mut N&, b N&)` would establish nothing `link` requires (T22a) - and a function borrowing its
+result is no value of a type building one. A result written as a type variable (O14b) is a built one here.
 
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
 value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
-as a value is a compile-time error naming the obligation. The exception is a function type whose result is written as
+as a value is a compile-time error naming the obligation. A relation the signature writes - a parameter living where
+another does (`b N&a`) - is one a function type can write too, so such a function is a value of a type saying the same,
+and a call through it is held to that as a direct call is (T22). The exception is a function type whose result is written as
 a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc U, x T) U`):
 such a result may hand back one of the arguments (O14b), so the type itself requires each reference argument to
 outlive its result scope - and to be exactly it where something can be stored through the argument (O25g) - and a call

@@ -1,0 +1,16 @@
+# check: fail error[O25e]: these arguments live in different scopes
+# T22: a function type may say its parameters share a scope ('b N&a'), and a call through a value of it is held to that
+# as a direct call is
+type N struct(v I64) {
+    v
+    next N& = null
+}
+fn link(a mut N&, b N&a) { a.next = b }
+fn put(f fn(a mut N&, b N&a), a mut N&) {
+    t := N(5)
+    f(a, t)
+}
+fn main() {
+    x mut N& = N(1)
+    put(link, x)
+}

@@ -14386,6 +14386,31 @@ test "T22: a read-only reference parameter fits a function type whose parameter 
     assert t22Apply(s, p) == 12
 }
 
+# T22: a function type says where its references live - "b t22sN&a" lives where a does - so a function whose parameters
+# share a scope is a value only of a type saying the same, and a call through it builds what it hands over where the
+# type says (a value of "fn(a mut t22sN&, b t22sN&)" was accepted, and stored b where a lives with nothing checked)
+type t22sN struct(v I64) {
+    v
+    next t22sN& = null
+}
+fn t22sLink(a mut t22sN&, b t22sN&a) { a.next = b }
+fn t22sPut(f fn(a mut t22sN&, b t22sN&a), a mut t22sN&, i I64) { f(a, t22sN(i)) }
+fn t22sBuild() I64 {
+    x mut t22sN& = t22sN(1)
+    t22sPut(t22sLink, x, 6)
+    return x.v + x.next.v
+}
+T22sBuilt := t22sBuild()                            # baked: the evaluator calls through the value as the run time does
+test "T22: a function value whose parameters share a scope, through a type saying so" {
+    x mut t22sN& = t22sN(1)
+    for i in range 3 {
+        t22sPut(t22sLink, x, 40 + i)
+        sbChurn()
+    }
+    sbChurn()
+    assert x.next.v == 42 and T22sBuilt == 7 and t22sBuild() == 7
+}
+
 # O17: what is read out of a lent value's region by following a reference brings in nothing new, so a callee storing
 # it there keeps nothing of its own - the split lend stays legal (storing the value's own storage is the error, see
 # checks/cases/o17selfstore)

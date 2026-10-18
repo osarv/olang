@@ -488,6 +488,44 @@ fn (t mut Table&) PlainList(l ListId) ListId {
 # whether two types are one type (T22, T25a): identity with function types' scopes left out
 fn (t Table&) Same(a TypeId, b TypeId) Bool { return t.Plain(a) == t.Plain(b) }
 
+# whether two types that are Same also say the same of where function types' references live (T22): each parameter
+# sharing the same earlier one, each result borrowed from the same parameter or from none (built, or written as a type
+# variable: the same scopes passed), at any depth. A function value fits only a type saying what it says - a value of a
+# type saying less establishes nothing its function requires, and passes other hidden scope arguments
+fn (t Table&) ScopesFit(a TypeId, b TypeId) Bool {
+    if a == b or t.KindOf(a) != t.KindOf(b) { return true }
+    match t.KindOf(a) {
+        case Kind.Func {
+            if t.Role(a) != t.Role(b) { return false }
+            ap, bp := t.Items(t.Params(a)), t.Items(t.Params(b))
+            if ap.Len() != bp.Len() { return true }
+            for i in range ap.Len() {
+                if t.ShareOf(a, i) != t.ShareOf(b, i) or not t.ScopesFit(ap[i], bp[i]) { return false }
+            }
+            ar, br := t.Results(a), t.Results(b)
+            for k in range ar.Len() {
+                if k >= br.Len() { break }
+                ea, eb := t.ResultFrom(a, k), t.ResultFrom(b, k)
+                if ea != eb and not ((ea == OwnScope or ea == FromTypeVar) and (eb == OwnScope or eb == FromTypeVar)) {
+                    return false
+                }
+                if not t.ScopesFit(ar[k], br[k]) { return false }
+            }
+            return true
+        }
+        case Kind.Array { return t.ScopesFit(t.Elem(a), t.Elem(b)) }
+        case Kind.Ref { return t.ScopesFit(t.Referent(a), t.Referent(b)) }
+        case Kind.Tuple {
+            ap, bp := t.Items(t.Parts(a)), t.Items(t.Parts(b))
+            for i in range ap.Len() {
+                if i < bp.Len() and not t.ScopesFit(ap[i], bp[i]) { return false }
+            }
+            return true
+        }
+        nomatch { return true }
+    }
+}
+
 # whether a value of a type holds a reference - is one, or holds one in a field, element, payload or part held in
 # place, a function value among them (T21): what gives a parameter a scope variable of its own (O4b). A type variable
 # might become one, so it does; a declared type's body must be resolved first (generic asks), and one not resolved
@@ -1166,6 +1204,12 @@ test "function types carry their scopes; identity leaves them out; a call's scop
     built := t.Func(t.List1(roN), roN, ListId(0))
     borrowed := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, I64[OwnScope], I64[0]))
     assert t.ScopeVarsOf(built) == I64[0, ResultVar] and t.ScopeVarsOf(borrowed) == I64[0]
+    # T22: one type, but a function value fits only a type saying where its references live as it does
+    assert not t.ScopesFit(shared, plain) and not t.ScopesFit(plain, shared) and t.ScopesFit(shared, shared)
+    assert not t.ScopesFit(built, borrowed) and not t.ScopesFit(borrowed, built)
+    typeVarResult := t.Func(t.List1(roN), roN, ListId(0), t.Scopes(RoleFn, I64[OwnScope], I64[FromTypeVar]))
+    assert t.ScopesFit(built, typeVarResult) and not t.ScopesFit(borrowed, typeVarResult)
+    assert not t.ScopesFit(t.Array(shared, TypeId(0)), t.Array(plain, TypeId(0)))
     ctor := t.Func(t.List1(i64), n, ListId(0), t.Scopes(RoleCtor, I64[OwnScope], I64[OwnScope]))
     dtor := t.Func(t.List1(mutN), VoidT, ListId(0), t.Scopes(RoleDtor, I64[OwnScope], I64[]))
     assert t.ScopeVarsOf(ctor) == I64[ResultVar] and t.ScopeVarsOf(dtor) == I64[ClosingVar]

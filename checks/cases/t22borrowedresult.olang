@@ -1,0 +1,16 @@
+# check: fail error[E12]: expected fn(a mut N&) mut N&, found fn(a mut N&) mut N&a
+# T22: a borrowed result ('N&a', where a lives) is not a built one ('N&', where the call's result is put) - the caller of
+# a value of the built type would keep the result past its argument
+type N struct(v I64) {
+    v
+    next N& = null
+}
+fn self(a mut N&) mut N&a { return a }
+fn keep(f fn(a mut N&) N&, out mut N&, i I64) {
+    t := N(i)
+    out.next = f(t)
+}
+fn main() {
+    x mut N& = N(1)
+    keep(self, x, 42)
+}

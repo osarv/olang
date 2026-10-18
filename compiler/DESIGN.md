@@ -424,6 +424,9 @@ where it can be and refused (T22a) where it cannot:
 | a result borrowed | written as a type variable | adapted: the result scope is dropped |
 | a result built | written as a type variable | the same ABI |
 | parameters share | no sharing | **refused**: an obligation the call would not check (the stage-0 crash, `review/typed/repro`) |
+
+SPEC T22 (2026-10-18) makes every difference in the scopes a different type, so both compilers refuse the three adapted
+rows too for now (stage 0 has no such adapters, and is frozen); adapting them is a later relaxation, additive.
 | borrowed, or written as a type variable | built, or borrowed from another parameter | **refused**: the result may be one the caller does not expect where it looks |
 
 **Places and values.** A place names storage - a local, a global, what a reference names (`Deref`), a field, an element,
@@ -1363,8 +1366,8 @@ fix, allowed under QB), so the two compilers' behaviour can be compared:
 
 | rule | stage 0 | the contract |
 |---|---|---|
-| S4d | copies the old value where a callee's body can hand its argument back (`calleeMayKeepArg`, a §8 summary) | copies where the assigned value's type can hold the borrow (SPEC S4d) - more copies, decided before §8 runs |
-| T22a | `fn link(a mut N&, b N&a)` made a value of `fn(a mut N&, b N&)`: a crash, and unsound (`review/typed/repro`) | refused: a parameter sharing a scope variable the type does not (section 1.6.1's table); being fixed in C |
+| S4d | copied the old value where a callee's body can hand its argument back (`calleeMayKeepArg`, a §8 summary) - fixed 2026-10-18 (`s4dResultCanHold`) | copies where the assigned value's type can hold the borrow (SPEC S4d) - more copies, decided before §8 runs |
+| T22a | `fn link(a mut N&, b N&a)` made a value of `fn(a mut N&, b N&)`: a crash, and unsound (`review/typed/repro`) - fixed 2026-10-18: any difference in where the references live is a different type (SPEC T22) | refused: a parameter sharing a scope variable the type does not (section 1.6.1's table) - `check` refuses every difference for now (`types.ScopesFit`), as stage 0 does |
 
 **Not needed:**
 

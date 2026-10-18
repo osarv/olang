@@ -2654,6 +2654,13 @@ fn (c mut Checker&) textLit(sp source.Span) typed.Expr&c {
 fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
     have := typeOf(x)
     if want == types.UnknownT or have == types.UnknownT or want == types.VoidT { return x }
+    # T22: one type but for where a function type's references live - fitting would establish nothing the function
+    # requires, and pass other hidden scope arguments than it takes
+    if have != want and c.P.T.Same(have, want) and not c.P.T.ScopesFit(have, want) {
+        rec := c.err(sp, msgs.TypeMismatch(c.ty(want), c.ty(have)))
+        c.P.L.Diags.Note(rec, c.at(sp), msgs.NoteFuncTypeScopes(c.ty(have)))
+        return x
+    }
     if have == want or c.P.T.Same(have, want) {
         if c.isRef(want) and (c.P.T.PermOf(want) & types.Writable) != 0 { c.roWritableRef(x, sp) }
         return x
@@ -3822,7 +3829,7 @@ fn namedFn(x typed.Expr&) Bool {
 fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {
     hp := c.P.T.Items(c.P.T.Params(h))
     wp := c.P.T.Items(c.P.T.Params(w))
-    if hp.Len() != wp.Len() { return false }
+    if hp.Len() != wp.Len() or not c.P.T.ScopesFit(h, w) { return false }
     for i in range hp.Len() {
         if c.P.T.Same(hp[i], wp[i]) { continue }
         if not (c.isRef(hp[i]) and c.isRef(wp[i]) and c.P.T.Same(c.deref(hp[i]), c.deref(wp[i]))) { return false }

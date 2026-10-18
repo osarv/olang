@@ -265,7 +265,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
   writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
   keeps its argument cannot become a value; a type's `Call` fits a function type (E31). A
-  function value returned from a parameter is an obligation (O14a).
+  function value returned from a parameter is an obligation (O14a). Where its references live is part of a function
+  type (T22, 2026-10-18): a parameter sharing another's scope (`b N&a`) or a borrowed result (`T&p`) makes a function a
+  value only of a type saying the same, so `fn link(a mut N&, b N&a)` is no `fn(a mut N&, b N&)` (it was accepted, and
+  crashed: the call passed other hidden scope arguments and established nothing link requires).
 - **Static literals (T25d).** A literal known while compiling reaching a read-only reference is the constant data
   itself; an immutable global no writable reference reaches is `constant`, and importers see its value (K2).
 - **Small type rules:** a type cannot embed itself by value (T16); a self-holding array type is an error (T29); an

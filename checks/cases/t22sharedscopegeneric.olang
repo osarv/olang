@@ -1,0 +1,19 @@
+# check: run
+# flags: -debug -sanitize
+# T22/G16a: a type variable bound to a function type whose parameters share a scope is another instantiation than one
+# bound to the same type with the scopes apart - spelled apart too ("-s0"), where the two used to define one symbol twice
+type N struct(v I64) {
+    v
+    next N& = null
+}
+fn link(a mut N&, b N&a) { a.next = b }
+fn copy(a mut N&, b N&) { a.v = b.v }
+fn keep<F>(f F) F { return f }
+fn main() {
+    g := keep(copy)
+    f := keep(link)
+    x mut N& = N(1)
+    f(x, N(5))
+    g(x, N(6))
+    assert x.next.v == 5 and x.v == 6
+}
