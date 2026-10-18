@@ -24,6 +24,13 @@
 ; large arrays costs address space, not memory. The fault is the sanitizer's own report (__olang_san_handler): a
 ; use after a scope closed is a failed check (S18) - a test fails, a program aborts - saying so; any other fault is
 ; left to the action it replaced.
+;
+; A collection's retired array (M19d's "retire()", a Vec's old buffer) is the same, before its scope closes: an array
+; made in a module that retires arrays is given a chunk of its own (__olang_san_alloc_own) - its header on the first
+; page, the array from the second - and retiring it poisons the array and protects its pages (__olang_san_retire),
+; recording them in a ring of their own, so that a view kept across a Vec's growth is reported where it is next read or
+; written. The chunk stays in its scope's list, its header readable, and is quarantined with the rest when the scope
+; closes; the ring forgets it then (or, full, its oldest entry, made readable again).
 declare i32 @mprotect(ptr, i64, i32)
 declare i32 @madvise(ptr, i64, i32)
 ; a quarantined chunk: the chunk, how much of it is protected (0: none, when the system refused or it is not
@@ -39,6 +46,13 @@ declare i32 @madvise(ptr, i64, i32)
 @__olang_san_old = global [@@SIGACTION_BYTES@@ x i8] zeroinitializer
 @__olang_msg_san_mem = unnamed_addr constant [78 x i8] c"use after scope closed: storage a closed scope gave back was read or written\0A\00"
 @__olang_msg_san_ref = unnamed_addr constant [93 x i8] c"use after scope closed: a reference read from storage a closed scope gave back was followed\0A\00"
+@__olang_msg_san_retired = unnamed_addr constant [120 x i8] c"stale view: storage a collection replaced when it grew was read or written, through a view kept from before the growth\0A\00"
+; the retired arrays (__olang_san_retire): each one's pages and how many bytes of them are protected, the next entry to
+; fill, and how many are held
+%olang.sanr = type { ptr, i64 }
+@__olang_san_retired = global [4096 x %olang.sanr] zeroinitializer
+@__olang_san_rnext = global i64 0
+@__olang_san_rcount = global i64 0
 @__olang_msg_san_len = unnamed_addr constant [117 x i8] c"use after scope closed: an allocation of more than 2^60 bytes - a length read from storage a closed scope gave back\0A\00"
 
 ; what a closing scope gives back (__olang_scope_close): each of its chunks into the quarantine
@@ -73,10 +87,178 @@ done:
   ret void
 }
 
+; size bytes of zeros in a chunk of their own, linked into scope (after its head, so the scope never bumps into it) -
+; an array a module that retires arrays makes (cgSizedArrayAlloc). The chunk's header is on its first page and the
+; array starts on the second, page-aligned, so that retiring it can protect the array's pages and nothing else. Its
+; "fresh" word says so (2), and its bump offset is its capacity. Nothing is size 0 here: an empty array is the
+; allocator's as any other
+define noalias ptr @__olang_san_alloc_own(ptr %scope, i64 %size) noinline {
+entry:
+  %empty = icmp eq i64 %size, 0
+  br i1 %empty, label %plain, label %own
+plain:
+  %pp = call ptr @__olang_scope_alloc_zeroed(ptr %scope, i64 %size)
+  ret ptr %pp
+own:
+  %need = add i64 %size, 4032
+  %c = call ptr @__olang_new_chunk(i64 %need)
+  %data = getelementptr i8, ptr %c, i64 4096
+  %freshptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 4
+  %fresh = load i64, ptr %freshptr
+  %clean = icmp ne i64 %fresh, 0
+  br i1 %clean, label %mark, label %clear
+clear:
+  call void @llvm.memset.p0.i64(ptr %data, i8 0, i64 %size, i1 false)
+  br label %mark
+mark:
+  store i64 2, ptr %freshptr
+  %capptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 2
+  %cap = load i64, ptr %capptr
+  %usedptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 1
+  store i64 %cap, ptr %usedptr
+  br label %find
+  ; a stand-in that has been folded forwards to what it stood in for (P2), as __olang_scope_alloc_a follows it
+find:
+  %s = phi ptr [ %scope, %mark ], [ %fwd, %follow ]
+  %headptr = getelementptr %olang.scope, ptr %s, i32 0, i32 0
+  %head = load ptr, ptr %headptr
+  %isfwd = icmp eq ptr %head, @__olang_fwd_chunk
+  br i1 %isfwd, label %follow, label %link
+follow:
+  %fwdptr = getelementptr %olang.scope, ptr %s, i32 0, i32 2
+  %fwd = load ptr, ptr %fwdptr
+  br label %find
+link:
+  %nextptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 0
+  %tailptr = getelementptr %olang.scope, ptr %s, i32 0, i32 2
+  %none = icmp eq ptr %head, null
+  br i1 %none, label %first, label %second
+first:
+  store ptr null, ptr %nextptr
+  store ptr %c, ptr %headptr
+  store ptr %c, ptr %tailptr
+  ret ptr %data
+second:
+  %hnextptr = getelementptr %olang.chunk, ptr %head, i32 0, i32 0
+  %hnext = load ptr, ptr %hnextptr
+  store ptr %hnext, ptr %nextptr
+  store ptr %c, ptr %hnextptr
+  %tail = load ptr, ptr %tailptr
+  %wastail = icmp eq ptr %tail, %head
+  br i1 %wastail, label %newtail, label %done
+newtail:
+  store ptr %c, ptr %tailptr
+  br label %done
+done:
+  ret ptr %data
+}
+
+; M19d: n bytes at p, an array a collection no longer uses - poisoned, and where it has a chunk of its own
+; (__olang_san_alloc_own: p on a page boundary, the chunk's "fresh" word 2) its pages protected and recorded, so that
+; the handler reports a use of them. Its chunk's "fresh" word is 3 from then on and its stamp the ring entry's index
+define void @__olang_san_retire(ptr %p, i64 %n) noinline {
+entry:
+  %none = icmp eq i64 %n, 0
+  br i1 %none, label %out, label %poison
+poison:
+  %whole = and i64 %n, -8
+  call void @__olang_san_poison(ptr %p, i64 %whole)
+  %pi = ptrtoint ptr %p to i64
+  %off = and i64 %pi, 4095
+  %aligned = icmp eq i64 %off, 0
+  br i1 %aligned, label %header, label %out
+header:
+  %c = getelementptr i8, ptr %p, i64 -4096
+  %freshptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 4
+  %fresh = load i64, ptr %freshptr
+  %ownc = icmp eq i64 %fresh, 2
+  %mapptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 3
+  %maplen = load i64, ptr %mapptr
+  %mapped = icmp ugt i64 %maplen, 4096
+  %can = and i1 %ownc, %mapped
+  br i1 %can, label %protect, label %out
+protect:
+  %len = sub i64 %maplen, 4096
+  %r = call i32 @mprotect(ptr %p, i64 %len, i32 0)
+  %ok = icmp eq i32 %r, 0
+  br i1 %ok, label %record, label %out
+record:
+  %l0 = call i32 @pthread_mutex_lock(ptr @__olang_san_lock)
+  %at = load i64, ptr @__olang_san_rnext
+  %e = getelementptr [4096 x %olang.sanr], ptr @__olang_san_retired, i64 0, i64 %at
+  %ep = getelementptr %olang.sanr, ptr %e, i32 0, i32 0
+  %old = load ptr, ptr %ep
+  %elp = getelementptr %olang.sanr, ptr %e, i32 0, i32 1
+  %oldlen = load i64, ptr %elp
+  ; the ring full: its oldest entry forgotten, its pages readable again (still poisoned)
+  %taken = icmp ne ptr %old, null
+  br i1 %taken, label %forget, label %put
+forget:
+  %fr = call i32 @mprotect(ptr %old, i64 %oldlen, i32 3)
+  %cnt0 = load i64, ptr @__olang_san_rcount
+  %cnt1 = sub i64 %cnt0, 1
+  store i64 %cnt1, ptr @__olang_san_rcount
+  br label %put
+put:
+  store ptr %p, ptr %ep
+  store i64 %len, ptr %elp
+  %at1 = add i64 %at, 1
+  %atw = and i64 %at1, 4095
+  store i64 %atw, ptr @__olang_san_rnext
+  %cnt2 = load i64, ptr @__olang_san_rcount
+  %cnt3 = add i64 %cnt2, 1
+  store i64 %cnt3, ptr @__olang_san_rcount
+  store i64 3, ptr %freshptr
+  %stampptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 7
+  store i64 %at, ptr %stampptr
+  %u0 = call i32 @pthread_mutex_unlock(ptr @__olang_san_lock)
+  br label %out
+out:
+  ret void
+}
+
+; a retired chunk's entry, forgotten as its scope closes - its bump offset 0, so that the quarantine poisons nothing of
+; its protected pages - unless the ring forgot it already
+define void @__olang_san_unretire(ptr %c) noinline {
+entry:
+  %usedptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 1
+  store i64 0, ptr %usedptr
+  %freshptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 4
+  store i64 0, ptr %freshptr
+  %stampptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 7
+  %at = load i64, ptr %stampptr
+  %data = getelementptr i8, ptr %c, i64 4096
+  %l0 = call i32 @pthread_mutex_lock(ptr @__olang_san_lock)
+  %e = getelementptr [4096 x %olang.sanr], ptr @__olang_san_retired, i64 0, i64 %at
+  %ep = getelementptr %olang.sanr, ptr %e, i32 0, i32 0
+  %p = load ptr, ptr %ep
+  %mine = icmp eq ptr %p, %data
+  br i1 %mine, label %clear, label %done
+clear:
+  store ptr null, ptr %ep
+  %elp = getelementptr %olang.sanr, ptr %e, i32 0, i32 1
+  store i64 0, ptr %elp
+  %cnt0 = load i64, ptr @__olang_san_rcount
+  %cnt1 = sub i64 %cnt0, 1
+  store i64 %cnt1, ptr @__olang_san_rcount
+  br label %done
+done:
+  %u0 = call i32 @pthread_mutex_unlock(ptr @__olang_san_lock)
+  ret void
+}
+
 ; chunk c, which a closed scope held, poisoned, protected and put in the quarantine - after the oldest have been
 ; taken out until it fits under the bounds (all of them, for a chunk larger than the bound alone)
 define void @__olang_san_quarantine(ptr %c) {
 entry:
+  %rfreshptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 4
+  %rfresh = load i64, ptr %rfreshptr
+  %retired = icmp eq i64 %rfresh, 3
+  br i1 %retired, label %unretire, label %measure
+unretire:
+  call void @__olang_san_unretire(ptr %c)
+  br label %measure
+measure:
   %usedptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 1
   %used = load i64, ptr %usedptr
   %capptr = getelementptr %olang.chunk, ptr %c, i32 0, i32 2
@@ -107,7 +289,7 @@ release:
   %dr = call i32 @madvise(ptr %rest, i64 %restlen, i32 4)
   br label %push
 push:
-  %plen = phi i64 [ 0, %entry ], [ %plen.p, %protect ], [ %plen.p, %release ]
+  %plen = phi i64 [ 0, %measure ], [ %plen.p, %protect ], [ %plen.p, %release ]
   %l0 = call i32 @pthread_mutex_lock(ptr @__olang_san_lock)
   br label %room
 room:
@@ -191,12 +373,15 @@ ok:
 }
 
 ; a use after a scope closed, found: a failed check (S18) - in a test, that test fails; otherwise the process
-; aborts. 1: storage in quarantine was reached, 2: a poisoned reference was followed, 3: a poisoned length
+; aborts. 1: storage in quarantine was reached, 2: a poisoned reference was followed, 3: a poisoned length, 4: a retired
+; array was reached
 define void @__olang_san_report(i32 %kind) {
 entry:
   %is1 = icmp eq i32 %kind, 1
   %is2 = icmp eq i32 %kind, 2
-  %m2 = select i1 %is2, ptr @__olang_msg_san_ref, ptr @__olang_msg_san_len
+  %is4 = icmp eq i32 %kind, 4
+  %m3 = select i1 %is4, ptr @__olang_msg_san_retired, ptr @__olang_msg_san_len
+  %m2 = select i1 %is2, ptr @__olang_msg_san_ref, ptr %m3
   %m = select i1 %is1, ptr @__olang_msg_san_mem, ptr %m2
   call void @__olang_check_failed(ptr %m)
   ret void
@@ -226,9 +411,32 @@ scan:
 next:
   %i1 = add i64 %i, 1
   %more = icmp ult i64 %i1, 16384
-  br i1 %more, label %scan, label %poison
+  br i1 %more, label %scan, label %rscan0
 closed:
   call void @__olang_san_report(i32 1)
+  ret void
+  ; ...or in an array a collection retired
+rscan0:
+  %rtheld = load i64, ptr @__olang_san_rcount
+  %rtany = icmp ne i64 %rtheld, 0
+  br i1 %rtany, label %retscan, label %poison
+retscan:
+  %j = phi i64 [ 0, %rscan0 ], [ %j1, %retnext ]
+  %re = getelementptr [4096 x %olang.sanr], ptr @__olang_san_retired, i64 0, i64 %j
+  %rtpp = getelementptr %olang.sanr, ptr %re, i32 0, i32 0
+  %rtp = load ptr, ptr %rtpp
+  %rtlp = getelementptr %olang.sanr, ptr %re, i32 0, i32 1
+  %rtlen = load i64, ptr %rtlp
+  %rtpi = ptrtoint ptr %rtp to i64
+  %rtoff = sub i64 %a, %rtpi
+  %rtin = icmp ult i64 %rtoff, %rtlen
+  br i1 %rtin, label %stale, label %retnext
+retnext:
+  %j1 = add i64 %j, 1
+  %rtmore = icmp ult i64 %j1, 4096
+  br i1 %rtmore, label %retscan, label %poison
+stale:
+  call void @__olang_san_report(i32 4)
   ret void
 poison:
   %ahi = lshr i64 %a, 32

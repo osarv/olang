@@ -1,6 +1,8 @@
-# check: fail note: this object is reached through a call's result, a borrow of an owned object whose region is not known here
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# round 1 of docs/memory.md: a Vec is a handle, so 'take' no longer moves one - its record stays in the first own
+# object's region, and storing the handle into another region is refused by O25h (O1b for a global, O38 for a borrow)
 # vec7 F2: a Vec taken through a getter giving a borrowed own result (O37) - which region the object is in is not known
-# where the take is checked, so the take is refused (O34)
+# where the is checked, so the is refused (O34)
 import "std/io"
 type Lexer struct() {
     toks Vec<String&> = Vec<String&>()
@@ -23,7 +25,7 @@ fn main() ? {
     for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
     d := Parser()
     d.lx = Lexer()
-    d.lx.toks = take p.Lx().toks
+    d.lx.toks = p.Lx().toks
     p.lx = null
     churn()
     try io.Println(d.lx.toks[0])

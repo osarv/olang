@@ -1,0 +1,19 @@
+# round 1 of docs/memory.md: a view of a Vec kept across a growth the compiler cannot see - through a second name stored
+# in a structure. Built plainly it reads the old elements (memory-safe); built -sanitize the old buffer is unreadable
+# and the read is reported; interpreted, the evaluator stops on it with both places
+import "std/io"
+type Job struct() {
+    items Vec<I64>
+}
+fn add(j mut Job&) { for i in range 100 { j.items.Push(9) } }
+fn report(v Vec<I64>, j mut Job&) I64 {
+    head := v.View()
+    add(j)
+    return head[0]
+}
+fn main() {
+    j := Job()
+    j.items.Push(Run)
+    io.Println($report(j.items, j))!
+}
+Run mut I64 = 5

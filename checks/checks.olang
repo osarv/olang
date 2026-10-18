@@ -32,7 +32,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "bench", "objnames", "remote",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad"
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv"
                      "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr"
-                     "frameenv", "ownleave", "vecalias", "inferfield", "format", "runfile", "output", "words", "testends"]
+                     "frameenv", "ownleave", "vecalias", "vechandle", "inferfield", "format", "runfile", "output", "words", "testends"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -269,6 +269,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "scopesan" { try scopesan(r) }
         case "ownleave" { try ownleave(r) }
         case "vecalias" { try vecalias(r) }
+        case "vechandle" { try vechandle(r) }
         case "inferfield" { try inferfield(r) }
         case "runfile" { try runfile(r) }
         case "output" { try output(r) }
@@ -1042,8 +1043,9 @@ fn typereview(r mut report&) ? Failed {
 }
 
 # vec2 N2: a function made a value through an import alias ("f := lib.F") is checked as one named bare is - G12, T22a,
-# O36, O37 (a borrowed own result is called by name only) and O40 - where it once skipped them all; one error each, and
-# what stays legal through an alias the same built and interpreted
+# O36 and O40 - where it once skipped them all; one error each, and what stays legal through an alias the same built and
+# interpreted. (A Vec's View() is an ordinary borrowed result since Vec is a handle, so a function handing one back is a
+# value like any other.)
 test "a function value through an import alias is checked as one named bare" { assert passed("vecalias") }
 
 fn vecalias(r mut report&) ? Failed {
@@ -1052,13 +1054,41 @@ fn vecalias(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "30 60 7 9\n", "good output", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret good.olang > out.txt 2>&1") == 0 and outOf(dir) == "30 60 7 9\n", "good under -i", dir)
-    try oneError(r, dir, "n2", "error[O37]: 'View2' gives a borrowed own result")
     try oneError(r, dir, "p1", "error[T22a]: 'Stash' relates its arguments' scopes")
     try oneError(r, dir, "p2", "error[O40]: 'Drop' releases owned objects")
     try oneError(r, dir, "p3", "error[G12]: generic function 'Id' is not a value")
     try oneError(r, dir, "p4", "error[O36]: 'Eat' owns a parameter")
-    try oneError(r, dir, "p5", "error[O37]: 'View2' gives a borrowed own result")
-    try oneError(r, dir, "f3", "error[O38]: this value borrows an own object, and is kept where only this function's locals may hold it")
+}
+
+# M19d, B2f, K1 (round 1 of docs/memory.md): a Vec is a handle - copies second names, growth retiring the old buffer - and
+# a program using it gives one output built, built -debug, built -sanitize and interpreted. A view kept across a growth
+# made through a second name stored in a structure reads the old elements when built plainly, is reported by the scope
+# sanitizer (its old buffer made unreadable) -sanitize and -debug -sanitize alike, and stops the evaluator under
+# interpret with both places
+test "a Vec is a handle, built, sanitized and interpreted alike, and a stale view is caught" { assert passed("vechandle") }
+
+fn vechandle(r mut report&) ? Failed {
+    dir := fresh("vechandle")
+    os.Run("cp checks/fixtures/vechandle/* " $os.Quote(dir))
+    try r.expect(sh(dir, "\"$OLANG\" build handle.olang > out.txt 2>&1 && ./build/handle > b.txt") == 0, "handle", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug handle.olang > out.txt 2>&1 && ./build/handle.debug > d.txt") == 0
+                 "handle -debug", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -sanitize handle.olang > out.txt 2>&1 && ./build/handle.san > s.txt") == 0
+                 "handle -sanitize", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret handle.olang > i.txt 2> out.txt") == 0, "handle interpreted", dir)
+    try r.expect(sh(dir, "cmp -s b.txt d.txt && cmp -s b.txt s.txt && cmp -s b.txt i.txt") == 0, "handle outputs differ", dir)
+    try r.expect(sh(dir, "grep -q '^1051 1051 51 539924 -1 999$' b.txt") == 0, "handle output", dir)
+    plain := "\"$OLANG\" build stale.olang > out.txt 2>&1 && ./build/stale > out.txt 2>&1 && grep -qx 5 out.txt"
+    try r.expect(sh(dir, plain) == 0, "stale built plainly: the old element", dir)
+    for flags in String&["-sanitize", "-debug -sanitize"] {
+        bin := "./build/stale" $(".debug" if flags == "-debug -sanitize" else "") ".san"
+        try r.expect(sh(dir, "\"$OLANG\" build " $flags " stale.olang > out.txt 2>&1") == 0, "stale " $flags, dir)
+        try r.expect(sh(dir, $bin " > out.txt 2>&1") == 134 and outOf(dir).Contains("stale view: storage a collection replaced")
+                     "stale " $flags " was not reported", dir)
+    }
+    try r.expect(sh(dir, "\"$OLANG\" interpret stale.olang > out.txt 2>&1") == 1 and
+                 outOf(dir).Contains("stale.olang:12: it uses a view of a Vec's elements taken before the Vec grew") and
+                 outOf(dir).Contains("stale.olang:8: the Vec grew here"), "stale interpreted", dir)
 }
 
 # P4-P4d: tasks that fail - the earliest spawned failure is the join's, a task's clauses run on its thread, defaults land

@@ -1,8 +1,9 @@
 # Memory: one rule, and freeing early as the compiler's optimization
 
-Status: design for review, 2026-10-17. Nothing in it is built yet. The user decided the direction (ledger QAB,
-2026-10-17) and approved building it ("do it"). Section 5.5 is the plan an implementation agent follows, round by
-round. This replaces owned references (`own`, `take`, loans: SPEC §8.8, `docs/own.md`).
+Status: design for review, 2026-10-17. Round 1 (Vec as a handle, section 5.5) is built; the rest is not. The user
+decided the direction (ledger QAB, 2026-10-17) and approved building it ("do it"). Section 5.5 is the plan an
+implementation agent follows, round by round; what each round built and measured is in HISTORY.md. This replaces owned
+references (`own`, `take`, loans: SPEC §8.8, `docs/own.md`).
 
 The user's words, in order:
 - "I want it gone completely somehow and the memory model more streamlined."

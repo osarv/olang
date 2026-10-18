@@ -329,6 +329,7 @@ static bool isPreludeModule(struct semaModule* mod) {
     for (int i = 0; i < preludeModules.len; i++) if (*(struct semaModule**)ListGetIdx(&preludeModules, i) == mod) return true;
     return false;
 }
+bool SemanticIsPreludeModule(struct semaModule* mod) { return isPreludeModule(mod); }
 static struct type* preludeType(struct str name) {
     if (!isPublic(name)) return NULL;
     for (int i = 0; i < preludeModules.len; i++) {
@@ -17676,6 +17677,16 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { Err(mTok, ERR_TAKES_NO_ARGS, mTok); return OperandIntLiteral(mTok); }
         return OperandLen(recvOp, mTok);
     }
+    //M19d: "a.retire()" - a collection in the prelude saying it no longer uses an array (a Vec's old buffer). The
+    //prelude's alone: anywhere else no array has such a method
+    if (recvType.bType == BASETYPE_ARRAY && StrCmp(mName, StrFromCStr("retire")) && isPreludeModule(ctx->mod)) {
+        *reported = true;
+        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { Err(mTok, ERR_TAKES_NO_ARGS, mTok); return OperandIntLiteral(mTok); }
+        ctx->mod->retires = true;
+        struct operand* op = operandNew(mTok, OPERATION_RETIRE, TypeVanilla(BASETYPE_VOID));
+        ListAdd(&op->args, &recvOp);
+        return op;
+    }
     //E33: a float's bit pattern, and a float from one - supplied by the compiler too
     struct type bitsT;
     if (suppliedBitsMethod(recvType, mName, &bitsT)) {
@@ -22637,6 +22648,7 @@ static bool exprCanStandAsStatement(struct operand* op) {
             return false;
         case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
         case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
+        case OPERATION_RETIRE: //M19d: says something of the array, as a statement
             return true;
         default:
             return false;
@@ -28606,8 +28618,9 @@ static struct var* buildConstVar(struct str name) {
 bool SemanticIsBuildConst(struct var* v) { return v && ((buildModule && v->owner == buildModule) || v->buildDefault); }
 
 //where the evaluator stopped, as a note - when that is somewhere else than the error itself
-static void noteWhy(struct token at, struct token whyTok) {
+static void noteWhy(struct token at, struct token whyTok, const char* why) {
     if (whyTok.owner && (whyTok.owner != at.owner || whyTok.lineNr != at.lineNr)) Note(whyTok, NOTE_HERE);
+    if (CtWhyStale(why) && CtStaleGrewAt().owner) Note(CtStaleGrewAt(), NOTE_VEC_GREW_HERE); //M19g: and where it grew
 }
 
 //G21: a constant argument that needed evaluation proper - a call, a global computed by one - computed now that the
@@ -31036,7 +31049,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                 continue;
             }
             Err(r->lit->tok, ERR_LITERAL_CTOR_FAILS, &r->call->type, why);
-            noteWhy(r->lit->tok, whyTok);
+            noteWhy(r->lit->tok, whyTok, why);
         }
         //D13c: each zero value a constructor gives - all zero bits (nothing then runs), something else (the
         //constructor runs, being pure), or none: a declaration of a type without one needs a value
@@ -31076,7 +31089,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             struct token use = r->moved ? zeroUseArgument(r->use, r->call->type, &fix) : r->use;
             Err(use, ERR_NO_ZERO_VALUE, &r->call->type, why);
             if (r->moved) Note(r->tok, NOTE_IN_LIBRARY);
-            noteWhy(r->tok, whyTok);
+            noteWhy(r->tok, whyTok, why);
             if (fix) Note(use, NOTE_ZERO_BY_REFERENCE, fix);
             else if (r->moved) Note(use, NOTE_ZERO_REFERENCE_HAS_ONE, &r->call->type, &r->call->type);
         }
@@ -31105,8 +31118,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                     }
                     if (seen) continue;
                     ListAdd(&abortsAt, &whyTok);
-                    Err(v->tok, ERR_GLOBAL_ABORTS, why);
-                    noteWhy(v->tok, whyTok);
+                    Err(v->tok, CtWhyStale(why) ? ERR_GLOBAL_STALE : ERR_GLOBAL_ABORTS, why);
+                    noteWhy(v->tok, whyTok, why);
                 }
             }
         }
@@ -31120,7 +31133,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             const char* why = NULL;
             if (CtEvaluate(r->op, r->type, &val, &whyTok, &why, NULL)) continue;
             Err(r->op->tok, ERR_DEFAULT_NOT_COMPUTABLE, why);
-            noteWhy(r->op->tok, whyTok);
+            noteWhy(r->op->tok, whyTok, why);
         }
         //S18c: an assert whose condition can be evaluated here is checked here - false is a compile-time
         //error at the assert, true needs no run-time check. Its locals count when they are fixed (S8c).
@@ -31137,8 +31150,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             if (!CtEvaluateIn(r->op, TypeVanilla(BASETYPE_BOOL), &v, &whyTok, &why, NULL,
                               fixedLocalInit, bodyStmts(r->bodyId))) {
                 if (CtWhyAborts(why)) { //K1: evaluating it aborts the program, as it would when the assert runs
-                    Err(r->op->tok, ERR_ASSERT_ABORTS, why);
-                    noteWhy(r->op->tok, whyTok);
+                    Err(r->op->tok, CtWhyStale(why) ? ERR_ASSERT_STALE : ERR_ASSERT_ABORTS, why);
+                    noteWhy(r->op->tok, whyTok, why);
                 }
                 continue;
             }

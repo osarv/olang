@@ -1,4 +1,6 @@
-# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# round 1 of docs/memory.md: a Vec is a handle, so 'take' no longer moves one - its record stays in the first own
+# object's region, and storing the handle into another region is refused by O25h (O1b for a global, O38 for a borrow)
 # Vec phase 2a review R1 (O33): a Vec field of an owned object keeps what its elements refer to in that object's region -
 # moved into another owned object's field, it would outlive the region 'p.lx = null' frees
 import "std/io"
@@ -22,7 +24,7 @@ fn main() ? {
     for i in range 3 { p.lx.toks.Push($i "-word-built-in-the-lexer's-region") }
     d := Parser()
     d.lx = Lexer()
-    d.lx.toks = take p.lx.toks
+    d.lx.toks = p.lx.toks
     p.lx = null
     churn()
     try io.Println(d.lx.toks[0])
