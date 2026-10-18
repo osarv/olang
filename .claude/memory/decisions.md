@@ -382,7 +382,8 @@ design. Do what you want") - nothing to decide until a GUI is written.
   only through its own signature (`fn f() T ? E`; `Result<T, E>` written as a result type is an error naming that form,
   since a function that fails says so with `?`), and `return r` of a kept result in such a function passes its outcome
   through; a `match` on an error value has `case null` for "no error" where null is possible, and `case null` is an error where
-  the value is known not to be null - a catch binding or an error word (the user's refinement). DECIDED (the user's
+  the value is known not to be null - known structurally, never by the evaluator: a catch binding (the user: "have we
+  caught this error to end up here") or an error word written out (the user's refinement). DECIDED (the user's
   proposal; "if you think the two meanings have valid niches then sure, also disallow variable creation with ?"):
   `T ? E` only in function signatures ("this fails"), `Result<T, E>` for values (variables, fields, type
   arguments, and the result of a function that returns an outcome as data without failing); `r := f()?` gives a
