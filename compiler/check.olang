@@ -148,6 +148,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     unfillable Map<I64, Bool>                       # the generic functions G4 says no call can instantiate
+    syntaxMark I64 = -1                             # the diagnostics said before checking began: the syntax errors
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -199,6 +200,7 @@ type atRec struct(Body I64, Site I64, Base typed.Place&, Of types.TypeId) {
 # they ask for in turn
 fn (c mut Checker&) CheckProgram() {
     c.P.AllFns()
+    if c.syntaxMark < 0 { c.syntaxMark = c.P.L.Diags.RecordCount() }
     for {
         c.Attempts++
         mark := c.P.L.Diags.Count()
@@ -1331,7 +1333,7 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     c.cur().Root = root
     if nr {
         if not c.fr().Gapped and not leavesBlock(root) { c.err(c.nameSpan(fd), msgs.NoreturnFallsOff()) }
-    } else if c.P.T.Result(sig) != types.VoidT and not c.fr().Gapped and not leavesBlock(root) {
+    } else if c.P.T.Result(sig) != types.VoidT and not c.fr().Gapped and not leavesBlock(root) and not c.P.L.Diags.ErrorWithin(c.fr().File, I64(fd.Sp.Start), I64(fd.Sp.End), c.syntaxMark) {
         c.err(c.nameSpan(fd), msgs.MissingReturn(c.ty(c.P.T.Result(sig))))
     }
     c.pop()
@@ -2143,7 +2145,7 @@ fn (c mut Checker&) isEnum(t types.TypeId) Bool {
 fn (c mut Checker&) resolve(t ast.TypeRef&) types.TypeId {
     if t == null { return types.UnknownT }
     r := c.P.Resolve(c.fr().Ctx, t)
-    c.writtenMet(t)
+    if not c.writtenMet(t) { return types.UnknownT }   # what was said of it is the one error
     return r
 }
 
@@ -2995,7 +2997,8 @@ fn (c mut Checker&) literal(sp source.Span, kind token.Tok, want types.TypeId) t
     if kind == token.Tok.StrLit { return c.textLit(sp) }
     # L10: an integer literal beyond 64 bits - one fold could not read
     if kind == token.Tok.IntLit {
-        c.err(sp, msgs.IntLiteralTooLarge(msgs.Tok(c.src(sp))))
+        # a separator out of place was the scanner's error (L10b) - the one said
+        if not badSeparator(c.src(sp)) { c.err(sp, msgs.IntLiteralTooLarge(msgs.Tok(c.src(sp)))) }
         return c.unknown(sp)
     }
     if kind == token.Tok.FloatLit {
@@ -5022,6 +5025,20 @@ fn (c mut Checker&) suggest(name String&, withVars Bool) String {
     return best
 }
 
+# whether a number's text has a '_' standing anywhere but between two digits (L10b)
+fn badSeparator(t String&) Bool {
+    for i in range t.Len() {
+        if t[i] != '_' { continue }
+        if i == 0 or i + 1 >= t.Len() { return true }
+        if not t[i - 1].IsDigit() and not isHexDigit(t[i - 1]) { return true }
+        if not t[i + 1].IsDigit() and not isHexDigit(t[i + 1]) { return true }
+        if (i >= 2 and t[i - 1] == 'x' and t[i - 2] == '0') or (i >= 2 and t[i - 1] == 'b' and t[i - 2] == '0') { return true }
+    }
+    return false
+}
+
+fn isHexDigit(c Char) Bool { return (c >= 'a' and c <= 'f') or (c >= 'A' and c <= 'F') }
+
 # T17: an enum with no case of this name - the nearest one suggested
 fn (c mut Checker&) noCase(t types.TypeId, n source.NameId) msgs.Msg {
     name := c.text(n)
@@ -5363,6 +5380,17 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 if args.Len() < 1 or args.Len() > 2 {
                     c.err(sp, msgs.ArgCountRange(1, 2, args.Len()))
                     return c.unknown(sp)
+                }
+                match targs[0] {
+                    case ast.TypeRef.Perm(psp, of, w, _) {
+                        if w and not c.refWritten(of) {
+                            # T25b: "mut" is a reference's permission
+                            c.err(source.Span(psp.Start, psp.Start + 3), msgs.MutOnValueType(c.ty(c.P.Resolve(c.fr().Ctx, of))))
+                            for a in args { c.expr(a, types.UnknownT) }
+                            return c.unknown(sp)
+                        }
+                    }
+                    nomatch { }
                 }
                 return c.arrayMake(sp, c.resolve(targs[0]), args, want)
             }
@@ -6062,6 +6090,11 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             if p == null { p = typed.Place.Temp(x.Span(), rt, rx, c.site(typed.SiteKind.Temp, x.Span())) }
             fp := c.field(sp, nsp, p, n)
             if fp != null { return c.callValue(sp, nsp, c.read(sp, fp), args) }
+        }
+        if c.isNamed(dt) and c.declKind(dt) == types.DeclKind.Trait {
+            # a trait as a value's type was said where it is written (T30)
+            for a in args { c.expr(a, types.UnknownT) }
+            return c.unknown(sp)
         }
         if supplied(name) and name != "Eq" {
             c.gap(nsp, "a method the compiler supplies (E10b, E11c)")
@@ -8164,6 +8197,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         return null
     }
     atm := c.roleMethod(dt, "At", 1)
+    if atm < 0 and f.Tried { atm = c.roleMethod(dt, "CheckedAt", 1) }   # S9e: under try, the checked form walks
     lm := c.roleMethod(dt, "Len", 0)
     if atm >= 0 and c.P.T.Items(c.P.T.Errors(c.P.Sig(atm))).Len() > 0 { c.fr().LoopFails++ }
     if atm >= 0 and lm >= 0 {

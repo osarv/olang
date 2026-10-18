@@ -222,6 +222,22 @@ fn (d mut Diagnostics&) ContextBase(from I64) I64 {
 
 fn (d Diagnostics&) ContextDepth() I64 { return d.contexts.Len() }
 
+fn (d Diagnostics&) RecordCount() I64 { return d.records.Len() }
+
+# whether an error was reported inside [from, to) of a file - a body a syntax error was found in, whose rest the
+# checker reads as recovered
+fn (d Diagnostics&) ErrorWithin(file I64, from I64, to I64, upto I64) Bool {
+    for i in range upto {
+        if i >= d.records.Len() { break }
+        r := d.records[i]
+        match r.at {
+            case Where.Span(f, s, _) { if f == file and s >= from and s < to { return true } }
+            nomatch { }
+        }
+    }
+    return false
+}
+
 # the innermost open context in the program's own files, when at is in the library: the use of the library's code at
 # was met for. -1 when there is none
 fn (d Diagnostics&) programUse(at Where) I64 {
