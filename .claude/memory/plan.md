@@ -77,6 +77,11 @@ overrated".
   builds and runs programs, `make emitdiff` 929/1009 tests as stage 0 (shared.olang's differences: destructors (M6),
   compile-time decisions (M8), check gaps; PROGRESS.md in /home/user/wt/emit has the rest). Running: wt-scope6 (M6),
   wt-eval (M8 on lowered MIR).
+- 2026-10-18 22:00 CEST: wt-scope6 merged and verified (M6 round 1): compiler/scope.olang fills typed.Plan, lower places
+  by it (lowerdump as clean as the stand-in); `make scopediff`: 277/300 accepted programs scope clean, but 147 of 279
+  section-8 fail cases get no error (E11c/O12 34, E31b 29, O17 18, C2d 11, P2/D16e 11, O10c 8 ...) - round 2's work,
+  with per-instance bindings (O23a/O13c) for the 96 over-rejection rows. Emitter must allocate a non-Frame Home for a
+  local the scope pass stores in a scope variable (O26a) - emitdump still lowers with the stand-in.
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
   self-hosting (stage 0 too): the open STAGE-0 BUG FIXES (wt-noown - own/take removed, memory round 3 - merged
