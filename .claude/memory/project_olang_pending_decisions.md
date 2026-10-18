@@ -365,11 +365,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
 - QAI REVISED 2026-10-18 (the user: "we never check function calls with checked, not even as try", "Checked only ever
-  operates on operators"; my reading that try=calls/checked=operators incl. user operators was rejected: "No, this is
-  not cleaner"). ASKED, current reading: `try` handles everything declared fallible as written (calls, and user
-  operators whose methods declare errors); `checked` only adds the checks of built-in operators (overflow, division,
-  shifts, conversions, as, indexes, slices) and covers nothing else - not calls, not user operators, not their errors.
-  Awaiting confirmation.
+  operates on operators", then "make checked overload a function ... fn checked Plus ... is the one we call with
+  checked. This would then require Plus to exist without checked or else it's an error"). PROPOSED (recommended,
+  awaiting OK): `try` handles what fails as written (calls, user operators whose plain method declares errors);
+  `checked` handles operators only: built-in ones gain their checks, and a user operator calls its checked overload
+  `fn (a Money) checked Plus(b Money) Money ? E` - written as a modifier on the method, replacing the CheckedPlus names;
+  only operator methods (not Eq, Str, Len, Call); its plain form must exist (else an error) and its errors are a
+  superset of the plain one's; checked At/Slice/SetAt still derived from Len when not declared; with no checked
+  overload, `checked` calls the plain method as written. Calls are never checked.
 - QAI DECIDED 2026-10-18 (the user: "This is all good"): `checked` binds to its operand (one index/slice/conversion or a
   parenthesized expression - every built-in operation in it), never into calls or function values; the Checked forms
   and the superset rule go (a user type's operators check themselves; `checked x[i]` on At+Len types keeps the derived
