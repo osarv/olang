@@ -19784,6 +19784,140 @@ region term for all of a place's values would let `b.next = a`, both read from o
 `a`; fixed by a region term per read and no region term outliving another or itself (a collection whose values refer
 to each other is then never freed early). Stale SPEC text listed for round 3 (O11's index clause, O17b's try-default,
 S13b vs O4b, the section 8.8 leftovers).
+
+## Vec as a handle: round 1 of docs/memory.md (M19d, B2f, K1, 2026-10-17)
+
+The user decided the direction (ledger QAB: "I want it gone completely somehow and the memory model more streamlined";
+on Vec: "Vec is basically a normal array hidden behind an access gate. The error we get when vec moves is a correctness
+bug not a memory bug") and approved building `docs/memory.md` in advance. Round 1 makes `Vec` a handle and leaves `own`
+in place (round 3 removes it); the view rule M19g is round 2.
+
+**The handle.** `type Vec<T> struct(cap I64 = 0) { s mut vecState<T>& = vecState<T>(cap) }`, the record holding the
+buffer, the count and the room asked for. A copy is a second name, as for List and Map: `b := a`, a by-value argument, a
+field, a capture and a task's argument all name one Vec. `vec.olang` has no `own` and no `take`; `Clone()` is
+`PushAll` of the view into a new one, `ToArray()` an array filled from the first element.
+
+**Growth retires the old buffer.** `room(need, fill)` makes a buffer of twice the size (8 first, or what was asked
+for), copies the elements, points the record at it and calls `old.retire()`. Decided (mine): the new buffer is filled
+with the element being stored, not zero-filled, as List's chunks are - `Array<T>(r)` needed a zero value, and a Vec of
+Vecs (whose zero value holds a reference) hit D13c's "a fill would share" error at the first `Vec<Vec<I64>>`. With the
+fill, `Vec<Vec<T>>`, `Vec<List<T>>` and any T without a zero value work. So the buffer is made at the first Push, and
+`Vec<T>(cap)` and `Reserve` on an empty Vec only remember the room (`want`), which `Cap()` reports. The old buffer stays
+in the Vec's scope until it closes - stage 0 never frees early - so the buffers growth leaves add up to less than the
+last one.
+
+**Walking.** `RunFrom` and `VecIter` went: `for x in v` walks by `At` and `Len` (S9d, since a Vec now has no `Next`
+or `Iter` of its own), reading the Vec each step, so a work list pushing onto the Vec it walks sees what it pushed.
+`v.Iter()` is `Indexable`'s default, an `IndexIter`. Measured: the walk vectorizes exactly as an array's (below).
+
+**`a.retire()`, the prelude's own (M19d).** An operation on arrays (`OPERATION_RETIRE`) built only where the calling
+module is one of the prelude's; elsewhere an array simply has no such method (`error[M19]: Array<I64> has no method
+'retire'`) - it is no part of the language. In codegen it is nothing; the optimized IR of a program not built with
+`-sanitize` is unchanged by it.
+
+**Under `-sanitize` (B2f).** A retired array is poisoned and, where it has a chunk of its own, made unreadable, so a
+stale view is reported where it is next read or written: `stale view: storage a collection replaced when it grew was
+read or written, through a view kept from before the growth`, a failed check (134 outside a test). Decided (mine): an
+array made in a module that calls `retire()` anywhere (`semaModule.retires`, only `vec.olang` now) comes, under
+`-sanitize` only, from `__olang_san_alloc_own` - a chunk of its own from `__olang_new_chunk`, its header on the first
+page and the array page-aligned from the second, linked after the scope's head chunk with its bump offset full so
+nothing else lands in it, its `fresh` word 2. `__olang_san_retire(p, bytes)` poisons, and for such a chunk protects
+the array's pages (`PROT_NONE`) and records them in a ring of 4,096 retired ranges the SIGSEGV handler scans (report
+kind 4); the chunk's `fresh` word becomes 3 and its stamp the ring index. The header page stays readable, so the
+scope's close walks its list as ever; `__olang_san_quarantine` sees `fresh == 3`, forgets the ring entry
+(`__olang_san_unretire`) and sets the bump offset to 0, so it poisons nothing in the protected pages before it
+protects the whole mapping. A full ring makes its oldest range readable again (still poisoned). The other choice -
+every array allocation its own chunk under `-sanitize` - would map a chunk for every small array a loop makes.
+
+**The evaluator (K1).** `ctVal.retiredAt` marks a retired array node with where the program grew it: the innermost
+running call written outside the prelude, from a stack of call sites the evaluator now keeps (`ctProgramCallSite`) -
+so the place named is the program's `Push`, not `vec.olang`'s line. A read or write through it, or through a slice of it
+(`viewOf`), stops the evaluation (`ctStaleUse` at indexing, slicing, `==` and rendering) with `CT_WHY_STALE`. Decided
+(mine): that is in the abort class (`CtWhyAborts`), so where a value is required it is a compile-time error -
+`error[S18c, K1]: evaluated while compiling, this assertion stops on a stale view` / `error[K2, K1]: ... this global's
+initializer ...` (two new messages, since "aborts the program" would be false: the run time reads the old elements) -
+with a note at the read and `the Vec grew here, after the view was taken; take the view after the growth, or copy the
+elements first: 'v.ToArray()'`; under `interpret` the program stops with both lines. A copy of a node (`ctCopy`) is not
+retired.
+
+**Tests, checks.** `std/prelude/tests/vec.olang` rewritten for the handle - second names, Clone, a by-value argument
+pushed to, Vec as a type argument of List, Map and Vec, a capture, two tasks filling one each, a for-in that pushes -
+each read back after a churn, the K2 and S18c tests kept; 22 pass built, `-debug`, `-sanitize` and `-debug -sanitize`.
+Checks: `retire01assert`/`retire02global` (the must-fail evaluator stops) and `retire03outside`; the `vechandle`
+scenario builds one program four ways (built, `-debug`, `-sanitize`, interpreted) and compares the outputs, and a stale
+view through a second name stored in a structure reads `5` built plainly, is reported `-sanitize` and `-debug
+-sanitize`, and stops `interpret` naming lines 12 and 8. Of the 160 `vec*` cases: 64 fail cases whose programs now
+compile were deleted (59 compile as written; vec08, vec89, vec105, vec133 and vec134 compile once their `take` of a
+Vec is dropped); 14 fail cases moving a Vec between own regions with `take` were adapted - with the handle, storing the
+Vec into another region's field is refused by O25h (O1b for a global, O38 for a getter's borrow), which is also the
+soundness check that a handle's record living in one region never reaches another while `own` exists; vec98's
+expectation names the `Lexer`; run cases vec144, vec146 and vec156 were adapted (second names, a Clone) and vec142 and
+vec151 deleted - they were own's same-path moves of a Vec, and their handle versions are refused by own's region rules
+(O25h/O10c), which round 3 removes. The vecalias scenario lost n2, p5 and f3 (a Vec's View is no borrowed own result).
+
+**For round 2 (M19g).** The deleted cases that were view-across-growth shapes are its candidate must-fail cases: a view
+across a Push (vec01), a copy pushed to (vec03, vec90, vec91), a view lent to a callee growing the same Vec (vec04,
+vec05), a view handed back through a function (vec06, vec104, vec13, vec14, vec19), an iterator across a Push (vec09 -
+legal now: the iterator reads the Vec each step), a field's Vec viewed then grown through the struct (vec88, vec92,
+vec103), through a global (vec97, vec126, vec127), a lambda or task holding a view (vec94, vec96), and the vecalias n2
+and f3 fixtures (through a function value and a spawn target). Today all of these compile and read the old elements.
+
+**Measured (callgrind, `-target x86-64-v3`, the loops alone: passes 10 less passes 0, 1M elements; whole push and sort
+runs less a run of one element).** Against today's own Vec (61739c9) and an Array:
+
+| row | new Vec | own Vec | Array | List | C | budget |
+|---|---|---|---|---|---|---|
+| walk, `for x in v` x10 | 6.9M | 6.9M | 6.9M | 6.9M | 6.9M | met: vectorized, as an Array's |
+| gather, `v[idx[i]]` 10M | 417.5M | 417.5M | 417.5M | 891.9M | 245.6M | met: level with an Array |
+| store, `v[i] = v[i] * 2 + p` x10 | 200.0M | 190.0M | 180.0M | 780.0M | 11.9M | missed: +11% (budget 3%) |
+| two fields, `s.pos[i] += s.vel[i]` x10 | 320.0M | 300.0M | 190.0M | - | 9.4M | missed: +68% (budget 5%) |
+| push, 1M | 53.3M | 86.4M | - | 53.2M | 14.5M | met: 38% fewer than today's |
+| opaque call x10 | 250.0M | 240.0M | 240.0M | - | 90.0M | none |
+| Sort with a lambda, 1M | 1181.5M | 1188.6M | 1160.6M | - | 560.6M | met |
+
+50M pushes (with the 400MB array of values pushed from): peak 1.83 GB for the new Vec and for today's (equal, as
+`docs/memory.md` predicted - the pool kept today's freed buffers anyway), 1.31 GB for a List; 1.37-1.66 s against
+1.53-1.64 s.
+
+**Findings, not fixed here.** (1) The store and two-field misses: the load of the handle's reference (`v.s`) is
+untagged (T36 tags no reference), so it may alias every element store and is reloaded each iteration - section 4.2's
+reference tags, decided there and not part of round 1. (2) Found reading the optimized IR of the store loop: a block
+scope opened per iteration of the loop body survives optimization when the body calls a method taking a hidden scope
+argument (`SetAt`): the inlined `__olang_scope_close` passes the header to calls it cannot see (`__olang_scope_fold_parts`,
+a destructor), so the header counts as captured, an element store may alias it, and each iteration zeroes and closes
+it - about 15 instructions an element, on Vec's and List's stores (List's store row, 78 an element). A TBAA tag of
+its own on the runtime's scope-header accesses would let the element stores past them; a codegen/runtime change for
+its own round. (3) An Array's own store loop through a reference parameter is not vectorized (18 an element against
+C's 1.2), Vec or not.
+
+**Found on the way.** The scope-fuzzer's own-mode Vec shapes
+still run clean at the seeds `checks` uses (the refused ones are left out, the accepted ones now run as handles).
+
+**After master's `Chunks` (2026-10-18).** A Vec gets no `Chunks` of its own: `v.ViewMut().Chunks(n)` already gives the
+pieces, and a second spelling would hide the window on the current buffer that `View` exists to make visible (a piece
+kept across a growth is a stale view like any other). A prelude test cuts a Vec's view into pieces written by a task
+each, built and under -debug -sanitize.
+
+## A literal reaching a constrained variable takes a type its constraint allows (G9a, G19, T35c, 2026-10-18; the user: "math.Sqrt(4) should not be an error")
+
+`math.Sqrt(4)` (`fn Sqrt<T Float>(x T) T`) bound `T` to `I64`, the integer literal's own type (T6a), and then failed the
+`Float` constraint at the call - an error for what any reader means as the square root of four. The decided rule: a
+variable that only numeric literals (or literal-only expressions, E4a, or conditionals of them) reach is bound to the
+widest of their types as before; when that type fails the variable's constraint, it is bound instead to the first type
+of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8, U8` that meets the constraint and that every one of those
+literals adapts to by T6. The order (mine) is widest first, a float before an integer of its width - so a constraint a
+float meets takes `F64`, the float literal's own type, and one only an integer meets takes `I64` (or `U64` for a literal
+above `I64`'s range). With none, the binding stays and G19's error is said as before (`whole(2.5)`, a float literal never
+adapting to an integer). Nothing a typed argument binds changes: `math.Sqrt(n)` with `n I64` is still G19's error - no
+implicit integer-to-float conversion. Since only the prelude declares methods on built-in types (M19d), the candidates
+that can matter are the prelude's numeric traits and whatever a program's own trait asks of the built-in method set.
+Built in both compilers: stage 0's `literalTypeForConstraint` beside G9a's widest-literal step in `OperandFuncCall`, the
+port's `Checker.literalBinding` after the argument pass, over `Program.MeetsBound`. The evaluator needed nothing: it
+sees the instance at `F64`, so `NtSqrtBaked := math.Sqrt(4)` bakes and `assert math.Sqrt(4) == 2.0` is decided while
+compiling (S18c) beside the same at run time. `checks/cases/numtraitsqrtint` became the typed-variable case, and
+`numtraitsqrtlit` runs the literal ones (`Sqrt(4)`, `Sqrt(2 + 2)`, `Pow(2, 10)`, `Abs(-3)` still `I64`). A character literal
+chooses nothing (it is a `Char`, T29h): `ncNext('a')` against `Integer` stays G19's error - the full verify's
+`numtraitchar` case caught the first version, which adapted `'a'` to `I64`.
 ## Port M7: lowering, `compiler/lower.olang` (2026-10-18, first round)
 
 `compiler/lower.olang` makes a MIR function (`compiler/mir.olang`, DESIGN.md 1.8.1) of each typed body the checker

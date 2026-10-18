@@ -1,2 +1,0 @@
-import Vl "vlib"
-fn Nothing() I64 { return 1 }

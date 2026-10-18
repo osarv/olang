@@ -1,4 +1,6 @@
-# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# check: fail error[O1b]: a global holds only what lives as long as the program
+# round 1 of docs/memory.md: a Vec is a handle, so 'take' no longer moves one - its record stays in the first own
+# object's region, and storing the handle into another region is refused by O25h (O1b for a global, O38 for a borrow)
 # R1: between two globals' owned objects
 import "std/io"
 type Lex3 struct() {
@@ -21,7 +23,7 @@ fn main() ? {
     GH.lx = Lex3()
     GG.lx = Lex3()
     for i in range 3 { GH.lx.toks.Push($i "-built-into-gh-region") }
-    GG.lx.toks = take GH.lx.toks
+    GG.lx.toks = GH.lx.toks
     GH.lx = null
     churn()
     try io.Println(GG.lx.toks[0])

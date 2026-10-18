@@ -2165,6 +2165,18 @@ fn (p mut Program&) sameUpToShape(a types.TypeId, c types.TypeId) Bool {
 # a variable's binding checked against its constraint, where it is bound (G19): whether it is met
 fn (p mut Program&) BoundMet(owner I64, args types.ListId) Bool { return p.FirstUnmet(owner, args).Var < 0 }
 
+# whether owner's variable i bound to t meets its constraint, the others as in args (G9a: what a literal may bind)
+fn (p mut Program&) MeetsBound(owner I64, i I64, args types.ListId, t types.TypeId) Bool {
+    row := p.VarAt(owner, i)
+    if row.Bound == types.UnknownT { return true }
+    xs := p.T.Items(args)
+    ys := Array<types.TypeId>(xs.Len())
+    for j in range xs.Len() { ys[j] = t if j == i else xs[j] }
+    bound := p.Subst(row.Bound, owner, p.T.List(ys))
+    if not p.T.Closed(bound) { return true }
+    return p.Missing(t, bound).Var < 0
+}
+
 # the first variable of owner whose binding in args fails its constraint, with every variable in the constraint
 # substituted (G19); a binding or a constraint still holding a variable is a pattern, checked where it is applied
 fn (p mut Program&) FirstUnmet(owner I64, args types.ListId) Unmet {

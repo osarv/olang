@@ -55,6 +55,8 @@ overrated".
 - SMALL, after the errors and syntax batches land (they edit SPEC.md): SPEC §5's section numbers are broken - no 5.6, two
   5.11s and two 5.12s - and ~50 `§5.x` references (SPEC.md, bootstrap/syntax.h) must be checked one by one for which
   section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
+- QUEUED (QAH, 2026-10-18): error-set parameters `<T ? E>` in both compilers - spec first (G-rules, R1b), inference,
+  Iterator<T ? E>, std helpers taking fallible callbacks, checks; after wt-mathmeth and wt-mem2 merge.
 - DONE 2026-10-18 (9a831b2): the syntax batch (QY/QW, 9b78375), the number traits (T35c), Pair to std/pair, E13c (a
   number literal is no receiver), `a.Chunks(ChunkSize)` for race-free fan-out.
 - QUEUED (QZ2, the user 2026-10-17): after memory round 1 (Vec as a handle - replaces Vec phase 2b), the iterator
@@ -69,6 +71,10 @@ overrated".
   shapes without Rust's global exclusivity (P3 withdrawn, done properly on ownership). Neither imports the rest of
   Rust: no `&mut` exclusivity, lifetime parameters, Send/Sync, Rc/RefCell, Pin, unsafe. Likely first small borrow from
   Rust when code needs it: two-phase borrows (`v.Push(v.Len())`).
+- RECORDED 2026-10-18 (the user: "Record it then"): relax the LEND rule (docs/scope-model.md 3.3 - SPEC O17 fixes the
+  binding by the value's kind; the model shows choosing whichever binding is sound accepts slightly more safe programs).
+  Order decided: first the port's M6 matches stage 0 exactly (stage 0 is its oracle), then the relaxation in BOTH
+  compilers as a language change with its own soundness review - sooner if real code hits a refused-but-safe case.
 - Then runtime interfaces back as `any Trait&` (decided 2026-10-08, see the ledger; for GUI widgets eventually).
 - Pacing and safety: one agent at a time early in a week; snapshots (wipsnap.sh) and backup pushes (QM yes); kill only
   your own processes by PID.

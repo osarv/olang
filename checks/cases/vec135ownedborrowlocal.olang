@@ -1,4 +1,6 @@
-# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# round 1 of docs/memory.md: a Vec is a handle, so 'take' no longer moves one - its record stays in the first own
+# object's region, and storing the handle into another region is refused by O25h (O1b for a global, O38 for a borrow)
 # R1: through a borrow local 'q := p.lx'
 import "std/io"
 type Lexer struct() {
@@ -22,7 +24,7 @@ fn main() ? {
     d := Parser()
     d.lx = Lexer()
     q := p.lx
-    d.lx.toks = take q.toks
+    d.lx.toks = q.toks
     p.lx = null
     churn()
     try io.Println(d.lx.toks[0])

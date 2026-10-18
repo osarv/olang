@@ -514,6 +514,41 @@ four vectors and k n <= 65536 (`computedDirectly`). Through the real `Gemm`, bef
 in one process): 64 x 32 x 64 10.3-10.5 -> 4.75-4.8 (attention's), 64^3 19.7 -> 8.2-8.4, 32^3 5.45 -> 1.66, 64 x 8 x 5
 2.9-3.1 -> 1.0, F64 64 x 32 x 64 14.5-15.0 -> 11.0; 8^3 and 8 x 64 x 64 unchanged.
 
+## Vec as a handle (`vec.olang`, round 1 of docs/memory.md, 2026-10-17)
+
+`vec.olang MODE KIND N PASSES` runs one row of `docs/memory.md` section 4.6 over a `Vec`, an `Array` or a `List`;
+`c/vec.c` computes the same over arrays (`run.olang`'s "Vec:" and "Array:" rows). Instructions from callgrind at
+`-target x86-64-v3` (valgrind cannot run AVX-512), the loop alone - the run at PASSES 10 less the run at 0, 1M
+elements - against today's own Vec (a build at 61739c9, the commit before round 1):
+
+| row | new Vec | own Vec | Array | List | C | budget |
+|---|---|---|---|---|---|---|
+| walk, `for x in v` x10 | 6.9M | 6.9M | 6.9M | 6.9M | 6.9M | met: vectorized as an Array's |
+| gather, `v[idx[i]]` 10M | 417.5M | 417.5M | 417.5M | 891.9M | 245.6M | met: level with an Array |
+| store, `v[i] = v[i] * 2 + p` x10 | 200.0M | 190.0M | 180.0M | 780.0M | 11.9M | missed: +11% (3%) |
+| two fields, `s.pos[i] += s.vel[i]` x10 | 320.0M | 300.0M | 190.0M | - | 9.4M | missed: +68% (5%) |
+| push, 1M (less a run of 1) | 53.3M | 86.4M | - | 53.2M | 14.5M | met: 38% fewer |
+| opaque call x10 | 250.0M | 240.0M | 240.0M | - | 90.0M | none |
+| Sort with a lambda, 1M | 1181.5M | 1188.6M | 1160.6M | - | 560.6M | met |
+
+50M pushes (with a 400MB array of the values pushed): peak **1.83 GB for the new Vec and for the own Vec** (the
+pool kept the own Vec's freed buffers anyway, as docs/memory.md 2.7 measured), 1.31 GB for a List. Times on the shared
+machine, interleaved by hand: new Vec 1.37-1.97 s, own Vec 1.53-1.88 s, List 1.00-1.25 s; one `run.olang` pass (load
+2-3) put the new Vec at 3.8 s, an outlier the hand runs did not repeat. `run.olang -r 5`, medians in seconds, olang/C:
+walk 0.054/0.041 (Array 0.044/0.046), gather 0.244/0.162 (Array 0.233/0.168), store 0.208/0.041 (Array 0.207/0.043), two
+fields 0.346/0.081 (Array 0.240/0.094), opaque call 0.280/0.150 (Array 0.294/0.161), Sort 0.230/0.156 (Array
+0.254/0.170).
+
+The two misses, and what the store loop's optimized IR shows:
+- **The handle's reference is untagged.** T36 tags no reference, so the load of `v.s` may alias every element store and
+  is reloaded each iteration - section 4.2's reference tags (decided there, not part of round 1) are what lets it hoist.
+- **A block scope per iteration survives** when the loop body calls a method with a hidden scope argument (`SetAt`):
+  the inlined `__olang_scope_close` passes the header to calls it cannot see, so it counts as captured, an element store
+  may alias it, and each iteration zeroes and closes it - about 15 instructions an element on a Vec's and a List's
+  stores (the List's row: 78 an element). A tag of its own on the runtime's scope-header accesses would let element
+  stores past them.
+- An Array's own store loop through a reference parameter is not vectorized either (18 against C's 1.2 an element).
+
 ## Machine
 
 Intel Xeon @ 2.80GHz (Cascade Lake class, family 6 model 85, AVX-512), 4 vCPUs in a Firecracker VM, 33 MB L3;

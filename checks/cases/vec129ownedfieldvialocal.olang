@@ -1,4 +1,6 @@
-# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# round 1 of docs/memory.md: a Vec is a handle, so 'take' no longer moves one - its record stays in the first own
+# object's region, and storing the handle into another region is refused by O25h (O1b for a global, O38 for a borrow)
 # R1: taken out into a local - the region outlives nothing, so the words cannot leave it
 import "std/io"
 type Lex3 struct() {
@@ -21,8 +23,8 @@ fn main() ? {
     h.lx = Lex3()
     g.lx = Lex3()
     for i in range 3 { h.lx.toks.Push($i "-built-into-h-region") }
-    m := take h.lx.toks
-    g.lx.toks = take m
+    m := h.lx.toks
+    g.lx.toks = m
     h.lx = null
     churn()
     try io.Println(g.lx.toks[0])

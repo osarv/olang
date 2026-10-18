@@ -329,6 +329,7 @@ static bool isPreludeModule(struct semaModule* mod) {
     for (int i = 0; i < preludeModules.len; i++) if (*(struct semaModule**)ListGetIdx(&preludeModules, i) == mod) return true;
     return false;
 }
+bool SemanticIsPreludeModule(struct semaModule* mod) { return isPreludeModule(mod); }
 static struct type* preludeType(struct str name) {
     if (!isPublic(name)) return NULL;
     for (int i = 0; i < preludeModules.len; i++) {
@@ -13477,6 +13478,46 @@ static void unifyLambdaWritten(struct operand* arg, struct type paramT, struct l
         if (TypeUnify(want, wt, &trial)) *bindings = trial;
     }
 }
+//G9a/G19: whether binding `name` to `t` meets every constraint the generic puts on it - a constraint still naming an
+//unbound variable is left to checkTypeConstraints, as there
+static bool literalBindingMeetsConstraints(struct var* func, struct str name, struct type t, struct list* bindings) {
+    struct list tmp = ListInit(sizeof(struct typeBinding));
+    for (int i = 0; i < bindings->len; i++) ListAdd(&tmp, ListGetIdx(bindings, i));
+    struct typeBinding nb = { name, t };
+    ListAdd(&tmp, &nb);
+    for (int i = 0; i < func->type.typeConstraints.len; i++) {
+        struct type* c = ListGetIdx(&func->type.typeConstraints, i);
+        if (!StrCmp(c->name, name) || !c->varConstraint) continue;
+        struct type want = TypeSubstitute(*c->varConstraint, &tmp);
+        if (TypeIsGeneric(want)) continue;
+        if (!TypeSatisfiesConstraint(t, want, NULL)) return false;
+    }
+    return true;
+}
+//G9a: a variable only numeric literals reach is bound to the widest of their own types - unless that type fails the
+//variable's constraint (G19), when it is bound to the first type, widest first and a float before an integer of its
+//width, that meets the constraint and that every one of those literals adapts to (T6): "math.Sqrt(4)" is Sqrt at F64.
+//Only number literals choose so - a character literal is a Char (T29h), and "ncNext('a')" stays G19's error. None
+//meeting both, the widest stays, and the constraint's error is said at the call as ever.
+static struct type literalTypeForConstraint(struct var* func, struct str name, struct type widest, struct list args,
+                                            struct list* bindings) {
+    if (literalBindingMeetsConstraints(func, name, widest, bindings)) return widest;
+    static const enum baseType order[] = { BASETYPE_FLOAT64, BASETYPE_INT64, BASETYPE_U64, BASETYPE_FLOAT32, BASETYPE_INT32,
+        BASETYPE_U32, BASETYPE_F16, BASETYPE_BF16, BASETYPE_I16, BASETYPE_U16, BASETYPE_I8, BASETYPE_BYTE };
+    for (size_t k = 0; k < sizeof order / sizeof *order; k++) {
+        struct type cand = TypeVanilla(order[k]);
+        bool fits = true;
+        for (int i = 0; fits && i < args.len; i++) {
+            struct operand* arg = *(struct operand**)ListGetIdx(&args, i);
+            struct type pt = (*(struct var*)ListGetIdx(&func->type.vars, i)).type;
+            if (!(operandNumericLiteralLike(arg) && pt.bType == BASETYPE_TYPEVAR && StrCmp(pt.name, name))) continue;
+            if (arg->type.owner) return widest; //a character literal is a Char (T29h), never a number to adapt
+            fits = operandCondOfLiterals(arg) ? condOfLiteralsWouldFit(arg, cand) : literalLikeWouldFit(arg, cand);
+        }
+        if (fits && literalBindingMeetsConstraints(func, name, cand, bindings)) return cand;
+    }
+    return widest;
+}
 static void copyOldBorrows(struct checkCtx* ctx, struct var* func, struct list args, bool keepsAll);
 struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct list args, struct token tok,
                                 struct list scopeArgNodes) {
@@ -13572,6 +13613,7 @@ struct operand* OperandFuncCall(struct checkCtx* ctx, struct var* func, struct l
                     widest = other->type;
                 }
             }
+            widest = literalTypeForConstraint(func, paramT.name, widest, args, &bindings);
             TypeUnify(paramT, widest, &bindings);
         }
         //G19/G9c: a variable named only in a constraint is bound through it as soon as the variable it constrains is -
@@ -17675,6 +17717,16 @@ struct operand* buildMethodCall(struct checkCtx* ctx, struct operand* recvOp, st
         *reported = true;
         if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { Err(mTok, ERR_TAKES_NO_ARGS, mTok); return OperandIntLiteral(mTok); }
         return OperandLen(recvOp, mTok);
+    }
+    //M19d: "a.retire()" - a collection in the prelude saying it no longer uses an array (a Vec's old buffer). The
+    //prelude's alone: anywhere else no array has such a method
+    if (recvType.bType == BASETYPE_ARRAY && StrCmp(mName, StrFromCStr("retire")) && isPreludeModule(ctx->mod)) {
+        *reported = true;
+        if (prebuiltMethodArgs ? prebuiltMethodArgs->len != 0 : allPartsOfType(argsNode, SNTX_EXPR).len != 0) { Err(mTok, ERR_TAKES_NO_ARGS, mTok); return OperandIntLiteral(mTok); }
+        ctx->mod->retires = true;
+        struct operand* op = operandNew(mTok, OPERATION_RETIRE, TypeVanilla(BASETYPE_VOID));
+        ListAdd(&op->args, &recvOp);
+        return op;
     }
     //E33: a float's bit pattern, and a float from one - supplied by the compiler too
     struct type bitsT;
@@ -22637,6 +22689,7 @@ static bool exprCanStandAsStatement(struct operand* op) {
             return false;
         case OPERATION_ATOMIC_STORE: case OPERATION_ATOMIC_ADD:
         case OPERATION_ATOMIC_SWAP: case OPERATION_ATOMIC_CAS:
+        case OPERATION_RETIRE: //M19d: says something of the array, as a statement
             return true;
         default:
             return false;
@@ -28606,8 +28659,9 @@ static struct var* buildConstVar(struct str name) {
 bool SemanticIsBuildConst(struct var* v) { return v && ((buildModule && v->owner == buildModule) || v->buildDefault); }
 
 //where the evaluator stopped, as a note - when that is somewhere else than the error itself
-static void noteWhy(struct token at, struct token whyTok) {
+static void noteWhy(struct token at, struct token whyTok, const char* why) {
     if (whyTok.owner && (whyTok.owner != at.owner || whyTok.lineNr != at.lineNr)) Note(whyTok, NOTE_HERE);
+    if (CtWhyStale(why) && CtStaleGrewAt().owner) Note(CtStaleGrewAt(), NOTE_VEC_GREW_HERE); //M19g: and where it grew
 }
 
 //G21: a constant argument that needed evaluation proper - a call, a global computed by one - computed now that the
@@ -31036,7 +31090,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                 continue;
             }
             Err(r->lit->tok, ERR_LITERAL_CTOR_FAILS, &r->call->type, why);
-            noteWhy(r->lit->tok, whyTok);
+            noteWhy(r->lit->tok, whyTok, why);
         }
         //D13c: each zero value a constructor gives - all zero bits (nothing then runs), something else (the
         //constructor runs, being pure), or none: a declaration of a type without one needs a value
@@ -31076,7 +31130,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             struct token use = r->moved ? zeroUseArgument(r->use, r->call->type, &fix) : r->use;
             Err(use, ERR_NO_ZERO_VALUE, &r->call->type, why);
             if (r->moved) Note(r->tok, NOTE_IN_LIBRARY);
-            noteWhy(r->tok, whyTok);
+            noteWhy(r->tok, whyTok, why);
             if (fix) Note(use, NOTE_ZERO_BY_REFERENCE, fix);
             else if (r->moved) Note(use, NOTE_ZERO_REFERENCE_HAS_ONE, &r->call->type, &r->call->type);
         }
@@ -31105,8 +31159,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
                     }
                     if (seen) continue;
                     ListAdd(&abortsAt, &whyTok);
-                    Err(v->tok, ERR_GLOBAL_ABORTS, why);
-                    noteWhy(v->tok, whyTok);
+                    Err(v->tok, CtWhyStale(why) ? ERR_GLOBAL_STALE : ERR_GLOBAL_ABORTS, why);
+                    noteWhy(v->tok, whyTok, why);
                 }
             }
         }
@@ -31120,7 +31174,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             const char* why = NULL;
             if (CtEvaluate(r->op, r->type, &val, &whyTok, &why, NULL)) continue;
             Err(r->op->tok, ERR_DEFAULT_NOT_COMPUTABLE, why);
-            noteWhy(r->op->tok, whyTok);
+            noteWhy(r->op->tok, whyTok, why);
         }
         //S18c: an assert whose condition can be evaluated here is checked here - false is a compile-time
         //error at the assert, true needs no run-time check. Its locals count when they are fixed (S8c).
@@ -31137,8 +31191,8 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
             if (!CtEvaluateIn(r->op, TypeVanilla(BASETYPE_BOOL), &v, &whyTok, &why, NULL,
                               fixedLocalInit, bodyStmts(r->bodyId))) {
                 if (CtWhyAborts(why)) { //K1: evaluating it aborts the program, as it would when the assert runs
-                    Err(r->op->tok, ERR_ASSERT_ABORTS, why);
-                    noteWhy(r->op->tok, whyTok);
+                    Err(r->op->tok, CtWhyStale(why) ? ERR_ASSERT_STALE : ERR_ASSERT_ABORTS, why);
+                    noteWhy(r->op->tok, whyTok, why);
                 }
                 continue;
             }

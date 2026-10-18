@@ -1,4 +1,6 @@
-# check: fail error[O34]: the owner refers to what lives shorter than the slot it is moved into
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# round 1 of docs/memory.md: a Vec is a handle, so 'take' no longer moves one - its record stays in the first own
+# object's region, and storing the handle into another region is refused by O25h (O1b for a global, O38 for a borrow)
 # Vec phase 2a review vec7 F1: 'q' was read through a reference local repointed before the move - two reads by one
 # variable's name are not one object, so moving into 'q.more' from 'p.lx.toks' is checked as between two regions
 import "std/io"
@@ -26,7 +28,7 @@ fn main() ? {
     p mut Parser& = a
     q := p.lx
     p = b
-    q.more = take p.lx.toks
+    q.more = p.lx.toks
     b.lx = null
     churn()
     try io.Println(a.lx.more[0])

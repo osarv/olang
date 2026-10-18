@@ -1,4 +1,6 @@
-# check: fail note: this object is reached through a call's result, a borrow of an owned object whose region is not known here
+# check: fail error[O25h]: this value holds references into a scope the target outlives
+# round 1 of docs/memory.md: a Vec is a handle, so 'take' no longer moves one - its record stays in the first own
+# object's region, and storing the handle into another region is refused by O25h (O1b for a global, O38 for a borrow)
 # vec7 F2 through a local assigned the getter's result after the take, on a later turn of the loop - what a variable may
 # hold is read off the whole of its function
 import "std/io"
@@ -26,7 +28,7 @@ fn main() ? {
     d.lx = Lexer()
     q mut Lexer& = Lexer()
     for k in range 2 {
-        d.lx.toks = take q.toks
+        d.lx.toks = q.toks
         q = p.Lx()
     }
     p.lx = null

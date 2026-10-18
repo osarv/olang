@@ -415,8 +415,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the
   join; a closure that may build into a captured scope asks for its thread's part of it (`__olang_capture_scope`);
   reading closures pay nothing.
-- **Recorded limits:** long-lived mutated structures only grow (ledger QF, addressed by `own`); a value
-  `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the port's §8 pass.
+- **Recorded limits:** long-lived mutated structures only grow (ledger QF; `docs/memory.md`'s early freeing, round
+  6); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
+  port's §8 pass.
 - **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
   each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result
   bindings; a by-value parameter's references returned are an obligation; destructors register once per constructor
@@ -441,12 +442,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   function's locals; keeping it elsewhere is an error naming `Clone()`.
 - **Owning parameters and results, own arrays, owner value places (O31-O37).** A parameter or result written `own`; an
   own array holds a buffer in its region; a struct holding an owner by value is owning, its copies borrowed copies (`b
-  := v`, QJ1), `take v` moves; owner value places include fields and globals (Vec phase 2a). A borrowed own result
-  (`View() Array<T>&v`) is called by name only.
-- **`Vec<T>` is the default growable array (QH, the user's call; it had been abandoned 2026-09 for `List` because a
-  bump allocator could not free a grown buffer - `own` made that safe).** An owning value over an own buffer, growth
-  handing the old buffer over; walking and indexing at array speed. `List` stays where stable addresses earn it. Not
-  yet: Vec as a type argument, in tasks or lambdas (phase 2b).
+  := v`, QJ1), `take v` moves; owner value places include fields and globals. A borrowed own result (`First() T&p`
+  of an own field) is called by name only. (`Vec` was built on these and is a handle now, M19d.)
 - Removed: `Region<T>`/`With` (decision 51, redirected by the user into `own`).
 - **The rest of §8.8.** Releases are refused while a loan is live (O39), through calls by a release effect and a
   borrow effect read off bodies; callbacks, destructors, `Str`/`Eq`/`Hash` and spawned calls release nothing (O40/O41
@@ -542,8 +539,21 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Split`, `Trim`, `Replace`, `ParseInt(base)`, `ParseFloat`, `PadStart`, `Lines`, `<` by bytes.
 - **Collections in the prelude:** `List<T>` (chunked, never moves, a handle - a copy is a second name, `Clone()`
   copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Update`, ordered walks by
-  insertion of slot), `Vec<T>` (above), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators have `Any All Count Fold Map Filter
+  insertion of slot), `Vec<T>` (below), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators have `Any All Count Fold Map Filter
   ToList`.
+- **`Vec<T>` is the default growable array, and a handle (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
+  QAB, approved in advance).** Its record (buffer and count) is made where it is constructed; a copy is a second name,
+  `Clone()` a Vec of its own; it is a type argument, field, global, capture or task argument like any value. Growth
+  doubles (8 first), fills the new buffer with the element being stored (so no zero value is needed), and retires the
+  old buffer, which stays where the Vec lives until that scope closes - so a view taken before a growth reads the old
+  elements, never freed memory. `View()` is the one way to have the elements as an array (`ViewMut()` writable - so `v.ViewMut().Chunks(n)` is how tasks split a Vec, with no Vec `Chunks` of its own). `for x in v` walks by `At`
+  and `Len` (S9d), seeing what the body pushes; `RunFrom` and `VecIter` went (`v.Iter()` is `Indexable`'s). `a.retire()`
+  (prelude-only, no method elsewhere) is nothing at run time but under `-sanitize`, where an array made in a module
+  that retires has a chunk of its own and retiring poisons and protects it (`stale view: ...`, B2f); the evaluator marks
+  the node and stops on a later read or write with both places - the use and the program's growing call (K1: an error
+  where a value is required, a stop under `interpret`). The view rule M19g (an error where the compiler sees the same
+  Vec on both sides) is round 2. Vec had been abandoned in 2026-09 for `List` (a bump allocator could not free a grown
+  buffer), then built on `own` (QH), and is now neither.
 - **Printing (M19f, 2026-10-17, the user's decision):** one pathway, `std/io`: `io.Print`, `io.Println(t = "")`,
   `io.PrintErr`, `io.PrintErrln` fail with `IoError` and are written with `try`; no std function ends the program on
   its own. The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
@@ -614,6 +624,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   case for them. Stage 0 and the port both enforce it; the error is `G19, T31` "... is sealed". Used by std/math's float
   functions (`<T Float>`), std/stats (`<T Number>`), linalg's FastExp/FastTanh/FastSigmoid (`<T Float>`, F16/BF16 now
   through F32); Abs/Min/Max/Clamp and the Matrix operations stay open (Less types, F8 elements).
+- **A literal reaching a constrained variable takes a type its constraint allows (G9a, G19, T35c, 2026-10-18, the
+  user: "math.Sqrt(4) should not be an error").** A variable only numeric literals reach is bound to the widest of their
+  types unless that fails its constraint; then to the first of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8,
+  U8` (my order: widest first, a float before an integer of its width) that meets it and that every literal adapts to
+  (T6) - `math.Sqrt(4)` is `Sqrt` at `F64`; none fitting, G19's error stays (`whole(2.5)`). A typed argument binds its
+  own type: `math.Sqrt(n)` with `n I64` stays an error (no implicit integer-to-float). Both compilers; the evaluator
+  sees the bound type.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

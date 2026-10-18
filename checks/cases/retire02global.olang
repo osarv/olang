@@ -1,0 +1,17 @@
+# check: fail error[K2, K1]: evaluated while compiling, this global's initializer stops on a stale view
+# also: note: the Vec grew here, after the view was taken
+# round 1 of docs/memory.md (K1, K2): a global whose initializer reads a Vec's elements through a view taken before a
+# Push grew it - a value is required, so the stale read is an error, at the global
+import "std/io"
+fn stale(n I64) I64 {
+    v := Vec<I64>()
+    v.Push(n)
+    d := v.View()
+    w := v
+    for i in range 20 { w.Push(i) }
+    return d[0]
+}
+G I64 = stale(4)
+fn main() {
+    io.Println($G)!
+}

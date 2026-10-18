@@ -1,6 +1,6 @@
 # check: run
-# Vec phase 1: an element of a Vec of text or of nodes refers outside the buffer (an own array's elements live where the
-# Vec does), so it is kept across growth and across the Vec being given another buffer
+# Vec phase 1: an element of a Vec of text or of nodes refers outside the buffer (its referent lives where the Vec
+# does), so it is kept across growth and across the Vec being given another buffer
 import "std/io"
 type N struct(v I64) { v }
 fn main() ? {

@@ -1,9 +1,0 @@
-import "vlib"
-import "std/io"
-fn main() ? {
-    v := Vec<I64>()
-    v.Push(1)
-    f := (vlib.View2)
-    d := f(v)
-    try io.Println($d[0])
-}

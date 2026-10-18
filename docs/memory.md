@@ -1,8 +1,9 @@
 # Memory: one rule, and freeing early as the compiler's optimization
 
-Status: design for review, 2026-10-17. Nothing in it is built yet. The user decided the direction (ledger QAB,
-2026-10-17) and approved building it ("do it"). Section 5.5 is the plan an implementation agent follows, round by
-round. This replaces owned references (`own`, `take`, loans: SPEC §8.8, `docs/own.md`).
+Status: design for review, 2026-10-17. Round 1 (Vec as a handle, section 5.5) is built; the rest is not. The user
+decided the direction (ledger QAB, 2026-10-17) and approved building it ("do it"). Section 5.5 is the plan an
+implementation agent follows, round by round; what each round built and measured is in HISTORY.md. This replaces owned
+references (`own`, `take`, loans: SPEC §8.8, `docs/own.md`).
 
 The user's words, in order:
 - "I want it gone completely somehow and the memory model more streamlined."
@@ -809,6 +810,15 @@ removed. For nothing of the backstop to stay behind, its registration node lives
 unlinked from its scope's list when disarmed (the list becomes doubly linked). Without it, a long-lived structure that
 should not grow holds its resources by descriptor (`I32`, as `std/os` does today) or in types without a destructor.
 
+**What the server of 2.7 needs.** Its `Conn` holds `fd I64`, a plain number, so early freeing works for it as written.
+A `Conn` holding a std resource type instead (a socket object with a destructor) would keep every connection's storage
+for as long as the server lives, closed or not. So disarming is a dependency of early freeing for servers, not an
+extra:
+- with it (ledger QAD 2, recommended yes; the user has not answered yet), `c.Close()` then the removal frees the
+  connection;
+- without it, a server that should stay flat holds descriptors, and std's resource types do not compose with early
+  freeing in long-lived structures.
+
 ### 5.3 What each use of `own` becomes
 
 | today | after |
@@ -886,7 +896,9 @@ sequential, because they all edit `bootstrap/semantic.c` and SPEC.
 - **errmsg**: the O30-O42, T25e and E34 entries go.
 - **SPEC**: §8.8, T25e, E34, every *(§8.8, not yet implemented)* clause, the keywords, the grammar, §8's title and
   opening, O8c's last sentence, the Map paragraph's own values; O8c revised and O8d and O15's sentence added (1.1),
-  O8d marked *(not yet implemented)*.
+  O8d marked *(not yet implemented)*. The other edits of `docs/scope-model.md` 9.1 item 9 land here too, S13b's
+  included: a binding read out of a by-value enum parameter is built into where that parameter's scope variable says
+  (O4b), not "nothing is built into" it. It is the one place the scope model departs from SPEC's letter.
 - **Records**: PRINCIPLES.md's "Deliberately not" line; CLAUDE.md's opening paragraph, "Ownership (§8.8)" removed and
   "Memory and scopes" given the O8d entry and the Vec entry; HISTORY.md's entry; `docs/own.md`'s status line;
   `docs/README.md`.
@@ -917,6 +929,26 @@ sequential, because they all edit `bootstrap/semantic.c` and SPEC.
 **Round 6 - early freeing, in the port (M6, M7, M9).**
 - The analysis of section 2 (M6), lowering (M7), the runtime of 3.4, the report (B14), the three oracles of 3.6, and
   4.6's `mremap` row.
+- **The gate.** Early freeing is unsafe in one way only: a place wrongly proved sole while a reference into its region
+  escapes. Everything else it gets wrong only keeps memory. So the round is held to three things before any
+  measurement:
+  1. **No reached program reads a freed region.** The evaluator's dead-region mode, `-sanitize` and the early-free
+     fuzzer (3.6) run over the corpus, std, checks and the fuzzer's programs, and find nothing.
+  2. **Every relaxation is reviewed.** The first version keeps wherever 2.6 says. Each step past that gets a soundness
+     review before it merges, as each `own` relaxation did.
+  3. **Always keep where a fact is missing.** A fact not computed, not converged, or not known for a body (a function
+     value, an `extern`, a cycle not yet settled) means keep. Keeping is the default answer, not an afterthought.
+- **Two reachability notions 2.3 does not list.** The analysis needs both. Each has a structural, conservative default,
+  as 2.6 item 5 has for callbacks:
+  1. **Which construction-site collections a parameter may reach.** It decides whether a call may let go of, or grow,
+     a place the caller holds a view of (2.5, and the hidden alias of 4.4's `report`/`Job`). Default: a parameter
+     reaches every construction site whose collection type is reachable from the parameter's type through fields,
+     elements, payloads and references. A global reaches the sites reachable from its type. A body not known reaches
+     every site reachable from what it is given. Only a site not reachable this way is distinct.
+  2. **Which construction-site collections a task may reach** (condition 3). Default: every site reachable, by the
+     same type walk, from the task's arguments, captures, the function values held in what it is handed, its clauses
+     and targets, and from every global. All of them are kept.
+  Precision past these defaults is a relaxation, under the gate above.
 - **Accept when**:
   - 2.7's five programs that replace in long-lived places (server, frames, Map, text field, tree), as checks under
     `ulimit -v`, stay under 8 MB each - the frames one in its one-line-fixed form, or as written if pins were chosen;
@@ -925,6 +957,25 @@ sequential, because they all edit `bootstrap/semantic.c` and SPEC.
   - their blocked variants produce exactly the report rows shown in 2.7;
   - the evaluator's dead-region mode, `-sanitize` and the early-free fuzzer find nothing;
   - `bench/` within 2% of round 5's times outside the rows that allocate into regions.
+
+**Round 7 - `x.Destroy()`, decided by the user 2026-10-18 (replaces disarming, ledger QAD).**
+- **Rule:** `x.Destroy()` runs the destructor of `x`'s object now and marks it run, so nothing runs for it when its
+  scope closes: every destructor runs exactly once, at its scope's close or at a proven `Destroy()`. It compiles only
+  where the compiler proves `x` is the sole way left to reach the object - the early-free proof of section 2 (no
+  reference to it stored anywhere else, no view of it live, and no call it was passed to that may have kept it - a
+  callee storing it in a field, a global or a collection, returning something holding it, or passing it on to one that
+  may, read off the callee's body as section 2's may-keep summaries; a body that cannot be seen (a function value, an
+  `extern`) is taken to have kept it); otherwise it is an error naming what else reaches it. A
+  use of `x` after it in the same function is an error. So early destruction never causes a use-after-free or a
+  use-after-close. With no destructor pending, the object's storage may be freed early (section 2).
+- **No `Close`, no idempotent destructors:** the destructor is the close. std's resource types lose `Close`.
+- **Stage 0:** a simple local version - `x` a local initialized straight from a `Take` or a constructor call, never
+  stored, passed, captured or viewed. **The port:** the full analysis, in M6.
+- **Fallback, documented:** a long-lived structure whose values cannot be proven sole is rebuilt periodically - a block
+  inside the server loop, left every N requests, so its scope closes and every destructor runs once.
+- **Accept when:** a server holding std sockets in a `Map` stays flat (as 2.7's server) with `Destroy()` after `Take`;
+  must-fail cases for a second reference (another map, a field, a capture), a call that may have stored it (and one
+  through a function value), a use after `Destroy()`, and a view held; a run case for a call that provably keeps nothing.
 
 ## 6. Risks, decisions, questions
 
@@ -942,7 +993,9 @@ sequential, because they all edit `bootstrap/semantic.c` and SPEC.
    memory.
 5. **Freed storage is reused, not returned.** The pool keeps it (O8b). A program whose peak is one big growth does not
    get its peak back (2.7); `mremap` growth answers that for large Vec buffers only.
-6. **Destructor-holding values** in long-lived structures keep growing unless question 2 is answered yes.
+6. **Destructor-holding values** in long-lived structures keep growing unless question 2 is answered yes. This is
+   a dependency for the server use case, not a refinement: a `Conn` holding a std socket object frees nothing early
+   without it (5.2). Ledger QAD 2, unanswered.
 7. **Threads.** Servers that share structures with tasks get no early freeing from this first version.
 
 ### 6.2 Decided here
@@ -978,4 +1031,5 @@ These are details within the user's direction. They are recorded so the user can
    removed (5.2)? It would be a compiler-supplied method callable only in the type's own module (spelled `x.Disarm()`,
    say). It keeps destructor timing independent of the analysis: whether the destructor runs depends only on whether
    the program closed the object. **Recommended: yes.** Without it, a long-lived structure holding std's resources
-   grows with every resource it ever held.
+   grows with every resource it ever held, and the server of 2.7 frees early only while its `Conn` holds a
+   descriptor number (5.2).
