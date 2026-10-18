@@ -19915,4 +19915,6 @@ Built in both compilers: stage 0's `literalTypeForConstraint` beside G9a's wides
 port's `Checker.literalBinding` after the argument pass, over `Program.MeetsBound`. The evaluator needed nothing: it
 sees the instance at `F64`, so `NtSqrtBaked := math.Sqrt(4)` bakes and `assert math.Sqrt(4) == 2.0` is decided while
 compiling (S18c) beside the same at run time. `checks/cases/numtraitsqrtint` became the typed-variable case, and
-`numtraitsqrtlit` runs the literal ones (`Sqrt(4)`, `Sqrt(2 + 2)`, `Pow(2, 10)`, `Abs(-3)` still `I64`).
+`numtraitsqrtlit` runs the literal ones (`Sqrt(4)`, `Sqrt(2 + 2)`, `Pow(2, 10)`, `Abs(-3)` still `I64`). A character literal
+chooses nothing (it is a `Char`, T29h): `ncNext('a')` against `Integer` stays G19's error - the full verify's
+`numtraitchar` case caught the first version, which adapted `'a'` to `I64`.
