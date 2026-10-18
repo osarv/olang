@@ -8,7 +8,7 @@
 # Without, the program's main runs with ARGS, its globals set first (B5a): the status 0 for its return, 1 for an error
 # leaving it ("unhandled error"), what it asked for with os.Exit, 134 for a failed check or undefined behaviour - the
 # stop's "FILE:LINE: text" on standard error. On standard error too, the check's errors when there are any, and
-# "unlowered WHAT" for each function a run reached that did not lower.
+# "unlowered WHAT" for each function a run reached that did not lower, and "gap PLACE WHAT" for what stopped it.
 
 import "std/os"
 import "std/io"
@@ -79,5 +79,6 @@ fn run(args Array<String&>&) I32 {
     }
     status := x.RunTests(d) if testBuild else x.RunMain(d)
     for key in x.Unlowered { try io.PrintErrln("unlowered " $key) catch io.IoError { } }
+    for g in x.Lw.Gaps { try io.PrintErrln("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.IoError { } }
     return status
 }

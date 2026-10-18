@@ -8415,11 +8415,13 @@ fn (c mut Checker&) elseHolds(s ast.Stmt&) Bool {
     }
 }
 
-# whether a plain else was dropped: the build took the then. An else-if's branch is dropped as well where its own
-# condition is decided false after a running one, so it says nothing about the then
+# whether the whole else chain was dropped: the build took the then. One else-if's branch is dropped as well where its
+# own condition is decided false after a running one, so only every branch of the chain dropped says the then was
 fn (c mut Checker&) elseDropped(s ast.Stmt&) Bool {
     match s {
-        case ast.Stmt.If(_, e) { return e.Cond == null and e.Then.Group >= 0 and c.P.L.Diags.IsDropped(e.Then.Group) }
+        case ast.Stmt.If(_, e) {
+            return e.Then.Group >= 0 and c.P.L.Diags.IsDropped(e.Then.Group) and (e.Else == null or c.elseDropped(e.Else))
+        }
         nomatch { return false }
     }
 }
