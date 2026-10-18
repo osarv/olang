@@ -335,6 +335,14 @@ fn (c mut Checker&) fnTypeParams(f I64) {
     if fd.TypeParams != null {
         for tp in fd.TypeParams {
             if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
+            # G19: a variable written after a type that is no trait, used as a type - its "constraint" constrains nothing
+            if tp.Ty != null and not c.traitRef(mi, tp.Ty) and c.typeUseIn(fd, tp.Name) {
+                c.err(tp.Ty.Span(), msgs.ConstraintNotTrait(c.src(tp.Ty.Span())))
+            }
+            # T30: a variable constrained by a trait, used as a constant - a trait is no value's type
+            if tp.Ty != null and c.traitRef(mi, tp.Ty) and c.constUseIn(fd, tp.Name) {
+                c.err(tp.Ty.Span(), msgs.TraitNotAType(c.src(tp.Ty.Span())))
+            }
         }
     }
     owner := generic.FnOwner(f)
@@ -379,6 +387,46 @@ fn (c mut Checker&) constUseIn(fd ast.Func&, n source.NameId) Bool {
         }
     }
     return false
+}
+
+# whether a written type names a trait
+fn (c mut Checker&) traitRef(mi I64, t ast.TypeRef&) Bool {
+    match t {
+        case ast.TypeRef.Named(nsp, _, _) {
+            ref := c.P.R.Use(c.P.L.Mods[mi].File, nsp.Start)
+            if ref.Kind != names.What.Type or ref.Index < 0 { return ref.Kind != names.What.Builtin }
+            return c.P.T.DeclKindOf(c.P.DeclFor(ref.Module, ref.Index)) == types.DeclKind.Trait
+        }
+        nomatch { return false }
+    }
+}
+
+# whether a signature writes a variable where a type goes
+fn (c mut Checker&) typeUseIn(fd ast.Func&, n source.NameId) Bool {
+    for prm in fd.S.Params {
+        if c.typeUse(prm.Ty, n) { return true }
+    }
+    if fd.Recv != null and c.typeUse(fd.Recv.Ty, n) { return true }
+    if fd.S.Results != null {
+        for r in fd.S.Results {
+            if c.typeUse(r, n) { return true }
+        }
+    }
+    return false
+}
+
+fn (c mut Checker&) typeUse(t ast.TypeRef&, n source.NameId) Bool {
+    if t == null { return false }
+    match t {
+        case ast.TypeRef.Named(_, path, args) {
+            if path.Len() == 1 and path[0] == n and args.Len() == 0 { return true }
+            if path.Len() == 1 and c.text(path[0]) == "Array" and args.Len() > 0 { return c.typeUse(args[0], n) }
+            return false
+        }
+        case ast.TypeRef.Ref(_, of, _) { return c.typeUse(of, n) }
+        case ast.TypeRef.Perm(_, of, _, _) { return c.typeUse(of, n) }
+        nomatch { return false }
+    }
 }
 
 fn (c mut Checker&) constUse(t ast.TypeRef&, n source.NameId) Bool {
@@ -2886,6 +2934,11 @@ fn (c mut Checker&) expr(x ast.Expr&, want types.TypeId) typed.Expr&c {
         case ast.Expr.Join(sp, parts) { return c.join(sp, parts) }
         case ast.Expr.Try(sp, y, clauses, isChecked) { return c.tryExpr(sp, y, clauses, isChecked, want) }
         case ast.Expr.Postfix(sp, op, y) if op == token.Tok.Bang { return c.bang(sp, y, want) }
+        case ast.Expr.Postfix(sp, op, y) {
+            # S3a: an increment stands alone
+            c.err(c.opAfter(y.Span(), 2), msgs.IncdecInExpression("'" $op.Text() "'"))
+            return c.unknown(sp)
+        }
         case ast.Expr.Is(sp, a, b, negated) { return c.identity(sp, a, b, negated) }
         case ast.Expr.As(sp, a, tr) { return c.asCase(sp, a, tr) }
         case ast.Expr.IsType(sp, a, tr, negated) {
@@ -2996,6 +3049,8 @@ fn (c mut Checker&) adapter(sp source.Span, x typed.Expr&c, want types.TypeId) t
     if hp.Len() != wp.Len() + 1 { return null }
     for i in range wp.Len() {
         if not c.P.T.Same(c.deref(hp[i + 1]), c.deref(wp[i])) { return null }
+        # T22: Call writing a parameter the function type passes read-only does not fit
+        if c.writable(hp[i + 1]) and c.isRef(wp[i]) and not c.writable(wp[i]) { return null }
     }
     if not c.P.T.Same(c.deref(c.P.T.Result(sig)), c.deref(c.P.T.Result(want))) { return null }
     id := c.fnBody(inst)
@@ -3131,6 +3186,11 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
         return c.unknown(sp)
     }
     shift := op == token.Tok.Shl or op == token.Tok.Shr
+    # E8a, E4a: a literal shifted by a literal past its own type's width, with nothing adapting it to compute it exactly
+    if shift and want == types.UnknownT and numberLitsOnly(a) and lb.Ok and not lb.IsFloat and not lb.Big and (lb.I < 0 or lb.I >= 64) {
+        c.err(b.Span(), msgs.ShiftUnadapted())
+        return c.unknown(sp)
+    }
     if not la.Ok and not lb.Ok and (c.litLike(a) != c.litLike(b)) {
         if c.litLike(b) {
             x0 := c.value(c.expr(a, types.UnknownT), a.Span())
@@ -3738,7 +3798,7 @@ fn (c mut Checker&) uncovered(big types.ListId, e types.TypeId) types.TypeId {
 
 # x as Array<T, N>& (E32b): a view of an array of a run-time length as one of N, its length checked once - aborting,
 # or under try failing with BuiltinError.OUT_OF_BOUNDS; null where the target is no such view
-fn (c mut Checker&) asView(sp source.Span, x typed.Expr&c, tr ast.TypeRef&) typed.Expr&c {
+fn (c mut Checker&) asView(sp source.Span, x typed.Expr&c, tr ast.TypeRef&, asp source.Span) typed.Expr&c {
     want := c.resolve(tr)
     if not c.isRef(want) { return null }
     at := c.deref(want)
@@ -3746,6 +3806,13 @@ fn (c mut Checker&) asView(sp source.Span, x typed.Expr&c, tr ast.TypeRef&) type
     xt := typeOf(x)
     xu := c.under(c.deref(xt))
     if c.P.T.KindOf(xu) != types.Kind.Array or not c.sameRepr(c.P.T.Elem(xu), c.P.T.Elem(at)) { return null }
+    # E32b: a fixed array viewed at another fixed length
+    lx := c.P.T.Length(xu)
+    la := c.P.T.Length(at)
+    if c.fr().Checks == 0 and c.P.T.KindOf(lx) == types.Kind.Const and c.P.T.KindOf(la) == types.Kind.Const and c.P.T.ConstValue(lx) != c.P.T.ConstValue(la) {
+        c.err(asp, msgs.AsArrayLength(c.P.T.ConstValue(lx), c.P.T.ConstValue(la)))
+        return c.unknown(sp)
+    }
     p := readPlace(x)
     perm := types.Writable
     if c.isRef(xt) {
@@ -3777,7 +3844,13 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     # a reference marker on a case reads the same payload (E32: the case is what is asked)
     named := tr
     match tr {
-        case ast.TypeRef.Ref(_, of, _) {
+        case ast.TypeRef.Ref(rsp, of, sc) {
+            if c.isEnum(et) and sc != source.NameId(0) {
+                # E32: "&mask" after the case is a reference marker's scope name, never the operator
+                nl := c.text(sc).Len()
+                c.err(source.Span(rsp.End - I32(nl), rsp.End), msgs.IsAsMarker(c.text(sc), "as", c.text(sc)))
+                return c.unknown(sp)
+            }
             if c.isEnum(et) { named = of }
         }
         nomatch { }
@@ -3797,7 +3870,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     }
     if k < 0 {
         if xt == types.UnknownT { return c.unknown(sp) }
-        v := c.asView(sp, x, tr)
+        v := c.asView(sp, x, tr, c.between(a.Span(), tr.Span(), 2))
         if v != null { return v }
         c.gap(sp, "'as' of this kind (E32)")
         return c.unknown(sp)
@@ -4985,6 +5058,22 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
             }
             if args.Len() == 0 { return true }
             for a in args {
+                # G11: a type argument's reference marker is bare - its references live in the container
+                match a {
+                    case ast.TypeRef.Ref(rsp, _, sc) {
+                        if sc != source.NameId(0) {
+                            if path.Len() == 1 and c.text(path[0]) == "Array" {
+                                # T24: an element's reference lives where the array does
+                                nl := c.text(sc).Len()
+                                c.err(source.Span(rsp.End - I32(nl), rsp.End), msgs.NamedScopeOnElement())
+                            } else {
+                                c.err(a.Span(), msgs.TypeArgNamedScope())
+                            }
+                            return false
+                        }
+                    }
+                    nomatch { }
+                }
                 if not c.writtenMet(a) { return false }
             }
             rt := c.P.Resolve(c.fr().Ctx, tr)
@@ -5230,7 +5319,8 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
     for i in range nv {
         v := b.Vals[i]
         if v == types.UnknownT {
-            c.gap(nsp, "a generic type's constructor whose variables its arguments do not bind (G10c)")
+            tn := c.text(c.P.T.DeclName(d))
+            c.err(nsp, msgs.CtorTypeArgsNotInferable(tn, tn))
             return c.unknown(sp)
         }
         if c.isRef(v) {
@@ -5398,7 +5488,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     }
     for i in range nv {
         if b.Vals[i] == types.UnknownT {
-            c.gap(nsp, "a generic call whose variables need more than its arguments' types (G9)")
+            c.err(nsp, msgs.TypeArgsNotInferable(c.text(c.P.FnDecl(f).Name)))
             return c.unknown(sp)
         }
     }
@@ -5705,10 +5795,37 @@ fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want 
     inner.Ctx = c.P.FnContext(f, iargs)
     inner.Block = fr.Block
     x := c.exprTo(fd.S.Params[i].Dflt, want)
+    c.defaultReads(x)
     file := c.fr().File
     c.pop()
     if file != here { return typed.Expr.Away(sp, file, x) }
     return x
+}
+
+# D8a: a default is computed while compiling - a mutable global it reads has the running program's value (said once,
+# at the global's name in the declaration)
+fn (c mut Checker&) defaultReads(x typed.Expr&) {
+    if x == null { return }
+    match x {
+        case typed.Expr.Read(rsp, _, p, _) {
+            match p {
+                case typed.Place.Global(_, _, mi, n) {
+                    v := c.P.GlobalDecl(mi, n)
+                    if v != null and writtenMut(v.Ty) {
+                        c.P.L.Diags.ErrorOncePerLine(c.at(rsp), msgs.DefaultNotComputable("it reads a mutable global, whose value is the running program's"))
+                    }
+                }
+                nomatch { }
+            }
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args { c.defaultReads(a) }
+        }
+        case typed.Expr.Call(_, _, cl) {
+            for a in cl.Args { c.defaultReads(a) }
+        }
+        nomatch { }
+    }
 }
 
 # the default of a constructor's parameter k (D8a), checked in its type's context - an instance's arguments bound
@@ -5803,6 +5920,20 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&c, 
     m := c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("Call"))
     if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("call")) }
     if m >= 0 { return c.invoke(sp, fsp, m, fv, args, null) }
+    # E11b: a "(" after a rendering in a join calls what it renders - the value inside is joined with '$(...)'
+    tx := c.P.L.Mods[c.fr().Mi].Src.Text
+    pb := I64(fsp.Start) - 1
+    for pb > 0 and tx[pb] == ' ' { pb-- }
+    if fsp.Start > 0 and tx[I64(fsp.Start)] == '(' and tx[pb] == '"' {
+        c.err(source.Span(fsp.Start, fsp.Start + 1), msgs.JoinPieceCalled())
+        for a in args { c.expr(a, types.UnknownT) }
+        return c.unknown(sp)
+    }
+    if fsp.Start > 0 and ((tx[I64(fsp.Start) - 1] == '$' and c.deref(t) == c.textType()) or tx[I64(fsp.Start)] == '"') {
+        c.err(c.opAfter(fsp, 1), msgs.JoinPieceCalled())
+        for a in args { c.expr(a, types.UnknownT) }
+        return c.unknown(sp)
+    }
     c.err(fsp, msgs.NotCallable(c.ty(t)))
     for a in args { c.expr(a, types.UnknownT) }
     return c.unknown(sp)
@@ -5821,6 +5952,11 @@ fn (c mut Checker&) importPath(x ast.Expr&) Bool {
 fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, rx typed.Expr&c, name String&, args Array<ast.Expr&>&) typed.Expr&c {
     rt := c.deref(typeOf(rx))
     u := c.under(rt)
+    if name == "Bits" and args.Len() > 0 and c.P.T.IsFloat(u) {
+        c.err(nsp, msgs.TakesNoArgs("'Bits'"))
+        for a in args { c.expr(a, types.UnknownT) }
+        return c.unknown(sp)
+    }
     if name == "Bits" and args.Len() == 0 and c.P.T.IsFloat(u) {
         bits := c.P.T.Bits(u)
         r := c.P.T.Prim("U64") if bits == 64 else c.P.T.Prim("U32") if bits == 32 else c.P.T.Prim("U16")
@@ -8034,6 +8170,11 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
 # storage reserved from an array's length or a range's count where the walk knows it, else grown (Reserve null)
 fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
     et := c.resolve(cm.Elem)
+    if et != types.UnknownT and (c.isRef(et) or c.P.T.HoldsRefs(et)) {
+        # E27: not yet - where such elements live would be the array's
+        c.err(c.opAfter(cm.Elem.Span(), 1), msgs.ComprehensionReferences())
+        return c.unknown(sp)
+    }
     at := c.P.T.Array(et, types.TypeId(0))
     f := ast.ForIn(cm.Key, cm.Name, cm.Source, false, null, null)
     from := c.stmts.Len()
@@ -8599,6 +8740,8 @@ fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
             if c.P.T.Same(ct, st) { return i }
         }
     }
+    # G15: a type match is exhaustive for every instance - one no case covers needs a nomatch
+    if m.NoMatch == null { c.err(m.Subject.Span(), msgs.TypeMatchUncovered(c.ty(st))) }
     return -1
 }
 
