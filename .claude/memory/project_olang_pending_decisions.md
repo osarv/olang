@@ -364,6 +364,55 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAI FINAL 2026-10-18 (the user: "I want to avoid unchecked as a keyword, because we don't nest into functions it's
+  not a problem really. And I think that probably answers the 'do functions automatically get a checked version'"): no
+  `unchecked`; no checked version derived from a function's body (only checked At/SetAt/Slice from Len, overridable by a
+  written one, as trait defaults are); -debug's program-wide aborting checks DROPPED with it (mine: without `unchecked`
+  it would flag std's intended wraps). Everything else in QAI below stands.
+- QAI REVISED 2026-10-18 (the user: "make checked overload a function ... fn checked Plus ... requires Plus to exist
+  without checked or else it's an error", then "No, checked works on any function no? Operators are normal functions").
+  DECIDED (the user: "Checked is basically the keyword telling you to call the checked function versions of everything
+  in the () (binds as a normal unary)"): built-in operators are functions with a checked version built in; `checked` is
+  a unary binding as `not`/`-` do (`checked a + b` checks only `a`, so `checked (a + b)`; postfix binds tighter, so
+  `checked a[i]`, `checked x.Pow(n)`, `checked I32(x)` cover the whole postfix chain); a `checked` covering nothing with
+  a checked version is an error, as an empty try is. Details as proposed: any function or method may have a checked overload (`fn checked parse(...)`, `fn (a Money)
+  checked Plus(...)`); `checked (e)` is try plus the built-in operators' checks, and every call in e (operators
+  included) whose callee has a checked overload calls that overload instead; the plain form must exist, the same
+  parameters and result, errors a superset of the plain one's; a function value is always the plain function (not
+  reached); externs and lambdas have none; checked At/Slice/SetAt still derived from Len; one level only (the overload's
+  body is what its author wrote). Replaces the CheckedX names. Queued with QAH after wt-mathmeth and wt-mem2.
+- QAI DECIDED 2026-10-18 (the user: "This is all good"): `checked` binds to its operand (one index/slice/conversion or a
+  parenthesized expression - every built-in operation in it), never into calls or function values; the Checked forms
+  and the superset rule go (a user type's operators check themselves; `checked x[i]` on At+Len types keeps the derived
+  Len check); `-debug` aborts on every such check program-wide; `unchecked (e)` marks intended wraps, truncations and
+  infinities (std's hashes, RNGs, checksums, Fixed's limbs); BuiltinError is renamed CheckError. Both compilers; queued
+  with QAH after wt-mathmeth (whose CheckedPow is taken out) and wt-mem2 merge.
+- QAJ RESOLVED 2026-10-18 by QAI: `checked` on a prototype is the checked overload (`fn checked f`). Was: QAJ ASKED 2026-10-18 (the user: "settle checked on function prototypes, is this something to have?"): `checked fn f`
+  (every operation of the body checked). Recommended: not now - it makes every `+` in the body an error exit not marked
+  at its line (the reason `try { }` was declined), and -debug covers the find-every-overflow job; add later if parser
+  code reads noisy with `checked (...)`. In effect: not built.
+- QAI 2026-10-18 (checked reaching into callees). DECIDED (the user): a call through a function value is never checked
+  (a lambda written inside the checked expression is). ASKED: (1) keep `checked` local as today but drop the Checked
+  forms (a user operator method is an ordinary call; `checked x[i]` on At+Len types keeps the derived bounds check),
+  move the program-wide "find every overflow" job to a build option (aborting checks under -debug, Rust's debug
+  overflow), and add `unchecked (e)` to mark intended wraps/truncations for that mode - recommended over deep checked
+  (checked copies of every reached function, BuiltinError in every reached set, std's wraps marked) as too much for its
+  payoff; (2) rename BuiltinError to CheckError (recommended; raised only by checked). In effect: today's design.
+- QAH DECIDED 2026-10-18 (the user: "If this make sense in general we do it in general yes"): generics over error sets.
+  A declaration's type parameter list may end in one error-set parameter after `?` (`trait Iterator<T ? E>`, `fn
+  Fold<U ? E>(init U, f fn(acc U, x T) U ? E) U ? E`), usable wherever an error set is written; inferred like a type
+  variable from the error sets of function values and iterators passed; empty when nothing fallible binds it (then no
+  `try` is needed); absent = empty (`Iterator<I64>`); monomorphized per error set. Not a stored error (no Result type).
+  Iterator becomes `trait Iterator<T ? E> { mut Next() T ? E, Exhausted }`; generators write `fn lines(p String&)
+  Iterator<String ? IoError>` and have no `?` of their own. std's helpers (Fold, Map, Filter, Any, All, Count, Sort's
+  comparator, linalg Map) take fallible callbacks. Core generics: both compilers. Queued after wt-mathmeth and wt-mem2
+  merge (semantic.c).
+- QAG GENERATORS REVISED 2026-10-18 (the user: "settle on fn evens (n I64) Iterator<T> ... the compiler knows this is a
+  generator because of the return type and the yields and the user doesn't need to know"): no `generator` keyword and no
+  `yields` marker - a `fn` whose result is `Iterator<T>` and whose body yields is a generator; `Iterator<T>` there is the
+  hidden type. BOTH COMPILERS (the user, 2026-10-18: syntax goes in both), after QAH (needs Iterator<T ? E>). Details mine: its `? E` is Next's errors; a trait as a result type is allowed only for such a generator
+  (general `impl Trait` results not now). OPERATORS also reverted the same day to today's E31 methods (the user: "Let's
+  take operators back to where we started"). Below is the superseded record.
 - QAG DECIDED 2026-10-18 (the user, on ideas.md #1 and operators: "maybe we want a new keyword ... generator? ... and
   maybe we want operator for operators?", clarified: the keyword replaces `fn`; "Record it yes"): a declaration's first
   word says its kind - `fn`, `generator`, `operator`. GENERATORS (ideas #1): `generator evens(n I64) I64 { ... yield i
