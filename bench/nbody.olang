@@ -5,7 +5,6 @@ import "std/os"
 
 extern fn sqrt(x F64) F64
 
-Pi F64 = 3.141592653589793
 SolarMass F64 = 4.0 * Pi * Pi
 DaysPerYear F64 = 365.24
 

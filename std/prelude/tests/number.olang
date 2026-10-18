@@ -1,0 +1,202 @@
+# the numbers' methods, tested - a module of its own, not part of the prelude, so what the tests compute is compiled
+# only when they are run. Each function is checked twice: from constants, which the compiler decides itself (S18c) or
+# bakes into a global (K2), and from mutable globals, which only the built program reads - so the two agree
+
+# read at run time - a mutable global is the running program's, so nothing reading one is computed while compiling (K1)
+# and each assert below that reads one checks the function as the built program runs it, beside its twin read from a
+# constant, which the compiler decides itself (S18c)
+half mut F64 = 0.5
+two mut F64 = 2.0
+negOne mut F64 = -1.0
+big mut F64 = 1e300
+thousand mut F64 = 1000.0
+
+# baked while compiling (K2): each is the C library's own answer, by the very function the run time calls
+bakedSqrtTwo F64 = 2.0.Sqrt()
+bakedExpHalf F64 = 0.5.Exp()
+bakedLogTwo F64 = 2.0.Log()
+bakedPowHalf F64 = 2.0.Pow(0.5)
+bakedSinHalf F64 = 0.5.Sin()
+bakedAtanTwo F64 = 2.0.Atan2(0.5)
+bakedErfHalf F64 = 0.5.Erf()
+bakedSqrtTwo32 F32 = F32(2.0).Sqrt()
+bakedExpHalf32 F32 = F32(0.5).Exp()
+bakedExpHalf16 F16 = F16(0.5).Exp()
+bakedTanhHalfB BF16 = BF16(0.5).Tanh()
+
+test "the compile-time values are the run time's" {
+    assert two.Sqrt() == bakedSqrtTwo and bakedSqrtTwo == F64(2).Sqrt()
+    assert half.Exp() == bakedExpHalf
+    assert two.Log() == bakedLogTwo and bakedLogTwo == F64(2).Log()
+    assert two.Pow(half) == bakedPowHalf
+    assert half.Sin() == bakedSinHalf
+    assert two.Atan2(half) == bakedAtanTwo
+    assert half.Erf() == bakedErfHalf
+    assert F32(two).Sqrt() == bakedSqrtTwo32
+    assert F32(half).Exp() == bakedExpHalf32
+    assert F16(half).Exp() == bakedExpHalf16
+    assert BF16(half).Tanh() == bakedTanhHalfB
+}
+
+test "Sqrt is correctly rounded, in every float type" {
+    assert 4.0.Sqrt() == 2.0 and F32(4.0).Sqrt() == 2.0 and F16(9.0).Sqrt() == 3.0 and BF16(16.0).Sqrt() == 4.0
+    # each type's nearest value to the root of 2 - what rounding F64's own once more gives, since F64 holds over twice
+    # their bits
+    assert F32(2.0).Sqrt() == F32(F64(2).Sqrt()) and F16(2.0).Sqrt() == F16(F64(2).Sqrt()) and BF16(2.0).Sqrt() == BF16(F64(2).Sqrt())
+    assert F32(two).Sqrt() == F32(F64(2).Sqrt()) and F16(two).Sqrt() == F16(F64(2).Sqrt()) and BF16(two).Sqrt() == BF16(F64(2).Sqrt())
+    assert 1e300.Sqrt() == 1e150 and big.Sqrt() == 1e150
+    assert Inf.Sqrt() == Inf
+    assert (-1.0).Sqrt().IsNan() and negOne.Sqrt().IsNan() and F16(negOne).Sqrt().IsNan()
+    assert (-0.0).Sqrt() == 0.0 and (-0.0).Sqrt().SignBit()
+}
+
+test "a result outside a function's domain is IEEE's, never an error" {
+    assert 0.0.Log() == -Inf and (-1.0).Log().IsNan() and negOne.Log().IsNan()
+    assert 1000.0.Exp() == Inf and thousand.Exp() == Inf and (-1000.0).Exp() == 0.0
+    assert 2.0.Asin().IsNan() and F32(-2.0).Acos().IsNan()
+    assert (-8.0).Pow(1.0 / 3.0).IsNan() and (-8.0).Cbrt() == -2.0
+    assert NaN.Pow(0.0) == 1.0 and 2.0.Pow(10.0) == 1024.0
+    assert F16(20.0).Exp().IsInf() and F16(thousand).Exp().IsInf()        # past F16's largest, 65504
+    assert 1000.0.Tanh() == 1.0 and thousand.Tanh() == 1.0
+}
+
+test "huge and tiny arguments" {
+    assert 1e300.Hypot(1e300) == 1e300 * F64(2).Sqrt() and big.Hypot(big) == 1e300 * F64(2).Sqrt()      # no overflow on the way
+    assert 3.0.Hypot(4.0) == 5.0
+    assert 1e-20.Expm1() == 1e-20 and 1e-20.Log1p() == 1e-20       # where Exp(x) - 1 and Log(1 + x) give 0
+    assert 1e-20.Exp() - 1.0 == 0.0
+    tiny := U64(1).F64FromBits()                                 # the smallest subnormal
+    assert tiny.Sqrt() == 2.2227587494850775e-162
+    assert tiny.Log2() == -1074.0 and (-1074.0).Exp2() == tiny
+}
+
+test "trigonometry" {
+    assert 0.0.Sin() == 0.0 and 0.0.Cos() == 1.0 and 0.0.Tan() == 0.0
+    assert 1.0.Atan2(1.0) == Pi / 4.0 and 0.0.Atan2(-1.0) == Pi and (-0.0).Atan2(-1.0) == -Pi
+    assert Inf.Atan() == Pi / 2.0 and 1.0.Asin() == Pi / 2.0 and (-1.0).Acos() == Pi
+    assert 0.0.Sinh() == 0.0 and 0.0.Cosh() == 1.0
+    assert 0.0.Erf() == 0.0 and Inf.Erf() == 1.0 and 0.0.Erfc() == 1.0 and Inf.Erfc() == 0.0
+    assert 1000.0.Log10() == 3.0 and 1024.0.Log2() == 10.0 and 10.0.Exp2() == 1024.0
+}
+
+test "rounding to a whole number" {
+    assert (-1.5).Floor() == -2.0 and (-1.5).Ceil() == -1.0 and (-1.5).Trunc() == -1.0
+    assert 2.5.Round() == 3.0 and (-2.5).Round() == -3.0 and 0.49999999999999994.Round() == 0.0
+    assert 2.5.RoundEven() == 2.0 and 3.5.RoundEven() == 4.0 and (-2.5).RoundEven() == -2.0
+    assert F16(0.5).Round() == 1.0 and F16(0.5).RoundEven() == 0.0 and BF16(-0.5).Floor() == -1.0
+    assert F32(half).Round() == 1.0 and F32(half).RoundEven() == 0.0
+    assert (-0.0).Floor().SignBit() and (-0.5).Ceil().SignBit() and F32(-0.5).Trunc().SignBit()
+    assert Inf.Floor() == Inf and NaN.Floor().IsNan()
+}
+
+test "Fma rounds once" {
+    # 0.1 * 10 is 1 and a little, which rounding the product to an F64 loses
+    assert 0.1.Fma(10.0, -1.0) == 5.551115123125783e-17 and 0.1 * 10.0 - 1.0 == 0.0
+    assert F32(0.1).Fma(F32(10.0), F32(-1.0)) == F32(1.4901161e-8)
+    assert F16(1.5).Fma(F16(1.5), F16(-2.0)) == 0.25 and BF16(3.0).Fma(BF16(3.0), BF16(1.0)) == 10.0
+    assert two.Fma(two, half) == 4.5
+}
+
+test "sign and size" {
+    assert (-3).Abs() == 3 and I64(-3).Abs() == 3 and U8(200).Abs() == 200
+    assert (I32(-2147483647) - 1).Abs() == I32(-2147483647) - 1        # the most negative stays as it is
+    assert (-1.5).Abs() == 1.5 and F32(-1.5).Abs() == 1.5 and F16(-1.5).Abs() == 1.5 and BF16(-1.5).Abs() == 1.5
+    assert (-0.0).Abs().Bits() == 0 and negOne.Abs() == 1.0 and (-Inf).Abs() == Inf
+    assert 3.0.CopySign(-0.0) == -3.0 and (-3.0).CopySign(1.0) == 3.0 and F16(2.0).CopySign(F16(-1.0)) == -2.0
+    assert (-0.0).SignBit() and not 0.0.SignBit() and F16(-0.0).SignBit() and BF16(-2.0).SignBit() and (-NaN).SignBit()
+    assert not NaN.SignBit() and not (-0.0 < 0.0)
+}
+
+test "NaN, the infinities and -0" {
+    assert NaN.IsNan() and not Inf.IsNan() and not 0.0.IsNan() and F32(NaN).IsNan() and F16(NaN).IsNan() and BF16(NaN).IsNan()
+    assert NaN.Bits() == 0x7FF8000000000000
+    assert Inf.IsInf() and (-Inf).IsInf() and not NaN.IsInf() and not 1e308.IsInf() and F32(1e300 * big).IsInf()
+    assert 0.0.IsFinite() and (-1e308).IsFinite() and not Inf.IsFinite() and not NaN.IsFinite() and not F16(NaN).IsFinite()
+    assert F16(65504.0).IsFinite() and BF16(1e38).IsFinite()
+    assert Inf == 1.0 / 0.0 and -Inf < -1e308
+}
+
+test "Min, Max and Clamp" {
+    assert 1.Min(2) == 1 and 1.Max(2) == 2 and U8(7).Min(3) == 3 and I64(-4).Max(-9) == -4
+    assert 1.5.Min(-2.0) == -2.0 and F16(1.5).Max(F16(-2.0)) == 1.5
+    # -0.0 below 0.0, whichever comes first
+    assert (-0.0).Min(0.0).SignBit() and 0.0.Min(-0.0).SignBit() and not (-0.0).Max(0.0).SignBit() and not 0.0.Max(-0.0).SignBit()
+    assert F32(0.0).Min(F32(-0.0)).SignBit() and not BF16(-0.0).Max(BF16(0.0)).SignBit()
+    # a NaN either way round
+    assert NaN.Min(1.0).IsNan() and 1.0.Min(NaN).IsNan() and NaN.Max(1.0).IsNan() and F16(1.0).Max(F16(NaN)).IsNan()
+    assert 5.Clamp(0, 3) == 3 and (-1).Clamp(0, 3) == 0 and 2.Clamp(0, 3) == 2
+    assert (-1.5).Clamp(0.0, 1.0) == 0.0 and half.Clamp(0.0, 1.0) == 0.5 and NaN.Clamp(0.0, 1.0).IsNan()
+    assert 5.Clamp(3, 0) == 0                                   # lo above hi: hi
+    assert half.Min(two) == 0.5 and half.Max(two) == 2.0
+}
+
+test "the constants" {
+    assert F32(Pi) == F32(3.1415927) and Pi.Cos() == -1.0 and (Pi / 2.0).Sin() == 1.0
+    assert Euler.Log() == 1.0 and 1.0.Exp() == Euler
+    assert F64(2).Sqrt() * F64(2).Sqrt() == 2.0000000000000004 and F64(2).Log().Exp() == 2.0 and F64(10).Log().Exp() == 10.000000000000002
+}
+
+# ---- the integers' methods ----
+
+seventeen mut I64 = 17
+three mut I32 = 3
+maxU64 mut U64 = 18446744073709551615
+minusOne mut I32 = -1
+
+bakedPow I64 = I64(3).Pow(4)
+bakedPowWraps I32 = I32(3).Pow(21)                               # 10460353203 wraps to 1870418611, as "*" does
+bakedSqrt I64 = try I64(17).Sqrt() catch default -1
+bakedSqrtMax U64 = U64(18446744073709551615).Sqrt()
+bakedChecked I32 = checked I32(3).Pow(21) catch default -1       # does not fit: CheckedPow fails
+
+test "Pow wraps as * does, and checked checks it" {
+    assert bakedPow == 81 and seventeen.Pow(2) == 289
+    assert bakedPowWraps == 1870418611 and three.Pow(21) == bakedPowWraps
+    assert I32(0).Pow(0) == 1 and I32(5).Pow(0) == 1 and I32(-2).Pow(3) == -8 and U8(2).Pow(8) == 0
+    assert bakedChecked == -1 and (checked three.Pow(21) catch default -1) == -1
+    assert (checked three.Pow(19) catch default -1) == 1162261467           # fits: the same value as Pow
+    assert (checked I64(-2).Pow(63) catch default 0) == -9223372036854775807 - 1
+    assert (checked I64(2).Pow(63) catch default 0) == 0
+    assert (checked U8(2).Pow(7) catch default 0) == 128 and (checked U8(2).Pow(8) catch default 0) == 0
+    assert (checked U8(16).Pow(2) catch BuiltinError.OVERFLOW default 7) == 7
+}
+
+test "an integer's Sqrt is the floor of its root, exact at every edge" {
+    assert bakedSqrt == 4 and (try seventeen.Sqrt() catch default -1) == 4
+    assert U8(0).Sqrt() == 0 and U8(1).Sqrt() == 1 and U8(255).Sqrt() == 15 and U16(65535).Sqrt() == 255
+    assert U32(4294967295).Sqrt() == 65535 and bakedSqrtMax == 4294967295 and maxU64.Sqrt() == 4294967295
+    assert U64(18446744065119617025).Sqrt() == 4294967295                  # (2^32 - 1)^2, a perfect square
+    assert U64(18446744065119617024).Sqrt() == 4294967294                  # one below it
+    assert U64(4503599761588224).Sqrt() == 67108864                        # (2^26)^2 + 2^27
+    assert U64(9007199254740993).Sqrt() == 94906265                        # 2^53 + 1, which F64 rounds
+    for n in range 2000 {
+        r := U64(n).Sqrt()
+        assert r * r <= U64(n) and (r + 1) * (r + 1) > U64(n)
+    }
+    assert (try I8(127).Sqrt() catch default -1) == 11 and (try I16(32767).Sqrt() catch default -1) == 181
+    assert (try I32(2147483647).Sqrt() catch default -1) == 46340
+    assert (try I64(9223372036854775807).Sqrt() catch default -1) == 3037000499
+    assert (try I64(0).Sqrt() catch default -1) == 0 and (try I64(1).Sqrt() catch default -1) == 1
+    assert (try I64(144).Sqrt() catch default -1) == 12 and (try I64(143).Sqrt() catch default -1) == 11
+}
+
+test "a negative signed integer has no square root" {
+    assert (try minusOne.Sqrt() catch NumberError.NEGATIVE default 99) == 99
+    assert (try I8(-128).Sqrt() catch NumberError.NEGATIVE default 99) == 99
+    assert (try I64(-9223372036854775807 - 1).Sqrt() catch NumberError.NEGATIVE default 99) == 99
+}
+
+test "Abs, Min, Max and Clamp on the integers" {
+    assert minusOne.Abs() == 1 and I8(-128).Abs() == -128 and U64(5).Abs() == 5
+    assert three.Min(minusOne) == -1 and three.Max(minusOne) == 3 and U16(9).Clamp(1, 4) == 4
+    assert (-7).Clamp(-3, 3) == -3 and seventeen.Clamp(0, 100) == 17
+}
+
+# a number written as a literal is a receiver like any other value, of its own type (E13c)
+test "methods on number literals" {
+    assert 7.Hash() == I64(7).Hash() and (1 + 2).Hash() == I64(3).Hash()
+    assert 255.Format(16) == "ff" and 2.5.Fixed(1) == "2.5" and (-0.0).Bits() == 0x8000000000000000
+    assert 2.0.Sqrt() == F64(2).Sqrt() and -2.0.Sqrt() == -(F64(2).Sqrt()) and 16.Pow(2) == 256
+    x := 2.0.Sqrt()
+    assert x.Sqrt() == F64(2).Sqrt().Sqrt()                       # an F64, the literal's own type
+}

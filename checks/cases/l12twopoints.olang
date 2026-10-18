@@ -1,7 +1,7 @@
 # check: run
 # L12/L12a: an exponent is one only when a digit follows its "e" and sign ("1e_x" is the number 1 and the name e_x - it
 # was "1e" and "_x", with a separator reported). A second "." before a name is a member access on the float, which
-# e13cfloat.olang shows refused by E13c, not reported as a second decimal point
+# e13cfloat.olang shows called on the float, not reported as a second decimal point
 fn main() ? {
     e_x := 3
     assert 1e2 + 1E-1 == 100.1 and e_x == 3

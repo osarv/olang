@@ -240,10 +240,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   an enum reference's zero is null; a null matches no case pattern.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
-- **A number written as a literal is no method's receiver (E13c, 2026-10-17, the user: "disallow for numbers, allow for
-  array and text").** `7.Hash()`, `2.5.Fixed(1)`, `(255).Format(16)`, `(-0.0).Bits()`, `(1 + 2).Hash()` are errors: such
-  a number has no type until it lands (T6) and a call is no place it lands. Put it in a variable or convert it
-  (`I64(255).Format(16)`). Text, character, array literals and comprehensions keep methods. L12's lexing is unchanged.
+- **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should
+  be valid code. Don't make an exception for floats like that" - reversing their 2026-10-17 refusal).** `2.0.Sqrt()`,
+  `7.Hash()`, `255.Format(16)`, `(1 + 2).Hash()` take the literal's own type (T6a: `I64`, `F64`, `U64` above `I64`'s
+  largest), since a call is no place a literal adapts; another type is a conversion (`F32(2).Sqrt()`). `-2.0.Sqrt()` is
+  `-(2.0.Sqrt())`. L12's lexing is unchanged.
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
   method is the operator only in the operator's shape - another shape is an ordinary method. Checked forms are
@@ -365,14 +366,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is `CheckedAt`, `CheckedPlus` ... (the Try forms renamed - the user, reversing their own TryAt), what `checked`
   calls, and must fail with every error the plain one can (a compile error at the declaration otherwise; for a generic
   type, per instantiation). A checked form requires its plain one (`CheckedAt` alone is an error); loops never call one.
-  `CheckedAt`/`CheckedSlice`/`CheckedSetAt` are derived from the plain form and `Len` when not declared.
+  `CheckedAt`/`CheckedSlice`/`CheckedSetAt` are derived from the plain form and `Len` when not declared. A method called
+  by name has its checked form the same way (`checked x.Pow(n)` calls `CheckedPow`, E31a, 2026-10-18, mine).
 - **`BuiltinError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE`) is raised only by `checked` (R20);**
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
   may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
   (`NOT_FOUND BAD_BASE NOT_FINITE`; `Format`, `ParseInt` and `ParseUint` take a `Radix` - 2 to 36, or 0 - failing with
   `TextError.BAD_BASE`, a literal one decided while compiling, `Radix(10)` written out included), `ArrayError.NOT_FOUND`, `ChanError.CLOSED` on a Send,
-  `StatsError`, `RandError`, `JsonError.UNEVEN`, linalg's `ShapeError.MISMATCH` and `ActivationError` (an operation
+  `StatsError`, `RandError`, `JsonError.UNEVEN`, `NumberError.NEGATIVE` (a signed integer's `Sqrt`), linalg's `ShapeError.MISMATCH` and `ActivationError` (an operation
   with nothing to mismatch cannot fail; a float matrix never fails an activation). A `Matrix` built directly takes its
   data as a slice and an array length do (D14b, E16b); `View` is the checked form. Language guarantees still abort.
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
@@ -537,6 +539,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Text is plain `String` with methods, no wrapper type (`std/prelude/text.olang`).** A literal, a slice and every
   rendering already are one, so methods reach all of them with nothing converted. `Eq`, `Find` (fails on a miss),
   `Split`, `Trim`, `Replace`, `ParseInt(base)`, `ParseFloat`, `PadStart`, `Lines`, `<` by bytes.
+- **Math is the numbers' methods (M19d, 2026-10-18, the user's decision: "Yes let's do this. I want an integer power as
+  well", "Also abs for integers"; std/math removed).** Every C math function is a method of every float, written once as
+  a default over `Float` (`fn (x T) Sqrt<T Float>() T`, `match T` inside, X8's libm calls, so the evaluator computes
+  them while compiling), the first C argument the receiver: `x.Sqrt()`, `y.Atan2(x)`, `a.Hypot(b)`, `x.Fma(a, b)`,
+  `x.Pow(y)`, `IsNan`... `Abs`, `Min`, `Max`, `Clamp` over `Number` (IEEE on floats). Integers: `x.Pow(n U32)`
+  (wrapping as `*`; `CheckedPow` is what `checked x.Pow(n)` calls - E31a now covers a method called by name, mine) and
+  `Sqrt()` (the user's name, not ISqrt: the floor of the root in the receiver's type, hardware sqrt plus a one-step
+  correction, exact for every U64; signed fails with the prelude's `NumberError.NEGATIVE` - mine - unsigned cannot
+  fail). Constants `Pi`, `Euler`, `Inf`, `NaN` are the prelude's, read by bare name everywhere and reserved (D3a);
+  others are computed in place (`F64(2).Sqrt()`). Decided (mine): integer `Sqrt` is a concrete method per type (the
+  two signatures differ); a type that only declares `Less` no longer has Min/Max/Clamp (nothing but std/math's own test
+  used it - it declares its own); the methods live in `number.olang` beside the traits (M19: a default lives in its
+  trait's module). Not done: a named constant adapting like a literal (`f F32 = Pi` is an error; `F32(Pi)` is written) -
+  E4a covers literal-only expressions, not names. `tools/math_methods.olang` migrates (oann later).
 - **Collections in the prelude:** `List<T>` (chunked, never moves, a handle - a copy is a second name, `Clone()`
   copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Update`, ordered walks by
   insertion of slot), `Vec<T>` (below), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators have `Any All Count Fold Map Filter
@@ -559,7 +575,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   its own. The prelude's print words are gone. `io.Writer` buffers (errors at `Flush`); `io.Lines` reads lines.
 - **Libraries:** `std/os` (files, Exec without a shell, Start/Process, RunOnStack, OnCrash, MkTemp, RemoveAll),
   `std/json` (immutable recursive enum tree, exact numbers), `std/http` (over curl), `std/csv` (strict), `std/stats`,
-  `std/math` (generic over the floats, libm calls), `std/linalg` (`Matrix<T>` views, Goto GEMM with per-target tiles,
+  `std/linalg` (`Matrix<T>` views, Goto GEMM with per-target tiles,
   batched causal products, fused epilogues, convolutions - the base for all numeric work, the user's call: a 2-D
   Matrix, not a tensor), `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
@@ -618,15 +634,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is
   supplied only for a type its own module declares (or a built-in one), so `Char` and `type Dist extends F64` inherit
   the method and satisfy nothing - that is what lets a body pick by `match T` over the built-ins, which would have no
-  case for them. Stage 0 and the port both enforce it; the error is `G19, T31` "... is sealed". Used by std/math's float
-  functions (`<T Float>`), std/stats (`<T Number>`), linalg's FastExp/FastTanh/FastSigmoid (`<T Float>`, F16/BF16 now
-  through F32); Abs/Min/Max/Clamp and the Matrix operations stay open (Less types, F8 elements).
+  case for them. Stage 0 and the port both enforce it; the error is `G19, T31` "... is sealed". Used by the numbers'
+  methods (`<T Float>`, `<T Number>`, `<T Integer>`, M19d), std/stats (`<T Number>`), linalg's
+  FastExp/FastTanh/FastSigmoid (`<T Float>`, F16/BF16 through F32); the Matrix operations stay open (F8 elements).
 - **A literal reaching a constrained variable takes a type its constraint allows (G9a, G19, T35c, 2026-10-18, the
   user: "math.Sqrt(4) should not be an error").** A variable only numeric literals reach is bound to the widest of their
   types unless that fails its constraint; then to the first of `F64, I64, U64, F32, I32, U32, F16, BF16, I16, U16, I8,
   U8` (my order: widest first, a float before an integer of its width) that meets it and that every literal adapts to
-  (T6) - `math.Sqrt(4)` is `Sqrt` at `F64`; none fitting, G19's error stays (`whole(2.5)`). A typed argument binds its
-  own type: `math.Sqrt(n)` with `n I64` stays an error (no implicit integer-to-float). Both compilers; the evaluator
+  (T6) - `root(4)` with `fn root<T Float>(x T) T` is `root` at `F64`; none fitting, G19's error stays (`whole(2.5)`). A typed argument binds its
+  own type: `root(n)` with `n I64` stays an error (no implicit integer-to-float). Both compilers; the evaluator
   sees the bound type.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no

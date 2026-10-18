@@ -11,7 +11,6 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `os.olang` | arguments, environment, files and directories, `Exec`/`Start` without a shell, `Exit` |
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
 | `time.olang` | monotonic and wall clocks |
-| `math.olang` | the C math functions over the four float types, and constants |
 | `rand.olang` | seeded xoshiro256** generator |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | sum, mean, variance, percentiles, histograms |
@@ -25,8 +24,10 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 ## Subfolders
 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
-  without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `iterator`, `hash`, `float`,
-  `complex`, `f8`, `builtin` (the language's own errors). Only the prelude may give methods to built-in types (M19d).
+  without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `iterator`, `hash`, `number` (the numeric traits,
+  the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
+  `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
+  `builtin` (the language's own errors). Only the prelude may give methods to built-in types (M19d).
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.
 - `runtime/` - the runtime as LLVM IR text: `runtime.ll` (arena allocator, chunk pools, regions, worker cache),
   `san.ll` (scope sanitizer, linked only under `-s`), `dyncall.ll` (calls by name over libffi). The compiler

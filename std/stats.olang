@@ -21,7 +21,6 @@
 # sample variance. A NaN among the values makes the answer NaN, as IEEE 754 carries it, and a percentile asked outside
 # 0..100 is a mistake in the program, which stops it as a slice out of range does.
 
-import "math"
 
 # why a statistic has no value
 error StatsError {
@@ -56,10 +55,10 @@ fn PopulationVariance<T Number>(a Array<T>&) F64 ? StatsError {
 }
 
 # the sample standard deviation, the square root of Variance. Needs two values
-fn StdDev<T Number>(a Array<T>&) F64 ? StatsError { return math.Sqrt(try Variance(a)) }
+fn StdDev<T Number>(a Array<T>&) F64 ? StatsError { return (try Variance(a)).Sqrt() }
 
 # the population standard deviation, the square root of PopulationVariance
-fn PopulationStdDev<T Number>(a Array<T>&) F64 ? StatsError { return math.Sqrt(try PopulationVariance(a)) }
+fn PopulationStdDev<T Number>(a Array<T>&) F64 ? StatsError { return (try PopulationVariance(a)).Sqrt() }
 
 # the middle value - the mean of the two middle ones for an even count. Percentile(a, 50.0)
 fn Median<T Number>(a Array<T>&) F64 ? StatsError { return try Percentile(a, 50.0) }
@@ -104,7 +103,7 @@ fn Percentiles<T Number>(a Array<T>&, ps Array<F64>&) Array<F64> ? StatsError {
     for j, p in ps {
         if not (p >= 0.0 and p <= 100.0) { error StatsError.OUT_OF_RANGE }
         if nan {
-            out[j] = math.NaN
+            out[j] = NaN
             continue
         }
         pos F64 = p / 100.0 * F64(n - 1)
@@ -114,19 +113,19 @@ fn Percentiles<T Number>(a Array<T>&, ps Array<F64>&) Array<F64> ? StatsError {
     return out
 }
 
-# the least element, as it is - a NaN if there is one, as math.Min gives it
+# the least element, as it is - a NaN if there is one, as Min gives it
 fn Min<T Number>(a Array<T>&) T ? StatsError {
     if a.Len() == 0 { error StatsError.TOO_FEW }
     m := a[0]
-    for i in range 1, a.Len() { m = math.Min(m, a[i]) }
+    for i in range 1, a.Len() { m = m.Min(a[i]) }
     return m
 }
 
-# the greatest element, as it is - a NaN if there is one, as math.Max gives it
+# the greatest element, as it is - a NaN if there is one, as Max gives it
 fn Max<T Number>(a Array<T>&) T ? StatsError {
     if a.Len() == 0 { error StatsError.TOO_FEW }
     m := a[0]
-    for i in range 1, a.Len() { m = math.Max(m, a[i]) }
+    for i in range 1, a.Len() { m = m.Max(a[i]) }
     return m
 }
 
@@ -308,8 +307,8 @@ test "Sum, Mean, Variance and StdDev" {
     # values large and close together: the two-pass variance keeps them, a sum of squares would lose every digit
     big := F64[1e9 + 4.0, 1e9 + 7.0, 1e9 + 13.0, 1e9 + 16.0]
     assert (try Variance(big) catch default -1.0) == 30.0
-    nan := F64[1.0, math.NaN, 3.0]
-    assert math.IsNan(try Mean(nan) catch default 0.0) and math.IsNan(try Variance(nan) catch default 0.0)
+    nan := F64[1.0, NaN, 3.0]
+    assert (try Mean(nan) catch default 0.0).IsNan() and (try Variance(nan) catch default 0.0).IsNan()
 }
 
 test "pairwise sums keep their error small" {
@@ -317,9 +316,9 @@ test "pairwise sums keep their error small" {
     a := Array<F64>(1000000, 0.1)
     plain F64 = 0.0
     for x in a { plain += x }
-    assert math.Abs(Sum(a) - 100000.0) < 1e-8 and math.Abs(plain - 100000.0) > 1e-7
+    assert (Sum(a) - 100000.0).Abs() < 1e-8 and (plain - 100000.0).Abs() > 1e-7
     f := Array<F32>(1000000, F32(0.1))
-    assert math.Abs(Sum(f) - 100000.00149011612) < 1e-6                     # each F32 exactly, summed in F64
+    assert (Sum(f) - 100000.00149011612).Abs() < 1e-6                     # each F32 exactly, summed in F64
 }
 
 test "Median and Percentile interpolate between the closest ranks, as numpy does" {
@@ -331,7 +330,7 @@ test "Median and Percentile interpolate between the closest ranks, as numpy does
     assert (try Percentile(a, 30.0) catch default -1.0) == 23.0
     assert (try Percentile(I64[7], 90.0) catch default -1.0) == 7.0
     assert (try Median(Array<I32>(0)) catch StatsError.TOO_FEW default -1.0) == -1.0
-    assert math.IsNan(try Median(F64[1.0, math.NaN]) catch default 0.0)
+    assert (try Median(F64[1.0, NaN]) catch default 0.0).IsNan()
     ps := try Percentiles(a, F64[0.0, 30.0, 40.0, 50.0, 100.0])
     assert ps == F64[15.0, 23.0, 29.0, 35.0, 50.0]
     # the selection agrees with sorting, on values with repeats, in any order
@@ -347,9 +346,9 @@ test "Median and Percentile interpolate between the closest ranks, as numpy does
 test "Min, Max and Histogram" {
     assert (try Min(I32[4, -2, 9]) catch default 0) == -2 and (try Max(I32[4, -2, 9]) catch default 0) == 9
     assert (try Max(F32[1.5, 2.5]) catch default 0.0) == 2.5
-    assert math.IsNan(try Max(F64[1.0, math.NaN, 2.0]) catch default 0.0)
+    assert (try Max(F64[1.0, NaN, 2.0]) catch default 0.0).IsNan()
     assert (try Min(Array<F64>(0)) catch StatsError.TOO_FEW default -1.0) == -1.0
-    h := try Histogram(F64[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, -1.0, 9.0, math.NaN], F64[0.0, 1.0, 2.0, 3.0])
+    h := try Histogram(F64[0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, -1.0, 9.0, NaN], F64[0.0, 1.0, 2.0, 3.0])
     assert h == I64[2, 2, 3]                     # the last bin holds its right edge; -1, 9 and NaN in none
     e := try Edges(0.0, 1.0, 4)
     assert e == F64[0.0, 0.25, 0.5, 0.75, 1.0]

@@ -2275,6 +2275,26 @@ fn (c mut Checker&) checkedForm(t types.TypeId, name String&, n I64) I64 {
     return -1
 }
 
+# E31a: where checked checks it, a method called by name calls its checked form - CheckedPow for Pow - when the type has
+# one of as many parameters; m, the plain one, otherwise (and for a name already of a checked form)
+fn (c mut Checker&) checkedMethod(t types.TypeId, name String&, m I64) I64 {
+    if name.Len() == 0 { return m }
+    if name.Len() > 7 and (name.StartsWith("Checked") or name.StartsWith("checked")) and name[7].IsUpper() { return m }
+    priv := name[0].IsLower()
+    up := StringBuilder()
+    up.Push("checked" if priv else "Checked")
+    up.PushChar(name[0].ToUpper())
+    up.Push(name[1:])
+    cn := c.P.L.Names.Intern(up.ToString())
+    cm := c.P.MethodOf(t, cn)
+    if cm < 0 {
+        ds := c.P.DefaultMethods(t, cn)
+        if ds.Len() == 1 { cm = ds[0] }
+    }
+    if cm < 0 or c.P.T.Items(c.P.T.Params(c.P.Sig(cm))).Len() != c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() { return m }
+    return cm
+}
+
 # an arithmetic operation's check (E15a): under try the ones that can overflow, divide by zero or shift out - else none
 fn (c mut Checker&) arithCheck(op typed.PrimOp, t types.TypeId) typed.Check {
     if not c.isNumber(t) { return typed.Check.None }
@@ -2341,7 +2361,7 @@ type litv struct(Ok Bool, IsFloat Bool, Big Bool, I I64, F F64) {
     Hex Bool = false   # a hex or binary pattern: I its bits, read unsigned where an unsigned type is wanted (L10a)
 }
 
-# E13c: whether x is a number written as a literal - a numeric literal, alone, negated or in parentheses, or arithmetic
+# E4a: whether x is a number written as a literal - a numeric literal, alone, negated or in parentheses, or arithmetic
 # of such (E4a's literal-only expression), whatever it folds to
 fn numberLitsOnly(x ast.Expr&) Bool {
     if x == null { return false }
@@ -5732,7 +5752,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
 }
 
 # G9a: a variable only literals reach, whose constraint (G19) the widest of their types fails, takes the first type
-# of literalOrder that meets it and that every one of those literals adapts to (T6) - "math.Sqrt(4)" is Sqrt at F64.
+# of literalOrder that meets it and that every one of those literals adapts to (T6) - root(4), with "fn root<T Float>(x T) T", is root at F64.
 # None doing both, the binding stays and the constraint's error is said at the call
 fn (c mut Checker&) literalBinding(owner I64, b mut generic.Binding&, ps Array<types.TypeId>&, k0 I64, args Array<ast.Expr&>&) {
     for i in range b.N {
@@ -6099,9 +6119,7 @@ fn (c mut Checker&) ctorDefault(sp source.Span, k I64, want types.TypeId) typed.
 
 # x.m(args): a method of x's type (M19); an array's Len supplied by the compiler (E23)
 fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp source.Span, args Array<ast.Expr&>&) typed.Expr&c {
-    # E13c: a number written as a literal has no type until it lands, and a method call is no place it lands - said, then
-    # built as written, so what follows sees the call's result and adds no error
-    if numberLitsOnly(x) { c.err(nsp, msgs.MethodOnNumberLiteral(c.tok(n))) }
+    # E13c: a number written as a literal is a receiver like any other value, of its own type (T6a)
     rx := c.expr(x, types.UnknownT)
     rt := typeOf(rx)
     if rt == types.UnknownT {
@@ -6120,6 +6138,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         }
         if ds.Len() == 1 { m = ds[0] }
     }
+    if m >= 0 and c.fr().Checks > 0 { m = c.checkedMethod(c.deref(rt), name, m) }
     if m < 0 and name == "Len" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT {
         return c.prim(sp, c.i64(), typed.PrimOp.Len, rx, null)
     }

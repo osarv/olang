@@ -24,6 +24,7 @@ tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. 
 | `donefail_migrate.olang` | S16: `done`, `fail` and `abort` removed - `!`, `try`, `assert`, `return`, `unreachable` | `build/tools_donefail_migrate FILE\|DIR...` |
 | `cli_words.olang` | B1: the command line in words (`-b` -> `build`, `-d` -> `-debug`, ...), in commands and `# flags:` | `build/tools_cli_words FILE...` |
 | `syntax_migrate.olang` | QY/QW: lists by commas on a line and line breaks between lines, `+` gone from error sets and catch items, type parameter lists (`fn f<T>(a T)`, `fn (l List<T>&)`) | `build/tools_syntax_migrate [--old] [--check] [-v] FILE\|DIR...` |
+| `math_methods.olang` | M19d: std/math removed - its functions are the numbers' methods (`math.Sqrt(x)` -> `x.Sqrt()`), its constants the prelude's (`Pi`, `Euler`, `Inf`, `NaN`) | `build/tools_math_methods [--dry] PATH...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
@@ -38,6 +39,8 @@ tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. 
   generators) are not migrated - search them for `<T>`, `<<` and `+` in error sets by hand. Two checks cases are written
   in the old syntax on purpose (`checks/cases/commaendsline.olang`, `qwnointro.olang`): leave `checks/cases` out of a
   run on this repository, or restore them after it.
+- `math_methods` works on the text alone and lists the literal receivers whose type a person should write (`math.Pow(2.0,
+  x)` with an F32 `x` wants `F32(2.0).Pow(x)`); code inside strings and comments is searched for `math.` by hand.
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and
