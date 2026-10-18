@@ -3,8 +3,9 @@
 # of the same element type growing; a call given the Vec read-only, or one that only sets elements; a view taken after
 # the growth; a view taken again each turn; a view used before the growth only; a copy of the Vec (a second name, no
 # view) read after pushes through either; an iterator, which reads the Vec each step; the Vec given another one before
-# the push, or a parameter given another one before its push; a Vec of Vecs whose inner Vec grows while a view of the outer one is held; a growth through a second name
-# stored in a structure, which the compiler cannot see (the evaluator and -sanitize catch that - retire01assert)
+# the push, or a parameter given another one before its push; a Vec of Vecs whose inner Vec grows while a view of the
+# outer one is held; a growth through a second name stored in a structure, which the compiler cannot see (the evaluator
+# and -sanitize catch that - retire01assert)
 fn sum(v Vec<I64>&) I64 {
     t := 0
     for x in v { t += x }
