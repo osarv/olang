@@ -1,6 +1,6 @@
 # check: run
-# vec4 F1': an else-if condition's catch block returning new storage keeps the proof - the result is fresh, the loan on
-# the Vec's buffer is spared, and the buffer may change while the result is used
+# vec4 F1': an else-if condition's catch block returning new storage - the result is fresh, apart from the Vec's buffer,
+# which may change while the result is used
 import "std/io"
 fn churn() I64 {
     t := 0

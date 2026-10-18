@@ -145,8 +145,15 @@ static const char* CT_WHY_TEST_ERROR = "an error leaves the test, which fails it
 static bool ctForeignTarget;
 //B12a, X8: a function of the C math library whose result is the library's own, for another machine than this one
 static const char* CT_WHY_FOREIGN_MATH = "it calls a function of the C math library whose result is the target's own library's, and the target is another machine";
+//K1/M19g: a view of an array its collection retired, used - at run time the old elements, which the program cannot have
+//meant, so where a value is required it is an error, with both places: the use, and the growth (ctStaleGrewAt)
+static const char* CT_WHY_STALE = "it uses a view of a Vec's elements taken before the Vec grew, which shows the old elements";
+static struct token ctStaleGrewAt;
+bool CtWhyStale(const char* why) { return why == CT_WHY_STALE; }
+struct token CtStaleGrewAt(void) { return ctStaleGrewAt; }
+
 bool CtWhyAborts(const char* why) {
-    return why == CT_WHY_UNREACHABLE || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
+    return why == CT_WHY_STALE || why == CT_WHY_UNREACHABLE || why == CT_WHY_ASSERT || why == CT_WHY_SLICE
            || why == CT_WHY_LENGTH || why == CT_WHY_FIXED || why == CT_WHY_BANG || why == CT_WHY_TEST_ERROR;
 }
 
@@ -163,6 +170,17 @@ static struct ctVal* ctFail(struct ctState* st, struct token tok, const char* wh
         st->whyTok = tok;
     }
     return NULL;
+}
+
+//M19g: whether array node a is one its collection retired, or a view of one - where it is, a use of it stops evaluation
+//with both places (CT_WHY_STALE), reading or writing alike
+static bool ctStaleUse(struct ctState* st, struct token tok, struct ctVal* a) {
+    if (!a || a->kind != CT_AGG) return false;
+    const struct token* at = a->retiredAt ? a->retiredAt : a->viewOf ? a->viewOf->retiredAt : NULL;
+    if (!at) return false;
+    if (st->flow != CF_FAIL) ctStaleGrewAt = *at;
+    ctFail(st, tok, CT_WHY_STALE);
+    return true;
 }
 
 //B3e: a check the language guarantees failed while a program runs - the built program's message, and its abort; and
@@ -394,6 +412,7 @@ static struct ctVal* ctCopy(struct ctVal* v) {
     if (v->kind == CT_AGG) {
         c->viewOf = NULL; //a copy is storage of its own
         c->viewOff = 0;
+        c->retiredAt = NULL;
         c->elems = MallocOrCrash(sizeof(struct ctVal*) * (size_t)(v->n ? v->n : 1));
         for (int i = 0; i < v->n; i++) c->elems[i] = ctCopy(v->elems[i]);
     }
@@ -804,6 +823,7 @@ static struct ctVal* ctLvalue(struct ctState* st, struct operand* op, bool forWr
             if (forWrite && !ctRun && CtNodeOwner(base)) return ctFail(st, op->tok, CT_WHY_WRITES_GLOBAL);
             if (base->kind == CT_NULL) return ctFail(st, op->tok, "it indexes a null array");
             if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
+            if (ctStaleUse(st, op->tok, base)) return NULL; //M19g
             if (idx->i < 0 || idx->i >= base->n) {
                 if (op->checkRoot) return ctCheckFail(st, op, "OUT_OF_BOUNDS"); //E16d/R20
                 return ctFail(st, op->tok, "it indexes outside the array, which is undefined at run time");
@@ -998,6 +1018,7 @@ static int ctDeepEq(struct ctState* st, struct token tok, struct ctVal* x, struc
     }
     if (ctIsIdentity(x) || ctIsIdentity(y)) return ctSameIdentity(x, y);
     if (x->kind == CT_AGG || y->kind == CT_AGG) {
+        if (ctStaleUse(st, tok, x) || ctStaleUse(st, tok, y)) return -1; //M19g
         if (x->kind != y->kind || x->n != y->n) return 0;
         if (x->type->bType == BASETYPE_CHOICE && x->i != y->i) return 0; //T17a: the live case, then its payload
         for (int i = 0; i < x->n; i++) {
@@ -1584,6 +1605,26 @@ static struct ctVal* ctExtern(struct ctState* st, struct operand* op, struct var
 static struct ctVal* ctRunOnStack(struct ctState* st, struct operand* op);
 static struct ctVal* ctCall(struct ctState* st, struct operand* op);
 
+//M19g: the calls running, each where it is written and the module whose code wrote it - so a growth inside the prelude
+//is named where the program asked for it (ctProgramCallSite)
+static struct { struct { struct token tok; struct semaModule* mod; }* at; int n, cap; } ctCallSites;
+static void ctCallSitePush(struct token tok, struct semaModule* mod) {
+    if (ctCallSites.n == ctCallSites.cap) {
+        ctCallSites.cap = ctCallSites.cap ? ctCallSites.cap * 2 : 64;
+        ctCallSites.at = realloc(ctCallSites.at, sizeof(*ctCallSites.at) * (size_t)ctCallSites.cap);
+        if (!ctCallSites.at) ErrorBugFound();
+    }
+    ctCallSites.at[ctCallSites.n].tok = tok;
+    ctCallSites.at[ctCallSites.n].mod = mod;
+    ctCallSites.n++;
+}
+//the innermost running call written outside the prelude, else at
+static struct token ctProgramCallSite(struct token at) {
+    for (int i = ctCallSites.n - 1; i >= 0; i--)
+        if (ctCallSites.at[i].mod && !SemanticIsPreludeModule(ctCallSites.at[i].mod)) return ctCallSites.at[i].tok;
+    return at;
+}
+
 static bool ctCallBind(struct ctState* st, struct operand* op, struct ctCallFrame* fr);
 static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ctCallFrame* fr);
 
@@ -1728,12 +1769,14 @@ static struct ctVal* ctCallRun(struct ctState* st, struct operand* op, struct ct
     struct list* saved = st->locals;
     struct var* savedFunc = st->func;
     struct semaModule* savedMod = st->mod;
+    ctCallSitePush(op->tok, st->mod);
     st->locals = &fr->locals;
     st->func = func;
     st->mod = func->owner ? func->owner : st->mod;
     st->depth++;
     ctExecBlock(st, &func->codeBlock);
     st->depth--;
+    ctCallSites.n--;
     st->locals = saved;
     st->func = savedFunc;
     st->mod = savedMod;
@@ -1830,6 +1873,7 @@ static struct ctVal* ctSlice(struct ctState* st, struct operand* op) {
     if (!hi) return NULL;
     if (base->kind == CT_NULL) return ctFail(st, op->tok, "it slices a null array");
     if (base->kind != CT_AGG) return ctFail(st, op->tok, "it uses a value compile-time evaluation does not model");
+    if (ctStaleUse(st, op->tok, base)) return NULL; //M19g
     long long l = ctDeref(lo)->i, h = ctDeref(hi)->i;
     //E32b: "x as Array<T, N>&" - the whole of x, of length N exactly
     if (op->sliceExact ? h != base->n : !(l >= 0 && l <= h && h <= base->n)) {
@@ -2022,6 +2066,7 @@ static bool ctRenderValue(struct ctState* st, struct ctText* b, struct ctVal* v,
         ctTextStr(b, num);
         return true;
     }
+    if (t.bType == BASETYPE_ARRAY && ctStaleUse(st, tok, ctDeref(v))) return false; //M19g
     return ctRenderBody(st, b, v, t, depth, tok);
 }
 
@@ -2182,6 +2227,16 @@ static struct ctVal* ctEvalOp(struct ctState* st, struct operand* op) {
             node->kind = CT_NULL;
             node->target = NULL;
             return v;
+        }
+        case OPERATION_RETIRE: { //M19d: the array no longer its collection's - marked, with where the program grew it
+            struct ctVal* a = ctDeref(ctEval(st, *(struct operand**)ListGetIdx(&op->args, 0)));
+            if (!a) return NULL;
+            if (a->kind == CT_AGG && !a->retiredAt) {
+                struct token* at = MallocOrCrash(sizeof(struct token));
+                *at = ctProgramCallSite(op->tok);
+                a->retiredAt = at;
+            }
+            return ctNew(CT_INT, TypeVanilla(BASETYPE_VOID));
         }
         case OPERATION_BITCAST: { //E33: the same bits, read as the other type - exactly the generated code's bitcast
             struct operand* src = *(struct operand**)ListGetIdx(&op->args, 0);
@@ -3399,6 +3454,10 @@ static int ctRunStopped(struct ctState* st) {
     fflush(NULL);
     struct str f = st->whyTok.owner ? TokenGetFileName(st->whyTok.owner) : StrFromCStr("?");
     fprintf(stderr, "olang interpret: %.*s:%d: %s\n", f.len, f.ptr, st->whyTok.lineNr, st->why ? st->why : "it cannot go on");
+    if (st->why == CT_WHY_STALE && ctStaleGrewAt.owner) { //M19g: and where it grew
+        struct str g = TokenGetFileName(ctStaleGrewAt.owner);
+        fprintf(stderr, "olang interpret: %.*s:%d: the Vec grew here\n", g.len, g.ptr, ctStaleGrewAt.lineNr);
+    }
     return 1;
 }
 

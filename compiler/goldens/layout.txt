@@ -82,6 +82,7 @@ fn(I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(I64) std/prelude/array:ChunkSize ? std/prelude/array:ArrayError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 fn(I64) std/prelude/text:Radix ? std/prelude/text:TextError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 fn(I64) std/prelude/vec:Vec<std/prelude/text:String&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<std/prelude/text:String&>" pass v
+fn(I64) std/prelude/vec:vecState<std/prelude/text:String&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:vecState<std/prelude/text:String&>" pass v
 fn(I64, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(I64, U64, I64) (U64, I64)	16 8	{ ptr, ptr }	-	ret { i64, i64 } pass vvv
 fn(I64, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
@@ -202,7 +203,7 @@ mut std/prelude/text:LineIter&	8 8	ptr	-	-
 mut std/prelude/text:String&	16 8	{ i64, ptr }	-	-
 mut std/prelude/text:StringBuilder&	8 8	ptr	-	-
 mut std/prelude/text:decimal&	8 8	ptr	-	-
-own mut Array<std/prelude/text:String&>&	16 8	{ i64, ptr }	-	-
+mut std/prelude/vec:vecState<std/prelude/text:String&>&	8 8	ptr	-	-
 std/prelude/array:ArrayError	4 4	i32	-	-
 std/prelude/array:ChunkSize	8 8	i64	-	-
 std/prelude/builtin:BuiltinError	4 4	i32	-	-
@@ -238,9 +239,10 @@ std/prelude/text:TextError	4 4	i32	-	-
 std/prelude/text:decimal	56 8	%"std/prelude/text:decimal"	{ { i64, ptr }, { i64, ptr }, i64, i64, i1 }	fields 0,16,32,40,48
 std/prelude/text:decimal&	8 8	ptr	-	-
 std/prelude/text:undecided	4 4	i32	-	-
-std/prelude/vec:Vec<std/prelude/text:String&>	24 8	%"std/prelude/vec:Vec<std/prelude/text:String&>"	{ { i64, ptr }, i64 }	fields 0,16
+std/prelude/vec:Vec<std/prelude/text:String&>	8 8	%"std/prelude/vec:Vec<std/prelude/text:String&>"	{ ptr }	fields 0
 std/prelude/vec:Vec<std/prelude/text:String&>&	8 8	ptr	-	-
 std/prelude/vec:VecError	4 4	i32	-	-
+std/prelude/vec:vecState<std/prelude/text:String&>	32 8	%"std/prelude/vec:vecState<std/prelude/text:String&>"	{ { i64, ptr }, i64, i64 }	fields 0,16,24
 tests/Base:BaseBox	4 4	%"tests/Base:BaseBox"	{ i32 }	fields 0
 tests/Base:BaseBox&	8 8	ptr	-	-
 tests/Base:BaseDir	4 4	i32	-	-
@@ -3282,6 +3284,7 @@ mut tests/shared:strOnceHolder&	8 8	ptr	-	-
 mut tests/shared:strWalkNode&	8 8	ptr	-	-
 mut tests/shared:t22P&	8 8	ptr	-	-
 own mut Array<I64>&	16 8	{ i64, ptr }	-	-
+own mut Array<std/prelude/text:String&>&	16 8	{ i64, ptr }	-	-
 own mut Array<tests/shared:OwnTextPair>&	16 8	{ i64, ptr }	-	-
 own mut std/prelude/text:String&	16 8	{ i64, ptr }	-	-
 own mut tests/shared:OwnConn&	8 8	ptr	-	-
@@ -8989,7 +8992,7 @@ fn(std/prelude/text:String&) mut Array<std/prelude/text:String&>&	16 8	{ ptr, pt
 fn(std/prelude/text:String&, std/prelude/text:String&, Array<std/prelude/text:String&>&, Array<std/prelude/text:String&>&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvvv
 == checks/checks.olang
 Array<std/prelude/text:String&, 29>	464 8	[29 x { i64, ptr }]	-	-
-Array<std/prelude/text:String&, 55>	880 8	[55 x { i64, ptr }]	-	-
+Array<std/prelude/text:String&, 56>	896 8	[56 x { i64, ptr }]	-	-
 checks/checks:Failed	4 4	i32	-	-
 checks/checks:report	16 8	%"checks/checks:report"	{ { i64, ptr } }	fields 0
 fn() checks/checks:report	16 8	{ ptr, ptr }	-	ret %"checks/checks:report" pass 
@@ -9416,6 +9419,39 @@ fn(I64, I64) F64	16 8	{ ptr, ptr }	-	ret double pass vv
 bench/sum:Usage	4 4	i32	-	-
 fn() ? bench/sum:Usage + std/io:IoError + std/prelude/text:ParseError	16 8	{ ptr, ptr }	-	ret i32 pass 
 fn(mut std/prelude/array:ArrayIter<I64>&, I64, fn(I64, I64) I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvs
+== bench/vec.olang
+bench/vec:SimA	32 8	%"bench/vec:SimA"	{ { i64, ptr }, { i64, ptr } }	fields 0,16
+bench/vec:SimV	16 8	%"bench/vec:SimV"	{ %"std/prelude/vec:Vec<I64>", %"std/prelude/vec:Vec<I64>" }	fields 0,8
+bench/vec:Usage	4 4	i32	-	-
+fn() ? bench/vec:Usage + std/io:IoError + std/prelude/text:ParseError	16 8	{ ptr, ptr }	-	ret i32 pass 
+fn(Array<I64>&, Array<I64>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(Array<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(I64) bench/vec:SimA	16 8	{ ptr, ptr }	-	ret %"bench/vec:SimA" pass v
+fn(I64) bench/vec:SimV	16 8	{ ptr, ptr }	-	ret %"bench/vec:SimV" pass v
+fn(I64) std/prelude/vec:Vec<I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<I64>" pass v
+fn(I64) std/prelude/vec:vecState<I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:vecState<I64>" pass v
+fn(I64, I64) Array<I64>	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(mut Array<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut bench/vec:SimA&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut bench/vec:SimV&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:List<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut std/prelude/vec:Vec<I64>&, Array<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/vec:Vec<I64>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/vec:Vec<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut std/prelude/vec:Vec<I64>&, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/vec:Vec<I64>&, fn(I64, I64) Bool)	16 8	{ ptr, ptr }	-	ret void pass vs
+fn(mut std/prelude/vec:vecState<I64>&, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(std/prelude/list:List<I64>&, Array<I64>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(std/prelude/vec:Vec<I64>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/vec:Vec<I64>&, Array<I64>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(std/prelude/vec:Vec<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+mut bench/vec:SimA&	8 8	ptr	-	-
+mut bench/vec:SimV&	8 8	ptr	-	-
+mut std/prelude/vec:Vec<I64>&	8 8	ptr	-	-
+mut std/prelude/vec:vecState<I64>&	8 8	ptr	-	-
+std/prelude/vec:Vec<I64>	8 8	%"std/prelude/vec:Vec<I64>"	{ ptr }	fields 0
+std/prelude/vec:Vec<I64>&	8 8	ptr	-	-
+std/prelude/vec:vecState<I64>	32 8	%"std/prelude/vec:vecState<I64>"	{ { i64, ptr }, i64, i64 }	fields 0,16,24
 == tests/Base.olang -t
 Array<I32, 10>	40 4	[10 x i32]	-	-
 Array<mut Array<F64>&>	16 8	{ i64, ptr }	-	-
@@ -10425,8 +10461,6 @@ checks/cases/e32asref:Shape&	8 8	ptr	-	-
 == checks/cases/e35bangrun.olang
 checks/cases/e35bangrun:E	4 4	i32	-	-
 fn(I64) I64 ? checks/cases/e35bangrun:E	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
-== checks/cases/e35checkedbang.olang
-fn(Array<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 == checks/cases/enumcomma.olang
 checks/cases/enumcomma:D	4 4	i32	-	-
 checks/cases/enumcomma:E	4 4	i32	-	-
@@ -11752,29 +11786,30 @@ std/prelude/list:List<std/prelude/list:List<I32>>&	8 8	ptr	-	-
 std/prelude/list:listState<std/prelude/list:List<I32>>	88 8	%"std/prelude/list:listState<std/prelude/list:List<I32>>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
 == checks/cases/vec10keep.olang
 Array<checks/cases/vec10keep:N&>	16 8	{ i64, ptr }	-	-
-Array<checks/cases/vec10keep:N&>&	16 8	{ i64, ptr }	-	-
 checks/cases/vec10keep:N	8 8	%"checks/cases/vec10keep:N"	{ i64 }	fields 0
 checks/cases/vec10keep:N&	8 8	ptr	-	-
 fn(I64) checks/cases/vec10keep:N	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec10keep:N" pass v
 fn(I64) std/prelude/vec:Vec<checks/cases/vec10keep:N&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<checks/cases/vec10keep:N&>" pass v
+fn(I64) std/prelude/vec:vecState<checks/cases/vec10keep:N&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:vecState<checks/cases/vec10keep:N&>" pass v
 fn(mut std/prelude/vec:Vec<checks/cases/vec10keep:N&>&, checks/cases/vec10keep:N&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/vec:Vec<std/prelude/text:String&>&, std/prelude/text:String&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(own mut Array<checks/cases/vec10keep:N&>&, I64, I64) own mut Array<checks/cases/vec10keep:N&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
-fn(own mut Array<std/prelude/text:String&>&, I64, I64) own mut Array<std/prelude/text:String&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(mut std/prelude/vec:vecState<checks/cases/vec10keep:N&>&, I64, checks/cases/vec10keep:N&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/vec:vecState<std/prelude/text:String&>&, I64, std/prelude/text:String&)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(std/prelude/vec:Vec<checks/cases/vec10keep:N&>&, I64) checks/cases/vec10keep:N&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(std/prelude/vec:Vec<std/prelude/text:String&>&, I64) std/prelude/text:String&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 mut Array<checks/cases/vec10keep:N&>&	16 8	{ i64, ptr }	-	-
 mut std/prelude/vec:Vec<checks/cases/vec10keep:N&>&	8 8	ptr	-	-
 mut std/prelude/vec:Vec<std/prelude/text:String&>&	8 8	ptr	-	-
-own mut Array<checks/cases/vec10keep:N&>&	16 8	{ i64, ptr }	-	-
-std/prelude/vec:Vec<checks/cases/vec10keep:N&>	24 8	%"std/prelude/vec:Vec<checks/cases/vec10keep:N&>"	{ { i64, ptr }, i64 }	fields 0,16
+mut std/prelude/vec:vecState<checks/cases/vec10keep:N&>&	8 8	ptr	-	-
+std/prelude/vec:Vec<checks/cases/vec10keep:N&>	8 8	%"std/prelude/vec:Vec<checks/cases/vec10keep:N&>"	{ ptr }	fields 0
 std/prelude/vec:Vec<checks/cases/vec10keep:N&>&	8 8	ptr	-	-
+std/prelude/vec:vecState<checks/cases/vec10keep:N&>	32 8	%"std/prelude/vec:vecState<checks/cases/vec10keep:N&>"	{ { i64, ptr }, i64, i64 }	fields 0,16,24
 == checks/cases/vec12elemvalue.olang
 Array<checks/cases/vec12elemvalue:Tok>	16 8	{ i64, ptr }	-	-
-Array<checks/cases/vec12elemvalue:Tok>&	16 8	{ i64, ptr }	-	-
 checks/cases/vec12elemvalue:Tok	24 8	%"checks/cases/vec12elemvalue:Tok"	{ { i64, ptr }, i64 }	fields 0,16
 fn() ? std/prelude/vec:VecError	16 8	{ ptr, ptr }	-	ret i32 pass 
 fn(I64) std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>" pass v
+fn(I64) std/prelude/vec:vecState<checks/cases/vec12elemvalue:Tok>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:vecState<checks/cases/vec12elemvalue:Tok>" pass v
 fn(checks/cases/vec12elemvalue:Tok, checks/cases/vec12elemvalue:Tok) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(mut Array<checks/cases/vec12elemvalue:Tok>&, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut Array<checks/cases/vec12elemvalue:Tok>&, I64, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvv
@@ -11786,133 +11821,119 @@ fn(mut std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&, I64) checks/cases/
 fn(mut std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&, I64, checks/cases/vec12elemvalue:Tok)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&, checks/cases/vec12elemvalue:Tok)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&, fn(checks/cases/vec12elemvalue:Tok, checks/cases/vec12elemvalue:Tok) Bool)	16 8	{ ptr, ptr }	-	ret void pass vs
-fn(own mut Array<checks/cases/vec12elemvalue:Tok>&, I64, I64) own mut Array<checks/cases/vec12elemvalue:Tok>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(mut std/prelude/vec:vecState<checks/cases/vec12elemvalue:Tok>&, I64, checks/cases/vec12elemvalue:Tok)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(std/prelude/text:String&, I64) checks/cases/vec12elemvalue:Tok	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec12elemvalue:Tok" pass vv
 fn(std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&, I64) checks/cases/vec12elemvalue:Tok	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec12elemvalue:Tok" pass vv
 mut Array<checks/cases/vec12elemvalue:Tok>&	16 8	{ i64, ptr }	-	-
 mut std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&	8 8	ptr	-	-
-own mut Array<checks/cases/vec12elemvalue:Tok>&	16 8	{ i64, ptr }	-	-
-std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>	24 8	%"std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>"	{ { i64, ptr }, i64 }	fields 0,16
+mut std/prelude/vec:vecState<checks/cases/vec12elemvalue:Tok>&	8 8	ptr	-	-
+std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>	8 8	%"std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>"	{ ptr }	fields 0
 std/prelude/vec:Vec<checks/cases/vec12elemvalue:Tok>&	8 8	ptr	-	-
-== checks/cases/vec142ownedfieldmoves.olang
-checks/cases/vec142ownedfieldmoves:Lexer	72 8	%"checks/cases/vec142ownedfieldmoves:Lexer"	{ %"std/prelude/vec:Vec<std/prelude/text:String&>", %"std/prelude/vec:Vec<std/prelude/text:String&>", %"std/prelude/vec:Vec<I64>" }	fields 0,24,48
-checks/cases/vec142ownedfieldmoves:Parser	8 8	%"checks/cases/vec142ownedfieldmoves:Parser"	{ ptr }	fields 0
-fn() checks/cases/vec142ownedfieldmoves:Lexer	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec142ownedfieldmoves:Lexer" pass 
-fn() checks/cases/vec142ownedfieldmoves:Parser	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec142ownedfieldmoves:Parser" pass 
-fn() own mut checks/cases/vec142ownedfieldmoves:Lexer&	16 8	{ ptr, ptr }	-	ret ptr pass 
-fn() std/prelude/vec:Vec<I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<I64>" pass 
-fn(I64) std/prelude/vec:Vec<I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<I64>" pass v
-fn(mut std/prelude/vec:Vec<I64>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(own mut Array<I64>&, I64, I64) own mut Array<I64>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
-fn(std/prelude/vec:Vec<I64>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-fn(std/prelude/vec:Vec<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(std/prelude/vec:Vec<std/prelude/text:String&>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-mut checks/cases/vec142ownedfieldmoves:Lexer&	8 8	ptr	-	-
-mut std/prelude/vec:Vec<I64>&	8 8	ptr	-	-
-own mut checks/cases/vec142ownedfieldmoves:Lexer&	8 8	ptr	-	-
-std/prelude/vec:Vec<I64>	24 8	%"std/prelude/vec:Vec<I64>"	{ { i64, ptr }, i64 }	fields 0,16
-std/prelude/vec:Vec<I64>&	8 8	ptr	-	-
+std/prelude/vec:vecState<checks/cases/vec12elemvalue:Tok>	32 8	%"std/prelude/vec:vecState<checks/cases/vec12elemvalue:Tok>"	{ { i64, ptr }, i64, i64 }	fields 0,16,24
 == checks/cases/vec143convview.olang
 fn(I64) std/prelude/vec:Vec<std/prelude/text:Char>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<std/prelude/text:Char>" pass v
+fn(I64) std/prelude/vec:vecState<std/prelude/text:Char>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:vecState<std/prelude/text:Char>" pass v
 fn(mut std/prelude/vec:Vec<std/prelude/text:Char>&, I64, std/prelude/text:Char)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/vec:Vec<std/prelude/text:Char>&, std/prelude/text:Char)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(own mut Array<std/prelude/text:Char>&, I64, I64) own mut Array<std/prelude/text:Char>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(mut std/prelude/vec:vecState<std/prelude/text:Char>&, I64, std/prelude/text:Char)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(std/prelude/vec:Vec<std/prelude/text:Char>&) Array<std/prelude/text:Char>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(std/prelude/vec:Vec<std/prelude/text:Char>&, I64) std/prelude/text:Char	16 8	{ ptr, ptr }	-	ret i8 pass vv
 mut std/prelude/vec:Vec<std/prelude/text:Char>&	8 8	ptr	-	-
-own mut Array<std/prelude/text:Char>&	16 8	{ i64, ptr }	-	-
-std/prelude/vec:Vec<std/prelude/text:Char>	24 8	%"std/prelude/vec:Vec<std/prelude/text:Char>"	{ { i64, ptr }, i64 }	fields 0,16
+mut std/prelude/vec:vecState<std/prelude/text:Char>&	8 8	ptr	-	-
+std/prelude/vec:Vec<std/prelude/text:Char>	8 8	%"std/prelude/vec:Vec<std/prelude/text:Char>"	{ ptr }	fields 0
 std/prelude/vec:Vec<std/prelude/text:Char>&	8 8	ptr	-	-
+std/prelude/vec:vecState<std/prelude/text:Char>	32 8	%"std/prelude/vec:vecState<std/prelude/text:Char>"	{ { i64, ptr }, i64, i64 }	fields 0,16,24
 == checks/cases/vec144taketolocal.olang
 Array<checks/cases/vec144taketolocal:Tok>	16 8	{ i64, ptr }	-	-
-Array<checks/cases/vec144taketolocal:Tok>&	16 8	{ i64, ptr }	-	-
-checks/cases/vec144taketolocal:Lex2	24 8	%"checks/cases/vec144taketolocal:Lex2"	{ %"std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>" }	fields 0
+checks/cases/vec144taketolocal:Lex2	8 8	%"checks/cases/vec144taketolocal:Lex2"	{ %"std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>" }	fields 0
 checks/cases/vec144taketolocal:Tok	24 8	%"checks/cases/vec144taketolocal:Tok"	{ { i64, ptr }, i64 }	fields 0,16
 fn() checks/cases/vec144taketolocal:Lex2	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec144taketolocal:Lex2" pass 
 fn() std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>" pass 
 fn(I64) std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>" pass v
+fn(I64) std/prelude/vec:vecState<checks/cases/vec144taketolocal:Tok>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:vecState<checks/cases/vec144taketolocal:Tok>" pass v
 fn(mut std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>&, checks/cases/vec144taketolocal:Tok)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(own mut Array<checks/cases/vec144taketolocal:Tok>&, I64, I64) own mut Array<checks/cases/vec144taketolocal:Tok>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(mut std/prelude/vec:vecState<checks/cases/vec144taketolocal:Tok>&, I64, checks/cases/vec144taketolocal:Tok)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(std/prelude/text:String&, I64) checks/cases/vec144taketolocal:Tok	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec144taketolocal:Tok" pass vv
 fn(std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>&, I64) checks/cases/vec144taketolocal:Tok	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec144taketolocal:Tok" pass vv
 mut Array<checks/cases/vec144taketolocal:Tok>&	16 8	{ i64, ptr }	-	-
 mut std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>&	8 8	ptr	-	-
-own mut Array<checks/cases/vec144taketolocal:Tok>&	16 8	{ i64, ptr }	-	-
-std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>	24 8	%"std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>"	{ { i64, ptr }, i64 }	fields 0,16
+mut std/prelude/vec:vecState<checks/cases/vec144taketolocal:Tok>&	8 8	ptr	-	-
+std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>	8 8	%"std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>"	{ ptr }	fields 0
 std/prelude/vec:Vec<checks/cases/vec144taketolocal:Tok>&	8 8	ptr	-	-
+std/prelude/vec:vecState<checks/cases/vec144taketolocal:Tok>	32 8	%"std/prelude/vec:vecState<checks/cases/vec144taketolocal:Tok>"	{ { i64, ptr }, i64, i64 }	fields 0,16,24
 == checks/cases/vec146deepok.olang
-checks/cases/vec146deepok:L0	24 8	%"checks/cases/vec146deepok:L0"	{ %"std/prelude/vec:Vec<I64>" }	fields 0
-checks/cases/vec146deepok:L1	24 8	%"checks/cases/vec146deepok:L1"	{ %"checks/cases/vec146deepok:L0" }	fields 0
-checks/cases/vec146deepok:L10	24 8	%"checks/cases/vec146deepok:L10"	{ %"checks/cases/vec146deepok:L9" }	fields 0
-checks/cases/vec146deepok:L11	24 8	%"checks/cases/vec146deepok:L11"	{ %"checks/cases/vec146deepok:L10" }	fields 0
-checks/cases/vec146deepok:L12	24 8	%"checks/cases/vec146deepok:L12"	{ %"checks/cases/vec146deepok:L11" }	fields 0
-checks/cases/vec146deepok:L13	24 8	%"checks/cases/vec146deepok:L13"	{ %"checks/cases/vec146deepok:L12" }	fields 0
-checks/cases/vec146deepok:L14	24 8	%"checks/cases/vec146deepok:L14"	{ %"checks/cases/vec146deepok:L13" }	fields 0
-checks/cases/vec146deepok:L15	24 8	%"checks/cases/vec146deepok:L15"	{ %"checks/cases/vec146deepok:L14" }	fields 0
-checks/cases/vec146deepok:L16	24 8	%"checks/cases/vec146deepok:L16"	{ %"checks/cases/vec146deepok:L15" }	fields 0
-checks/cases/vec146deepok:L17	24 8	%"checks/cases/vec146deepok:L17"	{ %"checks/cases/vec146deepok:L16" }	fields 0
-checks/cases/vec146deepok:L18	24 8	%"checks/cases/vec146deepok:L18"	{ %"checks/cases/vec146deepok:L17" }	fields 0
-checks/cases/vec146deepok:L19	24 8	%"checks/cases/vec146deepok:L19"	{ %"checks/cases/vec146deepok:L18" }	fields 0
-checks/cases/vec146deepok:L2	24 8	%"checks/cases/vec146deepok:L2"	{ %"checks/cases/vec146deepok:L1" }	fields 0
-checks/cases/vec146deepok:L20	24 8	%"checks/cases/vec146deepok:L20"	{ %"checks/cases/vec146deepok:L19" }	fields 0
-checks/cases/vec146deepok:L21	24 8	%"checks/cases/vec146deepok:L21"	{ %"checks/cases/vec146deepok:L20" }	fields 0
-checks/cases/vec146deepok:L22	24 8	%"checks/cases/vec146deepok:L22"	{ %"checks/cases/vec146deepok:L21" }	fields 0
-checks/cases/vec146deepok:L23	24 8	%"checks/cases/vec146deepok:L23"	{ %"checks/cases/vec146deepok:L22" }	fields 0
-checks/cases/vec146deepok:L24	24 8	%"checks/cases/vec146deepok:L24"	{ %"checks/cases/vec146deepok:L23" }	fields 0
-checks/cases/vec146deepok:L25	24 8	%"checks/cases/vec146deepok:L25"	{ %"checks/cases/vec146deepok:L24" }	fields 0
-checks/cases/vec146deepok:L26	24 8	%"checks/cases/vec146deepok:L26"	{ %"checks/cases/vec146deepok:L25" }	fields 0
-checks/cases/vec146deepok:L27	24 8	%"checks/cases/vec146deepok:L27"	{ %"checks/cases/vec146deepok:L26" }	fields 0
-checks/cases/vec146deepok:L28	24 8	%"checks/cases/vec146deepok:L28"	{ %"checks/cases/vec146deepok:L27" }	fields 0
-checks/cases/vec146deepok:L29	24 8	%"checks/cases/vec146deepok:L29"	{ %"checks/cases/vec146deepok:L28" }	fields 0
-checks/cases/vec146deepok:L3	24 8	%"checks/cases/vec146deepok:L3"	{ %"checks/cases/vec146deepok:L2" }	fields 0
-checks/cases/vec146deepok:L30	24 8	%"checks/cases/vec146deepok:L30"	{ %"checks/cases/vec146deepok:L29" }	fields 0
-checks/cases/vec146deepok:L31	24 8	%"checks/cases/vec146deepok:L31"	{ %"checks/cases/vec146deepok:L30" }	fields 0
-checks/cases/vec146deepok:L32	24 8	%"checks/cases/vec146deepok:L32"	{ %"checks/cases/vec146deepok:L31" }	fields 0
-checks/cases/vec146deepok:L33	24 8	%"checks/cases/vec146deepok:L33"	{ %"checks/cases/vec146deepok:L32" }	fields 0
-checks/cases/vec146deepok:L34	24 8	%"checks/cases/vec146deepok:L34"	{ %"checks/cases/vec146deepok:L33" }	fields 0
-checks/cases/vec146deepok:L35	24 8	%"checks/cases/vec146deepok:L35"	{ %"checks/cases/vec146deepok:L34" }	fields 0
-checks/cases/vec146deepok:L36	24 8	%"checks/cases/vec146deepok:L36"	{ %"checks/cases/vec146deepok:L35" }	fields 0
-checks/cases/vec146deepok:L37	24 8	%"checks/cases/vec146deepok:L37"	{ %"checks/cases/vec146deepok:L36" }	fields 0
-checks/cases/vec146deepok:L38	24 8	%"checks/cases/vec146deepok:L38"	{ %"checks/cases/vec146deepok:L37" }	fields 0
-checks/cases/vec146deepok:L39	24 8	%"checks/cases/vec146deepok:L39"	{ %"checks/cases/vec146deepok:L38" }	fields 0
-checks/cases/vec146deepok:L4	24 8	%"checks/cases/vec146deepok:L4"	{ %"checks/cases/vec146deepok:L3" }	fields 0
-checks/cases/vec146deepok:L40	24 8	%"checks/cases/vec146deepok:L40"	{ %"checks/cases/vec146deepok:L39" }	fields 0
-checks/cases/vec146deepok:L41	24 8	%"checks/cases/vec146deepok:L41"	{ %"checks/cases/vec146deepok:L40" }	fields 0
-checks/cases/vec146deepok:L42	24 8	%"checks/cases/vec146deepok:L42"	{ %"checks/cases/vec146deepok:L41" }	fields 0
-checks/cases/vec146deepok:L43	24 8	%"checks/cases/vec146deepok:L43"	{ %"checks/cases/vec146deepok:L42" }	fields 0
-checks/cases/vec146deepok:L44	24 8	%"checks/cases/vec146deepok:L44"	{ %"checks/cases/vec146deepok:L43" }	fields 0
-checks/cases/vec146deepok:L45	24 8	%"checks/cases/vec146deepok:L45"	{ %"checks/cases/vec146deepok:L44" }	fields 0
-checks/cases/vec146deepok:L46	24 8	%"checks/cases/vec146deepok:L46"	{ %"checks/cases/vec146deepok:L45" }	fields 0
-checks/cases/vec146deepok:L47	24 8	%"checks/cases/vec146deepok:L47"	{ %"checks/cases/vec146deepok:L46" }	fields 0
-checks/cases/vec146deepok:L48	24 8	%"checks/cases/vec146deepok:L48"	{ %"checks/cases/vec146deepok:L47" }	fields 0
-checks/cases/vec146deepok:L49	24 8	%"checks/cases/vec146deepok:L49"	{ %"checks/cases/vec146deepok:L48" }	fields 0
-checks/cases/vec146deepok:L5	24 8	%"checks/cases/vec146deepok:L5"	{ %"checks/cases/vec146deepok:L4" }	fields 0
-checks/cases/vec146deepok:L50	24 8	%"checks/cases/vec146deepok:L50"	{ %"checks/cases/vec146deepok:L49" }	fields 0
-checks/cases/vec146deepok:L51	24 8	%"checks/cases/vec146deepok:L51"	{ %"checks/cases/vec146deepok:L50" }	fields 0
-checks/cases/vec146deepok:L52	24 8	%"checks/cases/vec146deepok:L52"	{ %"checks/cases/vec146deepok:L51" }	fields 0
-checks/cases/vec146deepok:L53	24 8	%"checks/cases/vec146deepok:L53"	{ %"checks/cases/vec146deepok:L52" }	fields 0
-checks/cases/vec146deepok:L54	24 8	%"checks/cases/vec146deepok:L54"	{ %"checks/cases/vec146deepok:L53" }	fields 0
-checks/cases/vec146deepok:L55	24 8	%"checks/cases/vec146deepok:L55"	{ %"checks/cases/vec146deepok:L54" }	fields 0
-checks/cases/vec146deepok:L56	24 8	%"checks/cases/vec146deepok:L56"	{ %"checks/cases/vec146deepok:L55" }	fields 0
-checks/cases/vec146deepok:L57	24 8	%"checks/cases/vec146deepok:L57"	{ %"checks/cases/vec146deepok:L56" }	fields 0
-checks/cases/vec146deepok:L58	24 8	%"checks/cases/vec146deepok:L58"	{ %"checks/cases/vec146deepok:L57" }	fields 0
-checks/cases/vec146deepok:L59	24 8	%"checks/cases/vec146deepok:L59"	{ %"checks/cases/vec146deepok:L58" }	fields 0
-checks/cases/vec146deepok:L6	24 8	%"checks/cases/vec146deepok:L6"	{ %"checks/cases/vec146deepok:L5" }	fields 0
-checks/cases/vec146deepok:L60	24 8	%"checks/cases/vec146deepok:L60"	{ %"checks/cases/vec146deepok:L59" }	fields 0
-checks/cases/vec146deepok:L61	24 8	%"checks/cases/vec146deepok:L61"	{ %"checks/cases/vec146deepok:L60" }	fields 0
-checks/cases/vec146deepok:L62	24 8	%"checks/cases/vec146deepok:L62"	{ %"checks/cases/vec146deepok:L61" }	fields 0
-checks/cases/vec146deepok:L63	24 8	%"checks/cases/vec146deepok:L63"	{ %"checks/cases/vec146deepok:L62" }	fields 0
-checks/cases/vec146deepok:L64	24 8	%"checks/cases/vec146deepok:L64"	{ %"checks/cases/vec146deepok:L63" }	fields 0
-checks/cases/vec146deepok:L65	24 8	%"checks/cases/vec146deepok:L65"	{ %"checks/cases/vec146deepok:L64" }	fields 0
-checks/cases/vec146deepok:L66	24 8	%"checks/cases/vec146deepok:L66"	{ %"checks/cases/vec146deepok:L65" }	fields 0
-checks/cases/vec146deepok:L67	24 8	%"checks/cases/vec146deepok:L67"	{ %"checks/cases/vec146deepok:L66" }	fields 0
-checks/cases/vec146deepok:L68	24 8	%"checks/cases/vec146deepok:L68"	{ %"checks/cases/vec146deepok:L67" }	fields 0
-checks/cases/vec146deepok:L69	24 8	%"checks/cases/vec146deepok:L69"	{ %"checks/cases/vec146deepok:L68" }	fields 0
-checks/cases/vec146deepok:L7	24 8	%"checks/cases/vec146deepok:L7"	{ %"checks/cases/vec146deepok:L6" }	fields 0
-checks/cases/vec146deepok:L70	24 8	%"checks/cases/vec146deepok:L70"	{ %"checks/cases/vec146deepok:L69" }	fields 0
-checks/cases/vec146deepok:L8	24 8	%"checks/cases/vec146deepok:L8"	{ %"checks/cases/vec146deepok:L7" }	fields 0
-checks/cases/vec146deepok:L9	24 8	%"checks/cases/vec146deepok:L9"	{ %"checks/cases/vec146deepok:L8" }	fields 0
+checks/cases/vec146deepok:L0	8 8	%"checks/cases/vec146deepok:L0"	{ %"std/prelude/vec:Vec<I64>" }	fields 0
+checks/cases/vec146deepok:L1	8 8	%"checks/cases/vec146deepok:L1"	{ %"checks/cases/vec146deepok:L0" }	fields 0
+checks/cases/vec146deepok:L10	8 8	%"checks/cases/vec146deepok:L10"	{ %"checks/cases/vec146deepok:L9" }	fields 0
+checks/cases/vec146deepok:L11	8 8	%"checks/cases/vec146deepok:L11"	{ %"checks/cases/vec146deepok:L10" }	fields 0
+checks/cases/vec146deepok:L12	8 8	%"checks/cases/vec146deepok:L12"	{ %"checks/cases/vec146deepok:L11" }	fields 0
+checks/cases/vec146deepok:L13	8 8	%"checks/cases/vec146deepok:L13"	{ %"checks/cases/vec146deepok:L12" }	fields 0
+checks/cases/vec146deepok:L14	8 8	%"checks/cases/vec146deepok:L14"	{ %"checks/cases/vec146deepok:L13" }	fields 0
+checks/cases/vec146deepok:L15	8 8	%"checks/cases/vec146deepok:L15"	{ %"checks/cases/vec146deepok:L14" }	fields 0
+checks/cases/vec146deepok:L16	8 8	%"checks/cases/vec146deepok:L16"	{ %"checks/cases/vec146deepok:L15" }	fields 0
+checks/cases/vec146deepok:L17	8 8	%"checks/cases/vec146deepok:L17"	{ %"checks/cases/vec146deepok:L16" }	fields 0
+checks/cases/vec146deepok:L18	8 8	%"checks/cases/vec146deepok:L18"	{ %"checks/cases/vec146deepok:L17" }	fields 0
+checks/cases/vec146deepok:L19	8 8	%"checks/cases/vec146deepok:L19"	{ %"checks/cases/vec146deepok:L18" }	fields 0
+checks/cases/vec146deepok:L2	8 8	%"checks/cases/vec146deepok:L2"	{ %"checks/cases/vec146deepok:L1" }	fields 0
+checks/cases/vec146deepok:L20	8 8	%"checks/cases/vec146deepok:L20"	{ %"checks/cases/vec146deepok:L19" }	fields 0
+checks/cases/vec146deepok:L21	8 8	%"checks/cases/vec146deepok:L21"	{ %"checks/cases/vec146deepok:L20" }	fields 0
+checks/cases/vec146deepok:L22	8 8	%"checks/cases/vec146deepok:L22"	{ %"checks/cases/vec146deepok:L21" }	fields 0
+checks/cases/vec146deepok:L23	8 8	%"checks/cases/vec146deepok:L23"	{ %"checks/cases/vec146deepok:L22" }	fields 0
+checks/cases/vec146deepok:L24	8 8	%"checks/cases/vec146deepok:L24"	{ %"checks/cases/vec146deepok:L23" }	fields 0
+checks/cases/vec146deepok:L25	8 8	%"checks/cases/vec146deepok:L25"	{ %"checks/cases/vec146deepok:L24" }	fields 0
+checks/cases/vec146deepok:L26	8 8	%"checks/cases/vec146deepok:L26"	{ %"checks/cases/vec146deepok:L25" }	fields 0
+checks/cases/vec146deepok:L27	8 8	%"checks/cases/vec146deepok:L27"	{ %"checks/cases/vec146deepok:L26" }	fields 0
+checks/cases/vec146deepok:L28	8 8	%"checks/cases/vec146deepok:L28"	{ %"checks/cases/vec146deepok:L27" }	fields 0
+checks/cases/vec146deepok:L29	8 8	%"checks/cases/vec146deepok:L29"	{ %"checks/cases/vec146deepok:L28" }	fields 0
+checks/cases/vec146deepok:L3	8 8	%"checks/cases/vec146deepok:L3"	{ %"checks/cases/vec146deepok:L2" }	fields 0
+checks/cases/vec146deepok:L30	8 8	%"checks/cases/vec146deepok:L30"	{ %"checks/cases/vec146deepok:L29" }	fields 0
+checks/cases/vec146deepok:L31	8 8	%"checks/cases/vec146deepok:L31"	{ %"checks/cases/vec146deepok:L30" }	fields 0
+checks/cases/vec146deepok:L32	8 8	%"checks/cases/vec146deepok:L32"	{ %"checks/cases/vec146deepok:L31" }	fields 0
+checks/cases/vec146deepok:L33	8 8	%"checks/cases/vec146deepok:L33"	{ %"checks/cases/vec146deepok:L32" }	fields 0
+checks/cases/vec146deepok:L34	8 8	%"checks/cases/vec146deepok:L34"	{ %"checks/cases/vec146deepok:L33" }	fields 0
+checks/cases/vec146deepok:L35	8 8	%"checks/cases/vec146deepok:L35"	{ %"checks/cases/vec146deepok:L34" }	fields 0
+checks/cases/vec146deepok:L36	8 8	%"checks/cases/vec146deepok:L36"	{ %"checks/cases/vec146deepok:L35" }	fields 0
+checks/cases/vec146deepok:L37	8 8	%"checks/cases/vec146deepok:L37"	{ %"checks/cases/vec146deepok:L36" }	fields 0
+checks/cases/vec146deepok:L38	8 8	%"checks/cases/vec146deepok:L38"	{ %"checks/cases/vec146deepok:L37" }	fields 0
+checks/cases/vec146deepok:L39	8 8	%"checks/cases/vec146deepok:L39"	{ %"checks/cases/vec146deepok:L38" }	fields 0
+checks/cases/vec146deepok:L4	8 8	%"checks/cases/vec146deepok:L4"	{ %"checks/cases/vec146deepok:L3" }	fields 0
+checks/cases/vec146deepok:L40	8 8	%"checks/cases/vec146deepok:L40"	{ %"checks/cases/vec146deepok:L39" }	fields 0
+checks/cases/vec146deepok:L41	8 8	%"checks/cases/vec146deepok:L41"	{ %"checks/cases/vec146deepok:L40" }	fields 0
+checks/cases/vec146deepok:L42	8 8	%"checks/cases/vec146deepok:L42"	{ %"checks/cases/vec146deepok:L41" }	fields 0
+checks/cases/vec146deepok:L43	8 8	%"checks/cases/vec146deepok:L43"	{ %"checks/cases/vec146deepok:L42" }	fields 0
+checks/cases/vec146deepok:L44	8 8	%"checks/cases/vec146deepok:L44"	{ %"checks/cases/vec146deepok:L43" }	fields 0
+checks/cases/vec146deepok:L45	8 8	%"checks/cases/vec146deepok:L45"	{ %"checks/cases/vec146deepok:L44" }	fields 0
+checks/cases/vec146deepok:L46	8 8	%"checks/cases/vec146deepok:L46"	{ %"checks/cases/vec146deepok:L45" }	fields 0
+checks/cases/vec146deepok:L47	8 8	%"checks/cases/vec146deepok:L47"	{ %"checks/cases/vec146deepok:L46" }	fields 0
+checks/cases/vec146deepok:L48	8 8	%"checks/cases/vec146deepok:L48"	{ %"checks/cases/vec146deepok:L47" }	fields 0
+checks/cases/vec146deepok:L49	8 8	%"checks/cases/vec146deepok:L49"	{ %"checks/cases/vec146deepok:L48" }	fields 0
+checks/cases/vec146deepok:L5	8 8	%"checks/cases/vec146deepok:L5"	{ %"checks/cases/vec146deepok:L4" }	fields 0
+checks/cases/vec146deepok:L50	8 8	%"checks/cases/vec146deepok:L50"	{ %"checks/cases/vec146deepok:L49" }	fields 0
+checks/cases/vec146deepok:L51	8 8	%"checks/cases/vec146deepok:L51"	{ %"checks/cases/vec146deepok:L50" }	fields 0
+checks/cases/vec146deepok:L52	8 8	%"checks/cases/vec146deepok:L52"	{ %"checks/cases/vec146deepok:L51" }	fields 0
+checks/cases/vec146deepok:L53	8 8	%"checks/cases/vec146deepok:L53"	{ %"checks/cases/vec146deepok:L52" }	fields 0
+checks/cases/vec146deepok:L54	8 8	%"checks/cases/vec146deepok:L54"	{ %"checks/cases/vec146deepok:L53" }	fields 0
+checks/cases/vec146deepok:L55	8 8	%"checks/cases/vec146deepok:L55"	{ %"checks/cases/vec146deepok:L54" }	fields 0
+checks/cases/vec146deepok:L56	8 8	%"checks/cases/vec146deepok:L56"	{ %"checks/cases/vec146deepok:L55" }	fields 0
+checks/cases/vec146deepok:L57	8 8	%"checks/cases/vec146deepok:L57"	{ %"checks/cases/vec146deepok:L56" }	fields 0
+checks/cases/vec146deepok:L58	8 8	%"checks/cases/vec146deepok:L58"	{ %"checks/cases/vec146deepok:L57" }	fields 0
+checks/cases/vec146deepok:L59	8 8	%"checks/cases/vec146deepok:L59"	{ %"checks/cases/vec146deepok:L58" }	fields 0
+checks/cases/vec146deepok:L6	8 8	%"checks/cases/vec146deepok:L6"	{ %"checks/cases/vec146deepok:L5" }	fields 0
+checks/cases/vec146deepok:L60	8 8	%"checks/cases/vec146deepok:L60"	{ %"checks/cases/vec146deepok:L59" }	fields 0
+checks/cases/vec146deepok:L61	8 8	%"checks/cases/vec146deepok:L61"	{ %"checks/cases/vec146deepok:L60" }	fields 0
+checks/cases/vec146deepok:L62	8 8	%"checks/cases/vec146deepok:L62"	{ %"checks/cases/vec146deepok:L61" }	fields 0
+checks/cases/vec146deepok:L63	8 8	%"checks/cases/vec146deepok:L63"	{ %"checks/cases/vec146deepok:L62" }	fields 0
+checks/cases/vec146deepok:L64	8 8	%"checks/cases/vec146deepok:L64"	{ %"checks/cases/vec146deepok:L63" }	fields 0
+checks/cases/vec146deepok:L65	8 8	%"checks/cases/vec146deepok:L65"	{ %"checks/cases/vec146deepok:L64" }	fields 0
+checks/cases/vec146deepok:L66	8 8	%"checks/cases/vec146deepok:L66"	{ %"checks/cases/vec146deepok:L65" }	fields 0
+checks/cases/vec146deepok:L67	8 8	%"checks/cases/vec146deepok:L67"	{ %"checks/cases/vec146deepok:L66" }	fields 0
+checks/cases/vec146deepok:L68	8 8	%"checks/cases/vec146deepok:L68"	{ %"checks/cases/vec146deepok:L67" }	fields 0
+checks/cases/vec146deepok:L69	8 8	%"checks/cases/vec146deepok:L69"	{ %"checks/cases/vec146deepok:L68" }	fields 0
+checks/cases/vec146deepok:L7	8 8	%"checks/cases/vec146deepok:L7"	{ %"checks/cases/vec146deepok:L6" }	fields 0
+checks/cases/vec146deepok:L70	8 8	%"checks/cases/vec146deepok:L70"	{ %"checks/cases/vec146deepok:L69" }	fields 0
+checks/cases/vec146deepok:L8	8 8	%"checks/cases/vec146deepok:L8"	{ %"checks/cases/vec146deepok:L7" }	fields 0
+checks/cases/vec146deepok:L9	8 8	%"checks/cases/vec146deepok:L9"	{ %"checks/cases/vec146deepok:L8" }	fields 0
 fn() checks/cases/vec146deepok:L0	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec146deepok:L0" pass 
 fn() checks/cases/vec146deepok:L1	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec146deepok:L1" pass 
 fn() checks/cases/vec146deepok:L10	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec146deepok:L10" pass 
@@ -11984,21 +12005,15 @@ fn() checks/cases/vec146deepok:L7	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec146d
 fn() checks/cases/vec146deepok:L70	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec146deepok:L70" pass 
 fn() checks/cases/vec146deepok:L8	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec146deepok:L8" pass 
 fn() checks/cases/vec146deepok:L9	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec146deepok:L9" pass 
-== checks/cases/vec151samepathhere.olang
-checks/cases/vec151samepathhere:Lexer	48 8	%"checks/cases/vec151samepathhere:Lexer"	{ %"std/prelude/vec:Vec<std/prelude/text:String&>", %"std/prelude/vec:Vec<std/prelude/text:String&>" }	fields 0,24
-checks/cases/vec151samepathhere:Parser	16 8	%"checks/cases/vec151samepathhere:Parser"	{ ptr, ptr }	fields 0,8
-fn() checks/cases/vec151samepathhere:Lexer	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec151samepathhere:Lexer" pass 
-fn() checks/cases/vec151samepathhere:Parser	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec151samepathhere:Parser" pass 
-fn(mut checks/cases/vec151samepathhere:Parser&)	16 8	{ ptr, ptr }	-	ret void pass v
-mut checks/cases/vec151samepathhere:Lexer&	8 8	ptr	-	-
-mut checks/cases/vec151samepathhere:Parser&	8 8	ptr	-	-
-own mut checks/cases/vec151samepathhere:Lexer&	8 8	ptr	-	-
 == checks/cases/vec156getterfresh.olang
-checks/cases/vec156getterfresh:Lexer	24 8	%"checks/cases/vec156getterfresh:Lexer"	{ %"std/prelude/vec:Vec<std/prelude/text:String&>" }	fields 0
+checks/cases/vec156getterfresh:Lexer	8 8	%"checks/cases/vec156getterfresh:Lexer"	{ %"std/prelude/vec:Vec<std/prelude/text:String&>" }	fields 0
 checks/cases/vec156getterfresh:Parser	8 8	%"checks/cases/vec156getterfresh:Parser"	{ ptr }	fields 0
 fn() checks/cases/vec156getterfresh:Lexer	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec156getterfresh:Lexer" pass 
 fn() checks/cases/vec156getterfresh:Parser	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec156getterfresh:Parser" pass 
 fn(I64) mut checks/cases/vec156getterfresh:Lexer&	16 8	{ ptr, ptr }	-	ret ptr pass v
+fn(mut std/prelude/vec:Vec<std/prelude/text:String&>&, Array<std/prelude/text:String&>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(std/prelude/vec:Vec<std/prelude/text:String&>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/vec:Vec<std/prelude/text:String&>&) std/prelude/vec:Vec<std/prelude/text:String&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<std/prelude/text:String&>" pass v
 mut checks/cases/vec156getterfresh:Lexer&	8 8	ptr	-	-
 own mut checks/cases/vec156getterfresh:Lexer&	8 8	ptr	-	-
 == checks/cases/vec157convcond.olang
@@ -12017,6 +12032,7 @@ fn(std/prelude/vec:Vec<I64>&) Array<I64>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } p
 fn(std/prelude/vec:Vec<I64>&) checks/cases/vec20byname:Ix&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(std/prelude/vec:Vec<std/prelude/text:Char>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/vec:Vec<std/prelude/text:Char>&) std/prelude/text:String&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
+own mut Array<std/prelude/text:Char>&	16 8	{ i64, ptr }	-	-
 == checks/cases/vec22recrun.olang
 checks/cases/vec22recrun:CB	32 8	%"checks/cases/vec22recrun:CB"	{ { i64, ptr }, { i64, ptr } }	fields 0,16
 checks/cases/vec22recrun:CB&	8 8	ptr	-	-
@@ -12032,18 +12048,20 @@ checks/cases/vec25cloneref:N	8 8	%"checks/cases/vec25cloneref:N"	{ i64 }	fields 
 checks/cases/vec25cloneref:N&	8 8	ptr	-	-
 fn(I64) checks/cases/vec25cloneref:N	16 8	{ ptr, ptr }	-	ret %"checks/cases/vec25cloneref:N" pass v
 fn(I64) std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>" pass v
+fn(I64) std/prelude/vec:vecState<checks/cases/vec25cloneref:N&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:vecState<checks/cases/vec25cloneref:N&>" pass v
+fn(mut std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>&, Array<checks/cases/vec25cloneref:N&>&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>&, checks/cases/vec25cloneref:N&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(own mut Array<checks/cases/vec25cloneref:N&>&, I64, I64) own mut Array<checks/cases/vec25cloneref:N&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(mut std/prelude/vec:vecState<checks/cases/vec25cloneref:N&>&, I64, checks/cases/vec25cloneref:N&)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>&) std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>" pass v
 fn(std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>&, I64) checks/cases/vec25cloneref:N&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(std/prelude/vec:Vec<std/prelude/text:String&>&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
-fn(std/prelude/vec:Vec<std/prelude/text:String&>&) std/prelude/vec:Vec<std/prelude/text:String&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<std/prelude/text:String&>" pass v
 mut Array<checks/cases/vec25cloneref:N&>&	16 8	{ i64, ptr }	-	-
 mut std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>&	8 8	ptr	-	-
-own mut Array<checks/cases/vec25cloneref:N&>&	16 8	{ i64, ptr }	-	-
-std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>	24 8	%"std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>"	{ { i64, ptr }, i64 }	fields 0,16
+mut std/prelude/vec:vecState<checks/cases/vec25cloneref:N&>&	8 8	ptr	-	-
+std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>	8 8	%"std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>"	{ ptr }	fields 0
 std/prelude/vec:Vec<checks/cases/vec25cloneref:N&>&	8 8	ptr	-	-
+std/prelude/vec:vecState<checks/cases/vec25cloneref:N&>	32 8	%"std/prelude/vec:vecState<checks/cases/vec25cloneref:N&>"	{ { i64, ptr }, i64, i64 }	fields 0,16,24
 == checks/cases/vec26toarray.olang
 fn(std/prelude/vec:Vec<std/prelude/text:String&>&) mut Array<std/prelude/text:String&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 == checks/cases/vec49byname.olang

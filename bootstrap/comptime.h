@@ -26,6 +26,8 @@ struct ctVal {
                           //elems[0] a reference to the instance it calls it on
     struct ctVal* viewOf; //CT_AGG, an array that is a slice (E16a): the array whose storage it is part of, starting
     int viewOff;          //at element viewOff - a view shares that array's element nodes
+    const struct token* retiredAt; //CT_AGG, M19d: an array its collection retired ("retire()", a Vec's old buffer), and
+                          //where the program made it so - a later read or write through it stops evaluation (K1)
 };
 
 //evaluates op, as a value of type want, entirely at compile time. False when it cannot be - it reads
@@ -44,6 +46,10 @@ bool CtEvaluateGlobal(struct var* v, struct ctVal** out, struct token* whyTok, c
 //K1: whether why - what stopped an evaluation - is reaching what aborts the program (abort, unreachable, a failing
 //assert, a guaranteed check): where a value is required, that is a compile-time error rather than a run-time fallback
 bool CtWhyAborts(const char* why);
+//K1/M19g: where the program grew the Vec whose old buffer the last evaluation stopped on reading (CtWhyStale) - the
+//program's own call, not the prelude's line inside it
+bool CtWhyStale(const char* why);
+struct token CtStaleGrewAt(void);
 
 //K2b: the global whose value first reached node - what it holds is that global's storage - or NULL
 struct var* CtNodeOwner(struct ctVal* node);

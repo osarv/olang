@@ -696,6 +696,8 @@ enum operation {
                       //(<= hi when isInclusive); only ever built under "try", so it always has a checkRoot
     OPERATION_BITCAST, //E33: "x.Bits()", "u.F64FromBits()" - args[0]'s bits read as op->type, of the same width: a value
                        //made from a value, never a view of storage (T36)
+    OPERATION_RETIRE, //M19d: "a.retire()", the prelude's own - args[0] an array its collection no longer uses (a Vec's
+                      //old buffer). Nothing at run time but under -sanitize (B2f); the evaluator stops on a later use (K1)
     OPERATION_NUMERIC_CONVERT, //"TypeName(x)" where TypeName is one of the five numeric primitive types
     OPERATION_TAKE, //E34: "take p" - args[0] is the place (an own slot); the owner it held, the place left null
     OPERATION_NOMINAL_CONVERT, //T29: "Name(x)" between a declared type and its underlying one - same
@@ -954,10 +956,13 @@ struct semaModule {
     bool publicClosureComputed;
     bool computingPublicClosure;
     struct list publicClosure; //list of struct semaModule*, only valid once publicClosureComputed
+    bool retires; //M19d: its code calls "retire()" - under -sanitize its arrays get chunks of their own (B2f)
     struct list globalOrder; //B5a: struct var*, the globals with an initializer in the order they are set (CtOrderGlobals)
     bool globalOrderSet;
 };
 
+//M19d: whether mod is one of the prelude's
+bool SemanticIsPreludeModule(struct semaModule* mod);
 long long TypeGetSize(struct type t);
 //D14b: the largest length an array of elements this size may have - its byte count must fit an I64
 long long ArrayLengthLimit(long long elemSize);

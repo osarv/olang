@@ -1,0 +1,63 @@
+# round 1 of docs/memory.md: a Vec is a handle - built, built -debug, built -sanitize and interpreted, one output
+import "std/io"
+type Tok struct(text String&, line I64) {
+    text
+    line
+}
+type Lexer struct() {
+    toks Vec<Tok>
+}
+fn (l mut Lexer&) run(src String&) {
+    line := 0
+    for w in src.Split(" ") {
+        l.toks.Push(Tok(w, line))
+        line++
+    }
+}
+fn churn() I64 {
+    t := 0
+    for i in range 3000 {
+        s := $i "abcdefghijklmnopqrstuvwxyz0123456789"
+        t += s.Len()
+    }
+    return t
+}
+fn pushTo(v Vec<I64>, n I64) { for i in range n { v.Push(i * i) } }
+fn main() {
+    v := Vec<I64>()
+    pushTo(v, 50)                                   # a copy is a second name: v sees the Pushes
+    w := v
+    w.Push(-1)
+    c := v.Clone()
+    for i in range 1000 { v.Push(i) }               # the buffer replaced; w follows, c does not
+    churn()
+    t := 0
+    for x in v { t += x }
+    io.Println($v.Len() " " $w.Len() " " $c.Len() " " $t " " $c[50] " " $w[1050])!
+    l := Lexer()
+    l.run("let x = 42 + y")
+    keep := l.toks[1]
+    for i in range 200 { l.toks.Push(Tok("t" $i, i)) }
+    churn()
+    l.toks.Sort(fn(a Tok, b Tok) Bool { return a.text < b.text })
+    io.Println($l.toks.Len() " " $keep.text " " $l.toks[0].text " " $l.toks[l.toks.Len() - 1].text)!
+    m := Map<String&, Vec<I64>>()
+    for k in range 5 {
+        m.Put($k, Vec<I64>())
+        e := try m.Get($k) catch { unreachable }
+        for j in range k * 10 { e.Push(j) }
+    }
+    churn()
+    s := 0
+    for e in m {
+        s += e.Value.Len() * 1000
+        for x in e.Value { s += x }
+    }
+    s += v.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x })
+    q := Vec<I64>()
+    q.Push(1)
+    for x in q {
+        if x < 1000 { q.Push(x * 2) }
+    }
+    io.Println($s " " $q.Len() " " $q " " $(v == w) " " $(c == v))!
+}

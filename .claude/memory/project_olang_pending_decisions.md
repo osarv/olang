@@ -331,6 +331,15 @@ design. Do what you want") - nothing to decide until a GUI is written.
   destructor now, exactly once (nothing at scope close for it); its storage may then be freed early; use after it is
   refused locally, caught by the evaluator/interpret/-sanitize elsewhere, and std resource methods fail with an error.
   No Close, no idempotent destructors. In effect: neither.
+  ANSWERED (the user: "We don't want pins yet at least. For Destruct(). Only allow this if it can be proven memory
+  safe? Alternatively force server loops to exit and restart every once in a while to free up memory? Premature
+  destruction should never introduce use after frees"): no pins. DECIDED: `x.Destroy()` compiles only where the
+  compiler proves x is the sole way left to reach the object (the early-free proof: no reference to it stored
+  elsewhere, no live view; e.g. a value just taken out of a Map with `Take`), else an error naming what else reaches
+  it; use after it in the same function refused; destructors run exactly once (scope close or a proven Destroy); no
+  Close, no idempotent destructors; stage 0 a simple local version (a local straight from Take or a constructor, never
+  stored or passed), the port the full analysis; the restart pattern (a block in the server loop left every N
+  requests) documented as the fallback. Into docs/memory.md's build plan.
 - QAE DECIDED by me 2026-10-18 (the user did not follow the question; a tidy-up): SPEC section 8 is restated in the
   model's form (general rules, special cases as applications, no change in meaning), beside M6.
 - QAE ASKED (for the morning) from docs/scope-model.md (merged 2026-10-18): restate SPEC section 8 in the model's form
@@ -344,6 +353,17 @@ design. Do what you want") - nothing to decide until a GUI is written.
   error). Being fixed in both compilers. ANSWERED the methods question with a recommendation: keep std/math's free
   functions (the method-set overload incl. through extends, several-argument functions, one place). In effect: free
   functions; E13c unchanged (`4.Sqrt()`/`2.0.Sqrt()` stay errors).
+  CONFIRMED 2026-10-18 (the user: "Keep in math lib"; moving only Sqrt/Exp would be arbitrary). Also confirmed:
+  static race safety dropped ("an artifact" of own/take); Char does not satisfy Number (the numtraits decision).
+  REVERSED the same day (the user: "this kinda makes moving the math functions onto the type viable again. If integers
+  only take min max clamp, isqrt and exp... floats are a compsci type", then "Also abs for integers"): math becomes
+  methods - floats (F16, BF16, F32, F64) get every std/math function as a method written once over the Float trait
+  (x.Sqrt(), y.Atan2(x), a.Hypot(b), x.Fma(a, b) ...); integers get Abs, Min, Max, Clamp, ISqrt; prelude constants Pi,
+  Euler, Inf, NaN (others computed, folded: F64(2).Sqrt()); std/math removed, the free functions gone, corpus and std
+  migrated by an olang tool. Then (the user: "Yes let's do this. I want an integer power as well for the integer set.
+  And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
+  a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
+  (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
 - QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two

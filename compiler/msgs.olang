@@ -388,6 +388,7 @@ type Diag enum {
     StrStoresInReceiver
     StrReceiverWritable
     NoteHere
+    NoteVecGrewHere
     NoteOwnElemByRef
     NoteOwnBorrowedHere
     OwnImplicitRelease
@@ -615,6 +616,8 @@ type Diag enum {
     AssertMessageNotText
     AssertAborts
     GlobalAborts
+    AssertStale
+    GlobalStale
     CondTooDeep
     MainSignature
     NoteObligationOrigin
@@ -1662,6 +1665,9 @@ fn StrReceiverWritable() Msg { return Msg(Diag.StrReceiverWritable, "E11c, T25c"
 # NOTE_HERE
 fn NoteHere() Msg { return Msg(Diag.NoteHere, "", "here") }
 
+# NOTE_VEC_GREW_HERE
+fn NoteVecGrewHere() Msg { return Msg(Diag.NoteVecGrewHere, "", "the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'") }
+
 # NOTE_OWN_ELEM_BY_REF
 fn NoteOwnElemByRef(ty1 String&, ty2 String&) Msg { return Msg(Diag.NoteOwnElemByRef, "", "its elements, " $ty1 ", are values holding references - hold them by reference, '" $ty2 "&'") }
 
@@ -2342,6 +2348,12 @@ fn AssertAborts(text String&) Msg { return Msg(Diag.AssertAborts, "S18c", "this 
 
 # ERR_GLOBAL_ABORTS
 fn GlobalAborts(text String&) Msg { return Msg(Diag.GlobalAborts, "K2", "this global's initializer aborts the program, evaluated while compiling: " $text) }
+
+# ERR_ASSERT_STALE
+fn AssertStale(text String&) Msg { return Msg(Diag.AssertStale, "S18c, K1", "evaluated while compiling, this assertion stops on a stale view: " $text) }
+
+# ERR_GLOBAL_STALE
+fn GlobalStale(text String&) Msg { return Msg(Diag.GlobalStale, "K2, K1", "evaluated while compiling, this global's initializer stops on a stale view: " $text) }
 
 # ERR_COND_TOO_DEEP
 fn CondTooDeep(n I64) Msg { return Msg(Diag.CondTooDeep, "B9c", "conditions decide branches holding further conditions more than " $n " levels deep") }

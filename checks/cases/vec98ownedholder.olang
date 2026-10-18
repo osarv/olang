@@ -1,4 +1,4 @@
-# check: fail error[O39]: assigning 'h.lx' may release the Array<I64> borrowed on line 15, which is used after it
+# check: fail error[O39]: assigning 'h.lx' may release the Lexer borrowed on line 15, which is used after it
 # Vec phase 2a (O35/O39): releasing an owned struct releases its Vec field's buffer - not while a view of it is used
 import "std/io"
 type Lexer struct(n I64) {

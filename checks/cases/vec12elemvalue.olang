@@ -1,5 +1,5 @@
 # check: run
-# Vec phase 2a (T25e, was Vec phase 1's refusal): a Vec's elements may be values holding references - Vec<Tok> with Tok
+# Vec phase 2a: a Vec's elements may be values holding references - Vec<Tok> with Tok
 # holding its text: pushed, grown, sorted, indexed, an element kept across growth and read back after a churn
 type Tok struct(text String&, k I64) {
     text
