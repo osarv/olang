@@ -31007,13 +31007,14 @@ static void vgPlacesOf(struct operand* op, struct vgState* st, struct list* out)
         if (!v || v->isLambda || (v->type.bType == BASETYPE_FUNC && v->isFuncDecl)) return;
         struct var* c = canonicalVar(v);
         if (c->isGlobalVar) { vgPlaceAdd(out, (struct vgPlace){ c, -1, "", 0, false }); return; }
-        int i = vgParamIndex(v);
-        if (i >= 0) { vgPlaceAdd(out, (struct vgPlace){ canonicalVar(ListGetIdx(&vg.func->type.vars, i)), i, "", 0, false }); return; }
+        //(a parameter given another value names what it was given - its own place, no longer the caller's)
         struct vgLocal* l = vgLocalOf(st, c, false);
         if (l && l->aliasSet) {
             for (int k = 0; k < l->alias.len; k++) vgPlaceAdd(out, *(struct vgPlace*)ListGetIdx(&l->alias, k));
             return;
         }
+        int i = vgParamIndex(v);
+        if (i >= 0) { vgPlaceAdd(out, (struct vgPlace){ canonicalVar(ListGetIdx(&vg.func->type.vars, i)), i, "", 0, false }); return; }
         vgPlaceAdd(out, (struct vgPlace){ c, -1, "", 0, false });
         return;
     }
@@ -31452,9 +31453,15 @@ static void vgStoreInto(struct operand* target, struct list* refs, struct vgStat
 
 static void vgAssign(struct operand* target, struct operand* val, struct list* refs, struct vgState* st) {
     if (!target) return;
-    if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar
-            && vgParamIndex(target->readVar) < 0) {
+    if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar) {
+        bool param = vgParamIndex(target->readVar) >= 0;
+        if (param) vgStoreInto(target, NULL, st); //(the views of what it named before go)
         vgBind(target->readVar, val, refs, st, true);
+        struct vgLocal* l = vgLocalOf(st, target->readVar, false);
+        if (param && l && !l->aliasSet) { //a root of its own from now on
+            vgPlaceAdd(&l->alias, (struct vgPlace){ l->v, -1, "", 0, false });
+            l->aliasSet = true;
+        }
         return;
     }
     if (target->opType != OPERATION_READ_VAR) {
