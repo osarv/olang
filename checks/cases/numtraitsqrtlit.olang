@@ -1,0 +1,16 @@
+# check: run
+# G9a/T35c: a variable only literals reach, whose constraint their own type (I64) fails, takes the first type that meets
+# it and that they adapt to - F64 for a Float - so root(4) is root at F64, as root(4.0) is; an integer literal still
+# binds I64 where the constraint takes it (a Number)
+fn root<T Float>(x T) T { return x.Sqrt() }
+fn power<T Float>(x T, y T) T { return x.Pow(y) }
+fn size<T Number>(x T) T { return x.Abs() }
+fn whole<T Integer>(x T) T { return x }
+fn main() ? {
+    a F64 = root(4)
+    b := root(2 + 2)
+    c := power(2, 10)
+    d I64 = size(-3)
+    e I64 = whole(7)
+    assert a == 2.0 and b == 2.0 and c == 1024.0 and d == 3 and e == 7
+}

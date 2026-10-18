@@ -6060,6 +6060,7 @@ fn(mut compiler/check:Checker&, I64, compiler/types:ListId, compiler/source:Span
 fn(mut compiler/check:Checker&, I64, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/check:Checker&, I64, compiler/types:TypeId, compiler/types:ListId)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut compiler/check:Checker&, I64, compiler/types:TypeId, std/prelude/text:String&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
+fn(mut compiler/check:Checker&, I64, mut compiler/generic:Binding&, Array<compiler/types:TypeId>&, I64, Array<compiler/ast:Expr&>&)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
 fn(mut compiler/check:Checker&, I64, std/prelude/text:String&, std/prelude/text:String&, I64, compiler/types:TypeId, compiler/types:ListId)	16 8	{ ptr, ptr }	-	ret void pass vvvvvvv
 fn(mut compiler/check:Checker&, compiler/ast:Branch&) compiler/typed:Block&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(mut compiler/check:Checker&, compiler/ast:Case&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
@@ -6366,6 +6367,7 @@ fn(mut compiler/generic:Program&, I64, Array<compiler/ast:Decl&>&)	16 8	{ ptr, p
 fn(mut compiler/generic:Program&, I64, Array<compiler/source:NameId>&)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/generic:Program&, I64, I64) compiler/generic:varRow	16 8	{ ptr, ptr }	-	ret %"compiler/generic:varRow" pass vvv
 fn(mut compiler/generic:Program&, I64, I64) compiler/types:DeclId	16 8	{ ptr, ptr }	-	ret i32 pass vvv
+fn(mut compiler/generic:Program&, I64, I64, compiler/types:ListId, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
 fn(mut compiler/generic:Program&, I64, compiler/ast:Func&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut compiler/generic:Program&, I64, compiler/ast:TopIf&, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/generic:Program&, I64, compiler/ast:TypeParam&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
