@@ -56,7 +56,13 @@ overrated".
   5.11s and two 5.12s - and ~50 `§5.x` references (SPEC.md, bootstrap/syntax.h) must be checked one by one for which
   section they mean (`§5.6` points at nothing). Renumber 5.6-5.19 in order.
 - QUEUED (QAH, 2026-10-18): error-set parameters `<T ? E>` in both compilers - spec first (G-rules, R1b), inference,
-  Iterator<T ? E>, std helpers taking fallible callbacks, checks; after wt-mathmeth and wt-mem2 merge.
+  Iterator<T ? E>, std helpers taking fallible callbacks, checks; with QAI's checked versions; after wt-mathmeth and
+  wt-mem2 merge. Then generators (fn ... Iterator<T ? E> with yield) in both compilers.
+- QUEUED after the 2026-10-24 reset (the user, 2026-10-18: "C is verbose as fuck, we aren't supposed to be verbose"):
+  a verbosity audit of the port (sonnet/medium): where compiler/*.olang's lines go, file by file (code, tests,
+  comments, the generated msgs table), which patterns repeat, and which language features would shrink them - evidence
+  for language design, not only tidying. Measured 2026-10-18: scanner+parser 4,470 lines vs C's 6,050; checker 17,100
+  vs semantic.c's 31,350 (which also holds section 8); the finished port projected at 40-50k vs C's 56k.
 - DONE 2026-10-18 (9a831b2): the syntax batch (QY/QW, 9b78375), the number traits (T35c), Pair to std/pair, E13c (a
   number literal is no receiver), `a.Chunks(ChunkSize)` for race-free fan-out.
 - QUEUED (QZ2, the user 2026-10-17): after memory round 1 (Vec as a handle - replaces Vec phase 2b), the iterator

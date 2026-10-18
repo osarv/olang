@@ -23,7 +23,12 @@ just don't spend effort building extras twice.
   model, array model, generics, the command line, test semantics), everything the port's own source or its std uses,
   and every bug fix (found in one, fixed in both).
 - ONLY into the self-hosted compiler: extra features for other domains - arbitrary-precision or arbitrary-width types,
-  FPGA/HLS targets, new backends, units of measure, generators, reflection and the like - unless the port itself comes to
+  FPGA/HLS targets, new backends and the like - unless the port itself comes to
   need one, in which case stage 0 gets it.
 - The port is written in the best olang; stage 0 is amended to follow, never the reverse.
 - Today's batches (errors, arrays incl. QW, the word command line, formatter) are core: they go into both.
+
+**Syntax goes into both (the user, 2026-10-18, on generators): "they are a syntax features so I kinda think they should
+go in both. Restricting the port on syntax is probably gonna backfire eventually."** Anything the port's own source
+could be written with - syntax and language constructs (generators included) - goes into stage 0 too, so the port is
+never restricted by what stage 0 accepts. Port-only stays for domain extras (arbitrary precision, FPGA, new backends).
