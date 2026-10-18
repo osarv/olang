@@ -315,8 +315,11 @@ fn (ln mut lowering&) assemble(res types.TypeId) {
     for i in range b.Fields.Len() { ops[i] = mir.Operand.Copy(mir.L(mir.LocalId(I32(b.Fields[i])))) }
     v := ln.into(inst, mir.Rvalue.Aggregate(inst, 0, ln.F.Args(ops)), b.Sp)
     if inst != res {
-        # an instance of a reference-only type (C11): made where it lands, its instance scope's stand-in
-        v = ln.into(res, mir.Rvalue.New(ln.instance(), v, res), b.Sp)
+        # an instance of a reference-only type (C11): made where it lands, its instance scope, and a destructor-bearing
+        # one registered there, once per constructor call (O16)
+        s := ln.instance()
+        v = ln.into(res, mir.Rvalue.New(s, v, res), b.Sp)
+        if t.KindOf(r) == types.Kind.Named and t.HasBody(r) and t.Destructs(r) { ln.emit(mir.Stmt.RegisterDtor(b.Sp, s, inst, v)) }
     }
     ln.leave(0)
     ln.end(mir.Term.Return(b.Sp, v))
