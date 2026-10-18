@@ -1826,8 +1826,8 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
 # the value's scopes, else a thunk of its own taking one
 fn (e mut Emitter&) codeFor(code mir.FnKey, ty types.TypeId) String {
     s := e.sym(code)
-    own := e.codeType(code)
-    if e.hasEnv(code) and e.passedOf(code, own) == mir.PassedCount(e.T, mir.Callee.Value(mir.Operand.None), ty) {
+    mine := e.codeType(code)
+    if e.hasEnv(code) and e.passedOf(code, mine) == mir.PassedCount(e.T, mir.Callee.Value(mir.Operand.None), ty) {
         return s
     }
     key := $s "_fv" $ty
@@ -1854,9 +1854,9 @@ fn (e mut Emitter&) codeType(k mir.FnKey) types.TypeId {
 fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
     t := e.T
     s := e.sym(code)
-    own := e.codeType(code)
+    mine := e.codeType(code)
     vp := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), ty)
-    cp := e.passedOf(code, own)
+    cp := e.passedOf(code, mine)
     hdr := e.header(code, ty, $s "_fv" $ty, vp, true)
     b := StringBuilder()
     b.Push(hdr)
@@ -1895,7 +1895,7 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
             case _ { args.Push($e.ty(ps[i]) " %a" $i) }
         }
     }
-    rt := t.RetLlvm(own)
+    rt := t.RetLlvm(mine)
     if rt == "void" {
         b.Push("  call void @" $s "(" $args.ToString() ")\n  ret void\n}\n\n")
     } else {
