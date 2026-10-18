@@ -103,6 +103,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     lastErrs types.ListId = types.ListId(0)   # the errors of the call checked last (P4: a task's)
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
+    eqAt source.Span = source.Span(-1, -1)    # where the "==" being elaborated is written (M6b's error)
     opIn source.Span = source.Span(-1, -1)    # where "in" is written, for the Has or Contains being built (E29)
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
     textT types.TypeId = types.TypeId(-1)
@@ -1188,6 +1189,8 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     mi := c.P.FnModule(f)
     sig := c.P.InstanceSig(inst)
     c.P.Asking = generic.Origin(c.P.L.Mods[mi].File, fd.Sp, inst)
+    base := c.P.L.Diags.ContextBase(c.P.L.Diags.ContextDepth())
+    pushed := c.instContexts(inst)
     fr := c.push(id, mi, c.P.T.Result(sig), c.P.T.Errors(sig))
     fr.Ctx = c.P.FnContext(f, c.P.InstanceArgs(inst))
     # G19: the type instances its signature writes, checked where they are written
@@ -1225,6 +1228,43 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
         c.err(c.nameSpan(fd), msgs.MissingReturn(c.ty(c.P.T.Result(sig))))
     }
     c.pop()
+    for k2 in range pushed { c.P.L.Diags.PopContext() }
+    c.P.L.Diags.ContextBase(base)
+}
+
+# G16b: the contexts an instance's body is checked in - where it was asked for, and where each instance asking for it
+# was in turn, the outermost first - each "instantiated here, with T = ...": how many were pushed
+fn (c mut Checker&) instContexts(inst I64) I64 {
+    chain List<pair.Pair<generic.Origin, I64>>
+    cur := inst
+    for depth in range 32 {
+        if c.P.T.Items(c.P.InstanceArgs(cur)).Len() == 0 { break }
+        o := c.P.InstanceOrigin(cur)
+        if o.File < 0 { break }
+        chain.Push(pair.Pair(o, cur))
+        if o.Within < 0 { break }
+        cur = o.Within
+    }
+    for kk in range chain.Len() {
+        e := chain[chain.Len() - 1 - kk]
+        c.P.L.Diags.PushContext(diag.Where.Span(e.First.File, I64(e.First.Sp.Start), I64(e.First.Sp.End)), c.instNote(e.Second))
+    }
+    return chain.Len()
+}
+
+# "instantiated here, with K = K, V = I32"
+fn (c mut Checker&) instNote(inst I64) String {
+    b := StringBuilder()
+    b.Push("instantiated here")
+    owner := generic.FnOwner(c.P.InstanceFn(inst))
+    args := c.P.T.Items(c.P.InstanceArgs(inst))
+    for j in range args.Len() {
+        b.Push(", with " if j == 0 else ", ")
+        b.Push(c.text(c.P.VarAt(owner, j).Name))
+        b.Push(" = ")
+        b.Push(c.ty(args[j]))
+    }
+    return b.ToString()
 }
 
 # where a signature writes "noreturn" (D8e): the word in a declaration's text, after its parameters
@@ -1520,7 +1560,21 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
                 c.roNeed(readPlace(ref))
             }
         }
-        case typed.Place.Field(_, _, base, _) { c.mustWrite(base, sp, store) }
+        case typed.Place.Field(fsp, _, base, _) {
+            match base {
+                case typed.Place.Temp(_, _, v, _) {
+                    if not store and c.chosenAt(v).Start >= 0 and c.condChoosesPlace(v) {
+                        # E28: a part of a conditional's value lent writably - a part of a copy, read-only besides (T25c)
+                        nsp := c.lastName(fsp)
+                        c.err(nsp, msgs.CondLentWritable())
+                        c.err(nsp, msgs.ReadOnlyToWritable())
+                        return
+                    }
+                }
+                nomatch { }
+            }
+            c.mustWrite(base, sp, store)
+        }
         case typed.Place.Elem(_, _, e) { c.mustWrite(e.Base, sp, store) }
         case typed.Place.Payload(_, _, pl) { c.mustWrite(pl.Base, sp, store) }
         case typed.Place.Temp(_, _, x, _) {
@@ -2496,7 +2550,15 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 }
                 return typed.Expr.Borrow(sp, want, p)
             }
-            if (c.P.T.PermOf(want) & types.Writable) != 0 { c.roLend(x, sp) }
+            if (c.P.T.PermOf(want) & types.Writable) != 0 {
+                csp := c.chosenAt(x)
+                if csp.Start >= 0 and c.condChoosesPlace(x) {
+                    # E28: a conditional's value is a copy, which the callee would write and drop
+                    c.err(csp, msgs.CondLentWritable())
+                } else {
+                    c.roLend(x, sp)
+                }
+            }
             return typed.Expr.Promote(sp, want, typed.Promote(x, c.site(typed.SiteKind.Promote, sp)))
         }
         if c.flowsInto(have, r) or (c.isNumber(have) and c.isNumber(r) and c.P.Flows(have, r)) {
@@ -3068,7 +3130,13 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         return c.unknown(sp)
     }
     if not c.isNumber(ta) or not c.isNumber(tb) {
-        if op == token.Tok.EqEq or op == token.Tok.NotEq { return c.equality(sp, op, x, y) }
+        if op == token.Tok.EqEq or op == token.Tok.NotEq {
+            at := c.eqAt
+            c.eqAt = opSp
+            r := c.equality(sp, op, x, y)
+            c.eqAt = at
+            return r
+        }
         if operatorName(op) != "" and c.notOperator(c.deref(ta), operatorName(op), opSp, msgs.Tok(op.Text()), 1, false) { return c.unknown(sp) }
         if c.isNumber(ta) or c.isNumber(tb) {
             c.err(opSp, msgs.OperandsDiffer(msgs.Tok(op.Text()), c.ty(ta), c.ty(tb)))
@@ -3265,7 +3333,12 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&c, y typ
             return c.lit(sp, types.BoolT, 0)
         }
     }
-    eq := c.P.MethodOf(da, c.P.L.Names.Intern("Eq"))
+    eq := c.eqMethod(da)
+    if eq == -2 {
+        # M6b: a private eq is "==" in its own module only - here it cannot be found
+        c.P.L.Diags.ErrorOncePerLine(c.at(c.eqAt if c.eqAt.Start >= 0 else sp), msgs.ProtocolPrivate("'=='", c.ty(da), "eq", "Eq"))
+        return c.lit(sp, types.BoolT, 0)
+    }
     if eq >= 0 {
         r := c.invoke(sp, sp, eq, x, null, c.one(y))
         return c.negate(sp, r) if op == token.Tok.NotEq else r
@@ -3288,6 +3361,16 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&c, y typ
     c.exprs.Push(vb)
     r := c.callOf(sp, types.BoolT, typed.Callee.Helper(typed.Helper.Equal, da), gather(c.exprs, from))
     return c.negate(sp, r) if op == token.Tok.NotEq else r
+}
+
+# the Eq a type declares for "==" (E10a): its Eq, or its private eq where the code being checked is in that eq's module
+# (M6b); -2 for a private eq of another module, which "==" here cannot call, -1 for none
+fn (c mut Checker&) eqMethod(t types.TypeId) I64 {
+    m := c.P.MethodOf(t, c.P.L.Names.Intern("Eq"))
+    if m >= 0 { return m }
+    m = c.P.MethodOf(t, c.P.L.Names.Intern("eq"))
+    if m < 0 or c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() != 2 { return -1 }
+    return m if c.P.FnModule(m) == c.fr().Mi else -2
 }
 
 fn (c mut Checker&) one(x typed.Expr&c) Array<typed.Expr&>&c {
@@ -3432,7 +3515,7 @@ fn (c mut Checker&) partsHaveEq(t types.TypeId, depth I64) Bool {
 
 fn (c mut Checker&) typeHasEq(t types.TypeId, depth I64) Bool {
     d := c.deref(t)
-    if c.isNamed(d) and c.P.MethodOf(d, c.P.L.Names.Intern("Eq")) >= 0 { return true }
+    if c.isNamed(d) and c.eqMethod(d) != -1 { return true }
     if c.isRef(t) and not (c.P.T.KindOf(d) == types.Kind.Array) { return false }
     return c.partsHaveEq(d, depth + 1)
 }
@@ -4484,6 +4567,56 @@ fn (c mut Checker&) roDeepPlace(b I64, p typed.Place&, out mut List<I64>&, seen 
     }
 }
 
+# the name a span ends with: a member's
+fn (c mut Checker&) lastName(sp source.Span) source.Span {
+    t := c.src(sp)
+    i := t.Len()
+    for i > 0 and (t[i - 1].IsLetter() or t[i - 1].IsDigit() or t[i - 1] == '_') { i-- }
+    if i == t.Len() { return sp }
+    return source.Span(sp.Start + I32(i), sp.End)
+}
+
+# where a conditional or a match giving a value is written - its "if" or its "match" - for E28's error; Start -1 for
+# what is neither
+fn (c mut Checker&) chosenAt(x typed.Expr&) source.Span {
+    match x {
+        case typed.Expr.Cond(csp, _, k) {
+            if k.A != null and k.A.Span().End <= csp.End and k.A.Span().Start == csp.Start { return c.opAfter(k.A.Span(), 2) }
+        }
+        case typed.Expr.Match(msp, _, _) { return source.Span(msp.Start, msp.Start + 5) }
+        nomatch { }
+    }
+    return source.Span(-1, -1)
+}
+
+# whether a conditional or a match chooses a value with storage - a place, an element read through At, a tried one: a
+# copy of it, which a callee lent it would write and drop (E28, S12b)
+fn (c mut Checker&) condChoosesPlace(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Cond(_, _, k) { return c.armPlace(k.A) or c.armPlace(k.B) }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if c.armPlace(a.Value) { return true }
+            }
+            return m.NoMatch != null and c.armPlace(m.NoMatch.Value)
+        }
+        nomatch { return false }
+    }
+}
+
+fn (c mut Checker&) armPlace(x typed.Expr&) Bool {
+    if x == null { return false }
+    match x {
+        case typed.Expr.Borrow(_, _, _) { return true }
+        case typed.Expr.Read(_, ty, p, _) { return p != null and not c.isRef(ty) }
+        case typed.Expr.Promote(_, _, pr) { return c.armPlace(pr.X) }
+        case typed.Expr.Call(csp, _, cl) { return cl.Args.Len() > 0 and cl.Args[0] != null and cl.Args[0].Span() == csp }
+        case typed.Expr.Try(_, _, t) { return t.X != null and c.armPlace(t.X) }
+        case typed.Expr.Cond(_, _, _), typed.Expr.Match(_, _, _) { return c.condChoosesPlace(x) }
+        nomatch { return false }
+    }
+}
+
 # a value with no storage of its own lent writably (T25c): a read-only copy may not be - a call's result copied out of
 # what a read-only argument reaches
 fn (c mut Checker&) roLend(x typed.Expr&, sp source.Span) {
@@ -5134,7 +5267,10 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         c.gap(nsp, "more than 1,000 instances of one function (G17)")
         return c.unknown(sp)
     }
+    asking := c.P.Asking
+    c.P.Asking = generic.Origin(c.fr().File, nsp, c.curInst())   # G16b: where the instance is asked for
     inst := c.P.FnInstance(f, c.P.T.List(b.Vals))
+    c.P.Asking = asking
     if not c.instancesMet(c.P.InstanceSig(inst), nsp) { return c.unknown(sp) }
     if not c.fnBodies.Has(inst) { c.instsOf.Put(f, made + 1) }
     id := c.fnBody(inst)
@@ -5250,6 +5386,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     c.err(c.calleeSpan(args[i]), msgs.TupleNotAValue())
                     e = c.unknown(asp)
                 } else {
+                    if c.writable(ps[k]) and c.condChoosesPlace(e) { c.err(c.chosenAt(e), msgs.CondLentWritable()) }
                     e = c.fit(e, ps[k], c.argSpan(args[i]))
                 }
             }
@@ -5941,6 +6078,14 @@ fn checkableAst(x ast.Expr&) Bool {
 }
 
 # whether the body being checked is a generic's instance, or a lambda in one (R8)
+# the function instance whose body is being checked, -1 for none (a constructor's, a global's, a test's)
+fn (c mut Checker&) curInst() I64 {
+    return match c.cur().Of {
+        case typed.BodyOf.Fn(inst) => inst
+        case _ => -1
+    }
+}
+
 fn (c mut Checker&) inGeneric() Bool { return c.fr().Ctx.Vars.Len() > 0 }
 
 # x! (E35): what can fail in x as written ends the program - x's calls and operators handled, no check turned on
