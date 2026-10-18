@@ -364,13 +364,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
-- QAI REVISED 2026-10-18 (the user: "So basically we never check function calls with checked, not even as try", then
-  "Checked only ever operates on operators"): try and checked are disjoint - `try` handles calls (things written as
-  calls), `checked` handles operators (built-in ones gain their checks; a user operator's declared errors are covered,
-  its body not entered). Reverses QQ1's "checked = try + every check". Details mine: a fallible user operator outside
-  `checked` is an unhandled failure, as a bare fallible call is (`try (a - b)` becomes `checked (a - b)`); a fallible
-  call inside `checked` still needs its own `try`; conversions `T(x)`, `as`, indexes and slices count as operators;
-  `!` keeps try's reach plus fallible user operators, with no checks; `for x in try c` and `try join` stay try.
+- QAI REVISED 2026-10-18 (the user: "we never check function calls with checked, not even as try", "Checked only ever
+  operates on operators"; my reading that try=calls/checked=operators incl. user operators was rejected: "No, this is
+  not cleaner"). ASKED, current reading: `try` handles everything declared fallible as written (calls, and user
+  operators whose methods declare errors); `checked` only adds the checks of built-in operators (overflow, division,
+  shifts, conversions, as, indexes, slices) and covers nothing else - not calls, not user operators, not their errors.
+  Awaiting confirmation.
 - QAI DECIDED 2026-10-18 (the user: "This is all good"): `checked` binds to its operand (one index/slice/conversion or a
   parenthesized expression - every built-in operation in it), never into calls or function values; the Checked forms
   and the superset rule go (a user type's operators check themselves; `checked x[i]` on At+Len types keeps the derived
