@@ -96,7 +96,7 @@ overrated".
       `T ? E` only in signatures, cases Ok/Err, zero Err(null), unwrap by try/!/catch): `type X error { }` and named sets, catch bindings, `error e`, no error
       among several results, methods on error types, the zero `null` as "no error" (raising a null error aborts); error types
       declared `type IoError error { ... }`; `fn(I64) ? (A, B)` removed for a named set; `Result<T, E Error>` with a sealed
-      prelude trait `Error`; sets list error types only, nest and flatten, words stay qualified; `catch LoadError e`
+      prelude trait `Error`; sets list error types and may end in words of their own (`type LoadError error IoError, ParseError { TIMEOUT }`), nest and flatten, words stay qualified; `catch LoadError e`
       takes every member; error values hash, Result compares and renders structurally; `case null` an error where the
       value is known non-null (a catch binding, a written word); error values compare only with their own words and null.
   15. The port verbosity audit; SPEC section 5 renumbered; SPEC section 8 restated in the scope model's form beside M6

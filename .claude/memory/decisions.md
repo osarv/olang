@@ -393,6 +393,12 @@ design. Do what you want") - nothing to decide until a GUI is written.
   type is an E; a named set lists error types only and never adds words (new words make a new error type), sets nest
   and flatten (`type AnyError error LoadError, ChanError`), words stay qualified by their own type (`IoError.FULL`),
   `catch LoadError e` takes every member; error values hash (a Map key), `Result` compares and renders structurally.
+  REVISED 2026-10-18 (the user: "type my error error Error1, {WORD}, error2 be valid too ... probably on the form where
+  the brackets come last only. What do you want?"): a declaration may have members and words of its own, words last -
+  one grammar `type Name error [Member, ...] [{ WORDS }]`, at least one of the two: `type LoadError error IoError,
+  ParseError { TIMEOUT }`. Its own words are `LoadError.TIMEOUT` and the type is one member of its own set (flattened as
+  any member), so `catch LoadError` takes everything, `catch LoadError.TIMEOUT` the word alone; a word may not repeat a
+  member's (words are qualified anyway, so this is only against confusion - mine); braces mid-list are a syntax error.
 - QAM 2026-10-18 (errors as values; the user: "1) ... I want this feature tho 2) yes, disallow this 3) reserve the
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
