@@ -19945,7 +19945,8 @@ nothing: it already stops on every stale view it reaches (round 1).
 route (`m19g01push` a direct Push, `02secondname`, `03callgrows`, `04struct` a writable struct holding the Vec, `05global`
 grown by name, `06chain` three callees deep, `07funcvalue`, `08givenboth`, `09element` an element borrowed in place,
 `10through` a view handed back by a function, `11lambda`, `12task`, `13kept` a view kept in a List by `Push`,
-`14byvalue`, `15loop`) and a run case (`m19g20allowed`: another Vec of the same element type growing, a call given the
+`14byvalue`, `15loop`, `16forin` - a loop walking a view while its body pushes, said as `this reads a view of 'v'`,
+not by the loop's hidden local) and a run case (`m19g20allowed`: another Vec of the same element type growing, a call given the
 Vec read-only, one that only sets elements, a view taken after the growth or again each turn, a copy of the Vec, an
 iterator, the Vec given another one, an inner Vec growing). Round 1's deleted candidates are back with their names:
 vec01, 04, 05, 06, 13, 14, 19, 88, 92, 94, 96, 97, 103 and 104 as M19g's fail cases, and vec03, 09, 90, 91, 126 and 127
