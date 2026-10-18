@@ -10,6 +10,7 @@
 # initialized where it is first read (B5a's order falls out: each after the globals it reads).
 
 import "std/pair"
+import "std/io"
 import "source"
 import "ast"
 import "diag"
@@ -323,3 +324,103 @@ fn line(d mut diag.Diagnostics&, file I64, sp source.Span) String {
     k := try at.FindLast(":") catch default -1
     return $at[:k] if k >= 0 else $at
 }
+
+# ---- running a program (B3e) ----
+
+# each global set, in the order check made their initializers - each after the ones it reads (B5a). One that stops
+# leaves its global unset, read later as the stop again: the first such stop
+fn (x mut Exec&) InitGlobals() eval.Stop {
+    x.start()
+    first := eval.Stop.None
+    for i in x.Globals {
+        match x.Bodies[i].Of {
+            case typed.BodyOf.Global(m, n) {
+                s := x.M.InitGlobal(m, n)
+                if s != eval.Stop.None and first == eval.Stop.None { first = s }
+            }
+            case _ { }
+        }
+    }
+    return first
+}
+
+# the root module's tests run as "olang test" runs them (S15, S16): each global set, then each test "ok - NAME", or
+# what stopped it and "FAIL - NAME"; then the counts. The status: 1 where any failed
+fn (x mut Exec&) RunTests(d mut diag.Diagnostics&) I32 {
+    tests, _ := x.Entries()
+    for t in tests { x.Need(mir.FnKey.Body(typed.BodyId(I32(t)))) }
+    x.InitGlobals()
+    pass, fail I64 = 0, 0
+    none := Array<I64>(0)
+    for t in tests {
+        name := x.TestName(t)
+        s := x.M.Eval(mir.FnKey.Body(typed.BodyId(I32(t))), none)
+        if s == eval.Stop.None {
+            pass++
+            say("ok - " $name "\n")
+        } else {
+            fail++
+            text := x.StopText(s, t, d)
+            if text != "" { say($text "\n") }
+            say("FAIL - " $name "\n")
+        }
+    }
+    say($pass " passed, " $fail " failed\n")
+    return 1 if fail > 0 else 0
+}
+
+# the program's main run, its globals set first (B5a, B3e): the status 0 for its return, 1 for an error leaving it
+# ("unhandled error: T.W" on standard error), 134 for a failed check or undefined behaviour (its "FILE:LINE: text"),
+# what it asks for with os.Exit (the process ends there); 1 for no main
+fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
+    _, entry := x.Entries()
+    if entry < 0 {
+        sayErr("no main\n")
+        return 1
+    }
+    k := mir.FnKey.Body(typed.BodyId(I32(entry)))
+    x.Need(k)
+    s := x.InitGlobals()
+    if s == eval.Stop.None { s = x.M.Eval(k, Array<I64>(0)) }
+    match s {
+        case eval.Stop.None { return 0 }
+        case eval.Stop.Raised(_) {
+            sayErr($x.StopText(s, entry, d) "\n")
+            return 1
+        }
+        case _ {
+            sayErr($x.StopText(s, entry, d) "\n")
+            return 134
+        }
+    }
+}
+
+# what a stop says, as the built program says it (S18a, B3e): "FILE:LINE: text"; an error leaving body b "unhandled
+# error: T.W", its code under b's error list
+fn (x mut Exec&) StopText(s eval.Stop, b I64, d mut diag.Diagnostics&) String {
+    match s {
+        case eval.Stop.Raised(code) { return "unhandled error: " $x.errorName(code, x.Bodies[b].Ty) }
+        case _ { return StopText(s, d) }
+    }
+}
+
+# an error's name as a program writes it outside its module ("io.IoError.FULL"): code under the error list of
+# function type ty (R6)
+fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
+    errs := x.P.T.Items(x.P.T.Errors(ty))
+    i := (code >> 16) - 1
+    if i < 0 or i >= errs.Len() { return "error " $code }
+    et := x.P.T.ErrOf(errs[i])
+    dl := x.P.T.DeclOf(et)
+    ws := x.P.ErrorWords(dl)
+    w := code & 0xFFFF
+    word := $x.P.T.Names.Text(ws[w]) if w < ws.Len() else $w
+    name := x.P.T.Names.Text(x.P.T.DeclName(dl))
+    if x.P.T.DeclModule(dl) == x.P.L.Root { return $name "." $word }
+    id := x.P.L.Mods[x.P.T.DeclModule(dl)].Identity
+    k := try id.FindLast("/") catch default -1
+    return $id[k + 1:] "." $name "." $word
+}
+
+fn say(t String&) { try io.Print(t) catch io.IoError { } }
+fn sayErr(t String&) { try io.PrintErr(t) catch io.IoError { } }

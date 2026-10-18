@@ -66,74 +66,7 @@ fn run(args Array<String&>&) I32 {
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
     x := interp.Exec(p, c.Bodies, eval.Mode.Run)
     for i in range k, args.Len() { x.M.Args.Push(args[i]) }
-    tests, entry := x.Entries()
-    status I32 = 0
-    if testBuild {
-        status = runTests(x, tests, d)
-    } else if entry < 0 {
-        try io.PrintErrln("evaldump: " $path " has no main") catch io.IoError { }
-        status = 1
-    } else {
-        status = runMain(x, entry, d)
-    }
+    status := x.RunTests(d) if testBuild else x.RunMain(d)
     for key in x.Unlowered { try io.PrintErrln("unlowered " $key) catch io.IoError { } }
     return status
 }
-
-# each global set, in the order check made their initializers - each after the ones it reads (B5a); one that stops
-# leaves its global unset, read later as the stop again
-fn initGlobals(x mut interp.Exec&, d mut diag.Diagnostics&) eval.Stop {
-    first := eval.Stop.None
-    for i in x.Globals {
-        match x.Bodies[i].Of {
-            case typed.BodyOf.Global(m, n) {
-                s := x.M.InitGlobal(m, n)
-                if s != eval.Stop.None and first == eval.Stop.None { first = s }
-            }
-            case _ { }
-        }
-    }
-    return first
-}
-
-fn runTests(x mut interp.Exec&, tests List<I64>&, d mut diag.Diagnostics&) I32 {
-    for t in tests { x.Need(mir.FnKey.Body(typed.BodyId(I32(t)))) }
-    initGlobals(x, d)
-    pass, fail I64 = 0, 0
-    none := Array<I64>(0)
-    for t in tests {
-        name := x.TestName(t)
-        s := x.M.Eval(mir.FnKey.Body(typed.BodyId(I32(t))), none)
-        if s == eval.Stop.None {
-            pass++
-            say("ok - " $name "\n")
-        } else {
-            fail++
-            text := interp.StopText(s, d)
-            if text != "" { say($text "\n") }
-            say("FAIL - " $name "\n")
-        }
-    }
-    say($pass " passed, " $fail " failed\n")
-    return 1 if fail > 0 else 0
-}
-
-fn runMain(x mut interp.Exec&, entry I64, d mut diag.Diagnostics&) I32 {
-    k := mir.FnKey.Body(typed.BodyId(I32(entry)))
-    x.Need(k)
-    s := initGlobals(x, d)
-    if s == eval.Stop.None { s = x.M.Eval(k, Array<I64>(0)) }
-    match s {
-        case eval.Stop.None { return 0 }
-        case eval.Stop.Raised(_) {
-            try io.PrintErrln("unhandled error") catch io.IoError { }
-            return 1
-        }
-        case _ {
-            try io.PrintErrln(interp.StopText(s, d)) catch io.IoError { }
-            return 134
-        }
-    }
-}
-
-fn say(t String&) { try io.Print(t) catch io.IoError { } }
