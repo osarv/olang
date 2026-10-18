@@ -610,7 +610,7 @@ reviews found drifting. It gives errors only, and the plan comes before MIR, so 
   - **Scopes are arenas** freed when they close, using §8's placement, and destructors run then.
   - **Floats are held as bits**, so E33a's NaN rules are exact.
   - **Budgets.** K1's step and memory budgets apply to compile-time evaluation.
-  - **libm** is called through `std/math`, which is X8's libm itself. A program's externs go through a dynamic call
+  - **libm** is called through the floats' methods in the prelude (`std/prelude/number.olang`), which are X8's libm itself. A program's externs go through a dynamic call
     (section 7, S3).
 - **Evaluation serves:**
   - constants and conditions (S8a, S8b, B9c), during checking;
@@ -1305,7 +1305,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M5b | `check`: expressions | M5a | together with M5c, the check acceptance; S4d decided by types; every ownership event a `Take` or a site (in progress 2026-10-18: checkdiff 406 of 411 refused cases give stage 0's first error - the rest own/take and constant generics, both being removed - 381 their pinned message, 279 of 283 accepted programs check clean - PROGRESS.md in wt-check) |
 | M5c | `check`: declarations, statements, patterns, lambdas | M5a | (with M5b); S8c's fixed locals over the resolved AST; a body per global, per twin, per payload; defaults built per call (in progress, with M5b) |
 | M6 | `scope` | M5a's `typed` contract | written first as a small formal model of section 8 and section 8.8 (the rules and why each is sound, `docs/scope-model.md`), reviewed before code; then every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38); the scope fuzzer and sanitizer find nothing |
-| M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1) |
+| M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1; `lower` built 2026-10-18 with the stand-in placement: `make lowerdump` - 58,932 of 58,955 corpus bodies and every helper verify clean, the rest check's; no releases or holds, own being removed - HISTORY.md "Port M7: lowering") |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
 | M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 |
 | M10 | `build`, `target`, `olang` (driver) | from the start; integrates last | every mode and flag; content-addressed objects (B3, B10b, B12b); a no-op build links nothing; checks' build scenarios; `-t` self-exec (built 2026-10-17 over a `Frontend` interface, all but checks' scenarios - section 1.11) |
@@ -1329,7 +1329,7 @@ Notes on the schedule:
 - **Collections and text:** `List` (indexing, `Pop`, `Sort`, `RunFrom`), `Map` (`Update`, `Keys`), `StringBuilder`,
   `Find`, `Split`, `Trim`, `PadStart`, `ParseInt`/`ParseUint` in any base (base 0 reads an olang literal, as L10 needs),
   exact `ParseFloat` and `ShortestDecimal`, and `x.Bits()` with the `FromBits` methods for float constants in IR.
-- **Other modules and features:** `std/math` (X8's libm, which the evaluator calls), `std/time`, `std/chan`; recursive
+- **Other modules and features:** the prelude's number methods (X8's libm, which the evaluator calls), `std/time`, `std/chan`; recursive
   enums for the trees, `join`/`spawn` for parallel clang and parsing, and `try (...)` for overflow-checked arithmetic.
 
 **Missing.** Each design below is decided. All go in during P0, in C and std, before the milestones that need them.

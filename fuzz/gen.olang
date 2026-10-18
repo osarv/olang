@@ -21,7 +21,7 @@
 # fixed-length arrays held in place in locals, fields and payloads (T7c), viewed with as (E32b) and through
 # fixed-length references; functions generic over a constant N whose if, conditional and match on N are decided per
 # instantiation (G26), and a generic struct G<i><T, N I64>; structs declaring Eq/Hash/Str (E10a, E11c); case _ (S13f);
-# std/math (X8, called through libm while compiling); n.Format(base) read back by ParseInt/ParseUint, and x.Fixed(n).
+# the numbers' methods (M19d; the floats' through libm while compiling, X8); n.Format(base) read back by ParseInt/ParseUint, and x.Fixed(n).
 # A case's result may be a struct, an enum, an array or a G<i> value, so such globals are baked (K2b) too.
 
 # the primitive types by code: 0-7 the integers, 8-11 the floats, 12 Bool, 13 String. A case's own struct types are
@@ -526,7 +526,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
             f = 10
         }
         x := g.solid(f, d - 1)
-        return "(" $Prims[f] "(" $x ").Bits() if " $x " == " $x " else " $g.lit(t) ")"     # E13c: never a literal's
+        return "(" $Prims[f] "(" $x ").Bits() if " $x " == " $x " else " $g.lit(t) ")"     # of type f, not a literal's own
     }
     if k == 16 { return g.recur(t, d) }
     if k == 17 {
@@ -2113,33 +2113,41 @@ fn (g mut Gen&) genStmt(ind String&) String& {
     return $ind "x" $x " " $g.tn(t) " = " $g.tn(t) "(" $e ")\n"
 }
 
-# ---- std: math, Format and ParseInt, Fixed ----
+# ---- the numbers' methods, Format and ParseInt, Fixed ----
 
 Unary := String&["Sqrt", "Cbrt", "Exp", "Exp2", "Expm1", "Log", "Log2", "Log10", "Log1p", "Sin", "Cos", "Tan", "Asin", "Acos", "Atan", "Sinh", "Cosh", "Tanh", "Erf", "Erfc", "Floor", "Ceil", "Trunc", "Round", "RoundEven", "Abs"]
 Binary := String&["Pow", "Hypot", "Atan2", "Min", "Max"]
 
-# a std/math function of a float of type t - the first argument never a literal, so it fixes T (G9b)
+# one of a float's methods (M19d, the C math library's functions, X8) on a value of type t - the receiver never a
+# literal, so it is of type t (E13c)
 fn (g mut Gen&) mathFloat(t I32, d I64) String& {
     p := g.r(10)
-    if p < 6 { return "math." $Unary[g.r(Unary.Len())] "(" $g.solid(t, d - 1) ")" }
-    if p < 9 { return "math." $Binary[g.r(Binary.Len())] "(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ")" }
+    if p < 6 { return "(" $g.solid(t, d - 1) ")." $Unary[g.r(Unary.Len())] "()" }
+    if p < 9 { return "(" $g.solid(t, d - 1) ")." $Binary[g.r(Binary.Len())] "(" $g.ex(t, d - 1) ")" }
     f String& = "Fma" if g.chance(50) else "Clamp"
-    return "math." $f "(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")"
+    return "(" $g.solid(t, d - 1) ")." $f "(" $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")"
 }
 
+# one of an integer's methods (M19d) on a value of type t: Abs, Min, Max, Clamp, Pow (wrapping, or checked), Sqrt
 fn (g mut Gen&) mathInt(t I32, d I64) String& {
-    p := g.r(4)
-    if p == 0 { return "math.Abs(" $g.solid(t, d - 1) ")" }
-    if p == 3 { return "math.Clamp(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")" }
+    p := g.r(7)
+    if p == 0 { return "(" $g.solid(t, d - 1) ").Abs()" }
+    if p == 3 { return "(" $g.solid(t, d - 1) ").Clamp(" $g.ex(t, d - 1) ", " $g.ex(t, d - 1) ")" }
+    if p == 4 { return "(" $g.solid(t, d - 1) ").Pow(" $g.r(70) ")" }
+    if p == 5 { return "(checked (" $g.solid(t, d - 1) ").Pow(" $g.r(9) ") catch default " $g.lit(t) ")" }
+    if p == 6 {
+        if t >= 4 { return "(" $g.solid(t, d - 1) ").Sqrt()" }                    # an unsigned one cannot fail
+        return "(try (" $g.solid(t, d - 1) ").Sqrt() catch default " $g.lit(t) ")"
+    }
     f String& = "Min" if p == 1 else "Max"
-    return "math." $f "(" $g.solid(t, d - 1) ", " $g.ex(t, d - 1) ")"
+    return "(" $g.solid(t, d - 1) ")." $f "(" $g.ex(t, d - 1) ")"
 }
 
 # an integer of type t through its text in a base and back
 fn (g mut Gen&) formatBack(t I32, d I64) String& {
     b I64 = 2 + g.r(35)
     s := g.intT()
-    x := $Prims[s] "(" $g.ex(s, d - 1) ").Format(" $b ")"      # E13c: a conversion, never a literal
+    x := $Prims[s] "(" $g.ex(s, d - 1) ").Format(" $b ")"      # a conversion: of type s, not a literal's own (E13c)
     if t == 7 { return "(try " $x ".ParseUint(" $b ") catch default " $g.lit(t) ")" }
     if t == 3 { return "(try " $x ".ParseInt(" $b ") catch default " $g.lit(t) ")" }
     return $Prims[t] "((try " $x ".ParseInt(" $b ") catch default " $g.lit(3) "))"
@@ -2302,7 +2310,7 @@ fn (g mut Gen&) collBool(d I64) String& {
         q := g.r(3)
         if q == 1 { f = "IsInf" }
         if q == 2 { f = "IsFinite" }
-        return "math." $f "(" $g.solid(g.floatT(), d - 1) ")"
+        return "(" $g.solid(g.floatT(), d - 1) ")." $f "()"
     }
     return g.leaf(TBool)
 }
@@ -2544,7 +2552,7 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
     g := Gen(seed)
     g.atomics = atomics
     b := StringBuilder()
-    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\nimport \"std/math\"\n")
+    b.Push("# fuzz seed " $seed "\nimport \"std/io\"\nimport \"std/os\"\n")
     prints := StringBuilder()
     resets := StringBuilder()
     for ci in range ncase {

@@ -1,6 +1,6 @@
 # check: run
 # E13c: text, characters, arrays, comprehensions and numbers whose type is written are receivers like any other
-# value - only a number written as a literal is not
+# value - and so is a number written as a literal (e13cparens.olang)
 fn main() ? {
     assert "a,b".Split(",").Len() == 2 and "xy".Len() == 2 and 'a'.IsLetter()
     assert I32[3, 1, 2].Len() == 3 and I32[x * 2 for x in I32[1, 2]].Len() == 2

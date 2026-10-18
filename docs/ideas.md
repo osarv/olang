@@ -11,13 +11,15 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 |---|---|---|---|
 | 1 | Generators (`yield`) | C#, Python | decided 2026-10-18: `fn f(...) Iterator<T>` with `yield`, both compilers |
 | 2 | Compile-time reflection | Zig, Rust derive | decided 2026-10-18: `T.Name/Kind/Base/Fields/Cases/Params`, both compilers |
-| 3 | Units of measure | F# | open |
-| 4 | Portable SIMD vectors | Zig, Rust | open |
-| 5 | Arbitrary-width integers and fixed point | Zig, VHDL | open |
-| 6 | Embedding a file | Zig, Rust | open |
-| 7 | `errdefer` | Zig | open |
+| 3 | Units of measure | F# | declined 2026-10-18 (the user: "I don't want units") |
+| 4 | Portable SIMD vectors | Zig, Rust | decided 2026-10-18 as lane-by-lane array operators, after self-hosting |
+| 5 | Arbitrary-width integers and fixed point | Zig, VHDL | integers decided 2026-10-18; fixed point open |
+| 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
+| 7 | `errdefer` | Zig | decided 2026-10-18, after self-hosting |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
 | 9 | Doc tests | Rust | open |
+| 10 | Method overloading by parameters | C++, Java, C# | open (the user, 2026-10-18: maybe) |
+| 11 | Constructor overloading | C++, Java, C# | open (the user, 2026-10-18: maybe) |
 
 ## 1. Generators (`yield`)
 
@@ -139,6 +141,24 @@ conversions are written.
 
 ## 4. Portable SIMD vectors
 
+**Decided 2026-10-18 (the user), as lane-by-lane array operators instead of vector types:** an array's operators work
+element by element - `a + b`, `a * b + c` - wherever the element type has the operator (a one-method prelude trait per
+operator: built-in numbers, declared types through `extends`, C32/C64, F8, a user's types). They are ordinary prelude
+operator methods whose bodies are comprehensions (E31; inherited by `extends` array types, never redefined, T29e).
+Fixed-length arrays (lengths known while compiling - the arrays batch, incl. constant-width slices) give fixed results:
+no allocation, vector instructions. Run-time-length arrays give a new array where the expression lands, as a
+comprehension does; lengths checked once per operation (abort, or `CheckError.OUT_OF_BOUNDS` under `checked`);
+assignment into an existing array of that length reuses its storage. General fusion: any method whose body is a single
+comprehension over its inputs' positions is a map, and maps of maps compose into one loop - `a + b * c - d` and
+`(a * b).Sum()` make no temporaries, for user functions of that shape too. Comparisons lane by lane are methods
+(`a.LanesEqual(b)`, `a.LanesLess(b)` giving `Array<Bool>`), since `==` is whole-array equality; `mask.Select(a, b)`,
+`a.Shuffle(...)` (constant positions), `mask.Bits()`/`FirstSet()`, `acc.DotAdd4(a, b)`, `mask.Any()`/`mask.All()` (the user: "I like Any/All for sure"; the existing
+`Any(f)`/`All(f)` with the predicate defaulting to the element itself, a default fitted per call so it is legal only
+where the element is a Bool). Totals: `a.Sum()` (T has Plus;
+an empty array gives T's zero value; replaces std/stats' Sum), `a.Max()`/`a.Min()` (T has Less; empty fails with
+ArrayError.EMPTY, replacing stats' Min/Max). No implicit threads: parallelism stays explicit (join/spawn,
+`a.Chunks`); a `parallel (e)` marker could come later. Built in the port after self-hosting.
+
 **What:** a value type of N lanes with element-wise operators, compiled to the machine's vector instructions.
 
 ```
@@ -159,6 +179,14 @@ own (perhaps from `TargetVectorBits`); there are also masks, shuffles and loads 
 2. Is it a prelude type built on compiler support, or language syntax?
 
 ## 5. Arbitrary-width integers and fixed point
+
+**Integers decided 2026-10-18 (the user: "Names are fine width is fine"):** `I1`-`I128` and `U1`-`U128`, any width,
+named as today's eight are (Zig's form; the eight become ordinary members). The existing integer rules apply unchanged:
+arithmetic wraps at the width (E6c), `checked` checks it, the T6b lattice widens them (wider within a signedness,
+unsigned into a strictly wider signed), literals adapt, `$`, `Hash`, `Format`, the `Integer` trait. Storage is whole
+bytes (a `U12` takes two); packing bits is the declared-layout work's. Cost on a CPU: one mask or sign-extension where a
+result's width matters, a library call for 128-bit division; on an FPGA odd widths are the cheap ones. Fixed point
+(`Q4.12`-style, saturating) is decided separately, with the FPGA work. Built in the port after self-hosting.
 
 **What:** integer types of any bit width, and fixed-point numbers with saturating arithmetic.
 
@@ -181,6 +209,16 @@ they meet `checked`.
 
 ## 6. Embedding a file
 
+**Decided 2026-10-18 (the user: "It's good for spelling ... Do as you want"):** `embed PATH` is an expression giving the
+file's bytes, read while compiling, as a read-only `Array<U8>` in the program's constant data (length known while
+compiling); text is `String(embed "help.txt")`, a view. PATH is any compile-time constant text, relative to the
+source file as imports are, kept inside a remote package. The evaluator can read the bytes (a table parsed and baked
+while compiling). An object is rebuilt when an embedded file changes (its content is in the object's hash). A file up
+to 64 KB is an LLVM constant, so the optimizer can fold reads of known bytes (a small lookup table); a larger one is
+placed in the object as raw bytes (assembler `.incbin`), since nothing is folded out of a large blob and LLVM would
+only be slow on it. Not now: directories,
+globs. Built in the port after self-hosting.
+
 **What:** a file's bytes become constant data in the binary, read while compiling.
 
 ```
@@ -199,6 +237,15 @@ when the file changes (B3 staleness has to include it).
 2. Can it read a directory, or files only?
 
 ## 7. `errdefer`
+
+**Decided 2026-10-18 (the user: "1) errdefer 2) that's good 3) good"):** `errdefer STATEMENT` / `errdefer { block }`
+registers deferred code of its block that runs only when the block is left by an error moving outward - out of the
+function (try's propagation, an `error` statement), a failing join to its `try join` clauses, a `for x in try c` ended
+by its own error; an error a clause catches inside the block does not leave it. Not on what ends the program or the test
+(a failed assert, `unreachable`, `!`, `os.Exit`), as for `defer`. One list with `defer`, in reverse registration order
+(an error exit runs both kinds, a normal exit only the defers - two lists would misorder `x := alloc(); errdefer
+free(x); y := build(x); defer log(y)`). The error is not available inside (errors are no values, T20); restricting it
+to some words (`errdefer IoError.FULL { }`) can be added later. Built in the port after self-hosting.
 
 **What:** a deferred block that runs only when its block is left by an error.
 
@@ -264,3 +311,25 @@ fn (t String&) Split(sep String&) Array<String&>&t { ... }
 - **Macros:** principle 4; compile-time evaluation and generics cover the uses.
 - **Pipelines (`x |> f |> g`):** methods already chain left to right.
 - **Optional chaining (`a?.b`):** possible, but `?` already means error sets, and a null read already traps.
+
+## 10. Method overloading by parameters
+
+**What:** several functions or methods of one name, told apart by their parameters' types or number
+(`p.Move(dx, dy)` and `p.Move(v Vec2)`). Today a name means one function; methods overload only by receiver (M21).
+
+**Costs and questions:** a call is then resolved by its arguments, which meets inference head on - a literal adapts to
+its target (T6) and a lambda takes its types from the expected function type (D16a), so with two candidates neither
+target is known; ambiguous calls need a rule and a diagnostic. A function as a value (`f := p.Move`) no longer names one
+function. Defaults (D8a) and `default` (E14) already cover the commonest use, the same operation with fewer arguments.
+Protocol methods (E31, M6b) are told apart by shape, which overloading would also blur.
+
+## 11. Constructor overloading
+
+**What:** several constructors per type (`Color(r, g, b)` and `Color(hex String&)`). Today a type has exactly one
+constructor (C2), and defaults cover its variants.
+
+**Costs and questions:** the same resolution questions as #10, plus the zero value (D13c), which is made by the one
+constructor from its defaults. The usual alternatives are named functions that build the value (`ColorFromHex(s)`,
+Go's and Rust's way), which need nothing new, or named constructors (`Color.FromHex(s)`), which would need reaching a
+function through a type name (as reflection's `T.Fields` already does).
+

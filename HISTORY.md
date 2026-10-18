@@ -20014,6 +20014,82 @@ the file as written - the one difference, recorded for when the back end exists)
 error apart: no difference. Found on the way: stage 0 said `-i` in B12a's message for interpret (main.c's
 resolveTarget, a leftover of the one-character flags) - now `interpret`, in both.
 
+## Math is the numbers' methods; a number literal is a receiver again (M19d, E13c, E31a, D3a, E2, T35c, X8, 2026-10-18; the user's decisions, details mine)
+
+The user, after the numeric traits made a method over a constrained receiver cheap: "this kinda makes moving the math
+functions onto the type viable again. If integers only take min max clamp, isqrt and exp... floats are a compsci type",
+"Also abs for integers", then "Yes let's do this. I want an integer power as well for the integer set. And 2.0.Sqrt()
+should be valid code. Don't make an exception for floats like that". This reverses the morning's "keep std/math's free
+functions" (QAF) and the previous day's E13c. While it was being built the user renamed the integer root: "the integer
+square root is named `Sqrt`, not `ISqrt` - the receiver's type says which root, as `/` truncates on integers", exact for
+every 64-bit value, a signed one failing on a negative value and an unsigned one infallible.
+
+**What it is.** `std/prelude/number.olang` holds the three sealed traits, the constants and every method. Each float
+function is written once as a default over `Float` (`fn (x T) Sqrt<T Float>() T`) with std/math's own `match T` body
+and its X8 libm calls unchanged, so the code generator and the evaluator see exactly what they saw before: a baked
+global (`bakedSqrtTwo F64 = 2.0.Sqrt()` is `constant double 0x3FF6A09E667F3BCD`) and a decided assert agree with the
+run time, and `checks/fixtures/agree/math.olang` still prints the same lines built, built `-debug` and interpreted.
+Several-argument functions take the first C argument as the receiver: `y.Atan2(x)`, `a.Hypot(b)`, `x.Fma(a, b)` (`x *
+a + b` rounded once), `x.Pow(y)`, `x.CopySign(s)`. `Abs`, `Min`, `Max` and `Clamp` are defaults over `Number`, IEEE's
+on the floats as before (`Min`/`Max` propagate a NaN and put -0.0 below 0.0). The integers get `x.Pow(n U32)` and
+`Sqrt()`. `Pi`, `Euler`, `Inf` and `NaN` are prelude constants.
+
+**Decided (mine).**
+- The methods live in `number.olang`, beside the traits: M19 lets a default be declared only in its trait's module.
+- Two defaults named `Pow` on different traits (`Float`'s `Pow(y T)`, `Integer`'s `Pow(n U32)`) coexist: a call picks
+  the one whose constraint the receiver meets (M19e's lookup already did). Stage 0's check that a checked form fails
+  with every error its plain form can looked the plain form up by the generic receiver alone and so found the float
+  `Pow` for the integer `CheckedPow` - it now asks which default the concrete receiver meets (`checkedFormPlain`).
+- **E31a covers a method called by name**: `x.M(args)` where `checked` checks it calls `x.CheckedM(args)` when the type
+  has one of as many parameters, as an operator calls its checked form. That is what "checked under `checked` for
+  overflow" needed - `checked` never reaches into a called body - and it composes with the existing rules (the
+  superset of errors, a checked form requiring its plain one). `CheckedPow` fails with `BuiltinError.OVERFLOW` exactly
+  where the true power does not fit: it never squares the base once no later step needs the square.
+- The integer `Sqrt` is a concrete method per type, not a default: the signed and unsigned signatures differ (`? 
+  NumberError` or nothing). One private `sqrtU64` does the work - `U64(sqrt(F64(n)))`, then `r > n / r` and `r + 1 <=
+  n / (r + 1)` corrections, which divide rather than square so nothing overflows next to 2^64. Tested at 0, 1, every
+  value below 2000, perfect squares, one below `(2^32 - 1)^2`, 2^53 + 1 (which F64 rounds) and each width's maximum.
+- `NumberError { NEGATIVE }` is the prelude's (errors are errors; a named type, as std's other failures have). Not
+  `MathError`: the corpus declares one, and prelude type names are reserved everywhere.
+- **The prelude's constants** are its exported immutable globals, visible by bare name in every module as a build
+  constant is (E2), and reserved like one: a module's global, function, local or parameter of that name is D3a's new
+  error, "'Pi' is a constant of the prelude - choose another name" (both compilers' message tables;
+  `checks/cases/preludeconst`). `bench/nbody.olang` lost its own `Pi`. `Sqrt2`, `Ln2` and `Ln10` went: `F64(2).Sqrt()`
+  is folded while compiling where a value is needed. A named constant does not adapt as a literal does (`f F32 = Pi` is
+  an error, `F32(Pi)` is written): E4a's rule covers expressions of literals only, and extending it to names is a
+  language change of its own - reported, not built.
+- **Less-only types lose `Min`/`Max`/`Clamp`.** std/math's were unconstrained so a type declaring `Less` could use them;
+  the one user was std/math's own test (`grade`), which is dropped. linalg's Matrix operations call them on numbers
+  only (the F8 structs have no `<`). A type wanting them declares its own.
+- E13c is restated positively rather than deleted: a number written as a literal is a receiver of its own type (T6a),
+  because a call is no place a literal adapts - so `2.0.Sqrt()` is `F64`'s, `7.Hash()` `I64`'s, and `-2.0.Sqrt()` is
+  `-(2.0.Sqrt())`. Stage 0's `operandOnlyNumericLiterals` check at the postfix method call and the port's
+  `numberLitsOnly` check in `methodCall` went with `ERR_METHOD_ON_NUMBER_LITERAL`; the conversions the 2026-10-17
+  migration wrote (`I64(255).Format(16)`) are left as they are - correct either way. The three E13c checks cases are run
+  cases now.
+
+**Both compilers.** Stage 0: `preludeConst` beside `buildConstVar` (lookups, the shadowing and redeclaration checks,
+the dotted receiver path, the constant-argument fold's names), the named checked form in `buildMethodCall`, E13c's
+check removed. The port: `preludeConsts` in the resolver (lookup, `addValue`, `noShadow`, `noConstClash`),
+`checkedMethod` in `methodCall`, E13c's check removed. The port's checker already resolved methods over a constrained
+receiver; it checks `std/prelude/tests/number.olang` with no error and no gap, and gives stage 0's first error on every
+new case.
+
+**Migration.** `tools/math_methods.olang` (re-runnable, for oann later): `math.F(a, b...)` becomes `a.F(b...)`, the
+receiver parenthesized unless it is a name, call, index, member or literal; the constants become the prelude's; the
+import goes. A literal receiver keeps its own type now, so an integer literal given a float function becomes a float
+one (`math.Sqrt(4)` -> `4.0.Sqrt()`), `Min`/`Max`/`Hypot` of a literal and a value take the value as the receiver (the
+same result either way round), and any other literal receiver beside a value is listed for a person - none in the
+repository needed one. Ten files: std/linalg (147 lines), std/stats, std/rand, bench/mlp, compiler/tools/unparse, the
+agree, bits and target fixtures, a fuzz repro, a checks case; std/math's tests became `std/prelude/tests/number.olang`
+(the integers' methods, literal receivers and the constants added). By hand: the fuzz generator's emitted calls (it
+now also writes the integers' `Pow`, `checked ... Pow` and `Sqrt`), comments, SPEC's `math.Fma`, the READMEs.
+
+**After merging the literal-constraint batch (G9a, 2026-10-18).** It landed beside this one and wrote its examples as
+`math.Sqrt(4)`; with std/math gone they are a generic of the program's own (`fn ntRoot<T Float>(x T) T { return
+x.Sqrt() }`, `root`, `power` and `size` in `numtraitsqrtlit`), which keeps what they test - a literal reaching a
+constrained variable - where `4.0.Sqrt()` would test nothing. tests/shared.olang's `import "std/math"` went.
+
 ## The view rule M19g, and alias tags for references: round 2 of docs/memory.md (M19g, T36, 2026-10-18)
 
 Round 2 of `docs/memory.md` (approved by the user with the rest of it, QAB): a view of a `Vec` used after the same `Vec`
@@ -20105,6 +20181,86 @@ cannot see through are expected (4.2).
 `settleOwnBorrows` in the block that runs once a program checks cleanly, and reuses only `ownForEachBody`,
 `ownParamIndex`, `ownFuncName`/`ownQuoted` (rename them when own's code goes) and O26a's `calleeMayKeepArg` (which
 reads `ownObligationsKnown`).
+## Port M7: lowering, `compiler/lower.olang` (2026-10-18, first round)
+
+`compiler/lower.olang` makes a MIR function (`compiler/mir.olang`, DESIGN.md 1.8.1) of each typed body the checker
+makes, and of each function lowering itself refers to - the helpers (`Equal`, `Hash`, `Zero`, `Render`), the `Call`
+adapters (E31) and the modules' initializations - and `compiler/tools/lowerdump.olang` (`make lowerdump`) lowers the
+corpus, std, the compiler and the checks' run and build cases and holds each function to the MIR verifier, M7's
+acceptance measured. It runs with DESIGN.md 1.6.1's stand-in placement until the scope pass (M6) lands: every site
+built in the program's scope, every local in its frame, every scope variable passed the program's.
+
+**Coverage at the end of the round.** Over the corpus, std, compiler and tools (each file loaded as a program of its
+own, so std is counted once per root): 58,955 bodies with code, 58,932 verified clean, 12 with a verifier problem, 11
+not lowered because a check error or gap left an unknown type in them, no gap of lowering's own; 1,984 helpers,
+adapters and initializations, all clean. Over the 224 checks run and build cases (their `# flags:` -define constants
+read): 50,046 bodies, all clean but one a check error leaves unchecked; 931 made, all clean. The 12 are check's, not
+lowering's: the three bodies of `shared.olang` storing a literal of another fixed length (T7d, which check reports and
+still emits), and a literal argument to `Has` not adapted to the key type (`1 in MapGlobal` in
+`std/prelude/tests/map.olang:197,304`, and a `Pair<I64, I64>` for a `Pair<I32, I32>` at :83).
+
+**How it lowers** (the table in DESIGN.md 1.8.1, with what the tree turned out to need):
+- Every operand is a temporary computed by the statements before it, a place's references and indices before the
+  place is used, an assignment's target before its value (S4) - so the order of evaluation is the statements' and no
+  later pass decides it. LLVM's mem2reg cleans up after.
+- A typed block opens a MIR scope of its own **only where its id is not its enclosing block's**: check reuses the
+  enclosing block's id for the `if`s it makes (a loop's break test, `breakUnless`), which are no scope.
+- The exit sequence is one routine (`leave`): for each level left, innermost first, its deferred code (lowered as a
+  block of its own with the levels above it set aside - they are closed on that path), a join's `Wait`, its `Close`.
+  `break`/`continue` leave to the loop's level, `return` and an error leaving the body to the frame, an error caught to
+  the try's level. A loop's body is a scope each turn, its post clause one after a `continue` or falling off the end.
+- Errors: a call's error edge dispatches over the innermost try's clauses with a test per item - `code == pos << 16 |
+  word`, or `code >> 16 == pos` for every word - each taken path closing the levels opened since the try, then jumping
+  to the clause's entry (made when first reached, lowered after the try's operand); a checked operation's failure
+  dispatches `BuiltinError`'s code under the list `[BuiltinError]`.
+
+**Decided (mine):**
+- **What a try's clauses do not take goes to the try around it** - DESIGN.md's "one no clause names leaves the body"
+  was read too narrowly: a for-in's `Exhausted` try sits inside the loop's `try ... catch IoError`, which must take the
+  rest. Past a `!` (`Ends`) the error ends the program; with no try left it is re-encoded under the body's own list and
+  raised once every scope is closed.
+- **An error edge with no try at all is a T29d literal's constructor's** (`default ChunkSize(1)` after a clause), which
+  check leaves to compile-time evaluation (`Key.Literal`): decided not to fail, so its edge is `Exit(Unreachable)`.
+- **A join that can fail** gets its errors from its tasks, found by walking its block for spawns (P1a: not into a
+  nested join): each task's callee's errors less the types its clauses take whole. Its wait's failed edge closes the
+  join and dispatches to the `try join`'s clauses, then the tries around it, with the levels inside the join set aside;
+  where an error is already leaving, the failed edge is the ok one (P4b: the join's failure does not replace it).
+- **`Take` of an owner held by value** is a copy and its zero value left; an own reference's is MIR's `Take`. Nothing is
+  released, held, registered as an owner or given: owned references are being removed (docs/memory.md), so lowering
+  keeps the one memory model - scopes and destructor registration (O16, at a `Promote` of a destructor-bearing value and
+  at a constructor's instance made by `New` where its type is reference-only).
+- **A fixed array stored where a run-time one of its element is wanted is widened** by `Prim(Convert)` (T7c): check
+  elaborates it everywhere but a `:=` global from a literal (`exactPow10 := F64[...]`), whose place it types run-time.
+- **A zero value is a call of the type's `Zero` helper** (D13c), whose body calls a constructor of no parameters and is
+  otherwise all zero bits; the constructor on its parameters' defaults is `Key.Zero`'s, eval's (M8).
+- **Helpers take `T&`**, a helper's value arguments held in a temporary and lent; an aggregate part goes through the
+  part type's own helper, so each type is one function and a type that comes round to itself through references
+  terminates (E10's "a function per type"). A struct's or enum's supplied `Hash` combines its parts as the prelude's
+  `HashElements` combines an array's (`h * 1099511628211 + part`), an enum's case first, a scalar by `mixHash`.
+- **Render follows E11a**: a struct as its name and fields, an enum as `Type.Case(...)`, an array as its element type
+  (its own permission dropped) and items, a reference as `null` or what it names, a function value as its spelled
+  signature, a type's `Str` (or `str`) by what it returns; a `Char` and text inside another value as literals, for
+  which MIR gained `WriteKind.Quoted` and `QuotedChar` (the runtime escapes, as it writes numbers). Not yet: the cut at
+  8 references deep.
+- **A module's initialization calls its globals' bodies in the order they were checked**: B5a's order is a summary of
+  their reads, computed once a module's bodies are checked (DESIGN.md 1.6), which is to come.
+
+**The MIR contract, revised where the checker's trees met it (`compiler/mir.olang`):**
+- A call's built result (a reference result built in the result scope, or one of several) is new storage only the
+  caller holds and writable (T25b): the verifier holds the callee's result type with write permission added (`held`)
+  for a call's destination and a task's targets.
+- "One representation" sees through arrays: an `Array<Char>` (a `String`) is an `Array<U8>` (T29h).
+- `Same` compares references by referent, whatever their permission.
+- The verifier and the dumper hold the function by reference beside a writable table, so a caller's function must live
+  where the table does: `f mir.Fn&lw = lw.LowerKey(k)`.
+
+**Found on the way (in check, left to its owner):** the three refused stores above; the `:=` global's run-time type;
+`IsCase` is applied to enum *references* (`x is E.C` on an `Expr&`), which the contract allows ("on a null reference
+it is false") and lowering makes a null test and a `Tag` of what it names; a spawn's discarded target (`spawn _, x =
+f()`) is a null place, lowered as a temporary given its zero value.
+
+**Left:** the plan (M6) in place of the stand-in; Render's depth cut; zero values from defaults (M8's keys); B5a's init
+order; the check-side findings above.
 
 ## `own` removed: round 3 of docs/memory.md (O8c, O8d, O15, O10a, O11, O17b, S13b; O30-O42, T25e, E34 retired; 2026-10-18)
 

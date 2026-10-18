@@ -6,7 +6,6 @@
 # One generator is shared by whatever draws from it - std/linalg's random fills take the caller's, so one seed
 # decides a whole run. A generator is an ordinary value: two copies continue the same sequence independently.
 
-import "std/math"
 
 # splitmix64's output function: a bijection scattering the bits of x
 fn mix64(x U64) U64 {
@@ -96,7 +95,7 @@ fn (r mut Rand&) Uniform(lo F64, hi F64) F64 {
 fn (r mut Rand&) Normal() F64 {
     u F64 = 1.0 - r.Float()                       # in (0, 1], so its logarithm is finite
     v := r.Float()
-    return math.Sqrt(-2.0 * math.Log(u)) * math.Cos(2.0 * math.Pi * v)
+    return (-2.0 * u.Log()).Sqrt() * (2.0 * Pi * v).Cos()
 }
 
 # puts the elements of "a" in a uniformly random order (Fisher-Yates), in place
@@ -202,7 +201,7 @@ test "Normal has mean 0 and standard deviation 1" {
         sq += x * x
     }
     mean F64 = sum / F64(n)
-    sd := math.Sqrt(sq / F64(n) - mean * mean)
+    sd := (sq / F64(n) - mean * mean).Sqrt()
     assert mean > -0.01 and mean < 0.01
     assert sd > 0.99 and sd < 1.01
 }

@@ -244,6 +244,7 @@ struct type;
     X(ERR_SHADOWS_GLOBAL,               "D3a",   "%n is already declared in this module - a name means one thing in it") \
     X(ERR_SHADOWS_FUNCTION,             "D3a",   "%n names a function of this module - a name means one thing in it, so name this apart") \
     X(ERR_SHADOWS_BUILD_CONST,          "D3a",   "%n is a build constant - choose another name") \
+    X(ERR_PRELUDE_CONST_REDECLARED,     "D3a",   "%n is a constant of the prelude - choose another name") \
     X(ERR_SHADOWS_TYPE,                 "D3a",   "%n is a type's name - choose another") \
     X(ERR_TYPE_HAS_NO_CONSTRUCTOR,      "",      "type %n has no constructor - an enum's values are its cases") \
     X(ERR_METHOD_CALLED_AS_FUNCTION,    "M19",   "%n is a method - call it on its receiver: x.%S(...)") \
@@ -373,7 +374,6 @@ struct type;
     X(ERR_MEMBERSHIP_NOT_BOOL,          "E29",   "%s, which 'in' calls, gives a Bool") \
     X(ERR_MEMBERSHIP_NEEDS_TRY,         "E29",   "%s can fail here - write 'try (x in c)'") \
     X(ERR_INCDEC_IN_EXPRESSION,         "S3a",   "%n is a statement of its own, never part of an expression") \
-    X(ERR_METHOD_ON_NUMBER_LITERAL,     "E13c",  "the receiver of %n is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'") \
     X(ERR_NOT_CALLABLE,                 "E13b",  "%t is not a function, and declares no Call") \
     X(ERR_JOIN_PIECE_CALLED,            "E11b",  "'(' after a piece of text calls it - to join the value inside, write '$(...)'") \
     X(ERR_UNHANDLED_FALLIBLE_CALL,      "E15",   "this call can fail - write 'try', and catch or pass on its errors") \

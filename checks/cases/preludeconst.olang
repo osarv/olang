@@ -1,0 +1,9 @@
+# check: fail error[D3a]: 'Pi' is a constant of the prelude - choose another name
+# also: error[D3a]: 'Inf' is a constant of the prelude - choose another name
+# also: compilation failed with 2 errors
+# M19d/D3a: the prelude's constants are read by their bare names in every module, so no module declares one again -
+# not as a global, not as a local
+Pi F64 = 3.14
+fn main() ? {
+    Inf := 1.0
+}

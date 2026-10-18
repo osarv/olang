@@ -1,0 +1,7 @@
+# check: fail error[E15]: this call can fail - write 'try'
+# M19d: a signed integer's Sqrt fails with NumberError.NEGATIVE for a negative value, so it is written with try; an
+# unsigned one's cannot fail and is not
+fn main() {
+    u := U32(17).Sqrt()
+    s := I32(17).Sqrt()
+}

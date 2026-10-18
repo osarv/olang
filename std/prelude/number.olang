@@ -1,11 +1,15 @@
-# the numeric traits, part of the prelude: Float, Integer and Number name the built-in number types, so generic code
-# over numbers says which it takes - `fn Sqrt<T Float>(x T) T` - and a call with any other type is an error at the call
-# naming the trait (G19), not a case missing inside the library.
+# the numbers, part of the prelude: the numeric traits, the constants, and the numbers' methods - the C math library's
+# functions on every float (x.Sqrt(), x.Exp(), y.Atan2(x) ...), and Abs, Min, Max, Clamp on every number and Pow and
+# Sqrt on every integer.
+#
+# Float, Integer and Number name the built-in number types, so generic code over numbers says which it takes -
+# `fn (x T) Sqrt<T Float>() T` - and a call with any other type is an error at the call naming the trait (G19), not a
+# case missing inside the library.
 #
 # Each trait is sealed (T31, T35c): its one method is private, declared here on each built-in type that satisfies it,
 # so no other module's type can supply it - not by declaring a method of that name, and not by extending a number: Char
 # (`type Char extends U8`) and `type Dist extends F64` inherit the method (T29f) and satisfy nothing. So a body
-# constrained by one may choose per type with "match T" over the built-in numbers alone, as std/math's do.
+# constrained by one may choose per type with "match T" over the built-in numbers alone, as the methods below do.
 
 # F16, BF16, F32 and F64
 type Float trait {
@@ -48,3 +52,533 @@ fn (x U8) numberType() { }
 fn (x U16) numberType() { }
 fn (x U32) numberType() { }
 fn (x U64) numberType() { }
+
+# ---- the constants ----
+
+# pi, e, the positive infinity and the quiet NaN, as F64s - F32(Pi) is the F32 nearest pi. Others are computed where
+# they are wanted, F64(2).Sqrt() or F64(10).Log(), which a constant context does while compiling (K2)
+Pi F64 = 3.141592653589793
+Euler F64 = 2.718281828459045
+Inf F64 = 1.0 / 0.0
+# the quiet NaN with no sign and no payload, made from its bits so that its bits are known (E33a)
+NaN F64 = U64(0x7FF8000000000000).F64FromBits()
+
+# ---- the floats' methods ----
+#
+# Each is written once, over the four float types (a default of Float, M19e), and compiled per type. An F64 or an F32
+# goes to the C math library's function for its type; an F16 or a BF16 is computed in F32 - F64 for Fma - and rounded
+# once to its own type. The library's functions are ones the language knows (X8): sqrt, fma, floor and the other exact
+# ones become instructions where the machine has them and vectorize, and every one of them is computed while compiling
+# where a value is needed then (K1, K2), by the very function the program calls.
+#
+# A result outside a function's domain is what IEEE 754 says - (-1.0).Sqrt() and (-1.0).Log() are NaN, 0.0.Log() is
+# -Inf, 1000.0.Exp() is Inf - never an error: a NaN carries the failure through the rest of a computation and is asked
+# about once, with IsNan, where a check on every call would cost what the call does. Math with checks is IsFinite on
+# the result.
+
+extern fn sqrt(x F64) F64
+extern fn sqrtf(x F32) F32
+extern fn cbrt(x F64) F64
+extern fn cbrtf(x F32) F32
+extern fn exp(x F64) F64
+extern fn expf(x F32) F32
+extern fn exp2(x F64) F64
+extern fn exp2f(x F32) F32
+extern fn expm1(x F64) F64
+extern fn expm1f(x F32) F32
+extern fn log(x F64) F64
+extern fn logf(x F32) F32
+extern fn log2(x F64) F64
+extern fn log2f(x F32) F32
+extern fn log10(x F64) F64
+extern fn log10f(x F32) F32
+extern fn log1p(x F64) F64
+extern fn log1pf(x F32) F32
+extern fn pow(x F64, y F64) F64
+extern fn powf(x F32, y F32) F32
+extern fn sin(x F64) F64
+extern fn sinf(x F32) F32
+extern fn cos(x F64) F64
+extern fn cosf(x F32) F32
+extern fn tan(x F64) F64
+extern fn tanf(x F32) F32
+extern fn asin(x F64) F64
+extern fn asinf(x F32) F32
+extern fn acos(x F64) F64
+extern fn acosf(x F32) F32
+extern fn atan(x F64) F64
+extern fn atanf(x F32) F32
+extern fn atan2(y F64, x F64) F64
+extern fn atan2f(y F32, x F32) F32
+extern fn sinh(x F64) F64
+extern fn sinhf(x F32) F32
+extern fn cosh(x F64) F64
+extern fn coshf(x F32) F32
+extern fn tanh(x F64) F64
+extern fn tanhf(x F32) F32
+extern fn erf(x F64) F64
+extern fn erff(x F32) F32
+extern fn erfc(x F64) F64
+extern fn erfcf(x F32) F32
+extern fn hypot(x F64, y F64) F64
+extern fn hypotf(x F32, y F32) F32
+extern fn fma(a F64, b F64, c F64) F64
+extern fn fmaf(a F32, b F32, c F32) F32
+extern fn floor(x F64) F64
+extern fn floorf(x F32) F32
+extern fn ceil(x F64) F64
+extern fn ceilf(x F32) F32
+extern fn trunc(x F64) F64
+extern fn truncf(x F32) F32
+extern fn round(x F64) F64
+extern fn roundf(x F32) F32
+extern fn roundeven(x F64) F64
+extern fn roundevenf(x F32) F32
+extern fn fabs(x F64) F64
+extern fn fabsf(x F32) F32
+extern fn copysign(x F64, s F64) F64
+extern fn copysignf(x F32, s F32) F32
+
+# the square root - correctly rounded, as IEEE 754 requires; NaN below zero, and (-0.0).Sqrt() is -0.0
+fn (x T) Sqrt<T Float>() T {
+    return match T {
+        case F64 => sqrt(x)
+        case F32 => sqrtf(x)
+        case F16 => F16(sqrtf(x))
+        case BF16 => BF16(sqrtf(x))
+    }
+}
+
+# the cube root, negative for a negative x
+fn (x T) Cbrt<T Float>() T {
+    return match T {
+        case F64 => cbrt(x)
+        case F32 => cbrtf(x)
+        case F16 => F16(cbrtf(x))
+        case BF16 => BF16(cbrtf(x))
+    }
+}
+
+# e to the power x
+fn (x T) Exp<T Float>() T {
+    return match T {
+        case F64 => exp(x)
+        case F32 => expf(x)
+        case F16 => F16(expf(x))
+        case BF16 => BF16(expf(x))
+    }
+}
+
+# 2 to the power x
+fn (x T) Exp2<T Float>() T {
+    return match T {
+        case F64 => exp2(x)
+        case F32 => exp2f(x)
+        case F16 => F16(exp2f(x))
+        case BF16 => BF16(exp2f(x))
+    }
+}
+
+# x.Exp() - 1, accurate where x is near zero and the subtraction would lose it
+fn (x T) Expm1<T Float>() T {
+    return match T {
+        case F64 => expm1(x)
+        case F32 => expm1f(x)
+        case F16 => F16(expm1f(x))
+        case BF16 => BF16(expm1f(x))
+    }
+}
+
+# the natural logarithm: -Inf at zero, NaN below it
+fn (x T) Log<T Float>() T {
+    return match T {
+        case F64 => log(x)
+        case F32 => logf(x)
+        case F16 => F16(logf(x))
+        case BF16 => BF16(logf(x))
+    }
+}
+
+# the base-2 logarithm
+fn (x T) Log2<T Float>() T {
+    return match T {
+        case F64 => log2(x)
+        case F32 => log2f(x)
+        case F16 => F16(log2f(x))
+        case BF16 => BF16(log2f(x))
+    }
+}
+
+# the base-10 logarithm
+fn (x T) Log10<T Float>() T {
+    return match T {
+        case F64 => log10(x)
+        case F32 => log10f(x)
+        case F16 => F16(log10f(x))
+        case BF16 => BF16(log10f(x))
+    }
+}
+
+# (1 + x).Log(), accurate where x is near zero and the addition would lose it
+fn (x T) Log1p<T Float>() T {
+    return match T {
+        case F64 => log1p(x)
+        case F32 => log1pf(x)
+        case F16 => F16(log1pf(x))
+        case BF16 => BF16(log1pf(x))
+    }
+}
+
+# x to the power y - C's pow, with every one of its special cases: x.Pow(0.0) is 1 even for a NaN x, and a negative
+# x to a power that is not a whole number is NaN
+fn (x T) Pow<T Float>(y T) T {
+    return match T {
+        case F64 => pow(x, y)
+        case F32 => powf(x, y)
+        case F16 => F16(powf(x, y))
+        case BF16 => BF16(powf(x, y))
+    }
+}
+
+# the length of the vector (x, y) - (x * x + y * y).Sqrt() without overflowing or underflowing on the way
+fn (x T) Hypot<T Float>(y T) T {
+    return match T {
+        case F64 => hypot(x, y)
+        case F32 => hypotf(x, y)
+        case F16 => F16(hypotf(x, y))
+        case BF16 => BF16(hypotf(x, y))
+    }
+}
+
+# x * a + b, rounded once - an F16 or a BF16 in F64, whose 53 bits hold their product exactly
+fn (x T) Fma<T Float>(a T, b T) T {
+    return match T {
+        case F64 => fma(x, a, b)
+        case F32 => fmaf(x, a, b)
+        case F16 => F16(fma(x, a, b))
+        case BF16 => BF16(fma(x, a, b))
+    }
+}
+
+fn (x T) Sin<T Float>() T {
+    return match T {
+        case F64 => sin(x)
+        case F32 => sinf(x)
+        case F16 => F16(sinf(x))
+        case BF16 => BF16(sinf(x))
+    }
+}
+
+fn (x T) Cos<T Float>() T {
+    return match T {
+        case F64 => cos(x)
+        case F32 => cosf(x)
+        case F16 => F16(cosf(x))
+        case BF16 => BF16(cosf(x))
+    }
+}
+
+fn (x T) Tan<T Float>() T {
+    return match T {
+        case F64 => tan(x)
+        case F32 => tanf(x)
+        case F16 => F16(tanf(x))
+        case BF16 => BF16(tanf(x))
+    }
+}
+
+# the angle whose sine is x, in -Pi/2 .. Pi/2; NaN outside -1 .. 1
+fn (x T) Asin<T Float>() T {
+    return match T {
+        case F64 => asin(x)
+        case F32 => asinf(x)
+        case F16 => F16(asinf(x))
+        case BF16 => BF16(asinf(x))
+    }
+}
+
+# the angle whose cosine is x, in 0 .. Pi; NaN outside -1 .. 1
+fn (x T) Acos<T Float>() T {
+    return match T {
+        case F64 => acos(x)
+        case F32 => acosf(x)
+        case F16 => F16(acosf(x))
+        case BF16 => BF16(acosf(x))
+    }
+}
+
+# the angle whose tangent is x, in -Pi/2 .. Pi/2
+fn (x T) Atan<T Float>() T {
+    return match T {
+        case F64 => atan(x)
+        case F32 => atanf(x)
+        case F16 => F16(atanf(x))
+        case BF16 => BF16(atanf(x))
+    }
+}
+
+# the angle of the point (x, y) from the positive x axis, in -Pi .. Pi: y.Atan2(x) - y first, as in C
+fn (y T) Atan2<T Float>(x T) T {
+    return match T {
+        case F64 => atan2(y, x)
+        case F32 => atan2f(y, x)
+        case F16 => F16(atan2f(y, x))
+        case BF16 => BF16(atan2f(y, x))
+    }
+}
+
+fn (x T) Sinh<T Float>() T {
+    return match T {
+        case F64 => sinh(x)
+        case F32 => sinhf(x)
+        case F16 => F16(sinhf(x))
+        case BF16 => BF16(sinhf(x))
+    }
+}
+
+fn (x T) Cosh<T Float>() T {
+    return match T {
+        case F64 => cosh(x)
+        case F32 => coshf(x)
+        case F16 => F16(coshf(x))
+        case BF16 => BF16(coshf(x))
+    }
+}
+
+fn (x T) Tanh<T Float>() T {
+    return match T {
+        case F64 => tanh(x)
+        case F32 => tanhf(x)
+        case F16 => F16(tanhf(x))
+        case BF16 => BF16(tanhf(x))
+    }
+}
+
+# the error function, 2/Pi.Sqrt() times the integral of (-t*t).Exp() from 0 to x - the normal distribution's, and GELU's
+fn (x T) Erf<T Float>() T {
+    return match T {
+        case F64 => erf(x)
+        case F32 => erff(x)
+        case F16 => F16(erff(x))
+        case BF16 => BF16(erff(x))
+    }
+}
+
+# 1 - x.Erf(), accurate where x.Erf() is near 1
+fn (x T) Erfc<T Float>() T {
+    return match T {
+        case F64 => erfc(x)
+        case F32 => erfcf(x)
+        case F16 => F16(erfcf(x))
+        case BF16 => BF16(erfcf(x))
+    }
+}
+
+# the largest whole number not above x
+fn (x T) Floor<T Float>() T {
+    return match T {
+        case F64 => floor(x)
+        case F32 => floorf(x)
+        case F16 => F16(floorf(x))
+        case BF16 => BF16(floorf(x))
+    }
+}
+
+# the smallest whole number not below x
+fn (x T) Ceil<T Float>() T {
+    return match T {
+        case F64 => ceil(x)
+        case F32 => ceilf(x)
+        case F16 => F16(ceilf(x))
+        case BF16 => BF16(ceilf(x))
+    }
+}
+
+# x without its fraction - toward zero
+fn (x T) Trunc<T Float>() T {
+    return match T {
+        case F64 => trunc(x)
+        case F32 => truncf(x)
+        case F16 => F16(truncf(x))
+        case BF16 => BF16(truncf(x))
+    }
+}
+
+# the nearest whole number, a half away from zero: 2.5.Round() is 3, (-2.5).Round() is -3 - as C, Go and Rust round
+fn (x T) Round<T Float>() T {
+    return match T {
+        case F64 => round(x)
+        case F32 => roundf(x)
+        case F16 => F16(roundf(x))
+        case BF16 => BF16(roundf(x))
+    }
+}
+
+# the nearest whole number, a half to the even one: 2.5.RoundEven() is 2, 3.5.RoundEven() is 4 - IEEE 754's own rounding,
+# which leaves no bias over many values, so the one a quantizer wants
+fn (x T) RoundEven<T Float>() T {
+    return match T {
+        case F64 => roundeven(x)
+        case F32 => roundevenf(x)
+        case F16 => F16(roundevenf(x))
+        case BF16 => BF16(roundevenf(x))
+    }
+}
+
+# x's magnitude with the sign of s - its sign bit, so 1.0.CopySign(-0.0) is -1.0
+fn (x T) CopySign<T Float>(s T) T {
+    return match T {
+        case F64 => copysign(x, s)
+        case F32 => copysignf(x, s)
+        case F16 => F16(copysignf(x, s))
+        case BF16 => BF16(copysignf(x, s))
+    }
+}
+
+# whether x's sign bit is set - true for -0.0 and for a NaN with a sign, which x < 0.0 is not
+fn (x T) SignBit<T Float>() Bool {
+    return match T {
+        case F64 => x.Bits() >> 63 == 1
+        case F32 => x.Bits() >> 31 == 1
+        case F16, BF16 => x.Bits() >> 15 == 1
+    }
+}
+
+# whether x is a NaN - the one value not equal to itself
+fn (x T) IsNan<T Float>() Bool {
+    return match T {
+        case F64, F32, F16, BF16 => x != x
+    }
+}
+
+# whether x is an infinity, of either sign
+fn (x T) IsInf<T Float>() Bool {
+    return match T {
+        case F64, F32, F16, BF16 => x.Abs() == Inf
+    }
+}
+
+# whether x is a number - neither an infinity nor a NaN
+fn (x T) IsFinite<T Float>() Bool {
+    return match T {
+        case F64, F32, F16, BF16 => x.Abs() < Inf
+    }
+}
+
+# ---- every number's methods ----
+#
+# Abs, Min, Max and Clamp on a float follow IEEE 754 (the sign bit; a NaN propagates; -0.0 below 0.0), on an integer
+# the plain arithmetic. A type other than a number that wants them declares its own
+
+# x without its sign - a float's sign bit cleared, so (-0.0).Abs() is 0.0; an integer's negation when it is negative,
+# which for the most negative one is itself, as negation wraps (E6c); an unsigned integer as it is
+fn (x T) Abs<T Number>() T {
+    return match T {
+        case F64 => fabs(x)
+        case F32 => fabsf(x)
+        case F16 => F16(fabsf(x))
+        case BF16 => BF16(fabsf(x))
+        case U8, U16, U32, U64 => x
+        nomatch => -x if x < 0 else x
+    }
+}
+
+# the lesser of a and b. For a float, IEEE 754's minimum: a NaN if either is one, since a NaN means the computation that
+# made it failed and taking the other would hide that; and -0.0 below 0.0, so a.Min(b) and b.Min(a) are the same value.
+# Otherwise a when they are equal
+fn (a T) Min<T Number>(b T) T {
+    match T {
+        case F64, F32, F16, BF16 {
+            if a != a or b != b { return a + b }        # a NaN: the sum is one
+            if a == b { return a if a.SignBit() else b } # -0.0 and 0.0 are equal and differ only there
+        }
+        nomatch { }
+    }
+    return b if b < a else a
+}
+
+# the greater of a and b, as Min: a NaN if either is one, and 0.0 above -0.0
+fn (a T) Max<T Number>(b T) T {
+    match T {
+        case F64, F32, F16, BF16 {
+            if a != a or b != b { return a + b }
+            if a == b { return b if a.SignBit() else a }
+        }
+        nomatch { }
+    }
+    return b if a < b else a
+}
+
+# x brought within lo .. hi: lo below it, hi above it - and hi when lo is above hi, since the upper bound is applied
+# last. A NaN x stays a NaN
+fn (x T) Clamp<T Number>(lo T, hi T) T {
+    return x.Max(lo).Min(hi)
+}
+
+# ---- the integers' methods ----
+
+# what an integer's square root fails with
+error NumberError {
+    NEGATIVE       # a negative value, which has no square root among the integers
+}
+
+# x to the power n, wrapping as "*" does (E6c): x.Pow(0) is 1, 0 included. "checked x.Pow(n)" calls CheckedPow (E31a)
+fn (x T) Pow<T Integer>(n U32) T {
+    r T = 1
+    b T = x
+    e U32 = n
+    for e > 0 {
+        if (e & 1) == 1 { r = r * b }
+        e = e >> 1
+        if e > 0 { b = b * b }
+    }
+    return r
+}
+
+# x.Pow(n), failing with BuiltinError.OVERFLOW where the true power does not fit - the checked form "checked x.Pow(n)"
+# calls (E31a). A square no later step needs is never taken, so it fails exactly where the result does not fit
+fn (x T) CheckedPow<T Integer>(n U32) T ? BuiltinError {
+    r T = 1
+    b T = x
+    e U32 = n
+    for e > 0 {
+        if (e & 1) == 1 { r = checked (r * b) }
+        e = e >> 1
+        if e > 0 { b = checked (b * b) }
+    }
+    return r
+}
+
+# the largest whole number whose square is not above n - the floor of its square root, exact for every U64: the
+# hardware's square root of the nearest F64, then a correction of one each way (the F64's rounding and the root's leave
+# it within one). The comparisons divide rather than square, so nothing overflows near 2^64
+fn sqrtU64(n U64) U64 {
+    if n < 2 { return n }
+    r U64 = U64(sqrt(F64(n)))
+    for r > n / r { r-- }                           # r * r > n
+    for r + 1 <= n / (r + 1) { r++ }                # (r + 1) * (r + 1) <= n
+    return r
+}
+
+# the integer square root: the largest whole number whose square is not above x, in x's type - 17 gives 4. An unsigned
+# integer's cannot fail; a signed integer's fails with NumberError.NEGATIVE for a negative x
+fn (x U8) Sqrt() U8 { return U8(sqrtU64(U64(x))) }
+fn (x U16) Sqrt() U16 { return U16(sqrtU64(U64(x))) }
+fn (x U32) Sqrt() U32 { return U32(sqrtU64(U64(x))) }
+fn (x U64) Sqrt() U64 { return sqrtU64(x) }
+fn (x I8) Sqrt() I8 ? NumberError {
+    if x < 0 { error NumberError.NEGATIVE }
+    return I8(sqrtU64(U64(x)))
+}
+fn (x I16) Sqrt() I16 ? NumberError {
+    if x < 0 { error NumberError.NEGATIVE }
+    return I16(sqrtU64(U64(x)))
+}
+fn (x I32) Sqrt() I32 ? NumberError {
+    if x < 0 { error NumberError.NEGATIVE }
+    return I32(sqrtU64(U64(x)))
+}
+fn (x I64) Sqrt() I64 ? NumberError {
+    if x < 0 { error NumberError.NEGATIVE }
+    return I64(sqrtU64(U64(x)))
+}

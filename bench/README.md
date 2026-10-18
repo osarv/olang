@@ -30,7 +30,7 @@ not one of them.
 (`clang -O3 -flto`, `addModeFlags` in `main.c`): the same compiler, optimizer and link-time optimization - and, since
 olang builds for the machine it runs on (B12, 2026-10-09), `-march=native`, with `-ffp-contract=off`, because clang's
 default would fuse `a*b+c` into an FMA wherever the target has one and change the results - olang never contracts, and
-fuses only where a program writes `math.Fma`. The `-x` columns build both for baseline x86-64 (`olang -target x86-64`, C with
+fuses only where a program writes `x.Fma(a, b)`. The `-x` columns build both for baseline x86-64 (`olang -target x86-64`, C with
 no `-march`). The tables below the next section were measured before B12, when olang built for baseline x86-64 and the
 `-n` columns were its IR relinked with `-march=native`. Both versions print floats as
 olang's `$` does (the fewest digits that read back as the same value; `c/common.h` copies util.c's `FloatShortest`),
@@ -314,7 +314,7 @@ Training step, 784-128-10, batch 64, F32, us a step (forward, softmax cross-entr
    B leaves the cache, 3.8 GFLOPS at 2048), and 70-75% of the default target's peak (SSE2: 4 F32 lanes x (mul + add) x
    2.8 GHz = 22.4 GFLOPS) - the micro-kernel's 48 accumulators stay in registers and its loads are the packed panels'.
 2. **The gap to OpenBLAS (5-7x single-threaded) is the instruction set, not the code**: olang builds for baseline
-   x86-64 - SSE2, 4 F32 lanes, no FMA - and never contracts `a*b + c` into an FMA (`math.Fma` is a correctly rounded
+   x86-64 - SSE2, 4 F32 lanes, no FMA - and never contracts `a*b + c` into an FMA (`x.Fma(a, b)` is a correctly rounded
    call, and at the baseline target a library call); OpenBLAS runs AVX-512 FMA, 16 lanes and two operations per
    instruction. The native relink buys little (F32 18-19) because the tile, 4 x 12, is sized for 4-wide vectors and
    still has no FMA; a native build would want its own tile sizes (8-wide or 16-wide vectors, 6 x 16 or 12 x 32) and
@@ -329,7 +329,7 @@ Training step, 784-128-10, batch 64, F32, us a step (forward, softmax cross-entr
 5. **The training step**: olang 2.4 ms against OpenBLAS's 0.4-0.8 ms and the naive C step's 9.6-13 ms; about 26M of its
    flops are in the two large products, which at olang's 15 GFLOPS account for ~1.7 ms - so the step follows the
    GEMM, and the gap to OpenBLAS is point 2's.
-6. **Element-wise math**: `std/math`'s Exp and Tanh call the C library per element, so a Map over them does not
+6. **Element-wise math**: the floats' Exp and Tanh call the C library per element, so a Map over them does not
    vectorize. `linalg.FastExp`/`FastTanh`/`FastSigmoid` are olang arithmetic and bit operations that do: counted
    with callgrind on a Map over 4096 elements, F32 FastExp 14 instructions an element (C library expf 39), FastTanh
    17 (tanhf 129), FastSigmoid 16; F64 34, 40 and 37 (exp 67, tanh 129). The same FastExp written in C runs at the

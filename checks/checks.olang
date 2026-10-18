@@ -802,7 +802,7 @@ fn k2(r mut report&) ? Failed {
 
 # E33: a NaN made from bits keeps them when a global holding it is written out as data - F32's in the double form
 # LLVM reads back exactly, the 16-bit ones in their own; and a BF16's sign bit, read from memory, is its own under -d
-# as under -b (LLVM 18's selection took it for a known zero, so std/math's SignBit failed at -d and -r)
+# as under -b (LLVM 18's selection took it for a known zero, so the SignBit of the floats failed at -d and -r)
 test "a NaN made from bits is written out with its bits, and a BF16's sign bit read from memory" { assert passed("bits") }
 
 fn bits(r mut report&) ? Failed {
@@ -1131,7 +1131,7 @@ fn agree(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build math.olang > out.txt 2>&1 && ./build/math > b.txt 2>&1") == 0, "math", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug math.olang > out.txt 2>&1 && ./build/math.debug > d.txt 2>&1") == 0, "math -d", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret math.olang > i.txt 2>&1") == 0, "math -i", dir)
-    try r.expect(sh(dir, "test $(wc -l < b.txt) = 12 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
+    try r.expect(sh(dir, "test $(wc -l < b.txt) = 14 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
     mll String& = " build/math.main.ll"
     try r.expect(sh(dir, "grep -q '^@math_SqrtTwo = constant double 0x3FF6A09E667F3BCD$'" $mll) == 0, "math baked", dir)
     try r.expect(sh(dir, "grep -q '^declare double @sqrt(double) memory(none) nounwind willreturn$'" $mll) == 0, "math exact", dir)
@@ -1294,7 +1294,7 @@ fn target(r mut report&) ? Failed {
     try r.expect(nl > 0, "native printed " $native, dir)
     first := native[:nl]
     results := native[nl + 1:]
-    # this machine's vectors, when it has wider ones than SSE's, and its FMA instruction for math.Fma, not a call
+    # this machine's vectors, when it has wider ones than SSE's, and its FMA instruction for x.Fma(a, b), not a call
     if not first.EndsWith(" 128 false") {
         try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'ymm|zmm'") == 0, "no wide vectors in " $first, dir)
     }

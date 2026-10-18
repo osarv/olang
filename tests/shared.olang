@@ -3,7 +3,6 @@
 # genuine cycle - see runner.olang).
 
 import "std/pair"
-import "std/math"
 
 type Point struct(x I32, y I32) {
     x
@@ -17018,12 +17017,13 @@ test "T35c: Float, Integer and Number - decided while compiling, and the same at
 
 # G9a: a variable only literals reach takes a type its constraint allows - F64 for a Float - rather than the I64 an
 # integer literal is by itself; a value with a type of its own still binds that type (checks/cases/numtraitsqrtint)
-NtSqrtBaked := math.Sqrt(4)
+fn ntRoot<T Float>(x T) T { return x.Sqrt() }
+NtSqrtBaked := ntRoot(4)
 NtHalfLitBaked F64 = ntHalf(3)
 ntSqrtRun mut F64 = 4.0
 test "G9a: a literal reaching a constrained variable - decided while compiling, and the same at run time" {
-    assert math.Sqrt(4) == 2.0 and math.Sqrt(2 + 2) == 2.0
-    assert NtSqrtBaked == math.Sqrt(ntSqrtRun) and NtSqrtBaked == 2.0
+    assert ntRoot(4) == 2.0 and ntRoot(2 + 2) == 2.0
+    assert NtSqrtBaked == ntSqrtRun.Sqrt() and NtSqrtBaked == 2.0
     assert NtHalfLitBaked == 1.5 and ntHalf(3) == ntHalf(ntRun) and ntHalf(3 if ntRunI > 0 else 5) == 1.5
     assert ntKind(4) == 2 and ntNext(4) == 5
 }
