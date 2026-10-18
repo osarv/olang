@@ -26,11 +26,18 @@
 # What lowering meets and does not lower yet is recorded as a gap (Gaps), with where and what; a body with one is not
 # verified (compiler/tools/lowerdump.olang counts them).
 
+import "std/os"
 import "source"
+import "diag"
+import "cond"
+import "fetch"
+import "load"
+import "names"
 import "types"
 import "generic"
 import "typed"
 import "mir"
+import "check"
 
 # a construct met and not lowered yet: where, and what
 type Gap struct(File I64, Sp source.Span, What String&) {
@@ -422,7 +429,7 @@ fn (ln mut lowering&) block(bl typed.Block&) {
         return
     }
     kind := match ln.B.Blocks[I64(bl.Id)].Kind {
-        case typed.BlockKind.Loop, typed.BlockKind.Collect => mir.ScopeKind.Loop
+        case typed.BlockKind.Loop => mir.ScopeKind.Loop
         case typed.BlockKind.Join => mir.ScopeKind.Join
         case _ => mir.ScopeKind.Block
     }
@@ -901,7 +908,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
         for ci in range tc.Clauses.Len() {
             if ln.dead { return }
             cl := tc.Clauses[ci]
-            cond := mir.Operand.None
+            test1 := mir.Operand.None
             always := cl.All
             for it in cl.Items {
                 if always { break }
@@ -918,15 +925,15 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
                     w := mir.Operand.Const(mir.I32T, ((k + 1) << 16) | it.Word)
                     one = ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, w], sp)
                 }
-                cond = one if cond == mir.Operand.None else ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[cond, one], sp)
+                test1 = one if test1 == mir.Operand.None else ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[test1, one], sp)
             }
-            if not always and cond == mir.Operand.None { continue }
+            if not always and test1 == mir.Operand.None { continue }
             if always {
                 ln.toClause(tc, ci)
                 return
             }
             yes, no := ln.F.NewBlock(), ln.F.NewBlock()
-            ln.end(mir.Term.Branch(cond, yes, no))
+            ln.end(mir.Term.Branch(test1, yes, no))
             ln.start(yes)
             ln.toClause(tc, ci)
             ln.start(no)
@@ -2253,7 +2260,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         }
         ln.word(b, ")", sp)
     } else if isEnum {
-        names := t.CaseNames(r) if t.KindOf(r) == types.Kind.Named else t.ShapeNames(r)
+        caseNames := t.CaseNames(r) if t.KindOf(r) == types.Kind.Named else t.ShapeNames(r)
         tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
         prefix := "" if t.KindOf(r) != types.Kind.Named else $ln.T.Names.Text(t.DeclName(t.DeclOf(r))) "."
         after := ln.F.NewBlock()
@@ -2266,7 +2273,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.end(mir.Term.Switch(tag, ln.F.AddCases(cs), after))
         for k in range cases.Len() {
             ln.start(bs[k])
-            name := ln.T.Names.Text(names[k]) if names != null and k < names.Len() else $k
+            name := ln.T.Names.Text(caseNames[k]) if caseNames != null and k < caseNames.Len() else $k
             ln.word(b, $prefix $name, sp)
             if cases[k] != types.TypeId(0) {
                 fs := ln.items(t.Parts(cases[k]))
@@ -2472,4 +2479,92 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
     ln.start(ok)
     ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(dest))))
     return true
+}
+
+# ---- tests ----
+
+# a program of one file, main.olang, loaded over the repository's std, checked and lowered: the verifier's problems with every body and every function they refer to, a line each
+# ("B<id>: problem"), "gap" lines for what is not lowered yet, and the dump of each body of the root module whose
+# function's name is in dumps
+fn lowerText(text String&, dumps Array<String&>&) (String, String) {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                     source.Names(), diag.Diagnostics(false))
+    l.Load($dir "/main.olang")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := check.Checker(p, false)
+    c.CheckProgram()
+    lw := Lowerer(p, c.Bodies)
+    problems := StringBuilder()
+    out := StringBuilder()
+    root := l.Mods[l.Root].File
+    for b in range c.Bodies.Len() {
+        if not lw.HasCode(b) { continue }
+        body := c.Bodies[b]
+        name := ""
+        match body.Of {
+            case typed.BodyOf.Fn(inst) { name = $p.L.Names.Text(p.FnDecl(p.InstanceFn(inst)).Name) }
+            case _ { }
+        }
+        dump := body.File == root and name in dumps
+        gapped, bad, shown := lw.Verified(b, dump)
+        if gapped { problems.Push("B" $b ": gapped\n") }
+        for line in bad.Split("\n") {
+            if line.Len() > 0 { problems.Push("B" $b ": " $line "\n") }
+        }
+        out.Push(shown)
+    }
+    for m in lw.InitModules() { lw.Want(mir.FnKey.Init(m)) }
+    w I64 = 0
+    for w < lw.Wanted.Len() {
+        key := lw.Wanted[w]
+        w++
+        gapped, bad, _ := lw.VerifiedKey(key, false)
+        if gapped { problems.Push($key ": gapped\n") }
+        for line in bad.Split("\n") {
+            if line.Len() > 0 { problems.Push($key ": " $line "\n") }
+        }
+    }
+    for g in lw.Gaps { problems.Push("gap " $g.What "\n") }
+    return problems.ToString(), out.ToString()
+}
+
+test "a function lowers to straight-line MIR: its operands in temporaries, its frame opened and closed" {
+    problems, dump := lowerText("fn add(a I32, b I32) I32 {\n    s := a + b\n    return s\n}\nfn main() { x := add(1, 2) }\n"
+                                String&["add"])
+    assert problems == "", problems
+    want := ("  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  L3 Temp: I32\n  L4 Temp: I32\n  L5 Temp: I32\n"
+             "  L6 Temp: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L3 = copy L0\n  L4 = copy L1\n  L5 = Add I32(copy L3, copy L4)\n"
+             "  L2 = copy L5\n  L6 = copy L2\n  close S0\n  return copy L6\n")
+    assert (try dump.Find(want) catch default -1) > 0, dump
+}
+
+test "control flow verifies clean: ifs, loops with break and continue, ranges, for-in, matches, tries, defers" {
+    text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
+             "error E {\n    BAD\n    WORSE\n}\n"
+             "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.BAD }\n    if n > 100 { error E.WORSE }\n    return n\n}\n"
+             "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r) => 3 * r * r\n        case Shape.Square => 1\n    }\n}\n"
+             "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"
+             "        if x > 50 { break }\n        t += try pick(x) catch E.BAD default 0\n    }\n    for i in range 3 { t += i }\n"
+             "    return t\n}\n"
+             "fn main() ? E {\n    s := try walk(I64[1, 2, 3]) + area(Shape.Circle(2))\n    assert s > 0, \"positive\"\n"
+             "    q := checked (s * 2) catch default 0\n    assert $q \" \" $Shape.Square != \"\"\n}\n")
+    problems, _ := lowerText(text, String&[])
+    assert problems == "", problems
+}
+
+test "helpers: == on a struct, its Hash, its rendering; a comprehension; a join of tasks" {
+    text := ("type Point struct(x I64, y I64) {\n    x, y\n}\n"
+             "fn sq(n I64) I64 { return n * n }\n"
+             "fn main() {\n    p := Point(1, 2)\n    assert p == Point(1, 2) and p.Hash() == Point(1, 2).Hash()\n"
+             "    t := $p\n    a := I64[x * 2 for x in I64[1, 2, 3] if x > 1]\n    out := Array<I64>(3)\n"
+             "    join {\n        for i in range 3 { spawn out[i] = sq(i) }\n    }\n    assert a.Len() == 2 and out[2] == 4 and t.Len() > 0\n}\n")
+    problems, _ := lowerText(text, String&[])
+    assert problems == "", problems
 }

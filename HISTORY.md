@@ -19768,3 +19768,84 @@ after; `String` has it (T29e), its pieces `Array<Char>&` (the result is not the 
 `std/prelude/tests/array.olang`: shapes, writes through a piece, refused sizes, and four tasks each writing their piece
 of an array read back after the join and an arena churn - baked while compiling (K1 runs the join's tasks in sequence)
 as at run time, and clean under `-race` and `-sanitize`.
+
+## Port M7: lowering, `compiler/lower.olang` (2026-10-18, first round)
+
+`compiler/lower.olang` makes a MIR function (`compiler/mir.olang`, DESIGN.md 1.8.1) of each typed body the checker
+makes, and of each function lowering itself refers to - the helpers (`Equal`, `Hash`, `Zero`, `Render`), the `Call`
+adapters (E31) and the modules' initializations - and `compiler/tools/lowerdump.olang` (`make lowerdump`) lowers the
+corpus, std, the compiler and the checks' run and build cases and holds each function to the MIR verifier, M7's
+acceptance measured. It runs with DESIGN.md 1.6.1's stand-in placement until the scope pass (M6) lands: every site
+built in the program's scope, every local in its frame, every scope variable passed the program's.
+
+**Coverage at the end of the round.** Over the corpus, std, compiler and tools (each file loaded as a program of its
+own, so std is counted once per root): 58,955 bodies with code, 58,932 verified clean, 12 with a verifier problem, 11
+not lowered because a check error or gap left an unknown type in them, no gap of lowering's own; 1,984 helpers,
+adapters and initializations, all clean. Over the 224 checks run and build cases (their `# flags:` -define constants
+read): 50,046 bodies, all clean but one a check error leaves unchecked; 931 made, all clean. The 12 are check's, not
+lowering's: the three bodies of `shared.olang` storing a literal of another fixed length (T7d, which check reports and
+still emits), and a literal argument to `Has` not adapted to the key type (`1 in MapGlobal` in
+`std/prelude/tests/map.olang:197,304`, and a `Pair<I64, I64>` for a `Pair<I32, I32>` at :83).
+
+**How it lowers** (the table in DESIGN.md 1.8.1, with what the tree turned out to need):
+- Every operand is a temporary computed by the statements before it, a place's references and indices before the
+  place is used, an assignment's target before its value (S4) - so the order of evaluation is the statements' and no
+  later pass decides it. LLVM's mem2reg cleans up after.
+- A typed block opens a MIR scope of its own **only where its id is not its enclosing block's**: check reuses the
+  enclosing block's id for the `if`s it makes (a loop's break test, `breakUnless`), which are no scope.
+- The exit sequence is one routine (`leave`): for each level left, innermost first, its deferred code (lowered as a
+  block of its own with the levels above it set aside - they are closed on that path), a join's `Wait`, its `Close`.
+  `break`/`continue` leave to the loop's level, `return` and an error leaving the body to the frame, an error caught to
+  the try's level. A loop's body is a scope each turn, its post clause one after a `continue` or falling off the end.
+- Errors: a call's error edge dispatches over the innermost try's clauses with a test per item - `code == pos << 16 |
+  word`, or `code >> 16 == pos` for every word - each taken path closing the levels opened since the try, then jumping
+  to the clause's entry (made when first reached, lowered after the try's operand); a checked operation's failure
+  dispatches `BuiltinError`'s code under the list `[BuiltinError]`.
+
+**Decided (mine):**
+- **What a try's clauses do not take goes to the try around it** - DESIGN.md's "one no clause names leaves the body"
+  was read too narrowly: a for-in's `Exhausted` try sits inside the loop's `try ... catch IoError`, which must take the
+  rest. Past a `!` (`Ends`) the error ends the program; with no try left it is re-encoded under the body's own list and
+  raised once every scope is closed.
+- **An error edge with no try at all is a T29d literal's constructor's** (`default ChunkSize(1)` after a clause), which
+  check leaves to compile-time evaluation (`Key.Literal`): decided not to fail, so its edge is `Exit(Unreachable)`.
+- **A join that can fail** gets its errors from its tasks, found by walking its block for spawns (P1a: not into a
+  nested join): each task's callee's errors less the types its clauses take whole. Its wait's failed edge closes the
+  join and dispatches to the `try join`'s clauses, then the tries around it, with the levels inside the join set aside;
+  where an error is already leaving, the failed edge is the ok one (P4b: the join's failure does not replace it).
+- **`Take` of an owner held by value** is a copy and its zero value left; an own reference's is MIR's `Take`. Nothing is
+  released, held, registered as an owner or given: owned references are being removed (docs/memory.md), so lowering
+  keeps the one memory model - scopes and destructor registration (O16, at a `Promote` of a destructor-bearing value and
+  at a constructor's instance made by `New` where its type is reference-only).
+- **A fixed array stored where a run-time one of its element is wanted is widened** by `Prim(Convert)` (T7c): check
+  elaborates it everywhere but a `:=` global from a literal (`exactPow10 := F64[...]`), whose place it types run-time.
+- **A zero value is a call of the type's `Zero` helper** (D13c), whose body calls a constructor of no parameters and is
+  otherwise all zero bits; the constructor on its parameters' defaults is `Key.Zero`'s, eval's (M8).
+- **Helpers take `T&`**, a helper's value arguments held in a temporary and lent; an aggregate part goes through the
+  part type's own helper, so each type is one function and a type that comes round to itself through references
+  terminates (E10's "a function per type"). A struct's or enum's supplied `Hash` combines its parts as the prelude's
+  `HashElements` combines an array's (`h * 1099511628211 + part`), an enum's case first, a scalar by `mixHash`.
+- **Render follows E11a**: a struct as its name and fields, an enum as `Type.Case(...)`, an array as its element type
+  (its own permission dropped) and items, a reference as `null` or what it names, a function value as its spelled
+  signature, a type's `Str` (or `str`) by what it returns; a `Char` and text inside another value as literals, for
+  which MIR gained `WriteKind.Quoted` and `QuotedChar` (the runtime escapes, as it writes numbers). Not yet: the cut at
+  8 references deep.
+- **A module's initialization calls its globals' bodies in the order they were checked**: B5a's order is a summary of
+  their reads, computed once a module's bodies are checked (DESIGN.md 1.6), which is to come.
+
+**The MIR contract, revised where the checker's trees met it (`compiler/mir.olang`):**
+- A call's built result (a reference result built in the result scope, or one of several) is new storage only the
+  caller holds and writable (T25b): the verifier holds the callee's result type with write permission added (`held`)
+  for a call's destination and a task's targets.
+- "One representation" sees through arrays: an `Array<Char>` (a `String`) is an `Array<U8>` (T29h).
+- `Same` compares references by referent, whatever their permission.
+- The verifier and the dumper hold the function by reference beside a writable table, so a caller's function must live
+  where the table does: `f mir.Fn&lw = lw.LowerKey(k)`.
+
+**Found on the way (in check, left to its owner):** the three refused stores above; the `:=` global's run-time type;
+`IsCase` is applied to enum *references* (`x is E.C` on an `Expr&`), which the contract allows ("on a null reference
+it is false") and lowering makes a null test and a `Tag` of what it names; a spawn's discarded target (`spawn _, x =
+f()`) is a null place, lowered as a temporary given its zero value.
+
+**Left:** the plan (M6) in place of the stand-in; Render's depth cut; zero values from defaults (M8's keys); B5a's init
+order; the check-side findings above.
