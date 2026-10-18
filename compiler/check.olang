@@ -2403,7 +2403,10 @@ fn (c mut Checker&) textLit(sp source.Span) typed.Expr&c {
 fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
     have := typeOf(x)
     if want == types.UnknownT or have == types.UnknownT or want == types.VoidT { return x }
-    if have == want or c.P.T.Same(have, want) { return x }
+    if have == want or c.P.T.Same(have, want) {
+        if c.isRef(want) and (c.P.T.PermOf(want) & types.Writable) != 0 { c.roWritableRef(x, sp) }
+        return x
+    }
     # D8e: a noreturn call fits where any value is wanted - control never arrives where it would be used
     if have == types.NoreturnT { return x }
     hk := c.P.T.KindOf(have)
@@ -2521,6 +2524,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 c.err(sp, msgs.ReadOnlyToWritable())
                 return x
             }
+            if (c.P.T.PermOf(want) & types.Writable) != 0 and not c.roWritableRef(x, sp) { return x }
             if c.P.T.Same(hr, wr) { return x }
             return c.convert(sp, x, want)
         }
@@ -3982,6 +3986,32 @@ fn (c mut Checker&) roPlace(p typed.Place&) Bool {
         case typed.Place.Field(_, _, base, _) => c.roPlace(base)
         case typed.Place.Elem(_, _, e) => c.roPlace(e.Base)
         case typed.Place.Payload(_, _, pl) => c.roPlace(pl.Base)
+        case typed.Place.Temp(_, _, v, _) => c.roValue(v)
+        case _ => false
+    }
+}
+
+# a writable reference given where one is wanted (T25b): read out of a read-only copy it is read-only - an error, false;
+# read out of a by-value parameter, that parameter needs a writable argument
+fn (c mut Checker&) roWritableRef(x typed.Expr&, sp source.Span) Bool {
+    if c.P.T.KindOf(c.P.T.Referent(typeOf(x))) == types.Kind.Func { return true }
+    if c.roRef(x) {
+        c.err(sp, msgs.ReadOnlyToWritable())
+        return false
+    }
+    c.roNeed(readPlace(x))
+    return true
+}
+
+# whether a place is part, by value, of a value with no storage that is a read-only copy (a call's result copied out
+# of what a read-only argument reaches): a writable reference read out of it is read-only (T25b)
+fn (c mut Checker&) roTempBase(p typed.Place&) Bool {
+    if p == null { return false }
+    return match p {
+        case typed.Place.Field(_, _, base, _) => c.roTempBase(base)
+        case typed.Place.Elem(_, _, e) => c.roTempBase(e.Base)
+        case typed.Place.Payload(_, _, pl) => c.roTempBase(pl.Base)
+        case typed.Place.Temp(_, _, v, _) => c.roValue(v)
         case _ => false
     }
 }
@@ -3998,7 +4028,7 @@ fn (c mut Checker&) immutableGlobal(mi I64, n source.NameId) Bool {
 # read-only copy by value (T25b)
 fn (c mut Checker&) roRef(x typed.Expr&) Bool {
     if x == null { return false }
-    if (c.P.T.PermOf(typeOf(x)) & types.Writable) != 0 { return c.roRoot(readPlace(x)) >= 0 }
+    if (c.P.T.PermOf(typeOf(x)) & types.Writable) != 0 { return c.roRoot(readPlace(x)) >= 0 or c.roTempBase(readPlace(x)) }
     return match x {
         case typed.Expr.Read(_, _, p, _) => c.roRead(p)
         case typed.Expr.Borrow(_, _, p) => c.roPlace(p)
@@ -4236,6 +4266,7 @@ fn (c mut Checker&) roSettle() {
         rec := c.P.L.Diags.Error(a.At, msgs.ReadOnlyCopyArg(a.Callee, c.text(l.Name), a.Ty, a.Fix))
         c.P.L.Diags.Note(rec, diag.Where.Span(b.File, I64(l.Sp.Start), I64(l.Sp.End)), msgs.NoteDeclaredHere(c.tok(l.Name)))
     }
+    c.strReceivers()
     for a in c.roRefArgs {
         if not c.roNeeds.Has(pair.Pair(a.Body, a.Param)) { continue }
         b := c.Bodies[a.Body]
@@ -4252,6 +4283,31 @@ fn (c mut Checker&) roSettle() {
             fix := c.roFix(source.NameId(0), l.Ty)
             c.P.L.Diags.Error(f.At, msgs.ReadOnlyFuncValue(f.What, c.text(l.Name), fix))
             break
+        }
+    }
+}
+
+# E11c: "$" renders read-only values too (an immutable global, a part of a read-only reference), so a Str whose by-value
+# receiver needs a writable argument is refused, at its name - once per declaration
+fn (c mut Checker&) strReceivers() {
+    said := Map<I64, Bool>()
+    for id in range c.Bodies.Len() {
+        if c.state[id] != 2 or not c.roNeeds.Has(pair.Pair(id, 0)) { continue }
+        match c.Bodies[id].Of {
+            case typed.BodyOf.Fn(inst) {
+                f := c.P.InstanceFn(inst)
+                fd := c.P.FnDecl(f)
+                n := c.text(fd.Name)
+                if fd.Recv == null or (n != "Str" and n != "str") or said.Has(f) { continue }
+                said.Put(f, true)
+                mi := c.P.FnModule(f)
+                text := c.P.L.Mods[mi].Src.Text
+                from := I64(fd.Recv.Sp.End)
+                at := try text[from:I64(fd.Sp.End)].Find(n) catch default -1
+                st := I64(fd.Sp.Start) if at < 0 else from + at
+                c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, st, st + n.Len()), msgs.StrReceiverWritable())
+            }
+            nomatch { }
         }
     }
 }
@@ -7702,6 +7758,8 @@ fn (c mut Checker&) countPost(sp source.Span, k I64) typed.Block&c {
 fn (c mut Checker&) borrowedSource(sp source.Span, src typed.Expr&c) I64 {
     st := typeOf(src)
     rt := st if c.isRef(st) else c.P.T.Ref(st, types.ReadOnly)
+    # T25c: a writable reference a read-only copy holds is walked read-only
+    if c.isRef(st) and (c.P.T.PermOf(st) & types.Writable) != 0 and c.roRef(src) { rt = c.P.T.Ref(c.P.T.Referent(st), c.P.T.PermOf(st) & types.Owning) }
     coll := c.hidden(sp, rt)
     # T25c: a value borrowed is as read-only as the place it is (its elements read-only copies exactly then)
     c.roBorrows.Put(c.roKey(coll), c.roRef(src) if c.isRef(st) else c.roPlace(readPlace(src)))
