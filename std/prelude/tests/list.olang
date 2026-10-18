@@ -1,6 +1,8 @@
 # the prelude List's newer operations, tested - a module of its own, not part of the prelude (only std/prelude's own
 # files are), so the Lists these tests make, and the text of the tests itself, are compiled only when they are run
 
+import "std/pair"
+
 # the elements of l, in order, as text - "[0 1 2]" - so a test compares a whole list in one assert
 fn listShow(l List<I64>&) String& {
     b := StringBuilder()
@@ -408,8 +410,8 @@ fn listRendered() String {
     n.Push(listUpTo(2))
     n.Push(List<I64>())
     b.Push($n " ")
-    p := List<Pair<String&, F64>>()
-    p.Push(Pair<String&, F64>("k", 0.5))
+    p := List<pair.Pair<String&, F64>>()
+    p.Push(pair.Pair<String&, F64>("k", 0.5))
     b.Push($p)
     return b.ToString()
 }
@@ -431,4 +433,45 @@ test "$ renders a List's elements, not its storage" {
     assert $long == expect.ToString()
     long.Truncate(9)
     assert $long == "List<I64>[0, 1, 2, 3, 4, 5, 6, 7, 8]"
+}
+
+# elements that are references to what can be stored through, or values holding references, walked by a for-in, by an
+# iterator and by its helpers - each element keeps where the list's references live, so it may be returned as the list's
+type listBag struct() {
+    items List<I64>& = List<I64>()
+}
+type listItem struct(n I64) {
+    n
+}
+fn listFind(l List<pair.Pair<String&, listItem&>>&, key String&) listItem&l ? {
+    for f in l {
+        if f.First == key { return f.Second }
+    }
+    error ListError.NOT_FOUND
+}
+fn listFindIter(l List<pair.Pair<String&, listItem&>>&, key String&) listItem&l ? {
+    for f in l.Iter() {
+        if f.First == key { return f.Second }
+    }
+    error ListError.NOT_FOUND
+}
+test "S9f: a List of references, walked by every route" {
+    bags := List<listBag&>()
+    bags.Push(listBag())
+    bags.Push(listBag())
+    s I64 = 0
+    for b in bags { s += b.items.Len() + 1 }
+    for b in bags.Iter() { s += b.items.Len() + 1 }
+    assert s == 4
+    #(a helper's callback handed an element something can be stored through is refused - the element's scope is
+    #derived from the iterator's, O23a, which a build through it would underestimate: C2d - so it counts these)
+    items := List<listItem&>()
+    items.Push(listItem(4))
+    items.Push(listItem(5))
+    assert items.Iter().Count(fn(b) { return b.n > 4 }) == 1
+    m := List<pair.Pair<String&, listItem&>>()
+    k String& = "x"
+    m.Push(pair.Pair<String&, listItem&>(k, listItem(4)))
+    assert (try listFind(m, "x") catch { unreachable }).n == 4
+    assert (try listFindIter(m, "x") catch { unreachable }).n == 4
 }

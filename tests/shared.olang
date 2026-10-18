@@ -1,5 +1,8 @@
-# Foundational types and functions - no imports. The base of this suite's import graph; worker.olang
-# and runner.olang both import this file, and also import each other (a genuine cycle - see runner.olang).
+# Foundational types and functions - no imports of this suite's files (std/pair only, for Pair). The base of
+# this suite's import graph; worker.olang and runner.olang both import this file, and also import each other (a
+# genuine cycle - see runner.olang).
+
+import "std/pair"
 
 type Point struct(x I32, y I32) {
     x
@@ -8432,7 +8435,7 @@ test "E10c: 'a is b' is identity and 'is not' its negation, while compiling and 
 }
 
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
-    p := Pair<I32, I64>(1, 2)
+    p := pair.Pair<I32, I64>(1, 2)
     assert p.Second == 2
 }
 
@@ -11118,8 +11121,8 @@ test "O4b/G11: a list of pairs holding text references, built in a loop over ano
     names mut List<String&>& = List<String&>()
     names.Push("ann")
     names.Push("bobby")
-    l mut List<Pair<String&, I64>>& = List<Pair<String&, I64>>()
-    for n in names { l.Push(Pair(n, n.Len())) }
+    l mut List<pair.Pair<String&, I64>>& = List<pair.Pair<String&, I64>>()
+    for n in names { l.Push(pair.Pair(n, n.Len())) }
     obChurn()
     assert l[1].First == "bobby" and l[1].Second == 5 and l[0].Second == 3
 }
@@ -11204,8 +11207,8 @@ fn sfBakeSum(n I64) I64 {
     k SfNode& = a if n > 3 else SfNode(1)
     l mut List<String&>& = List<String&>()
     for nm in String&["x", "yy"] { l.Push(nm) }
-    pl mut List<Pair<String&, I64>>& = List<Pair<String&, I64>>()
-    for s in l { pl.Push(Pair(s, s.Len())) }
+    pl mut List<pair.Pair<String&, I64>>& = List<pair.Pair<String&, I64>>()
+    for s in l { pl.Push(pair.Pair(s, s.Len())) }
     return a.v + b.v + f.v + e.v + k.v + pl[1].Second
 }
 SfBaked := sfBakeSum(5)
@@ -11834,17 +11837,17 @@ test "G8a: a field after a generic self-reference is reached through the instant
 type cbNode struct(v I32) {
     v
 }
-fn cbPairOf(k String&) Pair<String&, I64> { return Pair(k, 7) }
+fn cbPairOf(k String&) pair.Pair<String&, I64> { return pair.Pair(k, 7) }
 test "G10c: a generic constructor takes its expected type's arguments" {
-    l := List<Pair<String&, I64>>()
+    l := List<pair.Pair<String&, I64>>()
     k String& = "abc"
-    l.Push(Pair(k, 3))
-    p Pair<String&, I64> = Pair(k, I64(4))
+    l.Push(pair.Pair(k, 3))
+    p pair.Pair<String&, I64> = pair.Pair(k, I64(4))
     n mut cbNode& = cbNode(1)
-    q Pair<mut cbNode&, I32> = Pair(n, 1)
+    q pair.Pair<mut cbNode&, I32> = pair.Pair(n, 1)
     q.First.v = 5
-    q = Pair(n, 2)
-    r := Pair(k, I64(5))
+    q = pair.Pair(n, 2)
+    r := pair.Pair(k, I64(5))
     l.Push(r)
     assert l.Len() == 2 and p.Second == 4 and n.v == 5 and q.Second == 2 and cbPairOf(k).Second == 7
     assert l[0].Second == 3 and l[1].First == "abc"
@@ -11996,11 +11999,11 @@ test "E28: ':=' from a conditional of text, and of numbers of one type" {
 # E10/E10b/T29e/G19, from the prelude Map's tests: keys that rely on the hash the compiler supplies, or that a type
 # inherits through extends - here rather than in std/prelude/map.olang, whose tests every test build compiles
 test "E10: with no Eq anywhere, == is the built-in comparison and a Map takes any key with a Hash" {
-    a := Pair(I32(1), 2)
-    assert a == Pair(I32(1), 2) and a != Pair(I32(2), 2)
-    m := Map<Pair<I32, I64>, I32>()
+    a := pair.Pair(I32(1), 2)
+    assert a == pair.Pair(I32(1), 2) and a != pair.Pair(I32(2), 2)
+    m := Map<pair.Pair<I32, I64>, I32>()
     m.Put(a, 7)
-    assert try m.Get(Pair(I32(1), 2)) catch default 0 == 7
+    assert try m.Get(pair.Pair(I32(1), 2)) catch default 0 == 7
 }
 
 # E10b: keys with no Hash written - the compiler supplies one from the parts, while compiling as at run time
@@ -12445,12 +12448,12 @@ type sbJNode struct(v I64) {
     v
     next mut sbJNode& = null
 }
-fn sbFields(n I64) List<Pair<String&, sbJNode&>>& {
-    fields mut List<Pair<String&, sbJNode&>>&return = List<Pair<String&, sbJNode&>>()
+fn sbFields(n I64) List<pair.Pair<String&, sbJNode&>>& {
+    fields mut List<pair.Pair<String&, sbJNode&>>&return = List<pair.Pair<String&, sbJNode&>>()
     for i in range n {
         key String&fields = $i "k"
         value sbJNode&fields = sbJNode(I64(i) * 10)
-        fields.Push(Pair<String&, sbJNode&>(key, value))
+        fields.Push(pair.Pair<String&, sbJNode&>(key, value))
     }
     return fields
 }
@@ -15593,11 +15596,11 @@ test "O17: a generic's instantiations each say what their own body does with a r
 
 # O26a (study 5, r05): a for-in element is an element of what it walks, so a local walked into a returned one lives where
 # the result is put, as "out.Push(all[i])" makes it
-fn s5Top(counts Map<String&, I64>&, k I64) List<Pair<String&, I64>> {
-    all := List<Pair<String&, I64>>()
-    for e in counts { all.Push(Pair(e.Key, e.Value)) }
+fn s5Top(counts Map<String&, I64>&, k I64) List<pair.Pair<String&, I64>> {
+    all := List<pair.Pair<String&, I64>>()
+    for e in counts { all.Push(pair.Pair(e.Key, e.Value)) }
     all.Sort(fn(a, b) { return a.Second > b.Second })
-    out := List<Pair<String&, I64>>()
+    out := List<pair.Pair<String&, I64>>()
     for p in all {
         if out.Len() >= k { break }
         out.Push(p)

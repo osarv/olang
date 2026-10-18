@@ -1453,9 +1453,9 @@ functypename.olang:4:6: error[D2]: 'Circle' is already a type's name in this mod
       |      ^~~~~~
 compilation failed with 1 error
 === g10cexpected.olang
-g10cexpected.olang:6:33: error[E12]: expected String&, found I64
-    6 |     p Pair<String&, I64> = Pair(3, 4)
-      |                                 ^
+g10cexpected.olang:7:43: error[E12]: expected String&, found I64
+    7 |     p pair.Pair<String&, I64> = pair.Pair(3, 4)
+      |                                           ^
 compilation failed with 1 error
 === g10cinfer.olang
 g10cinfer.olang:5:10: error[G10c]: the type arguments of Tagged cannot be inferred from these arguments - write them: Tagged<...>(...)
@@ -2726,14 +2726,14 @@ o25hcopyprogram.olang:12:10: error[O25h]: this value holds references into a sco
       |          ^
 compilation failed with 1 error
 === o25hpairpush.olang
-o25hpairpush.olang:13:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         fields.Push(p)
+o25hpairpush.olang:14:16: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         fields.Push(p)
       |                ^~~~
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
-o25hpairpush.olang:12:9: note: 'p' is declared here, in a block that closes first - declare it where 'fields' lives: 'p mut Pair<String&, Node&>&fields = ...'
-   12 |         p := Pair<String&, Node&>("k", value)
+o25hpairpush.olang:13:9: note: 'p' is declared here, in a block that closes first - declare it where 'fields' lives: 'p mut Pair<String&, Node&>&fields = ...'
+   13 |         p := pair.Pair<String&, Node&>("k", value)
       |         ^
 compilation failed with 1 error
 === o25replacelist.olang

@@ -1,6 +1,8 @@
 # the prelude Map's tests - a module of their own, not part of the prelude (only std/prelude's own files are), so the
 # Maps they make are compiled only when these tests are run, never into every program and every other test build
 
+import "std/pair"
+
 test "put, get, replace, remove" {
     m := Map<I32, I64>()
     m.Put(1, 10)
@@ -79,10 +81,10 @@ test "for ... in visits every entry once" {
 }
 
 test "a pair is a key when both its parts are" {
-    m := Map<Pair<I32, I32>, I32>()
-    for i in range 20 { m.Put(Pair(I32(i), I32(i) + 1), I32(i)) }
-    assert (try m.Get(Pair(7, 8)) catch default -1) == 7
-    assert not m.Has(Pair(8, 7))
+    m := Map<pair.Pair<I32, I32>, I32>()
+    for i in range 20 { m.Put(pair.Pair(I32(i), I32(i) + 1), I32(i)) }
+    assert (try m.Get(pair.Pair(7, 8)) catch default -1) == 7
+    assert not m.Has(pair.Pair(8, 7))
 }
 
 test "membership in a Map is by key" {

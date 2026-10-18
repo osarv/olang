@@ -11,6 +11,7 @@
 # rules that are about declarations and imports, and B10's unknown name in a condition. A local if whose condition
 # the build decides (S8b) has its branches' diagnostics chosen or dropped here; one only compile-time evaluation can
 # decide stays pending for the checker.
+import "std/pair"
 import "std/os"
 import "source"
 import "token"
@@ -83,11 +84,11 @@ type Resolver struct(L mut load.Loader&) {
     mi I64 = -1
     locals List<local>
     scope Map<source.NameId, I64>
-    undo List<Pair<source.NameId, I64>>
+    undo List<pair.Pair<source.NameId, I64>>
     itemNames List<source.NameId>
     inCond Bool = false
     item I64 = 0
-    unknownSaid List<Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
+    unknownSaid List<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
 }
 
 # ---- the program ----
@@ -421,7 +422,7 @@ fn (r mut Resolver&) popTo(mark I64) {
 
 fn (r mut Resolver&) bind(n source.NameId, sp source.Span, what What, constant Bool) {
     prev := try r.scope.Get(n) catch default -1
-    r.undo.Push(Pair(n, prev))
+    r.undo.Push(pair.Pair(n, prev))
     r.scope.Put(n, r.locals.Len())
     r.locals.Push(local(n, sp, what, constant))
     if n not in r.itemNames { r.itemNames.Push(n) }
@@ -1095,7 +1096,7 @@ fn (r mut Resolver&) unknownInCond(sp source.Span, n source.NameId) {
     for u in r.unknownSaid {
         if u.First == n and u.Second == r.item { return }
     }
-    r.unknownSaid.Push(Pair(n, r.item))
+    r.unknownSaid.Push(pair.Pair(n, r.item))
     r.L.Diags.Error(r.at(r.mi, sp), msgs.UnknownBuildName(r.tok(n), name))
 }
 
@@ -1204,7 +1205,7 @@ fn (r mut Resolver&) unknownHead(sp source.Span, n source.NameId) {
     for u in r.unknownSaid {
         if u.First == n and u.Second == -1 { return }
     }
-    r.unknownSaid.Push(Pair(n, I64(-1)))
+    r.unknownSaid.Push(pair.Pair(n, I64(-1)))
     r.L.Diags.Error(r.at(r.mi, sp), msgs.UnknownImportStd(r.tok(n), name))
 }
 

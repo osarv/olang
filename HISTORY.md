@@ -19629,3 +19629,18 @@ takes its initializer's scope (O25a, `Mark.Infer`; it was the `<U>` spelling), a
 constraints. `checkdiff`: 232 of 413 refused checker cases give stage 0's first error and 278 of 282 accepted programs
 check clean - master's run on the same day gave 234 of 415 and 274 of 278, with the same 181 cases failing in both; the
 difference is the removed G8b/G22 cases and the three `T17, T19, C2` comma cases, which now build.
+
+## `Pair` moves from the prelude to `std/pair` (M19d, D8d, 2026-10-17, the user: "Pair goes in Std not prelude")
+
+`std/prelude/pair.olang` is `std/pair.olang`: a program names it `pair.Pair<A, B>` after `import "std/pair"`, its
+`Hash` kept and its tests no longer under `if TestBuild` (a std module's tests compile only when it is tested). The
+prelude is what every program carries and what is visible without an import; two values kept together is a library
+convenience, not something the language needs everywhere. Neither compiler knew the name (the prelude is every file of
+`std/prelude`, so removing the file was the whole change for them). Migrated: the port's `check`, `generic`, `load`
+and `names` (Map and List keys of two numbers), `tests/shared.olang` (its header no longer says "no imports" - it
+imports none of the suite's files, only `std/pair`), three checks cases and three fixtures, the prelude's Map tests;
+the one prelude test that used a `Pair` (S9f, a List of references walked by every route) moved from `list.olang`'s
+`if TestBuild` block to `std/prelude/tests/list.olang`, which can import. The `preludestale` scenario, which edited
+`pair.olang` to show a changed prelude rebuilds the root's instantiations, edits a method added to `List` instead.
+`$` still writes the type's own name, `Pair("k", 0.5)` (E11a: a rendering names a type as its declaration does, not
+by the alias an importer wrote). Goldens recaptured for the shifted lines and the type's new identity.

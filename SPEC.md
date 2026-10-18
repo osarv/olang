@@ -1409,7 +1409,7 @@ tuple type, and a call returning several values may appear only
 - alone as an expression statement (S3), discarding them.
 
 Anywhere else — an initializer, an operand, one argument among others — it is a compile-time error. Two values
-held together as one value are a `Pair` (M19d); there is no tuple type and no anonymous struct type. Each result is
+held together as one value are a `pair.Pair` (standard library `std/pair`, M19d); there is no tuple type and no anonymous struct type. Each result is
 checked on its own terms everywhere a single value would be: its type, its scope tag (§8: every built
 result is in the one result scope, O13/O14), and its fit at the target.
 
@@ -1859,9 +1859,10 @@ types get their methods; those methods are visible in every module. The prelude'
 (T35b), `Hashable` (E10b) and the numeric `Float`, `Integer` and `Number` (T35c). A program wanting methods over a built-in type declares a type of its own over it
 (T29) and gives that its methods.
 
-Among the prelude's types is `type Pair<A, B> struct(First A, Second B)`, two values of any types held as
-one, its type arguments inferred at construction (G10c). It has `Hash()` - with `==`, what a map key needs - for
-every instantiation whose two parts have it (a declared one, so a `Pair` is a key even where E10b would not apply).
+`Pair` is not part of the prelude: `std/pair` declares `type Pair<A, B> struct(First A, Second B)`, two values of
+any types held as one, named `pair.Pair` once imported, its type arguments inferred at construction (G10c). It has
+`Hash()` - with `==`, what a map key needs - for every instantiation whose two parts have it (a declared one, so a
+`pair.Pair` is a key even where E10b would not apply).
 
 The prelude declares `type List<T>`, a growable sequence whose storage **never moves**: `Push(x)` and `PushAll(a)`
 (every element of an array, in order) add at the end, `Len()` counts, `ToArray()` copies the elements into one new

@@ -17,6 +17,7 @@
 # What the checker meets and does not check yet is recorded as a gap (Gaps), never said as a diagnostic: the acceptance
 # (compiler/tools/checkdiff.olang) counts a program as checked clean only when it has neither errors nor gaps.
 
+import "std/pair"
 import "std/os"
 import "source"
 import "token"
@@ -45,7 +46,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     Errors     # the declared error set, the default error DefaultErrT among them (R15)
     Block I64 = 0
     bound Map<source.NameId, I64>
-    undo List<Pair<source.NameId, I64>>
+    undo List<pair.Pair<source.NameId, I64>>
     loops List<I64>        # the loops around, innermost last: each one's body block, what continue moves on
     exits List<I64>        # beside each, the loop break leaves: a run-wise walk's outer loop for its inner (S9f)
     InTest Bool = false
@@ -91,11 +92,11 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     queued I64 = 0
     state List<I64>                        # by body: 0 waiting, 1 being checked, 2 checked
     fnBodies Map<I64, I64>                 # a function instance's body
-    ctorBodies Map<Pair<I64, I64>, I64>   # a type's constructor's body, by type and twin (G10d)
+    ctorBodies Map<pair.Pair<I64, I64>, I64>   # a type's constructor's body, by type and twin (G10d)
     instsOf Map<I64, I64>                  # by generic function: how many instances were made (G17)
     ctorCalled types.TypeId = types.UnknownT  # the type whose constructor callBody is calling: its defaults (D8a)
-    globalBodies Map<Pair<I64, I64>, I64>  # (module, name): a global's initializer's body
-    globalTypes Map<Pair<I64, I64>, types.TypeId>
+    globalBodies Map<pair.Pair<I64, I64>, I64>  # (module, name): a global's initializer's body
+    globalTypes Map<pair.Pair<I64, I64>, types.TypeId>
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
@@ -110,11 +111,11 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # cycle) - its body and the set's length then - and the bodies whose set rests on such a read
     inferring Map<I64, Bool>
     inferredErrs Map<I64, types.ListId>
-    errReads List<Pair<I64, I64>>
+    errReads List<pair.Pair<I64, I64>>
     unsettled Map<I64, Bool>
     # what each inferred set came to, by body (bodyKey) - kept from one attempt to the next, where checking starts
-    errPresets Map<Pair<I64, I64>, types.ListId>
-    found Map<Pair<I64, I64>, types.ListId>
+    errPresets Map<pair.Pair<I64, I64>, types.ListId>
+    found Map<pair.Pair<I64, I64>, types.ListId>
     Attempts I64 = 0
 }
 
@@ -160,20 +161,20 @@ fn (c mut Checker&) reset() {
     c.queued = 0
     c.state = List<I64>()
     c.fnBodies = Map<I64, I64>()
-    c.ctorBodies = Map<Pair<I64, I64>, I64>()
+    c.ctorBodies = Map<pair.Pair<I64, I64>, I64>()
     c.instsOf = Map<I64, I64>()
     c.ctorCalled = types.UnknownT
-    c.globalBodies = Map<Pair<I64, I64>, I64>()
-    c.globalTypes = Map<Pair<I64, I64>, types.TypeId>()
+    c.globalBodies = Map<pair.Pair<I64, I64>, I64>()
+    c.globalTypes = Map<pair.Pair<I64, I64>, types.TypeId>()
     c.exprs = List<typed.Expr&>()
     c.stmts = List<typed.Stmt&>()
     c.atRecs = List<atRec>()
     c.lastErrs = types.ListId(0)
     c.inferring = Map<I64, Bool>()
     c.inferredErrs = Map<I64, types.ListId>()
-    c.errReads = List<Pair<I64, I64>>()
+    c.errReads = List<pair.Pair<I64, I64>>()
     c.unsettled = Map<I64, Bool>()
-    c.found = Map<Pair<I64, I64>, types.ListId>()
+    c.found = Map<pair.Pair<I64, I64>, types.ListId>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -451,11 +452,11 @@ fn (c mut Checker&) infersErrs(sig types.TypeId) Bool {
 }
 
 # a body's identity across attempts: what it is the body of
-fn (c mut Checker&) bodyKey(id I64) Pair<I64, I64> {
+fn (c mut Checker&) bodyKey(id I64) pair.Pair<I64, I64> {
     return match c.Bodies[id].Of {
-        case typed.BodyOf.Fn(inst) => Pair(inst, -1)
-        case typed.BodyOf.Ctor(t, twin) => Pair(-2 - I64(t), I64(twin))
-        case _ => Pair(-1, -1)
+        case typed.BodyOf.Fn(inst) => pair.Pair(inst, -1)
+        case typed.BodyOf.Ctor(t, twin) => pair.Pair(-2 - I64(t), I64(twin))
+        case _ => pair.Pair(-1, -1)
     }
 }
 
@@ -469,13 +470,13 @@ fn (c mut Checker&) bodyErrors(id I64) types.ListId {
     if c.state[id] == 2 {
         es := try c.inferredErrs.Get(id) catch default types.ListId(0)
         if try c.unsettled.Get(id) catch default false {
-            c.errReads.Push(Pair(id, c.P.T.Items(es).Len()))
+            c.errReads.Push(pair.Pair(id, c.P.T.Items(es).Len()))
             c.unsettle()
         }
         return es
     }
     es := try c.errPresets.Get(c.bodyKey(id)) catch default types.ListId(0)
-    c.errReads.Push(Pair(id, c.P.T.Items(es).Len()))
+    c.errReads.Push(pair.Pair(id, c.P.T.Items(es).Len()))
     c.unsettle()
     return es
 }
@@ -573,7 +574,7 @@ fn (c mut Checker&) ctorBody(t types.TypeId) I64 { return c.twinBody(t, types.Li
 
 # the constructor's body of one binding of its own variables (G10d's twin; none for an ordinary constructor)
 fn (c mut Checker&) twinBody(t types.TypeId, args types.ListId) I64 {
-    key := Pair(I64(t), I64(args))
+    key := pair.Pair(I64(t), I64(args))
     id := try c.ctorBodies.Get(key) catch default -1
     if id >= 0 { return id }
     d := c.P.T.DeclOf(t)
@@ -643,7 +644,7 @@ fn (c mut Checker&) testBody(mi I64, sp source.Span, body Array<ast.Stmt&>&, ind
 
 # a global's initializer's body (K2), checked where it is first asked for - its type may be what asks
 fn (c mut Checker&) globalBody(mi I64, n source.NameId) I64 {
-    key := Pair(mi, I64(n))
+    key := pair.Pair(mi, I64(n))
     id := try c.globalBodies.Get(key) catch default -1
     if id >= 0 { return id }
     v := c.P.GlobalDecl(mi, n)
@@ -661,7 +662,7 @@ fn (c mut Checker&) globalBody(mi I64, n source.NameId) I64 {
 
 # a global's type: written, or its initializer's (D15) - checked first where it is not known yet
 fn (c mut Checker&) globalType(mi I64, n source.NameId) types.TypeId {
-    key := Pair(mi, I64(n))
+    key := pair.Pair(mi, I64(n))
     t := try c.globalTypes.Get(key) catch default types.TypeId(-1)
     if t >= types.TypeId(0) { return t }
     v := c.P.GlobalDecl(mi, n)
@@ -884,7 +885,7 @@ fn (c mut Checker&) instField(sp source.Span, n source.NameId) typed.Place&c {
 
 fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     v := c.P.GlobalDecl(mi, n)
-    key := Pair(mi, I64(n))
+    key := pair.Pair(mi, I64(n))
     fr := c.push(id, mi, types.VoidT, types.ListId(0))
     fr.Ctx = generic.Context(mi, -1)
     sp := c.cur().Sp
@@ -1038,7 +1039,7 @@ fn (c mut Checker&) local(n source.NameId, sp source.Span, ty types.TypeId, kind
     fr := c.fr()
     id := I64(c.cur().AddLocal(typed.Local(n, sp, ty, typed.BlockId(I32(fr.Block)), kind, mark)))
     if n != source.NameId(0) and c.text(n) != "_" {
-        fr.undo.Push(Pair(n, try fr.bound.Get(n) catch default -1))
+        fr.undo.Push(pair.Pair(n, try fr.bound.Get(n) catch default -1))
         fr.bound.Put(n, id)
     }
     return id
