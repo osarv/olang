@@ -131,6 +131,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roDeps List<Pair<Pair<I64, I64>, Pair<I64, I64>>>
     roArgs List<roArg>
     roFns List<roFn>
+    unknownTypes Map<Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -221,6 +222,7 @@ fn (c mut Checker&) reset() {
     c.roDeps = List<Pair<Pair<I64, I64>, Pair<I64, I64>>>()
     c.roArgs = List<roArg>()
     c.roFns = List<roFn>()
+    c.unknownTypes = Map<Pair<I64, I64>, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -1887,9 +1889,20 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
             c.err(sp, msgs.TypeMismatch(c.ty(want), "F64"))
             return c.unknown(sp)
         }
+        if floatOverflows(target, v.F) {
+            c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
+            return c.unknown(sp)
+        }
         return c.lit(sp, want, floatBits(target, v.F))
     }
-    if c.P.T.IsFloat(target) { return c.lit(sp, want, floatBits(target, F64(v.I))) }
+    if c.P.T.IsFloat(target) {
+        # T6: an integer literal adapts to a float type it does not overflow
+        if floatOverflows(target, F64(v.I)) {
+            c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
+            return c.unknown(sp)
+        }
+        return c.lit(sp, want, floatBits(target, F64(v.I)))
+    }
     if not intFits(c.P.T, v, target) {
         if c.opOf(x) != sp {
             c.err(c.opOf(x), msgs.LiteralExprRange(c.ty(want)))
@@ -1899,6 +1912,16 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
         return c.unknown(sp)
     }
     return c.lit(sp, want, v.I)
+}
+
+# whether a finite value rounds to an infinity in a narrower float type (T6, L12b)
+fn floatOverflows(t types.TypeId, f F64) Bool {
+    if f > 1.7976931348623157e308 or f < -1.7976931348623157e308 { return false }
+    r := f
+    if t == types.TypeId(13) { r = F64(F32(f)) }
+    if t == types.TypeId(11) { r = F64(F16(f)) }
+    if t == types.TypeId(12) { r = F64(BF16(f)) }
+    return r > 1.7976931348623157e308 or r < -1.7976931348623157e308
 }
 
 fn floatBits(t types.TypeId, f F64) I64 {
@@ -1925,8 +1948,8 @@ fn intFits(tt types.Table&, v litv, t types.TypeId) Bool {
 fn (c mut Checker&) litFits(v litv, t types.TypeId) Bool {
     u := c.under(t)
     if not c.P.T.IsNumber(u) { return false }
-    if v.IsFloat { return c.P.T.IsFloat(u) }
-    if c.P.T.IsFloat(u) { return true }
+    if v.IsFloat { return c.P.T.IsFloat(u) and not floatOverflows(u, v.F) }
+    if c.P.T.IsFloat(u) { return not floatOverflows(u, F64(v.I)) }
     return intFits(c.P.T, v, u)
 }
 
@@ -3794,11 +3817,86 @@ fn (c mut Checker&) listMet(l types.ListId, sp source.Span, depth I64) Bool {
     return true
 }
 
+# T4, B11: an unknown type, said once in a module, with the type it most likely meant
+fn (c mut Checker&) unknownType(sp source.Span, n source.NameId) {
+    key := Pair(c.fr().Mi, I64(n))
+    if c.unknownTypes.Has(key) { return }
+    c.unknownTypes.Put(key, true)
+    name := c.text(n)
+    best := c.suggest(name, false)
+    if best.Len() == 0 {
+        c.err(sp, msgs.UnknownType(c.tok(n)))
+    } else if c.P.T.Prim(best) != types.UnknownT {
+        c.err(sp, msgs.UnknownNumberType(c.tok(n), best))
+    } else {
+        c.err(sp, msgs.UnknownTypeMeant(c.tok(n), best))
+    }
+}
+
+# the name a misspelt one most likely meant (T4, B11): a number's name shortened to its letter and width (Int32 ->
+# I32, Float64 -> F64, Uint8 -> U8), else the nearest type - built in, declared or the prelude's - or, withVars, global
+fn (c mut Checker&) suggest(name String&, withVars Bool) String {
+    k := name.Len()
+    for k > 0 and name[k - 1].IsDigit() { k-- }
+    if name.Len() >= 2 and k < name.Len() and name.Len() - k < 8 {
+        cand := $(name[0].ToUpper()) $name[k:]
+        if c.P.T.Prim(cand) != types.UnknownT { return cand }
+    }
+    if name == "Byte" { return "U8" }
+    best := ""
+    bestD := 2 if name.Len() <= 4 else 3
+    for x in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
+        d := nameDistance(name, x)
+        if d < bestD {
+            bestD = d
+            best = $x
+        }
+    }
+    for mi in range c.P.L.Mods.Len() {
+        if mi != c.fr().Mi and not c.P.L.Mods[mi].Prelude { continue }
+        for e in c.P.R.Tables[mi].Entries {
+            if e.Kind != names.What.Type and not (withVars and e.Kind == names.What.Global) { continue }
+            t := c.text(e.Name)
+            if mi != c.fr().Mi and not load.Public(t) { continue }
+            d := nameDistance(name, t)
+            if d < bestD {
+                bestD = d
+                best = $t
+            }
+        }
+    }
+    return best
+}
+
+# case-insensitive edit distance
+fn nameDistance(a String&, b String&) I64 {
+    if a.Len() > 40 or b.Len() > 40 { return 99 }
+    prev := Array<I64>(b.Len() + 1)
+    cur := Array<I64>(b.Len() + 1)
+    for j in range b.Len() + 1 { prev[j] = j }
+    for i in range 1, a.Len() + 1 {
+        cur[0] = i
+        for j in range 1, b.Len() + 1 {
+            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
+            del := prev[j] + 1
+            ins := cur[j - 1] + 1
+            m := sub if sub < del else del
+            cur[j] = m if m < ins else ins
+        }
+        for j in range b.Len() + 1 { prev[j] = cur[j] }
+    }
+    return prev[b.Len()]
+}
+
 # a written type's instances checked where it is written: each at its first argument (G19)
 fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
     if tr == null { return true }
     match tr {
-        case ast.TypeRef.Named(_, _, args) {
+        case ast.TypeRef.Named(nsp, path, args) {
+            if path.Len() == 1 and not c.fr().Ctx.Vars.Has(path[0]) and c.P.R.Use(c.fr().File, nsp.Start).Kind == names.What.None {
+                c.unknownType(nsp, path[0])
+                return false
+            }
             if args.Len() == 0 { return true }
             for a in args {
                 if not c.writtenMet(a) { return false }
@@ -3837,7 +3935,15 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 return c.construct(sp, nsp, t, args)
             }
             if ref.Kind == names.What.None {
-                c.err(nsp, msgs.UnknownFunction(c.tok(n)))
+                # B11: with the name it most likely meant - a number's, said as an unknown type (T4)
+                best := c.suggest(c.text(n), true)
+                if best.Len() == 0 {
+                    c.err(nsp, msgs.UnknownFunction(c.tok(n)))
+                } else if c.P.T.Prim(best) != types.UnknownT {
+                    c.err(nsp, msgs.UnknownNumberType(c.tok(n), best))
+                } else {
+                    c.err(nsp, msgs.UnknownFunctionMeant(c.tok(n), best))
+                }
                 for a in args { c.expr(a, types.UnknownT) }
                 return c.unknown(sp)
             }
