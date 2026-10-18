@@ -169,6 +169,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     temps Map<I64, Term>                   # by site: a temporary place's value judged (tempTerm), the term its references are at
     trMemo Map<pair.Pair<I64, I64>, I64>   # transient's answers, by (body, parameter): 1 being asked, 2 no, 3 yes
     useMemo Map<pair.Pair<I64, I64>, I64>  # uses' answers, by (body and mode, parameter): 1 being asked, 2 no, 3 yes
+    regionOnly List<I64>                   # by local: the parameter whose region it holds only reads of (O17), -1 none
+    rlChanged Bool = false
     # what decide found for the local the next Let declares: the result term it is moved to (O26a), or that a call it
     # is declared from lands by its obligations (O18c); landing is that flag handed to the call
     moveTo Term = Term.None
@@ -1485,9 +1487,170 @@ fn flThroughRefExpr(x typed.Expr&) Bool {
 fn (s mut Scoper&) computeKeeps(b typed.Body&) {
     s.kept.Clear()
     for i in range b.Locals.Len() { s.kept.Push(false) }
+    s.regionLocals(b)
     s.kwBlock(b.Root)
     s.sums[s.Id].Keeps.Clear()
     for p in b.Params { s.sums[s.Id].Keeps.Push(s.kept[I64(p)]) }
+}
+
+# the region a place is in (O17): the reference parameter it is reached from through a reference - what that parameter
+# names, or storage reached from there - else -1
+fn (s mut Scoper&) regionOf(p typed.Place&) I64 {
+    if not flThroughRef(p) { return -1 }
+    r := flRoot(p)
+    if r < 0 or s.B.Locals[r].Kind != typed.LocalKind.Param or not s.isRef(s.B.Locals[r].Ty) { return -1 }
+    return r
+}
+
+# whether x brings nothing new into parameter r's region (O17): a value read out of it through a reference, or a local
+# holding only such reads
+fn (s mut Scoper&) regionRead(x typed.Expr&, r I64) Bool {
+    if x == null { return true }
+    match x {
+        case typed.Expr.Read(_, _, p, _) {
+            if s.regionOf(p) == r { return true }
+            match p {
+                case typed.Place.Local(_, _, id) { return I64(id) < s.regionOnly.Len() and s.regionOnly[I64(id)] == r }
+                case _ { }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { return s.regionRead(y, r) }
+        case _ { }
+    }
+    return false
+}
+
+# the locals holding only what they read out of one parameter's region (O17: "t := a[i]  a[i] = a[j]  a[j] = t"): each
+# written only with such reads - its declaration, an assignment to it or to a part of it - and never lent writably nor
+# given a task's result; by local, the parameter, -1 for none. A fixed point: a local failing frees no other
+fn (s mut Scoper&) regionLocals(b typed.Body&) {
+    s.regionOnly.Clear()
+    for i in range b.Locals.Len() { s.regionOnly.Push(-1) }
+    # a candidate: a local declared from a region read
+    s.rlBlock(b.Root, 0)
+    for round in range 8 {
+        s.rlChanged = false
+        s.rlBlock(b.Root, 1)
+        if not s.rlChanged { break }
+    }
+}
+
+fn (s mut Scoper&) rlBlock(bl typed.Block&, pass I64) {
+    if bl == null { return }
+    for st in bl.Stmts { s.rlStmt(st, pass) }
+}
+
+fn (s mut Scoper&) rlDrop(l I64) {
+    if l >= 0 and l < s.regionOnly.Len() and s.regionOnly[l] >= 0 {
+        s.regionOnly[l] = -1
+        s.rlChanged = true
+    }
+}
+
+fn (s mut Scoper&) rlStmt(st typed.Stmt&, pass I64) {
+    if st == null { return }
+    match st {
+        case typed.Stmt.Let(_, l, x) {
+            if pass == 0 {
+                match s.unAway(x) {
+                    case typed.Expr.Read(_, _, p, _) {
+                        k := s.regionOf(p)
+                        if k >= 0 and s.B.Locals[I64(l)].Kind != typed.LocalKind.Param { s.regionOnly[I64(l)] = k }
+                    }
+                    case _ { }
+                }
+            }
+            s.rlExpr(x, pass)
+        }
+        case typed.Stmt.Assign(_, p, x) {
+            if pass == 1 and not flThroughRef(p) {
+                r := flRoot(p)
+                if r >= 0 and r < s.regionOnly.Len() and s.regionOnly[r] >= 0 and not s.regionRead(x, s.regionOnly[r]) { s.rlDrop(r) }
+            }
+            s.rlExpr(x, pass)
+        }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x) { s.rlExpr(x, pass) }
+        case typed.Stmt.If(_, i) {
+            s.rlExpr(i.Test, pass)
+            s.rlBlock(i.Then, pass)
+            s.rlBlock(i.Else, pass)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            s.rlBlock(body, pass)
+            s.rlBlock(post, pass)
+        }
+        case typed.Stmt.Assert(_, c, m) {
+            s.rlExpr(c, pass)
+            s.rlExpr(m, pass)
+        }
+        case typed.Stmt.Block(_, bl), typed.Stmt.Defer(_, bl) { s.rlBlock(bl, pass) }
+        case typed.Stmt.Join(_, jn) {
+            s.rlBlock(jn.Code, pass)
+            for c in jn.Clauses { s.rlBlock(c.Code, pass) }
+        }
+        case typed.Stmt.Spawn(_, sw) {
+            if pass == 1 {
+                for p in sw.Targets {
+                    if not flThroughRef(p) { s.rlDrop(flRoot(p)) }
+                }
+            }
+            s.rlExpr(sw.Task, pass)
+        }
+        case _ { }
+    }
+}
+
+# a value's lends of a candidate: a borrow of it - or a part of it - for a writable reference, which may be written
+fn (s mut Scoper&) rlExpr(x typed.Expr&, pass I64) {
+    if x == null or pass == 0 { return }
+    match x {
+        case typed.Expr.Borrow(_, ty, p) {
+            if not flThroughRef(p) and (s.P.T.PermOf(ty) & types.Writable) != 0 { s.rlDrop(flRoot(p)) }
+        }
+        case typed.Expr.Promote(_, _, pr) { s.rlExpr(pr.X, pass) }
+        case typed.Expr.Call(_, _, c) {
+            for a in c.Args { s.rlExpr(a, pass) }
+        }
+        case typed.Expr.Make(_, _, m) {
+            for it in m.Items { s.rlExpr(it, pass) }
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args { s.rlExpr(a, pass) }
+        }
+        case typed.Expr.Cond(_, _, c) {
+            s.rlExpr(c.A, pass)
+            s.rlExpr(c.B, pass)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts { s.rlStmt(st, pass) }
+            s.rlExpr(q.X, pass)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held { s.rlStmt(st, pass) }
+            for a in m.Arms {
+                if a != null {
+                    s.rlBlock(a.Code, pass)
+                    s.rlExpr(a.Value, pass)
+                }
+            }
+            if m.NoMatch != null { s.rlBlock(m.NoMatch.Code, pass) }
+        }
+        case typed.Expr.Try(_, _, t) {
+            s.rlExpr(t.X, pass)
+            for c in t.Clauses { s.rlBlock(c.Code, pass) }
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Lambda(_, caps, _) {
+                    # a lambda copying a candidate in may write the copy, not the candidate; but a borrow is a lend
+                    for cp in caps { s.rlExpr(cp.Outer, pass) }
+                }
+                case _ { }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { s.rlExpr(y, pass) }
+        case _ { }
+    }
 }
 
 fn (s mut Scoper&) keepParam(id I64) {
@@ -1508,6 +1671,10 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt&) {
         case typed.Stmt.Assign(_, p, x) {
             s.kwPlace(p)
             s.kwExpr(x, false)
+            # a reference, or a value holding one, stored into a parameter's region that it did not read out of there
+            # keeps something new in it (O17)
+            r := s.regionOf(p)
+            if r >= 0 and s.holds(p.Type()) and not s.regionRead(x, r) { s.keepParam(r) }
         }
         case typed.Stmt.Eval(_, x) { s.kwExpr(x, false) }
         case typed.Stmt.If(_, i) {
@@ -1519,7 +1686,15 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt&) {
             s.kwBlock(body)
             s.kwBlock(post)
         }
-        case typed.Stmt.Return(_, x) { s.kwExpr(x, false) }
+        case typed.Stmt.Return(_, x) {
+            s.kwExpr(x, false)
+            # a reference into a parameter's region through which something can be stored, handed out: the caller can
+            # build through it (O17)
+            if x != null and s.storeThrough(x.Type()) {
+                r := flRootExpr(s.unAway(x))
+                if r >= 0 and flThroughRefExpr(s.unAway(x)) { s.keepParam(r) }
+            }
+        }
         case typed.Stmt.Assert(_, c, m) {
             s.kwExpr(c, true)
             s.kwExpr(m, true)
@@ -1531,7 +1706,12 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt&) {
             for c in jn.Clauses { s.kwBlock(c.Code) }
         }
         case typed.Stmt.Spawn(_, sw) {
-            for p in sw.Targets { s.kwPlace(p) }
+            for p in sw.Targets {
+                s.kwPlace(p)
+                # a task's result stored into a parameter's region (P1g)
+                r := s.regionOf(p)
+                if r >= 0 and s.holds(p.Type()) { s.keepParam(r) }
+            }
             s.kwExpr(sw.Task, false)
             for c in sw.Clauses { s.kwExpr(c.Handler, false) }
         }
@@ -1654,14 +1834,37 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
         case typed.Callee.Value(f) { s.kwExpr(f, false) }
         case _ { }
     }
+    fty := s.calleeType(c)
+    ps := s.P.T.Items(s.P.T.Params(fty)) if fty != types.UnknownT else types.TypeId[]
     for k in range c.Args.Len() {
         a := c.Args[k]
         r := s.handedRegion(a)
         if r < 0 {
+            # a reference into a region handed on: kept where the callee keeps it - through a function value, where
+            # something can be stored through its parameter (T22a)
+            ua := s.unAway(a)
+            rr := flRootExpr(ua)
+            if rr >= 0 and flThroughRefExpr(ua) and s.isRef(ua.Type()) {
+                match c.Target {
+                    case typed.Callee.Value(_) {
+                        if k < ps.Len() and s.storeThrough(ps[k]) { s.keepParam(rr) }
+                    }
+                    case _ {
+                        if s.calleeKeepsArg(c, k) { s.keepParam(rr) }
+                    }
+                }
+            }
             s.kwExpr(a, false)
             continue
         }
-        if s.calleeKeepsArg(c, k) { s.keepParam(r) }
+        match c.Target {
+            case typed.Callee.Value(_) {
+                if k < ps.Len() and s.storeThrough(ps[k]) { s.keepParam(r) }
+            }
+            case _ {
+                if s.calleeKeepsArg(c, k) { s.keepParam(r) }
+            }
+        }
         match a {
             case typed.Expr.Borrow(_, _, p) { s.kwPlace(p) }
             case _ { }
@@ -3373,15 +3576,25 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         if owner[i] < 0 { continue }
         v := plain()
         pr := s.promoted(a)
-        if pr != null and s.isFresh(pr.X) and s.argLands(pr.X) and not s.calleeKeepsArg(c, i) {
+        if pr != null and s.isFresh(pr.X) and s.argLands(pr.X) {
             # a value a call gives, lent by reference to a callee keeping nothing in it: its call lands where its
             # obligations say and the variable is bound where its references are; its copy is a temporary of this
-            # block (O17b, O18c)
+            # block (O17b, O18c) - one keeping something in it would keep it where the copy is (O17)
             s.landing = true
             v = s.val(pr.X, Term.None)
             s.landing = false
             s.build(pr.Site, s.here())
             landed[i] = true
+            if v.K == ValKind.Fresh { v = existing(v.T) }
+            if s.calleeKeepsArg(c, i) and s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
+        } else if pr != null and not s.isFresh(pr.X) and s.holds(pr.X.Type()) {
+            # a value with no storage of its own whose references already live somewhere - a copy out of a place, a
+            # conditional of places, a try's default - lent where its references are, to a callee keeping nothing in
+            # it (O17); its copy is a temporary of this block
+            v = s.val(pr.X, Term.None)
+            s.build(pr.Site, s.here())
+            landed[i] = true
+            if v.K == ValKind.Existing and s.calleeKeepsArg(c, i) and s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
             if v.K == ValKind.Fresh { v = existing(v.T) }
         } else if s.isFresh(a) and s.argLands(a) {
             s.landing = true
@@ -3397,11 +3610,17 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             v = s.val(a, Term.None)
             s.onFrame = false
             rf := s.splitRefs(a)
+            cr := s.choiceRefs(a)
+            if cr != Term.None {
+                # a choice of places is a copy of this block's (E28)
+                rf = cr
+                v = existing(s.here())
+            }
             if rf != Term.None and rf != v.T {
                 # a value whose references live elsewhere than its storage is lent where they are, to a callee keeping
                 # nothing in it (O17, O17b)
                 if s.calleeKeepsArg(c, i) {
-                    if s.report { s.err(a.Span(), msgs.BorrowSplitScopes()) }
+                    if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
                 } else {
                     v = existing(rf)
                 }
@@ -3517,9 +3736,70 @@ fn (s mut Scoper&) splitRefs(a typed.Expr&) Term {
             if not s.holds(p.Type()) or flThroughRef(p) { return Term.None }
             return s.peekPlace(p, true)
         }
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() > 0 { return s.splitRefs(args[0]) }
+        }
+        case typed.Expr.Away(_, _, y) { return s.splitRefs(y) }
         case _ { }
     }
     return Term.None
+}
+
+# where an argument is said: a conditional at its "if"
+fn (s mut Scoper&) argAt(a typed.Expr&) source.Span {
+    x := s.unAway(a)
+    match x {
+        case typed.Expr.Promote(_, _, pr) { x = s.unAway(pr.X) }
+        case _ { }
+    }
+    match x {
+        case typed.Expr.Cond(_, _, c) {
+            text := try s.texts.Get(s.B.File) catch default ""
+            from := I64(c.A.Span().End)
+            to := I64(x.Span().End)
+            for k in range from, to - 1 {
+                word := k + 2 <= text.Len() and text[k] == 'i' and text[k + 1] == 'f'
+                if word and (k == 0 or not isNameChar(text[k - 1])) and (k + 2 >= text.Len() or not isNameChar(text[k + 2])) {
+                    return source.Span(I32(k), I32(k + 2))
+                }
+            }
+        }
+        case _ { }
+    }
+    return a.Span()
+}
+
+# a conditional or a match choosing value places, lent to a reference parameter (E28): a copy, a temporary of this block,
+# its references where the places' are - their term (a set where they differ); None for any other argument
+fn (s mut Scoper&) choiceRefs(a typed.Expr&) Term {
+    xs List<typed.Expr&>
+    match s.unAway(a) {
+        case typed.Expr.Cond(_, _, c) {
+            xs.Push(c.A)
+            xs.Push(c.B)
+        }
+        case typed.Expr.Match(_, _, m) {
+            if not m.IsValue { return Term.None }
+            for arm in m.Arms {
+                if arm != null and arm.Value != null { xs.Push(arm.Value) }
+            }
+            if m.NoMatch != null and m.NoMatch.Value != null { xs.Push(m.NoMatch.Value) }
+        }
+        case _ { return Term.None }
+    }
+    t := Term.None
+    for x in xs {
+        match s.unAway(x) {
+            case typed.Expr.Borrow(_, _, p) {
+                if not s.holds(p.Type()) or flThroughRef(p) { return Term.None }
+                u := s.peekPlace(p, true)
+                if u == Term.None { return Term.None }
+                t = u if t == Term.None else s.setOf(t, u)
+            }
+            case _ { return Term.None }
+        }
+    }
+    return t
 }
 
 fn (s mut Scoper&) isHeldFresh(x typed.Expr&) Bool {
