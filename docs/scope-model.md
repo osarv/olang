@@ -915,3 +915,32 @@ Rules for the order:
 
 Ledger QAD's two questions - pins for views across calls, and disarming a destructor - still stand. The model changes
 neither.
+
+### 9.3 Decided while building M6 (round 1, `compiler/scope.olang`)
+
+1. Constant data is a value kind of its own: it lives in `P` and fits every slot, as `null` does (T25d). The array a
+   `for ... in` walks, a literal of constant data reaching a read-only reference, has its elements in `P` whatever its
+   own storage is.
+2. A constructor's field is a slot of its instance whatever its type writes (a field written as a bare type variable
+   too): a bare field claims the instance scope with `st`'s exactness; a field written `&q` only outlives, and adds
+   `bind[q] ≥ Instance` to the constructor's obligations - the instance never outlives what such a field names (C2d).
+3. A field written `&q` read through a reference parameter `p` gives `D(p, q)`. Read through any other base (a local
+   instance) it gives an underestimate standing above the instance's term: shown to outlive what that term outlives,
+   never shown to be outlived, never built into (O23's fallback, made safe for building). Through a call, `D(p, q)` on
+   the side that is to outlive is `p`'s binding - the referent outlives the instance (C2d) - and on the other side it is
+   untraced until per-instance bindings exist: an over-rejection, never an acceptance.
+4. LEND (3.3) for a split value - a landed local whose references are not where its storage is, a call's value result
+   promoted for a reference parameter: bound where its references are, to a callee keeping nothing in it. Keeping is
+   handing the region's address on: the parameter's reference, or a borrow into what it names, returned, captured,
+   declared into a local, or passed to a callee that keeps. Storing into the region is not keeping under this binding,
+   since what is stored must outlive the binding, which outlives the region. Read off each body's tree after it is
+   judged, per parameter, callees first; anything else is O17's error.
+5. A callee whose component has not converged is taken to build into every scope variable, to keep every argument and
+   to give no landing (7.2: placement inside a component never reads its own obligations).
+6. `O18c`'s "the callee builds nothing" is read off the converged plans: a body builds into a scope variable where a
+   site of it is built there, or a call passes it to a callee variable that may be built into.
+7. `O26a` is decided before a local's `Let`, by a backward flow over the rest of its block (returns, assignments,
+   `:=` declarations, a method's receiver), seeded with the locals already in the result scope; a local reached only
+   by a flow, from a call tied to a block of this function, stays (SPEC's exception). A moved local's storage is
+   `Stored[l]`, which lowering gives the MIR local as its home.
+8. A term with no run-time scope that a call passes (`Inert`) is the program's in lowering.

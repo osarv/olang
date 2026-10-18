@@ -248,7 +248,15 @@ fn (ln mut lowering&) run() {
             case _ => mir.LocalKind.Var
         }
         if l.Ty == types.UnknownT { ln.gapped = true }
-        ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, mir.ScopeRef.Frame))
+        # where its storage is: the frame, or a scope variable where the scope pass moved it (O26a's returned locals)
+        home := mir.ScopeRef.Frame
+        if ln.planned and i < ln.plan.Stored.Len() {
+            match ln.plan.Stored[i] {
+                case typed.Scope.Var(v) { home = mir.ScopeRef.Var(v) }
+                case _ { }
+            }
+        }
+        ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
     }
     for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
     caps List<typed.LocalId>
@@ -579,6 +587,7 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
     match s {
         case typed.Stmt.Let(sp, l, init) {
             v := ln.fit(ln.val(init), init, ln.B.Locals[I64(l)].Ty, sp)
+            if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
             ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
         }
         case typed.Stmt.Assign(sp, target, value) {

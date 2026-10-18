@@ -120,6 +120,17 @@ build/compiler_tools_checkdiff: $(OLANG) compiler/tools/checkdiff.olang
 checkdiff: build/compiler_tools_checkdump build/compiler_tools_checkdiff
 	build/compiler_tools_checkdiff -v
 
+# the self-hosted scope pass's errors, unjudged constructs and plans on files (compiler/tools/scopedump.olang)
+build/compiler_tools_scopedump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/scopedump.olang
+	$(OLANG) build compiler/tools/scopedump.olang
+
+# M6's acceptance, measured: refused checks cases whose first error is section 8's give it, accepted programs are scope
+# clean (compiler/tools/scopediff.olang; not in verify until it is required)
+build/compiler_tools_scopediff: $(OLANG) compiler/tools/scopediff.olang
+	$(OLANG) build compiler/tools/scopediff.olang
+scopediff: build/compiler_tools_scopedump build/compiler_tools_scopediff
+	build/compiler_tools_scopediff -v
+
 # M7's acceptance, measured: every body of the corpus, std, the compiler and the checks' run and build cases checked,
 # lowered to MIR and held to the MIR verifier (compiler/tools/lowerdump.olang; the rows in build/lowerdump.txt, not in
 # verify until it is required)
@@ -258,7 +269,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff lowerdump layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff scopediff lowerdump layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
