@@ -73,6 +73,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     joinMarks List<I64>        # where each one's errors start in joinErrs
     joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
     spawnSaid I64 = 0              # spawned calls said to need try (P4): their join is not said to need none
+    DiagMark I64 = 0               # the diagnostics said before it began: what it says counts against its body (K1a)
 }
 
 # a construct met and not checked yet: where, and what (the acceptance's "gap")
@@ -159,6 +160,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # S18c: the asserts whose condition reads no local, each with its condition's body and its message's, for the
     # evaluator to decide while compiling
     AssertAsks List<AssertAsk>
+    Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
 }
 
 # an assert the evaluator may decide (S18c): the body it is in, where it is (its file and span), its condition's body
@@ -290,6 +292,7 @@ fn (c mut Checker&) reset() {
     c.unfillable = Map<I64, Bool>()
     c.Asks = List<Ask>()
     c.AssertAsks = List<AssertAsk>()
+    c.Faulty = Map<I64, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -1709,6 +1712,7 @@ fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block&c {
 fn (c mut Checker&) push(id I64, mi I64, result types.TypeId, errors types.ListId) mut frame&c {
     c.frames.Push(frame(id, mi, c.P.L.Mods[mi].File, result, errors))
     fr := c.fr()
+    fr.DiagMark = c.P.L.Diags.Count()
     # a function's or constructor's body whose set is inferred (R1a): what it lets out is its set, settled as it ends
     if id >= 0 and (try c.inferring.Get(id) catch default false) {
         fr.InferErrors = true
@@ -1720,6 +1724,8 @@ fn (c mut Checker&) push(id I64, mi I64, result types.TypeId, errors types.ListI
 fn (c mut Checker&) pop() {
     fr := c.fr()
     if fr.Settles { c.settle(fr) }
+    # K1a: a body checking met an error or a gap in is never evaluated while compiling
+    if fr.Body >= 0 and (fr.Gapped or c.P.L.Diags.Count() > fr.DiagMark) { c.Faulty.Put(fr.Body, true) }
     try c.frames.Pop() catch { }
 }
 
@@ -8409,9 +8415,11 @@ fn (c mut Checker&) elseHolds(s ast.Stmt&) Bool {
     }
 }
 
+# whether a plain else was dropped: the build took the then. An else-if's branch is dropped as well where its own
+# condition is decided false after a running one, so it says nothing about the then
 fn (c mut Checker&) elseDropped(s ast.Stmt&) Bool {
     match s {
-        case ast.Stmt.If(_, e) { return e.Then.Group >= 0 and c.P.L.Diags.IsDropped(e.Then.Group) }
+        case ast.Stmt.If(_, e) { return e.Cond == null and e.Then.Group >= 0 and c.P.L.Diags.IsDropped(e.Then.Group) }
         nomatch { return false }
     }
 }

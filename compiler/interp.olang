@@ -50,6 +50,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     tops := l.PendingIfs()
     if tops.Len() == 0 and c.Asks.Len() == 0 { return false }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
     made := false
     for a in c.Asks {
         key := pair.Pair(a.File, I64(a.At))
@@ -129,6 +130,7 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
     if c.AssertAsks.Len() == 0 { return 0 }
     d := c.P.L.Diags
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
     n I64 = 0
     for a in c.AssertAsks {
         key := pair.Pair(a.Body, I64(a.Sp.Start))
@@ -204,6 +206,8 @@ type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval
     dtorOf Map<types.TypeId, I64>
     externs Map<I64, Bool>
     Globals List<I64>               # the global initializers' bodies, in the order check made them
+    # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
+    Faulty Map<I64, Bool>
     started Bool = false
 }
 
@@ -259,6 +263,17 @@ fn (x mut Exec&) Need(k mir.FnKey) {
         key := try work.Pop() catch { break }
         if x.defined.Has(key) { continue }
         x.defined.Put(key, true)
+        if x.When == eval.Mode.Compile {
+            match key {
+                case mir.FnKey.Body(id) {
+                    if x.Faulty.Has(I64(id)) {
+                        x.Unlowered.Push(key)
+                        continue
+                    }
+                }
+                case _ { }
+            }
+        }
         f := x.Lw.LowerKey(key)
         if x.Lw.Gapped {
             x.Unlowered.Push(key)

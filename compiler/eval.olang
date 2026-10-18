@@ -226,13 +226,15 @@ type gkey struct(Module I64, Name source.NameId) {
 }
 
 # constant data's instance (T25d): where it is written, its type, and its index in its function's constants - a join's
-# literal pieces share the join's span, each a constant of its own
-type dkey struct(File I64, Start I32, End I32, Ty types.TypeId, C I32) {
+# literal pieces share the join's span, each a constant of its own; and for what is written nowhere (a helper's
+# words), the function it is in, -1 for written text
+type dkey struct(File I64, Start I32, End I32, Ty types.TypeId, C I32, Fn I64) {
     File
     Start
     End
     Ty
     C
+    Fn
 }
 
 # a value's shape, from its type: how its bytes are read
@@ -1138,7 +1140,9 @@ fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
 # read-only storage of a constant, one instance per written position and type, made the first time it is asked for;
 # its elements, and how many
 fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp source.Span) (Ptr, I64) {
-    key := dkey(file, sp.Start, sp.End, ty, c)
+    # what lowering synthesizes (a helper's words) is written nowhere: its instance is its function's
+    own I64 = m.codeIndex(f.Of) if sp.Start == I32(0) and sp.End == I32(0) else -1
+    key := dkey(file, sp.Start, sp.End, ty, c, own)
     id := try m.datas.Get(key) catch default 0
     node := f.Consts[I64(c)]
     n := m.constLen(f, node)
