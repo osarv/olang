@@ -254,10 +254,11 @@ fn otherPass(r String&) Bool {
 
 # a rule the decisions of 2026-10-17 remove or change, which the port follows instead of stage 0: constant generics
 # and their arrays' spelling (QP2: G20-G28), the introduction rule (QW: G8b), the default error (QO1: R15-R17),
-# done/fail/abort and a test's return (QU: S15, S16-S16b)
+# done/fail/abort and a test's return (QU: S15, S16-S16b); own and take, which are being removed (docs/memory.md:
+# T25e, E34)
 fn decidedAway(r String&) Bool {
     for x in String&["G8b", "G20", "G22", "G23", "G24", "G25", "G26", "G27", "G28", "R15", "R16", "R17", "R18", "R19"
-                     "S16a", "S16b", "S16c"] {
+                     "S16a", "S16b", "S16c", "T25e", "E34"] {
         if r == x { return true }
     }
     return false
