@@ -68,6 +68,8 @@ fn run(args Array<String&>&) {
         c := typecheck.Checker(p, testBuild)
         c.CheckProgram()
         s := scope.Scoper(p, c.Bodies)
+        cr mut typecheck.Checker& = c
+        s.InstNote = fn(inst I64) String { return cr.InstNote(inst) }
         s.Run()
         out.Write(d.Render())
         for g in s.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }

@@ -1363,6 +1363,9 @@ fn (c mut Checker&) instContexts(inst I64) I64 {
     return chain.Len()
 }
 
+# the note an instance's context gives, for the passes after checking (G16b)
+fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
+
 # "instantiated here, with K = K, V = I32"
 fn (c mut Checker&) instNote(inst I64) String {
     b := StringBuilder()
