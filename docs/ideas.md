@@ -81,8 +81,11 @@ field attributes. Both compilers (a language construct). The text below is the o
   signature, `? F.Errors`); a declared type takes its base's kind.
 - Layout: `T.Size`, `T.Align` (as laid out, as C's sizeof/alignof), `f.Offset` - compile-time constants.
 - Building a value: `T(decode(p, src) for p in T.Params)` - a comprehension in a call's argument list, one argument per
-  parameter, unrolled; the constructor runs, so its checks do. A parameter's default from inside the loop is left until
-  the JSON decoder is written.
+  parameter, unrolled; the constructor runs, so its checks do. Defaults (the user: "Both OK"): `p.HasDefault` (a
+  constant, so an `if` on it is decided per unrolled parameter) and `p.Default` (the default's value, built in its
+  declaration's context as D8a builds it; reading it on a parameter with none is a compile-time error) - a decoder
+  writes `try src.Field(p.Name, p.Type) catch DecodeError.MISSING default p.Default`. A reflected member's type is
+  usable as a type, constant per instance (`fn arg<P>(p P, ...) P.Type`).
 - Reflection on a value is a generic call (`Describe(x)` binds T); no `x.Type`.
 
 **What:** generic code that walks a type's fields and enum cases while compiling, with no run-time type information.
