@@ -1940,6 +1940,19 @@ fn (m mut Machine&) write(fi I64, b mir.ScopeRef, how mir.WriteKind, x mir.Opera
             for i in range n { m.appendByte(bs, m.rd(Ptr(data.Id, data.Off + i), 1)) }
         }
         case mir.WriteKind.Char { m.appendByte(bs, m.scalar(fi, x)) }
+        case mir.WriteKind.Quoted {
+            p := m.addr(fi, x, 1)
+            data, n := m.arrayView(p, xt)
+            if m.halted { return }
+            m.appendByte(bs, 34)
+            for i in range n { m.appendEscaped(bs, m.rd(Ptr(data.Id, data.Off + i), 1), 34) }
+            m.appendByte(bs, 34)
+        }
+        case mir.WriteKind.QuotedChar {
+            m.appendByte(bs, 39)
+            m.appendEscaped(bs, m.scalar(fi, x), 39)
+            m.appendByte(bs, 39)
+        }
         case mir.WriteKind.Bool { m.appendText(bs, "true" if m.scalar(fi, x) != 0 else "false") }
         case mir.WriteKind.Int { m.appendText(bs, $m.intValue(m.scalar(fi, x), xt)) }
         case mir.WriteKind.Uint { m.appendText(bs, $U64(m.scalar(fi, x))) }
@@ -1955,6 +1968,26 @@ fn (m mut Machine&) floatText(bits I64, ty types.TypeId) String {
         case types.TypeId(13) => $U32(bits & 0xFFFFFFFF).F32FromBits()
         nomatch => $U64(bits).F64FromBits()
     }
+}
+
+# one character of a literal as olang writes it (L13): the quote it stands in, a backslash and the control characters
+# with an escape of their own escaped, everything else as it is
+fn (m mut Machine&) appendEscaped(bs I64, c I64, quote I64) {
+    e := match c {
+        case 10 => 110
+        case 9 => 116
+        case 13 => 114
+        case 0 => 48
+        case 92 => 92
+        case _ if c == quote => c
+        nomatch => -1
+    }
+    if e < 0 {
+        m.appendByte(bs, c)
+        return
+    }
+    m.appendByte(bs, 92)
+    m.appendByte(bs, e)
 }
 
 fn (m mut Machine&) appendText(bs I64, s String&) {
