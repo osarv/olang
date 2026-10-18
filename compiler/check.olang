@@ -1872,6 +1872,7 @@ fn (c mut Checker&) bracketOf(base ast.Expr&) source.Span { return c.opAfter(bas
 fn (c mut Checker&) noIndex(sp source.Span, t types.TypeId, written types.TypeId, n I64) {
     bsp := c.bracketIn(sp)
     if c.notOperator(t, "At", bsp, "'x[i]'", 1, true) { return }
+    if c.roleMethod(t, "CheckedAt", n) >= 0 { return }   # E31a said the checked form needs its plain one
     if c.roleMethod(t, "SetAt", n + 1) >= 0 {
         c.err(c.compoundAt if c.compoundAt.Start >= 0 else bsp, msgs.AtUndeclared(c.ty(written)))
         return
@@ -3560,10 +3561,26 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&c, y typ
 # (M6b); -2 for a private eq of another module, which "==" here cannot call, -1 for none
 fn (c mut Checker&) eqMethod(t types.TypeId) I64 {
     m := c.P.MethodOf(t, c.P.L.Names.Intern("Eq"))
-    if m >= 0 { return m }
+    if m >= 0 { return m if c.eqShaped(t, m) else -1 }   # a mis-shaped Eq was said at its declaration (E10a)
     m = c.P.MethodOf(t, c.P.L.Names.Intern("eq"))
     if m < 0 or c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() != 2 { return -1 }
     return m if c.P.FnModule(m) == c.fr().Mi else -2
+}
+
+fn (c mut Checker&) eqShaped(t types.TypeId, m I64) Bool {
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(m)))
+    return ps.Len() == 2 and (c.P.T.KindOf(c.deref(ps[1])) == types.Kind.Var or c.P.T.Same(c.P.T.Plain(c.deref(ps[1])), c.P.T.Plain(t)) or c.P.T.DeclOf(c.deref(ps[1])) == c.P.T.DeclOf(t))
+}
+
+# arguments checked for their own errors where a call is not made - a lambda's left, since nothing gives it a type
+fn (c mut Checker&) dropArgs(args Array<ast.Expr&>&) {
+    if args == null { return }
+    for a in args {
+        match a {
+            case ast.Expr.Lambda(_, _) { }
+            nomatch { c.expr(a, types.UnknownT) }
+        }
+    }
 }
 
 fn (c mut Checker&) one(x typed.Expr&c) Array<typed.Expr&>&c {
@@ -5308,7 +5325,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 } else {
                     c.err(nsp, msgs.UnknownFunctionMeant(c.tok(n), best))
                 }
-                for a in args { c.expr(a, types.UnknownT) }
+                c.dropArgs(args)
                 return c.unknown(sp)
             }
             if ref.Kind == names.What.Local or ref.Kind == names.What.Global {
@@ -5386,7 +5403,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                         if w and not c.refWritten(of) {
                             # T25b: "mut" is a reference's permission
                             c.err(source.Span(psp.Start, psp.Start + 3), msgs.MutOnValueType(c.ty(c.P.Resolve(c.fr().Ctx, of))))
-                            for a in args { c.expr(a, types.UnknownT) }
+                            c.dropArgs(args)
                             return c.unknown(sp)
                         }
                     }
@@ -5400,7 +5417,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 if args.Len() != 0 {
                     # T8: a fixed array's call makes its zero value only - a filled one is a copy
                     c.err(args[0].Span(), msgs.FixedArrayCall())
-                    for a in args { c.expr(a, types.UnknownT) }
+                    c.dropArgs(args)
                     return c.unknown(sp)
                 }
                 elem := c.resolve(targs[0])
@@ -5528,7 +5545,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
 
 fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, args Array<ast.Expr&>&) typed.Expr&c {
     if not c.instancesMet(t, nsp) or not c.P.Body(t) {
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     k := c.declKind(t)
@@ -6057,7 +6074,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     rx := c.expr(x, types.UnknownT)
     rt := typeOf(rx)
     if rt == types.UnknownT {
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     name := c.text(n)
@@ -6067,7 +6084,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         if ds.Len() > 1 {
             # M19e: two traits' defaults of one name - the call cannot choose
             c.err(nsp, msgs.DefaultAmbiguous(c.ty(c.deref(rt)), c.tok(n)))
-            for a in args { c.expr(a, types.UnknownT) }
+            c.dropArgs(args)
             return c.unknown(sp)
         }
         if ds.Len() == 1 { m = ds[0] }
@@ -6078,7 +6095,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     if m < 0 and name != "Len" and c.isNamed(c.deref(rt)) and c.isOver(c.deref(rt)) and not c.P.Extends(c.deref(rt)) and c.baseHas(c.deref(rt), n) {
         # T29f: a declared type that does not extend its base has none of its base's methods
         c.err(nsp, msgs.MethodNotInherited(c.ty(c.deref(rt)), c.tok(n)))
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     if m < 0 {
@@ -6093,7 +6110,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         }
         if c.isNamed(dt) and c.declKind(dt) == types.DeclKind.Trait {
             # a trait as a value's type was said where it is written (T30)
-            for a in args { c.expr(a, types.UnknownT) }
+            c.dropArgs(args)
             return c.unknown(sp)
         }
         if supplied(name) and name != "Eq" {
@@ -6101,7 +6118,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         } else {
             c.err(nsp, msgs.UnknownMethod(c.ty(c.deref(rt)), c.tok(n)))
         }
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     return c.invoke(sp, nsp, m, rx, args, null)
@@ -6111,7 +6128,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
 fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&c, args Array<ast.Expr&>&) typed.Expr&c {
     t := typeOf(fv)
     if t == types.UnknownT {
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     if c.P.T.KindOf(t) == types.Kind.Func { return c.callBody(sp, fsp, t, typed.Callee.Value(fv), -1, null, args, null) }
@@ -6124,16 +6141,16 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&c, 
     for pb > 0 and tx[pb] == ' ' { pb-- }
     if fsp.Start > 0 and tx[I64(fsp.Start)] == '(' and tx[pb] == '"' {
         c.err(source.Span(fsp.Start, fsp.Start + 1), msgs.JoinPieceCalled())
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     if fsp.Start > 0 and ((tx[I64(fsp.Start) - 1] == '$' and c.deref(t) == c.textType()) or tx[I64(fsp.Start)] == '"') {
         c.err(c.opAfter(fsp, 1), msgs.JoinPieceCalled())
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     c.err(fsp, msgs.NotCallable(c.ty(t)))
-    for a in args { c.expr(a, types.UnknownT) }
+    c.dropArgs(args)
     return c.unknown(sp)
 }
 
@@ -6152,7 +6169,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
     u := c.under(rt)
     if name == "Bits" and args.Len() > 0 and c.P.T.IsFloat(u) {
         c.err(nsp, msgs.TakesNoArgs("'Bits'"))
-        for a in args { c.expr(a, types.UnknownT) }
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     if name == "Bits" and args.Len() == 0 and c.P.T.IsFloat(u) {
@@ -7269,6 +7286,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
             }
         }
         case ast.Expr.Call(_, _, _) { task = c.expr(inner, types.UnknownT) }
+        case ast.Expr.Postfix(_, op, y) if op == token.Tok.Bang and callLike(y) { task = c.expr(inner, types.UnknownT) }
         nomatch {
             c.err(inner.Span(), msgs.SpawnNotCall())
             c.expr(inner, types.UnknownT)
@@ -7281,7 +7299,10 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     fr.leaks.Truncate(lm)
     if task == null { return }
     errs := c.P.T.Items(c.lastErrs)
-    if errs.Len() > 0 and not tried { c.err(inner.Span(), msgs.SpawnFallible()) }
+    if errs.Len() > 0 and not tried {
+        c.err(inner.Span(), msgs.SpawnFallible())
+        for e in errs { fr.joinErrs.Push(e) }   # said once: its join is not then said to need no try
+    }
     if errs.Len() == 0 and tried { c.err(call.Span(), msgs.SpawnTryInfallible()) }
     # the clauses: what each takes, and the code it runs on the task (P4a)
     tcs mut List<typed.TaskClause&>&c = List<typed.TaskClause&>()
