@@ -1,0 +1,12 @@
+# check: fail error[E13c]: the receiver of 'Format' is a number written as a literal - put it in a variable of the type wanted, or convert it, as in 'I64(7)'
+# also: error[E13c]: the receiver of 'Bits' is a number written as a literal
+# also: error[E13c]: the receiver of 'Hash' is a number written as a literal
+# also: compilation failed with 3 errors
+# E13c: parentheses, a minus sign or arithmetic of literals still leave a number written as a literal, with no type of
+# its own until it lands - each is refused, once, and the calls still give their results (no error follows from them)
+fn main() ? {
+    t := (255).Format(16)
+    b := (-0.0).Bits()
+    h := (1 + 2).Hash()
+    assert t == "ff" and b != 0 and h != 0
+}

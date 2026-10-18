@@ -13,6 +13,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `time.olang` | monotonic and wall clocks |
 | `math.olang` | the C math functions over the four float types, and constants |
 | `rand.olang` | seeded xoshiro256** generator |
+| `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | sum, mean, variance, percentiles, histograms |
 | `linalg.olang` | `Matrix<T>`, GEMM, activations, convolutions by patches |
 | `json.olang` | JSON parse into an immutable tree, and encode |
@@ -24,7 +25,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 ## Subfolders
 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
-  without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `pair`, `iterator`, `hash`, `float`,
+  without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `iterator`, `hash`, `float`,
   `complex`, `f8`, `builtin` (the language's own errors). Only the prelude may give methods to built-in types (M19d).
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.
 - `runtime/` - the runtime as LLVM IR text: `runtime.ll` (arena allocator, chunk pools, regions, worker cache),

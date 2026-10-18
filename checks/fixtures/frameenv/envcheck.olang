@@ -2,6 +2,7 @@
 # "{ ptr @..lambda$N, ptr undef }" pair whose environment operand is an alloca of the same function. Prints
 # "ONSTACK ELSEWHERE": the pairs whose environment is an alloca, and the pairs whose environment is not.
 
+import "std/pair"
 import "std/os"
 import "std/io"
 
@@ -20,7 +21,7 @@ fn main() {
 }
 
 # the pairs whose environment is an alloca of their function, and the others
-fn count(text String&) Pair<I64, I64> {
+fn count(text String&) pair.Pair<I64, I64> {
     allocas := Map<String&, Bool>()
     onstack I64 = 0
     heap I64 = 0
@@ -39,7 +40,7 @@ fn count(text String&) Pair<I64, I64> {
             if env in allocas { onstack++ } else { heap++ }
         }
     }
-    return Pair(onstack, heap)
+    return pair.Pair(onstack, heap)
 }
 
 # the line's first word, as awk's $1

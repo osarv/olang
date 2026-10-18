@@ -16344,6 +16344,86 @@ the rules can test, and a function type carries it with no new field. (4) `x!` i
 `Ends` set - the lowering is a try whose escape ends the program. (5) Checked forms' superset and `Len`/`Eq`/`Str` not
 failing are judged once every set is known, a generic's checked forms per instance. (6) A declared number's constructor
 on a literal is no fallible call (T29d runs it while compiling). Root tests are checked in every build, as stage 0 does.
+**Constraints, read-only copies and the long tail (2026-10-18; checkdiff 232/418 refused cases giving stage 0's first
+error and 278/282 accepted programs clean before, 342/411 and 279/283 after, T25e and E34 now counted decided away).**
+G19 is checked where variables are bound: a call's inference, a written type's arguments (said at the first argument,
+as stage 0 says it), an inferred constructor's, the instances an instance's signature holds (`g19substituted`), and the
+types a checked signature writes - once per type instance (`boundsMet`), the instance's body unchecked where one is not
+met. `generic.Missing` names the first method not met and whether it seals the trait (T35c: a private method and a type
+the trait's module did not declare it for); a method the compiler supplies meets a trait (E10b's `Hash` by `HasHash`,
+E23's `Len`, E33's `Bits`), an inherited `Hash` beside an `Eq` of the type's own does not, and a `noreturn` method meets
+one with no result. **T25c's read-only copies** are tracked per local: a `:=` copy, a for-in element, a match binding or
+subject of a place reached read-only (an immutable global, through a read-only reference, a capture, another read-only
+copy) is one; it is refused where lent writably, written through, stored (an assignment, an array literal's element, a
+fill, a payload, a mutable global's initializer, a by-value result) or declared with a written type; a reference local
+made from a place (a borrow, a slice, a value read out of it - `roFrom`) reaches what the place reaches, so slices and
+loops over a copy read the copy. A by-value parameter's need of a writable argument is read off its body - written
+through, lent writably, stored, or passed on to a parameter that needs it - settled over every call once the attempt has
+checked every body (`roSettle`), and a function value (named, lambda, `Call`) with such a parameter is refused. **Left**
+(rv3roat/roclone/rofilter/roget, vec111elemrocopy, t25cforinwrites): `roByArg`/`roToResult` - what a generic's read-only
+reference parameter reaches is as read-only as its argument, which needs a summary of what the instance's body copies out
+of it and keeps writable; until then a generic instance's read-only reference parameter is not treated as read-only at
+all, so nothing is falsely refused. **Also**: T29 (a type over a struct, an enum or a generic instance; over an array
+holding itself, said at the last declared of a cycle), T29f (`extends` on a struct; a method of the base, a compound
+operator, not inherited without `extends`), T29e (an inherited method's name taken, save Eq/Hash/Str), T16 (a struct or
+enum holding itself by value through fields, payloads and fixed arrays, at the field), T6 (a float literal rounding to an
+infinity in a narrower float), T4/B11 (unknown types and functions named with the nearest type, numbers by letter and
+width), the match rules (S12b, S13a's first case not covered at the subject, S13c's alternatives - references of one type
+meet, S13e, S13f), G1, G4 (said once at the declaration, at the result for a type variable and the occurrence for a
+constant one; the function is then never instantiated and its calls say nothing), G6, G7, G10d, M6b (a protocol method
+public and private), E23/E33/P9 (a method the compiler supplies declared), M19d, E28 (numbers of two types are no
+conditional's values, a literal alone adapting), E32 (`is` with a case, `as` on a case carrying nothing), L10/L12b/E4a
+(literals beyond 64 bits or F64 - a division by zero still an infinity), S9b's step, and E15a's checks turned off in a
+match value's clauses. An assignment's fit is said at its `=`, an argument's at an `as` or at what a
+conversion converts, a binary expression's at its operator, a method call's at its name, as stage 0 says them. **Decided (mine):** (1) G19 is checked once per type instance, where first
+asked for, and an unmet instance gives the unknown type so nothing more is said about it; (2) read-only copies are
+local facts during checking plus one settle per attempt for parameters, not a pass of their own; (3) a generic
+instance's read-only reference parameters are read as not read-only until `roByArg` exists - accepting what stage 0
+refuses rather than refusing what it accepts.
+**roByArg and the long tail's end (2026-10-18, second round; checkdiff 342/411 refused cases giving stage 0's first error
+(298 exactly) before, 406/411 (367 exactly) after; 279/283 accepted programs clean throughout; a new measure, the pinned
+header messages, 381/411).** **T25c through a generic's read-only reference parameters**: in a generic instance's body
+(`instanceBody`), every value given a local is kept (`roVals`, from `emit`), so `roDeep` follows a value back through
+references, locals and calls to the read-only reference parameters it is copied out of (`roByArg`); a by-value result
+holding writable references gives its parameters `roToResult`, settled as the body finishes - before a caller reads it,
+the callee checked first where it has such a parameter (`roCheckCallee`), and in a cycle every such parameter followed;
+values the body keeps writable (stored, lent writably) make their parameters need a writable argument, and arguments
+resting on the caller's own such parameters join the settle's fixed point (`roDeepArgs`). A call's result is then a
+read-only copy where a followed argument is read-only (`ls[0].Push(9)`, `g := try m.Get(1)`), a read-only argument for a
+parameter that needs a writable one is ReadOnlyRefKept at the call (`ro.Clone()`, `ro.Filter(...)`), a reference a
+read-only call result holds is walked read-only (`for x in hs[0].ring` with a `mut At`), and a writable reference read
+out of a by-value parameter and passed on writably makes it need a writable argument - so a `Str` writing through its
+by-value receiver is E11c's error. **G16b's contexts**: an instance records where it was first asked for (the call's
+name, and the instance whose body asked), and its body is checked inside that chain of "instantiated here, with T = ..."
+contexts, so an error met in the standard library's code is reported at the program's use (B11) - which M6b's private
+`eq` reached through the prelude's `Map` needed. **The rest, each a rule stage 0 had and the port lacked**: M6b (a
+private `eq` is `==` only in its own module), E28 (a conditional or match choosing a place lent writably), G17 (a
+function instance nesting too deep, said at the function; a type instance's parts made as far as they nest, so a field
+growing its own type's argument is found), P9 (an atomic's place, its writability), S3 (`AtomicLoad` alone; text alone
+on a line, E11b), E10c (`is` on values and nulls), X2 (extern types, `fn()` for the runtime's own functions), E16 (a
+constant index past a fixed length), T7a (a run-time array in an array or a struct, a lambda's result a call holds in an
+array), T7c, T7d, T8, T24 (a reference to a number; a named marker on an element), G11, G9, G10c, G15, G19/T30 (a
+type parameter's constraint that is no trait, used as a type; a trait used as a constant), M19e (two traits' defaults,
+an override of another signature), P4a (a task's default naming storage), E27, D8a, E11a, E11b, E32, E32b, E14, E8a,
+T20, T25b, T22 (a `Call` writing what the type passes read-only), S9a (an iterator's `Next` shape), E29 (`Contains` for
+a sub-collection), D16c (a captured array is a capture), G9b through a receiver's type arguments, and positions (P1g,
+S4c, E31's compound operator, S4 on a conversion). **Fewer cascades**: a written type said wrong resolves to the unknown
+type; a trait as a value's type is not asked for methods; D10a is not said in a body holding a syntax error; L10 not
+after the scanner's L10b; a mis-shaped `Eq` is not called by `==`; an untyped lambda of a call not made is not checked.
+**Decided (mine):** (1) roByArg is per instance body and per parameter, its facts by (body, parameter) beside the
+by-value parameters' (`roNeeds`, `roDeps`), one settle per attempt - not a summary pass; a callee being checked (a cycle)
+is taken to hand back what any such parameter reaches, as stage 0 does; (2) only the program's top-level frame of an
+instance is a context base (`diag.ContextBase`), so a body checked inside another's check has its own chain, never the
+caller's; (3) a private `eq` of another module is said once per line (an operation reaching it twice, `m6bonce`);
+(4) `<T I32>` in a function's type-parameter list, `T` used as a type, is G19's "not a trait" (constant generics are
+being dropped, QP2), and `<N Shaped>` with `N` used as a constant is T30's; (5) E32b's compile-time length check is not
+made under `checked` - QP1 makes `Array<T>(3, v)` fixed in the port where stage 0 keeps it run-time, so `checked (r as
+Array<I32, 2>&)` stays the run-time check stage 0 makes (`t7dfixedrun`). **Left**: the five refused cases are own/take
+(o32copypush, o32copywrite, o34taketype, vec111elemrocopy - being removed) and a chain of constant instances
+(g17constchain - constant generics are being dropped); of the pinned messages, function types are spelled without their
+parameters' names (types carry none), text literals as `String&` where stage 0 says `Array<Char, N>`, and §8's cases
+counted here by their first error's rule.
+
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
 `compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
@@ -19630,6 +19710,81 @@ constraints. `checkdiff`: 232 of 413 refused checker cases give stage 0's first 
 check clean - master's run on the same day gave 234 of 415 and 274 of 278, with the same 181 cases failing in both; the
 difference is the removed G8b/G22 cases and the three `T17, T19, C2` comma cases, which now build.
 
+## `Pair` moves from the prelude to `std/pair` (M19d, D8d, 2026-10-17, the user: "Pair goes in Std not prelude")
+
+`std/prelude/pair.olang` is `std/pair.olang`: a program names it `pair.Pair<A, B>` after `import "std/pair"`, its
+`Hash` kept and its tests no longer under `if TestBuild` (a std module's tests compile only when it is tested). The
+prelude is what every program carries and what is visible without an import; two values kept together is a library
+convenience, not something the language needs everywhere. Neither compiler knew the name (the prelude is every file of
+`std/prelude`, so removing the file was the whole change for them). Migrated: the port's `check`, `generic`, `load`
+and `names` (Map and List keys of two numbers), `tests/shared.olang` (its header no longer says "no imports" - it
+imports none of the suite's files, only `std/pair`), three checks cases and three fixtures, the prelude's Map tests;
+the one prelude test that used a `Pair` (S9f, a List of references walked by every route) moved from `list.olang`'s
+`if TestBuild` block to `std/prelude/tests/list.olang`, which can import. The `preludestale` scenario, which edited
+`pair.olang` to show a changed prelude rebuilds the root's instantiations, edits a method added to `List` instead.
+`$` still writes the type's own name, `Pair("k", 0.5)` (E11a: a rendering names a type as its declaration does, not
+by the alias an importer wrote). Goldens recaptured for the shifted lines and the type's new identity.
+
+## A number written as a literal is no method's receiver (E13c, L12, 2026-10-17, the user: "disallow for numbers, allow for array and text")
+
+`7.Hash()` lexed as the integer 7 and a method call since L12 was written that way, and `(255).Format(16)`,
+`(-0.0).Bits()` and `0.5.Fixed(2)` all ran. They read badly - the dot after a number looks like a decimal point - and
+they hide the type the method belongs to: a literal has no type of its own until it lands (T6, T6a), and a receiver is
+not a place it lands, so `7.Hash()` was `I64.Hash` by the default type, which no reader sees at the call. E13c refuses
+a receiver that is a number written as a literal - a numeric literal alone, negated, parenthesized, or arithmetic of
+such (E4a's literal-only expression), decided on the syntax in both compilers (stage 0's `operandOnlyNumericLiterals`
+on the receiver at the postfix method call, the port's `numberLitsOnly` in `methodCall`). **Decided (mine)**: the
+parenthesized and arithmetic forms are refused too - parentheses do not give a literal a type, and refusing `7.Hash()`
+while allowing `(7).Hash()` would leave the same hidden type behind one more pair of characters; a character literal
+(`'a'.IsLetter()`) is not a number and keeps its methods (it has a declared type, `Char`, and reads as a character);
+the error names the method and the two fixes, a variable of the type wanted or a conversion (`I64(7)`); after
+reporting, the call is still built as written, so nothing that follows adds a second error. L12 is unchanged - a `.`
+before a name is still no decimal point, so `2.5.Fixed(1)` is E13c's error, not a second decimal point (the
+`l12method` case is now a must-fail case for E13c, and `e13cfloat` keeps that lexing pinned). Migrated by the
+compiler's own errors: std's tests (`F64(0.1).ShortestDecimal()`, `I64(255).Format(16)`, `F64(0.5).Fixed(0)`), `std/ffi`,
+`std/prelude/f8.olang`'s negative zero, the doc comments of `PadStart`, `Format` and `Fixed`, `checks/cases/
+t29dradixcall`, and the fuzz generator, whose `(e).Format(b)`, `(e).Fixed(n)` and `(e).Bits()` are now conversions of
+`e` to its own type (a generated `e` may be a literal). `compiler/testdata/lex/numbers.olang` keeps its `1.5.Hash()`:
+it is scanner input, never checked.
+
+## `a.Chunks(size)`: an array cut into pieces tasks may each write (M19d, P8b, 2026-10-17; the coordinator's request, details mine)
+
+The prelude gives every array `Chunks(size)`: the consecutive pieces of `size` elements, the last holding what is left,
+each a writable slice of the array's own storage - so `join { for part in a.Chunks(4) { spawn work(part) } }` hands
+each task a part of its own and cannot race on the array (no element is reached by two tasks; the join orders every
+write before what follows). **Decided (mine)**: (1) **an array of slices, not an iterator** - an iterator's `Next` can
+only say its result lives where the iterator does (`String&it`, as `LineIter` does: a result read through a field has no
+scope of its own a signature can name), and the for-in's hidden iterator lives in the loop's block, inside the join, so
+P2 refused every piece as a task argument; the pieces' array lives where the receiver does, as `Split`'s, so a piece is
+known to live as long as the array. It costs one allocation of `ceil(n / size)` slices per call, made in the receiver's
+scope (a long-lived array chunked again and again keeps each call's piece array until it closes - the same as `Split`).
+(2) **The size is a `ChunkSize`**, a declared `I64` whose constructor fails with `ArrayError.BAD_CHUNK` below one, as a
+base is a `Radix`: a literal is checked while compiling (`a.Chunks(0)` is T29d's compile-time error) and needs no `try`;
+a computed one is `try ChunkSize(n)`. Making `Chunks` itself fallible would put `try` on every call for a mistake only
+computed sizes can make; silently treating `size <= 0` as one would hide it (errors are errors). (3) The receiver is
+`mut` - the pieces are writable views, and a read-only receiver handing them out would be the shallow-permission hole
+linalg's views have; reading in parallel needs no help. (4) Arrays only: `Vec` is being reworked elsewhere and gets it
+after; `String` has it (T29e), its pieces `Array<Char>&` (the result is not the receiver's own type, T29f). Tested in
+`std/prelude/tests/array.olang`: shapes, writes through a piece, refused sizes, and four tasks each writing their piece
+of an array read back after the join and an arena churn - baked while compiling (K1 runs the join's tasks in sequence)
+as at run time, and clean under `-race` and `-sanitize`.
+
+## The formal model of section 8 (docs/scope-model.md, 2026-10-18)
+
+Written before the port's scope pass (M6), as the user asked on 2026-10-17 ("section 8's soundness is the project's main
+risk"). The model separates run-time scope terms (blocks, scope variables, the program - the only ones built into) from
+static-only terms (derived scopes, "not known here", untraced - read through, never built into), which is what O12,
+O23a, C2d and E11c's build restrictions have in common; one outlives order with obligations; two type predicates (refs,
+st); one fit rule (exact where something can be stored through, else outlives). Every O-rule is marked kept, runtime,
+subsumed (O2d, O5, O13b, O18, O19, O22, O25d, O25f), revised (O8c) or retired (O30-O42). Decided by its author: the
+program scope outlives every term (O10a to say so); derived scopes join the obligations' closure; no summary is read
+before its strongly connected component has converged (the root of tonight2 #2 and str4 C1); M6 implements LEND as SPEC
+states it, a two-scope-variable alternative measured after. Found: a hole in docs/memory.md 2.4 as first written - one
+region term for all of a place's values would let `b.next = a`, both read from one map, survive `m.Remove(1)` freeing
+`a`; fixed by a region term per read and no region term outliving another or itself (a collection whose values refer
+to each other is then never freed early). Stale SPEC text listed for round 3 (O11's index clause, O17b's try-default,
+S13b vs O4b, the section 8.8 leftovers).
+
 ## Vec as a handle: round 1 of docs/memory.md (M19d, B2f, K1, 2026-10-17)
 
 The user decided the direction (ledger QAB: "I want it gone completely somehow and the memory model more streamlined";
@@ -19737,3 +19892,8 @@ C's 1.2), Vec or not.
 
 **Found on the way.** The scope-fuzzer's own-mode Vec shapes
 still run clean at the seeds `checks` uses (the refused ones are left out, the accepted ones now run as handles).
+
+**After master's `Chunks` (2026-10-18).** A Vec gets no `Chunks` of its own: `v.ViewMut().Chunks(n)` already gives the
+pieces, and a second spelling would hide the window on the current buffer that `View` exists to make visible (a piece
+kept across a growth is a stale view like any other). A prelude test cuts a Vec's view into pieces written by a task
+each, built and under -debug -sanitize.

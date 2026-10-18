@@ -132,7 +132,7 @@ test "Has finds the C library's functions, and the math library's" {
 test "Call passes numbers and gives each kind of result" {
     w := U64[U64(-42)]
     assert I64(try Call("labs", U8[Code(Kind.I64)], w, Code(Kind.I64)) catch default 0) == 42
-    x := U64[(6.25).Bits()]
+    x := U64[F64(6.25).Bits()]
     assert (try Call("sqrt", U8[Code(Kind.F64)], x, Code(Kind.F64)) catch default 0).F64FromBits() == 2.5
     f F32 = 2.25
     y := U64[U64(f.Bits())]

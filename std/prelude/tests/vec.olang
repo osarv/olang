@@ -197,6 +197,20 @@ test "Vec: filled by tasks, one each, read after the join" {
     assert a.Len() == 1000 and b.Len() == 1000 and a[999] == 999 and b[999] == 1998
 }
 
+fn vecFillPart(part mut Array<I64>&, k I64) { for i in range part.Len() { part[i] = k } }
+test "Vec: its view cut into Chunks, each piece written by a task of its own" {
+    v := Vec<I64>()
+    for i in range 10 { v.Push(i) }
+    k I64 = 0
+    join {
+        for part in v.ViewMut().Chunks(4) {
+            k++
+            spawn vecFillPart(part, k)
+        }
+    }
+    assert $v == "Vec<I64>[1, 1, 1, 1, 2, 2, 2, 2, 3, 3]"
+}
+
 type vecNode struct(name String&, n I64) {
     name
     n

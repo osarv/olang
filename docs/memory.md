@@ -158,7 +158,10 @@ machinery (section 3.3).
    outlives nothing, as `own` gave each object a region (O33). Tag every reference read from the place with ρ and run
    §8's tag propagation again. Every reference whose tag becomes ρ points into the value. Where §8 would now reject a
    flow, the target is either a local or temporary of this function (a **view**, judged by liveness in 2.5) or anything
-   else (an **escape**: condition 2 fails, and that flow is the report's note).
+   else (an **escape**: condition 2 fails, and that flow is the report's note). One `ρ` for all of a place's values
+   would accept a reference into one value stored inside another (`b.next = a`, both read from one map), which a later
+   removal of `a` would leave dangling: each read gets a region term of its own, and for a store no region term
+   outlives another or itself (`docs/scope-model.md` 5.5).
 2. **Made for it.** Every store into the place is checked against condition 1: a temporary built there, `null`, constant
    data, or a move from a sole place.
 3. **Fixed point.** All candidate places are tried at once. A place that fails drops out, and so does every place whose

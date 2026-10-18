@@ -16753,6 +16753,9 @@ struct operand* buildPostfix(struct checkCtx* ctx, struct syntax* s) {
             //written at all.
             struct syntax* argsNode = firstPartOfType(p->sntx, SNTX_EXPR_ARGS);
             if (argsNode) {
+                //E13c: a number written as a literal has no type until it lands, and a method call is no place it lands
+                //(reported, then built as written, so what follows sees the call's own result and adds no error)
+                if (operandOnlyNumericLiterals(result) && !result->type.owner) Err(memberTok, ERR_METHOD_ON_NUMBER_LITERAL, memberTok);
                 bool mReported = false;
                 bool prevAllow = ctx->allowFallibleCall;
                 ctx->allowFallibleCall = i == s->parts.len - 1 && allowLast;

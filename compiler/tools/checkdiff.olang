@@ -57,7 +57,11 @@ fn run(args Array<String&>&) {
     # ---- 1. the cases stage 0 refuses ----
     said := StringBuilder()
     runAll(said, $root "/" $dump, $root "/checks/cases", fails, root)
-    got := rows(said.ToString())
+    saidText := said.ToString()
+    got := rows(saidText)
+    texts := caseTexts(saidText)
+    pinned I64 = 0
+    unpinned := StringBuilder()
     total I64 = 0
     mine I64 = 0
     first I64 = 0
@@ -75,6 +79,15 @@ fn run(args Array<String&>&) {
             continue
         }
         mine++
+        # the case's pinned message, its header's text after "fail", said as the case says it (DESIGN.md 4)
+        text := try os.ReadFile("checks/cases/" $c) catch os.OsError default ""
+        pin := header(text, "# check:")[4:].Trim()
+        said1 := try texts.Get(c) catch default ""
+        if pin.Len() > 0 and (try said1.Find(pin) catch default -1) >= 0 {
+            pinned++
+        } else {
+            unpinned.Push($c ": " $pin "\n")
+        }
         mineRows := errorRows(got, c)
         if want in mineRows {
             first++
@@ -88,6 +101,7 @@ fn run(args Array<String&>&) {
     out.Write(("checkdiff: refused programs: " $first " of " $mine " checker cases give stage 0's first error (" $exact
               " give exactly its errors; " $(total - mine - decided) " are other passes', " $decided
               " rules decided away)\n"))
+    out.Write("checkdiff: pinned messages: " $pinned " of " $mine " checker cases say their header's message\n")
 
     # ---- 2. the programs stage 0 accepts ----
     said2 := StringBuilder()
@@ -126,6 +140,8 @@ fn run(args Array<String&>&) {
     if verbose {
         out.Write("-- refused programs not giving stage 0's first error:\n")
         out.Write(missed.ToString())
+        out.Write("-- checker cases not saying their pinned message:\n")
+        out.Write(unpinned.ToString())
         out.Write("-- accepted programs not clean (rows):\n")
         out.Write(dirty.ToString())
         out.Write("-- errors said on accepted programs:\n")
@@ -179,6 +195,24 @@ fn rows(text String&) List<row> {
         }
     }
     return rs
+}
+
+# what checkdump said of each case: its rendering, by case
+fn caseTexts(text String&) Map<String&, String&> {
+    m := Map<String&, String&>()
+    c String& = ""
+    b := StringBuilder()
+    for line in text.Lines() {
+        if line.StartsWith("== ") and not line.StartsWith("=== ") {
+            if c.Len() > 0 { m.Put(c, b.ToString()) }
+            c = $line[3:]
+            b = StringBuilder()
+            continue
+        }
+        b.Push($line "\n")
+    }
+    if c.Len() > 0 { m.Put(c, b.ToString()) }
+    return m
 }
 
 # what a case's first header line of this kind says, after the key: "fail E12" for "# check: fail E12"
@@ -254,10 +288,11 @@ fn otherPass(r String&) Bool {
 
 # a rule the decisions of 2026-10-17 remove or change, which the port follows instead of stage 0: constant generics
 # and their arrays' spelling (QP2: G20-G28), the introduction rule (QW: G8b), the default error (QO1: R15-R17),
-# done/fail/abort and a test's return (QU: S15, S16-S16b)
+# done/fail/abort and a test's return (QU: S15, S16-S16b); own and take, which are being removed (docs/memory.md:
+# T25e, E34)
 fn decidedAway(r String&) Bool {
     for x in String&["G8b", "G20", "G22", "G23", "G24", "G25", "G26", "G27", "G28", "R15", "R16", "R17", "R18", "R19"
-                     "S16a", "S16b", "S16c"] {
+                     "S16a", "S16b", "S16c", "T25e", "E34"] {
         if r == x { return true }
     }
     return false

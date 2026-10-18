@@ -405,7 +405,7 @@ fn (t Table&) Closed(id TypeId) Bool {
     return match d.K {
         case Kind.Unknown, Kind.Var, Kind.ConstExpr, Kind.Null => false
         case Kind.Named, Kind.Tuple, Kind.Record => t.closedList(ListId(I32(d.B if d.K == Kind.Named else d.A)))
-        case Kind.Array => t.Closed(t.Elem(id)) and t.Closed(t.Length(id))
+        case Kind.Array => t.Closed(t.Elem(id)) and (t.Length(id) == TypeId(0) or t.Closed(t.Length(id)))
         case Kind.Ref => t.Closed(t.Referent(id))
         case Kind.Func => t.closedList(t.Params(id)) and t.Closed(t.Result(id)) and t.closedList(t.Errors(id))
         case Kind.AnonEnum => t.closedList(t.ShapeCases(id))

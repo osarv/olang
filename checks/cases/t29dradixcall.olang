@@ -4,9 +4,10 @@
 B mut I64 = 40
 fn main() {
     r := Radix(16)
-    assert (255).Format(r) == "ff" and (try "ff".ParseInt(r) catch default 0) == 255
+    n I64 = 255
+    assert n.Format(r) == "ff" and (try "ff".ParseInt(r) catch default 0) == 255
     assert (try "ff".ParseInt(16) catch ParseError default 0) == 255
     bad := try Radix(B) catch TextError.BAD_BASE default Radix(10)
-    assert (255).Format(bad) == "255" and (255).Format(0) == "255"
+    assert n.Format(bad) == "255" and I64(255).Format(0) == "255"
     assert (try "0x10".ParseInt(0) catch default 0) == 16
 }

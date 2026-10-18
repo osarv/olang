@@ -69,6 +69,7 @@ type Diagnostics struct(Color Bool) {
     groupState := List<I64>()       # per group: Pending, Chosen or Dropped
     held := List<I64>()             # the groups open now, innermost last
     contexts := List<context>()     # the contexts open now, innermost last
+    ctxFrom I64 = 0                 # the first of them in effect: those below belong to a body set aside (ContextBase)
     scopeOn Bool = false            # inside a statement's group of errors about where things live (ScopeGroupStart)
     scopeSeen Bool = false
     fatalAt Where = Where.Nowhere
@@ -149,7 +150,7 @@ fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
     # the innermost contexts, and always the outermost - the program's own use that began the chain (G16b)
     outer I64 = -1
     valid I64 = 0
-    for i in range top {
+    for i in range d.ctxFrom, top {
         if d.contexts[i].text.Len() == 0 { continue }
         if outer < 0 { outer = i }
         valid++
@@ -157,7 +158,7 @@ fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
     inner I64 = 2 if valid > 3 else 3
     shown I64 = 0
     i := top - 1
-    for i >= 0 and shown < inner {
+    for i >= d.ctxFrom and shown < inner {
         if d.contexts[i].text.Len() > 0 {
             if i == outer and valid > 3 { break }
             d.notes.Push(note(rec, d.contexts[i].at, $d.contexts[i].text))
@@ -211,12 +212,38 @@ fn (d mut Diagnostics&) PushContext(at Where, text String&) { d.contexts.Push(co
 
 fn (d mut Diagnostics&) PopContext() { try d.contexts.Pop() catch { } }
 
+# the contexts from the open ones' count on are in effect, those below set aside - a body checked inside another's
+# check has its own: what was in effect before, for the matching call to give back
+fn (d mut Diagnostics&) ContextBase(from I64) I64 {
+    old := d.ctxFrom
+    d.ctxFrom = from
+    return old
+}
+
+fn (d Diagnostics&) ContextDepth() I64 { return d.contexts.Len() }
+
+fn (d Diagnostics&) RecordCount() I64 { return d.records.Len() }
+
+# whether an error was reported inside [from, to) of a file - a body a syntax error was found in, whose rest the
+# checker reads as recovered
+fn (d Diagnostics&) ErrorWithin(file I64, from I64, to I64, upto I64) Bool {
+    for i in range upto {
+        if i >= d.records.Len() { break }
+        r := d.records[i]
+        match r.at {
+            case Where.Span(f, s, _) { if f == file and s >= from and s < to { return true } }
+            nomatch { }
+        }
+    }
+    return false
+}
+
 # the innermost open context in the program's own files, when at is in the library: the use of the library's code at
 # was met for. -1 when there is none
 fn (d Diagnostics&) programUse(at Where) I64 {
     if not d.isLibrary(at) { return -1 }
     i := d.contexts.Len() - 1
-    for i >= 0 {
+    for i >= d.ctxFrom {
         if d.contexts[i].text.Len() > 0 and not d.isLibrary(d.contexts[i].at) { return i }
         i--
     }
