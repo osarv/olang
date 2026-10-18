@@ -360,7 +360,10 @@ design. Do what you want") - nothing to decide until a GUI is written.
   methods - floats (F16, BF16, F32, F64) get every std/math function as a method written once over the Float trait
   (x.Sqrt(), y.Atan2(x), a.Hypot(b), x.Fma(a, b) ...); integers get Abs, Min, Max, Clamp, ISqrt; prelude constants Pi,
   Euler, Inf, NaN (others computed, folded: F64(2).Sqrt()); std/math removed, the free functions gone, corpus and std
-  migrated by an olang tool; E13c unchanged (2.0.Sqrt() stays an error). Queued right after wt-litcon lands.
+  migrated by an olang tool. Then (the user: "Yes let's do this. I want an integer power as well for the integer set.
+  And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
+  a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
+  (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
 - QX (docs/ideas.md): the user, 2026-10-17: "let's do these tomorrow" (2026-10-18).
 - QZ4 ASKED 2026-10-17 (the user: "Pair should not go there I feel. Is pair really that useful? I guess it pairs with
   Map?"): no - Map's entries are MapEntry (Key/Value) and a struct is already a Map key (supplied Hash). Pair (D8d's "two
