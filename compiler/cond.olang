@@ -389,6 +389,7 @@ fn (e Eval&) isLocal(n source.NameId) Bool {
 # whether a condition names a local anywhere - the evaluator stops at the first thing it cannot read, so one further
 # on was never seen
 fn (e Eval&) mentionsLocal(c ast.Expr&) Bool {
+    if c == null { return false }
     return match c {
         case ast.Expr.Name(_, n) => e.isLocal(n)
         case ast.Expr.Paren(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _) => e.mentionsLocal(x)
@@ -397,6 +398,14 @@ fn (e Eval&) mentionsLocal(c ast.Expr&) Bool {
         case ast.Expr.Index(_, x, items) => e.mentionsLocal(x) or e.anyLocal(items)
         case ast.Expr.Chain(_, ch) => e.anyLocal(ch.Xs)
         case ast.Expr.Cond(_, a, k, b) => e.mentionsLocal(a) or e.mentionsLocal(k) or e.mentionsLocal(b)
+        case ast.Expr.Postfix(_, _, x), ast.Expr.IsType(_, x, _, _), ast.Expr.As(_, x, _), ast.Expr.Generic(_, x, _)
+             ast.Expr.Try(_, x, _, _) => e.mentionsLocal(x)
+        case ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => e.mentionsLocal(a) or e.mentionsLocal(b)
+        case ast.Expr.ScopeCall(_, f, _, args) => e.mentionsLocal(f) or e.anyLocal(args)
+        case ast.Expr.Slice(_, x, lo, hi) => e.mentionsLocal(x) or e.mentionsLocal(lo) or e.mentionsLocal(hi)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items) => e.anyLocal(items)
+        # what declares names of its own is the running program's whatever it reads
+        case ast.Expr.Compr(_, _), ast.Expr.Lambda(_, _), ast.Expr.MatchE(_, _) => true
         case _ => false
     }
 }

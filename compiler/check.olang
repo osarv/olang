@@ -73,6 +73,7 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     joinMarks List<I64>        # where each one's errors start in joinErrs
     joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
     spawnSaid I64 = 0              # spawned calls said to need try (P4): their join is not said to need none
+    DiagMark I64 = 0               # the diagnostics said before it began: what it says counts against its body (K1a)
 }
 
 # a construct met and not checked yet: where, and what (the acceptance's "gap")
@@ -151,6 +152,35 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
     unfillable Map<I64, Bool>                       # the generic functions G4 says no call can instantiate
     syntaxMark I64 = -1                             # the diagnostics said before checking began: the syntax errors
+    # B9c, S8b: the local ifs whose condition the build decides that evaluation decided, by (file, the condition's
+    # start) - what the driver found in an earlier check of the program, given before this one; and the local ifs this
+    # check met undecided, each with its condition's body (CondBody) for the evaluator
+    Decided Map<pair.Pair<I64, I64>, Bool>
+    Asks List<Ask>
+    # S18c: the asserts whose condition reads no local, each with its condition's body and its message's, for the
+    # evaluator to decide while compiling
+    AssertAsks List<AssertAsk>
+    Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
+}
+
+# an assert the evaluator may decide (S18c): the body it is in, where it is (its file and span), its condition's body
+# (BodyOf.Cond) and its message's, -1 for none
+type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I64, Msg I64) {
+    Body
+    File
+    Sp
+    At         # what a decision is reported at: the condition's operator, as stage 0 reports it
+    Cond
+    Msg
+}
+
+# a local if whose condition the build decides and B9a could not evaluate (S8b): the condition's body (BodyOf.Cond),
+# where it is, and the if
+type Ask struct(Body I64, File I64, At I32, If ast.If&) {
+    Body
+    File
+    At
+    If
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -260,6 +290,9 @@ fn (c mut Checker&) reset() {
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
     c.unfillable = Map<I64, Bool>()
+    c.Asks = List<Ask>()
+    c.AssertAsks = List<AssertAsk>()
+    c.Faulty = Map<I64, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -1258,6 +1291,92 @@ fn (c mut Checker&) globalBody(mi I64, n source.NameId) I64 {
     return id
 }
 
+# a condition the build decides that B9a could not evaluate (B9c, S8b), checked in module mi's context as the body of
+# a function giving its value (BodyOf.Cond), for the evaluator - -1 where it does not check there: it reads a local
+# (the running program's, or S8c's) or it is wrong, which is said where it is checked as part of its program
+fn (c mut Checker&) CondBody(mi I64, x ast.Expr&) I64 { return c.ExprBody(mi, x, types.BoolT) }
+
+# an expression that reads no local as the body of a function giving its value, of type ty, checked in module mi's
+# context (BodyOf.Cond) - a condition (CondBody), an assert's message (S18c); -1 where it does not check there
+fn (c mut Checker&) ExprBody(mi I64, x ast.Expr&, ty types.TypeId) I64 {
+    d := c.P.L.Diags
+    if c.readsLocal(x) { return -1 }
+    mark := d.Count()
+    gaps := c.Gaps.Len()
+    sp := x.Span()
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, mi, ty, types.ListId(0))
+    fr.Ctx = generic.Context(mi, -1)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    v := c.cond1(x) if ty == types.BoolT else c.fit(c.expr(x, ty), ty, sp)
+    c.stmts.Push(typed.Stmt.Return(sp, v))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    if d.Count() > mark or c.Gaps.Len() > gaps {
+        d.Forget(mark)
+        c.Gaps.Truncate(gaps)
+        c.Bodies[id].Root = null
+        return -1
+    }
+    return id
+}
+
+# whether an expression names a local of the body it is in, or a type or constant variable - what a body of its own in
+# module context cannot read (S8b, S18c); what declares names of its own (a lambda, a comprehension, a match, a catch
+# clause) counts as reading one
+fn (c mut Checker&) readsLocal(x ast.Expr&) Bool {
+    if x == null { return false }
+    return match x {
+        case ast.Expr.Name(sp, _) => c.namesLocal(sp)
+        case ast.Expr.Lit(_, _), ast.Expr.Default(_) => false
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _) => c.readsLocal(a)
+        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _) => c.readsLocal(a)
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => c.readsLocal(a) or c.readsLocal(b)
+        case ast.Expr.Cond(_, a, k, b) => c.readsLocal(a) or c.readsLocal(k) or c.readsLocal(b)
+        case ast.Expr.Chain(_, ch) => c.anyReadsLocal(ch.Xs)
+        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args) => c.readsLocal(f) or c.anyReadsLocal(args)
+        case ast.Expr.Index(_, a, items) => c.readsLocal(a) or c.anyReadsLocal(items)
+        case ast.Expr.Slice(_, a, lo, hi) => c.readsLocal(a) or c.readsLocal(lo) or c.readsLocal(hi)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.anyReadsLocal(items)
+        case ast.Expr.Try(_, a, clauses, _) => c.readsLocal(a) or (clauses != null and clauses.Len() > 0)
+        nomatch => true
+    }
+}
+
+fn (c mut Checker&) anyReadsLocal(xs Array<ast.Expr&>&) Bool {
+    if xs == null { return false }
+    for x in xs {
+        if c.readsLocal(x) { return true }
+    }
+    return false
+}
+
+# where an expression's last operation is written: a binary operator's or a chain's last comparison's token, else the
+# expression
+fn (c mut Checker&) operatorOf(x ast.Expr&) source.Span {
+    left := match x {
+        case ast.Expr.Binary(_, _, a, _), ast.Expr.NotIn(_, a, _), ast.Expr.Is(_, a, _, _) => a
+        case ast.Expr.Chain(_, ch) => ch.Xs[ch.Xs.Len() - 2]
+        nomatch => null
+    }
+    if left == null { return x.Span() }
+    t := c.P.L.Mods[c.fr().Mi].Src.Text
+    i := I64(left.Span().End)
+    for i < t.Len() and (t[i] == ' ' or t[i] == ')') { i++ }
+    j := i
+    for j < t.Len() and t[j] != ' ' and t[j] != '(' and t[j] != '\n' { j++ }
+    return source.Span(I32(i), I32(j))
+}
+
+# whether the name written at sp is a local, a type variable or a constant variable
+fn (c mut Checker&) namesLocal(sp source.Span) Bool {
+    k := c.P.R.Use(c.fr().File, sp.Start).Kind
+    return k == names.What.Local or k == names.What.TypeVar
+}
+
 # a global's type: written, or its initializer's (D15) - checked first where it is not known yet
 fn (c mut Checker&) globalType(mi I64, n source.NameId) types.TypeId {
     key := pair.Pair(mi, I64(n))
@@ -1593,6 +1712,7 @@ fn (c mut Checker&) rootStmts(body Array<ast.Stmt&>&) typed.Block&c {
 fn (c mut Checker&) push(id I64, mi I64, result types.TypeId, errors types.ListId) mut frame&c {
     c.frames.Push(frame(id, mi, c.P.L.Mods[mi].File, result, errors))
     fr := c.fr()
+    fr.DiagMark = c.P.L.Diags.Count()
     # a function's or constructor's body whose set is inferred (R1a): what it lets out is its set, settled as it ends
     if id >= 0 and (try c.inferring.Get(id) catch default false) {
         fr.InferErrors = true
@@ -1604,6 +1724,8 @@ fn (c mut Checker&) push(id I64, mi I64, result types.TypeId, errors types.ListI
 fn (c mut Checker&) pop() {
     fr := c.fr()
     if fr.Settles { c.settle(fr) }
+    # K1a: a body checking met an error or a gap in is never evaluated while compiling
+    if fr.Body >= 0 and (fr.Gapped or c.P.L.Diags.Count() > fr.DiagMark) { c.Faulty.Put(fr.Body, true) }
     try c.frames.Pop() catch { }
 }
 
@@ -7248,6 +7370,16 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
                 }
             }
             c.emit(typed.Stmt.Assert(sp, x, m))
+            # S18c: one that reads no local is the evaluator's to decide - in a test only in a test build (B3a)
+            fr := c.fr()
+            if (c.Tests or not fr.InTest) and not c.readsLocal(k) and not c.readsLocal(msg) {
+                cb := c.CondBody(fr.Mi, k)
+                mb I64 = -1
+                if cb >= 0 and msg != null { mb = c.ExprBody(fr.Mi, msg, c.P.T.Ref(c.textType(), types.ReadOnly)) }
+                if cb >= 0 and (msg == null or mb >= 0) {
+                    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb))
+                }
+            }
         }
         case ast.Stmt.Raise(sp, word) { c.raise(sp, word) }
         case ast.Stmt.Defer(sp, inner) {
@@ -8193,6 +8325,29 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) { c.emit(c.ifOf(sp, i)) }
 fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     if i.Cond == null { return typed.Stmt.Block(sp, c.branchBlock(i.Then)) }
     d := c.P.L.Diags
+    # B9c, S8b: decided by evaluation in an earlier check of the program - the branch chosen alone
+    key := pair.Pair(c.fr().File, I64(i.Cond.Span().Start))
+    if c.Decided.Has(key) {
+        if try c.Decided.Get(key) catch default false {
+            if i.Then.Group >= 0 { d.Choose(i.Then.Group) }
+            c.dropElse(i.Else)
+            return typed.Stmt.Block(sp, c.branchBlock(i.Then))
+        }
+        if i.Then.Group >= 0 { d.Drop(i.Then.Group) }
+        if i.Else == null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
+        match i.Else {
+            case ast.Stmt.If(_, e) {
+                if e.Cond == null and e.Then.Group >= 0 { d.Choose(e.Then.Group) }
+            }
+            nomatch { }
+        }
+        return c.elseOf(sp, i.Else)
+    }
+    # a condition B9a left to evaluation: asked for, the if checked as a running one meanwhile
+    if i.Then.Group >= 0 and d.IsPending(i.Then.Group) {
+        b := c.CondBody(c.fr().Mi, i.Cond)
+        if b >= 0 { c.Asks.Push(Ask(b, c.fr().File, i.Cond.Span().Start, i)) }
+    }
     if i.Then.Group >= 0 and d.IsDropped(i.Then.Group) {
         # the build took the else (S8b)
         if i.Else == null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
@@ -8240,6 +8395,18 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     return typed.Stmt.If(sp, typed.If(k, then, els))
 }
 
+# an else chain after a branch evaluation took (S8b): none of it compiled
+fn (c mut Checker&) dropElse(s ast.Stmt&) {
+    if s == null { return }
+    match s {
+        case ast.Stmt.If(_, e) {
+            if e.Then.Group >= 0 { c.P.L.Diags.CutOff(e.Then.Group) }
+            c.dropElse(e.Else)
+        }
+        nomatch { }
+    }
+}
+
 fn (c mut Checker&) elseHolds(s ast.Stmt&) Bool {
     if s == null { return false }
     match s {
@@ -8248,9 +8415,14 @@ fn (c mut Checker&) elseHolds(s ast.Stmt&) Bool {
     }
 }
 
+# whether the else chain was dropped because the build took the then: a plain else dropped, or an else-if cut off - an
+# else-if dropped for its own condition, decided false after a running if, says nothing about the then
 fn (c mut Checker&) elseDropped(s ast.Stmt&) Bool {
     match s {
-        case ast.Stmt.If(_, e) { return e.Then.Group >= 0 and c.P.L.Diags.IsDropped(e.Then.Group) }
+        case ast.Stmt.If(_, e) {
+            d := c.P.L.Diags
+            return d.IsDropped(e.Then.Group) if e.Cond == null else d.IsCut(e.Then.Group)
+        }
         nomatch { return false }
     }
 }

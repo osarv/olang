@@ -298,6 +298,7 @@ fn (e mut Emitter&) bodySym(id I64) String {
         case typed.BodyOf.Test(_) => "olang_test_" $id
         case typed.BodyOf.Global(m, n) => types.Symbol($e.P.L.Mods[m].Identity "." $e.text(n) ".init")
         case typed.BodyOf.Case(_, _) => "olang_case_" $id
+        case typed.BodyOf.Cond(_, _) => "olang_cond_" $id
     }
 }
 

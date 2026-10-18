@@ -610,7 +610,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   lowered to MIR with the stand-in placement, helpers, adapters and initializations made as MIR functions; `make
   lowerdump` verifies every function of the corpus, std, compiler and the checks' run cases - all clean but what check
   leaves wrong; nested tries fall to the try around them, a T29d literal's error edge is never taken, no releases or
-  holds since own is being removed; HISTORY.md "Port M7: lowering").
+  holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
+  over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
+  scope reclaimed as it closes; `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline").
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is

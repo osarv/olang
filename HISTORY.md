@@ -20429,3 +20429,49 @@ soundness differences still open.
 
 **Found on the way, for the checker:** a body whose function type's `ResultFrom` names a parameter it does not have
 (`typed.Body.ResultMark` indexes past `Params`; compiler/build.olang) - guarded in the scope pass.
+
+## Port M8: evaluation in the pipeline, `compiler/interp.olang` (2026-10-18, second round)
+
+The evaluator (`compiler/eval.olang`, the MIR abstract machine of the first round, tested on hand-built MIR) now runs
+what lowering makes. `compiler/interp.olang` lowers on demand whatever a run reaches - the calls, tasks, closures and
+destructors a function names, externs by name - and runs it: while compiling, for the places that need a value, and as
+`olang interpret`, which the driver's `Passes.Interpret` now does (load, check, evaluate, run main).
+
+**Where evaluation is asked for.** `interp.Analyze` checks the program, then evaluates every condition the build
+decides that the token evaluator left - top-level ones (B9c, through the loader's `Decide`, which loads what a chosen
+branch imports) and local ones (S8b: the checker records each pending local `if` as an `Ask`, its condition elaborated
+as a body of its own, `typed.BodyOf.Cond`) - and checks again with the decisions until nothing new is decided, each
+attempt's diagnostics forgotten. `interp.DecideAsserts` (S18c) evaluates every assert reading no local: a true one is
+not tested at run time (lowering skips it), a false one, or one whose evaluation aborts, is an error at its operator in
+stage 0's words, a `note: here` at the place it stopped. A body whose check met an error or a gap is never evaluated
+while compiling (K1a, `Checker.Faulty`). Baking globals into emitted data (K2) is not done: emit does not write values
+yet.
+
+**Acceptance, measured** (`compiler/tools/evaldump.olang` runs a program or its tests; `compiler/tools/evaldiff.olang`
+compares with stage 0's runs test by test, and with -i with stage 0's interpret; `make evaldiff`, not in verify): of
+the corpus and std's tests (shared.olang, std/cancel and std/chan left out - too slow, and tasks run in sequence so a
+channel's two ends block), 20 of 23 files and 254 of 287 tests end as stage 0's (linalg runs 6 of its 35 tests in 900s); of the
+checks' 144 flag-free run cases, 134 behave as stage 0's. What is left is the evaluator's speed (about 50k instructions
+a loop iteration: frames and functions copied per statement; a 1M-iteration loop 6.8s against stage 0 interpret's
+15.5s), destructors and the stand-in placement (M6), and check's own (a named function rendered as `fn(...)`,
+`checked a[i]` lent as a copy, literals not adapted to a key type). emitdiff on shared.olang went from 633 to 637 of
+710 tests with the decided conditions and asserts. The evaluator reclaims each scope as it closes: 200,000 calls each
+making an `Array<I64>(16)` peak at 79MB, where stage 0 interpret takes 1.66GB.
+
+**Decided (mine)**: under interpret a global is initialized when first read, its imports' first (B5a); constant data
+is one instance per span, constant index and function (a join's literal pieces share one span, a helper's words have
+none); a test run's command line is its binary's as stage 0 names it; interpret recurses 10,000,000 deep (frames are
+tables, not C stack).
+
+**Found and fixed on the way**: a running `if` whose else-if was decided false (B9a) was compiled as its then alone,
+and conversely a chain whose first branch the build took lowered its unchecked else-if chain (a gap, so the function -
+std/linalg's `micro` - was never lowered): diag gained a group state, `Cut` - dropped because a branch before it in
+its chain was taken - so a then counts as taken when its plain else is dropped or its else-if cut off, never when an
+else-if is dropped for its own condition (checks/cases/s8bchaintaken.olang). A local condition reading a local inside a slice, a join, `is`, `as` or a `try`
+was taken for one the build decides and silently folded to false (cond's `mentionsLocal` now reads every expression
+form). In eval: an extern's array argument was written through its length word; a function value converted between
+function types (a noreturn function for one with no result, D8e) read as null; a run-time array given storage by `New`
+shared its elements (a write through a `mut String&` global initialized from text wrote the constant); a slice viewed
+as a fixed array (E32b) was written as a pair where its type is one pointer; errno was lost after the runtime's own
+functions. **Found, not fixed (stage 0)**: `$f` of a function value renders its error set with `+`
+(`fn() I64 ? Alpha + Zeta`), which QY removed; checks/cases/d16blambdaorder.olang asserts that spelling.

@@ -21,6 +21,10 @@ import "load"
 import "fetch"
 import "source"
 import "names"
+import "eval"
+import "interp"
+import typecheck "check"
+import "std/pair"
 
 fn main() ? {
     os.OnCrash("olang: internal compiler error: the compiler crashed - a bug in the compiler, not in the program\n")
@@ -352,8 +356,9 @@ fn drive(args Array<String&>&) I32 {
 # ---- the front end so far ----
 
 # the passes that exist: the program loaded (M4: its imports, fetched where they are remote, its top-level conditions
-# decided where B9a can) and its names resolved. What they find wrong is reported; a program they find nothing wrong
-# with cannot be built yet, the checker and the back end (M5b-M9) being still to come
+# decided where B9a can) and its names resolved; for interpret, checked, lowered and run by the evaluator (M8). What
+# they find wrong is reported; a program they find nothing wrong with cannot be built yet, the back end's driving (M9,
+# M10) being still to come
 type Passes struct() {
     Loaded I64 = 0
 }
@@ -364,10 +369,25 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     error build.Failed.UNBUILT
 }
 
+# interpret FILE ARGS (B3e): the program checked - its conditions and asserts the evaluator decides decided (B9c, S8b,
+# S18c) - and its main run by the evaluator, its globals set first, the program given its file and ARGS as its command
+# line; the status main ends with
 fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&
     d mut diag.Diagnostics&cfg) I32 ? build.Failed {
-    try p.front(root, cfg, d)
-    error build.Failed.UNBUILT
+    f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
+    nm mut source.Names&cfg = source.Names()
+    l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+    l.Load(root)
+    p.Loaded = l.Mods.Len()
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    c mut typecheck.Checker&cfg = interp.Analyze(l, false)
+    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    interp.DecideAsserts(c, asserts)
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
+    x.Lw.AssertsTrue = asserts
+    for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
+    return x.RunMain(d)
 }
 
 fn (p mut Passes&) front(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) ? build.Failed {

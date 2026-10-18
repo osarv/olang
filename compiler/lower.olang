@@ -29,6 +29,7 @@
 # verified (compiler/tools/lowerdump.olang counts them).
 
 import "std/os"
+import "std/pair"
 import "source"
 import "diag"
 import "cond"
@@ -55,6 +56,8 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
     Gaps List<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
+    # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
+    AssertsTrue Map<pair.Pair<I64, I64>, Bool>
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
     # order first referred to, each once: what LowerKey makes next
     Wanted List<mir.FnKey>
@@ -754,6 +757,7 @@ fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
 
 # an assert (S17, S18): the test, its message computed only on the failing path
 fn (ln mut lowering&) assert(sp source.Span, c typed.Expr&, msg typed.Expr&) {
+    if ln.L.AssertsTrue.Has(pair.Pair(I64(ln.B.Id), I64(sp.Start))) { return }     # decided true while compiling (S18c)
     x := ln.val(c)
     if ln.dead { return }
     ok, bad := ln.F.NewBlock(), ln.F.NewBlock()

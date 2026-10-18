@@ -225,11 +225,16 @@ type gkey struct(Module I64, Name source.NameId) {
     Name
 }
 
-type dkey struct(File I64, Start I32, End I32, Ty types.TypeId) {
+# constant data's instance (T25d): where it is written, its type, and its index in its function's constants - a join's
+# literal pieces share the join's span, each a constant of its own; and for what is written nowhere (a helper's
+# words), the function it is in, -1 for written text
+type dkey struct(File I64, Start I32, End I32, Ty types.TypeId, C I32, Fn I64) {
     File
     Start
     End
     Ty
+    C
+    Fn
 }
 
 # a value's shape, from its type: how its bytes are read
@@ -302,10 +307,12 @@ type Machine struct(T mut types.Table&, When Mode) {
     writableOf Map<types.TypeId, Bool>
     stopFile I64 = 0
     stopSp source.Span = source.Span(0, 0)
+    Args List<String&>          # -i: the interpreted program's command line, its file first (B3e)
+    lastErr I32 = 0
 }
 
 # a machine evaluating in the mode given, its budgets K1's (stage 0's): 20,000,000 steps, 256 MB, 2,000 frames while
-# compiling; under -i no step or memory budget and 100,000 frames
+# compiling; under -i no step or memory budget and 10,000,000 frames (frames are the machine's tables, not this process's stack)
 fn NewMachine(t mut types.Table&, mode Mode) Machine {
     m := Machine(t, mode)
     m.allocs.Push(alloc())      # slot 0: no allocation, so an id is never 0
@@ -314,7 +321,7 @@ fn NewMachine(t mut types.Table&, mode Mode) Machine {
     if mode == Mode.Run {
         m.StepBudget = -1
         m.MemBudget = -1
-        m.DepthBudget = 100000
+        m.DepthBudget = 10000000
     }
     m.scratch = m.allocate(64, aValue, m.program).Id
     for i in range 3 { m.tmps[i] = m.allocate(64, aValue, m.program).Id }
@@ -1133,7 +1140,9 @@ fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
 # read-only storage of a constant, one instance per written position and type, made the first time it is asked for;
 # its elements, and how many
 fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp source.Span) (Ptr, I64) {
-    key := dkey(file, sp.Start, sp.End, ty)
+    # what lowering synthesizes (a helper's words) is written nowhere: its instance is its function's
+    maker I64 = m.codeIndex(f.Of) if sp.Start == I32(0) and sp.End == I32(0) else -1
+    key := dkey(file, sp.Start, sp.End, ty, c, maker)
     id := try m.datas.Get(key) catch default 0
     node := f.Consts[I64(c)]
     n := m.constLen(f, node)
@@ -1234,7 +1243,19 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
             m.zero(src, n)
             m.copy(dst, s, n)
         }
-        case mir.Rvalue.Prim(op, ty, args) { m.wr(dst, m.width(ty), m.prim(fi, op, ty, args)) }
+        case mir.Rvalue.Prim(op, ty, args) {
+            if op == typed.PrimOp.Convert and m.arrayOf(ty) != types.UnknownT {
+                m.convertArray(fi, dst, m.arg(fi, args, 0), ty)
+                return
+            }
+            # a function value is the same two words whatever function type it is seen as (a noreturn function for
+            # one with no result, D8e)
+            if op == typed.PrimOp.Convert and m.T.KindOf(m.T.Repr(ty)) == types.Kind.Func {
+                m.put(fi, dst, ty, m.arg(fi, args, 0))
+                return
+            }
+            m.wr(dst, m.width(ty), m.prim(fi, op, ty, args))
+        }
         case mir.Rvalue.Overflows(op, ty, args) { m.wr(dst, 1, 1 if m.overflows(fi, op, ty, args) else 0) }
         case mir.Rvalue.Tag(q) {
             src, st := m.place(fi, q)
@@ -1250,6 +1271,48 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
         }
         case mir.Rvalue.Text(b, into, ty) { m.text(fi, dst, b, into) }
     }
+}
+
+# the array a type is, or a reference names; UnknownT for none
+fn (m mut Machine&) arrayOf(ty types.TypeId) types.TypeId {
+    t := m.T
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.Ref { r = t.Repr(t.Referent(r)) }
+    return r if t.KindOf(r) == types.Kind.Array else types.UnknownT
+}
+
+# an array between a run-time and a fixed length, or a reference to one (T7c): a fixed array's value as a run-time-
+# length one given storage of its own (which MIR does not place: the program's, as lowering's stand-in placement puts
+# what it builds), else its storage taken - or a fixed array's read whole
+fn (m mut Machine&) convertArray(fi I64, dst Ptr, x mir.Operand, to types.TypeId) {
+    t := m.T
+    from := m.opType(fi, x)
+    fa, ga := m.arrayOf(from), m.arrayOf(to)
+    p := m.addr(fi, x, 1)
+    if m.halted { return }
+    fixedFrom, fixedTo := t.Length(fa) != types.TypeId(0), t.Length(ga) != types.TypeId(0)
+    if fixedFrom and not t.IsRef(t.Repr(from)) and not fixedTo {
+        n := m.fixedLen(fa)
+        bytes := n * m.size(t.Elem(fa))
+        q := m.allocate(bytes, aValue, m.program)
+        if m.halted { return }
+        m.copy(q, p, bytes)
+        m.wr(dst, 8, n)
+        m.wrPtr(Ptr(dst.Id, dst.Off + 8), q)
+        return
+    }
+    data, n := m.arrayView(p, from)
+    if m.halted { return }
+    if fixedTo {
+        if t.IsRef(t.Repr(to)) {
+            m.wrPtr(dst, data)
+        } else {
+            m.copy(dst, data, m.size(ga))
+        }
+        return
+    }
+    m.wr(dst, 8, n)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), data)
 }
 
 fn (m mut Machine&) tagOf(p Ptr, ty types.TypeId) I64 {
@@ -1299,7 +1362,19 @@ fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mi
 fn (m mut Machine&) newRef(fi I64, dst Ptr, s mir.ScopeRef, x mir.Operand, ty types.TypeId) {
     r := m.T.Referent(m.T.Repr(ty))
     if m.rtArray(r) {
-        m.put(fi, dst, r, x)
+        # a run-time-length array value given storage of its own: its elements copied there, as the run time does
+        p := m.addr(fi, x, 1)
+        if m.halted { return }
+        data, n := m.arrayView(p, r)
+        if m.halted { return }
+        sc := m.buildScope(fi, s)
+        if m.halted { return }
+        bytes := n * m.size(m.elemOf(r))
+        q := m.allocate(bytes, aValue, sc)
+        if m.halted { return }
+        m.copy(q, data, bytes)
+        m.wr(dst, 8, n)
+        m.wrPtr(Ptr(dst.Id, dst.Off + 8), q)
         return
     }
     sc := m.buildScope(fi, s)
@@ -1341,8 +1416,15 @@ fn (m mut Machine&) slice(fi I64, dst Ptr, q mir.Place, lo mir.Operand, hi mir.O
         return
     }
     es := m.size(m.elemOf(st))
+    at := Ptr(data.Id, data.Off + a * es) if b > a or data.Id != 0 else NullPtr
+    # a view as a fixed array (E32b): one pointer, its length its type's
+    r := m.T.Repr(ty)
+    if m.T.KindOf(r) == types.Kind.Ref and m.T.Length(m.T.Repr(m.T.Referent(r))) != types.TypeId(0) {
+        m.wrPtr(dst, at)
+        return
+    }
     m.wr(dst, 8, b - a)
-    m.wrPtr(Ptr(dst.Id, dst.Off + 8), Ptr(data.Id, data.Off + a * es) if b > a or data.Id != 0 else NullPtr)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), at)
 }
 
 # the code allocation standing for a function: a function value's first word
@@ -2011,13 +2093,12 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
 
 # ---- globals ----
 
-# while compiling, an immutable global a statement reads is initialized first (K2): its initializer run as a frame
-# before the statement, which runs again once it has. A mutable one, or one whose value a writable reference reaches,
-# is refused (K1). Whether the statement can run now
+# a global a statement reads is initialized first where it is not set yet - while compiling an immutable one (K2), under
+# -i any (B5a): its initializer run as a frame before the statement, which runs again once it has. While compiling a
+# mutable one, or one whose value a writable reference reaches, is refused (K1). Whether the statement can run now
 fn (m mut Machine&) globalsReady(fi I64, p mir.Place, rv mir.Rvalue) Bool {
-    if m.When == Mode.Run { return true }
     f := m.fnOfFrame(fi)
-    if not m.globalWritten(p) { return false }
+    if m.When == Mode.Compile and not m.globalWritten(p) { return false }
     return match rv {
         case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => m.operandReady(fi, x)
         case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => m.placeReady(fi, q)
@@ -2059,13 +2140,18 @@ fn (m mut Machine&) globalWritten(p mir.Place) Bool {
 }
 
 fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
-    # under -i each module's Init sets its globals before main runs (B5a): nothing waits for one
-    if m.When == Mode.Run { return true }
     match p.B {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
             if g < 0 or g == m.initGlobal { return true }
             gl := m.globals[g]
+            # under -i a global is set before main runs, each after the globals its initializer reads (B5a): one read
+            # while another is initialized and not set yet is initialized first
+            if m.When == Mode.Run {
+                if gl.State != 0 or gl.Init < 0 { return true }
+                m.startGlobal(g)
+                return false
+            }
             if gl.Mutable {
                 m.refuse(WhyMutableGlobal)
                 return false
@@ -2220,11 +2306,13 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         m.refuse(WhyExtern)
         return false
     }
+    if name.StartsWith("__olang_") { return m.runtimeFn(fi, name, args, ty, dst, hasDst) }
     kinds := Array<U8>(ps.Len())
     nwords I64 = 0
     for i in range ps.Len() {
         if m.shape(ps[i]) == vPair or m.shape(ps[i]) == vFixed {
-            data, n := m.arrayView(m.addr(fi, f.Ops[I64(args.At) + i], 1), ps[i])
+            ax := f.Ops[I64(args.At) + i]
+            data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
             nwords += 1 + ffi.WordsFor(n * m.size(m.elemOf(ps[i])))
             kinds[i] = ffi.ArrayOf(m.ffiKind(m.elemOf(ps[i])))
         } else {
@@ -2238,7 +2326,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     for i in range ps.Len() {
         x := f.Ops[I64(args.At) + i]
         if kinds[i] >= 0x80 {
-            data, n := m.arrayView(m.addr(fi, x, 1), ps[i])
+            data, n := m.arrayView(m.addr(fi, x, 1), m.opType(fi, x))
             bytes := n * m.size(m.elemOf(ps[i]))
             words[w] = U64(n)
             for b in range bytes {
@@ -2260,11 +2348,13 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         m.refuse(WhyFfiPass)
         return false
     }
+    m.lastErr = __olang_err()    # what the call left in errno, before the evaluator's own work can change it (X6)
     # what the function wrote into an array is copied back into its storage
     w = 0
     for i in range ps.Len() {
         if kinds[i] >= 0x80 {
-            data, n := m.arrayView(m.addr(fi, f.Ops[I64(args.At) + i], 1), ps[i])
+            ax := f.Ops[I64(args.At) + i]
+            data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
             bytes := n * m.size(m.elemOf(ps[i]))
             if m.allocOf(data.Id).ReadOnly == false {
                 for b in range bytes {
@@ -2278,6 +2368,116 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     }
     if hasDst and res != types.VoidT { m.wr(dst, m.width(res), I64(out)) }
     return not m.halted
+}
+
+# ---- the runtime's own functions (X6, B3f) ----
+
+# the runtime's functions live in the program built, and are this process's own here: -i calls them itself, over the
+# interpreted program's command line (Args) - each array argument copied in and out as an extern's is
+extern fn __olang_env(name Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_err() I32
+extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
+extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
+extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+extern fn __olang_mkdtemp(template Array<U8>) I32
+extern fn __olang_dyncall(name Array<U8>, kinds Array<U8>, words Array<U64>, ret U8) U64
+extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
+
+fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.TypeId, dst Ptr, hasDst Bool) Bool {
+    f := m.fnOfFrame(fi)
+    x := fn(i I64) mir.Operand { return f.Ops[I64(args.At) + i] }
+    v I64 = 0
+    match name {
+        case "__olang_arg_count" { v = m.Args.Len() }
+        case "__olang_arg" {
+            i := m.intArg(fi, x(0))
+            if i < 0 or i >= m.Args.Len() {
+                v = -1
+            } else {
+                s := m.Args[i]
+                b := Array<U8>(s.Len())
+                for k in range s.Len() { b[k] = U8(s[k]) }
+                m.putBytes(fi, x(1), b, m.intArg(fi, x(2)))
+                v = s.Len()
+            }
+        }
+        case "__olang_env" {
+            buf := Array<U8>(m.intArg(fi, x(2)))
+            v = __olang_env(m.bytesOf(fi, x(0)), buf, buf.Len())
+            m.putBytes(fi, x(1), buf, buf.Len())
+        }
+        case "__olang_err" { v = I64(m.lastErr) }
+        case "__olang_stat" {
+            out := Array<I64>(3)
+            v = I64(__olang_stat(m.bytesOf(fi, x(0)), out))
+            b := Array<U8>(24)
+            for k in range 24 { b[k] = U8((out[k / 8] >> (8 * (k % 8))) & 0xFF) }
+            m.putBytes(fi, x(1), b, 24)
+        }
+        case "__olang_dir", "__olang_realpath" {
+            buf := Array<U8>(m.intArg(fi, x(2)))
+            path := m.bytesOf(fi, x(0))
+            v = __olang_dir(path, buf, buf.Len()) if name == "__olang_dir" else __olang_realpath(path, buf, buf.Len())
+            m.putBytes(fi, x(1), buf, buf.Len())
+        }
+        case "__olang_spawn" {
+            v = I64(__olang_spawn(m.bytesOf(fi, x(0)), m.intArg(fi, x(1)), I32(m.intArg(fi, x(2))), I32(m.intArg(fi, x(3)))
+                                  I32(m.intArg(fi, x(4))), m.bytesOf(fi, x(5))))
+        }
+        case "__olang_mkdtemp" {
+            b := m.bytesOf(fi, x(0))
+            v = I64(__olang_mkdtemp(b))
+            m.putBytes(fi, x(0), b, b.Len())
+        }
+        case "__olang_dyncall" {
+            wb := m.bytesOf(fi, x(2))
+            words := Array<U64>(wb.Len() / 8)
+            for k in range wb.Len() { words[k / 8] = words[k / 8] | (U64(wb[k]) << U64(8 * (k % 8))) }
+            v = I64(__olang_dyncall(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), words, U8(m.intArg(fi, x(3)))))
+            for k in range wb.Len() { wb[k] = U8((words[k / 8] >> U64(8 * (k % 8))) & 0xFF) }
+            m.putBytes(fi, x(2), wb, wb.Len())
+        }
+        case "__olang_dyncall_check" {
+            v = I64(__olang_dyncall_check(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), U8(m.intArg(fi, x(2)))))
+        }
+        case "__olang_on_crash" { }
+        case _ {
+            m.refuse(WhyFfiFind)
+            return false
+        }
+    }
+    if m.halted { return false }
+    # what the call left in errno, as after an extern's (X6)
+    if name != "__olang_err" and name != "__olang_arg_count" and name != "__olang_arg" { m.lastErr = __olang_err() }
+    res := m.T.Result(ty)
+    if hasDst and res != types.VoidT { m.wr(dst, m.width(res), v) }
+    return true
+}
+
+fn (m mut Machine&) intArg(fi I64, x mir.Operand) I64 { return m.intValue(m.scalar(fi, x), m.opType(fi, x)) }
+
+# an array operand's bytes, copied out of the machine
+fn (m mut Machine&) bytesOf(fi I64, x mir.Operand) Array<U8> {
+    xt := m.opType(fi, x)
+    data, n := m.arrayView(m.addr(fi, x, 1), xt)
+    if m.halted { return Array<U8>(0) }
+    bytes := n * m.size(m.elemOf(xt))
+    b := Array<U8>(bytes)
+    for k in range bytes { b[k] = U8(m.rd(Ptr(data.Id, data.Off + k), 1)) }
+    return b
+}
+
+# at most cap of b's bytes written into the array an operand names, as far as it reaches
+fn (m mut Machine&) putBytes(fi I64, x mir.Operand, b Array<U8>&, cap I64) {
+    xt := m.opType(fi, x)
+    data, n := m.arrayView(m.addr(fi, x, 1), xt)
+    if m.halted or m.allocOf(data.Id).ReadOnly { return }
+    room := n * m.size(m.elemOf(xt))
+    k := b.Len()
+    if cap < k { k = cap }
+    if room < k { k = room }
+    for i in range k { m.wr(Ptr(data.Id, data.Off + i), 1, I64(b[i])) }
 }
 
 fn (m mut Machine&) ffiKind(ty types.TypeId) ffi.Kind {
@@ -2843,6 +3043,24 @@ fn (m mut Machine&) Global(module I64, name source.NameId) Stop {
     p := m.allocate(m.size(ty), aValue, m.program)
     m.copy(p, Ptr(m.globals[g].Store, 0), m.size(ty))
     m.Result, m.ResultTy = p, ty
+    return m.Stopped
+}
+
+# a global's initializer run where it has not been (B5a, B3e: the start of a run), its value left in its storage
+fn (m mut Machine&) InitGlobal(module I64, name source.NameId) Stop {
+    m.halted = false
+    m.Stopped = Stop.None
+    m.Steps = 0
+    g := try m.globalOf.Get(gkey(module, name)) catch {
+        m.refuse(WhyNoBody)
+        return m.Stopped
+    }
+    if m.globals[g].State != 2 {
+        base := m.frames.Len()
+        m.startGlobal(g)
+        m.loop(base)
+        m.unwind(base)
+    }
     return m.Stopped
 }
 
