@@ -189,7 +189,8 @@ nullable type it is used against; see §2.1 T2a.
 **L12.** `FLOAT_LIT ::= digit { digit } [ "." digit { digit } ] exponent
 | digit { digit } "." digit { digit } [ exponent ]` — at least one digit is required on *both* sides of
 the `.`; there is no leading-dot (`.5`) or trailing-dot (`5.`) form, and no more than one `.`. A `.` followed by a
-letter or `_` is not part of a number at all - `7.Hash()` is the integer literal `7`, a member access and a call.
+letter or `_` is not part of a number at all - `7.Hash()` is the integer literal `7`, a member access and a call
+(which E13c then refuses: a literal number is no method's receiver).
 
 **L12a.** `exponent ::= ( "e" | "E" ) [ "+" | "-" ] digit { digit }`. An exponent makes the literal a
 float whether or not a `.` appeared, so `1e3` is a float literal and equals `1000.0`. The exponent is
@@ -2663,6 +2664,14 @@ call does; a `try` written before the chain covers its last call only. A `(` beg
 statement (L18), never a `call-on`. Calling a value not of function type is a compile-time error. `x.f(args)` where
 `f` is a field of `x` is such a call too - the function value the field holds is called, as `(x.f)(args)` - since a
 method may not share a field's name (M19), so the spelling has that one meaning.
+
+**E13c.** A method call's receiver may not be a number written as a literal: a numeric literal (L10, L12), alone,
+negated or in parentheses, or an expression built only from numeric literals (E4a) - `7.Hash()`, `2.5.Fixed(1)`,
+`(255).Format(16)` and `(-0.0).Bits()` are compile-time errors. Such a number has no type of its own until it lands
+(T6), and a method call is not a place it lands, so the type the method belongs to would be invisible at the call. The
+number is put in a variable of the type wanted, or converted to it (`n I64 = 255` then `n.Format(16)`, or
+`I64(255).Format(16)`). Text literals, character literals, array literals and comprehensions are receivers like any
+other value (`"a,b".Split(",")`, `I32[3, 1].Sort(...)`): each says what it is.
 
 **E13a.** `Array<T>(n)` and `Array<T>(n, v)` build an array (T8): `n`, of any integer type, is its length,
 and every element is `T`'s zero value or `v`, which must fit `T`. It is a value with no storage of its own,

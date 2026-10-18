@@ -240,6 +240,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   an enum reference's zero is null; a null matches no case pattern.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
+- **A number written as a literal is no method's receiver (E13c, 2026-10-17, the user: "disallow for numbers, allow for
+  array and text").** `7.Hash()`, `2.5.Fixed(1)`, `(255).Format(16)`, `(-0.0).Bits()`, `(1 + 2).Hash()` are errors: such
+  a number has no type until it lands (T6) and a call is no place it lands. Put it in a variable or convert it
+  (`I64(255).Format(16)`). Text, character, array literals and comprehensions keep methods. L12's lexing is unchanged.
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
   method is the operator only in the operator's shape - another shape is an ordinary method. Checked forms are

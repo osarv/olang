@@ -1600,6 +1600,21 @@ type litv struct(Ok Bool, IsFloat Bool, Big Bool, I I64, F F64) {
     Hex Bool = false   # a hex or binary pattern: I its bits, read unsigned where an unsigned type is wanted (L10a)
 }
 
+# E13c: whether x is a number written as a literal - a numeric literal, alone, negated or in parentheses, or arithmetic
+# of such (E4a's literal-only expression), whatever it folds to
+fn numberLitsOnly(x ast.Expr&) Bool {
+    if x == null { return false }
+    return match x {
+        case ast.Expr.Lit(_, kind) => kind == token.Tok.IntLit or kind == token.Tok.FloatLit
+        case ast.Expr.Paren(_, y) => numberLitsOnly(y)
+        case ast.Expr.Unary(_, op, y) => (op == token.Tok.Minus or op == token.Tok.Tilde) and numberLitsOnly(y)
+        case ast.Expr.Binary(_, op, a, b) => (op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star
+            or op == token.Tok.Slash or op == token.Tok.Percent or op == token.Tok.Amp or op == token.Tok.Pipe
+            or op == token.Tok.Caret or op == token.Tok.Shl or op == token.Tok.Shr) and numberLitsOnly(a) and numberLitsOnly(b)
+        case _ => false
+    }
+}
+
 fn noLit() litv { return litv(false, false, false, 0, 0.0) }
 
 fn intLit(v I64) litv { return litv(true, false, false, v, 0.0) }
@@ -3915,6 +3930,9 @@ fn (c mut Checker&) ctorDefault(sp source.Span, k I64, want types.TypeId) typed.
 
 # x.m(args): a method of x's type (M19); an array's Len supplied by the compiler (E23)
 fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp source.Span, args Array<ast.Expr&>&) typed.Expr&c {
+    # E13c: a number written as a literal has no type until it lands, and a method call is no place it lands - said, then
+    # built as written, so what follows sees the call's result and adds no error
+    if numberLitsOnly(x) { c.err(nsp, msgs.MethodOnNumberLiteral(c.tok(n))) }
     rx := c.expr(x, types.UnknownT)
     rt := typeOf(rx)
     if rt == types.UnknownT {

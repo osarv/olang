@@ -476,7 +476,7 @@ enum tokenType tokenizeNumberLiteral(TokenCtx tc) {
     bool isFloat = false;
     consumeDigitRun(tc, isDigit);
     //L12: a "." before a name is not part of the number - it is a member access or a method call on the integer
-    //("7.Hash()"); before anything else it begins the fraction, which must then have a digit
+    //("7.Hash()", which E13c then refuses); before anything else it begins the fraction, which must then have a digit
     char afterDot = peekChar(tc, 1);
     if (peekChar(tc, 0) == '.' && !isLetter(afterDot) && afterDot != '_') {
         feedChar(tc);

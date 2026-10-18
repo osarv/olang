@@ -19644,3 +19644,25 @@ the one prelude test that used a `Pair` (S9f, a List of references walked by eve
 `pair.olang` to show a changed prelude rebuilds the root's instantiations, edits a method added to `List` instead.
 `$` still writes the type's own name, `Pair("k", 0.5)` (E11a: a rendering names a type as its declaration does, not
 by the alias an importer wrote). Goldens recaptured for the shifted lines and the type's new identity.
+
+## A number written as a literal is no method's receiver (E13c, L12, 2026-10-17, the user: "disallow for numbers, allow for array and text")
+
+`7.Hash()` lexed as the integer 7 and a method call since L12 was written that way, and `(255).Format(16)`,
+`(-0.0).Bits()` and `0.5.Fixed(2)` all ran. They read badly - the dot after a number looks like a decimal point - and
+they hide the type the method belongs to: a literal has no type of its own until it lands (T6, T6a), and a receiver is
+not a place it lands, so `7.Hash()` was `I64.Hash` by the default type, which no reader sees at the call. E13c refuses
+a receiver that is a number written as a literal - a numeric literal alone, negated, parenthesized, or arithmetic of
+such (E4a's literal-only expression), decided on the syntax in both compilers (stage 0's `operandOnlyNumericLiterals`
+on the receiver at the postfix method call, the port's `numberLitsOnly` in `methodCall`). **Decided (mine)**: the
+parenthesized and arithmetic forms are refused too - parentheses do not give a literal a type, and refusing `7.Hash()`
+while allowing `(7).Hash()` would leave the same hidden type behind one more pair of characters; a character literal
+(`'a'.IsLetter()`) is not a number and keeps its methods (it has a declared type, `Char`, and reads as a character);
+the error names the method and the two fixes, a variable of the type wanted or a conversion (`I64(7)`); after
+reporting, the call is still built as written, so nothing that follows adds a second error. L12 is unchanged - a `.`
+before a name is still no decimal point, so `2.5.Fixed(1)` is E13c's error, not a second decimal point (the
+`l12method` case is now a must-fail case for E13c, and `e13cfloat` keeps that lexing pinned). Migrated by the
+compiler's own errors: std's tests (`F64(0.1).ShortestDecimal()`, `I64(255).Format(16)`, `F64(0.5).Fixed(0)`), `std/ffi`,
+`std/prelude/f8.olang`'s negative zero, the doc comments of `PadStart`, `Format` and `Fixed`, `checks/cases/
+t29dradixcall`, and the fuzz generator, whose `(e).Format(b)`, `(e).Fixed(n)` and `(e).Bits()` are now conversions of
+`e` to its own type (a generated `e` may be a literal). `compiler/testdata/lex/numbers.olang` keeps its `1.5.Hash()`:
+it is scanner input, never checked.
