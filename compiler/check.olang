@@ -116,6 +116,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     errPresets Map<Pair<I64, I64>, types.ListId>
     found Map<Pair<I64, I64>, types.ListId>
     Attempts I64 = 0
+    boundsMet Map<types.TypeId, Bool>         # a type instance's constraints, checked where it was first asked for (G19)
 }
 
 # an element read through At where a place is wanted (E31, E31b): its body and site, the collection's place, and the
@@ -174,6 +175,7 @@ fn (c mut Checker&) reset() {
     c.errReads = List<Pair<I64, I64>>()
     c.unsettled = Map<I64, Bool>()
     c.found = Map<Pair<I64, I64>, types.ListId>()
+    c.boundsMet = Map<types.TypeId, Bool>()
 }
 
 fn (c mut Checker&) attempt() {
@@ -702,6 +704,12 @@ fn (c mut Checker&) checkFn(id I64, inst I64) {
     c.P.Asking = generic.Origin(c.P.L.Mods[mi].File, fd.Sp, inst)
     fr := c.push(id, mi, c.P.T.Result(sig), c.P.T.Errors(sig))
     fr.Ctx = c.P.FnContext(f, c.P.InstanceArgs(inst))
+    # G19: the type instances its signature writes, checked where they are written
+    if fd.Recv != null { c.writtenMet(fd.Recv.Ty) }
+    for prm in fd.S.Params { c.writtenMet(prm.Ty) }
+    if fd.S.Results != null {
+        for r in fd.S.Results { c.writtenMet(r) }
+    }
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, fd.Sp)
     ps := c.P.T.Items(c.P.T.Params(sig))
     k I64 = 0
@@ -1405,8 +1413,9 @@ fn (c mut Checker&) isEnum(t types.TypeId) Bool {
 # a written type read in the current body's context
 fn (c mut Checker&) resolve(t ast.TypeRef&) types.TypeId {
     if t == null { return types.UnknownT }
-    fr := c.fr()
-    return c.P.Resolve(fr.Ctx, t)
+    r := c.P.Resolve(c.fr().Ctx, t)
+    c.writtenMet(t)
+    return r
 }
 
 # what a written type says about where its reference lives (O3, O25a)
@@ -3269,6 +3278,112 @@ fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr&c {
     return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
 }
 
+# ---- constraints (G19) ----
+
+# a binding of owner's variables checked against their constraints where they are bound, reported at sp: whether
+# every one is met
+fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
+    u := c.P.FirstUnmet(owner, args)
+    if u.Var < 0 { return true }
+    x := c.P.T.Items(args)[u.Var]
+    tn := c.text(c.P.T.DeclName(c.P.T.DeclOf(u.Trait)))
+    v := c.text(c.P.VarAt(owner, u.Var).Name)
+    if u.Sealed {
+        c.err(sp, msgs.ConstraintSealed(c.ty(x), tn, v, tn, c.text(u.Method)))
+        return false
+    }
+    if not u.Named {
+        c.err(sp, msgs.ConstraintUnmet(c.ty(x), tn, v))
+        return false
+    }
+    name := c.text(u.Method)
+    rec := c.err(sp, msgs.ConstraintUnmetHash(c.ty(x), tn, v) if name == "Hash" else msgs.ConstraintUnmetMethod(c.ty(x), tn, v, name))
+    # M6b: a tn's method is met by its own name, so a private spelling of it meets nothing; one of its name with
+    # another signature is said too
+    priv := lowerFirst(name)
+    pm := c.P.MethodOf(x, c.P.L.Names.Intern(priv)) if priv != name else -1
+    if pm >= 0 {
+        c.noteAt(rec, pm, msgs.NotePrivateSpelling(priv, name))
+    } else {
+        sm := c.P.MethodOf(x, u.Method)
+        if sm >= 0 { c.noteAt(rec, sm, msgs.NoteOtherSignature(name)) }
+    }
+    return false
+}
+
+fn (c mut Checker&) noteAt(rec I64, f I64, m msgs.Msg) {
+    fd := c.P.FnDecl(f)
+    mi := c.P.FnModule(f)
+    text := c.P.L.Mods[mi].Src.Text
+    name := c.text(fd.Name)
+    from := I64(fd.Recv.Sp.End) if fd.Recv != null else I64(fd.Sp.Start)
+    at := try text[from:I64(fd.Sp.End)].Find(name) catch default -1
+    s := I64(fd.Sp.Start) if at < 0 else from + at
+    c.P.L.Diags.Note(rec, diag.Where.Span(c.P.L.Mods[mi].File, s, s + name.Len()), m)
+}
+
+# every type instance a type holds checked against its declaration's constraints, once each - where it is first asked
+# for, reported at sp: whether all are met
+fn (c mut Checker&) instancesMet(t types.TypeId, sp source.Span) Bool { return c.instancesIn(t, sp, 0) }
+
+fn (c mut Checker&) instancesIn(t types.TypeId, sp source.Span, depth I64) Bool {
+    if depth > 32 or t == types.UnknownT { return true }
+    match c.P.T.KindOf(t) {
+        case types.Kind.Named {
+            args := c.P.T.Args(t)
+            if args == types.ListId(0) { return true }
+            if c.boundsMet.Has(t) { return try c.boundsMet.Get(t) catch default true }
+            ok := c.listMet(args, sp, depth)
+            if ok and c.P.T.Closed(t) { ok = c.bound(generic.DeclOwner(c.P.T.DeclOf(t)), args, sp) }
+            c.boundsMet.Put(t, ok)
+            return ok
+        }
+        case types.Kind.Ref { return c.instancesIn(c.P.T.Referent(t), sp, depth + 1) }
+        case types.Kind.Array { return c.instancesIn(c.P.T.Elem(t), sp, depth + 1) }
+        case types.Kind.Func {
+            if not c.listMet(c.P.T.Params(t), sp, depth) { return false }
+            return c.instancesIn(c.P.T.Result(t), sp, depth + 1)
+        }
+        case types.Kind.Tuple, types.Kind.Record { return c.listMet(c.P.T.Parts(t), sp, depth) }
+        nomatch { return true }
+    }
+}
+
+fn (c mut Checker&) listMet(l types.ListId, sp source.Span, depth I64) Bool {
+    for x in c.P.T.Items(l) {
+        if not c.instancesIn(x, sp, depth + 1) { return false }
+    }
+    return true
+}
+
+# a written type's instances checked where it is written: each at its first argument (G19)
+fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
+    if tr == null { return true }
+    match tr {
+        case ast.TypeRef.Named(_, _, args) {
+            if args.Len() == 0 { return true }
+            for a in args {
+                if not c.writtenMet(a) { return false }
+            }
+            return c.instancesMet(c.P.Resolve(c.fr().Ctx, tr), args[0].Span())
+        }
+        case ast.TypeRef.Ref(_, of, _) { return c.writtenMet(of) }
+        case ast.TypeRef.Perm(_, of, _, _) { return c.writtenMet(of) }
+        case ast.TypeRef.Func(_, s) {
+            for prm in s.Params {
+                if not c.writtenMet(prm.Ty) { return false }
+            }
+            if s.Results != null {
+                for r in s.Results {
+                    if not c.writtenMet(r) { return false }
+                }
+            }
+            return true
+        }
+        nomatch { return true }
+    }
+}
+
 # ---- calls (E13, E14, D8a, G9, M19) ----
 
 fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr&c {
@@ -3383,6 +3498,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
             if ref.Kind == names.What.Type and ref.Index >= 0 {
                 t := c.P.Apply(c.fr().Ctx, c.P.DeclFor(ref.Module, ref.Index), targs)
                 if t == types.UnknownT { return c.unknown(sp) }
+                if targs.Len() > 0 and not c.instancesMet(t, targs[0].Span()) { return c.unknown(sp) }
                 return c.construct(sp, msp, t, args)
             }
         }
@@ -3473,7 +3589,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
         }
     }
     t := c.P.Instance(d, c.P.T.List(b.Vals))
-    if not c.P.Body(t) { return c.unknown(sp) }
+    if not c.instancesMet(t, nsp) or not c.P.Body(t) { return c.unknown(sp) }
     isig := c.P.CtorSig(t)
     if isig == types.UnknownT { return c.unknown(sp) }
     id := c.ctorBody(t)
@@ -3485,7 +3601,7 @@ fn (c mut Checker&) inferredCtor(sp source.Span, nsp source.Span, d types.DeclId
 }
 
 fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, args Array<ast.Expr&>&) typed.Expr&c {
-    if not c.P.Body(t) {
+    if not c.instancesMet(t, nsp) or not c.P.Body(t) {
         for a in args { c.expr(a, types.UnknownT) }
         return c.unknown(sp)
     }
@@ -3634,6 +3750,9 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
             return c.unknown(sp)
         }
     }
+    # G19: each binding against its constraint, and every type instance the instance's signature holds against its own,
+    # where the call binds them - the instance's body is not checked where one is not met
+    if not c.bound(owner, c.P.T.List(b.Vals), nsp) { return c.unknown(sp) }
     # G17: a chain of instances one function asks of itself (a constant counting down, G26) is bounded
     made := try c.instsOf.Get(f) catch default 0
     if made > 1000 {
@@ -3641,6 +3760,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         return c.unknown(sp)
     }
     inst := c.P.FnInstance(f, c.P.T.List(b.Vals))
+    if not c.instancesMet(c.P.InstanceSig(inst), nsp) { return c.unknown(sp) }
     if not c.fnBodies.Has(inst) { c.instsOf.Put(f, made + 1) }
     id := c.fnBody(inst)
     x := c.callBody(sp, nsp, c.P.InstanceSig(inst), typed.Callee.Body(typed.BodyId(I32(id))), f, recv, args, vals.ToArray())

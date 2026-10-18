@@ -1919,29 +1919,52 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&) 
 # whether a type satisfies a trait instance: for each of the trait's methods, a method of the type's own (M19) of that
 # name whose signature, its receiver bound to the type, matches the trait's with the trait's variables bound -
 # parameter by parameter up to reference shape (a constrained call is a direct call, where E12 borrows), permission
-# agreeing (T31), the result and the errors in order (T22)
-fn (p mut Program&) Satisfies(t types.TypeId, tr types.TypeId) Bool {
-    if p.T.KindOf(tr) != types.Kind.Named { return false }
+# agreeing (T31), the result and the errors in order (T22); a method the compiler supplies counts as declared (E10b's
+# Hash, E23's Len)
+fn (p mut Program&) Satisfies(t types.TypeId, tr types.TypeId) Bool { return p.Missing(t, tr).Var < 0 }
+
+# why a binding fails a constraint (G19): Var the variable's index (-1 for none failing), Trait the trait instance it
+# fails, Method the first of its methods not met where Named, and Sealed where that method is private and so cannot be
+# supplied by the bound type (T31)
+type Unmet struct(Var I64, Trait types.TypeId, Method source.NameId, Named Bool, Sealed Bool) {
+    Var
+    Trait
+    Method
+    Named
+    Sealed
+}
+
+fn met() Unmet { return Unmet(-1, types.UnknownT, source.NameId(0), false, false) }
+
+# the first of a trait's methods a type does not meet (Var 0), or Var -1 where it satisfies the trait
+fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId) Unmet {
+    if p.T.KindOf(tr) != types.Kind.Named { return Unmet(0, tr, source.NameId(0), false, false) }
     d := p.T.DeclOf(tr)
     td := p.typeDecl(d)
-    if td == null or td.Body == null { return false }
+    if td == null or td.Body == null { return Unmet(0, tr, source.NameId(0), false, false) }
     match td.Body {
         case ast.TypeBody.Trait(methods) {
             for m in methods {
-                if not p.meets(t, d, p.T.Args(tr), m) { return false }
+                if p.meets(t, d, p.T.Args(tr), m) { continue }
+                priv := not load.Public(p.text(m.Name))
+                x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+                foreign := p.T.KindOf(x) != types.Kind.Named or p.DeclModule(p.T.DeclOf(x)) != p.DeclModule(d)
+                return Unmet(0, tr, m.Name, true, priv and foreign)
             }
-            return true
+            return met()
         }
-        nomatch { return false }
+        nomatch { return Unmet(0, tr, source.NameId(0), false, false) }
     }
 }
 
 fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m ast.Func&) Bool {
     f := p.MethodOf(t, m.Name)
-    if f < 0 { return false }
-    if not load.Public(p.text(m.Name)) and not p.sealedBy(t, d, f) { return false }
     c := p.declContext(d)
     want := p.Subst(p.sigType(c, m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), args)
+    if f < 0 { return p.suppliedMeets(t, p.text(m.Name), want) }
+    if not load.Public(p.text(m.Name)) and not p.sealedBy(t, d, f) { return false }
+    # T29e: an inherited Hash beside an Eq the type declares itself cannot agree with it (E10b)
+    if p.text(m.Name) == "Hash" and not p.ownMethod(t, m.Name) and p.declaresEq(t) { return false }
     have := p.MethodSig(f, t)
     if have == types.UnknownT { return false }
     hs := p.T.Items(p.T.Params(have))
@@ -1951,7 +1974,107 @@ fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m a
     for i in range ws.Len() {
         if not p.sameUpToShape(hs[i + 1], ws[i]) { return false }
     }
-    return p.T.Same(p.T.Result(have), p.T.Result(want)) and p.T.Errors(have) == p.T.Errors(want)
+    # D8e: a noreturn method meets one with no result
+    hr := p.T.Result(have)
+    wr := p.T.Result(want)
+    return (p.T.Same(hr, wr) or (hr == types.NoreturnT and wr == types.VoidT)) and p.T.Errors(have) == p.T.Errors(want)
+}
+
+# a method the compiler supplies meeting a trait's (G19): Hash where E10b supplies one, an array's Len (E23)
+fn (p mut Program&) suppliedMeets(t types.TypeId, name String&, want types.TypeId) Bool {
+    i64 := p.T.Prim("I64")
+    if p.T.Items(p.T.Params(want)).Len() != 0 or p.T.Errors(want) != types.ListId(0) { return false }
+    if name == "Bits" {
+        # E33: a float's bits, as the unsigned type of its width
+        x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+        for k in range 16 {
+            if p.T.IsFloat(x) {
+                b := p.T.Bits(x)
+                return p.T.Result(want) == p.T.Prim("U64" if b == 64 else "U32" if b == 32 else "U16")
+            }
+            if not p.Extends(x) { return false }
+            x = p.T.Base(x)
+        }
+        return false
+    }
+    if p.T.Result(want) != i64 { return false }
+    if name == "Hash" { return p.HasHash(t) }
+    if name == "Len" {
+        x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+        for k in range 16 {
+            if p.T.KindOf(x) == types.Kind.Array { return true }
+            if not p.Extends(x) { return false }
+            x = p.T.Base(x)
+        }
+    }
+    return false
+}
+
+# whether a type declares a method of this name itself, not through what it extends (T29f)
+fn (p mut Program&) ownMethod(t types.TypeId, name source.NameId) Bool {
+    p.allFns()
+    x := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    key := p.typeKey(x)
+    return key >= 0 and p.methods.Has(Pair(key, I64(name)))
+}
+
+fn (p mut Program&) declaresEq(t types.TypeId) Bool {
+    return p.ownMethod(t, p.L.Names.Intern("Eq")) or p.ownMethod(t, p.L.Names.Intern("eq"))
+}
+
+# whether a value of the type has a hash (E10b): a Hash it declares, of the shape "Hash() I64" (an inherited one not
+# beside an Eq of its own); else, where it declares no Hash, hash, Eq or eq, one the compiler supplies for a struct, enum
+# or array value every part of which has one; a reference has one where it names an array whose elements have one, or
+# a type declaring Eq and Hash
+fn (p mut Program&) HasHash(t types.TypeId) Bool { return p.hasHash(t, 0) }
+
+fn (p mut Program&) hasHash(t types.TypeId, depth I64) Bool {
+    if depth > 16 { return true }
+    k := p.T.KindOf(t)
+    if k == types.Kind.Unknown or k == types.Kind.Var or k == types.Kind.ConstExpr { return true }
+    hn := p.L.Names.Intern("Hash")
+    if k == types.Kind.Ref {
+        r := p.T.Referent(t)
+        if p.T.KindOf(r) == types.Kind.Array { return p.hasHash(p.T.Elem(r), depth + 1) }
+        if p.T.KindOf(r) == types.Kind.Named and p.Body(r) and p.T.DeclKindOf(p.T.DeclOf(r)) == types.DeclKind.Over and
+           p.T.KindOf(p.T.Base(r)) == types.Kind.Array and not p.declaresEq(r) and p.MethodOf(r, hn) < 0 {
+            return p.hasHash(p.T.Elem(p.T.Base(r)), depth + 1)
+        }
+        return p.declaresEq(r) and p.MethodOf(r, hn) >= 0 and p.hashShaped(r, p.MethodOf(r, hn))
+    }
+    f := p.MethodOf(t, hn)
+    if f >= 0 {
+        if not p.hashShaped(t, f) { return false }
+        return p.ownMethod(t, hn) or not p.declaresEq(t)
+    }
+    if p.declaresEq(t) or p.ownMethod(t, p.L.Names.Intern("hash")) { return false }
+    match k {
+        case types.Kind.Array { return p.hasHash(p.T.Elem(t), depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record { return p.hashesAll(p.T.Parts(t), depth) }
+        case types.Kind.AnonEnum { return p.hashesAll(p.T.ShapeCases(t), depth) }
+        case types.Kind.Named {
+            if not p.Body(t) { return true }
+            dk := p.T.DeclKindOf(p.T.DeclOf(t))
+            if dk == types.DeclKind.Struct { return p.hashesAll(p.T.Fields(t), depth) }
+            if dk == types.DeclKind.Enum { return p.hashesAll(p.T.Cases(t), depth) }
+            if dk == types.DeclKind.Over and p.T.KindOf(p.T.Base(t)) == types.Kind.Array { return p.hasHash(p.T.Base(t), depth + 1) }
+            return false
+        }
+        nomatch { return false }
+    }
+}
+
+fn (p mut Program&) hashesAll(l types.ListId, depth I64) Bool {
+    for x in p.T.Items(l) {
+        if x != types.TypeId(0) and not p.hasHash(x, depth + 1) { return false }
+    }
+    return true
+}
+
+fn (p mut Program&) hashShaped(t types.TypeId, f I64) Bool {
+    s := p.MethodSig(f, t)
+    return s != types.UnknownT and p.T.Items(p.T.Params(s)).Len() == 1 and p.T.Result(s) == p.T.Prim("I64") and
+           p.T.Errors(s) == types.ListId(0)
 }
 
 # a private method seals its trait (T31): it is met by a method the trait's own module declares, on a type that module
@@ -1978,16 +2101,22 @@ fn (p mut Program&) sameUpToShape(a types.TypeId, c types.TypeId) Bool {
 }
 
 # a variable's binding checked against its constraint, where it is bound (G19): whether it is met
-fn (p mut Program&) BoundMet(owner I64, args types.ListId) Bool {
+fn (p mut Program&) BoundMet(owner I64, args types.ListId) Bool { return p.FirstUnmet(owner, args).Var < 0 }
+
+# the first variable of owner whose binding in args fails its constraint, with every variable in the constraint
+# substituted (G19); a binding or a constraint still holding a variable is a pattern, checked where it is applied
+fn (p mut Program&) FirstUnmet(owner I64, args types.ListId) Unmet {
     xs := p.T.Items(args)
     for i in range xs.Len() {
         if i >= p.VarCount(owner) { break }
         row := p.VarAt(owner, i)
-        if row.Bound == types.UnknownT { continue }
+        if row.Bound == types.UnknownT or not p.T.Closed(xs[i]) { continue }
         bound := p.Subst(row.Bound, owner, args)
-        if not p.Satisfies(xs[i], bound) { return false }
+        if not p.T.Closed(bound) { continue }
+        u := p.Missing(xs[i], bound)
+        if u.Var >= 0 { return Unmet(i, u.Trait, u.Method, u.Named, u.Sealed) }
     }
-    return true
+    return met()
 }
 
 # ---- canonical texts ----
