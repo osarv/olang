@@ -1,0 +1,149 @@
+# evaldiff - M8's acceptance, measured: each program run by stage 0 and by the self-hosted pipeline's evaluator (load,
+# names, check, lower with the stand-in placement, eval - compiler/tools/evaldump.olang), and the two runs compared.
+#
+#     evaldiff [-v] [-i] [FILE...]
+#
+# A file of tests (the corpus, std's tests - the default list) is run as "olang test FILE" runs it, and compared test
+# by test: a row per file, "same N" where every test ends as stage 0's does, else what each run said - "stage0 P ok F
+# fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
+# run, its output and status compared - with -i against stage 0's interpret too. Then the totals. The compiler under
+# test is $OLANG (build/out), the evaluator build/compiler_tools_evaldump (or $EVALDUMP).
+
+import "std/os"
+import "toolkit"
+
+fn main() {
+    args := os.Args()
+    olang := toolkit.Env("OLANG", "build/out")
+    evaldump := toolkit.Env("EVALDUMP", "build/compiler_tools_evaldump")
+    verbose := false
+    interpret := false
+    files List<String&>
+    for k in range 1, args.Len() {
+        if args[k] == "-v" {
+            verbose = true
+        } else if args[k] == "-i" {
+            interpret = true
+        } else {
+            files.Push(args[k])
+        }
+    }
+    if files.Len() == 0 {
+        for f in toolkit.Matching("tests", ".olang") { files.Push($f) }
+        for f in toolkit.Matching("std", ".olang") { files.Push($f) }
+        for f in toolkit.Matching("std/prelude/tests", ".olang") { files.Push($f) }
+    }
+    same, differ, broken I64 = 0, 0, 0
+    tests, testsSame I64 = 0, 0
+    for f in files {
+        r := compare(olang, evaldump, f, verbose, interpret)
+        toolkit.Say(r.Row)
+        tests += r.Tests
+        testsSame += r.Same
+        if r.Broken {
+            broken++
+        } else if r.Equal {
+            same++
+        } else {
+            differ++
+        }
+    }
+    toolkit.Say(("== total: files " $files.Len() " same " $same " differ " $differ " broken " $broken "; tests " $tests
+                 " ending as stage 0's " $testsSame "\n"))
+}
+
+type result struct() {
+    Row String& = ""
+    Equal Bool = false
+    Broken Bool = false
+    Tests I64 = 0
+    Same I64 = 0
+}
+
+fn compare(olang String&, evaldump String&, f String&, v Bool, interpret Bool) result {
+    r := result()
+    program := f.StartsWith("checks/")
+    s0 := toolkit.Run(String&["timeout", "600", $olang, $f]) if program else toolkit.Run(String&["timeout", "600", $olang, "test", $f])
+    p := toolkit.Run(String&["timeout", "600", $evaldump, $f]) if program else toolkit.Run(String&["timeout", "600", $evaldump, "-t", $f])
+    unlowered := count(p.Stderr, "unlowered ")
+    if program {
+        r.Equal = p.Stdout == s0.Stdout and p.Status == s0.Status
+        row := $f ": " $("same" if r.Equal else "differs (status " $s0.Status " / " $p.Status ")")
+        if interpret {
+            i0 := toolkit.Run(String&["timeout", "600", $olang, "interpret", $f])
+            row = $row "; stage 0 interpret " $("agrees" if i0.Stdout == p.Stdout and i0.Status == p.Status else "differs (status " $i0.Status ")")
+        }
+        r.Row = $row $note(unlowered) "\n"
+        return r
+    }
+    a := outcomes(toolkit.Rows(s0.Stdout))
+    b := outcomes(toolkit.Rows(p.Stdout))
+    if b.Len() == 0 {
+        r.Broken = true
+        r.Row = $f ": no test ran (status " $p.Status ") - " $firstLine(p.Stderr) "\n"
+        return r
+    }
+    r.Tests = a.Len()
+    rows := StringBuilder()
+    diffs I64 = 0
+    for name in a.Keys() {
+        x := try a.Get(name) catch default ""
+        y := try b.Get(name) catch default "missing"
+        if x == y {
+            r.Same++
+        } else {
+            diffs++
+            if v { rows.Push("    " $name ": stage0 " $x ", port " $y "\n") }
+        }
+    }
+    r.Equal = diffs == 0 and p.Status == s0.Status
+    if r.Equal {
+        r.Row = $f ": same " $r.Tests $note(unlowered) "\n"
+    } else {
+        s0ok, s0f := counts(a)
+        pok, pf := counts(b)
+        r.Row = ($f ": stage0 " $s0ok " ok " $s0f " fail; port " $pok " ok " $pf " fail (status " $p.Status "); " $diffs
+                 " differ" $note(unlowered) "\n" $rows.ToString())
+    }
+    return r
+}
+
+fn count(t String&, prefix String&) I64 {
+    n I64 = 0
+    for row in toolkit.Rows(t) {
+        if row.StartsWith(prefix) { n++ }
+    }
+    return n
+}
+
+fn note(n I64) String { return "" if n == 0 else " (" $n " unlowered)" }
+
+fn firstLine(t String&) String {
+    for row in toolkit.Rows(t) {
+        if row.Len() > 0 { return $row }
+    }
+    return ""
+}
+
+# each test's ending, by name: "ok" or "FAIL"
+fn outcomes(rows List<String&>&) Map<String&, String&> {
+    m Map<String&, String&>
+    for row in rows {
+        if row.StartsWith("ok - ") {
+            m.Put($row[5:], "ok")
+        } else if row.StartsWith("FAIL - ") {
+            n := row[7:]
+            k := try n.Find(": ") catch default -1
+            m.Put($n[:k] if k >= 0 else $n, "FAIL")
+        }
+    }
+    return m
+}
+
+fn counts(m Map<String&, String&>&) (I64, I64) {
+    ok, bad I64 = 0, 0
+    for x in m.Values() {
+        if x == "ok" { ok++ } else { bad++ }
+    }
+    return ok, bad
+}

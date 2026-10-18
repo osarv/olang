@@ -1,0 +1,143 @@
+# evaldump - a program checked by the self-hosted checker, lowered (compiler/lower.olang) and run by the self-hosted
+# evaluator (compiler/eval.olang, compiler/interp.olang) as interpret runs it: M8's tool, as emitdump is M9's.
+#
+#     evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]
+#
+# With -t the root module's test blocks are run as "olang test FILE" runs them - each global set first, each test then
+# "ok - NAME" or the stop that ended it and "FAIL - NAME", then "N passed, M failed", the status 1 where any failed.
+# Without, the program's main runs with ARGS, its globals set first (B5a): the status 0 for its return, 1 for an error
+# leaving it ("unhandled error"), what it asked for with os.Exit, 134 for a failed check or undefined behaviour - the
+# stop's "FILE:LINE: text" on standard error. On standard error too, the check's errors when there are any, and
+# "unlowered WHAT" for each function a run reached that did not lower.
+
+import "std/os"
+import "std/io"
+import "../source"
+import "../diag"
+import "../cond"
+import "../fetch"
+import "../load"
+import resolver "../names"
+import "../generic"
+import typecheck "../check"
+import "../mir"
+import "../typed"
+import "../eval"
+import "../interp"
+import "../target"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PrintErrln("usage: evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]") catch io.IoError { }
+        os.Exit(2)
+    }
+    os.RunOnStack(1 << 30, fn() { os.Exit(run(args)) })
+}
+
+fn run(args Array<String&>&) I32 {
+    std := try os.Env("OLANG_STD") catch default "std"
+    defines List<String&>
+    testBuild := false
+    k I64 = 1
+    for k < args.Len() and args[k].StartsWith("-") {
+        if args[k] == "-t" {
+            testBuild = true
+        } else if args[k] == "-D" and k + 1 < args.Len() {
+            k++
+            defines.Push(args[k])
+        }
+        k++
+    }
+    if k >= args.Len() { return 2 }
+    path := args[k]
+    d := diag.Diagnostics(false)
+    consts := cond.Consts()
+    # B12: for this machine, as interpret is (the target constants of what clang would build, without clang if none)
+    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+        try io.PrintErr(d.Render()) catch io.IoError { }
+        return 1
+    }
+    consts.Builtins(tg.Os, tg.Arch, tg.Cpu, tg.VectorBits, 1 if tg.Fma else 0, false, false, testBuild)
+    for f in defines { try consts.Define(f, d) catch { } }
+    f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
+    l := load.Loader(std, consts, f, source.Names(), d)
+    l.Load(path)
+    r := resolver.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := typecheck.Checker(p, testBuild)
+    c.CheckProgram()
+    if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
+    x := interp.Exec(p, c.Bodies, eval.Mode.Run)
+    tests, entry := x.Entries()
+    status I32 = 0
+    if testBuild {
+        status = runTests(x, tests, d)
+    } else if entry < 0 {
+        try io.PrintErrln("evaldump: " $path " has no main") catch io.IoError { }
+        status = 1
+    } else {
+        status = runMain(x, entry, d)
+    }
+    for key in x.Unlowered { try io.PrintErrln("unlowered " $key) catch io.IoError { } }
+    return status
+}
+
+# each global set, in the order check made their initializers - each after the ones it reads (B5a); one that stops
+# leaves its global unset, read later as the stop again
+fn initGlobals(x mut interp.Exec&, d mut diag.Diagnostics&) eval.Stop {
+    first := eval.Stop.None
+    for i in x.Globals {
+        match x.Bodies[i].Of {
+            case typed.BodyOf.Global(m, n) {
+                s := x.M.InitGlobal(m, n)
+                if s != eval.Stop.None and first == eval.Stop.None { first = s }
+            }
+            case _ { }
+        }
+    }
+    return first
+}
+
+fn runTests(x mut interp.Exec&, tests List<I64>&, d mut diag.Diagnostics&) I32 {
+    for t in tests { x.Need(mir.FnKey.Body(typed.BodyId(I32(t)))) }
+    initGlobals(x, d)
+    pass, fail I64 = 0, 0
+    none := Array<I64>(0)
+    for t in tests {
+        name := x.TestName(t)
+        s := x.M.Eval(mir.FnKey.Body(typed.BodyId(I32(t))), none)
+        if s == eval.Stop.None {
+            pass++
+            say("ok - " $name "\n")
+        } else {
+            fail++
+            text := interp.StopText(s, d)
+            if text != "" { say($text "\n") }
+            say("FAIL - " $name "\n")
+        }
+    }
+    say($pass " passed, " $fail " failed\n")
+    return 1 if fail > 0 else 0
+}
+
+fn runMain(x mut interp.Exec&, entry I64, d mut diag.Diagnostics&) I32 {
+    k := mir.FnKey.Body(typed.BodyId(I32(entry)))
+    x.Need(k)
+    s := initGlobals(x, d)
+    if s == eval.Stop.None { s = x.M.Eval(k, Array<I64>(0)) }
+    match s {
+        case eval.Stop.None { return 0 }
+        case eval.Stop.Raised(_) {
+            try io.PrintErrln("unhandled error") catch io.IoError { }
+            return 1
+        }
+        case _ {
+            try io.PrintErrln(interp.StopText(s, d)) catch io.IoError { }
+            return 134
+        }
+    }
+}
+
+fn say(t String&) { try io.Print(t) catch io.IoError { } }

@@ -1,0 +1,216 @@
+# interp - the checked program as the evaluator runs it (compiler/DESIGN.md 1.8, the M8 row): an eval.Machine given
+# the MIR functions lowering makes, each lowered once a request can reach it, its globals and destructors defined.
+# What serves the decisions made while compiling (K2, S18c: decide.olang) and interpret (B3e) alike.
+#
+# A request's code is lowered before the request runs: from the function asked for, every function its MIR can call -
+# by name, as a task, as a function value it makes (a closure's code) - and every destructor it registers, to a fixed
+# point. A body lowering leaves unfinished (a check error, a lowering gap) is not defined: a call of it stops the
+# evaluation (eval's "a function whose body is not available"), as emit makes it a stub failing when called. Every
+# global the program has is defined at the start, its initializer lowered with what that reaches, so a global is
+# initialized where it is first read (B5a's order falls out: each after the globals it reads).
+
+import "source"
+import "ast"
+import "diag"
+import "types"
+import "generic"
+import "typed"
+import "mir"
+import "lower"
+import "eval"
+
+type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval.Mode) {
+    P
+    Bodies
+    When
+    Lw := lower.Lowerer(P, Bodies)
+    M := eval.NewMachine(P.T, When)
+    Unlowered List<mir.FnKey>       # the functions a request reached that did not lower, each once
+    defined Map<mir.FnKey, Bool>
+    dtorOf Map<types.TypeId, I64>
+    externs Map<I64, Bool>
+    Globals List<I64>               # the global initializers' bodies, in the order check made them
+    started Bool = false
+}
+
+# the machine's program defined: every global, with its initializer, and the bodies by what they are
+fn (x mut Exec&) start() {
+    if x.started { return }
+    x.started = true
+    for i in range x.Bodies.Len() {
+        b := x.Bodies[i]
+        match b.Of {
+            case typed.BodyOf.Dtor(t) { x.dtorOf.Put(t, i) }
+            case typed.BodyOf.Global(m, n) {
+                if b.Root == null { continue }
+                ty := globalType(b, m, n)
+                if ty == types.UnknownT { continue }
+                k := mir.FnKey.Body(typed.BodyId(I32(i)))
+                x.M.DefineGlobal(m, n, ty, writtenMut(x.P.GlobalDecl(m, n)), k)
+                x.Globals.Push(i)
+            }
+            case _ { }
+        }
+    }
+    for i in x.Globals { x.Need(mir.FnKey.Body(typed.BodyId(I32(i)))) }
+}
+
+# a global's type, as its initializer's store into it says (check writes one Assign to the global)
+fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
+    for s in b.Root.Stmts {
+        match s {
+            case typed.Stmt.Assign(_, typed.Place.Global(_, ty, gm, gn), _) {
+                if gm == m and gn == n { return ty }
+            }
+            case _ { }
+        }
+    }
+    return types.UnknownT
+}
+
+fn writtenMut(v ast.VarDecl&) Bool {
+    if v == null or v.Ty == null { return false }
+    return match v.Ty {
+        case ast.TypeRef.Perm(_, _, w, _) => w
+        case _ => false
+    }
+}
+
+# k and everything its code can reach lowered and defined in the machine
+fn (x mut Exec&) Need(k mir.FnKey) {
+    x.start()
+    work List<mir.FnKey>
+    work.Push(k)
+    for work.Len() > 0 {
+        key := try work.Pop() catch { break }
+        if x.defined.Has(key) { continue }
+        x.defined.Put(key, true)
+        f := x.Lw.LowerKey(key)
+        if x.Lw.Gapped {
+            x.Unlowered.Push(key)
+            continue
+        }
+        x.reach(f, work)
+        x.M.Define(f)
+    }
+}
+
+# what f's code can reach: its calls' and tasks' callees, the code of the function values it makes, the destructors it
+# registers - each pushed onto work; its externs defined by name
+fn (x mut Exec&) reach(f mir.Fn&, work mut List<mir.FnKey>&) {
+    for c in f.Calls { x.callee(c.Target, work) }
+    for t in f.Tasks { x.callee(t.Target, work) }
+    for bb in f.Blocks {
+        for s in bb.Stmts {
+            match s {
+                case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _)) { work.Push(code) }
+                case mir.Stmt.RegisterDtor(_, _, ty, _) {
+                    d := try x.dtorOf.Get(ty) catch default -1
+                    if d >= 0 {
+                        dk := mir.FnKey.Body(typed.BodyId(I32(d)))
+                        x.M.DefineDestructor(ty, dk)
+                        work.Push(dk)
+                    }
+                }
+                case _ { }
+            }
+        }
+    }
+}
+
+fn (x mut Exec&) callee(c mir.Callee, work mut List<mir.FnKey>&) {
+    match c {
+        case mir.Callee.Fn(key, _) { work.Push(key) }
+        case mir.Callee.Extern(e, _) {
+            if not x.externs.Has(e) {
+                x.externs.Put(e, true)
+                x.M.DefineExtern(e, x.P.T.Names.Text(x.P.FnDecl(e).Name))
+            }
+        }
+        case mir.Callee.Value(_) { }
+    }
+}
+
+# ---- what a program has ----
+
+# the root module's test bodies, in order, and its main's body (-1 for none)
+fn (x mut Exec&) Entries() (List<I64>, I64) {
+    tests List<I64>
+    main I64 = -1
+    p := x.P
+    for i in range x.Bodies.Len() {
+        match x.Bodies[i].Of {
+            case typed.BodyOf.Test(_) {
+                if x.Bodies[i].Root != null { tests.Push(i) }
+            }
+            case typed.BodyOf.Fn(inst) {
+                f := p.InstanceFn(inst)
+                if p.FnModule(f) == p.L.Root and p.T.Names.Text(p.FnDecl(f).Name) == "main" { main = i }
+            }
+            case _ { }
+        }
+    }
+    return tests, main
+}
+
+# a test's name, as its declaration writes it (between the quotes)
+fn (x mut Exec&) TestName(id I64) String {
+    m := x.P.L.Mods[x.P.L.Root]
+    name := findTest(m.Decls, x.Bodies[id].Sp)
+    if name.End == I32(0) { return "test" }
+    s := m.Src.TextOf(name)
+    if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
+    return $s
+}
+
+fn findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
+    if ds == null { return source.Span(0, 0) }
+    for d in ds {
+        match d {
+            case ast.Decl.Test(dsp, name, _) {
+                if dsp == sp { return name }
+            }
+            case ast.Decl.If(_, ti) {
+                found := findTestIf(ti, sp)
+                if found.End > I32(0) { return found }
+            }
+            case _ { }
+        }
+    }
+    return source.Span(0, 0)
+}
+
+fn findTestIf(ti ast.TopIf&, sp source.Span) source.Span {
+    if ti == null { return source.Span(0, 0) }
+    if ti.Then != null {
+        f := findTest(ti.Then.Decls, sp)
+        if f.End > I32(0) { return f }
+    }
+    if ti.Else != null {
+        f := findTest(ti.Else.Decls, sp)
+        if f.End > I32(0) { return f }
+    }
+    return findTestIf(ti.ElseIf, sp)
+}
+
+# what a stop says, as the built program says it (S18a, B3e): "FILE:LINE: text", "" for none
+fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
+    match s {
+        case eval.Stop.None { return "" }
+        case eval.Stop.Raised(code) { return "an error escapes, code " $code }
+        case eval.Stop.Exited(kind, file, sp, msg) {
+            what := mir.ExitText(kind)
+            if what == "" { return $msg }
+            if msg == "" { return $line(d, file, sp) ": " $what }
+            return $line(d, file, sp) ": " $what ": " $msg
+        }
+        case eval.Stop.Refused(why, file, sp) { return $line(d, file, sp) ": " $why }
+    }
+}
+
+# "PATH:LINE" of where sp starts
+fn line(d mut diag.Diagnostics&, file I64, sp source.Span) String {
+    at := d.Locate(file, I64(sp.Start))
+    k := try at.FindLast(":") catch default -1
+    return $at[:k] if k >= 0 else $at
+}

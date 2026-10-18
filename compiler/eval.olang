@@ -1234,7 +1234,13 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
             m.zero(src, n)
             m.copy(dst, s, n)
         }
-        case mir.Rvalue.Prim(op, ty, args) { m.wr(dst, m.width(ty), m.prim(fi, op, ty, args)) }
+        case mir.Rvalue.Prim(op, ty, args) {
+            if op == typed.PrimOp.Convert and m.arrayOf(ty) != types.UnknownT {
+                m.convertArray(fi, dst, m.arg(fi, args, 0), ty)
+                return
+            }
+            m.wr(dst, m.width(ty), m.prim(fi, op, ty, args))
+        }
         case mir.Rvalue.Overflows(op, ty, args) { m.wr(dst, 1, 1 if m.overflows(fi, op, ty, args) else 0) }
         case mir.Rvalue.Tag(q) {
             src, st := m.place(fi, q)
@@ -1250,6 +1256,48 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
         }
         case mir.Rvalue.Text(b, into, ty) { m.text(fi, dst, b, into) }
     }
+}
+
+# the array a type is, or a reference names; UnknownT for none
+fn (m mut Machine&) arrayOf(ty types.TypeId) types.TypeId {
+    t := m.T
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.Ref { r = t.Repr(t.Referent(r)) }
+    return r if t.KindOf(r) == types.Kind.Array else types.UnknownT
+}
+
+# an array between a run-time and a fixed length, or a reference to one (T7c): a fixed array's value as a run-time-
+# length one given storage of its own (which MIR does not place: the program's, as lowering's stand-in placement puts
+# what it builds), else its storage taken - or a fixed array's read whole
+fn (m mut Machine&) convertArray(fi I64, dst Ptr, x mir.Operand, to types.TypeId) {
+    t := m.T
+    from := m.opType(fi, x)
+    fa, ga := m.arrayOf(from), m.arrayOf(to)
+    p := m.addr(fi, x, 1)
+    if m.halted { return }
+    fixedFrom, fixedTo := t.Length(fa) != types.TypeId(0), t.Length(ga) != types.TypeId(0)
+    if fixedFrom and not t.IsRef(t.Repr(from)) and not fixedTo {
+        n := m.fixedLen(fa)
+        bytes := n * m.size(t.Elem(fa))
+        q := m.allocate(bytes, aValue, m.program)
+        if m.halted { return }
+        m.copy(q, p, bytes)
+        m.wr(dst, 8, n)
+        m.wrPtr(Ptr(dst.Id, dst.Off + 8), q)
+        return
+    }
+    data, n := m.arrayView(p, from)
+    if m.halted { return }
+    if fixedTo {
+        if t.IsRef(t.Repr(to)) {
+            m.wrPtr(dst, data)
+        } else {
+            m.copy(dst, data, m.size(ga))
+        }
+        return
+    }
+    m.wr(dst, 8, n)
+    m.wrPtr(Ptr(dst.Id, dst.Off + 8), data)
 }
 
 fn (m mut Machine&) tagOf(p Ptr, ty types.TypeId) I64 {
@@ -2011,13 +2059,12 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
 
 # ---- globals ----
 
-# while compiling, an immutable global a statement reads is initialized first (K2): its initializer run as a frame
-# before the statement, which runs again once it has. A mutable one, or one whose value a writable reference reaches,
-# is refused (K1). Whether the statement can run now
+# a global a statement reads is initialized first where it is not set yet - while compiling an immutable one (K2), under
+# -i any (B5a): its initializer run as a frame before the statement, which runs again once it has. While compiling a
+# mutable one, or one whose value a writable reference reaches, is refused (K1). Whether the statement can run now
 fn (m mut Machine&) globalsReady(fi I64, p mir.Place, rv mir.Rvalue) Bool {
-    if m.When == Mode.Run { return true }
     f := m.fnOfFrame(fi)
-    if not m.globalWritten(p) { return false }
+    if m.When == Mode.Compile and not m.globalWritten(p) { return false }
     return match rv {
         case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => m.operandReady(fi, x)
         case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => m.placeReady(fi, q)
@@ -2059,13 +2106,18 @@ fn (m mut Machine&) globalWritten(p mir.Place) Bool {
 }
 
 fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
-    # under -i each module's Init sets its globals before main runs (B5a): nothing waits for one
-    if m.When == Mode.Run { return true }
     match p.B {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
             if g < 0 or g == m.initGlobal { return true }
             gl := m.globals[g]
+            # under -i a global is set before main runs, each after the globals its initializer reads (B5a): one read
+            # while another is initialized and not set yet is initialized first
+            if m.When == Mode.Run {
+                if gl.State != 0 or gl.Init < 0 { return true }
+                m.startGlobal(g)
+                return false
+            }
             if gl.Mutable {
                 m.refuse(WhyMutableGlobal)
                 return false
@@ -2224,7 +2276,8 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     nwords I64 = 0
     for i in range ps.Len() {
         if m.shape(ps[i]) == vPair or m.shape(ps[i]) == vFixed {
-            data, n := m.arrayView(m.addr(fi, f.Ops[I64(args.At) + i], 1), ps[i])
+            ax := f.Ops[I64(args.At) + i]
+            data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
             nwords += 1 + ffi.WordsFor(n * m.size(m.elemOf(ps[i])))
             kinds[i] = ffi.ArrayOf(m.ffiKind(m.elemOf(ps[i])))
         } else {
@@ -2238,7 +2291,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     for i in range ps.Len() {
         x := f.Ops[I64(args.At) + i]
         if kinds[i] >= 0x80 {
-            data, n := m.arrayView(m.addr(fi, x, 1), ps[i])
+            data, n := m.arrayView(m.addr(fi, x, 1), m.opType(fi, x))
             bytes := n * m.size(m.elemOf(ps[i]))
             words[w] = U64(n)
             for b in range bytes {
@@ -2264,7 +2317,8 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     w = 0
     for i in range ps.Len() {
         if kinds[i] >= 0x80 {
-            data, n := m.arrayView(m.addr(fi, f.Ops[I64(args.At) + i], 1), ps[i])
+            ax := f.Ops[I64(args.At) + i]
+            data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
             bytes := n * m.size(m.elemOf(ps[i]))
             if m.allocOf(data.Id).ReadOnly == false {
                 for b in range bytes {
@@ -2843,6 +2897,24 @@ fn (m mut Machine&) Global(module I64, name source.NameId) Stop {
     p := m.allocate(m.size(ty), aValue, m.program)
     m.copy(p, Ptr(m.globals[g].Store, 0), m.size(ty))
     m.Result, m.ResultTy = p, ty
+    return m.Stopped
+}
+
+# a global's initializer run where it has not been (B5a, B3e: the start of a run), its value left in its storage
+fn (m mut Machine&) InitGlobal(module I64, name source.NameId) Stop {
+    m.halted = false
+    m.Stopped = Stop.None
+    m.Steps = 0
+    g := try m.globalOf.Get(gkey(module, name)) catch {
+        m.refuse(WhyNoBody)
+        return m.Stopped
+    }
+    if m.globals[g].State != 2 {
+        base := m.frames.Len()
+        m.startGlobal(g)
+        m.loop(base)
+        m.unwind(base)
+    }
     return m.Stopped
 }
 
