@@ -377,6 +377,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   null (`e == 0`, or a word of a type outside the set, is a compile-time error - the user's point). DECIDED (the user: "Yes,
   do it"): methods on error types (`fn (e IoError) Transient() Bool`), declared in the type's module as for any type;
   a named set has its own methods, none inherited from its members; `Str` may give `$e` a message, `==`/`Hash` built in.
+  Details decided by me the same day (loose ends): a `T ? E` has no zero value (neither Ok nor Err could stand for
+  "nothing yet"), so a declaration of one needs a value and an array of them a fill; a function's result is a `T ? E`
+  only through its own signature (`fn f() T ? E`; `Result<T, E>` written as a result type is an error naming that form,
+  since a function that fails says so with `?`), and `return r` of a kept result in such a function passes its outcome
+  through; a `match` on an error value has `case null` for "no error" and is exhaustive over the words.
 - QAM 2026-10-18 (errors as values; the user: "1) ... I want this feature tho 2) yes, disallow this 3) reserve the
   first error word to mean nothing ... 4) looks good"). DECIDED: an error type may be a value's type, of one type or a
   set; an error type as one of several results is an error (no Go `value, err`); `catch IoError e { }` binds what was
