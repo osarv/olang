@@ -371,6 +371,14 @@ design. Do what you want") - nothing to decide until a GUI is written.
   for locals only (fields unsound), else bind by match - recommended locals only; (4) the error `try x` raises (a
   prelude `Absent` with one word?). Unwrap as Result: `x!`, `try x [catch default d]`, `match`. Cost measured: ~1,300
   `null`s, 900 in compiler/. In effect: nullable references. Port only, after self-hosting.
+  REVISED 2026-10-18 (the user: "I don't really see why Option is superior to null. Narrowing is fine ig", "do
+  something like Absent.NULL", unfamiliar with Option): Option<T> dropped from the proposal. Now: keep `null`; a
+  reference is non-null unless its type says `maybe` (`next maybe Node&`); reading through a maybe reference without
+  handling null is an error; `if x is not null { }` narrows locals (agreed); `x!` aborts on null; `try x` raises
+  `Absent.NULL` (agreed). Explained honestly: the payoff is smaller in olang than Java/Go, since functions report
+  absence by errors - null remains only in stored absence (next, parent, AST parts, zero values). ASKED: (1) want it
+  at all - recommended yes, light form; (2) the word - recommended `maybe` (or nullable, optional). In effect: nullable
+  references (T2a/T2b).
 - QAN DECIDED 2026-10-18 (the user: "Nah, let's do it"; earlier not sure): `T ? E` is a type - the
   outcome of a fallible call held as a value, `Result` its name, a generic enum with cases Ok(value)/Failed(error);
   `fn f() T ? E` returns one; a call must still say what happens to its failure (`try`, `!`, catch, or postfix `?` =
