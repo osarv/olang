@@ -2224,6 +2224,16 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
         target = want
     }
     if v.IsFloat {
+        if (v.F > 1.7976931348623157e308 or v.F < -1.7976931348623157e308) and c.overflowsF64(x) {
+            # L12b, E4a: a float literal - or a literal expression of finite operands - beyond F64's range would be an
+            # infinity (a division by zero gives one, as IEEE's does)
+            if c.opOf(x) != sp {
+                c.err(c.opOf(x), msgs.LiteralExprRange("F64"))
+            } else {
+                c.err(sp, msgs.FloatLiteralRange(msgs.Tok(c.src(sp))))
+            }
+            return c.unknown(sp)
+        }
         if not c.P.T.IsFloat(target) {
             c.err(sp, msgs.TypeMismatch(c.ty(want), "F64"))
             return c.unknown(sp)
@@ -2261,6 +2271,20 @@ fn floatOverflows(t types.TypeId, f F64) Bool {
     if t == types.TypeId(11) { r = F64(F16(f)) }
     if t == types.TypeId(12) { r = F64(BF16(f)) }
     return r > 1.7976931348623157e308 or r < -1.7976931348623157e308
+}
+
+fn (c mut Checker&) overflowsF64(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Paren(_, y) { return c.overflowsF64(y) }
+        case ast.Expr.Binary(_, op, a, b) {
+            if op == token.Tok.Slash { return false }
+            fa := c.fold(a)
+            fb := c.fold(b)
+            fin := fn(v litv) Bool { return not v.IsFloat or (v.F <= 1.7976931348623157e308 and v.F >= -1.7976931348623157e308) }
+            return fin(fa) and fin(fb)
+        }
+        nomatch { return true }
+    }
 }
 
 fn floatBits(t types.TypeId, f F64) I64 {
@@ -2683,6 +2707,15 @@ fn (c mut Checker&) literal(sp source.Span, kind token.Tok, want types.TypeId) t
     }
     if kind == token.Tok.CharLit { return c.lit(sp, c.charType(), c.charValue(sp)) }
     if kind == token.Tok.StrLit { return c.textLit(sp) }
+    # L10: an integer literal beyond 64 bits - one fold could not read
+    if kind == token.Tok.IntLit {
+        c.err(sp, msgs.IntLiteralTooLarge(msgs.Tok(c.src(sp))))
+        return c.unknown(sp)
+    }
+    if kind == token.Tok.FloatLit {
+        c.err(sp, msgs.FloatLiteralRange(msgs.Tok(c.src(sp))))   # L12b: beyond F64, which no literal is
+        return c.unknown(sp)
+    }
     c.gap(sp, "a literal of this kind")
     return c.unknown(sp)
 }
