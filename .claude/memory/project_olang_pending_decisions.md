@@ -364,6 +364,11 @@ design. Do what you want") - nothing to decide until a GUI is written.
   And 2.0.Sqrt() should be valid code. Don't make an exception for floats like that"): integers also get Pow (exponent
   a U32, wrapping as `*`, checked under `checked`); E13c REVERSED - methods on number literals are allowed again
   (7.Hash(), 2.0.Sqrt()), both compilers. Being built (wt-mathmeth).
+- QAI FINAL 2026-10-18 (the user: "I want to avoid unchecked as a keyword, because we don't nest into functions it's
+  not a problem really. And I think that probably answers the 'do functions automatically get a checked version'"): no
+  `unchecked`; no checked version derived from a function's body (only checked At/SetAt/Slice from Len, overridable by a
+  written one, as trait defaults are); -debug's program-wide aborting checks DROPPED with it (mine: without `unchecked`
+  it would flag std's intended wraps). Everything else in QAI below stands.
 - QAI REVISED 2026-10-18 (the user: "make checked overload a function ... fn checked Plus ... requires Plus to exist
   without checked or else it's an error", then "No, checked works on any function no? Operators are normal functions").
   DECIDED (the user: "Checked is basically the keyword telling you to call the checked function versions of everything
