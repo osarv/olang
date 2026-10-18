@@ -1,0 +1,13 @@
+# check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+# also: note: 'v' may grow here, in 'Push'
+# M19g: a growth through a second name the function made of the Vec ("w := v" names the same Vec, M19d) - the same Vec
+# grows, so the view is as stale as after "v.Push"
+import "std/io"
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    w := v
+    d := v.View()
+    for i in range 100 { w.Push(i) }
+    try io.Println($d[0])
+}

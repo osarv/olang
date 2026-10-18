@@ -30812,6 +30812,997 @@ static void settleOwnBorrows(void) {
     ownForEachBody(ownBodyWalk);
 }
 
+// ---- a Vec's views (M19g) ----
+//A view (View(), ViewMut()) is a window on a Vec's buffer as it is when it is taken; a growth replaces the buffer, and
+//the view goes on showing the old one. M19g refuses a use of a view after its Vec may have grown, where the same Vec is
+//visible on both sides: grown in the function that holds the view - by name, or through a second name it made - or by
+//a call given the Vec, or a writable struct holding it, through a parameter whose body may grow it, or by a call whose
+//body grows a mutable global the view is of by name. Never by element type: another Vec of the same type growing is no
+//growth of this one.
+//
+//A PLACE is where a Vec is, as the walked body names it: a root - a local, a parameter or a global - and a path of field
+//names below it ("l.toks"). Every Vec operation reaches the buffer through the Vec's record (vec.olang's "s"), so the
+//place a growth and a view are of is the record's - "v.s" for "v.Push(1)" and "v.View()" alike - read off vec.olang's
+//own bodies like any other: an assignment to a record's "data" grows the record, and a slice of it is a view of it. A
+//place through an index or a call's result is not known (two of them may or may not be the same Vec), so it meets no
+//other. A local made a second name of a place ("w := v", "r Lexer& = l") stands for that place; one made from anything
+//else is a root of its own.
+//
+//What each function may do is its SUMMARY, a least fixed point over every body (as O39's release effects are): the
+//places below its parameters and the globals it may grow, and the views of places below its parameters it may hand
+//back. Then each body is walked once more against them, in order: a view held by a local (or by what holds it - a
+//struct it was stored in, a lambda capturing it) is STALE from a growth of its place on, and a use of a stale holder is
+//the error. A call given a view and the Vec it is of, through a parameter it may grow, is an error at the view; a growth
+//while a task holds a view, at the growth.
+struct vgPlace {
+    struct var* root; //canonical: a local, a parameter or a global; NULL for a place not known
+    int param;        //the parameter's index when root is one, else -1
+    char* path;       //"" or ".f.g" - field names below the root
+    int show;         //how much of path a message shows: up to the Vec, not into its record
+    bool any;         //a place below this one, not known which - what a body not known may grow
+};
+//one fact of a summary: a place below a parameter (param >= 0) or a global (global set) its body may grow, or hand back
+//a view of; tok is where in that body, for a note
+struct vgFact { int param; struct var* global; char* path; int show; bool any; struct token tok; int into; };
+//(keeps: a parameter's value its body stores where another parameter leads - param kept, into the one it is kept in,
+//as "l.Push(x)" keeps x in l: a view handed in there is held by what the second argument is)
+struct vgSum { struct list grows; struct list views; struct list keeps; }; //struct vgFact
+//a view held: of place p, made at site; stale from the growth at growTok (in growIn, a callee's name - NULL for a body
+//not known), whose callee grows it at innerTok (no owner where not worth a note)
+struct vgRef { struct vgPlace p; struct token site; bool stale; struct token growTok; struct str growIn; struct token innerTok; };
+struct vgLocal { struct var* v; struct list refs; struct list alias; bool aliasSet; }; //refs: vgRef; alias: vgPlace
+struct vgHeld { struct vgRef r; struct token spawn; };
+struct vgState { bool dead; struct list locals; struct list held; }; //struct vgLocal; struct vgHeld (tasks' views)
+struct vgLoop { struct list breaks; struct list conts; }; //struct vgState
+
+static struct {
+    bool check;           //false: finding the summaries; true: reporting
+    bool quiet;           //deriving only: no use is judged, no growth made
+    struct var* func;     //the body's function, NULL for a test or a global's initializer
+    struct vgSum* sum;    //...its summary, NULL where it has none
+    bool changed;
+    bool skip;            //the body is vec.olang's own: it reads a replaced buffer on purpose (room's copy)
+    struct list loops;    //struct vgLoop*
+    struct list reported; //struct token
+    struct list reportedHolds; //struct vgSeen: one error a holder for each growth
+    struct operand* inPlace; //an argument borrowed in place by a reference parameter - its part is the base's storage
+    struct semaModule* vecMod;
+} vg;
+struct vgSeen { struct var* v; struct token t; };
+
+static bool vgSameTok(struct token a, struct token b) { return a.owner == b.owner && a.tokId == b.tokId; }
+static bool vgReported(struct token t) {
+    for (int i = 0; i < vg.reported.len; i++) if (vgSameTok(*(struct token*)ListGetIdx(&vg.reported, i), t)) return true;
+    ListAdd(&vg.reported, &t);
+    return false;
+}
+
+static struct vgSum* vgSumOf(struct var* f) {
+    if (!f) return NULL;
+    f = canonicalVar(f);
+    if (!f->vecViews) {
+        f->vecViews = MallocOrCrash(sizeof(struct vgSum));
+        f->vecViews->grows = ListInit(sizeof(struct vgFact));
+        f->vecViews->views = ListInit(sizeof(struct vgFact));
+        f->vecViews->keeps = ListInit(sizeof(struct vgFact));
+    }
+    return f->vecViews;
+}
+
+static char* vgCat(const char* a, const char* b) {
+    size_t n = strlen(a) + strlen(b) + 1;
+    char* r = MallocOrCrash(n);
+    snprintf(r, n, "%s%s", a, b);
+    return r;
+}
+static int vgDepth(const char* path) {
+    int d = 0;
+    for (; *path; path++) d += *path == '.';
+    return d;
+}
+//whether path a is path b or a place above it, at a field boundary
+static bool vgPrefix(const char* a, const char* b) {
+    size_t n = strlen(a);
+    return !strncmp(a, b, n) && (b[n] == 0 || b[n] == '.');
+}
+//whether a growth of g may replace the buffer a view of p shows
+static bool vgMeets(struct vgPlace p, struct vgPlace g) {
+    if (!p.root || !g.root || p.root != g.root) return false;
+    if (!strcmp(p.path, g.path)) return true;
+    if (g.any && vgPrefix(g.path, p.path)) return true; //a growth somewhere below g
+    if (p.any && vgPrefix(p.path, g.path)) return true; //a view of something below p
+    return false;
+}
+
+//where a place is, as a message says it
+static char* vgPlaceText(struct vgPlace p) {
+    struct str n = p.root ? p.root->name : StrFromCStr("?");
+    int show = p.show < 0 || p.show > (int)strlen(p.path) ? (int)strlen(p.path) : p.show;
+    size_t len = (size_t)n.len + (size_t)show + 1;
+    char* r = MallocOrCrash(len);
+    snprintf(r, len, "%.*s%.*s", n.len, n.ptr, show, p.path);
+    return r;
+}
+
+static bool vgRecordType(struct type t) {
+    struct type* c = canonicalStructOf(t);
+    return c && c->genericOrigin && c->genericOrigin->owner && isPreludeModule(c->genericOrigin->owner)
+           && StrCmp(c->genericOrigin->name, StrFromCStr("vecState"));
+}
+//whether a value of type t can carry a view - a reference, an array reference, or something holding one
+//(an array held by value is storage made where it is - a copy of what it is given, T7b - so it holds a view only through
+//references among its elements)
+static bool vgCarries(struct type t) {
+    return t.structMAlloc || t.bType == BASETYPE_FUNC || TypeHoldsReferences(t);
+}
+
+//a summary's fact, added unless one already covers it - a path deeper than eight fields is cut to "something below"
+//there, so a recursion walking a chain of fields settles
+static void vgFactPut(struct list* l, int param, struct var* global, const char* path, int show, bool any, struct token tok) {
+    char* p = (char*)path;
+    if (vgDepth(path) > 8) {
+        int d = 0;
+        size_t k = 0;
+        for (; path[k]; k++) if (path[k] == '.' && ++d > 8) break;
+        p = MallocOrCrash(k + 1);
+        memcpy(p, path, k);
+        p[k] = 0;
+        any = true;
+    }
+    for (int i = 0; i < l->len; i++) {
+        struct vgFact* f = ListGetIdx(l, i);
+        if (f->param != param || f->global != global) continue;
+        if (!strcmp(f->path, p) && (f->any || !any)) return;
+        if (f->any && vgPrefix(f->path, p)) return;
+    }
+    if (show > (int)strlen(p)) show = (int)strlen(p);
+    struct vgFact f = { param, global, p, show, any, tok, -1 };
+    ListAdd(l, &f);
+    vg.changed = true;
+}
+
+// -- the state a walk carries --
+static struct vgLocal* vgLocalOf(struct vgState* st, struct var* v, bool make) {
+    v = canonicalVar(v);
+    for (int i = 0; i < st->locals.len; i++) {
+        struct vgLocal* l = ListGetIdx(&st->locals, i);
+        if (l->v == v) return l;
+    }
+    if (!make) return NULL;
+    struct vgLocal l = { v, ListInit(sizeof(struct vgRef)), ListInit(sizeof(struct vgPlace)), false };
+    ListAdd(&st->locals, &l);
+    return ListGetIdx(&st->locals, st->locals.len - 1);
+}
+static struct vgState vgCopy(struct vgState* s) {
+    struct vgState c = { s->dead, ListInit(sizeof(struct vgLocal)), ListInit(sizeof(struct vgHeld)) };
+    for (int i = 0; i < s->locals.len; i++) {
+        struct vgLocal* l = ListGetIdx(&s->locals, i);
+        struct vgLocal n = { l->v, ListInit(sizeof(struct vgRef)), ListInit(sizeof(struct vgPlace)), l->aliasSet };
+        ListAddList(&n.refs, l->refs);
+        ListAddList(&n.alias, l->alias);
+        ListAdd(&c.locals, &n);
+    }
+    ListAddList(&c.held, s->held);
+    return c;
+}
+static bool vgSamePlace(struct vgPlace a, struct vgPlace b) {
+    return a.root == b.root && a.param == b.param && a.any == b.any && !strcmp(a.path, b.path);
+}
+static bool vgRefAdd(struct list* refs, struct vgRef r) {
+    for (int i = 0; i < refs->len; i++) {
+        struct vgRef* o = ListGetIdx(refs, i);
+        if (!vgSameTok(o->site, r.site) || !vgSamePlace(o->p, r.p)) continue;
+        if (r.stale && !o->stale) { *o = r; return true; }
+        return false;
+    }
+    ListAdd(refs, &r);
+    return true;
+}
+static void vgPlaceAdd(struct list* ps, struct vgPlace p) {
+    for (int i = 0; i < ps->len; i++) if (vgSamePlace(*(struct vgPlace*)ListGetIdx(ps, i), p)) return;
+    ListAdd(ps, &p);
+}
+//a state reaching a point another way: what either holds, stale where either is
+static void vgMerge(struct vgState* into, struct vgState* from) {
+    if (from->dead) return;
+    if (into->dead) { *into = vgCopy(from); return; }
+    for (int i = 0; i < from->locals.len; i++) {
+        struct vgLocal* f = ListGetIdx(&from->locals, i);
+        struct vgLocal* t = vgLocalOf(into, f->v, true);
+        for (int k = 0; k < f->refs.len; k++) vgRefAdd(&t->refs, *(struct vgRef*)ListGetIdx(&f->refs, k));
+        if (f->aliasSet || t->aliasSet) {
+            //a second name only where every way here made it one; else a root of its own and of the places
+            if (!t->aliasSet) vgPlaceAdd(&t->alias, (struct vgPlace){ t->v, -1, "", 0, false });
+            if (!f->aliasSet) vgPlaceAdd(&t->alias, (struct vgPlace){ f->v, -1, "", 0, false });
+            for (int k = 0; k < f->alias.len; k++) vgPlaceAdd(&t->alias, *(struct vgPlace*)ListGetIdx(&f->alias, k));
+            t->aliasSet = true;
+        }
+    }
+    for (int i = 0; i < from->held.len; i++) {
+        struct vgHeld* h = ListGetIdx(&from->held, i);
+        bool have = false;
+        for (int k = 0; k < into->held.len && !have; k++) {
+            struct vgHeld* o = ListGetIdx(&into->held, k);
+            have = vgSameTok(o->r.site, h->r.site) && vgSameTok(o->spawn, h->spawn) && vgSamePlace(o->r.p, h->r.p);
+        }
+        if (!have) ListAdd(&into->held, h);
+    }
+}
+//how much a state holds - what a loop's walk compares to see it has settled (a merge only ever adds)
+static int vgWeight(struct vgState* s) {
+    if (s->dead) return 0;
+    int w = 1 + s->held.len;
+    for (int i = 0; i < s->locals.len; i++) {
+        struct vgLocal* l = ListGetIdx(&s->locals, i);
+        w += 1 + l->alias.len * 2 + l->aliasSet;
+        for (int k = 0; k < l->refs.len; k++) w += 3 + ((struct vgRef*)ListGetIdx(&l->refs, k))->stale * 5;
+    }
+    return w;
+}
+
+// -- places --
+static int vgParamIndex(struct var* v) {
+    if (!vg.func) return -1;
+    return ownParamIndex(vg.func, v);
+}
+static void vgPlacesOf(struct operand* op, struct vgState* st, struct list* out) {
+    if (!op) return;
+    switch (op->opType) {
+    case OPERATION_READ_VAR: {
+        struct var* v = op->readVar;
+        if (!v || v->isLambda || (v->type.bType == BASETYPE_FUNC && v->isFuncDecl)) return;
+        struct var* c = canonicalVar(v);
+        if (c->isGlobalVar) { vgPlaceAdd(out, (struct vgPlace){ c, -1, "", 0, false }); return; }
+        //(a parameter given another value names what it was given - its own place, no longer the caller's)
+        struct vgLocal* l = vgLocalOf(st, c, false);
+        if (l && l->aliasSet) {
+            for (int k = 0; k < l->alias.len; k++) vgPlaceAdd(out, *(struct vgPlace*)ListGetIdx(&l->alias, k));
+            return;
+        }
+        int i = vgParamIndex(v);
+        if (i >= 0) { vgPlaceAdd(out, (struct vgPlace){ canonicalVar(ListGetIdx(&vg.func->type.vars, i)), i, "", 0, false }); return; }
+        vgPlaceAdd(out, (struct vgPlace){ c, -1, "", 0, false });
+        return;
+    }
+    case OPERATION_MEMBER: {
+        if (!op->args.len || !op->memberName.len) return;
+        struct list base = ListInit(sizeof(struct vgPlace));
+        vgPlacesOf(*(struct operand**)ListGetIdx(&op->args, 0), st, &base);
+        char seg[256];
+        snprintf(seg, sizeof(seg), ".%.*s", op->memberName.len > 200 ? 200 : op->memberName.len, op->memberName.ptr);
+        for (int i = 0; i < base.len; i++) {
+            struct vgPlace p = *(struct vgPlace*)ListGetIdx(&base, i);
+            if (p.any) { vgPlaceAdd(out, p); continue; }
+            //a field of a Vec is its record: the Vec is shown, never its insides
+            bool inner = vgRecordType(op->type);
+            p.path = vgCat(p.path, seg);
+            if (!inner) p.show = (int)strlen(p.path);
+            vgPlaceAdd(out, p);
+        }
+        ListDestroy(base);
+        return;
+    }
+    case OPERATION_COND:
+        if (op->args.len == 3) {
+            vgPlacesOf(*(struct operand**)ListGetIdx(&op->args, 1), st, out);
+            vgPlacesOf(*(struct operand**)ListGetIdx(&op->args, 2), st, out);
+        }
+        return;
+    default:
+        return; //an element, a call's result: not a place known here
+    }
+}
+//a summary's path below the place a call's argument is
+static struct vgPlace vgBelow(struct vgPlace a, const char* path, int show, bool any) {
+    if (a.any) return a;
+    struct vgPlace g = a;
+    g.show = show > 0 ? (int)strlen(a.path) + show : a.show; //(as far as the callee's place shows, past the argument)
+    g.path = vgCat(a.path, path);
+    g.any = any;
+    return g;
+}
+
+static void vgEval(struct operand* op, struct vgState* st, struct list* out);
+static void vgBlock(struct list* block, struct vgState* st);
+static void vgStmt(struct statement* s, struct vgState* st);
+
+//a holder read: an error where what it holds is a view of a Vec that may have grown since it was taken
+static void vgUse(struct var* v, struct token at, struct vgState* st) {
+    if (!vg.check || vg.quiet || vg.skip || !v) return;
+    struct vgLocal* l = vgLocalOf(st, v, false);
+    if (!l) return;
+    for (int i = 0; i < l->refs.len; i++) {
+        struct vgRef* r = ListGetIdx(&l->refs, i);
+        if (!r->stale || !r->p.root) continue;
+        struct vgSeen seen = { l->v, r->growTok };
+        for (int k = 0; k < vg.reportedHolds.len; k++) {
+            struct vgSeen* o = ListGetIdx(&vg.reportedHolds, k);
+            if (o->v == seen.v && vgSameTok(o->t, seen.t)) return;
+        }
+        ListAdd(&vg.reportedHolds, &seen);
+        if (vgReported(at)) return;
+        char* where = vgPlaceText(r->p);
+        struct str name = canonicalVar(v)->name;
+        if (name.len && name.ptr[0] == '$') Err(at, ERR_VEC_HIDDEN_VIEW_STALE, where, where); //(a loop's own, S9a)
+        else Err(at, ERR_VEC_VIEW_STALE, name, where, where);
+        Note(r->growTok, NOTE_VEC_GROWS_HERE, where, r->growIn, where);
+        if (r->innerTok.owner && !isLibraryFile(TokenGetFileName(r->innerTok.owner)))
+            Note(r->innerTok, NOTE_VEC_GROWS_INSIDE, r->growIn);
+        return;
+    }
+}
+
+//what a growth of g does to the state: every view of it held stale, from at; an error where a task holds one
+static void vgGrow(struct vgPlace g, struct token at, struct str in, struct token inner, struct vgState* st) {
+    if (vg.quiet) return;
+    if (!vg.check && vg.sum && g.root) { //(a summary keeps what is below a parameter or a global)
+        if (g.param >= 0) vgFactPut(&vg.sum->grows, g.param, NULL, g.path, g.show, g.any, at);
+        else if (g.root->isGlobalVar) vgFactPut(&vg.sum->grows, -1, g.root, g.path, g.show, g.any, at);
+    }
+    for (int i = 0; i < st->locals.len; i++) {
+        struct vgLocal* l = ListGetIdx(&st->locals, i);
+        for (int k = 0; k < l->refs.len; k++) {
+            struct vgRef* r = ListGetIdx(&l->refs, k);
+            if (r->stale || !vgMeets(r->p, g)) continue;
+            r->stale = true;
+            r->growTok = at;
+            r->growIn = in;
+            r->innerTok = inner;
+        }
+    }
+    if (!vg.check || vg.skip) return;
+    for (int i = 0; i < st->held.len; i++) {
+        struct vgHeld* h = ListGetIdx(&st->held, i);
+        if (!vgMeets(h->r.p, g) || vgReported(at)) continue;
+        char* where = vgPlaceText(h->r.p);
+        Err(at, ERR_VEC_GROWS_UNDER_TASK, where, where);
+        Note(h->spawn, NOTE_VEC_TASK_HOLDS, where);
+        return;
+    }
+}
+
+//a view made now, of place p
+static void vgView(struct vgPlace p, struct token site, struct list* out) {
+    struct vgRef r = { p, site, false, (struct token){0}, (struct str){0}, (struct token){0} };
+    vgRefAdd(out, r);
+}
+
+static struct var* vgRootLocal(struct operand* op) {
+    while (op && (op->opType == OPERATION_MEMBER || op->opType == OPERATION_INDEX || op->opType == OPERATION_SLICE) && op->args.len)
+        op = *(struct operand**)ListGetIdx(&op->args, 0);
+    if (!op || op->opType != OPERATION_READ_VAR || !op->readVar || op->readVar->isLambda) return NULL;
+    struct var* c = canonicalVar(op->readVar);
+    if (c->isGlobalVar || vgParamIndex(op->readVar) >= 0 || (c->type.bType == BASETYPE_FUNC && c->isFuncDecl)) return NULL;
+    return c;
+}
+
+//the places a store's target is below - its base variable's, through fields, elements and slices
+static void vgTargetRoots(struct operand* target, struct vgState* st, struct list* out) {
+    while (target && (target->opType == OPERATION_MEMBER || target->opType == OPERATION_INDEX
+                      || target->opType == OPERATION_SLICE) && target->args.len)
+        target = *(struct operand**)ListGetIdx(&target->args, 0);
+    if (target && target->opType == OPERATION_READ_VAR) vgPlacesOf(target, st, out);
+}
+
+//what a store into place `into` puts there: the views it holds are held by the local the place is below; a parameter's
+//own value (a summary's seed) stored below another parameter is what the body keeps (keeps)
+static void vgKeepIn(struct operand* into, struct list* refs, struct vgState* st) {
+    if (!vgCarries(into->type)) return; //(a copy is put there)
+    struct var* holder = vgRootLocal(into);
+    if (holder) {
+        struct vgLocal* l = vgLocalOf(st, holder, true);
+        for (int k = 0; k < refs->len; k++) vgRefAdd(&l->refs, *(struct vgRef*)ListGetIdx(refs, k));
+    }
+    if (vg.check || !vg.sum) return;
+    struct list roots = ListInit(sizeof(struct vgPlace));
+    vgTargetRoots(into, st, &roots);
+    for (int i = 0; i < roots.len; i++) {
+        struct vgPlace* r = ListGetIdx(&roots, i);
+        if (!r->root || r->param < 0) continue;
+        for (int k = 0; k < refs->len; k++) {
+            struct vgRef* f = ListGetIdx(refs, k);
+            if (f->p.root || f->p.param < 0 || f->p.param == r->param) continue;
+            bool have = false;
+            for (int q = 0; q < vg.sum->keeps.len && !have; q++) {
+                struct vgFact* o = ListGetIdx(&vg.sum->keeps, q);
+                have = o->param == f->p.param && o->into == r->param;
+            }
+            if (have) continue;
+            struct vgFact kf = { f->p.param, NULL, "", 0, false, f->site, r->param };
+            ListAdd(&vg.sum->keeps, &kf);
+            vg.changed = true;
+        }
+    }
+    ListDestroy(roots);
+}
+
+static void vgClauses(struct list* clauses, struct vgState* st, struct list* out) {
+    if (!clauses->len) return;
+    struct vgState after = vgCopy(st);
+    for (int i = 0; i < clauses->len; i++) {
+        struct catchClause* c = ListGetIdx(clauses, i);
+        if (c->taskFn) continue; //P4a: run on the task's thread, a lambda of its own
+        struct vgState s = vgCopy(st);
+        vgBlock(&c->block, &s);
+        vgEval(c->dflt, &s, out);
+        vgMerge(&after, &s);
+    }
+    *st = after;
+}
+
+//a call: its arguments in order, then what its body may do with them - grow a Vec it is given through a parameter it
+//may grow, or a global - and what its result holds of what it was given
+static void vgCall(struct operand* op, struct vgState* st, struct list* out) {
+    vgEval(op->callee, st, NULL);
+    int n = op->args.len;
+    struct list* argRefs = MallocOrCrash(sizeof(struct list) * (size_t)(n ? n : 1));
+    struct var* f = op->readVar;
+    struct type* sig = op->callee ? &op->callee->type : f ? &f->type : NULL;
+    for (int i = 0; i < n; i++) {
+        argRefs[i] = ListInit(sizeof(struct vgRef));
+        struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+        struct operand* saved = vg.inPlace;
+        //(an element or a field borrowed by a reference parameter is the storage it is in - a view's element)
+        if (sig && sig->bType == BASETYPE_FUNC && i < sig->vars.len && ((struct var*)ListGetIdx(&sig->vars, i))->type.structMAlloc)
+            vg.inPlace = a;
+        vgEval(a, st, &argRefs[i]);
+        vg.inPlace = saved;
+    }
+    struct var* fn = NULL; //the function called by name, NULL for a function value
+    struct list fnRefs = ListInit(sizeof(struct vgRef));
+    if (!op->callee && f && f->type.bType == BASETYPE_FUNC && (f->isFuncDecl || f->isLambda) && !f->isGlobalVar
+            && vgParamIndex(f) < 0)
+        fn = f;
+    else if (!op->callee && f) { //a call through a function value a variable holds - a read of it
+        vgUse(f, op->tok, st);
+        struct vgLocal* l = vgLocalOf(st, f, false);
+        if (l) ListAddList(&fnRefs, l->refs);
+    }
+    struct vgSum* S = fn ? canonicalVar(fn)->vecViews : NULL;
+    struct str fnName = fn ? ownQuoted(fn) : StrFromCStr("a call through a function value");
+    //the growths it may make
+    struct list grows = ListInit(sizeof(struct vgPlace));
+    struct list inner = ListInit(sizeof(struct token)); //...each one's place in the callee, for a note
+    if (fn && !fn->type.isExtern) {
+        for (int k = 0; S && k < S->grows.len; k++) {
+            struct vgFact* g = ListGetIdx(&S->grows, k);
+            if (g->global) {
+                struct vgPlace gp = { canonicalVar(g->global), -1, g->path, g->show, g->any };
+                ListAdd(&grows, &gp);
+                ListAdd(&inner, &g->tok);
+                continue;
+            }
+            if (g->param < 0 || g->param >= n) continue;
+            struct list as = ListInit(sizeof(struct vgPlace));
+            vgPlacesOf(*(struct operand**)ListGetIdx(&op->args, g->param), st, &as);
+            for (int a = 0; a < as.len; a++) {
+                struct vgPlace gp = vgBelow(*(struct vgPlace*)ListGetIdx(&as, a), g->path, g->show, g->any);
+                ListAdd(&grows, &gp);
+                ListAdd(&inner, &g->tok);
+            }
+            ListDestroy(as);
+        }
+    } else if (!fn) {
+        //a body not known: it may grow whatever it is given writably - by value, or through a writable reference
+        struct type* ft = op->callee ? &op->callee->type : f ? &f->type : NULL;
+        for (int i = 0; i < n; i++) {
+            struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+            if (!a || a->type.bType != BASETYPE_STRUCT) continue;
+            if (ft && i < ft->vars.len) {
+                struct var* p = ListGetIdx(&ft->vars, i);
+                if (p->type.structMAlloc && !p->type.refMut && !p->mut) continue;
+            }
+            struct list as = ListInit(sizeof(struct vgPlace));
+            vgPlacesOf(a, st, &as);
+            for (int k = 0; k < as.len; k++) {
+                struct vgPlace gp = *(struct vgPlace*)ListGetIdx(&as, k);
+                gp.any = true;
+                gp.show = (int)strlen(gp.path);
+                ListAdd(&grows, &gp);
+                struct token none = (struct token){0};
+                ListAdd(&inner, &none);
+            }
+            ListDestroy(as);
+        }
+    }
+    //a view given to the very call that may grow its Vec
+    if (vg.check && !vg.quiet && !vg.skip)
+        for (int i = 0; i < n; i++)
+            for (int k = 0; k < argRefs[i].len; k++) {
+                struct vgRef* r = ListGetIdx(&argRefs[i], k);
+                for (int g = 0; g < grows.len; g++) {
+                    if (!vgMeets(r->p, *(struct vgPlace*)ListGetIdx(&grows, g))) continue;
+                    struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+                    if (vgReported(a->tok)) break;
+                    char* where = vgPlaceText(r->p);
+                    Err(a->tok, ERR_VEC_VIEW_GIVEN_GROWING, where, fnName, where, where);
+                    struct token* it = ListGetIdx(&inner, g);
+                    if (fn && it->owner && !isLibraryFile(TokenGetFileName(it->owner))) Note(*it, NOTE_VEC_GROWS_INSIDE, fnName);
+                    break;
+                }
+            }
+    for (int g = 0; g < grows.len; g++)
+        vgGrow(*(struct vgPlace*)ListGetIdx(&grows, g), op->tok, fnName, *(struct token*)ListGetIdx(&inner, g), st);
+    //what its result holds
+    if (out) {
+        ListAddList(out, fnRefs);
+        bool* viewed = MallocOrCrash(sizeof(bool) * (size_t)(n ? n : 1));
+        for (int i = 0; i < n; i++) viewed[i] = false;
+        for (int k = 0; S && k < S->views.len; k++) {
+            struct vgFact* v = ListGetIdx(&S->views, k);
+            if (v->param < 0 || v->param >= n) continue;
+            viewed[v->param] = true;
+            struct list as = ListInit(sizeof(struct vgPlace));
+            vgPlacesOf(*(struct operand**)ListGetIdx(&op->args, v->param), st, &as);
+            for (int a = 0; a < as.len; a++) vgView(vgBelow(*(struct vgPlace*)ListGetIdx(&as, a), v->path, v->show, v->any), op->tok, out);
+            ListDestroy(as);
+        }
+        bool resCarries = vgCarries(op->type);
+        for (int i = 0; i < n && resCarries; i++) {
+            if (viewed[i]) continue;
+            struct operand* a = *(struct operand**)ListGetIdx(&op->args, i);
+            bool keeps = fn ? calleeMayKeepArg(fn, i) : true;
+            if (keeps) for (int k = 0; k < argRefs[i].len; k++) vgRefAdd(out, *(struct vgRef*)ListGetIdx(&argRefs[i], k));
+            //a function value handing back an array borrowed from a Vec it was given: a view of it, as far as is known
+            if (!fn && a && a->type.bType == BASETYPE_STRUCT && op->type.bType == BASETYPE_ARRAY) {
+                struct list as = ListInit(sizeof(struct vgPlace));
+                vgPlacesOf(a, st, &as);
+                for (int k = 0; k < as.len; k++) {
+                    struct vgPlace p = *(struct vgPlace*)ListGetIdx(&as, k);
+                    p.show = (int)strlen(p.path);
+                    p.any = true;
+                    vgView(p, op->tok, out);
+                }
+                ListDestroy(as);
+            }
+        }
+    }
+    //a view given to a call that keeps it in another of its arguments - "l.Push(String(v.View()))": what holds that
+    //argument holds the view
+    for (int k = 0; S && !vg.quiet && k < S->keeps.len; k++) {
+        struct vgFact* kf = ListGetIdx(&S->keeps, k);
+        if (kf->param < 0 || kf->param >= n || kf->into < 0 || kf->into >= n || !argRefs[kf->param].len) continue;
+        vgKeepIn(*(struct operand**)ListGetIdx(&op->args, kf->into), &argRefs[kf->param], st);
+    }
+    vgClauses(&op->catchClauses, st, out);
+}
+
+//an operand evaluated: its parts in order, its calls' effects, and into out (when given) what its value holds of views
+static void vgEval(struct operand* op, struct vgState* st, struct list* out) {
+    if (!op || st->dead) return;
+    struct list mine = ListInit(sizeof(struct vgRef));
+    switch (op->opType) {
+    case OPERATION_READ_VAR: {
+        struct var* v = op->readVar;
+        if (!v) break;
+        if (v->isLambda) { //D16: a lambda holds what it captured
+            for (int i = 0; i < v->lambdaCaptures.len; i++) {
+                struct lambdaCapture* c = ListGetIdx(&v->lambdaCaptures, i);
+                vgUse(c->outer, op->tok, st);
+                struct vgLocal* l = vgLocalOf(st, c->outer, false);
+                if (l) for (int k = 0; k < l->refs.len; k++) vgRefAdd(&mine, *(struct vgRef*)ListGetIdx(&l->refs, k));
+            }
+            break;
+        }
+        vgUse(v, op->tok, st);
+        struct vgLocal* l = vgLocalOf(st, v, false);
+        if (l) ListAddList(&mine, l->refs);
+        break;
+    }
+    case OPERATION_FUNCCALL:
+        vgCall(op, st, &mine);
+        break;
+    case OPERATION_SEQ:
+    case OPERATION_COMPREHENSION:
+        vgBlock(&op->comprBody, st);
+        for (int i = 0; i < op->args.len; i++) vgEval(*(struct operand**)ListGetIdx(&op->args, i), st, op->opType == OPERATION_SEQ ? &mine : NULL);
+        break;
+    case OPERATION_MATCH: {
+        if (!op->comprBody.len) break;
+        struct statement* m = ListGetIdx(&op->comprBody, 0);
+        vgBlock(&m->matchHold, st);
+        vgEval(m->op, st, NULL);
+        struct vgState after = (struct vgState){ true, ListInit(sizeof(struct vgLocal)), ListInit(sizeof(struct vgHeld)) };
+        for (int i = 0; i < m->matchCases.len; i++) {
+            struct statement* c = ListGetIdx(&m->matchCases, i);
+            struct vgState s = vgCopy(st);
+            vgStmt(c, &s);
+            vgEval(c->op, &s, &mine);
+            vgMerge(&after, &s);
+        }
+        if (m->nomatchBlock.len || m->nomatchValue) {
+            struct vgState s = vgCopy(st);
+            vgBlock(&m->nomatchBlock, &s);
+            vgEval(m->nomatchValue, &s, &mine);
+            vgMerge(&after, &s);
+        }
+        if (m->matchCases.len || m->nomatchBlock.len || m->nomatchValue) *st = after;
+        break;
+    }
+    case OPERATION_COND: {
+        if (op->args.len != 3) break;
+        vgEval(*(struct operand**)ListGetIdx(&op->args, 0), st, NULL);
+        struct vgState a = vgCopy(st), b = vgCopy(st);
+        vgEval(*(struct operand**)ListGetIdx(&op->args, 1), &a, &mine);
+        vgEval(*(struct operand**)ListGetIdx(&op->args, 2), &b, &mine);
+        vgMerge(&a, &b);
+        *st = a;
+        break;
+    }
+    default: {
+        //every part, in order; what the value holds of them is what a slice, a conversion, a payload, a part read
+        //through a reference or a literal holds of the parts it is made of
+        for (int i = 0; i < op->args.len; i++) {
+            struct list part = ListInit(sizeof(struct vgRef));
+            vgEval(*(struct operand**)ListGetIdx(&op->args, i), st, &part);
+            bool keep = false;
+            switch (op->opType) {
+            case OPERATION_SLICE: case OPERATION_NOMINAL_CONVERT: case OPERATION_AS: case OPERATION_NONE:
+                keep = i == 0 || op->opType == OPERATION_NONE;
+                break;
+            //an element read out of a view is a value apart from the buffer, a reference element included (it refers
+            //where the Vec's elements do, M19d) - only one borrowed in place is the buffer's storage
+            case OPERATION_INDEX:
+                keep = i == 0 && (op->inPlaceBorrow || op == vg.inPlace);
+                break;
+            case OPERATION_MEMBER:
+                keep = i == 0 && (vgCarries(op->type) || op->inPlaceBorrow || op == vg.inPlace);
+                break;
+            default:
+                break;
+            }
+            if (keep) for (int k = 0; k < part.len; k++) vgRefAdd(&mine, *(struct vgRef*)ListGetIdx(&part, k));
+            ListDestroy(part);
+        }
+        for (int i = 0; i < op->chainOperands.len; i++) vgEval(*(struct operand**)ListGetIdx(&op->chainOperands, i), st, NULL);
+        vgEval(op->callee, st, NULL);
+        //a slice of a Vec's record's buffer is a view of the record (vec.olang's View, ViewMut and the rest)
+        if (op->opType == OPERATION_SLICE && op->args.len) {
+            struct operand* b = *(struct operand**)ListGetIdx(&op->args, 0);
+            if (b->opType == OPERATION_MEMBER && b->args.len && StrCmp(b->memberName, StrFromCStr("data"))) {
+                struct operand* rec = *(struct operand**)ListGetIdx(&b->args, 0);
+                if (vgRecordType(rec->type)) {
+                    struct list ps = ListInit(sizeof(struct vgPlace));
+                    vgPlacesOf(rec, st, &ps);
+                    for (int k = 0; k < ps.len; k++) vgView(*(struct vgPlace*)ListGetIdx(&ps, k), op->tok, &mine);
+                    ListDestroy(ps);
+                }
+            }
+        }
+        vgClauses(&op->catchClauses, st, &mine);
+        break;
+    }
+    }
+    if (out && (vgCarries(op->type) || op == vg.inPlace)) for (int k = 0; k < mine.len; k++) vgRefAdd(out, *(struct vgRef*)ListGetIdx(&mine, k));
+    ListDestroy(mine);
+}
+
+//what a local holds from now on: the views its value holds, and the place it is a second name of
+static void vgBind(struct var* v, struct operand* val, struct list* refs, struct vgState* st, bool whole) {
+    if (!v) return;
+    struct vgLocal* l = vgLocalOf(st, v, true);
+    if (whole) {
+        //its views of what it named before go: a new value, of another Vec perhaps
+        for (int i = 0; i < st->locals.len; i++) {
+            struct vgLocal* o = ListGetIdx(&st->locals, i);
+            for (int k = 0; k < o->refs.len; k++) {
+                struct vgRef* r = ListGetIdx(&o->refs, k);
+                if (r->p.root == l->v && r->p.param < 0 && !l->v->isGlobalVar) r->p.root = NULL;
+            }
+        }
+        l->refs.len = 0;
+        l->alias.len = 0;
+        l->aliasSet = false;
+        if (val && val->type.bType == BASETYPE_STRUCT) {
+            struct list ps = ListInit(sizeof(struct vgPlace));
+            vgPlacesOf(val, st, &ps);
+            //(a second name of a place, never of itself)
+            bool self = false;
+            for (int i = 0; i < ps.len; i++) self = self || ((struct vgPlace*)ListGetIdx(&ps, i))->root == l->v;
+            if (ps.len && !self) {
+                l->alias = ps;
+                l->aliasSet = true;
+            }
+        }
+    }
+    //(a local whose type can hold no view - an array or a struct by value with no reference in it - has its value
+    //copied in: "copied String = String(v.View())" is text of its own)
+    if (!vgCarries(l->v->type)) return;
+    for (int k = 0; refs && k < refs->len; k++) vgRefAdd(&l->refs, *(struct vgRef*)ListGetIdx(refs, k));
+}
+
+//an assignment to a place below a local: what the local holds gains the value's views; views of the Vec there go
+static void vgStoreInto(struct operand* target, struct list* refs, struct vgState* st) {
+    struct var* root = vgRootLocal(target);
+    struct list ps = ListInit(sizeof(struct vgPlace));
+    vgPlacesOf(target, st, &ps);
+    for (int i = 0; i < st->locals.len; i++) {
+        struct vgLocal* o = ListGetIdx(&st->locals, i);
+        for (int k = 0; k < o->refs.len; k++) {
+            struct vgRef* r = ListGetIdx(&o->refs, k);
+            for (int p = 0; p < ps.len; p++) {
+                struct vgPlace* t = ListGetIdx(&ps, p);
+                if (r->p.root && r->p.root == t->root && vgPrefix(t->path, r->p.path)) r->p.root = NULL;
+            }
+        }
+    }
+    ListDestroy(ps);
+    if (refs) vgKeepIn(target, refs, st);
+    if (!root) return;
+    struct vgLocal* l = vgLocalOf(st, root, true);
+    //a field of a second name assigned: no longer a second name as a whole
+    if (l->aliasSet && target->opType == OPERATION_MEMBER) {
+        l->alias.len = 0;
+        l->aliasSet = false;
+    }
+}
+
+static void vgAssign(struct operand* target, struct operand* val, struct list* refs, struct vgState* st) {
+    if (!target) return;
+    if (target->opType == OPERATION_READ_VAR && target->readVar && !target->readVar->isGlobalVar) {
+        bool param = vgParamIndex(target->readVar) >= 0;
+        if (param) vgStoreInto(target, NULL, st); //(the views of what it named before go)
+        vgBind(target->readVar, val, refs, st, true);
+        struct vgLocal* l = vgLocalOf(st, target->readVar, false);
+        if (param && l && !l->aliasSet) { //a root of its own from now on
+            vgPlaceAdd(&l->alias, (struct vgPlace){ l->v, -1, "", 0, false });
+            l->aliasSet = true;
+        }
+        return;
+    }
+    if (target->opType != OPERATION_READ_VAR) {
+        //the place's parts are read: a write through a view used as one
+        for (int i = 0; i < target->args.len; i++) vgEval(*(struct operand**)ListGetIdx(&target->args, i), st, NULL);
+    }
+    //a Vec's record given another buffer: the growth every growing method comes down to (vec.olang's room)
+    if (target->opType == OPERATION_MEMBER && target->args.len && StrCmp(target->memberName, StrFromCStr("data"))) {
+        struct operand* rec = *(struct operand**)ListGetIdx(&target->args, 0);
+        if (vgRecordType(rec->type)) {
+            struct list ps = ListInit(sizeof(struct vgPlace));
+            vgPlacesOf(rec, st, &ps);
+            for (int k = 0; k < ps.len; k++)
+                vgGrow(*(struct vgPlace*)ListGetIdx(&ps, k), target->tok, StrFromCStr("'Push'"), (struct token){0}, st);
+            ListDestroy(ps);
+            return;
+        }
+    }
+    vgStoreInto(target, refs, st);
+}
+
+static void vgLoopBody(struct statement* stm, struct vgState* st, bool condFirst) {
+    struct vgLoop* lp = MallocOrCrash(sizeof(struct vgLoop));
+    lp->breaks = ListInit(sizeof(struct vgState));
+    lp->conts = ListInit(sizeof(struct vgState));
+    ListAdd(&vg.loops, &lp);
+    struct vgState head = vgCopy(st);
+    struct vgState exits = (struct vgState){ true, ListInit(sizeof(struct vgLocal)), ListInit(sizeof(struct vgHeld)) };
+    for (int round = 0; round < 12; round++) {
+        lp->breaks.len = 0;
+        lp->conts.len = 0;
+        struct vgState s = vgCopy(&head);
+        if (condFirst) {
+            vgEval(stm->op, &s, NULL);
+            if (stm->op) vgMerge(&exits, &s); //(the condition false; with none, only a break leaves)
+        }
+        vgBlock(&stm->block, &s);
+        for (int i = 0; i < lp->conts.len; i++) vgMerge(&s, ListGetIdx(&lp->conts, i));
+        if (condFirst) vgStmt(stm->forPost, &s);
+        else {
+            vgEval(stm->op, &s, NULL);
+            vgMerge(&exits, &s);
+        }
+        for (int i = 0; i < lp->breaks.len; i++) vgMerge(&exits, ListGetIdx(&lp->breaks, i));
+        int before = vgWeight(&head);
+        vgMerge(&head, &s);
+        if (vgWeight(&head) == before) break;
+    }
+    vg.loops.len--;
+    *st = exits;
+}
+
+static void vgStmt(struct statement* s, struct vgState* st) {
+    if (!s || st->dead) return;
+    switch (s->sType) {
+    case STATEMENT_VAR_DECL: {
+        struct list refs = ListInit(sizeof(struct vgRef));
+        vgEval(s->op, st, &refs);
+        vgEval(s->fillValue, st, &refs);
+        vgBind(&s->var, s->op, &refs, st, true);
+        break;
+    }
+    case STATEMENT_ASSIGN: {
+        struct list refs = ListInit(sizeof(struct vgRef));
+        vgEval(s->op, st, &refs);
+        vgAssign(s->target, s->op, &refs, st);
+        break;
+    }
+    case STATEMENT_EXPR:
+    case STATEMENT_ASSERT:
+        vgEval(s->op, st, NULL);
+        if (s->assertMsg) { struct vgState m = vgCopy(st); vgEval(s->assertMsg, &m, NULL); }
+        break;
+    case STATEMENT_RET: {
+        struct list refs = ListInit(sizeof(struct vgRef));
+        vgEval(s->op, st, &refs);
+        if (!vg.check && vg.sum)
+            for (int k = 0; k < refs.len; k++) {
+                struct vgRef* r = ListGetIdx(&refs, k);
+                if (r->p.root && r->p.param >= 0) vgFactPut(&vg.sum->views, r->p.param, NULL, r->p.path, r->p.show, r->p.any, s->startTok);
+            }
+        st->dead = true;
+        break;
+    }
+    case STATEMENT_IF: {
+        vgEval(s->op, st, NULL);
+        struct vgState a = vgCopy(st), b = vgCopy(st);
+        vgBlock(&s->block, &a);
+        vgStmt(s->elseStmnt, &b);
+        vgMerge(&a, &b);
+        *st = a;
+        break;
+    }
+    case STATEMENT_FOR:
+        if (s->forInit) {
+            struct list refs = ListInit(sizeof(struct vgRef));
+            vgEval(s->forInit, st, &refs);
+            vgBind(&s->var, s->forInit, &refs, st, true);
+        }
+        vgLoopBody(s, st, true);
+        break;
+    case STATEMENT_DO:
+        vgLoopBody(s, st, false);
+        break;
+    case STATEMENT_MATCH: {
+        vgBlock(&s->matchHold, st);
+        vgEval(s->op, st, NULL);
+        struct vgState after = vgCopy(st); //(no case taken)
+        for (int i = 0; i < s->matchCases.len; i++) {
+            struct vgState c = vgCopy(st);
+            vgStmt(ListGetIdx(&s->matchCases, i), &c);
+            vgMerge(&after, &c);
+        }
+        if (s->nomatchBlock.len) {
+            struct vgState c = vgCopy(st);
+            vgBlock(&s->nomatchBlock, &c);
+            vgMerge(&after, &c);
+        }
+        *st = after;
+        break;
+    }
+    case STATEMENT_CASE: {
+        for (int i = 0; i < s->caseAlts.len; i++) {
+            struct caseAlt* a = ListGetIdx(&s->caseAlts, i);
+            vgEval(a->test, st, NULL);
+            for (int k = 0; k < a->binds.len; k++) {
+                struct caseBind* b = ListGetIdx(&a->binds, k);
+                struct list refs = ListInit(sizeof(struct vgRef));
+                vgEval(b->from, st, &refs);
+                vgBind(b->v, NULL, &refs, st, false);
+            }
+        }
+        vgEval(s->caseGuard, st, NULL);
+        vgBlock(&s->block, st);
+        break;
+    }
+    case STATEMENT_JOIN: {
+        int held = st->held.len;
+        vgBlock(&s->block, st);
+        if (!st->dead && st->held.len > held) st->held.len = held; //every task is joined here
+        vgClauses(&s->catchClauses, st, NULL);
+        break;
+    }
+    case STATEMENT_SPAWN: {
+        struct list refs = ListInit(sizeof(struct vgRef));
+        vgEval(s->op, st, &refs);
+        //what the task is given, held until its join: a view among its arguments, or captured by the lambda it runs
+        if (s->op && s->op->opType == OPERATION_FUNCCALL) {
+            bool q = vg.quiet;
+            vg.quiet = true;
+            struct list given = ListInit(sizeof(struct vgRef));
+            for (int i = 0; i < s->op->args.len; i++) vgEval(*(struct operand**)ListGetIdx(&s->op->args, i), st, &given);
+            if (s->op->readVar && s->op->readVar->isLambda) {
+                struct operand lv = (struct operand){0};
+                lv.opType = OPERATION_READ_VAR;
+                lv.readVar = s->op->readVar;
+                lv.type = s->op->readVar->type;
+                lv.type.structMAlloc = true;
+                lv.tok = s->op->tok;
+                vgEval(&lv, st, &given);
+            } else if (s->op->readVar) {
+                struct vgLocal* l = vgLocalOf(st, s->op->readVar, false);
+                if (l) ListAddList(&given, l->refs);
+            }
+            vg.quiet = q;
+            for (int k = 0; k < given.len; k++) {
+                struct vgHeld h = { *(struct vgRef*)ListGetIdx(&given, k), s->startTok.owner ? s->startTok : s->op->tok };
+                ListAdd(&st->held, &h);
+            }
+        }
+        for (int i = 0; i < s->spawnTargets.len; i++) {
+            struct operand* t = *(struct operand**)ListGetIdx(&s->spawnTargets, i);
+            if (t) vgAssign(t, NULL, &refs, st);
+        }
+        break;
+    }
+    case STATEMENT_DEFER:
+        break; //(walked where its block ends)
+    case STATEMENT_BREAK:
+    case STATEMENT_CONTINUE:
+        if (vg.loops.len) {
+            struct vgLoop* lp = *(struct vgLoop**)ListGetIdx(&vg.loops, vg.loops.len - 1);
+            struct vgState c = vgCopy(st);
+            ListAdd(s->sType == STATEMENT_BREAK ? &lp->breaks : &lp->conts, &c);
+        }
+        st->dead = true;
+        break;
+    case STATEMENT_UNREACHABLE:
+    case STATEMENT_ERROR:
+        st->dead = true;
+        break;
+    case STATEMENT_TRY_CATCH: {
+        vgEval(s->op, st, NULL);
+        struct vgState after = vgCopy(st);
+        for (int i = 0; i < s->catchClauses.len; i++) {
+            struct catchClause* c = ListGetIdx(&s->catchClauses, i);
+            struct vgState cs = vgCopy(st);
+            vgBlock(&c->block, &cs);
+            vgMerge(&after, &cs);
+        }
+        *st = after;
+        break;
+    }
+    }
+}
+
+static void vgBlock(struct list* block, struct vgState* st) {
+    for (int i = 0; i < block->len && !st->dead; i++) vgStmt(ListGetIdx(block, i), st);
+    if (st->dead) return;
+    for (int i = block->len - 1; i >= 0; i--) { //S19: deferred code runs where the block ends, last first
+        struct statement* s = ListGetIdx(block, i);
+        if (s->sType == STATEMENT_DEFER) vgBlock(&s->block, st);
+    }
+}
+
+static void vgBody(struct var* func, struct list* block) {
+    vg.func = func;
+    vg.sum = func ? vgSumOf(func) : NULL;
+    vg.skip = func && vg.vecMod && canonicalVar(func)->owner == vg.vecMod;
+    vg.loops.len = 0;
+    struct vgState st = { false, ListInit(sizeof(struct vgLocal)), ListInit(sizeof(struct vgHeld)) };
+    //(finding what a body keeps: each parameter that can hold a view starts out holding a mark of its own - no place,
+    //so nothing grows it and nothing reports it)
+    for (int i = 0; func && !vg.check && i < func->type.vars.len; i++) {
+        struct var* p = canonicalVar(ListGetIdx(&func->type.vars, i));
+        if (!vgCarries(p->type)) continue;
+        struct vgRef r = { (struct vgPlace){ NULL, i, "", 0, false }, p->tok, false, (struct token){0}, (struct str){0},
+                           (struct token){0} };
+        vgRefAdd(&vgLocalOf(&st, p, true)->refs, r);
+    }
+    vgBlock(block, &st);
+}
+
+//M19g: once every body is checked cleanly - the summaries, a least fixed point over calls; then each body against them
+static void settleVecViews(void) {
+    vg.vecMod = NULL;
+    for (int i = 0; i < preludeModules.len && !vg.vecMod; i++) {
+        struct semaModule* m = *(struct semaModule**)ListGetIdx(&preludeModules, i);
+        if (TypeGetList(&m->types, StrFromCStr("vecState"))) vg.vecMod = m;
+    }
+    if (!vg.vecMod) return;
+    vg.loops = ListInit(sizeof(struct vgLoop*));
+    vg.reported = ListInit(sizeof(struct token));
+    vg.reportedHolds = ListInit(sizeof(struct vgSeen));
+    vg.check = false;
+    vg.quiet = false;
+    for (int round = 0; round < 1000; round++) {
+        vg.changed = false;
+        ownForEachBody(vgBody);
+        if (!vg.changed) break;
+    }
+    vg.check = true;
+    ownForEachBody(vgBody);
+}
+
 static void settleInferredErrs(void) {
     errsRedo = false;
     for (int i = 0; i < errObs.len && !errsRedo; i++) {
@@ -31068,6 +32059,7 @@ static struct semaModule* analyzeOnce(char* fileName, bool requireMain) {
     if (ErrMsgGetNErrors() == errsAtStart) { //O38-O41: on a program that checked cleanly
         ownObligationsKnown = true;
         settleOwnBorrows();
+        settleVecViews(); //M19g
         ownObligationsKnown = false;
     }
 

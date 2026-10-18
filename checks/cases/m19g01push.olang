@@ -1,0 +1,12 @@
+# check: fail error[M19g]: 'd' holds a view of 'v' taken before 'v' may have grown
+# also: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
+# M19g: a view of a Vec kept across a Push on the same Vec, in one function - the view shows the buffer the growth replaced
+import "std/io"
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    d := v.View()
+    for i in range 100 { v.Push(i) }
+    try io.Println($d[0])
+}

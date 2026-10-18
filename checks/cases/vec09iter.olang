@@ -1,0 +1,11 @@
+# check: run
+# Vec phase 1: an iterator over a Vec holds the Vec, so a Push while it is used is refused (as Rust refuses it)
+# M19g, round 2 (brought back): a copy is a second name and an iterator reads the Vec each step - no view is stale
+import "std/io"
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    it := v.Iter()
+    v.Push(2)
+    try io.Println($(try it.Next() catch default 0))
+}

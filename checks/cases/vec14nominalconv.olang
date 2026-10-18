@@ -1,0 +1,25 @@
+# check: fail error[M19g]: 'd' holds a view of 'w' taken before 'w' may have grown
+# vec1 F1: as vec13, with a program's own declared array type and an explicit conversion
+# M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
+import "std/io"
+fn churn() I64 {
+    t := 0
+    for i in range 2000 { s := $i "abcdefghijklmnopqrstuvwxyz"
+        t += s.Len() }
+    return t
+}
+fn id(a Array<I64>&) Array<I64>&a { return a }
+type Ix Array<I64>
+fn f(v Vec<I64>&) Ix&v { return Ix(v.View()) }
+fn grow(w mut Vec<I64>&) ? io.IoError {
+    d := f(w)
+    for i in range 1000 { w.Push(i + 100) }
+    churn()
+    try io.Println($d[0] " " $d[1])
+}
+fn main() ? {
+    v := Vec<I64>()
+    v.Push(1)
+    v.Push(2)
+    try grow(v)
+}

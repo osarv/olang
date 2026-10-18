@@ -1,0 +1,16 @@
+# check: fail error[M19g]: 'd' holds a view of 'l.toks' taken before 'l.toks' may have grown
+# Vec phase 2a (O37/O39): a function handing back a view of its parameter's Vec field is a borrowed own result
+# M19g, round 2 (brought back from round 1's deletion): the same Vec is seen on both sides, so the view is refused
+import "std/io"
+type Lexer struct(n I64) {
+    n
+    toks Vec<I64> = Vec<I64>()
+}
+fn view(l Lexer&) Array<I64>&l { return l.toks.View() }
+fn main() ? {
+    l := Lexer(1)
+    l.toks.Push(1)
+    d := view(l)
+    l.toks.Push(2)
+    try io.Println($d[0])
+}
