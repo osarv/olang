@@ -636,8 +636,8 @@ d13czeroref.olang:18:20: note: 'Chan<Ticket&>' holds it by reference, whose zero
 d13czeroref.olang:20:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
    20 |     b := a.Repeat(2)
       |            ^~~~~~
-$ROOT/std/prelude/array.olang:174:12: note: in the standard library's code, here
-  174 |     out := Array<T>(a.Len() * k)
+$ROOT/std/prelude/array.olang:175:12: note: in the standard library's code, here
+  175 |     out := Array<T>(a.Len() * k)
       |            ^~~~~
 d13czeroref.olang:13:5: note: here
    13 |     Counter++
@@ -4543,8 +4543,8 @@ compilation failed with 1 error
 rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<List<I64>> is read-only - pass a writable one
     4 |     return ro.Filter(fn(x List<I64>) Bool { return true }).Len()
       |            ^~
-$ROOT/std/prelude/array.olang:95:5: note: 'a' is declared here
-   95 | fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
+$ROOT/std/prelude/array.olang:96:5: note: 'a' is declared here
+   96 | fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
       |     ^
 compilation failed with 1 error
 === rv3roforin.olang
@@ -5190,8 +5190,8 @@ compilation failed with 1 error
 strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
     9 |     long := b.words.Count(fn(s String&) Bool { return s.Len() > 1 })
       |                     ^~~~~
-$ROOT/std/prelude/array.olang:78:12: note: built here, where the receiver's part it was handed lives
-   78 |         if keep(x) { n++ }
+$ROOT/std/prelude/array.olang:79:12: note: built here, where the receiver's part it was handed lives
+   79 |         if keep(x) { n++ }
       |            ^~~~
 compilation failed with 1 error
 === strayfnbody.olang
@@ -5206,8 +5206,8 @@ compilation failed with 2 errors
 strcallbackbuilds.olang:10:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    10 |     n := b.words.Count(fn(s String&) Bool {
       |                  ^~~~~
-$ROOT/std/prelude/array.olang:78:12: note: built here, where the receiver's part it was handed lives
-   78 |         if keep(x) { n++ }
+$ROOT/std/prelude/array.olang:79:12: note: built here, where the receiver's part it was handed lives
+   79 |         if keep(x) { n++ }
       |            ^~~~
 strcallbackbuilds.olang:20:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    20 |     n := via(b.words, fn(s String&) Bool {

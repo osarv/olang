@@ -79,6 +79,7 @@ fn(I32, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	
 fn(I32, std/prelude/text:Radix) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(I64)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(I64) std/prelude/array:ChunkSize ? std/prelude/array:ArrayError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 fn(I64) std/prelude/text:Radix ? std/prelude/text:TextError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 fn(I64) std/prelude/vec:Vec<std/prelude/text:String&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/vec:Vec<std/prelude/text:String&>" pass v
 fn(I64, I64, std/prelude/text:Char) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
@@ -203,6 +204,7 @@ mut std/prelude/text:StringBuilder&	8 8	ptr	-	-
 mut std/prelude/text:decimal&	8 8	ptr	-	-
 own mut Array<std/prelude/text:String&>&	16 8	{ i64, ptr }	-	-
 std/prelude/array:ArrayError	4 4	i32	-	-
+std/prelude/array:ChunkSize	8 8	i64	-	-
 std/prelude/builtin:BuiltinError	4 4	i32	-	-
 std/prelude/complex:C16	4 2	%"std/prelude/complex:C16"	{ half, half }	fields 0,2
 std/prelude/complex:C32	8 4	%"std/prelude/complex:C32"	{ float, float }	fields 0,4
