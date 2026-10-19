@@ -944,3 +944,41 @@ neither.
    by a flow, from a call tied to a block of this function, stays (SPEC's exception). A moved local's storage is
    `Stored[l]`, which lowering gives the MIR local as its home.
 8. A term with no run-time scope that a call passes (`Inert`) is the program's in lowering.
+
+### 9.4 Decided while building M6 (round 2)
+
+9. **Tasks (P2, P1g).** Everything a task is handed - its arguments, what its temporaries hold, the function value it
+   calls, what its clauses capture, its targets - must last until its join block: a term at or outside the join block,
+   a scope variable, or `P`. A task's temporaries are built in the join block, where the task is made, never in the
+   spawn's own block. A spawn's target is fitted as the assignment it is, at the spawn.
+10. **Stand-ins apart from builds.** A body's summary records, per scope variable, whether it may build there at all
+    (`Builds`, a task's stand-in included) and whether it builds a value there (`Real`). A spawned call whose callee
+    builds into a variable builds there; one whose callee builds nothing still makes a stand-in of every scope it binds
+    (P2). A derived scope takes only real builds: a stand-in for it is made where the instance whose field it reads
+    lives (O23), a real build into it is O23a's error, as in stage 0.
+11. **T22a after every body.** A function with obligations becomes no value - named, a lambda, or an instance's `Call` -
+    judged once every body is, since obligations are summaries; a function value returned from a parameter (O14b's
+    callback) is exempt, its obligation being the callers'.
+12. **A constructor's instance is built where it stands or where its parameter is bound** (C2d), never landed by its
+    obligations (O18a, O18b): an instance not exactly where what it can store through lives is said at the argument.
+13. **What a body keeps, in two.** `Stores` - it stores into what it is lent, or hands a writable reference into it out
+    - and `Keeps` - it only keeps its reference. A reference read out of a lent region and handed on is kept in that
+    region only by a callee storing into it (O17). O17a refuses holding by reference, slicing or viewing a value whose
+    references live where its own storage does not.
+14. **E31b and E11c are read off callee bodies.** A copy of an element nobody holds, lent for a writable reference
+    parameter, is refused but for a handle the callee uses only through its reference and a view writing nothing of its
+    own storage - a greatest fixed point over bodies. What a body builds into each scope variable, and where, is a
+    least fixed point (P2 stand-ins, lambdas' and adapters' bodies, moved locals, try defaults and choices placed where
+    their values live), and a `Str` builds nothing where its receiver lives (decision 49).
+15. **Errors inside an instance's body are said at the program's use** (G16b), with the checker's note naming the
+    instance; one said in several instances is said once.
+16. **Which rule a fit says**, as stage 0 names it: O25 where an exact fit fails and something can be stored through at
+    any depth (else O10); O10 for a local whose own scope is too short, whatever its claim; T17c for an enum payload's
+    slot; O10d for a reference or function value returned from the function's own scope; O14 for a parameter's
+    storage returned as a built result (and T25c for a read-only reference returned as one). A derived scope's
+    exactness is refused for a local (nothing here shows the two the same) and recorded as an obligation for a result
+    (O14b). An assignment's fit is said at its `=`, a call at its last callee in a chain, an index call at its `[`.
+17. **O26a and lambdas.** A returned lambda's captures are not moved into the result scope; each is an obligation
+    (D16d), and a lambda over several scopes is O26.
+18. **O4a in generic signatures.** A marker in a signature naming no earlier parameter is an error at the name, in
+    `compiler/generic.olang` where signatures are made.

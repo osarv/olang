@@ -464,7 +464,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
     }
     for prm in s.Params {
         ps.Push(p.Resolve(c, prm.Ty))
-        shares.Push(p.markedParam(prm.Ty, named, shares))
+        shares.Push(p.markedParam(c, prm.Ty, named, shares))
         named.Push(prm.Name)
     }
     result := types.VoidT
@@ -472,7 +472,7 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
     rs := Array<types.TypeId>(s.Results.Len())
     for i in range s.Results.Len() {
         rs[i] = p.Resolve(c, s.Results[i])
-        from[i] = p.markedParam(s.Results[i], named, shares)
+        from[i] = p.markedParam(c, s.Results[i], named, shares)
         if from[i] == types.OwnScope and p.T.KindOf(rs[i]) == types.Kind.Var { from[i] = types.FromTypeVar }
     }
     if s.Results.Len() == 1 {
@@ -487,13 +487,29 @@ fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName 
 
 # the earlier parameter a written type's marker names (O4a), as the parameter whose own scope variable that one is:
 # OwnScope for a bare marker, "&return", none, or a name that is no earlier parameter
-fn (p mut Program&) markedParam(t ast.TypeRef&, named List<source.NameId>&, shares List<I64>&) I64 {
+fn (p mut Program&) markedParam(c Context&, t ast.TypeRef&, named List<source.NameId>&, shares List<I64>&) I64 {
     scope := p.markOf(t)
     if scope == source.NameId(0) { return types.OwnScope }
     for j in range named.Len() {
         if named[j] == scope { return shares[j] if shares[j] >= 0 else j }
     }
+    # a name no earlier parameter has (O4a)
+    text := p.L.Names.Text(scope)
+    if text != "return" {
+        sp := p.markSpan(t)
+        nsp := source.Span(sp.End - I32(text.Len()), sp.End)
+        p.L.Diags.ErrorOncePerLine(p.at(c.Mi, nsp), msgs.UnknownScopeName(msgs.Tok(text)))
+    }
     return types.OwnScope
+}
+
+# the span of a written type's outermost reference marker, whose scope name ends it
+fn (p mut Program&) markSpan(t ast.TypeRef&) source.Span {
+    return match t {
+        case ast.TypeRef.Ref(sp, _, _) => sp
+        case ast.TypeRef.Perm(_, of, _, _) => p.markSpan(of)
+        case _ => source.Span(0, 0)
+    }
 }
 
 # the name a written type's outermost marker names, 0 for none ("mut", "own" stand before it)
@@ -1783,7 +1799,7 @@ fn (p mut Program&) paramsSig(c Context&, params Array<ast.Param&>&, errs ast.Si
     if params != null {
         for prm in params {
             ps.Push(p.Resolve(c, prm.Ty))
-            shares.Push(p.markedParam(prm.Ty, named, shares))
+            shares.Push(p.markedParam(c, prm.Ty, named, shares))
             named.Push(prm.Name)
         }
     }

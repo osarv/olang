@@ -6,7 +6,8 @@
 #
 # For each file, "== FILE", then the program it is the root of loaded, its names resolved, every body checked and its
 # scopes judged: the diagnostics said, rendered as the compiler renders them, then "gap PATH:LINE:COL WHAT" for each
-# construct the scope pass met and does not judge yet, and "bodies N judged J". compiler/tools/scopediff.olang compares
+# construct the scope pass met and does not judge yet, and "bodies N judged J unjudged U" - U the bodies with code the pass
+# skipped, a type in them left unknown by the checker. compiler/tools/scopediff.olang compares
 # them with stage 0's goldens. -D defines build constants; -t makes TestBuild true and checks the root module's test
 # blocks. -plan prints the plan of each body whose place (PATH:LINE) contains PATTERN.
 
@@ -21,6 +22,7 @@ import resolver "../names"
 import "../generic"
 import typecheck "../check"
 import "../typed"
+import "../types"
 import "../scope"
 
 fn main() ? {
@@ -67,21 +69,37 @@ fn run(args Array<String&>&) {
         c := typecheck.Checker(p, testBuild)
         c.CheckProgram()
         s := scope.Scoper(p, c.Bodies)
+        cr mut typecheck.Checker& = c
+        s.InstNote = fn(inst I64) String { return cr.InstNote(inst) }
+        s.Spell = fn(t types.TypeId) String { return cr.Ty(t) }
         s.Run()
         out.Write(d.Render())
         for g in s.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }
         judged I64 = 0
+        unjudged I64 = 0
         for b in range c.Bodies.Len() {
-            if s.Judged(b) { judged++ }
+            if s.Judged(b) {
+                judged++
+            } else if c.Bodies[b].Root != null {
+                unjudged++
+            }
             if planAt.Len() == 0 { continue }
             body := c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
             if (try where.Find(planAt) catch default -1) < 0 { continue }
-            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $planText(s.Plans[b]))
+            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $varsText(body) $planText(s.Plans[b]))
         }
-        out.Write("bodies " $c.Bodies.Len() " judged " $judged "\n")
+        out.Write("bodies " $c.Bodies.Len() " judged " $judged " unjudged " $unjudged "\n")
     }
     try out.Flush() catch io.IoError { os.Exit(1) }
+}
+
+# a body's scope variables as text, in the order a call passes them
+fn varsText(b typed.Body&) String {
+    t := StringBuilder()
+    for k in range b.Vars.Len() { t.Push("var " $k " " $b.Vars[k] "\n") }
+    for k in range b.Locals.Len() { t.Push("local " $k " " $b.Locals[k].Kind " " $b.Locals[k].Marked " in " $b.Locals[k].In "\n") }
+    return t.ToString()
 }
 
 # a plan as text: each site's scope, each local's storage that is no stack slot, each call's passed scopes

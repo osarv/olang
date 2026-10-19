@@ -70,6 +70,12 @@ fn run(args Array<String&>&) {
     exact I64 = 0
     unpinned := StringBuilder()
     missed := StringBuilder()
+    # the cases giving no scope error at all: the pass's (by stage 0's first rule), or the checker's - where the port's
+    # checker said an error of its own, or left a body the pass skipped (a type unknown)
+    silent := Map<String&, I64>()
+    silentChecker I64 = 0
+    silentMine I64 = 0
+    silentList := StringBuilder()
     for c in mineCases {
         want := firstRow(old, c)
         text := try os.ReadFile("checks/cases/" $c) catch os.OsError default ""
@@ -88,12 +94,24 @@ fn run(args Array<String&>&) {
             missed.Push($c ": want " $want "; got ")
             for r in errorRows(got, c) { missed.Push($r "; ") }
             missed.PushChar('\n')
+            if mineRows.Len() == 0 {
+                if checkerSaid(got, c) or unjudged(said1) > 0 {
+                    silentChecker++
+                    silentList.Push($c " (checker's): " $want "\n")
+                } else {
+                    silentMine++
+                    silent.Update(errorOf(want), 1, fn(v I64) I64 { return v + 1 })
+                    silentList.Push($c ": " $want "\n")
+                }
+            }
         }
     }
     n1 := mineCases.Len()
     out.Write(("scopediff: refused programs: " $first " of " $n1 " scope cases give stage 0's first error (" $exact
         " give exactly its scope errors)\n"))
     out.Write("scopediff: pinned messages: " $pinned " of " $n1 " scope cases say their header's message\n")
+    out.Write(("scopediff: no scope error at all: " $silentMine " cases the scope pass misses, " $silentChecker
+        " where the checker erred or left a body unjudged\n"))
 
     # ---- 2. the programs stage 0 accepts ----
     said2 := StringBuilder()
@@ -136,6 +154,9 @@ fn run(args Array<String&>&) {
     if verbose {
         out.Write("-- refused programs not giving stage 0's first error:\n")
         out.Write(missed.ToString())
+        out.Write("-- refused programs with no scope error, by stage 0's first rule (the scope pass's):\n")
+        out.Write(counted(silent))
+        out.Write(silentList.ToString())
         out.Write("-- scope cases not saying their pinned message:\n")
         out.Write(unpinned.ToString())
         out.Write("-- accepted programs not scope clean (rows):\n")
@@ -150,6 +171,7 @@ fn run(args Array<String&>&) {
     }
     try os.WriteFile("build/scopediff.said", $saidText $said2.ToString()) catch os.OsError { }
     try os.WriteFile("build/scopediff.missed", missed.ToString()) catch os.OsError { }
+    try os.WriteFile("build/scopediff.silent", $counted(silent) $silentList.ToString()) catch os.OsError { }
     try out.Flush() catch io.IoError { }
 }
 
@@ -168,6 +190,24 @@ fn scopeRule(r String&) Bool {
         if r == x { return true }
     }
     return false
+}
+
+# whether the port said an error of a rule no scope rule is, for a case: the checker's own
+fn checkerSaid(rs List<row>&, c String&) Bool {
+    for r in rs {
+        if r.Case == c and not r.What.StartsWith("gap ") and not scopeRow(r.What) { return true }
+    }
+    return false
+}
+
+# the bodies a case's rendering says the pass skipped ("bodies N judged J unjudged U")
+fn unjudged(text String&) I64 {
+    for line in text.Lines() {
+        if not line.StartsWith("bodies ") { continue }
+        at := try line.Find(" unjudged ") catch { continue }
+        return try line[at + 10:].Trim().ParseInt() catch default 0
+    }
+    return 0
 }
 
 # a case's error rows of a scope rule, sorted

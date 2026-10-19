@@ -1482,6 +1482,11 @@ fn (c mut Checker&) instContexts(inst I64) I64 {
     return chain.Len()
 }
 
+# the note an instance's context gives, and a type as source writes it, for the passes after checking (G16b, B11)
+fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
+
+fn (c mut Checker&) Ty(t types.TypeId) String { return c.ty(t) }
+
 # "instantiated here, with K = K, V = I32"
 fn (c mut Checker&) instNote(inst I64) String {
     b := StringBuilder()
@@ -2278,10 +2283,11 @@ fn (c mut Checker&) resolve(t ast.TypeRef&) types.TypeId {
 fn (c mut Checker&) markOf(t ast.TypeRef&) typed.Mark {
     if t == null { return typed.Mark.Infer }
     match t {
-        case ast.TypeRef.Ref(_, _, sc) {
+        case ast.TypeRef.Ref(sp, _, sc) {
             if sc == source.NameId(0) { return typed.Mark.Bare }
             if c.text(sc) == "return" { return typed.Mark.Return }
-            id := c.localNamed(sc)
+            # in a lambda, a variable of a body around it is its capture (D16c)
+            id := c.localOrCapture(sc, sp)
             if id >= 0 { return typed.Mark.Of(typed.LocalId(I32(id))) }
             return typed.Mark.Global(c.fr().Mi, sc)
         }
@@ -4242,7 +4248,7 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
 fn (c mut Checker&) scoped(sp source.Span, x typed.Expr&c, sc source.NameId) typed.Expr&c {
     m := typed.Mark.Return
     if c.text(sc) != "return" {
-        id := c.localNamed(sc)
+        id := c.localOrCapture(sc, sp)
         m = typed.Mark.Of(typed.LocalId(I32(id))) if id >= 0 else typed.Mark.Global(c.fr().Mi, sc)
     }
     match x {
