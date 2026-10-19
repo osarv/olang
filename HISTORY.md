@@ -20529,3 +20529,12 @@ since a lambda builds into a read-only parameter's scope through a typed local (
 places from two scopes, a for-in copy lent, slices of temporaries in constructors, conversions naming storage, reference
 defaults, E25 with a global, two more); one acceptance kept on purpose - `l := m.l; return l` moved into the result
 scope by O26a where stage 0 keeps it, which is sound. PROGRESS.md lists them case by case.
+
+### E11a: `$` of a function writes its error set as QY lists it
+
+QY replaced `+` by commas in error lists (and parenthesized a function type's several items), but the renderer of a
+function's signature, which `$f` and a join use, still joined the items with ` + `. `rdSpellSigB` in codegen.c (shared with
+the compile-time evaluator through `RdSpellSig`/`RdSpellType`) now writes a named function as `name(params) R ? A, B` and a
+function value or type as `fn(params) R ? (A, B)` (one item stays unparenthesized). The port's renderer in `compiler/` has no
+`$` of functions yet, so nothing there changed. `checks/cases/d16blambdaorder.olang` pinned the old text and was updated;
+`tests/shared.olang` has a test comparing both forms, whose asserts the evaluator also decides while compiling (S18c).

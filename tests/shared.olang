@@ -2121,6 +2121,15 @@ test "E11a: functions render as signatures" {
     assert bytesEq($rs, "Point&[Point(1, 2)]")
 }
 
+# E11a/QY: an error set is listed with commas; a function type's several items are parenthesized
+fn renderFail(a I32) I32 ? MathError, RangeError { if a == 1 { error MathError.OVERFLOW } return a }
+
+test "E11a/QY: a function's error set renders with commas" {
+    assert bytesEq($renderFail, "renderFail(a I32) I32 ? MathError, RangeError")
+    f := renderFail
+    assert bytesEq($f, "fn(a I32) I32 ? (MathError, RangeError)")
+}
+
 test "E11a: '$' on text is a copy - it is a value, not a second name for the storage" {
     buf := Array<Char>(2, 'a')
     t := $buf
