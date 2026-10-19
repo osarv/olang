@@ -85,9 +85,13 @@ overrated".
 - 2026-10-19 00:40 CEST: wt-eval merged and verified (M8 round 2, 9713316): compiler/interp.olang runs lowered MIR;
   B9c/S8b/S18c decided by evaluation in Analyze; `olang interpret` through the driver; `make evaldiff` 254/287 tests as
   stage 0 (linalg slow, map check errors, os needs M6); 79MB where stage 0's interpret took 1.66GB. Left: speed
-  (pre-decode MIR), K2 baking into emitted data, G21, S8c, S18d, tasks. STAGE-0 BUG to fix: `$f` renders a function's
-  error set with `+` (QY removed it); checks/cases/d16blambdaorder.olang pins the old spelling. Running: wt-scope6 (M6
+  (pre-decode MIR), K2 baking into emitted data, G21, S8c, S18d, tasks. (`$f`'s error set with `+`: fixed 2026-10-19, wt-render2.) Running: wt-scope6 (M6
   round 2).
+- 2026-10-19 03:00 CEST (weekly ~0.87, code work stopped for the week - the user: stop at 90%): wt-scope6 round 2
+  merged and verified (316bc01): 147 -> 18 section-8 cases the port wrongly accepts (the 18 listed in HISTORY.md "Port
+  M6 round 2" and /home/user/wt/scope6/PROGRESS.md), 221/279 give stage 0's first error; per-instance bindings
+  (O23a/O13c) not started. wt-render2 merged: `$f` writes error sets with commas (E11a/QY). NEXT after the reset: M6
+  round 3 (the 18, then per-instance bindings), the emitter's Home allocation, M8 speed and K2 baking, then M10/M11.
 - **THE BUILD LIST - everything decided and not yet built (kept here so nothing is lost; the user, 2026-10-18: "Are you
   making sure all the features we decide on actually get built later on"). Each item points at its record. Before
   self-hosting (stage 0 too): the open STAGE-0 BUG FIXES (wt-noown - own/take removed, memory round 3 - merged
