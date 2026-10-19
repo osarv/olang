@@ -15,5 +15,5 @@ fn main() {
     g := fn() I64 { return try z(N) + try a(N) }
     assert runIt(g) == 10
     h := fn() I64 { return try z(N + 1) + try a(N + 1) }
-    assert runIt(h) == 20 and $g == "fn() I64 ? Alpha + Zeta"
+    assert runIt(h) == 20 and $g == "fn() I64 ? (Alpha, Zeta)"
 }

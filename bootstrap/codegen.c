@@ -4789,8 +4789,8 @@ static void rdKey(struct type t, struct cgBuf* b) {
 //parameter and result types of a function rendering. Spelled into a growable buffer: a fixed one per level cut a
 //long type short, and two long function types then shared a rendering helper's name
 
-//"(a I32, b mut Point&) I32 ? E + F", the part of a signature after its name
-static void rdSpellSigB(struct type f, struct cgBuf* b) {
+//"(a I32, b mut Point&) I32 ? E, F", the part of a signature after its name
+static void rdSpellSigB(struct type f, struct cgBuf* b, bool fnType) {
     rdSigDepth++;
     cgBufAdd(b, "(");
     for (int i = 0; i < f.vars.len; i++) {
@@ -4814,13 +4814,16 @@ static void rdSpellSigB(struct type f, struct cgBuf* b) {
     }
     if (f.noReturn) cgBufAdd(b, " noreturn"); //D8e
     //R1a: an inferred set is rendered as what it was found to be
-    if (f.errors.len) cgBufAdd(b, " ?");
+    //QY: items are listed with commas; a function type's several items are parenthesized (E11a)
+    bool paren = fnType && f.errors.len > 1;
+    if (f.errors.len) cgBufAdd(b, paren ? " ? (" : " ?");
     for (int i = 0; i < f.errors.len; i++) {
         struct type* e = *(struct type**)ListGetIdx(&f.errors, i);
         char item[2048];
         ErrSpellItems(*e, item, sizeof(item)); //R1c: "T", or the words it names
-        cgBufAdd(b, "%s%s", i ? " + " : " ", item);
+        cgBufAdd(b, "%s%s", i ? ", " : (paren ? "" : " "), item);
     }
+    if (paren) cgBufAdd(b, ")");
     rdSigDepth--;
 }
 
@@ -4864,7 +4867,7 @@ static void rdSpellTypeB(struct type t, struct cgBuf* b) {
     }
     if (t.bType == BASETYPE_FUNC) {
         cgBufAdd(b, "fn");
-        rdSpellSigB(t, b);
+        rdSpellSigB(t, b, true);
         return;
     }
     //G8b: a diagnostic writes a variable as the program does once it is introduced - bare, "T", never "<T>" again
@@ -4919,7 +4922,7 @@ static void rdSpellType(struct type t, char* buf, size_t n) {
 
 static void rdSpellSig(struct type f, char* buf, size_t n) {
     struct cgBuf b = {0};
-    rdSpellSigB(f, &b);
+    rdSpellSigB(f, &b, false);
     snprintf(buf, n, "%s", cgBufStr(&b));
     free(b.p);
 }

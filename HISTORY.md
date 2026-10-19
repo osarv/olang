@@ -20475,3 +20475,12 @@ shared its elements (a write through a `mut String&` global initialized from tex
 as a fixed array (E32b) was written as a pair where its type is one pointer; errno was lost after the runtime's own
 functions. **Found, not fixed (stage 0)**: `$f` of a function value renders its error set with `+`
 (`fn() I64 ? Alpha + Zeta`), which QY removed; checks/cases/d16blambdaorder.olang asserts that spelling.
+
+### E11a: `$` of a function writes its error set as QY lists it
+
+QY replaced `+` by commas in error lists (and parenthesized a function type's several items), but the renderer of a
+function's signature, which `$f` and a join use, still joined the items with ` + `. `rdSpellSigB` in codegen.c (shared with
+the compile-time evaluator through `RdSpellSig`/`RdSpellType`) now writes a named function as `name(params) R ? A, B` and a
+function value or type as `fn(params) R ? (A, B)` (one item stays unparenthesized). The port's renderer in `compiler/` has no
+`$` of functions yet, so nothing there changed. `checks/cases/d16blambdaorder.olang` pinned the old text and was updated;
+`tests/shared.olang` has a test comparing both forms, whose asserts the evaluator also decides while compiling (S18c).
