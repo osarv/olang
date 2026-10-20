@@ -1,3 +1,7 @@
+**Moved 2026-10-20 to the private repository osarv/hotpath** (the user created it for the company): README.md (plan,
+proof, ground rules, open questions), CLAUDE.md, outreach/{plan,targets,bounties}.md. Company work happens in a
+separate session on that repository; this file stays as olang's pointer.
+
 ---
 name: outreach
 description: "Contract work to pay for compute: fixed-price measured speedups; the outreach doc, 14 targets and 8 letters; the company Gmail I am to send from; what waits on the user"
