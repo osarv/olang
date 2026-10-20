@@ -2,5 +2,4 @@
 - [Direction](direction.md) — the user's principles for olang (no manual memory, C-like perf, natural language, minimal syntax, multi-purpose, solid and smooth), FPGA/oann/settling networks/oagent goals, natural-language syntax, dictated messages, times in CEST
 - [Plan](plan.md) — work order (the port, own/Vec, queued stage-0 fixes), recorded future work, parked items and revisit-ifs
 - [Decisions](decisions.md) — numbered ledger: questions for the user, answers I owe, my unconfirmed calls (each with default + recommendation), on-hold and deferred items
-- [Outreach](outreach.md) — contract work for compute: fixed-price measured speedups, the outreach doc, 14 targets, 8 letters; company Gmail; QL pending
 - [Archive](archive/) — historical, not imported: `decisions_log.md`, `next_steps_log.md`, `concurrency_gaps.md` (all done), `open_language_gaps.md` (all resolved), `vec_growth_question.md` (superseded: Vec exists and is the default growable array)

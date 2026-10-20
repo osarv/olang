@@ -21,20 +21,6 @@ only structs/enums convert, no widening at first, defaults/overrides through the
 code comes back from git (T30). GUI style (retained vs immediate mode) left to me (the user: "I don't know about GUI
 design. Do what you want") - nothing to decide until a GUI is written.
 
-**Asked 2026-10-11 (contract work, outreach.md):**
-- QL1. The company's name. Recommended: Osarv (also offered: O Labs/Olab, Hotpath, Measured, Cycles, Kvick, Rask). In
-  effect: `[company]` in the letters. Also offered: checking the name (Bolagsverket, .se/.com domains, EUIPO).
-  The user, 2026-10-11: "I want an English name, and preferably one that starts with O ... Olab or something like that
-  is really good too"; Hotpath maybe later, for a separate solution-specific company. Asked how to start a company in
-  Sweden (answered: enskild firma vs aktiebolag, F-skatt/moms via verksamt.se). Name still open; availability check
-  still offered.
-- QL2. The outreach doc's six "Before sending" decisions: the guarantee, prices, the AI-use line, the signature (company
-  name and background line), quoting olang/oann results, and invoicing. In effect: the defaults written into the
-  letters. Nothing is sent before the user OKs them.
-- QL3. Send order, asked as a comment in the doc: the strongest fits first, as listed (in effect), or the five Swedish
-  companies first, so a reply can become a meeting.
-- QL4. Offered, no answer yet: drafting a compute-credits application.
-
 **Asked 2026-10-17 (the user: "Make sure you don't lose any work when the limits are hit"):**
 - QM. ANSWERED YES 2026-10-17 ("You can push to GitHub ... Else is rather run locally") - built, wipsnap.sh. Was: May I push agents' work branches (`wt-*`, or `refs/wip/*` snapshots) to GitHub as backups? Only a push survives a
   lost container; the designated branch rule forbids other branches without the user's OK. In effect: local only
@@ -253,7 +239,6 @@ design. Do what you want") - nothing to decide until a GUI is written.
   DECIDED (the user: "Do that, disallow for numbers, allow for array and text"): a method call on a number literal is a
   compile-time error (written through a variable); text, array literals and comprehensions keep methods. Both
   compilers, queued after the syntax batch with the Pair move.
-- QL1 (company name): the user, 2026-10-17: "don't worry about the name" - dropped.
 - QJ1/QJ2/QF explained again 2026-10-17 (the user asked "tell me about 2-4"); recommendations unchanged (QJ1 keep -
   or a bare `b := a` on a Vec an error; QJ2 keep; QF open until Vec phase 2b's move-aware collections, closed with a
   test of a long-running Map of owned objects staying flat).
