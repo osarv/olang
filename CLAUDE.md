@@ -23,7 +23,7 @@ drift out of sync with the actual code.
 
 ## Claude's memory
 
-What Claude has learned working with the user, in five files in `.claude/memory/`, imported here so every session
+What Claude has learned working with the user, in four files in `.claude/memory/`, imported here so every session
 starts with them: `rules.md` (their standing rules and corrections), `direction.md` (their direction for the language,
 how they write, their time zone), `plan.md` (the work order and recorded future work), `decisions.md` (the ledger of
 questions put to them and the decisions made for their review).
