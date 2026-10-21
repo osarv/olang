@@ -1574,7 +1574,11 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
     un := t.IsUnsigned(r)
     x := fe.val(a0, t0)
     match op {
-        case typed.PrimOp.Neg { return fe.let("fneg " $lt " " $x) if fl else fe.let("sub " $lt " 0, " $x) }
+        case typed.PrimOp.Neg {
+            # a BF16's sign flipped in its bits (T4)
+            if lt == "bfloat" { return fe.let("bitcast i16 " $fe.let("xor i16 " $fe.let("bitcast bfloat " $x " to i16") ", -32768") " to bfloat") }
+            return fe.let("fneg " $lt " " $x) if fl else fe.let("sub " $lt " 0, " $x)
+        }
         case typed.PrimOp.BitNot { return fe.let("xor " $lt " " $x ", " $("true" if r == types.BoolT else "-1")) }
         case typed.PrimOp.Not { return fe.let("xor i1 " $x ", true") }
         case typed.PrimOp.Convert { return fe.convert(x, t0, ty) }
@@ -1592,6 +1596,27 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case _ { }
     }
     y := fe.val(fe.arg(args, 1), t0)
+    if lt == "bfloat" {
+        # BF16 arithmetic and comparisons through F32, the result narrowed in integers: exact for a comparison, one
+        # rounding for + - * / % (F32's 24 bits hold any of them before BF16's 8 do) - LLVM's own calls the runtime
+        # library (T4)
+        a, b := fe.widenBF16(x, "float"), fe.widenBF16(y, "float")
+        w := match op {
+            case typed.PrimOp.Add => "fadd"
+            case typed.PrimOp.Sub => "fsub"
+            case typed.PrimOp.Mul => "fmul"
+            case typed.PrimOp.Div => "fdiv"
+            case typed.PrimOp.Rem => "frem"
+            case _ => ""
+        }
+        if w != "" { return fe.narrowBF16(fe.let($w " float " $a ", " $b)) }
+        match op {
+            case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge {
+                return fe.compare(op, types.TypeId(13), a, b)   # F32
+            }
+            case _ { }
+        }
+    }
     match op {
         case typed.PrimOp.Add { return fe.let($("fadd " if fl else "add ") $lt " " $x ", " $y) }
         case typed.PrimOp.Sub { return fe.let($("fsub " if fl else "sub ") $lt " " $x ", " $y) }
