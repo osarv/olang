@@ -1807,13 +1807,27 @@ fn (ln mut lowering&) floatResult(op typed.PrimOp, ty types.TypeId, ops Array<mi
     }
     bad := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[nan, ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[argsNan], sp)], sp)
     ln.fails(bad, chk, mir.ExitKind.Abort, Invalid, sp)
+    # whether each operand is finite: x - x == 0 holds for a finite float only
+    argsFinite := ln.constBool(true, sp)
+    for x in ops {
+        d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[x, x], sp)
+        xf := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+        argsFinite = ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[argsFinite, xf], sp)
+    }
     if op == typed.PrimOp.Div {
         z := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[ops[1], mir.Operand.Const(ty, 0)], sp)
         nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[ops[0], mir.Operand.Const(ty, 0)], sp)
-        byZero := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[z, nz], sp)
+        d0 := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[ops[0], ops[0]], sp)
+        fin0 := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d0, mir.Operand.Const(ty, 0)], sp)
+        byZero := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[z, nz], sp), fin0], sp)
         ln.fails(byZero, chk, mir.ExitKind.Abort, DivideByZero, sp)
     }
-    ln.finite(r, ty, chk, Overflow, sp)
+    # OVERFLOW only for an infinite result from finite operands
+    d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[r, r], sp)
+    fin := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+    ok := ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[fin, nan], sp)
+                                                                ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[argsFinite], sp)], sp)
+    ln.check(ok, chk, mir.ExitKind.Abort, Overflow, sp)
 }
 
 # r - r == 0 holds for a finite float only: a check failing with word where it does not (an infinity; a NaN was said)

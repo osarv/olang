@@ -3121,6 +3121,14 @@ fn (c mut Checker&) dataLength(x typed.Expr&) I64 {
     }
 }
 
+# whether a type's zero value is made by its constructor (D13c): a struct's, a declared number's with one (T29d)
+fn (c mut Checker&) zeroCalls(t types.TypeId) Bool {
+    if c.isStruct(t) { return true }
+    if not c.isNamed(t) or c.declKind(t) != types.DeclKind.Over or not c.P.Body(t) { return false }
+    sig := c.P.CtorSig(t)
+    return sig != types.UnknownT and c.P.T.Items(c.P.T.Errors(sig)).Len() == 0 and c.P.T.Items(c.P.T.Params(sig)).Len() == 1
+}
+
 # the zero value of a type (D13c): zero bits for a number, a Bool, a reference, a function value, an array; a struct's
 # constructor on its defaults
 fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr&c {
@@ -3147,6 +3155,13 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr&c {
         }
         c.ctorCalled = was
         return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), args, typed.Mark.None
+                                                 c.site(typed.SiteKind.Call, sp), true))
+    }
+    # a declared number with a constructor (T29d): its constructor on its base's zero
+    if c.zeroCalls(t) {
+        id := c.ctorBody(t)
+        p0 := c.P.T.Items(c.P.T.Params(c.P.CtorSig(t)))[0]
+        return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), c.one(c.zero(sp, p0)), typed.Mark.None
                                                  c.site(typed.SiteKind.Call, sp), true))
     }
     return c.lit(sp, t, 0)
@@ -3538,7 +3553,9 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
         if not c.notOperator(c.deref(ta), "MatMul", opSp, "'@'", 1, false) { c.err(opSp, msgs.MatmulUndeclared(c.ty(ta))) }
         return c.unknown(sp)
     }
-    if not c.isNumber(ta) or not c.isNumber(tb) {
+    # E10a: a declared type over a number that declares Eq is compared by it, as any type declaring one is
+    eqDeclared := (op == token.Tok.EqEq or op == token.Tok.NotEq) and c.isNamed(ta) and c.P.T.Same(ta, tb) and c.eqMethod(ta) != -1
+    if not c.isNumber(ta) or not c.isNumber(tb) or eqDeclared {
         if op == token.Tok.EqEq or op == token.Tok.NotEq {
             at := c.eqAt
             c.eqAt = opSp
@@ -4403,7 +4420,12 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     # E29: a Has or Contains that can fail is written under try - said at "in"
     c.opCall = c.text(c.P.FnDecl(m).Name)
     c.opIn = c.between(a.Span(), b.Span(), 2)
-    return c.invoke(sp, sp, m, coll, null, c.one(x))
+    # x evaluated first, held in a hidden local, then the collection (E29)
+    h := c.hidden(sp, typeOf(x))
+    from := c.stmts.Len()
+    c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(h)), x))
+    r := c.invoke(sp, sp, m, coll, null, c.one(c.readLocal(sp, h)))
+    return typed.Expr.Seq(sp, typeOf(r), typed.Seq(gather(c.stmts, from), r))
 }
 
 # a < b <= c (E30): each operand evaluated once, the next comparison only where the last held
@@ -5655,7 +5677,7 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
         c.exprs.Push(x)
     }
     # no fill: each element its type's zero value (D13c), a struct's made by its constructor
-    if args.Len() == 1 and c.isStruct(elem) { c.exprs.Push(c.zero(sp, elem)) }
+    if args.Len() == 1 and c.zeroCalls(elem) { c.exprs.Push(c.zero(sp, elem)) }
     items := gather(c.exprs, from)
     # its length checked once (D14b), under try failing into the try (E15a)
     lchk := c.checkOp(typed.Check.Abort)
@@ -5699,7 +5721,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 length := c.P.ConstArg(c.fr().Ctx, targs[1], c.i64())
                 if elem == types.UnknownT { return c.unknown(sp) }
                 # each element its type's zero value (D13c), a struct's made by its constructor
-                zs := Array<typed.Expr&>(1, c.zero(sp, elem)) if c.isStruct(elem) else Array<typed.Expr&>(0)
+                zs := Array<typed.Expr&>(1, c.zero(sp, elem)) if c.zeroCalls(elem) else Array<typed.Expr&>(0)
                 return typed.Expr.Make(sp, c.P.T.Array(elem, length), typed.Make(typed.MakeKind.Fill, 0, zs
                                        c.lit(sp, c.i64(), c.P.T.ConstValue(length) if c.P.T.KindOf(length) == types.Kind.Const else 0)
                                        c.site(typed.SiteKind.Make, sp), typed.Check.Abort))
