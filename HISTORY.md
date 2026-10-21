@@ -20568,6 +20568,10 @@ reverted the same hour, the second because stage 0 keeps a value local's instanc
   binding - it was held only to the instance's scope, which a method writing its receiver's `&of` field could falsify;
   and a store of existing storage where the binding is not known - through an element, another instance's field, an
   untracked local - is O23/O11's error (o23paramfield).
+- **A hole closed on the way**: a store into a `&q` field, and a constructor's initializer of one, needed only to outlive
+  the binding, so a longer-lived node could be stored where something is built through the field at the binding's
+  scope - stage 0 refuses that (O25, `checks/cases/o25gfieldbinding.olang`); both are exact now wherever something can
+  be stored through the field (O25g).
 
 **Found on the way, in the checker (fixed in `compiler/check.olang` and `types.olang`, both small)**: a `:=` field the
 declaration could not type - one initialized by a call, `y := mk&x(n)` - stayed Unknown in the type's field list, so the

@@ -1000,8 +1000,9 @@ neither.
     again (a store into the local itself, a task's target), carries the term each constructor parameter's argument
     lived at. A `&q` field read through it is there; a callee's `D(p, q)` through it resolves there, on both sides of a
     relation; a store into a `&q` field is held to the field's binding (`D(p, q)` through a parameter, the local's
-    binding, else the underestimate) - never only to the instance's scope; and a store of existing storage where only
-    the underestimate is known is O23/O11's error. Not tracked yet, so still underestimates (over-rejections, never
+    binding, else the underestimate) - never only to the instance's scope - and exactly where something can be stored
+    through it (O25g), as a constructor's initializer of one is, so that building through the field builds where its
+    referent is; a store of existing storage where only the underestimate is known is O23/O11's error. Not tracked yet, so still underestimates (over-rejections, never
     acceptances): locals assigned after their declaration, a call's result's bindings (O13c), a for-in's hidden locals.
 23. **Which rule and token**, as stage 0: O25e at the call (a constructor's at the argument); O1b at the value stored; an
     element read at its `[`; a build through a derived scope at the argument determining it; a conditional at its
