@@ -16424,6 +16424,22 @@ Array<I32, 2>&)` stays the run-time check stage 0 makes (`t7dfixedrun`). **Left*
 parameters' names (types carry none), text literals as `String&` where stage 0 says `Array<Char, N>`, and §8's cases
 counted here by their first error's rule.
 
+**The other agents' blockers (2026-10-21, third round; checkdiff 408/439 refused cases giving stage 0's first error,
+383/439 pinned messages, 299/303 accepted programs clean - 408, 381, 298 before).** Each blocker emit, scope and eval
+hit, fixed: T25c's read-only borrow followed through a conversion (`ToList`/`Filter` on a local fixed array); a method's
+argument checked against its parameter as the receiver's type arguments bind it (`boundParam`), so a literal adapts
+through `Map.Get`/`Has` on a `Pair` key; E11a, a function named directly rendering as its signature; E31b, `checked
+a[i]` with no clause lent to a reference parameter borrowing under the try; T7, `Array<T>(n)` run-time as stage 0 makes
+it; G16a/T22, a function instance's function type argument keeping its scopes, so `keep(link)` and `keep(copy)` are two
+instances; G21, a constant argument a call computes asked of the evaluator and the program checked again (B9c's loop).
+**Decided (mine):** (1) **reverses** the second round's (5): the port matches stage 0's array language until
+self-hosting - QP1's fixed `Array<T>(n)` comes with the arrays batch, which is the port's only (plan.md's build list);
+(2) a function type argument of an instance is kept whole and compared by `Same`, every other made plain - a function
+type's scopes are part of its identity (T22), a plain spelling would merge two different instances; (3) G21's asks are
+keyed by file and span start, a global named in a type argument asked as the name's expression, so a decision survives
+the next attempt's fresh AST walk; checkdump, having no evaluator, leaves the length unknown. **Left**: M19g (30 cases,
+the Vec view flow analysis - the scope pass's to take), function types spelled without parameter names.
+
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
 `compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
