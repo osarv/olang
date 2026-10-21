@@ -20,6 +20,7 @@ import "load"
 import "fetch"
 import "source"
 import "scope"
+import "typed"
 import "lower"
 import "fmt"
 import "emit"
@@ -341,8 +342,8 @@ fn drive(args Array<String&>&) I32 {
 # ---- the front end ----
 
 # the passes: the program loaded (M4: its imports, fetched where they are remote, its top-level conditions decided
-# where B9a can), resolved and checked with the decisions evaluation makes (M5, M8: B9c, S8b, S18c), held to section 8
-# by the scope pass (M6), lowered to MIR where that pass places things (M7) and written as LLVM IR (M9). Emission
+# where B9a can), resolved and checked with the decisions evaluation makes (M5, M8: B9c, S8b, S18c), lowered to MIR
+# (M7) with each local where the scope pass (M6) homes it (placement, below) and written as LLVM IR (M9). Emission
 # writes the whole program as one module, so a build is one object for the program (the root's, holding main or the
 # test harness) beside the runtime's - compile included, which writes the program its file is the root of
 type Passes struct() {
@@ -357,13 +358,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     interp.DecideAsserts(c, asserts)
     if d.Errors() > 0 { error build.Failed.REPORTED }
-    # section 8 (M6): the scope pass's errors, and its placement, which lowering follows
-    sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
-    sc.Run()
-    if d.Errors() > 0 { error build.Failed.REPORTED }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
-    lw.Plans = sc.Plans
+    lw.Plans = placement(c, cfg)
     e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
@@ -384,6 +381,31 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             error build.Failed.REPORTED
         }
     }
+}
+
+# where lowering puts things, for now (M6 round 3 is the scope pass's next step): each local's home as the scope pass
+# decides it - a local the function returns (O26a) lives where the result goes, never in a frame that is gone - and
+# every site the stand-in's, the program's scope, which is always safe and keeps everything to the end. The pass's own
+# site placement is not followed yet: its first rounds build a returned call's result in the callee's frame (a function
+# returning String values, or b.ToString(), read freed storage). Nor are its errors reported: on the compiler's own
+# source it still refuses 51 things stage 0 accepts (O10c, O25e, T17c, C2d ...), so stage 0 stays what holds a program
+# to section 8 until it agrees
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&) List<typed.Plan> {
+    d := c.P.L.Diags
+    sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
+    mark := d.Count()
+    sc.Run()
+    d.Forget(mark)
+    plans List<typed.Plan>
+    for i in range c.Bodies.Len() {
+        pl := typed.NewPlan(c.Bodies[i])
+        if i < sc.Plans.Len() {
+            from := sc.Plans[i]
+            for k in range pl.Stored.Len().Min(from.Stored.Len()) { pl.Stored[k] = from.Stored[k] }
+        }
+        plans.Push(pl)
+    }
+    return plans
 }
 
 # the triple emission writes, which the build's target replaces
