@@ -2281,7 +2281,7 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
                 if k3 == token.Tok.LBrack or (k3 == token.Tok.Iden and p.look(3) == token.Tok.LBrack and
                                                p.oracle.bare.Has(name)) {
                     p.advance()
-                    nt := ast.TypeRef.Named(p.from(at), Array<source.NameId>(1, name), Array<ast.TypeRef&>(0))
+                    nt ast.TypeRef&p = ast.TypeRef.Named(p.from(at), Array<source.NameId>(1, name), Array<ast.TypeRef&>(0))
                     elem := p.markers(at, nt)
                     return try p.arrayLit(at, elem)
                 }
@@ -2321,7 +2321,7 @@ fn (p mut Parser&) literalAfterType(at I32, x ast.Expr&p) ast.Expr&p ? Fail {
             parts := gather(p.ids, from)
             rev mut Array<source.NameId>&p = Array<source.NameId>(parts.Len())
             for i in range parts.Len() { rev[i] = parts[parts.Len() - 1 - i] }
-            nt := ast.TypeRef.Named(sp, rev, targs)
+            nt ast.TypeRef&p = ast.TypeRef.Named(sp, rev, targs)
             elem := p.markers(at, nt)
             return try p.arrayLit(at, elem)
         }
