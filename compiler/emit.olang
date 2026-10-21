@@ -2999,8 +2999,8 @@ fn RuntimeDecls(text String&) String {
             if line == "}" { copying = false }
             continue
         }
-        own := line.StartsWith("define internal ") or line.StartsWith("define private ")
-        if line.StartsWith("define ") and not own and ((try line.Find("alwaysinline") catch default -1) >= 0 or (try line.Find("inlinehint") catch default -1) >= 0) {
+        unexported := line.StartsWith("define internal ") or line.StartsWith("define private ")
+        if line.StartsWith("define ") and not unexported and ((try line.Find("alwaysinline") catch default -1) >= 0 or (try line.Find("inlinehint") catch default -1) >= 0) {
             out.Push("define available_externally " $line[7:] "\n")
             copying = true
             continue
