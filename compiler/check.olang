@@ -5729,8 +5729,10 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     n0 := c.exprTo(args[0], c.i64())
     length := types.TypeId(0)
     w := c.deref(want) if want != types.UnknownT else types.UnknownT
-    targetRunTime := w != types.UnknownT and c.P.T.KindOf(c.under(w)) == types.Kind.Array and c.P.T.Length(c.under(w)) == types.TypeId(0)
-    if not targetRunTime {
+    # a run-time array, as stage 0 makes it (T7) - but where a fixed array is wanted, its length folded (T7c: a
+    # mismatch known on both sides said here). QP1's fixed Array<T>(n) waits for the arrays batch, after self-hosting
+    targetFixed := w != types.UnknownT and c.P.T.KindOf(c.under(w)) == types.Kind.Array and c.P.T.Length(c.under(w)) != types.TypeId(0)
+    if targetFixed {
         k := c.P.FoldConst(c.fr().Ctx, args[0], c.i64())
         if c.P.T.KindOf(k) == types.Kind.Const and c.P.T.ConstValue(k) >= 0 { length = k }
     }
