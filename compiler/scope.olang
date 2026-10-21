@@ -178,6 +178,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     stmtSp source.Span = source.Span(0, 0) # the statement being judged
     resultVar I64 = -1                     # the result scope's index in Vars, -1 for none
     held Map<I64, typed.Expr&>             # a held local's temporary initializer, built where its one use puts it
+    splitHome Map<I64, Term>               # a for-in's hidden borrow of a split value: where its references live (O17a)
     targets List<typed.Place&>             # the places of the Assigns being judged, innermost last (Place.Target)
     buildsVar List<Bool>                   # by scope variable: whether this body builds into it, directly or through a call
     realVar List<Bool>                     # ... a value, not only a task's stand-in
@@ -400,6 +401,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.setFrom.Clear()
     s.setTerms.Clear()
     s.held.Clear()
+    s.splitHome.Clear()
     s.targets.Clear()
     s.resultVar = -1
     s.report = report
@@ -3034,6 +3036,16 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
     }
     isRef := s.isRef(t) or s.isFunc(t)
     if s.isRef(t) and loc.Kind != typed.LocalKind.Hidden and loc.Kind != typed.LocalKind.Held { s.splitBorrow(x) }
+    if s.isRef(t) and loc.Kind == typed.LocalKind.Hidden {
+        # the array a for-in walks, a split value borrowed: each element is given the references' scope, not the
+        # storage's (O17a)
+        match x {
+            case typed.Expr.Borrow(_, _, bp) {
+                if s.splitPlace(bp) { s.splitHome.Put(I64(l), s.partsTerm(bp)) }
+            }
+            case _ { }
+        }
+    }
     if claim == Term.None {
         # ":=", or no marker on a value holding references: the initializer's own term; a temporary is built in the
         # local's block (O18a), a call's result where its obligations say where decide found that it lands (O18c)
@@ -3041,6 +3053,8 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
         v := s.val(x, s.blockTerm(loc.In))
         s.landing = false
         s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
+        h := try s.splitHome.Get(I64(l)) catch default Term.None
+        if h != Term.None { s.terms[I64(l)] = h }
         # a "&p" field read through an element: only its container's scope is known, which the local would claim as its
         # own (C2d, O23)
         match v.T {
