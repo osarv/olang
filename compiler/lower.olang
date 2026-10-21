@@ -1431,7 +1431,9 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         a := c.Args[i]
         v := ln.val(a)
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
-        if helper and i < ps.Len() and t.IsRef(ps[i]) and not t.IsRef(a.Type()) {
+        # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
+        held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
+        if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
             l := ln.local(v, a.Type(), a.Span())
             v = ln.into(ps[i], mir.Rvalue.Ref(mir.L(l), ps[i]), a.Span())
         }
@@ -2659,7 +2661,8 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
 fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
     lw := ln.L
     t := ln.T
-    r := t.Repr(ty)
+    # a declared type over a number or an array is its own type here, with its own Str (E11c)
+    r := ty if t.KindOf(ty) == types.Kind.Named else t.Repr(ty)
     if t.KindOf(r) != types.Kind.Named { return -1 }
     got := try lw.strOf.Get(r) catch default -2
     if got != -2 { return got }
@@ -2674,7 +2677,7 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
                         ps := t.Items(t.Params(lw.Bodies[i].Ty))
                         if ps.Len() == 1 {
                             p0 := t.Referent(ps[0]) if t.IsRef(ps[0]) else ps[0]
-                            if t.Same(t.Repr(p0), r) { id = i }
+                            if t.Same(t.Repr(p0), t.Repr(r)) { id = i }
                         }
                     }
                 }

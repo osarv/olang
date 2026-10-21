@@ -3763,12 +3763,15 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&c, y typ
         }
         return c.negate(sp, r) if op == token.Tok.NotEq else r
     }
-    va := c.fit(x, da, sp)
-    vb := c.fit(y, da, sp)
+    # two references to arrays: equal where both are null, or neither is and what they name is (E10: a null equals only
+    # a null) - the helper of the reference type, which tests for null first
+    ht := c.P.T.Ref(da, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else da
+    va := c.fit(x, ht, sp)
+    vb := c.fit(y, ht, sp)
     from := c.exprs.Len()
     c.exprs.Push(va)
     c.exprs.Push(vb)
-    r := c.callOf(sp, types.BoolT, typed.Callee.Helper(typed.Helper.Equal, da), gather(c.exprs, from))
+    r := c.callOf(sp, types.BoolT, typed.Callee.Helper(typed.Helper.Equal, ht), gather(c.exprs, from))
     return c.negate(sp, r) if op == token.Tok.NotEq else r
 }
 
