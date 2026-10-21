@@ -57,6 +57,7 @@ Measurements below were taken on 2026-10-09 on the shared 4-core machine while o
 | names | `names` | 1,600 | semantic.c pass 1, syntax.c B9 evaluator |
 | types, checking, generics | `types`, `generic`, `typed`, `check` | 2,000 + 1,800 + 450 + 7,000 | semantic.c passes 2-3 |
 | scope check (§8) | `scope` | 3,000 | semantic.c O-sections, flow tracking |
+| a Vec's views (M19g) | `views` | 1,650 | semantic.c's `settleVecViews` |
 | mid-level IR | `mir`, `lower` | 600 + 2,400 | codegen.c lowering half |
 | evaluation, `-i` | `eval` | 2,600 | comptime.c (2,987) |
 | LLVM emission | `emit`, `dwarf` | 2,800 + 400 | codegen.c emission half |
@@ -528,6 +529,9 @@ body); T29d's literal constructors by the call (`BodyId`, `SiteId`); D13c's zero
 - **Before checking, over the resolved AST:** S8c's fixed locals ("nothing writes it"; D3a makes names exact there), so
   an S8b local `if` is decided in one checking pass.
 - **Errors only, after checking, in `check`'s last step:** T25c/QC's by-value need; `roByArg`/`roToResult`.
+- **Errors only, after checking, in `views` (M19g), a pass of its own run once the program checked cleanly:** what
+  each body may grow, the views it hands back and what its result holds of each argument, over the call graph's
+  components; then each body walked as a dataflow over the tree (views held, second names, tasks' views).
 - **Errors or placement only, after checking, in `scope`:** O17/O17b's regions and handles; `MayBuild`/`MayBuildInto`
   and `Str`'s noBuild; own effects (O39-O41's release and borrow effects); borrowed own results (O37); freshness (O38);
   C2d's may-hold; O26a/O18c's "may keep"; O10b's obligations, O23a's derived scopes and O13c's result bindings. E31b's

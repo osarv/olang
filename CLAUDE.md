@@ -613,7 +613,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
   scope reclaimed as it closes; `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
   plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 2: 221 of 279 refused
-  cases give stage 0's first error, 18 still get none; HISTORY.md "Port M6").
+  cases give stage 0's first error, 18 still get none; HISTORY.md "Port M6"). M19g is `compiler/views.olang`, a pass of its own after check
+  (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
+  it - HISTORY.md "Port M5b/M5c", fourth round).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is

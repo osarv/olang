@@ -16440,6 +16440,32 @@ keyed by file and span start, a global named in a type argument asked as the nam
 the next attempt's fresh AST walk; checkdump, having no evaluator, leaves the length unknown. **Left**: M19g (30 cases,
 the Vec view flow analysis - the scope pass's to take), function types spelled without parameter names.
 
+**M19g, a pass of its own: `compiler/views.olang` (2026-10-21, fourth round; checkdiff 438/439 refused cases giving
+stage 0's first error, 398 exactly, every M19g row and note stage 0's; 300 of 304 accepted programs clean, views.olang
+among them).** A Vec's view used after the same Vec may have grown is judged over the typed core once a program checks
+cleanly - after `check`, before `scope`, errors only - run by checkdump and by `interp.Analyze` (`judgeViews`, so the
+pipeline's tools refuse what stage 0 refuses). What it decides is stage 0's `settleVecViews` (SPEC M19g, HISTORY's
+"The view rule M19g"): a place is a root - a local, a parameter, a global - and the field names below it; a growth is
+an assignment to a Vec record's `data` and a view a slice of it, read off the prelude's own bodies, so nothing is keyed
+by Vec's method names; summaries (grows, views handed back, keeps) per body; then a forward walk with a state per
+program point - which views each local holds, which places a local is a second name of, which views tasks hold until
+their join - branches merged, loops to a fixed point, deferred code where its block ends. **How, unlike stage 0**: the
+summaries are a least fixed point over the call graph's strongly connected components, callees first (Tarjan, as the
+scope pass does), each component's bodies then walked once more with their errors said - stage 0 walks every body
+until nothing changes; and what a call's result holds of an argument is part of the summary too (`Passes`: a
+parameter's mark returned, or a constructor's field holding it at the body's end) where stage 0 asks O26a's
+type-based `calleeMayKeepArg`. A body not walked (an unknown type in it) is taken to pass every argument on and grow
+nothing; a call through a function value grows what it is given by value or writably, as stage 0's. The state is
+plain data in flat lists (holdings, second names, tasks) copied at branches; paths and callee names interned.
+**Decided (mine)**: (1) the operation's token - a method call's name, an element's `[` - is found from the source
+text after the receiver's or base's expression as written (`callTok`, `placeEnd`), since the typed core keeps only
+whole spans: stage 0's rows put an error there; (2) the pass is its own module rather than part of `scope`, which a
+parallel agent was reworking and whose summaries (obligations) M19g shares nothing with; (3) checkdump gates it on a
+program with no diagnostics, as stage 0 does. Two module tests (one file each through load, names, check and views)
+pin the routes: a growth in the function, through a second name and through a call; a view given to a call that may
+grow its Vec, a task holding one; another Vec growing, a view taken again each turn. Cost: about 0.1-0.2 s on
+compiler/check.olang's and scope.olang's test builds (4,761 bodies in shared.olang's within its 0.4 s).
+
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
 `compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
