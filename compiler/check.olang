@@ -3344,7 +3344,7 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
     }
     if op == token.Tok.Dollar {
         ps List<typed.Piece&>
-        ps.Push(typed.Piece.Render(c.rendered(sp, y)))
+        ps.Push(c.renderPiece(sp, y))
         return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
     }
     if op == token.Tok.Take { return c.takeExpr(sp, y) }
@@ -4433,7 +4433,7 @@ fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr&c {
             }
             case ast.Expr.Unary(_, op, y) {
                 if op == token.Tok.Dollar {
-                    ps.Push(typed.Piece.Render(c.rendered(p.Span(), y)))
+                    ps.Push(c.renderPiece(p.Span(), y))
                     ok = true
                 }
             }
@@ -5304,6 +5304,94 @@ fn nameDistance(a String&, b String&) I64 {
 
 # a written type's instances checked where it is written: each at its first argument (G19)
 # what "$" renders (E11a): a value - a call returning none is said at the "$"
+# "$x" as a piece: a function named directly renders as its signature, "name(params) results ? errors", known here
+# (E11a); anything else is rendered where the text is built
+fn (c mut Checker&) renderPiece(sp source.Span, y ast.Expr&) typed.Piece&c {
+    x := c.rendered(sp, y)
+    match x {
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Named(body) {
+                    match c.Bodies[I64(body)].Of {
+                        case typed.BodyOf.Fn(inst) {
+                            t := c.sigText(inst, I64(body))
+                            bs := Array<U8>(t.Len())
+                            for i in range t.Len() { bs[i] = U8(t[i]) }
+                            return typed.Piece.Lit(bs)
+                        }
+                        nomatch { }
+                    }
+                }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    return typed.Piece.Render(x)
+}
+
+# a function instance's signature as "$" writes it (E11a): its name, its parameters named, its result (a borrowed one
+# with the parameter it lives where, "P&p"), its error set's items with commas, an error type whose every word it
+# names written whole
+fn (c mut Checker&) sigText(inst I64, body I64) String {
+    fd := c.P.FnDecl(c.P.InstanceFn(inst))
+    sig := c.P.InstanceSig(inst)
+    b := StringBuilder()
+    b.Push(c.text(fd.Name))
+    b.PushChar('(')
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    k I64 = 0
+    if fd.Recv != null { k = 1 }
+    for i in range fd.S.Params.Len() {
+        if i > 0 { b.Push(", ") }
+        b.Push(c.text(fd.S.Params[i].Name))
+        if k + i < ps.Len() {
+            b.PushChar(' ')
+            c.spell(b, ps[k + i], false)
+        }
+    }
+    b.PushChar(')')
+    r := c.P.T.Result(sig)
+    if r != types.VoidT {
+        b.PushChar(' ')
+        c.spell(b, r, false)
+        e := c.P.T.ResultFrom(sig, 0)
+        if c.isRef(r) and e >= k and e - k < fd.S.Params.Len() { b.Push(c.text(fd.S.Params[e - k].Name)) }
+    }
+    es := c.P.T.Items(c.bodyErrors(body))   # an inferred set as its body lets it out (R1a)
+    first := true
+    for x in es {
+        if x == types.DefaultErrT { continue }
+        b.Push(" ? " if first else ", ")
+        first = false
+        if c.P.T.KindOf(x) == types.Kind.ErrWords {
+            et := c.P.T.ErrOf(x)
+            name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
+            ws := c.P.ErrorWords(c.P.T.DeclOf(et))
+            mask := c.P.T.ErrMask(x)
+            all := true
+            for i in range ws.Len() {
+                if i < 64 and (mask & (U64(1) << i)) == 0 { all = false }
+            }
+            if all {
+                b.Push(name)
+                continue
+            }
+            one := true
+            for i in range ws.Len() {
+                if i < 64 and (mask & (U64(1) << i)) != 0 {
+                    if not one { b.Push(", ") }
+                    b.Push($name "." $c.text(ws[i]))
+                    one = false
+                }
+            }
+            continue
+        }
+        c.spell(b, x, false)
+    }
+    return b.ToString()
+}
+
 fn (c mut Checker&) rendered(sp source.Span, y ast.Expr&) typed.Expr&c {
     x := c.expr(y, types.UnknownT)
     if typeOf(x) == types.VoidT {
