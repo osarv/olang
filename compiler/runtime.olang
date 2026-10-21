@@ -191,6 +191,129 @@ fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool) String ?
     return WithAttributes($"target triple = \"" $triple "\"\n\n" $body, attrs, race)
 }
 
+# the end of the type starting at at in line - a bracketed or braced one whole, else one word - in a global's line
+fn typeEnd(line String&, at I64) I64 {
+    c := line[at]
+    if c != '[' and c != '{' and c != '<' {
+        for k in range at, line.Len() {
+            if line[k] == ' ' or line[k] == ',' { return k }
+        }
+        return line.Len()
+    }
+    depth I64 = 0
+    for k in range at, line.Len() {
+        ch := line[k]
+        if ch == '[' or ch == '{' or ch == '<' { depth++ } else if (ch == ']' or ch == '}' or ch == '>') {
+            depth--
+            if depth == 0 { return k + 1 }
+        }
+    }
+    return line.Len()
+}
+
+# one line of filled-in runtime text as a module carries it, written to out: a type and a declaration as they are, a
+# definition as the declaration of what it defines - a function's parameter names dropped, a global's initializer -
+# and what the runtime keeps to itself (internal, private) nothing
+fn declare(out mut StringBuilder&, line String&) {
+    if line.StartsWith("declare ") or (line.StartsWith("%") and line.Contains(" = type ")) or
+        (line.StartsWith("@") and line.Contains(" = external ")) {
+        out.Push(line)
+        out.PushChar('\n')
+        return
+    }
+    if line.StartsWith("define internal ") or line.StartsWith("define private ") or line.Contains(" = internal ") or
+        line.Contains(" = private ") { return }
+    if line.StartsWith("define ") {
+        open := try line.Find("(") catch { return }
+        out.Push($"declare " $line[7:open] "(")
+        depth I64 = 0
+        start := open + 1
+        first := true
+        p := open + 1
+        for p < line.Len() {
+            ch := line[p]
+            if ch == '(' or ch == '[' or ch == '{' or ch == '<' { depth++ } else if ch == ']' or ch == '}' or ch == '>' {
+                depth--
+            } else if ch == ')' and depth > 0 { depth-- } else if (ch == ',' or ch == ')') and depth == 0 {
+                # a parameter's type, its name dropped
+                part := line[start:p].Trim()
+                sp := try part.FindLast(" ") catch default -1
+                if sp >= 0 and part[sp + 1] == '%' { part = part[:sp].TrimEnd() }
+                if part.Len() > 0 {
+                    if not first { out.Push(", ") }
+                    out.Push(part)
+                }
+                first = false
+                start = p + 1
+                if ch == ')' { break }
+            }
+            p++
+        }
+        # what follows the parameters, the brace opening the body left out: the function's attributes
+        attrs := line[p + 1:]
+        brace := try attrs.FindLast("{") catch default attrs.Len()
+        out.Push($")" $attrs[:brace].TrimEnd() "\n")
+        return
+    }
+    if line.StartsWith("@") {
+        eq := try line.Find(" = ") catch { return }
+        out.Push($line[:eq] " = external ")
+        r := line[eq + 3:]
+        if r.StartsWith("thread_local(") {
+            close := try r.Find(")") catch { return }
+            out.Push($r[:close + 1] " ")
+            r = r[close + 2:]
+        }
+        if r.StartsWith("unnamed_addr ") { r = r[13:] }
+        sp := try r.Find(" ") catch default r.Len()
+        e := typeEnd(r, sp + 1) if sp + 1 < r.Len() else r.Len()
+        out.Push($r[:sp + 1] $r[sp + 1:e] "\n")
+    }
+}
+
+# whether a line defines what the runtime marks for inlining (alwaysinline, inlinehint): given to a module whole
+fn modulesInline(line String&) Bool {
+    if not line.StartsWith("define ") or line.StartsWith("define internal ") or line.StartsWith("define private ") {
+        return false
+    }
+    return line.Contains("alwaysinline") or line.Contains("inlinehint")
+}
+
+# what a module carries for the runtime's text: its types, its globals as external, its functions as declarations,
+# and every body marked for inlining as available_externally (bootstrap/runtime.c's emitRuntimeDecls)
+fn Decls(text String&) String {
+    out := StringBuilder()
+    copying := false
+    for line in text.Lines() {
+        if copying {
+            out.Push(line)
+            out.PushChar('\n')
+            if line == "}" { copying = false }
+        } else if modulesInline(line) {
+            out.Push($"define available_externally " $line[7:] "\n")
+            copying = true
+        } else {
+            declare(out, line)
+        }
+    }
+    out.PushChar('\n')
+    return out.ToString()
+}
+
+# the tags the runtime's inlined bodies carry for its scope and chunk headers (T36), which the dynamic call's part
+# inlines too
+HeaderTbaa String& = ("!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\", !20, i64 0}\n" $
+        "!59 = !{!49, !49, i64 0}\n!60 = !{!50, !50, i64 0}\n")
+
+# the dynamic call's IR (S3), an object of its own linked only into a program declaring it: it reaches the rest of the
+# runtime as any module does, through what Decls derives
+fn DyncallIr(triple String&, arch String&, attrs String&, san Bool, race Bool) String ? Bad {
+    core := try Text(arch, san, false)
+    dc := try Text(arch, san, true)
+    body := $"target triple = \"" $triple "\"\n\n" $Decls(core) $dc "\n!20 = !{!\"olang\"}\n" $HeaderTbaa
+    return WithAttributes(body, attrs, race)
+}
+
 # ---- tests ----
 
 test "the runtime is filled in for an architecture and a mode, every placeholder replaced" {

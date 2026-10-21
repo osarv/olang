@@ -391,6 +391,11 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     holds := build.UnitKind.Tests if tests else (build.UnitKind.Main if kind == build.Kind.Program else build.UnitKind.Module)
     prog.Units.Push(build.Unit($l.Mods[l.Root].Identity, holds, ir))
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
+    if ir.Contains("@__olang_dyncall") {
+        prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad {
+            error build.Failed.REPORTED
+        }
+    }
 }
 
 # the triple emission writes, which the build's target replaces
