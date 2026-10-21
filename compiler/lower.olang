@@ -737,8 +737,29 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
     v := ln.fit(ln.val(value), value, res, sp)
     if ln.dead { return }
     l := ln.local(v, res, sp)
+    ln.retArrays(l, res, sp)
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
+}
+
+# T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
+# closes - into the program's scope, since a result holding no reference has no result scope to be built in
+# (types.ScopeVarsOf); under the stand-in placement it is there already
+fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, sp source.Span) {
+    if not ln.planned { return }
+    t := ln.T
+    if ln.valueArray(res) {
+        ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp))))
+        return
+    }
+    r := t.Repr(res)
+    if t.KindOf(r) != types.Kind.Tuple { return }
+    parts := t.Items(t.Parts(r))
+    for i in range parts.Len() {
+        if not ln.valueArray(parts[i]) { continue }
+        at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
+        ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp))))
+    }
 }
 
 # the body failing with code, under its own list, once every scope is closed
