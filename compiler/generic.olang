@@ -109,6 +109,17 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     Asking Origin = NoOrigin           # where the checker is asking from: recorded by the instances it makes (G16b)
     typeFrom Map<types.TypeId, Origin> # a type instance: where it was first asked for
     walkedBodies Map<types.TypeId, Bool> # the types bodiesOf has walked
+    # G21: a constant argument no fold reaches, evaluated while compiling - by its module's file and offset, what an
+    # evaluation found (set before checking; interp's Analyze), and the ones a check met undecided (ConstAsks)
+    Lengths Map<pair.Pair<I64, I64>, I64>
+    ConstAsks List<ConstAsk>
+}
+
+# a constant argument a fold could not compute: its expression, the module whose context reads it, its type
+type ConstAsk struct(Mi I64, Expr ast.Expr&, Want types.TypeId) {
+    Mi
+    Expr
+    Want
 }
 
 # the owners of variables: a type declaration's, a function's
@@ -671,7 +682,13 @@ fn (p mut Program&) constArg(c Context&, t ast.TypeRef&, want types.TypeId) type
                 if v >= types.TypeId(0) { return v }
             }
             f := p.foldPath(c, sp, path)
-            return p.constOf(c, f, want, null)
+            # a global a call computes is asked for as the expression the name is (G21)
+            x ast.Expr&p = null
+            if f.St == Unfolded {
+                x = ast.Expr.Name(sp, path[0])
+                for k in range 1, path.Len() { x = ast.Expr.Member(sp, x, path[k]) }
+            }
+            return p.constOf(c, f, want, x)
         }
         nomatch { return p.UnknownConst() }
     }
@@ -709,6 +726,17 @@ fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&
         k := p.T.ConstExpr($c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End ":" $I64(want))
         p.patterns.Put(p.T.A(k), pattern(e, c.Mi, c.Owner, want))
         return k
+    }
+    # G21: one needing evaluation, reading no variable (a call, a global a call computes) - what the evaluator found
+    # where it has, else asked for once and the unknown constant meanwhile
+    if f.St == Unfolded and e != null {
+        key := pair.Pair(p.L.Mods[c.Mi].File, I64(e.Span().Start))
+        if p.Lengths.Has(key) { return p.T.Const(want, p.wrap(try p.Lengths.Get(key) catch default 0, want)) }
+        seen := false
+        for a in p.ConstAsks {
+            if a.Mi == c.Mi and a.Expr.Span().Start == e.Span().Start { seen = true }
+        }
+        if not seen { p.ConstAsks.Push(ConstAsk(c.Mi, e, want)) }
     }
     return p.UnknownConst()
 }
@@ -1632,8 +1660,21 @@ fn (p mut Program&) MethodSig(f I64, t types.TypeId) types.TypeId {
 # a function's instance (G16): its signature with its variables bound, and its name - its module, its receiver's type
 # for a method (M21), its name and its arguments' canonical texts, made a symbol (G16a: injective, since every
 # canonical text is)
+# a function instance's arguments as its identity holds them (G16a): plain, but a function type with where its
+# references live (T22) - keep(link) and keep(copy) are two instances, as their callers' calls pass two ABIs
+fn (p mut Program&) instanceArgs(written types.ListId) types.ListId {
+    xs := p.T.Items(written)
+    out := Array<types.TypeId>(xs.Len())
+    changed := false
+    for i in range xs.Len() {
+        out[i] = xs[i] if p.T.KindOf(xs[i]) == types.Kind.Func else p.T.Plain(xs[i])
+        if out[i] != xs[i] { changed = true }
+    }
+    return p.T.List(out) if changed else written
+}
+
 fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
-    args := p.T.PlainList(written)   # held plain: T22's identity (G16a)
+    args := p.instanceArgs(written)
     key := pair.Pair(f, args)
     i := try p.instanceOf.Get(key) catch default -1
     if i >= 0 { return i }
@@ -1925,7 +1966,9 @@ fn (p mut Program&) unifyLists(a types.ListId, c types.ListId, b mut Binding&, r
 # number widens to a wider one of its family unless a receiver bound it (G9b), two references differing only in
 # permission meet at read-only (G9d)
 fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Bool, receiver Bool) Bool {
-    v := p.T.Plain(actual)   # a type argument is held plain (G16a): T22's identity, scopes left out
+    # a function type argument keeps where its references live (G16a, T22): fn(a mut N&, b N&a) is another argument
+    # than fn(mut N&, N&); what holds one by its parts' identity (a declared type's arguments) is held plain
+    v := actual if p.T.KindOf(actual) == types.Kind.Func else p.T.Plain(actual)
     if p.T.KindOf(v) == types.Kind.Named and p.Body(v) and p.T.DeclKindOf(p.T.DeclOf(v)) == types.DeclKind.Struct and
        p.T.Destructs(v) {
         v = p.T.Ref(v, types.Writable)
@@ -1937,7 +1980,7 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
         b.Fixed[i] = receiver
         return true
     }
-    if cur == v { return true }
+    if cur == v or p.T.Same(cur, v) { return true }
     if literal {
         # G9a: a variable only literals reach takes the widest of their types
         if b.LiteralOnly[i] and (p.Flows(cur, v) or (p.T.IsInt(cur) and p.T.IsFloat(v))) { b.Vals[i] = v }
@@ -2631,8 +2674,8 @@ test "function types carry what their markers say; a call's scope variables come
     atI64 := p.FnInstance(f, p.T.List1(p.T.Prim("I64")))
     atRef := p.FnInstance(f, p.T.List1(p.T.Ref(nt, types.ReadOnly)))
     assert p.ScopeVarsOf(p.InstanceSig(atI64)) == I64[] and p.ScopeVarsOf(p.InstanceSig(atRef)) == I64[0, types.ResultVar]
-    # a type argument is held plain: one instance whatever scopes it was written with
-    assert p.FnInstance(f, p.T.List1(link)) == p.FnInstance(f, p.T.List1(p.T.Plain(link)))
+    # a function type argument keeps where its references live (G16a, T22): two instances
+    assert p.FnInstance(f, p.T.List1(link)) != p.FnInstance(f, p.T.List1(p.T.Plain(link)))
     # an instance remembers where it was first asked for (G16b)
     p.Asking = Origin(7, source.Span(3, 9), atI64)
     bx := try p.ParseCanon($m ":Box<I32>") catch { unreachable }

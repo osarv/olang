@@ -102,6 +102,7 @@ fn run(args Array<String&>&) {
     }
     e := emit.Emitter(p, lw, d, p.T)
     e.Tests = testBuild
+    e.Baked = interp.Bake(c)     # K2: the immutable globals the evaluator gives, written as their values
     e.Attrs = tg.Attrs
     if outPath == "" {
         base := path
