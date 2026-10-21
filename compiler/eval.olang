@@ -279,7 +279,7 @@ type cfn struct() {
     Terms mut Array<mir.Term>&
     Global mut Array<Bool>&
     TermGlobal mut Array<Bool>&
-    Own mut Array<Bool>&        # by parameter: a by-value run-time-length array the body writes, its own copy (D9b)
+    Copied mut Array<Bool>&     # by parameter: a by-value run-time-length array the body writes, its own copy (D9b)
 }
 
 # ---- the machine ----
@@ -418,9 +418,9 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
         c.TermGlobal[bi] = termNamesGlobal(f, b.T)
     }
     c.Start[nb] = k
-    c.Own = Array<Bool>(f.Params.Len())
+    c.Copied = Array<Bool>(f.Params.Len())
     for i in range f.Params.Len() {
-        c.Own[i] = m.rtArrayValue(f.Locals[I64(f.Params[i])].Ty) and m.writesInto(f, f.Params[i])
+        c.Copied[i] = m.rtArrayValue(f.Locals[I64(f.Params[i])].Ty) and m.writesInto(f, f.Params[i])
     }
     return c
 }
@@ -1245,9 +1245,9 @@ fn (m mut Machine&) buildScope(fi I64, r mir.ScopeRef) I64 {
 
 # D9b: the by-value array parameters frame nf's body writes made its own copies, in the program's scope as emit's are
 fn (m mut Machine&) ownParams(nf I64, fi I64) {
-    own := m.cf[fi].Own
-    for i in range own.Len() {
-        if not own[i] { continue }
+    copied := m.cf[fi].Copied
+    for i in range copied.Len() {
+        if not copied[i] { continue }
         l := m.fns[fi].Params[i]
         p := m.localPtr(nf, l)
         n := m.rd(p, 8)
