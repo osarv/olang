@@ -301,11 +301,12 @@ type Machine struct(T mut types.Table&, When Mode) {
     globalOf Map<gkey, I64>
     datas Map<dkey, I64>
     # memory
-    heap mut Array<U8>& = Array<U8>(1 << 16)
+    hw mut Array<I64>& = Array<I64>(1 << 13)    # the heap, as words: byte i is byte i % 8 of word i / 8
     prov mut Array<I64>& = Array<I64>(1 << 13)
     top I64 = 8
     free mut Array<I64>& = Array<I64>(64)
-    allocs List<alloc>
+    al mut Array<alloc>& = Array<alloc>(1024)    # the allocations by slot, nAl of them; slot 0 none
+    nAl I64 = 1
     freeAllocs List<I64>
     scopes List<scope>
     freeScopes List<I64>
@@ -339,7 +340,6 @@ type Machine struct(T mut types.Table&, When Mode) {
 # compiling; under -i no step or memory budget and 10,000,000 frames (frames are the machine's tables, not this process's stack)
 fn NewMachine(t mut types.Table&, mode Mode) Machine {
     m := Machine(t, mode)
-    m.allocs.Push(alloc())      # slot 0: no allocation, so an id is never 0
     m.scopes.Push(scope())
     m.program = m.newScope(sProgram)
     if mode == Mode.Run {
@@ -467,7 +467,7 @@ fn (m mut Machine&) DefineGlobal(module I64, name source.NameId, ty types.TypeId
     a := m.allocate(m.size(ty), aGlobal, m.program)
     g.Store = a.Id
     m.globalOf.Put(gkey(module, name), m.globals.Len())
-    m.allocs[a.Id & slotMask].Owner = m.globals.Len()
+    m.al[a.Id & slotMask].Owner = m.globals.Len()
     m.globals.Push(g)
 }
 
@@ -694,12 +694,12 @@ fn classOf(n I64) I64 {
 }
 
 fn (m mut Machine&) grow(need I64) {
-    if need <= m.heap.Len() { return }
-    n := m.heap.Len()
+    if need <= 8 * m.hw.Len() { return }
+    n := 8 * m.hw.Len()
     for n < need { n *= 2 }
-    old := m.heap
-    m.heap = Array<U8>(n)
-    for i in range m.top { m.heap[i] = old[i] }
+    old := m.hw
+    m.hw = Array<I64>(n / 8)
+    for i in range (m.top + 7) / 8 { m.hw[i] = old[i] }
     oldp := m.prov
     m.prov = Array<I64>(n / 8)
     for i in range (m.top + 7) / 8 { m.prov[i] = oldp[i] }
@@ -720,15 +720,17 @@ fn (m mut Machine&) allocate(n I64, kind I64, s I64) Ptr {
     base := m.free[c]
     if base != 0 {
         m.free[c] = m.rdRaw(base, 8)
-        for i in range 1 << c { m.heap[base + i] = 0 }
-        for i in range (1 << c) / 8 { m.prov[base / 8 + i] = 0 }
+        for i in range (1 << c) / 8 {
+            m.hw[base / 8 + i] = 0
+            m.prov[base / 8 + i] = 0
+        }
     } else {
         base = m.top
         m.grow(m.top + (1 << c))
         m.top += 1 << c
     }
     slot := try m.freeAllocs.Pop() catch default m.newSlot()
-    a := m.allocs[slot]
+    a := m.al[slot]
     a.Base, a.Size, a.Class, a.Kind, a.Scope = base, n, c, kind, s
     a.Owner, a.ReadOnly, a.Code, a.Extern = -1, false, -1, false
     a.Prev, a.Next = 0, 0
@@ -736,28 +738,33 @@ fn (m mut Machine&) allocate(n I64, kind I64, s I64) Ptr {
         sc := s & slotMask
         head := m.scopes[sc].Allocs
         a.Next = head
-        if head != 0 { m.allocs[head].Prev = slot }
+        if head != 0 { m.al[head].Prev = slot }
         m.scopes[sc].Allocs = slot
         if m.When == Mode.Compile and s == m.program and m.initGlobal >= 0 { a.Owner = m.initGlobal }
     }
-    m.allocs[slot] = a
+    m.al[slot] = a
     m.Live += n
     return Ptr(a.Gen << slotBits | slot, 0)
 }
 
 fn (m mut Machine&) newSlot() I64 {
-    m.allocs.Push(alloc())
-    return m.allocs.Len() - 1
+    if m.nAl >= m.al.Len() {
+        old := m.al
+        m.al = Array<alloc>(2 * old.Len())
+        for i in range m.nAl { m.al[i] = old[i] }
+    }
+    m.nAl++
+    return m.nAl - 1
 }
 
 # frees an allocation: its block back to its class's list, its slot's generation moved on, out of its scope's list
 fn (m mut Machine&) release(slot I64) {
-    a := m.allocs[slot]
+    a := m.al[slot]
     if a.Kind == aFree { return }
     if a.Scope != 0 {
         sc := a.Scope & slotMask
-        if a.Prev != 0 { m.allocs[a.Prev].Next = a.Next } else { m.scopes[sc].Allocs = a.Next }
-        if a.Next != 0 { m.allocs[a.Next].Prev = a.Prev }
+        if a.Prev != 0 { m.al[a.Prev].Next = a.Next } else { m.scopes[sc].Allocs = a.Next }
+        if a.Next != 0 { m.al[a.Next].Prev = a.Prev }
     }
     for i in range (1 << a.Class) / 8 { m.prov[a.Base / 8 + i] = 0 }
     m.wrRaw(a.Base, 8, m.free[a.Class])
@@ -766,7 +773,7 @@ fn (m mut Machine&) release(slot I64) {
     a.Kind = aFree
     a.Gen = (a.Gen + 1) & ((1 << 38) - 1)
     a.Scope, a.Prev, a.Next = 0, 0, 0
-    m.allocs[slot] = a
+    m.al[slot] = a
     m.freeAllocs.Push(slot)
 }
 
@@ -779,40 +786,56 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
         return -1
     }
     slot := p.Id & slotMask
-    if slot >= m.allocs.Len() {
+    if slot >= m.nAl {
         m.refuse(WhyClosed)
         return -1
     }
-    a := m.allocs[slot]
-    if a.Kind == aFree or a.Gen != p.Id >> slotBits {
+    if m.al[slot].Kind == aFree or m.al[slot].Gen != p.Id >> slotBits {
         m.refuse(WhyClosed)
         return -1
     }
-    if p.Off < 0 or n < 0 or p.Off + n > a.Size {
+    if p.Off < 0 or n < 0 or p.Off + n > m.al[slot].Size {
         m.refuse(WhyBeyond)
         return -1
     }
     if write {
-        if a.ReadOnly {
+        if m.al[slot].ReadOnly {
             m.refuse(WhyReadOnly)
             return -1
         }
-        if m.When == Mode.Compile and a.Owner >= 0 and a.Owner != m.initGlobal {
+        if m.When == Mode.Compile and m.al[slot].Owner >= 0 and m.al[slot].Owner != m.initGlobal {
             m.refuse(WhyWritesGlobal)
             return -1
         }
     }
-    return a.Base + p.Off
+    return m.al[slot].Base + p.Off
 }
 
+# n bytes (at most 8) at addr, zero-extended: from one word, or the two it straddles
 fn (m mut Machine&) rdRaw(addr I64, n I64) I64 {
-    v I64 = 0
-    for i in range n { v = v | (I64(m.heap[addr + i]) << (8 * i)) }
-    return v
+    w, o := addr >> 3, addr & 7
+    if o == 0 and n == 8 { return m.hw[w] }
+    if o + n <= 8 { return (m.hw[w] >> (8 * o)) & m.mask(n) }
+    lo := 8 - o
+    return ((m.hw[w] >> (8 * o)) & m.mask(lo)) | ((m.hw[w + 1] & m.mask(n - lo)) << (8 * lo))
 }
 
 fn (m mut Machine&) wrRaw(addr I64, n I64, v I64) {
-    for i in range n { m.heap[addr + i] = U8((v >> (8 * i)) & 0xFF) }
+    w, o := addr >> 3, addr & 7
+    if o == 0 and n == 8 {
+        m.hw[w] = v
+        return
+    }
+    if o + n <= 8 {
+        mk := m.mask(n) << (8 * o)
+        m.hw[w] = (m.hw[w] & ~mk) | ((v << (8 * o)) & mk)
+        return
+    }
+    lo := 8 - o
+    mk := m.mask(lo) << (8 * o)
+    m.hw[w] = (m.hw[w] & ~mk) | ((v << (8 * o)) & mk)
+    hk := m.mask(n - lo)
+    m.hw[w + 1] = (m.hw[w + 1] & ~hk) | ((v >> (8 * lo)) & hk)
 }
 
 # a pointer stored at addr is no longer one where bytes over it are written
@@ -873,26 +896,36 @@ fn (m mut Machine&) copy(dst Ptr, src Ptr, n I64) {
 
 fn (m mut Machine&) move(d I64, s I64, n I64) {
     if d == s { return }
-    if d < s {
-        for i in range n { m.heap[d + i] = m.heap[s + i] }
-    } else {
-        for i in range n { m.heap[d + n - 1 - i] = m.heap[s + n - 1 - i] }
-    }
-    aligned := (d - s) % 8 == 0
-    lo, hi := d / 8, (d + n - 1) / 8 + 1
-    if not aligned {
-        for w in range lo, hi { m.prov[w] = 0 }
+    # both on word boundaries, the commonest: whole words and their pointers moved together, a pointer not kept in
+    # the part of a word after them
+    if d % 8 == 0 and s % 8 == 0 {
+        nw, rest := n / 8, n % 8
+        dw, sw := d / 8, s / 8
+        if d < s {
+            for i in range nw {
+                m.hw[dw + i] = m.hw[sw + i]
+                m.prov[dw + i] = m.prov[sw + i]
+            }
+        }
+        if rest > 0 {
+            m.wrRaw(d + 8 * nw, rest, m.rdRaw(s + 8 * nw, rest))
+            m.prov[dw + nw] = 0
+        }
+        if d > s {
+            for k in range nw {
+                i := nw - 1 - k
+                m.hw[dw + i] = m.hw[sw + i]
+                m.prov[dw + i] = m.prov[sw + i]
+            }
+        }
         return
     }
-    shift := (s - d) / 8
     if d < s {
-        for w in range lo, hi { m.prov[w] = m.prov[w + shift] if w * 8 >= d and w * 8 + 8 <= d + n else 0 }
+        for i in range n { m.wrRaw(d + i, 1, m.rdRaw(s + i, 1)) }
     } else {
-        for k in range hi - lo {
-            w := hi - 1 - k
-            m.prov[w] = m.prov[w + shift] if w * 8 >= d and w * 8 + 8 <= d + n else 0
-        }
+        for i in range n { m.wrRaw(d + n - 1 - i, 1, m.rdRaw(s + n - 1 - i, 1)) }
     }
+    for w in range d / 8, (d + n - 1) / 8 + 1 { m.prov[w] = 0 }
 }
 
 fn (m mut Machine&) zero(dst Ptr, n I64) {
@@ -900,15 +933,24 @@ fn (m mut Machine&) zero(dst Ptr, n I64) {
     d := m.at(dst, n, true)
     if d < 0 { return }
     m.unmark(d, n)
-    for i in range n { m.heap[d + i] = 0 }
+    i I64 = 0
+    for i < n and (d + i) % 8 != 0 {
+        m.wrRaw(d + i, 1, 0)
+        i++
+    }
+    for i + 8 <= n {
+        m.hw[(d + i) / 8] = 0
+        i += 8
+    }
+    if i < n { m.wrRaw(d + i, n - i, 0) }
 }
 
-fn (m mut Machine&) allocOf(id I64) alloc { return m.allocs[id & slotMask] }
+fn (m mut Machine&) allocOf(id I64) alloc { return m.al[id & slotMask] }
 
 # a scratch allocation of at least n bytes (k: 0 the register an aggregate is built in, 1-3 an operand's)
 fn (m mut Machine&) scratchFor(k I64, n I64) Ptr {
     id := m.scratch if k == 0 else m.tmps[k - 1]
-    if m.allocOf(id).Size >= n { return Ptr(id, 0) }
+    if m.al[id & slotMask].Size >= n { return Ptr(id, 0) }
     m.release(id & slotMask)
     p := m.allocate(n * 2, aValue, m.program)
     if k == 0 { m.scratch = p.Id } else { m.tmps[k - 1] = p.Id }
@@ -1027,7 +1069,7 @@ fn (m mut Machine&) releaseSlot(p Ptr) {
     q := m.rdPtr(p)
     if m.halted or q.Id == 0 { return }
     m.wrPtr(p, NullPtr)
-    region := m.allocOf(q.Id).Scope
+    region := m.al[q.Id & slotMask].Scope
     if not m.live(region) { return }
     m.disown(region)
     m.closing.Push(region)
@@ -1125,7 +1167,7 @@ fn (m mut Machine&) scopeOf(fi I64, r mir.ScopeRef) I64 {
 fn (m mut Machine&) regionOf(fi I64, l mir.LocalId) I64 {
     q := m.rdPtr(m.localPtr(fi, l))
     if q.Id == 0 { return 0 }
-    return m.allocOf(q.Id).Scope
+    return m.al[q.Id & slotMask].Scope
 }
 
 # where something is built in scope s: refused where s is not open
@@ -1286,10 +1328,23 @@ fn (m mut Machine&) addr(fi I64, x mir.Operand, k I64) Ptr {
 
 # a scalar operand's bits, zero-extended from its width
 fn (m mut Machine&) scalar(fi I64, x mir.Operand) I64 {
-    return match x {
-        case mir.Operand.None => 0
-        case mir.Operand.Const(ty, bits) => bits & m.mask(m.width(ty))
-        case _ => m.rd(m.addr(fi, x, 1), m.width(m.opType(fi, x)))
+    match x {
+        case mir.Operand.None { return 0 }
+        case mir.Operand.Const(ty, bits) { return bits & m.mask(m.width(ty)) }
+        case mir.Operand.Copy(p) {
+            # a local itself, the commonest operand: no projection to follow, no scratch
+            if p.Path.N == 0 {
+                match p.B {
+                    case mir.Base.Local(l) {
+                        return m.rd(m.localPtr(fi, l), m.width(m.cf[m.fs[fi].Fn].Locals[I64(l)].Ty))
+                    }
+                    case _ { }
+                }
+            }
+            ptr, ty := m.place(fi, p)
+            return m.rd(ptr, m.width(ty))
+        }
+        case _ { return m.rd(m.addr(fi, x, 1), m.width(m.opType(fi, x))) }
     }
 }
 
@@ -1320,7 +1375,7 @@ fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp sour
         p := m.allocate(n * m.size(e), aData, m.program)
         if m.halted { return NullPtr, 0 }
         m.writeElems(f, p, e, node)
-        m.allocs[p.Id & slotMask].ReadOnly = true
+        m.al[p.Id & slotMask].ReadOnly = true
         id = p.Id
         m.datas.Put(key, id)
     }
@@ -1359,7 +1414,7 @@ fn (m mut Machine&) writeElems(f mir.Fn&, p Ptr, e types.TypeId, node mir.ConstN
                             q := m.allocate(n * m.size(ee), aData, m.program)
                             if m.halted { return }
                             m.writeElems(f, q, ee, item)
-                            m.allocs[q.Id & slotMask].ReadOnly = true
+                            m.al[q.Id & slotMask].ReadOnly = true
                             if sh == vPair { m.wr(at, 8, n) }
                             m.wrPtr(Ptr(at.Id, at.Off + (8 if sh == vPair else 0)), q)
                         }
@@ -1400,7 +1455,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
     dst, dt := m.place(fi, p)
     if m.halted { return }
     t := m.T
-    if t.IsRef(t.Repr(dt)) and (t.PermOf(t.Repr(dt)) & types.Owning) != 0 { m.lastOwnScope = m.allocOf(dst.Id).Scope }
+    if t.IsRef(t.Repr(dt)) and (t.PermOf(t.Repr(dt)) & types.Owning) != 0 { m.lastOwnScope = m.al[dst.Id & slotMask].Scope }
     match rv {
         case mir.Rvalue.Use(x) { m.put(fi, dst, dt, x) }
         case mir.Rvalue.Ref(q, ty) { m.ref(fi, dst, q, ty) }
@@ -1600,7 +1655,7 @@ fn (m mut Machine&) codePtr(k mir.FnKey) Ptr {
     i := m.codeIndex(k)
     if m.codeAllocs[i] == 0 {
         p := m.allocate(0, aCode, m.program)
-        m.allocs[p.Id & slotMask].Code = i
+        m.al[p.Id & slotMask].Code = i
         m.codeAllocs[i] = p.Id
     }
     return Ptr(m.codeAllocs[i], 0)
@@ -1629,7 +1684,7 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
         held := sc
         if m.shape(tys[i]) == vPtr or m.shape(tys[i]) == vPair {
             q := m.rdPtr(Ptr(env.Id, offs[i] + (8 if m.shape(tys[i]) == vPair else 0)))
-            if q.Id != 0 { held = m.allocOf(q.Id).Scope }
+            if q.Id != 0 { held = m.al[q.Id & slotMask].Scope }
         }
         m.wr(Ptr(env.Id, total + 8 * i), 8, held)
     }
@@ -2066,9 +2121,9 @@ fn (m mut Machine&) fits(v I64, big Bool, w I64, signed Bool) Bool {
 
 # ---- statements ----
 
-fn (m mut Machine&) stmt(fi I64, st mir.Stmt, glob Bool) {
-    fk := m.fs[fi].Fn
-    match st {
+fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
+    glob := m.cf[fk].Global[i]
+    match m.cf[fk].Stmts[i] {
         case mir.Stmt.Assign(sp, p, rv) {
             m.atK(fk, sp)
             if glob and not m.globalsReady(fi, p, rv) { return }
@@ -2084,7 +2139,7 @@ fn (m mut Machine&) stmt(fi I64, st mir.Stmt, glob Bool) {
         case mir.Stmt.Dead(_, l) {
             slot := m.fs[fi].Locals + I64(l)
             id := m.ws[slot]
-            if id != 0 and m.allocOf(id).Gen == id >> slotBits { m.release(id & slotMask) }
+            if id != 0 and m.al[id & slotMask].Gen == id >> slotBits { m.release(id & slotMask) }
             m.ws[slot] = 0
         }
         case mir.Stmt.Open(_, s) {
@@ -2252,7 +2307,7 @@ fn (m mut Machine&) appendText(bs I64, s String&) {
 fn (m mut Machine&) appendByte(bs I64, c I64) {
     sc := bs & slotMask
     buf, n := m.scopes[sc].Buf, m.scopes[sc].BufLen
-    if n >= m.allocOf(buf).Size {
+    if n >= m.al[buf & slotMask].Size {
         nb := m.allocate(2 * n, aValue, bs)
         if m.halted { return }
         m.copy(nb, Ptr(buf, 0), n)
@@ -2529,7 +2584,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
             ax := f.Ops[I64(args.At) + i]
             data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
             bytes := n * m.size(m.elemOf(ps[i]))
-            if m.allocOf(data.Id).ReadOnly == false {
+            if m.al[data.Id & slotMask].ReadOnly == false {
                 for b in range bytes {
                     m.wr(Ptr(data.Id, data.Off + b), 1, I64((words[w + 1 + b / 8] >> (U64(b % 8) * 8)) & 0xFF))
                 }
@@ -2645,7 +2700,7 @@ fn (m mut Machine&) bytesOf(fi I64, x mir.Operand) Array<U8> {
 fn (m mut Machine&) putBytes(fi I64, x mir.Operand, b Array<U8>&, cap I64) {
     xt := m.opType(fi, x)
     data, n := m.arrayView(m.addr(fi, x, 1), xt)
-    if m.halted or m.allocOf(data.Id).ReadOnly { return }
+    if m.halted or m.al[data.Id & slotMask].ReadOnly { return }
     room := n * m.size(m.elemOf(xt))
     k := b.Len()
     if cap < k { k = cap }
@@ -2979,8 +3034,8 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
             vp := Ptr(tk.Buf, total + 8 * nt + 16 * nc + 8 * ns)
             code := m.rdPtr(vp)
             env = m.rdPtr(Ptr(vp.Id, vp.Off + 8))
-            if code.Id != 0 and m.allocOf(code.Id).Kind == aCode and not m.allocOf(code.Id).Extern {
-                callee = try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch default -1
+            if code.Id != 0 and m.al[code.Id & slotMask].Kind == aCode and not m.al[code.Id & slotMask].Extern {
+                callee = try m.fnOf.Get(m.codeKeys[m.al[code.Id & slotMask].Code]) catch default -1
             }
         }
         case _ { }
@@ -3082,11 +3137,11 @@ fn (m mut Machine&) taskEnded(fr frame) {
         hp := Ptr(tk.Buf, total + 8 * I64(k.Targets.N) + 16 * i)
         code := m.rdPtr(hp)
         env := m.rdPtr(Ptr(hp.Id, hp.Off + 8))
-        if code.Id == 0 or m.allocOf(code.Id).Kind != aCode {
+        if code.Id == 0 or m.al[code.Id & slotMask].Kind != aCode {
             m.refuse(WhyNullCall)
             return
         }
-        hf := try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch {
+        hf := try m.fnOf.Get(m.codeKeys[m.al[code.Id & slotMask].Code]) catch {
             m.refuse(WhyNoBody)
             return
         }
@@ -3146,7 +3201,7 @@ fn (m mut Machine&) loop(base I64) {
             continue
         }
         if i < m.cf[k].Start[b + 1] {
-            m.stmt(fi, m.cf[k].Stmts[i], m.cf[k].Global[i])
+            m.stmtAt(fi, k, i)
         } else {
             m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
         }
@@ -3162,7 +3217,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     m.halted = false
     m.Stopped = Stop.None
     m.Steps = 0
-    if m.Result.Id != 0 and m.allocOf(m.Result.Id).Kind != aFree { m.release(m.Result.Id & slotMask) }
+    if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree { m.release(m.Result.Id & slotMask) }
     m.Result, m.ResultTy = NullPtr, types.VoidT
     fi := try m.fnOf.Get(k) catch {
         m.refuse(WhyNoBody)
@@ -3193,7 +3248,7 @@ fn (m mut Machine&) Global(module I64, name source.NameId) Stop {
     m.halted = false
     m.Stopped = Stop.None
     m.Steps = 0
-    if m.Result.Id != 0 and m.allocOf(m.Result.Id).Kind != aFree { m.release(m.Result.Id & slotMask) }
+    if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree { m.release(m.Result.Id & slotMask) }
     m.Result, m.ResultTy = NullPtr, types.VoidT
     g := try m.globalOf.Get(gkey(module, name)) catch {
         m.refuse(WhyNoBody)
@@ -3314,7 +3369,7 @@ fn (m mut Machine&) Text(p Ptr, ty types.TypeId) String {
 
 # the bytes the heap holds and how many allocations and scopes are live, for measuring
 fn (m Machine&) HeapBytes() I64 { return m.top }
-fn (m Machine&) Allocations() I64 { return m.allocs.Len() }
+fn (m Machine&) Allocations() I64 { return m.nAl }
 fn (m Machine&) ScopeSlots() I64 { return m.scopes.Len() }
 
 # ---- K1a: whether a function can ever be evaluated ----
