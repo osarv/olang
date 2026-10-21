@@ -22,6 +22,7 @@ import "generic"
 import "typed"
 import "mir"
 import typecheck "check"
+import "views"
 import "lower"
 import "eval"
 
@@ -42,9 +43,18 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         c := typecheck.Checker(p, tests)
         c.Decided = decided
         c.CheckProgram()
-        if not decide(l, c, decided, lengths) { return c }
+        if not decide(l, c, decided, lengths) {
+            if l.Diags.Count() == mark { judgeViews(c) }
+            return c
+        }
         l.Diags.Forget(mark)
     }
+}
+
+# M19g (compiler/views.olang), on a program that checked cleanly: a Vec's view used after the Vec may have grown
+fn judgeViews(c mut typecheck.Checker&) {
+    vw mut views.Viewer&c = views.Viewer(c.P, c.Bodies)
+    vw.Run()
 }
 
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was

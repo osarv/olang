@@ -19,6 +19,7 @@ import "../load"
 import resolver "../names"
 import "../generic"
 import typecheck "../check"
+import "../views"
 
 fn main() ? {
     args := os.Args()
@@ -59,6 +60,8 @@ fn run(args Array<String&>&) {
         p := generic.Program(l, r)
         c := typecheck.Checker(p, testBuild)
         c.CheckProgram()
+        vw := views.Viewer(p, c.Bodies)
+        if d.Count() == 0 { vw.Run() } # M19g, on a program that checked cleanly
         out.Write(d.Render())
         for g in c.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }
         out.Write("bodies " $c.Bodies.Len() "\n")
