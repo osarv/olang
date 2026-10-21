@@ -42,8 +42,9 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         c := typecheck.Checker(p, tests)
         c.Decided = decided
         c.CheckProgram()
-        made := decide(l, c, decided)
-        if compute(c, computed) { made = true }
+        # the constants first: deciding a top-level if may load what its branch holds, which the asks' trees are not
+        made := compute(c, computed)
+        if decide(l, c, decided) { made = true }
         if not made { return c }
         l.Diags.Forget(mark)
     }

@@ -113,6 +113,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     # those this check asks for
     Computed Map<pair.Pair<I64, I64>, I64>
     ConstAsks List<ConstAsk>
+    asking Bool = false                # folding a type's constant argument: what needs evaluating is asked (G21)
     fns List<fnRow>
     fnsOf Map<I64, Bool>               # the modules fns holds
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
@@ -683,14 +684,24 @@ fn (p mut Program&) paramTypes(c Context&, ps Array<ast.Param&>&) types.ListId {
 # that length, or an instance with that argument, has no layout yet
 fn (p mut Program&) constArg(c Context&, t ast.TypeRef&, want types.TypeId) types.TypeId {
     match t {
-        case ast.TypeRef.Const(_, e) { return p.fold(c, e, want) }
+        case ast.TypeRef.Const(_, e) {
+            # G21: only a type's written argument is asked of the evaluator, never a value's length folded in passing
+            was := p.asking
+            p.asking = true
+            k := p.fold(c, e, want)
+            p.asking = was
+            return k
+        }
         case ast.TypeRef.Named(sp, path, args) {
             if args.Len() > 0 { return p.UnknownConst() }
             if path.Len() == 1 {
                 v := try c.Vars.Get(path[0]) catch default types.TypeId(-1)
                 if v >= types.TypeId(0) { return v }
             }
+            was := p.asking
+            p.asking = true
             f := p.foldPath(c, sp, path)
+            p.asking = was
             return p.constOf(c, f, want, null)
         }
         nomatch { return p.UnknownConst() }
@@ -724,7 +735,7 @@ fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeI
 
 fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&) types.TypeId {
     if f.St == Folded { return p.T.Const(want, p.wrap(f.V, want)) }
-    if f.St == Unfolded and e != null {
+    if f.St == Unfolded and e != null and p.asking {
         # needs evaluating: what the evaluator computed for it, else asked of it (G21)
         key := ConstKey(c.Mi, e, source.NameId(0))
         if p.Computed.Has(key) { return p.T.Const(want, p.wrap(try p.Computed.Get(key) catch default 0, want)) }
@@ -850,7 +861,7 @@ fn (p mut Program&) foldGlobal(mi I64, n source.NameId) folded {
     gc := Context(mi, -1)
     f := p.eval(gc, v.Values[i])
     p.folding.Put(key, false)
-    if f.St == Unfolded and v.Ty != null {
+    if f.St == Unfolded and v.Ty != null and p.asking {
         # computed by a call: the evaluator's value for the global, else asked of it (G21)
         ck := ConstKey(mi, null, n)
         t := p.Resolve(gc, v.Ty)

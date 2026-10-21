@@ -611,7 +611,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   leaves wrong; nested tries fall to the try around them, a T29d literal's error edge is never taken, no releases or
   holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
   over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
-  scope reclaimed as it closes; `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
+  scope reclaimed as it closes, immutable globals baked into emitted data (K2), constants computed by calls (G21), the
+  error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
   plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 2: 221 of 279 refused
   cases give stage 0's first error, 18 still get none; HISTORY.md "Port M6").
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
