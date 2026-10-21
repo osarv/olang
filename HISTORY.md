@@ -20524,6 +20524,69 @@ as a fixed array (E32b) was written as a pair where its type is one pointer; err
 functions. **Found, not fixed (stage 0)**: `$f` of a function value renders its error set with `+`
 (`fn() I64 ? Alpha + Zeta`), which QY removed; checks/cases/d16blambdaorder.olang asserts that spelling.
 
+## Port M8: evaluation in the pipeline, third round (2026-10-21)
+
+**Speed.** Round 2's machine copied a MIR function (22 fields) and a frame out of their lists at every statement and
+operand, walked a byte heap a byte at a time and asked the type table for a size, a shape and a width at every
+operand. Each function is now decoded once, when it is defined: its tables (locals, projections, operands, calls,
+cases, scopes) as arrays read in place, its blocks' statements in one array with each block's start, and for each
+statement whether it names a global at all, so only one that does asks whether its globals are set. Frames, their
+words (locals' ids, scopes, scope variables - one stack) and allocations are arrays with counts; the heap is words, a
+read or write of up to 8 bytes one word or two; a move on word boundaries moves words and their pointers together;
+size, shape and width are kept per type once its layout is settled. A 50,000-iteration loop went from 2.81 to 1.02
+billion instructions (about 55k to 18k an iteration, `callgrind`), a 1M-iteration loop from 6.8s to 2.1s (user time;
+stage 0 interpret 5.5s). What is left is the design itself - an allocation checked at every access, an enum statement
+matched and its operands walked at every step - so std/linalg's tests still stop at the seventh: its products are
+hundreds of millions of multiply-adds, which no tree of this shape interprets in minutes (stage 0's interpret neither).
+
+**K2: baked globals.** `interp.Bake` evaluates every immutable global while compiling; `eval.Machine.Image` gives one
+that is plain data, or reaches only storage its own initializer made, as blobs - its storage, then each allocation it
+reaches once (a cycle written as itself, K2b), each blob's bytes as the evaluator laid them out (the target's layout)
+and the references among them. emit (`Emitter.Baked`, set by emitdump) writes each as `@G... = global <{ [n x i8]
+c"...", ptr @G....kN, ... }>`, a referent as a private global beside it (`internal constant` for constant data), and
+runs none of their initializers at startup. **Decided (mine)**: a global reaching code (a function value), another
+global's storage or an instance another global's initializer made is set at startup instead, so no instance is
+written twice; a blob is aligned to its type and to O8a's classes (8, 32, 64); emit's own data model is untouched -
+the global's LLVM type is the packed blob's, which opaque pointers make no matter.
+
+**G21: constants computed by calls.** Built here as a second mechanism beside the checker round's (on master the same
+day: `Program.ConstAsks`/`Program.Lengths`, evaluated in `interp.decide` through `ExprBody`, keyed by file and offset);
+merging the two kept the checker's alone - it is the one check already asks through, it names a global as the
+expression it is rather than a separate kind of ask, and it evaluates its asks before deciding top-level ifs (which
+the first version here did not, crashing std/cancel's analysis). What this round's version added - asking only a
+type's written argument - is moot: QP1 decided that `Array<T>(n)` with a constant `n` is fixed, which the checker's
+asks give.
+
+**S18d under interpret.** The machine keeps the error being returned's last 32 places: a Raise at the place a call or a
+join just failed with an error passes it on (`try passed it on`, `a task failed, and its join passed it on`), any
+other starts the trace again (`raised here`); a task has a trace of its own (its thread's), the spawner's restored when
+it ends. `RunMain` prints it after `unhandled error`, as stage 0's interpret and a debug build do - the same lines on
+the three cases tried (a chain of tries, a clause raising its own error, a join).
+
+**Tasks (B3e).** A join's tasks still run one after another at the join (K1). A wait on a condition variable stops
+interpret as stage 0's does - `pthread_cond_wait` always, `pthread_cond_timedwait` while a task waits or runs - with
+stage 0's words and the task's spawn site; std/chan's tests now end (5 of 11 stop so) instead of hanging. A task
+spinning on another's progress (std/cancel's busy-task test) still never ends, as under stage 0's interpret. And a stop
+interpret makes (undefined behaviour, what it cannot run) is now `olang interpret: FILE:LINE: why`, status 1, as stage
+0's; a failed check stays 134.
+
+**Found and fixed on the way.** The machine's scratch allocations, reallocated while a global's initializer ran,
+were owned by that global, so every later evaluation building an aggregate was refused ("it writes a global") - which
+kept most struct and array globals from being decided while compiling (pre-existing, round 1); constant data likewise
+belonged to the global that first reached it. A generic's by-value array parameter its body writes was not copied by
+the evaluator (emit copies it, D9b): `permAlias` gave 7070 baked and 7005 at run time. emit merged two literal sites
+holding the same data into one constant (T25d: two sites are two) - baking exposed it, the baked value being right.
+G21's asks were first made for every unfoldable `Array<T>(n)` length, and one of them read a tree a check had built
+for itself (a crash in std/cancel's analysis).
+
+**Measured** (`evaldiff`, emitdiff on shared.olang): emitdiff 643 of 711 tests ending as stage 0's (638 with this
+tree's code but no baking); evaldiff, the corpus and std's tests but shared.olang, now with std/cancel and std/chan
+(they no longer hang, 900s each), 27 files, 22 the same, 266 of 306 tests ending as stage 0's (round 2: 254 of 287,
+without those two and std/pair); of the checks' 144 flag-free run cases, 135 behave as stage 0's (mapchurn no longer
+times out). Left as round 2 listed: linalg (6 of 35 in 900s), map (3, check), os (1, destructors), cancel and chan
+(interleaving), and the cases chunkpool, d16blambdaorder, e31btryelem, gemmflat, o15deepchain, o25harrayslice and
+o26acycle (twice), r1cwords.
+
 ## Port M6: the scope pass, round 2 - soundness (2026-10-18)
 
 Round 1 left 147 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error at all from the port:

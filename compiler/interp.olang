@@ -184,6 +184,28 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
     return n
 }
 
+# ---- globals baked into the program's data (K2) ----
+
+# every immutable global c checked whose value the evaluator gives while compiling (K1), and which is plain data or
+# reaches only storage its own initializer made, by its initializer's body: emit writes each as its value and runs
+# none of them at startup. One the evaluator refuses is set at startup as before
+fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
+    out Map<I64, eval.Image>
+    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
+    x.start()
+    for i in x.Globals {
+        match x.Bodies[i].Of {
+            case typed.BodyOf.Global(m, n) {
+                img := try x.M.Image(m, n) catch eval.NotBaked { continue }
+                out.Put(i, img)
+            }
+            case _ { }
+        }
+    }
+    return out
+}
+
 # why an evaluation that reached an exit aborts the program, as K1 says it (stage 0's words)
 fn AbortWhy(k mir.ExitKind) String& {
     return match k {
@@ -482,7 +504,8 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&) I32 {
 }
 
 # the program's main run, its globals set first (B5a, B3e): the status 0 for its return, 1 for an error leaving it
-# ("unhandled error: T.W" on standard error), 134 for a failed check or undefined behaviour (its "FILE:LINE: text"),
+# ("unhandled error: T.W" on standard error, its trace after it, S18d), 1 for what interpret stops at - undefined
+# behaviour, what it cannot run ("olang interpret: FILE:LINE: why") - 134 for a failed check (its "FILE:LINE: text"),
 # what it asks for with os.Exit (the process ends there); 1 for no main
 fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
     _, entry := x.Entries()
@@ -498,6 +521,12 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
         case eval.Stop.None { return 0 }
         case eval.Stop.Raised(_) {
             sayErr($x.StopText(s, entry, d) "\n")
+            sayErr(x.TraceText(d))
+            return 1
+        }
+        case eval.Stop.Refused(_, _, _) {
+            # what interpret cannot run, or the built program leaves undefined: interpret's own stop (B3e)
+            sayErr("olang interpret: " $x.StopText(s, entry, d) "\n")
             return 1
         }
         case _ {
@@ -512,8 +541,28 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
 fn (x mut Exec&) StopText(s eval.Stop, b I64, d mut diag.Diagnostics&) String {
     match s {
         case eval.Stop.Raised(code) { return "unhandled error: " $x.errorName(code, x.Bodies[b].Ty) }
+        case eval.Stop.Refused(why, _, _) {
+            # a wait for another task, in a task: which one (B3e)
+            if why == eval.WhyWaits and x.M.WaitTaskFile >= 0 {
+                return $StopText(s, d) " - here in the task spawned at " $line(d, x.M.WaitTaskFile, x.M.WaitTaskSp)
+            }
+            return StopText(s, d)
+        }
         case _ { return StopText(s, d) }
     }
+}
+
+# the trace of the error that just left the request (S18d), as a debug build prints it: "(N earlier places not kept)"
+# where more than 32 were recorded, then a "FILE:LINE: what" line a place, oldest first
+fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
+    b := StringBuilder()
+    if x.M.TraceDropped > 0 { b.Push("(" $x.M.TraceDropped " earlier places not kept)\n") }
+    for i in range x.M.TraceLen() {
+        file, at, kind := x.M.TraceAt(i)
+        what := "raised here" if kind == 0 else "try passed it on" if kind == 1 else "a task failed, and its join passed it on"
+        b.Push($line(d, file, source.Span(I32(at), I32(at))) ": " $what "\n")
+    }
+    return b.ToString()
 }
 
 # an error's name as a program writes it outside its module ("io.IoError.FULL"): code under the error list of
