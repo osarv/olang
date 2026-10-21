@@ -1000,20 +1000,22 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span) String 
         fe.gap("constant data of a " $t.Canon(ty))
         return "undef"
     }
-    g, n := fe.constGlobal(t.Elem(a), c)
+    # T25d: one instance per literal site (however often it is reached), two sites two instances
+    g, n := fe.constGlobal(t.Elem(a), c, $file ":" $sp.Start ":" $sp.End)
     if t.IsRef(r) and fe.fixed(a) { return g }
     if fe.fixed(a) { return fe.load(fe.ty(a), g) }
     return "{ i64 " $n ", ptr " $g " }"
 }
 
-# constant c of this function's tables, elements of type el, as a private global: its name and its length
-fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32) (String, I64) {
+# constant c of this function's tables, elements of type el, as a private global: its name and its length - one per
+# site where one is given, else one per content
+fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String& = "") (String, I64) {
     lt, init, n := fe.constInit(el, c)
-    key := "d:" $lt " " $init
+    key := "d:" $site " " $lt " " $init
     if fe.E.dataAt.Has(key) { return (try fe.E.dataAt.Get(key) catch default ""), n }
     s := "@.d" $fe.E.nconst
     fe.E.nconst++
-    fe.E.tail.Push($s " = private unnamed_addr constant " $lt " " $init "\n")
+    fe.E.tail.Push($s " = private " $("" if site != "" else "unnamed_addr ") "constant " $lt " " $init "\n")
     fe.E.dataAt.Put($key, $s)
     return s, n
 }
