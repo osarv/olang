@@ -982,3 +982,39 @@ neither.
     (D16d), and a lambda over several scopes is O26.
 18. **O4a in generic signatures.** A marker in a signature naming no earlier parameter is an error at the name, in
     `compiler/generic.olang` where signatures are made.
+
+### 9.5 Decided while building M6 (round 3)
+
+19. **A set where one scope is needed** (O11, O12, S13c): a temporary stored into a place whose references live in one
+    of several scopes, a mark or scope argument naming such a local, and an argument a callee may build into are
+    errors - there is no run-time scope to build in. A match binding lives in its clause (S13b); a for-in's own copy is
+    never moved (O26a); a reference default lives exactly where the call's result does (R11); a conversion names its
+    array's storage (T29a); a slice of a constructor's temporary is the constructor's frame's (E16a).
+20. **What O17 counts as storing into a region**: a store through a reference the body read out of the region; a result
+    a call borrows from the region is a read of it; a handle holding a handle is used through its reference. A for-in's
+    copy of an element is lent as its storage, the loop's block (B11's note names the array).
+21. **Inside a component, least fixed points.** What a callee of the component being judged keeps, stores and builds,
+    and what its obligations require of a variable no argument determines (O18b), is what the rounds so far found; the
+    rounds run until no relation and no such fact grows, then once more reporting.
+22. **Per-instance bindings for locals (O23a).** A local a constructor call initializes, and the body never assigns
+    again (a store into the local itself, a task's target), carries the term each constructor parameter's argument
+    lived at. A `&q` field read through it is there; a callee's `D(p, q)` through it resolves there, on both sides of a
+    relation; a store into a `&q` field is held to the field's binding (`D(p, q)` through a parameter, the local's
+    binding, else the underestimate) - never only to the instance's scope - and exactly where something can be stored
+    through it (O25g), as a constructor's initializer of one is, so that building through the field builds where its
+    referent is; a store of existing storage where only the underestimate is known is O23/O11's error. Not tracked yet, so still underestimates (over-rejections, never
+    acceptances): locals assigned after their declaration, a call's result's bindings (O13c), a for-in's hidden locals.
+23. **Which rule and token**, as stage 0: O25e at the call (a constructor's at the argument); O1b at the value stored; an
+    element read at its `[`; a build through a derived scope at the argument determining it; a conditional at its
+    `if`; a relation naming a constructor's instance is C2d's (through a constructor building one of its fields too); a
+    callee's relation on its result asking this function's own storage to outlive the result, where the result is
+    returned, is O26 at the call; a reference stored exactly where something can be stored through is O25 (naming a
+    value local that closes first); an array literal's element and a fill are O25c's.
+24. **An array value with no result scope.** A function whose result is, or holds by value, an array value has no result
+    scope in the typed contract where its type holds no reference; what it returns is built in the program's scope (as
+    lower's copy of a returned array value is), a local it returns whole is moved there, a conversion passes its
+    destination on, and an array read out of a call's built result has that result built where the value goes. Sound,
+    not exact: a result scope for array values (as stage 0 has) would reclaim it with the caller.
+25. **Handed back through a shared scope.** A call can hand back an argument that shares the scope its result is
+    borrowed from (O13), so a local lent there flows into the result (O26a); and landing by obligations (O18c) reads the
+    summaries of the component being judged, as O18b does (21).

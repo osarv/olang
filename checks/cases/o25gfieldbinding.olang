@@ -1,0 +1,21 @@
+# check: fail error[O25]: a reference never narrows - keep its scope
+# O25g/O23a: a field written "&of" lives where its constructor's argument for of lived, exactly where something can be
+# stored through it - storing a longer-lived node there would make a node built through c.cur below, which is built
+# where the binding says, hang from storage that outlives it
+type N struct() {
+    next mut N& = null
+    v I64 = 0
+}
+type C struct(of mut N&) {
+    cur mut N&of = of
+}
+fn main() ? {
+    g mut N& = N()
+    {
+        t mut N& = N()
+        c := C(t)
+        c.cur = g
+        c.cur.next = N()
+    }
+    assert g.next != null
+}

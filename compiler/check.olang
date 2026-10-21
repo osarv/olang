@@ -1583,6 +1583,7 @@ fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
+                c.fieldTypes(t)
                 if s.Dtor != null {
                     c.pop()
                     c.dtorBody(t, mi)
@@ -1608,6 +1609,25 @@ fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
         }
     }
     c.pop()
+}
+
+# a ":=" field the declaration could not type without the checker (generic.Infer: a call, a member read) takes the type
+# its initializer was checked to have (D15), so the type's layout and what it holds see it
+fn (c mut Checker&) fieldTypes(t types.TypeId) {
+    fs := c.P.T.Items(c.P.T.Fields(t))
+    ls := c.cur().Fields
+    if fs.Len() != ls.Len() { return }
+    out := Array<types.TypeId>(fs.Len())
+    filled := false
+    for i in range fs.Len() {
+        out[i] = fs[i]
+        lt := c.cur().Locals[I64(ls[i])].Ty
+        if fs[i] == types.UnknownT and lt != types.UnknownT {
+            out[i] = lt
+            filled = true
+        }
+    }
+    if filled { c.P.T.SetStructBody(t, c.P.T.List(out), c.P.T.Destructs(t)) }
 }
 
 # a type's destructor's body (C9), made once its constructor is checked: a function of "mut T&" in the scope closing

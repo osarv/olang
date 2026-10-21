@@ -20649,3 +20649,74 @@ the compile-time evaluator through `RdSpellSig`/`RdSpellType`) now writes a name
 function value or type as `fn(params) R ? (A, B)` (one item stays unparenthesized). The port's renderer in `compiler/` has no
 `$` of functions yet, so nothing there changed. `checks/cases/d16blambdaorder.olang` pinned the old text and was updated;
 `tests/shared.olang` has a test comparing both forms, whose asserts the evaluator also decides while compiling (S18c).
+
+## Port M6: the scope pass, round 3 - the last silent cases, per-instance bindings, stage 0's messages (2026-10-21)
+
+Round 2 left 18 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error from the port. Round 3
+closed 17 of them; the one left, s5mapgetreturn, is the acceptance round 2 kept on purpose (`l := m.l; return l`, moved
+into the result scope by O26a where stage 0 keeps it - sound). Nothing stage 0 refuses was relaxed: a first try at
+letting a value local lent where its references are be stored into (docs/scope-model.md 3.3's relaxation) silenced 13
+O17 cases, and a constructor's instance placed where the arguments it holds live silenced C2d and O26 cases - both
+reverted the same hour, the second because stage 0 keeps a value local's instance in its block (rv3ctorcopy refuses
+`h := H(r)` that way) and moves it only where O26a does.
+
+**What was built**, each a cluster of the silent cases:
+- **O12 sets where one scope is needed**: a temporary stored into a place whose references live in one of several scopes,
+  a mark or scope argument naming such a local, an argument a callee may build into (O11, O12, S13c); E25 naming a
+  global (O1b); a match binding lives in its clause (S13b); a for-in's copy is never moved (O26a); a reference default
+  lives exactly where the call's result is (R11); a conversion names its array's storage (T29a); a slice of a
+  constructor's temporary is its frame's (E16a).
+- **O17**: a store through a reference a body read out of a parameter's region stores into that region; a result a call
+  borrows from the region is a read of it; a handle holding a handle is used through its reference; a for-in's copy of an
+  element is lent as its storage, with B11's note naming the array (r06).
+- **Inside a component** (a cycle of calls), what a callee keeps, stores and builds, and where O18b places a variable no
+  argument determines, are what the component's rounds found so far - least fixed points; the rounds run until no fact
+  grows.
+- **Per-instance bindings for locals (O23a)**: a local a constructor call initializes, and the body never assigns again
+  (a store into the local itself or a task's target, found by the call-graph walk), carries where each of the
+  constructor's parameters' arguments lived. A `&q` field read through it is there (`b := ScopedBox&return(...); return
+  b.inner`); a callee's derived scope through it resolves there (o23awrite); a store into a `&q` field is held to that
+  binding - it was held only to the instance's scope, which a method writing its receiver's `&of` field could falsify;
+  and a store of existing storage where the binding is not known - through an element, another instance's field, an
+  untracked local - is O23/O11's error (o23paramfield).
+- **A hole closed on the way**: a store into a `&q` field, and a constructor's initializer of one, needed only to outlive
+  the binding, so a longer-lived node could be stored where something is built through the field at the binding's
+  scope - stage 0 refuses that (O25, `checks/cases/o25gfieldbinding.olang`); both are exact now wherever something can
+  be stored through the field (O25g).
+
+**Found on the way, in the checker (fixed in `compiler/check.olang` and `types.olang`, both small)**: a `:=` field the
+declaration could not type - one initialized by a call, `y := mk&x(n)` - stayed Unknown in the type's field list, so the
+type held no references as far as layout and section 8 were concerned (vec72ctorscopearg said nothing; the type's layout
+was wrong). The checker now writes its checked initializer's type into the type once the constructor is checked, and
+`HoldsRefs` keeps no answer it found over a part not typed yet.
+
+**Stage 0's messages**: O25e is said at the call (a constructor's at the argument), O1b at the value stored, an element
+read at its `[`, a build through a derived scope at the argument determining it, a conditional at its `if`; an obligation
+naming a constructor's instance is C2d's, through a constructor building one of its fields too; a call building a
+returned value that holds this function's own storage is O26 at the call; a reference stored exactly where something can
+be stored through is O25, naming a value local that closes first; an array literal's element and a fill are O25c's.
+
+**What the driver found placing by the plan** (M10 builds the port with itself under an interim placement that puts
+everything in the program's scope; these kept it from using the pass's): a function returning an array value - a
+`String` - has no result scope in the typed contract (its type holds no reference), and the pass built what it returns
+in the function's own frame, which closes at the return. Now such a result's storage is built in the program's scope -
+where lower's copy of a returned array value is made too - a local returned whole is moved there, a conversion passes
+its destination to the array it names, and an array read out of a call's built result (`return b.ToString()`) has that
+result built where the value goes (T7b, O26a). Exact would be a result scope for array values in the typed contract,
+as stage 0 has; until then such storage lives to the program's end. And `nt := ast.TypeRef.Named(...)` lent to
+`p.markers(at, nt)`, whose parameter shares the scope its result is borrowed from: an argument sharing that scope can be
+what is handed back (O13), so `nt` flows into the result and lives where `p` does, as stage 0 lands it - it was an O25e
+over-rejection, which the driver's placement turned into a frame address kept. Landing a call's result by its
+obligations (O18c) now reads the summaries of the component being judged, as O18b does: compiler/olang.olang's errors
+stage 0 does not give went 51 (master) -> 14 (this round before these) -> 7.
+
+**Measured** (`make scopediff`): first error 221 -> 264 of 280 (211 -> 250 exactly its scope errors); pinned message
+227 -> 260; silent 18 -> 1 (+2 where the checker errs first); accepted programs scope clean 279 of 301 -> 280 of 303;
+distinct error rows on accepted programs 92 -> 48, no gaps left.
+
+**Left**: per-instance bindings for call results (O13c - iterators, `it := l.Iter()`), for locals assigned after their
+declaration and for-in hidden locals; a value local made here whose storage something longer-lived keeps (b6elemvalue,
+and four of the seven on compiler/olang.olang: parse.olang's `pun` pushed in a payload, check.olang's `root` stored in a
+field, two in interp.olang) - stage 0 lands the local where it is kept; the verifier shape (`v := verifier(f, t); v.run(); return
+v.out.ToString()`), which stage 0 accepts by moving `v` into a result scope the port's types give a `String` value
+result no scope for; 16 cases still differing in their first error (columns, and rules the checker or O18c decide).
