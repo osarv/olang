@@ -20,7 +20,9 @@ import "msgs"
 import "load"
 import "fetch"
 import "source"
-import "names"
+import "lower"
+import "emit"
+import rt "runtime"
 import "eval"
 import "interp"
 import typecheck "check"
@@ -353,20 +355,72 @@ fn drive(args Array<String&>&) I32 {
     return RunWith(args, fe)
 }
 
-# ---- the front end so far ----
+# ---- the front end ----
 
-# the passes that exist: the program loaded (M4: its imports, fetched where they are remote, its top-level conditions
-# decided where B9a can) and its names resolved; for interpret, checked, lowered and run by the evaluator (M8). What
-# they find wrong is reported; a program they find nothing wrong with cannot be built yet, the back end's driving (M9,
-# M10) being still to come
+# the passes: the program loaded (M4: its imports, fetched where they are remote, its top-level conditions decided
+# where B9a can), resolved and checked with the decisions evaluation makes (M5, M8: B9c, S8b, S18c), lowered to MIR
+# (M7, with the stand-in placement - the scope pass, M6, is not run yet) and written as LLVM IR (M9). Emission writes
+# the whole program as one module, so a build is one object for the program (the root's, holding main or the test
+# harness) beside the runtime's - compile included, which writes the program its file is the root of
 type Passes struct() {
     Loaded I64 = 0
 }
 
 fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&
     d mut diag.Diagnostics&cfg) ? build.Failed {
-    try p.front(root, cfg, d)
-    error build.Failed.UNBUILT
+    tests := kind == build.Kind.Tests
+    l mut load.Loader&cfg = try p.load(root, cfg, d)
+    c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
+    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    interp.DecideAsserts(c, asserts)
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
+    lw.AssertsTrue = asserts
+    e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
+    e.Tests = tests
+    e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
+    raw := try p.emitted(e, root, cfg, d)
+    if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
+        for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
+        for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }
+        error build.Failed.UNBUILT
+    }
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    t := cfg.Target
+    ir String&prog = raw.Replace(emittedTriple, $"target triple = \"" $t.Triple "\"\n")
+    holds := build.UnitKind.Tests if tests else (build.UnitKind.Main if kind == build.Kind.Program else build.UnitKind.Module)
+    prog.Units.Push(build.Unit($l.Mods[l.Root].Identity, holds, ir))
+    prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
+}
+
+# the triple emission writes, which the build's target replaces
+emittedTriple String& = "target triple = \"x86_64-pc-linux-gnu\"\n"
+
+# the program's IR as e writes it: through a file in the build's directory, read back
+fn (p mut Passes&) emitted(e mut emit.Emitter&, root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) String ? build.Failed {
+    try os.MkDirAll(cfg.Dir) catch os.OsError { error build.Failed.REPORTED }
+    path := $cfg.Dir "/" $build.Readable(root) ".emitting." $build.Pid() ".ll"
+    fd := try os.Create(path) catch os.OsError {
+        build.Unbuildable($"cannot write " $path)
+        error build.Failed.UNBUILT
+    }
+    w := io.Writer(fd)
+    e.Program(w)
+    try w.Flush() catch io.IoError { }
+    try os.Close(fd) catch os.OsError { }
+    bytes := try os.ReadFile(path) catch os.OsError { error build.Failed.REPORTED }
+    try os.Remove(path) catch os.OsError { }
+    return String(bytes)
+}
+
+fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) mut load.Loader&cfg ? build.Failed {
+    f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
+    nm mut source.Names&cfg = source.Names()
+    l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+    l.Load(root)
+    p.Loaded = l.Mods.Len()
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    return l
 }
 
 # interpret FILE ARGS (B3e): the program checked - its conditions and asserts the evaluator decides decided (B9c, S8b,
@@ -374,12 +428,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
 # line; the status main ends with
 fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.Config&
     d mut diag.Diagnostics&cfg) I32 ? build.Failed {
-    f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
-    nm mut source.Names&cfg = source.Names()
-    l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
-    l.Load(root)
-    p.Loaded = l.Mods.Len()
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    l mut load.Loader&cfg = try p.load(root, cfg, d)
     c mut typecheck.Checker&cfg = interp.Analyze(l, false)
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     interp.DecideAsserts(c, asserts)
@@ -388,18 +437,6 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     x.Lw.AssertsTrue = asserts
     for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
     return x.RunMain(d)
-}
-
-fn (p mut Passes&) front(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) ? build.Failed {
-    f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)
-    nm mut source.Names&cfg = source.Names()
-    l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
-    l.Load(root)
-    p.Loaded = l.Mods.Len()
-    if d.Errors() > 0 { error build.Failed.REPORTED }
-    r mut names.Resolver&cfg = names.Resolver(l)
-    r.Resolve()
-    if d.Errors() > 0 { error build.Failed.REPORTED }
 }
 
 # ---- tests ----

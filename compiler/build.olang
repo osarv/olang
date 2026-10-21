@@ -53,6 +53,7 @@ type Program struct() {
 }
 
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
+# (said by Unbuildable)
 error Failed {
     REPORTED
     UNBUILT
@@ -455,12 +456,15 @@ fn finish(d mut diag.Diagnostics&) I32 {
     return 1
 }
 
-# what a front end that cannot make code yet writes
-fn unbuilt() I32 {
-    sayln("olang: error: this compiler does not generate code yet - its checker and back end are compiler/DESIGN.md's " $
-            "M5b-M9; build with build/out")
-    return 1
-}
+# what a front end that cannot make code for a program yet says, a line for each thing it cannot (UNBUILT), on the
+# standard output where diagnostics go: what the self-hosted back end does not do yet, not a mistake in the program
+fn Unbuildable(why String&) { sayln($"olang: error: the self-hosted compiler cannot build this yet: " $why) }
+
+# a front end's UNBUILT: what it could not do is said already
+fn unbuilt() I32 { return 1 }
+
+# this process's id, for temporary files' names
+fn Pid() I32 { return getpid() }
 
 fn (c Config&) ensureDir(d mut diag.Diagnostics&) ? Failed {
     try os.MkDirAll(c.Dir) catch os.OsError {
