@@ -544,7 +544,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     passed := e.passedOf(k, f.Ty)
     bad := "" if e.Lw.Gapped else f.Verify(e.T)
     if e.Lw.Gapped or bad != "" {
-        e.gap("not lowered: " $symbol)
+        e.gap($"not lowered: " $symbol $(" (" $bad.Trim() ")" if bad != "" else ""))
         e.body.Push(e.header(k, f.Ty, symbol, passed, env))
         if e.isGlobalInit(k) {
             # a global's initializer: the global left at its zero value, so that the rest of the program still runs
