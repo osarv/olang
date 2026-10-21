@@ -348,8 +348,9 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   is left to it, as a pattern (M8). So is a type only a top-level `if` the evaluator decides declares (B9c).
 - **Revised after the contract's review (2026-10-12).** A function type carries its scopes (`types.Scopes`, filled
   from the written markers by `sigType`, kept by `Subst`, spelled ` ~[...]` by `Canon` and read back by `ParseCanon`),
-  outside T22's identity (`Plain`, `Same`); an instance's and a function instance's arguments are held plain, and
-  inference binds a variable to a plain type. `types.ScopeVarsOf` gives a call's hidden scope arguments from the type
+  outside T22's identity (`Plain`, `Same`); an instance's arguments are held plain, a function instance's plain but for a
+  function type, which keeps its scopes (G16a, T22: `keep(link)` and `keep(copy)` are two instances, 2026-10-21), and
+  inference binds a variable so. `types.ScopeVarsOf` gives a call's hidden scope arguments from the type
   alone, `generic.Program.ScopeVarsOf` resolving the bodies whose fields say whether a value holds a reference. Every
   type and function instance records where it was first asked for (`Asking`, `TypeOrigin`, `InstanceOrigin`, G16b).
 
@@ -407,7 +408,8 @@ entry per parameter (its own scope variable, or the earlier parameter whose vari
 markers, and substitution keeps it. Scopes are outside T22's identity: `types.Plain` is a type with every function
 type's scopes left out, and two types are one type exactly when their plain ids are equal (`types.Same`). What is named
 by its parts' identity - an instance's arguments (G16a), a function instance's arguments, an anonymous enum's payloads
-(T27) - is held plain; a type argument written with sharing scopes is therefore its plain type. A canonical text spells
+(T27) - is held plain; a type argument written with sharing scopes is therefore its plain type, save a function
+instance's function type argument, which keeps them (G16a: the instances differ in the hidden arguments they pass). A canonical text spells
 scopes that say something after the type, ` ~[role,n,entries]`, which `ParseCanon` reads back.
 
 The ABI follows from the type alone. `types.ScopeVarsOf(f)` - one function that `check`, `scope`, `lower` and `eval` all
