@@ -4,13 +4,19 @@ description: "Standing rules from the user for how Claude works on olang, oann a
 metadata:
   node_type: memory
   type: feedback
-  modified: 2026-10-18
+  modified: 2026-10-21
 ---
 
 Merged on 2026-10-18 from the former `feedback_*` files. Where two said the same thing it is written once; where a
 later paragraph replaced an earlier one, the current rule stands with a one-line note of what it replaced.
 
 # Commits and git
+
+## Which repositories are mine to work in
+olang, oann and oagent. **Not hotpath** (osarv/hotpath, the user's company material): the user, 2026-10-21, when I
+cloned it with the others on their local machine: "dont do hotpath tho, that is not yours to meddle with unless I say
+so". Don't clone, read, change or snapshot it unless they ask. Locally (WSL) the three live side by side in
+/home/oscar; in a cloud session in /home/user.
 
 ## No Claude attribution
 Commits in the user's repositories carry no Claude attribution: author and committer are the user
