@@ -2,6 +2,7 @@
 # self-hosted emitter (compiler/emit.olang): M9's tool, as lowerdump is M7's.
 #
 #     emitdump [-D NAME=VALUE]... [-t] [-standin] [-o OUT.ll] FILE
+#     emitdump -rt DIR
 #
 # The program whose root is FILE - with -t its test blocks run by the harness, else its main - written as one LLVM
 # module to OUT.ll (FILE's base name with ".ll" in build/ by default), placed by the scope pass's plans
@@ -9,6 +10,7 @@
 # errors when there are any (the module is written still, a body they left wrong a function failing when called), and
 # a line "gap WHAT" for each construct emission does not emit yet. Compile the module with the filled-in runtime beside
 # it (stage 0 leaves one in build/, olang_runtime.HASH.ll): clang -O1 OUT.ll RUNTIME.ll -o PROG -lm -lpthread -ldl.
+# With -rt, the runtime itself filled in for this machine (emit.RuntimeIR): DIR/olang_runtime.ll and DIR/olang_dyncall.ll.
 
 import "std/os"
 import "std/io"
@@ -41,7 +43,7 @@ fn run(args Array<String&>&) {
     standin := false
     outPath String&args = ""
     k I64 = 1
-    for k < args.Len() and args[k].StartsWith("-") {
+    for k < args.Len() and args[k].StartsWith("-") and args[k] != "-rt" {
         if args[k] == "-t" {
             testBuild = true
         } else if args[k] == "-standin" {
@@ -54,6 +56,10 @@ fn run(args Array<String&>&) {
             outPath = args[k]
         }
         k++
+    }
+    if k + 1 < args.Len() and args[k] == "-rt" {
+        runtimeFiles(std, args[k + 1])
+        return
     }
     if k >= args.Len() { os.Exit(2) }
     path := args[k]
@@ -114,4 +120,35 @@ fn run(args Array<String&>&) {
     try os.Close(fd) catch os.OsError { }
     for g in e.Gaps { try io.PrintErrln("gap " $g) catch io.IoError { } }
     for g in lw.Gaps { try io.PrintErrln("lower gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.IoError { } }
+}
+
+# the runtime's files filled in for this machine (B12), written into dir
+fn runtimeFiles(std String&, dir String&) {
+    d := diag.Diagnostics(false)
+    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+        try io.PrintErr(d.Render()) catch io.IoError { }
+        os.Exit(1)
+    }
+    core := filled(std, "runtime", tg.Arch)
+    write($dir "/olang_runtime.ll", emit.RuntimeModule(core, tg.Arch, tg.Attrs))
+    # the dynamic call's object: the runtime as a module carries it, then its own text (S3)
+    write($dir "/olang_dyncall.ll", emit.RuntimeModule($emit.RuntimeDecls(core) $filled(std, "dyncall", tg.Arch) "\n" $emit.RuntimeMetadata(core), tg.Arch, tg.Attrs))
+}
+
+fn filled(std String&, name String&, arch String&) String {
+    text := try os.ReadFile($std "/runtime/" $name ".ll") catch os.OsError {
+        try io.PrintErrln("emitdump: cannot read " $std "/runtime/" $name ".ll") catch io.IoError { }
+        os.Exit(1)
+    }
+    return try emit.RuntimeFill(text, arch, false) catch emit.RuntimeError {
+        try io.PrintErrln("emitdump: " $std "/runtime/" $name ".ll is malformed") catch io.IoError { }
+        os.Exit(1)
+    }
+}
+
+fn write(path String&, text String&) {
+    try os.WriteFile(path, text) catch os.OsError {
+        try io.PrintErrln("emitdump: cannot write " $path) catch io.IoError { }
+        os.Exit(1)
+    }
 }

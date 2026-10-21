@@ -44,7 +44,7 @@ fn main() {
     }
     dir := "build/emitdiff"
     try os.MkDirAll($dir "/rt") catch os.OsError { toolkit.Die("emitdiff: cannot make " $dir) }
-    rt := runtime(olang, dir)
+    rt := runtime(olang, emitdump, dir)
     same, differ, broken I64 = 0, 0, 0
     tests, testsSame I64 = 0, 0
     for i in range files.Len() {
@@ -80,7 +80,9 @@ fn absolute(p String&) String {
 
 # the runtime's IR, filled in by stage 0 for this machine, and the dynamic call's: what a program declaring nothing
 # but an import of std/ffi leaves in its build/
-fn runtime(olang String&, dir String&) Array<String&> {
+# the runtime the port's modules are linked with: the port's own, filled in by emitdump (-rt, emit.RuntimeFill), and a
+# row saying whether it is stage 0's text exactly
+fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
     toolkit.Write($dir "/rt/rt.olang", "import \"std/ffi\"\nfn main() { }\n")
     toolkit.Run(String&[$olang, "build", "rt.olang"], String&[], $dir "/rt")
     rt String& = ""
@@ -90,7 +92,14 @@ fn runtime(olang String&, dir String&) Array<String&> {
         if (try n.Find("olang_dyncall.") catch default -1) >= 0 { dc = $n }
     }
     if rt == "" or dc == "" { toolkit.Die("emitdiff: stage 0 left no runtime in " $dir "/rt/build") }
-    return String&[rt, dc]
+    try os.MkDirAll($dir "/rtport") catch os.OsError { toolkit.Die("emitdiff: cannot make " $dir "/rtport") }
+    e := toolkit.Run(String&[emitdump, "-rt", $dir "/rtport"])
+    if e.Status != 0 { toolkit.Die("emitdiff: the port's runtime was not filled in: " $e.Stderr) }
+    prt String& = $dir "/rtport/olang_runtime.ll"
+    pdc String& = $dir "/rtport/olang_dyncall.ll"
+    same := toolkit.Read(prt) == toolkit.Read(rt) and toolkit.Read(pdc) == toolkit.Read(dc)
+    toolkit.Say("runtime: " $("stage 0's" if same else "differs from stage 0's") "\n")
+    return String&[prt, pdc]
 }
 
 type result struct() {
