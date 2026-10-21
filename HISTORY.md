@@ -20570,6 +20570,10 @@ O20 1), so its errors are not reported by the driver yet: stage 0 holds programs
 
 Under that interim, stage 1 (22 s to build at -debug) passes the tests of all 27 compiler/ modules and builds stage 2
 (39 s, 2.1 GB); stage 2 builds stage 3; the three are byte for byte equal and their IR is the IR the stage-0-built
-port writes. The leaks are the cost: nothing built is freed before the program ends. Also found: stage 0's interpreter
+port writes. At -O3 too: stage 1 builds stage 2 byte for byte equal to itself (8 minutes for stage 1, nearly all of it
+LTO over one 43 MB module). The leaks are the cost: nothing built is freed before the program ends. drvdiff gained 11
+whole builds (build, run with arguments, exit statuses, test, interpret, format -check), all as stage 0 - but for two
+port bugs it now avoids and records: B10c's `-define` over a top-level default is ignored, and E12's message spells
+a text literal's type `String&`. Also found: stage 0's interpreter
 called execv without unistd.h (a warning gcc -Werror refuses).
 

@@ -926,7 +926,9 @@ golden dumps in `lower`'s tests stand in for round trips.
   still refuses 51 things stage 0 accepts, and its own site placement builds some returned results in a closed
   frame). Under that, the port builds itself: `compiler_olang build -debug compiler/olang.olang` (stage 1, 22 s) builds
   stage 2 (39 s, 2.1 GB) and stage 2 stage 3, the three binaries byte for byte equal and the IR the stage-0-built port
-  writes; stage 1 passes the tests of every `compiler/` module.
+  writes; stage 1 passes the tests of every `compiler/` module. At -O3 the same: stage 1 (8 minutes, nearly all of
+  it LTO over one 43 MB module) builds stage 2 byte for byte equal to itself. `make drvdiff` compares 11 whole builds
+  with stage 0's beside the 72 command lines.
 
 ## 2. The thirteen grammar points
 
