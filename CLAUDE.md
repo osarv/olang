@@ -603,8 +603,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,
   namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
   loading and names, M5a types and the typed contract, M7's MIR contract, M10's driver (`compiler/build.olang`,
-  `target.olang`, `olang.olang` - the word command line over a front-end interface; `make drvdiff`); the compiler under test is `OLANG ?=
-  build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
+  `target.olang`, `olang.olang` - the word command line over the whole pipeline, the runtime filled in by
+  `runtime.olang`; `make drvdiff`; under an interim placement - every site and declared aggregate local in the program's
+  scope, the scope pass's errors not reported - the port builds itself at `-debug`, stage 1 == stage 2 == stage 3,
+  HISTORY.md "Port M10: the pipeline behind the driver"); the compiler under test is `OLANG ?= build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
   elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c"); M7, `compiler/lower.olang` (the typed core
   lowered to MIR with the stand-in placement, helpers, adapters and initializations made as MIR functions; `make
   lowerdump` verifies every function of the corpus, std, compiler and the checks' run cases - all clean but what check

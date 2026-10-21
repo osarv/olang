@@ -913,6 +913,20 @@ golden dumps in `lower`'s tests stand in for round trips.
   files that cannot be built - their standard output, standard error and status each equal to stage 0's.
   Waiting for the back end: the real `Analyze` (M5b-M9), `interpret` (M8), checks' build scenarios and the build-time
   measurements of section 3.3 (M11). B3's text in SPEC.md keeps stage 0's timestamps until stage 1 replaces it.
+- **The pipeline behind it (M10, 2026-10-21).** `Passes.Analyze` loads, checks with evaluation's decisions
+  (`interp.Analyze`, `DecideAsserts`), runs the scope pass for its local homes, lowers and emits; emission writes the
+  whole program as one module, so every build is one object for the program (the root's, `.main` or `.test`) beside
+  the runtime's - `compile` too, which writes the program its file is the root of. `runtime.olang` fills in
+  `std/runtime/*.ll` as stage 0 does (identical text, checked), and derives the dynamic call's declarations. Running a
+  file is `os.ExecInPlace` (the runtime's `__olang_exec`: the program in the driver's place, its first word the file as
+  written); `format` calls `compiler/fmt.olang` (`Files`, with the oracle loading and `unparse.olang` moved under
+  `compiler/`). What emission or lowering does not do yet is said (`Unbuildable`) and nothing is built.
+  Placement, for now: every site in the program's scope (the stand-in) and every declared aggregate local there too,
+  a local the scope pass homes in a scope variable there (O26a); the pass's errors are not reported (on `compiler/` it
+  still refuses 51 things stage 0 accepts, and its own site placement builds some returned results in a closed
+  frame). Under that, the port builds itself: `compiler_olang build -debug compiler/olang.olang` (stage 1, 22 s) builds
+  stage 2 (39 s, 2.1 GB) and stage 2 stage 3, the three binaries byte for byte equal and the IR the stage-0-built port
+  writes; stage 1 passes the tests of every `compiler/` module.
 
 ## 2. The thirteen grammar points
 
