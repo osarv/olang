@@ -16424,6 +16424,54 @@ Array<I32, 2>&)` stays the run-time check stage 0 makes (`t7dfixedrun`). **Left*
 parameters' names (types carry none), text literals as `String&` where stage 0 says `Array<Char, N>`, and §8's cases
 counted here by their first error's rule.
 
+**The other agents' blockers (2026-10-21, third round; checkdiff 408/439 refused cases giving stage 0's first error,
+383/439 pinned messages, 299/303 accepted programs clean - 408, 381, 298 before).** Each blocker emit, scope and eval
+hit, fixed: T25c's read-only borrow followed through a conversion (`ToList`/`Filter` on a local fixed array); a method's
+argument checked against its parameter as the receiver's type arguments bind it (`boundParam`), so a literal adapts
+through `Map.Get`/`Has` on a `Pair` key; E11a, a function named directly rendering as its signature; E31b, `checked
+a[i]` with no clause lent to a reference parameter borrowing under the try; T7, `Array<T>(n)` run-time as stage 0 makes
+it; G16a/T22, a function instance's function type argument keeping its scopes, so `keep(link)` and `keep(copy)` are two
+instances; G21, a constant argument a call computes asked of the evaluator and the program checked again (B9c's loop).
+**Decided (mine):** (1) **reverses** the second round's (5): the port matches stage 0's array language until
+self-hosting - QP1's fixed `Array<T>(n)` comes with the arrays batch, which is the port's only (plan.md's build list);
+(2) a function type argument of an instance is kept whole and compared by `Same`, every other made plain - a function
+type's scopes are part of its identity (T22), a plain spelling would merge two different instances; (3) G21's asks are
+keyed by file and span start, a global named in a type argument asked as the name's expression, so a decision survives
+the next attempt's fresh AST walk; checkdump, having no evaluator, leaves the length unknown. **Left**: M19g (30 cases,
+the Vec view flow analysis - the scope pass's to take), function types spelled without parameter names.
+
+**M19g, a pass of its own: `compiler/views.olang` (2026-10-21, fourth round; checkdiff 438/439 refused cases giving
+stage 0's first error, 398 exactly, every M19g row and note stage 0's; 300 of 304 accepted programs clean, views.olang
+among them).** A Vec's view used after the same Vec may have grown is judged over the typed core once a program checks
+cleanly - after `check`, before `scope`, errors only - run by checkdump and by `interp.Analyze` (`judgeViews`, so the
+pipeline's tools refuse what stage 0 refuses). What it decides is stage 0's `settleVecViews` (SPEC M19g, HISTORY's
+"The view rule M19g"): a place is a root - a local, a parameter, a global - and the field names below it; a growth is
+an assignment to a Vec record's `data` and a view a slice of it, read off the prelude's own bodies, so nothing is keyed
+by Vec's method names; summaries (grows, views handed back, keeps) per body; then a forward walk with a state per
+program point - which views each local holds, which places a local is a second name of, which views tasks hold until
+their join - branches merged, loops to a fixed point, deferred code where its block ends. **How, unlike stage 0**: the
+summaries are a least fixed point over the call graph's strongly connected components, callees first (Tarjan, as the
+scope pass does), each component's bodies then walked once more with their errors said - stage 0 walks every body
+until nothing changes; and what a call's result holds of an argument is part of the summary too (`Passes`: a
+parameter's mark returned, or a constructor's field holding it at the body's end) where stage 0 asks O26a's
+type-based `calleeMayKeepArg`. A body not walked (an unknown type in it) is taken to pass every argument on and grow
+nothing; a call through a function value grows what it is given by value or writably, as stage 0's. The state is
+plain data in flat lists (holdings, second names, tasks) copied at branches; paths and callee names interned.
+**Decided (mine)**: (1) the operation's token - a method call's name, an element's `[` - is found from the source
+text after the receiver's or base's expression as written (`callTok`, `placeEnd`), since the typed core keeps only
+whole spans: stage 0's rows put an error there; (2) the pass is its own module rather than part of `scope`, which a
+parallel agent was reworking and whose summaries (obligations) M19g shares nothing with; (3) checkdump gates it on a
+program with no diagnostics, as stage 0 does; (4) the note saying where the task holding a view was started sits at
+its `spawn`, where stage 0 puts a spawned lambda's at the lambda or its call's `(` (it makes that statement without a
+start). Beside the checks, 28 more programs (recursion and mutual recursion through a cycle, views handed back two
+calls deep, conditionals, matches, payloads, structs and Lists holding views, second names through struct copies and
+repointed references, a parameter given another value, loops with break and continue, deferred growth, generic
+callees, methods, lambdas called directly and spawned) were compared with stage 0: the same errors and notes, but (4).
+Two module tests (one file each through load, names, check and views)
+pin the routes: a growth in the function, through a second name and through a call; a view given to a call that may
+grow its Vec, a task holding one; another Vec growing, a view taken again each turn. Cost: about 0.1-0.2 s on
+compiler/check.olang's and scope.olang's test builds (4,761 bodies in shared.olang's within its 0.4 s).
+
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
 `compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
@@ -20501,13 +20549,13 @@ global's storage or an instance another global's initializer made is set at star
 written twice; a blob is aligned to its type and to O8a's classes (8, 32, 64); emit's own data model is untouched -
 the global's LLVM type is the packed blob's, which opaque pointers make no matter.
 
-**G21: constants computed by calls.** A type's written constant argument folding cannot compute (`Array<U8, kPage()>`,
-or a global computed by a call, `KPageWords I64 = kPage() / 8`) is asked of the evaluator (`generic.ConstAsk`):
-`interp.Analyze` checks the program, evaluates each ask - an expression as a body of its own in its module
-(`Checker.ExprBody`), a global by its initializer - and checks again with the values (`Program.Computed`, by module and
-offset), as stage 0's C2e loop does. **Decided (mine)**: only a type's argument is asked, never an `Array<T>(n)` length
-folded in passing, which would turn a run-time array fixed. Not done: a call reading a type's own variables
-(`c2eCap(Array<T>(0))`), which would need a value per instantiation.
+**G21: constants computed by calls.** Built here as a second mechanism beside the checker round's (on master the same
+day: `Program.ConstAsks`/`Program.Lengths`, evaluated in `interp.decide` through `ExprBody`, keyed by file and offset);
+merging the two kept the checker's alone - it is the one check already asks through, it names a global as the
+expression it is rather than a separate kind of ask, and it evaluates its asks before deciding top-level ifs (which
+the first version here did not, crashing std/cancel's analysis). What this round's version added - asking only a
+type's written argument - is moot: QP1 decided that `Array<T>(n)` with a constant `n` is fixed, which the checker's
+asks give.
 
 **S18d under interpret.** The machine keeps the error being returned's last 32 places: a Raise at the place a call or a
 join just failed with an error passes it on (`try passed it on`, `a task failed, and its join passed it on`), any

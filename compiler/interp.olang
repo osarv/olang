@@ -22,6 +22,7 @@ import "generic"
 import "typed"
 import "mir"
 import typecheck "check"
+import "views"
 import "lower"
 import "eval"
 
@@ -32,54 +33,34 @@ import "eval"
 # until a check meets none left to decide: that last check. What an earlier check said is forgotten. tests as Checker's
 fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     decided Map<pair.Pair<I64, I64>, Bool>
-    computed Map<pair.Pair<I64, I64>, I64>
+    lengths Map<pair.Pair<I64, I64>, I64>
     for {
         mark := l.Diags.Count()
         r := names.Resolver(l)
         r.Resolve()
         p := generic.Program(l, r)
-        p.Computed = computed
+        p.Lengths = lengths
         c := typecheck.Checker(p, tests)
         c.Decided = decided
         c.CheckProgram()
-        # the constants first: deciding a top-level if may load what its branch holds, which the asks' trees are not
-        made := compute(c, computed)
-        if decide(l, c, decided) { made = true }
-        if not made { return c }
+        if not decide(l, c, decided, lengths) {
+            if l.Diags.Count() == mark { judgeViews(c) }
+            return c
+        }
         l.Diags.Forget(mark)
     }
 }
 
-# the constant arguments one check of the program asked the evaluator for (G21: computed by a call, or from a global
-# computed by one), computed where they can be: whether any was
-fn compute(c mut typecheck.Checker&, computed mut Map<pair.Pair<I64, I64>, I64>&) Bool {
-    if c.P.ConstAsks.Len() == 0 { return false }
-    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
-    x.Faulty = c.Faulty
-    made := false
-    for a in c.P.ConstAsks {
-        key := generic.ConstKey(a.Mi, a.E, a.Global)
-        if computed.Has(key) { continue }
-        if a.E == null {
-            x.start()
-            if x.M.Global(a.Mi, a.Global) != eval.Stop.None { continue }
-        } else {
-            b := c.ExprBody(a.Mi, a.E, a.Want)
-            if b < 0 { continue }
-            k := mir.FnKey.Body(typed.BodyId(I32(b)))
-            x.Need(k)
-            if x.M.Eval(k, Array<I64>(0)) != eval.Stop.None { continue }
-        }
-        computed.Put(key, x.M.Int(x.M.Result, x.M.ResultTy))
-        made = true
-    }
-    return made
+# M19g (compiler/views.olang), on a program that checked cleanly: a Vec's view used after the Vec may have grown
+fn judgeViews(c mut typecheck.Checker&) {
+    vw mut views.Viewer&c = views.Viewer(c.P, c.Bodies)
+    vw.Run()
 }
 
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was
-fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&) Bool {
+fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<pair.Pair<I64, I64>, I64>&) Bool {
     tops := l.PendingIfs()
-    if tops.Len() == 0 and c.Asks.Len() == 0 { return false }
+    if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 { return false }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     made := false
@@ -89,6 +70,18 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         v, ok := x.Cond(a.Body)
         if ok {
             decided.Put(key, v)
+            made = true
+        }
+    }
+    # G21: a constant argument a call computes, evaluated in its module's context
+    for a in c.P.ConstAsks {
+        key := pair.Pair(l.Mods[a.Mi].File, I64(a.Expr.Span().Start))
+        if lengths.Has(key) { continue }
+        b := c.ExprBody(a.Mi, a.Expr, a.Want)
+        if b < 0 { continue }
+        v, ok := x.Int(b, a.Want)
+        if ok {
+            lengths.Put(key, v)
             made = true
         }
     }
@@ -244,6 +237,15 @@ fn (x mut Exec&) Cond(body I64) (Bool, Bool) {
     s := x.M.Eval(k, Array<I64>(0))
     if s != eval.Stop.None { return false, false }
     return x.M.Int(x.M.Result, types.BoolT) != 0, true
+}
+
+# a body giving an integer evaluated (G21's constant arguments): its value, and whether evaluation reached one
+fn (x mut Exec&) Int(body I64, ty types.TypeId) (I64, Bool) {
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return 0, false }
+    return x.M.Int(x.M.Result, ty), true
 }
 
 # ---- the machine ----
