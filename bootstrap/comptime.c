@@ -37,6 +37,7 @@
 #include <dirent.h>
 #include <limits.h>
 #include <spawn.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include "comptime.h"
 #include "errmsg.h"
