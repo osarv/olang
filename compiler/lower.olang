@@ -1905,7 +1905,7 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body) => ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty), sp)
+        case typed.FnVal.Named(body) => ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
         case typed.FnVal.Lambda(body, caps, site) => ln.lambda(body, caps, site, ty, sp)
         case typed.FnVal.Adapter(call, recv, site) => ln.adapter(call, recv, site, ty, sp)
     }
@@ -1917,14 +1917,24 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
     for i in range caps.Len() { ops[i] = ln.val(caps[i].Outer) }
     if ln.dead { return mir.Operand.None }
     s := mir.ScopeRef.Frame if caps.Len() == 0 else ln.built(site)
-    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops)), sp)
+    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
 }
 
 fn (ln mut lowering&) adapter(call typed.BodyId, recv typed.Expr&, site typed.SiteId, ty types.TypeId, sp source.Span) mir.Operand {
     r := ln.val(recv)
     if ln.dead { return mir.Operand.None }
     ln.L.Want(mir.FnKey.Adapter(call))
-    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Adapter(call), ty, ln.built(site), ln.F.Args(mir.Operand[r])), sp)
+    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Adapter(call), ty, ln.built(site), ln.F.Args(mir.Operand[r]), ln.capScopes(site))
+                   sp)
+}
+
+# where a closure's captures holding references live, in order (D16c): the plan's at its site, none recorded under the
+# stand-in placement
+fn (ln mut lowering&) capScopes(site typed.SiteId) mir.Range {
+    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() { return mir.Empty }
+    xs List<mir.ScopeRef>
+    for i := I64(0), ln.plan.Passed(site, i) != typed.Scope.Unset, i++ { xs.Push(ln.scopeRef(ln.plan.Passed(site, i))) }
+    return ln.F.ScopeRefs(xs.ToArray())
 }
 
 # ---- text ----

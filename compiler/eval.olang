@@ -1265,7 +1265,7 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
         case mir.Rvalue.New(s, x, ty) { m.newRef(fi, dst, s, x, ty) }
         case mir.Rvalue.NewArray(s, ty, n, fill) { m.newArray(fi, dst, s, ty, n, fill) }
         case mir.Rvalue.Slice(q, lo, hi, ty) { m.slice(fi, dst, q, lo, hi, ty) }
-        case mir.Rvalue.Closure(code, ty, s, args) { m.closure(fi, dst, code, s, args) }
+        case mir.Rvalue.Closure(code, ty, s, args, _) { m.closure(fi, dst, code, s, args) }
         case mir.Rvalue.Recode(x, from, to) {
             m.wr(dst, 4, m.recode(m.intValue(m.scalar(fi, x), mir.I32T), from, to))
         }
@@ -2104,7 +2104,7 @@ fn (m mut Machine&) globalsReady(fi I64, p mir.Place, rv mir.Rvalue) Bool {
         case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => m.placeReady(fi, q)
         case mir.Rvalue.Slice(q, lo, hi, _) => m.placeReady(fi, q) and m.operandReady(fi, lo) and m.operandReady(fi, hi)
         case mir.Rvalue.Prim(_, _, r), mir.Rvalue.Overflows(_, _, r), mir.Rvalue.Aggregate(_, _, r)
-             mir.Rvalue.Closure(_, _, _, r) => m.rangeReady(fi, f, r)
+             mir.Rvalue.Closure(_, _, _, r, _) => m.rangeReady(fi, f, r)
         case mir.Rvalue.NewArray(_, _, n, fill) => m.operandReady(fi, n) and m.operandReady(fi, fill)
         case _ => true
     }

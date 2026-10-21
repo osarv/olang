@@ -317,6 +317,27 @@ fn (e mut Emitter&) isGlobalInit(k mir.FnKey) Bool {
 }
 
 # whether a function takes an environment first: a lambda, an adapter
+# how many scope variables a closure's code takes from its environment: one for each capture holding references (D16c)
+fn (e mut Emitter&) capVars(k mir.FnKey) I64 {
+    n I64 = 0
+    match k {
+        case mir.FnKey.Body(id) {
+            for v in e.Lw.Bodies[I64(id)].Vars {
+                match v {
+                    case typed.ScopeVar.Capture(_) { n++ }
+                    case _ { }
+                }
+            }
+        }
+        case mir.FnKey.Adapter(call) {
+            ps := e.T.Items(e.T.Params(e.Lw.Bodies[I64(call)].Ty))
+            if ps.Len() > 0 and e.T.HoldsRefs(ps[0]) { n = 1 }
+        }
+        case _ { }
+    }
+    return n
+}
+
 fn (e mut Emitter&) hasEnv(k mir.FnKey) Bool {
     return match k {
         case mir.FnKey.Adapter(_) => true
@@ -659,6 +680,14 @@ fn (fe mut fnEm&) run() {
             fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i "\n")
             fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
         }
+        # the captured scopes (D16c), each as this thread may build into it: its own part of a scope another thread
+        # owns, the program's (null) as this thread reaches it (P2, decision 48)
+        fe.E.runtime("__olang_capture_scope")
+        for j in range fe.E.capVars(f.Of) {
+            fe.pro.Push("  %vq" $j " = getelementptr " $et ", ptr %env, i32 0, i32 " $(f.Captures.Len() + j) "\n")
+            fe.pro.Push("  %vr" $j " = load ptr, ptr %vq" $j "\n")
+            fe.pro.Push("  %vc" $j " = call ptr @__olang_capture_scope(ptr %vr" $j ")\n")
+        }
     }
     for b in range f.Blocks.Len() {
         fe.label(blockName(mir.BlockId(I32(b))))
@@ -792,6 +821,8 @@ fn (fe mut fnEm&) envType() String {
         if i > 0 { b.Push(", ") }
         b.Push(fe.ty(f.Locals[I64(f.Captures[i])].Ty))
     }
+    # then where each capture holding references lives (D16c): the closure's Capture scope variables, in order
+    for k in range fe.E.capVars(f.Of) { b.Push(", ptr") }
     b.Push(" }")
     return b.ToString()
 }
@@ -1085,7 +1116,8 @@ fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
         case mir.ScopeRef.Scope(s) { return "%s" $s }
         case mir.ScopeRef.Var(i) {
             if i < fe.passed { return "%v" $i }
-            return fe.program()   # a capture's scope: the program's under the stand-in placement
+            if fe.F.Captures.Len() > 0 and i - fe.passed < fe.E.capVars(fe.F.Of) { return "%vc" $(i - fe.passed) }
+            return fe.program()
         }
         case mir.ScopeRef.Program { return fe.program() }
         case mir.ScopeRef.Frame {
@@ -1348,7 +1380,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         }
         case mir.Rvalue.NewArray(s, ty, n, fill) { return fe.newArray(s, ty, n, fill) }
         case mir.Rvalue.Slice(p, lo, hi, ty) { return fe.slice(p, lo, hi, ty) }
-        case mir.Rvalue.Closure(code, ty, s, args) { return fe.closure(code, ty, s, args) }
+        case mir.Rvalue.Closure(code, ty, s, args, caps) { return fe.closure(code, ty, s, args, caps) }
         case mir.Rvalue.Recode(code, from, tl) { return fe.recode(fe.val(code, mir.I32T), from, tl) }
         case mir.Rvalue.Text(b, into, ty) {
             bp := fe.scope(b)
@@ -1836,17 +1868,19 @@ fn (e mut Emitter&) pow2(k I64) String { return e.constText(types.TypeId(14), I6
 # ---- function values ----
 
 # a function value (T21): the pair { code, environment } - the environment, where there are captures, built in s
-fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args mir.Range) String {
+fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args mir.Range, caps mir.Range) String {
     fe.E.want(code)
     sym := fe.E.codeFor(code, ty)
     env := "null"
     if args.N > I32(0) {
+        nc := fe.E.capVars(code)
         b := StringBuilder()
         b.Push("{ ")
         for i in range args.N {
             if i > 0 { b.Push(", ") }
             b.Push(fe.ty(fe.otype(fe.arg(args, i))))
         }
+        for k in range nc { b.Push(", ptr") }
         b.Push(" }")
         et := b.ToString()
         size := fe.let("ptrtoint ptr " $fe.let("getelementptr " $et ", ptr null, i32 1") " to i64")
@@ -1855,6 +1889,19 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             x := fe.arg(args, i)
             xt := fe.otype(x)
             fe.store(fe.ty(xt), fe.val(x, xt), fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i))
+        }
+        # where the captures holding references live (D16c): null for the program's, and for each the plan did not say
+        for j in range nc {
+            sc := "null"
+            if j < I64(caps.N) {
+                r := fe.F.Refs[I64(caps.At) + j]
+                isProg := match r {
+                    case mir.ScopeRef.Program => true
+                    case _ => false
+                }
+                if not isProg { sc = fe.scope(r) }
+            }
+            fe.store("ptr", sc, fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $(I64(args.N) + j)))
         }
     }
     a := fe.let("insertvalue { ptr, ptr } undef, ptr @" $sym ", 0")
@@ -2258,6 +2305,7 @@ fn (e mut Emitter&) runtime(name String&) {
         case "__olang_fmt_float" => "i64 @__olang_fmt_float(ptr, i64, double, i32)"
         case "__olang_rd_quote" => "i64 @__olang_rd_quote(ptr, i64, ptr, i64, i8)"
         case "__olang_thread_init" => "void @__olang_thread_init()"
+        case "__olang_capture_scope" => "ptr @__olang_capture_scope(ptr)"
         case "__olang_test_failed" => "void @__olang_test_failed(ptr)"
         case _ => ""
     }

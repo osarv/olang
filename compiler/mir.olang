@@ -210,8 +210,10 @@ type Rvalue enum {
     Slice(p Place, lo Operand, hi Operand, ty types.TypeId)   # p's elements lo up to hi, a reference ty (E16a)
     # a function value (T21) of type ty: code with an environment in s holding args, its captures in order (D16c), or
     # an adapter's instance (E31); a named function's value has no environment (args empty, s Frame). Where ty's
-    # scopes differ from code's own, the value adapts them (DESIGN.md 1.6.1, T22a)
-    Closure(code FnKey, ty types.TypeId, s ScopeRef, args Range)
+    # scopes differ from code's own, the value adapts them (DESIGN.md 1.6.1, T22a). caps (in Refs) are where the
+    # captures that hold references live, in order - code's Capture variables, carried in the environment (D16c);
+    # none recorded (the stand-in placement) is the program's for each
+    Closure(code FnKey, ty types.TypeId, s ScopeRef, args Range, caps Range)
     # an error code under one error list, as the same error under another (R6): one the target list does not name
     # becomes its default error (R17), which it then names
     Recode(code Operand, from types.ListId, to types.ListId)
@@ -834,9 +836,10 @@ fn (v mut verifier&) rvalueShape(rv Rvalue) {
             v.operand(lo)
             v.operand(hi)
         }
-        case Rvalue.Closure(_, _, s, r) {
+        case Rvalue.Closure(_, _, s, r, cs) {
             v.ref(s)
             v.ops(r)
+            v.refs(cs)
         }
         case Rvalue.Recode(x, _, _) { v.operand(x) }
         case Rvalue.Text(b, into, _) {
@@ -1205,7 +1208,7 @@ fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
         case Rvalue.New(_, x, ty) => v.refType(v.operandType(x), ty)
         case Rvalue.NewArray(_, ty, n, fill) => v.newArrayType(ty, n, fill)
         case Rvalue.Slice(p, lo, hi, ty) => v.sliceType(v.placeType(p), lo, hi, ty)
-        case Rvalue.Closure(_, ty, _, _) => v.closureType(ty)
+        case Rvalue.Closure(_, ty, _, _, _) => v.closureType(ty)
         case Rvalue.Recode(x, _, _) => v.intOf(v.operandType(x), I32T, "an error code")
         case Rvalue.Text(b, _, ty) => v.textType(b, ty)
     }
@@ -1821,9 +1824,10 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
             v.reads(lo)
             v.reads(hi)
         }
-        case Rvalue.Closure(_, _, s, r) {
+        case Rvalue.Closure(_, _, s, r, cs) {
             v.readArgs(r)
             if r.N > I32(0) { v.buildsIn(s) }
+            for i in range cs.N { v.usesScope(v.F.Refs[I64(cs.At) + i]) }
         }
         case Rvalue.Text(b, into, _) {
             v.usesScope(b)
@@ -2039,8 +2043,8 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
                                                  $w.operand(fill) ")")
         case Rvalue.Slice(p, lo, hi, ty) => ("slice " $w.place(p) "[" $w.operand(lo) " : " $w.operand(hi) "]: "
                                              $t.Canon(ty))
-        case Rvalue.Closure(code, ty, s, r) => ("closure " $w.key(code) " in " $w.ref(s) "(" $w.operands(r) "): "
-                                                $t.Canon(ty))
+        case Rvalue.Closure(code, ty, s, r, cs) => ("closure " $w.key(code) " in " $w.ref(s) "(" $w.operands(r) ")"
+                                                    $(" captures " $w.refs(cs) if cs.N > I32(0) else "") ": " $t.Canon(ty))
         case Rvalue.Recode(x, from, to) => "recode " $w.operand(x) " from " $w.list(from) " to " $w.list(to)
         case Rvalue.Text(b, into, ty) => "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
     }
