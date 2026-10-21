@@ -3179,13 +3179,10 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
         exact := s.narrowingMatters(t)
         kind := FitLocal
         if loc.Kind == typed.LocalKind.Field {
-            # a constructor's field is a slot of the instance (C2d): exact where something can be stored through it, and
-            # a field written "&q" keeps its argument's own scope, which need only outlive the instance
+            # a constructor's field is a slot of the instance (C2d): exact where something can be stored through it (O25g) -
+            # a field written "&q" exactly where its argument lives then, so that building through it builds where its
+            # referent is; else it need only outlive the instance
             exact = s.storeThrough(t)
-            match loc.Marked {
-                case typed.Mark.Of(_) { exact = false }
-                case _ { }
-            }
             kind = FitField if exact else FitDecl
             s.why = WhyHolds
         }
@@ -3381,8 +3378,10 @@ fn (s mut Scoper&) slotOf(p typed.Place&) (Term, Bool, I64) {
             match mark {
                 case typed.Mark.Of(_) {
                     # a field written "&p" keeps its argument's own scope: what is stored must outlive where that argument
-                    # lived - the instance's construction binding, through a parameter its derived scope (C2d, O23a)
-                    return s.fieldTerm(base, i), false, FitField
+                    # lived - the instance's construction binding, through a parameter its derived scope (C2d, O23a) - and
+                    # be exactly there where something can be stored through it (O25g), so that building through the
+                    # field builds where its referent is
+                    return s.fieldTerm(base, i), s.storeThrough(t), FitField
                 }
                 case _ { }
             }
