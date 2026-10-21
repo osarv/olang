@@ -57,6 +57,7 @@ Measurements below were taken on 2026-10-09 on the shared 4-core machine while o
 | names | `names` | 1,600 | semantic.c pass 1, syntax.c B9 evaluator |
 | types, checking, generics | `types`, `generic`, `typed`, `check` | 2,000 + 1,800 + 450 + 7,000 | semantic.c passes 2-3 |
 | scope check (§8) | `scope` | 3,000 | semantic.c O-sections, flow tracking |
+| a Vec's views (M19g) | `views` | 1,650 | semantic.c's `settleVecViews` |
 | mid-level IR | `mir`, `lower` | 600 + 2,400 | codegen.c lowering half |
 | evaluation, `-i` | `eval` | 2,600 | comptime.c (2,987) |
 | LLVM emission | `emit`, `dwarf` | 2,800 + 400 | codegen.c emission half |
@@ -348,8 +349,9 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   is left to it, as a pattern (M8). So is a type only a top-level `if` the evaluator decides declares (B9c).
 - **Revised after the contract's review (2026-10-12).** A function type carries its scopes (`types.Scopes`, filled
   from the written markers by `sigType`, kept by `Subst`, spelled ` ~[...]` by `Canon` and read back by `ParseCanon`),
-  outside T22's identity (`Plain`, `Same`); an instance's and a function instance's arguments are held plain, and
-  inference binds a variable to a plain type. `types.ScopeVarsOf` gives a call's hidden scope arguments from the type
+  outside T22's identity (`Plain`, `Same`); an instance's arguments are held plain, a function instance's plain but for a
+  function type, which keeps its scopes (G16a, T22: `keep(link)` and `keep(copy)` are two instances, 2026-10-21), and
+  inference binds a variable so. `types.ScopeVarsOf` gives a call's hidden scope arguments from the type
   alone, `generic.Program.ScopeVarsOf` resolving the bodies whose fields say whether a value holds a reference. Every
   type and function instance records where it was first asked for (`Asking`, `TypeOrigin`, `InstanceOrigin`, G16b).
 
@@ -407,7 +409,8 @@ entry per parameter (its own scope variable, or the earlier parameter whose vari
 markers, and substitution keeps it. Scopes are outside T22's identity: `types.Plain` is a type with every function
 type's scopes left out, and two types are one type exactly when their plain ids are equal (`types.Same`). What is named
 by its parts' identity - an instance's arguments (G16a), a function instance's arguments, an anonymous enum's payloads
-(T27) - is held plain; a type argument written with sharing scopes is therefore its plain type. A canonical text spells
+(T27) - is held plain; a type argument written with sharing scopes is therefore its plain type, save a function
+instance's function type argument, which keeps them (G16a: the instances differ in the hidden arguments they pass). A canonical text spells
 scopes that say something after the type, ` ~[role,n,entries]`, which `ParseCanon` reads back.
 
 The ABI follows from the type alone. `types.ScopeVarsOf(f)` - one function that `check`, `scope`, `lower` and `eval` all
@@ -526,6 +529,9 @@ body); T29d's literal constructors by the call (`BodyId`, `SiteId`); D13c's zero
 - **Before checking, over the resolved AST:** S8c's fixed locals ("nothing writes it"; D3a makes names exact there), so
   an S8b local `if` is decided in one checking pass.
 - **Errors only, after checking, in `check`'s last step:** T25c/QC's by-value need; `roByArg`/`roToResult`.
+- **Errors only, after checking, in `views` (M19g), a pass of its own run once the program checked cleanly:** what
+  each body may grow, the views it hands back and what its result holds of each argument, over the call graph's
+  components; then each body walked as a dataflow over the tree (views held, second names, tasks' views).
 - **Errors or placement only, after checking, in `scope`:** O17/O17b's regions and handles; `MayBuild`/`MayBuildInto`
   and `Str`'s noBuild; own effects (O39-O41's release and borrow effects); borrowed own results (O37); freshness (O38);
   C2d's may-hold; O26a/O18c's "may keep"; O10b's obligations, O23a's derived scopes and O13c's result bindings. E31b's
@@ -576,12 +582,12 @@ and leaks to those places disagreeing.
 diagnostics name them ("make it where 'st' lives"). Restating §8 as constraint solving would be a semantics project,
 not a port, so the pass follows §8 rule by rule. The pass runs on every body that checked without errors.
 
-**What of §8.8 runs where.** `scope` keeps, over the tree: confinement (O38: where a value made from a borrow may go),
-own regions and reach (O33, O34) as placement, and the release and borrow effect summaries. O39-O41's liveness check -
-a release or move while a loan is live, a task's loans held to its join - runs over MIR after lowering, as rustc's
-non-lexical lifetimes do: releases, holds, deferred code, joins, try exits and evaluation order (O33's arguments, O38's
-join pieces, F3's holds) are explicit only there, and deriving them a second time on the tree is what decision 49's
-reviews found drifting. It gives errors only, and the plan comes before MIR, so there is no cycle.
+**What of §8.8 runs where.** Section 8.8 (`own`, `take`, loans, O30-O42) was removed from the language on 2026-10-18
+(round 3 of `docs/memory.md`); freeing early is the compiler's (O8d), not yet built. What is left of it is M19g, a
+Vec's view used after the Vec may have grown, and that is `views` (section 1.6.1's summaries): its own pass after
+`check`, errors only, over the tree - summaries over the call graph's components, then a forward dataflow walk of each
+body, the stage 0 analysis (`settleVecViews`) rebuilt on the typed core. Early freeing, when it comes, needs a
+liveness of its own over MIR, where releases, deferred code, joins and try exits are explicit.
 
 ### 1.8 MIR, lowering and evaluation (`mir`, `lower`, `eval`)
 

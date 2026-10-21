@@ -32,6 +32,7 @@ compiler/olang.olang`, M11). The command line is stage 0's (`build`, `compile`, 
 | `typed.olang`, `mir.olang` | the typed core language and the mid-level IR (contracts) |
 | `check.olang` | the checker: the resolved tree elaborated into the typed core (M5b/M5c, in progress) |
 | `scope.olang` | section 8: scope terms, obligations over the call graph's components, the O rules, placement (M6, in progress) |
+| `views.olang` | M19g: a Vec's view used after the same Vec may have grown, from summaries over the call graph's components and a dataflow walk of each body, once a program has checked cleanly |
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
