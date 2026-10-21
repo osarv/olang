@@ -20538,3 +20538,55 @@ the compile-time evaluator through `RdSpellSig`/`RdSpellType`) now writes a name
 function value or type as `fn(params) R ? (A, B)` (one item stays unparenthesized). The port's renderer in `compiler/` has no
 `$` of functions yet, so nothing there changed. `checks/cases/d16blambdaorder.olang` pinned the old text and was updated;
 `tests/shared.olang` has a test comparing both forms, whose asserts the evaluator also decides while compiling (S18c).
+
+## Port M6: the scope pass, round 3 - the last silent cases, per-instance bindings, stage 0's messages (2026-10-21)
+
+Round 2 left 18 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error from the port. Round 3
+closed 17 of them; the one left, s5mapgetreturn, is the acceptance round 2 kept on purpose (`l := m.l; return l`, moved
+into the result scope by O26a where stage 0 keeps it - sound). Nothing stage 0 refuses was relaxed: a first try at
+letting a value local lent where its references are be stored into (docs/scope-model.md 3.3's relaxation) silenced 13
+O17 cases, and a constructor's instance placed where the arguments it holds live silenced C2d and O26 cases - both
+reverted the same hour, the second because stage 0 keeps a value local's instance in its block (rv3ctorcopy refuses
+`h := H(r)` that way) and moves it only where O26a does.
+
+**What was built**, each a cluster of the silent cases:
+- **O12 sets where one scope is needed**: a temporary stored into a place whose references live in one of several scopes,
+  a mark or scope argument naming such a local, an argument a callee may build into (O11, O12, S13c); E25 naming a
+  global (O1b); a match binding lives in its clause (S13b); a for-in's copy is never moved (O26a); a reference default
+  lives exactly where the call's result is (R11); a conversion names its array's storage (T29a); a slice of a
+  constructor's temporary is its frame's (E16a).
+- **O17**: a store through a reference a body read out of a parameter's region stores into that region; a result a call
+  borrows from the region is a read of it; a handle holding a handle is used through its reference; a for-in's copy of an
+  element is lent as its storage, with B11's note naming the array (r06).
+- **Inside a component** (a cycle of calls), what a callee keeps, stores and builds, and where O18b places a variable no
+  argument determines, are what the component's rounds found so far - least fixed points; the rounds run until no fact
+  grows.
+- **Per-instance bindings for locals (O23a)**: a local a constructor call initializes, and the body never assigns again
+  (a store into the local itself or a task's target, found by the call-graph walk), carries where each of the
+  constructor's parameters' arguments lived. A `&q` field read through it is there (`b := ScopedBox&return(...); return
+  b.inner`); a callee's derived scope through it resolves there (o23awrite); a store into a `&q` field is held to that
+  binding - it was held only to the instance's scope, which a method writing its receiver's `&of` field could falsify;
+  and a store of existing storage where the binding is not known - through an element, another instance's field, an
+  untracked local - is O23/O11's error (o23paramfield).
+
+**Found on the way, in the checker (fixed in `compiler/check.olang` and `types.olang`, both small)**: a `:=` field the
+declaration could not type - one initialized by a call, `y := mk&x(n)` - stayed Unknown in the type's field list, so the
+type held no references as far as layout and section 8 were concerned (vec72ctorscopearg said nothing; the type's layout
+was wrong). The checker now writes its checked initializer's type into the type once the constructor is checked, and
+`HoldsRefs` keeps no answer it found over a part not typed yet.
+
+**Stage 0's messages**: O25e is said at the call (a constructor's at the argument), O1b at the value stored, an element
+read at its `[`, a build through a derived scope at the argument determining it, a conditional at its `if`; an obligation
+naming a constructor's instance is C2d's, through a constructor building one of its fields too; a call building a
+returned value that holds this function's own storage is O26 at the call; a reference stored exactly where something can
+be stored through is O25, naming a value local that closes first; an array literal's element and a fill are O25c's.
+
+**Measured** (`make scopediff`): first error 221 -> 263 of 279 (211 -> 249 exactly its scope errors); pinned message
+227 -> 259; silent 18 -> 1 (+2 where the checker errs first); accepted programs scope clean 279 of 301 -> 280 of 303;
+distinct error rows on accepted programs 92 -> 64, no gaps left.
+
+**Left**: per-instance bindings for call results (O13c - iterators, `it := l.Iter()`), for locals assigned after their
+declaration and for-in hidden locals; constructor instances a value local keeps beyond its block (b6elemvalue: stage 0
+lands `wv := W(x)` where `cells[i].w = wv` keeps it); the verifier shape (`v := verifier(f, t); v.run(); return
+v.out.ToString()`), which stage 0 accepts by moving `v` into a result scope the port's types give a `String` value
+result no scope for; 16 cases still differing in their first error (columns, and rules the checker or O18c decide).
