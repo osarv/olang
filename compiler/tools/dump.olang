@@ -52,7 +52,7 @@ import "../load"
 import resolver "../names"
 import ty "../types"
 import "../generic"
-import "unparse"
+import "../unparse"
 import "std/filepath"
 
 fn main() ? {

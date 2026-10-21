@@ -65,7 +65,7 @@ build/layoutdump: bootstrap/oracle/layoutdump.c $(filter-out build/obj/main.o,$(
 	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
-build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/dump.olang compiler/tools/unparse.olang
+build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/dump.olang
 	$(OLANG) build compiler/tools/dump.olang
 
 # the acceptance tools (compiler/tools/NAME.olang, which share toolkit.olang): tokdiff, astdiff, namesdiff, layoutdiff,
@@ -74,7 +74,7 @@ build/compiler_tools_%: compiler/tools/%.olang compiler/tools/toolkit.olang $(OL
 	$(OLANG) build $<
 
 # the formatter (SPEC.md B13): "olang format" builds it into its own cache; this is the copy the tests use
-build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/fmt.olang compiler/tools/unparse.olang
+build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/fmt.olang
 	$(OLANG) build compiler/tools/fmt.olang
 
 # B13's acceptance: every file of the repository formatted reads back as the same tree, keeps its comments, and is its
@@ -86,7 +86,7 @@ fmtdiff: build/compiler_tools_fmt
 build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
 	$(OLANG) build compiler/olang.olang
 
-# M10's acceptance so far: the driver says what stage 0 says for every command line decided before code generation
+# M10's acceptance: the driver says what stage 0 says, for command lines decided before code generation and for whole builds
 drvdiff: build/out build/compiler_olang build/compiler_tools_drvdiff
 	build/compiler_tools_drvdiff
 

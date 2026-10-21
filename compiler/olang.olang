@@ -11,7 +11,6 @@
 
 import "std/os"
 import "std/io"
-import "std/filepath"
 import "build"
 import "target"
 import "cond"
@@ -20,7 +19,9 @@ import "msgs"
 import "load"
 import "fetch"
 import "source"
+import "scope"
 import "lower"
+import "fmt"
 import "emit"
 import rt "runtime"
 import "eval"
@@ -285,27 +286,9 @@ fn explain(rule String&, d mut diag.Diagnostics&) String ? Bad {
     return text
 }
 
-# format: the formatter (compiler/tools/fmt.olang), as built beside this compiler (make's build/compiler_tools_fmt),
-# run over the files with std beside it - stage 0 builds it into its cache itself, which this driver cannot do until it
-# makes code
-fn format(cl CommandLine&, d mut diag.Diagnostics&) I32 ? Bad {
-    exe := try os.ReadLink("/proc/self/exe") catch os.OsError default "olang"
-    dir := filepath.Dir(exe)
-    bin := $dir "/compiler_tools_fmt"
-    if not os.Exists(bin) { try usage(d, msgs.FormatterMissing(bin)) }
-    std := try os.Env("OLANG_STD") catch default $dir "/../std"
-    av List<String&>
-    av.Push("/usr/bin/env")
-    av.Push($"OLANG_STD=" $std)
-    av.Push(bin)
-    av.Push("-l" if cl.Check else "-f")
-    for f in cl.Files { av.Push($f) }
-    out := try os.Exec(av.ToArray(), "", false) catch os.OsError {
-        d.Error(diag.Where.Nowhere, msgs.FormatterBuild(bin))
-        error Bad.USAGE
-    }
-    return out.Status
-}
+# format: each file in olang's one layout, or (-check) each file not in it named (B13) - the formatter is
+# compiler/fmt.olang, called here, where stage 0 builds compiler/tools/fmt.olang into its cache and runs it
+fn format(cl CommandLine&) I32 { return fmt.Files("-l" if cl.Check else "-f", cl.Files.ToArray(), load.StdDir()) }
 
 # runs the command line args with the front end fe, as the process olang is: the status it ends with
 fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
@@ -321,7 +304,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         text := try explain(cl.Word, d) catch Bad { return said(d) }
         return write(text)
     }
-    if cl.Mode == Format { return try format(cl, d) catch Bad { return said(d) } }
+    if cl.Mode == Format { return format(cl) }
     files := cl.Files.ToArray()
     if cl.Mode == Compile { return build.Compile(fe, c, files[0], d) }
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }
@@ -358,10 +341,10 @@ fn drive(args Array<String&>&) I32 {
 # ---- the front end ----
 
 # the passes: the program loaded (M4: its imports, fetched where they are remote, its top-level conditions decided
-# where B9a can), resolved and checked with the decisions evaluation makes (M5, M8: B9c, S8b, S18c), lowered to MIR
-# (M7, with the stand-in placement - the scope pass, M6, is not run yet) and written as LLVM IR (M9). Emission writes
-# the whole program as one module, so a build is one object for the program (the root's, holding main or the test
-# harness) beside the runtime's - compile included, which writes the program its file is the root of
+# where B9a can), resolved and checked with the decisions evaluation makes (M5, M8: B9c, S8b, S18c), held to section 8
+# by the scope pass (M6), lowered to MIR where that pass places things (M7) and written as LLVM IR (M9). Emission
+# writes the whole program as one module, so a build is one object for the program (the root's, holding main or the
+# test harness) beside the runtime's - compile included, which writes the program its file is the root of
 type Passes struct() {
     Loaded I64 = 0
 }
@@ -374,8 +357,13 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     interp.DecideAsserts(c, asserts)
     if d.Errors() > 0 { error build.Failed.REPORTED }
+    # section 8 (M6): the scope pass's errors, and its placement, which lowering follows
+    sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
+    sc.Run()
+    if d.Errors() > 0 { error build.Failed.REPORTED }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
+    lw.Plans = sc.Plans
     e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs

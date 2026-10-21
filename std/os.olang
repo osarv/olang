@@ -25,6 +25,7 @@ extern fn __olang_stat(path Array<U8>, out Array<I64>) I32
 extern fn __olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_spawn(args Array<U8>, count I64, stdin I32, stdout I32, stderr I32, dir Array<U8>) I32
+extern fn __olang_exec(path Array<U8>, args Array<U8>, count I64) I32
 extern fn __olang_mkdtemp(template Array<U8>) I32
 extern fn __olang_run_on_stack(bytes I64, f fn())
 extern fn __olang_on_crash(message Array<U8>, len I64)
@@ -176,6 +177,37 @@ fn Exec(args Array<String&>&, input Array<U8>& = "", capture Bool = true, dir St
 fn ExecUntil(args Array<String&>&, tok cancel.Token&, input Array<U8>& = "", capture Bool = true, dir String& = "") Output ? OsError, cancel.Stopped {
     p := try Start(args, input, capture, dir)
     return try p.WaitUntil(tok)
+}
+
+# runs the program at path in this program's place, args its command line (args[0] the name it runs by, which need not
+# be path): what this program would do next is the program's, its status this process's - a shell's script handing on
+# to another program, a driver running what it built. path is not looked up through PATH. Returns only when the
+# program cannot be started, failing as Exec does - NOT_FOUND, DENIED, or FAILED for no arguments or one holding a zero
+# byte
+fn ExecInPlace(path String&, args Array<String&>&) ? OsError {
+    if args.Len() == 0 { error OsError.FAILED }
+    size I64 = 0
+    for a in args {
+        zero := true
+        try a.FindByte(0) catch { zero = false }
+        if zero { error OsError.FAILED }
+        size += a.Len() + 1
+    }
+    zero := true
+    try path.FindByte(0) catch { zero = false }
+    if zero { error OsError.FAILED }
+    line := Array<U8>(size)                         # the arguments, each ended by a zero byte
+    at I64 = 0
+    for a in args {
+        for c in a {
+            line[at] = c
+            at++
+        }
+        at++
+    }
+    __olang_exec($path "\0", line, args.Len())
+    try raise(__olang_err())
+    error OsError.FAILED
 }
 
 # a program Start started: Wait for it, once, to have what it did; Kill it to end it sooner. Its descriptors are closed

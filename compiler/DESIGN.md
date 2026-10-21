@@ -1138,7 +1138,7 @@ with the installed one; `make bootstrap` is section 5.
    - Branches decided by the build (point 12): both parsers parse every branch (stage 0 through
      `SyntaxParseAllBranches`, set by the oracle only), so they are compared now; deciding them is compared with M4.
    - Built (M3): `bootstrap/oracle/astdump.c` (run on a 1 GB thread, as the compiler runs), `dump.olang ast`, and
-     `dump.olang roundtrip`, whose writer is `compiler/tools/unparse.olang` - it writes every node as source with no
+     `dump.olang roundtrip`, whose writer is `compiler/unparse.olang` - it writes every node as source with no
      parentheses added, a branch that had held diagnostics as its own text. `compiler/tools/astdiff.olang` runs both over
      every file of the repository (`make astdiff`, part of `make verify`, about 5 s once both tools are built). What
      it normalizes: each file's rows are sorted (the two trees hold the same nodes in different shapes); stage 0's

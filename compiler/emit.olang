@@ -592,7 +592,11 @@ fn (fe mut fnEm&) run() {
         l := f.Locals[i]
         if l.Ty == types.VoidT or l.Ty == types.NoreturnT { continue }
         lt := fe.ty(l.Ty)
-        if fe.size(l.Ty) > 65536 {
+        if not fe.isFrame(l.Home) {
+            # a local the scope pass gave a home outside the frame (O26a: one the function returns): its storage is
+            # made in that home's arena each time it is declared (Live), and the slot holds where
+            fe.head.Push("  %l" $i "p = alloca ptr\n")
+        } else if fe.size(l.Ty) > 65536 {
             if not fe.big {
                 fe.big = true
                 fe.head.Push("  %big = alloca %olang.scope\n")
@@ -621,6 +625,7 @@ fn (fe mut fnEm&) run() {
     for i in range f.Params.Len() {
         l := I64(f.Params[i])
         lt := f.Locals[l].Ty
+        if not fe.isFrame(f.Locals[l].Home) { fe.gap("a parameter homed in an arena") }
         match pass[i] {
             case 'm' {
                 fe.pro.Push("  %pv" $i " = load " $fe.ty(lt) ", ptr %a" $i "\n")
@@ -650,6 +655,7 @@ fn (fe mut fnEm&) run() {
         for i in range f.Captures.Len() {
             l := I64(f.Captures[i])
             lt := fe.ty(f.Locals[l].Ty)
+            if not fe.isFrame(f.Locals[l].Home) { fe.gap("a capture homed in an arena") }
             fe.pro.Push("  %cp" $i " = getelementptr " $et ", ptr %env, i32 0, i32 " $i "\n")
             fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i "\n")
             fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
@@ -817,7 +823,7 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
     ty := types.UnknownT
     match p.B {
         case mir.Base.Local(l) {
-            at = "%l" $l
+            at = fe.localAt(l)
             ty = fe.localType(l)
         }
         case mir.Base.Global(m, n, gt) {
@@ -839,7 +845,7 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
                 ty = fs[k]
             }
             case mir.Proj.Index(l) {
-                ix := fe.index(fe.load(fe.ty(fe.localType(l)), "%l" $l), fe.localType(l))
+                ix := fe.index(fe.load(fe.ty(fe.localType(l)), fe.localAt(l)), fe.localType(l))
                 at, ty = fe.elemAt(at, ty, ix)
             }
             case mir.Proj.At(k) { at, ty = fe.elemAt(at, ty, $k) }
@@ -1086,6 +1092,12 @@ fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
     }
 }
 
+# where local l's storage is: its alloca, or for one homed in an arena (Live) the storage its slot holds
+fn (fe mut fnEm&) localAt(l mir.LocalId) String {
+    if fe.isFrame(fe.F.Locals[I64(l)].Home) { return "%l" $l }
+    return fe.load("ptr", "%l" $l "p")
+}
+
 fn (fe mut fnEm&) program() String {
     fe.E.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
     return fe.load("ptr", "@__olang_prog_scope")
@@ -1119,7 +1131,11 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             fe.store(fe.ty(pt), v, at)
         }
         case mir.Stmt.Live(_, l) {
-            if not fe.isFrame(fe.F.Locals[I64(l)].Home) { fe.gap("a local in an arena") }
+            home := fe.F.Locals[I64(l)].Home
+            if not fe.isFrame(home) {
+                lt := fe.localType(l)
+                fe.store("ptr", fe.alloc(home, $fe.size(lt), fe.align(lt)), "%l" $l "p")
+            }
         }
         case mir.Stmt.Dead(_, _) { }
         case mir.Stmt.Open(_, sc) {
