@@ -60,6 +60,9 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     thunkFor Map<String&, Bool>
     thunkKeys List<mir.FnKey>
     thunkTys List<types.TypeId>
+    adaptFrom List<types.TypeId>    # function values converted between ABIs (R6): an adapter per pair, its from and to
+    adaptTo List<types.TypeId>
+    adaptAt Map<String&, Bool>
     dtorKeys List<mir.FnKey>        # destructor thunks to write (the runtime's fn(ptr instance, ptr scope))
     dtorSeen Map<mir.FnKey, Bool>
     ctorOf Map<types.TypeId, I64>
@@ -110,6 +113,7 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
     }
     e.cur = -1
     for i in range e.thunkKeys.Len() { e.thunk(e.thunkKeys[i], e.thunkTys[i]) }
+    for i in range e.adaptFrom.Len() { e.fvAdapter(e.adaptFrom[i], e.adaptTo[i]) }
     for d in e.dtorKeys { e.dtorThunk(d) }
     if e.Tests {
         e.harness(tests)
@@ -1691,6 +1695,7 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
     t := fe.E.T
     f, g := t.Repr(from), t.Repr(to)
     fl, gl := fe.ty(f), fe.ty(g)
+    if t.KindOf(f) == types.Kind.Func and t.KindOf(g) == types.Kind.Func and fe.E.abiDiffers(f, g) { return fe.adapt(v, f, g) }
     if fl == gl { return $v }
     fi, gi := t.IsInt(f) or f == types.BoolT, t.IsInt(g) or g == types.BoolT
     if fi and gi {
@@ -1982,19 +1987,126 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
         }
     }
     rt := t.RetLlvm(mine)
+    vt := t.RetLlvm(ty)
     if rt == "void" {
-        b.Push("  call void @" $s "(" $args.ToString() ")\n  ret void\n}\n\n")
+        b.Push("  call void @" $s "(" $args.ToString() ")\n")
+        # a function that cannot fail as a value that can (R6): it never fails
+        b.Push("  ret void\n}\n\n" if vt == "void" else "  ret i32 0\n}\n\n")
+        e.body.Push(b.ToString())
+        return
+    }
+    b.Push("  %r = call " $rt " @" $s "(" $args.ToString() ")\n")
+    if vt == rt and t.Errors(mine) == t.Errors(ty) {
+        b.Push("  ret " $rt " %r\n}\n\n")
+        e.body.Push(b.ToString())
+        return
+    }
+    # the value's error list differs from its function's (R6, R17): its result, and its code re-encoded under the
+    # value's list - a code its list does not name being the value's default error
+    fe mut fnEm&e = fnEm(e, mir.Fn(code, ty, 0, source.Span(0, 0)), code)
+    from := t.Errors(mine)
+    to := t.Errors(ty)
+    res2 := t.Result(mine)
+    hasRes := res2 != types.VoidT and res2 != types.NoreturnT and not t.ViaMemory(res2)
+    code0 := "0"
+    if t.Items(from).Len() > 0 { code0 = "%r" if not hasRes else fe.let("extractvalue " $rt " %r, 0") }
+    c := fe.recode(code0, from, to) if t.Items(from).Len() > 0 else "0"
+    if vt == "i32" {
+        fe.w("ret i32 " $c)
+    } else if t.Items(to).Len() == 0 {
+        fe.w("ret " $vt " " $(fe.let("extractvalue " $rt " %r, 1") if t.Items(from).Len() > 0 else "%r"))
     } else {
-        b.Push("  %r = call " $rt " @" $s "(" $args.ToString() ")\n")
-        vt := t.RetLlvm(ty)
-        if vt == rt {
-            b.Push("  ret " $rt " %r\n}\n\n")
+        v := fe.let("extractvalue " $rt " %r, 1") if t.Items(from).Len() > 0 else "%r"
+        a := fe.let("insertvalue " $vt " zeroinitializer, i32 " $c ", 0")
+        fe.w("ret " $vt " " $fe.let("insertvalue " $vt " " $a ", " $e.ty(t.Result(ty)) " " $v ", 1"))
+    }
+    b.Push(fe.code.ToString())
+    b.Push("}\n\n")
+    e.body.Push(b.ToString())
+}
+
+# whether a call through a function value of type f and one of type g differ in what is returned (R6: a function that
+# cannot fail as a value that can, or another error list)
+fn (e mut Emitter&) abiDiffers(f types.TypeId, g types.TypeId) Bool {
+    t := e.T
+    return t.RetLlvm(f) != t.RetLlvm(g) or t.Errors(f) != t.Errors(g)
+}
+
+# a function value of type f as one of type g whose ABI differs: an environment holding the value, in the program's
+# scope (it may be kept anywhere), called through an adapter that re-encodes what it returns
+fn (fe mut fnEm&) adapt(v String&, f types.TypeId, g types.TypeId) String {
+    e := fe.E
+    key := $f "_" $g
+    if not e.adaptAt.Has(key) {
+        e.adaptAt.Put($key, true)
+        e.adaptFrom.Push(f)
+        e.adaptTo.Push(g)
+    }
+    e.runtime("__olang_scope_alloc")
+    env := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.program() ", i64 16)")
+    fe.store("{ ptr, ptr }", v, env)
+    a := fe.let("insertvalue { ptr, ptr } undef, ptr @olang_fvadapt_" $key ", 0")
+    return fe.let("insertvalue { ptr, ptr } " $a ", ptr " $env ", 1")
+}
+
+# the adapter of fvAdapt: the inner value's code called with its environment, the outer's scopes (the program's for
+# any more the inner takes) and arguments, its error code re-encoded under g's list (R6, R17)
+fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
+    t := e.T
+    vp := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), g)
+    ip := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), f)
+    key := $f "_" $g
+    hdr := e.header(mir.FnKey.Init(0), g, "olang_fvadapt_" $key, vp, true)
+    fe mut fnEm&e = fnEm(e, mir.Fn(mir.FnKey.Init(0), g, 0, source.Span(0, 0)), mir.FnKey.Init(0))
+    code := fe.load("ptr", "%env")
+    inner := fe.load("ptr", fe.let("getelementptr { ptr, ptr }, ptr %env, i32 0, i32 1"))
+    args := StringBuilder()
+    args.Push("ptr " $inner)
+    res := t.Result(f)
+    if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr %out") }
+    for i in range ip {
+        if i < vp {
+            args.Push(", ptr %v" $i)
         } else {
-            e.gap("a function value whose errors differ from its function's")
-            b.Push("  ret " $vt " zeroinitializer\n}\n\n")
+            args.Push(", ptr " $fe.program())
         }
     }
-    e.body.Push(b.ToString())
+    ps := t.Items(t.Params(g))
+    pass := t.Passing(g)
+    for i in range ps.Len() {
+        match pass[i] {
+            case 'm' { args.Push(", ptr %a" $i) }
+            case 's' { args.Push(", ptr %a" $i "c, ptr %a" $i "e") }
+            case _ { args.Push(", " $e.ty(ps[i]) " %a" $i) }
+        }
+    }
+    rt := t.RetLlvm(f)
+    vt := t.RetLlvm(g)
+    from := t.Errors(f)
+    to := t.Errors(g)
+    if rt == "void" {
+        fe.w("call void " $code "(" $args.ToString() ")")
+        fe.w("ret void" if vt == "void" else "ret i32 0")
+    } else {
+        r := fe.let("call " $rt " " $code "(" $args.ToString() ")")
+        hasRes := res != types.VoidT and res != types.NoreturnT and not t.ViaMemory(res)
+        errs := t.Items(from).Len() > 0
+        c := "0"
+        if errs { c = fe.recode(r if not hasRes else fe.let("extractvalue " $rt " " $r ", 0"), from, to) }
+        val := (fe.let("extractvalue " $rt " " $r ", 1") if errs else r) if hasRes else ""
+        if vt == "i32" {
+            fe.w("ret i32 " $c)
+        } else if t.Items(to).Len() == 0 {
+            fe.w("ret " $vt " " $val)
+        } else {
+            a := fe.let("insertvalue " $vt " zeroinitializer, i32 " $c ", 0")
+            fe.w("ret " $vt " " $fe.let("insertvalue " $vt " " $a ", " $e.ty(t.Result(g)) " " $val ", 1"))
+        }
+    }
+    e.body.Push(hdr)
+    e.body.Push("entry:\n")
+    e.body.Push(fe.code.ToString())
+    e.body.Push("}\n\n")
 }
 
 # a destructor as the runtime calls it, fn(ptr instance, ptr scope): the scope being closed passed for every scope
