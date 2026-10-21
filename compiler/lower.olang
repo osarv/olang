@@ -644,7 +644,20 @@ fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
     if not ln.valueArray(ty) { return false }
     return match x {
         case typed.Expr.Read(_, _, _, _) => true
+        # a fixed array a reference names, converted (it names that storage)
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and derefOf(args[0]) != null
         case _ => false
+    }
+}
+
+# the reference a read of what it names reads through, else null
+fn derefOf(x typed.Expr&) typed.Expr&x {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => match p {
+            case typed.Place.Deref(_, _, r) => r
+            case _ => null
+        }
+        case _ => null
     }
 }
 
@@ -1707,6 +1720,16 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         ln.check(b, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.SliceBounds, OutOfBounds, sp)
         return v
     }
+    # a fixed array a reference names, as a run-time-length array value: the pair naming that storage, not a copy of it
+    # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a
+    # declaration's or a body that writes it)
+    r typed.Expr&args = null
+    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) { r = derefOf(args[0]) }
+    if r != null and ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 {
+        v := ln.val(r)
+        if ln.dead { return mir.Operand.None }
+        return ln.prim(op, ty, mir.Operand[v], sp)
+    }
     ops := ln.vals(args)
     if ln.dead { return mir.Operand.None }
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
@@ -1786,7 +1809,17 @@ fn (ln mut lowering&) primChecks(op typed.PrimOp, chk typed.Check, ops Array<mir
                 over := ln.into(types.BoolT, mir.Rvalue.Overflows(op, ty, ln.F.Args(ops)), sp)
                 ln.fails(over, chk, kind, Overflow, sp)
             } else if t.IsFloat(rt) {
-                ln.finite(ln.prim(op, ty, ops, sp), ty, chk, Overflow, sp)
+                # OVERFLOW when a finite value becomes infinite: an infinity converted stays one
+                res := ln.prim(op, ty, ops, sp)
+                d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[res, res], sp)
+                ok := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+                ok = ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ok, ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[res, res], sp)], sp)
+                if t.IsFloat(at) {
+                    d0 := ln.prim(typed.PrimOp.Sub, args[0].Type(), mir.Operand[ops[0], ops[0]], sp)
+                    fin0 := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d0, mir.Operand.Const(args[0].Type(), 0)], sp)
+                    ok = ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ok, ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[fin0], sp)], sp)
+                }
+                ln.check(ok, chk, kind, Overflow, sp)
             }
         }
         case _ { }
