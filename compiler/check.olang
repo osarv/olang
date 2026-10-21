@@ -3126,7 +3126,26 @@ fn (c mut Checker&) dataLength(x typed.Expr&) I64 {
 fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr&c {
     if c.isStruct(t) {
         id := c.ctorBody(t)
-        args := Array<typed.Expr&>(0)
+        # each parameter its default, else its own type's zero value - none where the constructor has no parameter,
+        # the Zero helper's call then
+        sig := c.P.CtorSig(t)
+        ps := c.P.T.Items(c.P.T.Params(sig)) if sig != types.UnknownT else Array<types.TypeId>(0)
+        td := c.P.TypeDecl(c.P.T.DeclOf(t))
+        written Array<ast.Param&>&td = null
+        if td != null and td.Body != null {
+            match td.Body {
+                case ast.TypeBody.Struct(st) { written = st.Params }
+                nomatch { }
+            }
+        }
+        args := Array<typed.Expr&>(ps.Len())
+        was := c.ctorCalled
+        c.ctorCalled = t
+        for k in range ps.Len() {
+            hasDefault := written != null and k < written.Len() and written[k].Dflt != null
+            args[k] = c.ctorDefault(sp, k, ps[k]) if hasDefault else c.zero(sp, ps[k])
+        }
+        c.ctorCalled = was
         return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), args, typed.Mark.None
                                                  c.site(typed.SiteKind.Call, sp), true))
     }
@@ -5632,6 +5651,8 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
         if not c.isRef(elem) { c.roStore(x, args[1].Span(), RoStored) }   # T25c: every element is writable
         c.exprs.Push(x)
     }
+    # no fill: each element its type's zero value (D13c), a struct's made by its constructor
+    if args.Len() == 1 and c.isStruct(elem) { c.exprs.Push(c.zero(sp, elem)) }
     items := gather(c.exprs, from)
     # its length checked once (D14b), under try failing into the try (E15a)
     lchk := c.checkOp(typed.Check.Abort)
@@ -5674,7 +5695,9 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 elem := c.resolve(targs[0])
                 length := c.P.ConstArg(c.fr().Ctx, targs[1], c.i64())
                 if elem == types.UnknownT { return c.unknown(sp) }
-                return typed.Expr.Make(sp, c.P.T.Array(elem, length), typed.Make(typed.MakeKind.Fill, 0, Array<typed.Expr&>(0)
+                # each element its type's zero value (D13c), a struct's made by its constructor
+                zs := Array<typed.Expr&>(1, c.zero(sp, elem)) if c.isStruct(elem) else Array<typed.Expr&>(0)
+                return typed.Expr.Make(sp, c.P.T.Array(elem, length), typed.Make(typed.MakeKind.Fill, 0, zs
                                        c.lit(sp, c.i64(), c.P.T.ConstValue(length) if c.P.T.KindOf(length) == types.Kind.Const else 0)
                                        c.site(typed.SiteKind.Make, sp), typed.Check.Abort))
             }

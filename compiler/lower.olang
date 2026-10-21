@@ -1442,7 +1442,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
 
 fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
-    if c.Zero { return ln.zero(ty, sp) }
+    if c.Zero and c.Args.Len() == 0 { return ln.zero(ty, sp) }
     callee, fty := ln.callee(c.Target, sp)
     if ln.dead { return mir.Operand.None }
     args := ln.args(c, callee, fty)
@@ -1571,7 +1571,28 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
     n := mir.Operand.None
     if m.Length != null { n = ln.val(m.Length) }
     fv := mir.Operand.Const(el, 0)
-    if m.Items.Len() > 0 { fv = ln.val(m.Items[0]) }
+    if m.Items.Len() > 0 {
+        zero := match m.Items[0] {
+            case typed.Expr.Call(_, _, k) => k.Zero
+            case _ => false
+        }
+        if zero and n != mir.Operand.None and not ln.dead {
+            # an element type's zero value made only for an array that has an element: Array<T>(0) needs none (D13c)
+            v := ln.temp(el, sp)
+            ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(fv)))
+            some := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[ln.asI64(n, m.Length.Type(), sp), ln.constI64(0)], sp)
+            yes, after := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(some, yes, after))
+            ln.start(yes)
+            z := ln.val(m.Items[0])
+            if not ln.dead { ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(z))) }
+            ln.goto(after)
+            ln.start(after)
+            fv = mir.Operand.Copy(mir.L(v))
+        } else {
+            fv = ln.val(m.Items[0])
+        }
+    }
     if ln.dead { return mir.Operand.None }
     fixed := ln.fixedLen(at)
     if fixed >= 0 {
@@ -1589,6 +1610,13 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
     if m.Checked != typed.Check.None {
         ok := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[n64, ln.constI64(0)], sp)
         ln.check(ok, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
+        # ... and its byte count an I64 (D14b)
+        ln.L.P.Layout(el)
+        size := t.Size(el)
+        if size > 1 {
+            fits := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[n64, ln.constI64(9223372036854775807 / size)], sp)
+            ln.check(fits, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
+        }
     }
     return ln.into(ty, mir.Rvalue.NewArray(ln.built(m.Site), ty, n64, fv), sp)
 }
