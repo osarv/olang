@@ -20682,3 +20682,10 @@ been the caller's (D9b); a length's byte count was unchecked (D14b); two literal
 (T25d). And in the scope pass, reported to its owner: a temporary passed to a call whose borrowed result is returned, a
 build through a constructed cursor's `&of` field, and a constructor field a reference or view is taken to are each placed
 in a block that closes first.
+
+After merging master (cd2c701) the run of `tests/shared.olang` crashed in the O17a test (`rvSplitWalk`): the scope pass
+read a for-in's hidden borrow of a split value - a value local or a by-value parameter whose references live elsewhere
+than its storage - at the storage's scope, so `for x in h.items { x.next = rvN(...) }` built each node in the frame and
+`for x in l` over a by-value `List` parameter in its block. Stage 0 gives each element the references' scope (O17a); the
+pass now records that scope for such a borrow (`splitHome`) and reads the borrow there. Its errors are unchanged
+(scopediff identical). emitdiff: 25 of 26 files and 989 of 1013 tests as stage 0's, tests/shared 687 of 711.
