@@ -20538,3 +20538,36 @@ the compile-time evaluator through `RdSpellSig`/`RdSpellType`) now writes a name
 function value or type as `fn(params) R ? (A, B)` (one item stays unparenthesized). The port's renderer in `compiler/` has no
 `$` of functions yet, so nothing there changed. `checks/cases/d16blambdaorder.olang` pinned the old text and was updated;
 `tests/shared.olang` has a test comparing both forms, whose asserts the evaluator also decides while compiling (S18c).
+
+## Port M9: the emitter placed by the scope pass, round 2 (2026-10-21)
+
+`compiler/emit.olang` now writes programs as the scope pass (M6) places them: emitdump and emitdiff run `scope.Scoper`
+and lower with its plans (`-standin` keeps lowering's stand-in placement). Of 711 tests in `tests/shared.olang`, 680 end
+as stage 0's (637 under the stand-in placement, where every instance lived in the program's scope and so no destructor
+ran before the end); every destructor-timing test passes. PROGRESS.md has the rest.
+
+**What placement needed from emission.** A local the plan moves into a scope variable (O26a) is made at its `Live` in that
+scope's arena. A closure carries where its captures holding references live: `mir.Rvalue.Closure` gained the scopes (the
+plan's `Passed` at the closure's site), the environment holds them after the captures, and the closure's code asks the
+runtime for each as its thread may build there (`__olang_capture_scope`, decision 48) - before, a build through a capture
+went to the program's scope, so what a task a destructor spawned built was never destructed. A test build keeps P1d's
+chain of open scopes, so a failed check unwinds, joins and destructs before it jumps.
+
+**Decided.** A body the scope pass reports an error in is placed by the stand-in placement: its plan is not one to trust
+while the pass is finished, and the two mix safely since the stand-in only builds in the program's scope. An array value a
+function returns is copied into the program's scope under the plan: `types.ScopeVarsOf` gives no result scope to a result
+holding no reference, where stage 0 gives every function returning an array value one - a leak per call until the ABI
+does too (recorded as left). A function value converted to a type with another error list (an infallible function where a
+fallible type is wanted, R6) is called through an adapter re-encoding its code. The runtime is filled in by the port
+(`emit.RuntimeFill`, `RuntimeModule`, `RuntimeDecls`) - stage 0's facts table and rewrite, its output byte for byte stage
+0's - and emitdiff links with it.
+
+**Found on the way**, fixed in check and lower (each with stage 0's meaning): a struct's zero value ignored its
+constructor's defaults and a declared number's its constructor (D13c, T29d); `==` on two array references took an empty
+array for a null (E10); `==` on a declared number never called its `Eq` (E10a); `x in c` evaluated `c` first (E29); a
+declared type over a number rendered as its base, its `Str` never called (E11c); checked float division and narrowing
+reported IEEE exceptions for infinite operands (E15a); a fixed array a reference names was copied where it should have
+been the caller's (D9b); a length's byte count was unchecked (D14b); two literal sites with one content were one instance
+(T25d). And in the scope pass, reported to its owner: a temporary passed to a call whose borrowed result is returned, a
+build through a constructed cursor's `&of` field, and a constructor field a reference or view is taken to are each placed
+in a block that closes first.
