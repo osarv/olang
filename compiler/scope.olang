@@ -178,6 +178,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     stmtSp source.Span = source.Span(0, 0) # the statement being judged
     resultVar I64 = -1                     # the result scope's index in Vars, -1 for none
     held Map<I64, typed.Expr&>             # a held local's temporary initializer, built where its one use puts it
+    inits Map<I64, typed.Expr&>            # by local: its declaration's initializer, for the notes
     targets List<typed.Place&>             # the places of the Assigns being judged, innermost last (Place.Target)
     buildsVar List<Bool>                   # by scope variable: whether this body builds into it, directly or through a call
     realVar List<Bool>                     # ... a value, not only a task's stand-in
@@ -400,6 +401,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.setFrom.Clear()
     s.setTerms.Clear()
     s.held.Clear()
+    s.inits.Clear()
     s.targets.Clear()
     s.resultVar = -1
     s.report = report
@@ -1000,6 +1002,20 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     s.flowStart(l, 1)
     s.flowRun(ss, from)
     s.landOK = s.flKept
+}
+
+# whether an argument borrows a for-in's copy of an element: a value, its storage the loop's block (O17, O10c)
+fn (s mut Scoper&) lentLoopCopy(a typed.Expr&) Bool {
+    match s.unAway(a) {
+        case typed.Expr.Borrow(_, _, p) {
+            match p {
+                case typed.Place.Local(_, _, id) { return s.loopElement(I64(id)) and not s.isRef(s.B.Locals[I64(id)].Ty) }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
 }
 
 # whether local l is a for-in's own variable, its element or key (S9a): declared at the loop, as its loop block is
@@ -1738,10 +1754,18 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
 # names, or storage reached from there - else -1
 fn (s mut Scoper&) regionOf(p typed.Place&) I64 {
     if not flThroughRef(p) { return -1 }
-    r := flRoot(p)
-    if r >= 0 and r < s.aliasOf.Len() and s.aliasOf[r] >= 0 { r = s.aliasOf[r] }
+    r := s.regionParam(flRoot(p))
     if r < 0 or s.B.Locals[r].Kind != typed.LocalKind.Param or not s.isRef(s.B.Locals[r].Ty) { return -1 }
     return r
+}
+
+# the reference parameter whose region what local l refers to is in: l's own, a second name's for one, or a reference
+# l holds only reads of a region into ("s := l.s; s.tail[i] = x" stores into l's region, O17); else l
+fn (s mut Scoper&) regionParam(l I64) I64 {
+    if l < 0 { return l }
+    if l < s.aliasOf.Len() and s.aliasOf[l] >= 0 { return s.aliasOf[l] }
+    if l < s.regionOnly.Len() and s.regionOnly[l] >= 0 and s.isRef(s.B.Locals[l].Ty) { return s.regionOnly[l] }
+    return l
 }
 
 # the reference locals declared as second names for a reference parameter (a for-in's hidden cursor): "c := p"
@@ -1790,6 +1814,15 @@ fn (s mut Scoper&) regionRead(x typed.Expr&, r I64) Bool {
         case typed.Expr.Cond(_, _, c) { return s.regionRead(c.A, r) and s.regionRead(c.B, r) }
         case typed.Expr.Prim(_, _, op, _, args) { return op == typed.PrimOp.Convert and args.Len() > 0 and s.regionRead(args[0], r) }
         case typed.Expr.Seq(_, _, q) { return q.Stmts.Len() == 0 and s.regionRead(q.X, r) }
+        # a result borrowed from what the region hands the call - "s.tail = s.chunk(k)" - is storage of the region
+        case typed.Expr.Call(_, _, c) {
+            fty := s.calleeType(c)
+            if fty == types.UnknownT { return false }
+            e := s.P.T.ResultFrom(fty, 0)
+            if e < 0 or e >= c.Args.Len() { return false }
+            a := c.Args[e]
+            return s.regionParam(s.handedRegion(a)) == r or s.regionRead(a, r)
+        }
         case _ { }
     }
     return false
@@ -1937,7 +1970,7 @@ fn (s mut Scoper&) keepParam(id I64) {
 
 # a parameter whose region the body stores into, or hands a writable reference into out (O17): kept, and more
 fn (s mut Scoper&) storeParam(id I64) {
-    if id >= 0 and id < s.aliasOf.Len() and s.aliasOf[id] >= 0 { id = s.aliasOf[id] }
+    id = s.regionParam(id)
     if id >= 0 and id < s.kept.Len() and s.B.Locals[id].Kind == typed.LocalKind.Param and s.isRef(s.B.Locals[id].Ty) {
         s.kept[id] = true
         s.keptStore[id] = true
@@ -2549,10 +2582,15 @@ fn (s mut Scoper&) ueExpr(b typed.Body&, x typed.Expr&, l I64, mode I64) Bool {
                 if handed == 1 {
                     if not s.uses(callee, k, mode) { return false }
                 } else if handed == 2 {
-                    # a struct the parameter holds by value: a handle used only through its reference, a view as one
+                    # a struct the parameter holds by value: a handle used only through its reference (a handle holding
+                    # one, as StringBuilder holds its List, is used through that one's), a view as one
                     ft := s.unAway(a).Type()
-                    if mode != UseView { return false }
                     rt := s.P.T.Referent(pt) if s.isRef(pt) else pt
+                    if mode == UseThru {
+                        if not s.isHandle(rt) or not s.uses(callee, k, UseThru) { return false }
+                        continue
+                    }
+                    if mode != UseView { return false }
                     if s.isHandle(rt) {
                         if not s.uses(callee, k, UseThru) { return false }
                     } else if not s.isStruct(rt) or not s.uses(callee, k, UseView) {
@@ -2978,6 +3016,7 @@ fn (s mut Scoper&) stmt(st typed.Stmt&) {
 fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
     loc := s.B.Locals[I64(l)]
     t := loc.Ty
+    if x != null { s.inits.Put(I64(l), x) }
     moved := s.moveTo
     land := s.landOK
     s.moveTo = Term.None
@@ -4364,7 +4403,12 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             landed[i] = true
             if v.K == ValKind.Fresh { v = existing(v.T) }
             if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and s.report {
-                s.err(s.argAt(a), msgs.BorrowSplitScopes())
+                # x[i]'s copy, said at its "[" (E31b)
+                if s.atCall(pr.X) {
+                    s.err(s.elemAt(pr.X), msgs.WriteThroughAtBuilds())
+                } else {
+                    s.err(s.argAt(a), msgs.BorrowSplitScopes())
+                }
             }
         } else if pr != null and s.oldValue(pr.X) {
             # S4d's copy of a place's old value is built where a temporary put there would be: where the place's
@@ -4409,10 +4453,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             if rf != Term.None and rf != v.T {
                 # a value whose references live elsewhere than its storage is lent where they are, to a callee keeping
                 # nothing in it (O17) - a handle lent as its reference to one using it only through it (O17b), where that
-                # is known here (O12)
+                # is known here (O12); but a for-in's copy of an element is lent as the storage it is, the loop's block
+                # (a recorded limit: the callee's obligations cannot tell its storage from what it holds)
                 if s.calleeKeepsArg(c, i) and not (rf.Runs() and s.handleLent(c, i, a)) {
                     if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
-                } else {
+                } else if cr != Term.None or (rf.Runs() and s.handleLent(c, i, a)) or not s.lentLoopCopy(a) {
                     v = existing(rf)
                 }
             }
@@ -4764,7 +4809,58 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         rec := s.err(s.nameSpan(sp), m)
         cb := s.Bodies[callee]
         s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
+        # the argument too short a loop's copy of an element (B11, r06)
+        ai := s.argOfVar(c, r.Hi)
+        if ai >= 0 and s.lentLoopCopy(c.Args[ai]) { s.noteLoopCopy(rec, c.Args[ai]) }
     }
+}
+
+# a note at a for-in's own variable lent by its storage (B11, r06): the element itself is lent from the array walked,
+# where that is a local of the program's - else what a call lent it ties to the copy
+fn (s mut Scoper&) noteLoopCopy(rec I64, a typed.Expr&) {
+    l := flRootExpr(s.unAway(a))
+    if l < 0 { return }
+    name := s.P.L.Names.Text(s.B.Locals[l].Name)
+    at := s.wordAt(s.B.Locals[l].Sp, name)
+    arr := ""
+    x := try s.inits.Get(l) catch default null
+    if x != null {
+        match x {
+            case typed.Expr.Read(_, _, p, _) {
+                match p {
+                    case typed.Place.Elem(_, _, e) {
+                        h := flRoot(e.Base)
+                        src typed.Expr&x = null
+                        if h >= 0 and s.B.Locals[h].Kind == typed.LocalKind.Hidden { src = try s.inits.Get(h) catch default null }
+                        w := -1
+                        if src != null { w = flRootExpr(s.unAway(src)) }
+                        if w >= 0 and s.B.Locals[w].Kind == typed.LocalKind.Var and not s.loopElement(w) { arr = s.P.L.Names.Text(s.B.Locals[w].Name) }
+                    }
+                    case _ { }
+                }
+            }
+            case _ { }
+        }
+    }
+    if arr != "" {
+        s.note(rec, s.B.File, at, msgs.NoteLoopCopy(name, arr, arr))
+    } else if s.holds(s.B.Locals[l].Ty) {
+        s.note(rec, s.B.File, at, msgs.NoteLoopCopyLent(name))
+    }
+}
+
+# where a name is written as a whole word on the line a span begins: its own span, else the span
+fn (s mut Scoper&) wordAt(sp source.Span, name String&) source.Span {
+    text := try s.texts.Get(s.B.File) catch default ""
+    end := I64(sp.Start)
+    for end < text.Len() and text[end] != '\n' { end++ }
+    for k in range I64(sp.Start), end {
+        if k + name.Len() > end or text[k:k + name.Len()] != name { continue }
+        if k > 0 and isNameChar(text[k - 1]) { continue }
+        if k + name.Len() < text.Len() and isNameChar(text[k + name.Len()]) { continue }
+        return source.Span(I32(k), I32(k + name.Len()))
+    }
+    return sp
 }
 
 # the argument of a call that determines a callee's scope term t (a scope variable), -1 for none
