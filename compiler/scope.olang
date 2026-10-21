@@ -3293,9 +3293,9 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
         return
     }
     if v.K == ValKind.Existing {
-        # an assignment's own fit is said at its "=" (B11)
+        # an assignment's own fit is said at its "=" (B11), a global's at the value (O1b)
         savedAt, savedSp := s.fitAt, s.fitSp
-        s.fitAt, s.fitSp = true, s.eqAfter(p.Span())
+        s.fitAt, s.fitSp = kind != FitGlobal, s.eqAfter(p.Span())
         s.fit(v.T, slot, exact, x, kind)
         s.fitAt, s.fitSp = savedAt, savedSp
     }
@@ -3899,6 +3899,7 @@ fn (s mut Scoper&) opTok(x typed.Expr&) source.Span {
         case typed.Expr.Read(sp, _, p, _), typed.Expr.Borrow(sp, _, p) {
             match p {
                 case typed.Place.Field(_, _, _, _) { return s.lastName(sp) }
+                case typed.Place.Elem(_, _, _) { return s.lastBracket(sp) }
                 # a slice's elements copied out, said at the slice
                 case typed.Place.Deref(_, _, r) {
                     match s.unAway(r) {
@@ -3912,6 +3913,34 @@ fn (s mut Scoper&) opTok(x typed.Expr&) source.Span {
         case _ { }
     }
     return s.firstToken(s.B.File, u.Span())
+}
+
+# the argument determining scope variable v, said at its last name (a build through a derived scope, C2d); at for none
+fn (s mut Scoper&) ownerAt(c typed.Call&, owner Array<I64>&, v I64, at source.Span) source.Span {
+    for i in range c.Args.Len() {
+        if i < owner.Len() and owner[i] == v { return s.lastName(c.Args[i].Span()) }
+    }
+    return at
+}
+
+# an index's "[" in sp: the last one outside every bracket - an index of an index, a[i][j], the outer one's
+fn (s mut Scoper&) lastBracket(sp source.Span) source.Span {
+    text := try s.texts.Get(s.B.File) catch default ""
+    depth := 0
+    at := -1
+    for k in range I64(sp.Start), I64(sp.End) {
+        if k >= text.Len() { break }
+        c := text[k]
+        if c == '[' {
+            if depth == 0 { at = k }
+            depth++
+        } else if c == '(' {
+            depth++
+        } else if (c == ']' or c == ')') and depth > 0 {
+            depth--
+        }
+    }
+    return source.Span(I32(at), I32(at + 1)) if at >= 0 else s.firstToken(s.B.File, sp)
 }
 
 # whether storage at term t lasts until join block j closes (P2): a block j's or one enclosing it; a set where each of
@@ -4586,7 +4615,8 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         if beta[k] == Term.None {
             beta[k] = v.T
         } else if beta[k] != v.T {
-            s.disagree(sp, a, beta[k], v.T)
+            # said at the call (at a constructor's argument, C2d)
+            s.disagree(a.Span() if s.P.T.Role(fty) == types.RoleCtor else s.nameSpan(sp), beta[k], v.T)
         }
     }
     # what a task is handed lasts until its join (P2): an argument's storage, and what it holds
@@ -4717,7 +4747,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             # a constructor's instance held by reference (a destructor-bearing type, C11) is built where it lands
             s.buildsInto(beta[v], at, s.B.File, at)
         } else if s.calleeBuilds(c, callee, v) and s.derivedBuilds(fty, vars, v, beta) {
-            s.buildsThrough(beta[v], at, callee, v)
+            s.buildsThrough(beta[v], s.ownerAt(c, owner, v, at) if isDerived(beta[v]) else at, callee, v)
         }
     }
     # the callee's obligations, through the bindings (O10c)
@@ -4912,7 +4942,12 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         k := s.judgeOut(hi, lo)
         if k == Holds { continue }
         if k == Obliged {
+            # what a constructor's instance holds, through a constructor building one of its fields: its own C2d, said
+            # where it is called as such
+            saved := s.why
+            if r.Why != 0 and s.instanceRel(hi, lo) { s.why = r.Why }
             s.oblige(hi, lo, r.Exact)
+            s.why = saved
             continue
         }
         if not s.report { continue }
@@ -4937,6 +4972,15 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         ai := s.argOfVar(c, r.Hi)
         if ai >= 0 and s.lentLoopCopy(c.Args[ai]) { s.noteLoopCopy(rec, c.Args[ai]) }
     }
+}
+
+# whether a relation names the instance of the constructor being judged (C2d)
+fn (s mut Scoper&) instanceRel(hi Term, lo Term) Bool {
+    match s.B.Of {
+        case typed.BodyOf.Ctor(_, _) { }
+        case _ { return false }
+    }
+    return s.resultVar >= 0 and (hi == Term.Var(s.resultVar) or lo == Term.Var(s.resultVar))
 }
 
 # a note at a for-in's own variable lent by its storage (B11, r06): the element itself is lent from the array walked,
@@ -5059,13 +5103,13 @@ fn (s mut Scoper&) paramBinding(c typed.Call&, p I64, beta Array<Term>&) Term {
 }
 
 # two arguments determining one scope variable in different scopes (O25e)
-fn (s mut Scoper&) disagree(sp source.Span, a typed.Expr&, t Term, u Term) {
+fn (s mut Scoper&) disagree(at source.Span, t Term, u Term) {
     if s.judgeOut(t, u) == Obliged and s.judgeOut(u, t) == Obliged {
         s.oblige(t, u, true)
         return
     }
     if not s.report { return }
-    s.err(a.Span(), msgs.ScopeArgsDisagree())
+    s.err(at, msgs.ScopeArgsDisagree())
 }
 
 # ---- the order and judging a fit ----
@@ -5155,8 +5199,11 @@ fn (s mut Scoper&) gammaHolds(hi Term, lo Term) Bool {
 fn (s mut Scoper&) oblige(hi Term, lo Term, exact Bool) {
     if s.floorOf(hi) != Term.None { hi = s.floorOf(hi) }
     if s.floorOf(lo) != Term.None { lo = s.floorOf(lo) }
-    s.addRel(rel(hi, lo, exact, s.stmtSp, s.why))
-    if exact { s.addRel(rel(lo, hi, exact, s.stmtSp, s.why)) }
+    # one naming a constructor's instance is what the instance holds (C2d)
+    why := s.why
+    if why == 0 and s.instanceRel(hi, lo) { why = WhyHolds }
+    s.addRel(rel(hi, lo, exact, s.stmtSp, why))
+    if exact { s.addRel(rel(lo, hi, exact, s.stmtSp, why)) }
 }
 
 fn (s mut Scoper&) addRel(r rel) {
@@ -5238,6 +5285,13 @@ fn (s mut Scoper&) narrowingMatters(t types.TypeId) Bool {
     if s.isFunc(t) { return false }
     # a reference local never narrows, whatever it refers to (O25)
     return s.isRef(t) or s.valueAdmits(t)
+}
+
+fn isDerived(t Term) Bool {
+    return match t {
+        case Term.Derived(_, _) => true
+        case _ => false
+    }
 }
 
 fn (s mut Scoper&) derivedTerm(t Term) Bool {
