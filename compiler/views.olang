@@ -160,8 +160,8 @@ type summary struct() {
     Grows List<fact>
     Views List<fact>
     Keeps List<fact>
-    Passes List<Bool> # by parameter: whether the result may hold what that argument holds
-    Walked Bool = false
+    Passes List<Bool>  # by parameter: whether the result may hold what that argument holds
+    Known Bool = false # whether the body is walked: else a call of it may pass on anything and grows nothing known
 }
 
 # a loop being walked: the states its breaks and continues leave with
@@ -219,9 +219,11 @@ fn (v mut Viewer&) Run() {
     }
     if v.vecFile < 0 { return }
     v.str("")
+    # every summary starts empty, the least: a component's bodies are walked until theirs stop growing
     for i in range v.Bodies.Len() {
         v.sums.Push(summary())
         for p in v.Bodies[i].Params { v.sums[i].Passes.Push(false) }
+        v.sums[i].Known = v.walkable(i)
     }
     v.components()
     for k in range v.compFrom.Len() {
@@ -236,17 +238,24 @@ fn (v mut Viewer&) Run() {
     }
 }
 
-# body b walked: its summary found, or its errors said
-fn (v mut Viewer&) walk(b I64, check Bool) {
+# whether body b is walked: it has code, it is no condition the build decides, and it holds no unknown type
+fn (v mut Viewer&) walkable(b I64) Bool {
     body := v.Bodies[b]
-    if body.Root == null { return }
+    if body.Root == null { return false }
     match body.Of {
-        case typed.BodyOf.Cond(_, _) { return }
+        case typed.BodyOf.Cond(_, _) { return false }
         case _ { }
     }
     for l in body.Locals {
-        if l.Ty == types.UnknownT { return }
+        if l.Ty == types.UnknownT { return false }
     }
+    return true
+}
+
+# body b walked: its summary found, or its errors said
+fn (v mut Viewer&) walk(b I64, check Bool) {
+    if not v.sums[b].Known { return }
+    body := v.Bodies[b]
     v.B = body
     v.Id = b
     v.check = check
@@ -259,7 +268,6 @@ fn (v mut Viewer&) walk(b I64, check Bool) {
     for i in range body.Params.Len() { v.paramAt[I64(body.Params[i])] = i }
     st := state()
     if not check {
-        v.sums[b].Walked = true
         # what each parameter holds starts as a mark of its own: where the body puts it (a result, a keep)
         for i in range body.Params.Len() {
             id := I64(body.Params[i])
@@ -1275,7 +1283,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     }
     tok := v.callTok(sp, c)
     name := v.str(v.quoted(callee))
-    known := callee >= 0 and v.sums[callee].Walked
+    known := callee >= 0 and v.sums[callee].Known
     # the growths it may make, and each one's place in the callee, for a note
     grows List<place>
     innerFile List<I64>
