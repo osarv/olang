@@ -98,6 +98,7 @@ WhyLong String& = "it makes an array longer than the evaluator holds"
 WhyFfiFind String& = "it calls an external function -i cannot find in this process"
 WhyFfiPass String& = "it calls an external function with a parameter type -i cannot pass"
 WhyNoClause String& = "a task's error has no clause to take it"
+WhyWaits String& = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other"
 
 # ---- pointers ----
 
@@ -209,7 +210,17 @@ type frame struct() {
     Raised Bool = false
     Code I64 = 0
     PrevInit I64 = -1    # rGlobal: the global being initialized before it
+    # S18d: an error its call or its join just failed with, and where - so its Raise there passes it on (tCall, tJoin);
+    # -1 for none
+    ErrKind I64 = -1
+    ErrAt I32 = 0
 }
+
+# S18d: what a place in an error's trace did
+tRaised I64 = 0
+tCall I64 = 1
+tJoin I64 = 2
+traceKept I64 = 32
 
 # a global (K1, K2, B5a): its storage and whether its initializer has run
 type global struct() {
@@ -268,6 +279,7 @@ type cfn struct() {
     Terms mut Array<mir.Term>&
     Global mut Array<Bool>&
     TermGlobal mut Array<Bool>&
+    Own mut Array<Bool>&        # by parameter: a by-value run-time-length array the body writes, its own copy (D9b)
 }
 
 # ---- the machine ----
@@ -333,6 +345,14 @@ type Machine struct(T mut types.Table&, When Mode) {
     stopFile I64 = 0
     stopSp source.Span = source.Span(0, 0)
     Args List<String&>          # -i: the interpreted program's command line, its file first (B3e)
+    # S18d: the error being returned's last places, oldest first - its file, span and what it did, three words a place
+    trace List<I64>
+    TraceDropped I64 = 0
+    traceStack List<I64>        # the traces of the threads a running task stands beside: each's words, then its count
+                                # of words and its dropped places
+    # B3e: where the task was spawned whose wait for another task stopped -i (WhyWaits), -1 for none
+    WaitTaskFile I64 = -1
+    WaitTaskSp source.Span = source.Span(0, 0)
     lastErr I32 = 0
 }
 
@@ -398,7 +418,48 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
         c.TermGlobal[bi] = termNamesGlobal(f, b.T)
     }
     c.Start[nb] = k
+    c.Own = Array<Bool>(f.Params.Len())
+    for i in range f.Params.Len() {
+        c.Own[i] = m.rtArrayValue(f.Locals[I64(f.Params[i])].Ty) and m.writesInto(f, f.Params[i])
+    }
     return c
+}
+
+# a run-time-length array held by value, not through a reference
+fn (m mut Machine&) rtArrayValue(ty types.TypeId) Bool {
+    r := m.T.Repr(ty)
+    return m.T.KindOf(r) == types.Kind.Array and m.T.Length(r) == types.TypeId(0)
+}
+
+# whether f's body writes into local l's elements, or makes a writable reference to them (D9b) - as emit judges it
+fn (m mut Machine&) writesInto(f mir.Fn&, l mir.LocalId) Bool {
+    for bb in f.Blocks {
+        for st in bb.Stmts {
+            match st {
+                case mir.Stmt.Assign(_, p, rv) {
+                    if p.Path.N > I32(0) and baseIs(p, l) { return true }
+                    match rv {
+                        case mir.Rvalue.Ref(q, ty), mir.Rvalue.Slice(q, _, _, ty) {
+                            if baseIs(q, l) and (m.T.PermOf(m.T.Repr(ty)) & types.Writable) != 0 { return true }
+                        }
+                        case _ { }
+                    }
+                }
+                case mir.Stmt.CopyElems(_, d, _, _) {
+                    if baseIs(d, l) { return true }
+                }
+                case _ { }
+            }
+        }
+    }
+    return false
+}
+
+fn baseIs(p mir.Place, l mir.LocalId) Bool {
+    return match p.B {
+        case mir.Base.Local(k) => k == l
+        case _ => false
+    }
 }
 
 fn placeNamesGlobal(p mir.Place) Bool {
@@ -953,6 +1014,8 @@ fn (m mut Machine&) scratchFor(k I64, n I64) Ptr {
     if m.al[id & slotMask].Size >= n { return Ptr(id, 0) }
     m.release(id & slotMask)
     p := m.allocate(n * 2, aValue, m.program)
+    if m.halted { return NullPtr }
+    m.al[p.Id & slotMask].Owner = -1        # the machine's, whichever global was being initialized (K1)
     if k == 0 { m.scratch = p.Id } else { m.tmps[k - 1] = p.Id }
     return p
 }
@@ -1180,6 +1243,23 @@ fn (m mut Machine&) buildScope(fi I64, r mir.ScopeRef) I64 {
     return s
 }
 
+# D9b: the by-value array parameters frame nf's body writes made its own copies, in the program's scope as emit's are
+fn (m mut Machine&) ownParams(nf I64, fi I64) {
+    own := m.cf[fi].Own
+    for i in range own.Len() {
+        if not own[i] { continue }
+        l := m.fns[fi].Params[i]
+        p := m.localPtr(nf, l)
+        n := m.rd(p, 8)
+        if n <= 0 or m.halted { continue }
+        data := m.rdPtr(Ptr(p.Id, p.Off + 8))
+        bytes := n * m.size(m.elemOf(m.cf[fi].Locals[I64(l)].Ty))
+        q := m.allocate(bytes, aValue, m.program)
+        m.copy(q, data, bytes)
+        m.wrPtr(Ptr(p.Id, p.Off + 8), q)
+    }
+}
+
 # ---- places ----
 
 # a place's storage and its type, in frame fi
@@ -1376,6 +1456,7 @@ fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp sour
         if m.halted { return NullPtr, 0 }
         m.writeElems(f, p, e, node)
         m.al[p.Id & slotMask].ReadOnly = true
+        m.al[p.Id & slotMask].Owner = -1    # constant data is no global's, whichever made it first (K2b)
         id = p.Id
         m.datas.Put(key, id)
     }
@@ -2470,6 +2551,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
             m.put(fi, m.localPtr(nf, l), g.Locals[I64(l)].Ty, f.Ops[I64(args.At) + i])
         }
     }
+    m.ownParams(nf, callee)
     # the passed scope variables: in order for a direct call, mapped through the value's type for a function value
     # whose code's own type differs (T22a)
     passed := 0
@@ -2535,6 +2617,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         return false
     }
     if name.StartsWith("__olang_") { return m.runtimeFn(fi, name, args, ty, dst, hasDst) }
+    if m.When == Mode.Run and m.waitsForTask(name) { return false }
     kinds := Array<U8>(ps.Len())
     nwords I64 = 0
     for i in range ps.Len() {
@@ -2787,6 +2870,7 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
         }
         case mir.Term.Raise(sp, x) {
             m.atK(k, sp)
+            if not m.fs[fi].Done { m.traced(fi, k, sp) }
             # read once: when the frame's storage has closed, the code is already kept on the frame
             code := m.fs[fi].Code if m.fs[fi].Done else m.intValue(m.scalar(fi, x), mir.I32T)
             m.leave(fi, true, mir.Operand.None, code)
@@ -2909,6 +2993,7 @@ fn (m mut Machine&) returned(fr frame) {
                     return
                 }
                 m.wr(m.localPtr(caller, c.Code), 4, fr.Code)
+                m.failedHere(caller, tCall)
                 m.jump(caller, c.Err)
             } else {
                 m.jump(caller, c.Ok)
@@ -2925,11 +3010,90 @@ fn (m mut Machine&) returned(fr frame) {
             m.globals[fr.RetArg].State = 2
             m.initGlobal = fr.PrevInit
         }
-        case rTask { m.taskEnded(fr) }
+        case rTask {
+            # back on the spawner's thread: its trace again (S18d)
+            m.trace.Clear()
+            m.TraceDropped = try m.traceStack.Pop() catch default 0
+            n := try m.traceStack.Pop() catch default 0
+            at := m.traceStack.Len() - n
+            for i in range n { m.trace.Push(m.traceStack[at + i]) }
+            m.traceStack.Truncate(at)
+            m.taskEnded(fr)
+        }
         case rClause { m.freeTask(fr.RetArg) }
         nomatch { }
     }
 }
+
+# B3e: a wait on a condition variable is a wait for another thread to signal it - and under -i no other runs, a join's
+# tasks running one after another, the join's body before them. An untimed wait can never end, and a timed one while
+# tasks wait or run would be waiting for one of them: either stops -i, saying so (and in which task), rather than
+# hanging. A timed wait with no task anywhere waits out its time, as the built program would with nothing to wake it
+fn (m mut Machine&) waitsForTask(name String&) Bool {
+    untimed := name == "pthread_cond_wait"
+    if not untimed and name != "pthread_cond_timedwait" { return false }
+    running := -1
+    for i in range m.nFs {
+        if m.fs[i].Ret == rTask { running = m.fs[i].RetArg }
+    }
+    pending := false
+    for i in range 1, m.scopes.Len() {
+        if m.scopes[i].Live and m.scopes[i].Tasks >= 0 { pending = true }
+    }
+    if not untimed and not pending and running < 0 { return false }
+    m.WaitTaskFile = -1
+    if running >= 0 {
+        tk := m.tasks[running]
+        st := m.cf[tk.Fn].Stmts
+        for i in range st.Len() {
+            match st[i] {
+                case mir.Stmt.Spawn(sp, _, ti) {
+                    if I64(ti) == tk.Task {
+                        m.WaitTaskFile, m.WaitTaskSp = m.cf[tk.Fn].File, sp
+                    }
+                }
+                case _ { }
+            }
+        }
+    }
+    m.refuse(WhyWaits)
+    return true
+}
+
+# ---- the error return trace (S18d) ----
+
+# frame fi's call or join, the terminator it is at, just failed: its Raise at that place passes the error on
+fn (m mut Machine&) failedHere(fi I64, kind I64) {
+    t := m.cf[m.fs[fi].Fn].Terms[m.fs[fi].Block]
+    at := match t {
+        case mir.Term.Call(sp, _), mir.Term.Wait(sp, _, _, _, _) => sp.Start
+        nomatch => I32(-1)
+    }
+    m.fs[fi].ErrKind, m.fs[fi].ErrAt = kind, at
+}
+
+# frame fi raising at sp: where it passes on the error its call or join failed with there, that place added; else the
+# error raised here, the trace started again
+fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
+    kind := m.fs[fi].ErrKind
+    if kind < 0 or m.fs[fi].ErrAt != sp.Start {
+        kind = tRaised
+        m.trace.Clear()
+        m.TraceDropped = 0
+    }
+    m.fs[fi].ErrKind = -1
+    if m.trace.Len() >= 3 * traceKept {
+        for i in range 3 { try m.trace.RemoveAt(0) catch { } }
+        m.TraceDropped++
+    }
+    m.trace.Push(m.cf[k].File)
+    m.trace.Push(I64(sp.Start))
+    m.trace.Push(kind)
+}
+
+# the trace's places, oldest first: each one's file, offset and what it did (tRaised, tCall, tJoin)
+fn (m Machine&) TraceLen() I64 { return m.trace.Len() / 3 }
+fn (m Machine&) TraceAt(i I64) (I64, I64, I64) { return m.trace[3 * i], m.trace[3 * i + 1], m.trace[3 * i + 2] }
 
 # ---- tasks (P1, P4, run in sequence at their join as K1 says) ----
 
@@ -3010,6 +3174,7 @@ fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId
     m.scopes[sc].Kept = 0
     if kept != 0 and failed != mir.NoBlock {
         m.wr(m.localPtr(fi, code), 4, kept)
+        m.failedHere(fi, tJoin)
         m.jump(fi, failed)
         return
     }
@@ -3046,6 +3211,12 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
     }
     nf := m.pushFrame(callee, rTask, slot)
     if nf < 0 { return }
+    # the task has a thread of its own, and so a trace of its own (S18d)
+    for w in m.trace { m.traceStack.Push(w) }
+    m.traceStack.Push(m.trace.Len())
+    m.traceStack.Push(m.TraceDropped)
+    m.trace.Clear()
+    m.TraceDropped = 0
     g := m.fns[callee]
     for i in range k.Args.N {
         if i < g.Params.Len() {
@@ -3053,6 +3224,7 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
             m.copy(m.localPtr(nf, l), Ptr(tk.Buf, offs[i]), m.size(g.Locals[I64(l)].Ty))
         }
     }
+    m.ownParams(nf, callee)
     sat := total + 8 * nt + 16 * nc
     passed I64 = 0
     for kv in g.Vars {
@@ -3217,6 +3389,9 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     m.halted = false
     m.Stopped = Stop.None
     m.Steps = 0
+    m.trace.Clear()
+    m.traceStack.Clear()
+    m.TraceDropped = 0
     if m.Result.Id != 0 and m.al[m.Result.Id & slotMask].Kind != aFree { m.release(m.Result.Id & slotMask) }
     m.Result, m.ResultTy = NullPtr, types.VoidT
     fi := try m.fnOf.Get(k) catch {
@@ -3346,6 +3521,79 @@ fn (m mut Machine&) Main(inits Array<mir.FnKey>&, main mir.FnKey) Stop {
         if s != Stop.None { return s }
     }
     return m.Eval(main, none)
+}
+
+# ---- a global's value as data (K2, K2b) ----
+
+# storage written out as data: its bytes, the alignment it needs, whether it is constant, and the references in it -
+# at an offset (a word's), to another blob's offset
+type Blob struct() {
+    Bytes List<U8>
+    Align I64 = 8
+    Constant Bool = false
+    At List<I64>
+    To List<I64>
+    Off List<I64>
+}
+
+# an immutable global's value baked (K2): blob 0 its own storage, then each allocation it reaches, once (K2b: two
+# references to one instance stay one, a cycle is written as itself)
+type Image struct() {
+    Blobs List<Blob>
+}
+
+error NotBaked {
+    REFUSED
+}
+
+# the image of global (module, name) once evaluated while compiling: a value that is plain data, and what it reaches,
+# the program's own storage made by its initializer. One reaching code (a function value), another global's storage
+# or storage the evaluator does not hold as data is set at startup instead
+fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
+    if m.Global(module, name) != Stop.None { error NotBaked.REFUSED }
+    g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.REFUSED }
+    img := Image()
+    blobOf Map<I64, I64>
+    work List<I64>
+    root := m.globals[g].Store & slotMask
+    if m.al[root].Size == 0 { error NotBaked.REFUSED }
+    blobOf.Put(root, 0)
+    work.Push(root)
+    k I64 = 0
+    for k < work.Len() {
+        slot := work[k]
+        a := m.al[slot]
+        b := Blob()
+        b.Constant = a.ReadOnly or a.Kind == aData
+        b.Align = 64 if a.Size >= 64 else 32 if a.Size >= 32 else 8
+        if k == 0 {
+            al := m.T.Align(types.TypeId(I32(m.globals[g].Ty)))
+            if al > b.Align { b.Align = al }
+        }
+        for i in range a.Size { b.Bytes.Push(U8(m.rdRaw(a.Base + i, 1))) }
+        for w in range a.Size / 8 {
+            id := m.prov[a.Base / 8 + w]
+            if id == 0 { continue }
+            ts := id & slotMask
+            if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits { error NotBaked.REFUSED }
+            if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData { error NotBaked.REFUSED }
+            if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program { error NotBaked.REFUSED }
+            # an instance another global's initializer made is that global's: written once, with it (K2b)
+            if ts != root and m.al[ts].Owner >= 0 and m.al[ts].Owner != g { error NotBaked.REFUSED }
+            to := try blobOf.Get(ts) catch default -1
+            if to < 0 {
+                to = work.Len()
+                blobOf.Put(ts, to)
+                work.Push(ts)
+            }
+            b.At.Push(8 * w)
+            b.To.Push(to)
+            b.Off.Push(m.rdRaw(a.Base + 8 * w, 8))
+        }
+        img.Blobs.Push(b)
+        k++
+    }
+    return img
 }
 
 # ---- reading results ----

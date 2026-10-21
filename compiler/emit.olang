@@ -29,6 +29,7 @@ import "generic"
 import "typed"
 import "mir"
 import "lower"
+import "eval"
 
 # the emission of a program: P the checked program, Lw its lowering, D for where things are (FILE:LINE)
 type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Diagnostics&, T mut types.Table&) {
@@ -65,6 +66,9 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     ctorOf Map<types.TypeId, I64>
     dtorOf Map<types.TypeId, I64>
     indexed Bool = false
+    # K2: the immutable globals evaluated while compiling, by their initializer's body - each written as its value,
+    # its initializer not run at startup (interp.Bake)
+    Baked Map<I64, eval.Image>
 }
 
 fn (e mut Emitter&) gap(what String&) {
@@ -388,8 +392,61 @@ fn (e mut Emitter&) declare(name String&, text String&) { e.define(name, "declar
 
 fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     s := e.globalSym(m, n)
-    e.define(s, "@" $s " = global " $e.ty(t) " zeroinitializer")
+    if e.seen.Has(s) { return "@" $s }
+    b := e.globalBody(m, n)
+    if b >= 0 and e.Baked.Has(b) {
+        img := try e.Baked.Get(b) catch default eval.Image()
+        e.define(s, e.bakedText(s, img))
+    } else {
+        e.define(s, "@" $s " = global " $e.ty(t) " zeroinitializer")
+    }
     return "@" $s
+}
+
+# a baked global's definition (K2, K2b): its storage, then each blob it reaches as a private global beside it - the
+# bytes as the evaluator laid them out, the target's layout, a reference among them the address it names
+fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
+    out := StringBuilder()
+    for j in range img.Blobs.Len() {
+        b := img.Blobs[j]
+        name := "@" $s if j == 0 else "@" $s ".k" $j
+        kind := "global" if j == 0 else "internal constant" if b.Constant else "internal global"
+        tyText, valText := StringBuilder(), StringBuilder()
+        at I64 = 0
+        for r in range b.At.Len() + 1 {
+            end := b.At[r] if r < b.At.Len() else b.Bytes.Len()
+            if end > at {
+                if tyText.Len() > 0 {
+                    tyText.Push(", ")
+                    valText.Push(", ")
+                }
+                tyText.Push("[" $(end - at) " x i8]")
+                valText.Push("[" $(end - at) " x i8] c\"")
+                for i in range at, end { valText.Push(hexByte(b.Bytes[i])) }
+                valText.Push("\"")
+            }
+            if r == b.At.Len() { break }
+            if tyText.Len() > 0 {
+                tyText.Push(", ")
+                valText.Push(", ")
+            }
+            to := "@" $s if b.To[r] == 0 else "@" $s ".k" $b.To[r]
+            tyText.Push("ptr")
+            if b.Off[r] == 0 {
+                valText.Push("ptr " $to)
+            } else {
+                valText.Push("ptr getelementptr (i8, ptr " $to ", i64 " $b.Off[r] ")")
+            }
+            at = b.At[r] + 8
+        }
+        out.Push($name " = " $kind " <{ " $tyText.ToString() " }> <{ " $valText.ToString() " }>, align " $b.Align "\n")
+    }
+    return out.ToString()
+}
+
+fn hexByte(c U8) String {
+    digits := "0123456789ABCDEF"
+    return "\\" $digits[I64(c >> 4)] $digits[I64(c & 15)]
 }
 
 # a C string constant, NUL-terminated: its symbol
@@ -989,20 +1046,22 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span) String 
         fe.gap("constant data of a " $t.Canon(ty))
         return "undef"
     }
-    g, n := fe.constGlobal(t.Elem(a), c)
+    # T25d: one instance for each site written, two sites two - what lowering synthesizes (no span) by its contents
+    site := "" if sp.Start == I32(0) and sp.End == I32(0) else $file ":" $sp.Start ":" $sp.End ":" $c ":" $t.Canon(ty)
+    g, n := fe.constGlobal(t.Elem(a), c, site)
     if t.IsRef(r) and fe.fixed(a) { return g }
     if fe.fixed(a) { return fe.load(fe.ty(a), g) }
     return "{ i64 " $n ", ptr " $g " }"
 }
 
 # constant c of this function's tables, elements of type el, as a private global: its name and its length
-fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32) (String, I64) {
+fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) (String, I64) {
     lt, init, n := fe.constInit(el, c)
-    key := "d:" $lt " " $init
+    key := "d:" $lt " " $init if site == "" else "s:" $site
     if fe.E.dataAt.Has(key) { return (try fe.E.dataAt.Get(key) catch default ""), n }
     s := "@.d" $fe.E.nconst
     fe.E.nconst++
-    fe.E.tail.Push($s " = private unnamed_addr constant " $lt " " $init "\n")
+    fe.E.tail.Push($s " = private " $("unnamed_addr " if site == "" else "") "constant " $lt " " $init "\n")
     fe.E.dataAt.Put($key, $s)
     return s, n
 }
@@ -1057,7 +1116,7 @@ fn (fe mut fnEm&) constItem(el types.TypeId, c I32) String {
                 _, init, _ := fe.constInit(t.Elem(a), c)
                 return init
             }
-            g, n := fe.constGlobal(t.Elem(a), c)
+            g, n := fe.constGlobal(t.Elem(a), c, "")
             if t.IsRef(r) and fe.fixed(a) { return g }
             return "{ i64 " $n ", ptr " $g " }"
         }
@@ -2243,7 +2302,9 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     b.Push("define i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
-    for i in e.globalOrder(inits) { b.Push("  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))) "()\n") }
+    for i in e.globalOrder(inits) {
+        if not e.Baked.Has(i) { b.Push("  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))) "()\n") }
+    }
     k := mir.FnKey.Body(typed.BodyId(I32(mainBody)))
     ty := e.Lw.Bodies[mainBody].Ty
     errs := t.Items(t.Errors(ty))
@@ -2312,6 +2373,7 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     # zero value and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
     g I64 = 0
     for i in e.globalOrder(inits) {
+        if e.Baked.Has(i) { continue }
         key := mir.FnKey.Body(typed.BodyId(I32(i)))
         b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj" $g " = call i32 @setjmp(ptr %jb)\n")
         b.Push("  %gz" $g " = icmp eq i32 %gj" $g ", 0\n  br i1 %gz" $g ", label %grun" $g ", label %gnext" $g "\n")

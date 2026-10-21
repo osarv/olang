@@ -39,6 +39,22 @@ type pattern struct(Expr ast.Expr&, Mi I64, Owner I64, Want types.TypeId) {
     Want
 }
 
+# a constant argument folding cannot compute - a call's (G21), or a global computed by one - asked of the evaluator
+# once the program has checked (M8, interp.Analyze): written in module Mi, of type Want; an expression E, or the
+# immutable global Global of module Mi where E is null
+type ConstAsk struct(Mi I64, E ast.Expr&, Want types.TypeId, Global source.NameId) {
+    Mi
+    E
+    Want
+    Global
+}
+
+# where a computed constant is kept (Program.Computed): an expression's by its module and offset, a global's by its
+# module and -1 - its name
+fn ConstKey(mi I64, e ast.Expr&, global source.NameId) pair.Pair<I64, I64> {
+    return pair.Pair(mi, I64(e.Span().Start) if e != null else -1 - I64(global))
+}
+
 # a function or method (D7, M19): where it is declared
 type fnRow struct(Mi I64, F ast.Func&, Extern Bool) {
     Mi
@@ -93,6 +109,10 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     r1bSaid Map<pair.Pair<I64, I64>, Bool>  # (module, start): a function type said to write its error set (R1b)
     modules I64 = 0                    # how many modules T knows
     patterns Map<I64, pattern>         # by the pattern's index in T
+    # G21: what the evaluator computed of the constants folding could not, by ConstKey - given by the check before; and
+    # those this check asks for
+    Computed Map<pair.Pair<I64, I64>, I64>
+    ConstAsks List<ConstAsk>
     fns List<fnRow>
     fnsOf Map<I64, Bool>               # the modules fns holds
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
@@ -704,6 +724,13 @@ fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeI
 
 fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&) types.TypeId {
     if f.St == Folded { return p.T.Const(want, p.wrap(f.V, want)) }
+    if f.St == Unfolded and e != null {
+        # needs evaluating: what the evaluator computed for it, else asked of it (G21)
+        key := ConstKey(c.Mi, e, source.NameId(0))
+        if p.Computed.Has(key) { return p.T.Const(want, p.wrap(try p.Computed.Get(key) catch default 0, want)) }
+        p.ConstAsks.Push(ConstAsk(c.Mi, e, want, source.NameId(0)))
+        return p.UnknownConst()
+    }
     if f.St == Pending and e != null {
         sp := e.Span()
         k := p.T.ConstExpr($c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End ":" $I64(want))
@@ -823,6 +850,14 @@ fn (p mut Program&) foldGlobal(mi I64, n source.NameId) folded {
     gc := Context(mi, -1)
     f := p.eval(gc, v.Values[i])
     p.folding.Put(key, false)
+    if f.St == Unfolded and v.Ty != null {
+        # computed by a call: the evaluator's value for the global, else asked of it (G21)
+        ck := ConstKey(mi, null, n)
+        t := p.Resolve(gc, v.Ty)
+        if p.Computed.Has(ck) { return folded(Folded, p.wrap(try p.Computed.Get(ck) catch default 0, t), t) }
+        p.ConstAsks.Push(ConstAsk(mi, null, t, n))
+        return f
+    }
     if f.St != Folded or v.Ty == null { return f }
     t := p.Resolve(gc, v.Ty)
     return folded(Folded, p.wrap(f.V, t), t)

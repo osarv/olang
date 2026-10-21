@@ -6,7 +6,8 @@
 # With -t the root module's test blocks are run as "olang test FILE" runs them - each global set first, each test then
 # "ok - NAME" or the stop that ended it and "FAIL - NAME", then "N passed, M failed", the status 1 where any failed.
 # Without, the program's main runs with ARGS, its globals set first (B5a): the status 0 for its return, 1 for an error
-# leaving it ("unhandled error"), what it asked for with os.Exit, 134 for a failed check or undefined behaviour - the
+# leaving it ("unhandled error", the error's trace after it) or for what interpret stops at - undefined behaviour, what
+# it cannot run ("olang interpret: FILE:LINE: why") - what it asked for with os.Exit, 134 for a failed check - the
 # stop's "FILE:LINE: text" on standard error. On standard error too, the check's errors when there are any, and
 # "unlowered WHAT" for each function a run reached that did not lower, and "gap PLACE WHAT" for what stopped it.
 
