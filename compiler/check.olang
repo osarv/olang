@@ -2875,6 +2875,16 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     if wk == types.Kind.Ref and hk != types.Kind.Ref {
         r := c.P.T.Referent(want)
         if c.P.T.Same(r, have) {
+            # "checked a[i]" with no clause names the element as "a[i]" does (E31b, T1): the element borrowed under the
+            # try, so the write lands
+            match x {
+                case typed.Expr.Try(tsp, _, t) {
+                    if t.Clauses.Len() == 0 and readPlace(t.X) != null {
+                        return typed.Expr.Try(tsp, want, typed.Try(c.fit(t.X, want, sp), t.Clauses, t.Ends))
+                    }
+                }
+                nomatch { }
+            }
             p := readPlace(x)
             if p != null {
                 if (c.P.T.PermOf(want) & types.Writable) != 0 {
