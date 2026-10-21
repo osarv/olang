@@ -1010,3 +1010,11 @@ neither.
     callee's relation on its result asking this function's own storage to outlive the result, where the result is
     returned, is O26 at the call; a reference stored exactly where something can be stored through is O25 (naming a
     value local that closes first); an array literal's element and a fill are O25c's.
+24. **An array value with no result scope.** A function whose result is, or holds by value, an array value has no result
+    scope in the typed contract where its type holds no reference; what it returns is built in the program's scope (as
+    lower's copy of a returned array value is), a local it returns whole is moved there, a conversion passes its
+    destination on, and an array read out of a call's built result has that result built where the value goes. Sound,
+    not exact: a result scope for array values (as stage 0 has) would reclaim it with the caller.
+25. **Handed back through a shared scope.** A call can hand back an argument that shares the scope its result is
+    borrowed from (O13), so a local lent there flows into the result (O26a); and landing by obligations (O18c) reads the
+    summaries of the component being judged, as O18b does (21).

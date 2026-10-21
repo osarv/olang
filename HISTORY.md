@@ -20585,12 +20585,27 @@ naming a constructor's instance is C2d's, through a constructor building one of 
 returned value that holds this function's own storage is O26 at the call; a reference stored exactly where something can
 be stored through is O25, naming a value local that closes first; an array literal's element and a fill are O25c's.
 
-**Measured** (`make scopediff`): first error 221 -> 263 of 279 (211 -> 249 exactly its scope errors); pinned message
-227 -> 259; silent 18 -> 1 (+2 where the checker errs first); accepted programs scope clean 279 of 301 -> 280 of 303;
-distinct error rows on accepted programs 92 -> 64, no gaps left.
+**What the driver found placing by the plan** (M10 builds the port with itself under an interim placement that puts
+everything in the program's scope; these kept it from using the pass's): a function returning an array value - a
+`String` - has no result scope in the typed contract (its type holds no reference), and the pass built what it returns
+in the function's own frame, which closes at the return. Now such a result's storage is built in the program's scope -
+where lower's copy of a returned array value is made too - a local returned whole is moved there, a conversion passes
+its destination to the array it names, and an array read out of a call's built result (`return b.ToString()`) has that
+result built where the value goes (T7b, O26a). Exact would be a result scope for array values in the typed contract,
+as stage 0 has; until then such storage lives to the program's end. And `nt := ast.TypeRef.Named(...)` lent to
+`p.markers(at, nt)`, whose parameter shares the scope its result is borrowed from: an argument sharing that scope can be
+what is handed back (O13), so `nt` flows into the result and lives where `p` does, as stage 0 lands it - it was an O25e
+over-rejection, which the driver's placement turned into a frame address kept. Landing a call's result by its
+obligations (O18c) now reads the summaries of the component being judged, as O18b does: compiler/olang.olang's errors
+stage 0 does not give went 51 (master) -> 14 (this round before these) -> 7.
+
+**Measured** (`make scopediff`): first error 221 -> 264 of 280 (211 -> 250 exactly its scope errors); pinned message
+227 -> 260; silent 18 -> 1 (+2 where the checker errs first); accepted programs scope clean 279 of 301 -> 280 of 303;
+distinct error rows on accepted programs 92 -> 48, no gaps left.
 
 **Left**: per-instance bindings for call results (O13c - iterators, `it := l.Iter()`), for locals assigned after their
-declaration and for-in hidden locals; constructor instances a value local keeps beyond its block (b6elemvalue: stage 0
-lands `wv := W(x)` where `cells[i].w = wv` keeps it); the verifier shape (`v := verifier(f, t); v.run(); return
+declaration and for-in hidden locals; a value local made here whose storage something longer-lived keeps (b6elemvalue,
+and four of the seven on compiler/olang.olang: parse.olang's `pun` pushed in a payload, check.olang's `root` stored in a
+field, two in interp.olang) - stage 0 lands the local where it is kept; the verifier shape (`v := verifier(f, t); v.run(); return
 v.out.ToString()`), which stage 0 accepts by moving `v` into a result scope the port's types give a `String` value
 result no scope for; 16 cases still differing in their first error (columns, and rules the checker or O18c decide).

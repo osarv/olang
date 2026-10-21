@@ -612,7 +612,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
   over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
   scope reclaimed as it closes; `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
-  plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 3: 263 of 279 refused
+  plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 3: 264 of 280 refused
   cases give stage 0's first error, 1 still gets none (kept on purpose), per-instance bindings for locals; HISTORY.md
   "Port M6").
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
