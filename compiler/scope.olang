@@ -354,9 +354,9 @@ fn (s mut Scoper&) component(comp Array<I64>&) {
             grew := false
             for b in comp {
                 before := s.sums[b].Rels.Len()
-                built := countTrue(s.sums[b].Builds) + countTrue(s.sums[b].Real)
+                built := s.facts(b)
                 s.judge(b, false)
-                if s.sums[b].Rels.Len() != before or countTrue(s.sums[b].Builds) + countTrue(s.sums[b].Real) != built { grew = true }
+                if s.sums[b].Rels.Len() != before or s.facts(b) != built { grew = true }
             }
             if not grew { break }
         }
@@ -366,6 +366,12 @@ fn (s mut Scoper&) component(comp Array<I64>&) {
         s.sums[b].Done = true
         s.sums[b].Judging = false
     }
+}
+
+# how many of a body's may-facts hold: what it builds into, keeps and stores (each only grows over a component's rounds)
+fn (s mut Scoper&) facts(b I64) I64 {
+    sm := s.sums[b]
+    return countTrue(sm.Builds) + countTrue(sm.Real) + countTrue(sm.Keeps) + countTrue(sm.Stores)
 }
 
 fn countTrue(xs List<Bool>&) I64 {
@@ -2229,6 +2235,8 @@ fn (s mut Scoper&) calleeKeepsArg(c typed.Call&, k I64) Bool {
     match c.Target {
         case typed.Callee.Body(id) {
             cb := I64(id)
+            # one of the component being judged: what the rounds so far found (a least fixed point, 7.2)
+            if s.sums[cb].Judging { return k < s.sums[cb].Keeps.Len() and s.sums[cb].Keeps[k] }
             if not s.sums[cb].Done or k >= s.sums[cb].Keeps.Len() { return true }
             return s.sums[cb].Keeps[k]
         }
@@ -2242,6 +2250,8 @@ fn (s mut Scoper&) calleeStoresArg(c typed.Call&, k I64) Bool {
     match c.Target {
         case typed.Callee.Body(id) {
             cb := I64(id)
+            # one of the component being judged: what the rounds so far found (a least fixed point, 7.2)
+            if s.sums[cb].Judging { return k < s.sums[cb].Stores.Len() and s.sums[cb].Stores[k] }
             if not s.sums[cb].Done or k >= s.sums[cb].Stores.Len() { return true }
             return s.sums[cb].Stores[k]
         }
@@ -4455,9 +4465,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 # nothing in it (O17) - a handle lent as its reference to one using it only through it (O17b), where that
                 # is known here (O12); but a for-in's copy of an element is lent as the storage it is, the loop's block
                 # (a recorded limit: the callee's obligations cannot tell its storage from what it holds)
-                if s.calleeKeepsArg(c, i) and not (rf.Runs() and s.handleLent(c, i, a)) {
+                handle := rf.Runs() and s.handleLent(c, i, a)
+                loop := cr == Term.None and s.lentLoopCopy(a)
+                if s.calleeKeepsArg(c, i) and not handle {
                     if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
-                } else if cr != Term.None or (rf.Runs() and s.handleLent(c, i, a)) or not s.lentLoopCopy(a) {
+                } else if cr != Term.None or handle or not loop {
                     v = existing(rf)
                 }
             }
