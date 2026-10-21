@@ -592,7 +592,11 @@ fn (fe mut fnEm&) run() {
         l := f.Locals[i]
         if l.Ty == types.VoidT or l.Ty == types.NoreturnT { continue }
         lt := fe.ty(l.Ty)
-        if fe.size(l.Ty) > 65536 {
+        if not fe.isFrame(l.Home) {
+            # its storage in an arena, made by its Live (O26a): the local's slot holds where it is
+            fe.head.Push("  %lp" $i " = alloca ptr\n")
+            if l.Kind != mir.LocalKind.Var and l.Kind != mir.LocalKind.Temp { fe.gap("a parameter or capture in an arena") }
+        } else if fe.size(l.Ty) > 65536 {
             if not fe.big {
                 fe.big = true
                 fe.head.Push("  %big = alloca %olang.scope\n")
@@ -612,6 +616,7 @@ fn (fe mut fnEm&) run() {
         } else {
             fe.head.Push("  %s" $i " = alloca %olang.scope\n")
             if f.Scopes[i].Kind == mir.ScopeKind.Join { fe.head.Push("  %jh" $i " = alloca ptr\n") }
+            if fe.E.Tests { fe.head.Push("  %u" $i " = alloca %olang.unwind\n") }
         }
     }
     rt := t.RetLlvm(f.Ty)
@@ -795,6 +800,12 @@ fn (fe mut fnEm&) envType() String {
 
 fn (fe mut fnEm&) localType(l mir.LocalId) types.TypeId { return fe.F.Locals[I64(l)].Ty }
 
+# where local l's storage is: its stack slot, or the arena storage its Live made (O26a)
+fn (fe mut fnEm&) localAt(l mir.LocalId) String {
+    if fe.isFrame(fe.F.Locals[I64(l)].Home) { return "%l" $l }
+    return fe.load("ptr", "%lp" $l)
+}
+
 # an array type, past a declared type over one; Unknown for none
 fn (fe mut fnEm&) arrayOf(ty types.TypeId) types.TypeId {
     t := fe.E.T
@@ -817,7 +828,7 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
     ty := types.UnknownT
     match p.B {
         case mir.Base.Local(l) {
-            at = "%l" $l
+            at = fe.localAt(l)
             ty = fe.localType(l)
         }
         case mir.Base.Global(m, n, gt) {
@@ -839,7 +850,7 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
                 ty = fs[k]
             }
             case mir.Proj.Index(l) {
-                ix := fe.index(fe.load(fe.ty(fe.localType(l)), "%l" $l), fe.localType(l))
+                ix := fe.index(fe.load(fe.ty(fe.localType(l)), fe.localAt(l)), fe.localType(l))
                 at, ty = fe.elemAt(at, ty, ix)
             }
             case mir.Proj.At(k) { at, ty = fe.elemAt(at, ty, $k) }
@@ -1098,6 +1109,23 @@ fn (fe mut fnEm&) isFrame(r mir.ScopeRef) Bool {
     }
 }
 
+# P1d (S18b): in a test build each scope this function opens is on the runtime's chain of open scopes while it is open
+# - its header and, for a join, its task list - so a failed check unwinds it (joining its tasks, running its
+# destructors) before its longjmp ends the test
+fn (fe mut fnEm&) unwindPush(sc mir.ScopeId, joins Bool) {
+    fe.E.define("__olang_unwind_top", "@__olang_unwind_top = external thread_local(initialexec) global ptr")
+    top := fe.load("ptr", "@__olang_unwind_top")
+    fe.store("ptr", top, fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 0"))
+    fe.store("ptr", "%s" $sc, fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 1"))
+    fe.store("ptr", ("%jh" $sc) if joins else "null", fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 2"))
+    fe.store("ptr", "%u" $sc, "@__olang_unwind_top")
+}
+
+fn (fe mut fnEm&) unwindPop(sc mir.ScopeId) {
+    prev := fe.load("ptr", fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 0"))
+    fe.store("ptr", prev, "@__olang_unwind_top")
+}
+
 # size bytes of storage aligned to align, in scope r: on the stack for the frame (size a constant), else in its arena
 fn (fe mut fnEm&) alloc(r mir.ScopeRef, size String&, align I64, stack String& = "") String {
     if fe.isFrame(r) and stack != "" { return fe.alloca(stack, align) }
@@ -1119,7 +1147,12 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             fe.store(fe.ty(pt), v, at)
         }
         case mir.Stmt.Live(_, l) {
-            if not fe.isFrame(fe.F.Locals[I64(l)].Home) { fe.gap("a local in an arena") }
+            home := fe.F.Locals[I64(l)].Home
+            if not fe.isFrame(home) {
+                lt := fe.localType(l)
+                at := fe.alloc(home, $fe.size(lt), fe.align(lt))
+                fe.store("ptr", at, "%lp" $l)
+            }
         }
         case mir.Stmt.Dead(_, _) { }
         case mir.Stmt.Open(_, sc) {
@@ -1129,7 +1162,9 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             } else {
                 if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Region { fe.gap("a region") }
                 fe.w("store %olang.scope zeroinitializer, ptr %s" $sc)
-                if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Join { fe.w("store ptr null, ptr %jh" $sc) }
+                joins := fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Join
+                if joins { fe.w("store ptr null, ptr %jh" $sc) }
+                if fe.E.Tests { fe.unwindPush(sc, joins) }
             }
         }
         case mir.Stmt.Close(_, sc) {
@@ -1139,6 +1174,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             } else {
                 fe.E.runtime("__olang_scope_close")
                 fe.w("call void @__olang_scope_close(ptr %s" $sc ")")
+                if fe.E.Tests { fe.unwindPop(sc) }
             }
         }
         case mir.Stmt.Give(_, _) { fe.gap("Give") }
@@ -1987,7 +2023,7 @@ fn (fe mut fnEm&) term(tm mir.Term) {
                 fe.w("br label %" $blockName(ok))
             } else {
                 c := fe.let("trunc i64 " $e " to i32")
-                if code != mir.NoLocal { fe.store("i32", c, "%l" $code) }
+                if code != mir.NoLocal { fe.store("i32", c, fe.localAt(code)) }
                 bad := fe.let("icmp ne i32 " $c ", 0")
                 fe.w("br i1 " $bad ", label %" $blockName(failed) ", label %" $blockName(ok))
             }
@@ -2125,7 +2161,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     if errs {
         code := r if (via or res == types.VoidT) else fe.let("extractvalue " $rt " " $r ", 0")
-        if c.Code != mir.NoLocal { fe.store("i32", code, "%l" $c.Code) }
+        if c.Code != mir.NoLocal { fe.store("i32", code, fe.localAt(c.Code)) }
         bad := fe.let("icmp ne i32 " $code ", 0")
         ok := fe.fresh("ok")
         fe.w("br i1 " $bad ", label %" $blockName(c.Err) ", label %" $ok)

@@ -1,14 +1,15 @@
 # emitdiff - M9's acceptance, measured: each program built by stage 0 and by the self-hosted pipeline (load, names,
-# check, lower with the stand-in placement, emit - compiler/tools/emitdump.olang), run, and the two runs compared.
+# check, the scope pass, lower with its placement, emit - compiler/tools/emitdump.olang), run, and the two runs compared.
 #
-#     emitdiff [-v] [-O LEVEL] [FILE...]
+#     emitdiff [-v] [-standin] [-O LEVEL] [FILE...]
 #
 # A file of tests (the corpus, std's tests - the default list) is run as "olang test FILE" runs it, and compared test
 # by test: a row per file, "same N" where every test ends as stage 0's does, else what each run said - "stage0 P ok F
 # fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
 # built and run, its output and status compared. Then the totals. The port's module is compiled by clang (at -O LEVEL,
 # 0 by default) with stage 0's filled-in runtime beside it; a module clang refuses counts as "does not compile". The
-# compiler under test is $OLANG (build/out), the emitter build/compiler_tools_emitdump (or $EMITDUMP).
+# compiler under test is $OLANG (build/out), the emitter build/compiler_tools_emitdump (or $EMITDUMP); with -standin
+# the port's modules are placed by lowering's stand-in placement instead of the scope pass's.
 
 import "std/os"
 import "std/io"
@@ -20,11 +21,14 @@ fn main() {
     emitdump := toolkit.Env("EMITDUMP", "build/compiler_tools_emitdump")
     verbose := false
     level := "0"
+    standin := false
     files List<String&>
     k I64 = 1
     for k < args.Len() {
         if args[k] == "-v" {
             verbose = true
+        } else if args[k] == "-standin" {
+            standin = true
         } else if args[k] == "-O" and k + 1 < args.Len() {
             k++
             level = args[k]
@@ -51,7 +55,7 @@ fn main() {
         try os.MkDirAll(sub) catch os.OsError { toolkit.Die("emitdiff: cannot make " $sub) }
         base := f[:f.Len() - 6] if f.EndsWith(".olang") else f
         out := $sub "/" $base.Replace("/", "_") $("" if program else "_test")
-        r := compare(olang, emitdump, level, rt, f, out, program, verbose)
+        r := compare(olang, emitdump, level, rt, f, out, program, verbose, standin)
         toolkit.Say(r.Row)
         tests += r.Tests
         testsSame += r.Same
@@ -97,13 +101,19 @@ type result struct() {
     Same I64 = 0
 }
 
-fn compare(olang String&, emitdump String&, level String&, rt Array<String&>&, f String&, out String&, program Bool, v Bool) result {
+fn compare(olang String&, emitdump String&, level String&, rt Array<String&>&, f String&, out String&, program Bool, v Bool, standin Bool) result {
     r := result()
     # stage 0's run
     s0 := toolkit.Run(String&["timeout", "600", $olang, $f]) if program else toolkit.Run(String&["timeout", "600", $olang, "test", $f])
     # the port's
-    dump := String&[$emitdump, "-o", $out ".ll", $f] if program else String&[$emitdump, "-t", "-o", $out ".ll", $f]
-    e := toolkit.Run(dump)
+    dump := List<String&>()
+    dump.Push(emitdump)
+    if not program { dump.Push("-t") }
+    if standin { dump.Push("-standin") }
+    dump.Push("-o")
+    dump.Push($out ".ll")
+    dump.Push(f)
+    e := toolkit.Run(dump.ToArray())
     gaps := gapCount(e.Stderr)
     if e.Status != 0 {
         r.Broken = true
