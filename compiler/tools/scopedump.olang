@@ -87,7 +87,7 @@ fn run(args Array<String&>&) {
             body := c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
             if (try where.Find(planAt) catch default -1) < 0 { continue }
-            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $varsText(body) $planText(s.Plans[b]))
+            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $varsText(body) $planText(s.Plans[b]) $s.Summary(b))
         }
         out.Write("bodies " $c.Bodies.Len() " judged " $judged " unjudged " $unjudged "\n")
     }

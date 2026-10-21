@@ -4756,9 +4756,11 @@ fn (s mut Scoper&) isHeldFresh(x typed.Expr&) Bool {
 }
 
 # the term the callee's obligations require scope variable v to live in: a bound one it must outlive or equal (O18b);
-# None where none does, or where the callee's obligations are not final (a component of its own, 7.2)
+# None where none does. A callee of the component being judged gives what the rounds so far found: its obligations only
+# grow, so the first relation naming v - what this reads - is fixed once found, and the rounds still reach their fixed
+# point before anything is said (7.2)
 fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
-    if callee < 0 or not s.sums[callee].Done { return Term.None }
+    if callee < 0 or not (s.sums[callee].Done or s.sums[callee].Judging) { return Term.None }
     for r in s.sums[callee].Rels {
         match r.Hi {
             case Term.Var(i) {
@@ -5376,6 +5378,16 @@ fn isNameChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 
 # whether body b's scopes were judged: it has code, and no type in it is unknown (a check error)
 fn (s Scoper&) Judged(b I64) Bool { return s.judged[b] }
+
+# body b's summary as text, for compiler/tools/scopedump.olang: its obligations, what it builds into, keeps and stores
+fn (s Scoper&) Summary(b I64) String {
+    t := StringBuilder()
+    sm := s.sums[b]
+    for r in sm.Rels { t.Push("rel " $r.Hi $(" == " if r.Exact else " >= ") $r.Lo $(" why " $r.Why if r.Why != 0 else "") "\n") }
+    for k in range sm.Builds.Len() { t.Push("var " $k " builds " $sm.Builds[k] " real " $sm.Real[k] "\n") }
+    for k in range sm.Keeps.Len() { t.Push("param " $k " keeps " $sm.Keeps[k] " stores " $sm.Stores[k] "\n") }
+    return t.ToString()
+}
 
 # ---- tests: the plan and the summaries, which compiler/tools/scopediff.olang cannot show ----
 
