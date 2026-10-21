@@ -3361,6 +3361,7 @@ FitValue I64 = 4  # a value local holding references (O25h)
 FitPayload I64 = 5 # an enum case's payload (T17c)
 FitDecl I64 = 6   # a constructor's field declared (C2d): where nothing can be stored through it, outliving (O10)
 FitOwn I64 = 7    # a reference or function value returned, living in this function's own scope (O10d)
+FitElem I64 = 8   # an array literal's element or an array's fill (O25c)
 
 # a place's slot: its term, whether a value put there must be exactly in it, and its kind
 fn (s mut Scoper&) slotOf(p typed.Place&) (Term, Bool, I64) {
@@ -3896,6 +3897,7 @@ fn (s mut Scoper&) opTok(x typed.Expr&) source.Span {
         case typed.Expr.Promote(_, _, pr) { return s.opTok(pr.X) }
         case typed.Expr.Call(sp, _, _), typed.Expr.Make(sp, _, _) { return s.nameSpan(sp) }
         case typed.Expr.Slice(sp, _, sl) { return s.sliceAt(sp, sl) }
+        case typed.Expr.Cond(sp, _, c) { return s.wordAt(source.Span(c.A.Span().End, sp.End), "if") }
         case typed.Expr.Read(sp, _, p, _), typed.Expr.Borrow(sp, _, p) {
             match p {
                 case typed.Place.Field(_, _, _, _) { return s.lastName(sp) }
@@ -4060,7 +4062,7 @@ fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
         case typed.Expr.Make(_, ty, m) {
             if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
             s.val(m.Length, Term.None)
-            for it in m.Items { s.item(it, d, FitPayload if m.Kind == typed.MakeKind.Case else FitField) }
+            for it in m.Items { s.item(it, d, s.itemKind(m.Kind)) }
             if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
             return fresh(d)
         }
@@ -4168,6 +4170,15 @@ fn (s mut Scoper&) convertedPlace(x typed.Expr&) typed.Place&x {
 
 # an item of an array, tuple or case being built in d: a temporary built there too (O6), existing storage judged as a
 # slot of it (O25c, T17c)
+# the kind of slot an item of a value made is (fit)
+fn (s mut Scoper&) itemKind(k typed.MakeKind) I64 {
+    return match k {
+        case typed.MakeKind.Case => FitPayload
+        case typed.MakeKind.Array, typed.MakeKind.Fill => FitElem
+        case _ => FitField
+    }
+}
+
 fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
     v := s.val(x, d)
     if v.K == ValKind.Existing { s.fit(v.T, d, s.storeThrough(x.Type()), x, kind) }
@@ -4956,6 +4967,11 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             s.err(s.taskAt, msgs.SpawnFuncTooShort() if s.taskFunc else msgs.SpawnArgHoldsShort())
             continue
         }
+        if r.Lo == Term.Var(s.resultVarOf(s.calleeType(c))) and s.ownIntoResult(hi, lo) {
+            # a result returned holding this function's own storage, through the call that put it there (O26)
+            s.err(s.nameSpan(sp), msgs.ReturnOwnStorage())
+            continue
+        }
         if r.Why != 0 {
             # a constructor's instance outliving what it holds (C2d): said at the argument
             ai := s.argOfVar(c, r.Hi)
@@ -4972,6 +4988,16 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         ai := s.argOfVar(c, r.Hi)
         if ai >= 0 and s.lentLoopCopy(c.Args[ai]) { s.noteLoopCopy(rec, c.Args[ai]) }
     }
+}
+
+# whether a callee's relation on its result, through a call, asks this function's own storage to outlive this one's
+# result: what the call builds is returned (O26) - in a function, not a constructor, whose instance is its fields' own concern (C2d)
+fn (s mut Scoper&) ownIntoResult(hi Term, lo Term) Bool {
+    match s.B.Of {
+        case typed.BodyOf.Ctor(_, _) { return false }
+        case _ { }
+    }
+    return s.resultVar >= 0 and lo == Term.Var(s.resultVar) and s.isBlock(hi)
 }
 
 # whether a relation names the instance of the constructor being judged (C2d)
@@ -5323,6 +5349,13 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         }
         case _ { }
     }
+    if kind == FitField and exact and s.why == 0 and not (s.taskTemp and s.fitSlot == s.taskSlot) {
+        # a reference stored where something can be stored through it lives exactly where its slot's references do
+        # (O25) - a value local of this function's own, named, where it is what closes first
+        name := s.valueLocalName(x) if not s.fitNarrow else ""
+        s.err(s.fitSp if s.fitAt else s.opTok(x), msgs.ReferenceNarrowedLocal(name) if name != "" else msgs.ReferenceNarrowed())
+        return
+    }
     rec := s.fitErrorAt(s.fitSp if s.fitAt else s.opTok(x), kind, exact)
     # a slice of a temporary borrows it in the block it is written in, which a reader would not guess (E16a)
     match s.unAway(x) {
@@ -5331,6 +5364,13 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         }
         case _ { }
     }
+}
+
+# the name of the value local of this function's an expression reads or borrows whole, "" for any other
+fn (s mut Scoper&) valueLocalName(x typed.Expr&) String {
+    l := s.argLocal(x)
+    if l < 0 or s.isRef(s.B.Locals[l].Ty) or s.B.Locals[l].Kind == typed.LocalKind.Hidden { return "" }
+    return $s.P.L.Names.Text(s.B.Locals[l].Name)
 }
 
 # whether a place is a part of a temporary, reached without a reference
@@ -5360,6 +5400,8 @@ fn (s mut Scoper&) fitErrorAt(sp source.Span, kind I64, exact Bool) I64 {
         m = msgs.OwnCannotOutlive()
     } else if kind == FitField {
         m = msgs.StoredRefOutlived()
+    } else if kind == FitElem {
+        m = msgs.ElemNotInArrayScope() if exact else msgs.ElemOutlived()
     } else if kind == FitGlobal {
         m = msgs.GlobalHoldsShorter()
     } else if kind == FitReturn {
