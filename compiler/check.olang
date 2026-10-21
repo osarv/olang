@@ -4366,7 +4366,16 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
         hm := c.roleMethod(ct, "Has", 1)
         if hm >= 0 {
             hp := c.P.T.Items(c.P.T.Params(c.P.Sig(hm)))
-            if c.P.T.KindOf(hp[1]) != types.Kind.Var { xw = c.deref(hp[1]) }
+            owner := generic.FnOwner(hm)
+            nv := c.P.VarCount(owner)
+            if nv == 0 {
+                if c.P.T.KindOf(hp[1]) != types.Kind.Var { xw = c.deref(hp[1]) }
+            } else if hp.Len() > 1 {
+                # a generic collection's Has: its parameter as the collection's type arguments make it (Map<I32, V>)
+                hb := generic.Binding(owner, nv)
+                c.unify(hp[0], typeOf(coll), hb, false, true)
+                xw = c.boundParam(hp, 1, hb)
+            }
         }
     }
     x := c.expr(a, xw)
@@ -4542,6 +4551,8 @@ fn (c mut Checker&) roRef(x typed.Expr&) Bool {
         case typed.Expr.Borrow(_, _, p) => c.roPlace(p)
         case typed.Expr.Slice(_, _, sl) => c.roPlace(sl.Base)
         case typed.Expr.Call(_, _, cl) => c.roCallRef(cl)
+        # a fixed array borrowed as a run-time-length one (T7c) is as read-only as the borrow
+        case typed.Expr.Prim(_, _, op, _, args) => c.roRef(args[0]) if op == typed.PrimOp.Convert and args.Len() == 1 else true
         case typed.Expr.Promote(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Lit(_, _, _) => false
         case _ => true
     }
@@ -5901,7 +5912,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 match args[i] {
                     case ast.Expr.Lambda(_, _) { lambdas.Push(i) }
                     case ast.Expr.Default(_) { }
-                    nomatch { e = c.expr(args[i], types.UnknownT) }
+                    nomatch { e = c.expr(args[i], c.boundParam(ps, k, b) if recv != null else types.UnknownT) }
                 }
             }
         }
@@ -5979,6 +5990,16 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         }
     }
     return x
+}
+
+# parameter k as far as a binding has bound it, where that leaves no variable open - what a receiver's type arguments
+# make of a method's parameter (G10c: a generic constructor argued there takes its type arguments; a literal adapts)
+fn (c mut Checker&) boundParam(ps Array<types.TypeId>&, k I64, b generic.Binding&) types.TypeId {
+    if k >= ps.Len() { return types.UnknownT }
+    part := Array<types.TypeId>(b.N)
+    for j in range b.N { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(b.Owner, j, types.ReadOnly) }
+    t := c.P.Subst(ps[k], b.Owner, c.P.T.List(part))
+    return c.deref(t) if c.P.T.Closed(t) else types.UnknownT
 }
 
 # G9a: a variable only literals reach, whose constraint (G19) the widest of their types fails, takes the first type
