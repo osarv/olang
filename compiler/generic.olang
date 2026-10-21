@@ -109,6 +109,17 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     Asking Origin = NoOrigin           # where the checker is asking from: recorded by the instances it makes (G16b)
     typeFrom Map<types.TypeId, Origin> # a type instance: where it was first asked for
     walkedBodies Map<types.TypeId, Bool> # the types bodiesOf has walked
+    # G21: a constant argument no fold reaches, evaluated while compiling - by its module's file and offset, what an
+    # evaluation found (set before checking; interp's Analyze), and the ones a check met undecided (ConstAsks)
+    Lengths Map<pair.Pair<I64, I64>, I64>
+    ConstAsks List<ConstAsk>
+}
+
+# a constant argument a fold could not compute: its expression, the module whose context reads it, its type
+type ConstAsk struct(Mi I64, Expr ast.Expr&, Want types.TypeId) {
+    Mi
+    Expr
+    Want
 }
 
 # the owners of variables: a type declaration's, a function's
@@ -671,7 +682,13 @@ fn (p mut Program&) constArg(c Context&, t ast.TypeRef&, want types.TypeId) type
                 if v >= types.TypeId(0) { return v }
             }
             f := p.foldPath(c, sp, path)
-            return p.constOf(c, f, want, null)
+            # a global a call computes is asked for as the expression the name is (G21)
+            x ast.Expr&p = null
+            if f.St == Unfolded {
+                x = ast.Expr.Name(sp, path[0])
+                for k in range 1, path.Len() { x = ast.Expr.Member(sp, x, path[k]) }
+            }
+            return p.constOf(c, f, want, x)
         }
         nomatch { return p.UnknownConst() }
     }
@@ -709,6 +726,17 @@ fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&
         k := p.T.ConstExpr($c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End ":" $I64(want))
         p.patterns.Put(p.T.A(k), pattern(e, c.Mi, c.Owner, want))
         return k
+    }
+    # G21: one needing evaluation, reading no variable (a call, a global a call computes) - what the evaluator found
+    # where it has, else asked for once and the unknown constant meanwhile
+    if f.St == Unfolded and e != null {
+        key := pair.Pair(p.L.Mods[c.Mi].File, I64(e.Span().Start))
+        if p.Lengths.Has(key) { return p.T.Const(want, p.wrap(try p.Lengths.Get(key) catch default 0, want)) }
+        seen := false
+        for a in p.ConstAsks {
+            if a.Mi == c.Mi and a.Expr.Span().Start == e.Span().Start { seen = true }
+        }
+        if not seen { p.ConstAsks.Push(ConstAsk(c.Mi, e, want)) }
     }
     return p.UnknownConst()
 }
