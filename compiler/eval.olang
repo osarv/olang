@@ -197,9 +197,9 @@ type frame struct() {
     Fn I64 = 0
     Block I64 = 0
     Stmt I64 = 0
-    Locals I64 = 0       # where its locals' allocation ids start in localIds
-    Scopes I64 = 0       # where the ids of the scopes it opens start in scopeIds
-    Vars I64 = 0         # where its scope variables start in varIds
+    Locals I64 = 0       # where its locals' allocation ids start in ws
+    Scopes I64 = 0       # where the ids of the scopes it opens start in ws
+    Vars I64 = 0         # where its scope variables start in ws
     Store I64 = 0        # its own storage's scope
     Ret I64 = 0
     RetArg I64 = 0       # rCall: the caller's call; rTask, rClause: the task's slot; rGlobal: the global
@@ -252,6 +252,24 @@ vAgg I64 = 10      # a struct, a tuple, a record
 vFixed I64 = 11    # an array of a length the type says (T7c)
 vNone I64 = 12     # no layout
 
+# a function decoded once, when it is defined (M8): the tables its statements index held as arrays, read in place where
+# a list's element would be copied out, its blocks' statements in one array (block b's from Start[b] to Start[b + 1]),
+# and whether a statement or a terminator names a global at all - only one that does asks whether its globals are set
+type cfn struct() {
+    File I64 = 0
+    Locals Array<mir.Local>&
+    Scopes Array<mir.ScopeInfo>&
+    Projs Array<mir.Proj>&
+    Ops Array<mir.Operand>&
+    Calls Array<mir.Call>&
+    Cases Array<mir.Case>&
+    Stmts mut Array<mir.Stmt>&
+    Start mut Array<I64>&
+    Terms mut Array<mir.Term>&
+    Global mut Array<Bool>&
+    TermGlobal mut Array<Bool>&
+}
+
 # ---- the machine ----
 
 type Machine struct(T mut types.Table&, When Mode) {
@@ -268,6 +286,10 @@ type Machine struct(T mut types.Table&, When Mode) {
     halted Bool = false
     # the program's code
     fns List<mir.Fn>
+    cf mut Array<cfn>& = Array<cfn>(64)    # by fns' index, each decoded
+    tySize mut Array<I64>& = Array<I64>(1024, -1)    # by type: size, shape, width once settled, -1 before
+    tyShape mut Array<I64>& = Array<I64>(1024, -1)
+    tyWidth mut Array<I64>& = Array<I64>(1024, -1)
     fnOf Map<mir.FnKey, I64>
     codeKeys List<mir.FnKey>     # every function a value or a code allocation names, by its own index
     codeOf Map<mir.FnKey, I64>
@@ -292,10 +314,12 @@ type Machine struct(T mut types.Table&, When Mode) {
     tasks List<task>
     freeTasks List<I64>
     # execution
-    frames List<frame>
-    localIds List<I64>
-    scopeIds List<I64>
-    varIds List<I64>
+    fs mut Array<frame>& = Array<frame>(64)    # the frames, nFs of them, the top last
+    nFs I64 = 0
+    # the frames' words, nWs of them: each frame's locals' allocation ids, then the ids of the scopes it opens, then its
+    # scope variables (frame.Locals, .Scopes, .Vars)
+    ws mut Array<I64>& = Array<I64>(1024)
+    nWs I64 = 0
     closing List<I64>
     program I64 = 0
     scratch I64 = 0
@@ -332,8 +356,97 @@ fn NewMachine(t mut types.Table&, mode Mode) Machine {
 
 # a MIR function, by its key
 fn (m mut Machine&) Define(f mir.Fn) {
-    m.fnOf.Put(f.Of, m.fns.Len())
+    i := m.fns.Len()
+    m.fnOf.Put(f.Of, i)
     m.fns.Push(f)
+    if i >= m.cf.Len() {
+        old := m.cf
+        m.cf = Array<cfn>(2 * old.Len())
+        for k in range old.Len() { m.cf[k] = old[k] }
+    }
+    m.cf[i] = m.decode(f)
+}
+
+# f decoded (cfn)
+fn (m mut Machine&) decode(f mir.Fn&) cfn {
+    c := cfn()
+    c.File = f.File
+    c.Locals = f.Locals.ToArray()
+    c.Scopes = f.Scopes.ToArray()
+    c.Projs = f.Projs.ToArray()
+    c.Ops = f.Ops.ToArray()
+    c.Calls = f.Calls.ToArray()
+    c.Cases = f.Cases.ToArray()
+    n I64 = 0
+    for b in f.Blocks { n += b.Stmts.Len() }
+    nb := f.Blocks.Len()
+    c.Stmts = Array<mir.Stmt>(n)
+    c.Global = Array<Bool>(n)
+    c.Start = Array<I64>(nb + 1)
+    c.Terms = Array<mir.Term>(nb)
+    c.TermGlobal = Array<Bool>(nb)
+    k I64 = 0
+    for bi in range nb {
+        b := f.Blocks[bi]
+        c.Start[bi] = k
+        for st in b.Stmts {
+            c.Stmts[k] = st
+            c.Global[k] = stmtNamesGlobal(f, st)
+            k++
+        }
+        c.Terms[bi] = b.T
+        c.TermGlobal[bi] = termNamesGlobal(f, b.T)
+    }
+    c.Start[nb] = k
+    return c
+}
+
+fn placeNamesGlobal(p mir.Place) Bool {
+    return match p.B {
+        case mir.Base.Global(_, _, _) => true
+        case _ => false
+    }
+}
+
+fn opNamesGlobal(x mir.Operand) Bool {
+    return match x {
+        case mir.Operand.Copy(p) => placeNamesGlobal(p)
+        case _ => false
+    }
+}
+
+fn rangeNamesGlobal(f mir.Fn&, r mir.Range) Bool {
+    for i in range r.N {
+        if opNamesGlobal(f.Ops[I64(r.At) + i]) { return true }
+    }
+    return false
+}
+
+# whether a statement's place or operands name a global: what globalsReady reads
+fn stmtNamesGlobal(f mir.Fn&, st mir.Stmt) Bool {
+    return match st {
+        case mir.Stmt.Assign(_, p, rv) => placeNamesGlobal(p) or match rv {
+            case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => opNamesGlobal(x)
+            case mir.Rvalue.Ref(q, _), mir.Rvalue.Take(q), mir.Rvalue.Tag(q) => placeNamesGlobal(q)
+            case mir.Rvalue.Slice(q, lo, hi, _) => placeNamesGlobal(q) or opNamesGlobal(lo) or opNamesGlobal(hi)
+            case mir.Rvalue.Prim(_, _, r), mir.Rvalue.Overflows(_, _, r), mir.Rvalue.Aggregate(_, _, r)
+                 mir.Rvalue.Closure(_, _, _, r) => rangeNamesGlobal(f, r)
+            case mir.Rvalue.NewArray(_, _, n, fill) => opNamesGlobal(n) or opNamesGlobal(fill)
+            case _ => false
+        }
+        case _ => false
+    }
+}
+
+# whether a terminator's operands name a global: what term's readiness checks read
+fn termNamesGlobal(f mir.Fn&, t mir.Term) Bool {
+    return match t {
+        case mir.Term.Branch(c, _, _) => opNamesGlobal(c)
+        case mir.Term.Switch(x, _, _) => opNamesGlobal(x)
+        case mir.Term.Return(_, x) => opNamesGlobal(x)
+        case mir.Term.Call(_, k) => rangeNamesGlobal(f, f.Calls[I64(k)].Args)
+        case _ => false
+    }
 }
 
 # an extern (X1), by generic.Program's function index, as the linker names it
@@ -404,10 +517,35 @@ fn (m mut Machine&) layRepr(ty types.TypeId) {
     if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(ty)) == types.DeclKind.Over and t.HasBody(ty) { m.lay(ty) }
 }
 
+# a type's size, shape and width, each kept the first time it is final - once the type's layout is decided (laid out,
+# or known to have none): the evaluator asks for them at every operand
 fn (m mut Machine&) size(ty types.TypeId) I64 {
-    if ty == types.NullT { return 8 }
-    if ty == types.VoidT or not m.lay(ty) { return 0 }
-    return m.T.Size(ty)
+    i := I64(ty)
+    if i < m.tySize.Len() and m.tySize[i] >= 0 { return m.tySize[i] }
+    v I64 = 8 if ty == types.NullT else 0 if ty == types.VoidT or not m.lay(ty) else m.T.Size(ty)
+    if m.settled(ty) { m.tySize[i] = v }
+    return v
+}
+
+# whether ty's layout is decided, the caches given room for it
+fn (m mut Machine&) settled(ty types.TypeId) Bool {
+    st := m.T.LayoutState(ty)
+    if st != types.LaidOut and st != types.NoLayout { return false }
+    i := I64(ty)
+    if i >= m.tySize.Len() {
+        n := 2 * m.tySize.Len()
+        for n <= i { n *= 2 }
+        a, b, c := m.tySize, m.tyShape, m.tyWidth
+        m.tySize = Array<I64>(n, -1)
+        m.tyShape = Array<I64>(n, -1)
+        m.tyWidth = Array<I64>(n, -1)
+        for k in range a.Len() {
+            m.tySize[k] = a[k]
+            m.tyShape[k] = b[k]
+            m.tyWidth[k] = c[k]
+        }
+    }
+    return true
 }
 
 fn (m mut Machine&) rtArray(ty types.TypeId) Bool {
@@ -416,6 +554,14 @@ fn (m mut Machine&) rtArray(ty types.TypeId) Bool {
 }
 
 fn (m mut Machine&) shape(ty types.TypeId) I64 {
+    i := I64(ty)
+    if i < m.tyShape.Len() and m.tyShape[i] >= 0 { return m.tyShape[i] }
+    v := m.shapeOf(ty)
+    if m.settled(ty) { m.tyShape[i] = v }
+    return v
+}
+
+fn (m mut Machine&) shapeOf(ty types.TypeId) I64 {
     t := m.T
     m.lay(ty)
     r := t.Repr(ty)
@@ -484,6 +630,14 @@ fn (m mut Machine&) payloadType(ty types.TypeId, tag I64) types.TypeId {
 
 # the bytes one value of a number type takes
 fn (m mut Machine&) width(ty types.TypeId) I64 {
+    i := I64(ty)
+    if i < m.tyWidth.Len() and m.tyWidth[i] >= 0 { return m.tyWidth[i] }
+    v := m.widthOf(ty)
+    if m.settled(ty) { m.tyWidth[i] = v }
+    return v
+}
+
+fn (m mut Machine&) widthOf(ty types.TypeId) I64 {
     sh := m.shape(ty)
     if sh == vBool { return 1 }
     if sh == vOrd { return 4 }
@@ -892,7 +1046,7 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
     if fr < 0 { return }
     f := m.fns[fi]
     if f.Params.Len() > 0 { m.wrPtr(m.localPtr(fr, f.Params[0]), p) }
-    for i in range f.Vars.Len() { m.varIds[m.frames[fr].Vars + i] = closing }
+    for i in range f.Vars.Len() { m.ws[m.fs[fr].Vars + i] = closing }
 }
 
 # ---- frames ----
@@ -900,38 +1054,53 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
 # a frame for function fi pushed: its own storage, its frame locals made there, its scope variables to be set by the
 # caller. Its index; -1, stopped, past the depth budget
 fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
-    if m.frames.Len() >= m.DepthBudget {
+    if m.nFs >= m.DepthBudget {
         m.refuse(WhyDepth if m.When == Mode.Compile else WhyRunDepth)
         return -1
     }
     f := m.fns[fi]
+    ls := m.cf[fi].Locals
+    nl, ns, nv := ls.Len(), f.Scopes.Len(), f.Vars.Len()
     fr := frame()
     fr.Fn, fr.Ret, fr.RetArg = fi, ret, retArg
-    fr.Locals, fr.Scopes, fr.Vars = m.localIds.Len(), m.scopeIds.Len(), m.varIds.Len()
+    fr.Locals, fr.Scopes, fr.Vars = m.nWs, m.nWs + nl, m.nWs + nl + ns
     fr.Closing = m.closing.Len()
     fr.Store = m.newScope(sStore)
-    for l in f.Locals {
-        id I64 = 0
-        if l.Home == mir.ScopeRef.Frame {
-            id = m.allocate(m.size(l.Ty), aValue, fr.Store).Id
-        }
-        m.localIds.Push(id)
+    need := m.nWs + nl + ns + nv
+    if need > m.ws.Len() {
+        old := m.ws
+        n := old.Len()
+        for n < need { n *= 2 }
+        m.ws = Array<I64>(n)
+        for i in range m.nWs { m.ws[i] = old[i] }
     }
-    for i in range f.Scopes.Len() { m.scopeIds.Push(0) }
-    for i in range f.Vars.Len() { m.varIds.Push(0) }
-    m.frames.Push(fr)
-    return m.frames.Len() - 1
+    for i in range nl {
+        id I64 = 0
+        if ls[i].Home == mir.ScopeRef.Frame {
+            id = m.allocate(m.size(ls[i].Ty), aValue, fr.Store).Id
+        }
+        m.ws[m.nWs + i] = id
+    }
+    for i in range nl, need - m.nWs { m.ws[m.nWs + i] = 0 }
+    m.nWs = need
+    if m.nFs >= m.fs.Len() {
+        old := m.fs
+        m.fs = Array<frame>(2 * old.Len())
+        for i in range m.nFs { m.fs[i] = old[i] }
+    }
+    m.fs[m.nFs] = fr
+    m.nFs++
+    return m.nFs - 1
 }
 
 fn (m mut Machine&) popFrame() {
-    fr := try m.frames.Pop() catch { return }
-    m.localIds.Truncate(fr.Locals)
-    m.scopeIds.Truncate(fr.Scopes)
-    m.varIds.Truncate(fr.Vars)
+    if m.nFs == 0 { return }
+    m.nFs--
+    m.nWs = m.fs[m.nFs].Locals
 }
 
 fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
-    id := m.localIds[m.frames[fi].Locals + I64(l)]
+    id := m.ws[m.fs[fi].Locals + I64(l)]
     if id == 0 {
         m.refuse(WhyClosed)
         return NullPtr
@@ -939,14 +1108,14 @@ fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
     return Ptr(id, 0)
 }
 
-fn (m mut Machine&) fnOfFrame(fi I64) mir.Fn { return m.fns[m.frames[fi].Fn] }
+fn (m mut Machine&) fnOfFrame(fi I64) mir.Fn { return m.fns[m.fs[fi].Fn] }
 
 # the scope a ScopeRef names in frame fi
 fn (m mut Machine&) scopeOf(fi I64, r mir.ScopeRef) I64 {
-    fr := m.frames[fi]
+    fr := m.fs[fi]
     return match r {
-        case mir.ScopeRef.Scope(s) => m.scopeIds[fr.Scopes + I64(s)]
-        case mir.ScopeRef.Var(i) => m.varIds[fr.Vars + i]
+        case mir.ScopeRef.Scope(s) => m.ws[fr.Scopes + I64(s)]
+        case mir.ScopeRef.Var(i) => m.ws[fr.Vars + i]
         case mir.ScopeRef.Program => m.program
         case mir.ScopeRef.Frame => fr.Store
         case mir.ScopeRef.RegionOf(l) => m.regionOf(fi, l)
@@ -973,14 +1142,14 @@ fn (m mut Machine&) buildScope(fi I64, r mir.ScopeRef) I64 {
 
 # a place's storage and its type, in frame fi
 fn (m mut Machine&) place(fi I64, p mir.Place) (Ptr, types.TypeId) {
-    f := m.fnOfFrame(fi)
+    k := m.fs[fi].Fn
     t := m.T
     ptr := NullPtr
     ty := types.UnknownT
     match p.B {
         case mir.Base.Local(l) {
             ptr = m.localPtr(fi, l)
-            ty = f.Locals[I64(l)].Ty
+            ty = m.cf[k].Locals[I64(l)].Ty
         }
         case mir.Base.Global(module, name, gt) {
             g := try m.globalOf.Get(gkey(module, name)) catch {
@@ -994,17 +1163,17 @@ fn (m mut Machine&) place(fi I64, p mir.Place) (Ptr, types.TypeId) {
     }
     for i in range p.Path.N {
         if m.halted { return NullPtr, ty }
-        match f.Projs[I64(p.Path.At) + i] {
-            case mir.Proj.Field(k) {
-                ptr = Ptr(ptr.Id, ptr.Off + m.partOffset(ty, k))
-                ty = m.partType(ty, k)
+        match m.cf[k].Projs[I64(p.Path.At) + i] {
+            case mir.Proj.Field(j) {
+                ptr = Ptr(ptr.Id, ptr.Off + m.partOffset(ty, j))
+                ty = m.partType(ty, j)
             }
             case mir.Proj.Index(l) {
-                lt := f.Locals[I64(l)].Ty
+                lt := m.cf[k].Locals[I64(l)].Ty
                 v := m.intValue(m.rd(m.localPtr(fi, l), m.width(lt)), lt)
                 ptr, ty = m.element(ptr, ty, v)
             }
-            case mir.Proj.At(k) { ptr, ty = m.element(ptr, ty, k) }
+            case mir.Proj.At(j) { ptr, ty = m.element(ptr, ty, j) }
             case mir.Proj.Deref {
                 r := t.Referent(t.Repr(ty))
                 if not m.rtArray(r) { ptr = m.rdPtr(ptr) }
@@ -1062,16 +1231,16 @@ fn (m mut Machine&) opType(fi I64, x mir.Operand) types.TypeId {
 
 # a place's type, its projections followed with no memory read
 fn (m mut Machine&) placeType(fi I64, p mir.Place) types.TypeId {
-    f := m.fnOfFrame(fi)
+    k := m.fs[fi].Fn
     t := m.T
     ty := match p.B {
-        case mir.Base.Local(l) => f.Locals[I64(l)].Ty
+        case mir.Base.Local(l) => m.cf[k].Locals[I64(l)].Ty
         case mir.Base.Global(_, _, gt) => gt
         case mir.Base.None => types.UnknownT
     }
     for i in range p.Path.N {
-        ty = match f.Projs[I64(p.Path.At) + i] {
-            case mir.Proj.Field(k) => m.partType(ty, k)
+        ty = match m.cf[k].Projs[I64(p.Path.At) + i] {
+            case mir.Proj.Field(j) => m.partType(ty, j)
             case mir.Proj.Index(_), mir.Proj.At(_) => m.elemOf(ty)
             case mir.Proj.Deref => t.Referent(t.Repr(ty))
             case mir.Proj.Payload(tag) => m.payloadType(ty, tag)
@@ -1338,13 +1507,12 @@ fn (m mut Machine&) ref(fi I64, dst Ptr, q mir.Place, ty types.TypeId) {
 }
 
 fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mir.Range) {
-    f := m.fnOfFrame(fi)
     n := m.size(ty)
     s := m.scratchFor(0, n)
     m.zero(s, n)
     sh := m.shape(ty)
     for i in range args.N {
-        x := f.Ops[I64(args.At) + i]
+        x := m.arg(fi, args, i)
         if sh == vFixed {
             e := m.elemOf(ty)
             m.put(fi, Ptr(s.Id, i * m.size(e)), e, x)
@@ -1516,7 +1684,7 @@ fn (m mut Machine&) text(fi I64, dst Ptr, b mir.ScopeRef, into mir.ScopeRef) {
 
 # ---- operations (E6-E8, E26, E33) ----
 
-fn (m mut Machine&) arg(fi I64, args mir.Range, i I64) mir.Operand { return m.fnOfFrame(fi).Ops[I64(args.At) + i] }
+fn (m mut Machine&) arg(fi I64, args mir.Range, i I64) mir.Operand { return m.cf[m.fs[fi].Fn].Ops[I64(args.At) + i] }
 
 fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Range) I64 {
     x := m.arg(fi, args, 0)
@@ -1898,29 +2066,29 @@ fn (m mut Machine&) fits(v I64, big Bool, w I64, signed Bool) Bool {
 
 # ---- statements ----
 
-fn (m mut Machine&) stmt(fi I64, st mir.Stmt) {
-    f := m.fnOfFrame(fi)
+fn (m mut Machine&) stmt(fi I64, st mir.Stmt, glob Bool) {
+    fk := m.fs[fi].Fn
     match st {
         case mir.Stmt.Assign(sp, p, rv) {
-            m.at0(f, sp)
-            if not m.globalsReady(fi, p, rv) { return }
+            m.atK(fk, sp)
+            if glob and not m.globalsReady(fi, p, rv) { return }
             m.assign(fi, p, rv)
         }
         case mir.Stmt.Live(sp, l) {
-            m.at0(f, sp)
-            loc := f.Locals[I64(l)]
+            m.atK(fk, sp)
+            loc := m.cf[fk].Locals[I64(l)]
             sc := m.buildScope(fi, loc.Home)
             if m.halted { return }
-            m.localIds[m.frames[fi].Locals + I64(l)] = m.allocate(m.size(loc.Ty), aValue, sc).Id
+            m.ws[m.fs[fi].Locals + I64(l)] = m.allocate(m.size(loc.Ty), aValue, sc).Id
         }
         case mir.Stmt.Dead(_, l) {
-            slot := m.frames[fi].Locals + I64(l)
-            id := m.localIds[slot]
+            slot := m.fs[fi].Locals + I64(l)
+            id := m.ws[slot]
             if id != 0 and m.allocOf(id).Gen == id >> slotBits { m.release(id & slotMask) }
-            m.localIds[slot] = 0
+            m.ws[slot] = 0
         }
         case mir.Stmt.Open(_, s) {
-            si := f.Scopes[I64(s)]
+            si := m.cf[fk].Scopes[I64(s)]
             kind := match si.Kind {
                 case mir.ScopeKind.Inert => sInert
                 case mir.ScopeKind.Builder => sBuilder
@@ -1929,7 +2097,7 @@ fn (m mut Machine&) stmt(fi I64, st mir.Stmt) {
                 nomatch => sBlock
             }
             id := m.newScope(kind)
-            m.scopeIds[m.frames[fi].Scopes + I64(s)] = id
+            m.ws[m.fs[fi].Scopes + I64(s)] = id
             if kind == sJoin { m.scopes[id & slotMask].Errors = I64(si.Errors) }
             if kind == sBuilder {
                 b := m.allocate(64, aValue, id)
@@ -1937,21 +2105,21 @@ fn (m mut Machine&) stmt(fi I64, st mir.Stmt) {
             }
         }
         case mir.Stmt.Close(_, s) {
-            id := m.scopeIds[m.frames[fi].Scopes + I64(s)]
-            m.scopeIds[m.frames[fi].Scopes + I64(s)] = 0
+            id := m.ws[m.fs[fi].Scopes + I64(s)]
+            m.ws[m.fs[fi].Scopes + I64(s)] = 0
             if m.live(id) {
                 m.closing.Push(id)
-                m.frames[fi].Pending = true
+                m.fs[fi].Pending = true
                 return
             }
         }
         case mir.Stmt.Give(_, s) {
-            id := m.scopeIds[m.frames[fi].Scopes + I64(s)]
-            m.scopeIds[m.frames[fi].Scopes + I64(s)] = 0
+            id := m.ws[m.fs[fi].Scopes + I64(s)]
+            m.ws[m.fs[fi].Scopes + I64(s)] = 0
             m.adopt(id, m.lastOwnScope)
         }
         case mir.Stmt.RegisterDtor(sp, s, ty, x) {
-            m.at0(f, sp)
+            m.atK(fk, sp)
             sc := m.scopeOf(fi, s)
             if m.When == Mode.Compile and not (sc == m.program and m.initGlobal >= 0) {
                 m.refuse(WhyDestructor)
@@ -1961,26 +2129,26 @@ fn (m mut Machine&) stmt(fi I64, st mir.Stmt) {
             m.addReg(sc, gDtor, I64(ty), p)
         }
         case mir.Stmt.RegisterOwner(sp, s, p) {
-            m.at0(f, sp)
+            m.atK(fk, sp)
             slot, _ := m.place(fi, p)
             m.addReg(m.scopeOf(fi, s), gOwner, 0, slot)
         }
         case mir.Stmt.Release(sp, p) {
-            m.at0(f, sp)
+            m.atK(fk, sp)
             slot, _ := m.place(fi, p)
             n := m.closing.Len()
             m.releaseSlot(slot)
             if m.closing.Len() > n {
-                m.frames[fi].Pending = true
+                m.fs[fi].Pending = true
                 return
             }
         }
         case mir.Stmt.Write(sp, b, how, x) {
-            m.at0(f, sp)
+            m.atK(fk, sp)
             m.write(fi, b, how, x)
         }
         case mir.Stmt.CopyElems(sp, d, src, n) {
-            m.at0(f, sp)
+            m.atK(fk, sp)
             dp, dt := m.place(fi, d)
             sp2, srcT := m.place(fi, src)
             dd, dn := m.arrayView(dp, dt)
@@ -1994,15 +2162,20 @@ fn (m mut Machine&) stmt(fi I64, st mir.Stmt) {
             m.copy(dd, sd, k * m.size(m.elemOf(dt)))
         }
         case mir.Stmt.Spawn(sp, j, k) {
-            m.at0(f, sp)
+            m.atK(fk, sp)
             m.spawn(fi, j, k)
         }
     }
-    if not m.halted { m.frames[fi].Stmt += 1 }
+    if not m.halted { m.fs[fi].Stmt += 1 }
 }
 
 fn (m mut Machine&) at0(f mir.Fn&, sp source.Span) {
     m.stopFile = f.File
+    m.stopSp = sp
+}
+
+fn (m mut Machine&) atK(k I64, sp source.Span) {
+    m.stopFile = m.cf[k].File
     m.stopSp = sp
 }
 
@@ -2097,7 +2270,7 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
 # -i any (B5a): its initializer run as a frame before the statement, which runs again once it has. While compiling a
 # mutable one, or one whose value a writable reference reaches, is refused (K1). Whether the statement can run now
 fn (m mut Machine&) globalsReady(fi I64, p mir.Place, rv mir.Rvalue) Bool {
-    f := m.fnOfFrame(fi)
+    f := m.fns[m.fs[fi].Fn]
     if m.When == Mode.Compile and not m.globalWritten(p) { return false }
     return match rv {
         case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => m.operandReady(fi, x)
@@ -2180,7 +2353,7 @@ fn (m mut Machine&) startGlobal(g I64) {
     }
     fr := m.pushFrame(fi, rGlobal, g)
     if fr < 0 { return }
-    m.frames[fr].PrevInit = m.initGlobal
+    m.fs[fr].PrevInit = m.initGlobal
     m.initGlobal = g
     m.globals[g].State = 1
 }
@@ -2271,7 +2444,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
                 if vvars[j] == want and j < I64(scopes.N) { s = m.scopeOf(fi, f.Refs[I64(scopes.At) + j]) }
             }
         }
-        m.varIds[m.frames[nf].Vars + i] = s
+        m.ws[m.fs[nf].Vars + i] = s
     }
     if g.Captures.Len() > 0 {
         if env.Id == 0 {
@@ -2284,7 +2457,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
         for i in range g.Captures.Len() {
             m.copy(m.localPtr(nf, g.Captures[i]), Ptr(env.Id, env.Off + offs[i]), m.size(tys[i]))
             if passed + i < g.Vars.Len() {
-                m.varIds[m.frames[nf].Vars + passed + i] = m.rd(Ptr(env.Id, env.Off + total + 8 * i), 8)
+                m.ws[m.fs[nf].Vars + passed + i] = m.rd(Ptr(env.Id, env.Off + total + 8 * i), 8)
             }
         }
     }
@@ -2513,30 +2686,31 @@ fn mathExtern(name String&, arity I64) Bool {
 
 # ---- terminators ----
 
-fn (m mut Machine&) term(fi I64, t mir.Term) {
-    f := m.fnOfFrame(fi)
+fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
+    k := m.fs[fi].Fn
     match t {
         case mir.Term.None { m.notModelled() }
         case mir.Term.Goto(b) { m.jump(fi, b) }
         case mir.Term.Branch(c, yes, no) {
-            if not m.operandReady(fi, c) { return }
+            if glob and not m.operandReady(fi, c) { return }
             m.jump(fi, yes if m.scalar(fi, c) != 0 else no)
         }
         case mir.Term.Switch(x, cases, otherwise) {
-            if not m.operandReady(fi, x) { return }
+            if glob and not m.operandReady(fi, x) { return }
             v := m.scalar(fi, x)
             to := otherwise
+            mk := m.mask(m.width(m.opType(fi, x)))
             for i in range cases.N {
-                if (f.Cases[I64(cases.At) + i].Value & m.mask(m.width(m.opType(fi, x)))) == v {
-                    to = f.Cases[I64(cases.At) + i].To
+                if (m.cf[k].Cases[I64(cases.At) + i].Value & mk) == v {
+                    to = m.cf[k].Cases[I64(cases.At) + i].To
                 }
             }
             if not m.halted { m.jump(fi, to) }
         }
-        case mir.Term.Call(sp, k) {
-            m.at0(f, sp)
-            c := f.Calls[I64(k)]
-            if not m.rangeReady(fi, f, c.Args) { return }
+        case mir.Term.Call(sp, ci) {
+            m.atK(k, sp)
+            c := m.cf[k].Calls[I64(ci)]
+            if glob and not m.rangeReady(fi, m.fns[k], c.Args) { return }
             match c.Target {
                 case mir.Callee.Extern(e, ty) { m.externCall(fi, c, e, ty) }
                 case mir.Callee.Value(x) {
@@ -2545,37 +2719,37 @@ fn (m mut Machine&) term(fi I64, t mir.Term) {
                     if isExtern {
                         m.externCall(fi, c, e, m.calleeType(fi, c.Target))
                     } else {
-                        m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(k))
+                        m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci))
                     }
                 }
-                case _ { m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(k)) }
+                case _ { m.enter(fi, c.Target, c.Args, c.Scopes, rCall, I64(ci)) }
             }
         }
         case mir.Term.Return(sp, x) {
-            m.at0(f, sp)
-            if not m.frames[fi].Done and not m.operandReady(fi, x) { return }
+            m.atK(k, sp)
+            if not m.fs[fi].Done and glob and not m.operandReady(fi, x) { return }
             m.leave(fi, false, x, 0)
         }
         case mir.Term.Raise(sp, x) {
-            m.at0(f, sp)
+            m.atK(k, sp)
             # read once: when the frame's storage has closed, the code is already kept on the frame
-            code := m.frames[fi].Code if m.frames[fi].Done else m.intValue(m.scalar(fi, x), mir.I32T)
+            code := m.fs[fi].Code if m.fs[fi].Done else m.intValue(m.scalar(fi, x), mir.I32T)
             m.leave(fi, true, mir.Operand.None, code)
         }
         case mir.Term.Wait(sp, j, ok, code, failed) {
-            m.at0(f, sp)
+            m.atK(k, sp)
             m.wait(fi, j, ok, code, failed)
         }
         case mir.Term.Exit(sp, kind, msg) {
-            m.at0(f, sp)
-            m.exit(fi, f.File, sp, kind, msg)
+            m.atK(k, sp)
+            m.exit(fi, m.cf[k].File, sp, kind, msg)
         }
     }
 }
 
 fn (m mut Machine&) jump(fi I64, b mir.BlockId) {
-    m.frames[fi].Block = I64(b)
-    m.frames[fi].Stmt = 0
+    m.fs[fi].Block = I64(b)
+    m.fs[fi].Stmt = 0
 }
 
 fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
@@ -2598,7 +2772,7 @@ fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
 error NotACall { TERM }
 
 fn (m mut Machine&) callIndex(fi I64, c mir.Call) I64 ? NotACall {
-    t := m.fnOfFrame(fi).Blocks[m.frames[fi].Block].T
+    t := m.cf[m.fs[fi].Fn].Terms[m.fs[fi].Block]
     match t {
         case mir.Term.Call(_, k) { return I64(k) }
         case _ { error NotACall.TERM }
@@ -2624,15 +2798,15 @@ fn (m mut Machine&) exit(fi I64, file I64, sp source.Span, kind mir.ExitKind, ms
 # a Return or a Raise: the value delivered where the frame returns to, then the frame's own storage closed, then the
 # frame gone and what it returned to going on
 fn (m mut Machine&) leave(fi I64, raised Bool, x mir.Operand, code I64) {
-    fr := m.frames[fi]
+    fr := m.fs[fi]
     if not fr.Done {
         if not raised { m.deliver(fi, x) }
         if m.halted { return }
-        m.frames[fi].Done = true
-        m.frames[fi].Raised = raised
-        m.frames[fi].Code = code
+        m.fs[fi].Done = true
+        m.fs[fi].Raised = raised
+        m.fs[fi].Code = code
         m.closing.Push(fr.Store)
-        m.frames[fi].Pending = true
+        m.fs[fi].Pending = true
         return
     }
     m.popFrame()
@@ -2642,7 +2816,7 @@ fn (m mut Machine&) leave(fi I64, raised Bool, x mir.Operand, code I64) {
 # a returning frame's value written where it goes: the caller's destination, the request's result, a task's targets,
 # a global's storage
 fn (m mut Machine&) deliver(fi I64, x mir.Operand) {
-    fr := m.frames[fi]
+    fr := m.fs[fi]
     if x == mir.Operand.None { return }
     xt := m.opType(fi, x)
     match fr.Ret {
@@ -2672,7 +2846,7 @@ fn (m mut Machine&) deliver(fi I64, x mir.Operand) {
 fn (m mut Machine&) returned(fr frame) {
     match fr.Ret {
         case rCall {
-            caller := m.frames.Len() - 1
+            caller := m.nFs - 1
             c := m.fnOfFrame(caller).Calls[fr.RetArg]
             if fr.Raised {
                 if c.Err == mir.NoBlock {
@@ -2716,7 +2890,7 @@ fn (m mut Machine&) taskLayout(f mir.Fn&, k mir.Task, fi I64) (Array<I64>, I64) 
 fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     f := m.fnOfFrame(fi)
     k := f.Tasks[I64(ti)]
-    js := m.scopeIds[m.frames[fi].Scopes + I64(j)]
+    js := m.ws[m.fs[fi].Scopes + I64(j)]
     if not m.live(js) {
         m.refuse(WhyClosed)
         return
@@ -2748,7 +2922,7 @@ fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
     }
     slot := try m.freeTasks.Pop() catch default m.newTaskSlot()
     tk := task()
-    tk.Fn, tk.Task, tk.Buf, tk.Next = m.frames[fi].Fn, I64(ti), buf.Id, -1
+    tk.Fn, tk.Task, tk.Buf, tk.Next = m.fs[fi].Fn, I64(ti), buf.Id, -1
     m.tasks[slot] = tk
     sc := js & slotMask
     if m.scopes[sc].TasksEnd >= 0 { m.tasks[m.scopes[sc].TasksEnd].Next = slot } else { m.scopes[sc].Tasks = slot }
@@ -2764,7 +2938,7 @@ fn (m mut Machine&) freeTask(slot I64) { m.freeTasks.Push(slot) }
 
 # a join waited for: its next task run as a frame, or, none left, on to ok - or to failed with the earliest kept error
 fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId, failed mir.BlockId) {
-    js := m.scopeIds[m.frames[fi].Scopes + I64(j)]
+    js := m.ws[m.fs[fi].Scopes + I64(j)]
     if not m.live(js) {
         m.refuse(WhyClosed)
         return
@@ -2833,7 +3007,7 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
         }
     }
     for i in range passed {
-        m.varIds[m.frames[nf].Vars + i] = m.rd(Ptr(tk.Buf, sat + 8 * i), 8) if i < ns else m.program
+        m.ws[m.fs[nf].Vars + i] = m.rd(Ptr(tk.Buf, sat + 8 * i), 8) if i < ns else m.program
     }
     m.loadCaptures(nf, g, env, passed)
 }
@@ -2849,7 +3023,7 @@ fn (m mut Machine&) loadCaptures(nf I64, g mir.Fn&, env Ptr, passed I64) {
     offs, total := m.pack(tys)
     for i in range g.Captures.Len() {
         m.copy(m.localPtr(nf, g.Captures[i]), Ptr(env.Id, env.Off + offs[i]), m.size(tys[i]))
-        if passed + i < g.Vars.Len() { m.varIds[m.frames[nf].Vars + passed + i] = m.rd(Ptr(env.Id, env.Off + total + 8 * i), 8) }
+        if passed + i < g.Vars.Len() { m.ws[m.fs[nf].Vars + passed + i] = m.rd(Ptr(env.Id, env.Off + total + 8 * i), 8) }
     }
 }
 
@@ -2882,7 +3056,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
     tk := m.tasks[slot]
     f := m.fns[tk.Fn]
     k := f.Tasks[tk.Task]
-    waiter := m.frames.Len() - 1
+    waiter := m.nFs - 1
     ty := match k.Target {
         case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t) => t
         case mir.Callee.Value(x) => m.T.Repr(m.opType(waiter, x))
@@ -2926,15 +3100,15 @@ fn (m mut Machine&) taskEnded(fr frame) {
                 case _ { passed++ }
             }
         }
-        for v in range passed { m.varIds[m.frames[nf].Vars + v] = m.program }
+        for v in range passed { m.ws[m.fs[nf].Vars + v] = m.program }
         m.loadCaptures(nf, g, env, passed)
         return
     }
     # no clause: kept for the join, re-encoded under its list, where the join keeps none from an earlier task
     wf := m.fnOfFrame(waiter)
-    match wf.Blocks[m.frames[waiter].Block].T {
+    match wf.Blocks[m.fs[waiter].Block].T {
         case mir.Term.Wait(_, j, _, _, _) {
-            js := m.scopeIds[m.frames[waiter].Scopes + I64(j)]
+            js := m.ws[m.fs[waiter].Scopes + I64(j)]
             sc := js & slotMask
             if m.scopes[sc].Kept == 0 {
                 m.scopes[sc].Kept = m.recode(fr.Code, errs, types.ListId(I32(m.scopes[sc].Errors)))
@@ -2949,30 +3123,33 @@ fn (m mut Machine&) taskEnded(fr frame) {
 
 # runs until the frames are back to base or the machine stops
 fn (m mut Machine&) loop(base I64) {
-    for m.frames.Len() > base and not m.halted {
+    for m.nFs > base and not m.halted {
         m.Steps++
         if m.StepBudget >= 0 and m.Steps > m.StepBudget {
             m.refuse(WhySteps)
             return
         }
-        fi := m.frames.Len() - 1
-        fr := m.frames[fi]
-        if m.closing.Len() > fr.Closing {
+        fi := m.nFs - 1
+        if m.closing.Len() > m.fs[fi].Closing {
             m.stepClose()
             continue
         }
-        f := m.fns[fr.Fn]
-        bb := f.Blocks[fr.Block]
-        if fr.Pending {
-            m.frames[fi].Pending = false
-            if fr.Stmt < bb.Stmts.Len() {
-                m.frames[fi].Stmt += 1
+        k, b := m.fs[fi].Fn, m.fs[fi].Block
+        i := m.cf[k].Start[b] + m.fs[fi].Stmt
+        if m.fs[fi].Pending {
+            m.fs[fi].Pending = false
+            if i < m.cf[k].Start[b + 1] {
+                m.fs[fi].Stmt += 1
             } else {
-                m.term(fi, bb.T)
+                m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
             }
             continue
         }
-        if fr.Stmt < bb.Stmts.Len() { m.stmt(fi, bb.Stmts[fr.Stmt]) } else { m.term(fi, bb.T) }
+        if i < m.cf[k].Start[b + 1] {
+            m.stmt(fi, m.cf[k].Stmts[i], m.cf[k].Global[i])
+        } else {
+            m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
+        }
     }
 }
 
@@ -2994,7 +3171,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     f := m.fns[fi]
     # where a refusal is reported until a statement with a place of its own is reached: the function itself
     m.stopFile, m.stopSp = f.File, f.Sp
-    base := m.frames.Len()
+    base := m.nFs
     nf := m.pushFrame(fi, rRequest, 0)
     if nf < 0 { return m.Stopped }
     for i in range args.Len() {
@@ -3004,7 +3181,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
             m.wr(m.localPtr(nf, l), m.width(ty), args[i])
         }
     }
-    for i in range f.Vars.Len() { m.varIds[m.frames[nf].Vars + i] = m.program }
+    for i in range f.Vars.Len() { m.ws[m.fs[nf].Vars + i] = m.program }
     m.loop(base)
     m.unwind(base)
     return m.Stopped
@@ -3034,7 +3211,7 @@ fn (m mut Machine&) Global(module I64, name source.NameId) Stop {
         }
     }
     if m.globals[g].State != 2 {
-        base := m.frames.Len()
+        base := m.nFs
         m.startGlobal(g)
         m.loop(base)
         m.unwind(base)
@@ -3056,7 +3233,7 @@ fn (m mut Machine&) InitGlobal(module I64, name source.NameId) Stop {
         return m.Stopped
     }
     if m.globals[g].State != 2 {
-        base := m.frames.Len()
+        base := m.nFs
         m.startGlobal(g)
         m.loop(base)
         m.unwind(base)
@@ -3066,11 +3243,11 @@ fn (m mut Machine&) InitGlobal(module I64, name source.NameId) Stop {
 
 # a stopped request's frames and scopes dropped, freed with no registration run
 fn (m mut Machine&) unwind(base I64) {
-    for m.frames.Len() > base {
-        fi := m.frames.Len() - 1
-        fr := m.frames[fi]
-        for i in range m.scopeIds.Len() - fr.Scopes {
-            id := m.scopeIds[fr.Scopes + i]
+    for m.nFs > base {
+        fi := m.nFs - 1
+        fr := m.fs[fi]
+        for i in range fr.Vars - fr.Scopes {
+            id := m.ws[fr.Scopes + i]
             if m.live(id) { m.dropScope(id) }
         }
         if m.live(fr.Store) { m.dropScope(fr.Store) }
@@ -3807,7 +3984,7 @@ test "undefined behaviour stops with where: outside an array, after a scope clos
     f5.End(back, mir.Term.Return(Sp0, mir.Operand.Copy(mir.L(r5))))
     tdefine(t, m, f5)
     assert m.Eval(tkey(5), I64[1]) == Stop.Refused(WhyDepth, 0, tspan(17))
-    assert m.frames.Len() == 0 and m.closing.Len() == 0
+    assert m.nFs == 0 and m.closing.Len() == 0
     # memory: a loop keeping an array every turn in the frame's scope
     f6 := nfn(t, 6)
     turn := f6.NewBlock()
