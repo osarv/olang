@@ -582,12 +582,12 @@ and leaks to those places disagreeing.
 diagnostics name them ("make it where 'st' lives"). Restating §8 as constraint solving would be a semantics project,
 not a port, so the pass follows §8 rule by rule. The pass runs on every body that checked without errors.
 
-**What of §8.8 runs where.** `scope` keeps, over the tree: confinement (O38: where a value made from a borrow may go),
-own regions and reach (O33, O34) as placement, and the release and borrow effect summaries. O39-O41's liveness check -
-a release or move while a loan is live, a task's loans held to its join - runs over MIR after lowering, as rustc's
-non-lexical lifetimes do: releases, holds, deferred code, joins, try exits and evaluation order (O33's arguments, O38's
-join pieces, F3's holds) are explicit only there, and deriving them a second time on the tree is what decision 49's
-reviews found drifting. It gives errors only, and the plan comes before MIR, so there is no cycle.
+**What of §8.8 runs where.** Section 8.8 (`own`, `take`, loans, O30-O42) was removed from the language on 2026-10-18
+(round 3 of `docs/memory.md`); freeing early is the compiler's (O8d), not yet built. What is left of it is M19g, a
+Vec's view used after the Vec may have grown, and that is `views` (section 1.6.1's summaries): its own pass after
+`check`, errors only, over the tree - summaries over the call graph's components, then a forward dataflow walk of each
+body, the stage 0 analysis (`settleVecViews`) rebuilt on the typed core. Early freeing, when it comes, needs a
+liveness of its own over MIR, where releases, deferred code, joins and try exits are explicit.
 
 ### 1.8 MIR, lowering and evaluation (`mir`, `lower`, `eval`)
 

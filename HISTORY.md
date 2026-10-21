@@ -16461,7 +16461,13 @@ plain data in flat lists (holdings, second names, tasks) copied at branches; pat
 text after the receiver's or base's expression as written (`callTok`, `placeEnd`), since the typed core keeps only
 whole spans: stage 0's rows put an error there; (2) the pass is its own module rather than part of `scope`, which a
 parallel agent was reworking and whose summaries (obligations) M19g shares nothing with; (3) checkdump gates it on a
-program with no diagnostics, as stage 0 does. Two module tests (one file each through load, names, check and views)
+program with no diagnostics, as stage 0 does; (4) the note saying where the task holding a view was started sits at
+its `spawn`, where stage 0 puts a spawned lambda's at the lambda or its call's `(` (it makes that statement without a
+start). Beside the checks, 28 more programs (recursion and mutual recursion through a cycle, views handed back two
+calls deep, conditionals, matches, payloads, structs and Lists holding views, second names through struct copies and
+repointed references, a parameter given another value, loops with break and continue, deferred growth, generic
+callees, methods, lambdas called directly and spawned) were compared with stage 0: the same errors and notes, but (4).
+Two module tests (one file each through load, names, check and views)
 pin the routes: a growth in the function, through a second name and through a call; a view given to a call that may
 grow its Vec, a task holding one; another Vec growing, a view taken again each turn. Cost: about 0.1-0.2 s on
 compiler/check.olang's and scope.olang's test builds (4,761 bodies in shared.olang's within its 0.4 s).
