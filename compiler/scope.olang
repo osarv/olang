@@ -1009,6 +1009,9 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     # a for-in's own variable is the loop's copy, never moved: it is no declaration of the program's (O26a)
     if s.qualifiesMove(loc, x) and not ctor and not s.loopElement(I64(l)) {
         rt := s.resultTerm(0)
+        # an array value returned from a function with no result scope (its type holds no reference) lasts only in the
+        # program's scope (T7b, as lower's copy of one is made there)
+        if s.isBlock(rt) and s.arenaValue(loc.Ty) and s.returnsArray() { rt = s.storageTerm() }
         if rt.Runs() and not s.isBlock(rt) {
             s.flowStart(l, 0)
             s.flCaps = false
@@ -1028,7 +1031,7 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     c := s.callOf(x)
     if c == null { return }
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.sums[callee].Done { return }
+    if callee < 0 or not s.summed(callee) { return }
     # a constructor's instance is built where it is declared, C2d holding it to what it holds (O18a)
     if s.P.T.Role(s.calleeType(c)) == types.RoleCtor { return }
     rv := s.resultVarOf(s.calleeType(c))
@@ -1208,7 +1211,7 @@ fn (s mut Scoper&) forced(callee I64, rv I64) Bool {
 # program's, a derived one or not known here
 fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) Term {
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.sums[callee].Done { return Term.None }
+    if callee < 0 or not s.summed(callee) { return Term.None }
     best := Term.None
     for r in s.sums[callee].Rels {
         if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv) { continue }
@@ -1249,7 +1252,7 @@ fn (s mut Scoper&) landTerm(a typed.Expr&) Term {
     if c == null { return Term.None }
     fty := s.calleeType(c)
     callee := s.bodyOf(c.Target)
-    if callee < 0 or not s.sums[callee].Done { return Term.None }
+    if callee < 0 or not s.summed(callee) { return Term.None }
     # a constructor's instance is built where its parameter is bound, C2d holding it to what it holds (O18b)
     if s.P.T.Role(fty) == types.RoleCtor { return Term.None }
     rv := s.resultVarOf(fty)
@@ -1411,6 +1414,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt&) {
             if s.flMode == 0 {
                 xs List<I64>
                 s.carried(x, xs)
+                s.returnedArrays(x, xs)
                 for k in xs {
                     s.flAdd(k)
                     if not flHas(s.flDirect, k) { s.flDirect.Push(k) }
@@ -1633,6 +1637,8 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
     if s.P.T.Role(fty) == types.RoleCtor { return true }
     e := s.P.T.ResultFrom(fty, 0)
     if e == j or e == types.FromTypeVar { return true }
+    # an argument sharing the scope the result is borrowed from may be what is handed back (O13)
+    if e >= 0 and s.P.T.ShareOf(fty, j) == e { return true }
     callee := s.bodyOf(c.Target)
     if callee < 0 or not s.sums[callee].Done { return true }
     vars := s.P.T.ScopeVarsOf(fty)
@@ -1655,6 +1661,24 @@ fn (s mut Scoper&) carries(x typed.Expr&) Bool {
         if flHas(s.fl, k) { return true }
     }
     return false
+}
+
+# the array value locals a return gives whole - a result, or one of several: what is returned shares their storage
+# (T7b), so they live where the result goes (O26a)
+fn (s mut Scoper&) returnedArrays(x typed.Expr&, out mut List<I64>&) {
+    if x == null { return }
+    match x {
+        case typed.Expr.Read(_, ty, p, _) {
+            if s.arenaValue(ty) and wholeLocal(p) >= 0 { out.Push(wholeLocal(p)) }
+        }
+        case typed.Expr.Make(_, _, m) {
+            if m.Kind == typed.MakeKind.Tuple {
+                for it in m.Items { s.returnedArrays(it, out) }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { s.returnedArrays(y, out) }
+        case _ { }
+    }
 }
 
 # the locals a value carries where it is put: one it reads that holds references, one whose storage it borrows or
@@ -3624,6 +3648,30 @@ fn (s mut Scoper&) resultTerm(k I64) Term {
     return Term.Var(s.resultVar) if s.resultVar >= 0 else s.here()
 }
 
+# whether the body being judged is a function whose result is, or holds by value, an array value
+fn (s mut Scoper&) returnsArray() Bool {
+    return s.P.T.KindOf(s.B.Ty) == types.Kind.Func and s.arenaValue(s.P.T.Result(s.B.Ty))
+}
+
+# where storage a result is made of is built when its type holds no reference: the result scope where the function
+# has one, else the program's
+fn (s mut Scoper&) storageTerm() Term { return Term.Var(s.resultVar) if s.resultVar >= 0 else Term.Program }
+
+# whether a value of type t is, or holds by value, an array of a run-time length: storage of its own in an arena (T7b)
+fn (s mut Scoper&) arenaValue(t types.TypeId) Bool {
+    r := s.P.T.Repr(t)
+    match s.P.T.KindOf(r) {
+        case types.Kind.Array { return s.P.T.Length(r) == types.TypeId(0) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for p in s.P.T.Items(s.P.T.Parts(r)) {
+                if s.arenaValue(p) { return true }
+            }
+            return false
+        }
+        case _ { return false }
+    }
+}
+
 # result k's mark (ResultMark), where the body's type gives one its parameters can say
 fn (s mut Scoper&) resultMark(k I64) typed.Mark {
     if s.P.T.KindOf(s.B.Ty) != types.Kind.Func { return typed.Mark.Bare }
@@ -3635,7 +3683,10 @@ fn (s mut Scoper&) resultMark(k I64) typed.Mark {
 fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
     t := x.Type()
     if not s.holds(t) {
-        s.val(x, Term.None)
+        # an array value: its type holds no reference, so its function may have no result scope to build it in (the
+        # typed contract gives none), and then what it is made of outlives the call only in the program's scope - where
+        # lower makes its copy of a returned array value too (T7b)
+        s.val(x, s.storageTerm() if s.arenaValue(t) else Term.None)
         return
     }
     dest := s.resultTerm(k)
@@ -4072,7 +4123,8 @@ fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
             return fresh(d)
         }
         case typed.Expr.Prim(_, ty, op, _, args) {
-            if op == typed.PrimOp.Convert and args.Len() > 0 and s.holds(ty) { return s.val(args[0], dest) }
+            # a conversion names its argument's storage (T29a): an array value's too
+            if op == typed.PrimOp.Convert and args.Len() > 0 and (s.holds(ty) or s.arenaValue(ty)) { return s.val(args[0], dest) }
             for a in args { s.val(a, Term.None) }
             return plain()
         }
@@ -4186,6 +4238,18 @@ fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
 # what reading a place gives (O20, O25h): a reference's referent's term, a value's references' - a held local's
 # temporary built where this one use puts it
 fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
+    # an array value read out of a call's built result shares that result's storage - nothing is copied - so the result is
+    # built where the value goes (T7b)
+    match p {
+        case typed.Place.Deref(_, _, r) {
+            if dest != Term.None and s.arenaValue(ty) and s.isFresh(r) {
+                v := s.val(r, dest)
+                if not s.holds(ty) { return plain() }
+                return existing(v.T)
+            }
+        }
+        case _ { }
+    }
     s.placeOperands(p)
     match p {
         case typed.Place.Local(_, _, id) {
@@ -4691,7 +4755,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 if s.P.T.Role(fty) == types.RoleCtor { land = false }
                 if not land and dest == Term.None and s.P.T.Role(fty) != types.RoleCtor {
                     cb := s.bodyOf(c.Target)
-                    land = cb >= 0 and s.sums[cb].Done and s.forced(cb, rv)
+                    land = cb >= 0 and s.summed(cb) and s.forced(cb, rv)
                 }
                 if land {
                     t := s.landByObligations(c, rv, beta)
@@ -4988,6 +5052,10 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         if ai >= 0 and s.lentLoopCopy(c.Args[ai]) { s.noteLoopCopy(rec, c.Args[ai]) }
     }
 }
+
+# whether a body's summary can be read: judged, or of the component being judged - what its rounds so far found, which
+# only grows, the rounds running to their fixed point before anything is said (7.2)
+fn (s mut Scoper&) summed(b I64) Bool { return s.sums[b].Done or s.sums[b].Judging }
 
 # whether a callee's relation on its result, through a call, asks this function's own storage to outlive this one's
 # result: what the call builds is returned (O26) - in a function, not a constructor, whose instance is its fields' own concern (C2d)
@@ -5729,5 +5797,68 @@ if TestBuild {
         assert s.sums[fg].Builds[0] and s.sums[fg].Real[0]
         assert s.sums[fp].Builds[0], "fanPeek makes a stand-in of its list's scope"
         assert not s.sums[fp].Real[0], "fanPeek builds into no real scope"
+    }
+
+    jpArrays String& = ("type E enum {\n"
+                        "    Leaf(n I64)\n"
+                        "    Pair(a E&, b E&)\n"
+                        "}\n"
+                        "type P struct() {\n"
+                        "    n I64 = 0\n"
+                        "}\n"
+                        "fn (p mut P&) mark(t E&p) E&p { return t }\n"
+                        "fn (p mut P&) build(n I64) E&p {\n"
+                        "    nt := E.Leaf(n)\n"
+                        "    return p.mark(nt)\n"
+                        "}\n"
+                        "fn shout(n I64) String {\n"
+                        "    out := String(Array<Char>(n, 'a'))\n"
+                        "    return out\n"
+                        "}\n"
+                        "fn label(n I64) String { return $n \"!\" }\n"
+                        "fn main() {\n"
+                        "    p := P()\n"
+                        "    e := p.build(4)\n"
+                        "    assert shout(3).Len() == 3\n"
+                        "    assert label(5).Len() == 2\n"
+                        "}\n")
+
+    test "plans: a returned array value with no result scope is built in the program's scope (T7b); a local lent for a parameter sharing the borrowed result's scope lives there (O26a)" {
+        dir := try os.MkTemp() catch os.OsError { unreachable }
+        defer { try os.RemoveAll(dir) catch os.OsError { } }
+        try os.WriteFile($dir "/main.olang", jpArrays) catch os.OsError { }
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                         source.Names(), diag.Diagnostics(false))
+        l.Load($dir "/main.olang")
+        r := names.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, false)
+        c.CheckProgram()
+        s := Scoper(p, c.Bodies)
+        s.Run()
+        assert rootRules(l) == "", rootRules(l)
+        # nt is lent for mark's t, which shares p's scope, the scope build's result is borrowed from: it lives there
+        b := bodyAt(l, c.Bodies, 9)
+        assert b >= 0
+        stored := false
+        for x in s.Plans[b].Stored {
+            if x == typed.Scope.Var(0) { stored = true }
+        }
+        assert stored, "nt is stored where p lives"
+        # shout's array and label's text are what they return, and neither has a result scope
+        for n in I64[13, 17] {
+            k := bodyAt(l, c.Bodies, n)
+            assert k >= 0
+            assert c.Bodies[k].Vars.Len() == 0, $c.Bodies[k].Vars.Len()
+            built := false
+            for i in range c.Bodies[k].Sites.Len() {
+                if s.Plans[k].Built[i] == typed.Scope.Program { built = true }
+                assert s.Plans[k].Built[i] != typed.Scope.Block(typed.BlockId(0)), "a site of line " $n " built in its frame"
+            }
+            assert built, "a site of line " $n " built in the program's scope"
+        }
     }
 }
