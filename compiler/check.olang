@@ -114,6 +114,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
     eqAt source.Span = source.Span(-1, -1)    # where the "==" being elaborated is written (M6b's error)
+    strAt source.Span = source.Span(-1, -1)   # where the "$" whose renderings are being found is written (M6b's error)
+    hashAt source.Span = source.Span(-1, -1)  # where the supplied Hash whose parts are being found is called (M6b's error)
     compoundAt source.Span = source.Span(-1, -1)  # a compound assignment's operator, while its target is read (E31)
     opIn source.Span = source.Span(-1, -1)    # where "in" is written, for the Has or Contains being built (E29)
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
@@ -910,6 +912,14 @@ fn protocolArity(cap String&) I64 {
 
 # a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
 # E10a, E11c); its private spelling is held to the same (M6b)
+# an operator method's shape error at its name - a private spelling's with a note saying why it is held to the shape,
+# since its name does not (M6b)
+fn (c mut Checker&) shapeErr(at source.Span, fd ast.Func&, cap String&, m msgs.Msg) {
+    rec := c.err(at, m)
+    name := c.text(fd.Name)
+    if name != cap { c.P.L.Diags.Note(rec, c.at(at), msgs.NoteProtocolSpelling(name, cap, cap)) }
+}
+
 fn (c mut Checker&) operatorMethod(f I64) {
     fd := c.P.FnDecl(f)
     name := c.text(fd.Name)
@@ -928,27 +938,27 @@ fn (c mut Checker&) operatorMethod(f I64) {
     at := c.nameSpan(fd)
     res := c.P.T.Result(sig)
     if res == types.NoreturnT {
-        c.err(at, msgs.NoreturnHere("an operator's method"))
+        c.shapeErr(at, fd, cap, msgs.NoreturnHere("an operator's method"))
     } else if sh.Result and (res == types.VoidT or c.P.T.KindOf(res) == types.Kind.Tuple) {
-        c.err(at, msgs.OperatorResult(sh.Name))
+        c.shapeErr(at, fd, cap, msgs.OperatorResult(sh.Name))
     } else if not sh.Result and res != types.VoidT {
-        c.err(at, msgs.SetatResult())
+        c.shapeErr(at, fd, cap, msgs.SetatResult())
     } else if not sh.MayFail and c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and not c.infersErrs(sig) {
         # an inferred set is judged once it is known (failForms)
-        c.err(at, msgs.MethodCannotFail(sh.Name))
+        c.shapeErr(at, fd, cap, msgs.MethodCannotFail(sh.Name))
     } else if sh.Name == "Less" and res != types.BoolT {
-        c.err(at, msgs.LessNotBool())
+        c.shapeErr(at, fd, cap, msgs.LessNotBool())
     } else if sh.Name == "Len" and res != c.i64() {
-        c.err(at, msgs.LenShape())
+        c.shapeErr(at, fd, cap, msgs.LenShape())
     } else if sh.Name == "Eq" or sh.Name == "Str" {
         writes := c.writable(ps[0])
         if sh.Name == "Eq" {
             writes = writes or c.writable(ps[1])
-            if res != types.BoolT or not c.P.T.Same(c.P.T.Plain(c.deref(ps[0])), c.P.T.Plain(c.deref(ps[1]))) { c.err(at, msgs.EqShape()) }
+            if res != types.BoolT or not c.P.T.Same(c.P.T.Plain(c.deref(ps[0])), c.P.T.Plain(c.deref(ps[1]))) { c.shapeErr(at, fd, cap, msgs.EqShape()) }
         } else if not c.sameRepr(c.deref(res), c.textType()) {
-            c.err(at, msgs.StrShape())
+            c.shapeErr(at, fd, cap, msgs.StrShape())
         }
-        if writes { c.err(at, msgs.EqStrWrites(sh.Name)) }
+        if writes { c.shapeErr(at, fd, cap, msgs.EqStrWrites(sh.Name)) }
     }
     c.pop()
 }
@@ -1304,7 +1314,11 @@ fn (c mut Checker&) partHashes(t types.TypeId, depth I64) {
         for name in String&["Hash", "hash"] {
             m := c.P.MethodOf(r, c.P.L.Names.Intern(name))
             if m < 0 or c.P.VarCount(generic.FnOwner(m)) > 0 { continue }
-            if name == "hash" and c.P.FnModule(m) != c.fr().Mi { continue }
+            if name == "hash" and c.P.FnModule(m) != c.fr().Mi {
+                # M6b: a private hash is its own module's - the supplied Hash elsewhere cannot use it
+                if c.hashAt.Start >= 0 { c.privateRole(m, r, "Hash", c.hashAt, "'Hash'") }
+                continue
+            }
             c.fnBody(c.P.FnInstance(m, types.ListId(0)))
             return
         }
@@ -4261,6 +4275,7 @@ fn (c mut Checker&) adapter(sp source.Span, x typed.Expr&c, want types.TypeId) t
     m := c.P.MethodOf(dt, c.P.L.Names.Intern("Call"))
     if m < 0 { m = c.P.MethodOf(dt, c.P.L.Names.Intern("call")) }
     if m < 0 or c.P.VarCount(generic.FnOwner(m)) > 0 { return null }
+    c.privateRole(m, dt, "Call", sp, msgs.Tok(c.src(sp)))
     c.P.Sig(m)
     inst := c.P.FnInstance(m, types.ListId(0))
     sig := c.P.InstanceSig(inst)
@@ -4330,12 +4345,13 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
         if c.isNamed(c.deref(t)) and not (c.isNumber(t) and c.P.Extends(t)) {
             mname := "Neg" if op == token.Tok.Minus else "BitNot"
             m := c.checkedForm(c.deref(t), mname, 0) if op == token.Tok.Minus else -1
-            if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern(mname)) }
-            if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern(lowerFirst(mname))) }
+            if m < 0 { m = c.roleUse(c.deref(t), mname, 0, sp, msgs.Tok(op.Text())) }
             if m >= 0 {
                 c.opCall = c.text(c.P.FnDecl(m).Name)
                 return c.invoke(sp, sp, m, x, null, Array<typed.Expr&>(0))
             }
+            # E31: a method of that name shaped otherwise is an ordinary one, and this operator has none
+            if c.notOperator(c.deref(t), mname, sp, msgs.Tok(op.Text()), 0, false) { return c.unknown(sp) }
             if c.isNumber(t) {
                 c.err(sp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $mname "'"))
                 return c.unknown(sp)
@@ -4630,7 +4646,7 @@ fn (c mut Checker&) operatorCall(sp source.Span, opSp source.Span, op token.Tok,
     if not c.isNamed(ta) { return null }
     # under checked the operation's checked form, where the type declares one (E31a)
     m := c.checkedForm(ta, name, 1)
-    if m < 0 { m = c.roleMethod(ta, name, 1) }
+    if m < 0 { m = c.roleUse(ta, name, 1, opSp, msgs.Tok(op.Text())) }
     if m < 0 { return null }
     c.opCall = c.text(c.P.FnDecl(m).Name)
     if op == token.Tok.Gt or op == token.Tok.Le {
@@ -4649,6 +4665,22 @@ fn (c mut Checker&) roleMethod(t types.TypeId, name String&, n I64) I64 {
     m = c.P.MethodOf(t, c.P.L.Names.Intern(lowerFirst(name)))
     if m >= 0 and c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() == n + 1 { return m }
     return -1
+}
+
+# a protocol method an operation found, by role: one of its private spelling, declared in another module than the code
+# using it, cannot be found there - said at the operation (M6b), the method kept so nothing else is said of it
+fn (c mut Checker&) roleUse(t types.TypeId, name String&, n I64, at source.Span, tok String&) I64 {
+    m := c.roleMethod(t, name, n)
+    c.privateRole(m, t, name, at, tok)
+    return m
+}
+
+fn (c mut Checker&) privateRole(m I64, t types.TypeId, cap String&, at source.Span, tok String&) Bool {
+    if m < 0 or c.frames.Len() == 0 { return false }
+    low := c.text(c.P.FnDecl(m).Name)
+    if low == cap or c.P.FnModule(m) == c.fr().Mi { return false }
+    c.P.L.Diags.ErrorOncePerLine(c.at(at), msgs.ProtocolPrivate(tok, c.ty(c.deref(t)), low, cap))
+    return true
 }
 
 fn lowerFirst(t String&) String {
@@ -5360,7 +5392,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
             derived = m >= 0 and c.checkOp(typed.Check.None) == typed.Check.Try
         }
         if m < 0 {
-            c.err(sp, msgs.NotIndexable(c.ty(t)))
+            if not c.notOperator(t, "Slice", sp, "'x[lo:hi]'", 2, false) { c.err(sp, msgs.NotIndexable(c.ty(t))) }
             return c.unknown(sp)
         }
         lm := c.roleMethod(t, "Len", 0)
@@ -5420,7 +5452,7 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     et := c.arrayOf(ct)
     xw := c.P.T.Elem(et) if et != types.UnknownT else types.UnknownT
     if et == types.UnknownT {
-        hm := c.roleMethod(ct, "Has", 1)
+        hm := c.roleUse(ct, "Has", 1, c.between(a.Span(), b.Span(), 2), "'in'")
         if hm >= 0 {
             hp := c.P.T.Items(c.P.T.Params(c.P.Sig(hm)))
             owner := generic.FnOwner(hm)
@@ -5437,8 +5469,8 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     }
     x := c.expr(a, xw)
     name := "Contains" if c.P.T.Same(c.deref(typeOf(x)), ct) else "Has"
-    m := c.P.MethodOf(ct, c.P.L.Names.Intern(name))
-    if m < 0 { m = c.P.MethodOf(ct, c.P.L.Names.Intern(lowerFirst(name))) }
+    m := c.roleUse(ct, name, 1, c.between(a.Span(), b.Span(), 2), "'in'")
+    if m < 0 and c.notOperator(ct, name, c.between(a.Span(), b.Span(), 2), "'x in c'", 1, false) { return c.lit(sp, types.BoolT, 0) }
     if m < 0 {
         # E29: x of the collection's own type asks Contains - a sub-collection
         c.err(c.between(a.Span(), b.Span(), 2), msgs.MembershipNoMethod(name, c.ty(ct)))
@@ -6464,7 +6496,9 @@ fn (c mut Checker&) rendered(sp source.Span, y ast.Expr&) typed.Expr&c {
         return c.unknown(sp)
     }
     seen := Map<types.TypeId, Bool>()
+    c.strAt = source.Span(sp.Start, sp.Start + 1)
     c.wantStr(typeOf(x), seen, 0)
+    c.strAt = source.Span(-1, -1)
     return x
 }
 
@@ -6479,6 +6513,7 @@ fn (c mut Checker&) wantStr(t types.TypeId, seen mut Map<types.TypeId, Bool>&, d
             for name in String&["Str", "str"] {
                 m := c.P.MethodOf(t, c.P.T.Names.Intern(name))
                 if m >= 0 {
+                    if c.strAt.Start >= 0 { c.privateRole(m, t, "Str", c.strAt, "'$'") }
                     c.strInstance(m, t)
                     return
                 }
@@ -7634,6 +7669,7 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&c, 
     if c.P.T.KindOf(t) == types.Kind.Func { return c.callBody(sp, fsp, t, typed.Callee.Value(fv), -1, null, args, null) }
     m := c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("Call"))
     if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("call")) }
+    c.privateRole(m, t, "Call", fsp, msgs.Tok(c.src(fsp)))
     if m >= 0 { return c.invoke(sp, fsp, m, fv, args, null) }
     # E11b: a "(" after a rendering in a join calls what it renders - the value inside is joined with '$(...)'
     tx := c.P.L.Mods[c.fr().Mi].Src.Text
@@ -7736,7 +7772,9 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return typed.Expr.Prim(sp, r, op, typed.Check.None, gather(c.exprs, from))
     }
     if name == "Hash" and args.Len() == 0 {
+        c.hashAt = nsp
         c.partHashes(rt, 0)
+        c.hashAt = source.Span(-1, -1)
         return c.callOf(sp, c.i64(), typed.Callee.Helper(typed.Helper.Hash, rt), c.one(c.value(rx, sp)))
     }
     return null
@@ -7895,7 +7933,7 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
         # under checked the checked form (E31a): CheckedAt where the type declares one
         tm := c.checkedForm(dt, "At", items.Len())
         if tm >= 0 { return c.invoke(sp, sp, tm, c.read(sp, base), items, null) }
-        m := c.roleMethod(dt, "At", items.Len())
+        m := c.roleUse(dt, "At", items.Len(), c.bracketIn(sp), "'['")
         if m >= 0 {
             return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedCheckedAt(sp, base, dt, items))
         }
@@ -7975,7 +8013,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
         if t == types.UnknownT { return null }
         # x[i] on a type with At (E31): the element read, a value with no storage - written through, it is written
         # back by SetAt (E31b, writeBack)
-        m := c.roleMethod(t, "At", items.Len())
+        m := c.roleUse(t, "At", items.Len(), c.bracketIn(sp), "'['")
         # under checked the checked form (E31a): CheckedAt where the type declares one - a chain's every link (E24)
         tm := c.checkedForm(t, "At", items.Len())
         if m < 0 and tm < 0 {
@@ -9008,7 +9046,10 @@ fn (c mut Checker&) stepMethod(sp source.Span, p typed.Place&c, t types.TypeId, 
         return true
     }
     pm := c.roleMethod(t, "Plus" if inc else "Minus", 1)
-    if pm < 0 { return false }
+    if pm < 0 {
+        # E31: an Inc shaped otherwise is an ordinary method, and "++" has none
+        return c.notOperator(t, "Inc" if inc else "Dec", sp, "'++'" if inc else "'--'", 0, false)
+    }
     pt := c.deref(c.P.T.Items(c.P.T.Params(c.P.Sig(pm)))[1])
     if not c.isNumber(pt) { return false }
     one := c.lit(sp, pt, floatBits(c.under(pt), 1.0) if c.P.T.IsFloat(c.under(pt)) else 1)
@@ -9109,8 +9150,7 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
             if dt == types.UnknownT or c.arrayOf(dt) != types.UnknownT { return false }
             # a compound one reads the element through At and writes it back (writeBack)
             if op != token.Tok.Assign { return false }
-            m := c.P.MethodOf(dt, c.P.L.Names.Intern("SetAt"))
-            if m < 0 { m = c.P.MethodOf(dt, c.P.L.Names.Intern("setAt")) }
+            m := c.roleMethod(dt, "SetAt", items.Len() + 1)
             if m < 0 {
                 osp := c.opAfter(target.Span(), 1)
                 if not c.notOperator(dt, "SetAt", osp, "'x[i] = v'", 2, true) { c.err(osp, msgs.SetatUndeclared(c.ty(base.Type()))) }
@@ -9974,8 +10014,8 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         return c.readLocal(sp, n)
     }
     dt := c.deref(st)
-    runs := c.roleMethod(dt, "RunFrom", 1)
-    next := c.roleMethod(dt, "Next", 0)
+    runs := c.roleUse(dt, "RunFrom", 1, sp, "'for'")
+    next := c.roleUse(dt, "Next", 0, sp, "'for'")
     if next >= 0 and not c.iterShaped(next) { next = -1 }   # S9a: an iterator's Next is "mut Next() T ? Exhausted"
     if runs >= 0 and next < 0 {
         c.walkRuns(sp, f, src, runs, cm, ce)
@@ -9985,7 +10025,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         c.walkIter(sp, f, src, next, cm, ce)
         return null
     }
-    iter := c.roleMethod(dt, "Iter", 0)
+    iter := c.roleUse(dt, "Iter", 0, sp, "'for'")
     if iter >= 0 {
         it := c.invoke(sp, f.Source.Span(), iter, src, null, Array<typed.Expr&>(0))
         nt := c.roleMethod(c.deref(typeOf(it)), "Next", 0)
@@ -9996,7 +10036,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         c.walkIter(sp, f, it, nt, cm, ce)
         return null
     }
-    atm := c.roleMethod(dt, "At", 1)
+    atm := c.roleUse(dt, "At", 1, sp, "'for'")
     if atm < 0 and f.Tried { atm = c.roleMethod(dt, "CheckedAt", 1) }   # S9e: under try, the checked form walks
     lm := c.roleMethod(dt, "Len", 0)
     if atm >= 0 and c.P.T.Items(c.P.T.Errors(c.P.Sig(atm))).Len() > 0 { c.fr().LoopFails++ }
@@ -10004,6 +10044,8 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         c.walkIndexed(sp, f, src, atm, lm, cm, ce)
         return null
     }
+    # E31: a Next shaped otherwise is an ordinary method, and "for" has nothing to walk with
+    if c.notOperator(dt, "Next", sp, "'for ... in'", 0, false) { return null }
     c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
     return null
 }
