@@ -1345,6 +1345,12 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
         match r.Hi {
             case Term.Var(i) {
                 if i < beta.Len() { to = beta[i] }
+                # constant data given for it lives in the program's scope; a variable nothing determines yet is bound
+                # after, by its own obligations or where the result lands (O18b), and constrains nothing here
+                if to == Term.None {
+                    if not s.staticVar(c, i) { continue }
+                    to = Term.Program
+                }
             }
             # a derived scope is where the argument's instance bound it, where its record says (O23a); else it outlives
             # where its instance is: landed there, an underestimate (O23)
@@ -1358,6 +1364,10 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
         }
         match to {
             case Term.Block(_), Term.Var(_) { }
+            # the program's, only where the callee builds nothing there: nothing is then kept to the end
+            case Term.Program {
+                if s.sumBuilds(callee, rv) { return Term.None }
+            }
             case _ { return Term.None }
         }
         if best == Term.None {
@@ -1369,6 +1379,25 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
         }
     }
     return best
+}
+
+# whether every argument determining a call's scope variable v is constant data (T25d), and one is
+fn (s mut Scoper&) staticVar(c typed.Call&, v I64) Bool {
+    fty := s.calleeType(c)
+    if fty == types.UnknownT { return false }
+    vars := s.P.T.ScopeVarsOf(fty)
+    if v >= vars.Len() { return false }
+    any := false
+    for i in range c.Args.Len() {
+        k := s.P.T.ShareOf(fty, i)
+        q := k if k >= 0 else i
+        if vars[v] != q { continue }
+        match s.unAway(c.Args[i]) {
+            case typed.Expr.Data(_, _, _, _) { any = true }
+            case _ { return false }
+        }
+    }
+    return any
 }
 
 # whether a call's result passed on as an argument lands by its obligations (O18c): its arguments' terms, read without
