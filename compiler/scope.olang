@@ -4021,6 +4021,10 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
         try s.targets.Pop() catch { }
         return
     }
+    if v.K == ValKind.Existing and kind != FitGlobal and s.instanceOutlivesArg(x, slot) {
+        try s.targets.Pop() catch { }
+        return
+    }
     if v.K == ValKind.Existing {
         # an assignment's own fit is said at its "=" (B11), a global's at the value (O1b)
         savedAt, savedSp := s.fitAt, s.fitSp
@@ -4030,6 +4034,38 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
     }
     if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None { s.freshIntoUnknown(sp, p, slot) }
     try s.targets.Pop() catch { }
+}
+
+# C2d at a store: a local a constructor call made, stored whole where an argument its instance holds, made in a block of
+# this function, does not outlive the slot - said at that argument, as stage 0 says it, with nothing more said of the
+# store (b6elemvalue). False otherwise, the store then judged as any other
+fn (s mut Scoper&) instanceOutlivesArg(x typed.Expr&, slot Term) Bool {
+    if not slot.Runs() { return false }
+    l := -1
+    match s.unAway(x) {
+        case typed.Expr.Read(_, _, q, _) { l = wholeLocal(q) }
+        case _ { }
+    }
+    if l < 0 or s.isRef(s.B.Locals[l].Ty) { return false }
+    from := try s.bindFrom.Get(l) catch default -1
+    init := try s.inits.Get(l) catch default null
+    c := s.callOf(s.unPromoted(init)) if init != null else null
+    if from < 0 or c == null or s.P.T.Role(s.calleeType(c)) != types.RoleCtor { return false }
+    callee := s.bodyOf(c.Target)
+    rv := s.resultVarOf(s.calleeType(c))
+    if callee < 0 or rv < 0 or not s.summed(callee) { return false }
+    for r in s.sums[callee].Rels {
+        if r.Why == 0 or r.Lo != Term.Var(rv) { continue }
+        ai := s.argOfVar(c, r.Hi)
+        if ai < 0 or from + ai >= s.bindTerms.Len() { continue }
+        t := s.bindTerms[from + ai]
+        # only existing storage of one of this function's blocks that closes first, given as the argument: anything else -
+        # a temporary built for the call included - the store's own fit judges
+        if not t.Runs() or s.order(t, slot) != FailsBlock or s.isFresh(c.Args[ai]) or s.madeLocal(c.Args[ai], 0) < 0 { continue }
+        if s.report { s.err(s.argAt(c.Args[ai]), msgs.InstanceOutlivesArg()) }
+        return true
+    }
+    return false
 }
 
 # whether a place is a "&p" field of an instance whose construction binding is not known here - reached through an

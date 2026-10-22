@@ -1118,3 +1118,28 @@ neither.
     assignment's `=` - as stage 0 says it; and a compound assignment through `SetAt` is said at its operator.
 48. **A condition's and an assert message's body for the evaluator** (BodyOf.Cond) builds in the program's scope, as a
     global's initializer does: it has no caller, its value is the evaluator's.
+
+### 9.9 Decided while building M6 (round 7, the port's own output under the scope sanitizer)
+
+49. **A local an arm of a returned conditional or match, or a try's default, gives is a returned local** (O26a, T7b):
+    `return both if c else mk(i)` moves `both` into the result scope, as `return both` does - the port had built it in
+    its block and returned it from there (a segfault of the sanitized compiler, emit's `compare`). Lowering copies a
+    returned array value read out of storage in any of those values into the result scope, as stage 0's
+    `cgBuiltInResult` (a field read in an arm, which no move covers).
+50. **A task's result is built where its target keeps it** (P1g, T11b): an array value takes the result's storage, so
+    the call builds it where the target's own storage is, never in the join block, which closes at the join; of several
+    targets the longest-lived storage, which outlives each. A discarded target (`_`) has none.
+51. **A value match's arm value is the match's**, built where the match stands (S12b, O18a), never in the arm's own
+    block, which closes as the arm ends (`name := match r { case A(i) => $f(i) ... }`, compiler/views.olang's `where`).
+52. **C2d at a store of a constructed local** (b6elemvalue): a local a constructor call made, stored whole where an
+    argument its instance holds - made in a block of this function that closes first - does not outlive the slot, is
+    C2d at that argument, as stage 0 says it, and nothing more is said of the store. Not a landing: the instance stays
+    where it was built (stage 0 refuses what a landing would accept, a constructor building a List in a kept local).
+53. **O10c's notes say where the short argument is made** (B11, stage 0's `noteMakeWhere`): through a call whose result
+    holds what an argument refers to (the callee's obligations on its result scope), every such argument made in a block
+    of this function; an index held for At and SetAt; a text value passed (`write '$' before it`); a Str's receiver
+    (`keep copies`). Not inside an instance of a generic: the type would be spelled as the generic writes it (G16b),
+    which nothing here does yet.
+54. **A plan says which of the body's scope variables it may build into** (`MayBuild`, decision 48), read off its
+    builds summary - so a lambda's prologue need ask for its thread's part only of a captured scope it may build into.
+    The emitter does not read it yet; it asks for every captured scope, which is sound.
