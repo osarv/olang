@@ -641,3 +641,9 @@ already exists (T7b).
 maybe for array literals too; several `for` clauses; a lazy form; elements holding references); O10b inferred
 obligations (come back to it with more code); built-in Number/Ordered constraints over primitives (they would give only
 errors and documentation - generic `+` already works).
+- QAQ ANSWERED 2026-10-22 (the seed, M11; the user: "only reseed when needed yes", "keep bootstrap until we pass
+  everything properly, then delete it"): (1) the committed seed (`seed/*.ll.xz`, `make seed`) is regenerated only when
+  compiler/ needs something the seed's compiler cannot build (Zig's zig1.wasm cadence; `make bootstrap` shows it),
+  not on every compiler change; (2) bootstrap/ stays until the port passes the whole suite on its own and the
+  stage-0 comparisons are replaced by stored goldens; then tag `stage0-final` and remove it (QAL's condition, made
+  precise).
