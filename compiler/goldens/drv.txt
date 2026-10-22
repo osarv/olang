@@ -1,0 +1,548 @@
+=== olang 
+| stdout:
+| olang: error[B1]: nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)
+| stderr:
+| status 1
+=== olang -debug
+| stdout:
+| olang: error[B1]: running a file needs a file
+| stderr:
+| status 1
+=== olang -race -sanitize -update
+| stdout:
+| olang: error[B1]: running a file needs a file
+| stderr:
+| status 1
+=== olang -x
+| stdout:
+| olang: error[B1]: unknown option '-x' - 'olang help' lists the options of running a file
+| stderr:
+| status 1
+=== olang -race build main.olang
+| stdout:
+| olang: error[B1]: the mode comes first: 'olang build' and then its options
+| stderr:
+| status 1
+=== olang build main.olang -x -y
+| stdout:
+| olang: error[B1]: unknown option '-x' - 'olang help' lists the options of build
+| stderr:
+| status 1
+=== olang --help
+| stdout:
+| olang: error[B1]: unknown option '--help' - 'olang help' lists the options of running a file
+| stderr:
+| status 1
+=== olang build -b main.olang
+| stdout:
+| olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build
+| stderr:
+| status 1
+=== olang test -output o main.olang
+| stdout:
+| olang: error[B1]: -output applies to build and compile, not to test
+| stderr:
+| status 1
+=== olang format -debug a.olang
+| stdout:
+| olang: error[B1]: -debug applies to running a file, build, compile and test, not to format
+| stderr:
+| status 1
+=== olang interpret -race p.olang
+| stdout:
+| olang: error[B1]: -race applies to running a file, build, compile and test, not to interpret
+| stderr:
+| status 1
+=== olang help -debug
+| stdout:
+| olang: error[B1]: -debug applies to running a file, build, compile and test, not to help
+| stderr:
+| status 1
+=== olang explain -check B1
+| stdout:
+| olang: error[B1]: -check applies to format, not to explain
+| stderr:
+| status 1
+=== olang build main.olang -target
+| stdout:
+| olang: error[B1]: -target needs a value after it: NAME
+| stderr:
+| status 1
+=== olang build -output
+| stdout:
+| olang: error[B1]: -output needs a value after it: PATH
+| stderr:
+| status 1
+=== olang compile main.olang -define
+| stdout:
+| olang: error[B1]: -define needs a value after it: Name=value
+| stderr:
+| status 1
+=== olang build -output W/adir main.olang
+| stdout:
+| olang: error[B3h]: -output W/adir is a directory - name the file to write
+| stderr:
+| status 1
+=== olang build -output W/nodir/x main.olang
+| stdout:
+| olang: error[B3h]: -output W/nodir/x: there is no directory W/nodir
+| stderr:
+| status 1
+=== olang compile -output W/adir main.olang
+| stdout:
+| olang: error[B3h]: -output W/adir is a directory - name the file to write
+| stderr:
+| status 1
+=== olang compile -target bogus-cpu main.olang
+| stdout:
+| olang: error[B12]: unknown target 'bogus-cpu' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+| stderr:
+| status 1
+=== olang compile -target riscv64-linux-gnu main.olang
+| stdout:
+| olang: error[B12]: olang does not build for 'riscv64-linux-gnu' - it builds for x86_64 and aarch64 Linux with the GNU C library
+| stderr:
+| status 1
+=== olang compile -target x86_64-apple-darwin main.olang
+| stdout:
+| olang: error[B12]: olang does not build for 'x86_64-apple-darwin' - it builds for x86_64 and aarch64 Linux with the GNU C library
+| stderr:
+| status 1
+=== olang compile -target x86_64-linux-gnu:a:b main.olang
+| stdout:
+| olang: error[B12]: unknown target 'x86_64-linux-gnu:a:b' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
+| stderr:
+| status 1
+=== olang compile -target aarch64-linux-gnu main.olang
+| stdout:
+| olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back end for that architecture cannot generate the BF16 code the runtime holds
+| stderr:
+| status 1
+=== olang build -target aarch64-linux-gnu main.olang
+| stdout:
+| olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back end for that architecture cannot generate the BF16 code the runtime holds
+| stderr:
+| status 1
+=== olang test -target aarch64-linux-gnu main.olang
+| stdout:
+| olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back end for that architecture cannot generate the BF16 code the runtime holds
+| stderr:
+| status 1
+=== olang interpret -target aarch64-linux-gnu main.olang
+| stdout:
+| olang: error[B12a]: interpret builds and runs on this machine, and '-target aarch64-linux-gnu' is another architecture or system - only compile builds for it
+| stderr:
+| status 1
+=== olang build -define X main.olang
+| stdout:
+| olang: error[B10]: -define takes Name=value, found 'X'
+| stderr:
+| status 1
+=== olang build -define X=1 -define X=2 main.olang
+| stdout:
+| olang: error[B10]: -define X=2: defined twice
+| stderr:
+| status 1
+=== olang build -define 1x=2 main.olang
+| stdout:
+| olang: error[B10]: -define 1x=2: the name is not an identifier
+| stderr:
+| status 1
+=== olang build -define X=1.2.3e main.olang
+| stdout:
+| main.olang: error: cannot open this file
+| compilation failed with 1 error
+| stderr:
+| status 1
+=== olang build -define X=0xZZ main.olang
+| stdout:
+| olang: error[B10]: -define X=0xZZ: not a number - '0x' and '0b' take digits of their own base
+| stderr:
+| status 1
+=== olang build -define X=99999999999999999999 main.olang
+| stdout:
+| olang: error[B10]: -define X=99999999999999999999: beyond 64 bits
+| stderr:
+| status 1
+=== olang build -define X=-99999999999999999999 main.olang
+| stdout:
+| olang: error[B10]: -define X=-99999999999999999999: beyond 64 bits
+| stderr:
+| status 1
+=== olang build -define X=1e400 main.olang
+| stdout:
+| olang: error[B10]: -define X=1e400: beyond F64's range
+| stderr:
+| status 1
+=== olang build -define TargetOs=x main.olang
+| stdout:
+| olang: error[B10a]: -define cannot redefine the built-in constant TargetOs
+| stderr:
+| status 1
+=== olang test -define TestBuild=1 main.olang
+| stdout:
+| olang: error[B10a]: -define cannot redefine the built-in constant TestBuild
+| stderr:
+| status 1
+=== olang build
+| stdout:
+| olang: error[B1]: build needs a file
+| stderr:
+| status 1
+=== olang build a.olang b.olang
+| stdout:
+| olang: error[B1]: build takes exactly one file
+| stderr:
+| status 1
+=== olang compile
+| stdout:
+| olang: error[B1]: compile needs a file
+| stderr:
+| status 1
+=== olang compile a.olang b.olang
+| stdout:
+| olang: error[B1]: compile takes exactly one file
+| stderr:
+| status 1
+=== olang test
+| stdout:
+| olang: error[B1]: test needs a file
+| stderr:
+| status 1
+=== olang interpret
+| stdout:
+| olang: error[B1]: interpret needs a file
+| stderr:
+| status 1
+=== olang format
+| stdout:
+| olang: error[B1]: format needs a file
+| stderr:
+| status 1
+=== olang bogus
+| stdout:
+| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run
+| stderr:
+| status 1
+=== olang main.txt
+| stdout:
+| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run
+| stderr:
+| status 1
+=== olang -debug main.txt
+| stdout:
+| olang: error[B1]: 'main.txt' is no olang file to run - a file's name ends in .olang
+| stderr:
+| status 1
+=== olang -debug test main.olang
+| stdout:
+| olang: error[B1]: the mode comes first: 'olang test' and then its options
+| stderr:
+| status 1
+=== olang help
+| stdout:
+| usage: olang MODE [OPTION...] FILE...   or   olang [OPTION...] FILE.olang [ARGUMENT...]
+| 
+| modes:
+|   FILE.olang  builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file
+|   build       builds one program, FILE.olang its root module, into build/ (B3)
+|   compile     compiles one module to an object, linking nothing (B2)
+|   test        runs each file's test blocks, each file built on its own (B3a)
+|   interpret   runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)
+|   format      rewrites each file in olang's one layout (B13)
+|   explain     prints a rule of the specification (B11a)
+|   help        lists the modes, or a mode's options
+| 
+| 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
+| stderr:
+| status 0
+=== olang help build
+| stdout:
+| usage: olang build [OPTION...] FILE.olang
+| builds one program, FILE.olang its root module, into build/ (B3)
+| 
+| options:
+|   -output PATH       writes the executable or the object to PATH (B3h)
+|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -race              builds with the data race detector (B2b)
+|   -sanitize          builds with the scope sanitizer (B2f)
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+| stderr:
+| status 0
+=== olang help run
+| stdout:
+| usage: olang [OPTION...] FILE.olang [ARGUMENT...]
+| builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file
+| 
+| options:
+|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -race              builds with the data race detector (B2b)
+|   -sanitize          builds with the scope sanitizer (B2f)
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+| stderr:
+| status 0
+=== olang help compile
+| stdout:
+| usage: olang compile [OPTION...] FILE.olang
+| compiles one module to an object, linking nothing (B2)
+| 
+| options:
+|   -output PATH       writes the executable or the object to PATH (B3h)
+|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -race              builds with the data race detector (B2b)
+|   -sanitize          builds with the scope sanitizer (B2f)
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+| stderr:
+| status 0
+=== olang help test
+| stdout:
+| usage: olang test [OPTION...] FILE.olang...
+| runs each file's test blocks, each file built on its own (B3a)
+| 
+| options:
+|   -debug             builds unoptimized, with debug information (B2c, B2e)
+|   -race              builds with the data race detector (B2b)
+|   -sanitize          builds with the scope sanitizer (B2f)
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+| stderr:
+| status 0
+=== olang help interpret
+| stdout:
+| usage: olang interpret [OPTION...] FILE.olang [ARGUMENT...]
+| runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)
+| 
+| options:
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+| stderr:
+| status 0
+=== olang help format
+| stdout:
+| usage: olang format [OPTION...] FILE.olang...
+| rewrites each file in olang's one layout (B13)
+| 
+| options:
+|   -check             rewrites nothing: lists each file not in the layout (B13)
+| stderr:
+| status 0
+=== olang help explain
+| stdout:
+| usage: olang explain RULE
+| prints a rule of the specification (B11a)
+| stderr:
+| status 0
+=== olang help help
+| stdout:
+| usage: olang help [MODE]
+| lists the modes, or a mode's options
+| stderr:
+| status 0
+=== olang help nope
+| stdout:
+| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run
+| stderr:
+| status 1
+=== olang help build test
+| stdout:
+| olang: error[B1]: help takes at most one mode
+| stderr:
+| status 1
+=== olang explain
+| stdout:
+| olang: error[B11a]: explain takes one rule, as 'olang explain B1'
+| stderr:
+| status 1
+=== olang explain B1 B2
+| stdout:
+| olang: error[B11a]: explain takes one rule, as 'olang explain B1'
+| stderr:
+| status 1
+=== olang explain B1
+| stdout:
+| §10.1 Compilation modes
+| 
+| **B1.** Each module — one `.olang` file (§4 M1) — is a **separate compilation unit**, compiled to its own
+| object file and linked with the others. The command line names one **mode**, the word after `olang`, and there is no
+| other entry point; or it names a file, which is built and run (B3g):
+| 
+| ```
+| command   ::= "olang" [ mode-word ] { option } { argument }
+| mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help"
+| option    ::= "-output" PATH | "-debug" | "-race" | "-sanitize" | "-target" NAME | "-define" NAME "=" VALUE
+|             | "-update" | "-check"
+| ```
+| 
+| A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
+| an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
+| `explain` (B11a) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
+| **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
+| the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
+| beginning with `-` that is no option is an error:
+| 
+| | option | applies to | rule |
+| |---|---|---|
+| | `-output PATH` | build, compile | B3h |
+| | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
+| | `-target NAME` | running a file, build, compile, test, interpret | B12 |
+| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret | B10, §4 M23c |
+| | `-check` | format | B13 |
+| 
+| `build` and `compile` take exactly one file, `test` and `format` one or more; for running a file and for `interpret`
+| every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
+| spellings: a flag of one character is an unknown option.
+| stderr:
+| status 0
+=== olang explain t6b
+| stdout:
+| §2.2 Primitive types
+| 
+| **T6b (numbers flow toward their base).** A number flows implicitly into a type that holds every value of its own,
+| so nothing is lost: into a wider type of the same signedness (`I8` → `I16` → `I32` → `I64`, `U8` → `U16` → `U32` →
+| `U64`), an unsigned one into a strictly wider signed one (`U8` → `I16`, `U16` → `I32`, `U32` → `I64`), and a float
+| into a wider float (`F16` → `F32`, `BF16` → `F32`, `F32` → `F64`; `F16` and `BF16` each keep something the other
+| loses, so neither flows into the other). Integers and floats never flow into each other. A declared type over a
+| numeric type (T29) flows into that type and on from it. Nothing flows
+| the other way: an `I64` into an `I32`, an `I32` into a `U32` or a `F64`, and an `I32` into a declared `Meters` are
+| each written as a conversion (E26, or the declared type's own, T29/T29d).
+| Where a value flows, it is converted at that point - sign-extended, zero-extended for `U8`, or extended to the
+| wider float - wherever a value fits a target (E12: an initializer, an assignment, an argument, a returned value).
+| Two numeric operands of an operator requiring one type (E6, E8, E9, E10) **meet** when one flows into the
+| other's type, and the operation is then the other's: `I32 + I64` is an `I64`, `U8 < I32` compares two
+| `I32`s, and a `Meters` beside an `I32` is an `I32`. Two that neither flows into - two declared types over one
+| base, an integer and a float - do not meet, and that is a compile-time error. A literal has no fixed type of its own
+| to meet with: beside a number it adapts (T6), or, where that number's type cannot hold it, meets it at the literal's
+| own type (E6d).
+| stderr:
+| status 0
+=== olang explain Zz9
+| stdout:
+| olang: error[B11a]: the specification has no rule Zz9
+| stderr:
+| status 1
+=== olang test W/none.olang
+| stdout:
+| W/none.olang: error: cannot open this file
+| W/none.olang: cannot be built, skipping
+| stderr:
+| status 1
+=== olang test W/adir
+| stdout:
+| W/adir: error[M1]: a directory - a module is one .olang file
+| W/adir: cannot be built, skipping
+| stderr:
+| status 1
+=== olang test /dev/null
+| stdout:
+| /dev/null: error: not a regular file
+| /dev/null: cannot be built, skipping
+| stderr:
+| status 1
+=== olang test W/none.olang W/adir /dev/null
+| stdout:
+| W/none.olang: error: cannot open this file
+| W/none.olang: cannot be built, skipping
+| W/adir: error[M1]: a directory - a module is one .olang file
+| W/adir: cannot be built, skipping
+| /dev/null: error: not a regular file
+| /dev/null: cannot be built, skipping
+| stderr:
+| status 1
+=== olang build W/none.olang
+| stdout:
+| W/none.olang: error: cannot open this file
+| compilation failed with 1 error
+| stderr:
+| status 1
+=== olang compile W/none.olang
+| stdout:
+| W/none.olang: error: cannot open this file
+| compilation failed with 1 error
+| stderr:
+| status 1
+=== olang interpret W/none.olang a b
+| stdout:
+| W/none.olang: error: cannot open this file
+| compilation failed with 1 error
+| stderr:
+| status 1
+=== olang W/none.olang a b
+| stdout:
+| W/none.olang: error: cannot open this file
+| compilation failed with 1 error
+| stderr:
+| status 1
+=== in a directory of programs: olang build hello.olang
+| stdout:
+| built ./build/hello
+| stderr:
+| status 0
+=== in a directory of programs: olang hello.olang
+| stdout:
+| hello 42
+| stderr:
+| status 0
+=== in a directory of programs: olang args.olang a -b c
+| stdout:
+| args.olang
+| a
+| -b
+| c
+| stderr:
+| status 0
+=== in a directory of programs: olang exit.olang
+| stdout:
+| stderr:
+| status 3
+=== in a directory of programs: olang fails.olang
+| stdout:
+| stderr:
+| unhandled error: E.BAD
+| (build with -debug to see where it came from)
+| status 1
+=== in a directory of programs: olang test tests.olang
+| stdout:
+| tests.olang:8:18: error[S18c]: this assertion is false, evaluated while compiling
+|     8 |     assert two() == 3
+|       |                  ^~
+| tests.olang: semantic errors, skipping
+| stderr:
+| status 1
+=== in a directory of programs: olang build bad.olang
+| stdout:
+| bad.olang:2:10: error: unknown name 'y'
+|     2 |     x := y
+|       |          ^
+| compilation failed with 1 error
+| stderr:
+| status 1
+=== in a directory of programs: olang -define N=7 defs.olang
+| stdout:
+| 7
+| stderr:
+| status 0
+=== in a directory of programs: olang interpret args.olang x y
+| stdout:
+| args.olang
+| x
+| y
+| stderr:
+| status 0
+=== in a directory of programs: olang interpret exit.olang
+| stdout:
+| stderr:
+| status 3
+=== in a directory of programs: olang format -check ugly.olang hello.olang
+| stdout:
+| ugly.olang
+| hello.olang
+| stderr:
+| status 1

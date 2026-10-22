@@ -219,6 +219,86 @@ fn Sections(t String&) I64 {
     return n
 }
 
+# ---- goldens ----
+#
+# A golden file (compiler/goldens/*.txt) holds stored outputs, a section each: a row "=== KEY", then the body's rows,
+# each written "| ROW", and "\\ no newline at end" after the last when the body does not end in one. Any text can be a
+# body, a row beginning "=== " included. A golden is captured on purpose by its tool's -capture (a make target), never
+# written by a check.
+
+# the sections of a golden: its keys in order, and each key's body
+type Golden struct() {
+    Keys List<String&> = List<String&>()
+    Bodies Map<String&, String&> = Map<String&, String&>()
+}
+
+# a section of a golden file, written as GoldenRead reads it back
+fn GoldenSection(key String&, body String&) String {
+    b := StringBuilder()
+    b.Push("=== " $key "\n")
+    for r in Rows(body) {
+        b.Push("| ")
+        b.Push(r)
+        b.PushChar('\n')
+    }
+    if body.Len() > 0 and body[body.Len() - 1] != '\n' { b.Push("\\ no newline at end\n") }
+    return b.ToString()
+}
+
+# a golden's text read into its sections; rows of another shape end the tool, since the file is not one
+fn GoldenParse(t String&, what String&) Golden {
+    g := Golden()
+    key String& = ""
+    body := StringBuilder()
+    open := false
+    for r in Rows(t) {
+        if r.StartsWith("=== ") {
+            if open { g.Bodies.Put($key, body.ToString()) }
+            key = $r[4:]
+            g.Keys.Push($key)
+            body.Clear()
+            open = true
+        } else if open and r.StartsWith("| ") {
+            body.Push(r[2:])
+            body.PushChar('\n')
+        } else if open and r == "|" {
+            body.PushChar('\n')
+        } else if open and r == "\\ no newline at end" {
+            s := body.ToString()
+            body.Clear()
+            body.Push(s[:s.Len() - 1] if s.Len() > 0 else s)
+        } else {
+            Die($what ": not a golden row: " $r)
+        }
+    }
+    if open { g.Bodies.Put($key, body.ToString()) }
+    return g
+}
+
+# the golden at path, read; a missing one ends the tool, naming the target that captures it
+fn GoldenRead(path String&, target String&) Golden {
+    t := try os.ReadFile(path) catch os.OsError {
+        Die("no golden " $path " - capture it with make " $target)
+        unreachable
+    }
+    return GoldenParse(t, path)
+}
+
+# writes a golden whole, through a file beside it renamed into place
+fn GoldenWrite(path String&, text String&) {
+    Write($path ".tmp", text)
+    try os.Rename($path ".tmp", path) catch os.OsError { Die("cannot write " $path) }
+}
+
+# FNV-1a over a text's bytes, 64 bits, as 16 hex digits - what a golden stores of a dump too large to keep
+fn Hash(t String&) String {
+    h U64 = 0xcbf29ce484222325
+    for c in t {
+        h = (h ^ U64(U8(c))) * 0x100000001b3
+    }
+    return h.Format(16).PadStart(16, '0')
+}
+
 test "rows are awk's" {
     assert Rows("a\nb\n").Len() == 2
     assert Rows("a\nb").Len() == 2
@@ -240,4 +320,19 @@ test "sorting is by bytes" {
     s := Sorted(Rows("b\nB\na\n"))
     assert s[0] == "B"
     assert s[2] == "b"
+}
+
+test "a golden section reads back as its body, whatever the body holds" {
+    for body in String&["", "a\n", "a\nb", "=== x\n| y\n\n", "\n\n", "z"] {
+        g := GoldenParse($GoldenSection("k one", body) $GoldenSection("k2", "x\n"), "test")
+        assert g.Keys.Len() == 2
+        assert g.Keys[0] == "k one"
+        assert (try g.Bodies.Get("k one") catch default "?") == body
+        assert (try g.Bodies.Get("k2") catch default "?") == "x\n"
+    }
+}
+
+test "a hash is FNV-1a's" {
+    assert Hash("") == "cbf29ce484222325"
+    assert Hash("a") == "af63dc4c8601ec8c"
 }

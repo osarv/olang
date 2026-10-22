@@ -86,9 +86,18 @@ fmtdiff: build/compiler_tools_fmt
 build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
 	$(OLANG) build compiler/olang.olang
 
-# M10's acceptance: the driver says what stage 0 says, for command lines decided before code generation and for whole builds
-drvdiff: build/out build/compiler_olang build/compiler_tools_drvdiff
+# the compiler a golden is captured from (compiler/goldens/): stage 0 while there is one, else the port ("make drvgold
+# GOLD_OLANG=build/stage1"). A golden is captured only by its own target, never by a check
+GOLD_OLANG ?= build/out
+
+# M10's acceptance: the driver says what compiler/goldens/drv.txt stores - what stage 0 said - for command lines decided
+# before code generation and for whole builds
+drvdiff: build/compiler_olang build/compiler_tools_drvdiff
 	build/compiler_tools_drvdiff
+
+# captures compiler/goldens/drv.txt again from $(GOLD_OLANG), after a message or a command line changes
+drvgold: $(GOLD_OLANG) build/compiler_tools_drvdiff
+	build/compiler_tools_drvdiff -capture $(GOLD_OLANG)
 
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
 tokdiff: build/tokdump build/compiler_tools_dump build/compiler_tools_tokdiff
@@ -335,7 +344,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap stage0 seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap stage0 seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.

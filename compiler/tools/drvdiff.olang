@@ -1,14 +1,19 @@
-# drvdiff - M10's acceptance so far: the self-hosted driver (compiler/olang.olang, built as build/compiler_olang) says
-# what stage 0 (build/out) says for every command line below - what each writes to standard output and to standard
-# error, and the status it ends with. These are the command lines whose outcome is decided before code is generated:
-# the command line's own mistakes (B1, B3h, B10, B10a, B11a, B12, B12a), help, explain, and files that cannot be built.
-# Then whole builds (Builds): the programs in Programs written into a directory of each compiler's own, and each command
-# line run there - building, running a file (its arguments and its first word, the file as written), test, interpret,
-# format - with what the compiler and what it runs write, and their status, compared the same way. (compile is left out:
-# its object is named by a hash of different IR.) Prints the differences and exits 1 if there are any.
+# drvdiff - M10's acceptance: the self-hosted driver (compiler/olang.olang, built as build/compiler_olang, or the compiler
+# $DRVDIFF_DRIVER names) says what stage 0 said for every command line below - what each writes to standard output and to
+# standard error, and the status it ends with - as compiler/goldens/drv.txt stores it, captured once from stage 0. These
+# are the command lines whose outcome is decided before code is generated: the command line's own mistakes (B1, B3h,
+# B10, B10a, B11a, B12, B12a), help, explain, and files that cannot be built. Then whole builds (Builds): the programs in
+# Programs written into a directory, and each command line run there - building, running a file (its arguments and its
+# first word, the file as written), test, interpret, format - with what the compiler and what it runs write, and their
+# status. (compile is left out: its object is named by a hash of the IR.) Prints the differences and exits 1 if there
+# are any.
 #
-# Run from the repository root after "make build/out build/compiler_olang" (make drvdiff). A case's words are split at
-# spaces; W stands for a scratch directory holding an empty directory "adir".
+#     drvdiff                    the driver against the golden
+#     drvdiff -capture COMPILER  the golden captured again from COMPILER (make drvgold; GOLD_OLANG names it)
+#
+# Run from the repository root (make drvdiff). A case's words are split at spaces; W stands for a scratch directory
+# holding an empty directory "adir" - the golden writes it W, as it writes the directory of programs D and the
+# repository's root $ROOT.
 
 import "std/os"
 import "toolkit"
@@ -129,48 +134,73 @@ Builds Array<String&> = String&[
 ]
 
 fn main() {
-    stage0 := "build/out"
-    driver := "build/compiler_olang"
-    for t in String&[stage0, driver] {
-        if not toolkit.Built(t) { toolkit.Die("drvdiff: " $t " is not built (make " $t ")") }
-    }
+    args := os.Args()
+    capture := args.Len() == 3 and args[1] == "-capture"
+    if args.Len() > 1 and not capture { toolkit.Die("usage: drvdiff [-capture COMPILER]") }
+    exe := $args[2] if capture else toolkit.Env("DRVDIFF_DRIVER", "build/compiler_olang")
+    if not toolkit.Built(exe) { toolkit.Die("drvdiff: " $exe " is not built (make " $exe ")") }
+    gpath := "compiler/goldens/drv.txt"
+    g := toolkit.Golden() if capture else toolkit.GoldenRead(gpath, "drvgold")
+    here := try os.Cwd() catch os.OsError { toolkit.Die("drvdiff: no working directory") }
     work := toolkit.Scratch("drvdiff")
     defer toolkit.Clean(work)
     try os.MkDir($work "/adir") catch os.OsError { toolkit.Die("drvdiff: cannot make " $work "/adir") }
-    bad I64 = 0
+    keys := List<String&>()
+    got := List<String&>()
     for line in Cases {
-        a := outcome(stage0, line, work)
-        b := outcome(driver, line, work)
-        if a != b {
-            bad++
-            toolkit.Say("-- olang " $line "\n")
-            toolkit.Say(toolkit.Head(toolkit.Diff(work, a, b), 12))
-        }
+        keys.Push($"olang " $line)
+        got.Push(normal(outcome(exe, line, work), work, "", here))
     }
-    here := try os.Cwd() catch os.OsError { toolkit.Die("drvdiff: no working directory") }
     std := $"OLANG_STD=" $here "/std"
-    dirs := String&[$work "/s0", $work "/s1"]
-    for dir in dirs {
-        try os.MkDir(dir) catch os.OsError { toolkit.Die("drvdiff: cannot make " $dir) }
-        for i in range ProgramNames.Len() { toolkit.Write($dir "/" $ProgramNames[i], ProgramTexts[i]) }
-    }
+    dir := $work "/programs"
+    try os.MkDir(dir) catch os.OsError { toolkit.Die("drvdiff: cannot make " $dir) }
+    for i in range ProgramNames.Len() { toolkit.Write($dir "/" $ProgramNames[i], ProgramTexts[i]) }
+    full := $exe if exe.StartsWith("/") else $here "/" $exe
     # stage 0 builds its formatter into its cache the first time, and says so: done once beforehand
-    outcome($here "/" $stage0, "format -check hello.olang", dirs[0], std, dirs[0])
+    outcome(full, "format -check hello.olang", dir, std, dir)
     for line in Builds {
-        a := outcome($here "/" $stage0, line, dirs[0], std, dirs[0])
-        b := outcome($here "/" $driver, line, dirs[1], std, dirs[1])
-        if a.Replace(dirs[0], "D") != b.Replace(dirs[1], "D") {
+        keys.Push($"in a directory of programs: olang " $line)
+        got.Push(normal(outcome(full, line, dir, std, dir), work, dir, here))
+    }
+    if capture {
+        b := StringBuilder()
+        for i in range keys.Len() { b.Push(toolkit.GoldenSection(keys[i], got[i])) }
+        toolkit.GoldenWrite(gpath, b.ToString())
+        toolkit.Say("drvdiff: " $keys.Len() " command lines captured from " $exe " into " $gpath "\n")
+        return
+    }
+    bad I64 = 0
+    ran := Map<String&, Bool>()
+    for i in range keys.Len() {
+        ran.Put(keys[i], true)
+        want := try g.Bodies.Get(keys[i]) catch {
             bad++
-            toolkit.Say("-- in a directory of programs: olang " $line "\n")
-            toolkit.Say(toolkit.Head(toolkit.Diff(work, a, b), 12))
+            toolkit.Say("-- " $keys[i] ": not in " $gpath " (make drvgold)\n")
+            continue
+        }
+        if want != got[i] {
+            bad++
+            toolkit.Say("-- " $keys[i] " (< golden, > " $exe ")\n")
+            toolkit.Say(toolkit.Head(toolkit.Diff(work, want, got[i]), 12))
         }
     }
-    n := Cases.Len() + Builds.Len()
+    for k in g.Keys {
+        if k not in ran {
+            bad++
+            toolkit.Say("-- " $k ": in " $gpath " and not run (make drvgold)\n")
+        }
+    }
     if bad > 0 {
-        toolkit.Say("drvdiff: " $bad " of " $n " command lines differ\n")
+        toolkit.Say("drvdiff: " $bad " of " $keys.Len() " command lines differ from the golden\n")
         os.Exit(1)
     }
-    toolkit.Say("drvdiff: no difference over " $n " command lines\n")
+    toolkit.Say("drvdiff: no difference from the golden over " $keys.Len() " command lines\n")
+}
+
+# an outcome with the directory of programs written D, the scratch directory W and the repository's root $ROOT
+fn normal(t String&, work String&, dir String&, here String&) String {
+    a := t.Replace(dir, "D") if dir != "" else $t
+    return a.Replace(work, "W").Replace(here, "$ROOT")
 }
 
 # what the compiler at exe writes for the command line line, and its status, as one text
