@@ -1140,8 +1140,20 @@ fn (s mut Scoper&) madeHere(x typed.Expr&) Bool {
         case typed.Expr.Seq(_, _, q) => s.madeHere(q.X)
         case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() > 0 and s.madeHere(args[0])
         case typed.Expr.Read(_, _, p, _) => s.heldPart(p)
+        # a conditional or a value match each of whose values makes it (E28, S12b; stage 0's copiesExistingRefs)
+        case typed.Expr.Cond(_, _, c) => s.madeHere(c.A) and s.madeHere(c.B)
+        case typed.Expr.Match(_, _, m) => s.matchMadeHere(m)
         case _ => false
     }
+}
+
+# whether every value a value match gives makes new storage - an arm that leaves gives none
+fn (s mut Scoper&) matchMadeHere(m typed.Match&) Bool {
+    if not m.IsValue { return false }
+    for a in m.Arms {
+        if a.Value != null and not s.madeHere(a.Value) { return false }
+    }
+    return m.NoMatch.Value == null or s.madeHere(m.NoMatch.Value)
 }
 
 # whether a place is a part of a held local whose initializer makes new storage: a destructured result (S4b)
@@ -3407,7 +3419,9 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
     s.targets.Push(p)
     s.placeOperands(p)
     if not s.holds(t) {
-        s.val(x, Term.None)
+        # an array value given a new length takes the temporary's storage (T11b), so the temporary is built where the
+        # place's own storage is (O18a) - never in the block the assignment stands in, which may close first
+        s.val(x, s.peekPlace(p, false) if s.arenaValue(t) else Term.None)
         try s.targets.Pop() catch { }
         return
     }
