@@ -4302,6 +4302,14 @@ fn (s mut Scoper&) fieldTerm(base typed.Place&, i I64) Term {
 }
 
 # whether a place is reached through an element of an array: no per-instance binding is known there (O23)
+# whether a callee's term is a derived scope ("&p" field) of the parameter whose argument is reached through an element
+fn (s mut Scoper&) derivedThroughElem(t Term, c typed.Call&) Bool {
+    match t {
+        case Term.Derived(p, _) { return p >= 0 and p < c.Args.Len() and throughElemExpr(s.unAway(c.Args[p])) }
+        case _ { return false }
+    }
+}
+
 fn throughElem(p typed.Place&) Bool {
     return match p {
         case typed.Place.Elem(_, _, _) => true
@@ -6138,6 +6146,8 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             continue
         }
         m := msgs.ReferenceNarrowed() if r.Exact else msgs.ScopeObligationUnmet()
+        # a "&p" field of an argument reached through an element: its binding is not known through this path (O23, O11)
+        if s.derivedThroughElem(r.Lo, c) or s.derivedThroughElem(r.Hi, c) { m = msgs.FieldBindingUnknown() }
         rec := s.err(s.nameSpan(sp), m)
         cb := s.Bodies[callee]
         s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
