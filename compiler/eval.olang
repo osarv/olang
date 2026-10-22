@@ -3917,6 +3917,14 @@ fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
         img.Blobs.Push(b)
         k++
     }
+    # K2b: what only the global's own read-only reference reaches, holding no reference itself, nothing can write - a
+    # constant, as the global itself is
+    gt := types.TypeId(I32(m.globals[g].Ty))
+    if m.T.IsRef(gt) and (m.T.PermOf(gt) & types.Writable) == 0 {
+        for to in img.Blobs[0].To {
+            if to > 0 and img.Blobs[to].At.Len() == 0 { img.Blobs[to].Constant = true }
+        }
+    }
     return img
 }
 
