@@ -54,7 +54,6 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     P
     Bodies
     Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
-    renderReps Map<types.TypeId, types.TypeId>  # a type rendered, by its Unnamed: the first asked for (helperTy)
     Gaps List<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
@@ -1461,14 +1460,9 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
 }
 
 # the type a helper is made for: one helper per type but for its function types' parameter names (types.Unnamed) - a
-# Render helper the first one asked for, whose names its function values render with (E11a)
+# Render helper per type with them, which its function values render with (E11a)
 fn (lw mut Lowerer&) helperTy(kind mir.HelperKind, ty types.TypeId) types.TypeId {
-    u := lw.P.T.Unnamed(ty)
-    if kind != mir.HelperKind.Render { return u }
-    r := try lw.renderReps.Get(u) catch default types.TypeId(-1)
-    if r >= types.TypeId(0) { return r }
-    lw.renderReps.Put(u, ty)
-    return ty
+    return ty if kind == mir.HelperKind.Render else lw.P.T.Unnamed(ty)
 }
 
 # a type's zero value (D13c), a call of its Zero helper: all zero bits, its constructor on its parameters' defaults or
@@ -2620,8 +2614,10 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         if res != types.VoidT { out.Push(" " $ln.spell(res, true)) }
         es := t.Items(t.Errors(ty))
         if es.Len() > 0 {
-            out.Push(" ?")
-            for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
+            # QY: a function type's several error items parenthesized
+            out.Push(" ? (" if es.Len() > 1 else " ? ")
+            for i in range es.Len() { out.Push($(", " if i > 0 else "") $ln.spell(t.ErrOf(es[i]), true)) }
+            if es.Len() > 1 { out.PushChar(')') }
         }
         return out.ToString()
     }

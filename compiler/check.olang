@@ -2600,8 +2600,8 @@ fn (c mut Checker&) fold(x ast.Expr&) litv {
             return noLit()
         }
         case ast.Expr.Binary(_, op, a, b) {
-            va := c.fold(a)
-            vb := c.fold(b)
+            va := c.foldPart(a)
+            vb := c.foldPart(b)
             if not va.Ok or not vb.Ok { return noLit() }
             if va.IsFloat or vb.IsFloat {
                 if va.Big or vb.Big { return noLit() }
@@ -2653,6 +2653,18 @@ fn (c mut Checker&) litU64(x ast.Expr&) Bool {
         case ast.Expr.Binary(_, _, a, b) => c.litU64(a) or c.litU64(b)
         case _ => c.fold(x).Big
     }
+}
+
+# an operand of a literal-only operation folded: a character literal there is its code, an integer literal (T6a, as
+# stage 0: 'a' + 1 is the I64 98)
+fn (c mut Checker&) foldPart(x ast.Expr&) litv {
+    match x {
+        case ast.Expr.Lit(sp, kind) {
+            if kind == token.Tok.CharLit { return intLit(c.charValue(sp)) }
+        }
+        case _ { }
+    }
+    return c.fold(x)
 }
 
 # an integer literal value's sign and magnitude: exact for every value T6a gives a literal, I64's and U64's
@@ -3148,9 +3160,19 @@ fn (c mut Checker&) lengthsMeet(a types.TypeId, b types.TypeId) Bool {
 
 # an expression checked and made to fit a type: a literal adapting to it (T6), the rest by fit
 fn (c mut Checker&) exprTo(x ast.Expr&, want types.TypeId) typed.Expr&c {
+    lc := c.litCtor(x, want)
+    if lc != null { return lc }
     e := c.expr(x, want)
     if want == types.UnknownT { return e }
     return c.fit(e, want, c.argSpan(x))
+}
+
+# T29d: a literal entering a declared number with a constructor - an initializer, an assignment, an argument, a returned
+# value - is that constructor called on it, run while compiling; null where x is no literal or want no such type
+fn (c mut Checker&) litCtor(x ast.Expr&, want types.TypeId) typed.Expr&c {
+    if x == null or want == types.UnknownT or not c.isNamed(want) or not c.litLike(x) { return null }
+    if c.declKind(want) != types.DeclKind.Over or not c.P.Body(want) or c.P.CtorSig(want) == types.UnknownT { return null }
+    return c.construct(x.Span(), x.Span(), want, Array<ast.Expr&>(1, x))
 }
 
 # what ":=" declares from its initializer (D15): text a String value (T29c), a literal its own type (T6a)
@@ -6077,6 +6099,16 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         }
         if c.flowsInto(c.deref(xt), base) or c.sameRepr(c.deref(xt), base) {
             if c.isRef(xt) { return c.convert(sp, x, c.P.T.Ref(t, c.P.T.PermOf(xt))) }
+            # T29a: an array named by a place converted names its storage - a place of the declared type, whose read is
+            # a copy where one is made and whose borrow is that storage, written where it may be
+            xp := readPlace(x)
+            if xp != null and c.P.T.KindOf(c.under(xt)) == types.Kind.Array and c.P.T.KindOf(base) == types.Kind.Array {
+                perm := types.Writable if c.placeWritable(xp) else types.ReadOnly
+                r := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(xt, perm), xp), c.P.T.Ref(t, perm))
+                # a fixed array's storage lent as one of a run-time length: a borrow, as a slice of it is (E16a)
+                if c.P.T.Length(c.under(xt)) != types.TypeId(0) and c.P.T.Length(base) == types.TypeId(0) { return r }
+                return c.read(sp, typed.Place.Deref(sp, t, r))
+            }
             if not c.flowsInto(xt, base) { return c.convert(sp, x, t) }
             return c.convert(sp, c.fit(x, base, args[0].Span()), t)
         }
@@ -6344,7 +6376,8 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
             if isDefault {
                 e = c.defaultArg(sp, f, k, recv != null, ps[k], c.calleeArgs(target))
             } else {
-                e = c.expr(args[i], ps[k])
+                e = c.litCtor(args[i], ps[k])
+                if e == null { e = c.expr(args[i], ps[k]) }
                 if c.P.T.KindOf(typeOf(e)) == types.Kind.Tuple and c.P.T.KindOf(ps[k]) != types.Kind.Tuple {
                     # D8c: several results are one value nowhere but as all of a call's arguments (D8d)
                     c.err(c.calleeSpan(args[i]), msgs.TupleNotAValue())
