@@ -1888,8 +1888,9 @@ fn (s mut Scoper&) carries(x typed.Expr&) Bool {
     return false
 }
 
-# the array value locals a return gives whole - a result, or one of several: what is returned shares their storage
-# (T7b), so they live where the result goes (O26a)
+# the array value locals a return gives whole - a result, or one of several, either value of a conditional (E28), any
+# value of a match (S12b) or a try's default: what is returned shares their storage (T7b), so they live where the result
+# goes (O26a)
 fn (s mut Scoper&) returnedArrays(x typed.Expr&, out mut List<I64>&) {
     if x == null { return }
     match x {
@@ -1901,6 +1902,23 @@ fn (s mut Scoper&) returnedArrays(x typed.Expr&, out mut List<I64>&) {
                 for it in m.Items { s.returnedArrays(it, out) }
             }
         }
+        case typed.Expr.Cond(_, _, c) {
+            s.returnedArrays(c.A, out)
+            s.returnedArrays(c.B, out)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if a != null { s.returnedArrays(a.Value, out) }
+            }
+            if m.NoMatch != null { s.returnedArrays(m.NoMatch.Value, out) }
+        }
+        case typed.Expr.Try(_, _, t) {
+            s.returnedArrays(t.X, out)
+            for c in t.Clauses {
+                for df in c.Defaults { s.returnedArrays(df, out) }
+            }
+        }
+        case typed.Expr.Seq(_, _, q) { s.returnedArrays(q.X, out) }
         case typed.Expr.Away(_, _, y) { s.returnedArrays(y, out) }
         case _ { }
     }
@@ -6854,14 +6872,22 @@ if TestBuild {
                         "    return out\n"
                         "}\n"
                         "fn label(n I64) String { return $n \"!\" }\n"
+                        "fn pickArm(n I64, c Bool) String {\n"
+                        "    if n > 0 {\n"
+                        "        both := label(n)\n"
+                        "        return both if c else label(n + 1)\n"
+                        "    }\n"
+                        "    return \"\"\n"
+                        "}\n"
                         "fn main() {\n"
                         "    p := P()\n"
                         "    e := p.build(4)\n"
                         "    assert shout(3).Len() == 3\n"
                         "    assert label(5).Len() == 2\n"
+                        "    assert pickArm(3, true).Len() == 2\n"
                         "}\n")
 
-    test "plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there (O26a)" {
+    test "plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there, as one a conditional's arm returns (O26a)" {
         dir := try os.MkTemp() catch os.OsError { unreachable }
         defer { try os.RemoveAll(dir) catch os.OsError { } }
         try os.WriteFile($dir "/main.olang", jpArrays) catch os.OsError { }
@@ -6899,5 +6925,13 @@ if TestBuild {
             }
             assert built, "a site of line " $n " built in the result scope"
         }
+        # a local a conditional's arm returns is what is returned: it lives in the result scope (O26a)
+        k := bodyAt(l, c.Bodies, 18)
+        assert k >= 0
+        moved := false
+        for x in s.Plans[k].Stored {
+            if x == typed.Scope.Var(0) { moved = true }
+        }
+        assert moved, "both is stored where the result goes"
     }
 }

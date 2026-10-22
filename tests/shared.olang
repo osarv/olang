@@ -13362,6 +13362,58 @@ test "O26a: a returned List, Map, struct, conditional, destructured local and re
     assert c3Sum(c3MkList(10)) + c3Sum(c3MakeBox("b", 4).items) + c3Sum(c3Destructured(3)) == 63
 }
 
+# O26a/T7b: text a function returns from a conditional's or a match's value, or a try's default, holding a local made in
+# an inner block (the port built it in that block and returned it from there)
+fn c3Mk(i I64) String { return "v" $i }
+type c3Held struct(s String&) { s }
+fn c3PickArm(i I64, eq Bool) String {
+    if i >= 0 {
+        both := c3Mk(i)
+        return both if eq else c3Mk(i + 100)
+    }
+    return "none"
+}
+fn c3PickMatch(i I64) String {
+    if i >= 0 {
+        a := c3Mk(i)
+        return match i % 2 {
+            case 0 => a
+            case _ => c3Mk(i + 200)
+        }
+    }
+    return "none"
+}
+fn c3PickField(i I64) String {
+    if i >= 0 {
+        h := c3Held(c3Mk(i))
+        return h.s if i > 0 else c3Mk(i + 300)
+    }
+    return "none"
+}
+error c3Err { BAD }
+fn c3Fails(i I64) String ? c3Err {
+    if i > 0 { error c3Err.BAD }
+    return c3Mk(i)
+}
+fn c3PickTry(i I64) String {
+    if i >= 0 {
+        d := c3Mk(i + 400)
+        return try c3Fails(i) catch default d
+    }
+    return "none"
+}
+C3Arms String = $c3PickArm(3, true) $c3PickMatch(4) $c3PickField(5) $c3PickTry(6)
+test "O26a: a local a conditional, a match or a try's default returns outlives the call" {
+    a := c3PickArm(sbRun * 3, true)
+    b := c3PickArm(sbRun * 3, false)
+    m := c3PickMatch(sbRun * 4)
+    f := c3PickField(sbRun * 5)
+    t := c3PickTry(sbRun * 6)
+    sbChurn()
+    assert a == "v3" and b == "v103" and m == "v4" and f == "v5" and t == "v406"
+    assert C3Arms == "v3v4v5v406"
+}
+
 # O25e: an immutable global List or Map is read through its methods - a global is in the program's scope, its storage
 # and its references alike
 C3Words List<String&> = c3Words()
