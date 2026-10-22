@@ -1237,6 +1237,11 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     dbgMeta StringBuilder
     sites Map<I32, I64>     # S18d: where this function's calls (1) and joins (2) are, by the start of their span
     sited Bool = false
+    # E11b: the builders whose text is measured and then written straight where it lands (direct), and the pieces of
+    # the one being written
+    direct Map<I64, Bool>
+    pieceKinds List<mir.WriteKind>
+    pieceOps List<mir.Operand>
 }
 
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
@@ -1489,7 +1494,9 @@ fn (fe mut fnEm&) run() {
             fe.head.Push("  %l" $i " = alloca " $lt "\n")
         }
     }
+    fe.findDirect()
     for i in range f.Scopes.Len() {
+        if fe.direct.Has(i) { continue }
         if f.Scopes[i].Kind == mir.ScopeKind.Builder {
             fe.head.Push("  %s" $i " = alloca %olang.builder\n  %s" $i "room = alloca [64 x i8], align 8\n")
         } else {
@@ -2241,6 +2248,11 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.Dead(_, _) { }
         case mir.Stmt.Open(_, sc) {
+            if fe.direct.Has(I64(sc)) {
+                fe.pieceKinds.Clear()
+                fe.pieceOps.Clear()
+                return
+            }
             if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Builder {
                 fe.w("store %olang.builder { ptr null, i64 0, i64 64, ptr null, ptr null }, ptr %s" $sc)
                 fe.w("store ptr %s" $sc "room, ptr %s" $sc)
@@ -2253,6 +2265,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             }
         }
         case mir.Stmt.Close(_, sc) {
+            if fe.direct.Has(I64(sc)) { return }
             if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Builder {
                 # a builder that never outgrew its room made no scope of its own: nothing to close (the rest is the
                 # runtime's __olang_sb_done)
@@ -2289,7 +2302,14 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.RegisterOwner(_, _, _) { fe.gap("RegisterOwner") }
         case mir.Stmt.Release(_, _) { fe.gap("Release") }
-        case mir.Stmt.Write(_, b, how, x) { fe.write(fe.scope(b), how, x) }
+        case mir.Stmt.Write(_, b, how, x) {
+            if fe.directRef(b) {
+                fe.pieceKinds.Push(how)
+                fe.pieceOps.Push(x)
+                return
+            }
+            fe.write(fe.scope(b), how, x)
+        }
         case mir.Stmt.CopyElems(_, dst, src, n) {
             d := fe.dataPtr(dst)
             sv := fe.dataPtr(src)
@@ -2300,6 +2320,120 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.Spawn(_, j, task) { fe.spawn(j, fe.F.Tasks[I64(task)]) }
     }
+}
+
+# E11b: the builders whose pieces are only text, characters, integers and Bools, written one after another and made
+# text at once - Open, Writes, the Text, Close in one block, as lowering writes a join with no rendering helper. Such a
+# text is measured, then written straight into storage of its length where it lands: no builder, no room in the
+# frame (a recursion through a join holds nothing but its operands, as stage 0's measured writes), no copy
+fn (fe mut fnEm&) findDirect() {
+    for bb in fe.F.Blocks {
+        n := bb.Stmts.Len()
+        for i in range n {
+            sc := I64(-1)
+            match bb.Stmts[i] {
+                case mir.Stmt.Open(_, s0) {
+                    if fe.F.Scopes[I64(s0)].Kind == mir.ScopeKind.Builder { sc = I64(s0) }
+                }
+                case _ { }
+            }
+            if sc < 0 { continue }
+            j := i + 1
+            for j < n and fe.plainWrite(bb.Stmts[j], sc) { j++ }
+            if j + 1 >= n { continue }
+            textOk := match bb.Stmts[j] {
+                case mir.Stmt.Assign(_, _, rv) => match rv {
+                    case mir.Rvalue.Text(b, _, _) => fe.refIs(b, sc)
+                    case _ => false
+                }
+                case _ => false
+            }
+            closeOk := match bb.Stmts[j + 1] {
+                case mir.Stmt.Close(_, s1) => I64(s1) == sc
+                case _ => false
+            }
+            if textOk and closeOk { fe.direct.Put(sc, true) }
+        }
+    }
+}
+
+fn (fe mut fnEm&) plainWrite(st mir.Stmt, sc I64) Bool {
+    return match st {
+        case mir.Stmt.Write(_, b, how, _) => fe.refIs(b, sc) and match how {
+            case mir.WriteKind.Bytes, mir.WriteKind.Char, mir.WriteKind.Int, mir.WriteKind.Uint, mir.WriteKind.Bool => true
+            case _ => false
+        }
+        case _ => false
+    }
+}
+
+fn (fe mut fnEm&) refIs(r mir.ScopeRef, sc I64) Bool {
+    return match r {
+        case mir.ScopeRef.Scope(s0) => I64(s0) == sc
+        case _ => false
+    }
+}
+
+fn (fe mut fnEm&) directRef(r mir.ScopeRef) Bool {
+    return match r {
+        case mir.ScopeRef.Scope(s0) => fe.direct.Has(I64(s0))
+        case _ => false
+    }
+}
+
+# a direct builder's text (findDirect): each piece's length, their sum allocated in into, each piece written there
+fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
+    k := fe.pieceOps.Len()
+    vs := Array<String&>(k, "")
+    ns := Array<String&>(k, "")
+    total := "0"
+    for i in range k {
+        x := fe.pieceOps[i]
+        xt := fe.otype(x)
+        v := fe.val(x, xt)
+        match fe.pieceKinds[i] {
+            case mir.WriteKind.Bytes {
+                data, n := fe.arrayParts(v, xt)
+                vs[i] = $data
+                ns[i] = $n
+            }
+            case mir.WriteKind.Char {
+                vs[i] = $v
+                ns[i] = $"1"
+            }
+            case mir.WriteKind.Bool {
+                vs[i] = $fe.let("select i1 " $v ", ptr " $fe.E.cstr("true") ", ptr " $fe.E.cstr("false"))
+                ns[i] = $fe.let("select i1 " $v ", i64 4, i64 5")
+            }
+            case mir.WriteKind.Uint {
+                vs[i] = $fe.zext64(v, xt)
+                fe.E.runtime("__olang_fmt_u64")
+                ns[i] = $fe.let("call i64 @__olang_fmt_u64(ptr null, i64 " $vs[i] ")")
+            }
+            case _ {
+                vs[i] = $fe.index(v, xt)
+                fe.E.runtime("__olang_fmt_i64")
+                ns[i] = $fe.let("call i64 @__olang_fmt_i64(ptr null, i64 " $vs[i] ")")
+            }
+        }
+        total = $ns[i] if i == 0 else fe.let("add i64 " $total ", " $ns[i])
+    }
+    fe.E.runtime("__olang_scope_alloc")
+    out := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(into) ", i64 " $total ")")
+    at := out
+    for i in range k {
+        match fe.pieceKinds[i] {
+            case mir.WriteKind.Char { fe.store("i8", vs[i], at) }
+            case mir.WriteKind.Uint { fe.let("call i64 @__olang_fmt_u64(ptr " $at ", i64 " $vs[i] ")") }
+            case mir.WriteKind.Int { fe.let("call i64 @__olang_fmt_i64(ptr " $at ", i64 " $vs[i] ")") }
+            case _ {
+                fe.E.textCopy()
+                fe.w("call void @olang_textcopy(ptr " $at ", ptr " $vs[i] ", i64 " $ns[i] ")")
+            }
+        }
+        if i + 1 < k { at = fe.let("getelementptr i8, ptr " $at ", i64 " $ns[i]) }
+    }
+    return fe.pair(total, out)
 }
 
 # where an array place's elements are
@@ -2448,6 +2582,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.Closure(code, ty, s, args, caps) { return fe.closure(code, ty, s, args, caps) }
         case mir.Rvalue.Recode(code, from, tl) { return fe.recode(fe.val(code, mir.I32T), from, tl) }
         case mir.Rvalue.Text(b, into, ty) {
+            if fe.directRef(b) { return fe.directText(into) }
             bp := fe.scope(b)
             data := fe.load("ptr", bp)
             n := fe.load("i64", fe.let("getelementptr %olang.builder, ptr " $bp ", i32 0, i32 1"))
