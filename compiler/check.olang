@@ -106,6 +106,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     globalTypes Map<pair.Pair<I64, I64>, types.TypeId>
     globalDecls List<pair.Pair<I64, I64>>  # (module, name): the globals in declaration order, the branches chosen (B5a)
     b5aSaid Map<I64, Bool>                 # the global bodies in a cycle said already (B5a)
+    litLocals Map<pair.Pair<I64, I64>, Bool>  # (body, local): a number ":=" declared of its literal's own type (T6a)
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
@@ -308,6 +309,7 @@ fn (c mut Checker&) reset() {
     c.globalTypes = Map<pair.Pair<I64, I64>, types.TypeId>()
     c.globalDecls = List<pair.Pair<I64, I64>>()
     c.b5aSaid = Map<I64, Bool>()
+    c.litLocals = Map<pair.Pair<I64, I64>, Bool>()
     c.exprs = List<typed.Expr&>()
     c.stmts = List<typed.Stmt&>()
     c.atRecs = List<atRec>()
@@ -3725,7 +3727,8 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     # numbers flow toward their base (T6b)
     if c.isNumber(have) and c.isNumber(want) and hk != types.Kind.Ref and wk != types.Kind.Ref {
         if c.P.Flows(have, want) { return c.convert(sp, x, want) }
-        c.err(sp, msgs.NumberDoesNotFlow(c.ty(have), c.ty(want), c.ty(want)))
+        rec := c.err(sp, msgs.NumberDoesNotFlow(c.ty(have), c.ty(want), c.ty(want)))
+        c.literalLocalNote(rec, c.literalLocalIn(x, have), want)
         return x
     }
     # a reference where a value is wanted: the value copied out (E12)
@@ -3984,6 +3987,36 @@ fn (c mut Checker&) inferred(x ast.Expr&, e typed.Expr&) types.TypeId {
         return c.P.T.Array(c.P.T.Elem(t), types.TypeId(0))
     }
     return t
+}
+
+# T6a/B11: the local read in x that ":=" made of type ty from a literal (n := 0, an I64) - -1 for none
+fn (c mut Checker&) literalLocalIn(x typed.Expr&, ty types.TypeId) I64 {
+    if x == null { return -1 }
+    match x {
+        case typed.Expr.Read(_, rt, p, _) {
+            match p {
+                case typed.Place.Local(_, _, id) {
+                    if c.P.T.Same(rt, ty) and c.litLocals.Has(pair.Pair(c.fr().Body, I64(id))) { return I64(id) }
+                }
+                case _ { }
+            }
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args {
+                r := c.literalLocalIn(a, ty)
+                if r >= 0 { return r }
+            }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# a note at local id's declaration: its type is its literal's own, and the type it should have is want
+fn (c mut Checker&) literalLocalNote(rec I64, id I64, want types.TypeId) {
+    if id < 0 { return }
+    l := c.cur().Locals[id]
+    c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteLiteralLocal(c.text(l.Name), c.ty(l.Ty), c.text(l.Name), c.ty(want)))
 }
 
 # a temporary's value before it was given storage
@@ -4397,6 +4430,13 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     if shift and want == types.UnknownT and numberLitsOnly(a) and lb.Ok and not lb.IsFloat and not lb.Big and (lb.I < 0 or lb.I >= 64) {
         c.err(b.Span(), msgs.ShiftUnadapted())
         return c.unknown(sp)
+    }
+    # E4a: integer literals whose exact sum, difference or product no type holds
+    if (op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star) and la.Ok and lb.Ok and not la.IsFloat and not lb.IsFloat {
+        if not c.fold(ast.Expr.Binary(sp, op, a, b)).Ok {
+            c.err(opSp, msgs.LiteralExprNoValue())
+            return c.unknown(sp)
+        }
     }
     if not la.Ok and not lb.Ok and (c.litLike(a) != c.litLike(b)) {
         if c.litLike(b) {
@@ -8851,7 +8891,18 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
                     same := c.P.T.Same(pt, parts[i]) or
                             (c.isRef(pt) and c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), c.deref(parts[i])))
                     if places[i] != null and not same {
-                        c.err(c.operandAt(targets[i]), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i].Type())))
+                        if c.isRef(pt) and not c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), parts[i]) {
+                            # the fix is the function's result, built where its result lands (study 4's r16)
+                            c.err(c.operandAt(targets[i]), msgs.SpawnResultAsRef(c.ty(parts[i]), c.ty(pt), c.src(c.calleeSpan(call)), c.ty(pt)))
+                        } else {
+                            rec := c.err(c.operandAt(targets[i]), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i].Type())))
+                            match places[i] {
+                                case typed.Place.Local(_, _, lid) {
+                                    if c.litLocals.Has(pair.Pair(c.fr().Body, I64(lid))) { c.literalLocalNote(rec, I64(lid), parts[i]) }
+                                }
+                                case _ { }
+                            }
+                        }
                     }
                 }
             }
@@ -9038,6 +9089,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         id := c.local(v.Names[i], nsp, t, kind, mark)
         if inferred { c.roLet(id, x) }
+        # T6a: a number its literal's own type declares, for the note where it does not flow (B11)
+        if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
         # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
         if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
