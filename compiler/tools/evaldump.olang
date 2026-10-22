@@ -1,5 +1,6 @@
-# evaldump - a program checked by the self-hosted checker, lowered (compiler/lower.olang) and run by the self-hosted
-# evaluator (compiler/eval.olang, compiler/interp.olang) as interpret runs it: M8's tool, as emitdump is M9's.
+# evaldump - a program checked by the self-hosted checker, placed by the scope pass, lowered (compiler/lower.olang)
+# and run by the self-hosted evaluator (compiler/eval.olang, compiler/interp.olang) as interpret runs it: M8's tool,
+# as emitdump is M9's.
 #
 #     evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]
 #
@@ -71,6 +72,7 @@ fn run(args Array<String&>&) I32 {
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
     x := interp.Exec(p, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
+    x.Place()
     # the command line the program is given: under -t the test binary's, as stage 0 names it (build/std_os_test)
     if testBuild {
         base := path[:path.Len() - 6] if path.EndsWith(".olang") else path

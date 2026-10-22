@@ -87,6 +87,7 @@ type Resolver struct(L mut load.Loader&) {
     scope Map<source.NameId, I64>
     undo List<pair.Pair<source.NameId, I64>>
     itemNames List<source.NameId>
+    itemInits List<source.NameId>   # the locals of the item declared with an initializer, one value each: S8c's candidates
     inCond Bool = false
     item I64 = 0
     unknownSaid List<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
@@ -499,6 +500,7 @@ fn (r mut Resolver&) startItem(mi I64) {
     r.scope.Clear()
     r.undo.Clear()
     r.itemNames.Clear()
+    r.itemInits.Clear()
     r.inCond = false
     r.item++
 }
@@ -881,6 +883,12 @@ fn (r mut Resolver&) varDecl(v ast.VarDecl&) {
     # a constructor's pun is its parameter, already in scope (C4)
     if v.Field and v.Ty == null and v.Values.Len() == 0 and not v.Infer { return }
     for i in range v.Names.Len() { r.declare(v.Names[i], v.NameSps[i]) }
+    # S8c: a local declared with its own value may be fixed - which the checker decides, knowing its type and its writes
+    if not v.Field and v.Values.Len() == v.Names.Len() {
+        for n in v.Names {
+            if n not in r.itemInits { r.itemInits.Push(n) }
+        }
+    }
 }
 
 # D3a, E29: a for-in's names are new - one already declared makes the loop an error, never a membership test
@@ -967,6 +975,8 @@ fn (r mut Resolver&) decideLocal(c ast.Expr&) (cond.Outcome, Bool) {
     r.L.CondParser(m)
     m.Scope.Locals.Clear()
     for n in r.itemNames { m.Scope.Locals.Push(n) }
+    m.Scope.Fixed.Clear()
+    for n in r.itemInits { m.Scope.Fixed.Push(n) }
     e mut cond.Eval&m = cond.Eval(m.Src.Text, r.L.Names, m.Scope, r.L.Consts)
     return e.Local(c)
 }
