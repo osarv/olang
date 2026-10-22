@@ -10284,14 +10284,14 @@ compiler/olang:CommandLine&	8 8	ptr	-	-
 compiler/olang:Passes	8 8	%"compiler/olang:Passes"	{ i64 }	fields 0
 compiler/runtime:Bad	4 4	i32	-	-
 compiler/scope:Gap	32 8	%"compiler/scope:Gap"	{ i64, %"compiler/source:Span", { i64, ptr } }	fields 0,8,16
-compiler/scope:Scoper	792 8	%"compiler/scope:Scoper"	{ ptr, %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<compiler/typed:Plan>", %"std/prelude/list:List<compiler/scope:Gap>", { ptr, ptr }, { ptr, ptr }, %"std/prelude/list:List<mut compiler/scope:summary&>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<I64, std/prelude/text:String&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", ptr, i64, i1, %"compiler/typed:Plan", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/typed:BlockId>", %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/scope:Term>", %"compiler/source:Span", i64, %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/list:List<compiler/scope:Term>", i64, i64, %"std/prelude/list:List<compiler/typed:Place&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", i1, %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", i1, i1, %"std/prelude/list:List<compiler/typed:BlockId>", { i64, [2 x i64] }, i1, %"compiler/source:Span", { i64, [2 x i64] }, i1, { i64, [2 x i64] }, i1, i1, i1, %"compiler/source:Span", %"std/prelude/list:List<compiler/scope:fnUse>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<Bool>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, { i64, [2 x i64] }, i1, i1, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, i32, i1, i1 }	fields 0,8,16,24,32,48,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,497,504,512,536,540,552,576,584,608,609,610,612,624,632,640,648,656,664,672,680,688,696,704,712,720,744,745,752,760,768,776,784,788,789
+compiler/scope:Scoper	800 8	%"compiler/scope:Scoper"	{ ptr, %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<compiler/typed:Plan>", %"std/prelude/list:List<compiler/scope:Gap>", { ptr, ptr }, { ptr, ptr }, %"std/prelude/list:List<mut compiler/scope:summary&>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<I64, std/prelude/text:String&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", ptr, i64, i1, %"compiler/typed:Plan", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/typed:BlockId>", %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/scope:Term>", %"compiler/source:Span", i64, %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/list:List<compiler/scope:Term>", i64, i64, %"std/prelude/list:List<compiler/typed:Place&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", i1, %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", i1, i1, %"std/prelude/list:List<compiler/typed:BlockId>", { i64, [2 x i64] }, i1, %"compiler/source:Span", { i64, [2 x i64] }, i1, { i64, [2 x i64] }, i1, i1, i1, %"compiler/source:Span", %"std/prelude/list:List<compiler/scope:fnUse>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<Bool>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, { i64, [2 x i64] }, i1, i1, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, i32, i1, i1 }	fields 0,8,16,24,32,48,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,497,504,512,536,540,552,576,584,608,609,610,612,624,632,640,648,656,664,672,680,688,696,704,712,720,728,752,753,760,768,776,784,792,796,797
 compiler/scope:Scoper&	8 8	ptr	-	-
 compiler/scope:Term	24 8	{ i64, [2 x i64] }	-	cases ;0;0;;0,8;0;
 compiler/scope:Val	32 8	%"compiler/scope:Val"	{ i32, { i64, [2 x i64] } }	fields 0,8
 compiler/scope:ValKind	4 4	i32	-	-
 compiler/scope:fnUse	40 8	%"compiler/scope:fnUse"	{ i64, %"compiler/source:Span", i64, i64, i32 }	fields 0,8,16,24,32
 compiler/scope:rel	72 8	%"compiler/scope:rel"	{ { i64, [2 x i64] }, { i64, [2 x i64] }, i1, %"compiler/source:Span", i64 }	fields 0,24,48,52,64
-compiler/scope:summary	64 8	%"compiler/scope:summary"	{ %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", i1, i1 }	fields 0,8,16,24,32,40,48,56,57
+compiler/scope:summary	72 8	%"compiler/scope:summary"	{ %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", i1, i1 }	fields 0,8,16,24,32,40,48,56,64,65
 compiler/scope:walked	16 8	%"compiler/scope:walked"	{ %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>" }	fields 0,8
 fn() compiler/olang:CommandLine	16 8	{ ptr, ptr }	-	ret %"compiler/olang:CommandLine" pass 
 fn() compiler/olang:Passes	16 8	{ ptr, ptr }	-	ret %"compiler/olang:Passes" pass 
@@ -10381,7 +10381,7 @@ fn(mut compiler/scope:Scoper&, I64, compiler/source:Span) compiler/source:Span	1
 fn(mut compiler/scope:Scoper&, I64, compiler/source:Span, std/prelude/text:String&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut compiler/scope:Scoper&, I64, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/scope:Scoper&, I64, compiler/typed:LocalId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, I64, compiler/types:TypeId, compiler/typed:Expr&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
+fn(mut compiler/scope:Scoper&, I64, compiler/types:TypeId, compiler/typed:Expr&, Bool, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
 fn(mut compiler/scope:Scoper&, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(mut compiler/scope:Scoper&, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
 fn(mut compiler/scope:Scoper&, compiler/scope:Term) compiler/typed:Scope	16 8	{ ptr, ptr }	-	ret { i64, [1 x i64] } pass vv
@@ -12796,6 +12796,45 @@ std/prelude/list:List<mut checks/cases/o17btrydefaultkept:BagState&>	8 8	%"std/p
 std/prelude/list:List<mut checks/cases/o17btrydefaultkept:BagState&>&	8 8	ptr	-	-
 std/prelude/list:listState<mut checks/cases/o17btrydefaultkept:BagState&>	88 8	%"std/prelude/list:listState<mut checks/cases/o17btrydefaultkept:BagState&>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
 std/prelude/list:listState<mut checks/cases/o17btrydefaultkept:BagState&>&	8 8	ptr	-	-
+== checks/cases/o17handlewalk.olang
+Array<mut Array<mut checks/cases/o17handlewalk:Node&>&>	16 8	{ i64, ptr }	-	-
+Array<mut checks/cases/o17handlewalk:Node&>	16 8	{ i64, ptr }	-	-
+Array<mut checks/cases/o17handlewalk:Node&>&	16 8	{ i64, ptr }	-	-
+checks/cases/o17handlewalk:Box	24 8	%"checks/cases/o17handlewalk:Box"	{ %"std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>", %"checks/cases/o17handlewalk:Hd", i64 }	fields 0,8,16
+checks/cases/o17handlewalk:Box&	8 8	ptr	-	-
+checks/cases/o17handlewalk:Hd	8 8	%"checks/cases/o17handlewalk:Hd"	{ ptr }	fields 0
+checks/cases/o17handlewalk:Hd&	8 8	ptr	-	-
+checks/cases/o17handlewalk:Node	16 8	%"checks/cases/o17handlewalk:Node"	{ ptr, i64 }	fields 0,8
+checks/cases/o17handlewalk:St	16 8	%"checks/cases/o17handlewalk:St"	{ { i64, ptr } }	fields 0
+checks/cases/o17handlewalk:W	24 8	%"checks/cases/o17handlewalk:W"	{ %"checks/cases/o17handlewalk:Box" }	fields 0
+fn() checks/cases/o17handlewalk:Box	16 8	{ ptr, ptr }	-	ret %"checks/cases/o17handlewalk:Box" pass 
+fn() checks/cases/o17handlewalk:Hd	16 8	{ ptr, ptr }	-	ret %"checks/cases/o17handlewalk:Hd" pass 
+fn() checks/cases/o17handlewalk:Node	16 8	{ ptr, ptr }	-	ret %"checks/cases/o17handlewalk:Node" pass 
+fn() checks/cases/o17handlewalk:St	16 8	{ ptr, ptr }	-	ret %"checks/cases/o17handlewalk:St" pass 
+fn() std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>" pass 
+fn() std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>" pass 
+fn(checks/cases/o17handlewalk:Box&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(checks/cases/o17handlewalk:Box) checks/cases/o17handlewalk:W	16 8	{ ptr, ptr }	-	ret %"checks/cases/o17handlewalk:W" pass v
+fn(checks/cases/o17handlewalk:Hd&) Array<mut checks/cases/o17handlewalk:Node&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
+fn(mut checks/cases/o17handlewalk:W&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(mut std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>&, mut checks/cases/o17handlewalk:Node&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>&, mut checks/cases/o17handlewalk:Node&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>&, I64) Array<mut checks/cases/o17handlewalk:Node&>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>&, I64) mut checks/cases/o17handlewalk:Node&	16 8	{ ptr, ptr }	-	ret ptr pass vv
+fn(std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>&, I64) mut Array<mut checks/cases/o17handlewalk:Node&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>&, I64, I64) Array<mut checks/cases/o17handlewalk:Node&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+mut Array<mut Array<mut checks/cases/o17handlewalk:Node&>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut checks/cases/o17handlewalk:Node&>&	16 8	{ i64, ptr }	-	-
+mut checks/cases/o17handlewalk:Node&	8 8	ptr	-	-
+mut checks/cases/o17handlewalk:St&	8 8	ptr	-	-
+mut checks/cases/o17handlewalk:W&	8 8	ptr	-	-
+mut std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>&	8 8	ptr	-	-
+mut std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>&	8 8	ptr	-	-
+std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>	8 8	%"std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>"	{ ptr }	fields 0
+std/prelude/list:List<mut checks/cases/o17handlewalk:Node&>&	8 8	ptr	-	-
+std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>	88 8	%"std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<mut checks/cases/o17handlewalk:Node&>&	8 8	ptr	-	-
 == checks/cases/o17lambdareads.olang
 checks/cases/o17lambdareads:Box	16 8	%"checks/cases/o17lambdareads:Box"	{ { i64, ptr } }	fields 0
 checks/cases/o17lambdareads:W	16 8	%"checks/cases/o17lambdareads:W"	{ %"checks/cases/o17lambdareads:Box" }	fields 0

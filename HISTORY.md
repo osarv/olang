@@ -20805,3 +20805,57 @@ port bugs it now avoids and records: B10c's `-define` over a top-level default i
 a text literal's type `String&`. Also found: stage 0's interpreter
 called execv without unistd.h (a warning gcc -Werror refuses).
 
+
+## Port M6: the scope pass, round 4 - compiler/*.olang clean, a result scope for array values (2026-10-21)
+
+The goal of the round: no scope error on compiler/*.olang that stage 0 does not give, and placement the driver (M10)
+can use in place of its interim "everything in the program's scope". The pass gave eleven such errors on
+compiler/olang.olang at the round's start (30b555f); it gives none now, and the three shapes the driver listed are
+answered.
+
+**O17 read through a handle** (eval.olang's `m.cf[i] = m.decode(f)`, interp.olang's `x.M.Define(f)`, views.olang's
+`merge(s, c)` over `frame.Conts`). `decode(f mir.Fn&)` walks `for b in f.Blocks` and reads `f.Blocks[bi]`; each walk
+calls `RunFrom`, `At` or `Len` on a borrow of `f.Blocks`, a `List` inline in what `f` names. The pass took every such
+call as keeping and storing into `f`'s region - `RunFrom` hands back a run, which hands back a chunk - so lending a
+split value to `decode` was O17's error. Stage 0 lends the `List` as its reference (O17b) and counts only what the
+callee stores there itself: `RunFrom`'s hand-out is judged where it lands, `r.tags.Push(t)` is a store (s5atbuilds).
+Two pieces made the port's agree: a reference local declared as a borrow of a part of a parameter, never assigned after
+(the for-in's hidden collection), is a second name for the parameter's region, as `c := p` was; and a summary now keeps
+`Puts` - what the body stores into a region itself or through a callee that does - apart from `Stores`, which counts
+handing a reference out too, and a handle lent as its reference contributes only its callee's `Puts`. On the way a
+narrower attempt was tried and reverted: judging a returned reference by the function's declared result rather than by
+the value made `fn (b Box&) get() Array<mut Node&>&b { return b.arr2 }` acceptable where stage 0 refuses it (through a
+read-only array, its writable elements can be stored through); the check now counts a returned reference into the
+region wherever something can be stored through it at any depth, and a slice of the region as such a reference - which
+also closed two pre-existing acceptances stage 0 refuses (`return b.arr2[0:1]`, `s := b.st; return s.first[0:1]`).
+
+**O26a through a part** (interp.olang's `p.Lengths = lengths` with `p` returned inside a `Checker`). A copy stored into
+a field of what flows into the result keeps its references where the source's are (O25h), so the source flows too; the
+plain-copy guard is now only for a copy taking a local's whole place. And what already lives where the result goes -
+the parameter a borrowed result is borrowed from - starts the flow, and an assignment's place is rooted through a
+dereference or a call's borrowed result (parse.olang:1316, check.olang:7836).
+
+**A result scope for array values** (T7b, the driver's first item). `types.ScopeVarsOf` now gives a function whose
+result is a run-time-length array held by value a `ResultVar`, as stage 0 gives it a hidden result scope (its IR has
+`@w_word(ptr %sarg0, ...)`): the caller passes the scope the result goes to, and `return b.ToString()` builds the text
+there instead of in the callee's frame. Checked through the port's own emitter: a program returning such arrays through
+two calls builds and runs. Lowering's copy of a returned array value still goes to the program's scope under the
+stand-in placement.
+
+**The verifier shape** (mir.olang's `Verify` and `Dump`, typed.olang's `Print`): `v := verifier(f, t); v.run(); return
+v.out.ToString()`. The walker holds the type table writably (`Canon` caches spellings in it), so where the instance is
+matters: built in the block, a spelling cached through `v.T` would be built there and kept in the table - stage 0 also
+refuses the shape when the function returns anything not built from `v` (C2d). Stage 0 accepts the compiler's code only
+because it moves `v` into the result scope through `ToArray`'s generic body's obligation, which it checks once for every
+instantiation; the port checks each instantiation (`ToArray<Char>` has none). So the source says it: `v mut verifier&t
+= verifier(f, t)`, the walker living where the table does - the same place stage 0's move put it, through the
+obligation tying the result scope to the table's.
+
+**Measured** (`make scopediff`, from 30b555f): first error 264 -> 265 of 280 (250 -> 251 exactly its scope errors);
+pinned message 260 -> 261; silent still 1 (+2 where the checker errs first); accepted programs scope clean 280 of 304 ->
+296 of 305 (one new run case, o17handlewalk); distinct error rows on accepted programs 52 -> 40, none on compiler/.
+
+**Left**: per-instance bindings of a constructor's own fields - `o := Outer&return(x, y); return o.mid.leaf`, Mid's
+`&p` field bound inside Outer's constructor to the instance's scope (tests/shared.olang's O10d rows, 9 of the 40) - and
+of call results (O13c), locals assigned after their declaration, for-in hidden locals; 15 cases still differing in
+their first error.

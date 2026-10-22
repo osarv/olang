@@ -576,8 +576,9 @@ fn (t mut Table&) listHolds(l ListId) Bool {
 # the scope variables a call of a function of this type passes, in order, as hidden arguments - read off the type alone,
 # so a call, the body it reaches and a function value's adapter agree (DESIGN.md 1.6.1): each parameter (the receiver
 # first) holding a reference and sharing no earlier one's, by its index; then ResultVar where a result is built or
-# written as a type variable (O13, O14b) and holds one, or the function is a constructor (its instance, C2d); a
-# destructor's is ClosingVar alone (C9a). A closure's captures are its environment's, never the type's (D16c)
+# written as a type variable (O13, O14b) and holds one, or is an array value whose storage is made where the result goes
+# (T7b), or the function is a constructor (its instance, C2d); a destructor's is ClosingVar alone (C9a). A closure's
+# captures are its environment's, never the type's (D16c)
 fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     role := t.Role(f)
     if role == RoleDtor { return I64[ClosingVar] }
@@ -590,7 +591,7 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     rs := t.Results(f)
     for k in range rs.Len() {
         e := t.ResultFrom(f, k)
-        if (e == OwnScope or e == FromTypeVar) and t.HoldsRefs(rs[k]) { built = true }
+        if (e == OwnScope or e == FromTypeVar) and (t.HoldsRefs(rs[k]) or t.runTimeArray(rs[k])) { built = true }
     }
     if built { out.Push(ResultVar) }
     return out.ToArray()
