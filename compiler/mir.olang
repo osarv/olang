@@ -398,6 +398,7 @@ type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
     Consts List<ConstNode>
     ConstItems List<I32>
     Bytes List<U8>
+    Taken List<BlockId>     # S18d: each clause's entry, where it takes an error - a kept error return trace cleared there
 }
 
 fn (f mut Fn&) AddLocal(l Local) LocalId {

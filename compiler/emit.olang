@@ -1374,9 +1374,18 @@ fn (fe mut fnEm&) run() {
             fe.pro.Push("  %vc" $j " = call ptr @__olang_capture_scope(ptr %vr" $j ")" $fe.dbgEntry() "\n")
         }
     }
+    taken Map<I64, Bool>
+    if fe.E.traced() {
+        for b in f.Taken { taken.Put(I64(b), true) }
+    }
     for b in range f.Blocks.Len() {
         fe.label(blockName(mir.BlockId(I32(b))))
         bb := f.Blocks[b]
+        # S18d: a clause takes the error - the trace it left is no one's now
+        if taken.Has(b) {
+            fe.E.runtime("__olang_ert_clear")
+            fe.w("call void @__olang_ert_clear()")
+        }
         for s in bb.Stmts { fe.stmt(s) }
         fe.term(bb.T)
     }
