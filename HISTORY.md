@@ -21334,9 +21334,16 @@ environment. SPEC B2e says so now. gdb's `info args`/`info locals` show `p = {x 
 (`olang_textcopy`, inlined), and a builder that never outgrew its room closed inline - bench/text 152.6M -> 146.6M
 instructions (stage 0 135.4M), level in time.
 
+**Decided (mine): a join of only text, characters, integers and Bools is measured, then written straight where it
+lands** (`findDirect`, `directText`): no builder, no room in the frame, no copy - stage 0's measured write. A builder's
+64-byte room sat in every frame holding a join, 160 bytes a frame of landing's joindepth recursion against stage 0's
+112, so 60,000 deep overflowed 8MB; the frame is stage 0's now (six pushes and 0x38). A join with a float, a quoted
+piece or a rendering helper keeps the builder.
+
 **Measured**: emitdiff 26 of 26 files, 1015 of 1015 tests as stage 0's (at cae753a); stage 2 == stage 3 at -debug but
-for the working directory in DIFile; -race and -debug -sanitize suites as above. **Left**: joindepth (landing) - a
-join's 64-byte room is in every frame holding a join, 160 bytes a frame of the recursion against stage 0's 112 (whose
-plain joins measure and write with no builder), so 60,000 deep overflows 8MB; scopesan's drive.c links stage 0's
+for the working directory in DIFile; -race and -debug -sanitize suites as above; every checks case through the debug
+driver - 85 failing, the suite agent's 84 and l1nul (its harness's grep on a NUL byte), e31bviewbigcond passing.
+**Left**: landing's callparts runs out of its 50MB - mk's result lands where `base` lives (the scope pass's O18c,
+`call B177 [V0, V0]`, not this round's); scopesan's drive.c links stage 0's
 symbol spelling (`stub_Touch`) of a function no program path reaches; capscope and the other IR-shape scenarios grep
 stage 0's spellings; frameenv's errors and -i's stale view are the checker's and the interpreter's.
