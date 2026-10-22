@@ -36,6 +36,8 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     decided Map<pair.Pair<I64, I64>, Bool>
     dead Map<pair.Pair<I64, I64>, Bool>
     lengths Map<String&, I64>
+    # B9c: the top-level conditions decided as errors - each said once the last check is made, the if taking no branch
+    condErrs List<CondErr>
     for {
         mark := l.Diags.Count()
         r := names.Resolver(l)
@@ -46,7 +48,8 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         c.Decided = decided
         c.Dead = dead
         c.CheckProgram()
-        if not decide(l, c, decided, dead, lengths) {
+        if not decide(l, c, decided, dead, lengths, condErrs) {
+            for e in condErrs { l.Diags.Error(e.At, e.M) }
             if l.Diags.Count() == mark { judgeViews(c) }
             return c
         }
@@ -62,7 +65,7 @@ fn judgeViews(c mut typecheck.Checker&) {
 
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was
 fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&
-    dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&) Bool {
+    dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&, condErrs mut List<CondErr>&) Bool {
     tops := l.PendingIfs()
     if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 { return false }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
@@ -111,11 +114,15 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     for t in tops {
         ti := findIf(l.Mods[t.First].Decls, t.Second)
         if ti == null { continue }
-        chosen, ok := chain(x, c, t.First, ti)
-        if ok {
-            l.Decide(t.First, t.Second, chosen)
-            made = true
+        chosen, ok, why, at := chain(x, c, t.First, ti)
+        if not ok {
+            # B9c: a condition that does not check here - what it uses exists only in the branches being decided - or
+            # whose evaluation stops is an error at it, decided now as stage 0 decides it: its if takes no branch
+            condErrs.Push(CondErr(at, msgs.CondUnseen() if why == "" else msgs.CondUndecidable(why)))
+            chosen = load.NoBranch
         }
+        l.Decide(t.First, t.Second, chosen)
+        made = true
     }
     # a condition that does not evaluate is the running program's, what its branches hold reported - once no decision
     # is left to make: one calling a function whose own if is still undecided may evaluate in the next check (S8b)
@@ -142,22 +149,39 @@ fn askNote(c mut typecheck.Checker&, a generic.ConstAsk&, rec I64) {
     c.P.L.Diags.Note(rec, diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.Msg(msgs.NoteHere().Kind, "", b.ToString()))
 }
 
+# a B9c condition decided as an error: where it is, and what is said
+type CondErr struct(At diag.Where, M msgs.Msg) {
+    At
+    M
+}
+
 # a pending top-level if's branch, its conditions evaluated in order (B9c): the first true one's, the else's after
-# them, load.NoBranch for none - and whether every condition read could be evaluated
-fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) (I64, Bool) {
+# them, load.NoBranch for none - and whether every condition read decided, or for the first that cannot, why: "" where it
+# does not check in its module, else what stopped its evaluation and where (stage 0's ERR_COND_UNDECIDABLE), and where
+# the condition is
+fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) (I64, Bool, String, diag.Where) {
+    d := c.P.L.Diags
+    file := c.P.L.Mods[mi].File
     k I64 = 0
     link := ti
     for link != null {
+        csp := link.Cond.Span()
+        at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
         b := c.CondBody(mi, link.Cond)
-        if b < 0 { return 0, false }
-        v, ok := x.Cond(b)
-        if not ok { return 0, false }
-        if v { return k, true }
+        if b < 0 { return 0, false, "", at }
+        v, s := x.CondStop(b)
+        match s {
+            case eval.Stop.None { }
+            case eval.Stop.Refused(why, f, sp) { return 0, false, $why " (" $line(d, f, sp) ")", at }
+            case eval.Stop.Exited(kind, f, sp, _) { return 0, false, $AbortWhy(kind) " (" $line(d, f, sp) ")", at }
+            case eval.Stop.Raised(_) { return 0, false, "it fails with an error no clause handles", at }
+        }
+        if v { return k, true, "", at }
         k++
-        if link.ElseIf == null { return (k if link.Else != null else load.NoBranch), true }
+        if link.ElseIf == null { return (k if link.Else != null else load.NoBranch), true, "", at }
         link = link.ElseIf
     }
-    return load.NoBranch, true
+    return load.NoBranch, true, "", diag.Where.Span(file, 0, 0)
 }
 
 # the top-level if whose first condition starts at that offset, in decls or a branch of an if in them
@@ -295,6 +319,15 @@ fn (x mut Exec&) Cond(body I64) (Bool, Bool) {
     s := x.M.Eval(k, Array<I64>(0))
     if s != eval.Stop.None { return false, false }
     return x.M.Int(x.M.Result, types.BoolT) != 0, true
+}
+
+# the same, with what stopped an evaluation that gave no value
+fn (x mut Exec&) CondStop(body I64) (Bool, eval.Stop) {
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return false, s }
+    return x.M.Int(x.M.Result, types.BoolT) != 0, s
 }
 
 # a body giving an integer evaluated (G21's constant arguments): its value, and whether evaluation reached one
