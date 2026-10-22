@@ -779,7 +779,10 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
     res := ln.T.Result(ln.B.Ty)
     v := ln.fit(ln.val(value), value, res, sp)
     # S19: deferred code runs after the result is computed - an array value read out of storage it may write is copied
-    if not ln.dead and ln.defers.Len() > 0 and ln.copiesArray(value, res) { v = ln.arrayCopy(v, res, sp) }
+    # (under the stand-in placement here, into the program's scope; under the plan by retArrays, into the result scope)
+    if not ln.dead and not ln.planned and ln.defers.Len() > 0 and ln.copiesArray(value, res) {
+        v = ln.arrayCopy(v, res, sp, mir.ScopeRef.Program)
+    }
     if ln.dead { return }
     l := ln.local(v, res, sp)
     ln.retArrays(l, res, value, sp)
