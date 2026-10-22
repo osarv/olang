@@ -2710,11 +2710,11 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     }
     if c.P.T.IsFloat(target) {
         # T6: an integer literal adapts to a float type it does not overflow
-        if floatOverflows(target, F64(v.I)) {
+        if floatOverflows(target, F64(U64(v.I)) if v.Big else F64(v.I)) {
             c.err(sp, msgs.LiteralRange(msgs.Tok(c.src(sp)), c.ty(want)))
             return c.unknown(sp)
         }
-        return c.lit(sp, want, floatBits(target, F64(v.I)))
+        return c.lit(sp, want, intFloatBits(target, v))
     }
     if not intFits(c.P.T, v, target) {
         if c.opOf(x) != sp {
@@ -2749,6 +2749,21 @@ fn (c mut Checker&) overflowsF64(x ast.Expr&) Bool {
         }
         nomatch { return true }
     }
+}
+
+# an integer literal's value as a float type's bits, rounded once (T4: never through F64 first)
+fn intFloatBits(t types.TypeId, v litv) I64 {
+    if v.Big {
+        u := U64(v.I)
+        if t == types.TypeId(13) { return I64(F32(u).Bits()) }
+        if t == types.TypeId(12) { return I64(BF16(u).Bits()) }
+        if t == types.TypeId(11) { return I64(F16(u).Bits()) }
+        return I64(F64(u).Bits())
+    }
+    if t == types.TypeId(13) { return I64(F32(v.I).Bits()) }
+    if t == types.TypeId(12) { return I64(BF16(v.I).Bits()) }
+    if t == types.TypeId(11) { return I64(F16(v.I).Bits()) }
+    return I64(F64(v.I).Bits())
 }
 
 fn floatBits(t types.TypeId, f F64) I64 {
@@ -8054,6 +8069,10 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
                 return true
             }
             pre mut Array<typed.Expr&>&c = null
+            # x[i] read through At (E31b): this SetAt on the copy, then x[i] written back - not under checked yet
+            if c.valueTemp(base) >= 0 and c.fr().Checks == 0 and c.checkedForm(dt, "SetAt", items.Len() + 1) < 0 {
+                return c.writeBack(sp, op, base, value, c.opAfter(target.Span(), 1), m, items)
+            }
             # under checked the checked form (R21, E31a): CheckedSetAt where declared, else the index checked against Len()
             tm := c.checkedForm(dt, "SetAt", items.Len() + 1)
             if tm >= 0 {
@@ -8395,8 +8414,10 @@ fn (c mut Checker&) replaceTemp(p typed.Place&c, t I64) typed.Place&c {
 
 # a store into x[i]... through At (E31b): x's place and the indices held, the value evaluated, then the element read
 # into a local, the store made into it, and the element written back by SetAt - nothing the program wrote runs
-# between the read and the write-back. Whether it is handled
-fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, value ast.Expr&, osp source.Span) Bool {
+# between the read and the write-back. With setM the store is that SetAt on p itself, its indices setItems held after
+# the levels' (x[i][j] = v, x[i] an element read: x[i]'s own SetAt, then x[i] written back). Whether it is handled
+fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, value ast.Expr&, osp source.Span, setM I64 = -1
+                              setItems Array<ast.Expr&>& = null) Bool {
     vsp := value.Span() if value != null else sp
     ri := c.valueTemp(p)
     if ri < 0 { return false }
@@ -8446,8 +8467,21 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         }
         held[l] = hs
     }
-    # then the value
+    # the SetAt's own indices, then its value at its parameter's type
     pt := p.Type()
+    setHeld List<I64>
+    if setM >= 0 {
+        pts := c.paramsOn(setM, pt)
+        for i in range setItems.Len() {
+            it := setItems[i]
+            a := c.value(c.expr(it, pts[1 + i] if 1 + i < pts.Len() else types.UnknownT), it.Span())
+            h := c.local(source.NameId(0), it.Span(), typeOf(a), typed.LocalKind.Held, typed.Mark.None)
+            c.emit(typed.Stmt.Let(it.Span(), typed.LocalId(I32(h)), a))
+            setHeld.Push(h)
+        }
+        pt = pts[pts.Len() - 1] if pts.Len() > 0 else types.UnknownT
+    }
+    # then the value
     x typed.Expr&c = null
     if op == token.Tok.Assign {
         x = c.exprTo(value, pt)
@@ -8488,8 +8522,15 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     p2 := c.replaceTemp(p, temps[0])
     c.notCapture(p2, sp)
     v := c.readLocal(sp, hv)
-    if op != token.Tok.Assign { v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Place.Target(sp, pt)), v) }
-    c.emit(typed.Stmt.Assign(sp, p2, v))
+    if setM >= 0 {
+        sa mut Array<typed.Expr&>&c = Array<typed.Expr&>(setHeld.Len() + 1)
+        for i in range setHeld.Len() { sa[i] = c.readLocal(sp, setHeld[i]) }
+        sa[setHeld.Len()] = v
+        c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, setM, c.read(sp, p2), null, sa)))
+    } else {
+        if op != token.Tok.Assign { v = c.prim(sp, pt, binaryOp(compoundOp(op)), c.read(sp, typed.Place.Target(sp, pt)), v) }
+        c.emit(typed.Stmt.Assign(sp, p2, v))
+    }
     for l in range nl {
         hs := held[l]
         sargs mut Array<typed.Expr&>&c = Array<typed.Expr&>(hs.Len() + 1)
@@ -8498,6 +8539,19 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sms[l], c.read(sp, bases[l]), null, sargs)))
     }
     return true
+}
+
+# a method's parameters, the receiver's first, as a receiver of type recv binds the method's variables (boundParam's);
+# Unknown where one is left open
+fn (c mut Checker&) paramsOn(f I64, recv types.TypeId) Array<types.TypeId> {
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
+    out := Array<types.TypeId>(ps.Len())
+    owner := generic.FnOwner(f)
+    nv := c.P.VarCount(owner)
+    b := generic.Binding(owner, nv)
+    if nv > 0 and ps.Len() > 0 { c.unify(ps[0], recv, b, false, true) }
+    for k in range ps.Len() { out[k] = c.deref(ps[k]) if nv == 0 else c.boundParam(ps, k, b) }
+    return out
 }
 
 # the value of the Temp a store reaches (valueTemp's)
