@@ -2183,8 +2183,18 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             b.PushChar('&')
         }
         case types.Kind.Func {
-            b.Push("fn")
-            c.spellList(b, c.P.T.Params(t), "(", ")")
+            b.Push("fn(")
+            ps := c.P.T.Items(c.P.T.Params(t))
+            ns := c.P.T.NamesOf(t)
+            for i in range ps.Len() {
+                if i > 0 { b.Push(", ") }
+                if ns.Len() == ps.Len() {
+                    b.Push(c.text(source.NameId(I32(ns[i]))))
+                    b.PushChar(' ')
+                }
+                c.spell(b, ps[i], false)
+            }
+            b.PushChar(')')
             if c.P.T.Result(t) != types.VoidT {
                 b.PushChar(' ')
                 c.spell(b, c.P.T.Result(t), false)
@@ -3341,6 +3351,9 @@ fn (c mut Checker&) fnValue(sp source.Span, f I64) typed.Expr&c {
     # an inferred set is what the value fails with (R1a)
     if c.infersErrs(sig) { sig = c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), c.bodyErrors(id), c.P.T.ScopesOf(sig)) }
     c.roFns.Push(roFn(id, 0, c.at(sp), "'" $c.text(c.P.FnDecl(f).Name) "'"))   # T25c
+    # its parameters' names, which "$" renders the value with (E11a)
+    d := c.P.FnDecl(f)
+    if d.Recv == null and d.S.Params.Len() == c.P.T.Items(c.P.T.Params(sig)).Len() { sig = c.P.T.WithNames(sig, c.P.SigNames(d.S)) }
     return typed.Expr.Fn(sp, sig, typed.FnVal.Named(typed.BodyId(I32(id))))
 }
 
@@ -3538,6 +3551,11 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     } else if c.shiftLit(a) and not c.shiftLit(b) {
         y = c.value(c.expr(b, types.UnknownT), b.Span())
         x = c.value(c.expr(a, c.literalBeside(typeOf(y)) if c.isInt(typeOf(y)) else types.UnknownT), a.Span())
+    } else if la.Ok and lb.Ok and not la.IsFloat and not lb.IsFloat and not shift and (c.litU64(a) or c.litU64(b)) {
+        # T6a: two literal-only operands of one width meet unsigned above signed - a U64 literal's beside an I64's
+        u := c.P.T.Prim("U64")
+        x = c.litOf(a, la, u if c.litFits(la, u) else types.UnknownT)
+        y = c.litOf(b, lb, u if c.litFits(lb, u) else types.UnknownT)
     } else {
         x = c.value(c.expr(a, types.UnknownT), a.Span())
         y = c.value(c.expr(b, types.UnknownT), b.Span())
@@ -5443,6 +5461,9 @@ fn (c mut Checker&) sigText(inst I64, body I64) String {
         if k + i < ps.Len() {
             b.PushChar(' ')
             c.spell(b, ps[k + i], false)
+            # a parameter sharing an earlier one's scope says whose ("b T&a", O4b)
+            e := c.P.T.ShareOf(sig, k + i)
+            if c.isRef(ps[k + i]) and e >= k and e - k < i { b.Push(c.text(fd.S.Params[e - k].Name)) }
         }
     }
     b.PushChar(')')
@@ -9043,7 +9064,9 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     c.pop()
     c.state[id] = 2
     c.roFns.Push(roFn(id, 0, c.at(sp), "this lambda"))   # T25c
-    return typed.Expr.Fn(sp, ty, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, sp)))
+    # with nothing expected the value renders with its own parameters' names (E11a); else it is the type expected
+    vt := c.P.T.WithNames(ty, c.P.SigNames(f.S)) if w == types.UnknownT else c.P.T.WithNames(ty, c.P.T.NamesIdOf(w))
+    return typed.Expr.Fn(sp, vt, typed.FnVal.Lambda(typed.BodyId(I32(id)), caps, c.site(typed.SiteKind.Closure, sp)))
 }
 
 # T[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
@@ -9102,7 +9125,7 @@ fn (c mut Checker&) exhaustedOrBreak(sp source.Span, call typed.Expr&c, loop I64
     items[0] = typed.Item(ex, -1)
     cl := Array<typed.Clause&>(1)
     cl[0] = typed.Clause(sp, items, false, code, Array<typed.Expr&>(0))
-    return typed.Expr.Try(sp, typeOf(call), typed.Try(call, cl))
+    return typed.Expr.Try(sp, typeOf(call), typed.Try(call, cl, false, true))
 }
 
 # a fallible call the loop makes with no try written: Exhausted aside, it may fail with nothing else (S9e)
