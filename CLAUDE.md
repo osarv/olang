@@ -608,7 +608,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c"); M7, `compiler/lower.olang` (the typed core
   lowered to MIR with the stand-in placement, helpers, adapters and initializations made as MIR functions; `make
   lowerdump` verifies every function of the corpus, std, compiler and the checks' run cases - all clean but what check
-  leaves wrong; nested tries fall to the try around them, a T29d literal's error edge is never taken, no releases or
+  leaves wrong; a try's leftovers leave the body (R13) but for a loop's own Exhausted try and a clause-less checked, which pass them to the try around them, a T29d literal's error edge is never taken, no releases or
   holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
   over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
   scope reclaimed as it closes, immutable globals baked into emitted data (K2), constants computed by calls (G21), the
