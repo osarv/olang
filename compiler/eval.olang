@@ -83,6 +83,8 @@ WhySteps String& = "the computation runs longer than compile-time evaluation all
 WhyMemory String& = "the computation takes more memory than compile-time evaluation allows"
 WhyDepth String& = "the computation recurses deeper than compile-time evaluation allows"
 WhyRunDepth String& = "it recurses deeper than -i allows"
+WhyEqDepth String& = "the comparison recurses deeper than compile-time evaluation allows"
+WhyRunEqDepth String& = "the comparison recurses deeper than interpret allows"
 WhyNull String& = "it reads through a null reference"
 WhyNullCall String& = "it calls through a null function value"
 WhyClosed String& = "it uses storage after the scope it was made in closed"
@@ -296,6 +298,7 @@ type cfn struct() {
     FastOp mut Array<typed.PrimOp>&
     NVars I64 = 0               # its scope variables, how many
     ReadsBuild Bool = false     # S8a: its body reads a build constant (Machine.BuildFns)
+    Equal Bool = false          # E10: an Equal helper - a level "==" descends, counted against eqDepth
     Sps mut Array<source.Span>&
 }
 
@@ -321,6 +324,7 @@ type Machine struct(T mut types.Table&, When Mode) {
     StepBudget I64 = 20000000
     MemBudget I64 = 1 << 28
     DepthBudget I64 = 2000
+    eqDepth I64 = 0             # how many Equal helpers' frames are live (E10)
     Steps I64 = 0
     Live I64 = 0                 # bytes allocated and not freed
     Result Ptr = NullPtr         # the last request's result
@@ -427,6 +431,10 @@ fn (m mut Machine&) Define(f mir.Fn) {
     }
     m.cf[i] = m.decode(f)
     m.cf[i].ReadsBuild = m.BuildFns.Has(f.Of)
+    match f.Of {
+        case mir.FnKey.Helper(k, _) { m.cf[i].Equal = k == mir.HelperKind.Equal }
+        case _ { }
+    }
 }
 
 # f decoded (cfn)
@@ -1406,6 +1414,25 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
         m.refuse(WhyDepth if m.When == Mode.Compile else WhyRunDepth)
         return -1
     }
+    # E10: each level "==" descends is a call, at run time too - data that holds itself is compared without end, which
+    # stops evaluation at stage 0's depths (2,000 while compiling, 100,000 under -i) rather than its memory
+    if m.cf[fi].Equal {
+        if m.eqDepth >= (2000 if m.When == Mode.Compile else 100000) {
+            # said where the comparison is written: the call into the first of them
+            k := m.nFs - 1
+            for k > 0 and m.cf[m.fs[k].Fn].Equal { k-- }
+            if k >= 0 {
+                f := m.fns[m.fs[k].Fn]
+                match f.Blocks[m.fs[k].Block].T {
+                    case mir.Term.Call(csp, _) { m.stopFile, m.stopSp = f.File, csp }
+                    case _ { }
+                }
+            }
+            m.refuse(WhyEqDepth if m.When == Mode.Compile else WhyRunEqDepth)
+            return -1
+        }
+        m.eqDepth++
+    }
     if m.cf[fi].ReadsBuild { m.UsedBuild = true }
     ls := m.cf[fi].Locals
     nl, ns, nv := ls.Len(), m.cf[fi].Scopes.Len(), m.cf[fi].NVars
@@ -1444,6 +1471,7 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
 fn (m mut Machine&) popFrame() {
     if m.nFs == 0 { return }
     m.nFs--
+    if m.cf[m.fs[m.nFs].Fn].Equal { m.eqDepth-- }
     m.nWs = m.fs[m.nFs].Locals
 }
 
