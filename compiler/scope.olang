@@ -237,6 +237,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     under List<Term>                       # the terms fieldTerm's underestimates stand above, a Derived(-1 - k, _) for under[k]
     underElem List<Bool>                   # ... and whether each was read through an array's element (O23)
     temps Map<I64, Term>                   # by site: a temporary place's value judged (tempTerm), the term its references are at
+    partDest Map<I64, Term>                # by call site: where a part read out of its built result is put (O18a)
+    resAt Term = Term.None                 # the result scope the call judged last was bound to
     trMemo Map<pair.Pair<I64, I64>, I64>   # transient's answers, by (body, parameter): 1 being asked, 2 no, 3 yes
     useMemo Map<pair.Pair<I64, I64>, I64>  # uses' answers, by (body and mode, parameter): 1 being asked, 2 no, 3 yes
     regionOnly List<I64>                   # by local: the parameter whose region it holds only reads of (O17), -1 none
@@ -4056,10 +4058,13 @@ fn (s mut Scoper&) placeOperands(p typed.Place&) {
 fn (s mut Scoper&) tempTerm(v typed.Expr&, site typed.SiteId) Term {
     t := try s.temps.Get(I64(site)) catch default Term.Untraced
     if t != Term.Untraced { return t }
+    s.resAt = Term.None
     x := s.tempVal(v)
     h := s.here()
     s.build(site, h)
     t = x.T if x.T != Term.None else h
+    # a call's array value holds no reference, but its elements are where its result scope is bound (T7b)
+    if x.T == Term.None and s.arenaValue(v.Type()) and s.callOf(v) != null and s.resAt.Runs() { t = s.resAt }
     s.temps.Put(I64(site), t)
     return t
 }
@@ -4580,14 +4585,18 @@ fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
             for a in args { s.val(a, Term.None) }
             return plain()
         }
-        case typed.Expr.Slice(sp, _, sl) {
+        case typed.Expr.Slice(sp, ty, sl) {
+            # a slice of a call's built result put elsewhere has its call land there (O18a)
+            pk := s.partLand(sl.Base, ty, dest)
             s.placeOperands(sl.Base)
             # a slice or a view of a value whose references live elsewhere than its storage would take them to live
             # where that is (O17a)
             if s.splitPlace(sl.Base) and s.report { s.err(s.sliceAt(sp, sl), msgs.SliceSplitValue()) }
             s.val(sl.Lo, Term.None)
             s.val(sl.Hi, Term.None)
-            return existing(s.sliceTerm(sl.Base))
+            st := s.sliceTerm(sl.Base)
+            if pk >= 0 { s.partDest.Remove(pk) }
+            return existing(st)
         }
         case typed.Expr.Cond(_, ty, c) {
             s.val(c.C, Term.None)
@@ -4688,8 +4697,55 @@ fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
 }
 
 # what reading a place gives (O20, O25h): a reference's referent's term, a value's references' - a held local's
-# temporary built where this one use puts it
+# temporary built where this one use puts it; a part of a call's built result read where it is put elsewhere than here
+# has its call land there (O18a: "f = mkBox(i).n" with f outside the loop)
 fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
+    k := s.partLand(p, ty, dest)
+    v := s.readPart(p, ty, dest)
+    if k >= 0 { s.partDest.Remove(k) }
+    return v
+}
+
+# where a part of a call's built result is put elsewhere than the block it stands in: that call's site, its landing
+# noted for the call (O18a); -1 for none
+fn (s mut Scoper&) partLand(p typed.Place&, ty types.TypeId, dest Term) I64 {
+    if not dest.Runs() or dest == s.here() or not s.holds(ty) { return -1 }
+    c := s.partCall(p)
+    if c == null { return -1 }
+    k := I64(c.Site)
+    if (try s.partDest.Get(k) catch default Term.None) != Term.None { return -1 }
+    s.partDest.Put(k, dest)
+    return k
+}
+
+# the call whose built result a place is a part of - a field, an element or a payload of it, through what it holds -
+# null for none
+fn (s mut Scoper&) partCall(p typed.Place&) typed.Call&p {
+    return match p {
+        case typed.Place.Field(_, _, b, _) => s.partCall(b)
+        case typed.Place.Elem(_, _, e) => s.partCall(e.Base)
+        case typed.Place.Payload(_, _, pl) => s.partCall(pl.Base)
+        case typed.Place.Deref(_, _, r) => s.builtCall(r)
+        case typed.Place.Temp(_, _, v, _) => s.builtCall(v)
+        case _ => null
+    }
+}
+
+# the call an expression is where its result is built (a temporary) - read out of the temporary holding it, or a part
+# of one - else null
+fn (s mut Scoper&) builtCall(x typed.Expr&) typed.Call&x {
+    if x == null { return null }
+    match x {
+        case typed.Expr.Read(_, _, q, _) { return s.partCall(q) }
+        case typed.Expr.Away(_, _, y) { return s.builtCall(y) }
+        case _ { }
+    }
+    # an array value a call gives is built in its result scope (T7b)
+    if not s.isFresh(x) and not s.arenaValue(x.Type()) { return null }
+    return s.callOf(x)
+}
+
+fn (s mut Scoper&) readPart(p typed.Place&, ty types.TypeId, dest Term) Val {
     # an array value read out of a call's built result shares that result's storage - nothing is copied - so the result is
     # built where the value goes (T7b)
     match p {
@@ -4996,6 +5052,13 @@ fn (s mut Scoper&) inner(a Term, b Term) Term {
 fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Term) Val {
     land := s.landing
     s.landing = false
+    # a part of its result read where it is put (O18a): there, unless its obligations force it elsewhere (O18c)
+    partD := false
+    if dest == Term.None {
+        dest = try s.partDest.Get(I64(c.Site)) catch default Term.None
+        partD = dest != Term.None
+        if partD { land = false }
+    }
     spawned := s.inSpawn
     s.inSpawn = false
     j := s.taskJoin if spawned else Term.None
@@ -5205,7 +5268,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 # a result nothing puts anywhere lands by its obligations where they need its scope to outlive an
                 # argument's (O18a, O18c) - a constructor's instance is built where it stands, C2d holding it
                 if s.P.T.Role(fty) == types.RoleCtor { land = false }
-                if not land and dest == Term.None and s.P.T.Role(fty) != types.RoleCtor {
+                if not land and (dest == Term.None or partD) and s.P.T.Role(fty) != types.RoleCtor {
                     cb := s.bodyOf(c.Target)
                     land = cb >= 0 and s.summed(cb) and s.forced(cb, rv)
                 }
@@ -5278,6 +5341,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     }
     # the callee's obligations, through the bindings (O10c)
     if callee >= 0 { s.discharge(sp, callee, beta, c) }
+    s.resAt = beta[rv] if rv >= 0 else here
     if not s.holds(ty) { return plain() }
     if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sums[callee].ResBind.Len() > 0 {
         # the instance it gives carries the bindings its callee's returns had, through this call's (O13c): "it :=
