@@ -1042,6 +1042,15 @@ fn (s mut Scoper&) stmts(ss Array<typed.Stmt&>&) {
     }
 }
 
+# whether an expression is a conditional or a match (E28, S12b)
+fn (s mut Scoper&) choiceOfRefs(x typed.Expr&) Bool {
+    return match s.unAway(x) {
+        case typed.Expr.Cond(_, _, _), typed.Expr.Match(_, _, _) => true
+        case typed.Expr.Seq(_, _, q) => s.choiceOfRefs(q.X)
+        case _ => false
+    }
+}
+
 # whether a block is a three-clause "for"'s own: the variables it declares, then the loop (S9)
 fn (s mut Scoper&) forWrap(b typed.Block&) Bool {
     if s.B.Blocks[I64(b.Id)].Kind != typed.BlockKind.Plain or b.Stmts.Len() < 2 { return false }
@@ -1337,9 +1346,13 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
             case Term.Var(i) {
                 if i < beta.Len() { to = beta[i] }
             }
-            # a derived scope outlives where its instance is: landed there, an underestimate (O23)
-            case Term.Derived(p, _) {
-                if p >= 0 { to = s.paramBinding(c, p, beta) }
+            # a derived scope is where the argument's instance bound it, where its record says (O23a); else it outlives
+            # where its instance is: landed there, an underestimate (O23)
+            case Term.Derived(p, w) {
+                if p >= 0 {
+                    to = s.derivedAt(p, w, c, true, beta)
+                    if not to.Runs() or to == Term.Program { to = s.paramBinding(c, p, beta) }
+                }
             }
             case _ { return Term.None }
         }
@@ -3457,6 +3470,18 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
     s.terms[I64(l)] = claim
     v := s.val(x, claim)
     s.bindLocal(l, x)
+    # a conditional or a match of references living in different scopes declared with a bare "&" is held where it is
+    # declared - every value it can give outlives this block - and where it lives is not known here: read, never built
+    # into nor stored through (E28, O12)
+    match v.T {
+        case Term.Set(_) {
+            if loc.Marked == typed.Mark.Bare and s.isRef(t) and s.choiceOfRefs(x) {
+                s.terms[I64(l)] = v.T
+                return
+            }
+        }
+        case _ { }
+    }
     # a local naming where a derived scope's referent lives may hold what lives there, never what is new (O23a, C2d)
     if v.K == ValKind.Fresh and s.report and s.unknownBinding(claim) { s.err(s.opTok(x), msgs.BuildThroughUnknownScope()) }
     if loc.Kind == typed.LocalKind.Field and v.K == ValKind.Fresh and v.T != claim and v.T.Relatable() {
