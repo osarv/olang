@@ -2544,6 +2544,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
                 return
             }
         }
+        case mir.Stmt.Raised(sp) { m.traced(fi, fk, sp) }
         case mir.Stmt.Give(_, s) {
             id := m.ws[m.fs[fi].Scopes + I64(s)]
             m.ws[m.fs[fi].Scopes + I64(s)] = 0
@@ -3371,7 +3372,12 @@ fn (m mut Machine&) returned(fr frame) {
             m.initGlobal = fr.PrevInit
         }
         case rTask {
-            # back on the spawner's thread: its trace again (S18d)
+            # a task ending the program by "!" keeps its own trace (E35); else back on the spawner's thread: its trace
+            # again (S18d)
+            if fr.Raised and m.endsProgram(fr.RetArg) {
+                m.taskEnded(fr)
+                return
+            }
             m.trace.Clear()
             m.TraceDropped = try m.traceStack.Pop() catch default 0
             n := try m.traceStack.Pop() catch default 0
@@ -3632,6 +3638,12 @@ fn (m mut Machine&) toTargets(fi I64, slot I64, x mir.Operand, xt types.TypeId) 
     }
 }
 
+# whether the task in slot is "spawn f(x)!", its failure ending the program (E35)
+fn (m Machine&) endsProgram(slot I64) Bool {
+    tk := m.tasks[slot]
+    return m.fns[tk.Fn].Tasks[tk.Task].Ends.N > I32(0)
+}
+
 # a task ended: done, or its error to the first clause taking it - run as a frame where it has a handler - or kept for
 # its join where none takes it and its join keeps none earlier (P4a, P4b)
 fn (m mut Machine&) taskEnded(fr frame) {
@@ -3689,6 +3701,22 @@ fn (m mut Machine&) taskEnded(fr frame) {
         }
         for v in range passed { m.ws[m.fs[nf].Vars + v] = m.program }
         m.loadCaptures(nf, g, env, passed)
+        return
+    }
+    # "spawn f(x)!" (E35, P6): the error ends the program, named as a "!" names it, where the "!" is
+    if k.Ends.N > I32(0) {
+        name := mir.Operand.None
+        for i in range 0, I64(k.Ends.N), 2 {
+            match f.Ops[I64(k.Ends.At) + i] {
+                case mir.Operand.Const(_, v) if v == fr.Code { name = f.Ops[I64(k.Ends.At) + i + 1] }
+                case _ { }
+            }
+        }
+        if name == mir.Operand.None {
+            m.stop(Stop.Exited(mir.ExitKind.Error, f.File, k.EndsSp, "unhandled error"))
+        } else {
+            m.exit(waiter, f.File, k.EndsSp, mir.ExitKind.Error, name)
+        }
         return
     }
     # no clause: kept for the join, re-encoded under its list, where the join keeps none from an earlier task
