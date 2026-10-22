@@ -20796,6 +20796,14 @@ run tasks beside each other, the design is green threads in the machine: each ta
 implemented by the machine (a mutex an owner, a wait parking the task until a signal), and a wait every task is parked
 in stopping as WhyWaits does now.
 
+**Measured.** The checks through stage 1 (the debug driver): cases 1,014 of 1,060 passing (986 at the end of the
+suite's round 2; e31bviewbigcond not run) - of the 46 left, s5mapgetreturn is the scope pass's, asenumcase came with
+the merge (E32 naming another enum's case, the checker's) and l1nul is the sweep script's (a NUL byte defeats its grep);
+scenarios 48 of 56 (46): k2 and agree pass, interp gets as far as tasks.olang x (below). evaldiff: 23 of 26 files the
+same, 983 of 1,019 tests ending as stage 0's (round 5: 22, 978 of 1,015 - tests/shared's last test passes since the
+scope pass's round 7) - cancel 2 and chan 5 (tasks in sequence, decided above), linalg 29 (speed); the checks' run
+cases 143 of 145, as before. emitdiff: 26 of 26 files, 1,019 of 1,019 tests.
+
 **Not done**: interpret stopping on a wait does not run the deferred code of the blocks it is in, as stage 0 does
 (interp's tasks.olang x: "cleanup ran" before the stop). MIR copies deferred code onto each way out of a block and keeps
 no list of it; running it on a stop needs cleanup blocks in MIR - a scope's deferred code reachable by unwinding alone,
