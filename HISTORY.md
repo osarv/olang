@@ -20719,6 +20719,88 @@ tests ending as stage 0's (round 4: 975) - shared 1 (above), cancel 2 and chan 5
 **Not done**: task interleaving under interpret (std/cancel's spinning task, std/chan's waits) - a frame stack per task,
 the next round's.
 
+## Port M8: evaluation in the pipeline, sixth round (2026-10-22)
+
+The round took the failures of the checks through stage 1 that are the evaluator's (the full-suite round's list) one by
+one, against stage 0's behaviour (`bootstrap/semantic.c`'s pass after checking, `bootstrap/comptime.c`).
+
+**Merged first**: master with evaluator round 5 and scope round 7 (`wt-merge`), then the full-suite round's second
+round (`wt-suite`). Both had wired K2 baking into the driver; the one wiring kept is `interp.Bake` with the suite's
+handling of storage two globals reach - itself replaced below (K2b).
+
+**B9c: a top-level condition that does not decide is an error at it.** It stayed pending, its branches simply absent, so
+a program whose condition reads a mutable global, divides the most negative value by -1, reads an operation's NaN's bits
+or uses what only its own branches declare compiled. `interp.decide` now decides such a condition in the attempt that
+meets it, as stage 0 does: an error (`CondUnseen` where it does not check in its module, `CondUndecidable` with what
+stopped the evaluation and where, "it reads a mutable global, whose value is the running program's (badcond.olang:4)")
+said once the last check is made, the if taking no branch. One whose check already said why (B10's unknown build name)
+stays pending as before, so that error is the one said.
+
+**T29d and D13c, decided while compiling.** The checker records each literal entering a declared number through its
+constructor and each zero value a constructor makes (`Checker.ValueAsks`), with a body giving the value built where it
+is met (`askValue`, the literal through `litCtor`, the zero through `zero`, nested asks off); `interp.DecideValues`
+evaluates each on a program that checked cleanly and reports stage 0's errors: `LiteralCtorFails`, `NoZeroValue` with
+the evaluation's reason and a note where it stopped, and for a zero value filling every element of an array
+(`Array<T>(n)`, `Array<T, N>()`) one holding an address (`Machine.ResultHoldsAddress`) `ZeroValueShared` - an array of
+none (`Array<T>(0)`) needs no zero value. A fallible constructor now makes a zero value too (`zeroCalls` dropped its
+no-errors condition): its failure is an error while compiling, never at run time, as a literal's is. B11: met in the
+library's code for a program's use, the error is at the type argument the program wrote, with the type held by
+reference as the fix ("'Chan<Ticket&>' holds it by reference"), else "a reference has one, null" - which needed an
+instance's constructor to be checked in the context it was asked for (`checkCtor` pushes the instance's origin, as a
+function instance's body already was). G10d's constructor introducing type variables has no zero value, said where one
+is needed. Stage 0's T29d check of the constructor's one parameter (`PrimCtorParam`) replaced the checker's gap.
+
+**K2: a global whose initializer aborts the program is an error**, at the global, with a note where it aborted -
+once per place reached, so a global reading another that aborts is not reported again (`Bake` reads the stop the
+evaluator gave). **K1's write**: a global's own name written - the store of an increment or a compound assignment, whose
+read is lowered first - is refused as the write it is ("it writes a global, which the running program would then not
+see written", K1a's words in stage 0, `Machine.writesAfter`), a write into what a global holds keeping the longer words.
+
+**M19g in the evaluator: a stale view.** A Vec's growth retires its old buffer (`retire()`, the prelude's alone); the
+checker made it nothing. It is now `PrimOp.Retire` - nothing at run time (emit gives 0), and the evaluator marks the
+buffer's allocation with where the program grew the Vec: the call the innermost frame of the program's own code (not
+std's) is making (`Machine.retire`, `Library`). A later use of it, through a view taken before, stops evaluation while
+compiling (`WhyStale`): an assert decided while compiling or a global's initializer that meets one is an error
+(`AssertStale`, `GlobalStale`) with notes where the view was read and where the Vec grew.
+
+**G27: an assert reading its instance's constants is decided per instance.** An assert's condition reading a constant
+variable was the running program's (`readsLocal` counts a type or constant variable). While an assert's condition is
+made a body of its own (`constsRead`), a constant variable the instance binds is read as its value - the new body carries
+the instance's bindings - so `assert N > 0 and (N & (N - 1)) == 0` in `Ring<I32, 6>`'s constructor is false while
+compiling, with the instance named ("instantiated here, with T = I32, N = 6"). A local if's condition does not (one
+parse serves every instance, S8b).
+
+**K2b: what two baked globals reach is written once per module.** The suite's round set such globals at startup; stage 0
+bakes them. `Image` now names an instance another global's initializer made instead of refusing it (`Blob.Ext`), and
+`Bake` gives each allocation one home - the first global, in the order they are set, whose image holds it - every
+other image naming that global's blob (`ExtMod`, `ExtName`, `ExtIdx`; emit writes `@G.k1`, or a `getelementptr` into it
+for a slice). A global naming storage no baked global of its own module holds is set at startup. `B = A`,
+`Sl = Arr[1:3]` and `Ring`'s and `Chain`'s nodes are now data as stage 0 writes them. **Baking a global whose value a
+writable reference reaches**: K1 refuses reading such a global in another evaluation, but its own value is written out
+(`Machine.Global(..., baking)`), what the writable reference reaches written writable.
+
+**E10: data that holds itself.** `==` descends through Equal helpers, a frame each, so `s == s` over a struct holding
+itself through an array ran interpret out of memory. Each live Equal helper frame is counted (`cfn.Equal`, `eqDepth`):
+past stage 0's depths - 2,000 while compiling, 100,000 under interpret - evaluation stops, said where the comparison is
+written (the call into the first helper): "cyclic.olang:9: the comparison recurses deeper than interpret allows".
+
+**Found and fixed on the way (the checker's)**: `a, b := 1, ""` declared `b` a fixed `Array<Char, 0>` - a parallel `:=`
+of written text is a `String` value now, as `x := ""` is (T29c).
+
+**Decided (mine): tasks stay sequential under interpret.** A join's tasks run one after another at the join, under
+interpret as while compiling (B3e, K1) - stage 0's semantics, which interp's tasks.olang pins (with an argument a
+producer fills a channel a consumer would have to empty at the same time, and interpret is to stop there, naming the
+task). So std/cancel's spinning task and std/chan's waits are evaldiff's expected differences, not gaps. Should B3e ever
+run tasks beside each other, the design is green threads in the machine: each task a frame stack of its own (a range of
+`fs` with its own base), a scheduler switching at a blocking wait, the pthread mutex and condition-variable externs
+implemented by the machine (a mutex an owner, a wait parking the task until a signal), and a wait every task is parked
+in stopping as WhyWaits does now.
+
+**Not done**: interpret stopping on a wait does not run the deferred code of the blocks it is in, as stage 0 does
+(interp's tasks.olang x: "cleanup ran" before the stop). MIR copies deferred code onto each way out of a block and keeps
+no list of it; running it on a stop needs cleanup blocks in MIR - a scope's deferred code reachable by unwinding alone,
+as LLVM's landing pads are - which emit and the verifier would have to know.
+
 ## Port M6: the scope pass, round 2 - soundness (2026-10-18)
 
 Round 1 left 147 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error at all from the port:
