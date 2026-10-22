@@ -2322,12 +2322,21 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     }
     sc := fe.scope(s)
     p := ""
-    if zero {
+    if fe.E.San and fe.E.retires(fe.F.File) {
+        # B2f: an array made in a module that retires arrays (M19d) has a chunk of its own, zero-filled, so that
+        # retiring it can make it unreadable
+        fe.E.runtime("__olang_san_alloc_own")
+        p = fe.let("call ptr @__olang_san_alloc_own(ptr " $sc ", i64 " $bytes ")")
+        if zero { return fe.pair(cnt, p) }
+    } else if zero {
         fe.E.runtime("__olang_scope_alloc_zeroed")
         p = fe.let("call ptr @__olang_scope_alloc_zeroed(ptr " $sc ", i64 " $bytes ")")
-    } else {
-        fe.E.runtime("__olang_scope_alloc")
-        p = fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")")
+    }
+    if not zero {
+        if p == "" {
+            fe.E.runtime("__olang_scope_alloc")
+            p = fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")")
+        }
         big := fe.viaMem(el)
         v := "" if big else fe.val(fill, el)
         elt := fe.ty(el)
@@ -2459,6 +2468,20 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case typed.PrimOp.Not { return fe.let("xor i1 " $x ", true") }
         case typed.PrimOp.Convert { return fe.convert(x, t0, ty) }
         case typed.PrimOp.Bitcast { return fe.let("bitcast " $lt " " $x " to " $fe.ty(ty)) }
+        case typed.PrimOp.Retire {
+            # M19d: an array a collection no longer uses - under -sanitize its storage poisoned and, where it has a
+            # chunk of its own, made unreadable until its scope closes (B2f); nothing otherwise
+            rr := t.Referent(r) if t.IsRef(r) else r
+            a := fe.arrayOf(rr)
+            if fe.E.San and a != types.UnknownT and not fe.fixed(a) {
+                n := fe.let("extractvalue { i64, ptr } " $x ", 0")
+                p := fe.let("extractvalue { i64, ptr } " $x ", 1")
+                bytes := fe.let("mul i64 " $n ", " $fe.size(t.Elem(a)))
+                fe.E.runtime("__olang_san_retire")
+                fe.w("call void @__olang_san_retire(ptr " $p ", i64 " $bytes ")")
+            }
+            return "undef"
+        }
         case typed.PrimOp.Len {
             rr := t.Referent(r) if t.IsRef(r) else r
             a := fe.arrayOf(rr)
@@ -2814,6 +2837,12 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
                     case _ => false
                 }
                 if not isProg { sc = fe.scope(r) }
+            }
+            # the scope may now reach another thread with the closure, whose code asks for it as its thread may build
+            # there: claimed for this one first (P2, decision 48 - a scope's owner is set before it leaves its thread)
+            if sc != "null" {
+                fe.E.runtime("__olang_scope_escape")
+                fe.w("call void @__olang_scope_escape(ptr " $sc ")")
             }
             fe.store("ptr", sc, fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $(I64(args.N) + j)), ", !tbaa !28")
         }
@@ -3396,6 +3425,21 @@ fn (e mut Emitter&) runtime(name String&) {
 
 # main: the command line kept (B4a), the thread made known, each module initialized (B5a), the root's main called - an
 # error escaping it printed, the status 1 (B4)
+# whether the module of this file calls retire() (M19d)
+fn (e mut Emitter&) retires(file I64) Bool {
+    for m in e.P.L.Mods {
+        if m.File == file { return m.Retires }
+    }
+    return false
+}
+
+# B2f: the scope sanitizer's handler, in place before anything can close a scope
+fn (e mut Emitter&) sanInit(b mut StringBuilder&) {
+    if not e.San { return }
+    e.runtime("__olang_san_init")
+    b.Push("  call void @__olang_san_init()\n")
+}
+
 fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     t := e.T
     e.define("__olang_argc", "@__olang_argc = external global i32")
@@ -3405,6 +3449,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     b.Push("define i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
+    e.sanInit(b)
     for i in e.globalOrder(inits) {
         if not e.Baked.Has(i) { b.Push("  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))) "()\n") }
     }
@@ -3470,6 +3515,7 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     b.Push("  store i32 0, ptr %pass\n  store i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
+    e.sanInit(b)
     # each global's initializer behind a recovery point of its own: one that fails a check leaves its global at its
     # zero value and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
     g I64 = 0

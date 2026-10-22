@@ -325,6 +325,7 @@ type PrimOp enum {
     AtomicAdd
     AtomicSwap
     AtomicCompareSwap
+    Retire          # "a.retire()" in the prelude (M19d): nothing, but under -sanitize the array's storage poisoned (B2f)
 }
 
 type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check, Exact Bool) {
