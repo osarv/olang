@@ -1,0 +1,23 @@
+# check: fail error[P1g]: these targets live in different scopes, and the results are built in one
+# P1g: a task's built results go into targets in two blocks - built in one, the other's would refer to it from where it
+# closes first (the port fitted only an existing result, so its built one went unchecked: review port1 l01)
+import "std/io"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+fn two(i I64) (mut Node&, mut Node&) {
+    n := Node(i)
+    return n, n
+}
+fn main() ? io.IoError {
+    a mut Node& = null
+    for i in range 2 {
+        b mut Node& = null
+        join {
+            spawn a, b = two(i + 5)
+        }
+        b.next = Node(99)
+    }
+    try io.Println($a.v)
+}

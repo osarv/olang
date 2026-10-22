@@ -1,0 +1,10 @@
+# check: fail error[O10d]: this value lives in this function's own scope, which closes first
+# O10d/D9b: a generic's by-value parameter bound to a String and sliced is the callee's own copy - a slice of it returned
+# would outlive the call (review port1 s01)
+import "std/io"
+fn headOf<T>(x T) Array<Char>&x { return x[0:3] }
+fn main() ? io.IoError {
+    t String = "tttttttttt"
+    h := headOf(t)
+    try io.Println(String(h))
+}

@@ -191,6 +191,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     plan typed.Plan = typed.Plan(0, 0, 0)
     terms List<Term>           # by local: where its referent lives (a reference) or its references (a value holding them)
     stors List<Term>           # by local: where its own storage is
+    copied Map<I64, Bool>      # the by-value run-time array parameters the body has its own copy of, in the frame (D9b)
     blocks List<typed.BlockId> # the blocks entered, innermost last
     gamma List<rel>            # the obligations found (O10b)
     setFrom List<I64>          # the sets of terms not known here (O12): set k's terms in setTerms from setFrom[k]
@@ -465,6 +466,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.Id = b
     s.terms.Clear()
     s.stors.Clear()
+    s.copied.Clear()
     s.blocks.Clear()
     s.joins.Clear()
     s.gamma.Clear()
@@ -768,6 +770,8 @@ type walked struct() {
     Callees List<I64>
     Assigned List<I64>
     Borrowed List<I64>            # the locals whose own storage a borrow or a slice names, reached through no reference
+    BorrowedTy List<types.TypeId> # ... each such borrow's type, in order - 0 for a slice
+    Written List<I64>             # the locals whose own storage a store writes, reached through no reference
     FieldTypes List<types.TypeId> # the struct types whose field FieldIdx is assigned after construction - -1 the whole
     FieldIdx List<I64>            # value, written through a reference
 }
@@ -798,6 +802,7 @@ fn collectStmt(st typed.Stmt&, out mut walked&) {
         case typed.Stmt.Let(_, _, x) { collectExpr(x, out) }
         case typed.Stmt.Assign(_, p, x) {
             if wholeLocal(p) >= 0 { out.Assigned.Push(wholeLocal(p)) }
+            if not flThroughRef(p) and flRoot(p) >= 0 { out.Written.Push(flRoot(p)) }
             collectField(p, out)
             collectPlace(p, out)
             collectExpr(x, out)
@@ -826,6 +831,7 @@ fn collectStmt(st typed.Stmt&, out mut walked&) {
         case typed.Stmt.Spawn(_, sp) {
             for p in sp.Targets {
                 if wholeLocal(p) >= 0 { out.Assigned.Push(wholeLocal(p)) }
+                if not flThroughRef(p) and flRoot(p) >= 0 { out.Written.Push(flRoot(p)) }
                 collectField(p, out)
                 collectPlace(p, out)
             }
@@ -871,8 +877,11 @@ fn collectExpr(x typed.Expr&, out mut walked&) {
     if x == null { return }
     match x {
         case typed.Expr.Read(_, _, p, _) { collectPlace(p, out) }
-        case typed.Expr.Borrow(_, _, p) {
-            if not flThroughRef(p) and flRoot(p) >= 0 { out.Borrowed.Push(flRoot(p)) }
+        case typed.Expr.Borrow(_, ty, p) {
+            if not flThroughRef(p) and flRoot(p) >= 0 {
+                out.Borrowed.Push(flRoot(p))
+                out.BorrowedTy.Push(ty)
+            }
             collectPlace(p, out)
         }
         case typed.Expr.Take(_, _, p) { collectPlace(p, out) }
@@ -897,7 +906,10 @@ fn collectExpr(x typed.Expr&, out mut walked&) {
             for a in args { collectExpr(a, out) }
         }
         case typed.Expr.Slice(_, _, sl) {
-            if not flThroughRef(sl.Base) and flRoot(sl.Base) >= 0 { out.Borrowed.Push(flRoot(sl.Base)) }
+            if not flThroughRef(sl.Base) and flRoot(sl.Base) >= 0 {
+                out.Borrowed.Push(flRoot(sl.Base))
+                out.BorrowedTy.Push(types.TypeId(0))   # a slice has its base's permission (E16a), a parameter's writable
+            }
             collectPlace(sl.Base, out)
             collectExpr(sl.Lo, out)
             collectExpr(sl.Hi, out)
@@ -1044,6 +1056,24 @@ fn (s mut Scoper&) run() {
                 if s.terms[I64(l)] == Term.None { s.terms[I64(l)] = s.terms[I64(x)] }
             }
             case _ { }
+        }
+    }
+    # D9b: a by-value run-time array parameter the body writes, slices or borrows writably, is the callee's own copy,
+    # made in the frame (the code generator's prologue copies it into the frame's arena): its elements are there, not
+    # where the caller's argument has them - anything that would outlive the call is refused (O10d)
+    if b.Root != null {
+        w walked
+        collectBlock(b.Root, w)
+        for l in b.Params {
+            r := s.P.T.Repr(b.Locals[I64(l)].Ty)
+            if s.isRef(r) or s.P.T.KindOf(r) != types.Kind.Array or s.P.T.Length(r) != types.TypeId(0) { continue }
+            copied := w.Assigned.Has(I64(l)) or w.Written.Has(I64(l))
+            for k in range w.Borrowed.Len() {
+                if w.Borrowed[k] != I64(l) { continue }
+                bt := w.BorrowedTy[k]
+                if bt == types.TypeId(0) or (s.P.T.PermOf(s.P.T.Repr(bt)) & types.Writable) != 0 { copied = true }
+            }
+            if copied { s.copied.Put(I64(l), true) }
         }
     }
     s.blocks.Push(typed.BlockId(0))
@@ -4257,6 +4287,7 @@ fn (s mut Scoper&) isStruct(t types.TypeId) Bool {
 fn (s mut Scoper&) partsTerm(p typed.Place&) Term {
     match p {
         case typed.Place.Local(_, _, id) {
+            if s.copied.Has(I64(id)) { return Term.Block(typed.BlockId(0)) }   # D9b: its own copy's elements
             t := s.terms[I64(id)]
             return t if t != Term.None else s.stors[I64(id)]
         }
@@ -4465,7 +4496,13 @@ fn (s mut Scoper&) resultTerm(k I64) Term {
     if s.P.T.KindOf(s.B.Ty) != types.Kind.Func { return s.here() }
     e := s.P.T.ResultFrom(s.B.Ty, k)
     if e >= 0 {
-        if e < s.B.Params.Len() { return s.terms[I64(s.B.Params[e])] }
+        if e < s.B.Params.Len() {
+            l := I64(s.B.Params[e])
+            # D9b: borrowed from a by-value array parameter the body has its own copy of - from the caller's argument,
+            # which nothing of the frame's copy outlives (O10d)
+            if s.terms[l] == Term.None and s.copied.Has(l) { return Term.Program }
+            return s.terms[l]
+        }
         return Term.Untraced
     }
     return Term.Var(s.resultVar) if s.resultVar >= 0 else s.here()
@@ -4613,8 +4650,8 @@ fn (s mut Scoper&) paramRoot(x typed.Expr&) I64 {
     return r if r >= 0 and s.B.Locals[r].Kind == typed.LocalKind.Param else -1
 }
 
-# a task (P1, P1g, P2): its targets are assignments of its results; its call judged as any call, landing where its one
-# target is
+# a task (P1, P1g, P2): its targets are assignments of its results, each judged as the plain assignment it is (S4b);
+# its call judged as any call, landing where its targets are
 fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     j := Term.None
     if s.joins.Len() > 0 { j = Term.Block(s.joins[s.joins.Len() - 1]) }
@@ -4625,22 +4662,35 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         # a target is stored into when the task's call returns: it lasts until the join (P1g)
         if not s.lastsUntil(s.peekPlace(p, false), j) and s.report { s.err(p.Span(), msgs.SpawnResultTooShort()) }
     }
-    # where the task's result is built: where its target keeps it - an array value takes the result's storage (T11b, P1g),
-    # so that is where the target's own storage is; of several, the longest-lived, which outlives each
+    # where the task's result is built: where its targets keep it - an array value takes the result's storage (T11b,
+    # P1g), so that is where the target's own storage is. Several targets share one result scope, so it is built where
+    # they all are, or they disagree (below); of those, the longest-lived
     dest := Term.None
-    for p in sw.Targets {
+    first := Term.None
+    agree := true
+    unknownAt := -1
+    for k in range sw.Targets.Len() {
+        p := sw.Targets[k]
         if p == null { continue }
         t := p.Type()
         d := Term.None
         if s.holds(t) {
             slot, _, _ := s.slotOf(p)
             d = slot
+            # a slot no run-time scope stands for (a derived scope, one of several): nothing new is built there (C2d, O12)
+            if not d.Runs() and d != Term.None and unknownAt < 0 { unknownAt = k }
         } else if s.arenaValue(t) {
             d = s.peekPlace(p, false)
         }
         if not d.Runs() { continue }
+        if first == Term.None {
+            first = d
+        } else if d != first {
+            agree = false
+        }
         if not dest.Runs() or s.order(d, dest) == Holds { dest = d }
     }
+    clauseBuilt := false
     for c in sw.Clauses {
         # a clause runs on the task's thread: what it captured is handed to the task (P2), and the default it gives is
         # built where the targets are (P4a, R9a)
@@ -4653,7 +4703,9 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         match c.Handler {
             case typed.Expr.Fn(_, _, f) {
                 match f {
-                    case typed.FnVal.Lambda(id, _, _) { s.clauseBuilds(I64(id), dest, c.Sp) }
+                    case typed.FnVal.Lambda(id, _, _) {
+                        if s.clauseBuilds(I64(id), dest, c.Sp) { clauseBuilt = true }
+                    }
                     case _ { }
                 }
             }
@@ -4665,11 +4717,25 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     v := s.val(sw.Task, dest)
     s.inSpawn = false
     s.taskJoin = Term.None
+    # a result built - the task's, or a clause's default - lands where the targets are: one scope, run-time, for all
+    built := v.K == ValKind.Fresh or clauseBuilt
+    if built and unknownAt >= 0 {
+        p := sw.Targets[unknownAt]
+        slot, _, _ := s.slotOf(p)
+        s.freshIntoUnknown(sp, p, slot)
+    } else if built and not agree {
+        if s.report { s.err(s.firstToken(s.B.File, sp), msgs.SpawnResultsDisagree()) }
+    }
     # each target is assigned its result as an assignment's value is (P1g, O25): said at the spawn
     if v.K == ValKind.Existing {
         for p in sw.Targets {
-            if not s.holds(p.Type()) { continue }
+            if p == null or not s.holds(p.Type()) { continue }
             slot, exact, kind := s.slotOf(p)
+            if s.bindingUnknown(p, slot) {
+                # existing storage stored into a "&p" field of an instance whose binding is not known here (O23, O11)
+                if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
+                continue
+            }
             savedAt, savedSp := s.fitAt, s.fitSp
             s.fitAt, s.fitSp = true, s.firstToken(s.B.File, sp)
             s.fit(v.T, slot, exact, sw.Task, kind)
@@ -4850,13 +4916,19 @@ fn (s mut Scoper&) lastsUntil(t Term, j Term) Bool {
     }
 }
 
-# a task clause's lambda lb giving a default built in its result scope, which is where the spawn's targets are (dest)
-fn (s mut Scoper&) clauseBuilds(lb I64, dest Term, sp source.Span) {
+# a task clause's lambda lb giving a default built in its result scope, which is where the spawn's targets are (dest):
+# whether it builds one
+fn (s mut Scoper&) clauseBuilds(lb I64, dest Term, sp source.Span) Bool {
     vs := s.Bodies[lb].Vars
+    r := false
     for k in range vs.Len() {
         if vs[k] != typed.ScopeVar.Result { continue }
-        if s.buildsSum(lb, k) { s.buildsThrough(dest, sp, lb, k) }
+        if s.buildsSum(lb, k) {
+            s.buildsThrough(dest, sp, lb, k)
+            r = true
+        }
     }
+    return r
 }
 
 # held locals no use placed: their temporaries are built in the block they were held in
@@ -7468,5 +7540,41 @@ if TestBuild {
             }
         }
         assert building == 1 and reading == 1, $building " " $reading
+    }
+
+    # a task's built result into a "&p" field of a parameter (a derived scope) judged as the plain assignment it is
+    # (C2d) - it was stored with none of an assignment's checks, built in the join's scope (review port1 l03)
+    spDerived String& = ("type Node struct(v I64) {\n"
+                         "    v\n"
+                         "    next mut Node& = null\n"
+                         "}\n"
+                         "type Holder struct(src mut Node&) {\n"
+                         "    r mut Node&src = src\n"
+                         "}\n"
+                         "fn mkNode(i I64) mut Node& { return Node(i) }\n"
+                         "fn setIt(h mut Holder&, i I64) {\n"
+                         "    join { spawn h.r = mkNode(i) }\n"
+                         "}\n"
+                         "fn setOne(h mut Holder&, i I64) {\n"
+                         "    h.r = mkNode(i)\n"
+                         "}\n")
+
+    test "C2d, P1g: a task's built result stored into a '&p' field of a parameter is refused as the assignment is" {
+        dir := try os.MkTemp() catch os.OsError { unreachable }
+        defer { try os.RemoveAll(dir) catch os.OsError { } }
+        try os.WriteFile($dir "/main.olang", spDerived) catch os.OsError { }
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+        l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                         source.Names(), diag.Diagnostics(false))
+        l.Load($dir "/main.olang")
+        r := names.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, false)
+        c.CheckProgram()
+        s := Scoper(p, c.Bodies)
+        s.Run()
+        assert rootRules(l) == "C2d C2d ", rootRules(l)
     }
 }
