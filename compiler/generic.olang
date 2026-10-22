@@ -91,6 +91,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     indexed Map<I64, Bool>             # the modules typeIndex holds
     identity Map<String&, I64>         # a module by its identity
     r1bSaid Map<pair.Pair<I64, I64>, Bool>  # (module, start): a function type said to write its error set (R1b)
+    argSaid Map<pair.Pair<I64, I64>, Bool>  # (module, start): a type argument said to be of the wrong kind (G21)
     modules I64 = 0                    # how many modules T knows
     patterns Map<I64, pattern>         # by the pattern's index in T
     fns List<fnRow>
@@ -346,6 +347,8 @@ fn (p mut Program&) named(c Context&, sp source.Span, path Array<source.NameId>&
             name := p.text(path[path.Len() - 1])
             if name == "Array" {
                 if args.Len() == 0 { return types.UnknownT }
+                if p.wrongKind(c, args[0], false, "Array", "T") { return types.UnknownT }
+                if args.Len() > 1 and p.wrongKind(c, args[1], true, "Array", "N") { return types.UnknownT }
                 elem := p.Resolve(c, args[0])
                 if args.Len() == 1 { return p.T.Array(elem, types.TypeId(0)) }
                 return p.T.Array(elem, p.constArg(c, args[1], p.T.Prim("I64")))
@@ -371,9 +374,37 @@ fn (p mut Program&) Apply(c Context&, d types.DeclId, args Array<ast.TypeRef&>&)
     owner := DeclOwner(d)
     for i in range n {
         row := p.VarAt(owner, i)
+        td := p.typeDecl(d)
+        if td != null and p.wrongKind(c, args[i], p.T.ParamIsConst(d, i), p.text(td.Name), p.text(row.Name)) { return types.UnknownT }
         vs[i] = p.constArg(c, args[i], row.Const) if p.T.ParamIsConst(d, i) else p.Resolve(c, args[i])
     }
     return p.Instance(d, p.T.List(vs))
+}
+
+# G21: a type written where a constant parameter goes, or a value where a type parameter goes - said once where it is
+# written, and true
+fn (p mut Program&) wrongKind(c Context&, a ast.TypeRef&, isConst Bool, generic String&, param String&) Bool {
+    bad := false
+    match a {
+        case ast.TypeRef.Named(sp, path, args) {
+            if path.Len() == 1 and args.Len() == 0 and c.Vars.Has(path[0]) { return false }
+            k := p.R.Use(p.file(c.Mi), sp.Start).Kind
+            isType := path.Len() == 1 and (k == names.What.Type or k == names.What.Builtin)
+            isValue := path.Len() == 1 and args.Len() == 0 and (k == names.What.Global or k == names.What.Build)
+            bad = (isConst and isType) or (not isConst and isValue)
+        }
+        case ast.TypeRef.Const(_, _) { bad = not isConst }
+        case ast.TypeRef.Func(_, _), ast.TypeRef.Shape(_, _), ast.TypeRef.Ref(_, _, _), ast.TypeRef.Perm(_, _, _, _) { bad = isConst }
+    }
+    if not bad { return false }
+    sp := a.Span()
+    key := pair.Pair(c.Mi, I64(sp.Start))
+    if not p.argSaid.Has(key) {
+        p.argSaid.Put(key, true)
+        m := msgs.ConstArgIsType(generic, param, generic) if isConst else msgs.TypeArgIsValue(generic, param)
+        p.L.Diags.Error(p.at(c.Mi, sp), m)
+    }
+    return true
 }
 
 # a type's instance with these arguments (or the type itself, a non-generic one with none): G17 bounds how deep the
@@ -734,6 +765,16 @@ fn unfolded() folded { return folded(Unfolded, 0, types.UnknownT) }
 fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeId { return p.constOf(c, p.eval(c, e), want, e) }
 
 fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&) types.TypeId {
+    # G21: a typed value of a number type that does not flow into the parameter's (T6b) - a literal's adapts
+    if f.St == Folded and e != null and p.T.IsInt(f.Ty) and p.T.IsInt(want) and f.Ty != want and not p.Flows(f.Ty, want) {
+        sp := e.Span()
+        key := pair.Pair(c.Mi, I64(sp.Start))
+        if not p.argSaid.Has(key) {
+            p.argSaid.Put(key, true)
+            p.L.Diags.Error(p.at(c.Mi, sp), msgs.ConstArgKind(p.T.Canon(want)))
+        }
+        return p.UnknownConst()
+    }
     if f.St == Folded { return p.T.Const(want, p.wrap(f.V, want)) }
     # one needing evaluation in a context whose variables are not bound yet - a generic's own declaration - is a
     # pattern too: each instance evaluates it with its own arguments (T7c, G21)
