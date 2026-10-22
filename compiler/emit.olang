@@ -1037,6 +1037,31 @@ fn (e mut Emitter&) has(symbol String&) Bool { return e.itemAt.Has(symbol) }
 
 fn (e mut Emitter&) define(symbol String&, text String&) { e.item(symbol, HomeShared, $text "\n") }
 
+# text copied out of a builder (E11b): a short one - the commonest, a number or a word - by two overlapping moves of
+# its own width rather than a call of memcpy, so that a join costs what stage 0's measured write does
+fn (e mut Emitter&) textCopy() {
+    if e.has("olang_textcopy") { return }
+    e.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
+    b := StringBuilder()
+    b.Push("define linkonce_odr hidden void @olang_textcopy(ptr %d, ptr %s, i64 %n) alwaysinline {\nentry:\n")
+    b.Push("  %big = icmp ugt i64 %n, 16\n  br i1 %big, label %call, label %s8\n")
+    b.Push("call:\n  call void @llvm.memcpy.p0.p0.i64(ptr %d, ptr %s, i64 %n, i1 false)\n  ret void\n")
+    b.Push("s8:\n  %ge8 = icmp uge i64 %n, 8\n  br i1 %ge8, label %w8, label %s4\n")
+    b.Push("w8:\n  %e8 = sub i64 %n, 8\n  %a8 = load i64, ptr %s, align 1\n  %sb8 = getelementptr i8, ptr %s, i64 %e8\n")
+    b.Push("  %b8 = load i64, ptr %sb8, align 1\n  store i64 %a8, ptr %d, align 1\n  %db8 = getelementptr i8, ptr %d, i64 %e8\n")
+    b.Push("  store i64 %b8, ptr %db8, align 1\n  ret void\n")
+    b.Push("s4:\n  %ge4 = icmp uge i64 %n, 4\n  br i1 %ge4, label %w4, label %s1\n")
+    b.Push("w4:\n  %e4 = sub i64 %n, 4\n  %a4 = load i32, ptr %s, align 1\n  %sb4 = getelementptr i8, ptr %s, i64 %e4\n")
+    b.Push("  %b4 = load i32, ptr %sb4, align 1\n  store i32 %a4, ptr %d, align 1\n  %db4 = getelementptr i8, ptr %d, i64 %e4\n")
+    b.Push("  store i32 %b4, ptr %db4, align 1\n  ret void\n")
+    b.Push("s1:\n  %none = icmp eq i64 %n, 0\n  br i1 %none, label %done, label %w1\n")
+    b.Push("w1:\n  %h = lshr i64 %n, 1\n  %e1 = sub i64 %n, 1\n  %a1 = load i8, ptr %s\n  %sh = getelementptr i8, ptr %s, i64 %h\n")
+    b.Push("  %m1 = load i8, ptr %sh\n  %se = getelementptr i8, ptr %s, i64 %e1\n  %z1 = load i8, ptr %se\n  store i8 %a1, ptr %d\n")
+    b.Push("  %dh = getelementptr i8, ptr %d, i64 %h\n  store i8 %m1, ptr %dh\n  %de = getelementptr i8, ptr %d, i64 %e1\n")
+    b.Push("  store i8 %z1, ptr %de\n  br label %done\ndone:\n  ret void\n}\n")
+    e.item("olang_textcopy", HomeShared, b.ToString())
+}
+
 # a runtime function or a C library function, declared once
 fn (e mut Emitter&) declare(name String&, text String&) { e.define(name, "declare " $text) }
 
@@ -2229,8 +2254,17 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.Close(_, sc) {
             if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Builder {
+                # a builder that never outgrew its room made no scope of its own: nothing to close (the rest is the
+                # runtime's __olang_sb_done)
                 fe.E.runtime("__olang_sb_done")
+                h := fe.load("ptr", fe.let("getelementptr %olang.builder, ptr %s" $sc ", i32 0, i32 3"))
+                grew := fe.let("icmp ne ptr " $h ", null")
+                yes, no := fe.fresh("sbgrew"), fe.fresh("sbdone")
+                fe.w("br i1 " $grew ", label %" $yes ", label %" $no)
+                fe.label(yes)
                 fe.w("call void @__olang_sb_done(ptr %s" $sc ")")
+                fe.w("br label %" $no)
+                fe.label(no)
             } else {
                 fe.E.runtime("__olang_scope_close")
                 fe.w("call void @__olang_scope_close(ptr %s" $sc ")")
@@ -2419,8 +2453,8 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
             n := fe.load("i64", fe.let("getelementptr %olang.builder, ptr " $bp ", i32 0, i32 1"))
             fe.E.runtime("__olang_scope_alloc")
             out := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(into) ", i64 " $n ")")
-            fe.E.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
-            fe.w("call void @llvm.memcpy.p0.p0.i64(ptr " $out ", ptr " $data ", i64 " $n ", i1 false)")
+            fe.E.textCopy()
+            fe.w("call void @olang_textcopy(ptr " $out ", ptr " $data ", i64 " $n ")")
             return fe.pair(n, out)
         }
     }
