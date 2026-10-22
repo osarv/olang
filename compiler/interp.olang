@@ -65,6 +65,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     made := false
+    undecided List<ast.If&>
     for a in c.Asks {
         key := pair.Pair(a.File, I64(a.At))
         if decided.Has(key) { continue }
@@ -73,9 +74,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
             decided.Put(key, v)
             made = true
         } else {
-            # a condition that does not evaluate: the running program's, as this check checked it - what its branches
-            # hold reported
-            c.Running(a.If)
+            undecided.Push(a.If)
         }
     }
     # G21: a constant argument a call computes, evaluated in its module's context
@@ -98,6 +97,11 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
             l.Decide(t.First, t.Second, chosen)
             made = true
         }
+    }
+    # a condition that does not evaluate is the running program's, what its branches hold reported - once no decision
+    # is left to make: one calling a function whose own if is still undecided may evaluate in the next check (S8b)
+    if not made {
+        for i in undecided { c.Running(i) }
     }
     return made
 }
