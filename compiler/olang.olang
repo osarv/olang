@@ -366,7 +366,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     e.Tests = tests
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
     e.Module = kind == build.Kind.Module
-    objs := e.Objects()
+    e.Triple = cfg.Target.Triple
+    objs := e.Objects&prog()
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
         for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
         for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }
@@ -374,10 +375,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     if d.Errors() > 0 { error build.Failed.REPORTED }
     t := cfg.Target
-    triple := $"target triple = \"" $t.Triple "\"\n"
     dyncall := false
     for o in objs {
-        ir String&prog = o.Ir.Replace(emittedTriple, triple)
+        ir String&prog = o.Ir
         if ir.Contains("@__olang_dyncall") { dyncall = true }
         holds := match o.Kind {
             case emit.ObjectKind.Module => build.UnitKind.Module
@@ -436,8 +436,6 @@ fn placement(c mut typecheck.Checker&, cfg mut build.Config&) List<typed.Plan> {
     return plans
 }
 
-# the triple emission writes, which the build's target replaces
-emittedTriple String& = "target triple = \"x86_64-pc-linux-gnu\"\n"
 
 fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) mut load.Loader&cfg ? build.Failed {
     f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, false)

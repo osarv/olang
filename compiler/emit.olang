@@ -58,6 +58,8 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     itemHome List<I64>
     itemDecl List<String&>
     itemAt Map<String&, I64>
+    itemRefs List<Array<I64>&>      # each item's references (refsIn), found once when an object first needs them
+    Triple String& = "x86_64-pc-linux-gnu"    # the target written into every module (B12)
     nconst I64 = 0
     badType Bool = false            # a type met with no layout, in the function being written
     ntask I64 = 0                   # tasks' trampolines made
@@ -108,7 +110,7 @@ type Object struct(Identity String&, Kind ObjectKind, Ir String&) {
 # module's initialization, and every function they reach
 fn (e mut Emitter&) Program(w mut io.Writer&) {
     e.emitAll()
-    w.Write(moduleHead)
+    w.Write(e.head())
     w.Write(runtimeTypes)
     for d in e.tyDef { w.Write(d) }
     for t in e.itemText { w.Write(t) }
@@ -140,8 +142,10 @@ fn (e mut Emitter&) Objects() List<Object> {
     return out
 }
 
-moduleHead String& = ("; olang - emitted by the self-hosted compiler (compiler/emit.olang)\n"
-                      "target triple = \"x86_64-pc-linux-gnu\"\n\n")
+# a module's first lines
+fn (e Emitter&) head() String {
+    return $"; olang - emitted by the self-hosted compiler (compiler/emit.olang)\ntarget triple = \"" $e.Triple "\"\n\n"
+}
 
 fn (e mut Emitter&) attributes() String { return $"attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n" }
 
@@ -287,7 +291,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
         it := order[k]
         k++
         text := e.itemText[it]
-        rs := refsIn(text)
+        rs := e.refs(it)
         for r in range 0, rs.Len(), 3 {
             name := text[rs[r + 1]:rs[r + 2]]
             if rs[r] == 1 {
@@ -314,7 +318,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
         }
     }
     out := StringBuilder()
-    out.Push(moduleHead)
+    out.Push(e.head())
     out.Push(runtimeTypes)
     for t in tys { out.Push(e.tyDef[t]) }
     for it in order {
@@ -324,7 +328,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
             continue
         }
         at I64 = 0
-        rs := refsIn(text)
+        rs := e.refs(it)
         for r in range 0, rs.Len(), 3 {
             if rs[r] != 0 { continue }
             j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
@@ -638,6 +642,13 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
     e.itemText.Push($text)
     e.itemHome.Push(home)
     e.itemDecl.Push($decl)
+    e.itemRefs.Push(null)
+}
+
+# item i's references, found once
+fn (e mut Emitter&) refs(i I64) Array<I64>&e {
+    if e.itemRefs[i] == null { e.itemRefs[i] = refsIn(e.itemText[i]).ToArray() }
+    return e.itemRefs[i]
 }
 
 fn (e mut Emitter&) has(symbol String&) Bool { return e.itemAt.Has(symbol) }
