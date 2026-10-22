@@ -122,6 +122,11 @@ type summary struct() {
     Keeps List<Bool>  # by parameter: whether the body may keep something in what it names (O17)
     Stores List<Bool> # ... store something into it, or hand a writable reference into it out - not only keep its reference
     Puts List<Bool>   # ... store something into it itself, or by a callee that does - not only hand a reference out (O17b)
+    # a lambda's, by local: the same of each reference it captured, for a lambda that never leaves where it is made,
+    # judged by its body (O17, D16c)
+    CapKeeps List<Bool>
+    CapStores List<Bool>
+    CapPuts List<Bool>
     # by constructor parameter of the instance the body returns: where every return's instance bound it, in the body's
     # terms (O13c) - Untraced where the returns disagree or it is not one of the caller's; empty for none
     ResBind List<Term>
@@ -260,6 +265,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     flBlock typed.BlockId = typed.BlockId(0)
     flGrew Bool = false
     flCaps Bool = true                     # whether carried follows what a function value captured
+    kwTransient Bool = false               # the lambda kwExpr walks next never leaves where it is made (D16c)
 }
 
 # every body judged, callees before callers, a component of the call graph until its obligations stop growing
@@ -405,7 +411,8 @@ fn (s mut Scoper&) component(comp Array<I64>&) {
 # how many of a body's may-facts hold: what it builds into, keeps and stores (each only grows over a component's rounds)
 fn (s mut Scoper&) facts(b I64) I64 {
     sm := s.sums[b]
-    return countTrue(sm.Builds) + countTrue(sm.Real) + countTrue(sm.Keeps) + countTrue(sm.Stores) + countTrue(sm.Puts)
+    return countTrue(sm.Builds) + countTrue(sm.Real) + countTrue(sm.Keeps) + countTrue(sm.Stores) + countTrue(sm.Puts) +
+        countTrue(sm.CapKeeps) + countTrue(sm.CapStores) + countTrue(sm.CapPuts)
 }
 
 fn countTrue(xs List<Bool>&) I64 {
@@ -2030,6 +2037,29 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
         s.sums[s.Id].Stores.Push(s.keptStore[I64(p)])
         s.sums[s.Id].Puts.Push(s.keptPut[I64(p)])
     }
+    s.sums[s.Id].CapKeeps.Clear()
+    s.sums[s.Id].CapStores.Clear()
+    s.sums[s.Id].CapPuts.Clear()
+    if s.isLambda(b) {
+        for i in range b.Locals.Len() {
+            s.sums[s.Id].CapKeeps.Push(s.kept[i])
+            s.sums[s.Id].CapStores.Push(s.keptStore[i])
+            s.sums[s.Id].CapPuts.Push(s.keptPut[i])
+        }
+    }
+}
+
+fn (s mut Scoper&) isLambda(b typed.Body&) Bool {
+    return match b.Of {
+        case typed.BodyOf.Lambda(_) => true
+        case _ => false
+    }
+}
+
+# whether local l is one whose region O17 asks about: a reference parameter, or a lambda's capture of a reference
+fn (s mut Scoper&) regionKind(l I64) Bool {
+    k := s.B.Locals[l].Kind
+    return k == typed.LocalKind.Param or (k == typed.LocalKind.Capture and s.isLambda(s.B))
 }
 
 # the region a place is in (O17): the reference parameter it is reached from through a reference - what that parameter
@@ -2037,7 +2067,7 @@ fn (s mut Scoper&) computeKeeps(b typed.Body&) {
 fn (s mut Scoper&) regionOf(p typed.Place&) I64 {
     if not flThroughRef(p) { return -1 }
     r := s.regionParam(flRoot(p))
-    if r < 0 or s.B.Locals[r].Kind != typed.LocalKind.Param or not s.isRef(s.B.Locals[r].Ty) { return -1 }
+    if r < 0 or not s.regionKind(r) or not s.isRef(s.B.Locals[r].Ty) { return -1 }
     return r
 }
 
@@ -2108,7 +2138,7 @@ fn (s mut Scoper&) aliasBlock(bl typed.Block&) {
                 field := s.B.Locals[I64(l)].Kind == typed.LocalKind.Field
                 if p >= 0 and not field and s.isRef(s.B.Locals[I64(l)].Ty) and s.isRef(s.B.Locals[p].Ty) {
                     if s.aliasOf[p] >= 0 { p = s.aliasOf[p] }
-                    if s.B.Locals[p].Kind == typed.LocalKind.Param { s.aliasOf[I64(l)] = p }
+                    if s.regionKind(p) { s.aliasOf[I64(l)] = p }
                 }
             }
             case typed.Stmt.If(_, i) {
@@ -2292,7 +2322,7 @@ fn (s mut Scoper&) rlExpr(x typed.Expr&, pass I64) {
 
 fn (s mut Scoper&) keepParam(id I64) {
     if id >= 0 and id < s.aliasOf.Len() and s.aliasOf[id] >= 0 { id = s.aliasOf[id] }
-    if id >= 0 and id < s.kept.Len() and s.B.Locals[id].Kind == typed.LocalKind.Param and s.isRef(s.B.Locals[id].Ty) {
+    if id >= 0 and id < s.kept.Len() and s.regionKind(id) and s.isRef(s.B.Locals[id].Ty) {
         s.kept[id] = true
     }
 }
@@ -2301,7 +2331,7 @@ fn (s mut Scoper&) keepParam(id I64) {
 # when it is a store itself
 fn (s mut Scoper&) storeParam(id I64, put Bool) {
     id = s.regionParam(id)
-    if id >= 0 and id < s.kept.Len() and s.B.Locals[id].Kind == typed.LocalKind.Param and s.isRef(s.B.Locals[id].Ty) {
+    if id >= 0 and id < s.kept.Len() and s.regionKind(id) and s.isRef(s.B.Locals[id].Ty) {
         s.kept[id] = true
         s.keptStore[id] = true
         if put { s.keptPut[id] = true }
@@ -2310,7 +2340,18 @@ fn (s mut Scoper&) storeParam(id I64, put Bool) {
 
 fn (s mut Scoper&) kwBlock(b typed.Block&) {
     if b == null { return }
-    for st in b.Stmts { s.kwStmt(st) }
+    for i in range b.Stmts.Len() {
+        st := b.Stmts[i]
+        # a capturing lambda held in a local only ever called never leaves the frame (D16c)
+        match st {
+            case typed.Stmt.Let(_, l, x) {
+                if s.capturingLambda(x) and s.ocStmts(b.Stmts, i + 1, I64(l), false) { s.kwTransient = true }
+            }
+            case _ { }
+        }
+        s.kwStmt(st)
+        s.kwTransient = false
+    }
 }
 
 fn (s mut Scoper&) kwStmt(st typed.Stmt&) {
@@ -2450,8 +2491,12 @@ fn (s mut Scoper&) kwExpr(x typed.Expr&, inert Bool) {
         }
         case typed.Expr.Fn(_, _, f) {
             match f {
-                case typed.FnVal.Lambda(_, caps, _) {
-                    for cp in caps { s.kwExpr(cp.Outer, false) }
+                case typed.FnVal.Lambda(lb, caps, _) {
+                    # a lambda that never leaves where it is made is judged by its body: a capture is kept where the
+                    # lambda keeps or stores into it (O17, D16c)
+                    tr := s.kwTransient
+                    s.kwTransient = false
+                    for cp in caps { s.kwCapture(I64(lb), cp, tr) }
                 }
                 case typed.FnVal.Adapter(_, r, _) { s.kwExpr(r, false) }
                 case _ { }
@@ -2468,6 +2513,20 @@ fn (s mut Scoper&) kwExpr(x typed.Expr&, inert Bool) {
         case typed.Expr.Away(_, _, y) { s.kwExpr(y, inert) }
         case _ { }
     }
+}
+
+fn (s mut Scoper&) kwCapture(lb I64, cp typed.Capture&, tr Bool) {
+    sm := s.sums[lb]
+    k := I64(cp.Inner)
+    if not tr or not (sm.Done or sm.Judging) or k >= sm.CapKeeps.Len() {
+        s.kwExpr(cp.Outer, false)
+        return
+    }
+    if sm.CapStores[k] {
+        r := regionLocal(s.unAway(cp.Outer))
+        if r >= 0 { s.storeParam(r, sm.CapPuts[k]) }
+    }
+    s.kwExpr(cp.Outer, not sm.CapKeeps[k])
 }
 
 fn (s mut Scoper&) kwArm(a typed.Arm&, inert Bool) {
@@ -2500,7 +2559,12 @@ fn (s mut Scoper&) kwPlace(p typed.Place&) {
 # keep something in it
 fn (s mut Scoper&) kwCall(c typed.Call&) {
     match c.Target {
-        case typed.Callee.Value(f) { s.kwExpr(f, false) }
+        case typed.Callee.Value(f) {
+            # a lambda called where it is made never leaves it (D16c)
+            if s.capturingLambda(f) { s.kwTransient = true }
+            s.kwExpr(f, false)
+            s.kwTransient = false
+        }
         case _ { }
     }
     fty := s.calleeType(c)
@@ -2525,7 +2589,10 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
                     }
                 }
             }
+            # a capturing lambda made for a callee keeping nothing of it never leaves the call (D16c)
+            if s.capturingLambda(a) and s.transient(s.bodyOf(c.Target), k) { s.kwTransient = true }
             s.kwExpr(a, false)
+            s.kwTransient = false
             continue
         }
         # a handle in the region lent as its reference to a callee using it only through that reference (O17b): the
