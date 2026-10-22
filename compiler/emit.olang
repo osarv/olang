@@ -607,9 +607,13 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     if b >= 0 and e.Baked.Has(b) {
         img := try e.Baked.Get(b) catch default eval.Image()
         text := e.bakedText(s, img)
-        at := try text.Find(" = global ") catch default -1
+        at := try text.Find(" = constant ") catch default -1
         end := try text.Find("}>") catch default -1
-        decl := $"@" $s " = external global " $text[at + 10:end + 2] if at >= 0 and end > at else $"@" $s " = external global i8"
+        decl := $"@" $s " = external constant " $text[at + 12:end + 2] if at >= 0 and end > at else $"@" $s " = external global i8"
+        # K2: plain data an importer declares with its value, which its optimizer reads before the link
+        if img.Blobs.Len() == 1 and img.Blobs[0].At.Len() == 0 and at >= 0 {
+            decl = $"@" $s " = available_externally constant " $text[at + 12:text.Len() - 1]
+        }
         e.item(s, m, text, $decl "\n")
     } else {
         ty := e.ty(t)
@@ -625,7 +629,9 @@ fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
     for j in range img.Blobs.Len() {
         b := img.Blobs[j]
         name := "@" $s if j == 0 else "@" $s ".k" $j
-        kind := "global" if j == 0 else "internal constant" if b.Constant else "internal global"
+        # K2: an immutable global's own storage is never written once set - only immutable ones are baked - so it is a
+        # constant, whose loads LLVM folds
+        kind := "constant" if j == 0 else "internal constant" if b.Constant else "internal global"
         tyText, valText := StringBuilder(), StringBuilder()
         at I64 = 0
         for r in range b.At.Len() + 1 {

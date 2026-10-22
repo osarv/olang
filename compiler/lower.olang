@@ -2510,6 +2510,29 @@ fn (ln mut lowering&) zeroOf(ty types.TypeId, sp source.Span) mir.Operand {
 
 # an instance's Call as a function value (E31): its environment the instance, its code calling Call on it with the
 # value's own arguments, its result and its errors Call's
+# the scopes an adapter passes its Call: for the receiver's, the scope its instance lives in (the capture's, O4b, D16c)
+# - which the runtime gives this thread's part of where it is called elsewhere (P2) - for another parameter's, the
+# adapter's own for that parameter, for the result's the adapter's result scope
+fn (ln mut lowering&) adapterPassed(cty types.TypeId, recv types.TypeId) mir.Range {
+    t := ln.T
+    cvs := t.ScopeVarsOf(cty)
+    avs := t.ScopeVarsOf(ln.F.Ty)
+    xs := Array<mir.ScopeRef>(cvs.Len())
+    for i in range cvs.Len() {
+        xs[i] = mir.ScopeRef.Program
+        v := cvs[i]
+        if v == 0 and t.HoldsRefs(recv) {
+            xs[i] = mir.ScopeRef.Var(avs.Len())
+            continue
+        }
+        want := v - 1 if v > 0 else v
+        for j in range avs.Len() {
+            if avs[j] == want { xs[i] = mir.ScopeRef.Var(j) }
+        }
+    }
+    return ln.F.ScopeRefs(xs)
+}
+
 fn (lw mut Lowerer&) adapterFn(call typed.BodyId) mir.Fn {
     cty := lw.Bodies[I64(call)].Ty
     ps := lw.P.T.Items(lw.P.T.Params(cty))
@@ -2549,7 +2572,7 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
         eb = ln.F.NewBlock()
     }
     callee := mir.Callee.Fn(mir.FnKey.Body(call), cty)
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(args), ln.passed(mir.PassedCount(t, callee, cty))
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(args), ln.adapterPassed(cty, recv)
                                mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
     ln.end(mir.Term.Call(sp, k))
     if eb != mir.NoBlock {

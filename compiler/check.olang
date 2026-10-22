@@ -3790,6 +3790,9 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 }
                 return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, c.P.T.PermOf(want)), p), want)
             }
+            # T25d: an array of constants reaching a read-only reference is the constant data itself
+            d := c.staticArray(x, want)
+            if d != null { return d }
             v := c.fit(x, r, sp)
             if p != null and c.isNamed(have) and c.isOver(have) {
                 return typed.Expr.Borrow(sp, want, p)
@@ -4962,6 +4965,32 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
     }
     r := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, yy)
     return c.negate(sp, r) if negated else r
+}
+
+# T25d: an array literal of constants - numbers, Bool, text written in the program - as the read-only constant data of
+# its written position, of type want (a read-only reference to an array of its elements); null where it is no such
+fn (c mut Checker&) staticArray(x typed.Expr&c, want types.TypeId) typed.Expr&c {
+    if (c.P.T.PermOf(want) & types.Writable) != 0 or c.P.T.KindOf(c.P.T.Referent(want)) != types.Kind.Array { return null }
+    el := c.P.T.Elem(c.P.T.Referent(want))
+    match x {
+        case typed.Expr.Make(msp, mt, m) {
+            if m.Kind != typed.MakeKind.Array or not c.P.T.Same(c.P.T.Elem(mt), el) { return null }
+            if not (c.isNumber(el) or el == types.BoolT or el == c.P.T.Ref(c.textType(), types.ReadOnly)) { return null }
+            ks := Array<typed.Const&>(m.Items.Len())
+            for i in range m.Items.Len() {
+                match m.Items[i] {
+                    case typed.Expr.Lit(_, lt, bits) {
+                        if lt == types.UnknownT { return null }
+                        ks[i] = typed.Const.Bits(bits)
+                    }
+                    case typed.Expr.Data(_, _, _, k) { ks[i] = k }
+                    nomatch { return null }
+                }
+            }
+            return typed.Expr.Data(msp, want, c.fr().File, typed.Const.Items(ks))
+        }
+        nomatch { return null }
+    }
 }
 
 fn isArrayMake(x typed.Expr&) Bool {
@@ -9356,7 +9385,8 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     }
     vt := typeOf(v)
     if bop != token.Tok.Shl and bop != token.Tok.Shr and vt != t and vt != types.UnknownT {
-        if c.isNumber(vt) and not c.isNamed(vt) and c.P.Flows(vt, t) {
+        # T6b: a number flows toward its base - a declared one into its base and on (sc U64 += a Code over U16)
+        if c.isNumber(vt) and c.P.Flows(vt, t) {
             v = c.convert(value.Span(), v, t)
         } else {
             c.err(osp, msgs.NumberDoesNotFlow(c.ty(vt), c.ty(t), c.ty(t)))
@@ -10057,7 +10087,10 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     }
     errs := types.ListId(0)
     inferErrs := false
-    if f.S.HasErrors {
+    if f.S.HasErrors and f.S.Errors.Len() == 0 and w == types.UnknownT {
+        # R1a: "?" alone is what the body is found to fail with, as a function's is
+        inferErrs = true
+    } else if f.S.HasErrors {
         es List<types.TypeId>
         if f.S.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
         for e in f.S.Errors { es.Push(c.P.ErrorType(c.fr().Ctx, e)) }
