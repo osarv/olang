@@ -5623,12 +5623,61 @@ fn (s mut Scoper&) oldValue(x typed.Expr&) Bool {
         case typed.Expr.Read(_, _, p, _) {
             match p {
                 case typed.Place.Target(_, _) { return true }
-                case _ { }
+                # a borrow of the place written over, or of storage within it (S4d: "y = wrap(y)")
+                case _ { return not s.isRef(s.targets[s.targets.Len() - 1].Type()) and within(p, s.targets[s.targets.Len() - 1]) }
             }
         }
         case _ { }
     }
     return false
+}
+
+# whether place p is place q or storage within it - a field, payload or element of it (any element standing for any
+# other), reached through no reference (S4d)
+fn within(p typed.Place&, q typed.Place&) Bool {
+    if samePlace(p, q) { return true }
+    return match p {
+        case typed.Place.Field(_, _, b, _) => within(b, q)
+        case typed.Place.Elem(_, _, e) => within(e.Base, q)
+        case typed.Place.Payload(_, _, pl) => within(pl.Base, q)
+        case _ => false
+    }
+}
+
+fn samePlace(p typed.Place&, q typed.Place&) Bool {
+    match p {
+        case typed.Place.Local(_, _, a) {
+            match q {
+                case typed.Place.Local(_, _, b) { return a == b }
+                case _ { return false }
+            }
+        }
+        case typed.Place.Global(_, _, m, n) {
+            match q {
+                case typed.Place.Global(_, _, m2, n2) { return m == m2 and n == n2 }
+                case _ { return false }
+            }
+        }
+        case typed.Place.Field(_, _, b, i) {
+            match q {
+                case typed.Place.Field(_, _, b2, i2) { return i == i2 and samePlace(b, b2) }
+                case _ { return false }
+            }
+        }
+        case typed.Place.Elem(_, _, e) {
+            match q {
+                case typed.Place.Elem(_, _, e2) { return samePlace(e.Base, e2.Base) }
+                case _ { return false }
+            }
+        }
+        case typed.Place.Payload(_, _, pl) {
+            match q {
+                case typed.Place.Payload(_, _, pl2) { return samePlace(pl.Base, pl2.Base) }
+                case _ { return false }
+            }
+        }
+        case _ { return false }
+    }
 }
 
 # where an argument is said: a conditional at its "if"
