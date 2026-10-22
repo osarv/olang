@@ -764,9 +764,19 @@ fn unfolded() folded { return folded(Unfolded, 0, types.UnknownT) }
 
 fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeId { return p.constOf(c, p.eval(c, e), want, e) }
 
+# whether an expression is a literal, or a sign before one: its value adapts (E4a), whatever type its digits read as
+fn litOnly(e ast.Expr&) Bool {
+    return match e {
+        case ast.Expr.Lit(_, _) => true
+        case ast.Expr.Unary(_, _, x) => litOnly(x)
+        case ast.Expr.Paren(_, x) => litOnly(x)
+        case _ => false
+    }
+}
+
 fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&) types.TypeId {
     # G21: a typed value of a number type that does not flow into the parameter's (T6b) - a literal's adapts
-    if f.St == Folded and e != null and p.T.IsInt(f.Ty) and p.T.IsInt(want) and f.Ty != want and not p.Flows(f.Ty, want) {
+    if f.St == Folded and e != null and p.T.IsInt(f.Ty) and p.T.IsInt(want) and f.Ty != want and not p.Flows(f.Ty, want) and not litOnly(e) {
         sp := e.Span()
         key := pair.Pair(c.Mi, I64(sp.Start))
         if not p.argSaid.Has(key) {

@@ -21145,7 +21145,8 @@ compiled where stage 0 refuses them, 83 with another first diagnostic, 2 not bui
   borrowed again at the target's permission when the literal is refitted (T25b - `Cur&[c]` into `Array<mut Cur&>`); a
   function named through an import alias is a value (T21, `say := io.Println`).
 - *generic*: G21 - a type where a constant parameter goes and a value where a type parameter goes, said once where
-  written; a typed value of another integer type (`K<X + 1>`, X a U8, for an I8).
+  written; a typed value of another integer type (`K<X + 1>`, X a U8, for an I8) - never a literal, whose value adapts
+  (`KfMin<-9223372036854775808>`, a U64's digits for I64's minimum).
 - *eval/interp*: G21's constant arguments the evaluator refuses or that abort are errors where they are written, with
   "instantiated here, with N = 0"; a condition that does not evaluate is the running program's only once nothing more
   is decided - the evaluator's round 4 had made it so in the first attempt, which reported the held syntax errors of a
@@ -21161,7 +21162,12 @@ compiled where stage 0 refuses them, 83 with another first diagnostic, 2 not bui
   a program reaches, and counts uses' objects past their hash (stage 0's `.d<hash>` is a naming detail, B10b's
   behaviour is what is checked).
 
-**Left, by pass** (checks/checks.olang through stage 1 after the round: see PROGRESS). *eval* (the evaluator's round
+**Measured after the round** (a debug build of the port, 52c42b3 and the G21 literal fix): tests/shared.olang 713 of
+713 through it (at -debug, which links small), runner 25 of 25, worker 15 of 15; the other test files as before, all
+passing; checks/checks.olang 34 of its 59 tests (at the merge, -O3), and of its 1,061 cases 85 still failing (from 125),
+27 of them compiling where stage 0 refuses.
+
+**Left, by pass.** *eval* (the evaluator's round
 in progress): S18c asserts false while compiling, K2 globals that abort, S8a dead branches, T29d literals through a
 constructor, D13c zero values, E33's NaN bits, B9a's MIN / -1, B9c's unseen condition. *check*: B5a's initialization
 order and its cycle errors (lowering still runs initializers in checked order - a correctness gap, not only a
