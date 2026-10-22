@@ -48,8 +48,9 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 ## Subfolders
 
 - `tools/` - the acceptance tools (below), all olang programs (the shell scripts they began as are gone):
-  `tokdiff`, `astdiff`, `namesdiff`, `layoutdiff` and `modgraph` compare the self-hosted passes with stage 0's oracles
-  and goldens, `layoutgold` and `diaggold_capture` capture the goldens again, and `toolkit.olang` is what they share
+  `tokdiff`, `astdiff`, `namesdiff`, `layoutdiff` and `modgraph` compare the self-hosted passes with what stage 0 gave,
+  as `goldens/` stores it (each tool's `-capture`, `layoutgold`, `diaggold_capture` and `rungold` capture the goldens
+  again, from stage 0 or from the port), and `toolkit.olang` is what they share
   (running a program without a shell, reading a tool's output as rows, a scratch directory, `diff`). Each is built and
   run by its make target (`make tokdiff`), or by hand from the repository root: `build/out build
   compiler/tools/tokdiff.olang && build/compiler_tools_tokdiff [FILE...]`. Also `dump.olang` (prints what the passes
@@ -63,7 +64,11 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
   `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`, `genmsgs.olang`
   (writes `msgs.olang` from the C table; from the
   repository root, `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
-- `goldens/` - what stage 0 gave, captured: `diag.txt` (diagnostics per checks case), `layout.txt` and
+- `goldens/` - what stage 0 gave, captured: `drv.txt` (the driver's command lines and whole builds), `run.txt` (the
+  corpus's and std's test runs and the checks' run cases, for emitdiff and evaldiff), `tokens.txt`/`tokens.full.txt` and
+  `ast.txt`/`ast.full.txt` (a hash per file of the C tokenizer's stream and the C parser's tree, whole for small files
+  with errors - a file edited since is compared with the C oracle while `bootstrap/` has it), `modgraph.txt` (module
+  graphs per root), `diag.txt` (diagnostics per checks case), `layout.txt` and
   `layout.deferred` (type layouts per program).
 - `testdata/lex/` - small inputs for the scanner's tests.
 
@@ -80,6 +85,8 @@ make modgraph      # the module graph equals stage 0's, from every root program
 make diagtest      # diagnostics (msgs, diag) against the goldens
 make layoutgold    # capture layout.txt again from stage 0 (minutes)
 make diaggold      # capture diag.txt again from build/out
+make drvgold       # capture drv.txt again; rungold run.txt (minutes); tokgold, astgold, modgold the rest
+                   # (GOLD_FROM=port captures any of them from the port instead, GOLD_OLANG naming its driver)
 make fmtdiff       # every file formatted reads back as the same tree, keeps its comments, and is its own layout
 make checkdiff     # the checker's first errors equal stage 0's on refused cases; accepted programs check clean
 make scopediff     # the scope pass's first errors equal stage 0's on cases refused by section 8; accepted programs are clean
@@ -89,5 +96,6 @@ make emitdiff      # the corpus and std's tests built through emit, run, and eac
 make evaldiff      # the corpus, std's tests and the checks' run cases run by the evaluator, compared with stage 0's runs
 ```
 
-The `*diff` targets build the C oracles in `bootstrap/oracle/` and `build/compiler_tools_dump` first.
+The `*diff` targets build `build/compiler_tools_dump` first, and the C oracles in `bootstrap/oracle/` where a golden's
+capture or a file edited since needs them.
 `make verify` runs tokdiff, astdiff, namesdiff, layoutdiff, fmtdiff and drvdiff.
