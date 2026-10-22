@@ -280,7 +280,26 @@ type cfn struct() {
     Global mut Array<Bool>&
     TermGlobal mut Array<Bool>&
     Copied mut Array<Bool>&     # by parameter: a by-value run-time-length array the body writes, its own copy (D9b)
+    # by statement, the commonest shapes in a flat form (fastStride words each, Fast[i * fastStride] the kind, 0 for
+    # none): a number moved, set, computed or read from or written into an array, between locals - run by fastStmt
+    # with the same checks the general path makes, without walking its operands and places again
+    Fast mut Array<I64>&
+    FastOp mut Array<typed.PrimOp>&
+    Sps mut Array<source.Span>&
 }
+
+# the flat forms (cfn.Fast): a local of a number set from another (fCopy), from a constant (fConst), from an operator
+# on two (fBin) or one (fUn) operands each a local or a constant, from an array local's element at an index local
+# (fLoad); an array local's element at an index local set from a local or a constant (fStore). The words: kind, the
+# destination local, its width, operand A (a local, or -1 and its bits), operand B (the same), A's type, B's type,
+# the result's type
+fCopy I64 = 1
+fConst I64 = 2
+fBin I64 = 3
+fUn I64 = 4
+fLoad I64 = 5
+fStore I64 = 6
+fastStride I64 = 10
 
 # ---- the machine ----
 
@@ -402,6 +421,9 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
     nb := f.Blocks.Len()
     c.Stmts = Array<mir.Stmt>(n)
     c.Global = Array<Bool>(n)
+    c.Fast = Array<I64>(n * fastStride)
+    c.FastOp = Array<typed.PrimOp>(n, typed.PrimOp.Add)
+    c.Sps = Array<source.Span>(n, source.Span(0, 0))
     c.Start = Array<I64>(nb + 1)
     c.Terms = Array<mir.Term>(nb)
     c.TermGlobal = Array<Bool>(nb)
@@ -412,6 +434,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
         for st in b.Stmts {
             c.Stmts[k] = st
             c.Global[k] = stmtNamesGlobal(f, st)
+            if not c.Global[k] { m.flatten(f, st, c, k) }
             k++
         }
         c.Terms[bi] = b.T
@@ -423,6 +446,138 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
         c.Copied[i] = m.rtArrayValue(f.Locals[I64(f.Params[i])].Ty) and m.writesInto(f, f.Params[i])
     }
     return c
+}
+
+# statement k of f in a flat form, where it has one of the shapes cfn.Fast holds
+fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt, c mut cfn&, k I64) {
+    match st {
+        case mir.Stmt.Assign(sp, p, rv) {
+            c.Sps[k] = sp
+            o := k * fastStride
+            if p.Path.N == 0 {
+                d := plainLocal(p)
+                if d < 0 or not m.number(f.Locals[d].Ty) { return }
+                w := m.width(f.Locals[d].Ty)
+                c.Fast[o + 1], c.Fast[o + 2], c.Fast[o + 9] = d, w, I64(f.Locals[d].Ty)
+                match rv {
+                    case mir.Rvalue.Use(x) {
+                        match x {
+                            case mir.Operand.Const(ty, bits) {
+                                if not m.number(ty) or m.width(ty) != w { return }
+                                c.Fast[o], c.Fast[o + 3], c.Fast[o + 4] = fConst, -1, bits & m.mask(w)
+                            }
+                            case mir.Operand.Copy(q) {
+                                if q.Path.N == 0 {
+                                    a := plainLocal(q)
+                                    if a < 0 or not m.number(f.Locals[a].Ty) or m.width(f.Locals[a].Ty) != w { return }
+                                    c.Fast[o], c.Fast[o + 3], c.Fast[o + 4] = fCopy, a, w
+                                } else if q.Path.N == 1 {
+                                    a := plainLocal(q)
+                                    if a < 0 { return }
+                                    match f.Projs[I64(q.Path.At)] {
+                                        case mir.Proj.Index(ix) {
+                                            el := m.elemOf(f.Locals[a].Ty)
+                                            if not m.number(el) or m.width(el) != w or m.size(el) != w { return }
+                                            if not m.number(f.Locals[I64(ix)].Ty) { return }
+                                            c.Fast[o], c.Fast[o + 3], c.Fast[o + 5] = fLoad, a, I64(ix)
+                                            c.Fast[o + 7], c.Fast[o + 8] = I64(f.Locals[a].Ty), I64(f.Locals[I64(ix)].Ty)
+                                        }
+                                        case _ { }
+                                    }
+                                }
+                            }
+                            case _ { }
+                        }
+                    }
+                    case mir.Rvalue.Prim(op, ty, args) {
+                        if not m.number(ty) or m.width(ty) != w or not flatOp(op) { return }
+                        if not m.flatOperand(f, f.Ops[I64(args.At)], c, o + 3, o + 7) { return }
+                        if op == typed.PrimOp.Neg or op == typed.PrimOp.BitNot or op == typed.PrimOp.Not {
+                            if args.N != 1 { return }
+                            c.Fast[o] = fUn
+                        } else {
+                            if args.N != 2 or not m.flatOperand(f, f.Ops[I64(args.At) + 1], c, o + 5, o + 8) { return }
+                            c.Fast[o] = fBin
+                        }
+                        c.FastOp[k] = op
+                    }
+                    case _ { }
+                }
+            } else if p.Path.N == 1 {
+                # an element stored: x[i] = v
+                d := plainLocal(p)
+                if d < 0 { return }
+                match f.Projs[I64(p.Path.At)] {
+                    case mir.Proj.Index(ix) {
+                        el := m.elemOf(f.Locals[d].Ty)
+                        if not m.number(el) or m.size(el) != m.width(el) { return }
+                        w := m.width(el)
+                        match rv {
+                            case mir.Rvalue.Use(x) {
+                                match x {
+                                    case mir.Operand.Const(_, _), mir.Operand.Copy(_) {
+                                        if not m.flatOperand(f, x, c, o + 3, o + 9) { return }
+                                        if m.width(types.TypeId(I32(c.Fast[o + 9]))) != w { return }
+                                    }
+                                    case _ { return }
+                                }
+                            }
+                            case _ { return }
+                        }
+                        if not m.number(f.Locals[I64(ix)].Ty) { return }
+                        c.Fast[o], c.Fast[o + 1], c.Fast[o + 2], c.Fast[o + 5] = fStore, d, w, I64(ix)
+                        c.Fast[o + 7], c.Fast[o + 8] = I64(f.Locals[d].Ty), I64(f.Locals[I64(ix)].Ty)
+                    }
+                    case _ { }
+                }
+            }
+        }
+        case _ { }
+    }
+}
+
+# an operand of a flat form: a local of a number (its id at slot), or a number constant (-1 at slot, its bits after);
+# its type at tslot. Whether it is one
+fn (m mut Machine&) flatOperand(f mir.Fn&, x mir.Operand, c mut cfn&, slot I64, tslot I64) Bool {
+    match x {
+        case mir.Operand.Const(ty, bits) {
+            if not m.number(ty) { return false }
+            c.Fast[slot], c.Fast[slot + 1], c.Fast[tslot] = -1, bits & m.mask(m.width(ty)), I64(ty)
+            return true
+        }
+        case mir.Operand.Copy(q) {
+            if q.Path.N != 0 { return false }
+            a := plainLocal(q)
+            if a < 0 or not m.number(f.Locals[a].Ty) { return false }
+            c.Fast[slot], c.Fast[slot + 1], c.Fast[tslot] = a, m.width(f.Locals[a].Ty), I64(f.Locals[a].Ty)
+            return true
+        }
+        case _ { return false }
+    }
+}
+
+fn plainLocal(p mir.Place) I64 {
+    return match p.B {
+        case mir.Base.Local(l) => I64(l)
+        case _ => -1
+    }
+}
+
+# the operators prim computes from two numbers' bits (or one's), with nothing else to read
+fn flatOp(op typed.PrimOp) Bool {
+    return match op {
+        case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul
+             typed.PrimOp.Div, typed.PrimOp.Rem, typed.PrimOp.Shl, typed.PrimOp.Shr, typed.PrimOp.BitAnd, typed.PrimOp.BitOr
+             typed.PrimOp.BitXor, typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt
+             typed.PrimOp.Ge => true
+        nomatch => false
+    }
+}
+
+# a number: a Bool, an integer or a float, held in one word of its own width
+fn (m mut Machine&) number(ty types.TypeId) Bool {
+    sh := m.shape(ty)
+    return sh == vBool or sh == vInt or sh == vUint or sh == vFloat
 }
 
 # a run-time-length array held by value, not through a reference
@@ -1215,6 +1370,56 @@ fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
 
 fn (m mut Machine&) fnOfFrame(fi I64) mir.Fn { return m.fns[m.fs[fi].Fn] }
 
+# statement i of frame fi's function (fk) in its flat form (cfn.Fast): what assign makes of it, its operands read
+# and its destination written through the same checks
+fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
+    fast := m.cf[fk].Fast
+    o := i * fastStride
+    m.stopFile = m.cf[fk].File
+    m.stopSp = m.cf[fk].Sps[i]
+    w := fast[o + 2]
+    if kind == fStore {
+        p, _ := m.element(m.localPtr(fi, mir.LocalId(I32(fast[o + 1]))), types.TypeId(I32(fast[o + 7])), m.flatIndex(fi, fast, o))
+        if m.halted { return }
+        m.wr(p, w, m.flatValue(fi, fast, o + 3))
+        return
+    }
+    v I64 = 0
+    if kind == fCopy or kind == fConst {
+        v = m.flatValue(fi, fast, o + 3)
+    } else if kind == fLoad {
+        p, _ := m.element(m.localPtr(fi, mir.LocalId(I32(fast[o + 3]))), types.TypeId(I32(fast[o + 7])), m.flatIndex(fi, fast, o))
+        if m.halted { return }
+        v = m.rd(p, w)
+    } else {
+        op := m.cf[fk].FastOp[i]
+        at := types.TypeId(I32(fast[o + 7]))
+        a := m.flatValue(fi, fast, o + 3)
+        if kind == fUn {
+            v = m.unary(op, a, at, m.shape(at))
+        } else {
+            b := m.flatValue(fi, fast, o + 5)
+            if m.halted { return }
+            v = m.numOp(op, a, b, at, types.TypeId(I32(fast[o + 8])), m.shape(at))
+        }
+    }
+    if m.halted { return }
+    m.wr(m.localPtr(fi, mir.LocalId(I32(fast[o + 1]))), w, v)
+}
+
+# a flat form's operand at slot: a local's bits (its width after it), or the constant's
+fn (m mut Machine&) flatValue(fi I64, fast Array<I64>&, slot I64) I64 {
+    l := fast[slot]
+    if l < 0 { return fast[slot + 1] }
+    return m.rd(m.localPtr(fi, mir.LocalId(I32(l))), fast[slot + 1])
+}
+
+# a flat load's or store's index: its local's value
+fn (m mut Machine&) flatIndex(fi I64, fast Array<I64>&, o I64) I64 {
+    lt := types.TypeId(I32(fast[o + 8]))
+    return m.intValue(m.rd(m.localPtr(fi, mir.LocalId(I32(fast[o + 5]))), m.width(lt)), lt)
+}
+
 # the scope a ScopeRef names in frame fi
 fn (m mut Machine&) scopeOf(fi I64, r mir.ScopeRef) I64 {
     fr := m.fs[fi]
@@ -1860,6 +2065,26 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
     yt := m.opType(fi, m.arg(fi, args, 1))
     b := m.scalar(fi, m.arg(fi, args, 1))
     if m.halted { return 0 }
+    if sh == vFloat or sh == vInt or sh == vUint or sh == vBool { return m.numOp(op, a, b, at, yt, sh) }
+    # == and != of anything else (a reference, an error code, a plain enum): its words alike
+    if op == typed.PrimOp.Eq or op == typed.PrimOp.Ne {
+        p := m.addr(fi, x, 1)
+        q := m.addr(fi, m.arg(fi, args, 1), 2)
+        same := true
+        n := m.size(at)
+        for w in range (n + 7) / 8 {
+            k := 8 if n - 8 * w >= 8 else n - 8 * w
+            pa := m.rdPtrOrBits(Ptr(p.Id, p.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(p.Id, p.Off + 8 * w), k))
+            qa := m.rdPtrOrBits(Ptr(q.Id, q.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(q.Id, q.Off + 8 * w), k))
+            if pa.Id != qa.Id or pa.Off != qa.Off { same = false }
+        }
+        return 1 if same == (op == typed.PrimOp.Eq) else 0
+    }
+    return m.notModelled()
+}
+
+# a binary operator on two numbers' bits, a's type at (sh its shape) and b's yt
+fn (m mut Machine&) numOp(op typed.PrimOp, a I64, b I64, at types.TypeId, yt types.TypeId, sh I64) I64 {
     if sh == vFloat { return m.floatOp(op, a, b, at) }
     if sh == vInt or sh == vUint { return m.intOp(op, a, b, at, yt) }
     if sh == vBool {
@@ -1874,20 +2099,6 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
             case typed.PrimOp.Ge => 1 if a >= b else 0
             nomatch => m.notModelled()
         }
-    }
-    # == and != of anything else (a reference, an error code, a plain enum): its words alike
-    if op == typed.PrimOp.Eq or op == typed.PrimOp.Ne {
-        p := m.addr(fi, x, 1)
-        q := m.addr(fi, m.arg(fi, args, 1), 2)
-        same := true
-        n := m.size(at)
-        for w in range (n + 7) / 8 {
-            k := 8 if n - 8 * w >= 8 else n - 8 * w
-            pa := m.rdPtrOrBits(Ptr(p.Id, p.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(p.Id, p.Off + 8 * w), k))
-            qa := m.rdPtrOrBits(Ptr(q.Id, q.Off + 8 * w)) if k == 8 else Ptr(0, m.rd(Ptr(q.Id, q.Off + 8 * w), k))
-            if pa.Id != qa.Id or pa.Off != qa.Off { same = false }
-        }
-        return 1 if same == (op == typed.PrimOp.Eq) else 0
     }
     return m.notModelled()
 }
@@ -2203,6 +2414,12 @@ fn (m mut Machine&) fits(v I64, big Bool, w I64, signed Bool) Bool {
 # ---- statements ----
 
 fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
+    fkind := m.cf[fk].Fast[i * fastStride]
+    if fkind != 0 {
+        m.flat(fi, fk, i, fkind)
+        if not m.halted { m.fs[fi].Stmt += 1 }
+        return
+    }
     glob := m.cf[fk].Global[i]
     match m.cf[fk].Stmts[i] {
         case mir.Stmt.Assign(sp, p, rv) {
@@ -3402,7 +3619,25 @@ fn (m mut Machine&) loop(base I64) {
             }
             continue
         }
-        if i < m.cf[k].Start[b + 1] {
+        end := m.cf[k].Start[b + 1]
+        if i < end and m.cf[k].Fast[i * fastStride] != 0 {
+            # a run of flat statements: no scope closes, no frame changes, nothing waits between them
+            fast := m.cf[k].Fast
+            for {
+                m.flat(fi, k, i, fast[i * fastStride])
+                if m.halted { return }
+                m.fs[fi].Stmt += 1
+                i++
+                if i >= end or fast[i * fastStride] == 0 { break }
+                m.Steps++
+                if m.StepBudget >= 0 and m.Steps > m.StepBudget {
+                    m.refuse(WhySteps)
+                    return
+                }
+            }
+            continue
+        }
+        if i < end {
             m.stmtAt(fi, k, i)
         } else {
             m.term(fi, m.cf[k].Terms[b], m.cf[k].TermGlobal[b])
