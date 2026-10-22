@@ -1,0 +1,6 @@
+# M6a: a public type's private member, from another module
+import "lib"
+fn main() ? {
+  b := lib.Box(1)
+  n := b.inner
+}

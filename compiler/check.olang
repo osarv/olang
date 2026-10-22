@@ -104,6 +104,13 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     ctorCalled types.TypeId = types.UnknownT  # the type whose constructor callBody is calling: its defaults (D8a)
     globalBodies Map<pair.Pair<I64, I64>, I64>  # (module, name): a global's initializer's body
     globalTypes Map<pair.Pair<I64, I64>, types.TypeId>
+    globalDecls List<pair.Pair<I64, I64>>  # (module, name): the globals in declaration order, the branches chosen (B5a)
+    b5aSaid Map<I64, Bool>                 # the global bodies in a cycle said already (B5a)
+    litLocals Map<pair.Pair<I64, I64>, Bool>  # (body, local): a number ":=" declared of its literal's own type (T6a)
+    rangeEnds Map<pair.Pair<I64, I64>, source.Span>  # (body, local): a for-in's variable over literals, its range's end
+    rangeExprs Map<pair.Pair<I64, I64>, Bool>        # ... whose end is a literal-only expression, not one literal
+    rangeEnd source.Span = source.Span(-1, -1)       # the range being walked, while its variable is declared
+    rangeEndLit Bool = false
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
@@ -111,6 +118,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     tryStmt Bool = false                      # the try being built is a statement: its clauses give no value (R11)
     decided Bool = false                      # the call being built is a declared number's constructor run on a literal (T29d)
     eqAt source.Span = source.Span(-1, -1)    # where the "==" being elaborated is written (M6b's error)
+    strAt source.Span = source.Span(-1, -1)   # where the "$" whose renderings are being found is written (M6b's error)
+    hashAt source.Span = source.Span(-1, -1)  # where the supplied Hash whose parts are being found is called (M6b's error)
     compoundAt source.Span = source.Span(-1, -1)  # a compound assignment's operator, while its target is read (E31)
     opIn source.Span = source.Span(-1, -1)    # where "in" is written, for the Has or Contains being built (E29)
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
@@ -268,6 +277,7 @@ fn (c mut Checker&) CheckProgram() {
         }
         if not grew or c.Attempts >= 20 {
             c.settleFixed()
+            c.orderGlobals()
             return
         }
         c.P.L.Diags.Forget(mark)
@@ -307,6 +317,11 @@ fn (c mut Checker&) reset() {
     c.ctorCalled = types.UnknownT
     c.globalBodies = Map<pair.Pair<I64, I64>, I64>()
     c.globalTypes = Map<pair.Pair<I64, I64>, types.TypeId>()
+    c.globalDecls = List<pair.Pair<I64, I64>>()
+    c.b5aSaid = Map<I64, Bool>()
+    c.litLocals = Map<pair.Pair<I64, I64>, Bool>()
+    c.rangeEnds = Map<pair.Pair<I64, I64>, source.Span>()
+    c.rangeExprs = Map<pair.Pair<I64, I64>, Bool>()
     c.exprs = List<typed.Expr&>()
     c.stmts = List<typed.Stmt&>()
     c.atRecs = List<atRec>()
@@ -451,6 +466,7 @@ fn (c mut Checker&) attempt() {
         if c.P.FnIsExtern(f) or c.P.FnDecl(f).Body == null { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
+        c.errorSetKnown(f)
         if c.P.FnDecl(f).Recv != null {
             c.operatorMethod(f)
             c.inheritClash(f)
@@ -468,6 +484,21 @@ fn (c mut Checker&) attempt() {
     c.drain()
     c.failForms()
     c.roSettle()
+}
+
+# R1: every item of a function's written error set names an error type, or one of its words
+fn (c mut Checker&) errorSetKnown(f I64) {
+    fd := c.P.FnDecl(f)
+    if fd.S.Errors == null { return }
+    mi := c.P.FnModule(f)
+    ctx := generic.Context(mi, -1)
+    for e in fd.S.Errors {
+        if e == null or e.Parts.Len() == 0 or c.P.ErrorType(ctx, e) != types.UnknownT { continue }
+        n := e.Parts.Len()
+        if n >= 2 and c.P.ErrorType(ctx, ast.Path(e.Sp, e.Parts[:n - 1])) != types.UnknownT { continue }
+        text := c.P.L.Mods[mi].Src.Text[I64(e.Sp.Start):I64(e.Sp.End)]
+        c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(e.Sp.Start), I64(e.Sp.End)), msgs.UnknownErrorType(msgs.Tok(text)))
+    }
 }
 
 # X2: what crosses the C boundary - a number, or for a parameter an array of numbers; a runtime function's parameter
@@ -907,6 +938,14 @@ fn protocolArity(cap String&) I64 {
 
 # a method named for an operator, of the operator's arity, claims it, so it has the rest of its shape (E31, E31a,
 # E10a, E11c); its private spelling is held to the same (M6b)
+# an operator method's shape error at its name - a private spelling's with a note saying why it is held to the shape,
+# since its name does not (M6b)
+fn (c mut Checker&) shapeErr(at source.Span, fd ast.Func&, cap String&, m msgs.Msg) {
+    rec := c.err(at, m)
+    name := c.text(fd.Name)
+    if name != cap { c.P.L.Diags.Note(rec, c.at(at), msgs.NoteProtocolSpelling(name, cap, cap)) }
+}
+
 fn (c mut Checker&) operatorMethod(f I64) {
     fd := c.P.FnDecl(f)
     name := c.text(fd.Name)
@@ -925,27 +964,27 @@ fn (c mut Checker&) operatorMethod(f I64) {
     at := c.nameSpan(fd)
     res := c.P.T.Result(sig)
     if res == types.NoreturnT {
-        c.err(at, msgs.NoreturnHere("an operator's method"))
+        c.shapeErr(at, fd, cap, msgs.NoreturnHere("an operator's method"))
     } else if sh.Result and (res == types.VoidT or c.P.T.KindOf(res) == types.Kind.Tuple) {
-        c.err(at, msgs.OperatorResult(sh.Name))
+        c.shapeErr(at, fd, cap, msgs.OperatorResult(sh.Name))
     } else if not sh.Result and res != types.VoidT {
-        c.err(at, msgs.SetatResult())
+        c.shapeErr(at, fd, cap, msgs.SetatResult())
     } else if not sh.MayFail and c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 and not c.infersErrs(sig) {
         # an inferred set is judged once it is known (failForms)
-        c.err(at, msgs.MethodCannotFail(sh.Name))
+        c.shapeErr(at, fd, cap, msgs.MethodCannotFail(sh.Name))
     } else if sh.Name == "Less" and res != types.BoolT {
-        c.err(at, msgs.LessNotBool())
+        c.shapeErr(at, fd, cap, msgs.LessNotBool())
     } else if sh.Name == "Len" and res != c.i64() {
-        c.err(at, msgs.LenShape())
+        c.shapeErr(at, fd, cap, msgs.LenShape())
     } else if sh.Name == "Eq" or sh.Name == "Str" {
         writes := c.writable(ps[0])
         if sh.Name == "Eq" {
             writes = writes or c.writable(ps[1])
-            if res != types.BoolT or not c.P.T.Same(c.P.T.Plain(c.deref(ps[0])), c.P.T.Plain(c.deref(ps[1]))) { c.err(at, msgs.EqShape()) }
+            if res != types.BoolT or not c.P.T.Same(c.P.T.Plain(c.deref(ps[0])), c.P.T.Plain(c.deref(ps[1]))) { c.shapeErr(at, fd, cap, msgs.EqShape()) }
         } else if not c.sameRepr(c.deref(res), c.textType()) {
-            c.err(at, msgs.StrShape())
+            c.shapeErr(at, fd, cap, msgs.StrShape())
         }
-        if writes { c.err(at, msgs.EqStrWrites(sh.Name)) }
+        if writes { c.shapeErr(at, fd, cap, msgs.EqStrWrites(sh.Name)) }
     }
     c.pop()
 }
@@ -1049,7 +1088,10 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
     for d in ds {
         match d {
             case ast.Decl.Global(_, v) {
-                for n in v.Names { c.globalBody(mi, n) }
+                for n in v.Names {
+                    c.globalDecls.Push(pair.Pair(mi, I64(n)))
+                    c.globalBody(mi, n)
+                }
             }
             case ast.Decl.Test(sp, _, body) {
                 if mi == c.P.L.Root { c.testBody(mi, sp, body, tests) }
@@ -1298,7 +1340,11 @@ fn (c mut Checker&) partHashes(t types.TypeId, depth I64) {
         for name in String&["Hash", "hash"] {
             m := c.P.MethodOf(r, c.P.L.Names.Intern(name))
             if m < 0 or c.P.VarCount(generic.FnOwner(m)) > 0 { continue }
-            if name == "hash" and c.P.FnModule(m) != c.fr().Mi { continue }
+            if name == "hash" and c.P.FnModule(m) != c.fr().Mi {
+                # M6b: a private hash is its own module's - the supplied Hash elsewhere cannot use it
+                if c.hashAt.Start >= 0 { c.privateRole(m, r, "Hash", c.hashAt, "'Hash'") }
+                continue
+            }
             c.fnBody(c.P.FnInstance(m, types.ListId(0)))
             return
         }
@@ -1696,6 +1742,456 @@ fn (c mut Checker&) namesLocal(sp source.Span) Bool {
     return k == names.What.Local or k == names.What.TypeVar
 }
 
+# ---- B5a: the order globals are set in ----
+
+# what a walk from one global's initializer finds: the bodies it ran into, the functions named as values in what runs,
+# the globals of its module read, the globals holding a function whose initializers were read for the names they hold,
+# and whether what runs calls through a function value - which may reach any function named as one
+type b5aWalk struct(Mod I64) {
+    Mod
+    walked Map<I64, Bool>
+    named List<I64>
+    found List<I64>
+    holders Map<I64, Bool>
+    strs Map<types.TypeId, Bool>
+    namesOnly Bool = false
+    through Bool = false
+}
+
+# every module's globals in the order they are set (P.InitOrder): a module after its imports - the prelude's first,
+# then the root's, depth first - and within one each after the globals its initializer reads, directly or through what
+# it calls, else in declaration order. A cycle is said once, from the first global left, along its reads; its members
+# are then set in that order and the rest ordered on
+fn (c mut Checker&) orderGlobals() {
+    seen Map<I64, Bool>
+    mods List<I64>
+    for m in range c.P.L.Mods.Len() {
+        if c.P.L.Mods[m].Prelude { c.b5aModules(m, seen, mods) }
+    }
+    c.b5aModules(c.P.L.Root, seen, mods)
+    for m in range c.P.L.Mods.Len() { c.b5aModules(m, seen, mods) }
+    c.P.InitOrder.Clear()
+    for m in mods { c.orderModule(m, c.P.InitOrder) }
+}
+
+fn (c mut Checker&) b5aModules(m I64, seen mut Map<I64, Bool>&, out mut List<I64>&) {
+    if seen.Has(m) { return }
+    seen.Put(m, true)
+    for im in c.P.L.Mods[m].Imports {
+        if im.Target >= 0 { c.b5aModules(im.Target, seen, out) }
+    }
+    out.Push(m)
+}
+
+fn (c mut Checker&) orderModule(m I64, out mut List<I64>&) {
+    gs List<I64>
+    pos Map<I64, I64>
+    for k in c.globalDecls {
+        if k.First != m { continue }
+        id := try c.globalBodies.Get(k) catch default -1
+        if id < 0 or c.Bodies[id].Root == null or pos.Has(id) { continue }
+        pos.Put(id, gs.Len())
+        gs.Push(id)
+    }
+    for i in range c.Bodies.Len() {
+        match c.Bodies[i].Of {
+            case typed.BodyOf.Global(gm, _) {
+                if gm == m and c.Bodies[i].Root != null and not pos.Has(i) {
+                    pos.Put(i, gs.Len())
+                    gs.Push(i)
+                }
+            }
+            case _ { }
+        }
+    }
+    n := gs.Len()
+    depAt List<I64>
+    depTo List<I64>
+    for g in gs {
+        depAt.Push(depTo.Len())
+        for d in c.globalDeps(m, g) { depTo.Push(try pos.Get(d) catch default -1) }
+    }
+    depAt.Push(depTo.Len())
+    placed := Array<Bool>(n, false)
+    done I64 = 0
+    for done < n {
+        pick I64 = -1
+        for k in range n {
+            if placed[k] { continue }
+            ready := true
+            for j in range depAt[k], depAt[k + 1] {
+                if depTo[j] >= 0 and not placed[depTo[j]] { ready = false }
+            }
+            if ready {
+                pick = k
+                break
+            }
+        }
+        if pick >= 0 {
+            placed[pick] = true
+            out.Push(gs[pick])
+            done++
+            continue
+        }
+        # a cycle: from the first global left, along the first unset global each reads, back to one on the path
+        cur I64 = 0
+        for placed[cur] { cur++ }
+        path List<I64>
+        for {
+            at := try path.IndexOf(cur) catch default -1
+            if at >= 0 {
+                c.b5aCycle(gs, path, at)
+                for p in range at, path.Len() {
+                    placed[path[p]] = true
+                    out.Push(gs[path[p]])
+                    done++
+                }
+                break
+            }
+            path.Push(cur)
+            next I64 = -1
+            for j in range depAt[cur], depAt[cur + 1] {
+                if next < 0 and depTo[j] >= 0 and not placed[depTo[j]] { next = depTo[j] }
+            }
+            if next < 0 {
+                # no cycle after all (it cannot happen): the rest in declaration order
+                for k in range n {
+                    if not placed[k] {
+                        placed[k] = true
+                        out.Push(gs[k])
+                        done++
+                    }
+                }
+                break
+            }
+            cur = next
+        }
+    }
+}
+
+# a global read while its initializer is being checked: the globals being checked from it on, each reading the next,
+# the last it again - said at it, once
+fn (c mut Checker&) typeCycle(id I64) {
+    chain List<I64>
+    on := false
+    for fr in c.frames {
+        if fr.Body == id { on = true }
+        if not on or fr.Body < 0 { continue }
+        match c.Bodies[fr.Body].Of {
+            case typed.BodyOf.Global(_, _) {
+                if fr.Body not in chain { chain.Push(fr.Body) }
+            }
+            case _ { }
+        }
+    }
+    if chain.Len() == 0 { return }
+    path List<I64>
+    for k in range chain.Len() { path.Push(k) }
+    c.b5aCycle(chain, path, 0)
+}
+
+# the cycle path[at:] reported at its first global: one reading itself, or the chain back to it - not where one of its
+# globals is in a cycle said already (typeCycle)
+fn (c mut Checker&) b5aCycle(gs List<I64>&, path List<I64>&, at I64) {
+    for p in range at, path.Len() {
+        if c.b5aSaid.Has(gs[path[p]]) { return }
+    }
+    for p in range at, path.Len() { c.b5aSaid.Put(gs[path[p]], true) }
+    first := c.Bodies[gs[path[at]]]
+    w := diag.Where.Span(first.File, I64(first.Sp.Start), I64(first.Sp.End))
+    if at == path.Len() - 1 {
+        name := c.b5aName(gs[path[at]])
+        c.P.L.Diags.Error(w, msgs.GlobalReadsItself(name, name))
+        return
+    }
+    b := StringBuilder()
+    for p in range at, path.Len() { b.Push($c.b5aName(gs[path[p]]) " -> ") }
+    b.Push(c.b5aName(gs[path[at]]))
+    c.P.L.Diags.Error(w, msgs.GlobalsCycle(b.ToString()))
+}
+
+fn (c mut Checker&) b5aName(b I64) String {
+    return match c.Bodies[b].Of {
+        case typed.BodyOf.Global(_, n) => $c.text(n)
+        case _ => ""
+    }
+}
+
+# the globals of module m that global body g's initializer reads, directly or through what it calls, at any depth
+fn (c mut Checker&) globalDeps(m I64, g I64) List<I64> {
+    w := b5aWalk(m)
+    c.b5aInit(w, g)
+    k I64 = 0
+    for w.through and k < w.named.Len() {
+        c.b5aFn(w, w.named[k])
+        k++
+    }
+    return w.found
+}
+
+# a global's initializer, its store into the global itself left out (checkGlobal's last statement)
+fn (c mut Checker&) b5aInit(w mut b5aWalk&, g I64) {
+    b := c.Bodies[g]
+    if b.Root == null { return }
+    for st in b.Root.Stmts {
+        match st {
+            case typed.Stmt.Assign(_, p, x) {
+                match p {
+                    case typed.Place.Global(_, _, _, _) { c.b5aExpr(w, x) }
+                    case _ { c.b5aStmt(w, st) }
+                }
+            }
+            case _ { c.b5aStmt(w, st) }
+        }
+    }
+}
+
+# a function walked runs: what it reads counts, whatever the walk was reading for
+fn (c mut Checker&) b5aFn(w mut b5aWalk&, b I64) {
+    if b < 0 or b >= c.Bodies.Len() or w.walked.Has(b) { return }
+    w.walked.Put(b, true)
+    was := w.namesOnly
+    w.namesOnly = false
+    c.b5aBlock(w, c.Bodies[b].Root)
+    w.namesOnly = was
+}
+
+fn (c mut Checker&) b5aGlobal(w mut b5aWalk&, mi I64, n source.NameId, ty types.TypeId) {
+    if w.namesOnly { return }
+    id := try c.globalBodies.Get(pair.Pair(mi, I64(n))) catch default -1
+    if id < 0 { return }
+    if mi == w.Mod and id not in w.found { w.found.Push(id) }
+    # what it holds may be called: the functions its initializer names
+    if not w.holders.Has(id) and c.b5aHoldsFn(ty, 0) {
+        w.holders.Put(id, true)
+        w.namesOnly = true
+        c.b5aInit(w, id)
+        w.namesOnly = false
+    }
+}
+
+fn (c mut Checker&) b5aHoldsFn(t types.TypeId, depth I64) Bool {
+    if depth > 8 or t == types.UnknownT { return false }
+    return match c.P.T.KindOf(t) {
+        case types.Kind.Func => true
+        case types.Kind.Array => c.b5aHoldsFn(c.P.T.Elem(t), depth + 1)
+        case types.Kind.Tuple, types.Kind.Record => c.b5aHoldsAny(c.P.T.Items(c.P.T.Parts(t)), depth)
+        case types.Kind.Named => c.P.Body(t) and (c.b5aHoldsAny(c.P.T.Items(c.P.T.Fields(t)), depth) or c.b5aHoldsAny(c.P.T.Items(c.P.T.Cases(t)), depth))
+        case _ => false
+    }
+}
+
+fn (c mut Checker&) b5aHoldsAny(ts Array<types.TypeId>&, depth I64) Bool {
+    for t in ts {
+        if c.b5aHoldsFn(t, depth + 1) { return true }
+    }
+    return false
+}
+
+# E11c: the Str "$" calls rendering a value of type t, or its parts' - the bodies check made for them (wantStr)
+fn (c mut Checker&) b5aStr(w mut b5aWalk&, t types.TypeId, depth I64) {
+    if depth > 16 or t == types.UnknownT or t == types.TypeId(0) or w.strs.Has(t) { return }
+    w.strs.Put(t, true)
+    match c.P.T.KindOf(t) {
+        case types.Kind.Ref { c.b5aStr(w, c.P.T.Referent(t), depth + 1) }
+        case types.Kind.Named {
+            for name in String&["Str", "str"] {
+                m := c.P.MethodOf(t, c.P.T.Names.Intern(name))
+                if m >= 0 {
+                    c.b5aFn(w, c.b5aStrBody(m, t))
+                    return
+                }
+            }
+            if not c.P.Body(t) { return }
+            for f in c.P.T.Items(c.P.T.Fields(t)) { c.b5aStr(w, f, depth + 1) }
+            for f in c.P.T.Items(c.P.T.Cases(t)) { c.b5aStr(w, f, depth + 1) }
+        }
+        case types.Kind.Array { c.b5aStr(w, c.P.T.Elem(t), depth + 1) }
+        case types.Kind.Tuple, types.Kind.Record {
+            for f in c.P.T.Items(c.P.T.Parts(t)) { c.b5aStr(w, f, depth + 1) }
+        }
+        nomatch { }
+    }
+}
+
+# the body of method m's instance for receiver type t, if check made one (strInstance's binding) - -1 for none
+fn (c mut Checker&) b5aStrBody(m I64, t types.TypeId) I64 {
+    if c.P.FnIsExtern(m) { return -1 }
+    owner := generic.FnOwner(m)
+    nv := c.P.VarCount(owner)
+    if nv == 0 { return try c.fnBodies.Get(c.P.FnInstance(m, types.ListId(0))) catch default -1 }
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(m)))
+    if ps.Len() == 0 { return -1 }
+    b := generic.Binding(owner, nv)
+    c.unify(ps[0], t, b, false, true)
+    c.P.InferThroughBounds(b)
+    for v in b.Vals {
+        if v == types.UnknownT { return -1 }
+    }
+    return try c.fnBodies.Get(c.P.FnInstance(m, c.P.T.List(b.Vals))) catch default -1
+}
+
+fn (c mut Checker&) b5aBlock(w mut b5aWalk&, bl typed.Block&) {
+    if bl == null { return }
+    for st in bl.Stmts { c.b5aStmt(w, st) }
+}
+
+fn (c mut Checker&) b5aStmt(w mut b5aWalk&, st typed.Stmt&) {
+    if st == null { return }
+    match st {
+        case typed.Stmt.Let(_, _, x) { c.b5aExpr(w, x) }
+        case typed.Stmt.Assign(_, p, x) {
+            c.b5aPlace(w, p)
+            c.b5aExpr(w, x)
+        }
+        case typed.Stmt.Eval(_, x) { c.b5aExpr(w, x) }
+        case typed.Stmt.If(_, i) {
+            c.b5aExpr(w, i.Test)
+            c.b5aBlock(w, i.Then)
+            c.b5aBlock(w, i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            c.b5aBlock(w, body)
+            c.b5aBlock(w, post)
+        }
+        case typed.Stmt.Return(_, x) { c.b5aExpr(w, x) }
+        case typed.Stmt.Assert(_, cd, m) {
+            c.b5aExpr(w, cd)
+            c.b5aExpr(w, m)
+        }
+        case typed.Stmt.Block(_, b) { c.b5aBlock(w, b) }
+        case typed.Stmt.Defer(_, b) { c.b5aBlock(w, b) }
+        case typed.Stmt.Join(_, jn) {
+            c.b5aBlock(w, jn.Code)
+            for cl in jn.Clauses { c.b5aBlock(w, cl.Code) }
+        }
+        case typed.Stmt.Spawn(_, sp) {
+            for p in sp.Targets { c.b5aPlace(w, p) }
+            c.b5aExpr(w, sp.Task)
+            for cl in sp.Clauses { c.b5aExpr(w, cl.Handler) }
+        }
+        case typed.Stmt.Yield(_, x) { c.b5aExpr(w, x) }
+        case _ { }
+    }
+}
+
+fn (c mut Checker&) b5aPlace(w mut b5aWalk&, p typed.Place&) {
+    if p == null { return }
+    match p {
+        case typed.Place.Global(_, ty, mi, n) { c.b5aGlobal(w, mi, n, ty) }
+        case typed.Place.Deref(_, _, r) { c.b5aExpr(w, r) }
+        case typed.Place.Field(_, _, b, _) { c.b5aPlace(w, b) }
+        case typed.Place.Elem(_, _, e) {
+            c.b5aPlace(w, e.Base)
+            c.b5aExpr(w, e.Index)
+        }
+        case typed.Place.Payload(_, _, pl) { c.b5aPlace(w, pl.Base) }
+        case typed.Place.Temp(_, _, v, _) { c.b5aExpr(w, v) }
+        case _ { }
+    }
+}
+
+fn (c mut Checker&) b5aNamed(w mut b5aWalk&, b I64) {
+    if b not in w.named { w.named.Push(b) }
+}
+
+fn (c mut Checker&) b5aExpr(w mut b5aWalk&, x typed.Expr&) {
+    if x == null { return }
+    match x {
+        case typed.Expr.Read(_, _, p, _) { c.b5aPlace(w, p) }
+        case typed.Expr.Borrow(_, _, p) { c.b5aPlace(w, p) }
+        case typed.Expr.Take(_, _, p) { c.b5aPlace(w, p) }
+        case typed.Expr.Promote(_, _, pr) { c.b5aExpr(w, pr.X) }
+        case typed.Expr.Call(_, _, cl) {
+            match cl.Target {
+                case typed.Callee.Body(id) {
+                    if not w.namesOnly { c.b5aFn(w, I64(id)) }
+                }
+                case typed.Callee.Value(v) {
+                    if not w.namesOnly { w.through = true }
+                    c.b5aExpr(w, v)
+                }
+                case _ { }
+            }
+            for a in cl.Args { c.b5aExpr(w, a) }
+        }
+        case typed.Expr.Make(_, _, m) {
+            for a in m.Items { c.b5aExpr(w, a) }
+            c.b5aExpr(w, m.Length)
+        }
+        case typed.Expr.Collect(_, _, cl) {
+            c.b5aExpr(w, cl.Reserve)
+            c.b5aBlock(w, cl.Loop)
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args { c.b5aExpr(w, a) }
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            c.b5aPlace(w, sl.Base)
+            c.b5aExpr(w, sl.Lo)
+            c.b5aExpr(w, sl.Hi)
+        }
+        case typed.Expr.Cond(_, _, cd) {
+            c.b5aExpr(w, cd.C)
+            c.b5aExpr(w, cd.A)
+            c.b5aExpr(w, cd.B)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            for st in q.Stmts { c.b5aStmt(w, st) }
+            c.b5aExpr(w, q.X)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for st in m.Held { c.b5aStmt(w, st) }
+            for a in m.Arms { c.b5aArm(w, a) }
+            c.b5aArm(w, m.NoMatch)
+        }
+        case typed.Expr.Try(_, _, t) {
+            c.b5aExpr(w, t.X)
+            for cl in t.Clauses {
+                c.b5aBlock(w, cl.Code)
+                for d in cl.Defaults { c.b5aExpr(w, d) }
+            }
+        }
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Named(id) { c.b5aNamed(w, I64(id)) }
+                case typed.FnVal.Lambda(id, caps, _) {
+                    c.b5aNamed(w, I64(id))
+                    for cp in caps { c.b5aExpr(w, cp.Outer) }
+                }
+                case typed.FnVal.Adapter(id, r, _) {
+                    c.b5aNamed(w, I64(id))
+                    c.b5aExpr(w, r)
+                }
+            }
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(r) {
+                        c.b5aExpr(w, r)
+                        if not w.namesOnly { c.b5aStr(w, r.Type(), 0) }
+                    }
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { c.b5aExpr(w, y) }
+        case _ { }
+    }
+}
+
+fn (c mut Checker&) b5aArm(w mut b5aWalk&, a typed.Arm&) {
+    if a == null { return }
+    for alt in a.Alts {
+        c.b5aExpr(w, alt.Test)
+        for bd in alt.Binds { c.b5aExpr(w, bd.From) }
+    }
+    c.b5aExpr(w, a.Guard)
+    c.b5aBlock(w, a.Code)
+    c.b5aExpr(w, a.Value)
+}
+
 # a global's type: written, or its initializer's (D15) - checked first where it is not known yet
 fn (c mut Checker&) globalType(mi I64, n source.NameId) types.TypeId {
     key := pair.Pair(mi, I64(n))
@@ -1709,8 +2205,10 @@ fn (c mut Checker&) globalType(mi I64, n source.NameId) types.TypeId {
         return t
     }
     id := try c.globalBodies.Get(key) catch default -1
+    # B5a's cycle among globals whose types are their initializers' (D15): said here, where it is met, as orderGlobals
+    # says one among typed globals - its type the stand-in, which fits anything
     if id >= 0 and c.state[id] == 1 {
-        c.gap(v.NameSps[0], "a global read by its own initializer (B5a)")
+        c.typeCycle(id)
         return types.UnknownT
     }
     c.globalBody(mi, n)
@@ -3269,7 +3767,8 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     # numbers flow toward their base (T6b)
     if c.isNumber(have) and c.isNumber(want) and hk != types.Kind.Ref and wk != types.Kind.Ref {
         if c.P.Flows(have, want) { return c.convert(sp, x, want) }
-        c.err(sp, msgs.NumberDoesNotFlow(c.ty(have), c.ty(want), c.ty(want)))
+        rec := c.err(sp, msgs.NumberDoesNotFlow(c.ty(have), c.ty(want), c.ty(want)))
+        c.literalLocalNote(rec, c.literalLocalIn(x, have), want)
         return x
     }
     # a reference where a value is wanted: the value copied out (E12)
@@ -3334,6 +3833,9 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 }
                 return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, c.P.T.PermOf(want)), p), want)
             }
+            # T25d: an array of constants reaching a read-only reference is the constant data itself
+            d := c.staticArray(x, want)
+            if d != null { return d }
             v := c.fit(x, r, sp)
             if p != null and c.isNamed(have) and c.isOver(have) {
                 return typed.Expr.Borrow(sp, want, p)
@@ -3525,6 +4027,48 @@ fn (c mut Checker&) inferred(x ast.Expr&, e typed.Expr&) types.TypeId {
         return c.P.T.Array(c.P.T.Elem(t), types.TypeId(0))
     }
     return t
+}
+
+# T6a/B11: the local read in x that ":=" made of type ty from a literal (n := 0, an I64) - -1 for none
+fn (c mut Checker&) literalLocalIn(x typed.Expr&, ty types.TypeId) I64 {
+    if x == null { return -1 }
+    match x {
+        case typed.Expr.Read(_, rt, p, _) {
+            match p {
+                case typed.Place.Local(_, _, id) {
+                    k := pair.Pair(c.fr().Body, I64(id))
+                    if c.P.T.Same(rt, ty) and (c.litLocals.Has(k) or c.rangeExprs.Has(k)) { return I64(id) }
+                }
+                case _ { }
+            }
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args {
+                r := c.literalLocalIn(a, ty)
+                if r >= 0 { return r }
+            }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# a note at local id's declaration: its type is its literal's own, and the type it should have is want
+fn (c mut Checker&) literalLocalNote(rec I64, id I64, want types.TypeId) {
+    if id < 0 { return }
+    l := c.cur().Locals[id]
+    k := pair.Pair(c.fr().Body, id)
+    end := try c.rangeEnds.Get(k) catch default source.Span(-1, -1)
+    if end.Start >= 0 {
+        # a for-in's variable over a range of literals: the end to convert, which gives the range its type (S9b)
+        if c.rangeExprs.Has(k) {
+            c.P.L.Diags.Note(rec, c.at(end), msgs.NoteLiteralRangeExpr(c.text(l.Name), c.ty(l.Ty), c.ty(want), c.ty(want)))
+        } else {
+            c.P.L.Diags.Note(rec, c.at(end), msgs.NoteLiteralRange(c.text(l.Name), c.ty(l.Ty), c.ty(want), c.src(end), c.ty(want)))
+        }
+        return
+    }
+    c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteLiteralLocal(c.text(l.Name), c.ty(l.Ty), c.text(l.Name), c.ty(want)))
 }
 
 # a temporary's value before it was given storage
@@ -3769,6 +4313,7 @@ fn (c mut Checker&) adapter(sp source.Span, x typed.Expr&c, want types.TypeId) t
     m := c.P.MethodOf(dt, c.P.L.Names.Intern("Call"))
     if m < 0 { m = c.P.MethodOf(dt, c.P.L.Names.Intern("call")) }
     if m < 0 or c.P.VarCount(generic.FnOwner(m)) > 0 { return null }
+    c.privateRole(m, dt, "Call", sp, msgs.Tok(c.src(sp)))
     c.P.Sig(m)
     inst := c.P.FnInstance(m, types.ListId(0))
     sig := c.P.InstanceSig(inst)
@@ -3839,12 +4384,13 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
         if c.isNamed(c.deref(t)) and not (c.isNumber(t) and c.P.Extends(t)) {
             mname := "Neg" if op == token.Tok.Minus else "BitNot"
             m := c.checkedForm(c.deref(t), mname, 0) if op == token.Tok.Minus else -1
-            if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern(mname)) }
-            if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern(lowerFirst(mname))) }
+            if m < 0 { m = c.roleUse(c.deref(t), mname, 0, sp, msgs.Tok(op.Text())) }
             if m >= 0 {
                 c.opCall = c.text(c.P.FnDecl(m).Name)
                 return c.invoke(sp, sp, m, x, null, Array<typed.Expr&>(0))
             }
+            # E31: a method of that name shaped otherwise is an ordinary one, and this operator has none
+            if c.notOperator(c.deref(t), mname, sp, msgs.Tok(op.Text()), 0, false) { return c.unknown(sp) }
             if c.isNumber(t) {
                 c.err(sp, msgs.NotExtendedOp(c.ty(t), msgs.Tok(op.Text()), "'" $mname "'"))
                 return c.unknown(sp)
@@ -3939,6 +4485,13 @@ fn (c mut Checker&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr
     if shift and want == types.UnknownT and numberLitsOnly(a) and lb.Ok and not lb.IsFloat and not lb.Big and (lb.I < 0 or lb.I >= 64) {
         c.err(b.Span(), msgs.ShiftUnadapted())
         return c.unknown(sp)
+    }
+    # E4a: integer literals whose exact sum, difference or product no type holds
+    if (op == token.Tok.Plus or op == token.Tok.Minus or op == token.Tok.Star) and la.Ok and lb.Ok and not la.IsFloat and not lb.IsFloat {
+        if not c.fold(ast.Expr.Binary(sp, op, a, b)).Ok {
+            c.err(opSp, msgs.LiteralExprNoValue())
+            return c.unknown(sp)
+        }
     }
     if not la.Ok and not lb.Ok and (c.litLike(a) != c.litLike(b)) {
         if c.litLike(b) {
@@ -4132,7 +4685,7 @@ fn (c mut Checker&) operatorCall(sp source.Span, opSp source.Span, op token.Tok,
     if not c.isNamed(ta) { return null }
     # under checked the operation's checked form, where the type declares one (E31a)
     m := c.checkedForm(ta, name, 1)
-    if m < 0 { m = c.roleMethod(ta, name, 1) }
+    if m < 0 { m = c.roleUse(ta, name, 1, opSp, msgs.Tok(op.Text())) }
     if m < 0 { return null }
     c.opCall = c.text(c.P.FnDecl(m).Name)
     if op == token.Tok.Gt or op == token.Tok.Le {
@@ -4151,6 +4704,22 @@ fn (c mut Checker&) roleMethod(t types.TypeId, name String&, n I64) I64 {
     m = c.P.MethodOf(t, c.P.L.Names.Intern(lowerFirst(name)))
     if m >= 0 and c.P.T.Items(c.P.T.Params(c.P.Sig(m))).Len() == n + 1 { return m }
     return -1
+}
+
+# a protocol method an operation found, by role: one of its private spelling, declared in another module than the code
+# using it, cannot be found there - said at the operation (M6b), the method kept so nothing else is said of it
+fn (c mut Checker&) roleUse(t types.TypeId, name String&, n I64, at source.Span, tok String&) I64 {
+    m := c.roleMethod(t, name, n)
+    c.privateRole(m, t, name, at, tok)
+    return m
+}
+
+fn (c mut Checker&) privateRole(m I64, t types.TypeId, cap String&, at source.Span, tok String&) Bool {
+    if m < 0 or c.frames.Len() == 0 { return false }
+    low := c.text(c.P.FnDecl(m).Name)
+    if low == cap or c.P.FnModule(m) == c.fr().Mi { return false }
+    c.P.L.Diags.ErrorOncePerLine(c.at(at), msgs.ProtocolPrivate(tok, c.ty(c.deref(t)), low, cap))
+    return true
 }
 
 fn lowerFirst(t String&) String {
@@ -4483,6 +5052,19 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
                      c.lit(sp, c.i64(), k))
         return c.negate(sp, r0) if negated else r0
     }
+    # E32: a case of another enum - one sharing the name in another module, say - is no case of this one
+    if c.isEnum(c.deref(typeOf(x))) {
+        match b {
+            case ast.Expr.Member(_, prefix, _) {
+                pt := c.typeNamed(prefix)
+                if pt >= types.TypeId(0) and c.isEnum(pt) {
+                    c.err(prefix.Span(), msgs.AsNeedsCase(c.ty(c.deref(typeOf(x))), "'" $c.src(prefix.Span()) "'"))
+                    return c.unknown(sp)
+                }
+            }
+            nomatch { }
+        }
+    }
     y := c.expr(b, typeOf(x))
     if (not c.isRef(typeOf(x)) and typeOf(x) != types.NullT and c.P.T.KindOf(typeOf(x)) != types.Kind.Func) or (typeOf(x) == types.NullT and typeOf(y) == types.NullT) {
         # E10c: identity is of references (or function values) - two values, or two nulls, have none
@@ -4507,6 +5089,32 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
     }
     r := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, yy)
     return c.negate(sp, r) if negated else r
+}
+
+# T25d: an array literal of constants - numbers, Bool, text written in the program - as the read-only constant data of
+# its written position, of type want (a read-only reference to an array of its elements); null where it is no such
+fn (c mut Checker&) staticArray(x typed.Expr&c, want types.TypeId) typed.Expr&c {
+    if (c.P.T.PermOf(want) & types.Writable) != 0 or c.P.T.KindOf(c.P.T.Referent(want)) != types.Kind.Array { return null }
+    el := c.P.T.Elem(c.P.T.Referent(want))
+    match x {
+        case typed.Expr.Make(msp, mt, m) {
+            if m.Kind != typed.MakeKind.Array or not c.P.T.Same(c.P.T.Elem(mt), el) { return null }
+            if not (c.isNumber(el) or el == types.BoolT or el == c.P.T.Ref(c.textType(), types.ReadOnly)) { return null }
+            ks := Array<typed.Const&>(m.Items.Len())
+            for i in range m.Items.Len() {
+                match m.Items[i] {
+                    case typed.Expr.Lit(_, lt, bits) {
+                        if lt == types.UnknownT { return null }
+                        ks[i] = typed.Const.Bits(bits)
+                    }
+                    case typed.Expr.Data(_, _, _, k) { ks[i] = k }
+                    nomatch { return null }
+                }
+            }
+            return typed.Expr.Data(msp, want, c.fr().File, typed.Const.Items(ks))
+        }
+        nomatch { return null }
+    }
 }
 
 fn isArrayMake(x typed.Expr&) Bool {
@@ -4836,7 +5444,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr&, hi ast.Expr
             derived = m >= 0 and c.checkOp(typed.Check.None) == typed.Check.Try
         }
         if m < 0 {
-            c.err(sp, msgs.NotIndexable(c.ty(t)))
+            if not c.notOperator(t, "Slice", sp, "'x[lo:hi]'", 2, false) { c.err(sp, msgs.NotIndexable(c.ty(t))) }
             return c.unknown(sp)
         }
         lm := c.roleMethod(t, "Len", 0)
@@ -4896,7 +5504,7 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     et := c.arrayOf(ct)
     xw := c.P.T.Elem(et) if et != types.UnknownT else types.UnknownT
     if et == types.UnknownT {
-        hm := c.roleMethod(ct, "Has", 1)
+        hm := c.roleUse(ct, "Has", 1, c.between(a.Span(), b.Span(), 2), "'in'")
         if hm >= 0 {
             hp := c.P.T.Items(c.P.T.Params(c.P.Sig(hm)))
             owner := generic.FnOwner(hm)
@@ -4913,8 +5521,8 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
     }
     x := c.expr(a, xw)
     name := "Contains" if c.P.T.Same(c.deref(typeOf(x)), ct) else "Has"
-    m := c.P.MethodOf(ct, c.P.L.Names.Intern(name))
-    if m < 0 { m = c.P.MethodOf(ct, c.P.L.Names.Intern(lowerFirst(name))) }
+    m := c.roleUse(ct, name, 1, c.between(a.Span(), b.Span(), 2), "'in'")
+    if m < 0 and c.notOperator(ct, name, c.between(a.Span(), b.Span(), 2), "'x in c'", 1, false) { return c.lit(sp, types.BoolT, 0) }
     if m < 0 {
         # E29: x of the collection's own type asks Contains - a sub-collection
         c.err(c.between(a.Span(), b.Span(), 2), msgs.MembershipNoMethod(name, c.ty(ct)))
@@ -5865,6 +6473,13 @@ fn (c mut Checker&) renderPiece(sp source.Span, y ast.Expr&) typed.Piece&c {
         }
         nomatch { }
     }
+    # E11b, T7b: an operand naming a fixed array is a borrow of it, its elements read when its piece renders - as a
+    # run-time array's pair already names its storage
+    p := readPlace(x)
+    xt := typeOf(x)
+    if p != null and c.P.T.KindOf(xt) == types.Kind.Array and c.P.T.Length(xt) != types.TypeId(0) {
+        return typed.Piece.Render(typed.Expr.Borrow(x.Span(), c.P.T.Ref(xt, types.ReadOnly), p))
+    }
     return typed.Piece.Render(x)
 }
 
@@ -5940,7 +6555,9 @@ fn (c mut Checker&) rendered(sp source.Span, y ast.Expr&) typed.Expr&c {
         return c.unknown(sp)
     }
     seen := Map<types.TypeId, Bool>()
+    c.strAt = source.Span(sp.Start, sp.Start + 1)
     c.wantStr(typeOf(x), seen, 0)
+    c.strAt = source.Span(-1, -1)
     return x
 }
 
@@ -5955,6 +6572,7 @@ fn (c mut Checker&) wantStr(t types.TypeId, seen mut Map<types.TypeId, Bool>&, d
             for name in String&["Str", "str"] {
                 m := c.P.MethodOf(t, c.P.T.Names.Intern(name))
                 if m >= 0 {
+                    if c.strAt.Start >= 0 { c.privateRole(m, t, "Str", c.strAt, "'$'") }
                     c.strInstance(m, t)
                     return
                 }
@@ -7097,6 +7715,8 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         c.dropArgs(args)
         return c.unknown(sp)
     }
+    # M6: a method is public by its first letter - another module's private one is said, and called still
+    if not name[0].IsUpper() and c.P.FnModule(m) != c.fr().Mi { c.err(nsp, msgs.MethodIsPrivate(c.tok(n))) }
     return c.invoke(sp, nsp, m, rx, args, null)
 }
 
@@ -7110,6 +7730,7 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&c, 
     if c.P.T.KindOf(t) == types.Kind.Func { return c.callBody(sp, fsp, t, typed.Callee.Value(fv), -1, null, args, null) }
     m := c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("Call"))
     if m < 0 { m = c.P.MethodOf(c.deref(t), c.P.L.Names.Intern("call")) }
+    c.privateRole(m, t, "Call", fsp, msgs.Tok(c.src(fsp)))
     if m >= 0 { return c.invoke(sp, fsp, m, fv, args, null) }
     # E11b: a "(" after a rendering in a join calls what it renders - the value inside is joined with '$(...)'
     tx := c.P.L.Mods[c.fr().Mi].Src.Text
@@ -7212,7 +7833,9 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return typed.Expr.Prim(sp, r, op, typed.Check.None, gather(c.exprs, from))
     }
     if name == "Hash" and args.Len() == 0 {
+        c.hashAt = nsp
         c.partHashes(rt, 0)
+        c.hashAt = source.Span(-1, -1)
         return c.callOf(sp, c.i64(), typed.Callee.Helper(typed.Helper.Hash, rt), c.one(c.value(rx, sp)))
     }
     return null
@@ -7286,6 +7909,11 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n so
         c.gap(nsp, "a field the checker cannot place")
         return null
     }
+    # M6a: a member is public by its own first letter - another module's private one is said, its type carried on
+    # (of a private type itself, M6 said where the type is named)
+    if not c.text(n)[0].IsUpper() and c.P.T.DeclModule(c.P.T.DeclOf(t)) != c.fr().Mi and c.text(c.P.T.DeclName(c.P.T.DeclOf(t)))[0].IsUpper() {
+        c.err(nsp, msgs.MemberIsPrivate(c.text(n), c.ty(t)))
+    }
     return typed.Place.Field(sp, fs[i], base, i)
 }
 
@@ -7339,6 +7967,7 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
         c.err(nsp, c.noCase(t, n))
         return c.unknown(sp)
     }
+    c.casePublic(t, n, nsp)
     sig := c.P.CaseSig(t, tag)
     ps := c.P.T.Items(c.P.T.Params(sig))
     given I64 = 0
@@ -7371,7 +8000,7 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
         # under checked the checked form (E31a): CheckedAt where the type declares one
         tm := c.checkedForm(dt, "At", items.Len())
         if tm >= 0 { return c.invoke(sp, sp, tm, c.read(sp, base), items, null) }
-        m := c.roleMethod(dt, "At", items.Len())
+        m := c.roleUse(dt, "At", items.Len(), c.bracketIn(sp), "'['")
         if m >= 0 {
             return c.invoke(sp, sp, m, c.read(sp, base), items, c.derivedCheckedAt(sp, base, dt, items))
         }
@@ -7451,7 +8080,7 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
         if t == types.UnknownT { return null }
         # x[i] on a type with At (E31): the element read, a value with no storage - written through, it is written
         # back by SetAt (E31b, writeBack)
-        m := c.roleMethod(t, "At", items.Len())
+        m := c.roleUse(t, "At", items.Len(), c.bracketIn(sp), "'['")
         # under checked the checked form (E31a): CheckedAt where the type declares one - a chain's every link (E24)
         tm := c.checkedForm(t, "At", items.Len())
         if m < 0 and tm < 0 {
@@ -8044,7 +8673,13 @@ fn (c mut Checker&) errorWord(p ast.Path&) (I64, types.TypeId) {
     head := ast.Path(p.Sp, p.Parts[:n - 1])
     et := c.P.ErrorType(c.fr().Ctx, head)
     if et == types.UnknownT { return -1, types.UnknownT }
-    return c.wordIndex(c.P.T.DeclOf(et), p.Parts[n - 1]), et
+    w := p.Parts[n - 1]
+    k := c.wordIndex(c.P.T.DeclOf(et), w)
+    # M6a: an error word is public by its own first letter
+    if k >= 0 and not c.text(w)[0].IsUpper() and c.P.T.DeclModule(c.P.T.DeclOf(et)) != c.fr().Mi {
+        c.P.L.Diags.ErrorOncePerLine(c.at(source.Span(p.Sp.End - I32(c.text(w).Len()), p.Sp.End)), msgs.ErrorWordIsPrivate(c.tok(w)))
+    }
+    return k, et
 }
 
 # a word's position among an error type's (T19); -1 for none
@@ -8301,6 +8936,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     c.lastErrs = types.ListId(0)
     fr.Tries++
     task typed.Expr&c = null
+    banged := false
     match inner {
         case ast.Expr.Lambda(lsp, lf) {
             if lf.S.Params.Len() > 0 { c.err(lsp, msgs.SpawnLambdaParams()) }
@@ -8310,7 +8946,11 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
             }
         }
         case ast.Expr.Call(_, _, _) { task = c.expr(inner, types.UnknownT) }
-        case ast.Expr.Postfix(_, op, y) if op == token.Tok.Bang and callLike(y) { task = c.expr(inner, types.UnknownT) }
+        case ast.Expr.Postfix(_, op, y) if op == token.Tok.Bang and callLike(y) {
+            # E35: "spawn f(x)!" - its errors end the program from the task's thread (P6), none reaches the join
+            banged = true
+            task = c.expr(inner, types.UnknownT)
+        }
         nomatch {
             c.err(inner.Span(), msgs.SpawnNotCall())
             c.expr(inner, types.UnknownT)
@@ -8323,6 +8963,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     fr.leaks.Truncate(lm)
     if task == null { return }
     errs := c.P.T.Items(c.lastErrs)
+    if banged { errs = Array<types.TypeId>(0) }
     if errs.Len() > 0 and not tried {
         c.err(inner.Span(), msgs.SpawnFallible())
         fr.spawnSaid++   # said once: its "try join" is not then said to need no try
@@ -8367,7 +9008,18 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
                     same := c.P.T.Same(pt, parts[i]) or
                             (c.isRef(pt) and c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), c.deref(parts[i])))
                     if places[i] != null and not same {
-                        c.err(c.operandAt(targets[i]), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i].Type())))
+                        if c.isRef(pt) and not c.isRef(parts[i]) and c.P.T.Same(c.deref(pt), parts[i]) {
+                            # the fix is the function's result, built where its result lands (study 4's r16)
+                            c.err(c.operandAt(targets[i]), msgs.SpawnResultAsRef(c.ty(parts[i]), c.ty(pt), c.src(c.calleeSpan(call)), c.ty(pt)))
+                        } else {
+                            rec := c.err(c.operandAt(targets[i]), msgs.SpawnResultType(c.ty(parts[i]), c.ty(places[i].Type())))
+                            match places[i] {
+                                case typed.Place.Local(_, _, lid) {
+                                    if c.litLocals.Has(pair.Pair(c.fr().Body, I64(lid))) { c.literalLocalNote(rec, I64(lid), parts[i]) }
+                                }
+                                case _ { }
+                            }
+                        }
                     }
                 }
             }
@@ -8473,7 +9125,10 @@ fn (c mut Checker&) stepMethod(sp source.Span, p typed.Place&c, t types.TypeId, 
         return true
     }
     pm := c.roleMethod(t, "Plus" if inc else "Minus", 1)
-    if pm < 0 { return false }
+    if pm < 0 {
+        # E31: an Inc shaped otherwise is an ordinary method, and "++" has none
+        return c.notOperator(t, "Inc" if inc else "Dec", sp, "'++'" if inc else "'--'", 0, false)
+    }
     pt := c.deref(c.P.T.Items(c.P.T.Params(c.P.Sig(pm)))[1])
     if not c.isNumber(pt) { return false }
     one := c.lit(sp, pt, floatBits(c.under(pt), 1.0) if c.P.T.IsFloat(c.under(pt)) else 1)
@@ -8554,6 +9209,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         id := c.local(v.Names[i], nsp, t, kind, mark)
         if inferred { c.roLet(id, x) }
+        # T6a: a number its literal's own type declares, for the note where it does not flow (B11)
+        if inferred and not v.Field and c.isNumber(t) and c.litLike(v.Values[i]) { c.litLocals.Put(pair.Pair(c.fr().Body, id), true) }
         # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
         if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
@@ -8572,8 +9229,7 @@ fn (c mut Checker&) assignAt(sp source.Span, op token.Tok, target ast.Expr&, val
             if dt == types.UnknownT or c.arrayOf(dt) != types.UnknownT { return false }
             # a compound one reads the element through At and writes it back (writeBack)
             if op != token.Tok.Assign { return false }
-            m := c.P.MethodOf(dt, c.P.L.Names.Intern("SetAt"))
-            if m < 0 { m = c.P.MethodOf(dt, c.P.L.Names.Intern("setAt")) }
+            m := c.roleMethod(dt, "SetAt", items.Len() + 1)
             if m < 0 {
                 osp := c.opAfter(target.Span(), 1)
                 if not c.notOperator(dt, "SetAt", osp, "'x[i] = v'", 2, true) { c.err(osp, msgs.SetatUndeclared(c.ty(base.Type()))) }
@@ -8901,7 +9557,8 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     }
     vt := typeOf(v)
     if bop != token.Tok.Shl and bop != token.Tok.Shr and vt != t and vt != types.UnknownT {
-        if c.isNumber(vt) and not c.isNamed(vt) and c.P.Flows(vt, t) {
+        # T6b: a number flows toward its base - a declared one into its base and on (sc U64 += a Code over U16)
+        if c.isNumber(vt) and c.P.Flows(vt, t) {
             v = c.convert(value.Span(), v, t)
         } else {
             c.err(osp, msgs.NumberDoesNotFlow(c.ty(vt), c.ty(t), c.ty(t)))
@@ -9441,8 +10098,8 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         return c.readLocal(sp, n)
     }
     dt := c.deref(st)
-    runs := c.roleMethod(dt, "RunFrom", 1)
-    next := c.roleMethod(dt, "Next", 0)
+    runs := c.roleUse(dt, "RunFrom", 1, sp, "'for'")
+    next := c.roleUse(dt, "Next", 0, sp, "'for'")
     if next >= 0 and not c.iterShaped(next) { next = -1 }   # S9a: an iterator's Next is "mut Next() T ? Exhausted"
     if runs >= 0 and next < 0 {
         c.walkRuns(sp, f, src, runs, cm, ce)
@@ -9452,7 +10109,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         c.walkIter(sp, f, src, next, cm, ce)
         return null
     }
-    iter := c.roleMethod(dt, "Iter", 0)
+    iter := c.roleUse(dt, "Iter", 0, sp, "'for'")
     if iter >= 0 {
         it := c.invoke(sp, f.Source.Span(), iter, src, null, Array<typed.Expr&>(0))
         nt := c.roleMethod(c.deref(typeOf(it)), "Next", 0)
@@ -9463,7 +10120,7 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         c.walkIter(sp, f, it, nt, cm, ce)
         return null
     }
-    atm := c.roleMethod(dt, "At", 1)
+    atm := c.roleUse(dt, "At", 1, sp, "'for'")
     if atm < 0 and f.Tried { atm = c.roleMethod(dt, "CheckedAt", 1) }   # S9e: under try, the checked form walks
     lm := c.roleMethod(dt, "Len", 0)
     if atm >= 0 and c.P.T.Items(c.P.T.Errors(c.P.Sig(atm))).Len() > 0 { c.fr().LoopFails++ }
@@ -9471,6 +10128,8 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr&, ce types.T
         c.walkIndexed(sp, f, src, atm, lm, cm, ce)
         return null
     }
+    # E31: a Next shaped otherwise is an ordinary method, and "for" has nothing to walk with
+    if c.notOperator(dt, "Next", sp, "'for ... in'", 0, false) { return null }
     c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
     return null
 }
@@ -9607,7 +10266,10 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     }
     errs := types.ListId(0)
     inferErrs := false
-    if f.S.HasErrors {
+    if f.S.HasErrors and f.S.Errors.Len() == 0 and w == types.UnknownT {
+        # R1a: "?" alone is what the body is found to fail with, as a function's is
+        inferErrs = true
+    } else if f.S.HasErrors {
         es List<types.TypeId>
         if f.S.Errors.Len() == 0 { es.Push(types.DefaultErrT) }
         for e in f.S.Errors { es.Push(c.P.ErrorType(c.fr().Ctx, e)) }
@@ -9903,7 +10565,16 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
         c.exprs.Push(v)
     }
     vals := gather(c.exprs, vfrom)
-    if t == types.UnknownT { t = c.i64() }
+    if t == types.UnknownT {
+        t = c.i64()
+        # T6a/B11: the loop's variable an I64 by the range's literals - the note where it does not flow names its end
+        e := rargs[0] if rargs.Len() == 1 else rargs[1]
+        c.rangeEnd = e.Span()
+        c.rangeEndLit = match e {
+            case ast.Expr.Lit(_, _) => true
+            case _ => false
+        }
+    }
     # S9b: a literal step is positive
     if rargs.Len() > 2 {
         fs := c.fold(rargs[2])
@@ -9974,6 +10645,11 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
         e = c.prim(sp, kt, typed.PrimOp.Add, c.readLocal(sp, lo), c.prim(sp, kt, typed.PrimOp.Mul, c.readLocal(sp, k), c.readLocal(sp, st)))
     }
     x := c.local(f.Name, sp, typeOf(e), typed.LocalKind.Var, typed.Mark.Infer)
+    if c.rangeEnd.Start >= 0 {
+        c.rangeEnds.Put(pair.Pair(c.fr().Body, x), c.rangeEnd)
+        if c.rangeEndLit { c.litLocals.Put(pair.Pair(c.fr().Body, x), true) } else { c.rangeExprs.Put(pair.Pair(c.fr().Body, x), true) }
+        c.rangeEnd = source.Span(-1, -1)
+    }
     c.roLet(x, e)   # T25c: an element of a collection reached read-only is a read-only copy
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), e))
     c.walkBody(f, cm, ce)
@@ -10669,12 +11345,22 @@ fn (c mut Checker&) caseTag(x ast.Expr&, et types.TypeId) I64 {
             cn := c.P.T.CaseNames(et)
             if cn == null { return -1 }
             for i in range cn.Len() {
-                if cn[i] == n { return i }
+                if cn[i] == n {
+                    xsp := x.Span()
+                    c.casePublic(et, n, source.Span(xsp.End - I32(c.text(n).Len()), xsp.End))
+                    return i
+                }
             }
             return -1
         }
         nomatch { return -1 }
     }
+}
+
+# M6a: an enum's case is public by its own first letter - another module's private one is said where it is named
+fn (c mut Checker&) casePublic(t types.TypeId, n source.NameId, sp source.Span) {
+    if c.text(n)[0].IsUpper() or c.frames.Len() == 0 or c.P.T.DeclModule(c.P.T.DeclOf(t)) == c.fr().Mi { return }
+    c.P.L.Diags.ErrorOncePerLine(c.at(sp), msgs.CaseIsPrivate(c.tok(n)))
 }
 
 fn (c mut Checker&) and2(sp source.Span, a typed.Expr&c, b typed.Expr&c) typed.Expr&c {

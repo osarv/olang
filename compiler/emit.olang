@@ -46,11 +46,6 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     queue List<mir.FnKey>           # the functions to write, in the order first referred to
     queued Map<mir.FnKey, I64>      # each function's index in queue
     cur I64 = -1                    # the function being written
-    callFrom List<I64>              # what each function refers to (calls, function values, destructors): B5a's graph
-    callTo List<I64>
-    readFrom List<I64>              # the globals each function reads or writes
-    readM List<I64>
-    readN List<source.NameId>
     named List<types.TypeId>        # the declared structs whose types are spelled by name, to define
     namedSeen Map<types.TypeId, Bool>
     # what is written, one item per symbol in the order made (a function, a global, constant data, a declaration):
@@ -473,79 +468,22 @@ fn (e mut Emitter&) want(k mir.FnKey) {
         e.queued.Put(k, i)
         e.queue.Push(k)
     }
-    if e.cur >= 0 {
-        e.callFrom.Push(e.cur)
-        e.callTo.Push(i)
-    }
 }
 
 # ---- B5a: a module's globals initialized after the globals each reads ----
 
 # the global bodies of the modules in inits, in the order they run: a module's after its imports' (inits' order), and
-# within a module each after the globals its initializer reads, directly or through what it calls - else in the order
-# they were checked
+# within a module in check's order (P.InitOrder) - each after the globals its initializer reads, else as declared
 fn (e mut Emitter&) globalOrder(inits List<I64>) List<I64> {
     out List<I64>
-    state Map<I64, I64>
     for m in inits {
-        for i in range e.Lw.Bodies.Len() {
+        for i in e.P.InitOrder {
             match e.Lw.Bodies[i].Of {
                 case typed.BodyOf.Global(gm, _) {
-                    if gm == m and e.Lw.Bodies[i].Root != null { e.visitGlobal(i, state, out) }
+                    if gm == m { out.Push(i) }
                 }
                 case _ { }
             }
-        }
-    }
-    return out
-}
-
-fn (e mut Emitter&) visitGlobal(b I64, state mut Map<I64, I64>&, out mut List<I64>&) {
-    if state.Has(b) { return }
-    state.Put(b, 1)
-    gm := -1
-    match e.Lw.Bodies[b].Of {
-        case typed.BodyOf.Global(m, _) { gm = m }
-        case _ { }
-    }
-    for g in e.readsOf(b) {
-        if g != b and e.globalModule(g) == gm { e.visitGlobal(g, state, out) }
-    }
-    state.Put(b, 2)
-    out.Push(b)
-}
-
-fn (e mut Emitter&) globalModule(b I64) I64 {
-    return match e.Lw.Bodies[b].Of {
-        case typed.BodyOf.Global(m, _) => m
-        case _ => -1
-    }
-}
-
-# the global bodies whose globals body b's function reads, through every function it reaches
-fn (e mut Emitter&) readsOf(b I64) List<I64> {
-    out List<I64>
-    start := try e.queued.Get(mir.FnKey.Body(typed.BodyId(I32(b)))) catch default -1
-    if start < 0 { return out }
-    seen Map<I64, Bool>
-    work List<I64>
-    work.Push(start)
-    seen.Put(start, true)
-    k I64 = 0
-    for k < work.Len() {
-        f := work[k]
-        k++
-        for j in range e.callFrom.Len() {
-            if e.callFrom[j] == f and not seen.Has(e.callTo[j]) {
-                seen.Put(e.callTo[j], true)
-                work.Push(e.callTo[j])
-            }
-        }
-    }
-    for j in range e.readFrom.Len() {
-        if seen.Has(e.readFrom[j]) {
-            g := e.globalBody(e.readM[j], e.readN[j])
-            if g >= 0 and g not in out { out.Push(g) }
         }
     }
     return out
@@ -891,9 +829,13 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     if b >= 0 and e.Baked.Has(b) {
         img := try e.Baked.Get(b) catch default eval.Image()
         text := e.bakedText(s, img)
-        at := try text.Find(" = global ") catch default -1
+        at := try text.Find(" = constant ") catch default -1
         end := try text.Find("}>") catch default -1
-        decl := $"@" $s " = external global " $text[at + 10:end + 2] if at >= 0 and end > at else $"@" $s " = external global i8"
+        decl := $"@" $s " = external constant " $text[at + 12:end + 2] if at >= 0 and end > at else $"@" $s " = external global i8"
+        # K2: plain data an importer declares with its value, which its optimizer reads before the link
+        if img.Blobs.Len() == 1 and img.Blobs[0].At.Len() == 0 and at >= 0 {
+            decl = $"@" $s " = available_externally constant " $text[at + 12:text.Len() - 1]
+        }
         e.item(s, m, text, $decl "\n")
     } else {
         ty := e.ty(t)
@@ -909,7 +851,9 @@ fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
     for j in range img.Blobs.Len() {
         b := img.Blobs[j]
         name := "@" $s if j == 0 else "@" $s ".k" $j
-        kind := "global" if j == 0 else "internal constant" if b.Constant else "internal global"
+        # K2: an immutable global's own storage is never written once set - only immutable ones are baked - so it is a
+        # constant, whose loads LLVM folds
+        kind := "constant" if j == 0 else "internal constant" if b.Constant else "internal global"
         tyText, valText := StringBuilder(), StringBuilder()
         at I64 = 0
         for r in range b.At.Len() + 1 {
@@ -1562,9 +1506,6 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
         }
         case mir.Base.Global(m, n, gt) {
             at = fe.E.global(m, n, gt)
-            fe.E.readFrom.Push(fe.E.cur)
-            fe.E.readM.Push(m)
-            fe.E.readN.Push(n)
             ty = gt
         }
         case mir.Base.None { fe.gap("a place with no base") }
@@ -3127,6 +3068,12 @@ fn (fe mut fnEm&) externArg(v String&, ty types.TypeId) String {
 fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
     t := e.T
     name := $e.text(e.P.FnDecl(f).Name)
+    # X8: an exact C math function of its exact prototype is LLVM's intrinsic, an instruction where the target has one
+    intr := e.mathIntrinsic(name, ty)
+    if intr != "" {
+        if not e.has(intr) { e.declare(intr, $e.externRet(ty) " @" $intr "(" $e.mathParams(ty) ")") }
+        return intr
+    }
     if e.has(name) { return name }
     b := StringBuilder()
     b.Push($e.externRet(ty) " @" $name "(")
@@ -3144,8 +3091,65 @@ fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
         }
     }
     b.Push(")")
+    # X8: any other C math function as C's default -fmath-errno declares it (it may write errno), and nobuiltin, so LLVM
+    # never rewrites a call of it - the program calls exactly the function the evaluator called
+    if mathInexact.Has(name) and e.mathParams(ty) != "" { b.Push(" nobuiltin memory(write)") }
     e.declare(name, b.ToString())
     return name
+}
+
+# X8's exact functions, by their C name (F64's; F32's ends in "f"), the intrinsic named the same: how many operands
+mathExact Map<String&, I64> = mathExactTable()
+
+fn mathExactTable() Map<String&, I64> {
+    out Map<String&, I64>
+    for x in String&["sqrt", "floor", "ceil", "trunc", "round", "roundeven", "fabs"] { out.Put(x, 1) }
+    out.Put("copysign", 2)
+    out.Put("fma", 3)
+    return out
+}
+
+mathInexact Map<String&, Bool> = mathInexactTable()
+
+fn mathInexactTable() Map<String&, Bool> {
+    out Map<String&, Bool>
+    for x in String&["cbrt", "exp", "exp2", "expm1", "log", "log2", "log10", "log1p", "pow", "hypot", "sin", "cos", "tan"
+                     "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "erf", "erfc"] {
+        out.Put(x, true)
+        out.Put($x "f", true)
+    }
+    return out
+}
+
+# the intrinsic an exact C math function of its exact prototype is ("llvm.fma.f32" for fmaf), "" for any other
+fn (e mut Emitter&) mathIntrinsic(name String&, ty types.TypeId) String {
+    t := e.T
+    base := name[:]
+    f32 := false
+    if not mathExact.Has(base) and name.EndsWith("f") {
+        base = name[:name.Len() - 1]
+        f32 = true
+    }
+    n := try mathExact.Get(base) catch { return "" }
+    ps := t.Items(t.Params(ty))
+    want := types.Kind.F32 if f32 else types.Kind.F64
+    if ps.Len() != n or t.KindOf(t.Result(ty)) != want { return "" }
+    for p in ps {
+        if t.KindOf(p) != want { return "" }
+    }
+    return "llvm." $base ".f" $("32" if f32 else "64")
+}
+
+# a math function's parameters spelled for its declaration: every one F32 or F64 - "" where one is not
+fn (e mut Emitter&) mathParams(ty types.TypeId) String {
+    t := e.T
+    b := StringBuilder()
+    for i, p in t.Items(t.Params(ty)) {
+        if t.KindOf(p) != types.Kind.F32 and t.KindOf(p) != types.Kind.F64 { return "" }
+        if i > 0 { b.Push(", ") }
+        b.Push(e.ty(p))
+    }
+    return b.ToString()
 }
 
 fn (e mut Emitter&) externRet(ty types.TypeId) String {
