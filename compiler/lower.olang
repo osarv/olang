@@ -814,6 +814,11 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
 # whether a returned array value is copied into the result scope: existing storage, but for a local living there
 fn (ln mut lowering&) retCopies(x typed.Expr&, ty types.TypeId) Bool {
     if not ln.copiesArray(x, ty) { return false }
+    # deferred code or a join's tasks still to run on the way out may write the local after the result is computed
+    if ln.defers.Len() > 0 { return true }
+    for lv in ln.levels {
+        if lv.Kind == mir.ScopeKind.Join { return true }
+    }
     match x {
         case typed.Expr.Read(_, _, p, _) {
             match p {
