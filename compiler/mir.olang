@@ -255,6 +255,7 @@ type Stmt enum {
     Write(sp source.Span, b ScopeRef, how WriteKind, x Operand)    # x appended to the text builder b (E11a)
     CopyElems(sp source.Span, dst Place, src Place, n Operand)     # n elements of array src into array dst, from 0
     Spawn(sp source.Span, j ScopeId, task I32)    # f.Tasks[task] started in join j (P1): see Task
+    Raised(sp source.Span)    # S18d: an error raised at sp that a "!" takes in this body - its trace's first place
 }
 
 # ---- terminators ----
@@ -339,12 +340,15 @@ type Case struct(Value I64, To BlockId) {
 # before the arguments are evaluated (the operands here are values already). An error its call fails with goes to the
 # first of Clauses (f.Clauses) naming it, run on its thread (P4a); one none takes is re-encoded under its join's list
 # and carried to the join (P4b)
-type Task struct(Target Callee, Args Range, Scopes Range, Targets Range, Clauses Range) {
+type Task struct(Target Callee, Args Range, Scopes Range, Targets Range, Clauses Range, Ends Range = Range(0, 0)
+                 EndsSp source.Span = source.Span(0, 0)) {
     Target
     Args
     Scopes
     Targets
     Clauses
+    Ends     # "spawn f(x)!" (E35): pairs in f.Ops, an error code then its name as text data, each ending the program
+    EndsSp   # from the task's thread where the call fails with it (P6); where the "!" is
 }
 
 # a task's clause: the errors it takes (f.Items: an error type and a word, -1 every word; All for every error) and
@@ -471,12 +475,14 @@ fn (f mut Fn&) AddCases(cs Array<Case>&) Range {
     return Range(I32(at), I32(cs.Len()))
 }
 
-fn (f mut Fn&) AddTask(target Callee, args Range, scopes Range, targets Array<Place>&, clauses Array<TaskClause>&) I32 {
+fn (f mut Fn&) AddTask(target Callee, args Range, scopes Range, targets Array<Place>&, clauses Array<TaskClause>&
+                       ends Range = Range(0, 0), endsSp source.Span = source.Span(0, 0)) I32 {
     at := f.Places.Len()
     for p in targets { f.Places.Push(p) }
     ct := f.Clauses.Len()
     for c in clauses { f.Clauses.Push(c) }
-    f.Tasks.Push(Task(target, args, scopes, Range(I32(at), I32(targets.Len())), Range(I32(ct), I32(clauses.Len()))))
+    f.Tasks.Push(Task(target, args, scopes, Range(I32(at), I32(targets.Len())), Range(I32(ct), I32(clauses.Len())), ends
+                      endsSp))
     return I32(f.Tasks.Len() - 1)
 }
 
@@ -661,6 +667,7 @@ fn (v mut verifier&) shape() Bool {
     for k in f.Tasks {
         v.callee(k.Target)
         v.ops(k.Args)
+        v.ops(k.Ends)
         v.refs(k.Scopes)
         if v.within(k.Targets, f.Places.Len(), "targets") {
             for i in range k.Targets.N { v.place(f.Places[I64(k.Targets.At) + i]) }
@@ -816,6 +823,7 @@ fn (v mut verifier&) stmtShape(st Stmt) {
             v.scope(j)
             if k < I32(0) or I64(k) >= v.F.Tasks.Len() { v.bad("no task " $k) }
         }
+        case Stmt.Raised(_) { }
     }
 }
 
@@ -1790,6 +1798,7 @@ fn (v mut verifier&) stmtFlow(s Stmt) {
             for i in range task.Clauses.N { v.reads(f.Clauses[I64(task.Clauses.At) + i].Handler) }
             v.pend[I64(j)] = true
         }
+        case Stmt.Raised(_) { }
     }
 }
 
@@ -2073,6 +2082,7 @@ fn (w mut dumper&) stmt(s Stmt) String {
         case Stmt.Write(_, b, how, x) => "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
         case Stmt.CopyElems(_, d, src, n) => "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
         case Stmt.Spawn(_, j, k) => "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])
+        case Stmt.Raised(_) => "raised"
     }
 }
 

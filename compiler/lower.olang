@@ -1009,7 +1009,17 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
         ln.gap(sp, "a spawn outside a join")
         return
     }
-    fty := ln.taskType(sw.Task)
+    # E35: "spawn f(x)!" - the call itself is the task, and what it fails with ends the program from the task's thread
+    task := sw.Task
+    banged := false
+    match task {
+        case typed.Expr.Try(_, _, tr) if tr.Ends {
+            task = tr.X
+            banged = true
+        }
+        case _ { }
+    }
+    fty := ln.taskType(task)
     if fty == types.UnknownT {
         ln.gap(sp, "a task that is no call")
         return
@@ -1027,7 +1037,7 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             places[i] = ln.mk(ln.place(sw.Targets[i]))
         }
     }
-    match sw.Task {
+    match task {
         case typed.Expr.Call(csp, _, c) {
             callee, ty := ln.callee(c.Target, csp)
             if ln.dead { return }
@@ -1041,7 +1051,10 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
                 cls[i] = mir.TaskClause(ln.F.AddItems(cl.Items), cl.All, h)
             }
             if ln.dead { return }
-            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty), c.Site), places, cls)
+            ends := mir.Empty
+            if banged { ends = ln.F.Args(ln.bangNames(ln.T.Errors(ty), sp)) }
+            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty), c.Site), places, cls, ends
+                              sw.Task.Span())
             ln.emit(mir.Stmt.Spawn(sp, j, k))
         }
         case _ { }
@@ -1143,7 +1156,7 @@ fn (ln mut lowering&) check(ok mir.Operand, chk typed.Check, kind mir.ExitKind, 
     if chk == typed.Check.Abort {
         ln.end(mir.Term.Exit(sp, kind, mir.Operand.None))
     } else {
-        ln.dispatch(mir.Operand.Const(mir.I32T, (1 << 16) | word), ln.T.List1(ln.L.builtin()), sp)
+        ln.dispatch(mir.Operand.Const(mir.I32T, (1 << 16) | word), ln.T.List1(ln.L.builtin()), sp, true)
     }
     ln.start(good)
 }
@@ -1160,8 +1173,23 @@ fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind,
 # E35: the error a "!" took ends the program, named as a program writes it - another module's error type by its
 # module's base name, the prelude's and this module's bare ("io.IoError.FULL") - a test and an exit for each word
 fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, kind mir.ExitKind = mir.ExitKind.Error) {
+    xs := ln.bangNames(from, sp)
+    for i in range 0, xs.Len(), 2 {
+        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+        same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, xs[i]], sp)
+        ln.end(mir.Term.Branch(same, yes, no))
+        ln.start(yes)
+        ln.end(mir.Term.Exit(sp, kind, xs[i + 1]))
+        ln.start(no)
+    }
+    ln.end(mir.Term.Exit(sp, kind, ln.textData("unhandled error", sp)))
+}
+
+# the errors of list from as "!" names them: for each word, its code (an I32 constant) and its name as text data
+fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(0, 0)) Array<mir.Operand>& {
     t := ln.T
     xs := t.Items(from)
+    out mut List<mir.Operand>& = List<mir.Operand>()
     for j in range xs.Len() {
         et := t.ErrOf(xs[j])
         if t.KindOf(et) != types.Kind.Named { continue }
@@ -1175,16 +1203,11 @@ fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, 
         }
         ws := ln.L.P.ErrorWords(d)
         for w in range ws.Len() {
-            name := $q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w])
-            yes, no := ln.F.NewBlock(), ln.F.NewBlock()
-            same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w)], sp)
-            ln.end(mir.Term.Branch(same, yes, no))
-            ln.start(yes)
-            ln.end(mir.Term.Exit(sp, kind, ln.textData(name, sp)))
-            ln.start(no)
+            out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
+            out.Push(ln.textData($q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w]), sp))
         }
     }
-    ln.end(mir.Term.Exit(sp, kind, ln.textData("unhandled error", sp)))
+    return out.ToArray()
 }
 
 # text as constant data (T25d), a String&
@@ -1204,7 +1227,8 @@ fn (ln mut lowering&) module() I64 {
 # an error with code, under list from, reaching here: to the first clause of the innermost try taking it, the scopes
 # opened since the try closed on the way; what its clauses do not take leaves the body under its own list (R13, R17),
 # every scope closed - a try around it never sees it, but for a loop's own call (Passes), whose leftovers go on to it
-fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Span) {
+# raised: the error is raised here, by a check, not passed on by a call - a "!" taking it starts its trace here (S18d)
+fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Span, raised Bool = false) {
     t := ln.T
     xs := t.Items(from)
     for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
@@ -1244,6 +1268,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
         }
         # what this try's clauses do not take leaves the body - past a "!", it ends the program
         if tc.Ends {
+            if raised { ln.emit(mir.Stmt.Raised(sp)) }
             ln.bang(code, from, sp)
             return
         }
