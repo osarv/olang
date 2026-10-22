@@ -7091,6 +7091,9 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId) typed.E
     ref := c.P.R.Member(c.fr().File, sp.End)
     nsp := memberSpan(sp, c.text(n).Len())
     if ref.Kind == names.What.Global { return c.read(sp, typed.Place.Global(sp, c.globalType(ref.Module, n), ref.Module, n)) }
+    # T21: a function named through an import alias, as a value - as one named bare
+    if ref.Kind == names.What.Func { return c.fnValue(nsp, c.P.FnNamed(ref.Module, n)) }
+    if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
     if ref.Kind != names.What.None {
         c.gap(nsp, "a member reached through an import, of this kind")
         return c.unknown(sp)

@@ -606,11 +606,7 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     w := code & 0xFFFF
     word := $x.P.T.Names.Text(ws[w]) if w < ws.Len() else $w
     name := x.P.T.Names.Text(x.P.T.DeclName(dl))
-    m := x.P.T.DeclModule(dl)
-    if m == x.P.L.Root or x.P.L.Mods[m].Prelude { return $name "." $word }
-    id := x.P.L.Mods[x.P.T.DeclModule(dl)].Identity
-    k := try id.FindLast("/") catch default -1
-    return $id[k + 1:] "." $name "." $word
+    return $name "." $word   # B5: the type's own name, wherever it is declared
 }
 
 fn say(t String&) { try io.Print(t) catch io.IoError { } }
