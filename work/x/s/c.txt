@@ -1,0 +1,55 @@
+p.olang:200:22: error[O10]: this reference lives in a scope that may not outlive where it is put
+  200 |                 a[0] = q0_3
+      |                      ^
+p.olang:218:18: error[O10]: this reference lives in a scope that may not outlive where it is put
+  218 |             a[0] = q0_6
+      |                  ^
+p.olang:233:68: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  233 |         if l.Len() > 0 { (try l.Last() catch { unreachable }).next = q1_1 }
+      |                                                                    ^
+p.olang:284:19: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  284 |         a[0].next = q4_1 if Run > 0 else a[0].next
+      |                   ^
+p.olang:284:21: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+  284 |         a[0].next = q4_1 if Run > 0 else a[0].next
+      |                     ^~~~
+p.olang:331:20: error[O25]: a reference never narrows - 'q6_2' lives in a block that closes first, and this keeps it longer
+  331 |             x.next = q6_2
+      |                    ^
+p.olang:329:13: note: 'q6_2' is declared here, in a block that closes first - declare it where 'x' lives: 'q6_2 mut Node&x = ...'
+  329 |             q6_2 := Node(23)
+      |             ^~~~
+p.olang:362:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+  362 |             applyN(r.n, fn(x mut Node&) { x.next = Node(5) })
+      |             ^~~~~~
+p.olang:166:45: note: built here, where the receiver's part it was handed lives
+  166 | fn applyN(n mut Node&, f fn(x mut Node&)) { f(n) }
+      |                                             ^
+p.olang:395:20: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  395 |             x.next = match Run { case 1 => q8_1 case _ => pickNode(x) }
+      |                    ^
+p.olang:395:44: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+  395 |             x.next = match Run { case 1 => q8_1 case _ => pickNode(x) }
+      |                                            ^~~~
+p.olang:402:24: error[O25]: a reference never narrows - 'q8_3' lives in a block that closes first, and this keeps it longer
+  402 |                 x.next = q8_3
+      |                        ^
+p.olang:401:17: note: 'q8_3' is declared here, in a block that closes first - declare it where 'x' lives: 'q8_3 mut Node&x = ...'
+  401 |                 q8_3 := Node(8)
+      |                 ^~~~
+p.olang:453:24: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+  453 |             c11_2.next = nodeOf(E.N(Node(7)))
+      |                        ^
+p.olang:458:40: error[D16c]: a lambda's captures are read-only - capture a reference to change what is outside it
+  458 |             f11_4 := fn(v I64) { h11_3.next = Node(v) }
+      |                                        ^~~~
+p.olang:467:20: error[O25]: a reference never narrows - 'q11_6' lives in a block that closes first, and this keeps it longer
+  467 |             x.next = q11_6
+      |                    ^
+p.olang:466:13: note: 'q11_6' is declared here, in a block that closes first - declare it where 'x' lives: 'q11_6 mut Node&x = ...'
+  466 |             q11_6 := Node(17)
+      |             ^~~~~
+p.olang:477:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+  477 |         hh11_10 = csh11_9(tt11_11, 21 + i)
+      |                 ^
+compilation failed with 12 errors

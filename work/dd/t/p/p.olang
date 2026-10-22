@@ -1,0 +1,604 @@
+# scope fuzz seed 40
+import "std/time"
+import "std/io"
+error SgErr {
+    E
+}
+extern fn getpid() I32
+fn say(t String&) { try io.Println(t) catch io.IoError { } }
+Run mut I64 = 1          # read by every condition, so none is decided while compiling
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Box struct() {
+    head mut Node& = Node(1)
+    tag I64 = 0
+}
+type W struct(b Box) { b }
+type H struct(b Box) { b }
+type E enum {
+    A(b Box)
+    N(n mut Node&)
+    Z
+}
+type Cell struct() {
+    S List<mut Node&>
+    t I64 = 0
+}
+type Bag struct() {
+    nodes List<mut Node&>
+    boxes List<Box>
+    cells List<Cell>
+    grid List<List<Cell>>
+}
+fn sumCells(l List<Cell>&) I64 {
+    t I64 = 0
+    for c in l { t = t * 7 + sumList(c.S) }
+    return t
+}
+fn gridPush(b mut Bag&, v I64) { b.grid[0][0].S.Push(Node(v)) }
+type Two struct() {
+    items Array<mut Node&, 2>
+}
+# allocates and gives back: whatever reuses a closed scope's storage writes -7 and text over it
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7)
+        t += s.Len()
+    }
+    return t + I64(getpid() * 0)
+}
+# a chain's values, 40 nodes at most
+fn chain(n Node&) I64 {
+    t I64 = 0
+    c := n
+    for k in range 40 {
+        if c == null { break }
+        t = t * 31 + c.v
+        c = c.next
+    }
+    return t
+}
+fn sumList(l List<mut Node&>&) I64 {
+    t I64 = 0
+    for n in l { t = t * 7 + chain(n) }
+    return t
+}
+fn sumArr(a Array<mut Node&>&) I64 {
+    t I64 = 0
+    for n in a { t = t * 7 + chain(n) }
+    return t
+}
+fn sumMap(m Map<I64, mut Node&>&) I64 {
+    t I64 = 0
+    for k in range 40 {
+        n := try m.Get(k) catch default null
+        t = t * 7 + chain(n)
+    }
+    return t
+}
+fn sumBoxes(l List<Box>&) I64 {
+    t I64 = 0
+    for b in l { t = t * 7 + chain(b.head) }
+    return t
+}
+fn sumE(e E&) I64 {
+    if e is E.A {
+        b := e as E.A
+        return chain(b.head)
+    }
+    if e is E.N { return chain(e as E.N) }
+    return 0
+}
+fn mkNode(v I64) mut Node& { return Node(v) }
+fn mkChain(v I64) mut Node& {
+    n := Node(v)
+    n.next = Node(v + 1)
+    return n
+}
+fn via(v I64) mut Node& { return mkChain(v) }
+fn mkLambda(v I64) mut Node& {
+    f := fn(x I64) mut Node& { return Node(x) }
+    return f(v)
+}
+fn nodeOf(e E) mut Node&e { return e as E.N }
+fn pickNode(x mut Node&) mut Node&x { return x }
+fn pickBox(x mut Box&) mut Box&x { return x }
+fn build(b Box) { b.head.next = Node(42) }
+fn byAs(e E) {
+    b := e as E.A
+    b.head.next = Node(43)
+}
+fn link(a mut Node&, b mut Node&a) { a.next = b }
+fn grow(a mut Node&, v I64) { a.next = Node(v) }
+fn growDeep(a mut Node&, v I64) {
+    if v > 0 {
+        for i in range 2 {
+            a.next = Node(v + i)
+            churn()
+        }
+    }
+}
+fn mkList(v I64) List<mut Node&> {
+    l := List<mut Node&>()
+    for i in range 3 { l.Push(Node(v + i)) }
+    return l
+}
+fn mkList2(v I64) List<mut Node&> { return mkList(v) }
+fn pushNode(l mut List<mut Node&>&, v I64) { l.Push(Node(v)) }
+fn idBox(b mut Box&) Box { return b }
+fn addVia(b Box&, v I64) { b.head.next = Node(v) }
+fn addViaMut(b mut Box&, v I64) { b.head.next = Node(v) }
+fn readBox(b Box&) I64 { return chain(b.head) }
+fn keepBox(b Box&) fn() I64 { return fn() I64 { return chain(b.head) } }
+fn useBox(b Box&) I64 {
+    f := fn() I64 { return chain(b.head) }
+    return f() + f()
+}
+fn putNode(m mut Map<I64, mut Node&>&, k I64, v I64) { m.Put(k, Node(v)) }
+fn setNode(a mut Array<mut Node&>&, k I64, v I64) { a[k] = Node(v) }
+# fallible: growF and mkF succeed, failF fails after building, mkFail fails
+fn growF(a mut Node&, v I64) ? {
+    if Run < 0 { error SgErr.E }
+    a.next = Node(v)
+}
+fn failF(a mut Node&, v I64) ? {
+    a.next = Node(v)
+    if Run > 0 { error SgErr.E }
+}
+fn mkF(v I64) mut Node& ? {
+    if Run < 0 { error SgErr.E }
+    return Node(v)
+}
+fn mkFail(v I64) mut Node& ? {
+    if Run > 0 { error SgErr.E }
+    return Node(v)
+}
+# for Str scenarios: a borrowed result that fails, callbacks, a generic, call cycles, a local moved into a borrowed result's home
+fn borrowF(n mut Node&) mut Node&n ? {
+    if Run > 0 { error SgErr.E }
+    return n
+}
+fn applyN(n mut Node&, f fn(x mut Node&)) { f(n) }
+fn applyR(n Node&, f fn(x Node&) I64) I64 { return f(n) }
+fn idT<T>(x T) T { return x }
+fn cycA(n Node&, c I64) I64 {
+    if c > 0 { return cycB(n, c - 1) }
+    return n.v
+}
+fn cycB(n Node&, c I64) I64 { return cycA(n, c) + 1 }
+fn cycGrow(n mut Node&, c I64) {
+    if c > 0 { cycGrow2(n, c - 1) } else { n.next = Node(c + 7) }
+}
+fn cycGrow2(n mut Node&, c I64) { cycGrow(n, c) }
+type P2 struct(n mut Node&) { n }
+fn moveH(n mut Node&) mut Node&n {
+    p := P2(n)
+    return p.n
+}
+fn pickDef(n mut Node&, v I64) mut Node&n { return try borrowF(n) catch default mkNode(v) }
+fn readN(n Node&) I64 { return chain(n) }
+# scenario 0
+fn s0() I64 {
+    t := Two()
+    t.items[0] = Node(1)
+    t.items[1] = Node(1)
+    c0_1 := t
+    c0_1.items[1].next = Node(5)
+    link(t.items[1], via(7))
+    s0_2 := t.items[0:2]
+    s0_2[1].next = via(10)
+    churn()
+    return chain(t.items[0]) * 7 + chain(t.items[1])
+}
+# scenario 1
+G1 mut Node& = Node(1)
+fn s1() I64 {
+    
+    c1_2 := pickNode(G1) if Run > 0 else Node(3)
+    c1_2.next = Node(8)
+    G1.next = via(13) if Run > 0 else G1.next
+    churn()
+    return chain(G1)
+}
+# scenario 2
+fn s2() I64 {
+    m := Map<I64, mut Node&>()
+    {
+        defer {
+        for i2_2 in range Run * 2 {
+            n2_1 := try m.Get(8) catch default null
+            if n2_1 != null { n2_1.next = mkNode(5) }
+        }
+        }
+        churn()
+    }
+    putNode(m, 27, 7)
+    match Run {
+        case 1 {
+        m.Put(11, Node(15))
+        if Run < 0 { } else {
+            putNode(m, 27, 17)
+            m.Put(16, nodeOf(E.N(Node(22))))
+        }
+        }
+        case _ { }
+    }
+    churn()
+    return sumMap(m)
+}
+# scenario 3
+type R3 struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {
+    n
+    l
+    m
+    a
+}
+fn (r R3&) Str() String {
+    acc I64 = 0
+    f3_2 := fn() I64 {
+        q3_1 := Node(r.n.v)
+        q3_1.next = Node(6)
+        return chain(q3_1)
+    }
+    acc += f3_2()
+    q3_3 := try r.m.Get(Run * 9) catch default r.n
+    acc += q3_3.v
+    return "r" $acc ":" $chain(r.n)
+}
+fn s3() I64 {
+    x := Node(1)
+    x.next = Node(2)
+    l := List<mut Node&>()
+    l.Push(Node(3))
+    m := Map<I64, mut Node&>()
+    m.Put(3, Node(4))
+    a := Array<mut Node&>(4)
+    a[0] = Node(5)
+    r := R3(x, l, m, a)
+    h I64 = 0
+    for i in range 3 {
+        s := $r
+        h = h * 31 + s.Hash()
+        churn()
+    }
+    churn()
+    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)
+}
+# scenario 4
+type R4 struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {
+    n
+    l
+    m
+    a
+}
+fn (r R4&) Str() String {
+    acc I64 = 0
+    q4_1 := $r.n.v "x" $chain(r.n)
+    acc += q4_1.Len()
+    return "r" $acc ":" $chain(r.n)
+}
+fn s4() I64 {
+    x := Node(1)
+    x.next = Node(2)
+    l := List<mut Node&>()
+    l.Push(Node(3))
+    m := Map<I64, mut Node&>()
+    m.Put(3, Node(4))
+    a := Array<mut Node&>(4)
+    a[0] = Node(5)
+    r := R4(x, l, m, a)
+    h I64 = 0
+    for i in range 3 {
+        s := $r.n.v $r
+        h = h * 31 + s.Hash()
+        churn()
+    }
+    churn()
+    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)
+}
+# scenario 5
+type R5 struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {
+    n
+    l
+    m
+    a
+}
+fn (r R5&) Str() String {
+    acc I64 = 0
+    acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)
+    return "r" $acc ":" $chain(r.n)
+}
+fn s5() I64 {
+    x := Node(1)
+    x.next = Node(2)
+    l := List<mut Node&>()
+    l.Push(Node(3))
+    m := Map<I64, mut Node&>()
+    m.Put(3, Node(4))
+    a := Array<mut Node&>(4)
+    a[0] = Node(5)
+    r := R5(x, l, m, a)
+    h I64 = 0
+    for i in range 3 {
+        s := $r.n.v $r
+        h = h * 31 + s.Hash()
+        churn()
+    }
+    churn()
+    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)
+}
+# scenario 6
+G6 mut Node& = Node(1)
+fn cst6_6(n I64) String& { return $n "-made-in-p" }
+type cs6_5 struct(p String&, n I64) {
+    y String&p = $n "-new-text-in-p"
+}
+fn csh6_7(p String&, n I64) cs6_5 { return cs6_5(p, n) }
+fn cst6_13(n I64) String& { return $n "-made-in-p" }
+type cs6_12 struct(p String&, n I64) {
+    y String&p = $n "-new-text-in-p"
+}
+fn csh6_14(p String&, n I64) cs6_12 { return cs6_12(p, n) }
+fn s6() I64 {
+    
+    if Run > 0 {
+        churn()
+        for i6_3 in range Run * 2 {
+            G6.next = mkChain(5) if Run > 0 else G6.next
+            G6.next = Node(11)
+            G6.next = match Run { case 1 => mkChain(16) case _ => G6.next }
+        }
+        {
+            defer {
+            G6.next = mkChain(24)
+            G6.next.next = Node(27)
+            }
+            churn()
+        }
+        match Run {
+            case 1 {
+            {
+                q6_4 mut Node& = mkChain(31)
+                G6.next = q6_4 if Run > 0 else G6.next
+            }
+            }
+            case _ { }
+        }
+    }
+    for i6_17 in range 3 {
+        match Run {
+            case 1 {
+            growDeep(G6, 34)
+            G6.next = nodeOf(E.N(Node(37)))
+            for i in range 2 {
+                tt6_9 := $i "-inner-text"
+                hh6_8 := cs6_5(tt6_9, 38 + i)
+                churn()
+                G6.next = Node(hh6_8.y.Len() + I64(hh6_8.y[0]))
+            }
+            }
+            case _ { }
+        }
+        {
+            defer {
+            {
+                q6_10 := mkLambda(43)
+                G6.next = q6_10
+            }
+            h6_11 := pickNode(G6)
+            h6_11.next = via(48)
+            {
+            hh6_15 := cs6_12("outer", 51)
+            for i in range 2 {
+                tt6_16 := $i "-inner-text"
+                hh6_15 = csh6_14(tt6_16, 51 + i)
+            }
+            churn()
+            G6.next = Node(hh6_15.y.Len() + I64(hh6_15.y[0]))
+            }
+            }
+            churn()
+        }
+        churn()
+    }
+    churn()
+    return chain(G6)
+}
+# scenario 7
+fn s7() I64 {
+    l := List<mut Node&>()
+    l.Push(Node(1))
+    if l.Len() > 0 { (try l.First() catch { unreachable }).next = mkLambda(4) }
+    {
+        {
+            if l.Len() > 0 { l[0].next = mkChain(7) }
+            {
+                q7_3 := Node(11)
+                if l.Len() > 0 { (try l.Last() catch { unreachable }).next = q7_3 }
+            }
+        }
+        match Run {
+            case 1 {
+            f7_4 := fn(v I64) mut Node& { return Node(v) }
+            l.Push(f7_4(16))
+            q7_5 := mkNode(23)
+            churn()
+            l.Push(q7_5)
+            {
+                q7_6 := via(27)
+                l.Push(q7_6)
+            }
+            }
+            case _ { }
+        }
+        if Run > 0 {
+            l.Push(Node(30))
+        }
+    }
+    for i7_8 in range 3 {
+        {
+            q7_7 := Node(32)
+            if l.Len() > 0 { (try l.Last() catch { unreachable }).next = q7_7 }
+        }
+        join { spawn pushNode(l, 36) }
+        pushNode(l, 37)
+        churn()
+    }
+    churn()
+    return sumList(l)
+}
+# scenario 8
+fn opVal8_1(y Box) {
+    {
+        ks8_3 := List<fn() I64>()
+        for i8_2 in range 3 { ks8_3.Push(keepBox(idBox(y))) }
+        churn()
+        for k8_4 in ks8_3 { if k8_4() == -7 { abort } }
+    }
+}
+fn cst8_11(n I64) String& { return $n "-made-in-p" }
+type cs8_10 struct(p String&, n I64) {
+    y String& = $n "-new-text-in-the-instance"
+}
+fn csh8_12(p String&, n I64) cs8_10 { return cs8_10(p, n) }
+fn opNode8_8(p mut Node&) {
+    t8_9 mut Node& = null
+    join { spawn t8_9 = try mkFail(20) catch default Node(22) }
+    p.next = t8_9
+    {
+    hh8_13 := cs8_10("outer", 24)
+    for i in range 2 {
+        tt8_14 := $i "-inner-text"
+        hh8_13 = cs8_10(tt8_14, 24 + i)
+    }
+    churn()
+    p.next = Node(hh8_13.y.Len() + I64(hh8_13.y[0]))
+    }
+}
+fn s8() I64 {
+    w := W(Box())
+    opVal8_1(w.b)
+    {
+        {
+            q8_5 mut Node& = mkNode(10)
+            w.b.head.next = q8_5 if Run > 0 else w.b.head.next
+        }
+        {
+            q8_6 mut Node& = mkChain(15)
+            c8_7 mut Node& = q8_6 if Run > 0 else pickNode(w.b.head)
+            c8_7.next = mkLambda(16)
+        }
+        opNode8_8(w.b.head)
+    }
+    for i8_19 in range Run * 2 {
+        {
+            x8_15 := E.A(w.b) as E.A
+            x8_15.head.next = mkChain(27)
+            x8_16 := E.A(w.b) as E.A
+            x8_16.head.next = mkNode(32)
+            for i8_17 in range 3 { addVia(w.b if Run > 0 else w.b, 36 + i8_17) }
+        }
+        for i8_18 in range 3 { addVia(idBox(w.b), 41 + i8_18) }
+        byAs(E.A(w.b))
+    }
+    churn()
+    return chain(w.b.head)
+}
+# scenario 9
+fn s9() I64 {
+    l := List<mut Node&>()
+    l.Push(Node(1))
+    for i9_3 in range 3 {
+        join { spawn pushNode(l, 6) }
+        {
+            {
+                q9_1 := nodeOf(E.N(Node(8)))
+                if l.Len() > 0 { (try l.Last() catch { unreachable }).next = q9_1 }
+            }
+            for i9_2 in range 3 { l.Push(Node(10 + i9_2)) }
+        }
+        churn()
+    }
+    for i9_4 in range 3 { l.Push(Node(15 + i9_4)) }
+    if Run < 0 { } else {
+        for i9_5 in range 3 {
+            l.Push(mkChain(22))
+            churn()
+        }
+        for i9_6 in range 3 { l.Push(Node(27 + i9_6)) }
+        if Run < 0 { } else {
+            q9_7 := mkLambda(31)
+            churn()
+            l.Push(q9_7)
+            k9_9 I64 = 0
+            if l.Len() > 0 { l[0].next, k9_9 = Node(33), 1 }
+            l.Push(Node(36))
+        }
+    }
+    churn()
+    return sumList(l)
+}
+# scenario 10
+fn s10() I64 {
+    bag := Bag()
+    bag.boxes.Push(Box())
+    bag.cells.Push(Cell())
+    bag.grid.Push(List<Cell>())
+    bag.grid[0].Push(Cell())
+    bag.nodes.Push(mkNode(5))
+    churn()
+    return sumList(bag.nodes) * 7 + sumBoxes(bag.boxes) * 5 + sumCells(bag.cells) * 3 + sumCells(bag.grid[0])
+}
+# scenario 11
+type R11 struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {
+    n
+    l
+    m
+    a
+}
+fn (r R11&) Str() String {
+    acc I64 = 0
+    r.n.next = try borrowF(r.n) catch default mkNode(6)
+    {
+        applyN(r.n, fn(x mut Node&) { x.next = Node(8) })
+    }
+    return "r" $acc ":" $chain(r.n)
+}
+fn s11() I64 {
+    x := Node(1)
+    x.next = Node(2)
+    l := List<mut Node&>()
+    l.Push(Node(3))
+    m := Map<I64, mut Node&>()
+    m.Put(3, Node(4))
+    a := Array<mut Node&>(4)
+    a[0] = Node(5)
+    r := R11(x, l, m, a)
+    h I64 = 0
+    for i in range 3 {
+        s := $r $r
+        h = h * 31 + s.Hash()
+        churn()
+    }
+    churn()
+    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)
+}
+fn main() ? {
+    say("0: " $s0())
+    say("1: " $s1())
+    say("2: " $s2())
+    say("3: " $s3())
+    say("4: " $s4())
+    say("5: " $s5())
+    say("6: " $s6())
+    say("7: " $s7())
+    say("8: " $s8())
+    say("9: " $s9())
+    say("10: " $s10())
+    say("11: " $s11())
+}

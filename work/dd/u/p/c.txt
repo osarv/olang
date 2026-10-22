@@ -1,0 +1,58 @@
+p.olang:195:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+  195 |     idT(r.n).next = Node(8)
+      |                     ^~~~~~~
+p.olang:225:19: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+  225 |         c1_2.next = Node(9)
+      |                   ^
+p.olang:240:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+  240 |     join { spawn fn() { h2_2.next = Node(5) } }
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
+p.olang:240:37: note: built here, where the receiver's part it was handed lives
+  240 |     join { spawn fn() { h2_2.next = Node(5) } }
+      |                                     ^~~~~~~
+p.olang:283:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  283 |     G4.next = q4_1 if Run > 0 else pickNode(G4)
+      |             ^
+p.olang:300:15: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  300 |     b5_1.head = x
+      |               ^
+p.olang:318:12: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  318 |     p.next = q5_9
+      |            ^
+p.olang:328:20: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  328 |             x.next = match Run { case 1 => q5_10 case _ => pickNode(x) }
+      |                    ^
+p.olang:356:19: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+  356 |         c7_2.next = Node(4)
+      |                   ^
+p.olang:367:19: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  367 |         b8_1.head = G8
+      |                   ^
+p.olang:371:27: error[O11, O12]: where this reference's referent lives is not known here, and the callee may build there - give it one known scope
+  371 |             link(G8, q8_2 if Run > 0 else G8.next)
+      |                           ^~
+p.olang:371:13: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
+  371 |             link(G8, q8_2 if Run > 0 else G8.next)
+      |             ^~~~
+p.olang:390:23: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+  390 |             c9_4.next = Node(9)
+      |                       ^
+p.olang:401:22: error[O11, O12]: where this reference's referent lives is not known here, and the callee may build there - give it one known scope
+  401 |         link(x, q9_1 if Run > 0 else x.next)
+      |                      ^~
+p.olang:401:9: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
+  401 |         link(x, q9_1 if Run > 0 else x.next)
+      |         ^~~~
+p.olang:426:59: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  426 |                 (try m.Get(8) catch { unreachable }).next = q10_3
+      |                                                           ^
+p.olang:450:20: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+  450 |             x.next = q11_1
+      |                    ^
+p.olang:462:23: error[O11, O12]: where this reference's referent lives is not known here, and the callee may build there - give it one known scope
+  462 |         link(x, q11_5 if Run > 0 else x.next)
+      |                       ^~
+p.olang:462:9: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
+  462 |         link(x, q11_5 if Run > 0 else x.next)
+      |         ^~~~
+compilation failed with 18 errors

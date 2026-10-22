@@ -1,0 +1,103 @@
+p.olang:203:15: error[O25a]: this container's scope cannot be built into from here - write through the global itself
+  203 |     c1_2.next = Node(8)
+      |               ^
+p.olang:204:23: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  204 |     G1.next = via(13) if Run > 0 else G1.next
+      |                       ^~
+p.olang:352:34: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  352 |             G6.next = mkChain(5) if Run > 0 else G6.next
+      |                                  ^~
+p.olang:354:23: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  354 |             G6.next = match Run { case 1 => mkChain(16) case _ => G6.next }
+      |                       ^~~~~
+p.olang:367:32: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  367 |                 G6.next = q6_4 if Run > 0 else G6.next
+      |                                ^~
+p.olang:391:27: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+  391 |                 G6.next = q6_10
+      |                           ^~~~~
+p.olang:394:24: error[O25a]: this container's scope cannot be built into from here - write through the global itself
+  394 |             h6_11.next = via(48)
+      |                        ^
+p.olang:399:24: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+  399 |                 hh6_15 = csh6_14(tt6_16, 51 + i)
+      |                        ^
+p.olang:422:76: error[O25]: a reference never narrows - 'q7_3' lives in a block that closes first, and this keeps it longer
+  422 |                 if l.Len() > 0 { (try l.Last() catch { unreachable }).next = q7_3 }
+      |                                                                            ^
+p.olang:431:15: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  431 |             l.Push(q7_5)
+      |               ^~~~
+/home/user/wt/rvport/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+p.olang:429:13: note: 'q7_5' is made here, in a block that closes first - make it where 'l' lives: 'mkNode&l(...)'
+  429 |             q7_5 := mkNode(23)
+      |             ^~~~
+p.olang:434:19: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  434 |                 l.Push(q7_6)
+      |                   ^~~~
+/home/user/wt/rvport/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+p.olang:433:17: note: 'q7_6' is made here, in a block that closes first - make it where 'l' lives: 'via&l(...)'
+  433 |                 q7_6 := via(27)
+      |                 ^~~~
+p.olang:446:72: error[O25]: a reference never narrows - 'q7_7' lives in a block that closes first, and this keeps it longer
+  446 |             if l.Len() > 0 { (try l.Last() catch { unreachable }).next = q7_7 }
+      |                                                                        ^
+p.olang:459:56: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+  459 |         for i8_2 in range 3 { ks8_3.Push(keepBox(idBox(y))) }
+      |                                                        ^
+p.olang:459:50: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+  459 |         for i8_2 in range 3 { ks8_3.Push(keepBox(idBox(y))) }
+      |                                                  ^~~~~
+p.olang:461:47: error: unknown name 'abort'
+  461 |         for k8_4 in ks8_3 { if k8_4() == -7 { abort } }
+      |                                               ^~~~~
+p.olang:472:12: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  472 |     p.next = t8_9
+      |            ^
+p.olang:489:27: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  489 |             w.b.head.next = q8_5 if Run > 0 else w.b.head.next
+      |                           ^
+p.olang:489:29: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+  489 |             w.b.head.next = q8_5 if Run > 0 else w.b.head.next
+      |                             ^~~~
+p.olang:494:23: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+  494 |             c8_7.next = mkLambda(16)
+      |                       ^
+p.olang:500:28: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+  500 |             x8_15 := E.A(w.b) as E.A
+      |                            ^
+p.olang:502:28: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+  502 |             x8_16 := E.A(w.b) as E.A
+      |                            ^
+p.olang:504:47: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+  504 |             for i8_17 in range 3 { addVia(w.b if Run > 0 else w.b, 36 + i8_17) }
+      |                                               ^~
+p.olang:506:39: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+  506 |         for i8_18 in range 3 { addVia(idBox(w.b), 41 + i8_18) }
+      |                                       ^~~~~
+p.olang:507:20: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+  507 |         byAs(E.A(w.b))
+      |                    ^
+p.olang:521:76: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+  521 |                 if l.Len() > 0 { (try l.Last() catch { unreachable }).next = q9_1 }
+      |                                                                            ^
+p.olang:537:15: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+  537 |             l.Push(q9_7)
+      |               ^~~~
+/home/user/wt/rvport/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+p.olang:535:13: note: 'q9_7' is made here, in a block that closes first - make it where 'l' lives: 'mkLambda&l(...)'
+  535 |             q9_7 := mkLambda(31)
+      |             ^~~~
+p.olang:566:47: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
+  566 |     r.n.next = try borrowF(r.n) catch default mkNode(6)
+      |                                               ^~~~~~
+p.olang:97:37: note: built here, where the receiver's part it was handed lives
+   97 | fn mkNode(v I64) mut Node& { return Node(v) }
+      |                                     ^~~~
+compilation failed with 26 errors
