@@ -1,0 +1,30 @@
+# C2g: a constructor building into its fields from nested blocks, loops and a lambda called in place, then the
+# instance read after churn
+import "std/io"
+import "churn"
+type Node struct(v I64) {
+    v
+    next mut Node& = null
+}
+type Bag struct(n I64) {
+    l := List<String&>()
+    head mut Node& = Node(0)
+    names := List<String&>()
+    if n > 0 {
+        for i in range n {
+            l.Push($i "-ctor")
+            if i % 2 == 0 { head.next = Node(i * 100) }
+        }
+    }
+    t := $n "-tail"
+    names.Push(t)
+}
+fn main() ? io.IoError {
+    b mut Bag& = Bag(1)
+    for i in range 3 { b = Bag(i + 2) }
+    c := churn.Churn()
+    s := ""
+    for x in b.l { s = $s $x "," }
+    for x in b.names { s = $s $x "," }
+    try io.Println($c " " $s " " $b.head.next.v)
+}

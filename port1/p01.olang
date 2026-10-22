@@ -1,0 +1,22 @@
+# S9 / decision 39: a three-clause for whose variable stands in the block around the loop; values its initializer
+# and its post clause build are kept past the loop
+import "std/io"
+import "churn"
+type Link struct(v I64) {
+    v
+    next mut Link& = null
+}
+fn mk(v I64) mut Link& { return Link(v) }
+fn main() ? io.IoError {
+    keep mut Link& = Link(0)
+    keep2 mut Link& = Link(0)
+    for c mut Link& = Link(1), c.v < 5, c = Link(c.v + 1) {
+        keep = c
+    }
+    for d mut Link& = mk(10), d.v < 15, d = mk(d.v + 1) {
+        d.next = Link(d.v * 2)
+        keep2 = d
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v " " $keep2.v " " $keep2.next.v)
+}

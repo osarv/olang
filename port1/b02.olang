@@ -1,0 +1,20 @@
+# O23a records: two locals with different records exchanged by a parallel assignment, then read through
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Holder struct(src Node&) {
+    r Node&src = src
+}
+fn main() ? io.IoError {
+    x Node& = Node(1)
+    keep Node& = x
+    for i in range 2 {
+        y Node& = Node(77)
+        h := Holder(x)
+        g := Holder(y)
+        h, g = g, h
+        keep = h.r
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v)
+}

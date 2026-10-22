@@ -1,0 +1,20 @@
+# O18a: an element of a call's built array put outside the loop, the call also given an inner argument
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Box struct(t String&, n Node&) {
+    t
+    n
+}
+fn mkBox(t String&, i I64) Box { return Box(t, Node(i)) }
+fn mkArr(t String&, i I64) Array<Node&> { return Node&[Node(i), Node(t.Len())] }
+fn main() ? io.IoError {
+    f Node& = Node(0)
+    g Node& = Node(0)
+    for i in range 3 {
+        inner := $i "-inner-text"
+        g = mkArr(inner, i)[1]
+    }
+    c := churn.Churn()
+    try io.Println($c " " $f.v " " $g.v)
+}

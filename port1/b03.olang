@@ -1,0 +1,22 @@
+# O23a records: b02 with the exchange written as three assignments
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Holder struct(src Node&) {
+    r Node&src = src
+}
+fn main() ? io.IoError {
+    x Node& = Node(1)
+    keep Node& = x
+    for i in range 2 {
+        y Node& = Node(77)
+        h := Holder(x)
+        g := Holder(y)
+        t := h
+        h = g
+        g = t
+        keep = h.r
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v)
+}

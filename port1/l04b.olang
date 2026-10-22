@@ -1,0 +1,15 @@
+# l04 without the task: the same store as a plain assignment
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+fn mkNode(i I64) Node& { return Node(i) }
+fn main() ? io.IoError {
+    outer mut Array<Node&>& = Array<Node&>(1, Node(0))
+    for i in range 3 {
+        inner mut Array<Node&>& = Array<Node&>(1, Node(0))
+        arr := outer if i < 10 else inner
+        arr[0] = mkNode(i + 50)
+    }
+    c := churn.Churn()
+    try io.Println($c " " $outer[0].v)
+}

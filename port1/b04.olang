@@ -1,0 +1,22 @@
+# O23a records: a value field holding an instance with an &src field, replaced whole through a reference to its
+# container, in this function and in a callee; then read through the container's record
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Holder struct(src Node&) {
+    r Node&src = src
+}
+type Outer struct(h Holder) { h }
+fn replace(o mut Outer&, n Node&o) { o.h = Holder(n) }
+fn main() ? io.IoError {
+    x Node& = Node(1)
+    keep Node& = x
+    for i in range 2 {
+        y Node& = Node(77)
+        o := Outer(Holder(x))
+        replace(o, y)
+        keep = o.h.r
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v)
+}

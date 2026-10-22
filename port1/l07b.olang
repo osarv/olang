@@ -1,0 +1,23 @@
+# l07 without the task: the same store as a plain assignment
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Holder struct(src Node&) {
+    r Node&src = src
+}
+type Outer struct(h Holder) { h }
+fn pick(n Node&) Node&n { return n }
+fn main() ? io.IoError {
+    x Node& = Node(1)
+    keep Node& = x
+    for i in range 2 {
+        y Node& = Node(77)
+        if i >= 0 {
+            o := Outer(Holder(x))
+            o.h.r = pick(y)
+            keep = o.h.r
+        }
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v)
+}

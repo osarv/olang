@@ -1,0 +1,26 @@
+# O17: a split value that is no handle (a List and a number), copied out of a collection and lent to callees that
+# build through it: a function, a method, a lambda called in place, a lambda handed to a callee
+import "std/io"
+import "churn"
+type Two struct(a List<String&>, n I64) {
+    a
+    n
+}
+fn addT(t mut Two&, i I64) { t.a.Push($i "-f") }
+fn (t mut Two&) Add(i I64) { t.a.Push($i "-m") }
+fn run(f fn(i I64), i I64) { f(i) }
+fn main() ? io.IoError {
+    twos := List<Two>()
+    twos.Push(Two(List<String&>(), 0))
+    for i in range 3 {
+        t := twos[0]
+        addT(t, i)
+        t.Add(i)
+        fn(k I64) { t.a.Push($k "-l") }(i)
+        run(fn(k I64) { t.a.Push($k "-r") }, i)
+    }
+    c := churn.Churn()
+    s := ""
+    for x in twos[0].a { s = $s $x "," }
+    try io.Println($c " " $s)
+}

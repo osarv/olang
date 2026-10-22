@@ -1,0 +1,18 @@
+# D16c: a lambda capturing a value that holds references (a handle copied out of a collection), building through it
+import "std/io"
+import "churn"
+fn main() ? io.IoError {
+    lists := List<List<String&>>()
+    lists.Push(List<String&>())
+    for i in range 3 {
+        w := lists[0]
+        add := fn(k I64) { w.Push($k "-cap") }
+        add(i)
+        add(i + 10)
+        join { spawn add(i + 20) }
+    }
+    c := churn.Churn()
+    s := ""
+    for t in lists[0] { s = $s $t "," }
+    try io.Println($c " " $s)
+}

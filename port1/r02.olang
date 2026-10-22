@@ -1,0 +1,18 @@
+# T7a: a struct field holding an array by value (refused by stage 0); the port accepts it - where its storage lives,
+# and what a copy of the struct shares
+import "std/io"
+import "churn"
+type Rec struct(n I64) {
+    t := $n "-text-that-is-long-enough"
+    a := Array<I64>(n, 7)
+}
+fn mk(n I64) Rec { return Rec(n) }
+fn main() ? io.IoError {
+    r := Rec(3)
+    k := mk(4)
+    for i in range 3 { r = Rec(i + 5) }
+    c := churn.Churn()
+    q := r
+    q.a[0] = 99
+    try io.Println($c " " $r.t " " $k.t " " $r.a[0] " " $k.a.Len())
+}
