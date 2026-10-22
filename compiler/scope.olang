@@ -6330,6 +6330,12 @@ fn (s mut Scoper&) fit(t Term, slot Term, exact Bool, x typed.Expr&, kind I64) {
         }
     }
     if k == Holds { return }
+    # a global holds only what lives as long as the program: what lives where a scope variable says is no obligation
+    # on the callers - stored into a global, it is O1b's error at the value, as stage 0 has it
+    if k == Obliged and kind == FitGlobal {
+        s.fitError(x, kind, exact)
+        return
+    }
     if k == Obliged {
         s.oblige(t, slot, false)
         if exact and t != slot {
