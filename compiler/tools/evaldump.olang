@@ -71,6 +71,7 @@ fn run(args Array<String&>&) I32 {
     if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
     x := interp.Exec(p, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
+    x.Place()
     # the command line the program is given: under -t the test binary's, as stage 0 names it (build/std_os_test)
     if testBuild {
         base := path[:path.Len() - 6] if path.EndsWith(".olang") else path

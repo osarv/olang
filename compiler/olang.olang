@@ -467,6 +467,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     if d.Errors() > 0 { error build.Failed.REPORTED }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
+    x.Place()
     for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
     return x.RunMain(d)
 }

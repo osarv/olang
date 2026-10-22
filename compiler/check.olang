@@ -76,6 +76,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     joinErrs List<types.TypeId>    # what the tasks of the joins around let out, in order (P4b)
     spawnSaid I64 = 0              # spawned calls said to need try (P4): their join is not said to need none
     DiagMark I64 = 0               # the diagnostics said before it began: what it says counts against its body (K1a)
+    fixed Map<source.NameId, I64>   # a condition's body (ExprBodyIn): the fixed locals it reads, by name (S8c), of
+    fixedIn I64 = -1                # the body it was asked in
 }
 
 # a construct met and not checked yet: where, and what (the acceptance's "gap")
@@ -163,26 +165,41 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # evaluator to decide while compiling
     AssertAsks List<AssertAsk>
     Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
+    # S8c: by (body, local), a plain scalar local declared with its own value - its initializer and type; and every local
+    # a body writes (stores, increments, targets, atomics). A condition or assert asked for reading such a local reads
+    # its initializer, and is the running program's after all where the body writes the local (Rewritten)
+    fixedInits Map<pair.Pair<I64, I64>, fixedInit>
+    writes Map<pair.Pair<I64, I64>, Bool>
+    lastFixed List<I64>         # the locals the last ExprBodyIn read as fixed, of the body it was asked in
+}
+
+# a local that may be fixed (S8c): its initializer, checked again where a condition reads it, and its type
+type fixedInit struct(Init ast.Expr&, Ty types.TypeId) {
+    Init
+    Ty
 }
 
 # an assert the evaluator may decide (S18c): the body it is in, where it is (its file and span), its condition's body
 # (BodyOf.Cond) and its message's, -1 for none
-type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I64, Msg I64) {
+type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I64, Msg I64, Fixed Array<I64>&) {
     Body
     File
     Sp
     At         # what a decision is reported at: the condition's operator, as stage 0 reports it
     Cond
     Msg
+    Fixed      # the locals of Body it reads as fixed (S8c)
 }
 
 # a local if whose condition the build decides and B9a could not evaluate (S8b): the condition's body (BodyOf.Cond),
 # where it is, and the if
-type Ask struct(Body I64, File I64, At I32, If ast.If&) {
+type Ask struct(Body I64, File I64, At I32, If ast.If&, In I64, Fixed Array<I64>&) {
     Body
     File
     At
     If
+    In         # the body the if is in, and the locals of it the condition reads as fixed (S8c)
+    Fixed
 }
 
 type roOrigin struct(P typed.Place&, View Bool) {
@@ -295,6 +312,87 @@ fn (c mut Checker&) reset() {
     c.Asks = List<Ask>()
     c.AssertAsks = List<AssertAsk>()
     c.Faulty = Map<I64, Bool>()
+    c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
+    c.writes = Map<pair.Pair<I64, I64>, Bool>()
+    c.lastFixed = List<I64>()
+}
+
+# S8c: whether a local an asked condition or assert read as fixed is written by its body after all - the condition is
+# then the running program's
+fn (c Checker&) Rewritten(body I64, fixed Array<I64>&) Bool {
+    for id in fixed {
+        if c.writes.Has(pair.Pair(body, id)) { return true }
+    }
+    return false
+}
+
+# an asked if the build turned out not to decide (its condition reads a written local, or does not evaluate): checked
+# as a running one, both branches - what they hold reported
+fn (c mut Checker&) Running(i ast.If&) {
+    d := c.P.L.Diags
+    if i.Then.Group >= 0 and d.IsPending(i.Then.Group) { d.Choose(i.Then.Group) }
+    if i.Else == null { return }
+    match i.Else {
+        case ast.Stmt.If(_, e) {
+            if e.Cond == null and e.Then.Group >= 0 and d.IsPending(e.Then.Group) { d.Choose(e.Then.Group) }
+        }
+        nomatch { }
+    }
+}
+
+# a local written (S8c: it is not fixed)
+fn (c mut Checker&) noteWrite(p typed.Place&) {
+    match p {
+        case typed.Place.Local(_, _, id) { c.writes.Put(pair.Pair(c.fr().Body, I64(id)), true) }
+        nomatch { }
+    }
+}
+
+# whether a type is a plain scalar (S8c): a number, Bool, or an enum without payloads
+fn (c mut Checker&) plainScalar(t types.TypeId) Bool {
+    if c.isNumber(t) or c.under(t) == types.BoolT { return true }
+    return c.isEnum(t) and not c.P.T.HasPayload(c.P.T.Cases(t))
+}
+
+# whether an expression reads no local but fixed ones (S8c), each found put in out with its own initializer's, by name
+fn (c mut Checker&) onlyFixed(x ast.Expr&, out mut Map<source.NameId, I64>&) Bool {
+    if x == null { return true }
+    match x {
+        case ast.Expr.Name(sp, n) {
+            if not c.namesLocal(sp) { return true }
+            if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local { return false }
+            if out.Has(n) { return true }
+            id := c.localNamed(n)
+            if id < 0 { return false }
+            fi := try c.fixedInits.Get(pair.Pair(c.fr().Body, id)) catch { return false }
+            out.Put(n, id)
+            c.lastFixed.Push(id)
+            return c.onlyFixed(fi.Init, out)
+        }
+        nomatch { }
+    }
+    return match x {
+        case ast.Expr.Lit(_, _), ast.Expr.Default(_) => true
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _) => c.onlyFixed(a, out)
+        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _) => c.onlyFixed(a, out)
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => c.onlyFixed(a, out) and c.onlyFixed(b, out)
+        case ast.Expr.Cond(_, a, k, b) => c.onlyFixed(a, out) and c.onlyFixed(k, out) and c.onlyFixed(b, out)
+        case ast.Expr.Chain(_, ch) => c.allFixed(ch.Xs, out)
+        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args) => c.onlyFixed(f, out) and c.allFixed(args, out)
+        case ast.Expr.Index(_, a, items) => c.onlyFixed(a, out) and c.allFixed(items, out)
+        case ast.Expr.Slice(_, a, lo, hi) => c.onlyFixed(a, out) and c.onlyFixed(lo, out) and c.onlyFixed(hi, out)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.allFixed(items, out)
+        case ast.Expr.Try(_, a, clauses, _) => c.onlyFixed(a, out) and (clauses == null or clauses.Len() == 0)
+        nomatch => false
+    }
+}
+
+fn (c mut Checker&) allFixed(xs Array<ast.Expr&>&, out mut Map<source.NameId, I64>&) Bool {
+    if xs == null { return true }
+    for x in xs {
+        if not c.onlyFixed(x, out) { return false }
+    }
+    return true
 }
 
 fn (c mut Checker&) attempt() {
@@ -1320,8 +1418,9 @@ fn (c mut Checker&) globalBody(mi I64, n source.NameId) I64 {
 }
 
 # a condition the build decides that B9a could not evaluate (B9c, S8b), checked in module mi's context as the body of
-# a function giving its value (BodyOf.Cond), for the evaluator - -1 where it does not check there: it reads a local
-# (the running program's, or S8c's) or it is wrong, which is said where it is checked as part of its program
+# a function giving its value (BodyOf.Cond), for the evaluator - a fixed local it reads (S8c) read as its initializer -
+# -1 where it does not check there: it reads a local that is no fixed one (the running program's), or it is wrong,
+# which is said where it is checked as part of its program
 fn (c mut Checker&) CondBody(mi I64, x ast.Expr&) I64 { return c.ExprBody(mi, x, types.BoolT) }
 
 # an expression that reads no local as the body of a function giving its value, of type ty, checked in module mi's
@@ -1335,7 +1434,17 @@ fn (c mut Checker&) ExprBody(mi I64, x ast.Expr&, ty types.TypeId) I64 {
 fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals Array<types.TypeId>&, x ast.Expr&
                                ty types.TypeId) I64 {
     d := c.P.L.Diags
-    if c.readsLocal(x) { return -1 }
+    # S8c: a fixed local is read as its initializer - the body it is asked in has the locals' bindings
+    c.lastFixed.Clear()
+    fixed := Map<source.NameId, I64>()
+    fixedIn I64 = -1
+    if c.frames.Len() > 0 {
+        fixedIn = c.fr().Body
+        if not c.onlyFixed(x, fixed) { return -1 }
+    } else if c.readsLocal(x) {
+        return -1
+    }
+    read := c.lastFixed.ToArray()
     mark := d.Count()
     gaps := c.Gaps.Len()
     sp := x.Span()
@@ -1344,6 +1453,8 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     fr := c.push(id, mi, ty, types.ListId(0))
     fr.Ctx = generic.Context(mi, owner)
     for i in range ns.Len() { fr.Ctx.Vars.Put(ns[i], vals[i]) }
+    for e in fixed { fr.fixed.Put(e.Key, e.Value) }
+    fr.fixedIn = fixedIn
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
     from := c.stmts.Len()
     v := c.cond1(x) if ty == types.BoolT else c.fit(c.expr(x, ty), ty, sp)
@@ -1354,6 +1465,8 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     # the instances it asks for, made here, checked before it is evaluated (G21: a length an instance computes) - only
     # there: a condition's (S18c) would check what its own body queued, its errors then forgotten with its own
     if ns.Len() > 0 { c.drain() }
+    c.lastFixed.Clear()
+    for l in read { c.lastFixed.Push(l) }
     if d.Count() > mark or c.Gaps.Len() > gaps {
         d.Forget(mark)
         c.Gaps.Truncate(gaps)
@@ -1846,6 +1959,7 @@ fn (c mut Checker&) unwind(mark I64) {
 fn (c mut Checker&) notCapture(p typed.Place&, sp source.Span) { c.mustWrite(p, sp, true) }
 
 fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
+    c.noteWrite(p)
     match p {
         case typed.Place.Local(_, _, id) {
             if c.cur().Local(id).Kind == typed.LocalKind.Capture and not c.isRef(c.cur().Local(id).Ty) {
@@ -3390,6 +3504,12 @@ fn (c mut Checker&) literal(sp source.Span, kind token.Tok, want types.TypeId) t
 fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     ref := c.P.R.Use(c.fr().File, sp.Start)
     if ref.Kind == names.What.Local {
+        # S8c: in a condition's body, a fixed local of the body it was asked in is its initializer
+        if c.fr().fixed.Has(n) {
+            fid := try c.fr().fixed.Get(n) catch default -1
+            fi := try c.fixedInits.Get(pair.Pair(c.fr().fixedIn, fid)) catch { return c.unknown(sp) }
+            return c.exprTo(fi.Init, fi.Ty)
+        }
         id := c.localOrCapture(n, sp)
         if id < 0 and c.fr().Inst >= 0 {
             fp := c.instField(sp, n)
@@ -6848,6 +6968,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             c.err(c.operandAt(x), msgs.AtomicNotPlace())
             return c.unknown(sp)
         }
+        if op != typed.PrimOp.AtomicLoad { c.noteWrite(p) }
         if op != typed.PrimOp.AtomicLoad and not c.placeWritable(p) {
             c.err(c.operandAt(x), msgs.AtomicNotWritable())
             return c.unknown(sp)
@@ -7748,12 +7869,17 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
             c.emit(typed.Stmt.Assert(sp, x, m))
             # S18c: one that reads no local is the evaluator's to decide - in a test only in a test build (B3a)
             fr := c.fr()
-            if (c.Tests or not fr.InTest) and not c.readsLocal(k) and not c.readsLocal(msg) {
+            if c.Tests or not fr.InTest {
                 cb := c.CondBody(fr.Mi, k)
+                fixed := List<I64>()
+                for id in c.lastFixed { fixed.Push(id) }
                 mb I64 = -1
-                if cb >= 0 and msg != null { mb = c.ExprBody(fr.Mi, msg, c.P.T.Ref(c.textType(), types.ReadOnly)) }
+                if cb >= 0 and msg != null {
+                    mb = c.ExprBody(fr.Mi, msg, c.P.T.Ref(c.textType(), types.ReadOnly))
+                    for id in c.lastFixed { fixed.Push(id) }
+                }
                 if cb >= 0 and (msg == null or mb >= 0) {
-                    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb))
+                    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb, fixed.ToArray()))
                 }
             }
         }
@@ -8197,6 +8323,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if i < v.Values.Len() and not inferred and not c.isRef(t) { c.roStore(x, v.Values[i].Span(), RoDecl) }
         id := c.local(v.Names[i], nsp, t, kind, mark)
         if inferred { c.roLet(id, x) }
+        # S8c: a plain scalar with a value of its own may be fixed - if its body never writes it
+        if not v.Field and i < v.Values.Len() and c.plainScalar(t) { c.fixedInits.Put(pair.Pair(c.fr().Body, id), fixedInit(v.Values[i], t)) }
         c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), x))
         if v.Field { c.cur().Fields.Push(typed.LocalId(I32(id))) }
     }
@@ -8777,9 +8905,13 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
         return c.elseOf(sp, i.Else)
     }
     # a condition B9a left to evaluation: asked for, the if checked as a running one meanwhile
+    asked := false
     if i.Then.Group >= 0 and d.IsPending(i.Then.Group) {
         b := c.CondBody(c.fr().Mi, i.Cond)
-        if b >= 0 { c.Asks.Push(Ask(b, c.fr().File, i.Cond.Span().Start, i)) }
+        if b >= 0 {
+            c.Asks.Push(Ask(b, c.fr().File, i.Cond.Span().Start, i, c.fr().Body, c.lastFixed.ToArray()))
+            asked = true
+        }
     }
     if i.Then.Group >= 0 and d.IsDropped(i.Then.Group) {
         # the build took the else (S8b)
@@ -8790,7 +8922,7 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
         # the build took the then (S8b)
         return typed.Stmt.Block(sp, c.branchBlock(i.Then))
     }
-    if i.Then.Group >= 0 and (d.Holds(i.Then.Group) or c.elseHolds(i.Else)) {
+    if i.Then.Group >= 0 and d.IsPending(i.Then.Group) and (d.Holds(i.Then.Group) or c.elseHolds(i.Else)) {
         c.gap(sp, "an if the build decides, still undecided (S8b, B9c)")
         return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0)))
     }
@@ -8807,6 +8939,9 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
             nomatch { return c.elseOf(sp, i.Else) }
         }
     }
+    # a running if: what both its branches hold is reported - one whose condition reads a local that is no fixed one
+    # (S8c), or is wrong, included. One asked for stays held until evaluation decides it
+    if not asked { c.Running(i) }
     k := c.cond1(i.Cond)
     then := c.branchBlock(i.Then)
     els typed.Block&c = null
