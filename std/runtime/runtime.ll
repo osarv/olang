@@ -2470,6 +2470,46 @@ declare i32 @posix_spawn(ptr, ptr, ptr, ptr, ptr, ptr)
 @__olang_sh_c = constant [3 x i8] c"-c\00"
 @__olang_sh_cd = constant [24 x i8] c"cd -- \22$0\22 && exec \22$@\22\00"
 
+;
+; B3g: the program at %path run in this process's place, %count arguments packed as __olang_spawn's are its command
+; line (the first the name it is run by, which need not be %path). What this process wrote is flushed first; returns -1,
+; with errno set, only where it could not be started
+declare i32 @execv(ptr, ptr)
+define i32 @__olang_exec(ptr %path, ptr %args, i64 %count) {
+entry:
+  %none = icmp slt i64 %count, 1
+  br i1 %none, label %inval, label %start
+inval:
+  %ep0 = call ptr @__errno_location()
+  store i32 22, ptr %ep0 ; EINVAL
+  ret i32 -1
+start:
+  %n1 = add i64 %count, 1
+  %bytes = mul i64 %n1, 8
+  %argv = call ptr @malloc(i64 %bytes)
+  br label %loop
+loop:
+  %i = phi i64 [ 0, %start ], [ %i1, %step ]
+  %p = phi ptr [ %args, %start ], [ %p1, %step ]
+  %more = icmp slt i64 %i, %count
+  br i1 %more, label %step, label %built
+step:
+  %slot = getelementptr ptr, ptr %argv, i64 %i
+  store ptr %p, ptr %slot
+  %len = call i64 @strlen(ptr %p)
+  %len1 = add i64 %len, 1
+  %p1 = getelementptr i8, ptr %p, i64 %len1
+  %i1 = add i64 %i, 1
+  br label %loop
+built:
+  %end = getelementptr ptr, ptr %argv, i64 %count
+  store ptr null, ptr %end
+  %fl = call i32 @fflush(ptr null)
+  %rc = call i32 @execv(ptr %path, ptr %argv)
+  call void @free(ptr %argv)
+  ret i32 -1
+}
+
 define i32 @__olang_spawn(ptr %args, i64 %count, i32 %in, i32 %out, i32 %err, ptr %dir) {
 entry:
   %fa = alloca [@@SPAWN_FILE_ACTIONS_BYTES@@ x i8], align 16

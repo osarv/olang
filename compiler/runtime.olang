@@ -1,0 +1,345 @@
+# runtime - the runtime's IR (std/runtime/*.ll, compiler/DESIGN.md section 1.10) filled in for one build, as stage 0's
+# bootstrap/runtime.c fills it: each file's "; @if COND" / "; @else" / "; @end" runs decided (COND "san" - a -sanitize
+# build - or an architecture, either after "!"; not nested), every @@NAME@@ outside a comment replaced by the
+# architecture's fact about its C library, and the whole given the target's triple and the attributes every function
+# the compiler generates carries (B12; sanitize_thread under -race, P7). The text is what build compiles, once per
+# configuration, into the runtime's object (B3).
+#
+# The table's facts are stage 0's (bootstrap/runtime.c holds them, and checks the host's row against its C headers);
+# a runtime file the compiler cannot read - an @@NAME@@ it has no fact for, an "; @if" left open - is a mistake in the
+# repository, said as stage 0 says it: "olang: FILE:LINE: why".
+
+import "std/os"
+import "std/io"
+import "load"
+
+# the architectures the facts are for, and each fact's value on each, in that order
+Archs Array<String&> = String&["x86_64", "aarch64"]
+FactNames Array<String&> = String&["STAT_BYTES", "STAT_MODE", "STAT_SIZE", "STAT_MTIM_SEC", "STAT_MTIM_NSEC"
+    "DIRENT_NAME", "SPAWN_FILE_ACTIONS_BYTES", "PTHREAD_ATTR_BYTES", "JMP_BUF_BYTES", "SIGACTION_BYTES"
+    "SIGACTION_FLAGS", "FFI_DEFAULT_ABI"]
+FactX86 Array<I64> = I64[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2]
+FactArm Array<I64> = I64[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1]
+
+# a runtime file that is not there or cannot be read as a runtime file: said already
+error Bad { UNREADABLE }
+
+fn archRow(arch String&) I64 {
+    for i in range Archs.Len() {
+        if Archs[i] == arch { return i }
+    }
+    return 0
+}
+
+fn fact(name String&, row I64) I64 ? {
+    for i in range FactNames.Len() {
+        if FactNames[i] == name { return FactX86[i] if row == 0 else FactArm[i] }
+    }
+    error Bad.UNREADABLE
+}
+
+# a stop at line n of the runtime file at path: a mistake in the repository, not in the program
+fn malformed(path String&, n I64, why String&) ? Bad {
+    try io.PrintErrln($"olang: " $path ":" $n ": " $why) catch io.IoError { }
+    error Bad.UNREADABLE
+}
+
+# what a line is to Fill: "; @if", "; @else", "; @end" (0, 1, 2), or text (-1) - a comment that only begins as one
+# would among them
+fn directive(line String&) I64 {
+    if not line.StartsWith("; @") { return -1 }
+    rest := line[3:]
+    word := rest
+    sp := try rest.Find(" ") catch default -1
+    if sp >= 0 { word = rest[:sp] }
+    if word == "if" { return 0 }
+    if word == "else" { return 1 }
+    if word == "end" { return 2 }
+    return -1
+}
+
+# the runtime file named file (in std/runtime), filled in for architecture arch, with the scope sanitizer or not
+fn Fill(file String&, arch String&, san Bool) String ? Bad {
+    path := $load.StdDir() "/runtime/" $file
+    bytes := try os.ReadFile(path) catch os.OsError {
+        try io.PrintErrln($"olang: " $path ": cannot open this file") catch io.IoError { }
+        error Bad.UNREADABLE
+    }
+    text := String(bytes)
+    row := archRow(arch)
+    out := StringBuilder()
+    n I64 = 0
+    inIf := false
+    inElse := false
+    keep := true
+    ifLine I64 = 0
+    for line in text.Lines() {
+        n++
+        d := directive(line)
+        if d == 0 {
+            if inIf { try malformed(path, n, "\"; @if\" inside another") }
+            c := line[6:].TrimStart()
+            neg := c.StartsWith("!")
+            if neg { c = c[1:] }
+            sp := try c.Find(" ") catch default -1
+            if sp >= 0 { c = c[:sp] }
+            if c != "san" and c not in Archs {
+                try malformed(path, n, "a condition that is neither \"san\" nor an architecture")
+            }
+            holds := san if c == "san" else c == arch
+            keep = holds != neg
+            inIf = true
+            inElse = false
+            ifLine = n
+            continue
+        }
+        if d == 1 {
+            if not inIf or inElse { try malformed(path, n, "\"; @else\" with no \"; @if\" open") }
+            keep = not keep
+            inElse = true
+            continue
+        }
+        if d == 2 {
+            if not inIf { try malformed(path, n, "\"; @end\" with no \"; @if\" open") }
+            inIf = false
+            keep = true
+            continue
+        }
+        if not keep { continue }
+        # a comment is kept as it is written: it may name a placeholder without being one
+        if line.TrimStart().StartsWith(";") {
+            out.Push(line)
+            out.PushChar('\n')
+            continue
+        }
+        rest := line
+        for {
+            at := try rest.Find("@@") catch default -1
+            if at < 0 {
+                out.Push(rest)
+                break
+            }
+            out.Push(rest[:at])
+            after := rest[at + 2:]
+            end := try after.Find("@@") catch default -1
+            if end < 0 { try malformed(path, n, "an \"@@\" with no \"@@\" closing it") }
+            v := try fact(after[:end], row) catch Bad {
+                try malformed(path, n, "an @@NAME@@ the compiler knows no fact for")
+                unreachable
+            }
+            out.Push($v)
+            rest = after[end + 2:]
+        }
+        out.PushChar('\n')
+    }
+    if inIf { try malformed(path, ifLine, "\"; @if\" with no \"; @end\"") }
+    return out.ToString()
+}
+
+# the runtime's own part (runtime.ll, and san.ll under -sanitize) filled in, or the dynamic call's (dyncall.ll)
+fn Text(arch String&, san Bool, dyncall Bool) String ? Bad {
+    if dyncall { return try Fill("dyncall.ll", arch, san) }
+    core := try Fill("runtime.ll", arch, san)
+    if not san { return core }
+    s := try Fill("san.ll", arch, san)
+    return $core "\n" $s
+}
+
+# ir with the build's attributes, as stage 0 writes every object's: a linkonce_odr global in a comdat of its own, every
+# function definition given group #0 (#1, never instrumented, for the two crash handlers: they can run while
+# ThreadSanitizer's own state is inconsistent), the groups defined at the end - null_pointer_is_valid (T2b), the
+# target's attributes (B12), sanitize_thread on #0 under -race (P7)
+fn WithAttributes(ir String&, attrs String&, race Bool) String {
+    out := StringBuilder()
+    for line in ir.Lines() {
+        if line.StartsWith("@") {
+            sp := try line.Find(" = linkonce_odr ") catch default -1
+            if sp > 0 and (try line.Find(" ") catch default -1) == sp {
+                out.Push($"$" $line[1:sp] " = comdat any\n")
+                out.Push(line)
+                out.Push(", comdat\n")
+                continue
+            }
+        }
+        if line.StartsWith("define ") and line.EndsWith("{") {
+            dbg := try line.Find(" !dbg ") catch default -1
+            cut := dbg if dbg >= 0 else line.Len() - 1
+            head := line[:cut]
+            plain := head.Contains("@__olang_crash_handler(") or head.Contains("@__olang_san_handler(")
+            out.Push(head)
+            if dbg >= 0 {
+                out.Push(" #1" if plain else " #0")
+                out.Push(line[dbg:])
+            } else {
+                out.Push("#1 {" if plain else "#0 {")
+            }
+            out.PushChar('\n')
+            continue
+        }
+        out.Push(line)
+        out.PushChar('\n')
+    }
+    out.Push($"\nattributes #0 = { null_pointer_is_valid " $("sanitize_thread " if race else "") $attrs " }\n")
+    out.Push($"attributes #1 = { null_pointer_is_valid " $attrs " }\n")
+    return out.ToString()
+}
+
+# the runtime's IR for a build for triple and arch, with attrs on its functions: what build compiles into the
+# runtime's object
+fn Ir(triple String&, arch String&, attrs String&, san Bool, race Bool) String ? Bad {
+    body := try Text(arch, san, false)
+    return WithAttributes($"target triple = \"" $triple "\"\n\n" $body, attrs, race)
+}
+
+# the end of the type starting at at in line - a bracketed or braced one whole, else one word - in a global's line
+fn typeEnd(line String&, at I64) I64 {
+    c := line[at]
+    if c != '[' and c != '{' and c != '<' {
+        for k in range at, line.Len() {
+            if line[k] == ' ' or line[k] == ',' { return k }
+        }
+        return line.Len()
+    }
+    depth I64 = 0
+    for k in range at, line.Len() {
+        ch := line[k]
+        if ch == '[' or ch == '{' or ch == '<' { depth++ } else if (ch == ']' or ch == '}' or ch == '>') {
+            depth--
+            if depth == 0 { return k + 1 }
+        }
+    }
+    return line.Len()
+}
+
+# one line of filled-in runtime text as a module carries it, written to out: a type and a declaration as they are, a
+# definition as the declaration of what it defines - a function's parameter names dropped, a global's initializer -
+# and what the runtime keeps to itself (internal, private) nothing
+fn declare(out mut StringBuilder&, line String&) {
+    if line.StartsWith("declare ") or (line.StartsWith("%") and line.Contains(" = type ")) or
+        (line.StartsWith("@") and line.Contains(" = external ")) {
+        out.Push(line)
+        out.PushChar('\n')
+        return
+    }
+    if line.StartsWith("define internal ") or line.StartsWith("define private ") or line.Contains(" = internal ") or
+        line.Contains(" = private ") { return }
+    if line.StartsWith("define ") {
+        open := try line.Find("(") catch { return }
+        out.Push($"declare " $line[7:open] "(")
+        depth I64 = 0
+        start := open + 1
+        first := true
+        p := open + 1
+        for p < line.Len() {
+            ch := line[p]
+            if ch == '(' or ch == '[' or ch == '{' or ch == '<' { depth++ } else if ch == ']' or ch == '}' or ch == '>' {
+                depth--
+            } else if ch == ')' and depth > 0 { depth-- } else if (ch == ',' or ch == ')') and depth == 0 {
+                # a parameter's type, its name dropped
+                part := line[start:p].Trim()
+                sp := try part.FindLast(" ") catch default -1
+                if sp >= 0 and part[sp + 1] == '%' { part = part[:sp].TrimEnd() }
+                if part.Len() > 0 {
+                    if not first { out.Push(", ") }
+                    out.Push(part)
+                }
+                first = false
+                start = p + 1
+                if ch == ')' { break }
+            }
+            p++
+        }
+        # what follows the parameters, the brace opening the body left out: the function's attributes
+        attrs := line[p + 1:]
+        brace := try attrs.FindLast("{") catch default attrs.Len()
+        out.Push($")" $attrs[:brace].TrimEnd() "\n")
+        return
+    }
+    if line.StartsWith("@") {
+        eq := try line.Find(" = ") catch { return }
+        out.Push($line[:eq] " = external ")
+        r := line[eq + 3:]
+        if r.StartsWith("thread_local(") {
+            close := try r.Find(")") catch { return }
+            out.Push($r[:close + 1] " ")
+            r = r[close + 2:]
+        }
+        if r.StartsWith("unnamed_addr ") { r = r[13:] }
+        sp := try r.Find(" ") catch default r.Len()
+        e := typeEnd(r, sp + 1) if sp + 1 < r.Len() else r.Len()
+        out.Push($r[:sp + 1] $r[sp + 1:e] "\n")
+    }
+}
+
+# whether a line defines what the runtime marks for inlining (alwaysinline, inlinehint): given to a module whole
+fn modulesInline(line String&) Bool {
+    if not line.StartsWith("define ") or line.StartsWith("define internal ") or line.StartsWith("define private ") {
+        return false
+    }
+    return line.Contains("alwaysinline") or line.Contains("inlinehint")
+}
+
+# what a module carries for the runtime's text: its types, its globals as external, its functions as declarations,
+# and every body marked for inlining as available_externally (bootstrap/runtime.c's emitRuntimeDecls)
+fn Decls(text String&) String {
+    out := StringBuilder()
+    copying := false
+    for line in text.Lines() {
+        if copying {
+            out.Push(line)
+            out.PushChar('\n')
+            if line == "}" { copying = false }
+        } else if modulesInline(line) {
+            out.Push($"define available_externally " $line[7:] "\n")
+            copying = true
+        } else {
+            declare(out, line)
+        }
+    }
+    out.PushChar('\n')
+    return out.ToString()
+}
+
+# the tags the runtime's inlined bodies carry for its scope and chunk headers (T36), which the dynamic call's part
+# inlines too
+HeaderTbaa String& = ("!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\", !20, i64 0}\n" $
+        "!59 = !{!49, !49, i64 0}\n!60 = !{!50, !50, i64 0}\n")
+
+# the dynamic call's IR (S3), an object of its own linked only into a program declaring it: it reaches the rest of the
+# runtime as any module does, through what Decls derives
+fn DyncallIr(triple String&, arch String&, attrs String&, san Bool, race Bool) String ? Bad {
+    core := try Text(arch, san, false)
+    dc := try Text(arch, san, true)
+    body := $"target triple = \"" $triple "\"\n\n" $Decls(core) $dc "\n!20 = !{!\"olang\"}\n" $HeaderTbaa
+    return WithAttributes(body, attrs, race)
+}
+
+# ---- tests ----
+
+test "the runtime is filled in for an architecture and a mode, every placeholder replaced" {
+    x := try Ir("x86_64-pc-linux-gnu", "x86_64", "\"target-cpu\"=\"x86-64\"", false, false)
+    assert x.StartsWith("target triple = \"x86_64-pc-linux-gnu\"\n")
+    assert x.Contains("define i32 @__olang_spawn(ptr %args, i64 %count, i32 %in, i32 %out, i32 %err, ptr %dir) #0 {")
+    assert x.Contains("%fa = alloca [80 x i8]")
+    assert x.EndsWith("attributes #1 = { null_pointer_is_valid \"target-cpu\"=\"x86-64\" }\n")
+    # no placeholder or directive is left outside a comment
+    for line in x.Lines() {
+        if line.TrimStart().StartsWith(";") { continue }
+        assert not line.Contains("@@"), line
+    }
+    a := try Text("aarch64", false, false)
+    assert a.Contains("alloca [312 x i8]") and not a.Contains("alloca [200 x i8]")
+    s := try Text("x86_64", true, false)
+    assert s.Len() > x.Len()
+    r := try Ir("x86_64-pc-linux-gnu", "x86_64", "", false, true)
+    assert r.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread  }")
+    assert r.Contains("@__olang_crash_handler(") and r.Contains(") #1 {")
+}
+
+test "the attribute rewrite puts groups before the brace and linkonce_odr globals in comdats" {
+    ir := "@g = linkonce_odr global i32 0\ndefine { i32, i32 } @f() {\n  ret { i32, i32 } zeroinitializer\n}\n"
+    w := WithAttributes(ir, "X", false)
+    assert w.StartsWith("$g = comdat any\n@g = linkonce_odr global i32 0, comdat\ndefine { i32, i32 } @f() #0 {\n")
+    assert directive("; @if san") == 0 and directive("; @else") == 1 and directive("; @end") == 2
+    assert directive("; @__olang_scope_close below") == -1 and directive("ret void") == -1
+}

@@ -20759,3 +20759,41 @@ and four of the seven on compiler/olang.olang: parse.olang's `pun` pushed in a p
 field, two in interp.olang) - stage 0 lands the local where it is kept; the verifier shape (`v := verifier(f, t); v.run(); return
 v.out.ToString()`), which stage 0 accepts by moving `v` into a result scope the port's types give a `String` value
 result no scope for; 16 cases still differing in their first error (columns, and rules the checker or O18c decide).
+## Port M10: the pipeline behind the driver, and the port building itself (2026-10-21)
+
+The driver's `Passes` was load and names, reporting "does not generate code yet"; master had since gained check, scope,
+lower, eval and emit. `Passes.Analyze` now runs them all and gives build.olang one object's IR for the whole program
+(emit writes one module per program, so per-module objects wait for it), and the runtime's text, filled in by a new
+`compiler/runtime.olang` - a port of bootstrap/runtime.c's filling and of the attribute rewrite, whose output is byte
+for byte stage 0's (checked on a build of hello world), and of the declarations a module carries, for the dynamic
+call's object (also identical). Running a file now replaces the driver's process, as stage 0's execv does: a runtime
+function `__olang_exec` and `os.ExecInPlace(path, args)` in std (both interpreters know it). `format` calls
+`compiler/fmt.olang` (`Files`; the oracle loading moved there from tools/fmt.olang, `unparse.olang` to `compiler/`).
+What emission or lowering does not do is said as one row each and nothing is built.
+
+**How far it got, and what was in the way.** The first stage 1 (the driver built by stage 0, building
+compiler/olang.olang) linked after 5 minutes (one 43 MB module at -O3 with LTO) and crashed at once in name resolution;
+the port's own test files crashed the same way in six modules. Three causes, found one under another:
+1. **The stand-in placement left O26a locals in the frame**: `testLoader()` returns a Loader holding a reference to
+   its local `consts`, which stage 0 moves into the result scope. Lowering with the scope pass's homes fixed it, and
+   emit needed one thing for that: a local homed in an arena (`Live` allocates it, a slot holds where).
+2. **The scope pass's site placement is not sound yet**: it builds a returned call's result in the callee's closed
+   frame (`fn two() (String, String) { return word("a").ToLower(), word("b") }` read freed text, so the target was
+   taken for a foreign one). So sites stay the stand-in's, the program's scope.
+3. **It keeps in the frame a value local that a longer-lived reference is borrowed from**, which stage 0 lands where
+   the reference is stored (O18c): the parser's `nt := ast.TypeRef.Named(...)` then `p.markers(at, nt)` (every marked
+   array literal's element type read back as garbage - written `nt ast.TypeRef&p` now), and check's
+   `qx := typed.Place.Payload(...)` read through a `Field` built of it. For now every declared aggregate local lives in
+   the program's scope.
+And the pass reports 51 errors on compiler/ that stage 0 does not (O10c 34, T17c 5, O25e 5, C2d 3, O17 2, O25h 1,
+O20 1), so its errors are not reported by the driver yet: stage 0 holds programs to section 8 until it agrees.
+
+Under that interim, stage 1 (22 s to build at -debug) passes the tests of all 27 compiler/ modules and builds stage 2
+(39 s, 2.1 GB); stage 2 builds stage 3; the three are byte for byte equal and their IR is the IR the stage-0-built
+port writes. At -O3 too: stage 1 builds stage 2 byte for byte equal to itself (8 minutes for stage 1, nearly all of it
+LTO over one 43 MB module). The leaks are the cost: nothing built is freed before the program ends. drvdiff gained 11
+whole builds (build, run with arguments, exit statuses, test, interpret, format -check), all as stage 0 - but for two
+port bugs it now avoids and records: B10c's `-define` over a top-level default is ignored, and E12's message spells
+a text literal's type `String&`. Also found: stage 0's interpreter
+called execv without unistd.h (a warning gcc -Werror refuses).
+

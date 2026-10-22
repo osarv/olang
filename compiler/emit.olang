@@ -626,7 +626,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     passed := e.passedOf(k, f.Ty)
     bad := "" if e.Lw.Gapped else f.Verify(e.T)
     if e.Lw.Gapped or bad != "" {
-        e.gap("not lowered: " $symbol)
+        e.gap($"not lowered: " $symbol $(" (" $bad.Trim() ")" if bad != "" else ""))
         e.body.Push(e.header(k, f.Ty, symbol, passed, env))
         if e.isGlobalInit(k) {
             # a global's initializer: the global left at its zero value, so that the rest of the program still runs
@@ -708,6 +708,7 @@ fn (fe mut fnEm&) run() {
     for i in range f.Params.Len() {
         l := I64(f.Params[i])
         lt := f.Locals[l].Ty
+        if not fe.isFrame(f.Locals[l].Home) { fe.gap("a parameter homed in an arena") }
         match pass[i] {
             case 'm' {
                 fe.pro.Push("  %pv" $i " = load " $fe.ty(lt) ", ptr %a" $i "\n")
@@ -737,6 +738,7 @@ fn (fe mut fnEm&) run() {
         for i in range f.Captures.Len() {
             l := I64(f.Captures[i])
             lt := fe.ty(f.Locals[l].Ty)
+            if not fe.isFrame(f.Locals[l].Home) { fe.gap("a capture homed in an arena") }
             fe.pro.Push("  %cp" $i " = getelementptr " $et ", ptr %env, i32 0, i32 " $i "\n")
             fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i "\n")
             fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
@@ -2965,246 +2967,4 @@ fn (e mut Emitter&) recodeText(b mut StringBuilder&, code String&, from types.Li
     }
     b.Push("  %rs = shl i32 " $pos ", 16\n  %rv2 = or i32 %rs, %rw\n")
     return "%rv2"
-}
-
-# ---- the runtime (DESIGN.md 1.10) ----
-
-# what a runtime file asks of the target's C library, by name, for each architecture the runtime is built for (B12a):
-# struct stat's size and offsets, struct dirent's d_name, the sizes of a posix_spawn_file_actions_t, a pthread_attr_t,
-# a jmp_buf and a struct sigaction, where its sa_flags are, and libffi's default ABI - stage 0's table
-# (bootstrap/runtime.c), checked there against its own headers for the machine it runs on
-RuntimeArchs Array<String&>& = String&["x86_64", "aarch64"]
-RuntimeFacts Array<String&>& = String&["STAT_BYTES", "STAT_MODE", "STAT_SIZE", "STAT_MTIM_SEC", "STAT_MTIM_NSEC"
-                                         "DIRENT_NAME", "SPAWN_FILE_ACTIONS_BYTES", "PTHREAD_ATTR_BYTES", "JMP_BUF_BYTES"
-                                         "SIGACTION_BYTES", "SIGACTION_FLAGS", "FFI_DEFAULT_ABI"]
-RuntimeX86 Array<I64>& = I64[144, 24, 48, 88, 96, 19, 80, 56, 200, 152, 136, 2]
-RuntimeArm Array<I64>& = I64[128, 16, 48, 88, 96, 19, 80, 64, 312, 152, 136, 1]
-
-error RuntimeError {
-    MALFORMED
-}
-
-# runtime file text (std/runtime/FILE) filled in for a build for arch, with the scope sanitizer or not: each "; @if
-# COND" ... "; @else" ... "; @end" decided (COND "san" or an architecture, "!" negating it; they do not nest), each
-# @@NAME@@ outside a comment the architecture's fact
-fn RuntimeFill(text String&, arch String&, san Bool) String ? RuntimeError {
-    row := I64(1) if arch == "aarch64" else I64(0)
-    out := StringBuilder()
-    inIf, keep := false, true
-    for line in text.Lines() {
-        if line.StartsWith("; @if ") {
-            if inIf { error RuntimeError.MALFORMED }
-            c := line[6:].Trim()
-            neg := c.StartsWith("!")
-            if neg { c = c[1:] }
-            holds := false
-            if c == "san" {
-                holds = san
-            } else if c in RuntimeArchs {
-                holds = c == arch
-            } else {
-                error RuntimeError.MALFORMED
-            }
-            keep = holds != neg
-            inIf = true
-            continue
-        }
-        if line == "; @else" or line.StartsWith("; @else ") {
-            if not inIf { error RuntimeError.MALFORMED }
-            keep = not keep
-            continue
-        }
-        if line == "; @end" or line.StartsWith("; @end ") {
-            if not inIf { error RuntimeError.MALFORMED }
-            inIf, keep = false, true
-            continue
-        }
-        if not keep { continue }
-        if line.TrimStart().StartsWith(";") {
-            out.Push(line)
-        } else {
-            out.Push(try runtimeFacts(line, row))
-        }
-        out.PushChar('\n')
-    }
-    if inIf { error RuntimeError.MALFORMED }
-    return out.ToString()
-}
-
-# a module of runtime text as it is compiled: the target triple first, every function given the build's attributes -
-# #0, the crash handlers #1 (never instrumented) - and a "linkonce_odr" global its comdat (B12, P7, B3)
-fn RuntimeModule(text String&, arch String&, attrs String&, race Bool = false) String {
-    out := StringBuilder()
-    out.Push("target triple = \"" $arch $("-pc-linux-gnu" if arch == "x86_64" else "-unknown-linux-gnu") "\"\n\n")
-    for line in text.Lines() {
-        out.Push(runtimeAttrs(line))
-        out.PushChar('\n')
-    }
-    out.Push("\nattributes #0 = { null_pointer_is_valid " $("sanitize_thread " if race else "") $attrs " }\n")
-    out.Push("attributes #1 = { null_pointer_is_valid " $attrs " }\n")
-    return out.ToString()
-}
-
-# filled runtime text as another module carries it (B3): its types and declarations as they are, each definition the
-# declaration of what it defines - a function's parameter names dropped, a global external, its initializer dropped -
-# what it keeps to itself (internal, private) nothing, and a definition marked for inlining (alwaysinline, inlinehint)
-# whole, as available_externally
-fn RuntimeDecls(text String&) String {
-    out := StringBuilder()
-    copying := false
-    for line in text.Lines() {
-        if copying {
-            out.Push(line)
-            out.PushChar('\n')
-            if line == "}" { copying = false }
-            continue
-        }
-        unexported := line.StartsWith("define internal ") or line.StartsWith("define private ")
-        if line.StartsWith("define ") and not unexported and ((try line.Find("alwaysinline") catch default -1) >= 0 or (try line.Find("inlinehint") catch default -1) >= 0) {
-            out.Push("define available_externally " $line[7:] "\n")
-            copying = true
-            continue
-        }
-        d := runtimeDeclare(line)
-        if d != "" {
-            out.Push(d)
-            out.PushChar('\n')
-        }
-    }
-    out.PushChar('\n')
-    return out.ToString()
-}
-
-# the metadata nodes of filled runtime text (the type-based alias tags its inlined bodies name), a module carrying them
-# defining them too
-fn RuntimeMetadata(text String&) String {
-    out := StringBuilder()
-    for line in text.Lines() {
-        if line.StartsWith("!") {
-            out.Push(line)
-            out.PushChar('\n')
-        }
-    }
-    return out.ToString()
-}
-
-fn runtimeDeclare(line String&) String {
-    if line.StartsWith("declare ") or (line.StartsWith("%") and (try line.Find(" = type ") catch default -1) >= 0) or
-            (line.StartsWith("@") and (try line.Find(" = external ") catch default -1) >= 0) {
-        return $line
-    }
-    if line.StartsWith("define internal ") or line.StartsWith("define private ") { return "" }
-    if (try line.Find(" = internal ") catch default -1) >= 0 or (try line.Find(" = private ") catch default -1) >= 0 { return "" }
-    if line.StartsWith("define ") {
-        open := try line.Find("(") catch default -1
-        if open < 0 { return "" }
-        b := StringBuilder()
-        b.Push("declare " $line[7:open] "(")
-        # each parameter's type, its name dropped - split where no bracket or brace is open
-        depth := 0
-        start := open + 1
-        first := true
-        p := open + 1
-        for p < line.Len() {
-            ch := line[p]
-            if ch == '(' or ch == '[' or ch == '{' or ch == '<' {
-                depth++
-            } else if ch == ']' or ch == '}' or ch == '>' {
-                depth--
-            } else if ch == ')' and depth > 0 {
-                depth--
-            } else if (ch == ',' or ch == ')') and depth == 0 {
-                part := line[start:p].Trim()
-                sp := try part.FindLast(" ") catch default -1
-                if sp >= 0 and part[sp + 1] == '%' { part = part[:sp].Trim() }
-                if part.Len() > 0 {
-                    if not first { b.Push(", ") }
-                    b.Push(part)
-                }
-                first = false
-                start = p + 1
-                if ch == ')' { break }
-            }
-            p++
-        }
-        attrs := line[p + 1:]
-        brace := try attrs.FindLast("{") catch default attrs.Len()
-        b.Push(")" $attrs[:brace].TrimEnd())
-        return b.ToString()
-    }
-    if line.StartsWith("@") {
-        eq := try line.Find(" = ") catch default -1
-        if eq < 0 { return "" }
-        b := StringBuilder()
-        b.Push($line[:eq] " = external ")
-        r := line[eq + 3:]
-        if r.StartsWith("thread_local(") {
-            close := try r.Find(")") catch default 0
-            b.Push($r[:close + 1] " ")
-            r = r[close + 2:]
-        }
-        if r.StartsWith("unnamed_addr ") { r = r[13:] }
-        k := try r.Find(" ") catch default r.Len()
-        b.Push($r[:k + 1])
-        r = r[k + 1:]
-        b.Push(r[:typeEnd(r)])
-        return b.ToString()
-    }
-    return ""
-}
-
-# the end of the type that starts a global's line s: a bracketed or braced one whole, else one word
-fn typeEnd(s String&) I64 {
-    if s.Len() == 0 { return 0 }
-    if s[0] != '[' and s[0] != '{' and s[0] != '<' {
-        for i in range s.Len() {
-            if s[i] == ' ' or s[i] == ',' { return i }
-        }
-        return s.Len()
-    }
-    depth := 0
-    for i in range s.Len() {
-        if s[i] == '[' or s[i] == '{' or s[i] == '<' {
-            depth++
-        } else if s[i] == ']' or s[i] == '}' or s[i] == '>' {
-            depth--
-            if depth == 0 { return i + 1 }
-        }
-    }
-    return s.Len()
-}
-
-# a line's @@NAME@@s replaced by the facts of the architecture in row
-fn runtimeFacts(line String&, row I64) String ? RuntimeError {
-    b := StringBuilder()
-    rest := line
-    for {
-        at := try rest.Find("@@") catch default -1
-        if at < 0 {
-            b.Push(rest)
-            return b.ToString()
-        }
-        b.Push(rest[:at])
-        after := rest[at + 2:]
-        end := try after.Find("@@") catch default -1
-        if end < 0 { error RuntimeError.MALFORMED }
-        name := after[:end]
-        k := try RuntimeFacts.FindIndex(fn(x String&) Bool { return x == name }) catch default -1
-        if k < 0 { error RuntimeError.MALFORMED }
-        b.Push($(RuntimeArm[k] if row == 1 else RuntimeX86[k]))
-        rest = after[end + 2:]
-    }
-}
-
-# a define's attribute group before its brace (#1 for the crash handlers), a linkonce_odr global given its comdat
-fn runtimeAttrs(line String&) String {
-    if line.StartsWith("@") {
-        sp := try line.Find(" = linkonce_odr ") catch default -1
-        if sp > 0 { return "$" $line[1:sp] " = comdat any\n" $line ", comdat" }
-    }
-    if line.StartsWith("define ") and line.EndsWith("{") {
-        plain := (try line.Find("@__olang_crash_handler(") catch default -1) >= 0 or (try line.Find("@__olang_san_handler(") catch default -1) >= 0
-        return $line[:line.Len() - 1] $("#1 {" if plain else "#0 {")
-    }
-    return $line
 }

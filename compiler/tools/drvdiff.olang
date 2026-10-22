@@ -2,7 +2,10 @@
 # what stage 0 (build/out) says for every command line below - what each writes to standard output and to standard
 # error, and the status it ends with. These are the command lines whose outcome is decided before code is generated:
 # the command line's own mistakes (B1, B3h, B10, B10a, B11a, B12, B12a), help, explain, and files that cannot be built.
-# Prints the differences and exits 1 if there are any.
+# Then whole builds (Builds): the programs in Programs written into a directory of each compiler's own, and each command
+# line run there - building, running a file (its arguments and its first word, the file as written), test, interpret,
+# format - with what the compiler and what it runs write, and their status, compared the same way. (compile is left out:
+# its object is named by a hash of different IR.) Prints the differences and exits 1 if there are any.
 #
 # Run from the repository root after "make build/out build/compiler_olang" (make drvdiff). A case's words are split at
 # spaces; W stands for a scratch directory holding an empty directory "adir".
@@ -95,6 +98,36 @@ Cases Array<String&> = String&[
     "W/none.olang a b"
 ]
 
+# the programs the whole builds use, by file name, and their text
+ProgramNames Array<String&> = String&["hello.olang", "args.olang", "exit.olang", "fails.olang", "tests.olang"
+    "bad.olang", "defs.olang", "ugly.olang"]
+ProgramTexts Array<String&> = String&[
+    "import \"std/io\"\n\nfn main() {\n    io.Println(\"hello \" $(40 + 2))!\n}\n"
+    ("import \"std/io\"\nimport \"std/os\"\n\nfn main() {\n    for a in os.Args() { io.Println(a)! }\n}\n")
+    "import \"std/os\"\n\nfn main() {\n    os.Exit(3)\n}\n"
+    "error E {\n    BAD\n}\n\nfn main() ? E {\n    error E.BAD\n}\n"
+    ("test \"one passes\" {\n    assert 1 + 1 == 2\n}\n\nfn two() I64 { return 2 }\n\n" $
+            "test \"one fails\" {\n    assert two() == 3\n}\n")
+    "fn main() {\n    x := y\n}\n"
+    "import \"std/io\"\n\nfn main() {\n    io.Println($N)!\n}\n"
+    "fn main( ) {\n  x := 1\n}\n"
+]
+
+# the command lines the whole builds run, each in a directory holding Programs
+Builds Array<String&> = String&[
+    "build hello.olang"
+    "hello.olang"
+    "args.olang a -b c"
+    "exit.olang"
+    "fails.olang"
+    "test tests.olang"
+    "build bad.olang"
+    "-define N=7 defs.olang"
+    "interpret args.olang x y"
+    "interpret exit.olang"
+    "format -check ugly.olang hello.olang"
+]
+
 fn main() {
     stage0 := "build/out"
     driver := "build/compiler_olang"
@@ -114,21 +147,42 @@ fn main() {
             toolkit.Say(toolkit.Head(toolkit.Diff(work, a, b), 12))
         }
     }
+    here := try os.Cwd() catch os.OsError { toolkit.Die("drvdiff: no working directory") }
+    std := $"OLANG_STD=" $here "/std"
+    dirs := String&[$work "/s0", $work "/s1"]
+    for dir in dirs {
+        try os.MkDir(dir) catch os.OsError { toolkit.Die("drvdiff: cannot make " $dir) }
+        for i in range ProgramNames.Len() { toolkit.Write($dir "/" $ProgramNames[i], ProgramTexts[i]) }
+    }
+    # stage 0 builds its formatter into its cache the first time, and says so: done once beforehand
+    outcome($here "/" $stage0, "format -check hello.olang", dirs[0], std, dirs[0])
+    for line in Builds {
+        a := outcome($here "/" $stage0, line, dirs[0], std, dirs[0])
+        b := outcome($here "/" $driver, line, dirs[1], std, dirs[1])
+        if a.Replace(dirs[0], "D") != b.Replace(dirs[1], "D") {
+            bad++
+            toolkit.Say("-- in a directory of programs: olang " $line "\n")
+            toolkit.Say(toolkit.Head(toolkit.Diff(work, a, b), 12))
+        }
+    }
+    n := Cases.Len() + Builds.Len()
     if bad > 0 {
-        toolkit.Say("drvdiff: " $bad " of " $Cases.Len() " command lines differ\n")
+        toolkit.Say("drvdiff: " $bad " of " $n " command lines differ\n")
         os.Exit(1)
     }
-    toolkit.Say("drvdiff: no difference over " $Cases.Len() " command lines\n")
+    toolkit.Say("drvdiff: no difference over " $n " command lines\n")
 }
 
 # what the compiler at exe writes for the command line line, and its status, as one text
-fn outcome(exe String&, line String&, work String&) String {
+fn outcome(exe String&, line String&, work String&, std String& = "", dir String& = "") String {
     args := List<String&>()
     args.Push(exe)
     for w in line.Split(" ") {
         if w == "" { continue }
         args.Push(w.Replace("W/", $work "/") if w.StartsWith("W/") else $w)
     }
-    o := toolkit.Run(args.ToArray())
+    env := List<String&>()
+    if std != "" { env.Push($std) }
+    o := toolkit.Run(args.ToArray(), env.ToArray(), dir)
     return $"stdout:\n" $o.Stdout "stderr:\n" $o.Stderr "status " $o.Status "\n"
 }

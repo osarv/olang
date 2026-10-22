@@ -80,7 +80,7 @@ fn absolute(p String&) String {
 
 # the runtime's IR, filled in by stage 0 for this machine, and the dynamic call's: what a program declaring nothing
 # but an import of std/ffi leaves in its build/
-# the runtime the port's modules are linked with: the port's own, filled in by emitdump (-rt, emit.RuntimeFill), and a
+# the runtime the port's modules are linked with: the port's own, filled in by emitdump (-rt, compiler/runtime.olang), and a
 # row saying whether it is stage 0's text exactly
 fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
     toolkit.Write($dir "/rt/rt.olang", "import \"std/ffi\"\nfn main() { }\n")

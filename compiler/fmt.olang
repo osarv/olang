@@ -21,10 +21,21 @@
 # - the file ends with one newline, and no line with spaces.
 #
 # A branch the build decides that does not parse - right, perhaps, for another target - is left as written: every line
-# it is on (held, from compiler/tools/unparse's HeldBranches).
+# it is on (held, from compiler/unparse's HeldBranches).
+#
+# Files is "olang format" itself, which the compiler calls, and compiler/tools/fmt.olang the same as a program of its
+# own: each file read with the type names its imports declare known to the parser (OracleFor), as the compiler's loader
+# gives them.
+import "std/os"
+import "std/io"
+import "std/filepath"
 import "token"
 import "scan"
 import "source"
+import "parse"
+import "diag"
+import "msgs"
+import "unparse"
 
 # the file's text written in the layout: ts is its scan, the lists the parser's type brackets by token index, held the
 # spans of the branches to leave as written
@@ -571,4 +582,203 @@ fn (f formatter&) write() String {
         i = e
     }
     return out.ToString()
+}
+
+
+# ---- files ----
+
+# a file that does not scan or parse, so it has no layout: its diagnostics are said
+error Unparsable { SYNTAX }
+
+# the file src in the layout - or, where it does not scan or parse, nothing, its diagnostics rendered into said (in
+# colour where color says)
+fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, said mut StringBuilder&) String ? Unparsable {
+    src := source.Source($given.Path, $given.Text)  # here, with the names and the diagnostics the unparser holds together
+    names := source.Names()
+    d := diag.Diagnostics(color)
+    o := OracleFor(src.Path, std, prelude, names)
+    file := d.AddFile(src.Path, src.Text)
+    ts := scan.Scan(src.Text)
+    for x in ts.Diags {
+        d.Error(diag.Where.Span(file, I64(x.Start), I64(x.End)), msgs.Msg(msgs.Diag.UnknownChar, x.Rule(), x.Message()))
+    }
+    p := parse.Parser(src, ts, names, o, d, file)
+    decls := p.File()
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 {
+        said.Push(d.Render())
+        error Unparsable.SYNTAX
+    }
+    held := unparse.HeldBranches(decls, names, src.Text, d)
+    return Format(src.Text, ts, p.ArgAngles, p.CloseAngles, held)
+}
+
+# "olang format" over files (B13): mode "-f" rewrites each file in its layout, "-l" names each file not in it, one a
+# line, "-p" writes each file's layout to the standard output; std is where std is. A file that does not parse is left
+# as it is, its diagnostics written as the compiler writes them. 1 when a file did not parse, could not be read or
+# written, or (-l) is not in the layout
+fn Files(mode String&, files Array<String&>&, std String&) I32 {
+    out := io.Writer(1)
+    errs := io.Writer(2)
+    prelude := PreludeTypes(std)
+    status I32 = 0
+    for path in files {
+        src := try source.Read(path) catch os.OsError {
+            errs.Write("olang: " $path ": cannot be read\n")
+            status = 1
+            continue
+        }
+        said := StringBuilder()
+        text := try FileLayout(src, std, prelude, diag.ColorWanted(), said) catch {
+            errs.Write(said.ToString())
+            status = 1
+            continue
+        }
+        if mode == "-f" {
+            if text != src.Text {
+                try os.WriteFile(path, text) catch os.OsError {
+                    errs.Write("olang: " $path ": cannot be written\n")
+                    status = 1
+                }
+            }
+        } else if mode == "-p" {
+            out.Write(text)
+        } else if text != src.Text {
+            out.Write($path "\n")
+            status = 1
+        }
+    }
+    try out.Flush() catch io.IoError { return 1 }
+    try errs.Flush() catch io.IoError { return 1 }
+    return status
+}
+
+# ---- type names, as the compiler's loader gives them to the parser (as compiler/tools/dump.olang reads them) ----
+
+# the names the parser is told are types, in the file at path: its own, the prelude's (prelude, from PreludeTypes) and its
+# imports', through their alias chains
+
+fn OracleFor(path String&, std String&, prelude String&, names mut source.Names&) parse.Oracle {
+    l := loader(std)
+    m := l.load(path)
+    o := parse.Oracle()
+    if m >= 0 { l.oracle(o, names, m, prelude) }
+    return o
+}
+
+fn PreludeTypes(std String&) String {
+    l := loader(std)
+    return l.prelude()
+}
+
+# every module the files reach: its real path, its declared type and error names (" A B "), and its imports - each
+# import's alias and the module it reaches (-1 for a remote one or a file that is not there)
+type loader struct(std String&) {
+    std
+    paths List<String&>
+    types List<String&>
+    impMod List<I64>
+    impAlias List<String&>
+    impTarget List<I64>
+}
+
+# the names the prelude declares, " A B ", from every file of std/prelude
+fn (l mut loader&) prelude() String {
+    b := StringBuilder()
+    b.PushChar(' ')
+    dir := filepath.Join(l.std, "prelude")
+    names := try os.ReadDir(dir) catch os.OsError { return " " }
+    for n in names {
+        if not n.EndsWith(".olang") { continue }
+        m := l.load(filepath.Join(dir, n))
+        if m >= 0 { b.Push(l.types[m][1:]) }
+    }
+    return b.ToString()
+}
+
+# an import's file: "std/x" under std, a remote one (its first part holds a dot) none, anything else beside the importer
+fn (l loader&) target(importer String&, ipath String&) String {
+    first := ipath
+    slash := try ipath.FindByte('/') catch default -1
+    if slash >= 0 { first = ipath[:slash] }
+    if first.Contains(".") { return "" }
+    if ipath.StartsWith("std/") { return $filepath.Join(l.std, ipath[4:]) ".olang" }
+    return $filepath.Join(filepath.Dir(importer), ipath) ".olang"
+}
+
+# the module at path, loaded once, its imports with it; -1 where there is no such file
+fn (l mut loader&) load(path String&) I64 {
+    real := try os.RealPath(path) catch os.OsError { return -1 }
+    for i in range l.paths.Len() {
+        if l.paths[i] == real { return i }
+    }
+    src := try source.Read(real) catch os.OsError { return -1 }
+    ts := scan.Scan(src.Text)
+    m := l.paths.Len()
+    l.paths.Push($real)
+    b := StringBuilder()
+    b.PushChar(' ')
+    aliases List<String&>
+    paths List<String&>
+    toks := ts.Toks
+    n := toks.Len()
+    for i in range n {
+        k := toks[i].Kind
+        named := i + 1 < n and toks[i + 1].Kind == token.Tok.Iden
+        if (k == token.Tok.Type and named) or
+           (k == token.Tok.Error and named and i + 2 < n and toks[i + 2].Kind == token.Tok.LBrace) {
+            b.Push(src.Text[toks[i + 1].Start:toks[i + 1].End])
+            b.PushChar(' ')
+        }
+        if k == token.Tok.Import {
+            j := i + 1
+            alias String& = ""
+            if j < n and toks[j].Kind == token.Tok.Iden {
+                alias = $src.Text[toks[j].Start:toks[j].End]
+                j++
+            }
+            if j < n and toks[j].Kind == token.Tok.StrLit {
+                ip := src.Text[toks[j].Start + 1:toks[j].End - 1]
+                if alias == "" { alias = $filepath.Base(ip) }
+                aliases.Push($alias)
+                paths.Push($ip)
+            }
+        }
+    }
+    l.types.Push(b.ToString())
+    for k in range aliases.Len() {
+        t := l.target(real, paths[k])
+        target I64 = -1
+        if t != "" { target = l.load(t) }
+        l.impMod.Push(m)
+        l.impAlias.Push($aliases[k])
+        l.impTarget.Push(target)
+    }
+    return m
+}
+
+# the oracle for module m: its own names, the prelude's capitalized ones and Array bare, and its imports' through their
+# alias chains
+fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelude String&) {
+    l.addNames(o, names, "", l.types[m])
+    for t in prelude.Split(" ") {
+        if t != "" and t[0].IsUpper() { o.Add(names, "", t) }
+    }
+    o.Add(names, "", "Array")
+    l.chains(o, names, m, "", 0)
+}
+
+fn (l loader&) addNames(o mut parse.Oracle&, names mut source.Names&, alias String&, list String&) {
+    for t in list.Split(" ") {
+        if t != "" { o.Add(names, alias, t) }
+    }
+}
+
+fn (l loader&) chains(o mut parse.Oracle&, names mut source.Names&, m I64, prefix String&, depth I64) {
+    if depth >= 4 { return }
+    for i in range l.impMod.Len() {
+        if l.impMod[i] != m or l.impTarget[i] < 0 { continue }
+        chain := $prefix $l.impAlias[i]
+        l.addNames(o, names, chain, l.types[l.impTarget[i]])
+        l.chains(o, names, l.impTarget[i], $chain ".", depth + 1)
+    }
 }

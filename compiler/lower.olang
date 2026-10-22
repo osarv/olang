@@ -257,6 +257,7 @@ fn (ln mut lowering&) run() {
         if ln.planned and i < ln.plan.Stored.Len() {
             match ln.plan.Stored[i] {
                 case typed.Scope.Var(v) { home = mir.ScopeRef.Var(v) }
+                case typed.Scope.Program { home = mir.ScopeRef.Program }
                 case _ { }
             }
         }

@@ -37,6 +37,7 @@
 #include <dirent.h>
 #include <limits.h>
 #include <spawn.h>
+#include <unistd.h>
 #include <sys/stat.h>
 #include "comptime.h"
 #include "errmsg.h"
@@ -3260,12 +3261,24 @@ static int ctRtSpawn(const char* args, long long count, int in, int out, int err
     if (rc != 0) { errno = rc; return -1; }
     return pid;
 }
+//B3g: the runtime's __olang_exec - the program at path run in this process's place, its arguments packed as spawn's
+static int ctRtExec(const char* path, const char* args, long long count) {
+    if (count < 1) { errno = EINVAL; return -1; }
+    char** argv = MallocOrCrash(sizeof(char*) * (size_t)(count + 1));
+    for (long long i = 0; i < count; i++) { argv[i] = (char*)args; args += strlen(args) + 1; }
+    argv[count] = NULL;
+    fflush(NULL);
+    execv(path, argv);
+    free(argv);
+    return -1;
+}
 typedef void (*ctRtFn)(void);
 static ctRtFn ctRuntimeSym(const char* name) {
     static const struct { const char* name; ctRtFn fn; } syms[] = {
         { "__olang_arg_count", (ctRtFn)ctRtArgCount }, { "__olang_arg", (ctRtFn)ctRtArg }, { "__olang_env", (ctRtFn)ctRtEnv },
         { "__olang_err", (ctRtFn)ctRtErr }, { "__olang_stat", (ctRtFn)ctRtStat }, { "__olang_dir", (ctRtFn)ctRtDir },
         { "__olang_realpath", (ctRtFn)ctRtRealpath }, { "__olang_spawn", (ctRtFn)ctRtSpawn },
+        { "__olang_exec", (ctRtFn)ctRtExec },
         { "__olang_mkdtemp", (ctRtFn)ctRtMkdtemp }, { "__olang_on_crash", (ctRtFn)ctRtOnCrash },
         { "__olang_dyncall", (ctRtFn)ctRtDyncall }, { "__olang_dyncall_check", (ctRtFn)ctRtDyncallCheck },
     };
