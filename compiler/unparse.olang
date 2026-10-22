@@ -596,7 +596,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         }
         case ast.Expr.Unary(_, op, y) {
             w.put(op.Text())
-            if op == token.Tok.Not or op == token.Tok.Take {
+            if op == token.Tok.Not {
                 w.put(" ")
             } else if (op == token.Tok.Minus or op == token.Tok.Dec) and startsWithMinus(y) {
                 w.put(" ")          # "- -x" is no "--x"

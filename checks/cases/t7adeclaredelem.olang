@@ -1,0 +1,11 @@
+# check: fail error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+# also: instantiated here, with T = String
+# T7a: a String as an array's element, and as a generic struct's field bound by its type argument - held by reference
+# (review port1 r07, r11)
+import "std/io"
+type Box<T> struct(v T) { v }
+fn main() ? io.IoError {
+    a := Array<String>(3, "init")
+    b := Box<String>("start")
+    try io.Println($a.Len() " " $b.v)
+}

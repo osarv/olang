@@ -800,7 +800,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false) ast.Sig&p ? Fail {
 # whether a signature's result type follows its parameters
 fn (p Parser&) startsResult() Bool {
     k := p.peek()
-    return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn or
+    return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or
            k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait
 }
 
@@ -902,11 +902,10 @@ fn (p mut Parser&) sep(close token.Tok) Bool ? Fail {
 
 fn (p mut Parser&) typeExpr() ast.TypeRef&p ? Fail {
     at := p.here()
-    owned := p.accept(token.Tok.Own)
     writable := p.accept(token.Tok.Mut)
     t := try p.typeBase()
     t = p.markers(at, t)
-    if owned or writable { return ast.TypeRef.Perm(p.from(at), t, writable, owned) }
+    if writable { return ast.TypeRef.Perm(p.from(at), t, writable, false) }
     return t
 }
 
@@ -1006,7 +1005,7 @@ fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
 fn (p mut Parser&) typeArg() ast.TypeRef&p ? Fail {
     at := p.here()
     k := p.peek()
-    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn or k == token.Tok.Enum or
+    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.Enum or
        k == token.Tok.Struct or k == token.Tok.Trait {
         t := try p.typeExpr()
         if p.sees(token.Tok.Comma) or p.sees(token.Tok.StmtEnd) or p.closesAngle() { return t }
@@ -1293,7 +1292,7 @@ fn (p mut Parser&) idenStmt() ast.Stmt&p ? Fail {
                          null, Array<ast.Expr&>(0), false, true)
         return ast.Stmt.Var(sp, v)
     }
-    if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Own or
+    if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or
        k2 == token.Tok.Fn or k2 == token.Tok.Enum or k2 == token.Tok.Struct {
         nt := p.tk()
         name := try p.name()
@@ -1609,7 +1608,7 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl))
         }
         # three clauses: an initializer like a declaration, then "," cond "," post
-        if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut or k2 == token.Tok.Own {
+        if k2 == token.Tok.Define or k2 == token.Tok.Iden or k2 == token.Tok.Mut {
             iat := p.here()
             nt := p.tk()
             name := try p.name()
@@ -1733,7 +1732,7 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
 fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
     at := p.here()
     k := p.peek()
-    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn or k == token.Tok.Enum or
+    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.Enum or
        k == token.Tok.Struct or k == token.Tok.Trait {
         t := try p.typeExpr()
         n := p.peek()
@@ -1963,11 +1962,11 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
     }
 }
 
-# whether what follows "is" is a type by its form: "mut", "own", "fn", type arguments or a marker. A bare path is
+# whether what follows "is" is a type by its form: "mut", "fn", type arguments or a marker. A bare path is
 # left to the resolver (DESIGN.md point 1)
 fn (p mut Parser&) startsType() Bool {
     k := p.peek()
-    if k == token.Tok.Mut or k == token.Tok.Own or k == token.Tok.Fn { return true }
+    if k == token.Tok.Mut or k == token.Tok.Fn { return true }
     if k != token.Tok.Iden { return false }
     i I64 = 1
     for p.look(i) == token.Tok.Dot and p.look(i + 1) == token.Tok.Iden { i += 2 }
@@ -1998,7 +1997,7 @@ fn (p mut Parser&) unary() ast.Expr&p ? Fail {
             x := try p.binary(4)
             return ast.Expr.Unary(p.from(at), token.Tok.Not, x)
         }
-        case token.Tok.Minus, token.Tok.Tilde, token.Tok.Inc, token.Tok.Dec, token.Tok.Take {
+        case token.Tok.Minus, token.Tok.Tilde, token.Tok.Inc, token.Tok.Dec {
             k := p.peek()
             p.advance()
             x := try p.unary()

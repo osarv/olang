@@ -1,0 +1,20 @@
+# check: fail error[D9a]: array parameter 's' is passed by reference - write String&
+# also: array parameter 'c' is passed by reference - write Array<Char>&
+# D9a/T7b: an enum case's payload holds a run-time array by reference, as a parameter does (review port1 r10, r10b) -
+# a fixed one, Array<T, N>, by value (T7c)
+import "std/io"
+type E enum {
+    A(s String)
+    B(c Array<Char>)
+    F(f Array<I64, 3>)
+    N
+}
+fn wrap(i I64) E { return E.A($i "-payload") }
+fn main() ? io.IoError {
+    e := wrap(1)
+    m := match e {
+        case E.A(s) => $s
+        case _ => "none"
+    }
+    try io.Println(m)
+}

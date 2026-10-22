@@ -1,0 +1,10 @@
+# check: fail error[D11a]: a local is always writable - 'mut' is for a reference, and fn(x I64) I64 is none
+# also: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and fn(x I64) I64 is none
+# D11a, D9: a function value is no reference - "mut" before its type says nothing, on a local and a parameter alike
+import "std/io"
+fn dbl(x I64) I64 { return x * 2 }
+fn use(f mut fn(x I64) I64) I64 { return f(1) }
+fn main() ? io.IoError {
+    f mut fn(x I64) I64 = dbl
+    try io.Println($f(3) " " $use(dbl))
+}

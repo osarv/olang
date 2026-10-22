@@ -1,0 +1,15 @@
+# check: fail error[T7a, T7c]: an array inside an array or a struct is held by reference - write Nums&, or a length, Array<T, N>, to hold it in place
+# also: write String&, or a length
+# T7a: a declared array type (String, "type Nums Array<I64>") held by value in a field is an array like any other - its
+# storage would be shared, not copied, with the instance (review port1 r04, r06)
+import "std/io"
+type Nums Array<I64>
+type Rec struct(n I64) {
+    t := $n "-text"
+    a Nums = Nums(Array<I64>(n, 7))
+}
+fn mk(n I64) Rec { return Rec(n) }
+fn main() ? io.IoError {
+    k := mk(4)
+    try io.Println($k.t " " $k.a[3])
+}
