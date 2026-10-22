@@ -1,0 +1,19 @@
+# E16a: slices of a String value (a declared array type) - of a local reassigned in an inner block, of a generic's
+# by-value parameter bound to a String, kept past the block or the call
+import "std/io"
+import "churn"
+fn headOf<T>(x T) Array<Char>&x { return x[0:3] }
+fn main() ? io.IoError {
+    keep String& = "start"
+    s String = "s"
+    for i in range 3 {
+        if i >= 0 {
+            s = $i "-assigned-in-an-inner-block"
+            keep = s[0:6]
+        }
+    }
+    t String = "tttttttttt"
+    h := headOf(t)
+    c := churn.Churn()
+    try io.Println($c " " $keep " " $String(h))
+}

@@ -1,0 +1,11 @@
+# T7a: r02 reduced - one struct value, made directly, with a text field held by value
+import "std/io"
+import "churn"
+type Rec struct(n I64) {
+    t := $n "-text-that-is-long-enough"
+}
+fn main() ? io.IoError {
+    r := Rec(3)
+    c := churn.Churn()
+    try io.Println($c " " $r.t)
+}

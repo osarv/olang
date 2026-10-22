@@ -1,0 +1,9 @@
+# T7a: r07 reduced - a List of String values pushed text built in a loop
+import "std/io"
+import "churn"
+fn main() ? io.IoError {
+    l := List<String>()
+    for i in range 3 { l.Push($i "-list-text-that-is-long-enough") }
+    c := churn.Churn()
+    try io.Println($c " " $l[1])
+}

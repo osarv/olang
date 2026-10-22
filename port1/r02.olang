@@ -4,7 +4,6 @@ import "std/io"
 import "churn"
 type Rec struct(n I64) {
     t := $n "-text-that-is-long-enough"
-    a := Array<I64>(n, 7)
 }
 fn mk(n I64) Rec { return Rec(n) }
 fn main() ? io.IoError {
@@ -13,6 +12,5 @@ fn main() ? io.IoError {
     for i in range 3 { r = Rec(i + 5) }
     c := churn.Churn()
     q := r
-    q.a[0] = 99
-    try io.Println($c " " $r.t " " $k.t " " $r.a[0] " " $k.a.Len())
+    try io.Println($c " " $r.t " " $k.t)
 }
