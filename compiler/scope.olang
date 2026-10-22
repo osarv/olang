@@ -198,6 +198,13 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     bindKids List<I64>         # parallel to bindTerms: the record of the argument's own instance there, -1 for none
     siteRec Map<I64, I64>      # a call's site: the record its instance's bindings start at
     fieldsAssigned Map<pair.Pair<I64, I64>, Bool> # (struct type, field) any body assigns after construction, -1 all
+    # a local assigned after its declaration: the record every value it is given has, merged over a quiet judging of
+    # the body first (lateBody) - Untraced where they disagree, none where one has no record (O23a)
+    lateBody I64 = -1
+    lateGather Bool = false
+    late Map<I64, List<Term>>
+    lateNone Map<I64, Bool>
+    lateDecl Map<I64, Bool>    # ... whose declaration's value was among them
     ctorSite I64 = -1
     ctorFrom I64 = 0
     resBind List<Term>         # the returns' instance bindings so far (O13c), resBound once one is seen
@@ -419,6 +426,16 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     if body.Root == null { return }
     for l in body.Locals {
         if l.Ty == types.UnknownT { return }
+    }
+    if report and s.lateBody != b and s.hasLateLocals(b) {
+        # what each assigned local is given, gathered before the judging that reports reads it
+        s.lateBody = b
+        s.late.Clear()
+        s.lateNone.Clear()
+        s.lateDecl.Clear()
+        s.lateGather = true
+        s.judge(b, false)
+        s.lateGather = false
     }
     s.judged[b] = true
     s.B = body
@@ -3439,7 +3456,18 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
 fn (s mut Scoper&) bindLocal(l typed.LocalId, x typed.Expr&) {
     k := s.B.Locals[I64(l)].Kind
     if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Field { return }
-    if s.reassigned(I64(l)) { return }
+    if s.reassigned(I64(l)) {
+        s.noteLate(I64(l), x)
+        if s.lateGather { s.lateDecl.Put(I64(l), true) }
+        if s.lateGather or s.lateBody != s.Id or s.lateNone.Has(I64(l)) or not s.lateDecl.Has(I64(l)) { return }
+        ts := try s.late.Get(I64(l)) catch { return }
+        s.bindFrom.Put(I64(l), s.bindTerms.Len())
+        for t in ts {
+            s.bindTerms.Push(t)
+            s.bindKids.Push(-1)
+        }
+        return
+    }
     c := s.callOf(s.unPromoted(x))
     if c == null or I64(c.Site) != s.ctorSite { return }
     s.bindFrom.Put(I64(l), s.ctorFrom)
@@ -3485,6 +3513,38 @@ fn (s mut Scoper&) noteResBind(x typed.Expr&) {
         }
     }
     s.resBound = true
+}
+
+# whether body b has a local assigned after its declaration whose type is a struct with a constructor: one whose
+# record a later read could use (O23a)
+fn (s mut Scoper&) hasLateLocals(b I64) Bool {
+    for k in range s.assignedFrom[b], s.assignedFrom[b + 1] {
+        l := s.assignedTo[k]
+        if l >= 0 and l < s.Bodies[b].Locals.Len() and s.ctorParams(s.Bodies[b].Locals[l].Ty) > 0 { return true }
+    }
+    return false
+}
+
+# while gathering, the record value x gives local l merged into what the local's other values gave (O23a)
+fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
+    if not s.lateGather or s.lateNone.Has(l) { return }
+    n := s.ctorParams(s.B.Locals[l].Ty)
+    c := s.callOf(s.unPromoted(x))
+    if n == 0 or c == null or I64(c.Site) != s.ctorSite or s.ctorFrom + n > s.bindTerms.Len() {
+        s.lateNone.Put(l, true)
+        return
+    }
+    first := not s.late.Has(l)
+    if first { s.late.Put(l, List<Term>()) }
+    ts := try s.late.Get(l) catch { return }
+    for w in range n {
+        t := s.bindTerms[s.ctorFrom + w]
+        if first {
+            ts.Push(t)
+        } else if w < ts.Len() and ts[w] != t {
+            ts[w] = Term.Untraced
+        }
+    }
 }
 
 # whether the body being judged assigns local l after its declaration (walkBody)
@@ -3694,6 +3754,7 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
     slot, exact, kind := s.slotOf(p)
     if s.isRef(t) { s.splitBorrow(x) }
     v := s.val(x, slot if slot.Runs() else s.here())
+    if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
         # existing storage stored into a "&p" field of an instance whose construction binding is not known through this
         # path - an element, a field of another instance: only its container's scope is, an underestimate, and the store
@@ -4183,6 +4244,8 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     if s.joins.Len() > 0 { j = Term.Block(s.joins[s.joins.Len() - 1]) }
     for p in sw.Targets {
         s.placeOperands(p)
+        # a local a task's result is given has no record a read could trust (O23a)
+        if s.lateGather and wholeLocal(p) >= 0 { s.lateNone.Put(wholeLocal(p), true) }
         # a target is stored into when the task's call returns: it lasts until the join (P1g)
         if not s.lastsUntil(s.peekPlace(p, false), j) and s.report { s.err(p.Span(), msgs.SpawnResultTooShort()) }
     }
