@@ -1149,10 +1149,10 @@ fn agree(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -debug math.olang > out.txt 2>&1 && ./build/math.debug > d.txt 2>&1") == 0, "math -d", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret math.olang > i.txt 2>&1") == 0, "math -i", dir)
     try r.expect(sh(dir, "test $(wc -l < b.txt) = 14 && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "math output", dir)
-    mll String& = " build/math.main.ll"
-    try r.expect(sh(dir, "grep -q '^@math_SqrtTwo = constant double 0x3FF6A09E667F3BCD$'" $mll) == 0, "math baked", dir)
-    try r.expect(sh(dir, "grep -q '^declare double @sqrt(double) memory(none) nounwind willreturn$'" $mll) == 0, "math exact", dir)
-    try r.expect(sh(dir, "grep -q '^declare double @exp(double) nobuiltin '" $mll) == 0, "math inexact", dir)
+    mll String& = "build/math.main.ll"
+    try r.expect(irHas(dir, mll, "^" $gsym("math", "SqrtTwo") " = constant (double 0x3FF6A09E667F3BCD$|<\\{ \\[8 x i8\\] \\}> <\\{ \\[8 x i8\\] c\"\\\\CD\\\\3B\\\\7F\\\\66\\\\9E\\\\A0\\\\F6\\\\3F\" \\}>, align 8$)"), "math baked", dir)
+    try r.expect(irHas(dir, mll, "^declare double @(sqrt\\(double\\) memory\\(none\\) nounwind willreturn|llvm\\.sqrt\\.f64\\(double\\))$"), "math exact", dir)
+    try r.expect(irHas(dir, mll, "^declare double @exp\\(double\\) nobuiltin "), "math inexact", dir)
     try r.expect(sh(dir, "\"$OLANG\" build r17.olang > out.txt 2>&1") == 0, "r17", dir)
     try r.expect(sh(dir, "./build/r17 > b.txt 2>&1") == 1 and sh(dir, "\"$OLANG\" interpret r17.olang > i.txt 2>&1") == 1
                  "r17 did not end in its error, built and interpreted", dir)
@@ -1161,10 +1161,11 @@ fn agree(r mut report&) ? Failed {
     try r.expect(sh(dir, ("printf 'before\\nunhandled error: Err.LOUD\\n(build with -debug to see where it came from)\\n' | cmp -s - b.txt"
                           " && cmp -s d.txt i.txt && grep -q '^r17.olang:9: raised here$' d.txt")) == 0, "r17 output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build share.olang > out.txt 2>&1 && ./build/share") == 0, "share", dir)
-    ll String& = " build/share.main.ll"
-    try r.expect(sh(dir, "grep -q '^@share_B = constant ptr @share_A.k[0-9]*$'" $ll) == 0, "share_B", dir)
-    try r.expect(sh(dir, "grep -q '^@share_H.k[0-9]* = internal global .2 x i32.'" $ll) == 0, "share_H.k", dir)
-    try r.expect(sh(dir, "grep -q '^@share_Sl = constant { i64, ptr } { i64 2, ptr getelementptr inbounds (.4 x i32., ptr @share_Arr.k[0-9]*, i64 0, i64 1) }'" $ll) == 0
+    ll String& = "build/share.main.ll"
+    try r.expect(irHas(dir, ll, "^" $gsym("share", "B") " = constant (ptr|<\\{ ptr \\}> <\\{ ptr) " $gsym("share", "A") "\\.k[0-9]+")
+                 "share_B", dir)
+    try r.expect(irHas(dir, ll, "^" $gsym("share", "H") "\\.k[0-9]* = internal global (.2 x i32.|<\\{ \\[8 x i8\\] \\}>)"), "share_H.k", dir)
+    try r.expect(irHas(dir, ll, "^" $gsym("share", "Sl") " = constant (\\{ i64, ptr \\} \\{ i64 2, ptr getelementptr inbounds \\(.4 x i32., ptr @share_Arr\\.k[0-9]*, i64 0, i64 1\\) \\}|<\\{ \\[8 x i8\\], ptr \\}> <\\{ \\[8 x i8\\] c\"\\\\02(\\\\00){7}\", ptr getelementptr \\(i8, ptr @G_2eshare_2eArr\\.k[0-9]+, i64 4\\) \\}>)")
                  "share_Sl", dir)
 }
 

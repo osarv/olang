@@ -3864,6 +3864,7 @@ type Blob struct() {
 # references to one instance stay one, a cycle is written as itself)
 type Image struct() {
     Blobs List<Blob>
+    Slots List<I64>   # each blob's allocation in the evaluator: storage two images reach is shared (interp.Bake)
 }
 
 error NotBaked {
@@ -3915,6 +3916,7 @@ fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
             b.Off.Push(m.rdRaw(a.Base + 8 * w, 8))
         }
         img.Blobs.Push(b)
+        img.Slots.Push(slot)
         k++
     }
     # K2b: what only the global's own read-only reference reaches, holding no reference itself, nothing can write - a

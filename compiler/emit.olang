@@ -3068,6 +3068,12 @@ fn (fe mut fnEm&) externArg(v String&, ty types.TypeId) String {
 fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
     t := e.T
     name := $e.text(e.P.FnDecl(f).Name)
+    # X8: an exact C math function of its exact prototype is LLVM's intrinsic, an instruction where the target has one
+    intr := e.mathIntrinsic(name, ty)
+    if intr != "" {
+        if not e.has(intr) { e.declare(intr, $e.externRet(ty) " @" $intr "(" $e.mathParams(ty) ")") }
+        return intr
+    }
     if e.has(name) { return name }
     b := StringBuilder()
     b.Push($e.externRet(ty) " @" $name "(")
@@ -3085,8 +3091,65 @@ fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
         }
     }
     b.Push(")")
+    # X8: any other C math function as C's default -fmath-errno declares it (it may write errno), and nobuiltin, so LLVM
+    # never rewrites a call of it - the program calls exactly the function the evaluator called
+    if mathInexact.Has(name) and e.mathParams(ty) != "" { b.Push(" nobuiltin memory(write)") }
     e.declare(name, b.ToString())
     return name
+}
+
+# X8's exact functions, by their C name (F64's; F32's ends in "f"), the intrinsic named the same: how many operands
+mathExact Map<String&, I64> = mathExactTable()
+
+fn mathExactTable() Map<String&, I64> {
+    out Map<String&, I64>
+    for x in String&["sqrt", "floor", "ceil", "trunc", "round", "roundeven", "fabs"] { out.Put(x, 1) }
+    out.Put("copysign", 2)
+    out.Put("fma", 3)
+    return out
+}
+
+mathInexact Map<String&, Bool> = mathInexactTable()
+
+fn mathInexactTable() Map<String&, Bool> {
+    out Map<String&, Bool>
+    for x in String&["cbrt", "exp", "exp2", "expm1", "log", "log2", "log10", "log1p", "pow", "hypot", "sin", "cos", "tan"
+                     "asin", "acos", "atan", "atan2", "sinh", "cosh", "tanh", "erf", "erfc"] {
+        out.Put(x, true)
+        out.Put($x "f", true)
+    }
+    return out
+}
+
+# the intrinsic an exact C math function of its exact prototype is ("llvm.fma.f32" for fmaf), "" for any other
+fn (e mut Emitter&) mathIntrinsic(name String&, ty types.TypeId) String {
+    t := e.T
+    base := name[:]
+    f32 := false
+    if not mathExact.Has(base) and name.EndsWith("f") {
+        base = name[:name.Len() - 1]
+        f32 = true
+    }
+    n := try mathExact.Get(base) catch { return "" }
+    ps := t.Items(t.Params(ty))
+    want := types.Kind.F32 if f32 else types.Kind.F64
+    if ps.Len() != n or t.KindOf(t.Result(ty)) != want { return "" }
+    for p in ps {
+        if t.KindOf(p) != want { return "" }
+    }
+    return "llvm." $base ".f" $("32" if f32 else "64")
+}
+
+# a math function's parameters spelled for its declaration: every one F32 or F64 - "" where one is not
+fn (e mut Emitter&) mathParams(ty types.TypeId) String {
+    t := e.T
+    b := StringBuilder()
+    for i, p in t.Items(t.Params(ty)) {
+        if t.KindOf(p) != types.Kind.F32 and t.KindOf(p) != types.Kind.F64 { return "" }
+        if i > 0 { b.Push(", ") }
+        b.Push(e.ty(p))
+    }
+    return b.ToString()
 }
 
 fn (e mut Emitter&) externRet(ty types.TypeId) String {

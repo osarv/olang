@@ -232,15 +232,27 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.start()
+    reached Map<I64, I64>
     for i in x.Globals {
         match x.Bodies[i].Of {
             case typed.BodyOf.Global(m, n) {
                 img := try x.M.Image(m, n) catch eval.NotBaked { continue }
                 out.Put(i, img)
+                for sl in img.Slots { reached.Put(sl, (try reached.Get(sl) catch default 0) + 1) }
             }
             case _ { }
         }
     }
+    # K2b: storage two globals reach - a slice of another's array, the same constant text - is one instance; each
+    # would write its own copy, so such globals are set at startup, where they name that very storage
+    shared List<I64>
+    for i in x.Globals {
+        img := try out.Get(i) catch { continue }
+        for sl in img.Slots {
+            if (try reached.Get(sl) catch default 0) > 1 and i not in shared { shared.Push(i) }
+        }
+    }
+    for i in shared { out.Remove(i) }
     return out
 }
 
