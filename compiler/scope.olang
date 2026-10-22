@@ -4509,6 +4509,7 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     # so that is where the target's own storage is; of several, the longest-lived, which outlives each
     dest := Term.None
     for p in sw.Targets {
+        if p == null { continue }
         t := p.Type()
         d := Term.None
         if s.holds(t) {
