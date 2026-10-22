@@ -617,7 +617,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
   plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 3: 264 of 280 refused
   cases give stage 0's first error, 1 still gets none (kept on purpose), per-instance bindings for locals; HISTORY.md
-  "Port M6"). M19g is `compiler/views.olang`, a pass of its own after check
+  "Port M6"). M9, `compiler/emit.olang` (MIR written as LLVM IR, one object per module - each module's, the root's
+  instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
+  only what changed; the error trace S18d; `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits

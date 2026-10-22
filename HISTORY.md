@@ -20805,3 +20805,49 @@ port bugs it now avoids and records: B10c's `-define` over a top-level default i
 a text literal's type `String&`. Also found: stage 0's interpreter
 called execv without unistd.h (a warning gcc -Werror refuses).
 
+
+## Port M9, round 3: one object per module, the error trace (2026-10-22)
+
+**One object per module.** Emission wrote the whole program as one LLVM module, so a build of the compiler was one
+43 MB object: any edit recompiled all of it, and at -O3 its `-flto -c` alone ran single-threaded for minutes. Emit now
+makes *items* - a function, a global, constant data, a declaration - each with a home, and `emit.Objects` writes one
+object per home: each module's own (its plain functions, a non-generic type's constructor and destructor, its globals
+and their initializers, its initialization), the root's instances (generic instances and constructor twins, B3d: the
+root's `.inst` object), and the root's with `main` or the test harness. What an object names of another is declared
+(`declare`, `external global` with the baked global's own packed type); what is *shared* - helpers, a named function's
+value thunk, adapters, destructor thunks, the runtime's and C's declarations - is copied into each object naming it,
+`linkonce_odr` where it is a definition, so a function value is one address across objects (T21); what is *local* -
+constant data, lambdas, task trampolines, tests - is copied in as `internal`/`private` and renumbered per object in the
+order it is named. References are found by scanning each item's text once for `@NAME` and `%"TYPE"`, quoted text
+skipped. **An object's text depends only on what it holds**: its items are sorted by symbol, local names renumbered,
+and thunk and adapter names spell their types (`_fv_` + the canonical type) where they spelled a type's number - so an
+edit recompiles exactly the objects whose IR changed. `compile FILE` writes that module's object (its own bodies and
+the instances they use); `Program(w)` still writes one module for emitdump and emitdiff. The driver takes the objects
+where its program lives (`e.Objects&prog()`), the target's triple now written by emit rather than replaced in the text.
+
+Measured on the compiler (stage-0-built driver, a container shared with other agents): a clean `-debug` build 38 s ->
+32 s (57 objects, 53.6 MB of IR in all - 25% more than the single module, the shared copies - compiled four at once);
+nothing changed 20.8 s (the front end); one function of unparse.olang changed 38 s -> 22.4 s, only `unparse`'s object
+compiled; a clean -O3 build about 8 -> 4 minutes, of which the full LTO link is 3.3. Stage 1 still builds stage 2 and
+stage 3 byte for byte equal to itself. Decided: objects are built from what the program reaches (main or the tests), as
+before - emitting every function of a module would let two programs share its object, at the cost of lowering and
+compiling what no program calls.
+
+**The error return trace (S18d)** in test and -debug builds. MIR needed no Trace statement: at a `Raise`, a call that
+failed at the same place means the error is passed on ("try passed it on"), a join there that "a task failed, and its
+join passed it on", anything else that it was raised here - how the evaluator reads it (eval.traced). `main`'s
+unhandled error prints the trace under -debug, and `!` no longer adds "(build with -debug ...)" where the trace is
+kept. An error a `try` lets out of a test body was lowered as `unreachable` ("reached unreachable code", the test
+failing unnamed); it is its own exit now, `mir.ExitKind.Escaped`, emitted as stage 0's: "left the test" added to the
+trace, then the FAIL line naming the error (`FAIL - name: E.BAD`) and the trace. Output identical to stage 0's on a
+program and a test file raising, passing on, catching, ending at `!` and leaving a test. Not done: stage 0 clears the
+trace where a clause takes an error; a later raise restarts it anyway.
+
+**std/os's "the test before ended with f's scopes closed"** was the driver's interim placement, not emission: it builds
+every site in the program's scope, so the lambda's `stackRes()` never destructs before the program ends. Placed by the
+scope pass, std/os passes whole (and io, json, chan, cancel, linalg); but stage 1 then cannot load a program - import
+paths read as garbage. The driver gained `OLANG_SCOPE_PLAN=LO:HI` (those bodies placed by the pass, the interim the
+default), and halving found one body: `load.resolve`, where `path := ""` is later assigned `$Normalize(...)` inside an
+`if`. The pass builds that join in the `if`'s block, and lowering adopts the fresh array as `path`'s storage, so `path`
+is read after its block closed; stage 0 builds such a value in the target's scope. Left to the scope pass (or lowering
+must copy), with the reproducer in PROGRESS.md.
