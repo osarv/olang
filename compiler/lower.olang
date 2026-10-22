@@ -2919,11 +2919,19 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
     res := t.Result(fty)
     ok := ln.F.NewBlock()
     dest := ln.temp(res, sp)
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+    # E11c: what Str builds for its result is built in a scope "$" opens for the call, closed once the text is copied -
+    # its destructors run there, and an unwind through it closes it
+    rs := ln.F.AddScope(mir.ScopeKind.Block, ln.top().S, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, rs))
+    vs := t.ScopeVarsOf(fty)
+    xs := Array<mir.ScopeRef>(vs.Len())
+    for i in range vs.Len() { xs[i] = mir.ScopeRef.Scope(rs) if vs[i] == types.ResultVar else mir.ScopeRef.Program }
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.L(dest)
                                true, ok, mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
     ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(dest))))
+    ln.emit(mir.Stmt.Close(sp, rs))
     return true
 }
 
