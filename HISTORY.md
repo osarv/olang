@@ -20763,6 +20763,11 @@ std's) is making (`Machine.retire`, `Library`). A later use of it, through a vie
 compiling (`WhyStale`): an assert decided while compiling or a global's initializer that meets one is an error
 (`AssertStale`, `GlobalStale`) with notes where the view was read and where the Vec grew.
 
+**One Retire, after merging code generation round 5**, which had added `PrimOp.Retire` too: its form stays (a `Void`
+prim, the module's `Retires` flag, `__olang_san_retire` under -sanitize, its verifier rule) and the evaluator's marking
+goes on it. The stale-view stop holds under interpret as well, as stage 0's: "stale.olang:12: it uses a view of a Vec's
+elements taken before the Vec grew ...", then "stale.olang:8: the Vec grew here" (vechandle's "stale interpreted").
+
 **G27: an assert reading its instance's constants is decided per instance.** An assert's condition reading a constant
 variable was the running program's (`readsLocal` counts a type or constant variable). While an assert's condition is
 made a body of its own (`constsRead`), a constant variable the instance binds is read as its value - the new body carries
