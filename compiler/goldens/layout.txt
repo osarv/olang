@@ -1200,6 +1200,7 @@ fn(I32) tests/shared:IcCircle	16 8	{ ptr, ptr }	-	ret %"tests/shared:IcCircle" p
 fn(I32) tests/shared:IcSquare	16 8	{ ptr, ptr }	-	ret %"tests/shared:IcSquare" pass v
 fn(I32) tests/shared:IfmP	16 8	{ ptr, ptr }	-	ret %"tests/shared:IfmP" pass v
 fn(I32) tests/shared:IfmQ	16 8	{ ptr, ptr }	-	ret %"tests/shared:IfmQ" pass v
+fn(I32) tests/shared:K2cHandle	16 8	{ ptr, ptr }	-	ret %"tests/shared:K2cHandle" pass v
 fn(I32) tests/shared:KtCell	16 8	{ ptr, ptr }	-	ret %"tests/shared:KtCell" pass v
 fn(I32) tests/shared:KtDropped	16 8	{ ptr, ptr }	-	ret %"tests/shared:KtDropped" pass v
 fn(I32) tests/shared:LamPoint	16 8	{ ptr, ptr }	-	ret %"tests/shared:LamPoint" pass v
@@ -2421,6 +2422,7 @@ fn(tests/shared:IxGrid&, I64) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
 fn(tests/shared:IxOwn&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(tests/shared:IxOwn&) std/prelude/iterator:IndexIter<I32, tests/shared:IxOwn>	16 8	{ ptr, ptr }	-	ret %"std/prelude/iterator:IndexIter<I32, tests/shared:IxOwn>" pass v
 fn(tests/shared:IxOwn&, I64) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
+fn(tests/shared:K2cHandle)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(tests/shared:KBag<3>&) Array<I32, 3>	16 8	{ ptr, ptr }	-	ret [3 x i32] pass v
 fn(tests/shared:KBag<3>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(tests/shared:KGrid<0, false>&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
@@ -3819,6 +3821,8 @@ tests/shared:IxGrid	24 8	%"tests/shared:IxGrid"	{ i64, { i64, ptr } }	fields 0,8
 tests/shared:IxGrid&	8 8	ptr	-	-
 tests/shared:IxOwn	4 4	%"tests/shared:IxOwn"	{ i32 }	fields 0
 tests/shared:IxOwn&	8 8	ptr	-	-
+tests/shared:K2cHandle	4 4	%"tests/shared:K2cHandle"	{ i32 }	fields 0
+tests/shared:K2cHandle&	8 8	ptr	-	-
 tests/shared:KBag<3>	12 4	%"tests/shared:KBag<3>"	{ [3 x i32] }	fields 0
 tests/shared:KBag<3>&	8 8	ptr	-	-
 tests/shared:KBlock	128 8	%"tests/shared:KBlock"	{ [8 x i64], [64 x i8] }	fields 0,64
@@ -5063,7 +5067,7 @@ compiler/cond:Eval&	8 8	ptr	-	-
 compiler/cond:Global	64 8	%"compiler/cond:Global"	{ { i64, ptr }, %"compiler/source:Span", i1, { i64, ptr }, ptr, i1 }	fields 0,16,24,32,48,56
 compiler/cond:Global&	8 8	ptr	-	-
 compiler/cond:Outcome	4 4	i32	-	-
-compiler/cond:Scope	24 8	%"compiler/cond:Scope"	{ i1, %"std/prelude/list:List<compiler/cond:Global&>", %"std/prelude/list:List<compiler/source:NameId>" }	fields 0,8,16
+compiler/cond:Scope	32 8	%"compiler/cond:Scope"	{ i1, %"std/prelude/list:List<compiler/cond:Global&>", %"std/prelude/list:List<compiler/source:NameId>", %"std/prelude/list:List<compiler/source:NameId>" }	fields 0,8,16,24
 compiler/cond:Scope&	8 8	ptr	-	-
 compiler/cond:Value	48 8	%"compiler/cond:Value"	{ i32, i64, double, i64, i64, i1 }	fields 0,8,16,24,32,40
 compiler/cond:ValueKind	4 4	i32	-	-
@@ -5642,6 +5646,7 @@ Array<mut std/prelude/map:mapSlot<compiler/types:TypeId, compiler/types:body>&>	
 Array<mut std/prelude/map:mapSlot<compiler/types:data, compiler/types:TypeId>&>	16 8	{ i64, ptr }	-	-
 Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>&>	16 8	{ i64, ptr }	-	-
 Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>&>	16 8	{ i64, ptr }	-	-
+Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&>	16 8	{ i64, ptr }	-	-
 Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&>	16 8	{ i64, ptr }	-	-
 Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/source:NameId>&>	16 8	{ i64, ptr }	-	-
 Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/types:ListId>&>	16 8	{ i64, ptr }	-	-
@@ -5665,13 +5670,14 @@ Array<std/prelude/text:String&, 11>	176 8	[11 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 14>	224 8	[14 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 15>	240 8	[15 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 8>	128 8	[8 x { i64, ptr }]	-	-
-compiler/check:Ask	32 8	%"compiler/check:Ask"	{ i64, i64, i32, ptr }	fields 0,8,16,24
-compiler/check:AssertAsk	48 8	%"compiler/check:AssertAsk"	{ i64, i64, %"compiler/source:Span", %"compiler/source:Span", i64, i64 }	fields 0,8,16,24,32,40
-compiler/check:Checker	432 8	%"compiler/check:Checker"	{ ptr, i1, i1, %"std/prelude/list:List<compiler/typed:Place&>", %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<compiler/check:Gap>", %"std/prelude/list:List<mut compiler/check:frame&>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<I64, I64>", i32, %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:TypeId>", %"std/prelude/list:List<compiler/typed:Expr&>", %"std/prelude/list:List<compiler/typed:Stmt&>", %"std/prelude/list:List<compiler/check:atRec>", i32, i1, i1, %"compiler/source:Span", %"compiler/source:Span", %"compiler/source:Span", { i64, ptr }, i32, i32, %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<I64, compiler/types:ListId>", %"std/prelude/list:List<std/pair:Pair<I64, I64>>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>", i64, %"std/prelude/map:Map<compiler/types:TypeId, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/list:List<std/pair:Pair<std/pair:Pair<I64, I64>, std/pair:Pair<I64, I64>>>", %"std/prelude/list:List<compiler/check:roArg>", %"std/prelude/list:List<compiler/check:roFn>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, std/prelude/list:List<compiler/typed:Expr&>>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/list:List<std/pair:Pair<I64, compiler/typed:Expr&>>", %"std/prelude/list:List<std/pair:Pair<I64, compiler/typed:Expr&>>", %"std/prelude/list:List<compiler/check:roDeepArg>", %"std/prelude/list:List<compiler/check:roArg>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/map:Map<I64, Bool>", i64, %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/list:List<compiler/check:Ask>", %"std/prelude/list:List<compiler/check:AssertAsk>", %"std/prelude/map:Map<I64, Bool>" }	fields 0,8,9,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,148,149,152,160,168,176,192,196,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424
+compiler/check:Ask	56 8	%"compiler/check:Ask"	{ i64, i64, i32, ptr, i64, { i64, ptr } }	fields 0,8,16,24,32,40
+compiler/check:AssertAsk	64 8	%"compiler/check:AssertAsk"	{ i64, i64, %"compiler/source:Span", %"compiler/source:Span", i64, i64, { i64, ptr } }	fields 0,8,16,24,32,40,48
+compiler/check:Checker	456 8	%"compiler/check:Checker"	{ ptr, i1, i1, %"std/prelude/list:List<compiler/typed:Place&>", %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<compiler/check:Gap>", %"std/prelude/list:List<mut compiler/check:frame&>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<I64, I64>", i32, %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:TypeId>", %"std/prelude/list:List<compiler/typed:Expr&>", %"std/prelude/list:List<compiler/typed:Stmt&>", %"std/prelude/list:List<compiler/check:atRec>", i32, i1, i1, %"compiler/source:Span", %"compiler/source:Span", %"compiler/source:Span", { i64, ptr }, i32, i32, %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<I64, compiler/types:ListId>", %"std/prelude/list:List<std/pair:Pair<I64, I64>>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>", i64, %"std/prelude/map:Map<compiler/types:TypeId, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/list:List<std/pair:Pair<std/pair:Pair<I64, I64>, std/pair:Pair<I64, I64>>>", %"std/prelude/list:List<compiler/check:roArg>", %"std/prelude/list:List<compiler/check:roFn>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, std/prelude/list:List<compiler/typed:Expr&>>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/list:List<std/pair:Pair<I64, compiler/typed:Expr&>>", %"std/prelude/list:List<std/pair:Pair<I64, compiler/typed:Expr&>>", %"std/prelude/list:List<compiler/check:roDeepArg>", %"std/prelude/list:List<compiler/check:roArg>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/map:Map<I64, Bool>", i64, %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/list:List<compiler/check:Ask>", %"std/prelude/list:List<compiler/check:AssertAsk>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", %"std/prelude/list:List<I64>" }	fields 0,8,9,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,148,149,152,160,168,176,192,196,200,208,216,224,232,240,248,256,264,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448
 compiler/check:Checker&	8 8	ptr	-	-
 compiler/check:Gap	32 8	%"compiler/check:Gap"	{ i64, %"compiler/source:Span", { i64, ptr } }	fields 0,8,16
 compiler/check:atRec	32 8	%"compiler/check:atRec"	{ i64, i64, ptr, i32 }	fields 0,8,16,24
-compiler/check:frame	280 8	%"compiler/check:frame"	{ i64, i64, i64, %"compiler/generic:Context", i32, i32, i64, %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/list:List<std/pair:Pair<compiler/source:NameId, I64>>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i1, i64, i64, i64, i64, i64, i1, i64, i1, i1, i1, %"std/prelude/list:List<compiler/types:TypeId>", %"std/prelude/list:List<compiler/types:TypeId>", %"std/prelude/list:List<compiler/typed:Capture&>", i64, i1, i64, i64, i64, i64, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/types:TypeId>", i64, i64 }	fields 0,8,16,24,48,52,56,64,72,80,88,96,97,104,112,120,128,136,144,152,160,161,162,168,176,184,192,200,208,216,224,232,240,248,256,264,272
+compiler/check:fixedInit	16 8	%"compiler/check:fixedInit"	{ ptr, i32 }	fields 0,8
+compiler/check:frame	296 8	%"compiler/check:frame"	{ i64, i64, i64, %"compiler/generic:Context", i32, i32, i64, %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/list:List<std/pair:Pair<compiler/source:NameId, I64>>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i1, i64, i64, i64, i64, i64, i1, i64, i1, i1, i1, %"std/prelude/list:List<compiler/types:TypeId>", %"std/prelude/list:List<compiler/types:TypeId>", %"std/prelude/list:List<compiler/typed:Capture&>", i64, i1, i64, i64, i64, i64, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/types:TypeId>", i64, i64, %"std/prelude/map:Map<compiler/source:NameId, I64>", i64 }	fields 0,8,16,24,48,52,56,64,72,80,88,96,97,104,112,120,128,136,144,152,160,161,162,168,176,184,192,200,208,216,224,232,240,248,256,264,272,280,288
 compiler/check:frame&	8 8	ptr	-	-
 compiler/check:litv	32 8	%"compiler/check:litv"	{ i1, i1, i1, i64, double, i1 }	fields 0,1,2,8,16,24
 compiler/check:opShape	32 8	%"compiler/check:opShape"	{ { i64, ptr }, i64, i1, i1 }	fields 0,16,24,25
@@ -5708,7 +5714,7 @@ compiler/load:Module&	8 8	ptr	-	-
 compiler/load:unresolved	4 4	i32	-	-
 compiler/names:Entry	32 8	%"compiler/names:Entry"	{ i32, %"compiler/source:Span", i32, i1, ptr }	fields 0,4,12,16,24
 compiler/names:Ref	24 8	%"compiler/names:Ref"	{ i32, i64, i64 }	fields 0,8,16
-compiler/names:Resolver	112 8	%"compiler/names:Resolver"	{ ptr, %"std/prelude/list:List<mut compiler/names:Table&>", %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/map:Map<compiler/source:NameId, compiler/names:Ref>", %"std/prelude/map:Map<I64, compiler/names:Ref>", %"std/prelude/map:Map<I64, compiler/names:Ref>", i64, %"std/prelude/list:List<compiler/names:local>", %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/list:List<std/pair:Pair<compiler/source:NameId, I64>>", %"std/prelude/list:List<compiler/source:NameId>", i1, i64, %"std/prelude/list:List<std/pair:Pair<compiler/source:NameId, I64>>" }	fields 0,8,16,24,32,40,48,56,64,72,80,88,96,104
+compiler/names:Resolver	120 8	%"compiler/names:Resolver"	{ ptr, %"std/prelude/list:List<mut compiler/names:Table&>", %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/map:Map<compiler/source:NameId, compiler/names:Ref>", %"std/prelude/map:Map<I64, compiler/names:Ref>", %"std/prelude/map:Map<I64, compiler/names:Ref>", i64, %"std/prelude/list:List<compiler/names:local>", %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/list:List<std/pair:Pair<compiler/source:NameId, I64>>", %"std/prelude/list:List<compiler/source:NameId>", %"std/prelude/list:List<compiler/source:NameId>", i1, i64, %"std/prelude/list:List<std/pair:Pair<compiler/source:NameId, I64>>" }	fields 0,8,16,24,32,40,48,56,64,72,80,88,96,104,112
 compiler/names:Resolver&	8 8	ptr	-	-
 compiler/names:Table	40 8	%"compiler/names:Table"	{ %"std/prelude/list:List<compiler/names:Entry>", %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/map:Map<compiler/source:NameId, I64>", %"std/prelude/map:Map<compiler/source:NameId, Bool>" }	fields 0,8,16,24,32
 compiler/names:What	4 4	i32	-	-
@@ -5971,6 +5977,7 @@ fn() std/prelude/map:Map<compiler/types:TypeId, compiler/types:body>	16 8	{ ptr,
 fn() std/prelude/map:Map<compiler/types:data, compiler/types:TypeId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<compiler/types:data, compiler/types:TypeId>" pass 
 fn() std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>" pass 
 fn() std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>" pass 
+fn() std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>" pass 
 fn() std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>" pass 
 fn() std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>" pass 
 fn() std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>" pass 
@@ -6001,6 +6008,7 @@ fn() std/prelude/map:mapState<compiler/types:TypeId, compiler/types:body>	16 8	{
 fn() std/prelude/map:mapState<compiler/types:data, compiler/types:TypeId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<compiler/types:data, compiler/types:TypeId>" pass 
 fn() std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>" pass 
 fn() std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>" pass 
+fn() std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>" pass 
 fn() std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>" pass 
 fn() std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/source:NameId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/source:NameId>" pass 
 fn() std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/types:ListId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/types:ListId>" pass 
@@ -6041,13 +6049,13 @@ fn(I64, Bool, mut std/prelude/map:mapSlot<I64, Bool>&) std/prelude/map:mapSlot<I
 fn(I64, I32) std/pair:Pair<I64, I32>	16 8	{ ptr, ptr }	-	ret %"std/pair:Pair<I64, I32>" pass vv
 fn(I64, I64) compiler/generic:Binding	16 8	{ ptr, ptr }	-	ret %"compiler/generic:Binding" pass vv
 fn(I64, I64) compiler/generic:Context	16 8	{ ptr, ptr }	-	ret %"compiler/generic:Context" pass vv
-fn(I64, I64, I32, compiler/ast:If&) compiler/check:Ask	16 8	{ ptr, ptr }	-	ret %"compiler/check:Ask" pass vvvv
+fn(I64, I64, I32, compiler/ast:If&, I64, Array<I64>&) compiler/check:Ask	16 8	{ ptr, ptr }	-	ret %"compiler/check:Ask" pass vvvvvv
 fn(I64, I64, I64) compiler/typed:Plan	16 8	{ ptr, ptr }	-	ret %"compiler/typed:Plan" pass vvv
 fn(I64, I64, I64, I64, I64, I64, I64) compiler/parse:stackMarks	16 8	{ ptr, ptr }	-	ret %"compiler/parse:stackMarks" pass vvvvvvv
 fn(I64, I64, I64, compiler/types:TypeId, compiler/types:ListId) compiler/check:frame	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(I64, I64, compiler/diag:Where, std/prelude/text:String&) compiler/check:roFn	16 8	{ ptr, ptr }	-	ret %"compiler/check:roFn" pass vvvv
 fn(I64, I64, compiler/diag:Where, std/prelude/text:String&, std/prelude/text:String&, std/prelude/text:String&) compiler/check:roArg	16 8	{ ptr, ptr }	-	ret %"compiler/check:roArg" pass vvvvvv
-fn(I64, I64, compiler/source:Span, compiler/source:Span, I64, I64) compiler/check:AssertAsk	16 8	{ ptr, ptr }	-	ret %"compiler/check:AssertAsk" pass vvvvvv
+fn(I64, I64, compiler/source:Span, compiler/source:Span, I64, I64, Array<I64>&) compiler/check:AssertAsk	16 8	{ ptr, ptr }	-	ret %"compiler/check:AssertAsk" pass vvvvvvv
 fn(I64, I64, compiler/typed:Place&, compiler/types:TypeId) compiler/check:atRec	16 8	{ ptr, ptr }	-	ret %"compiler/check:atRec" pass vvvv
 fn(I64, I64, compiler/types:TypeId) compiler/generic:folded	16 8	{ ptr, ptr }	-	ret %"compiler/generic:folded" pass vvv
 fn(I64, compiler/ast:Expr&, compiler/types:TypeId, I64, Array<compiler/source:NameId>&, Array<compiler/types:TypeId>&, std/prelude/text:String&) compiler/generic:ConstAsk	16 8	{ ptr, ptr }	-	ret %"compiler/generic:ConstAsk" pass vvvvvvv
@@ -6078,6 +6086,7 @@ fn(compiler/ast:Expr&) mut std/prelude/text:String&	16 8	{ ptr, ptr }	-	ret { i6
 fn(compiler/ast:Expr&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(compiler/ast:Expr&, I64, I64, compiler/types:TypeId) compiler/generic:pattern	16 8	{ ptr, ptr }	-	ret %"compiler/generic:pattern" pass vvvv
 fn(compiler/ast:Expr&, compiler/source:Names&, std/prelude/text:String&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(compiler/ast:Expr&, compiler/types:TypeId) compiler/check:fixedInit	16 8	{ ptr, ptr }	-	ret %"compiler/check:fixedInit" pass vv
 fn(compiler/ast:Pattern&) Array<compiler/ast:Pattern&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(compiler/ast:Pattern&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/ast:Stmt&, compiler/source:Names&, std/prelude/text:String&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
@@ -6087,6 +6096,7 @@ fn(compiler/ast:TopIf&, compiler/source:NameId) Array<compiler/source:NameId>&	1
 fn(compiler/ast:TypeRef&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/ast:VarDecl&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/check:Checker&, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(compiler/check:Checker&, I64, Array<I64>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(compiler/check:litv) (Bool, U64)	16 8	{ ptr, ptr }	-	ret { i1, i64 } pass v
 fn(compiler/check:litv) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/generic:Origin, I64) std/pair:Pair<compiler/generic:Origin, I64>	16 8	{ ptr, ptr }	-	ret %"std/pair:Pair<compiler/generic:Origin, I64>" pass vv
@@ -6252,6 +6262,7 @@ fn(mut compiler/check:Checker&, Array<compiler/ast:Catch&>&, I64, I64)	16 8	{ pt
 fn(mut compiler/check:Checker&, Array<compiler/ast:Catch&>&, std/prelude/list:List<compiler/typed:Clause&>&, Bool, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
 fn(mut compiler/check:Checker&, Array<compiler/ast:Expr&>&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut compiler/check:Checker&, Array<compiler/ast:Expr&>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/check:Checker&, Array<compiler/ast:Expr&>&, mut std/prelude/map:Map<compiler/source:NameId, I64>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(mut compiler/check:Checker&, Array<compiler/ast:Stmt&>&) compiler/typed:Block&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(mut compiler/check:Checker&, Array<compiler/ast:Stmt&>&, compiler/typed:BlockKind, compiler/source:Span) compiler/typed:Block&	16 8	{ ptr, ptr }	-	ret ptr pass vvvv
 fn(mut compiler/check:Checker&, Array<compiler/types:TypeId>&, I64, compiler/generic:Binding&) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
@@ -6296,6 +6307,7 @@ fn(mut compiler/check:Checker&, I64, compiler/typed:Place&, mut std/prelude/list
 fn(mut compiler/check:Checker&, I64, compiler/types:ListId, compiler/source:Span) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
 fn(mut compiler/check:Checker&, I64, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/check:Checker&, I64, compiler/types:TypeId) Array<compiler/types:TypeId>	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(mut compiler/check:Checker&, I64, compiler/types:TypeId, I64) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
 fn(mut compiler/check:Checker&, I64, compiler/types:TypeId, compiler/types:ListId)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut compiler/check:Checker&, I64, compiler/types:TypeId, std/prelude/text:String&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/check:Checker&, I64, mut compiler/generic:Binding&, Array<compiler/types:TypeId>&, I64, Array<compiler/ast:Expr&>&)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
@@ -6321,10 +6333,12 @@ fn(mut compiler/check:Checker&, compiler/ast:Expr&, compiler/typed:Place&, compi
 fn(mut compiler/check:Checker&, compiler/ast:Expr&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(mut compiler/check:Checker&, compiler/ast:Expr&, compiler/types:TypeId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
 fn(mut compiler/check:Checker&, compiler/ast:Expr&, compiler/types:TypeId) compiler/typed:Expr&	16 8	{ ptr, ptr }	-	ret ptr pass vvv
+fn(mut compiler/check:Checker&, compiler/ast:Expr&, mut std/prelude/map:Map<compiler/source:NameId, I64>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(mut compiler/check:Checker&, compiler/ast:ForIn&, compiler/ast:Compr&, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut compiler/check:Checker&, compiler/ast:Func&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
 fn(mut compiler/check:Checker&, compiler/ast:Func&, compiler/source:NameId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(mut compiler/check:Checker&, compiler/ast:Func&, compiler/source:NameId) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvv
+fn(mut compiler/check:Checker&, compiler/ast:If&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut compiler/check:Checker&, compiler/ast:Match&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(mut compiler/check:Checker&, compiler/ast:Param&, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/check:Checker&, compiler/ast:Path&) (I64, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret { i64, i32 } pass vv
@@ -6907,7 +6921,13 @@ fn(mut std/prelude/list:List<compiler/ast:TypeRef&>&)	16 8	{ ptr, ptr }	-	ret vo
 fn(mut std/prelude/list:List<compiler/ast:TypeRef&>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/ast:TypeRef&>&, I64) Array<compiler/ast:TypeRef&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(mut std/prelude/list:List<compiler/ast:TypeRef&>&, compiler/ast:TypeRef&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/check:Ask>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:List<compiler/check:Ask>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/check:Ask>&, I64, compiler/check:Ask)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/list:List<compiler/check:Ask>&, compiler/check:Ask)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/check:AssertAsk>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:List<compiler/check:AssertAsk>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/check:AssertAsk>&, I64, compiler/check:AssertAsk)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/list:List<compiler/check:AssertAsk>&, compiler/check:AssertAsk)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/check:Gap>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/list:List<compiler/check:Gap>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
@@ -7082,6 +7102,7 @@ fn(mut std/prelude/map:Map<compiler/types:TypeId, compiler/types:body>&, compile
 fn(mut std/prelude/map:Map<compiler/types:data, compiler/types:TypeId>&, compiler/types:data, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>&, std/pair:Pair<I64, I64>, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>&, std/pair:Pair<I64, I64>, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&, std/pair:Pair<I64, I64>, compiler/check:fixedInit)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&, std/pair:Pair<I64, I64>, compiler/check:roOrigin)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>&, std/pair:Pair<I64, I64>, compiler/source:NameId)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>&, std/pair:Pair<I64, I64>, compiler/types:ListId)	16 8	{ ptr, ptr }	-	ret void pass vvv
@@ -7140,6 +7161,8 @@ fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>&)	16 8	{ ptr, ptr
 fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>&, I64, std/pair:Pair<I64, I64>, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>&, I64, std/pair:Pair<I64, I64>, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&, I64, std/pair:Pair<I64, I64>, compiler/check:fixedInit)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&, I64, std/pair:Pair<I64, I64>, compiler/check:roOrigin)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/source:NameId>&)	16 8	{ ptr, ptr }	-	ret void pass v
@@ -7160,6 +7183,8 @@ fn(std/pair:Pair<I64, I64>, Bool) std/prelude/map:MapEntry<std/pair:Pair<I64, I6
 fn(std/pair:Pair<I64, I64>, Bool, mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>&) std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>" pass vvv
 fn(std/pair:Pair<I64, I64>, I64) std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, I64>" pass vv
 fn(std/pair:Pair<I64, I64>, I64, mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>&) std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>" pass vvv
+fn(std/pair:Pair<I64, I64>, compiler/check:fixedInit) std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:fixedInit>" pass vv
+fn(std/pair:Pair<I64, I64>, compiler/check:fixedInit, mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&) std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>" pass vvv
 fn(std/pair:Pair<I64, I64>, compiler/check:roOrigin) std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:roOrigin>" pass vv
 fn(std/pair:Pair<I64, I64>, compiler/check:roOrigin, mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&) std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>" pass vvv
 fn(std/pair:Pair<I64, I64>, compiler/source:NameId) std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/source:NameId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/source:NameId>" pass vv
@@ -7206,6 +7231,10 @@ fn(std/prelude/list:List<compiler/ast:Stmt&>&, I64) compiler/ast:Stmt&	16 8	{ pt
 fn(std/prelude/list:List<compiler/ast:TypeParam&>&) mut Array<compiler/ast:TypeParam&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(std/prelude/list:List<compiler/ast:TypeRef&>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<compiler/ast:TypeRef&>&, I64) compiler/ast:TypeRef&	16 8	{ ptr, ptr }	-	ret ptr pass vv
+fn(std/prelude/list:List<compiler/check:Ask>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<compiler/check:Ask>&, I64) compiler/check:Ask	16 8	{ ptr, ptr }	-	ret %"compiler/check:Ask" pass vv
+fn(std/prelude/list:List<compiler/check:AssertAsk>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<compiler/check:AssertAsk>&, I64) compiler/check:AssertAsk	16 8	{ ptr, ptr }	-	ret %"compiler/check:AssertAsk" pass vv
 fn(std/prelude/list:List<compiler/check:Gap>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<compiler/check:Gap>&, I64) Array<compiler/check:Gap>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
 fn(std/prelude/list:List<compiler/check:atRec>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
@@ -7418,6 +7447,7 @@ fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>&, std/pair:Pair<I64, I64>)
 fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>&, std/pair:Pair<I64, I64>) Bool ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, i1 } pass vv
 fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>&, std/pair:Pair<I64, I64>) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>&, std/pair:Pair<I64, I64>) I64 ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vv
+fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&, std/pair:Pair<I64, I64>) compiler/check:fixedInit ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, %"compiler/check:fixedInit" } pass vv
 fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&, std/pair:Pair<I64, I64>) compiler/check:roOrigin ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, %"compiler/check:roOrigin" } pass vv
 fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>&, std/pair:Pair<I64, I64>) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>&, std/pair:Pair<I64, I64>) compiler/source:NameId ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
@@ -7450,6 +7480,7 @@ fn(std/prelude/map:mapState<compiler/types:TypeId, compiler/types:body>&, compil
 fn(std/prelude/map:mapState<compiler/types:data, compiler/types:TypeId>&, compiler/types:data) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>&, std/pair:Pair<I64, I64>) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>&, std/pair:Pair<I64, I64>) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&, std/pair:Pair<I64, I64>) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&, std/pair:Pair<I64, I64>) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/source:NameId>&, std/pair:Pair<I64, I64>) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/types:ListId>&, std/pair:Pair<I64, I64>) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
@@ -7624,6 +7655,7 @@ mut Array<mut std/prelude/map:mapSlot<compiler/types:TypeId, compiler/types:body
 mut Array<mut std/prelude/map:mapSlot<compiler/types:data, compiler/types:TypeId>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/source:NameId>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/types:ListId>&>&	16 8	{ i64, ptr }	-	-
@@ -7807,6 +7839,7 @@ mut std/prelude/map:Map<compiler/types:TypeId, compiler/types:body>&	8 8	ptr	-	-
 mut std/prelude/map:Map<compiler/types:data, compiler/types:TypeId>&	8 8	ptr	-	-
 mut std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>&	8 8	ptr	-	-
 mut std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>&	8 8	ptr	-	-
+mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&	8 8	ptr	-	-
 mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&	8 8	ptr	-	-
 mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>&	8 8	ptr	-	-
 mut std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/types:ListId>&	8 8	ptr	-	-
@@ -7840,6 +7873,7 @@ mut std/prelude/map:mapSlot<compiler/types:TypeId, compiler/types:body>&	8 8	ptr
 mut std/prelude/map:mapSlot<compiler/types:data, compiler/types:TypeId>&	8 8	ptr	-	-
 mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>&	8 8	ptr	-	-
 mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>&	8 8	ptr	-	-
+mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&	8 8	ptr	-	-
 mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&	8 8	ptr	-	-
 mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/source:NameId>&	8 8	ptr	-	-
 mut std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/types:ListId>&	8 8	ptr	-	-
@@ -7870,6 +7904,7 @@ mut std/prelude/map:mapState<compiler/types:TypeId, compiler/types:body>&	8 8	pt
 mut std/prelude/map:mapState<compiler/types:data, compiler/types:TypeId>&	8 8	ptr	-	-
 mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>&	8 8	ptr	-	-
 mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>&	8 8	ptr	-	-
+mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&	8 8	ptr	-	-
 mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&	8 8	ptr	-	-
 mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/source:NameId>&	8 8	ptr	-	-
 mut std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/types:ListId>&	8 8	ptr	-	-
@@ -7918,7 +7953,9 @@ std/prelude/list:List<compiler/ast:TypeParam&>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/ast:TypeRef&>	8 8	%"std/prelude/list:List<compiler/ast:TypeRef&>"	{ ptr }	fields 0
 std/prelude/list:List<compiler/ast:TypeRef&>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/check:Ask>	8 8	%"std/prelude/list:List<compiler/check:Ask>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/check:Ask>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/check:AssertAsk>	8 8	%"std/prelude/list:List<compiler/check:AssertAsk>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/check:AssertAsk>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/check:Gap>	8 8	%"std/prelude/list:List<compiler/check:Gap>"	{ ptr }	fields 0
 std/prelude/list:List<compiler/check:Gap>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/check:atRec>	8 8	%"std/prelude/list:List<compiler/check:atRec>"	{ ptr }	fields 0
@@ -8184,6 +8221,8 @@ std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>	8 8	%"std/prelude/map:Map<std
 std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>&	8 8	ptr	-	-
 std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>	8 8	%"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>"	{ ptr }	fields 0
 std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>&	8 8	ptr	-	-
+std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	8 8	%"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>"	{ ptr }	fields 0
+std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&	8 8	ptr	-	-
 std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	8 8	%"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>"	{ ptr }	fields 0
 std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&	8 8	ptr	-	-
 std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>	8 8	%"std/prelude/map:Map<std/pair:Pair<I64, I64>, compiler/source:NameId>"	{ ptr }	fields 0
@@ -8222,6 +8261,7 @@ std/prelude/map:MapEntry<compiler/types:TypeId, compiler/types:body>	20 4	%"std/
 std/prelude/map:MapEntry<compiler/types:data, compiler/types:TypeId>	56 8	%"std/prelude/map:MapEntry<compiler/types:data, compiler/types:TypeId>"	{ %"compiler/types:data", i32 }	fields 0,48
 std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, Bool>	24 8	%"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, Bool>"	{ %"std/pair:Pair<I64, I64>", i1 }	fields 0,16
 std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, I64>	24 8	%"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, I64>"	{ %"std/pair:Pair<I64, I64>", i64 }	fields 0,16
+std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	32 8	%"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:fixedInit>"	{ %"std/pair:Pair<I64, I64>", %"compiler/check:fixedInit" }	fields 0,16
 std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	32 8	%"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:roOrigin>"	{ %"std/pair:Pair<I64, I64>", %"compiler/check:roOrigin" }	fields 0,16
 std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/source:NameId>	24 8	%"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/source:NameId>"	{ %"std/pair:Pair<I64, I64>", i32 }	fields 0,16
 std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/types:ListId>	24 8	%"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/types:ListId>"	{ %"std/pair:Pair<I64, I64>", i32 }	fields 0,16
@@ -8266,6 +8306,7 @@ std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>	32 8	%"std/prelude/map:ma
 std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, Bool>&	8 8	ptr	-	-
 std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>	32 8	%"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>"	{ %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, I64>", ptr }	fields 0,24
 std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, I64>&	8 8	ptr	-	-
+std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	40 8	%"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:fixedInit>"	{ %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:fixedInit>", ptr }	fields 0,32
 std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	40 8	%"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/check:roOrigin>"	{ %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/check:roOrigin>", ptr }	fields 0,32
 std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/source:NameId>	32 8	%"std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/source:NameId>"	{ %"std/prelude/map:MapEntry<std/pair:Pair<I64, I64>, compiler/source:NameId>", ptr }	fields 0,24
 std/prelude/map:mapSlot<std/pair:Pair<I64, I64>, compiler/source:NameId>&	8 8	ptr	-	-
@@ -8321,6 +8362,8 @@ std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>	32 8	%"std/prelude/map:m
 std/prelude/map:mapState<std/pair:Pair<I64, I64>, Bool>&	8 8	ptr	-	-
 std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>	32 8	%"std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
 std/prelude/map:mapState<std/pair:Pair<I64, I64>, I64>&	8 8	ptr	-	-
+std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>	32 8	%"std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
+std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:fixedInit>&	8 8	ptr	-	-
 std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>	32 8	%"std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
 std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/check:roOrigin>&	8 8	ptr	-	-
 std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/source:NameId>	32 8	%"std/prelude/map:mapState<std/pair:Pair<I64, I64>, compiler/source:NameId>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
@@ -8525,7 +8568,7 @@ compiler/eval:NotBaked	4 4	i32	-	-
 compiler/eval:Ptr	16 8	%"compiler/eval:Ptr"	{ i64, i64 }	fields 0,8
 compiler/eval:Stop	48 8	{ i64, [5 x i64] }	-	cases ;0;0,8,16,24;0,16,24
 compiler/eval:alloc	96 8	%"compiler/eval:alloc"	{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i1, i64, i1 }	fields 0,8,16,24,32,40,48,56,64,72,80,88
-compiler/eval:cfn	200 8	%"compiler/eval:cfn"	{ i64, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr } }	fields 0,8,24,40,56,72,88,104,120,136,152,168,184
+compiler/eval:cfn	256 8	%"compiler/eval:cfn"	{ i64, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr }, i64, { i64, ptr } }	fields 0,8,24,40,56,72,88,104,120,136,152,168,184,200,216,232,240
 compiler/eval:dkey	32 8	%"compiler/eval:dkey"	{ i64, i32, i32, i32, i32, i64 }	fields 0,8,12,16,20,24
 compiler/eval:frame	120 8	%"compiler/eval:frame"	{ i64, i64, i64, i64, i64, i64, i64, i64, i64, i64, i1, i1, i1, i64, i64, i64, i32 }	fields 0,8,16,24,32,40,48,56,64,72,80,81,82,88,96,104,112
 compiler/eval:gkey	16 8	%"compiler/eval:gkey"	{ i64, i32 }	fields 0,8
@@ -8687,6 +8730,7 @@ fn(compiler/emit:Emitter&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/emit:Emitter&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(compiler/eval:Machine&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(compiler/eval:Machine&, I64) (I64, I64, I64)	16 8	{ ptr, ptr }	-	ret { i64, i64, i64 } pass vv
+fn(compiler/eval:Machine&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(compiler/eval:Stop, compiler/source:Source&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(compiler/eval:dkey, I64) std/prelude/map:MapEntry<compiler/eval:dkey, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<compiler/eval:dkey, I64>" pass vv
 fn(compiler/eval:dkey, I64, mut std/prelude/map:mapSlot<compiler/eval:dkey, I64>&) std/prelude/map:mapSlot<compiler/eval:dkey, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<compiler/eval:dkey, I64>" pass vvv
@@ -8716,6 +8760,7 @@ fn(compiler/mir:LocalId) compiler/mir:Place	16 8	{ ptr, ptr }	-	ret %"compiler/m
 fn(compiler/mir:LocalId, compiler/mir:LocalId, compiler/types:TypeId, compiler/types:TypeId) compiler/lower:collectCtx	16 8	{ ptr, ptr }	-	ret %"compiler/lower:collectCtx" pass vvvv
 fn(compiler/mir:Operand) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/mir:Place) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
+fn(compiler/mir:Place) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(compiler/mir:Place, compiler/mir:LocalId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(compiler/mir:Range, Bool, compiler/mir:Operand) compiler/mir:TaskClause	16 8	{ ptr, ptr }	-	ret %"compiler/mir:TaskClause" pass vvv
 fn(compiler/mir:ScopeId, compiler/typed:BlockId, compiler/mir:ScopeKind) compiler/lower:level	16 8	{ ptr, ptr }	-	ret %"compiler/lower:level" pass vvv
@@ -8725,6 +8770,7 @@ fn(compiler/mir:Term) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/so
 fn(compiler/source:NameId, compiler/source:Span, compiler/types:TypeId, compiler/mir:LocalKind, compiler/mir:ScopeRef) compiler/mir:Local	16 8	{ ptr, ptr }	-	ret %"compiler/mir:Local" pass vvvvv
 fn(compiler/typed:BlockId, I64) compiler/lower:loopCtx	16 8	{ ptr, ptr }	-	ret %"compiler/lower:loopCtx" pass vv
 fn(compiler/typed:Expr&) Array<compiler/typed:Expr&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
+fn(compiler/typed:PrimOp) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/typed:PrimOp, BF16, BF16) BF16	16 8	{ ptr, ptr }	-	ret bfloat pass vvv
 fn(compiler/typed:PrimOp, BF16, BF16) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(compiler/typed:PrimOp, F16, F16) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
@@ -8883,6 +8929,7 @@ fn(mut compiler/eval:Machine&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(mut compiler/eval:Machine&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(mut compiler/eval:Machine&, I64) compiler/eval:alloc	16 8	{ ptr, ptr }	-	ret %"compiler/eval:alloc" pass vv
 fn(mut compiler/eval:Machine&, I64) compiler/mir:Fn	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/eval:Machine&, I64, Array<I64>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvv
 fn(mut compiler/eval:Machine&, I64, Bool, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
 fn(mut compiler/eval:Machine&, I64, Bool, compiler/mir:Operand, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/eval:Machine&, I64, Bool, compiler/types:TypeId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvv
@@ -8892,6 +8939,8 @@ fn(mut compiler/eval:Machine&, I64, I64) compiler/eval:Ptr	16 8	{ ptr, ptr }	-	r
 fn(mut compiler/eval:Machine&, I64, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut compiler/eval:Machine&, I64, I64, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvv
 fn(mut compiler/eval:Machine&, I64, I64, I64) compiler/eval:Ptr	16 8	{ ptr, ptr }	-	ret %"compiler/eval:Ptr" pass vvvv
+fn(mut compiler/eval:Machine&, I64, I64, I64, Bool) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvvv
+fn(mut compiler/eval:Machine&, I64, I64, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/eval:Machine&, I64, I64, I64, compiler/eval:Ptr)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/eval:Machine&, I64, I64, compiler/mir:Operand, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/eval:Machine&, I64, I64, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvv
@@ -8969,8 +9018,10 @@ fn(mut compiler/eval:Machine&, compiler/mir:Fn&) compiler/eval:cfn	16 8	{ ptr, p
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/eval:Ptr, compiler/types:TypeId, compiler/mir:ConstNode)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/mir:ConstNode) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/mir:LocalId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/mir:Operand, mut compiler/eval:cfn&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvvv
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/mir:Range) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/mir:Rvalue) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/mir:Stmt, mut compiler/eval:cfn&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/mir:Task, I64) (Array<I64>, I64)	16 8	{ ptr, ptr }	-	ret { { i64, ptr }, i64 } pass vvvv
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/eval:Machine&, compiler/mir:Fn&, compiler/types:TypeId, I32, I64, compiler/source:Span) (compiler/eval:Ptr, I64)	16 8	{ ptr, ptr }	-	ret { %"compiler/eval:Ptr", i64 } pass vvvvvv
@@ -8983,6 +9034,7 @@ fn(mut compiler/eval:Machine&, compiler/mir:Place) Bool	16 8	{ ptr, ptr }	-	ret 
 fn(mut compiler/eval:Machine&, compiler/typed:PrimOp, F64, F64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvv
 fn(mut compiler/eval:Machine&, compiler/typed:PrimOp, I64, I64, compiler/types:TypeId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvvv
 fn(mut compiler/eval:Machine&, compiler/typed:PrimOp, I64, I64, compiler/types:TypeId, compiler/types:TypeId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvvvv
+fn(mut compiler/eval:Machine&, compiler/typed:PrimOp, I64, I64, compiler/types:TypeId, compiler/types:TypeId, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvvvvv
 fn(mut compiler/eval:Machine&, compiler/typed:PrimOp, I64, compiler/types:TypeId, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvvv
 fn(mut compiler/eval:Machine&, compiler/types:TypeId)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut compiler/eval:Machine&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
@@ -9586,6 +9638,7 @@ mut Array<compiler/mir:Term>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/mir:VarKind>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/typed:Block&>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/typed:Plan>&	16 8	{ i64, ptr }	-	-
+mut Array<compiler/typed:PrimOp>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<U8>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/emit:Object>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/eval:Blob>&>&	16 8	{ i64, ptr }	-	-
@@ -9630,6 +9683,7 @@ mut Array<mut std/prelude/map:mapSlot<std/prelude/text:String&, std/prelude/text
 mut compiler/emit:Emitter&	8 8	ptr	-	-
 mut compiler/emit:fnEm&	8 8	ptr	-	-
 mut compiler/eval:Machine&	8 8	ptr	-	-
+mut compiler/eval:cfn&	8 8	ptr	-	-
 mut compiler/lower:Lowerer&	8 8	ptr	-	-
 mut compiler/lower:lowering&	8 8	ptr	-	-
 mut compiler/lower:tryCtx&	8 8	ptr	-	-
@@ -9975,12 +10029,26 @@ mut compiler/fmt:formatter&	8 8	ptr	-	-
 mut compiler/fmt:loader&	8 8	ptr	-	-
 mut compiler/unparse:writer&	8 8	ptr	-	-
 == compiler/interp.olang
+(compiler/scope:Term, Bool, Bool)	32 8	{ { i64, [2 x i64] }, i1, i1 }	-	fields 0,24,25
+(compiler/scope:Term, Bool, I64)	40 8	{ { i64, [2 x i64] }, i1, i64 }	-	fields 0,24,32
 (compiler/source:Span, compiler/mir:Place, compiler/mir:Rvalue)	168 8	{ %"compiler/source:Span", %"compiler/mir:Place", { i64, [15 x i64] } }	-	fields 0,8,40
 (compiler/source:Span, compiler/typed:Place&, compiler/typed:Expr&)	24 8	{ %"compiler/source:Span", ptr, ptr }	-	fields 0,8,16
 (std/prelude/text:String, Bool)	24 8	{ { i64, ptr }, i1 }	-	fields 0,16
 Array<compiler/check:Ask>&	16 8	{ i64, ptr }	-	-
 Array<compiler/check:AssertAsk>&	16 8	{ i64, ptr }	-	-
+Array<compiler/generic:Origin>	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:Gap>	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:Term>	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:Term>&	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:Val>	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:Val>&	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:fnUse>	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:fnUse>&	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:rel>	16 8	{ i64, ptr }	-	-
+Array<compiler/scope:rel>&	16 8	{ i64, ptr }	-	-
+Array<compiler/typed:BlockId>	16 8	{ i64, ptr }	-	-
 Array<compiler/typed:Local>&	16 8	{ i64, ptr }	-	-
+Array<compiler/typed:Scope, 1>	16 8	[1 x { i64, [1 x i64] }]	-	-
 Array<compiler/views:fact>	16 8	{ i64, ptr }	-	-
 Array<compiler/views:fact>&	16 8	{ i64, ptr }	-	-
 Array<compiler/views:holding>	16 8	{ i64, ptr }	-	-
@@ -9995,6 +10063,12 @@ Array<compiler/views:tasked>	16 8	{ i64, ptr }	-	-
 Array<compiler/views:tasked>&	16 8	{ i64, ptr }	-	-
 Array<compiler/views:view>	16 8	{ i64, ptr }	-	-
 Array<compiler/views:view>&	16 8	{ i64, ptr }	-	-
+Array<mut Array<compiler/generic:Origin>&>	16 8	{ i64, ptr }	-	-
+Array<mut Array<compiler/scope:Gap>&>	16 8	{ i64, ptr }	-	-
+Array<mut Array<compiler/scope:Term>&>	16 8	{ i64, ptr }	-	-
+Array<mut Array<compiler/scope:fnUse>&>	16 8	{ i64, ptr }	-	-
+Array<mut Array<compiler/scope:rel>&>	16 8	{ i64, ptr }	-	-
+Array<mut Array<compiler/typed:BlockId>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<compiler/views:fact>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<compiler/views:holding>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<compiler/views:naming>&>	16 8	{ i64, ptr }	-	-
@@ -10002,18 +10076,33 @@ Array<mut Array<compiler/views:place>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<compiler/views:state>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<compiler/views:tasked>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<compiler/views:view>&>	16 8	{ i64, ptr }	-	-
+Array<mut Array<mut compiler/scope:summary&>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<mut compiler/views:loopFrame&>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<mut compiler/views:summary&>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<std/prelude/list:List<compiler/source:NameId>>&>	16 8	{ i64, ptr }	-	-
 Array<mut Array<std/prelude/list:List<compiler/views:view>>&>	16 8	{ i64, ptr }	-	-
 Array<mut compiler/load:Module&>&	16 8	{ i64, ptr }	-	-
+Array<mut compiler/scope:summary&>	16 8	{ i64, ptr }	-	-
 Array<mut compiler/views:loopFrame&>	16 8	{ i64, ptr }	-	-
 Array<mut compiler/views:summary&>	16 8	{ i64, ptr }	-	-
+Array<mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&>	16 8	{ i64, ptr }	-	-
+Array<mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&>	16 8	{ i64, ptr }	-	-
+Array<mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&>	16 8	{ i64, ptr }	-	-
 Array<mut std/prelude/map:mapSlot<compiler/types:DeclId, I64>&>	16 8	{ i64, ptr }	-	-
 Array<std/pair:Pair<I64, I32>>&	16 8	{ i64, ptr }	-	-
 Array<std/prelude/list:List<compiler/source:NameId>>	16 8	{ i64, ptr }	-	-
 Array<std/prelude/list:List<compiler/views:view>>	16 8	{ i64, ptr }	-	-
 compiler/interp:Exec	800 8	%"compiler/interp:Exec"	{ ptr, %"std/prelude/list:List<mut compiler/typed:Body&>", i32, %"compiler/lower:Lowerer", %"compiler/eval:Machine", %"std/prelude/list:List<compiler/mir:FnKey>", %"std/prelude/map:Map<compiler/mir:FnKey, Bool>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/list:List<I64>", %"std/prelude/map:Map<I64, Bool>", i1 }	fields 0,8,16,24,120,744,752,760,768,776,784,792
+compiler/scope:Gap	32 8	%"compiler/scope:Gap"	{ i64, %"compiler/source:Span", { i64, ptr } }	fields 0,8,16
+compiler/scope:Scoper	952 8	%"compiler/scope:Scoper"	{ ptr, %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<compiler/typed:Plan>", %"std/prelude/list:List<compiler/scope:Gap>", { ptr, ptr }, { ptr, ptr }, %"std/prelude/list:List<mut compiler/scope:summary&>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<I64, std/prelude/text:String&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", ptr, i64, i1, %"compiler/typed:Plan", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/typed:BlockId>", %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/scope:Term>", %"compiler/source:Span", i64, %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<I64>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", i64, i1, %"std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<I64, Bool>", i64, i64, %"std/prelude/list:List<compiler/scope:Term>", i1, %"std/prelude/list:List<compiler/typed:Place&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", i1, %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", i1, i1, %"std/prelude/list:List<compiler/typed:BlockId>", { i64, [2 x i64] }, i1, %"compiler/source:Span", { i64, [2 x i64] }, i1, { i64, [2 x i64] }, i1, i1, i1, %"compiler/source:Span", %"std/prelude/list:List<compiler/scope:fnUse>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<Bool>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<I64, compiler/scope:Term>", { i64, [2 x i64] }, %"std/prelude/map:Map<I64, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, { i64, [2 x i64] }, i1, i1, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, i32, i1, i1, i1, i1, i64, %"compiler/source:Span" }	fields 0,8,16,24,32,48,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,520,528,536,544,552,560,568,576,584,592,593,600,608,632,636,648,672,680,704,705,706,708,720,728,736,744,752,760,768,776,784,808,816,824,832,840,848,856,864,888,889,896,904,912,920,928,932,933,934,935,936,944
+compiler/scope:Scoper&	8 8	ptr	-	-
+compiler/scope:Term	24 8	{ i64, [2 x i64] }	-	cases ;0;0;;0,8;0;
+compiler/scope:Val	32 8	%"compiler/scope:Val"	{ i32, { i64, [2 x i64] } }	fields 0,8
+compiler/scope:ValKind	4 4	i32	-	-
+compiler/scope:fnUse	40 8	%"compiler/scope:fnUse"	{ i64, %"compiler/source:Span", i64, i64, i32 }	fields 0,8,16,24,32
+compiler/scope:rel	72 8	%"compiler/scope:rel"	{ { i64, [2 x i64] }, { i64, [2 x i64] }, i1, %"compiler/source:Span", i64 }	fields 0,24,48,52,64
+compiler/scope:summary	120 8	%"compiler/scope:summary"	{ %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/scope:Term>", i1, i1 }	fields 0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,113
+compiler/scope:walked	40 8	%"compiler/scope:walked"	{ %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/types:TypeId>", %"std/prelude/list:List<I64>" }	fields 0,8,16,24,32
 compiler/views:Root	24 8	{ i64, [2 x i64] }	-	cases ;0;0;0,8;0
 compiler/views:Viewer	216 8	%"compiler/views:Viewer"	{ ptr, %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<mut compiler/views:summary&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/map:Map<std/prelude/text:String&, I64>", %"std/prelude/map:Map<I64, std/prelude/text:String&>", %"std/prelude/map:Map<I64, Bool>", i64, %"std/prelude/map:Map<compiler/types:DeclId, I64>", %"std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", ptr, i64, i1, i1, i1, i1, %"std/prelude/list:List<I64>", %"std/prelude/list:List<mut compiler/views:loopFrame&>", %"std/prelude/list:List<compiler/typed:Place&>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<I64, Bool>" }	fields 0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,169,170,171,176,184,192,200,208
 compiler/views:fact	72 8	%"compiler/views:fact"	{ i64, i64, i32, i64, i64, i1, i64, %"compiler/source:Span", i64 }	fields 0,8,16,24,32,40,48,56,64
@@ -10026,8 +10115,17 @@ compiler/views:state&	8 8	ptr	-	-
 compiler/views:summary	40 8	%"compiler/views:summary"	{ %"std/prelude/list:List<compiler/views:fact>", %"std/prelude/list:List<compiler/views:fact>", %"std/prelude/list:List<compiler/views:fact>", %"std/prelude/list:List<Bool>", i1 }	fields 0,8,16,24,32
 compiler/views:tasked	104 8	%"compiler/views:tasked"	{ %"compiler/views:view", %"compiler/source:Span" }	fields 0,96
 compiler/views:view	96 8	%"compiler/views:view"	{ %"compiler/views:place", i64, i1, %"compiler/source:Span", i64, i64, %"compiler/source:Span" }	fields 0,48,56,60,72,80,88
+fn() compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass 
+fn() compiler/scope:summary	16 8	{ ptr, ptr }	-	ret %"compiler/scope:summary" pass 
+fn() compiler/scope:walked	16 8	{ ptr, ptr }	-	ret %"compiler/scope:walked" pass 
 fn() compiler/views:state	16 8	{ ptr, ptr }	-	ret %"compiler/views:state" pass 
 fn() compiler/views:summary	16 8	{ ptr, ptr }	-	ret %"compiler/views:summary" pass 
+fn() std/prelude/list:List<compiler/generic:Origin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/generic:Origin>" pass 
+fn() std/prelude/list:List<compiler/scope:Gap>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:Gap>" pass 
+fn() std/prelude/list:List<compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:Term>" pass 
+fn() std/prelude/list:List<compiler/scope:fnUse>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:fnUse>" pass 
+fn() std/prelude/list:List<compiler/scope:rel>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:rel>" pass 
+fn() std/prelude/list:List<compiler/typed:BlockId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/typed:BlockId>" pass 
 fn() std/prelude/list:List<compiler/views:fact>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:fact>" pass 
 fn() std/prelude/list:List<compiler/views:holding>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:holding>" pass 
 fn() std/prelude/list:List<compiler/views:naming>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:naming>" pass 
@@ -10035,10 +10133,17 @@ fn() std/prelude/list:List<compiler/views:place>	16 8	{ ptr, ptr }	-	ret %"std/p
 fn() std/prelude/list:List<compiler/views:state>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:state>" pass 
 fn() std/prelude/list:List<compiler/views:tasked>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:tasked>" pass 
 fn() std/prelude/list:List<compiler/views:view>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:view>" pass 
+fn() std/prelude/list:List<mut compiler/scope:summary&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<mut compiler/scope:summary&>" pass 
 fn() std/prelude/list:List<mut compiler/views:loopFrame&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<mut compiler/views:loopFrame&>" pass 
 fn() std/prelude/list:List<mut compiler/views:summary&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<mut compiler/views:summary&>" pass 
 fn() std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>" pass 
 fn() std/prelude/list:List<std/prelude/list:List<compiler/views:view>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<std/prelude/list:List<compiler/views:view>>" pass 
+fn() std/prelude/list:listState<compiler/generic:Origin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/generic:Origin>" pass 
+fn() std/prelude/list:listState<compiler/scope:Gap>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:Gap>" pass 
+fn() std/prelude/list:listState<compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:Term>" pass 
+fn() std/prelude/list:listState<compiler/scope:fnUse>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:fnUse>" pass 
+fn() std/prelude/list:listState<compiler/scope:rel>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:rel>" pass 
+fn() std/prelude/list:listState<compiler/typed:BlockId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/typed:BlockId>" pass 
 fn() std/prelude/list:listState<compiler/views:fact>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/views:fact>" pass 
 fn() std/prelude/list:listState<compiler/views:holding>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/views:holding>" pass 
 fn() std/prelude/list:listState<compiler/views:naming>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/views:naming>" pass 
@@ -10046,31 +10151,63 @@ fn() std/prelude/list:listState<compiler/views:place>	16 8	{ ptr, ptr }	-	ret %"
 fn() std/prelude/list:listState<compiler/views:state>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/views:state>" pass 
 fn() std/prelude/list:listState<compiler/views:tasked>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/views:tasked>" pass 
 fn() std/prelude/list:listState<compiler/views:view>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/views:view>" pass 
+fn() std/prelude/list:listState<mut compiler/scope:summary&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<mut compiler/scope:summary&>" pass 
 fn() std/prelude/list:listState<mut compiler/views:loopFrame&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<mut compiler/views:loopFrame&>" pass 
 fn() std/prelude/list:listState<mut compiler/views:summary&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<mut compiler/views:summary&>" pass 
 fn() std/prelude/list:listState<std/prelude/list:List<compiler/source:NameId>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<std/prelude/list:List<compiler/source:NameId>>" pass 
 fn() std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>" pass 
+fn() std/prelude/map:Map<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<I64, compiler/scope:Term>" pass 
+fn() std/prelude/map:Map<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<I64, compiler/typed:Expr&>" pass 
+fn() std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>" pass 
 fn() std/prelude/map:Map<compiler/types:DeclId, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<compiler/types:DeclId, I64>" pass 
+fn() std/prelude/map:mapState<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<I64, compiler/scope:Term>" pass 
+fn() std/prelude/map:mapState<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<I64, compiler/typed:Expr&>" pass 
+fn() std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>" pass 
 fn() std/prelude/map:mapState<compiler/types:DeclId, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<compiler/types:DeclId, I64>" pass 
 fn(Array<compiler/ast:Decl&>&, I32) compiler/ast:TopIf&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(Array<compiler/ast:Decl&>&, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
 fn(I64, I64, compiler/source:NameId, I64, I64, Bool, I64, compiler/source:Span) compiler/views:fact	16 8	{ ptr, ptr }	-	ret %"compiler/views:fact" pass vvvvvvvv
+fn(I64, compiler/scope:Term) std/prelude/map:MapEntry<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<I64, compiler/scope:Term>" pass vv
+fn(I64, compiler/scope:Term, mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&) std/prelude/map:mapSlot<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<I64, compiler/scope:Term>" pass vvv
+fn(I64, compiler/source:Span, I64, I64, compiler/types:TypeId) compiler/scope:fnUse	16 8	{ ptr, ptr }	-	ret %"compiler/scope:fnUse" pass vvvvv
+fn(I64, compiler/source:Span, std/prelude/text:String&) compiler/scope:Gap	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Gap" pass vvv
+fn(I64, compiler/typed:Expr&) std/prelude/map:MapEntry<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<I64, compiler/typed:Expr&>" pass vv
+fn(I64, compiler/typed:Expr&, mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&) std/prelude/map:mapSlot<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<I64, compiler/typed:Expr&>" pass vvv
 fn(I64, compiler/views:place) compiler/views:naming	16 8	{ ptr, ptr }	-	ret %"compiler/views:naming" pass vv
 fn(I64, compiler/views:view) compiler/views:holding	16 8	{ ptr, ptr }	-	ret %"compiler/views:holding" pass vv
+fn(I64, std/prelude/list:List<compiler/scope:Term>) std/prelude/map:MapEntry<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<I64, std/prelude/list:List<compiler/scope:Term>>" pass vv
+fn(I64, std/prelude/list:List<compiler/scope:Term>, mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&) std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>" pass vvv
 fn(compiler/ast:TopIf&, I32) compiler/ast:TopIf&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(compiler/ast:TopIf&, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
 fn(compiler/eval:Stop, mut compiler/diag:Diagnostics&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(compiler/scope:Scoper&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(compiler/scope:Scoper&, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
+fn(compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass v
+fn(compiler/scope:Term, compiler/scope:Term, Bool, compiler/source:Span, I64) compiler/scope:rel	16 8	{ ptr, ptr }	-	ret %"compiler/scope:rel" pass vvvvv
+fn(compiler/scope:ValKind, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vv
+fn(compiler/typed:Arm&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(compiler/typed:Arm&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(compiler/typed:Block&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(compiler/typed:Block&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(compiler/typed:BlockId) compiler/views:loopFrame	16 8	{ ptr, ptr }	-	ret %"compiler/views:loopFrame" pass v
 fn(compiler/typed:Body&, I64, compiler/source:NameId) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vvv
 fn(compiler/typed:Expr&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(compiler/typed:Expr&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(compiler/typed:Expr&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(compiler/typed:Expr&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(compiler/typed:Place&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/typed:Place&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(compiler/typed:Place&) compiler/typed:Expr&	16 8	{ ptr, ptr }	-	ret ptr pass v
+fn(compiler/typed:Place&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(compiler/typed:Place&, compiler/typed:Place&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(compiler/typed:Place&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(compiler/typed:Place&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(compiler/typed:Stmt&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(compiler/typed:Stmt&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(compiler/types:DeclId, I64) std/prelude/map:MapEntry<compiler/types:DeclId, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<compiler/types:DeclId, I64>" pass vv
 fn(compiler/types:DeclId, I64, mut std/prelude/map:mapSlot<compiler/types:DeclId, I64>&) std/prelude/map:mapSlot<compiler/types:DeclId, I64>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<compiler/types:DeclId, I64>" pass vvv
+fn(compiler/types:TypeId) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(compiler/views:Root) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
 fn(compiler/views:Root, I64, I64, Bool) compiler/views:place	16 8	{ ptr, ptr }	-	ret %"compiler/views:place" pass vvvv
 fn(compiler/views:place, I64) compiler/views:view	16 8	{ ptr, ptr }	-	ret %"compiler/views:view" pass vv
@@ -10080,6 +10217,7 @@ fn(compiler/views:view, compiler/source:Span) compiler/views:tasked	16 8	{ ptr, 
 fn(mut compiler/check:Checker&) std/prelude/map:Map<I64, compiler/eval:Image>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<I64, compiler/eval:Image>" pass v
 fn(mut compiler/check:Checker&, mut std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(mut compiler/diag:Diagnostics&, I64, compiler/source:Span) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(mut compiler/generic:Program&, std/prelude/list:List<mut compiler/typed:Body&>) compiler/scope:Scoper	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut compiler/generic:Program&, std/prelude/list:List<mut compiler/typed:Body&>) compiler/views:Viewer	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut compiler/generic:Program&, std/prelude/list:List<mut compiler/typed:Body&>, compiler/eval:Mode) compiler/interp:Exec	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/interp:Exec&)	16 8	{ ptr, ptr }	-	ret void pass v
@@ -10099,6 +10237,164 @@ fn(mut compiler/interp:Exec&, mut compiler/diag:Diagnostics&) I32	16 8	{ ptr, pt
 fn(mut compiler/interp:Exec&, mut compiler/diag:Diagnostics&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(mut compiler/load:Loader&, Bool) compiler/check:Checker	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut compiler/load:Loader&, mut compiler/check:Checker&, mut std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>&, mut std/prelude/map:Map<std/prelude/text:String&, I64>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut compiler/scope:Scoper&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
+fn(mut compiler/scope:Scoper&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass v
+fn(mut compiler/scope:Scoper&, Array<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, Array<compiler/typed:Capture&>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, Array<compiler/typed:Expr&>&, Array<compiler/scope:Val>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, Array<compiler/typed:Expr&>&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, Array<compiler/typed:Stmt&>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, Array<compiler/typed:Stmt&>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, Array<compiler/typed:Stmt&>&, I64, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut compiler/scope:Scoper&, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, I64) compiler/scope:walked	16 8	{ ptr, ptr }	-	ret %"compiler/scope:walked" pass vv
+fn(mut compiler/scope:Scoper&, I64) compiler/typed:Mark	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, I64, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, I64, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, I64, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, I64, I64, Array<compiler/scope:Term>&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvv
+fn(mut compiler/scope:Scoper&, I64, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, I64, I64, compiler/source:Span, compiler/msgs:Msg)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
+fn(mut compiler/scope:Scoper&, I64, I64, compiler/typed:Call&, Bool, Array<compiler/scope:Term>&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvvvv
+fn(mut compiler/scope:Scoper&, I64, compiler/scope:Term, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, I64, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvv
+fn(mut compiler/scope:Scoper&, I64, compiler/source:Span, std/prelude/text:String&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, I64, compiler/typed:Capture&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, I64, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, I64, compiler/typed:LocalId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, I64, compiler/types:TypeId, compiler/typed:Expr&, Bool, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term) compiler/typed:Scope	16 8	{ ptr, ptr }	-	ret { i64, [1 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, Array<compiler/scope:Term>&, compiler/typed:Call&, Bool) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, Bool, compiler/scope:Term, Bool) (compiler/scope:Term, Bool, Bool)	16 8	{ ptr, ptr }	-	ret { { i64, [2 x i64] }, i1, i1 } pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term, Bool, compiler/typed:Expr&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/source:Span, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/source:Span, I64, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Val, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Val, compiler/scope:Val) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/scope:Val, compiler/scope:Val, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/scope:rel)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, I64, Array<compiler/scope:Term>&, compiler/typed:Call&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, I64, Bool) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/msgs:Msg) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/scope:Term, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:LocalId, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Place&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Place&, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Slice&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Spawn&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/types:TypeId, compiler/typed:Call&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, std/prelude/text:String&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/source:Span, std/prelude/text:String&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Arm&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Arm&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Arm&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Arm&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Block&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Block&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Block&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Block&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:BlockId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:BlockId) compiler/typed:BlockId	16 8	{ ptr, ptr }	-	ret i32 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&, Array<compiler/typed:Expr&>&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Arm&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Block&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Expr&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Place&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Stmt&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, Array<I64>&, I64, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, Array<compiler/scope:Term>&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, Bool, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, I64, Array<I64>&, Array<compiler/scope:Val>&, Array<compiler/scope:Term>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, compiler/typed:Expr&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, compiler/types:TypeId, I64, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, compiler/scope:Term) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Call&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Callee&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Call&	16 8	{ ptr, ptr }	-	ret ptr pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Expr&	16 8	{ ptr, ptr }	-	ret ptr pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Place&	16 8	{ ptr, ptr }	-	ret ptr pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Promote&	16 8	{ ptr, ptr }	-	ret ptr pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/scope:Term, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/typed:SiteId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:FnVal&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:FnVal&, compiler/scope:Term, compiler/source:Span) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Local, compiler/typed:Expr&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:LocalId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:LocalId, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:LocalId, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:LocalId, compiler/typed:Expr&, Array<compiler/typed:Stmt&>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:MakeKind) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Mark, compiler/typed:BlockId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Match&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Match&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&) (compiler/scope:Term, Bool, I64)	16 8	{ ptr, ptr }	-	ret { { i64, [2 x i64] }, i1, i64 } pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, Bool) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, compiler/types:TypeId, compiler/scope:Term) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, compiler/types:TypeId, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Place&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:ScopeVar) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:SiteId)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:SiteId, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:SiteId, compiler/scope:Term, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Stmt&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, compiler/typed:Stmt&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, compiler/typed:Stmt&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
+fn(mut compiler/scope:Scoper&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut compiler/scope:Scoper&, compiler/types:TypeId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(mut compiler/scope:Scoper&, compiler/types:TypeId) std/prelude/list:List<compiler/types:TypeId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/types:TypeId>" pass vv
+fn(mut compiler/scope:Scoper&, compiler/types:TypeId, Array<I64>&, I64, Array<compiler/scope:Term>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
+fn(mut compiler/scope:Scoper&, compiler/types:TypeId, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
+fn(mut compiler/scope:Scoper&, compiler/types:TypeId, I64) compiler/typed:Mark	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
+fn(mut compiler/scope:Scoper&, compiler/types:TypeId, compiler/typed:LocalId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
+fn(mut compiler/scope:Scoper&, mut compiler/scope:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut compiler/scope:Scoper&, mut std/prelude/list:List<compiler/scope:Term>&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut compiler/scope:Scoper&, std/prelude/list:List<compiler/typed:Expr&>&, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
 fn(mut compiler/views:Viewer&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut compiler/views:Viewer&, Array<compiler/typed:Clause&>&, mut compiler/views:state&, mut std/prelude/list:List<compiler/views:view>&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut compiler/views:Viewer&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
@@ -10153,8 +10449,23 @@ fn(mut compiler/views:state&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut compiler/views:state&, I64, compiler/views:place)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut compiler/views:state&, I64, compiler/views:view) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
 fn(mut compiler/views:state&, compiler/views:state&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/generic:Origin>&, compiler/generic:Origin)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/mir:FnKey>&) compiler/mir:FnKey ? std/prelude/list:ListError	16 8	{ ptr, ptr }	-	ret { i32, { i64, [1 x i64] } } pass v
+fn(mut std/prelude/list:List<compiler/scope:Gap>&, compiler/scope:Gap)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:List<compiler/scope:Term>&) compiler/scope:Term ? std/prelude/list:ListError	16 8	{ ptr, ptr }	-	ret { i32, { i64, [2 x i64] } } pass v
+fn(mut std/prelude/list:List<compiler/scope:Term>&, I64, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/list:List<compiler/scope:Term>&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/scope:fnUse>&, compiler/scope:fnUse)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/scope:rel>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:List<compiler/scope:rel>&, compiler/scope:rel)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<compiler/source:Span>&, I64, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/list:List<compiler/typed:BlockId>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:List<compiler/typed:BlockId>&) compiler/typed:BlockId ? std/prelude/list:ListError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass v
+fn(mut std/prelude/list:List<compiler/typed:BlockId>&, compiler/typed:BlockId)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/typed:Place&>&) compiler/typed:Place& ? std/prelude/list:ListError	16 8	{ ptr, ptr }	-	ret { i32, ptr } pass v
+fn(mut std/prelude/list:List<compiler/typed:Plan>&, I64, compiler/typed:Plan)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/list:List<compiler/typed:Plan>&, compiler/typed:Plan)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/views:fact>&, compiler/views:fact)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/views:holding>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/list:List<compiler/views:holding>&, Array<compiler/views:holding>&)	16 8	{ ptr, ptr }	-	ret void pass vv
@@ -10172,14 +10483,24 @@ fn(mut std/prelude/list:List<compiler/views:tasked>&, I64)	16 8	{ ptr, ptr }	-	r
 fn(mut std/prelude/list:List<compiler/views:tasked>&, compiler/views:tasked)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<compiler/views:view>&, I64, compiler/views:view)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/list:List<compiler/views:view>&, compiler/views:view)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:List<mut compiler/scope:summary&>&, mut compiler/scope:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<mut compiler/views:loopFrame&>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/list:List<mut compiler/views:loopFrame&>&) mut compiler/views:loopFrame& ? std/prelude/list:ListError	16 8	{ ptr, ptr }	-	ret { i32, ptr } pass v
 fn(mut std/prelude/list:List<mut compiler/views:loopFrame&>&, mut compiler/views:loopFrame&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<mut compiler/views:summary&>&, mut compiler/views:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>&, std/prelude/list:List<compiler/source:NameId>)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:List<std/prelude/list:List<compiler/views:view>>&, std/prelude/list:List<compiler/views:view>)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<compiler/generic:Origin>&, compiler/generic:Origin)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/mir:FnKey>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:listState<compiler/scope:Gap>&, compiler/scope:Gap)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:listState<compiler/scope:Term>&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<compiler/scope:fnUse>&, compiler/scope:fnUse)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<compiler/scope:rel>&, compiler/scope:rel)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<compiler/typed:BlockId>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:listState<compiler/typed:BlockId>&, compiler/typed:BlockId)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/typed:Place&>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/list:listState<compiler/typed:Plan>&, compiler/typed:Plan)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/views:fact>&, compiler/views:fact)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/views:holding>&, compiler/views:holding)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/views:naming>&, compiler/views:naming)	16 8	{ ptr, ptr }	-	ret void pass vv
@@ -10187,23 +10508,53 @@ fn(mut std/prelude/list:listState<compiler/views:place>&, compiler/views:place)	
 fn(mut std/prelude/list:listState<compiler/views:state>&, compiler/views:state)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/views:tasked>&, compiler/views:tasked)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<compiler/views:view>&, compiler/views:view)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/list:listState<mut compiler/scope:summary&>&, mut compiler/scope:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<mut compiler/views:loopFrame&>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/list:listState<mut compiler/views:loopFrame&>&, mut compiler/views:loopFrame&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<mut compiler/views:summary&>&, mut compiler/views:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<std/prelude/list:List<compiler/source:NameId>>&, std/prelude/list:List<compiler/source:NameId>)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(mut std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>&, std/prelude/list:List<compiler/views:view>)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/map:Map<I64, Bool>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:Map<I64, I64>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/map:Map<I64, compiler/eval:Image>&, I64, compiler/eval:Image)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/map:Map<I64, compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:Map<I64, compiler/scope:Term>&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut std/prelude/map:Map<I64, compiler/scope:Term>&, I64, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/map:Map<I64, compiler/typed:Expr&>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(mut std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&, I64, std/prelude/list:List<compiler/scope:Term>)	16 8	{ ptr, ptr }	-	ret void pass vvv
 fn(mut std/prelude/map:Map<compiler/types:DeclId, I64>&, compiler/types:DeclId, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
+fn(mut std/prelude/map:MapIter<I64, compiler/typed:Expr&>&) ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret i32 pass v
+fn(mut std/prelude/map:MapIter<I64, compiler/typed:Expr&>&) std/prelude/map:MapEntry<I64, compiler/typed:Expr&> ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, %"std/prelude/map:MapEntry<I64, compiler/typed:Expr&>" } pass v
 fn(mut std/prelude/map:mapState<I64, compiler/eval:Image>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/map:mapState<I64, compiler/eval:Image>&, I64, I64, compiler/eval:Image)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut std/prelude/map:mapState<I64, compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:mapState<I64, compiler/scope:Term>&, I64, I64, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut std/prelude/map:mapState<I64, compiler/typed:Expr&>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:mapState<I64, compiler/typed:Expr&>&, I64, I64, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
+fn(mut std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&)	16 8	{ ptr, ptr }	-	ret void pass v
+fn(mut std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&, I64, I64, std/prelude/list:List<compiler/scope:Term>)	16 8	{ ptr, ptr }	-	ret void pass vvvv
 fn(mut std/prelude/map:mapState<compiler/types:DeclId, I64>&)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(mut std/prelude/map:mapState<compiler/types:DeclId, I64>&, I64, compiler/types:DeclId, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(std/prelude/list:List<compiler/check:Ask>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<compiler/check:Ask>&, I64) Array<compiler/check:Ask>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
-fn(std/prelude/list:List<compiler/check:AssertAsk>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<compiler/check:AssertAsk>&, I64) Array<compiler/check:AssertAsk>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
 fn(std/prelude/list:List<compiler/generic:ConstAsk>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<compiler/generic:Origin>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<compiler/generic:Origin>&, I64) compiler/generic:Origin	16 8	{ ptr, ptr }	-	ret %"compiler/generic:Origin" pass vv
+fn(std/prelude/list:List<compiler/scope:Term>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<compiler/scope:Term>&, I64) Array<compiler/scope:Term>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(std/prelude/list:List<compiler/scope:Term>&, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
+fn(std/prelude/list:List<compiler/scope:fnUse>&, I64) Array<compiler/scope:fnUse>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(std/prelude/list:List<compiler/scope:rel>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<compiler/scope:rel>&, I64) Array<compiler/scope:rel>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(std/prelude/list:List<compiler/scope:rel>&, compiler/scope:rel) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(std/prelude/list:List<compiler/typed:BlockId>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:List<compiler/typed:BlockId>&, I64) compiler/typed:BlockId	16 8	{ ptr, ptr }	-	ret i32 pass vv
 fn(std/prelude/list:List<compiler/typed:Local>&, I64) Array<compiler/typed:Local>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(std/prelude/list:List<compiler/typed:Scope>&) mut Array<compiler/typed:Scope>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
+fn(std/prelude/list:List<compiler/typed:SiteInfo>&, I64) compiler/typed:SiteInfo	16 8	{ ptr, ptr }	-	ret %"compiler/typed:SiteInfo" pass vv
 fn(std/prelude/list:List<compiler/views:fact>&, I64) Array<compiler/views:fact>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
 fn(std/prelude/list:List<compiler/views:holding>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<compiler/views:holding>&) std/prelude/list:List<compiler/views:holding>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:holding>" pass v
@@ -10223,6 +10574,7 @@ fn(std/prelude/list:List<compiler/views:view>&) I64	16 8	{ ptr, ptr }	-	ret i64 
 fn(std/prelude/list:List<compiler/views:view>&, I64) Array<compiler/views:view>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
 fn(std/prelude/list:List<compiler/views:view>&, I64) compiler/views:view	16 8	{ ptr, ptr }	-	ret %"compiler/views:view" pass vv
 fn(std/prelude/list:List<mut compiler/load:Module&>&, I64) Array<mut compiler/load:Module&>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(std/prelude/list:List<mut compiler/scope:summary&>&, I64) mut compiler/scope:summary&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(std/prelude/list:List<mut compiler/views:loopFrame&>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(std/prelude/list:List<mut compiler/views:loopFrame&>&, I64) mut compiler/views:loopFrame&	16 8	{ ptr, ptr }	-	ret ptr pass vv
 fn(std/prelude/list:List<mut compiler/views:summary&>&, I64) mut compiler/views:summary&	16 8	{ ptr, ptr }	-	ret ptr pass vv
@@ -10232,7 +10584,17 @@ fn(std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>&, I64) s
 fn(std/prelude/list:List<std/prelude/list:List<compiler/views:view>>&, I64) std/prelude/list:List<compiler/views:view>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/views:view>" pass vv
 fn(std/prelude/list:listState<compiler/check:Ask>&, I64, I64) Array<compiler/check:Ask>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(std/prelude/list:listState<compiler/check:AssertAsk>&, I64, I64) Array<compiler/check:AssertAsk>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(std/prelude/list:listState<compiler/generic:Origin>&, I64) mut Array<compiler/generic:Origin>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(std/prelude/list:listState<compiler/scope:Gap>&, I64) mut Array<compiler/scope:Gap>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(std/prelude/list:listState<compiler/scope:Term>&, I64) mut Array<compiler/scope:Term>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(std/prelude/list:listState<compiler/scope:Term>&, I64, I64) Array<compiler/scope:Term>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(std/prelude/list:listState<compiler/scope:fnUse>&, I64) mut Array<compiler/scope:fnUse>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(std/prelude/list:listState<compiler/scope:fnUse>&, I64, I64) Array<compiler/scope:fnUse>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(std/prelude/list:listState<compiler/scope:rel>&, I64) mut Array<compiler/scope:rel>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(std/prelude/list:listState<compiler/scope:rel>&, I64, I64) Array<compiler/scope:rel>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(std/prelude/list:listState<compiler/typed:BlockId>&, I64) mut Array<compiler/typed:BlockId>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<compiler/typed:Local>&, I64, I64) Array<compiler/typed:Local>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(std/prelude/list:listState<compiler/typed:Plan>&, I64) mut Array<compiler/typed:Plan>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<compiler/views:fact>&, I64) mut Array<compiler/views:fact>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<compiler/views:fact>&, I64, I64) Array<compiler/views:fact>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(std/prelude/list:listState<compiler/views:holding>&, I64) mut Array<compiler/views:holding>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
@@ -10248,13 +10610,29 @@ fn(std/prelude/list:listState<compiler/views:tasked>&, I64, I64) Array<compiler/
 fn(std/prelude/list:listState<compiler/views:view>&, I64) mut Array<compiler/views:view>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<compiler/views:view>&, I64, I64) Array<compiler/views:view>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(std/prelude/list:listState<mut compiler/load:Module&>&, I64, I64) Array<mut compiler/load:Module&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(std/prelude/list:listState<mut compiler/scope:summary&>&, I64) mut Array<mut compiler/scope:summary&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<mut compiler/views:loopFrame&>&, I64) mut Array<mut compiler/views:loopFrame&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<mut compiler/views:summary&>&, I64) mut Array<mut compiler/views:summary&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<std/pair:Pair<I64, I32>>&, I64, I64) Array<std/pair:Pair<I64, I32>>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 fn(std/prelude/list:listState<std/prelude/list:List<compiler/source:NameId>>&, I64) mut Array<std/prelude/list:List<compiler/source:NameId>>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
 fn(std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>&, I64) mut Array<std/prelude/list:List<compiler/views:view>>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
+fn(std/prelude/map:Map<I64, compiler/scope:Term>&, I64) compiler/scope:Term ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, { i64, [2 x i64] } } pass vv
+fn(std/prelude/map:Map<I64, compiler/typed:Expr&>&) std/prelude/map:MapIter<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapIter<I64, compiler/typed:Expr&>" pass v
+fn(std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64) compiler/typed:Expr& ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, ptr } pass vv
+fn(std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
+fn(std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&, I64) std/prelude/list:List<compiler/scope:Term> ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, %"std/prelude/list:List<compiler/scope:Term>" } pass vv
 fn(std/prelude/map:Map<compiler/types:DeclId, I64>&, compiler/types:DeclId) I64 ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vv
+fn(std/prelude/map:mapState<I64, compiler/scope:Term>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(std/prelude/map:mapState<I64, compiler/typed:Expr&>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+fn(std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(std/prelude/map:mapState<compiler/types:DeclId, I64>&, compiler/types:DeclId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
+mut Array<compiler/generic:Origin>&	16 8	{ i64, ptr }	-	-
+mut Array<compiler/scope:Gap>&	16 8	{ i64, ptr }	-	-
+mut Array<compiler/scope:Term>&	16 8	{ i64, ptr }	-	-
+mut Array<compiler/scope:fnUse>&	16 8	{ i64, ptr }	-	-
+mut Array<compiler/scope:rel>&	16 8	{ i64, ptr }	-	-
+mut Array<compiler/typed:BlockId>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/views:fact>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/views:holding>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/views:naming>&	16 8	{ i64, ptr }	-	-
@@ -10262,6 +10640,12 @@ mut Array<compiler/views:place>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/views:state>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/views:tasked>&	16 8	{ i64, ptr }	-	-
 mut Array<compiler/views:view>&	16 8	{ i64, ptr }	-	-
+mut Array<mut Array<compiler/generic:Origin>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut Array<compiler/scope:Gap>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut Array<compiler/scope:Term>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut Array<compiler/scope:fnUse>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut Array<compiler/scope:rel>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut Array<compiler/typed:BlockId>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/views:fact>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/views:holding>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/views:naming>&>&	16 8	{ i64, ptr }	-	-
@@ -10269,20 +10653,35 @@ mut Array<mut Array<compiler/views:place>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/views:state>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/views:tasked>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<compiler/views:view>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut Array<mut compiler/scope:summary&>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<mut compiler/views:loopFrame&>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<mut compiler/views:summary&>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<std/prelude/list:List<compiler/source:NameId>>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut Array<std/prelude/list:List<compiler/views:view>>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut compiler/scope:summary&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut compiler/views:loopFrame&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut compiler/views:summary&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&>&	16 8	{ i64, ptr }	-	-
+mut Array<mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&>&	16 8	{ i64, ptr }	-	-
 mut Array<mut std/prelude/map:mapSlot<compiler/types:DeclId, I64>&>&	16 8	{ i64, ptr }	-	-
 mut Array<std/prelude/list:List<compiler/source:NameId>>&	16 8	{ i64, ptr }	-	-
 mut Array<std/prelude/list:List<compiler/views:view>>&	16 8	{ i64, ptr }	-	-
 mut compiler/interp:Exec&	8 8	ptr	-	-
+mut compiler/scope:Scoper&	8 8	ptr	-	-
+mut compiler/scope:summary&	8 8	ptr	-	-
+mut compiler/scope:walked&	8 8	ptr	-	-
 mut compiler/views:Viewer&	8 8	ptr	-	-
 mut compiler/views:loopFrame&	8 8	ptr	-	-
 mut compiler/views:state&	8 8	ptr	-	-
 mut compiler/views:summary&	8 8	ptr	-	-
+mut std/prelude/list:List<compiler/generic:Origin>&	8 8	ptr	-	-
+mut std/prelude/list:List<compiler/scope:Gap>&	8 8	ptr	-	-
+mut std/prelude/list:List<compiler/scope:Term>&	8 8	ptr	-	-
+mut std/prelude/list:List<compiler/scope:fnUse>&	8 8	ptr	-	-
+mut std/prelude/list:List<compiler/scope:rel>&	8 8	ptr	-	-
+mut std/prelude/list:List<compiler/typed:BlockId>&	8 8	ptr	-	-
+mut std/prelude/list:List<compiler/typed:Plan>&	8 8	ptr	-	-
 mut std/prelude/list:List<compiler/views:fact>&	8 8	ptr	-	-
 mut std/prelude/list:List<compiler/views:holding>&	8 8	ptr	-	-
 mut std/prelude/list:List<compiler/views:naming>&	8 8	ptr	-	-
@@ -10290,10 +10689,17 @@ mut std/prelude/list:List<compiler/views:place>&	8 8	ptr	-	-
 mut std/prelude/list:List<compiler/views:state>&	8 8	ptr	-	-
 mut std/prelude/list:List<compiler/views:tasked>&	8 8	ptr	-	-
 mut std/prelude/list:List<compiler/views:view>&	8 8	ptr	-	-
+mut std/prelude/list:List<mut compiler/scope:summary&>&	8 8	ptr	-	-
 mut std/prelude/list:List<mut compiler/views:loopFrame&>&	8 8	ptr	-	-
 mut std/prelude/list:List<mut compiler/views:summary&>&	8 8	ptr	-	-
 mut std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>&	8 8	ptr	-	-
 mut std/prelude/list:List<std/prelude/list:List<compiler/views:view>>&	8 8	ptr	-	-
+mut std/prelude/list:listState<compiler/generic:Origin>&	8 8	ptr	-	-
+mut std/prelude/list:listState<compiler/scope:Gap>&	8 8	ptr	-	-
+mut std/prelude/list:listState<compiler/scope:Term>&	8 8	ptr	-	-
+mut std/prelude/list:listState<compiler/scope:fnUse>&	8 8	ptr	-	-
+mut std/prelude/list:listState<compiler/scope:rel>&	8 8	ptr	-	-
+mut std/prelude/list:listState<compiler/typed:BlockId>&	8 8	ptr	-	-
 mut std/prelude/list:listState<compiler/views:fact>&	8 8	ptr	-	-
 mut std/prelude/list:listState<compiler/views:holding>&	8 8	ptr	-	-
 mut std/prelude/list:listState<compiler/views:naming>&	8 8	ptr	-	-
@@ -10301,16 +10707,36 @@ mut std/prelude/list:listState<compiler/views:place>&	8 8	ptr	-	-
 mut std/prelude/list:listState<compiler/views:state>&	8 8	ptr	-	-
 mut std/prelude/list:listState<compiler/views:tasked>&	8 8	ptr	-	-
 mut std/prelude/list:listState<compiler/views:view>&	8 8	ptr	-	-
+mut std/prelude/list:listState<mut compiler/scope:summary&>&	8 8	ptr	-	-
 mut std/prelude/list:listState<mut compiler/views:loopFrame&>&	8 8	ptr	-	-
 mut std/prelude/list:listState<mut compiler/views:summary&>&	8 8	ptr	-	-
 mut std/prelude/list:listState<std/prelude/list:List<compiler/source:NameId>>&	8 8	ptr	-	-
 mut std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>&	8 8	ptr	-	-
 mut std/prelude/map:Map<I64, compiler/eval:Image>&	8 8	ptr	-	-
+mut std/prelude/map:Map<I64, compiler/scope:Term>&	8 8	ptr	-	-
+mut std/prelude/map:Map<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
+mut std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
 mut std/prelude/map:Map<compiler/types:DeclId, I64>&	8 8	ptr	-	-
+mut std/prelude/map:MapIter<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
+mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&	8 8	ptr	-	-
+mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
+mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
 mut std/prelude/map:mapSlot<compiler/types:DeclId, I64>&	8 8	ptr	-	-
+mut std/prelude/map:mapState<I64, compiler/scope:Term>&	8 8	ptr	-	-
+mut std/prelude/map:mapState<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
+mut std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
 mut std/prelude/map:mapState<compiler/types:DeclId, I64>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/check:Ask>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/check:AssertAsk>&	8 8	ptr	-	-
+std/prelude/list:List<compiler/generic:Origin>	8 8	%"std/prelude/list:List<compiler/generic:Origin>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/generic:Origin>&	8 8	ptr	-	-
+std/prelude/list:List<compiler/scope:Gap>	8 8	%"std/prelude/list:List<compiler/scope:Gap>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/scope:Term>	8 8	%"std/prelude/list:List<compiler/scope:Term>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/scope:Term>&	8 8	ptr	-	-
+std/prelude/list:List<compiler/scope:fnUse>	8 8	%"std/prelude/list:List<compiler/scope:fnUse>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/scope:fnUse>&	8 8	ptr	-	-
+std/prelude/list:List<compiler/scope:rel>	8 8	%"std/prelude/list:List<compiler/scope:rel>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/scope:rel>&	8 8	ptr	-	-
+std/prelude/list:List<compiler/typed:BlockId>	8 8	%"std/prelude/list:List<compiler/typed:BlockId>"	{ ptr }	fields 0
+std/prelude/list:List<compiler/typed:BlockId>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/views:fact>	8 8	%"std/prelude/list:List<compiler/views:fact>"	{ ptr }	fields 0
 std/prelude/list:List<compiler/views:fact>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/views:holding>	8 8	%"std/prelude/list:List<compiler/views:holding>"	{ ptr }	fields 0
@@ -10325,6 +10751,8 @@ std/prelude/list:List<compiler/views:tasked>	8 8	%"std/prelude/list:List<compile
 std/prelude/list:List<compiler/views:tasked>&	8 8	ptr	-	-
 std/prelude/list:List<compiler/views:view>	8 8	%"std/prelude/list:List<compiler/views:view>"	{ ptr }	fields 0
 std/prelude/list:List<compiler/views:view>&	8 8	ptr	-	-
+std/prelude/list:List<mut compiler/scope:summary&>	8 8	%"std/prelude/list:List<mut compiler/scope:summary&>"	{ ptr }	fields 0
+std/prelude/list:List<mut compiler/scope:summary&>&	8 8	ptr	-	-
 std/prelude/list:List<mut compiler/views:loopFrame&>	8 8	%"std/prelude/list:List<mut compiler/views:loopFrame&>"	{ ptr }	fields 0
 std/prelude/list:List<mut compiler/views:loopFrame&>&	8 8	ptr	-	-
 std/prelude/list:List<mut compiler/views:summary&>	8 8	%"std/prelude/list:List<mut compiler/views:summary&>"	{ ptr }	fields 0
@@ -10333,6 +10761,19 @@ std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>	8 8	%"std/p
 std/prelude/list:List<std/prelude/list:List<compiler/source:NameId>>&	8 8	ptr	-	-
 std/prelude/list:List<std/prelude/list:List<compiler/views:view>>	8 8	%"std/prelude/list:List<std/prelude/list:List<compiler/views:view>>"	{ ptr }	fields 0
 std/prelude/list:List<std/prelude/list:List<compiler/views:view>>&	8 8	ptr	-	-
+std/prelude/list:listState<compiler/generic:Origin>	88 8	%"std/prelude/list:listState<compiler/generic:Origin>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<compiler/generic:Origin>&	8 8	ptr	-	-
+std/prelude/list:listState<compiler/scope:Gap>	88 8	%"std/prelude/list:listState<compiler/scope:Gap>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<compiler/scope:Gap>&	8 8	ptr	-	-
+std/prelude/list:listState<compiler/scope:Term>	88 8	%"std/prelude/list:listState<compiler/scope:Term>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<compiler/scope:Term>&	8 8	ptr	-	-
+std/prelude/list:listState<compiler/scope:fnUse>	88 8	%"std/prelude/list:listState<compiler/scope:fnUse>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<compiler/scope:fnUse>&	8 8	ptr	-	-
+std/prelude/list:listState<compiler/scope:rel>	88 8	%"std/prelude/list:listState<compiler/scope:rel>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<compiler/scope:rel>&	8 8	ptr	-	-
+std/prelude/list:listState<compiler/typed:BlockId>	88 8	%"std/prelude/list:listState<compiler/typed:BlockId>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<compiler/typed:BlockId>&	8 8	ptr	-	-
+std/prelude/list:listState<compiler/typed:Plan>&	8 8	ptr	-	-
 std/prelude/list:listState<compiler/views:fact>	88 8	%"std/prelude/list:listState<compiler/views:fact>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
 std/prelude/list:listState<compiler/views:fact>&	8 8	ptr	-	-
 std/prelude/list:listState<compiler/views:holding>	88 8	%"std/prelude/list:listState<compiler/views:holding>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
@@ -10347,6 +10788,8 @@ std/prelude/list:listState<compiler/views:tasked>	88 8	%"std/prelude/list:listSt
 std/prelude/list:listState<compiler/views:tasked>&	8 8	ptr	-	-
 std/prelude/list:listState<compiler/views:view>	88 8	%"std/prelude/list:listState<compiler/views:view>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
 std/prelude/list:listState<compiler/views:view>&	8 8	ptr	-	-
+std/prelude/list:listState<mut compiler/scope:summary&>	88 8	%"std/prelude/list:listState<mut compiler/scope:summary&>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
+std/prelude/list:listState<mut compiler/scope:summary&>&	8 8	ptr	-	-
 std/prelude/list:listState<mut compiler/views:loopFrame&>	88 8	%"std/prelude/list:listState<mut compiler/views:loopFrame&>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
 std/prelude/list:listState<mut compiler/views:loopFrame&>&	8 8	ptr	-	-
 std/prelude/list:listState<mut compiler/views:summary&>	88 8	%"std/prelude/list:listState<mut compiler/views:summary&>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
@@ -10355,443 +10798,61 @@ std/prelude/list:listState<std/prelude/list:List<compiler/source:NameId>>	88 8	%
 std/prelude/list:listState<std/prelude/list:List<compiler/source:NameId>>&	8 8	ptr	-	-
 std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>	88 8	%"std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
 std/prelude/list:listState<std/prelude/list:List<compiler/views:view>>&	8 8	ptr	-	-
-std/prelude/map:Map<compiler/types:DeclId, I64>	8 8	%"std/prelude/map:Map<compiler/types:DeclId, I64>"	{ ptr }	fields 0
-std/prelude/map:Map<compiler/types:DeclId, I64>&	8 8	ptr	-	-
-std/prelude/map:MapEntry<compiler/types:DeclId, I64>	16 8	%"std/prelude/map:MapEntry<compiler/types:DeclId, I64>"	{ i32, i64 }	fields 0,8
-std/prelude/map:mapSlot<compiler/types:DeclId, I64>	24 8	%"std/prelude/map:mapSlot<compiler/types:DeclId, I64>"	{ %"std/prelude/map:MapEntry<compiler/types:DeclId, I64>", ptr }	fields 0,16
-std/prelude/map:mapState<compiler/types:DeclId, I64>	32 8	%"std/prelude/map:mapState<compiler/types:DeclId, I64>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
-std/prelude/map:mapState<compiler/types:DeclId, I64>&	8 8	ptr	-	-
-== compiler/olang.olang
-(compiler/scope:Term, Bool, I64)	40 8	{ { i64, [2 x i64] }, i1, i64 }	-	fields 0,24,32
-Array<compiler/emit:Object>&	16 8	{ i64, ptr }	-	-
-Array<compiler/generic:Origin>	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:Gap>	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:Term>	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:Term>&	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:Val>	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:fnUse>	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:fnUse>&	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:rel>	16 8	{ i64, ptr }	-	-
-Array<compiler/scope:rel>&	16 8	{ i64, ptr }	-	-
-Array<compiler/typed:BlockId>	16 8	{ i64, ptr }	-	-
-Array<compiler/typed:Scope, 1>	16 8	[1 x { i64, [1 x i64] }]	-	-
-Array<mut Array<compiler/generic:Origin>&>	16 8	{ i64, ptr }	-	-
-Array<mut Array<compiler/scope:Gap>&>	16 8	{ i64, ptr }	-	-
-Array<mut Array<compiler/scope:Term>&>	16 8	{ i64, ptr }	-	-
-Array<mut Array<compiler/scope:fnUse>&>	16 8	{ i64, ptr }	-	-
-Array<mut Array<compiler/scope:rel>&>	16 8	{ i64, ptr }	-	-
-Array<mut Array<compiler/typed:BlockId>&>	16 8	{ i64, ptr }	-	-
-Array<mut Array<mut compiler/scope:summary&>&>	16 8	{ i64, ptr }	-	-
-Array<mut compiler/scope:summary&>	16 8	{ i64, ptr }	-	-
-Array<mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&>	16 8	{ i64, ptr }	-	-
-Array<mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&>	16 8	{ i64, ptr }	-	-
-Array<mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&>	16 8	{ i64, ptr }	-	-
-compiler/olang:Bad	4 4	i32	-	-
-compiler/olang:CommandLine	96 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/list:List<std/prelude/text:String&>", { i64, ptr }, i1, %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>", { i64, ptr }, { i64, ptr }, i1 }	fields 0,8,16,32,40,48,56,72,88
-compiler/olang:CommandLine&	8 8	ptr	-	-
-compiler/olang:Passes	8 8	%"compiler/olang:Passes"	{ i64 }	fields 0
-compiler/scope:Gap	32 8	%"compiler/scope:Gap"	{ i64, %"compiler/source:Span", { i64, ptr } }	fields 0,8,16
-compiler/scope:Scoper	880 8	%"compiler/scope:Scoper"	{ ptr, %"std/prelude/list:List<mut compiler/typed:Body&>", %"std/prelude/list:List<compiler/typed:Plan>", %"std/prelude/list:List<compiler/scope:Gap>", { ptr, ptr }, { ptr, ptr }, %"std/prelude/list:List<mut compiler/scope:summary&>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<compiler/types:TypeId, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<I64, std/prelude/text:String&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", i64, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", ptr, i64, i1, %"compiler/typed:Plan", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<compiler/typed:BlockId>", %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/scope:Term>", %"compiler/source:Span", i64, %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<I64, compiler/typed:Expr&>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<I64>", %"std/prelude/map:Map<I64, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, Bool>", i64, i1, %"std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>", %"std/prelude/map:Map<I64, Bool>", %"std/prelude/map:Map<I64, Bool>", i64, i64, %"std/prelude/list:List<compiler/scope:Term>", i1, %"std/prelude/list:List<compiler/typed:Place&>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", i1, %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", i1, i1, %"std/prelude/list:List<compiler/typed:BlockId>", { i64, [2 x i64] }, i1, %"compiler/source:Span", { i64, [2 x i64] }, i1, { i64, [2 x i64] }, i1, i1, i1, %"compiler/source:Span", %"std/prelude/list:List<compiler/scope:fnUse>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<Bool>", %"std/prelude/map:Map<I64, compiler/scope:Term>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/map:Map<std/pair:Pair<I64, I64>, I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, { i64, [2 x i64] }, i1, i1, %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", i1, i64, i32, i1, i1 }	fields 0,8,16,24,32,48,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,496,504,512,520,528,536,544,552,560,568,576,577,584,592,616,620,632,656,664,688,689,690,692,704,712,720,728,736,744,752,760,768,776,784,792,800,808,832,833,840,848,856,864,872,876,877
-compiler/scope:Scoper&	8 8	ptr	-	-
-compiler/scope:Term	24 8	{ i64, [2 x i64] }	-	cases ;0;0;;0,8;0;
-compiler/scope:Val	32 8	%"compiler/scope:Val"	{ i32, { i64, [2 x i64] } }	fields 0,8
-compiler/scope:ValKind	4 4	i32	-	-
-compiler/scope:fnUse	40 8	%"compiler/scope:fnUse"	{ i64, %"compiler/source:Span", i64, i64, i32 }	fields 0,8,16,24,32
-compiler/scope:rel	72 8	%"compiler/scope:rel"	{ { i64, [2 x i64] }, { i64, [2 x i64] }, i1, %"compiler/source:Span", i64 }	fields 0,24,48,52,64
-compiler/scope:summary	96 8	%"compiler/scope:summary"	{ %"std/prelude/list:List<compiler/scope:rel>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/source:Span>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<compiler/scope:Term>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/scope:Term>", i1, i1 }	fields 0,8,16,24,32,40,48,56,64,72,80,88,89
-compiler/scope:walked	32 8	%"compiler/scope:walked"	{ %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<compiler/types:TypeId>", %"std/prelude/list:List<I64>" }	fields 0,8,16,24
-fn() compiler/olang:CommandLine	16 8	{ ptr, ptr }	-	ret %"compiler/olang:CommandLine" pass 
-fn() compiler/olang:Passes	16 8	{ ptr, ptr }	-	ret %"compiler/olang:Passes" pass 
-fn() compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass 
-fn() compiler/scope:summary	16 8	{ ptr, ptr }	-	ret %"compiler/scope:summary" pass 
-fn() compiler/scope:walked	16 8	{ ptr, ptr }	-	ret %"compiler/scope:walked" pass 
-fn() std/prelude/list:List<compiler/generic:Origin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/generic:Origin>" pass 
-fn() std/prelude/list:List<compiler/scope:Gap>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:Gap>" pass 
-fn() std/prelude/list:List<compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:Term>" pass 
-fn() std/prelude/list:List<compiler/scope:fnUse>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:fnUse>" pass 
-fn() std/prelude/list:List<compiler/scope:rel>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/scope:rel>" pass 
-fn() std/prelude/list:List<compiler/typed:BlockId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/typed:BlockId>" pass 
-fn() std/prelude/list:List<mut compiler/scope:summary&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<mut compiler/scope:summary&>" pass 
-fn() std/prelude/list:listState<compiler/generic:Origin>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/generic:Origin>" pass 
-fn() std/prelude/list:listState<compiler/scope:Gap>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:Gap>" pass 
-fn() std/prelude/list:listState<compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:Term>" pass 
-fn() std/prelude/list:listState<compiler/scope:fnUse>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:fnUse>" pass 
-fn() std/prelude/list:listState<compiler/scope:rel>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/scope:rel>" pass 
-fn() std/prelude/list:listState<compiler/typed:BlockId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<compiler/typed:BlockId>" pass 
-fn() std/prelude/list:listState<mut compiler/scope:summary&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:listState<mut compiler/scope:summary&>" pass 
-fn() std/prelude/map:Map<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<I64, compiler/scope:Term>" pass 
-fn() std/prelude/map:Map<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<I64, compiler/typed:Expr&>" pass 
-fn() std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>" pass 
-fn() std/prelude/map:mapState<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<I64, compiler/scope:Term>" pass 
-fn() std/prelude/map:mapState<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<I64, compiler/typed:Expr&>" pass 
-fn() std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>" pass 
-fn(Array<std/prelude/text:String&>&) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
-fn(Array<std/prelude/text:String&>&, mut compiler/build:Config&, mut compiler/diag:Diagnostics&) compiler/olang:CommandLine ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret { i32, %"compiler/olang:CommandLine" } pass vvv
-fn(Array<std/prelude/text:String&>&, mut compiler/olang:Passes&) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(I64, compiler/scope:Term) std/prelude/map:MapEntry<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<I64, compiler/scope:Term>" pass vv
-fn(I64, compiler/scope:Term, mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&) std/prelude/map:mapSlot<I64, compiler/scope:Term>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<I64, compiler/scope:Term>" pass vvv
-fn(I64, compiler/source:Span, I64, I64, compiler/types:TypeId) compiler/scope:fnUse	16 8	{ ptr, ptr }	-	ret %"compiler/scope:fnUse" pass vvvvv
-fn(I64, compiler/source:Span, std/prelude/text:String&) compiler/scope:Gap	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Gap" pass vvv
-fn(I64, compiler/typed:Expr&) std/prelude/map:MapEntry<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<I64, compiler/typed:Expr&>" pass vv
-fn(I64, compiler/typed:Expr&, mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&) std/prelude/map:mapSlot<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<I64, compiler/typed:Expr&>" pass vvv
-fn(I64, std/prelude/list:List<compiler/scope:Term>) std/prelude/map:MapEntry<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapEntry<I64, std/prelude/list:List<compiler/scope:Term>>" pass vv
-fn(I64, std/prelude/list:List<compiler/scope:Term>, mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&) std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>" pass vvv
-fn(compiler/olang:CommandLine&) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
-fn(compiler/olang:CommandLine&, mut compiler/diag:Diagnostics&) std/prelude/text:String ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
-fn(compiler/scope:Scoper&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(compiler/scope:Scoper&, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
-fn(compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass v
-fn(compiler/scope:Term, compiler/scope:Term, Bool, compiler/source:Span, I64) compiler/scope:rel	16 8	{ ptr, ptr }	-	ret %"compiler/scope:rel" pass vvvvv
-fn(compiler/scope:ValKind, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vv
-fn(compiler/typed:Arm&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(compiler/typed:Block&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(compiler/typed:Expr&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(compiler/typed:Expr&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(compiler/typed:Place&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
-fn(compiler/typed:Place&) compiler/typed:Expr&	16 8	{ ptr, ptr }	-	ret ptr pass v
-fn(compiler/typed:Place&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(compiler/typed:Place&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(compiler/typed:Stmt&, mut compiler/scope:walked&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(compiler/types:TypeId) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
-fn(mut compiler/build:Config&, Bool, mut compiler/diag:Diagnostics&) ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret i32 pass vvv
-fn(mut compiler/check:Checker&, mut compiler/build:Config&) std/prelude/list:List<compiler/typed:Plan>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/typed:Plan>" pass vv
-fn(mut compiler/diag:Diagnostics&, compiler/msgs:Msg) ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(mut compiler/generic:Program&, std/prelude/list:List<mut compiler/typed:Body&>) compiler/scope:Scoper	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/olang:Passes&, mut compiler/build:Config&, std/prelude/text:String&, Array<std/prelude/text:String&>&, mut compiler/diag:Diagnostics&) I32	16 8	{ ptr, ptr }	-	ret i32 pass vvvvv
-fn(mut compiler/olang:Passes&, mut compiler/build:Config&, std/prelude/text:String&, mut compiler/diag:Diagnostics&) I32	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
-fn(mut compiler/olang:Passes&, std/prelude/text:String&, Array<std/prelude/text:String&>&, mut compiler/build:Config&, mut compiler/diag:Diagnostics&) I32 ? compiler/build:Failed	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vvvvv
-fn(mut compiler/olang:Passes&, std/prelude/text:String&, compiler/build:Kind, mut compiler/build:Config&, mut compiler/build:Program&, mut compiler/diag:Diagnostics&) ? compiler/build:Failed	16 8	{ ptr, ptr }	-	ret i32 pass vvvvvv
-fn(mut compiler/olang:Passes&, std/prelude/text:String&, mut compiler/build:Config&, mut compiler/diag:Diagnostics&) mut compiler/load:Loader& ? compiler/build:Failed	16 8	{ ptr, ptr }	-	ret { i32, ptr } pass vvvv
-fn(mut compiler/scope:Scoper&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut compiler/scope:Scoper&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass v
-fn(mut compiler/scope:Scoper&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass v
-fn(mut compiler/scope:Scoper&, Array<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, Array<compiler/typed:Capture&>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, Array<compiler/typed:Expr&>&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, Array<compiler/typed:Stmt&>&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, Array<compiler/typed:Stmt&>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, Array<compiler/typed:Stmt&>&, I64, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(mut compiler/scope:Scoper&, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, I64) compiler/scope:walked	16 8	{ ptr, ptr }	-	ret %"compiler/scope:walked" pass vv
-fn(mut compiler/scope:Scoper&, I64) compiler/typed:Mark	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, I64, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, I64, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, I64, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, I64, I64, Array<compiler/scope:Term>&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvv
-fn(mut compiler/scope:Scoper&, I64, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, I64, I64, compiler/source:Span, compiler/msgs:Msg)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
-fn(mut compiler/scope:Scoper&, I64, I64, compiler/typed:Call&, Bool, Array<compiler/scope:Term>&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvvvv
-fn(mut compiler/scope:Scoper&, I64, compiler/scope:Term, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, I64, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvv
-fn(mut compiler/scope:Scoper&, I64, compiler/source:Span, std/prelude/text:String&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, I64, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, I64, compiler/typed:LocalId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, I64, compiler/types:TypeId, compiler/typed:Expr&, Bool, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term) compiler/typed:Scope	16 8	{ ptr, ptr }	-	ret { i64, [1 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, Array<compiler/scope:Term>&, compiler/typed:Call&, Bool) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/scope:Term, Bool, compiler/typed:Expr&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/source:Span, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Term, compiler/source:Span, I64, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Val, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Val, compiler/scope:Val) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/scope:Val, compiler/scope:Val, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/scope:rel)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, I64, Array<compiler/scope:Term>&, compiler/typed:Call&)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, I64, Bool) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/msgs:Msg) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/scope:Term, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:LocalId, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Place&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Place&, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Slice&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/typed:Spawn&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, compiler/types:TypeId, compiler/typed:Call&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, std/prelude/text:String&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/source:Span, std/prelude/text:String&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Arm&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Arm&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Arm&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Arm&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Block&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Block&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Block&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:BlockId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&, Array<compiler/typed:Expr&>&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Arm&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Block&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Expr&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Place&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Body&, compiler/typed:Stmt&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&) compiler/types:TypeId	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, Array<I64>&, I64, compiler/source:Span) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, Array<compiler/scope:Term>&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, Bool, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, compiler/typed:Expr&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, I64, compiler/types:TypeId, I64, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, compiler/scope:Term) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Call&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Callee&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/source:Span	16 8	{ ptr, ptr }	-	ret %"compiler/source:Span" pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Call&	16 8	{ ptr, ptr }	-	ret ptr pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Expr&	16 8	{ ptr, ptr }	-	ret ptr pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Place&	16 8	{ ptr, ptr }	-	ret ptr pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) compiler/typed:Promote&	16 8	{ ptr, ptr }	-	ret ptr pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64, Bool)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/scope:Term, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/typed:SiteId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Expr&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:FnVal&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:FnVal&, compiler/scope:Term, compiler/source:Span) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Local, compiler/typed:Expr&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:LocalId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:LocalId, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:LocalId, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:LocalId, compiler/typed:Expr&, Array<compiler/typed:Stmt&>&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:MakeKind) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Mark, compiler/typed:BlockId) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Match&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Match&, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&) (compiler/scope:Term, Bool, I64)	16 8	{ ptr, ptr }	-	ret { { i64, [2 x i64] }, i1, i64 } pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, Bool) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, compiler/scope:Term) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, compiler/types:TypeId, compiler/scope:Term) compiler/scope:Val	16 8	{ ptr, ptr }	-	ret %"compiler/scope:Val" pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Place&, mut std/prelude/list:List<I64>&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:ScopeVar) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:SiteId)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:SiteId, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:SiteId, compiler/scope:Term, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Stmt&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, compiler/typed:Stmt&, I64)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, compiler/typed:Stmt&, I64, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
-fn(mut compiler/scope:Scoper&, compiler/types:TypeId) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut compiler/scope:Scoper&, compiler/types:TypeId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(mut compiler/scope:Scoper&, compiler/types:TypeId) std/prelude/list:List<compiler/types:TypeId>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/types:TypeId>" pass vv
-fn(mut compiler/scope:Scoper&, compiler/types:TypeId, Array<I64>&, I64, Array<compiler/scope:Term>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvvv
-fn(mut compiler/scope:Scoper&, compiler/types:TypeId, Bool) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvv
-fn(mut compiler/scope:Scoper&, compiler/types:TypeId, I64) compiler/typed:Mark	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut compiler/scope:Scoper&, compiler/types:TypeId, compiler/typed:LocalId) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(mut compiler/scope:Scoper&, mut compiler/scope:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut compiler/scope:Scoper&, mut std/prelude/list:List<compiler/scope:Term>&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut compiler/scope:Scoper&, std/prelude/list:List<compiler/typed:Expr&>&, compiler/scope:Term) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vvv
-fn(mut std/prelude/list:List<compiler/generic:Origin>&, compiler/generic:Origin)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<compiler/scope:Gap>&, compiler/scope:Gap)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/list:List<compiler/scope:Term>&) compiler/scope:Term ? std/prelude/list:ListError	16 8	{ ptr, ptr }	-	ret { i32, { i64, [2 x i64] } } pass v
-fn(mut std/prelude/list:List<compiler/scope:Term>&, I64, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut std/prelude/list:List<compiler/scope:Term>&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<compiler/scope:fnUse>&, compiler/scope:fnUse)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<compiler/scope:rel>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/list:List<compiler/scope:rel>&, compiler/scope:rel)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<compiler/source:Span>&, I64, compiler/source:Span)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut std/prelude/list:List<compiler/typed:BlockId>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/list:List<compiler/typed:BlockId>&) compiler/typed:BlockId ? std/prelude/list:ListError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass v
-fn(mut std/prelude/list:List<compiler/typed:BlockId>&, compiler/typed:BlockId)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<compiler/typed:Plan>&, I64, compiler/typed:Plan)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut std/prelude/list:List<compiler/typed:Plan>&, compiler/typed:Plan)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:List<mut compiler/scope:summary&>&, mut compiler/scope:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/generic:Origin>&, compiler/generic:Origin)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/scope:Gap>&, compiler/scope:Gap)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/list:listState<compiler/scope:Term>&, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/scope:fnUse>&, compiler/scope:fnUse)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/scope:rel>&, compiler/scope:rel)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/typed:BlockId>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/list:listState<compiler/typed:BlockId>&, compiler/typed:BlockId)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<compiler/typed:Plan>&, compiler/typed:Plan)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/list:listState<mut compiler/scope:summary&>&, mut compiler/scope:summary&)	16 8	{ ptr, ptr }	-	ret void pass vv
-fn(mut std/prelude/map:Map<I64, Bool>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:Map<I64, I64>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:Map<I64, compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:Map<I64, compiler/scope:Term>&, I64, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut std/prelude/map:Map<I64, compiler/typed:Expr&>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(mut std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&, I64, std/prelude/list:List<compiler/scope:Term>)	16 8	{ ptr, ptr }	-	ret void pass vvv
-fn(mut std/prelude/map:MapIter<I64, compiler/typed:Expr&>&) ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret i32 pass v
-fn(mut std/prelude/map:MapIter<I64, compiler/typed:Expr&>&) std/prelude/map:MapEntry<I64, compiler/typed:Expr&> ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, %"std/prelude/map:MapEntry<I64, compiler/typed:Expr&>" } pass v
-fn(mut std/prelude/map:mapState<I64, compiler/scope:Term>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:mapState<I64, compiler/scope:Term>&, I64, I64, compiler/scope:Term)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut std/prelude/map:mapState<I64, compiler/typed:Expr&>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:mapState<I64, compiler/typed:Expr&>&, I64, I64, compiler/typed:Expr&)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(mut std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&)	16 8	{ ptr, ptr }	-	ret void pass v
-fn(mut std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&, I64, I64, std/prelude/list:List<compiler/scope:Term>)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(std/prelude/list:List<compiler/emit:Object>&, I64) Array<compiler/emit:Object>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
-fn(std/prelude/list:List<compiler/generic:Origin>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-fn(std/prelude/list:List<compiler/generic:Origin>&, I64) compiler/generic:Origin	16 8	{ ptr, ptr }	-	ret %"compiler/generic:Origin" pass vv
-fn(std/prelude/list:List<compiler/lower:Gap>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-fn(std/prelude/list:List<compiler/scope:Term>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-fn(std/prelude/list:List<compiler/scope:Term>&, I64) Array<compiler/scope:Term>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
-fn(std/prelude/list:List<compiler/scope:Term>&, I64) compiler/scope:Term	16 8	{ ptr, ptr }	-	ret { i64, [2 x i64] } pass vv
-fn(std/prelude/list:List<compiler/scope:fnUse>&, I64) Array<compiler/scope:fnUse>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
-fn(std/prelude/list:List<compiler/scope:rel>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-fn(std/prelude/list:List<compiler/scope:rel>&, I64) Array<compiler/scope:rel>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
-fn(std/prelude/list:List<compiler/scope:rel>&, compiler/scope:rel) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(std/prelude/list:List<compiler/typed:BlockId>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
-fn(std/prelude/list:List<compiler/typed:BlockId>&, I64) compiler/typed:BlockId	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(std/prelude/list:List<compiler/typed:Scope>&) mut Array<compiler/typed:Scope>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
-fn(std/prelude/list:List<compiler/typed:SiteInfo>&, I64) compiler/typed:SiteInfo	16 8	{ ptr, ptr }	-	ret %"compiler/typed:SiteInfo" pass vv
-fn(std/prelude/list:List<mut compiler/scope:summary&>&, I64) mut compiler/scope:summary&	16 8	{ ptr, ptr }	-	ret ptr pass vv
-fn(std/prelude/list:listState<compiler/emit:Object>&, I64, I64) Array<compiler/emit:Object>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
-fn(std/prelude/list:listState<compiler/generic:Origin>&, I64) mut Array<compiler/generic:Origin>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/list:listState<compiler/scope:Gap>&, I64) mut Array<compiler/scope:Gap>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/list:listState<compiler/scope:Term>&, I64) mut Array<compiler/scope:Term>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/list:listState<compiler/scope:Term>&, I64, I64) Array<compiler/scope:Term>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
-fn(std/prelude/list:listState<compiler/scope:fnUse>&, I64) mut Array<compiler/scope:fnUse>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/list:listState<compiler/scope:fnUse>&, I64, I64) Array<compiler/scope:fnUse>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
-fn(std/prelude/list:listState<compiler/scope:rel>&, I64) mut Array<compiler/scope:rel>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/list:listState<compiler/scope:rel>&, I64, I64) Array<compiler/scope:rel>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
-fn(std/prelude/list:listState<compiler/typed:BlockId>&, I64) mut Array<compiler/typed:BlockId>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/list:listState<compiler/typed:Plan>&, I64) mut Array<compiler/typed:Plan>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/list:listState<mut compiler/scope:summary&>&, I64) mut Array<mut compiler/scope:summary&>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vv
-fn(std/prelude/map:Map<I64, compiler/scope:Term>&, I64) compiler/scope:Term ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, { i64, [2 x i64] } } pass vv
-fn(std/prelude/map:Map<I64, compiler/typed:Expr&>&) std/prelude/map:MapIter<I64, compiler/typed:Expr&>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapIter<I64, compiler/typed:Expr&>" pass v
-fn(std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(std/prelude/map:Map<I64, compiler/typed:Expr&>&, I64) compiler/typed:Expr& ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, ptr } pass vv
-fn(std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&, I64) std/prelude/list:List<compiler/scope:Term> ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, %"std/prelude/list:List<compiler/scope:Term>" } pass vv
-fn(std/prelude/map:mapState<I64, compiler/scope:Term>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(std/prelude/map:mapState<I64, compiler/typed:Expr&>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
-fn(std/prelude/text:String&, mut compiler/diag:Diagnostics&) ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(std/prelude/text:String&, mut compiler/diag:Diagnostics&) std/prelude/text:String ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
-mut Array<compiler/generic:Origin>&	16 8	{ i64, ptr }	-	-
-mut Array<compiler/scope:Gap>&	16 8	{ i64, ptr }	-	-
-mut Array<compiler/scope:Term>&	16 8	{ i64, ptr }	-	-
-mut Array<compiler/scope:fnUse>&	16 8	{ i64, ptr }	-	-
-mut Array<compiler/scope:rel>&	16 8	{ i64, ptr }	-	-
-mut Array<compiler/typed:BlockId>&	16 8	{ i64, ptr }	-	-
-mut Array<mut Array<compiler/generic:Origin>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut Array<compiler/scope:Gap>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut Array<compiler/scope:Term>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut Array<compiler/scope:fnUse>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut Array<compiler/scope:rel>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut Array<compiler/typed:BlockId>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut Array<mut compiler/scope:summary&>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut compiler/scope:summary&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&>&	16 8	{ i64, ptr }	-	-
-mut Array<mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&>&	16 8	{ i64, ptr }	-	-
-mut compiler/olang:Passes&	8 8	ptr	-	-
-mut compiler/scope:Scoper&	8 8	ptr	-	-
-mut compiler/scope:summary&	8 8	ptr	-	-
-mut compiler/scope:walked&	8 8	ptr	-	-
-mut std/prelude/list:List<compiler/generic:Origin>&	8 8	ptr	-	-
-mut std/prelude/list:List<compiler/scope:Gap>&	8 8	ptr	-	-
-mut std/prelude/list:List<compiler/scope:Term>&	8 8	ptr	-	-
-mut std/prelude/list:List<compiler/scope:fnUse>&	8 8	ptr	-	-
-mut std/prelude/list:List<compiler/scope:rel>&	8 8	ptr	-	-
-mut std/prelude/list:List<compiler/typed:BlockId>&	8 8	ptr	-	-
-mut std/prelude/list:List<compiler/typed:Plan>&	8 8	ptr	-	-
-mut std/prelude/list:List<mut compiler/scope:summary&>&	8 8	ptr	-	-
-mut std/prelude/list:listState<compiler/generic:Origin>&	8 8	ptr	-	-
-mut std/prelude/list:listState<compiler/scope:Gap>&	8 8	ptr	-	-
-mut std/prelude/list:listState<compiler/scope:Term>&	8 8	ptr	-	-
-mut std/prelude/list:listState<compiler/scope:fnUse>&	8 8	ptr	-	-
-mut std/prelude/list:listState<compiler/scope:rel>&	8 8	ptr	-	-
-mut std/prelude/list:listState<compiler/typed:BlockId>&	8 8	ptr	-	-
-mut std/prelude/list:listState<mut compiler/scope:summary&>&	8 8	ptr	-	-
-mut std/prelude/map:Map<I64, compiler/scope:Term>&	8 8	ptr	-	-
-mut std/prelude/map:Map<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
-mut std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
-mut std/prelude/map:MapIter<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
-mut std/prelude/map:mapSlot<I64, compiler/scope:Term>&	8 8	ptr	-	-
-mut std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
-mut std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
-mut std/prelude/map:mapState<I64, compiler/scope:Term>&	8 8	ptr	-	-
-mut std/prelude/map:mapState<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
-mut std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/emit:Object>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/generic:Origin>	8 8	%"std/prelude/list:List<compiler/generic:Origin>"	{ ptr }	fields 0
-std/prelude/list:List<compiler/generic:Origin>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/scope:Gap>	8 8	%"std/prelude/list:List<compiler/scope:Gap>"	{ ptr }	fields 0
-std/prelude/list:List<compiler/scope:Term>	8 8	%"std/prelude/list:List<compiler/scope:Term>"	{ ptr }	fields 0
-std/prelude/list:List<compiler/scope:Term>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/scope:fnUse>	8 8	%"std/prelude/list:List<compiler/scope:fnUse>"	{ ptr }	fields 0
-std/prelude/list:List<compiler/scope:fnUse>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/scope:rel>	8 8	%"std/prelude/list:List<compiler/scope:rel>"	{ ptr }	fields 0
-std/prelude/list:List<compiler/scope:rel>&	8 8	ptr	-	-
-std/prelude/list:List<compiler/typed:BlockId>	8 8	%"std/prelude/list:List<compiler/typed:BlockId>"	{ ptr }	fields 0
-std/prelude/list:List<compiler/typed:BlockId>&	8 8	ptr	-	-
-std/prelude/list:List<mut compiler/scope:summary&>	8 8	%"std/prelude/list:List<mut compiler/scope:summary&>"	{ ptr }	fields 0
-std/prelude/list:List<mut compiler/scope:summary&>&	8 8	ptr	-	-
-std/prelude/list:listState<compiler/generic:Origin>	88 8	%"std/prelude/list:listState<compiler/generic:Origin>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
-std/prelude/list:listState<compiler/generic:Origin>&	8 8	ptr	-	-
-std/prelude/list:listState<compiler/scope:Gap>	88 8	%"std/prelude/list:listState<compiler/scope:Gap>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
-std/prelude/list:listState<compiler/scope:Gap>&	8 8	ptr	-	-
-std/prelude/list:listState<compiler/scope:Term>	88 8	%"std/prelude/list:listState<compiler/scope:Term>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
-std/prelude/list:listState<compiler/scope:Term>&	8 8	ptr	-	-
-std/prelude/list:listState<compiler/scope:fnUse>	88 8	%"std/prelude/list:listState<compiler/scope:fnUse>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
-std/prelude/list:listState<compiler/scope:fnUse>&	8 8	ptr	-	-
-std/prelude/list:listState<compiler/scope:rel>	88 8	%"std/prelude/list:listState<compiler/scope:rel>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
-std/prelude/list:listState<compiler/scope:rel>&	8 8	ptr	-	-
-std/prelude/list:listState<compiler/typed:BlockId>	88 8	%"std/prelude/list:listState<compiler/typed:BlockId>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
-std/prelude/list:listState<compiler/typed:BlockId>&	8 8	ptr	-	-
-std/prelude/list:listState<compiler/typed:Plan>&	8 8	ptr	-	-
-std/prelude/list:listState<mut compiler/scope:summary&>	88 8	%"std/prelude/list:listState<mut compiler/scope:summary&>"	{ { i64, ptr }, { i64, ptr }, i64, i64, { i64, ptr }, i64, i64, i64 }	fields 0,16,32,40,48,64,72,80
-std/prelude/list:listState<mut compiler/scope:summary&>&	8 8	ptr	-	-
 std/prelude/map:Map<I64, compiler/scope:Term>	8 8	%"std/prelude/map:Map<I64, compiler/scope:Term>"	{ ptr }	fields 0
 std/prelude/map:Map<I64, compiler/scope:Term>&	8 8	ptr	-	-
 std/prelude/map:Map<I64, compiler/typed:Expr&>	8 8	%"std/prelude/map:Map<I64, compiler/typed:Expr&>"	{ ptr }	fields 0
 std/prelude/map:Map<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
 std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>	8 8	%"std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>"	{ ptr }	fields 0
 std/prelude/map:Map<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
+std/prelude/map:Map<compiler/types:DeclId, I64>	8 8	%"std/prelude/map:Map<compiler/types:DeclId, I64>"	{ ptr }	fields 0
+std/prelude/map:Map<compiler/types:DeclId, I64>&	8 8	ptr	-	-
 std/prelude/map:MapEntry<I64, compiler/scope:Term>	32 8	%"std/prelude/map:MapEntry<I64, compiler/scope:Term>"	{ i64, { i64, [2 x i64] } }	fields 0,8
 std/prelude/map:MapEntry<I64, compiler/typed:Expr&>	16 8	%"std/prelude/map:MapEntry<I64, compiler/typed:Expr&>"	{ i64, ptr }	fields 0,8
 std/prelude/map:MapEntry<I64, std/prelude/list:List<compiler/scope:Term>>	16 8	%"std/prelude/map:MapEntry<I64, std/prelude/list:List<compiler/scope:Term>>"	{ i64, %"std/prelude/list:List<compiler/scope:Term>" }	fields 0,8
+std/prelude/map:MapEntry<compiler/types:DeclId, I64>	16 8	%"std/prelude/map:MapEntry<compiler/types:DeclId, I64>"	{ i32, i64 }	fields 0,8
 std/prelude/map:MapIter<I64, compiler/typed:Expr&>	32 8	%"std/prelude/map:MapIter<I64, compiler/typed:Expr&>"	{ ptr, i64, ptr, ptr }	fields 0,8,16,24
 std/prelude/map:mapSlot<I64, compiler/scope:Term>	40 8	%"std/prelude/map:mapSlot<I64, compiler/scope:Term>"	{ %"std/prelude/map:MapEntry<I64, compiler/scope:Term>", ptr }	fields 0,32
 std/prelude/map:mapSlot<I64, compiler/typed:Expr&>	24 8	%"std/prelude/map:mapSlot<I64, compiler/typed:Expr&>"	{ %"std/prelude/map:MapEntry<I64, compiler/typed:Expr&>", ptr }	fields 0,16
 std/prelude/map:mapSlot<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
 std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>	24 8	%"std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>"	{ %"std/prelude/map:MapEntry<I64, std/prelude/list:List<compiler/scope:Term>>", ptr }	fields 0,16
 std/prelude/map:mapSlot<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
+std/prelude/map:mapSlot<compiler/types:DeclId, I64>	24 8	%"std/prelude/map:mapSlot<compiler/types:DeclId, I64>"	{ %"std/prelude/map:MapEntry<compiler/types:DeclId, I64>", ptr }	fields 0,16
 std/prelude/map:mapState<I64, compiler/scope:Term>	32 8	%"std/prelude/map:mapState<I64, compiler/scope:Term>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
 std/prelude/map:mapState<I64, compiler/scope:Term>&	8 8	ptr	-	-
 std/prelude/map:mapState<I64, compiler/typed:Expr&>	32 8	%"std/prelude/map:mapState<I64, compiler/typed:Expr&>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
 std/prelude/map:mapState<I64, compiler/typed:Expr&>&	8 8	ptr	-	-
 std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>	32 8	%"std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
 std/prelude/map:mapState<I64, std/prelude/list:List<compiler/scope:Term>>&	8 8	ptr	-	-
+std/prelude/map:mapState<compiler/types:DeclId, I64>	32 8	%"std/prelude/map:mapState<compiler/types:DeclId, I64>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
+std/prelude/map:mapState<compiler/types:DeclId, I64>&	8 8	ptr	-	-
+== compiler/olang.olang
+Array<compiler/emit:Object>&	16 8	{ i64, ptr }	-	-
+compiler/olang:Bad	4 4	i32	-	-
+compiler/olang:CommandLine	96 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/list:List<std/prelude/text:String&>", { i64, ptr }, i1, %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>", { i64, ptr }, { i64, ptr }, i1 }	fields 0,8,16,32,40,48,56,72,88
+compiler/olang:CommandLine&	8 8	ptr	-	-
+compiler/olang:Passes	8 8	%"compiler/olang:Passes"	{ i64 }	fields 0
+fn() compiler/olang:CommandLine	16 8	{ ptr, ptr }	-	ret %"compiler/olang:CommandLine" pass 
+fn() compiler/olang:Passes	16 8	{ ptr, ptr }	-	ret %"compiler/olang:Passes" pass 
+fn(Array<std/prelude/text:String&>&) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
+fn(Array<std/prelude/text:String&>&, mut compiler/build:Config&, mut compiler/diag:Diagnostics&) compiler/olang:CommandLine ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret { i32, %"compiler/olang:CommandLine" } pass vvv
+fn(Array<std/prelude/text:String&>&, mut compiler/olang:Passes&) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
+fn(compiler/olang:CommandLine&) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
+fn(compiler/olang:CommandLine&, mut compiler/diag:Diagnostics&) std/prelude/text:String ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(mut compiler/build:Config&, Bool, mut compiler/diag:Diagnostics&) ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret i32 pass vvv
+fn(mut compiler/check:Checker&, mut compiler/build:Config&) std/prelude/list:List<compiler/typed:Plan>	16 8	{ ptr, ptr }	-	ret %"std/prelude/list:List<compiler/typed:Plan>" pass vv
+fn(mut compiler/diag:Diagnostics&, compiler/msgs:Msg) ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret i32 pass vv
+fn(mut compiler/olang:Passes&, mut compiler/build:Config&, std/prelude/text:String&, Array<std/prelude/text:String&>&, mut compiler/diag:Diagnostics&) I32	16 8	{ ptr, ptr }	-	ret i32 pass vvvvv
+fn(mut compiler/olang:Passes&, mut compiler/build:Config&, std/prelude/text:String&, mut compiler/diag:Diagnostics&) I32	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
+fn(mut compiler/olang:Passes&, std/prelude/text:String&, Array<std/prelude/text:String&>&, mut compiler/build:Config&, mut compiler/diag:Diagnostics&) I32 ? compiler/build:Failed	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vvvvv
+fn(mut compiler/olang:Passes&, std/prelude/text:String&, compiler/build:Kind, mut compiler/build:Config&, mut compiler/build:Program&, mut compiler/diag:Diagnostics&) ? compiler/build:Failed	16 8	{ ptr, ptr }	-	ret i32 pass vvvvvv
+fn(mut compiler/olang:Passes&, std/prelude/text:String&, mut compiler/build:Config&, mut compiler/diag:Diagnostics&) mut compiler/load:Loader& ? compiler/build:Failed	16 8	{ ptr, ptr }	-	ret { i32, ptr } pass vvvv
+fn(std/prelude/list:List<compiler/emit:Object>&, I64) Array<compiler/emit:Object>& ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+fn(std/prelude/list:List<compiler/lower:Gap>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/list:listState<compiler/emit:Object>&, I64, I64) Array<compiler/emit:Object>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
+fn(std/prelude/text:String&, mut compiler/diag:Diagnostics&) ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret i32 pass vv
+fn(std/prelude/text:String&, mut compiler/diag:Diagnostics&) std/prelude/text:String ? compiler/olang:Bad	16 8	{ ptr, ptr }	-	ret { i32, { i64, ptr } } pass vv
+mut compiler/olang:Passes&	8 8	ptr	-	-
+std/prelude/list:List<compiler/emit:Object>&	8 8	ptr	-	-
 == compiler/tools/astdiff.olang
 compiler/tools/astdiff:norm	48 8	%"compiler/tools/astdiff:norm"	{ %"std/prelude/list:List<std/prelude/text:String&>", { i64, ptr }, %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<I64>", %"std/prelude/list:List<I64>" }	fields 0,8,24,32,40
 compiler/tools/astdiff:norm&	8 8	ptr	-	-
@@ -12084,7 +12145,7 @@ std/prelude/map:mapSlot<std/linalg:Matrix<F64>, I64>	56 8	%"std/prelude/map:mapS
 std/prelude/map:mapSlot<std/linalg:Matrix<F64>, I64>&	8 8	ptr	-	-
 std/prelude/map:mapState<std/linalg:Matrix<F64>, I64>	32 8	%"std/prelude/map:mapState<std/linalg:Matrix<F64>, I64>"	{ { i64, ptr }, i64, ptr }	fields 0,16,24
 std/prelude/map:mapState<std/linalg:Matrix<F64>, I64>&	8 8	ptr	-	-
-== compiler/olang.olang -t
+== compiler/interp.olang -t
 fn(mut compiler/load:Loader&, std/prelude/list:List<mut compiler/typed:Body&>&, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
 == checks/cases/2digitname.olang
 checks/cases/2digitname:Pt	4 4	%"checks/cases/2digitname:Pt"	{ i32 }	fields 0
