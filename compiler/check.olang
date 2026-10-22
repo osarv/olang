@@ -171,6 +171,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     fixedInits Map<pair.Pair<I64, I64>, fixedInit>
     writes Map<pair.Pair<I64, I64>, Bool>
     lastFixed List<I64>         # the locals the last ExprBodyIn read as fixed, of the body it was asked in
+    # S8a: the bodies reading a build constant (B10), for the evaluator's usedBuild; and the local ifs whose condition
+    # evaluation decided reading none (given before this check, as Decided) - the same on every build, an error
+    ReadsBuild Map<I64, Bool>
+    Dead Map<pair.Pair<I64, I64>, Bool>
 }
 
 # a local that may be fixed (S8c): its initializer, checked again where a condition reads it, and its type
@@ -3804,6 +3808,7 @@ fn (c mut Checker&) defineValue(sp source.Span, n source.NameId, want types.Type
 }
 
 fn (c mut Checker&) buildConst(sp source.Span, n source.NameId) typed.Expr&c {
+    c.ReadsBuild.Put(c.fr().Body, true)
     v, big := try c.P.L.Consts.ValueOf(c.text(n)) catch {
         c.gap(sp, "a build constant without a value")
         return c.unknown(sp)
@@ -9169,9 +9174,13 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
         }
         return c.elseOf(sp, i.Else)
     }
+    # S8a: a condition the same on every build - B9a's value reading no build constant, or evaluation's - is a running
+    # if, its branches' errors reported, and an error once it checks
+    dead := c.Dead.Has(key) or c.P.R.Same.Has(key)
+    if dead { c.Running(i) }
     # a condition B9a left to evaluation: asked for, the if checked as a running one meanwhile
     asked := false
-    if i.Then.Group >= 0 and d.IsPending(i.Then.Group) {
+    if not dead and i.Then.Group >= 0 and d.IsPending(i.Then.Group) {
         b := c.CondBody(c.fr().Mi, i.Cond)
         if b >= 0 {
             c.Asks.Push(Ask(b, c.fr().File, i.Cond.Span().Start, i, c.fr().Body, c.lastFixed.ToArray()))
@@ -9211,6 +9220,7 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     # (S8c), or is wrong, included. One asked for stays held until evaluation decides it
     if not asked { c.Running(i) }
     k := c.cond1(i.Cond)
+    if dead and typeOf(k) == types.BoolT { c.err(c.operatorOf(i.Cond), msgs.ConditionConstant()) }
     then := c.branchBlock(i.Then)
     els typed.Block&c = null
     if i.Else != null {

@@ -34,6 +34,7 @@ import "eval"
 # until a check meets none left to decide: that last check. What an earlier check said is forgotten. tests as Checker's
 fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     decided Map<pair.Pair<I64, I64>, Bool>
+    dead Map<pair.Pair<I64, I64>, Bool>
     lengths Map<String&, I64>
     for {
         mark := l.Diags.Count()
@@ -43,8 +44,9 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         p.Lengths = lengths
         c := typecheck.Checker(p, tests)
         c.Decided = decided
+        c.Dead = dead
         c.CheckProgram()
-        if not decide(l, c, decided, lengths) {
+        if not decide(l, c, decided, dead, lengths) {
             if l.Diags.Count() == mark { judgeViews(c) }
             return c
         }
@@ -59,23 +61,28 @@ fn judgeViews(c mut typecheck.Checker&) {
 }
 
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was
-fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&) Bool {
+fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&
+    dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&) Bool {
     tops := l.PendingIfs()
     if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 { return false }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
+    x.ReadsBuild = c.ReadsBuild
     made := false
-    undecided List<I64>
-    for i in range c.Asks.Len() {
-        a := c.Asks[i]
+    undecided List<ast.If&>
+    for a in c.Asks {
         key := pair.Pair(a.File, I64(a.At))
-        if decided.Has(key) { continue }
+        if decided.Has(key) or dead.Has(key) { continue }
         v, ok := x.Cond(a.Body)
-        if ok {
+        if ok and not x.M.UsedBuild {
+            # S8a: decided reading no build constant - the same on every build, which the next check reports
+            dead.Put(key, true)
+            made = true
+        } else if ok {
             decided.Put(key, v)
             made = true
         } else {
-            undecided.Push(i)
+            undecided.Push(a.If)
         }
     }
     # G21: a constant argument a call computes, evaluated in its module's context
@@ -110,10 +117,10 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
             made = true
         }
     }
-    # a condition that does not evaluate once nothing more is decided (one calling a function whose own if a later check
-    # decides evaluates then): the running program's, as this check checked it - what its branches hold reported
+    # a condition that does not evaluate is the running program's, what its branches hold reported - once no decision
+    # is left to make: one calling a function whose own if is still undecided may evaluate in the next check (S8b)
     if not made {
-        for i in undecided { c.Running(c.Asks[i].If) }
+        for i in undecided { c.Running(i) }
     }
     return made
 }
@@ -302,6 +309,7 @@ type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval
     Globals List<I64>               # the global initializers' bodies, in the order check made them
     # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
     Faulty Map<I64, Bool>
+    ReadsBuild Map<I64, Bool>       # S8a: the bodies reading a build constant (check's)
     started Bool = false
 }
 
@@ -338,12 +346,25 @@ fn (x mut Exec&) start() {
                 if ty == types.UnknownT { continue }
                 k := mir.FnKey.Body(typed.BodyId(I32(i)))
                 x.M.DefineGlobal(m, n, ty, writtenMut(x.P.GlobalDecl(m, n)), k)
+                if x.buildDefault(m, ty, writtenMut(x.P.GlobalDecl(m, n))) { x.M.BuildGlobal(m, n) }
                 x.Globals.Push(i)
             }
             case _ { }
         }
     }
     for i in x.Globals { x.Need(mir.FnKey.Body(typed.BodyId(I32(i)))) }
+}
+
+# B10c: whether a global of module m is a build constant's default - immutable, outside std, of a type a -define
+# value can have (Bool, I32, I64, U64, F64, String) - which a condition reading it depends on (S8a)
+fn (x mut Exec&) buildDefault(m I64, ty types.TypeId, mutable Bool) Bool {
+    if mutable { return false }
+    mod := x.P.L.Mods[m]
+    if mod.Prelude or mod.Identity.StartsWith("std/") { return false }
+    for name in String&["Bool", "I32", "I64", "U64", "F64"] {
+        if ty == x.P.T.Prim(name) { return true }
+    }
+    return ty == x.P.PreludeType("std/prelude/text", "String")
 }
 
 # a global's type, as its initializer's store into it says (check writes one Assign to the global)
@@ -391,6 +412,12 @@ fn (x mut Exec&) Need(k mir.FnKey) {
         if x.Lw.Gapped {
             x.Unlowered.Push(key)
             continue
+        }
+        match key {
+            case mir.FnKey.Body(id) {
+                if x.ReadsBuild.Has(I64(id)) { x.M.BuildFns.Put(key, true) }
+            }
+            case _ { }
         }
         x.reach(f, work)
         x.M.Define(f)

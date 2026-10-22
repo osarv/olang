@@ -210,6 +210,7 @@ type frame struct() {
     Raised Bool = false
     Code I64 = 0
     PrevInit I64 = -1    # rGlobal: the global being initialized before it
+    PrevBuild Bool = false    # rGlobal: whether the evaluation had read a build constant before it began (S8a)
     # S18d: an error its call or its join just failed with, and where - so its Raise there passes it on (tCall, tJoin);
     # -1 for none
     ErrKind I64 = -1
@@ -229,6 +230,8 @@ type global struct() {
     Init I64 = -1        # its initializer, an index into codeKeys; -1 for none
     Store I64 = 0        # its storage's allocation id
     State I64 = 0        # 0 not set, 1 being initialized, 2 set
+    Build Bool = false   # S8a: it is a build constant's default (B10c) - reading it reads a build constant
+    Used Bool = false    # S8a: its initializer read a build constant, directly or through what it called
 }
 
 type gkey struct(Module I64, Name source.NameId) {
@@ -286,6 +289,7 @@ type cfn struct() {
     Fast mut Array<I64>&
     FastOp mut Array<typed.PrimOp>&
     NVars I64 = 0               # its scope variables, how many
+    ReadsBuild Bool = false     # S8a: its body reads a build constant (Machine.BuildFns)
     Sps mut Array<source.Span>&
 }
 
@@ -317,6 +321,11 @@ type Machine struct(T mut types.Table&, When Mode) {
     ResultTy types.TypeId = types.VoidT
     Stopped Stop = Stop.None
     halted Bool = false
+    # S8a, S8b: whether the last request read a build constant - a function in BuildFns run, a build constant's default
+    # (B10c) read, or a global whose initializer read one - as stage 0's usedBuild: a condition decided reading none is
+    # the same on every build
+    UsedBuild Bool = false
+    BuildFns Map<mir.FnKey, Bool>    # the functions whose bodies read a build constant (check's ReadsBuild)
     # the program's code
     fns List<mir.Fn>
     cf mut Array<cfn>& = Array<cfn>(64)    # by fns' index, each decoded
@@ -406,6 +415,7 @@ fn (m mut Machine&) Define(f mir.Fn) {
         for k in range old.Len() { m.cf[k] = old[k] }
     }
     m.cf[i] = m.decode(f)
+    m.cf[i].ReadsBuild = m.BuildFns.Has(f.Of)
 }
 
 # f decoded (cfn)
@@ -703,6 +713,12 @@ fn (m mut Machine&) DefineGlobal(module I64, name source.NameId, ty types.TypeId
     m.globalOf.Put(gkey(module, name), m.globals.Len())
     m.al[a.Id & slotMask].Owner = m.globals.Len()
     m.globals.Push(g)
+}
+
+# B10c: the global is a build constant's default - reading it reads a build constant (S8a)
+fn (m mut Machine&) BuildGlobal(module I64, name source.NameId) {
+    g := try m.globalOf.Get(gkey(module, name)) catch default -1
+    if g >= 0 { m.globals[g].Build = true }
 }
 
 fn (m mut Machine&) codeIndex(k mir.FnKey) I64 {
@@ -1338,6 +1354,7 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
         m.refuse(WhyDepth if m.When == Mode.Compile else WhyRunDepth)
         return -1
     }
+    if m.cf[fi].ReadsBuild { m.UsedBuild = true }
     ls := m.cf[fi].Locals
     nl, ns, nv := ls.Len(), m.cf[fi].Scopes.Len(), m.cf[fi].NVars
     fr := frame()
@@ -2730,6 +2747,7 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
             if g < 0 or g == m.initGlobal { return true }
             gl := m.globals[g]
+            if gl.Build or gl.Used { m.UsedBuild = true }
             # under -i a global is set before main runs, each after the globals its initializer reads (B5a): one read
             # while another is initialized and not set yet is initialized first
             if m.When == Mode.Run {
@@ -2780,8 +2798,14 @@ fn (m mut Machine&) startGlobal(g I64) {
         m.refuse(WhyNoBody)
         return
     }
+    prev := m.UsedBuild
+    m.UsedBuild = false
     fr := m.pushFrame(fi, rGlobal, g)
-    if fr < 0 { return }
+    if fr < 0 {
+        m.UsedBuild = prev
+        return
+    }
+    m.fs[fr].PrevBuild = prev
     m.fs[fr].PrevInit = m.initGlobal
     m.initGlobal = g
     m.globals[g].State = 1
@@ -3314,6 +3338,8 @@ fn (m mut Machine&) returned(fr frame) {
                 return
             }
             m.globals[fr.RetArg].State = 2
+            m.globals[fr.RetArg].Used = m.UsedBuild
+            m.UsedBuild = fr.PrevBuild or m.UsedBuild
             m.initGlobal = fr.PrevInit
         }
         case rTask {
@@ -3711,6 +3737,7 @@ fn (m mut Machine&) loop(base I64) {
 # kept until the next request
 fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
     m.halted = false
+    m.UsedBuild = false
     m.Stopped = Stop.None
     m.Steps = 0
     m.trace.Clear()
