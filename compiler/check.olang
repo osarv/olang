@@ -167,7 +167,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
     # S8c: by (body, local), a plain scalar local declared with its own value - its initializer and type; and every local
     # a body writes (stores, increments, targets, atomics). A condition or assert asked for reading such a local reads
-    # its initializer, and is the running program's after all where the body writes the local (Rewritten)
+    # its initializer, and is the running program's after all where the body writes the local (rewritten)
     fixedInits Map<pair.Pair<I64, I64>, fixedInit>
     writes Map<pair.Pair<I64, I64>, Bool>
     lastFixed List<I64>         # the locals the last ExprBodyIn read as fixed, of the body it was asked in
@@ -262,7 +262,10 @@ fn (c mut Checker&) CheckProgram() {
         for r in c.errReads {
             if c.P.T.Items(try c.inferredErrs.Get(r.First) catch default types.ListId(0)).Len() != r.Second { grew = true }
         }
-        if not grew or c.Attempts >= 20 { return }
+        if not grew or c.Attempts >= 20 {
+            c.settleFixed()
+            return
+        }
         c.P.L.Diags.Forget(mark)
         c.errPresets = c.found
         c.reset()
@@ -319,11 +322,36 @@ fn (c mut Checker&) reset() {
 
 # S8c: whether a local an asked condition or assert read as fixed is written by its body after all - the condition is
 # then the running program's
-fn (c Checker&) Rewritten(body I64, fixed Array<I64>&) Bool {
+fn (c Checker&) rewritten(body I64, fixed Array<I64>&) Bool {
     for id in fixed {
         if c.writes.Has(pair.Pair(body, id)) { return true }
     }
     return false
+}
+
+# S8c, once every body is checked: an asked if or assert reading a local as fixed that its body writes after all is the
+# running program's - the if's branches, checked as running, reported - and not asked
+fn (c mut Checker&) settleFixed() {
+    k I64 = 0
+    for i in range c.Asks.Len() {
+        a := c.Asks[i]
+        if c.rewritten(a.In, a.Fixed) {
+            c.Running(a.If)
+        } else {
+            c.Asks[k] = a
+            k++
+        }
+    }
+    c.Asks.Truncate(k)
+    k = 0
+    for i in range c.AssertAsks.Len() {
+        a := c.AssertAsks[i]
+        if not c.rewritten(a.Body, a.Fixed) {
+            c.AssertAsks[k] = a
+            k++
+        }
+    }
+    c.AssertAsks.Truncate(k)
 }
 
 # an asked if the build turned out not to decide (its condition reads a written local, or does not evaluate): checked
