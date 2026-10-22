@@ -1,15 +1,17 @@
-# emitdiff - M9's acceptance, measured: each program built by stage 0 and by the self-hosted pipeline (load, names,
-# check, the scope pass, lower with its placement, emit - compiler/tools/emitdump.olang), run, and the two runs compared.
+# emitdiff - M9's acceptance, measured: each program built by the self-hosted pipeline (load, names, check, the scope
+# pass, lower with its placement, emit - compiler/tools/emitdump.olang), run, and its run compared with stage 0's as
+# compiler/goldens/run.txt stores it (captured by compiler/tools/rungold.olang, make rungold).
 #
 #     emitdiff [-v] [-standin] [-O LEVEL] [FILE...]
 #
 # A file of tests (the corpus, std's tests - the default list) is run as "olang test FILE" runs it, and compared test
-# by test: a row per file, "same N" where every test ends as stage 0's does, else what each run said - "stage0 P ok F
-# fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
-# built and run, its output and status compared. Then the totals. The port's module is compiled by clang (at -O LEVEL,
-# 0 by default) with stage 0's filled-in runtime beside it; a module clang refuses counts as "does not compile". The
-# compiler under test is $OLANG (build/out), the emitter build/compiler_tools_emitdump (or $EMITDUMP); with -standin
-# the port's modules are placed by lowering's stand-in placement instead of the scope pass's.
+# by test: a row per file, "same N" where every test ends as the stored run's does, else what each said - "golden P ok
+# F fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
+# built and run, its output and status compared (its status alone where the stored output was unstable). Then the
+# totals. The port's module is compiled by clang (at -O LEVEL, 0 by default) with the port's filled-in runtime beside it;
+# a module clang refuses counts as "does not compile". The emitter is build/compiler_tools_emitdump (or $EMITDUMP); with
+# -standin the port's modules are placed by lowering's stand-in placement instead of the scope pass's. Where $OLANG
+# (build/out) is built, the port's runtime is also compared with the one it fills in, as a row.
 
 import "std/os"
 import "std/io"
@@ -45,6 +47,7 @@ fn main() {
     dir := "build/emitdiff"
     try os.MkDirAll($dir "/rt") catch os.OsError { toolkit.Die("emitdiff: cannot make " $dir) }
     rt := runtime(olang, emitdump, dir)
+    gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
     same, differ, broken I64 = 0, 0, 0
     tests, testsSame I64 = 0, 0
     for i in range files.Len() {
@@ -55,7 +58,7 @@ fn main() {
         try os.MkDirAll(sub) catch os.OsError { toolkit.Die("emitdiff: cannot make " $sub) }
         base := f[:f.Len() - 6] if f.EndsWith(".olang") else f
         out := $sub "/" $base.Replace("/", "_") $("" if program else "_test")
-        r := compare(olang, emitdump, level, rt, f, out, program, verbose, standin)
+        r := compare(gold, emitdump, level, rt, f, out, program, verbose, standin)
         toolkit.Say(r.Row)
         tests += r.Tests
         testsSame += r.Same
@@ -69,7 +72,7 @@ fn main() {
         try os.RemoveAll(sub) catch os.OsError { }
     }
     toolkit.Say(("== total: files " $files.Len() " same " $same " differ " $differ " broken " $broken "; tests " $tests
-                 " ending as stage 0's " $testsSame "\n"))
+                 " ending as stored " $testsSame "\n"))
 }
 
 fn absolute(p String&) String {
@@ -78,11 +81,19 @@ fn absolute(p String&) String {
     return $cwd "/" $p
 }
 
-# the runtime's IR, filled in by stage 0 for this machine, and the dynamic call's: what a program declaring nothing
-# but an import of std/ffi leaves in its build/
-# the runtime the port's modules are linked with: the port's own, filled in by emitdump (-rt, compiler/runtime.olang), and a
-# row saying whether it is stage 0's text exactly
+# the runtime the port's modules are linked with: the port's own, filled in by emitdump (-rt, compiler/runtime.olang),
+# and, where the compiler olang names is built, a row saying whether it is the text that compiler fills in for this
+# machine (what a program declaring nothing but an import of std/ffi leaves in its build/)
 fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
+    try os.MkDirAll($dir "/rtport") catch os.OsError { toolkit.Die("emitdiff: cannot make " $dir "/rtport") }
+    e := toolkit.Run(String&[emitdump, "-rt", $dir "/rtport"])
+    if e.Status != 0 { toolkit.Die("emitdiff: the port's runtime was not filled in: " $e.Stderr) }
+    prt String& = $dir "/rtport/olang_runtime.ll"
+    pdc String& = $dir "/rtport/olang_dyncall.ll"
+    if not toolkit.Built(olang) {
+        toolkit.Say("runtime: not compared (no " $olang ")\n")
+        return String&[prt, pdc]
+    }
     toolkit.Write($dir "/rt/rt.olang", "import \"std/ffi\"\nfn main() { }\n")
     toolkit.Run(String&[$olang, "build", "rt.olang"], String&[], $dir "/rt")
     rt String& = ""
@@ -91,14 +102,9 @@ fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
         if (try n.Find("olang_runtime.") catch default -1) >= 0 { rt = $n }
         if (try n.Find("olang_dyncall.") catch default -1) >= 0 { dc = $n }
     }
-    if rt == "" or dc == "" { toolkit.Die("emitdiff: stage 0 left no runtime in " $dir "/rt/build") }
-    try os.MkDirAll($dir "/rtport") catch os.OsError { toolkit.Die("emitdiff: cannot make " $dir "/rtport") }
-    e := toolkit.Run(String&[emitdump, "-rt", $dir "/rtport"])
-    if e.Status != 0 { toolkit.Die("emitdiff: the port's runtime was not filled in: " $e.Stderr) }
-    prt String& = $dir "/rtport/olang_runtime.ll"
-    pdc String& = $dir "/rtport/olang_dyncall.ll"
+    if rt == "" or dc == "" { toolkit.Die("emitdiff: " $olang " left no runtime in " $dir "/rt/build") }
     same := toolkit.Read(prt) == toolkit.Read(rt) and toolkit.Read(pdc) == toolkit.Read(dc)
-    toolkit.Say("runtime: " $("stage 0's" if same else "differs from stage 0's") "\n")
+    toolkit.Say("runtime: " $(("the text " $olang " fills in") if same else ("differs from the text " $olang " fills in")) "\n")
     return String&[prt, pdc]
 }
 
@@ -110,10 +116,15 @@ type result struct() {
     Same I64 = 0
 }
 
-fn compare(olang String&, emitdump String&, level String&, rt Array<String&>&, f String&, out String&, program Bool, v Bool, standin Bool) result {
+fn compare(gold toolkit.Golden&, emitdump String&, level String&, rt Array<String&>&, f String&, out String&, program Bool, v Bool, standin Bool) result {
     r := result()
-    # stage 0's run
-    s0 := toolkit.Run(String&["timeout", "600", $olang, $f]) if program else toolkit.Run(String&["timeout", "600", $olang, "test", $f])
+    # the stored run
+    s0 := toolkit.RunStored(gold, f)
+    if not s0.Found {
+        r.Broken = true
+        r.Row = $f ": no stored run in compiler/goldens/run.txt (make rungold)\n"
+        return r
+    }
     # the port's
     dump := List<String&>()
     dump.Push(emitdump)
@@ -137,11 +148,11 @@ fn compare(olang String&, emitdump String&, level String&, rt Array<String&>&, f
     }
     p := toolkit.Run(String&["timeout", "600", $out])
     if program {
-        r.Equal = p.Stdout == s0.Stdout and p.Status == s0.Status
+        r.Equal = (not s0.Stable or toolkit.RunText(p.Stdout) == s0.Out) and p.Status == s0.Status
         r.Row = $f ": " $("same" if r.Equal else "differs (status " $s0.Status " / " $p.Status ")") $gapsText(gaps) "\n"
         return r
     }
-    a := outcomes(toolkit.Rows(s0.Stdout))
+    a := outcomes(toolkit.Rows(s0.Out))
     b := outcomes(toolkit.Rows(p.Stdout))
     r.Tests = a.Len()
     rows := StringBuilder()
@@ -153,7 +164,7 @@ fn compare(olang String&, emitdump String&, level String&, rt Array<String&>&, f
             r.Same++
         } else {
             diffs++
-            if v { rows.Push("    " $name ": stage0 " $x ", port " $y "\n") }
+            if v { rows.Push("    " $name ": golden " $x ", port " $y "\n") }
         }
     }
     r.Equal = diffs == 0 and p.Status == s0.Status
@@ -162,7 +173,7 @@ fn compare(olang String&, emitdump String&, level String&, rt Array<String&>&, f
     } else {
         s0ok, s0f := counts(a)
         pok, pf := counts(b)
-        r.Row = ($f ": stage0 " $s0ok " ok " $s0f " fail; port " $pok " ok " $pf " fail (status " $p.Status "); " $diffs
+        r.Row = ($f ": golden " $s0ok " ok " $s0f " fail; port " $pok " ok " $pf " fail (status " $p.Status "); " $diffs
                  " differ" $gapsText(gaps) "\n" $rows.ToString())
     }
     return r

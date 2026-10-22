@@ -1,0 +1,133 @@
+# rungold [COMPILER] - captures compiler/goldens/run.txt, the stored runs emitdiff and evaldiff hold the port's programs to
+# (compiler/tools/toolkit.olang says the format): every file of tests of the corpus and std run as "COMPILER test FILE"
+# runs it, from the repository root, its status and its tests' endings kept; and every checks case that must run
+# ("# check: run") built and run as checks/checks.olang does - copied into a directory of its own, "COMPILER build
+# FLAGS CASE", then its program - its status and standard output kept, the case's directory written $CASE in it and
+# the repository's root $ROOT. Each such program runs twice, and one whose output differs is stored as unstable (its
+# status alone is held). Cases run four at a time; a file of tests at a time.
+#
+# Run from the repository root (make rungold; GOLD_OLANG names the compiler, stage 0 by default), after a test or a case
+# is added or changes what it prints. RUNGOLD_OUT names another file to write than the golden.
+
+import "std/os"
+import "std/filepath"
+import "toolkit"
+
+# how many cases are built at once
+Workers I64 = 4
+
+fn main() {
+    args := os.Args()
+    given := $args[1] if args.Len() > 1 else "build/out"
+    root := try os.Cwd() catch os.OsError { toolkit.Die("rungold: no working directory") }
+    dir := try os.RealPath(filepath.Dir(given)) catch os.OsError { toolkit.Die("rungold: no " $given) }
+    olang := $dir "/" $filepath.Base(given)
+    golden := toolkit.Env("RUNGOLD_OUT", "compiler/goldens/run.txt")
+    out := StringBuilder()
+    for f in TestFiles() {
+        o := toolkit.Run(String&["timeout", "600", olang, "test", f])
+        out.Push(toolkit.GoldenSection(toolkit.RunKey(f), toolkit.RunBody(o.Status, false, toolkit.TestEndings(o.Stdout))))
+        toolkit.Say("rungold: " $f " status " $o.Status "\n")
+    }
+    work := $root "/build/rungold"
+    try os.RemoveAll(work) catch os.OsError { }
+    try os.MkDirAll(work) catch os.OsError { toolkit.Die("rungold: cannot make " $work) }
+    cases := RunCases().ToArray()
+    join {
+        for w in range Workers {
+            spawn capture(olang, work, cases, w)
+        }
+    }
+    unstable I64 = 0
+    for f in cases {
+        name := filepath.Base(f)
+        cdir := $work "/" $name[0:name.Len() - 6]
+        body := read($cdir "/run.txt")
+        if body == "" { toolkit.Die("rungold: " $name " was not run") }
+        if toolkit.RunParse(body).Stable == false { unstable++ }
+        out.Push(toolkit.GoldenSection(toolkit.RunKey(f), body.Replace(cdir, "$CASE").Replace(root, "$ROOT")))
+    }
+    toolkit.GoldenWrite(golden, out.ToString())
+    try os.RemoveAll(work) catch os.OsError { }
+    toolkit.Say(("rungold: " $TestFiles().Len() " files of tests and " $cases.Len() " cases (" $unstable " unstable) from "
+                 $given " into " $golden "\n"))
+}
+
+# the files of tests emitdiff and evaldiff run by default: the corpus, std, std's prelude's tests
+fn TestFiles() List<String&> {
+    l := List<String&>()
+    for d in String&["tests", "std", "std/prelude/tests"] {
+        for f in toolkit.Matching(d, ".olang") { l.Push($f) }
+    }
+    return l
+}
+
+# the checks cases that must build and run
+fn RunCases() List<String&> {
+    l := List<String&>()
+    for f in toolkit.Matching("checks/cases", ".olang") {
+        if headerLine(toolkit.Read(f), "# check: ") == "run" { l.Push($f) }
+    }
+    return l
+}
+
+fn read(path String&) String {
+    return $(try os.ReadFile(path) catch default "")
+}
+
+# the rest of a header's first line beginning with prefix, "" for none
+fn headerLine(text String&, prefix String&) String {
+    for line in toolkit.Rows(text) {
+        if line.StartsWith(prefix) { return $line[prefix.Len():] }
+    }
+    return ""
+}
+
+# the program a case's flags name its binary as: -debug, -race and -sanitize each add a word (checks/checks.olang)
+fn binaryOf(base String&, flags String&) String {
+    bin := $base
+    for f in toolkit.Fields(flags) {
+        if f == "-debug" { bin = $bin ".debug" }
+        if f == "-race" { bin = $bin ".race" }
+    }
+    for f in toolkit.Fields(flags) {
+        if f == "-sanitize" { return $bin ".san" }
+    }
+    return bin
+}
+
+# every Workers'th case from number w: built in a directory of its own, run twice, its run.txt written there
+fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
+    for k in range w, cases.Len(), Workers {
+        name := filepath.Base(cases[k])
+        base := name[0:name.Len() - 6]
+        dir := $work "/" $base
+        try os.MkDirAll(dir) catch os.OsError { continue }
+        text := read(cases[k])
+        try os.WriteFile($dir "/" $name, text) catch os.OsError { continue }
+        flags := headerLine(text, "# flags: ")
+        args := List<String&>()
+        args.Push(olang)
+        args.Push("build")
+        for f in toolkit.Fields(flags) { args.Push($f) }
+        args.Push(name)
+        b := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError { continue }
+        body String& = ""
+        if b.Status != 0 {
+            body = toolkit.RunBody(-1, false, $"did not build\n" $b.Stdout)
+        } else {
+            exe := $dir "/build/" $binaryOf(base, flags)
+            one := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.OsError { continue }
+            two := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.OsError { continue }
+            body = toolkit.RunBody(one.Status, one.Stdout != two.Stdout or one.Status != two.Status, one.Stdout)
+        }
+        try os.WriteFile($dir "/run.txt", body) catch os.OsError { }
+    }
+}
+
+test "a case's binary is named for its flags" {
+    assert binaryOf("x", "") == "x"
+    assert binaryOf("x", "-debug -sanitize") == "x.debug.san"
+    assert binaryOf("x", "-sanitize -define A=1") == "x.san"
+    assert headerLine("# check: run\n# flags: -debug\n", "# flags: ") == "-debug"
+}

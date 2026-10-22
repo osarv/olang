@@ -1,14 +1,16 @@
-# evaldiff - M8's acceptance, measured: each program run by stage 0 and by the self-hosted pipeline's evaluator (load,
-# names, check, scope, lower with its placement, eval - compiler/tools/evaldump.olang), and the two runs compared.
+# evaldiff - M8's acceptance, measured: each program run by the self-hosted pipeline's evaluator (load, names, check,
+# scope, lower with its placement, eval - compiler/tools/evaldump.olang), and its run compared with stage 0's as
+# compiler/goldens/run.txt stores it (captured by compiler/tools/rungold.olang, make rungold).
 #
 #     evaldiff [-v] [-i] [FILE...]
 #
 # A file of tests (the corpus, std's tests - the default list) is run as "olang test FILE" runs it, and compared test
-# by test: a row per file, "same N" where every test ends as stage 0's does, else what each run said - "stage0 P ok F
-# fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
-# run, its output and status compared - with -i against stage 0's interpret too. Then the totals. The compiler under
-# test is $OLANG (build/out), the evaluator build/compiler_tools_evaldump (or $EVALDUMP), each of its runs stopped
-# after $EVALTIMEOUT seconds (300): tasks run in sequence (K1), so one waiting for another that has not run never ends.
+# by test: a row per file, "same N" where every test ends as the stored run's does, else what each said - "golden P ok
+# F fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
+# run, its output and status compared (its status alone where the stored output was unstable) - with -i against
+# "$OLANG interpret" too (build/out by default). Then the totals. The evaluator is build/compiler_tools_evaldump (or
+# $EVALDUMP), each of its runs stopped after $EVALTIMEOUT seconds (300): tasks run in sequence (K1), so one waiting for
+# another that has not run never ends.
 
 import "std/os"
 import "toolkit"
@@ -34,10 +36,11 @@ fn main() {
         for f in toolkit.Matching("std", ".olang") { files.Push($f) }
         for f in toolkit.Matching("std/prelude/tests", ".olang") { files.Push($f) }
     }
+    gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
     same, differ, broken I64 = 0, 0, 0
     tests, testsSame I64 = 0, 0
     for f in files {
-        r := compare(olang, evaldump, f, verbose, interpret)
+        r := compare(gold, olang, evaldump, f, verbose, interpret)
         toolkit.Say(r.Row)
         tests += r.Tests
         testsSame += r.Same
@@ -50,7 +53,7 @@ fn main() {
         }
     }
     toolkit.Say(("== total: files " $files.Len() " same " $same " differ " $differ " broken " $broken "; tests " $tests
-                 " ending as stage 0's " $testsSame "\n"))
+                 " ending as stored " $testsSame "\n"))
 }
 
 type result struct() {
@@ -61,24 +64,29 @@ type result struct() {
     Same I64 = 0
 }
 
-fn compare(olang String&, evaldump String&, f String&, v Bool, interpret Bool) result {
+fn compare(gold toolkit.Golden&, olang String&, evaldump String&, f String&, v Bool, interpret Bool) result {
     r := result()
     program := f.StartsWith("checks/")
-    s0 := toolkit.Run(String&["timeout", "600", $olang, $f]) if program else toolkit.Run(String&["timeout", "600", $olang, "test", $f])
+    s0 := toolkit.RunStored(gold, f)
+    if not s0.Found {
+        r.Broken = true
+        r.Row = $f ": no stored run in compiler/goldens/run.txt (make rungold)\n"
+        return r
+    }
     limit := toolkit.Env("EVALTIMEOUT", "300")
     p := toolkit.Run(String&["timeout", $limit, $evaldump, $f]) if program else toolkit.Run(String&["timeout", $limit, $evaldump, "-t", $f])
     unlowered := count(p.Stderr, "unlowered ")
     if program {
-        r.Equal = p.Stdout == s0.Stdout and p.Status == s0.Status
+        r.Equal = (not s0.Stable or toolkit.RunText(p.Stdout) == s0.Out) and p.Status == s0.Status
         row := $f ": " $("same" if r.Equal else "differs (status " $s0.Status " / " $p.Status ")")
         if interpret {
             i0 := toolkit.Run(String&["timeout", "600", $olang, "interpret", $f])
-            row = $row "; stage 0 interpret " $("agrees" if i0.Stdout == p.Stdout and i0.Status == p.Status else "differs (status " $i0.Status ")")
+            row = $row "; " $olang " interpret " $("agrees" if i0.Stdout == p.Stdout and i0.Status == p.Status else "differs (status " $i0.Status ")")
         }
         r.Row = $row $note(unlowered) "\n"
         return r
     }
-    a := outcomes(toolkit.Rows(s0.Stdout))
+    a := outcomes(toolkit.Rows(s0.Out))
     b := outcomes(toolkit.Rows(p.Stdout))
     if b.Len() == 0 and (a.Len() > 0 or p.Status != s0.Status) {
         r.Broken = true
@@ -95,7 +103,7 @@ fn compare(olang String&, evaldump String&, f String&, v Bool, interpret Bool) r
             r.Same++
         } else {
             diffs++
-            if v { rows.Push("    " $name ": stage0 " $x ", port " $y "\n") }
+            if v { rows.Push("    " $name ": golden " $x ", port " $y "\n") }
         }
     }
     r.Equal = diffs == 0 and p.Status == s0.Status
@@ -104,7 +112,7 @@ fn compare(olang String&, evaldump String&, f String&, v Bool, interpret Bool) r
     } else {
         s0ok, s0f := counts(a)
         pok, pf := counts(b)
-        r.Row = ($f ": stage0 " $s0ok " ok " $s0f " fail; port " $pok " ok " $pf " fail (status " $p.Status "); " $diffs
+        r.Row = ($f ": golden " $s0ok " ok " $s0f " fail; port " $pok " ok " $pf " fail (status " $p.Status "); " $diffs
                  " differ" $note(unlowered) "\n" $rows.ToString())
     }
     return r
