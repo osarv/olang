@@ -1072,7 +1072,10 @@ neither.
     `d.left.inner` reads the record of `d`'s `&l` argument, `o.mid.leaf` the one Outer's constructor gave `mid`. A
     record says where things were bound at construction, so it is used only for a field no body in the program assigns
     after construction (nor the whole struct through a reference): a store into a `&q` field is judged against that
-    field's own binding, which says nothing of the bindings of the instance put there.
+    field's own binding, which says nothing of the bindings of the instance put there. A local assigned after its
+    declaration carries the record all its values share, merged term by term (`Untraced` where they differ, none
+    where one value has no record - a task's target among them): gathered by judging its body once quietly first, so
+    the merge holds at every read, flow-insensitively.
 37. **Lowering's copies of array values are made where their storage is** (T7b): a local's copy of existing storage or
     of a literal in its block or home, a store's in the place's, a returned one in the result scope - and a returned
     temporary, or a local O26a moved there, is not copied again. Under the stand-in placement they were all made in the

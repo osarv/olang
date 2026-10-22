@@ -20889,16 +20889,19 @@ temporary or a local already in the result scope is not copied again.
 records, and a constructor's summary records its fields' - so `o.mid.leaf`, `d.left.inner` and `h.box.left.inner`
 (tests/shared.olang's per-instance tests) read where they were bound. A record is a fact about construction, so it is
 trusted only for a field no body assigns afterwards (a store into a `&q` field is judged against that field's binding,
-not the bindings of the instance it puts there). And a copy of constant data into an array value (`note := ""`) counts
-as made here for O26a (c2dheldreturned).
+not the bindings of the instance it puts there). A local assigned after its declaration carries the record every
+value it is given shares: a body with such a local is judged once quietly first, gathering what each assignment gives
+(none if one gives no record, a task's target included), and the reporting judgment reads the merge - flow-insensitive,
+so it holds at every read. And a copy of constant data into an array value (`note := ""`) counts as made here for O26a
+(c2dheldreturned).
 
 **Measured.** Stage 1 (the port built under the plans, at -debug) builds stage 2 in 31-44 s with a 1.49 GB peak, where
 the interim's stage 1 took 41 s and 3.9 GB on the same tree; stage1 == stage2 byte for byte. Through stage 1 the tests
 of every compiler/ module (28 files) and of std (33 files) pass, 421 tests - std/os, which lost one test under the
-interim, included. `make scopediff`: refused cases giving stage 0's first error 265 of 280 (unchanged), accepted
-programs scope clean 296 of 305 -> 299 of 307 at the binding-records commit, distinct error rows on them 40 -> 34;
-tests/shared.olang's rows 32 -> 22.
+interim, included. On the final tree stage1 == stage2 == stage3, each 39-40 s and 1.50 GB. `make scopediff`: refused
+cases giving stage 0's first error 265 of 280 (unchanged), accepted programs scope clean 296 of 305 -> 300 of 307,
+distinct error rows on them 40 -> 24; tests/shared.olang's rows 32 -> 19.
 
-**Left**: locals assigned after their declaration carry no record; b6elemvalue; the 15 cases differing in their first
-error; the remaining accepted programs the pass refuses (tests/shared.olang 22 rows, bench/run's E31b, three O17 cases
-through lambdas) - which the port now refuses where stage 0 builds them.
+**Left**: b6elemvalue; the 15 cases differing in their first error; the remaining accepted programs the pass refuses
+(tests/shared.olang 19 rows, bench/run's E31b, three O17 cases through lambdas) - which the port now refuses where
+stage 0 builds them.
