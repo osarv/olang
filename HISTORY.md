@@ -20951,3 +20951,22 @@ distinct error rows on them 40 -> 24; tests/shared.olang's rows 32 -> 19.
 **Left**: b6elemvalue; the 15 cases differing in their first error; the remaining accepted programs the pass refuses
 (tests/shared.olang 19 rows, bench/run's E31b, three O17 cases through lambdas) - which the port now refuses where
 stage 0 builds them.
+
+## Port M10: per-module objects under the scope pass's placement (2026-10-22)
+
+wt-emit (M9 round 3: one object per module, S18d) and wt-scope6 (M6 round 5: the driver lowers by the scope pass's
+plans) were merged. The driver's placement is the scope pass's alone (`sc.Run(); return sc.Plans`, its errors
+reported); the interim placement and `OLANG_SCOPE_PLAN` went with it - round 5 found and fixed the `load.resolve` join
+that variable was bisecting for (T11b, O18a), so it had nothing left to narrow. One fix the merge needed, a regression
+from round 5's lowering: a returned local the pass homes in the result scope was returned as it is, with no T7b copy,
+even when deferred code or a join's tasks still ran on the way out - `defer { m[0] = 99 }` then `return m` gave the
+caller 99 (tests/shared's T7b test, one of emitdiff's 989). Lowering copies again whenever a defer or a join is pending
+at the return, stage 0's own condition.
+
+Measured on the merged tree (-debug, the container shared with other work): the stage-0-built driver builds stage 1
+clean in 12-15 s (0.92 GB); stage 1 builds stage 2 clean in 46 s (1.61 GB), stage 2 builds stage 3 in 47 s, and the
+three are byte for byte equal. Incremental, through the -O3 driver: nothing changed 3.8 s, one function of
+unparse.olang changed 4.0 s (only `unparse`'s object compiled); through stage 2 (an -O0 front end) nothing changed is
+35 s. Stage 1 runs the tests of compiler/ and std (61 files): 421 passed, none failed, in 9.5 minutes. `make emitdiff` 989 of 1013
+tests as stage 0's (25 of 26 files), `make drvdiff` 83 of 83 command lines, `make scopediff` as round 5's (265 of 280,
+300 of 307, 24 rows).
