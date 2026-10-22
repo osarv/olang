@@ -21120,6 +21120,58 @@ does too.
 
 **Left**: b6elemvalue (a value local landed where it is kept), the notes O10c gives through a value's provenance and
 the held-index and text-copy notes, `MayBuild`.
+
+## Port M6 round 7: the port's own output under the scope sanitizer (2026-10-22)
+
+Round 6 left every program stage 0 accepts scope clean, but scopediff judges errors, not where things are built: a
+placement the pass gets wrong and stage 0 gets right is invisible to it. The emit agent found one by building the port
+with `-debug -sanitize` - the sanitized compiler segfaulted in `__olang_sb_put`, from emit's `compare`, whose `return
+both if op == Eq else fe.let(...)` returned text built in the `if`'s block. So round 7 built the check that finds such
+bugs mechanically: the port built by itself under the scope sanitizer, running the compiler's own tests, std's and the
+corpus (tests/shared, worker, runner), each test program built `-debug -sanitize` too - every "use after scope closed",
+or segfault the sanitizer causes, is a placement bug.
+
+**What it found, all fixed** (each reproduced against stage 0, which gets it right):
+1. A local an arm of a returned conditional or match, or a try's default, gives (O26a): the pass moved `return l` into
+   the result scope but not `return l if c else ...` - the arms are now returned values (`returnedArrays`). And
+   lowering's T7b copy of a returned array value read out of storage looked only at a plain read: an arm reading a
+   field (`return h.s if c else mk()`) returned the field's storage as it was. `retCopies` now looks through a
+   conditional, a match, a try's defaults, as stage 0's `cgBuiltInResult` does - one change outside the pass, in
+   compiler/lower.olang.
+2. A task's array result (P1g, T11b): `spawn a = try f()` with `a` a String built f's result in the join block, closed
+   at the join, so `a` read freed memory after it (tests/shared's "P4a: defaults holding references outlive the join";
+   stage 0 had the same bug and fixed it on 2026-10-10, `spawnTargetTakesStorage`). The call is built where the
+   target's own storage is; of several targets, the longest-lived. The first version crashed the pass on a discarded
+   target (`spawn _, only = ...`), which has none.
+3. A value match's arm value (S12b): `name := match r { case A(i) => $f(i) ... }` built the rendering in the arm's own
+   block, which closes as the arm ends - compiler/views.olang's `where`, reached only when M19g reports an error, so
+   its own tests segfaulted under the sanitizer. The value is built where the match stands.
+
+**Measured** on the tree of the last placement change (ee7c045's sources, the port built by itself at -debug
+-sanitize; the two commits after it add an error check and a plan field, no placement): the compiler's 28 test files,
+all passing (13 minutes; build.olang's x_kill case kills a compiler on purpose); std's 33, all passing; tests/shared 716 of 716 (in a copy with the two dead S8b branches made parseable - the
+evaluator's fix for them, b27fa0d, is on another branch), worker 15 of 15, runner 25 of 25. Before the fixes: views
+segfaulted, shared crashed at the P4a test (688 passed before it), compare's segfault building the compiler. One run of
+tests/shared failed "P2: spawned lambdas building through what they captured" once under heavy load, and passed in 6
+reruns and 20 isolated runs - recorded as flaky, not chased. The chain: stage 1 == stage 2 byte for byte, 33 s, 1.68 GB.
+`make scopediff` (b56ee10): refused cases giving stage 0's first error 274 -> 275 of 280 (262 -> 263 exactly), pinned
+messages 269 -> 275, accepted programs 307 of 307 clean, 0 rows - no worse.
+
+**Also built**: b6elemvalue's first error - a constructed local stored where an argument its instance holds (existing
+storage of a block that closes first) does not outlive the slot is C2d at that argument, as stage 0 says it, rather
+than O20 at the store. A landing where the local is kept was tried first and accepted what stage 0 refuses (a
+constructor building a List in a kept local), so it is a check at the store, not a landing. O10c's notes (B11): where
+the short argument is made, through a call whose result holds what its arguments refer to, every one made in a block of
+this function; the held index of At and SetAt; text passed (`write '$'`); a Str's receiver (`keep copies`) - five
+pinned cases now say their message; not inside a generic's instance, where the type would be spelled as the generic
+writes it (G16b). And `typed.Plan.MayBuild`, which scope variables a body may build into (decision 48), read off its
+builds summary; the emitter does not read it yet - it asks for every captured scope's part, which is sound and costs a
+few instructions per closure call.
+
+**Found, not the pass's**: the port accepted a function declaring an error type that does not exist (`? peErr` with no
+`peErr`), which stage 0 refuses (R1) - the checker's; and tests/shared's S8b test does not parse through the port on
+this tree (its fix is on the evaluator's branch).
+
 ## Port M11: the seed, and rebuilding the compiler from nothing (2026-10-22)
 
 The user decided on 2026-10-18 that once the port builds itself, rebuilding it from nothing is one run from a
