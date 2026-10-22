@@ -368,7 +368,13 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
     if kind == build.Kind.Program { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    # T29d, D13c, K2: on a program that checked cleanly, the values evaluation decides - a literal's constructor, a
+    # zero value, a global baked (one that aborts the program an error)
+    clean := d.Errors() == 0
+    if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
+    baked mut Map<I64, eval.Image>&cfg = Map<I64, eval.Image>()
+    if clean { baked = interp.Bake(c) }
     if d.Errors() > 0 {
         # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
         # left an unknown type in is not judged (scope.judge)
@@ -381,7 +387,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if d.Errors() > 0 { error build.Failed.REPORTED }
     e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
-    e.Baked = interp.Bake(c)     # K2: the immutable globals the evaluator gives, written as their values
+    e.Baked = baked              # K2: the immutable globals the evaluator gives, written as their values
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
     e.Module = kind == build.Kind.Module
     e.Triple = cfg.Target.Triple
@@ -442,7 +448,11 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     l mut load.Loader&cfg = try p.load(root, cfg, d)
     c mut typecheck.Checker&cfg = interp.Analyze(l, false)
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    # T29d, D13c, K2: what the build decides while compiling is decided here too - its errors the same
+    clean := d.Errors() == 0
+    if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
+    if clean { interp.Bake(c) }
     if d.Errors() > 0 { error build.Failed.REPORTED }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts

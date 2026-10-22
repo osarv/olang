@@ -34,6 +34,7 @@ import "typed"
 import "mir"
 import "std/ffi"
 import "std/os"
+import "std/pair"
 
 # ---- requests and what they give ----
 
@@ -71,6 +72,8 @@ fn (s Stop) Text(src source.Source&) String {
 WhyMutableGlobal String& = "it reads a mutable global, whose value is the running program's"
 WhyChangeable String& = "it reads a global holding storage a writable reference reaches, which the running program can change"
 WhyWritesGlobal String& = "it writes a global or what one holds, which the running program would then not see written"
+# a global itself written, as K1a's scan of a function meets it (stage 0's words for a store into a global's own name)
+WhyWritesGlobalVar String& = "it writes a global, which the running program would then not see written"
 WhyCycle String& = "these globals are defined in terms of each other"
 WhyNoValue String& = "its initializer does not produce a value"
 WhyDestructor String& = "it builds a value whose destructor runs when its scope closes"
@@ -83,6 +86,7 @@ WhyRunDepth String& = "it recurses deeper than -i allows"
 WhyNull String& = "it reads through a null reference"
 WhyNullCall String& = "it calls through a null function value"
 WhyClosed String& = "it uses storage after the scope it was made in closed"
+WhyStale String& = "it uses a view of a Vec's elements taken before the Vec grew, which shows the old elements"
 WhyOutside String& = "it indexes outside the array, which is undefined at run time"
 WhyBeyond String& = "it reaches outside the storage it refers to"
 WhyReadOnly String& = "it writes constant data"
@@ -134,6 +138,7 @@ type alloc struct() {
     Prev I64 = 0         # its neighbours, by slot, in its scope's list of allocations
     Next I64 = 0
     Owner I64 = -1       # K1: the global whose storage it is, -1 for none
+    Retired I64 = -1     # M19g: its collection no longer uses it - where the program grew it, in retiredAt; -1 for none
     ReadOnly Bool = false
     Code I64 = -1        # a code allocation's function: its index in codeKeys, or an extern's in its own numbering
     Extern Bool = false
@@ -375,6 +380,11 @@ type Machine struct(T mut types.Table&, When Mode) {
     writableOf Map<types.TypeId, Bool>
     stopFile I64 = 0
     stopSp source.Span = source.Span(0, 0)
+    # M19g: where the program grew each collection whose array was retired, by Retired; the one the last stale use
+    # stopped on (-1 for none); the library's files, whose frames the place is looked for below
+    retiredAt List<pair.Pair<I64, source.Span>>
+    StaleAt I64 = -1
+    Library Map<I64, Bool>
     Args List<String&>          # -i: the interpreted program's command line, its file first (B3e)
     # S18d: the error being returned's last places, oldest first - its file, span and what it did, three words a place
     trace List<I64>
@@ -986,6 +996,7 @@ fn (m mut Machine&) allocate(n I64, kind I64, s I64) Ptr {
     a := m.al[slot]
     a.Base, a.Size, a.Class, a.Kind, a.Scope = base, n, c, kind, s
     a.Owner, a.ReadOnly, a.Code, a.Extern = -1, false, -1, false
+    a.Retired = -1
     a.Prev, a.Next = 0, 0
     if s != 0 {
         sc := s & slotMask
@@ -1030,6 +1041,39 @@ fn (m mut Machine&) release(slot I64) {
     m.freeAllocs.Push(slot)
 }
 
+# M19g: the array at p, a ty, no longer its collection's - marked with where the program grew the collection: the call
+# the innermost frame of the program's own code (not the library's) is making, or the operation itself
+fn (m mut Machine&) retire(fi I64, p Ptr, ty types.TypeId) {
+    data, _ := m.arrayView(p, ty)
+    if m.halted or data.Id == 0 { return }
+    slot := data.Id & slotMask
+    if slot >= m.nAl or m.al[slot].Kind == aFree or m.al[slot].Retired >= 0 { return }
+    file, sp := m.stopFile, m.stopSp
+    k := fi
+    for k >= 0 {
+        f := m.fns[m.fs[k].Fn]
+        if not m.Library.Has(f.File) {
+            if k < fi {
+                match f.Blocks[m.fs[k].Block].T {
+                    case mir.Term.Call(csp, _) { file, sp = f.File, csp }
+                    case _ { }
+                }
+            }
+            break
+        }
+        k--
+    }
+    m.retiredAt.Push(pair.Pair(file, sp))
+    m.al[slot].Retired = m.retiredAt.Len() - 1
+}
+
+# M19g: where the program grew the collection whose retired array the last stale use stopped on (WhyStale)
+fn (m Machine&) StaleGrewAt() (I64, source.Span) {
+    if m.StaleAt < 0 or m.StaleAt >= m.retiredAt.Len() { return -1, source.Span(0, 0) }
+    e := m.retiredAt[m.StaleAt]
+    return e.First, e.Second
+}
+
 # the heap address of n bytes at p, checked: the allocation live, the bytes within it, a write allowed. -1, stopped,
 # where not
 fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
@@ -1049,6 +1093,13 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
     }
     if p.Off < 0 or n < 0 or p.Off + n > m.al[slot].Size {
         m.refuse(WhyBeyond)
+        return -1
+    }
+    # M19g: an array its collection retired, used - through a view taken before the collection grew - reads the old
+    # elements at run time, which the program cannot have meant: evaluation stops, with both places (K1)
+    if m.al[slot].Retired >= 0 and m.When == Mode.Compile {
+        m.StaleAt = m.al[slot].Retired
+        m.refuse(WhyStale)
         return -1
     }
     if write {
@@ -2126,6 +2177,10 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         }
         case typed.PrimOp.Convert { return m.convert(m.scalar(fi, x), at, ty) }
         case typed.PrimOp.Bitcast { return m.bitcast(m.scalar(fi, x), at) }
+        case typed.PrimOp.Retire {
+            m.retire(fi, m.addr(fi, x, 1), at)
+            return 0
+        }
         case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap
              typed.PrimOp.AtomicCompareSwap { return m.atomic(fi, op, args, at) }
         case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl {
@@ -2733,7 +2788,7 @@ fn (m mut Machine&) globalWritten(p mir.Place) Bool {
         case mir.Base.Global(module, name, _) {
             g := try m.globalOf.Get(gkey(module, name)) catch default -1
             if g >= 0 and g != m.initGlobal {
-                m.refuse(WhyWritesGlobal)
+                m.refuse(WhyWritesGlobalVar)
                 return false
             }
         }
@@ -2757,7 +2812,7 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
                 return false
             }
             if gl.Mutable {
-                m.refuse(WhyMutableGlobal)
+                m.refuse(WhyWritesGlobalVar if m.writesAfter(fi, module, name) else WhyMutableGlobal)
                 return false
             }
             if m.reachesWritable(types.TypeId(I32(gl.Ty))) {
@@ -2774,6 +2829,34 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
         }
         case _ { return true }
     }
+}
+
+# whether the statement frame fi is at reads a global that a later statement of the same source statement writes - an
+# increment or a compound assignment, whose read is lowered first: refused as the write it is, as stage 0's scan of the
+# statement meets it (K1)
+fn (m Machine&) writesAfter(fi I64, module I64, name source.NameId) Bool {
+    f := m.fns[m.fs[fi].Fn]
+    stmts := f.Blocks[m.fs[fi].Block].Stmts
+    k := m.fs[fi].Stmt
+    if k >= stmts.Len() { return false }
+    at I32 = -1
+    match stmts[k] {
+        case mir.Stmt.Assign(sp, _, _) { at = sp.Start }
+        case _ { return false }
+    }
+    for j in range k + 1, stmts.Len() {
+        match stmts[j] {
+            case mir.Stmt.Assign(sp, p, _) {
+                if sp.Start != at { return false }
+                match p.B {
+                    case mir.Base.Global(mo, n, _) { if mo == module and n == name { return true } }
+                    case _ { }
+                }
+            }
+            case _ { return false }
+        }
+    }
+    return false
 }
 
 # K2c: whether frame fi is a global's initializer's own, or a constructor it calls directly - the one place a
@@ -3796,8 +3879,9 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
 }
 
 # a global's value (K2, B3e): its initializer run where it has not been, the value then at Result, of type ResultTy.
-# While compiling, a mutable global, or one holding storage a writable reference reaches, is no compile-time value
-fn (m mut Machine&) Global(module I64, name source.NameId) Stop {
+# While compiling, a mutable global, or one holding storage a writable reference reaches, is no compile-time value -
+# baking, the latter is (its own storage written out as it is)
+fn (m mut Machine&) Global(module I64, name source.NameId, baking Bool = false) Stop {
     m.halted = false
     m.Stopped = Stop.None
     m.Steps = 0
@@ -3813,7 +3897,10 @@ fn (m mut Machine&) Global(module I64, name source.NameId) Stop {
             m.refuse(WhyMutableGlobal)
             return m.Stopped
         }
-        if m.reachesWritable(ty) {
+        # K1: another evaluation may not read storage a writable reference reaches - the running program can change
+        # it - but the global's own value, built by its own initializer, is written out as it is then (K2b: what a
+        # writable reference reaches written writable)
+        if not baking and m.reachesWritable(ty) {
             m.refuse(WhyChangeable)
             return m.Stopped
         }
@@ -3929,7 +4016,7 @@ error NotBaked {
 # the program's own storage made by its initializer. One reaching code (a function value), another global's storage
 # or storage the evaluator does not hold as data is set at startup instead
 fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
-    if m.Global(module, name) != Stop.None { error NotBaked.REFUSED }
+    if m.Global(module, name, true) != Stop.None { error NotBaked.REFUSED }
     g := try m.globalOf.Get(gkey(module, name)) catch { error NotBaked.REFUSED }
     img := Image()
     blobOf Map<I64, I64>
@@ -3986,6 +4073,21 @@ fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
 
 # ---- reading results ----
 
+# whether the value a request gave holds an address - a reference, an array's storage, a function value's environment:
+# a fill copying it into every element would share what it reaches (D13c)
+fn (m mut Machine&) ResultHoldsAddress() Bool {
+    if m.Result.Id == 0 { return false }
+    a := m.al[m.Result.Id & slotMask]
+    from := a.Base + m.Result.Off
+    to := from + m.size(m.ResultTy)
+    w := from / 8
+    for w * 8 < to {
+        if w < m.prov.Len() and m.prov[w] != 0 { return true }
+        w++
+    }
+    return false
+}
+
 # the integer at p, of type ty, sign-extended for a signed one
 fn (m mut Machine&) Int(p Ptr, ty types.TypeId) I64 { return m.intValue(m.rd(p, m.width(ty)), ty) }
 
@@ -4025,7 +4127,7 @@ fn (m mut Machine&) Why(k mir.FnKey) (String, I64, source.Span) {
             for s in bb.Stmts {
                 match s {
                     case mir.Stmt.Assign(sp, p, rv) {
-                        if m.writesGlobal(p) { return $WhyWritesGlobal, f.File, sp }
+                        if m.writesGlobal(p) { return $WhyWritesGlobalVar, f.File, sp }
                         if m.readsMutable(f, rv) { return $WhyMutableGlobal, f.File, sp }
                     }
                     case mir.Stmt.RegisterDtor(sp, s2, _, _) {
@@ -4865,7 +4967,7 @@ test "globals while compiling: an immutable one initialized when first read (K2)
     w.Add(B0, mir.Stmt.Close(Sp0, S0))
     w.End(B0, mir.Term.Return(Sp0, mir.Operand.Const(i64, 0)))
     tdefine(t, m, w)
-    assert m.Eval(tkey(3), I64[]) == Stop.Refused(WhyWritesGlobal, 0, tspan(3))
+    assert m.Eval(tkey(3), I64[]) == Stop.Refused(WhyWritesGlobalVar, 0, tspan(3))
     # C = D + 1, D = C + 1: defined in terms of each other
     tdefine(t, m, retFn(t, 13, mir.Operand.Copy(gplace(t, gd))))
     tdefine(t, m, retFn(t, 14, mir.Operand.Copy(gplace(t, gc))))
@@ -4874,7 +4976,7 @@ test "globals while compiling: an immutable one initialized when first read (K2)
     assert m.Eval(tkey(13), I64[]) == Stop.Refused(WhyCycle, 0, Sp0)
     # K1a: what keeps a function from ever being evaluated, found before running it
     why, file, sp := m.Why(tkey(3))
-    assert why == WhyWritesGlobal and sp == tspan(3), why
+    assert why == WhyWritesGlobalVar and sp == tspan(3), why
     why2, _, _ := m.Why(tkey(1))
     assert why2 == "", why2
 }

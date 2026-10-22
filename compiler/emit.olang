@@ -2235,6 +2235,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case typed.PrimOp.Not { return fe.let("xor i1 " $x ", true") }
         case typed.PrimOp.Convert { return fe.convert(x, t0, ty) }
         case typed.PrimOp.Bitcast { return fe.let("bitcast " $lt " " $x " to " $fe.ty(ty)) }
+        case typed.PrimOp.Retire { return "0" }     # M19g: nothing at run time (the evaluator's mark)
         case typed.PrimOp.Len {
             rr := t.Referent(r) if t.IsRef(r) else r
             a := fe.arrayOf(rr)
