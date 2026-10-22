@@ -553,7 +553,7 @@ fn ErrorCode(t types.Table&, errors types.ListId, err types.TypeId, word I64) I6
 # the problems with a function, a line each - "bbN[i]: ..." for the i-th statement of block N, "bbN[term]: ..." for
 # its terminator, "fn: ..." for the function's own tables; "" when it keeps the contract
 fn (f Fn&) Verify(t mut types.Table&) String {
-    v := verifier(f, t)
+    v mut verifier&t = verifier(f, t)
     v.run()
     return v.out.ToString()
 }
@@ -1888,7 +1888,7 @@ fn (v mut verifier&) termFlow(term Term) {
 
 # a function as text: its signature, its locals, its scopes, then each block's statements and terminator
 fn (f Fn&) Dump(t mut types.Table&) String {
-    w := dumper(f, t)
+    w mut dumper&t = dumper(f, t)
     w.all()
     return w.out.ToString()
 }
@@ -2406,7 +2406,7 @@ test "constants are flattened into the function's tables; helpers' ABI is their 
     t := types.NewTable(names)
     f := addFn(t)
     c := f.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bytes(U8[104, 105]), typed.Const.Bits(7)]))
-    w := dumper(f, t)
+    w mut dumper&t = dumper(f, t)
     assert w.constant(c) == "[text 2 7]" and f.Bytes.Len() == 2 and f.ConstItems.Len() == 2
     i64 := t.Prim("I64")
     render := HelperType(t, HelperKind.Render, i64)

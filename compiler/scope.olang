@@ -1394,13 +1394,20 @@ fn (s mut Scoper&) flStmt(st typed.Stmt&) {
     match st {
         case typed.Stmt.Let(_, l, x) {
             s.flExpr(x)
-            s.flInto(I64(l), s.B.Locals[I64(l)].Ty, x, false)
+            s.flInto(I64(l), s.B.Locals[I64(l)].Ty, x, false, true)
         }
         case typed.Stmt.Assign(_, p, x) {
             s.flPlace(p)
             s.flExpr(x)
             r := s.flPlaceRoot(p)
-            s.flInto(r, p.Type(), x, flThroughRef(p) or r < 0 or s.outside(r))
+            # a copy stored into a part of what flows into the result keeps its references where the source's are
+            # (O25h), so the source flows too: "p.Lengths = lengths" then "return Checker(p)"; only a copy taking a
+            # local's whole place is the copy's own
+            whole := match p {
+                case typed.Place.Local(_, _, _) => true
+                case _ => false
+            }
+            s.flInto(r, p.Type(), x, flThroughRef(p) or r < 0 or s.outside(r), whole)
         }
         case typed.Stmt.Eval(_, x) { s.flExpr(x) }
         case typed.Stmt.If(_, i) {
@@ -1452,10 +1459,10 @@ fn (s mut Scoper&) flStmt(st typed.Stmt&) {
 # a value x put into local r's storage (or a part of it) of type ty: in mode 0 what x carries joins where r is in the
 # set, but for a plain copy of a value local, which is no flow (O25h); in mode 1 r joins where x carries the local, or
 # the local is kept where r is outside its block
-fn (s mut Scoper&) flInto(r I64, ty types.TypeId, x typed.Expr&, outside Bool) {
+fn (s mut Scoper&) flInto(r I64, ty types.TypeId, x typed.Expr&, outside Bool, whole Bool) {
     if x == null or not s.holds(ty) { return }
     if s.flMode == 0 {
-        if r >= 0 and flHas(s.fl, r) and not s.plainCopyOf(x, ty) {
+        if r >= 0 and flHas(s.fl, r) and not (whole and s.plainCopyOf(x, ty)) {
             xs List<I64>
             s.carried(x, xs)
             for k in xs { s.flAdd(k) }
@@ -5911,7 +5918,7 @@ if TestBuild {
                         "    assert label(5).Len() == 2\n"
                         "}\n")
 
-    test "plans: a returned array value with no result scope is built in the program's scope (T7b); a local lent for a parameter sharing the borrowed result's scope lives there (O26a)" {
+    test "plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there (O26a)" {
         dir := try os.MkTemp() catch os.OsError { unreachable }
         defer { try os.RemoveAll(dir) catch os.OsError { } }
         try os.WriteFile($dir "/main.olang", jpArrays) catch os.OsError { }
@@ -5936,17 +5943,18 @@ if TestBuild {
             if x == typed.Scope.Var(0) { stored = true }
         }
         assert stored, "nt is stored where p lives"
-        # shout's array and label's text are what they return, and neither has a result scope
+        # shout's array and label's text are what they return: each built in its function's result scope, the one
+        # scope variable an array value's result gives it
         for n in I64[13, 17] {
             k := bodyAt(l, c.Bodies, n)
             assert k >= 0
-            assert c.Bodies[k].Vars.Len() == 0, $c.Bodies[k].Vars.Len()
+            assert c.Bodies[k].Vars.Len() == 1, $c.Bodies[k].Vars.Len()
             built := false
             for i in range c.Bodies[k].Sites.Len() {
-                if s.Plans[k].Built[i] == typed.Scope.Program { built = true }
+                if s.Plans[k].Built[i] == typed.Scope.Var(0) { built = true }
                 assert s.Plans[k].Built[i] != typed.Scope.Block(typed.BlockId(0)), "a site of line " $n " built in its frame"
             }
-            assert built, "a site of line " $n " built in the program's scope"
+            assert built, "a site of line " $n " built in the result scope"
         }
     }
 }
