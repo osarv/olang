@@ -364,6 +364,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if d.Errors() > 0 { error build.Failed.REPORTED }
     e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
+    e.Baked = interp.Bake(c)     # K2: the immutable globals the evaluator gives, written as their values
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
     e.Module = kind == build.Kind.Module
     e.Triple = cfg.Target.Triple
