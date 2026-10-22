@@ -7901,9 +7901,10 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
     }
     if name == "retire" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT and c.P.L.Mods[c.fr().Mi].Prelude {
-        # M19g: where a collection stops using an array - nothing at run time but under -sanitize, which the port does
-        # not build yet; the evaluator marks it, a later use through a view stopping evaluation (K1)
-        return c.prim(sp, c.i64(), typed.PrimOp.Retire, rx, null)
+        # M19g: where a collection stops using an array - nothing at run time but under -sanitize (B2f), where its
+        # storage is poisoned; a module that retires arrays gives its arrays chunks of their own there
+        c.P.L.Mods[c.fr().Mi].Retires = true
+        return c.prim(sp, types.VoidT, typed.PrimOp.Retire, c.value(rx, sp), null)
     }
     if name.StartsWith("Atomic") {
         op := typed.PrimOp.AtomicLoad

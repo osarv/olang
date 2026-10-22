@@ -233,6 +233,8 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, F mir.Fn
     joinS List<mir.ScopeId>
     erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
     planned Bool = false    # whether plan is the scope pass's plan for B, not the stand-in
+    adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
+    adoptAt mir.ScopeRef = mir.ScopeRef.Program
     plan typed.Plan = typed.Plan(0, 0, 0)
 }
 
@@ -442,6 +444,12 @@ fn (ln mut lowering&) asI64(x mir.Operand, ty types.TypeId, sp source.Span) mir.
 fn (ln mut lowering&) built(site typed.SiteId) mir.ScopeRef {
     if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() { return mir.ScopeRef.Program }
     return ln.scopeRef(ln.plan.Built[I64(site)])
+}
+
+# where an array made at site is: where the reference it is promoted to goes, if it is the one promote adopts
+fn (ln mut lowering&) madeAt(site typed.SiteId) mir.ScopeRef {
+    if site == ln.adoptSite and site >= typed.SiteId(0) { return ln.adoptAt }
+    return ln.built(site)
 }
 
 # the scopes a call at site passes for its callee's n variables: the plan's, the program's for the stand-in placement
@@ -1393,6 +1401,25 @@ fn (ln mut lowering&) take(p typed.Place&, ty types.TypeId, sp source.Span) mir.
 
 # a temporary given storage (E12c): New in the site's scope, a destructor-bearing instance registered there (O16)
 fn (ln mut lowering&) promote(pr typed.Promote&, ty types.TypeId, sp source.Span) mir.Operand {
+    # a fresh run-time-length array made only to be promoted - "s.data = Array<T>(n)", a literal - is made where the
+    # reference goes, the reference its pair, rather than made and copied there (T7)
+    t0 := ln.T
+    a0 := ln.arrayOf(ty)
+    if t0.IsRef(t0.Repr(ty)) and a0 != types.UnknownT and ln.fixedLen(a0) < 0 {
+        match pr.X {
+            case typed.Expr.Make(_, _, m) {
+                if (m.Kind == typed.MakeKind.Fill or m.Kind == typed.MakeKind.Array) and m.Site >= typed.SiteId(0) {
+                    sv, sa := ln.adoptSite, ln.adoptAt
+                    ln.adoptSite = m.Site
+                    ln.adoptAt = ln.built(pr.Site)
+                    r := ln.fill(m, ty, sp) if m.Kind == typed.MakeKind.Fill else ln.arrayLit(m, ty, sp)
+                    ln.adoptSite, ln.adoptAt = sv, sa
+                    return r
+                }
+            }
+            case _ { }
+        }
+    }
     v := ln.val(pr.X)
     if ln.dead { return mir.Operand.None }
     s := ln.built(pr.Site)
@@ -1685,7 +1712,7 @@ fn (ln mut lowering&) arrayLit(m typed.Make&, ty types.TypeId, sp source.Span) m
     }
     el := t.Elem(at)
     a := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(a), mir.Rvalue.NewArray(ln.built(m.Site), ty, ln.constI64(ops.Len())
+    ln.emit(mir.Stmt.Assign(sp, mir.L(a), mir.Rvalue.NewArray(ln.madeAt(m.Site), ty, ln.constI64(ops.Len())
                                                              mir.Operand.Const(el, 0))))
     deref := t.IsRef(t.Repr(ty))
     for i in range ops.Len() {
@@ -1754,7 +1781,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             ln.check(fits, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
         }
     }
-    return ln.into(ty, mir.Rvalue.NewArray(ln.built(m.Site), ty, n64, fv), sp)
+    return ln.into(ty, mir.Rvalue.NewArray(ln.madeAt(m.Site), ty, n64, fv), sp)
 }
 
 # a comprehension (E27): its buffer made at its reservation (or 100), each Yield stored at its count, the buffer grown
@@ -2079,8 +2106,7 @@ fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.
     for i in range tx.Pieces.Len() {
         match tx.Pieces[i] {
             case typed.Piece.Render(x) {
-                vals[i] = ln.val(x)
-                tys[i] = x.Type()
+                vals[i], tys[i] = ln.piece(x, sp)
             }
             case _ { }
         }
@@ -2103,6 +2129,27 @@ fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.
     r := ln.into(ty, mir.Rvalue.Text(bref, ln.built(tx.Site), ty), sp)
     ln.emit(mir.Stmt.Close(sp, b))
     return r
+}
+
+# a rendered operand, computed before any piece renders (E11b, Go's rule): a struct or a number as it is then, but an
+# array's elements read when its piece renders - a fixed array read from a place is rendered through a reference to
+# that place, as a run-time array's pair names its storage
+fn (ln mut lowering&) piece(x typed.Expr&, sp source.Span) (mir.Operand, types.TypeId) {
+    t := ln.T
+    xt := x.Type()
+    a := ln.arrayOf(xt)
+    if not t.IsRef(t.Repr(xt)) and a != types.UnknownT and ln.fixedLen(a) >= 0 {
+        match x {
+            case typed.Expr.Read(_, _, p, _) {
+                q := ln.place(p)
+                if ln.dead { return mir.Operand.None, xt }
+                rt := t.Ref(xt, types.ReadOnly)
+                return ln.into(rt, mir.Rvalue.Ref(ln.mk(q), rt), sp), rt
+            }
+            case _ { }
+        }
+    }
+    return ln.val(x), xt
 }
 
 # one value written into builder b: by kind where it is a number, a Bool, a Char or text, else through its type's Render

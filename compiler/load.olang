@@ -49,6 +49,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     Identity
     Prelude
     File I64 = -1
+    Retires Bool = false               # its code calls "retire()" (M19d): under -sanitize its arrays get chunks of their own (B2f)
     Src source.Source& = null
     Toks scan.Tokens& = null
     Decls Array<ast.Decl&>& = null

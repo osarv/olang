@@ -898,9 +898,14 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
             sayErr(x.TraceText(d))
             return 1
         }
-        case eval.Stop.Refused(_, _, _) {
+        case eval.Stop.Refused(why, _, _) {
             # what interpret cannot run, or the built program leaves undefined: interpret's own stop (B3e)
             sayErr("olang interpret: " $x.StopText(s, entry, d) "\n")
+            # M19g: a stale view - and where the program grew its Vec
+            if why == eval.WhyStale {
+                gf, gsp := x.M.StaleGrewAt()
+                if gf >= 0 { sayErr("olang interpret: " $line(d, gf, gsp) ": the Vec grew here\n") }
+            }
             return 1
         }
         case eval.Stop.Exited(kind, _, _, _) {

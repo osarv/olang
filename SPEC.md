@@ -5588,10 +5588,13 @@ with `-race`.
 
 **B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
 of the program has a source location and its own name, every statement a line, and every parameter and local
-of a primitive or reference type its name and value. A debugger can therefore break on a function or a
-`file:line`, step by statement, show arguments and locals, and print a backtrace in source terms. A by-value
-aggregate local is not yet described, and a test build's `test` blocks share one function scope. Outside
-`-debug` no debug information is emitted.
+its name and value - a number, a `Bool`, a reference (a pointer to what it names), a struct, a tuple or a record
+(its fields by name), a fixed array (its elements), a run-time-length array or text (its length and a pointer to
+its elements), an enum (its case, and the words of its payload where one carries a payload) and a function value
+(its code and environment). A debugger can therefore break on a function or a `file:line`, step by statement,
+show arguments and locals, and print a backtrace in source terms. A local held in an arena (over 64KB, T7c, or
+homed in a scope variable, O26a) is not described, and a test build's `test` blocks share one function scope.
+Outside `-debug` no debug information is emitted.
 
 A debug object is a distinct artifact from an optimized one and is named accordingly (B4) — without that,
 a `-debug` build would silently reuse optimized objects and be exactly what was not asked for.

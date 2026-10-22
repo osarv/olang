@@ -1104,8 +1104,9 @@ fn (m mut Machine&) at(p Ptr, n I64, write Bool) I64 {
         return -1
     }
     # M19g: an array its collection retired, used - through a view taken before the collection grew - reads the old
-    # elements at run time, which the program cannot have meant: evaluation stops, with both places (K1)
-    if m.al[slot].Retired >= 0 and m.When == Mode.Compile {
+    # elements at run time, which the program cannot have meant: evaluation stops, with both places (K1), while
+    # compiling and under interpret alike (B3e)
+    if m.al[slot].Retired >= 0 {
         m.StaleAt = m.al[slot].Retired
         m.refuse(WhyStale)
         return -1

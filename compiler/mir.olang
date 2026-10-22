@@ -1305,13 +1305,15 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             if ty != types.BoolT { v.bad("Same typed " $v.canon(ty)) }
         }
         case typed.PrimOp.Convert, typed.PrimOp.Bitcast { }
-        case typed.PrimOp.Retire {
-            if v.arrayOf(t.Referent(ra) if t.IsRef(ra) else a) == types.UnknownT { v.bad("Retire of a " $v.canon(a)) }
-        }
         case typed.PrimOp.Len {
             x := t.Referent(ra) if t.IsRef(ra) else a
             if v.arrayOf(x) == types.UnknownT { v.bad("Len of a " $v.canon(a)) }
             if ty != I64T { v.bad("Len typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.Retire {
+            x := t.Referent(ra) if t.IsRef(ra) else a
+            if v.arrayOf(x) == types.UnknownT { v.bad("Retire of a " $v.canon(a)) }
+            if ty != types.VoidT { v.bad("Retire typed " $v.canon(ty)) }
         }
         case typed.PrimOp.IsCase {
             _, ok := v.casesOf(a)

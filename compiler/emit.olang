@@ -93,6 +93,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dbgPtrN I64 = -1
     dbgFiles Map<I64, I64>
     dbgBasics Map<I64, I64>
+    dbgTypes Map<I64, I64>          # the debug types of aggregates, arrays, enums, references and function values
 }
 
 # whether the error return trace is kept (S18d): test and -debug builds
@@ -628,8 +629,11 @@ fn (e mut Emitter&) dbgSubTy() I64 {
     return e.dbgSubN
 }
 
-# the debug type a variable of type ty is shown as: a number's, Bool's, a pointer for a reference held in one word -
-# -1 for what is not described yet (an aggregate, a run-time-length array's pair, a function value)
+# the debug type a variable of type ty is shown as (B2e): a number's and Bool's basic type, a reference a pointer to
+# what it names, a struct, a tuple or a record its fields by name and offset, a fixed array its elements, a run-time
+# array its length and a pointer to its elements (text so shown as characters), an enum its cases (the tag and the
+# payload's words where one carries a payload), a function value its code and environment - -1 for what has no
+# layout. Each is made once, before its parts, so a type that holds itself through a reference is described once
 fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     t := e.T
     r := t.Repr(ty)
@@ -638,18 +642,169 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         n := e.dbgNew()
         e.dbgBasics.Put(I64(r), n)
         enc := "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
+        # a byte as a character, as C's unsigned char, so that text's elements print as text
+        if t.Bits(r) == 8 and t.IsUnsigned(r) { enc = "DW_ATE_unsigned_char" }
         bits := 8 if r == types.BoolT else t.Bits(r)
         e.dbgShared(n, $"!DIBasicType(name: \"" $t.Canon(r) "\", size: " $bits ", encoding: " $enc ")")
         return n
     }
-    if e.ty(r) == "ptr" and t.IsRef(r) {
-        if e.dbgPtrN < 0 {
-            e.dbgPtrN = e.dbgNew()
-            e.dbgShared(e.dbgPtrN, "!DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)")
+    if e.dbgTypes.Has(I64(r)) { return try e.dbgTypes.Get(I64(r)) catch default -1 }
+    k := t.KindOf(r)
+    if k == types.Kind.Ref {
+        rt := t.Referent(r)
+        if e.ty(r) != "ptr" { return e.dbgPair(r, "len", t.Prim("I64"), "data", t.Elem(t.Repr(rt))) }
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        b := e.dbgType(rt)
+        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " $("!" $b if b >= 0 else "null") ", size: 64)")
+        return n
+    }
+    if k == types.Kind.Func { return e.dbgPair(r, "code", types.UnknownT, "env", types.UnknownT) }
+    e.P.Layout(r)
+    size := t.Size(r) * 8
+    if k == types.Kind.Array {
+        if t.Length(r) == types.TypeId(0) { return e.dbgPair(r, "len", t.Prim("I64"), "data", t.Elem(r)) }
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        el := e.dbgType(t.Elem(r))
+        if el < 0 { el = e.dbgBytes() }
+        sub := e.dbgNew()
+        e.dbgShared(sub, $"!{!DISubrange(count: " $t.ConstValue(t.Length(r)) ")}")
+        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_array_type, baseType: !" $el ", size: " $size ", elements: !" $sub ")")
+        return n
+    }
+    isStruct := k == types.Kind.Tuple or k == types.Kind.Record or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct)
+    if isStruct {
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        fs := t.Items(t.Parts(r) if k != types.Kind.Named else t.Fields(r))
+        names := e.fieldNames(r, fs.Len())
+        offs := t.Offsets(r)
+        ms StringBuilder
+        for i in range fs.Len() {
+            e.P.Layout(fs[i])
+            mt := e.dbgType(fs[i])
+            if mt < 0 { mt = e.dbgBytes() }
+            m := e.dbgNew()
+            e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $escape(names[i]) "\", baseType: !" $mt ", size: " $
+                        (t.Size(fs[i]) * 8) ", offset: " $(offs[i] * 8) ")")
+            if i > 0 { ms.Push(", ") }
+            ms.Push($"!" $m)
         }
-        return e.dbgPtrN
+        el := e.dbgNew()
+        e.dbgShared(el, $"!{" $ms.ToString() "}")
+        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $size $
+                    ", elements: !" $el ")")
+        return n
+    }
+    isEnum := k == types.Kind.AnonEnum or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum)
+    if isEnum {
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        cn := t.CaseNames(r) if k == types.Kind.Named else null
+        cs := t.Items(t.ShapeCases(r) if k == types.Kind.AnonEnum else t.Cases(r))
+        es StringBuilder
+        for i in range cs.Len() {
+            m := e.dbgNew()
+            name := e.text(cn[i]) if cn != null and i < cn.Len() else $i
+            e.dbgShared(m, $"!DIEnumerator(name: \"" $escape(name) "\", value: " $i ")")
+            if i > 0 { es.Push(", ") }
+            es.Push($"!" $m)
+        }
+        el := e.dbgNew()
+        e.dbgShared(el, $"!{" $es.ToString() "}")
+        words := e.enumWords(r)
+        tag := n if not words else e.dbgNew()
+        tbase := e.dbgType(t.Prim("I64") if words else t.Prim("I32"))
+        e.dbgShared(tag, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $
+                    (64 if words else 32) ", baseType: !" $tbase ", elements: !" $el ")")
+        if not words { return n }
+        # the case, then the payload's words (its fields share them, by case)
+        w := t.PayloadSize(r) / 8
+        pw := e.dbgNew()
+        sub := e.dbgNew()
+        e.dbgShared(sub, $"!{!DISubrange(count: " $w ")}")
+        e.dbgShared(pw, $"!DICompositeType(tag: DW_TAG_array_type, baseType: !" $e.dbgType(t.Prim("I64")) ", size: " $(w * 64) $
+                    ", elements: !" $sub ")")
+        m0, m1, ml := e.dbgNew(), e.dbgNew(), e.dbgNew()
+        e.dbgShared(m0, $"!DIDerivedType(tag: DW_TAG_member, name: \"case\", baseType: !" $tag ", size: 64, offset: 0)")
+        e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"payload\", baseType: !" $pw ", size: " $(w * 64) ", offset: 64)")
+        e.dbgShared(ml, $"!{!" $m0 ", !" $m1 "}")
+        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $size $
+                    ", elements: !" $ml ")")
+        return n
     }
     return -1
+}
+
+# the pair a run-time array or a function value is: two words, the second a pointer to b's description (the first a
+# number of type a, or both pointers to nothing where a is Unknown)
+fn (e mut Emitter&) dbgPair(r types.TypeId, an String&, a types.TypeId, bn String&, b types.TypeId) I64 {
+    n := e.dbgNew()
+    e.dbgTypes.Put(I64(r), n)
+    at := e.dbgVoidPtr()
+    if a != types.UnknownT { at = e.dbgType(a) }
+    bt := e.dbgVoidPtr()
+    if b != types.UnknownT {
+        bd := e.dbgType(b)
+        bt = e.dbgNew()
+        e.dbgShared(bt, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " $("!" $bd if bd >= 0 else "null") ", size: 64)")
+    }
+    m0, m1, ml := e.dbgNew(), e.dbgNew(), e.dbgNew()
+    e.dbgShared(m0, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $an "\", baseType: !" $at ", size: 64, offset: 0)")
+    e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $bn "\", baseType: !" $bt ", size: 64, offset: 64)")
+    e.dbgShared(ml, $"!{!" $m0 ", !" $m1 "}")
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: 128, elements: !" $
+                ml ")")
+    return n
+}
+
+fn (e mut Emitter&) dbgVoidPtr() I64 {
+    if e.dbgPtrN < 0 {
+        e.dbgPtrN = e.dbgNew()
+        e.dbgShared(e.dbgPtrN, "!DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)")
+    }
+    return e.dbgPtrN
+}
+
+# a part with no description of its own shown as its bytes
+fn (e mut Emitter&) dbgBytes() I64 { return e.dbgType(e.T.Prim("U8")) }
+
+# a type's name as a debugger shows it: as the program writes it, its module left off
+fn (e mut Emitter&) dbgTypeName(r types.TypeId) String {
+    c := e.T.Canon(r)
+    k := try c.Find(":") catch default -1
+    return $c[k + 1:] if k >= 0 and not c.StartsWith("Array<") else $c
+}
+
+# a struct's field names in order, from its constructor's field declarations (C2); a tuple's or a record's by position
+fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
+    out := Array<String&>(n, "")
+    for i in range n { out[i] = $i }
+    if e.T.KindOf(r) != types.Kind.Named { return out }
+    td := e.P.TypeDecl(e.T.DeclOf(r))
+    if td == null or td.Body == null { return out }
+    match td.Body {
+        case ast.TypeBody.Struct(sb) {
+            if sb.Body == null { return out }
+            k I64 = 0
+            for st in sb.Body {
+                match st {
+                    case ast.Stmt.Var(_, v) {
+                        if v.Field {
+                            for vn in v.Names {
+                                if k < n { out[k] = $e.text(vn) }
+                                k++
+                            }
+                        }
+                    }
+                    nomatch { }
+                }
+            }
+        }
+        nomatch { }
+    }
+    return out
 }
 
 # the name a debugger knows a function by: a function's or a method's own (no linkage name - with a C compile unit
@@ -724,6 +879,7 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
         if l.Name == source.NameId(0) or not fe.isFrame(l.Home) { continue }
         name := e.text(l.Name)
         if name == "" or name.StartsWith("$") { continue }
+        if fe.size(l.Ty) > 65536 { continue }
         dt := e.dbgType(l.Ty)
         if dt < 0 { continue }
         n := e.dbgNew()
@@ -818,6 +974,31 @@ fn (e mut Emitter&) refs(i I64) Array<I64>&e {
 fn (e mut Emitter&) has(symbol String&) Bool { return e.itemAt.Has(symbol) }
 
 fn (e mut Emitter&) define(symbol String&, text String&) { e.item(symbol, HomeShared, $text "\n") }
+
+# text copied out of a builder (E11b): a short one - the commonest, a number or a word - by two overlapping moves of
+# its own width rather than a call of memcpy, so that a join costs what stage 0's measured write does
+fn (e mut Emitter&) textCopy() {
+    if e.has("olang_textcopy") { return }
+    e.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
+    b := StringBuilder()
+    b.Push("define linkonce_odr hidden void @olang_textcopy(ptr %d, ptr %s, i64 %n) alwaysinline {\nentry:\n")
+    b.Push("  %big = icmp ugt i64 %n, 16\n  br i1 %big, label %call, label %s8\n")
+    b.Push("call:\n  call void @llvm.memcpy.p0.p0.i64(ptr %d, ptr %s, i64 %n, i1 false)\n  ret void\n")
+    b.Push("s8:\n  %ge8 = icmp uge i64 %n, 8\n  br i1 %ge8, label %w8, label %s4\n")
+    b.Push("w8:\n  %e8 = sub i64 %n, 8\n  %a8 = load i64, ptr %s, align 1\n  %sb8 = getelementptr i8, ptr %s, i64 %e8\n")
+    b.Push("  %b8 = load i64, ptr %sb8, align 1\n  store i64 %a8, ptr %d, align 1\n  %db8 = getelementptr i8, ptr %d, i64 %e8\n")
+    b.Push("  store i64 %b8, ptr %db8, align 1\n  ret void\n")
+    b.Push("s4:\n  %ge4 = icmp uge i64 %n, 4\n  br i1 %ge4, label %w4, label %s1\n")
+    b.Push("w4:\n  %e4 = sub i64 %n, 4\n  %a4 = load i32, ptr %s, align 1\n  %sb4 = getelementptr i8, ptr %s, i64 %e4\n")
+    b.Push("  %b4 = load i32, ptr %sb4, align 1\n  store i32 %a4, ptr %d, align 1\n  %db4 = getelementptr i8, ptr %d, i64 %e4\n")
+    b.Push("  store i32 %b4, ptr %db4, align 1\n  ret void\n")
+    b.Push("s1:\n  %none = icmp eq i64 %n, 0\n  br i1 %none, label %done, label %w1\n")
+    b.Push("w1:\n  %h = lshr i64 %n, 1\n  %e1 = sub i64 %n, 1\n  %a1 = load i8, ptr %s\n  %sh = getelementptr i8, ptr %s, i64 %h\n")
+    b.Push("  %m1 = load i8, ptr %sh\n  %se = getelementptr i8, ptr %s, i64 %e1\n  %z1 = load i8, ptr %se\n  store i8 %a1, ptr %d\n")
+    b.Push("  %dh = getelementptr i8, ptr %d, i64 %h\n  store i8 %m1, ptr %dh\n  %de = getelementptr i8, ptr %d, i64 %e1\n")
+    b.Push("  store i8 %z1, ptr %de\n  br label %done\ndone:\n  ret void\n}\n")
+    e.item("olang_textcopy", HomeShared, b.ToString())
+}
 
 # a runtime function or a C library function, declared once
 fn (e mut Emitter&) declare(name String&, text String&) { e.define(name, "declare " $text) }
@@ -1008,6 +1189,11 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     dbgMeta StringBuilder
     sites Map<I32, I64>     # S18d: where this function's calls (1) and joins (2) are, by the start of their span
     sited Bool = false
+    # E11b: the builders whose text is measured and then written straight where it lands (direct), and the pieces of
+    # the one being written
+    direct Map<I64, Bool>
+    pieceKinds List<mir.WriteKind>
+    pieceOps List<mir.Operand>
 }
 
 # S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
@@ -1253,20 +1439,16 @@ fn (fe mut fnEm&) run() {
             fe.head.Push("  %lp" $i " = alloca ptr\n")
             if l.Kind != mir.LocalKind.Var and l.Kind != mir.LocalKind.Temp { fe.gap("a parameter or capture in an arena") }
         } else if fe.size(l.Ty) > 65536 {
-            if not fe.big {
-                fe.big = true
-                fe.head.Push("  %big = alloca %olang.scope\n")
-                fe.pro.Push("  store %olang.scope zeroinitializer, ptr %big\n")
-                fe.E.runtime("__olang_scope_alloc_a")
-                fe.E.runtime("__olang_scope_close")
-            }
+            fe.bigArena()
             a := fe.align(l.Ty)
             fe.pro.Push("  %l" $i " = call ptr @__olang_scope_alloc_a(ptr %big, i64 " $fe.size(l.Ty) ", i64 " $(a if a > 8 else 8) ")\n")
         } else {
             fe.head.Push("  %l" $i " = alloca " $lt "\n")
         }
     }
+    fe.findDirect()
     for i in range f.Scopes.Len() {
+        if fe.direct.Has(i) { continue }
         if f.Scopes[i].Kind == mir.ScopeKind.Builder {
             fe.head.Push("  %s" $i " = alloca %olang.builder\n  %s" $i "room = alloca [64 x i8], align 8\n")
         } else {
@@ -1285,8 +1467,9 @@ fn (fe mut fnEm&) run() {
         if not fe.isFrame(f.Locals[l].Home) { fe.gap("a parameter homed in an arena") }
         match pass[i] {
             case 'm' {
-                fe.pro.Push("  %pv" $i " = load " $fe.ty(lt) ", ptr %a" $i "\n")
-                fe.pro.Push("  store " $fe.ty(lt) " %pv" $i ", ptr %l" $l "\n")
+                # the caller's copy, made before the call: moved into the local's storage
+                fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+                fe.pro.Push("  call void @llvm.memmove.p0.p0.i64(ptr %l" $l ", ptr %a" $i ", i64 " $fe.size(lt) ", i1 false)\n")
             }
             case 's' {
                 fe.pro.Push("  %pf" $i " = insertvalue { ptr, ptr } undef, ptr %a" $i "c, 0\n")
@@ -1314,8 +1497,13 @@ fn (fe mut fnEm&) run() {
             lt := fe.ty(f.Locals[l].Ty)
             if not fe.isFrame(f.Locals[l].Home) { fe.gap("a capture homed in an arena") }
             fe.pro.Push("  %cp" $i " = getelementptr " $et ", ptr %env, i32 0, i32 " $i "\n")
-            fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i ", !tbaa !28\n")
-            fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
+            if fe.viaMem(f.Locals[l].Ty) {
+                fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+                fe.pro.Push("  call void @llvm.memmove.p0.p0.i64(ptr %l" $l ", ptr %cp" $i ", i64 " $fe.size(f.Locals[l].Ty) ", i1 false)\n")
+            } else {
+                fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i ", !tbaa !28\n")
+                fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
+            }
         }
         # the captured scopes (D16c), each as this thread may build into it: its own part of a scope another thread
         # owns, the program's (null) as this thread reaches it (P2, decision 48)
@@ -1348,6 +1536,159 @@ fn (fe mut fnEm&) run() {
         fe.w("ret " $rt " %rr")
     } else {
         fe.w("ret void")
+    }
+}
+
+# the frame's own arena for storage over 64KB (T7c), opened at entry and closed at the one return
+fn (fe mut fnEm&) bigArena() {
+    if fe.big { return }
+    fe.big = true
+    fe.head.Push("  %big = alloca %olang.scope\n")
+    fe.pro.Push("  store %olang.scope zeroinitializer, ptr %big\n")
+    fe.E.runtime("__olang_scope_alloc_a")
+    fe.E.runtime("__olang_scope_close")
+}
+
+# a value too large to carry as one LLVM value (types.ViaMemory: a struct, a tuple, a record or a fixed array over
+# 128 bytes) - moved through memory, as stage 0 moves it: copied by memmove, built part by part, a parameter as a
+# pointer to the callee's own copy, a result through the hidden out pointer. LLVM expands an aggregate value element by
+# element, and a link of a program moving one of 72KB as a value ran for over half an hour
+fn (fe mut fnEm&) viaMem(ty types.TypeId) Bool {
+    if ty == types.VoidT or ty == types.NoreturnT or ty == types.UnknownT { return false }
+    fe.E.P.Layout(ty)
+    return fe.E.T.ViaMemory(ty)
+}
+
+# a slot of type ty in the frame: an alloca in the entry block, over 64KB storage from the frame's arena (T7c)
+fn (fe mut fnEm&) slot(ty types.TypeId) String {
+    if fe.size(ty) <= 65536 { return fe.alloca(fe.ty(ty), fe.align(ty)) }
+    fe.bigArena()
+    a := fe.align(ty)
+    s := "%" $fe.fresh("bs")
+    fe.pro.Push("  " $s " = call ptr @__olang_scope_alloc_a(ptr %big, i64 " $fe.size(ty) ", i64 " $(a if a > 8 else 8) ")\n")
+    return s
+}
+
+fn (fe mut fnEm&) memmove(dst String&, src String&, n I64) {
+    fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+    fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $dst ", ptr " $src ", i64 " $n ", i1 false)")
+}
+
+# where an operand of a type moved through memory already is: a place's address, constant data's global; "" for
+# none (a constant: all zero bits)
+fn (fe mut fnEm&) srcAddr(x mir.Operand) String {
+    match x {
+        case mir.Operand.Copy(q) {
+            at, _ := fe.addr(q)
+            return at
+        }
+        case mir.Operand.Data(ty, c, file, sp) { return fe.data(ty, c, file, sp, true) }
+        case _ { return "" }
+    }
+}
+
+# operand x, of type ty, written into memory at at: a value too large to carry moved by memmove (all zero bits by a
+# memset), anything else stored
+fn (fe mut fnEm&) put(at String&, ty types.TypeId, x mir.Operand, tag String& = "") {
+    if fe.viaMem(ty) {
+        src := fe.srcAddr(x)
+        if src != "" {
+            if src != at { fe.memmove(at, src, fe.size(ty)) }
+            return
+        }
+        match x {
+            case mir.Operand.Const(_, _), mir.Operand.None {
+                fe.E.declare("llvm.memset.p0.i64", "void @llvm.memset.p0.i64(ptr, i8, i64, i1)")
+                fe.w("call void @llvm.memset.p0.i64(ptr " $at ", i8 0, i64 " $fe.size(ty) ", i1 false)")
+                return
+            }
+            case _ { }
+        }
+    }
+    fe.store(fe.ty(ty), fe.val(x, ty), at, tag)
+}
+
+# an assignment of a value moved through memory: a copy by memmove, an aggregate built where it lands - straight into
+# the place where nothing its parts read can be the place, else in a slot of its own first
+fn (fe mut fnEm&) intoPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
+    t := fe.E.T
+    match rv {
+        case mir.Rvalue.Use(x) {
+            at, _ := fe.addr(p)
+            fe.put(at, pt, x)
+            return true
+        }
+        case mir.Rvalue.Aggregate(ty, _, args) {
+            r := t.Repr(ty)
+            k := t.KindOf(r)
+            if k == types.Kind.AnonEnum or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum) {
+                return false
+            }
+            if fe.apart(p, args) {
+                at, _ := fe.addr(p)
+                fe.buildInto(at, pt, args)
+                return true
+            }
+            tmp := fe.slot(pt)
+            fe.buildInto(tmp, pt, args)
+            at, _ := fe.addr(p)
+            fe.memmove(at, tmp, fe.size(pt))
+            return true
+        }
+        case _ { return false }
+    }
+}
+
+# whether place p is a local of the frame no part in args can read: each a constant, constant data, or a copy of
+# another local reached without a reference
+fn (fe mut fnEm&) apart(p mir.Place, args mir.Range) Bool {
+    dst := mir.NoLocal
+    match p.B {
+        case mir.Base.Local(l) { dst = l }
+        case _ { return false }
+    }
+    if fe.derefs(p) { return false }
+    for i in range args.N {
+        match fe.arg(args, i) {
+            case mir.Operand.Copy(q) {
+                if fe.derefs(q) or fe.baseIs(q, dst) { return false }
+                match q.B {
+                    case mir.Base.Local(_) { }
+                    case _ { return false }
+                }
+            }
+            case _ { }
+        }
+    }
+    return true
+}
+
+fn (fe mut fnEm&) derefs(p mir.Place) Bool {
+    for i in range p.Path.N {
+        match fe.F.Projs[I64(p.Path.At) + i] {
+            case mir.Proj.Deref { return true }
+            case _ { }
+        }
+    }
+    return false
+}
+
+# an aggregate of a type moved through memory, built in place at at: each part written where it lives
+fn (fe mut fnEm&) buildInto(at String&, ty types.TypeId, args mir.Range) {
+    t := fe.E.T
+    r := t.Repr(ty)
+    lt := fe.ty(r)
+    a := fe.arrayOf(r)
+    if a != types.UnknownT {
+        el := t.Elem(a)
+        for i in range fe.fixedLen(a) {
+            fe.put(fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i), el, fe.arg(args, i), fe.E.tbaa(el, true))
+        }
+        return
+    }
+    fs := t.Items(fe.fieldList(r))
+    for i in range fs.Len() {
+        fe.put(fe.let("getelementptr " $lt ", ptr " $at ", i32 0, i32 " $i), fs[i], fe.arg(args, i), fe.E.tbaa(fs[i], false))
     }
 }
 
@@ -1685,7 +2026,7 @@ fn (e mut Emitter&) constText(ty types.TypeId, bits I64) String {
 # read-only constant storage (T25d): a private constant, one for each distinct content, and the operand's value - the
 # pair { length, storage } for a run-time-length array or a reference to one, the storage for a reference to a fixed
 # array, the array itself for a fixed array's value
-fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span) String {
+fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where Bool = false) String {
     t := fe.E.T
     r := t.Repr(ty)
     x := t.Referent(r) if t.IsRef(r) else r
@@ -1697,8 +2038,9 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span) String 
     # T25d: one instance for each site written, two sites two - what lowering synthesizes (no span) by its contents
     site := "" if sp.Start == I32(0) and sp.End == I32(0) else $file ":" $sp.Start ":" $sp.End ":" $c ":" $t.Canon(ty)
     g, n := fe.constGlobal(t.Elem(a), c, site)
-    if t.IsRef(r) and fe.fixed(a) { return g }
-    if fe.fixed(a) { return fe.load(fe.ty(a), g) }
+    if t.IsRef(r) and fe.fixed(a) { return "" if where else g }
+    if fe.fixed(a) { return g if where else fe.load(fe.ty(a), g) }
+    if where { return "" }
     return "{ i64 " $n ", ptr " $g " }"
 }
 
@@ -1839,6 +2181,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         case mir.Stmt.Assign(_, p, rv) {
             pt := fe.placeType(p)
             if fe.fillInPlace(p, pt, rv) { return }
+            if fe.viaMem(pt) and fe.intoPlace(p, pt, rv) { return }
             v := fe.rvalue(rv, pt)
             if pt == types.VoidT or pt == types.NoreturnT { return }
             at, _ := fe.addr(p)
@@ -1854,6 +2197,11 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.Dead(_, _) { }
         case mir.Stmt.Open(_, sc) {
+            if fe.direct.Has(I64(sc)) {
+                fe.pieceKinds.Clear()
+                fe.pieceOps.Clear()
+                return
+            }
             if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Builder {
                 fe.w("store %olang.builder { ptr null, i64 0, i64 64, ptr null, ptr null }, ptr %s" $sc)
                 fe.w("store ptr %s" $sc "room, ptr %s" $sc)
@@ -1866,9 +2214,19 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             }
         }
         case mir.Stmt.Close(_, sc) {
+            if fe.direct.Has(I64(sc)) { return }
             if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Builder {
+                # a builder that never outgrew its room made no scope of its own: nothing to close (the rest is the
+                # runtime's __olang_sb_done)
                 fe.E.runtime("__olang_sb_done")
+                h := fe.load("ptr", fe.let("getelementptr %olang.builder, ptr %s" $sc ", i32 0, i32 3"))
+                grew := fe.let("icmp ne ptr " $h ", null")
+                yes, no := fe.fresh("sbgrew"), fe.fresh("sbdone")
+                fe.w("br i1 " $grew ", label %" $yes ", label %" $no)
+                fe.label(yes)
                 fe.w("call void @__olang_sb_done(ptr %s" $sc ")")
+                fe.w("br label %" $no)
+                fe.label(no)
             } else {
                 fe.E.runtime("__olang_scope_close")
                 fe.w("call void @__olang_scope_close(ptr %s" $sc ")")
@@ -1893,7 +2251,14 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.RegisterOwner(_, _, _) { fe.gap("RegisterOwner") }
         case mir.Stmt.Release(_, _) { fe.gap("Release") }
-        case mir.Stmt.Write(_, b, how, x) { fe.write(fe.scope(b), how, x) }
+        case mir.Stmt.Write(_, b, how, x) {
+            if fe.directRef(b) {
+                fe.pieceKinds.Push(how)
+                fe.pieceOps.Push(x)
+                return
+            }
+            fe.write(fe.scope(b), how, x)
+        }
         case mir.Stmt.CopyElems(_, dst, src, n) {
             d := fe.dataPtr(dst)
             sv := fe.dataPtr(src)
@@ -1904,6 +2269,120 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.Spawn(_, j, task) { fe.spawn(j, fe.F.Tasks[I64(task)]) }
     }
+}
+
+# E11b: the builders whose pieces are only text, characters, integers and Bools, written one after another and made
+# text at once - Open, Writes, the Text, Close in one block, as lowering writes a join with no rendering helper. Such a
+# text is measured, then written straight into storage of its length where it lands: no builder, no room in the
+# frame (a recursion through a join holds nothing but its operands, as stage 0's measured writes), no copy
+fn (fe mut fnEm&) findDirect() {
+    for bb in fe.F.Blocks {
+        n := bb.Stmts.Len()
+        for i in range n {
+            sc := I64(-1)
+            match bb.Stmts[i] {
+                case mir.Stmt.Open(_, s0) {
+                    if fe.F.Scopes[I64(s0)].Kind == mir.ScopeKind.Builder { sc = I64(s0) }
+                }
+                case _ { }
+            }
+            if sc < 0 { continue }
+            j := i + 1
+            for j < n and fe.plainWrite(bb.Stmts[j], sc) { j++ }
+            if j + 1 >= n { continue }
+            textOk := match bb.Stmts[j] {
+                case mir.Stmt.Assign(_, _, rv) => match rv {
+                    case mir.Rvalue.Text(b, _, _) => fe.refIs(b, sc)
+                    case _ => false
+                }
+                case _ => false
+            }
+            closeOk := match bb.Stmts[j + 1] {
+                case mir.Stmt.Close(_, s1) => I64(s1) == sc
+                case _ => false
+            }
+            if textOk and closeOk { fe.direct.Put(sc, true) }
+        }
+    }
+}
+
+fn (fe mut fnEm&) plainWrite(st mir.Stmt, sc I64) Bool {
+    return match st {
+        case mir.Stmt.Write(_, b, how, _) => fe.refIs(b, sc) and match how {
+            case mir.WriteKind.Bytes, mir.WriteKind.Char, mir.WriteKind.Int, mir.WriteKind.Uint, mir.WriteKind.Bool => true
+            case _ => false
+        }
+        case _ => false
+    }
+}
+
+fn (fe mut fnEm&) refIs(r mir.ScopeRef, sc I64) Bool {
+    return match r {
+        case mir.ScopeRef.Scope(s0) => I64(s0) == sc
+        case _ => false
+    }
+}
+
+fn (fe mut fnEm&) directRef(r mir.ScopeRef) Bool {
+    return match r {
+        case mir.ScopeRef.Scope(s0) => fe.direct.Has(I64(s0))
+        case _ => false
+    }
+}
+
+# a direct builder's text (findDirect): each piece's length, their sum allocated in into, each piece written there
+fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
+    k := fe.pieceOps.Len()
+    vs := Array<String&>(k, "")
+    ns := Array<String&>(k, "")
+    total := "0"
+    for i in range k {
+        x := fe.pieceOps[i]
+        xt := fe.otype(x)
+        v := fe.val(x, xt)
+        match fe.pieceKinds[i] {
+            case mir.WriteKind.Bytes {
+                data, n := fe.arrayParts(v, xt)
+                vs[i] = $data
+                ns[i] = $n
+            }
+            case mir.WriteKind.Char {
+                vs[i] = $v
+                ns[i] = $"1"
+            }
+            case mir.WriteKind.Bool {
+                vs[i] = $fe.let("select i1 " $v ", ptr " $fe.E.cstr("true") ", ptr " $fe.E.cstr("false"))
+                ns[i] = $fe.let("select i1 " $v ", i64 4, i64 5")
+            }
+            case mir.WriteKind.Uint {
+                vs[i] = $fe.zext64(v, xt)
+                fe.E.runtime("__olang_fmt_u64")
+                ns[i] = $fe.let("call i64 @__olang_fmt_u64(ptr null, i64 " $vs[i] ")")
+            }
+            case _ {
+                vs[i] = $fe.index(v, xt)
+                fe.E.runtime("__olang_fmt_i64")
+                ns[i] = $fe.let("call i64 @__olang_fmt_i64(ptr null, i64 " $vs[i] ")")
+            }
+        }
+        total = $ns[i] if i == 0 else fe.let("add i64 " $total ", " $ns[i])
+    }
+    fe.E.runtime("__olang_scope_alloc")
+    out := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(into) ", i64 " $total ")")
+    at := out
+    for i in range k {
+        match fe.pieceKinds[i] {
+            case mir.WriteKind.Char { fe.store("i8", vs[i], at) }
+            case mir.WriteKind.Uint { fe.let("call i64 @__olang_fmt_u64(ptr " $at ", i64 " $vs[i] ")") }
+            case mir.WriteKind.Int { fe.let("call i64 @__olang_fmt_i64(ptr " $at ", i64 " $vs[i] ")") }
+            case _ {
+                fe.E.textCopy()
+                fe.w("call void @olang_textcopy(ptr " $at ", ptr " $vs[i] ", i64 " $ns[i] ")")
+            }
+        }
+        if i + 1 < k { at = fe.let("getelementptr i8, ptr " $at ", i64 " $ns[i]) }
+    }
+    return fe.pair(total, out)
 }
 
 # where an array place's elements are
@@ -2036,6 +2515,11 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.Aggregate(ty, tag, args) { return fe.aggregate(ty, tag, args) }
         case mir.Rvalue.New(s, x, ty) {
             rt := t.Referent(t.Repr(ty))
+            if fe.viaMem(rt) {
+                p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
+                fe.put(p, rt, x)
+                return p
+            }
             v := fe.val(x, rt)
             if fe.runTime(rt) { return fe.copyArray(s, v, rt) }
             p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
@@ -2047,13 +2531,14 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.Closure(code, ty, s, args, caps) { return fe.closure(code, ty, s, args, caps) }
         case mir.Rvalue.Recode(code, from, tl) { return fe.recode(fe.val(code, mir.I32T), from, tl) }
         case mir.Rvalue.Text(b, into, ty) {
+            if fe.directRef(b) { return fe.directText(into) }
             bp := fe.scope(b)
             data := fe.load("ptr", bp)
             n := fe.load("i64", fe.let("getelementptr %olang.builder, ptr " $bp ", i32 0, i32 1"))
             fe.E.runtime("__olang_scope_alloc")
             out := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(into) ", i64 " $n ")")
-            fe.E.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
-            fe.w("call void @llvm.memcpy.p0.p0.i64(ptr " $out ", ptr " $data ", i64 " $n ", i1 false)")
+            fe.E.textCopy()
+            fe.w("call void @olang_textcopy(ptr " $out ", ptr " $data ", i64 " $n ")")
             return fe.pair(n, out)
         }
     }
@@ -2111,13 +2596,23 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     }
     sc := fe.scope(s)
     p := ""
-    if zero {
+    if fe.E.San and fe.E.retires(fe.F.File) {
+        # B2f: an array made in a module that retires arrays (M19d) has a chunk of its own, zero-filled, so that
+        # retiring it can make it unreadable
+        fe.E.runtime("__olang_san_alloc_own")
+        p = fe.let("call ptr @__olang_san_alloc_own(ptr " $sc ", i64 " $bytes ")")
+        if zero { return fe.pair(cnt, p) }
+    } else if zero {
         fe.E.runtime("__olang_scope_alloc_zeroed")
         p = fe.let("call ptr @__olang_scope_alloc_zeroed(ptr " $sc ", i64 " $bytes ")")
-    } else {
-        fe.E.runtime("__olang_scope_alloc")
-        p = fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")")
-        v := fe.val(fill, el)
+    }
+    if not zero {
+        if p == "" {
+            fe.E.runtime("__olang_scope_alloc")
+            p = fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")")
+        }
+        big := fe.viaMem(el)
+        v := "" if big else fe.val(fill, el)
         elt := fe.ty(el)
         i := fe.alloca("i64")
         fe.store("i64", "0", i)
@@ -2129,7 +2624,11 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
         fe.w("br i1 " $more ", label %" $body ", label %" $done)
         fe.label(body)
         at := fe.let("getelementptr " $elt ", ptr " $p ", i64 " $k)
-        fe.store(elt, v, at)
+        if big {
+            fe.put(at, el, fill)
+        } else {
+            fe.store(elt, v, at)
+        }
         fe.store("i64", fe.let("add i64 " $k ", 1"), i)
         fe.w("br label %" $head)
         fe.label(done)
@@ -2243,7 +2742,20 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case typed.PrimOp.Not { return fe.let("xor i1 " $x ", true") }
         case typed.PrimOp.Convert { return fe.convert(x, t0, ty) }
         case typed.PrimOp.Bitcast { return fe.let("bitcast " $lt " " $x " to " $fe.ty(ty)) }
-        case typed.PrimOp.Retire { return "0" }     # M19g: nothing at run time (the evaluator's mark)
+        case typed.PrimOp.Retire {
+            # M19d: an array a collection no longer uses - under -sanitize its storage poisoned and, where it has a
+            # chunk of its own, made unreadable until its scope closes (B2f); nothing otherwise
+            rr := t.Referent(r) if t.IsRef(r) else r
+            a := fe.arrayOf(rr)
+            if fe.E.San and a != types.UnknownT and not fe.fixed(a) {
+                n := fe.let("extractvalue { i64, ptr } " $x ", 0")
+                p := fe.let("extractvalue { i64, ptr } " $x ", 1")
+                bytes := fe.let("mul i64 " $n ", " $fe.size(t.Elem(a)))
+                fe.E.runtime("__olang_san_retire")
+                fe.w("call void @__olang_san_retire(ptr " $p ", i64 " $bytes ")")
+            }
+            return "undef"
+        }
         case typed.PrimOp.Len {
             rr := t.Referent(r) if t.IsRef(r) else r
             a := fe.arrayOf(rr)
@@ -2582,7 +3094,12 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
         for i in range args.N {
             x := fe.arg(args, i)
             xt := fe.otype(x)
-            fe.store(fe.ty(xt), fe.val(x, xt), fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i), ", !tbaa !28")
+            at := fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i)
+            if fe.viaMem(xt) {
+                fe.put(at, xt, x)
+            } else {
+                fe.store(fe.ty(xt), fe.val(x, xt), at, ", !tbaa !28")
+            }
         }
         # where the captures holding references live (D16c): null for the program's, and for each the plan did not say
         for j in range nc {
@@ -2594,6 +3111,12 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
                     case _ => false
                 }
                 if not isProg { sc = fe.scope(r) }
+            }
+            # the scope may now reach another thread with the closure, whose code asks for it as its thread may build
+            # there: claimed for this one first (P2, decision 48 - a scope's owner is set before it leaves its thread)
+            if sc != "null" {
+                fe.E.runtime("__olang_scope_escape")
+                fe.w("call void @__olang_scope_escape(ptr " $sc ")")
             }
             fe.store("ptr", sc, fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $(I64(args.N) + j)), ", !tbaa !28")
         }
@@ -2848,7 +3371,7 @@ fn (fe mut fnEm&) term(tm mir.Term) {
         case mir.Term.Return(_, x) {
             rt := t.RetLlvm(fe.F.Ty)
             if fe.via {
-                fe.store(fe.ty(fe.res), fe.val(x, fe.res), "%out")
+                fe.put("%out", fe.res, x)
                 if fe.errs { fe.store("i32", "0", "%rv") }
             } else if fe.errs {
                 if fe.res == types.VoidT {
@@ -2980,7 +3503,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     out := ""
     if via {
-        out = fe.alloca(fe.ty(res), fe.align(res))
+        out = fe.slot(res)
         if not first { args.Push(", ") }
         args.Push("ptr " $out)
         first = false
@@ -2996,17 +3519,19 @@ fn (fe mut fnEm&) call(c mir.Call) {
         if not first { args.Push(", ") }
         first = false
         x := fe.arg(c.Args, i)
+        if not isExtern and pass[i] == 'm' {
+            # the callee's own copy, made before the arguments after it run
+            p := fe.slot(ps[i])
+            fe.put(p, ps[i], x)
+            args.Push("ptr " $p)
+            continue
+        }
         v := fe.val(x, ps[i])
         if isExtern {
             args.Push(fe.externArg(v, ps[i]))
             continue
         }
         match pass[i] {
-            case 'm' {
-                p := fe.alloca(fe.ty(ps[i]), fe.align(ps[i]))
-                fe.store(fe.ty(ps[i]), v, p)
-                args.Push("ptr " $p)
-            }
             case 's' {
                 args.Push("ptr " $fe.let("extractvalue { ptr, ptr } " $v ", 0") ", ptr " $fe.let("extractvalue { ptr, ptr } " $v ", 1"))
             }
@@ -3026,7 +3551,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     value := ""
     if via {
-        value = fe.load(fe.ty(res), out)
+        value = out
     } else if res != types.VoidT {
         value = fe.let("extractvalue " $rt " " $r ", 1") if errs else r
     }
@@ -3040,7 +3565,11 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     if c.HasDest and value != "" {
         at, dt := fe.addr(c.Dest)
-        fe.store(fe.ty(dt), value, at)
+        if via {
+            fe.memmove(at, out, fe.size(res))
+        } else {
+            fe.store(fe.ty(dt), value, at)
+        }
     }
     fe.w("br label %" $blockName(c.Ok))
 }
@@ -3233,6 +3762,21 @@ fn (e mut Emitter&) runtime(name String&) {
 
 # main: the command line kept (B4a), the thread made known, each module initialized (B5a), the root's main called - an
 # error escaping it printed, the status 1 (B4)
+# whether the module of this file calls retire() (M19d)
+fn (e mut Emitter&) retires(file I64) Bool {
+    for m in e.P.L.Mods {
+        if m.File == file { return m.Retires }
+    }
+    return false
+}
+
+# B2f: the scope sanitizer's handler, in place before anything can close a scope
+fn (e mut Emitter&) sanInit(b mut StringBuilder&) {
+    if not e.San { return }
+    e.runtime("__olang_san_init")
+    b.Push("  call void @__olang_san_init()\n")
+}
+
 fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     t := e.T
     e.define("__olang_argc", "@__olang_argc = external global i32")
@@ -3242,6 +3786,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     b.Push("define i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
+    e.sanInit(b)
     for i in e.globalOrder(inits) {
         if not e.Baked.Has(i) { b.Push("  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))) "()\n") }
     }
@@ -3307,6 +3852,7 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     b.Push("  store i32 0, ptr %pass\n  store i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
+    e.sanInit(b)
     # each global's initializer behind a recovery point of its own: one that fails a check leaves its global at its
     # zero value and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
     g I64 = 0
@@ -3421,9 +3967,10 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
         fields.Push("{ ptr, ptr }")
         vals.Push(fv)
     }
+    # an argument moved through memory is copied into the environment where it lands, below: "" here
     for i in range ps.Len() {
         fields.Push(fe.ty(ps[i]))
-        vals.Push(fe.val(fe.arg(k.Args, i), ps[i]))
+        vals.Push("" if fe.viaMem(ps[i]) else fe.val(fe.arg(k.Args, i), ps[i]))
     }
     subs List<String&>
     for i in range k.Scopes.N {
@@ -3464,8 +4011,14 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
     e.runtime("__olang_scope_alloc_a")
     size := fe.let("ptrtoint ptr " $fe.let("getelementptr " $envT ", ptr null, i32 1") " to i64")
     env := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 " $size ", i64 8)")
+    first := 1 if isValue else 0
     for i in range fields.Len() {
-        fe.store(fields[i], vals[i], fe.let("getelementptr " $envT ", ptr " $env ", i32 0, i32 " $i))
+        at := fe.let("getelementptr " $envT ", ptr " $env ", i32 0, i32 " $i)
+        if vals[i] == "" {
+            fe.put(at, ps[i - first], fe.arg(k.Args, i - first))
+        } else {
+            fe.store(fields[i], vals[i], at)
+        }
     }
     # the task's node (%olang.task: next, done, merges, error) and its stand-ins' merge records
     node := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 32, i64 8)")
@@ -3559,8 +4112,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
     }
     value := ""
     if via {
-        b.Push("  %v = load " $e.ty(res) ", ptr %out\n")
-        value = "%v"
+        value = "%out"
     } else if res != types.VoidT and res != types.NoreturnT {
         if errs {
             b.Push("  %v = extractvalue " $rt " %r, 1\n")
@@ -3579,7 +4131,22 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
     }
     if ntargets > 0 and value != "" {
         t0 := at + ps.Len() + nscopes
-        if ntargets == 1 {
+        if via {
+            # a result moved through memory, moved into its targets
+            e.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+            e.P.Layout(res)
+            if ntargets == 1 {
+                b.Push("  %d0 = load ptr, ptr %f" $t0 "\n  call void @llvm.memmove.p0.p0.i64(ptr %d0, ptr %out, i64 " $t.Size(res) ", i1 false)\n")
+            } else {
+                parts := t.Items(t.Parts(t.Repr(res)))
+                for i in range ntargets {
+                    e.P.Layout(parts[i])
+                    b.Push("  %d" $i " = load ptr, ptr %f" $(t0 + i) "\n")
+                    b.Push("  %o" $i " = getelementptr " $e.ty(res) ", ptr %out, i32 0, i32 " $i "\n")
+                    b.Push("  call void @llvm.memmove.p0.p0.i64(ptr %d" $i ", ptr %o" $i ", i64 " $t.Size(parts[i]) ", i1 false)\n")
+                }
+            }
+        } else if ntargets == 1 {
             b.Push("  %d0 = load ptr, ptr %f" $t0 "\n  store " $e.ty(res) " " $value ", ptr %d0\n")
         } else {
             parts := t.Items(t.Parts(t.Repr(res)))

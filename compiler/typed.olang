@@ -316,8 +316,6 @@ type PrimOp enum {
     # its representation (T29); an array between a run-time and a fixed length (T7c, checked Abort to a fixed one)
     Convert
     Bitcast    # a value's bits as ty, of its width (E33)
-    Retire     # M19g: the array args[0] names no longer its collection's - nothing at run time; the evaluator stops on a
-               # later use of it, or of a view of it (K1), naming where the program grew the collection. An I64, 0
     Len        # an array's length (E23)
     IsCase     # args [x, tag]: whether an enum value holds the case (E32, S13)
     InRange    # args [v, lo, hi]: v, once lo <= v < hi - a derived CheckedAt's check (E31)
@@ -327,6 +325,10 @@ type PrimOp enum {
     AtomicAdd
     AtomicSwap
     AtomicCompareSwap
+    # "a.retire()" in the prelude (M19d): nothing, but under -sanitize the array's storage poisoned (B2f); the
+    # evaluator marks it and stops on a later use of it, or of a view of it (K1, M19g), naming where the program grew
+    # the collection
+    Retire
 }
 
 type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check, Exact Bool) {
