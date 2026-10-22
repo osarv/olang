@@ -7170,6 +7170,26 @@ test "K1: a global whose initializer runs a destructor is set at startup, destru
     assert ktDtorRuns == 1
 }
 
+# K2c: an instance built in a global's own initializer lives in the program's scope, which never closes - it is never
+# destructed, so the evaluator may bake it (and what is read from it) while compiling; one built in a function the
+# initializer calls is not (KtFromDropped above)
+k2cDtorRuns mut I32 = 0
+
+type K2cHandle struct(v I32) {
+    v
+} destruct {
+    k2cDtorRuns++
+}
+
+K2cKept K2cHandle& = K2cHandle(5)
+K2cKeptV I32 = K2cKept.v + 1
+
+test "K2c: an instance built in a global's own initializer is never destructed, and is decided while compiling" {
+    assert K2cKeptV == 6
+    assert K2cKept.v == 5
+    assert k2cDtorRuns == 0
+}
+
 # S9/S9a/S10: the loop keyword is "for" in every position. "for { }" runs until something leaves it,
 # "for cond { }" while cond holds, the three-clause form as before, and "do { } for cond" at least once.
 # "for x in a" walks an array (a copy of each element), or an Iterator<T> - the built-in interface, a type

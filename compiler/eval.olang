@@ -2257,7 +2257,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
         case mir.Stmt.RegisterDtor(sp, s, ty, x) {
             m.atK(fk, sp)
             sc := m.scopeOf(fi, s)
-            if m.When == Mode.Compile and not (sc == m.program and m.initGlobal >= 0) {
+            if m.When == Mode.Compile and not (sc == m.program and m.initGlobal >= 0 and m.initFrame(fi)) {
                 m.refuse(WhyDestructor)
                 return
             }
@@ -2479,6 +2479,23 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Place) Bool {
         }
         case _ { return true }
     }
+}
+
+# K2c: whether frame fi is a global's initializer's own, or a constructor it calls directly - the one place a
+# destructor-bearing instance may be built while compiling: built into the program's scope, it never destructs at run
+# time either. One built in a function the initializer calls lands where that call closes, its destructor run then, an
+# effect the baked value would skip (without a plan everything lowers into the program's scope, so where the instance
+# would land at run time is told by the frames, not the scope)
+fn (m Machine&) initFrame(fi I64) Bool {
+    if m.fs[fi].Ret == rGlobal { return true }
+    if fi == 0 or m.fs[fi - 1].Ret != rGlobal { return false }
+    for v in m.fns[m.fs[fi].Fn].Vars {
+        match v {
+            case mir.VarKind.Instance { return true }
+            case _ { }
+        }
+    }
+    return false
 }
 
 fn (m mut Machine&) startGlobal(g I64) {
