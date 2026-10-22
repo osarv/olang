@@ -1182,11 +1182,25 @@ fn (s mut Scoper&) madeHere(x typed.Expr&) Bool {
         case typed.Expr.Away(_, _, y) => s.madeHere(y)
         case typed.Expr.Seq(_, _, q) => s.madeHere(q.X)
         case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() > 0 and s.madeHere(args[0])
-        case typed.Expr.Read(_, _, p, _) => s.heldPart(p)
+        case typed.Expr.Read(_, ty, p, _) => s.heldPart(p) or s.constCopy(p, ty)
         # a conditional or a value match each of whose values makes it (E28, S12b; stage 0's copiesExistingRefs)
         case typed.Expr.Cond(_, _, c) => s.madeHere(c.A) and s.madeHere(c.B)
         case typed.Expr.Match(_, _, m) => s.matchMadeHere(m)
         case _ => false
+    }
+}
+
+# whether a read of p is a copy of constant data into new storage: an array value read out of a literal (T25d)
+fn (s mut Scoper&) constCopy(p typed.Place&, ty types.TypeId) Bool {
+    if not s.arenaValue(ty) { return false }
+    match p {
+        case typed.Place.Deref(_, _, r) {
+            return match s.unAway(r) {
+                case typed.Expr.Data(_, _, _, _) => true
+                case _ => false
+            }
+        }
+        case _ { return false }
     }
 }
 
