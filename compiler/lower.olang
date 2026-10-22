@@ -54,6 +54,7 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     P
     Bodies
     Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
+    renderReps Map<types.TypeId, types.TypeId>  # a type rendered, by its Unnamed: the first asked for (helperTy)
     Gaps List<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
@@ -750,6 +751,8 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
     }
     res := ln.T.Result(ln.B.Ty)
     v := ln.fit(ln.val(value), value, res, sp)
+    # S19: deferred code runs after the result is computed - an array value read out of storage it may write is copied
+    if not ln.dead and ln.defers.Len() > 0 and ln.copiesArray(value, res) { v = ln.arrayCopy(v, res, sp) }
     if ln.dead { return }
     l := ln.local(v, res, sp)
     ln.retArrays(l, res, sp)
@@ -1429,6 +1432,7 @@ fn (ln mut lowering&) valueCallee(x typed.Expr&) (mir.Callee, types.TypeId) {
 
 fn (ln mut lowering&) helperCallee(k typed.Helper, ht types.TypeId) (mir.Callee, types.TypeId) {
     kind := mir.HelperKind.Equal if k == typed.Helper.Equal else mir.HelperKind.Hash
+    ht = ln.L.helperTy(kind, ht)
     ty := mir.HelperType(ln.T, kind, ht)
     ln.L.Want(mir.FnKey.Helper(kind, ht))
     return mir.Callee.Fn(mir.FnKey.Helper(kind, ht), ty), ty
@@ -1493,10 +1497,22 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     return mir.Operand.Copy(mir.L(dest))
 }
 
+# the type a helper is made for: one helper per type but for its function types' parameter names (types.Unnamed) - a
+# Render helper the first one asked for, whose names its function values render with (E11a)
+fn (lw mut Lowerer&) helperTy(kind mir.HelperKind, ty types.TypeId) types.TypeId {
+    u := lw.P.T.Unnamed(ty)
+    if kind != mir.HelperKind.Render { return u }
+    r := try lw.renderReps.Get(u) catch default types.TypeId(-1)
+    if r >= types.TypeId(0) { return r }
+    lw.renderReps.Put(u, ty)
+    return ty
+}
+
 # a type's zero value (D13c), a call of its Zero helper: all zero bits, its constructor on its parameters' defaults or
 # zeros, as eval decides once per type (Key.Zero) - the helper's to say which
 fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
+    ty = ln.L.helperTy(mir.HelperKind.Zero, ty)
     hty := mir.HelperType(t, mir.HelperKind.Zero, ty)
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Zero, ty), hty)
     ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Zero, ty))
@@ -2007,6 +2023,7 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
         ln.emit(mir.Stmt.Write(sp, b, how, v))
         return
     }
+    ty = ln.L.helperTy(mir.HelperKind.Render, ty)
     hty := mir.HelperType(t, mir.HelperKind.Render, ty)
     ref := ln.into(t.Items(t.Params(hty))[0], mir.Rvalue.Ref(mir.L(ln.local(v, ty, sp)), t.Items(t.Params(hty))[0]), sp)
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Render, ty), hty)
@@ -2115,6 +2132,7 @@ fn (ln mut lowering&) refTo(p pl, ty types.TypeId, sp source.Span) mir.Operand {
 # a helper of kind for type ty called with args (and its kind's scopes), its result, if any, into a temporary of res
 fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Array<mir.Operand>&, scopes Array<mir.ScopeRef>&
                                  res types.TypeId, sp source.Span) mir.Operand {
+    ty = ln.L.helperTy(kind, ty)
     hty := mir.HelperType(ln.T, kind, ty)
     k := mir.FnKey.Helper(kind, ty)
     ln.L.Want(k)

@@ -2994,7 +2994,18 @@ fn (m mut Machine&) returned(fr frame) {
                     m.refuse(WhyNotModelled)
                     return
                 }
-                m.wr(m.localPtr(caller, c.Code), 4, fr.Code)
+                code := fr.Code
+                # through a function value, under the value's type's list: re-encoded where the function's own differs
+                # (R6, R1b - a named function whose set is another order of the type's)
+                match c.Target {
+                    case mir.Callee.Value(_) {
+                        own := m.T.Errors(m.fns[fr.Fn].Ty)
+                        seen := m.T.Errors(m.calleeType(caller, c.Target))
+                        if own != seen { code = m.recode(code, own, seen) }
+                    }
+                    case _ { }
+                }
+                m.wr(m.localPtr(caller, c.Code), 4, code)
                 m.failedHere(caller, tCall)
                 m.jump(caller, c.Err)
             } else {
