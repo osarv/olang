@@ -1381,6 +1381,17 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
     return best
 }
 
+# the call a reference argument is read out of a part of the built result of, else null
+fn (s mut Scoper&) argPartCall(a typed.Expr&) typed.Call&a {
+    match s.unAway(a) {
+        case typed.Expr.Read(_, ty, p, _) {
+            if s.isRef(ty) { return s.partCall(p) }
+        }
+        case _ { }
+    }
+    return null
+}
+
 # whether every argument determining a call's scope variable v is constant data (T25d), and one is
 fn (s mut Scoper&) staticVar(c typed.Call&, v I64) Bool {
     fty := s.calleeType(c)
@@ -5258,7 +5269,19 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         } else {
             # a capturing lambda made for a callee keeping nothing of it lives in this frame (D16c)
             if s.capturingLambda(a) and s.transient(s.bodyOf(c.Target), i) { s.onFrame = true }
+            # a reference read out of a call's built result, for a variable the callee's obligations need to outlive one
+            # an argument before it determines: its call lands there, where the callee keeps it (O18b, O18c)
+            pk := -1
+            pc := s.argPartCall(a)
+            if pc != null {
+                t := s.requiredBy(s.bodyOf(c.Target), owner[i], beta)
+                if t.Runs() and t != s.here() and (try s.partDest.Get(I64(pc.Site)) catch default Term.None) == Term.None {
+                    pk = I64(pc.Site)
+                    s.partDest.Put(pk, t)
+                }
+            }
             v = s.val(a, Term.None)
+            if pk >= 0 { s.partDest.Remove(pk) }
             s.onFrame = false
             rf := s.splitRefs(a)
             cr := s.choiceRefs(a)
