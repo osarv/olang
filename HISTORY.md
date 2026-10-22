@@ -20671,6 +20671,54 @@ flag-free run cases 143 of 145 behave as stage 0's (round 3: 135 of 144) - chunk
 memory, the compiler's under interpret) and gemmflat (std/linalg's speed) left. checkdiff unchanged (438/439, 398
 exactly, 421 pinned).
 
+## Port M8: evaluation in the pipeline, fifth round (2026-10-22)
+
+**K2 through the driver.** The driver (`compiler/olang.olang`) never gave emit the evaluator's baked globals - only
+emitdump did - so a program the port built ran every global's initializer at startup. `Passes.Analyze` now sets
+`e.Baked = interp.Bake(c)`, as emitdump does: tests/shared built by the driver writes 291 of its globals as data, 713 of
+713 tests passing. K2c holds there too: `KtFromDropped`, whose initializer calls a function building and dropping a
+destructor-bearing value, is set at startup and its destructor runs (round 4's `initFrame`, now through the driver).
+A module's own init function (`olang.init.M`) still names a baked global's initializer; nothing calls it, the entry
+calling each unbaked initializer itself.
+
+**S8b: a condition calling a function whose own if is still undecided.** `ccUsesPlatformPage`'s condition calls
+`ccPlatformPage`, whose if the same check left to evaluation: its body had a gap that check, so the condition did not
+evaluate, and `interp.decide` called it the running program's at once - `Running` choosing its branches' groups, so the
+parse error in the branch the build drops was reported (in every later check too, a group's choice outliving the
+check). Stage 0 defers such a condition (`CT_WHY_INCOMPLETE`) to the next attempt. Now a condition that does not
+evaluate is running only once a check decides nothing at all: while anything else was decided, the program is checked
+again and the condition asked again. tests/shared under the evaluator 709 -> 712 of 713.
+
+**S8a.** A local condition decided reading no build constant is dead code, an error at the condition's operator (or the
+condition, where it is no operator), as stage 0 reports it; the if is then the running program's, both branches
+checked. Two halves, as stage 0's. B9a's: the token evaluator's value with no build constant read is
+`cond.Outcome.Same` (it was `Runtime`), recorded by the resolver (`Resolver.Same`) and reported by the checker once the
+condition checks as a Bool. Evaluation's: the evaluator tracks stage 0's usedBuild - `Machine.UsedBuild`, set when a
+function whose body reads a build constant runs (`Checker.ReadsBuild`, by body, from `buildConst`; `cfn.ReadsBuild`), when
+a build constant's default is read (B10c: an immutable global outside std of type Bool, I32, I64, U64, F64 or String,
+`Exec.buildDefault`, `Machine.BuildGlobal`), or a global whose initializer read one (`global.Used`, kept when its
+initializer finishes, the evaluation's own flag saved across it in the frame). A condition evaluation decides with none
+is kept as dead (`interp.Analyze`'s dead map, `Checker.Dead`) and reported in the next check. **Decided (mine)**: the
+evaluator's usedBuild is per function run, not per expression - a function whose body reads a build constant anywhere
+counts as reading it when it runs, a branch of it not taken included; stage 0 marks the read itself. Coarser only
+toward configuration (fewer S8a errors), never toward a false one; no program in the corpus, std or the checks tells
+the two apart. The five S8a cases (s8acall, s8afalse, s8afixedlocal, s8alevel, s8averbose) now give stage 0's error,
+position and text; no file of the corpus, std or their tests reports one.
+
+**Found, not fixed (the scope pass's).** `spawn a = try peText(5) catch default "none"` with a value `String` result:
+the scope pass's plan builds the result in the join block's scope (MIR `spawn ... [S1]`), which closes at the join -
+stage 0 lands such a result where the target's own storage is (P1g, `spawnTargetTakesStorage`). Under interpret the read
+after the join stops ("uses storage after the scope it was made in closed"), the one test of tests/shared left; a native
+build reads the closed scope's memory, still intact.
+
+**Measured.** emitdiff: 26 files, all the same, 1,015 of 1,015 tests. evaldiff: 22 of 26 files the same, 978 of 1,015
+tests ending as stage 0's (round 4: 975) - shared 1 (above), cancel 2 and chan 5 (tasks interleaved), linalg 29
+(speed); the checks' run cases 143 of 145, as before. checkdiff unchanged (438/439, 398 exactly, 421 pinned; accepted
+303 of 307 clean - S8a is the evaluator's rule there, checkdump not evaluating).
+
+**Not done**: task interleaving under interpret (std/cancel's spinning task, std/chan's waits) - a frame stack per task,
+the next round's.
+
 ## Port M6: the scope pass, round 2 - soundness (2026-10-18)
 
 Round 1 left 147 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error at all from the port:
