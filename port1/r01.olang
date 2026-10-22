@@ -1,5 +1,4 @@
-# C2g: a constructor building into its fields from nested blocks, loops and a lambda called in place, then the
-# instance read after churn
+# C2g: a constructor building into its fields from nested blocks and loops, then the instance read after churn
 import "std/io"
 import "churn"
 type Node struct(v I64) {

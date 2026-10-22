@@ -1,0 +1,15 @@
+# T7a / G18: a String held by value as a type argument - a Map's value, a generic struct's field - filled in a loop
+import "std/io"
+import "churn"
+type Box<T> struct(v T) { v }
+fn main() ? io.IoError {
+    m := Map<I64, String>()
+    b := Box<String>("start")
+    for i in range 3 {
+        m.Put(i, $i "-map-text-that-is-long-enough")
+        b = Box<String>($i "-box-text-that-is-long-enough")
+    }
+    c := churn.Churn()
+    v := try m.Get(1) catch default "missing"
+    try io.Println($c " " $v " " $b.v)
+}

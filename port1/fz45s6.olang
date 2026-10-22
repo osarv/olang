@@ -1,4 +1,5 @@
-# scope fuzz seed 45
+# scope fuzz seed 45, scenario 6 (scopeshow 45 12 6): accepted by the port, refused by stage 0 (O25) - sound: the port
+# moves q6_2 into the result scope (O26a) since it is stored into x, which is returned
 import "std/time"
 import "std/io"
 error SgErr {

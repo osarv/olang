@@ -1,0 +1,21 @@
+# O23/O25h: an instance with an '&src' field copied into a local of an outer block (its referent in the inner one);
+# the field read through the copy and kept in the outer block
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type Holder struct(src Node&) {
+    r Node&src = src
+}
+fn main() ? io.IoError {
+    x Node& = Node(1)
+    keep Node& = x
+    h2 := Holder(x)
+    for i in range 2 {
+        y Node& = Node(77 + i)
+        h := Holder(y)
+        h2 = h
+        keep = h2.r
+    }
+    c := churn.Churn()
+    try io.Println($c " " $keep.v " " $h2.r.v)
+}

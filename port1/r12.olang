@@ -1,0 +1,15 @@
+# T7a / G18: r11 with Array<I64> (no declared type) as the type argument - a Map's value and a generic struct's field
+import "std/io"
+import "churn"
+type Box<T> struct(v T) { v }
+fn main() ? io.IoError {
+    m := Map<I64, Array<I64>>()
+    b := Box<Array<I64>>(Array<I64>(2, 0))
+    for i in range 3 {
+        m.Put(i, Array<I64>(5, i))
+        b = Box<Array<I64>>(Array<I64>(6, i))
+    }
+    c := churn.Churn()
+    v := try m.Get(1) catch default Array<I64>(1, -1)
+    try io.Println($c " " $v[4] " " $b.v[5])
+}
