@@ -21280,3 +21280,63 @@ stage 0's IR shapes (TBAA, baked globals, ret.common, payload words) - the emit 
 `if` whose branch does not parse is compiled with that branch empty, its syntax error never said, when its condition
 reads a parameter (`fn f(n I64) { if n < 0 { x := } }` builds) - fixed in the checker at the end of the round, not yet
 measured through stage 1.
+
+## Port M9, round 5: big aggregates through memory, -race and -sanitize, DWARF for aggregates (2026-10-22)
+
+**Aggregates over 128 bytes go through memory**, as stage 0's do (types.ViaMemory: a struct, a tuple, a record or a
+fixed array over 128 bytes). The ABI already passed one as a pointer and returned one through `%out`, but the bodies
+moved it as one LLVM value - a load of the callee's copy, a `store` of the whole, an aggregate built by `insertvalue` -
+and LLVM expands such a value element by element: checks' e31bviewbigcond (a 72KB struct) made a 2.4 MB object at
+-debug and an -O3 link that ran for over half an hour. Now (`viaMem`, `put`, `buildInto`, `intoPlace`): a copy is a
+memmove, a zero value a memset, an aggregate is built part by part where it lands (straight into a local nothing in
+its parts reads, else in a slot of its own first), a parameter is a memmove of the caller's copy, an argument the
+callee's own copy made in a slot before the arguments after it run, a result moved out of the out slot, and the same
+for task environments and trampolines, closure captures, `New` and an array fill. A slot over 64KB comes from the
+frame's arena (T7c). The object is 17 KB and the -O3 build takes a second; a program exercising each path gives stage
+0's output at -debug and -O3.
+
+**-sanitize (B2f) through the port.** The port built the sanitizer's runtime but never installed its handler
+(`__olang_san_init`, called first thing in `main` and the harness) and dropped `retire()` in the checker (M19g:
+"nothing at run time but under -sanitize, which the port does not build yet"), so a stale Vec view read poison instead
+of being reported. `retire()` is now a prim (`typed.PrimOp.Retire`, VoidT, the evaluator ignoring it) that emit makes
+`__olang_san_retire` under -sanitize, and a module calling it (`load.Module.Retires`, set by the checker) has its arrays
+made by `__olang_san_alloc_own`, as stage 0's. **Decided (mine): a fresh run-time array promoted to a reference is made
+where the reference goes** (lower's `promote` adopts the inner Fill or literal - `madeAt`), not made in a scope of its
+own and copied there: the copy was what retire saw, in a chunk not its own, and it doubled every Vec growth's
+allocation (Vec push 20M: 0.85 s in round 4, 0.49 s now, stage 0 0.60). vechandle's stale view is reported by both
+-sanitize builds.
+
+**-race (P7) through the port** already put `sanitize_thread` on every function and built the race objects apart; what
+it found was the port's: a closure's captured scopes were handed to its environment without being claimed
+(`__olang_scope_escape`, decision 48), so a task calling the closure took the scope as its own and bumped the spawner's
+chunk - heap corruption in shared's global initializers that spawn (lamSpawnCalled, rv3Spawned), which the driver runs
+at startup since it bakes nothing; likely the stage-1 test binary's occasional segfault under load. Now every captured
+scope but the program's is claimed where the closure is made. Under -race the suite's files report exactly the one
+intended race (tests/shared readOut; 713 passed), and 40 runs of shared's test binary, four at a time, all pass.
+
+**Found by -debug -sanitize, the scope pass's (M6)**: a task whose result is a run-time array value holding no
+reference (`spawn a = try text(n) catch default "none"`, a String) had its result scope bound to the join block, which
+closes before the target is read - spawnerr and shared's "P4a: defaults holding references outlive the join". The
+pass now lands such a result where the target's own storage is (P1g, `spawn`'s `dest` - one change in scope.olang).
+
+**E11b, a fixed array's piece (lower)**: a join evaluates its operands before rendering (Go's rule), and lower copied a
+fixed array read from a place into a temporary, so `$f $bumpF(f)` printed the old elements where an array's are read
+when its piece renders (strheld's order); such a piece is now rendered through a read-only reference to the place.
+
+**DWARF (B2e) for aggregates**: a struct, tuple or record by its fields' names and offsets (from the constructor's
+field declarations), a fixed array by its elements, a run-time array or text as its length and a pointer to its
+elements (a byte as an unsigned char, so `s` prints as text), an enum as an enumeration (with the payload's words
+beside it where one carries one), a reference as a pointer to what it names, a function value as its code and
+environment. SPEC B2e says so now. gdb's `info args`/`info locals` show `p = {x = 3, y = 4, name = {len = 2, ...}}`,
+`s = {len = 5, data = 0x... "hello"}`, `sh = {case = Rect, payload = {2, 3}}`, `d = South`.
+
+**Text**: a join's text copied out of its builder by two overlapping moves of its width where it is 16 bytes or less
+(`olang_textcopy`, inlined), and a builder that never outgrew its room closed inline - bench/text 152.6M -> 146.6M
+instructions (stage 0 135.4M), level in time.
+
+**Measured**: emitdiff 26 of 26 files, 1015 of 1015 tests as stage 0's (at cae753a); stage 2 == stage 3 at -debug but
+for the working directory in DIFile; -race and -debug -sanitize suites as above. **Left**: joindepth (landing) - a
+join's 64-byte room is in every frame holding a join, 160 bytes a frame of the recursion against stage 0's 112 (whose
+plain joins measure and write with no builder), so 60,000 deep overflows 8MB; scopesan's drive.c links stage 0's
+symbol spelling (`stub_Touch`) of a function no program path reaches; capscope and the other IR-shape scenarios grep
+stage 0's spellings; frameenv's errors and -i's stale view are the checker's and the interpreter's.

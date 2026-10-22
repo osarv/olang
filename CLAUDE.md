@@ -625,7 +625,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   purpose), call results and constructors' fields carry instance records (O13c, O23a); HISTORY.md "Port M6"). M9, `compiler/emit.olang` (MIR written as LLVM IR, one object per module - each module's, the root's
   instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
   only what changed (at -O3 the instances in the root's, as stage 0's); the error trace S18d; TBAA, DWARF and the runtime's
-  declarations read from its text (round 4); `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
+  declarations read from its text (round 4); aggregates over 128 bytes through memory, -race and -sanitize, DWARF for
+  aggregates and arrays (round 5); `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
   M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;
