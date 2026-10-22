@@ -292,6 +292,7 @@ type Outcome enum {
     Deferred    # B9a cannot evaluate it: compile-time evaluation decides (B9c)
     Failed      # a mistake in the condition, said by Msg at At
     Runtime     # S8b: it reads a local - the running program's
+    Same        # S8a: a local condition's value, reading no build constant - the same on every build
 }
 
 # one condition being evaluated, in a module's text and names
@@ -378,7 +379,8 @@ fn (e mut Eval&) Local(c ast.Expr&) (Outcome, Bool) {
         if e.runtime or e.mentionsLocal(c) { return Outcome.Runtime, false }
         return Outcome.Deferred if e.deferrable else Outcome.Runtime, false
     }
-    if v.Kind != ValueKind.Bool or not e.UsedBuild { return Outcome.Runtime, false }
+    if v.Kind != ValueKind.Bool { return Outcome.Runtime, false }
+    if not e.UsedBuild { return Outcome.Same, v.I != 0 }
     return Outcome.Decided, v.I != 0
 }
 

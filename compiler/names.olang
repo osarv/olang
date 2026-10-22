@@ -91,6 +91,9 @@ type Resolver struct(L mut load.Loader&) {
     inCond Bool = false
     item I64 = 0
     unknownSaid List<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
+    # S8a: the local ifs whose condition B9a evaluated reading no build constant, by (file, the condition's start) - the
+    # same on every build, which the checker reports once the condition checks
+    Same Map<pair.Pair<I64, I64>, Bool>
 }
 
 # ---- the program ----
@@ -919,6 +922,7 @@ fn (r mut Resolver&) ifStmt(i ast.If&) {
     r.expr(i.Cond)
     r.inCond = false
     outcome, value := r.decideLocal(i.Cond)
+    if outcome == cond.Outcome.Same { r.Same.Put(pair.Pair(r.L.Mods[r.mi].File, I64(i.Cond.Span().Start)), true) }
     decided := outcome == cond.Outcome.Decided
     runtime := outcome != cond.Outcome.Deferred
     r.choose(i.Then, decided, value, runtime)
