@@ -9176,6 +9176,9 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
         if b >= 0 {
             c.Asks.Push(Ask(b, c.fr().File, i.Cond.Span().Start, i, c.fr().Body, c.lastFixed.ToArray()))
             asked = true
+        } else if not c.readsConst(i.Cond) {
+            # it reads a local no evaluation can stand for: the running program's, what its branches hold reported (S7)
+            c.Running(i)
         }
     }
     if i.Then.Group >= 0 and d.IsDropped(i.Then.Group) {
