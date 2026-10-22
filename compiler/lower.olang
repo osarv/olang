@@ -1059,13 +1059,13 @@ fn (ln mut lowering&) module() I64 {
 }
 
 # an error with code, under list from, reaching here: to the first clause of the innermost try taking it, the scopes
-# opened since the try closed on the way; what its clauses do not take, to the try around it; what none takes leaves the
-# body under its own list (R17), every scope closed
+# opened since the try closed on the way; what its clauses do not take leaves the body under its own list (R13, R17),
+# every scope closed - a try around it never sees it
 fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Span) {
     t := ln.T
     xs := t.Items(from)
-    for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
-        tc := ln.tries[ti]
+    if ln.tries.Len() > 0 {
+        tc := ln.tries[ln.tries.Len() - 1]
         for ci in range tc.Clauses.Len() {
             if ln.dead { return }
             cl := tc.Clauses[ci]
@@ -1099,7 +1099,7 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
             ln.toClause(tc, ci)
             ln.start(no)
         }
-        # what this try's clauses do not take goes to the try around it - but past a "!", which ends the program
+        # what this try's clauses do not take leaves the body - past a "!", it ends the program
         if tc.Ends {
             ln.bang(code, from, sp)
             return

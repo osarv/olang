@@ -62,6 +62,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InferErrors Bool = false   # a lambda's errors taken from its body (D16b), an inferred set's (R1a)
     Settles Bool = false       # a function's or constructor's body whose set is inferred (R1a)
     leaks List<types.TypeId>   # what its errors and uncaught tries let out, in order (D16b)
+    passed List<types.TypeId>  # what a try nested in another's operand lets out: it leaves the body, never seen by the
+                               # outer try's clauses (R13)
     captures List<typed.Capture&>
     Inst I64 = -1              # a destructor's: its instance parameter, whose fields it reads bare (C10)
     InTaskClause Bool = false  # a task's clause, run on the task: it may not leave it (P4a)
@@ -1152,7 +1154,7 @@ fn (c mut Checker&) checkNow(id I64) {
 # an inferred body's set, as its body found it: each error type once, in the canonical order - by the module declaring
 # it, then its name (R1a)
 fn (c mut Checker&) settle(fr frame&) {
-    sorted := c.canonicalErrs(c.merged(fr.leaks))
+    sorted := c.canonicalErrs(c.merged(c.letOut(fr)))
     c.inferredErrs.Put(fr.Body, sorted)
     c.found.Put(c.bodyKey(fr.Body), sorted)
     b := c.Bodies[fr.Body]
@@ -1299,6 +1301,13 @@ fn (c mut Checker&) CondBody(mi I64, x ast.Expr&) I64 { return c.ExprBody(mi, x,
 # an expression that reads no local as the body of a function giving its value, of type ty, checked in module mi's
 # context (BodyOf.Cond) - a condition (CondBody), an assert's message (S18c); -1 where it does not check there
 fn (c mut Checker&) ExprBody(mi I64, x ast.Expr&, ty types.TypeId) I64 {
+    return c.ExprBodyIn(mi, -1, Array<source.NameId>(0), Array<types.TypeId>(0), x, ty)
+}
+
+# the same in a context whose variables - ns, bound to vals - are bound: a constant argument of an instance of
+# owner's (G21, T7c)
+fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals Array<types.TypeId>&, x ast.Expr&
+                               ty types.TypeId) I64 {
     d := c.P.L.Diags
     if c.readsLocal(x) { return -1 }
     mark := d.Count()
@@ -1307,7 +1316,8 @@ fn (c mut Checker&) ExprBody(mi I64, x ast.Expr&, ty types.TypeId) I64 {
     id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
     c.state[id] = 1
     fr := c.push(id, mi, ty, types.ListId(0))
-    fr.Ctx = generic.Context(mi, -1)
+    fr.Ctx = generic.Context(mi, owner)
+    for i in range ns.Len() { fr.Ctx.Vars.Put(ns[i], vals[i]) }
     c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
     from := c.stmts.Len()
     v := c.cond1(x) if ty == types.BoolT else c.fit(c.expr(x, ty), ty, sp)
@@ -1315,6 +1325,8 @@ fn (c mut Checker&) ExprBody(mi I64, x ast.Expr&, ty types.TypeId) I64 {
     c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
     c.pop()
     c.state[id] = 2
+    # the instances it asks for, made here, checked before it is evaluated (G21: a length an instance computes)
+    c.drain()
     if d.Count() > mark or c.Gaps.Len() > gaps {
         d.Forget(mark)
         c.Gaps.Truncate(gaps)
@@ -2619,6 +2631,15 @@ fn (c mut Checker&) fold(x ast.Expr&) litv {
     }
 }
 
+# whether a literal-only expression's own type is U64 (T6a): a literal above I64's maximum in it, which the others meet
+fn (c mut Checker&) litU64(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Paren(_, y), ast.Expr.Unary(_, _, y) => c.litU64(y)
+        case ast.Expr.Binary(_, _, a, b) => c.litU64(a) or c.litU64(b)
+        case _ => c.fold(x).Big
+    }
+}
+
 # an integer literal value's sign and magnitude: exact for every value T6a gives a literal, I64's and U64's
 fn magOf(v litv) (Bool, U64) {
     if v.Big { return false, U64(v.I) }
@@ -2653,7 +2674,7 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     sp := x.Span()
     target := c.under(want)
     if not c.P.T.IsNumber(target) {
-        want = c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big else c.i64()
+        want = c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big or c.litU64(x) else c.i64()
         target = want
     }
     if v.IsFloat {
@@ -6027,7 +6048,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
             v := c.fold(args[i])
             if v.Ok or c.litLike(args[i]) {
                 fl := v.IsFloat if v.Ok else c.litFloat(args[i])
-                if k < ps.Len() { c.unify(ps[k], c.P.T.Prim("F64") if fl else c.i64(), b, true, false) }
+                if k < ps.Len() { c.unify(ps[k], c.P.T.Prim("F64") if fl else c.P.T.Prim("U64") if v.Ok and c.litU64(args[i]) else c.i64(), b, true, false) }
             } else {
                 match args[i] {
                     case ast.Expr.Lambda(_, _) { lambdas.Push(i) }
@@ -7338,7 +7359,27 @@ fn (c mut Checker&) leaks1(e types.TypeId) { c.fr().leaks.Push(e) }
 # try of a nest says so: an inner one's go on to it
 fn (c mut Checker&) escapes(at source.Span, mark I64, k I64) {
     fr := c.fr()
-    if fr.Tries > 0 or k == 0 { return }
+    if k == 0 { return }
+    c.escapeRules(at, mark, k)
+    if fr.Tries == 0 { return }
+    # a try in another's operand: what it lets out leaves the body there (R13) - the outer try's clauses never see it
+    keep List<types.TypeId>
+    for i in range mark + k, fr.leaks.Len() { keep.Push(fr.leaks[i]) }
+    for i in range mark, mark + k { fr.passed.Push(fr.leaks[i]) }
+    fr.leaks.Truncate(mark)
+    for e in keep { fr.leaks.Push(e) }
+}
+
+# what a body lets out: its leftovers and what its nested tries passed out (R1a, D16b)
+fn (c mut Checker&) letOut(fr frame&) List<types.TypeId> {
+    all List<types.TypeId>
+    for e in fr.leaks { all.Push(e) }
+    for e in fr.passed { all.Push(e) }
+    return all
+}
+
+fn (c mut Checker&) escapeRules(at source.Span, mark I64, k I64) {
+    fr := c.fr()
     # nothing may leave deferred code, an assert's message or a task's clause (S19b, S17, P4a)
     if fr.DeferLoops >= 0 {
         c.err(at, msgs.DeferErrorEscapes())
@@ -8944,7 +8985,7 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     }
     result = fr.Result
     # in R1a's canonical order, as an inferred set (decision 52)
-    if inferErrs { errs = c.canonicalErrs(c.merged(fr.leaks)) }
+    if inferErrs { errs = c.canonicalErrs(c.merged(c.letOut(fr))) }
     ty := c.P.T.Func(pl, result, errs, scopes)
     c.cur().Ty = ty
     if result != types.VoidT and not c.fr().Gapped and not leavesBlock(root) {

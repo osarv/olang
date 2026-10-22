@@ -33,7 +33,7 @@ import "eval"
 # until a check meets none left to decide: that last check. What an earlier check said is forgotten. tests as Checker's
 fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     decided Map<pair.Pair<I64, I64>, Bool>
-    lengths Map<pair.Pair<I64, I64>, I64>
+    lengths Map<String&, I64>
     for {
         mark := l.Diags.Count()
         r := names.Resolver(l)
@@ -58,7 +58,7 @@ fn judgeViews(c mut typecheck.Checker&) {
 }
 
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was
-fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<pair.Pair<I64, I64>, I64>&) Bool {
+fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&) Bool {
     tops := l.PendingIfs()
     if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 { return false }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
@@ -75,13 +75,13 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     }
     # G21: a constant argument a call computes, evaluated in its module's context
     for a in c.P.ConstAsks {
-        key := pair.Pair(l.Mods[a.Mi].File, I64(a.Expr.Span().Start))
+        key := a.Key
         if lengths.Has(key) { continue }
-        b := c.ExprBody(a.Mi, a.Expr, a.Want)
+        b := c.ExprBodyIn(a.Mi, a.Owner, a.Names, a.Vals, a.Expr, a.Want)
         if b < 0 { continue }
         v, ok := x.Int(b, a.Want)
         if ok {
-            lengths.Put(key, v)
+            lengths.Put($key, v)
             made = true
         }
     }
