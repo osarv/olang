@@ -125,6 +125,10 @@ type summary struct() {
     # by constructor parameter of the instance the body returns: where every return's instance bound it, in the body's
     # terms (O13c) - Untraced where the returns disagree or it is not one of the caller's; empty for none
     ResBind List<Term>
+    # by field of a constructor's instance: where the instance the field was given bound its own constructor's
+    # parameters, in the constructor's terms - from FieldFrom[i] in FieldTerms, -1 for none (O23a)
+    FieldFrom List<I64>
+    FieldTerms List<Term>
     Done Bool = false
     Judging Bool = false # its component is being judged to a fixed point: Builds is what the rounds so far found
 }
@@ -191,6 +195,9 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     # one per constructor parameter in bindTerms from bindFrom (O23a); ctorSite, ctorFrom the constructor call last judged
     bindFrom Map<I64, I64>
     bindTerms List<Term>
+    bindKids List<I64>         # parallel to bindTerms: the record of the argument's own instance there, -1 for none
+    siteRec Map<I64, I64>      # a call's site: the record its instance's bindings start at
+    fieldsAssigned Map<pair.Pair<I64, I64>, Bool> # (struct type, field) any body assigns after construction, -1 all
     ctorSite I64 = -1
     ctorFrom I64 = 0
     resBind List<Term>         # the returns' instance bindings so far (O13c), resBound once one is seen
@@ -428,6 +435,8 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.inits.Clear()
     s.bindFrom.Clear()
     s.bindTerms.Clear()
+    s.bindKids.Clear()
+    s.siteRec.Clear()
     s.ctorSite = -1
     s.resBind.Clear()
     s.resBound = false
@@ -478,6 +487,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         if not hasRel(s.sums[b].Rels, r) { s.sums[b].Rels.Push(r) }
     }
     sm := s.sums[b]
+    s.noteFieldRecs(sm)
     sm.ResBind.Clear()
     if s.resBound {
         for t in s.resBind { sm.ResBind.Push(t) }
@@ -710,6 +720,8 @@ fn (s mut Scoper&) fieldMark(t types.TypeId, i I64) typed.Mark {
 type walked struct() {
     Callees List<I64>
     Assigned List<I64>
+    FieldTypes List<types.TypeId> # the struct types whose field FieldIdx is assigned after construction - -1 the whole
+    FieldIdx List<I64>            # value, written through a reference
 }
 
 fn walkBody(s mut Scoper&, b I64) walked {
@@ -738,6 +750,7 @@ fn collectStmt(st typed.Stmt&, out mut walked&) {
         case typed.Stmt.Let(_, _, x) { collectExpr(x, out) }
         case typed.Stmt.Assign(_, p, x) {
             if wholeLocal(p) >= 0 { out.Assigned.Push(wholeLocal(p)) }
+            collectField(p, out)
             collectPlace(p, out)
             collectExpr(x, out)
         }
@@ -765,12 +778,28 @@ fn collectStmt(st typed.Stmt&, out mut walked&) {
         case typed.Stmt.Spawn(_, sp) {
             for p in sp.Targets {
                 if wholeLocal(p) >= 0 { out.Assigned.Push(wholeLocal(p)) }
+                collectField(p, out)
                 collectPlace(p, out)
             }
             collectExpr(sp.Task, out)
             for c in sp.Clauses { collectExpr(c.Handler, out) }
         }
         case typed.Stmt.Yield(_, x) { collectExpr(x, out) }
+        case _ { }
+    }
+}
+
+# a store into a field, or into all a reference names (O23a: the instance a field holds is no longer its constructor's)
+fn collectField(p typed.Place&, out mut walked&) {
+    match p {
+        case typed.Place.Field(_, _, b, i) {
+            out.FieldTypes.Push(b.Type())
+            out.FieldIdx.Push(i)
+        }
+        case typed.Place.Deref(_, ty, _) {
+            out.FieldTypes.Push(ty)
+            out.FieldIdx.Push(-1)
+        }
         case _ { }
     }
 }
@@ -888,6 +917,9 @@ fn (s mut Scoper&) components() {
         for c in w.Callees { s.edgeTo.Push(c) }
         s.assignedFrom.Push(s.assignedTo.Len())
         for l in w.Assigned { s.assignedTo.Push(l) }
+        for k in range w.FieldTypes.Len() {
+            s.fieldsAssigned.Put(pair.Pair(I64(s.P.T.Repr(w.FieldTypes[k])), w.FieldIdx[k]), true)
+        }
         s.tIndex.Push(-1)
         s.tLow.Push(0)
         s.tOn.Push(false)
@@ -3392,7 +3424,8 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
 # its "&q" fields lives, wherever it is read (O23a, C2d)
 fn (s mut Scoper&) bindLocal(l typed.LocalId, x typed.Expr&) {
     k := s.B.Locals[I64(l)].Kind
-    if (k != typed.LocalKind.Var and k != typed.LocalKind.Hidden) or s.reassigned(I64(l)) { return }
+    if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Field { return }
+    if s.reassigned(I64(l)) { return }
     c := s.callOf(s.unPromoted(x))
     if c == null or I64(c.Site) != s.ctorSite { return }
     s.bindFrom.Put(I64(l), s.ctorFrom)
@@ -3450,10 +3483,134 @@ fn (s mut Scoper&) reassigned(l I64) Bool {
 
 # where the instance local l holds or refers to bound its constructor's parameter w (bindLocal); None where not known
 fn (s mut Scoper&) boundAt(l I64, w I64) Term {
-    from := try s.bindFrom.Get(l) catch default -1
+    return s.recAt(try s.bindFrom.Get(l) catch default -1, w)
+}
+
+# binding w of the instance record from: None where not known
+fn (s mut Scoper&) recAt(from I64, w I64) Term {
     if from < 0 or w < 0 or from + w >= s.bindTerms.Len() { return Term.None }
     t := s.bindTerms[from + w]
     return t if t.Runs() else Term.None
+}
+
+# the record of the instance an argument is: a constructor call or a call whose result's bindings are known, judged
+# just now, or a local whose bindings are known; -1 for none
+fn (s mut Scoper&) argRec(a typed.Expr&) I64 {
+    x := s.unPromoted(s.unAway(a))
+    c := s.callOf(x)
+    if c != null { return try s.siteRec.Get(I64(c.Site)) catch default -1 }
+    match x {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { return s.recOf(p) }
+        case _ { return -1 }
+    }
+}
+
+# the record of the instance a place holds or refers to (O23a): a local's; through a reference a local holds, its
+# instance's; a field's, where the record of the instance holding it knows it - a "&q" field the argument's own record,
+# a bare field the one its constructor gave it (FieldFrom); -1 where not known
+fn (s mut Scoper&) recOf(p typed.Place&) I64 {
+    match p {
+        case typed.Place.Local(_, _, id) { return try s.bindFrom.Get(I64(id)) catch default -1 }
+        case typed.Place.Deref(_, _, r) {
+            match s.unAway(r) {
+                case typed.Expr.Read(_, _, q, _) {
+                    match q {
+                        case typed.Place.Local(_, _, id) {
+                            if s.B.Locals[I64(id)].Kind == typed.LocalKind.Param { return -1 }
+                            return try s.bindFrom.Get(I64(id)) catch default -1
+                        }
+                        case typed.Place.Field(_, _, b, i) { return s.fieldRec(b, i) }
+                        case _ { return -1 }
+                    }
+                }
+                case _ { return -1 }
+            }
+        }
+        case typed.Place.Field(_, _, b, i) { return s.fieldRec(b, i) }
+        case _ { return -1 }
+    }
+}
+
+# the record of the instance field i of the struct at base holds or refers to - where no body assigns that field, or
+# all of such a struct through a reference, after construction: a store judged against the field's own binding says
+# nothing of the bindings of the instance it puts there
+fn (s mut Scoper&) fieldRec(base typed.Place&, i I64) I64 {
+    bt := base.Type()
+    if not s.isStruct(bt) { return -1 }
+    r := I64(s.P.T.Repr(bt))
+    if s.fieldsAssigned.Has(pair.Pair(r, i)) or s.fieldsAssigned.Has(pair.Pair(r, I64(-1))) { return -1 }
+    rb := s.recOf(base)
+    match s.fieldMark(bt, i) {
+        case typed.Mark.Of(q) {
+            w := s.ctorParamIndex(bt, q)
+            if rb < 0 or w < 0 or rb + w >= s.bindKids.Len() { return -1 }
+            return s.bindKids[rb + w]
+        }
+        case _ { }
+    }
+    # a bare field: the instance its constructor gave it, its bindings in that constructor's terms - its parameters'
+    # bindings this instance's record has, its instance scope where this instance's references are
+    cb := try s.ctorOf.Get(bt) catch default -1
+    if cb < 0 or not s.summed(cb) or i >= s.sums[cb].FieldFrom.Len() { return -1 }
+    ff := s.sums[cb].FieldFrom[i]
+    if ff < 0 { return -1 }
+    cbody := s.Bodies[cb]
+    n := s.ctorParams(cbody.Locals[I64(cbody.Fields[i])].Ty) if i < cbody.Fields.Len() else 0
+    if n == 0 or ff + n > s.sums[cb].FieldTerms.Len() { return -1 }
+    from := s.bindTerms.Len()
+    for w in range n {
+        t := s.sums[cb].FieldTerms[ff + w]
+        u := Term.Untraced
+        match t {
+            case Term.Program { u = Term.Program }
+            case Term.Var(k) {
+                if k < cbody.Vars.Len() {
+                    match cbody.Vars[k] {
+                        case typed.ScopeVar.Instance { u = s.peekPlace(base, true) }
+                        case typed.ScopeVar.Param(l) {
+                            j := -1
+                            for k2 in range cbody.Params.Len() {
+                                if cbody.Params[k2] == l { j = k2 }
+                            }
+                            if rb >= 0 and j >= 0 and rb + j < s.bindTerms.Len() { u = s.bindTerms[rb + j] }
+                        }
+                        case _ { }
+                    }
+                }
+            }
+            case _ { }
+        }
+        s.bindTerms.Push(u)
+        s.bindKids.Push(-1)
+    }
+    return from
+}
+
+# a constructor's fields' instance records, in its own terms, for its summary (O23a); none for any other body
+fn (s mut Scoper&) noteFieldRecs(sm mut summary&) {
+    sm.FieldFrom.Clear()
+    sm.FieldTerms.Clear()
+    match s.B.Of {
+        case typed.BodyOf.Ctor(_, _) { }
+        case _ { return }
+    }
+    for f in s.B.Fields {
+        from := try s.bindFrom.Get(I64(f)) catch default -1
+        n := s.ctorParams(s.B.Locals[I64(f)].Ty)
+        if from < 0 or n == 0 or from + n > s.bindTerms.Len() {
+            sm.FieldFrom.Push(-1)
+            continue
+        }
+        sm.FieldFrom.Push(sm.FieldTerms.Len())
+        for w in range n {
+            t := s.bindTerms[from + w]
+            ok := match t {
+                case Term.Var(_), Term.Program => true
+                case _ => false
+            }
+            sm.FieldTerms.Push(t if ok else Term.Untraced)
+        }
+    }
 }
 
 # the value a promotion makes a reference of, else the expression itself
@@ -3692,14 +3849,11 @@ fn (s mut Scoper&) fieldTerm(base typed.Place&, i I64) Term {
                     case typed.Place.Deref(_, _, r) {
                         y := regionLocal(r)
                         if y >= 0 and s.B.Locals[y].Kind == typed.LocalKind.Param { return Term.Derived(s.paramIndex(y), w) }
-                        # a local's instance whose construction bindings are known (O23a)
-                        if y >= 0 and s.boundAt(y, w) != Term.None { return s.boundAt(y, w) }
-                    }
-                    case typed.Place.Local(_, _, id) {
-                        if s.boundAt(I64(id), w) != Term.None { return s.boundAt(I64(id), w) }
                     }
                     case _ { }
                 }
+                # an instance whose construction bindings are known (O23a): a local's, a field's of one
+                if s.recAt(s.recOf(base), w) != Term.None { return s.recAt(s.recOf(base), w) }
                 s.under.Push(s.partsTerm(base))
                 s.underElem.Push(throughElem(base))
                 return Term.Derived(-s.under.Len(), w)
@@ -5056,13 +5210,19 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         for t in s.sums[callee].ResBind {
             u := s.through(t, beta, c, false) if t != Term.Untraced else Term.Untraced
             s.bindTerms.Push(u)
+            s.bindKids.Push(-1)
         }
+        s.siteRec.Put(I64(c.Site), s.ctorFrom)
     }
     if s.P.T.Role(fty) == types.RoleCtor {
         # its construction bindings, for a local it initializes (O23a): where each parameter's argument lives
         s.ctorSite = I64(c.Site)
         s.ctorFrom = s.bindTerms.Len()
-        for p in range n { s.bindTerms.Push(s.paramBinding(c, p, beta)) }
+        for p in range n {
+            s.bindTerms.Push(s.paramBinding(c, p, beta))
+            s.bindKids.Push(s.argRec(c.Args[p]))
+        }
+        s.siteRec.Put(I64(c.Site), s.ctorFrom)
         return fresh(beta[rv] if rv >= 0 else here)
     }
     e := s.P.T.ResultFrom(fty, 0)
@@ -5395,9 +5555,9 @@ fn (s mut Scoper&) derivedAt(p I64, w I64, c typed.Call&, hi Bool, beta Array<Te
     if y >= 0 and s.B.Locals[y].Kind == typed.LocalKind.Param and s.isRef(s.B.Locals[y].Ty) {
         return Term.Derived(s.paramIndex(y), w)
     }
-    # a local's instance whose construction bindings are known (O23a)
-    l := s.argLocal(a)
-    if l >= 0 and s.boundAt(l, w) != Term.None { return s.boundAt(l, w) }
+    # an instance whose construction bindings are known (O23a): a local's, a field's of one
+    rec := s.argRec(a)
+    if s.recAt(rec, w) != Term.None { return s.recAt(rec, w) }
     if not hi { return Term.Untraced }
     t := s.paramBinding(c, p, beta)
     return t if t != Term.None else Term.Untraced
