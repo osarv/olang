@@ -6450,6 +6450,13 @@ fn (c mut Checker&) renderPiece(sp source.Span, y ast.Expr&) typed.Piece&c {
         }
         nomatch { }
     }
+    # E11b, T7b: an operand naming a fixed array is a borrow of it, its elements read when its piece renders - as a
+    # run-time array's pair already names its storage
+    p := readPlace(x)
+    xt := typeOf(x)
+    if p != null and c.P.T.KindOf(xt) == types.Kind.Array and c.P.T.Length(xt) != types.TypeId(0) {
+        return typed.Piece.Render(typed.Expr.Borrow(x.Span(), c.P.T.Ref(xt, types.ReadOnly), p))
+    }
     return typed.Piece.Render(x)
 }
 
