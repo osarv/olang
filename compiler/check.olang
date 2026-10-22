@@ -2917,7 +2917,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 case typed.Expr.Make(msp, _, m) {
                     if m.Kind == typed.MakeKind.Array {
                         from := c.exprs.Len()
-                        for it in m.Items { c.exprs.Push(c.fit(unpromoted(it), c.P.T.Elem(wa), it.Span())) }
+                        for it in m.Items { c.exprs.Push(c.fit(c.unadapted(it), c.P.T.Elem(wa), it.Span())) }
                         at := c.P.T.Array(c.P.T.Elem(wa), c.P.T.Length(have))
                         y := typed.Expr.Make(msp, at, typed.Make(typed.MakeKind.Array, 0, gather(c.exprs, from), null, m.Site, m.Checked))
                         return c.fit(y, want, sp)
@@ -3233,6 +3233,16 @@ fn (c mut Checker&) inferred(x ast.Expr&, e typed.Expr&) types.TypeId {
 fn unpromoted(x typed.Expr&) typed.Expr&x {
     match x {
         case typed.Expr.Promote(_, _, pr) { return pr.X }
+        nomatch { return x }
+    }
+}
+
+# an element as it was before it was fitted to a literal's element type: unpromoted, and a place borrowed read back,
+# so it can be borrowed again at the target's permission (T25b)
+fn (c mut Checker&) unadapted(x typed.Expr&c) typed.Expr&c {
+    match x {
+        case typed.Expr.Promote(_, _, pr) { return pr.X }
+        case typed.Expr.Borrow(sp, _, p) { return c.read(sp, p) }
         nomatch { return x }
     }
 }

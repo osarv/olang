@@ -357,7 +357,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     interp.DecideAsserts(c, asserts)
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 {
+        # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
+        # left an unknown type in is not judged (scope.judge)
+        if not d.HasFatal() { placement(c, cfg) }
+        error build.Failed.REPORTED
+    }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
     lw.Plans = placement(c, cfg)
