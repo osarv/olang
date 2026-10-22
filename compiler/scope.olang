@@ -173,6 +173,9 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     # each body's locals assigned after their declaration (walkBody), in assignedTo from assignedFrom[b]
     assignedFrom List<I64>
     assignedTo List<I64>
+    # ... and the locals whose own storage a borrow or a slice names, in borrowedTo from borrowedFrom[b]
+    borrowedFrom List<I64>
+    borrowedTo List<I64>
     tIndex List<I64>
     tLow List<I64>
     tOn List<Bool>
@@ -749,6 +752,7 @@ fn (s mut Scoper&) fieldMark(t types.TypeId, i I64) typed.Mark {
 type walked struct() {
     Callees List<I64>
     Assigned List<I64>
+    Borrowed List<I64>            # the locals whose own storage a borrow or a slice names, reached through no reference
     FieldTypes List<types.TypeId> # the struct types whose field FieldIdx is assigned after construction - -1 the whole
     FieldIdx List<I64>            # value, written through a reference
 }
@@ -852,7 +856,10 @@ fn collectExpr(x typed.Expr&, out mut walked&) {
     if x == null { return }
     match x {
         case typed.Expr.Read(_, _, p, _) { collectPlace(p, out) }
-        case typed.Expr.Borrow(_, _, p) { collectPlace(p, out) }
+        case typed.Expr.Borrow(_, _, p) {
+            if not flThroughRef(p) and flRoot(p) >= 0 { out.Borrowed.Push(flRoot(p)) }
+            collectPlace(p, out)
+        }
         case typed.Expr.Take(_, _, p) { collectPlace(p, out) }
         case typed.Expr.Promote(_, _, pr) { collectExpr(pr.X, out) }
         case typed.Expr.Call(_, _, c) {
@@ -875,6 +882,7 @@ fn collectExpr(x typed.Expr&, out mut walked&) {
             for a in args { collectExpr(a, out) }
         }
         case typed.Expr.Slice(_, _, sl) {
+            if not flThroughRef(sl.Base) and flRoot(sl.Base) >= 0 { out.Borrowed.Push(flRoot(sl.Base)) }
             collectPlace(sl.Base, out)
             collectExpr(sl.Lo, out)
             collectExpr(sl.Hi, out)
@@ -946,6 +954,8 @@ fn (s mut Scoper&) components() {
         for c in w.Callees { s.edgeTo.Push(c) }
         s.assignedFrom.Push(s.assignedTo.Len())
         for l in w.Assigned { s.assignedTo.Push(l) }
+        s.borrowedFrom.Push(s.borrowedTo.Len())
+        for l in w.Borrowed { s.borrowedTo.Push(l) }
         for k in range w.FieldTypes.Len() {
             s.fieldsAssigned.Put(pair.Pair(I64(s.P.T.Repr(w.FieldTypes[k])), w.FieldIdx[k]), true)
         }
@@ -955,6 +965,7 @@ fn (s mut Scoper&) components() {
     }
     s.edgeFrom.Push(s.edgeTo.Len())
     s.assignedFrom.Push(s.assignedTo.Len())
+    s.borrowedFrom.Push(s.borrowedTo.Len())
     for i in range n {
         if s.tIndex[i] < 0 { s.visit(i) }
     }
@@ -3475,6 +3486,16 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
     s.moveTo = Term.None
     s.landOK = false
     s.stors[I64(l)] = s.blockTerm(loc.In)
+    if loc.Kind == typed.LocalKind.Field and not s.isRef(t) and s.borrowed(I64(l)) and loc.In == typed.BlockId(0) {
+        # a value field a reference is taken to lives in the instance scope - its slot in the constructor's frame closes
+        # as it returns, and the field is copied into the instance from there (C2g)
+        st := s.blockTerm(typed.BlockId(0))
+        if st.Runs() {
+            s.stors[I64(l)] = st
+            s.plan.Stored[I64(l)] = s.scopeOf(st)
+            s.buildsInto(st, sp, s.B.File, sp)
+        }
+    }
     if moved != Term.None {
         # a local the function returns lives where the result goes, its own storage too (O26a)
         s.terms[I64(l)] = moved
@@ -3724,6 +3745,13 @@ fn (s mut Scoper&) noteLate(l I64, x typed.Expr&) {
 }
 
 # whether the body being judged assigns local l after its declaration (walkBody)
+fn (s mut Scoper&) borrowed(l I64) Bool {
+    for k in range s.borrowedFrom[s.Id], s.borrowedFrom[s.Id + 1] {
+        if s.borrowedTo[k] == l { return true }
+    }
+    return false
+}
+
 fn (s mut Scoper&) reassigned(l I64) Bool {
     for k in range s.assignedFrom[s.Id], s.assignedFrom[s.Id + 1] {
         if s.assignedTo[k] == l { return true }
@@ -4744,7 +4772,14 @@ fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
         case typed.Expr.Make(_, ty, m) {
             if m.Site >= typed.SiteId(0) { s.build(m.Site, d) }
             s.val(m.Length, Term.None)
-            for it in m.Items { s.item(it, d, s.itemKind(m.Kind)) }
+            # an item built in d too (O6), existing storage judged as a slot of it (O25c, T17c) - a payload's once
+            # its items agree on one scope (T17c)
+            vs := Array<Val>(m.Items.Len())
+            for k in range m.Items.Len() { vs[k] = s.val(m.Items[k], d) }
+            agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
+            for k in range m.Items.Len() {
+                if agreed and vs[k].K == ValKind.Existing { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], s.itemKind(m.Kind)) }
+            }
             if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
             return fresh(d)
         }
@@ -5597,7 +5632,12 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         }
     }
     # the callee's obligations, through the bindings (O10c)
-    if callee >= 0 { s.discharge(sp, callee, beta, c) }
+    # a constructor's arguments the instance holds agree on where it lives, said at the first that does not (C2d, O25e)
+    agreed := true
+    if callee >= 0 and s.report and s.P.T.Role(fty) == types.RoleCtor and rv >= 0 {
+        agreed = s.argsAgree(c, callee, rv, owner, vals, beta)
+    }
+    if callee >= 0 { s.discharge(sp, callee, beta, c, agreed) }
     s.resAt = beta[rv] if rv >= 0 else here
     if not s.holds(ty) { return plain() }
     if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sums[callee].ResBind.Len() > 0 {
@@ -5846,7 +5886,7 @@ fn (s mut Scoper&) requiredBy(callee I64, v I64, beta Array<Term>&) Term {
 
 # a callee's obligations judged through a call's bindings (O10c): each held, recorded as the caller's own, or an error
 # at the call naming the callee's statement that required it
-fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&) {
+fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c typed.Call&, agreed Bool) {
     for r in s.sums[callee].Rels {
         hi := s.through(r.Hi, beta, c, true)
         lo := s.through(r.Lo, beta, c, false)
@@ -5874,7 +5914,9 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             continue
         }
         if r.Why != 0 {
-            # a constructor's instance outliving what it holds (C2d): said at the argument
+            # a constructor's instance outliving what it holds (C2d): said at the argument - once its arguments were
+            # found to disagree, said there instead
+            if not agreed { continue }
             ai := s.argOfVar(c, r.Hi)
             if ai < 0 { ai = s.argOfVar(c, r.Lo) }
             at := s.argAt(c.Args[ai]) if ai >= 0 else s.nameSpan(sp)
@@ -5889,6 +5931,88 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         ai := s.argOfVar(c, r.Hi)
         if ai >= 0 and s.lentLoopCopy(c.Args[ai]) { s.noteLoopCopy(rec, c.Args[ai]) }
     }
+}
+
+# whether the arguments a constructor's instance holds agree on one scope for it, as stage 0 binds it (C2d's instance
+# scope, bindHereFrom): in order, each existing one held exactly where the binding so far is, or - held only to be
+# outlived - outliving it, a binding only outlived narrowing to a shorter one, an exact one fixing it where the others
+# outlive it; two of this function's scope variables are both kept. False, with O25e's error at the argument, where
+# they do not
+fn (s mut Scoper&) argsAgree(c typed.Call&, callee I64, rv I64, owner Array<I64>&, vals Array<Val>&, beta Array<Term>&) Bool {
+    fty := s.calleeType(c)
+    ps := s.P.T.Items(s.P.T.Params(fty))
+    bt := Term.None
+    bx := false
+    for i in range c.Args.Len() {
+        v := owner[i]
+        if v < 0 or v == rv or vals[i].K != ValKind.Existing { continue }
+        held := false
+        viaField := false
+        for r in s.sums[callee].Rels {
+            if r.Why == 0 { continue }
+            if r.Hi == Term.Var(v) and r.Lo == Term.Var(rv) {
+                held = true
+                if r.Why == WhyField { viaField = true }
+            }
+        }
+        if not held { continue }
+        # held exactly where something can be stored through it, unless a "&q" field keeps it (stage 0's narrowing)
+        pt := ps[i] if i < ps.Len() else types.UnknownT
+        ex := not viaField and pt != types.UnknownT and (s.admitsStores(pt) if s.isRef(pt) else s.valueAdmits(pt))
+        t := beta[v]
+        if not t.Runs() { continue }
+        nt, nx, ok := s.agreeStep(bt, bx, t, ex)
+        if not ok {
+            s.err(s.argAt(c.Args[i]), msgs.ScopeArgsDisagree())
+            return false
+        }
+        bt, bx = nt, nx
+    }
+    return true
+}
+
+# one more value an instance holds, living at t (exactly there where ex), against the binding so far, bt (bx): the
+# binding after it, and whether it agrees (argsAgree)
+fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) (Term, Bool, Bool) {
+    if bt == Term.None { return t, ex, true }
+    if t == bt { return bt, bx, true }
+    if ex != bx {
+        if bx and s.order(t, bt) == Holds { return bt, bx, true }
+        if ex and s.order(bt, t) == Holds { return t, true, true }
+    }
+    if not bx and not ex {
+        if s.order(bt, t) == Holds { return t, false, true }
+        if s.order(t, bt) == Holds { return bt, false, true }
+    }
+    # two of this function's scope variables: the instance must not outlive either, kept by the obligations
+    both := match t {
+        case Term.Var(_) => match bt {
+            case Term.Var(_) => true
+            case _ => false
+        }
+        case _ => false
+    }
+    return bt, bx, both
+}
+
+# whether the values an enum case's payload holds agree on one scope for it, as argsAgree for a constructor's (T17c):
+# false, with the error at the item, where they do not
+fn (s mut Scoper&) payloadAgree(items Array<typed.Expr&>&, vs Array<Val>&) Bool {
+    bt := Term.None
+    bx := false
+    for k in range items.Len() {
+        it := items[k]
+        if vs[k].K != ValKind.Existing or not vs[k].T.Runs() or not s.holds(it.Type()) { continue }
+        ty := it.Type()
+        ex := s.admitsStores(ty) if s.isRef(ty) else s.valueAdmits(ty)
+        nt, nx, ok := s.agreeStep(bt, bx, vs[k].T, ex)
+        if not ok {
+            s.err(s.argAt(it), msgs.PayloadScopesDisagree())
+            return false
+        }
+        bt, bx = nt, nx
+    }
+    return true
 }
 
 # whether a body's summary can be read: judged, or of the component being judged - what its rounds so far found, which
