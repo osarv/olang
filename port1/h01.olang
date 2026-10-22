@@ -1,0 +1,25 @@
+# text joins and renderings landing where they are kept: a field, a list, a map, a returned struct, a Str
+import "std/io"
+import "churn"
+type Rec struct(name String&) { name }
+type P struct(x I64) { x }
+fn (p P&) Str() String { return "P<" $p.x ">" }
+fn mkRec(i I64) Rec { return Rec("r" $i $P(i)) }
+fn label(i I64) String& { return "L" $i }
+fn main() ? io.IoError {
+    m mut Map<String&, I64>& = Map<String&, I64>()
+    l mut List<Rec>& = List<Rec>()
+    r mut Rec& = Rec("none")
+    keep mut String& = "k"
+    for i in range 4 {
+        m.Put("key" $i, i)
+        l.Push(mkRec(i))
+        if i == 2 { r.name = "named" $i $P(i * 2) }
+        if i == 3 { keep = label(i) }
+    }
+    c := churn.Churn()
+    s := ""
+    for x in l { s = $s $x.name "," }
+    v := try m.Get("key2") catch default -1
+    try io.Println($c " " $s " " $r.name " " $keep " " $v)
+}

@@ -1,0 +1,28 @@
+# O23a records through a hand-written iterator: elements read through its &of field, kept outside the block
+# the collection lives in
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+type It struct(of List<Node&>&) {
+    l List<Node&>&of = of
+    at I64 = 0
+}
+fn (it mut It&) Next() Node&it ? Exhausted {
+    if it.at >= it.l.Len() { error Exhausted.END }
+    it.at = it.at + 1
+    return it.l[it.at - 1]
+}
+fn main() ? io.IoError {
+    keep mut List<Node&>& = List<Node&>()
+    for i in range 3 {
+        inner mut List<Node&>& = List<Node&>()
+        inner.Push(Node(i * 7))
+        for x in It(inner) {
+            keep.Push(x)
+        }
+    }
+    c := churn.Churn()
+    t := 0
+    for n in keep { t = t + n.v }
+    try io.Println($c " " $t)
+}

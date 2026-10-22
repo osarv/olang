@@ -1,0 +1,32 @@
+# T7b/T29a: a value array returned through a conversion of storage the function made, or a parameter names
+import "std/io"
+import "churn"
+fn f1() String {
+    b := Array<Char>(5, 'a')
+    return String(b)
+}
+fn f2() String {
+    b Array<Char>& = Array<Char>(5, 'b')
+    return String(b)
+}
+fn f3(n I64) String {
+    b := Array<Char>(n, 'c')
+    if n > 2 {
+        b2 := Array<Char>(n, 'd')
+        return String(b2)
+    }
+    return String(b)
+}
+type H struct(a Array<Char>&) { a }
+fn f4() String {
+    h := H(Array<Char>(5, 'e'))
+    return String(h.a)
+}
+fn main() ? io.IoError {
+    s1 := f1()
+    s2 := f2()
+    s3 := f3(4)
+    s4 := f4()
+    c := churn.Churn()
+    try io.Println($c " " $s1 " " $s2 " " $s3 " " $s4)
+}
