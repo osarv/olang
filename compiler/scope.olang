@@ -6142,7 +6142,10 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             if ai < 0 { ai = s.argOfVar(c, r.Lo) }
             at := s.argAt(c.Args[ai]) if ai >= 0 else s.nameSpan(sp)
             if r.Why == WhyResult and s.landSite == I64(c.Site) { at = s.landSp }
-            s.err(at, msgs.InstanceOutlivesReferent() if r.Why == WhyField else msgs.InstanceOutlivesArg())
+            rec := s.err(at, msgs.InstanceOutlivesReferent() if r.Why == WhyField else msgs.InstanceOutlivesArg())
+            # the argument made where the instance goes - a parameter's scope (B11)
+            w := s.paramOfTerm(lo)
+            if ai >= 0 and w >= 0 { s.noteMadeNamed(rec, c.Args[ai], w, s.P.L.Names.Text(s.B.Locals[w].Name), 0) }
             continue
         }
         m := msgs.ReferenceNarrowed() if r.Exact else msgs.ScopeObligationUnmet()
