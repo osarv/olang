@@ -50,9 +50,14 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     readN List<source.NameId>
     named List<types.TypeId>        # the declared structs whose types are spelled by name, to define
     namedSeen Map<types.TypeId, Bool>
-    body StringBuilder              # the functions written
-    tail StringBuilder              # globals, constant data and declarations, written after the functions
-    seen Map<String&, Bool>          # the symbols tail defines or declares already
+    # what is written, one item per symbol in the order made (a function, a global, constant data, a declaration):
+    # its text, where it lives in a build of one object per module (a module's index, or Home*), and how another
+    # object declares it
+    itemSym List<String&>
+    itemText List<String&>
+    itemHome List<I64>
+    itemDecl List<String&>
+    itemAt Map<String&, I64>
     nconst I64 = 0
     badType Bool = false            # a type met with no layout, in the function being written
     ntask I64 = 0                   # tasks' trampolines made
@@ -69,6 +74,10 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     ctorOf Map<types.TypeId, I64>
     dtorOf Map<types.TypeId, I64>
     indexed Bool = false
+    Module Bool = false             # one module compiled alone (compile): its own bodies, no entry
+    emitted Bool = false
+    tyDef List<String&>             # each type spelled by name, defined: "%\"NAME\" = type BODY"
+    tyAt Map<String&, I64>          # a type's definition by its name (between the quotes)
     # K2: the immutable globals evaluated while compiling, by their initializer's body - each written as its value,
     # its initializer not run at startup (interp.Bake)
     Baked Map<I64, eval.Image>
@@ -80,15 +89,73 @@ fn (e mut Emitter&) gap(what String&) {
 
 # ---- the program ----
 
+# what an object holds: a module's code, the root's with main or with the test harness, or the program's instances
+type ObjectKind enum {
+    Module
+    Main
+    Tests
+    Instances
+}
+
+# one object's IR: the module it is for (its identity), what it holds, its text
+type Object struct(Identity String&, Kind ObjectKind, Ir String&) {
+    Identity
+    Kind
+    Ir
+}
+
 # the whole program as one LLVM module: the root's main (or, in a test build, the harness running its tests), each
 # module's initialization, and every function they reach
 fn (e mut Emitter&) Program(w mut io.Writer&) {
+    e.emitAll()
+    w.Write(moduleHead)
+    w.Write(runtimeTypes)
+    for d in e.tyDef { w.Write(d) }
+    for t in e.itemText { w.Write(t) }
+    w.Write(e.attributes())
+}
+
+# the program as one object per module (B3, B3d): each module's functions and globals in its own, every instance in
+# the root's instances object, main or the test harness in the root's; each declares what it names of the others and
+# carries a copy of the declarations, helpers and constant data it uses. An object's text depends only on what is in
+# it: its items in the order of their symbols, its private symbols numbered in the order it names them. Compiling one
+# module (Module) gives that one object, the instances it uses in it
+fn (e mut Emitter&) Objects() List<Object> {
+    e.emitAll()
+    out List<Object>
+    mods := e.P.L.Mods
+    root := e.P.L.Root
+    if e.Module {
+        out.Push(Object($mods[root].Identity, ObjectKind.Module, e.assemble(root, true)))
+        return out
+    }
+    used Map<I64, Bool>
+    for h in e.itemHome { used.Put(h, true) }
+    rootKind := ObjectKind.Tests if e.Tests else ObjectKind.Main
+    for m in range mods.Len() {
+        if m != root and used.Has(m) { out.Push(Object($mods[m].Identity, ObjectKind.Module, e.assemble(m, false))) }
+    }
+    if used.Has(HomeInst) { out.Push(Object($mods[root].Identity, ObjectKind.Instances, e.assemble(HomeInst, false))) }
+    out.Push(Object($mods[root].Identity, rootKind, e.assemble(root, false)))
+    return out
+}
+
+moduleHead String& = ("; olang - emitted by the self-hosted compiler (compiler/emit.olang)\n"
+                      "target triple = \"x86_64-pc-linux-gnu\"\n\n")
+
+fn (e mut Emitter&) attributes() String { return $"attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n" }
+
+# every function the program reaches written as an item, from main or the tests (or, compiling one module, from its
+# own bodies), then the thunks, adapters and the entry, and the types they name
+fn (e mut Emitter&) emitAll() {
+    if e.emitted { return }
+    e.emitted = true
     e.index()
     p := e.P
-    w.Write("; olang - emitted by the self-hosted compiler (compiler/emit.olang)\n")
-    w.Write("target triple = \"x86_64-pc-linux-gnu\"\n\n")
     inits := e.initOrder()
-    for m in inits { e.want(mir.FnKey.Init(m)) }
+    for m in inits {
+        if not e.Module or m == p.L.Root { e.want(mir.FnKey.Init(m)) }
+    }
     tests List<I64>
     mainBody I64 = -1
     for i in range e.Lw.Bodies.Len() {
@@ -103,7 +170,17 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
             case _ { }
         }
     }
-    if e.Tests {
+    if e.Module {
+        for i in range e.Lw.Bodies.Len() {
+            k := mir.FnKey.Body(typed.BodyId(I32(i)))
+            match e.Lw.Bodies[i].Of {
+                case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
+                    if e.Lw.Bodies[i].Root != null and e.homeOf(k) == p.L.Root { e.want(k) }
+                }
+                case _ { }
+            }
+        }
+    } else if e.Tests {
         for t in tests { e.want(mir.FnKey.Body(typed.BodyId(I32(t)))) }
     } else if mainBody >= 0 {
         e.want(mir.FnKey.Body(typed.BodyId(I32(mainBody))))
@@ -119,29 +196,170 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
     for i in range e.thunkKeys.Len() { e.thunk(e.thunkKeys[i], e.thunkTys[i]) }
     for i in range e.adaptFrom.Len() { e.fvAdapter(e.adaptFrom[i], e.adaptTo[i]) }
     for d in e.dtorKeys { e.dtorThunk(d) }
-    if e.Tests {
+    if e.Module {
+        # one module compiled alone: no entry, the program's main is built from its root's object
+    } else if e.Tests {
         e.harness(tests)
     } else if mainBody >= 0 {
         e.entry(inits, mainBody)
     }
     # the types spelled by name, defined; a declared struct's body may name others, laid out before it
     j I64 = 0
-    defs := StringBuilder()
     for j < e.named.Len() {
         nt := e.named[j]
         j++
         body := e.T.StructBody(nt)
         for x in e.T.Embedded(nt) { e.need(x) }
-        defs.Push(e.T.Llvm(nt))
-        defs.Push(" = type ")
-        defs.Push(body)
-        defs.PushChar('\n')
+        name := e.T.Llvm(nt)
+        e.tyAt.Put($name[2:name.Len() - 1], e.tyDef.Len())
+        e.tyDef.Push($name " = type " $body "\n")
     }
-    w.Write(runtimeTypes)
-    w.Write(defs.ToString())
-    w.Write(e.body.ToString())
-    w.Write(e.tail.ToString())
-    w.Write("attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n")
+}
+
+# ---- one object of several ----
+
+# the references in IR text, as positions: kind (0 a symbol after "@", 1 a type's name in %"..."), where its name
+# starts and ends. Quoted text is skipped (a constant's bytes, an attribute's value); a quote inside is always escaped
+fn refsIn(text String&) List<I64> {
+    out List<I64>
+    n := text.Len()
+    i I64 = 0
+    for i < n {
+        c := text[i]
+        if c == '"' {
+            i++
+            for i < n and text[i] != '"' { i++ }
+            i++
+        } else if c == ';' {
+            for i < n and text[i] != '\n' { i++ }
+        } else if c == '%' and i + 1 < n and text[i + 1] == '"' {
+            s := i + 2
+            i = s
+            for i < n and text[i] != '"' { i++ }
+            out.Push(1)
+            out.Push(s)
+            out.Push(i)
+            i++
+        } else if c == '@' {
+            s := i + 1
+            i = s
+            for i < n and symbolChar(text[i]) { i++ }
+            if i > s {
+                out.Push(0)
+                out.Push(s)
+                out.Push(i)
+            }
+        } else {
+            i++
+        }
+    }
+    return out
+}
+
+fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c == '.' or c == '$' or c == '-' }
+
+# one object's text: the items homed at home (with the instances' too, alsoInst), each shared or local item they name
+# copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
+# another object, and the types they name
+fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
+    mine List<I64>
+    for i in range e.itemSym.Len() {
+        h := e.itemHome[i]
+        if h == home or (alsoInst and h == HomeInst) { mine.Push(i) }
+    }
+    syms := e.itemSym
+    sorted := mine.ToArray()
+    sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
+    order List<I64>
+    have Map<I64, Bool>
+    for i in sorted {
+        order.Push(i)
+        have.Put(i, true)
+    }
+    decls StringBuilder
+    declared Map<I64, Bool>
+    tys List<I64>
+    tyHave Map<I64, Bool>
+    rename Map<I64, String&>
+    nloc I64 = 0
+    k I64 = 0
+    for k < order.Len() {
+        it := order[k]
+        k++
+        text := e.itemText[it]
+        rs := refsIn(text)
+        for r in range 0, rs.Len(), 3 {
+            name := text[rs[r + 1]:rs[r + 2]]
+            if rs[r] == 1 {
+                t := try e.tyAt.Get(name) catch default -1
+                if t >= 0 and not tyHave.Has(t) { e.wantType(t, tys, tyHave) }
+                continue
+            }
+            j := try e.itemAt.Get(name) catch default -1
+            if j < 0 or have.Has(j) or declared.Has(j) { continue }
+            h := e.itemHome[j]
+            if h == HomeShared or h == HomeLocal {
+                have.Put(j, true)
+                order.Push(j)
+                if h == HomeLocal {
+                    rename.Put(j, $prefixOf(e.itemSym[j]) $nloc)
+                    nloc++
+                }
+            } else if h == home or (alsoInst and h == HomeInst) {
+                # homed here (always in order already)
+            } else {
+                declared.Put(j, true)
+                decls.Push(e.itemDecl[j])
+            }
+        }
+    }
+    out := StringBuilder()
+    out.Push(moduleHead)
+    out.Push(runtimeTypes)
+    for t in tys { out.Push(e.tyDef[t]) }
+    for it in order {
+        text := e.itemText[it]
+        if rename.Len() == 0 {
+            out.Push(text)
+            continue
+        }
+        at I64 = 0
+        rs := refsIn(text)
+        for r in range 0, rs.Len(), 3 {
+            if rs[r] != 0 { continue }
+            j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+            if j < 0 or not rename.Has(j) { continue }
+            out.Push(text[at:rs[r + 1]])
+            out.Push(try rename.Get(j) catch default "")
+            at = rs[r + 2]
+        }
+        out.Push(text[at:])
+    }
+    out.Push(decls.ToString())
+    out.Push(e.attributes())
+    return out.ToString()
+}
+
+# a type's definition wanted in the object, and the types its body names
+fn (e mut Emitter&) wantType(t I64, tys mut List<I64>&, tyHave mut Map<I64, Bool>&) {
+    tyHave.Put(t, true)
+    tys.Push(t)
+    def := e.tyDef[t]
+    rs := refsIn(def)
+    for r in range 0, rs.Len(), 3 {
+        if rs[r] != 1 { continue }
+        u := try e.tyAt.Get(def[rs[r + 1]:rs[r + 2]]) catch default -1
+        if u >= 0 and not tyHave.Has(u) { e.wantType(u, tys, tyHave) }
+    }
+}
+
+# a local item's new name in an object: its symbol up to its first digit (".c", "olang_lambda_", "olang_task"), then
+# the object's own count
+fn prefixOf(s String&) String {
+    for i in range s.Len() {
+        if s[i].IsDigit() { return $s[:i] }
+    }
+    return $s "."
 }
 
 # the modules whose initialization runs, imports first (B5a): the prelude's, then the root's imports depth first
@@ -405,25 +623,44 @@ fn (e mut Emitter&) need(t types.TypeId) {
 
 # ---- the tail: globals, constants, declarations ----
 
-fn (e mut Emitter&) define(symbol String&, text String&) {
-    if e.seen.Has(symbol) { return }
-    e.seen.Put($symbol, true)
-    e.tail.Push(text)
-    e.tail.PushChar('\n')
+# where an item lives in a build of one object per module (DESIGN.md 1.9): a module's index (its functions and
+# globals, defined there and declared where named elsewhere), or one of these
+HomeShared I64 = -1     # copied, as written, into every object naming it: a declaration, a linkonce_odr helper or thunk
+HomeLocal I64 = -2      # copied into every object naming it, internal and renamed there (constants, lambdas, tasks)
+HomeInst I64 = -3       # the generics' instances (B3d): the root's own object of them
+
+# an item: its symbol, text (whole lines), home and how another object declares it; the first one made of a symbol
+# stands
+fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = "") {
+    if e.itemAt.Has(symbol) { return }
+    e.itemAt.Put($symbol, e.itemSym.Len())
+    e.itemSym.Push($symbol)
+    e.itemText.Push($text)
+    e.itemHome.Push(home)
+    e.itemDecl.Push($decl)
 }
+
+fn (e mut Emitter&) has(symbol String&) Bool { return e.itemAt.Has(symbol) }
+
+fn (e mut Emitter&) define(symbol String&, text String&) { e.item(symbol, HomeShared, $text "\n") }
 
 # a runtime function or a C library function, declared once
 fn (e mut Emitter&) declare(name String&, text String&) { e.define(name, "declare " $text) }
 
 fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     s := e.globalSym(m, n)
-    if e.seen.Has(s) { return "@" $s }
+    if e.has(s) { return "@" $s }
     b := e.globalBody(m, n)
     if b >= 0 and e.Baked.Has(b) {
         img := try e.Baked.Get(b) catch default eval.Image()
-        e.define(s, e.bakedText(s, img))
+        text := e.bakedText(s, img)
+        at := try text.Find(" = global ") catch default -1
+        end := try text.Find("}>") catch default -1
+        decl := $"@" $s " = external global " $text[at + 10:end + 2] if at >= 0 and end > at else $"@" $s " = external global i8"
+        e.item(s, m, text, $decl "\n")
     } else {
-        e.define(s, "@" $s " = global " $e.ty(t) " zeroinitializer")
+        ty := e.ty(t)
+        e.item(s, m, $"@" $s " = global " $ty " zeroinitializer\n", $"@" $s " = external global " $ty "\n")
     }
     return "@" $s
 }
@@ -480,7 +717,7 @@ fn (e mut Emitter&) cstr(text String&) String {
     if e.dataAt.Has(key) { return try e.dataAt.Get(key) catch default "" }
     s := "@.c" $e.nconst
     e.nconst++
-    e.tail.Push($s " = private unnamed_addr constant [" $(text.Len() + 1) " x i8] c\"" $escape(text) "\\00\"\n")
+    e.item(s[1:], HomeLocal, $s " = private unnamed_addr constant [" $(text.Len() + 1) " x i8] c\"" $escape(text) "\\00\"\n")
     e.dataAt.Put($key, $s)
     return s
 }
@@ -581,10 +818,11 @@ fn blockName(b mir.BlockId) String { return "bb" $b }
 fn (fe mut fnEm&) gap(what String&) { fe.E.gap(what) }
 
 # the function's LLVM header: linkage, result, name and parameters
-fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool) String {
+# a function's first line: "define LINK RET @SYM(PARAMS) #0 {" - or, with link "declare", how another object declares it
+fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal") String {
     t := e.T
     b := StringBuilder()
-    b.Push("define internal " $t.RetLlvm(ty) " @" $symbol "(")
+    b.Push($("declare " if link == "declare" else $"define " $link " ") $t.RetLlvm(ty) " @" $symbol "(")
     first := true
     if env {
         b.Push("ptr %env")
@@ -612,8 +850,47 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
             case _ { b.Push($e.ty(ps[i]) " %a" $i) }
         }
     }
-    b.Push(") #0 {\n")
+    b.Push(")\n" if link == "declare" else ") #0 {\n")
     return b.ToString()
+}
+
+# the linkage a function is defined with for its home
+fn linkFor(home I64) String {
+    return "internal" if home == HomeLocal else ("linkonce_odr" if home == HomeShared else "dso_local")
+}
+
+# where a function lives (HomeShared, HomeLocal, HomeInst or a module): a plain function, a non-generic type's
+# constructor or destructor, a global's initializer and a module's initialization in their module; an instance (and a
+# constructor's twin) with the instances; a test in the root; a helper is shared; a lambda, which a parameter's default
+# makes in every module whose code calls it, local to each object
+fn (e mut Emitter&) homeOf(k mir.FnKey) I64 {
+    p := e.P
+    return match k {
+        case mir.FnKey.Body(id) => match e.Lw.Bodies[I64(id)].Of {
+            case typed.BodyOf.Fn(inst) => HomeInst if p.InstanceArgs(inst) != types.ListId(0) else p.FnModule(p.InstanceFn(inst))
+            case typed.BodyOf.Ctor(ty, twin) => HomeInst if twin != types.ListId(0) else e.typeHome(ty)
+            case typed.BodyOf.Dtor(ty) => e.typeHome(ty)
+            case typed.BodyOf.Global(m, _) => m
+            case typed.BodyOf.Test(_) => p.L.Root
+            case _ => HomeLocal
+        }
+        case mir.FnKey.Helper(_, _) => HomeShared
+        case mir.FnKey.Adapter(call) => e.homeOf(mir.FnKey.Body(call))
+        case mir.FnKey.Init(m) => m
+    }
+}
+
+fn (e mut Emitter&) typeHome(ty types.TypeId) I64 {
+    t := e.T
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Named or t.Args(r) != types.ListId(0) { return HomeInst }
+    return t.DeclModule(t.DeclOf(r))
+}
+
+# a function's item: its text, and its declaration for another object
+fn (e mut Emitter&) fnItem(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, text String&) {
+    home := e.homeOf(k)
+    e.item(symbol, home, text, e.header(k, ty, symbol, passed, env, "declare"))
 }
 
 fn (e mut Emitter&) passedOf(k mir.FnKey, ty types.TypeId) I64 { return mir.PassedCount(e.T, mir.Callee.Fn(k, ty), ty) }
@@ -624,17 +901,17 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     symbol := e.sym(k)
     env := e.hasEnv(k)
     passed := e.passedOf(k, f.Ty)
+    hdr := e.header(k, f.Ty, symbol, passed, env, linkFor(e.homeOf(k)))
     bad := "" if e.Lw.Gapped else f.Verify(e.T)
     if e.Lw.Gapped or bad != "" {
         e.gap($"not lowered: " $symbol $(" (" $bad.Trim() ")" if bad != "" else ""))
-        e.body.Push(e.header(k, f.Ty, symbol, passed, env))
         if e.isGlobalInit(k) {
             # a global's initializer: the global left at its zero value, so that the rest of the program still runs
-            e.body.Push("entry:\n  ret void\n}\n\n")
+            e.fnItem(k, f.Ty, symbol, passed, env, $hdr "entry:\n  ret void\n}\n\n")
             return
         }
-        e.body.Push("entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not lowered by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
         e.runtime("__olang_check_failed")
+        e.fnItem(k, f.Ty, symbol, passed, env, $hdr "entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not lowered by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
         return
     }
     fe mut fnEm&e = fnEm(e, f, k)
@@ -644,18 +921,19 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     fe.run()
     if e.badType {
         # a type the program's layouts do not settle (a length a call computes, G21, is the evaluator's, M8)
-        e.body.Push(e.header(k, f.Ty, symbol, passed, env))
-        e.body.Push("entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not emitted by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
         e.runtime("__olang_check_failed")
+        e.fnItem(k, f.Ty, symbol, passed, env, $hdr "entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not emitted by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
         return
     }
-    e.body.Push(e.header(k, f.Ty, symbol, passed, env))
-    e.body.Push("entry:\n")
-    e.body.Push(fe.head.ToString())
-    e.body.Push(fe.pro.ToString())
-    e.body.Push("  br label %start\n")
-    e.body.Push(fe.code.ToString())
-    e.body.Push("}\n\n")
+    b := StringBuilder()
+    b.Push(hdr)
+    b.Push("entry:\n")
+    b.Push(fe.head.ToString())
+    b.Push(fe.pro.ToString())
+    b.Push("  br label %start\n")
+    b.Push(fe.code.ToString())
+    b.Push("}\n\n")
+    e.fnItem(k, f.Ty, symbol, passed, env, b.ToString())
 }
 
 fn (fe mut fnEm&) run() {
@@ -1109,7 +1387,7 @@ fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) (String, I64
     if fe.E.dataAt.Has(key) { return (try fe.E.dataAt.Get(key) catch default ""), n }
     s := "@.d" $fe.E.nconst
     fe.E.nconst++
-    fe.E.tail.Push($s " = private " $("unnamed_addr " if site == "" else "") "constant " $lt " " $init "\n")
+    fe.E.item(s[1:], HomeLocal, $s " = private " $("unnamed_addr " if site == "" else "") "constant " $lt " " $init "\n")
     fe.E.dataAt.Put($key, $s)
     return s, n
 }
@@ -2005,7 +2283,7 @@ fn (e mut Emitter&) codeFor(code mir.FnKey, ty types.TypeId) String {
     if e.hasEnv(code) and e.passedOf(code, mine) == mir.PassedCount(e.T, mir.Callee.Value(mir.Operand.None), ty) {
         return s
     }
-    key := $s "_fv" $ty
+    key := e.thunkSym(s, ty)
     if not e.thunkFor.Has(key) {
         e.thunkFor.Put($key, true)
         e.thunkKeys.Push(code)
@@ -2032,7 +2310,9 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
     mine := e.codeType(code)
     vp := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), ty)
     cp := e.passedOf(code, mine)
-    hdr := e.header(code, ty, $s "_fv" $ty, vp, true)
+    home := HomeLocal if e.homeOf(code) == HomeLocal else HomeShared
+    tsym := e.thunkSym(s, ty)
+    hdr := e.header(code, ty, tsym, vp, true, linkFor(home))
     b := StringBuilder()
     b.Push(hdr)
     b.Push("entry:\n")
@@ -2076,13 +2356,13 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
         b.Push("  call void @" $s "(" $args.ToString() ")\n")
         # a function that cannot fail as a value that can (R6): it never fails
         b.Push("  ret void\n}\n\n" if vt == "void" else "  ret i32 0\n}\n\n")
-        e.body.Push(b.ToString())
+        e.item(tsym, home, b.ToString())
         return
     }
     b.Push("  %r = call " $rt " @" $s "(" $args.ToString() ")\n")
     if vt == rt and t.Errors(mine) == t.Errors(ty) {
         b.Push("  ret " $rt " %r\n}\n\n")
-        e.body.Push(b.ToString())
+        e.item(tsym, home, b.ToString())
         return
     }
     # the value's error list differs from its function's (R6, R17): its result, and its code re-encoded under the
@@ -2106,8 +2386,14 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
     }
     b.Push(fe.code.ToString())
     b.Push("}\n\n")
-    e.body.Push(b.ToString())
+    e.item(tsym, home, b.ToString())
 }
+
+# a thunk's symbol: its function's, and the value's type spelled (stable whatever else the program holds)
+fn (e mut Emitter&) thunkSym(s String&, ty types.TypeId) String { return $s "_fv_" $types.Symbol(e.T.Canon(ty)) }
+
+# an adapter's key between two function types
+fn (e mut Emitter&) adaptKey(f types.TypeId, g types.TypeId) String { return types.Symbol($e.T.Canon(f) "|" $e.T.Canon(g)) }
 
 # whether a call through a function value of type f and one of type g differ in what is returned (R6: a function that
 # cannot fail as a value that can, or another error list)
@@ -2120,7 +2406,7 @@ fn (e mut Emitter&) abiDiffers(f types.TypeId, g types.TypeId) Bool {
 # scope (it may be kept anywhere), called through an adapter that re-encodes what it returns
 fn (fe mut fnEm&) adapt(v String&, f types.TypeId, g types.TypeId) String {
     e := fe.E
-    key := $f "_" $g
+    key := e.adaptKey(f, g)
     if not e.adaptAt.Has(key) {
         e.adaptAt.Put($key, true)
         e.adaptFrom.Push(f)
@@ -2139,8 +2425,8 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
     t := e.T
     vp := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), g)
     ip := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), f)
-    key := $f "_" $g
-    hdr := e.header(mir.FnKey.Init(0), g, "olang_fvadapt_" $key, vp, true)
+    key := e.adaptKey(f, g)
+    hdr := e.header(mir.FnKey.Init(0), g, "olang_fvadapt_" $key, vp, true, "linkonce_odr")
     fe mut fnEm&e = fnEm(e, mir.Fn(mir.FnKey.Init(0), g, 0, source.Span(0, 0)), mir.FnKey.Init(0))
     code := fe.load("ptr", "%env")
     inner := fe.load("ptr", fe.let("getelementptr { ptr, ptr }, ptr %env, i32 0, i32 1"))
@@ -2187,10 +2473,7 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
             fe.w("ret " $vt " " $fe.let("insertvalue " $vt " " $a ", " $e.ty(t.Result(g)) " " $val ", 1"))
         }
     }
-    e.body.Push(hdr)
-    e.body.Push("entry:\n")
-    e.body.Push(fe.code.ToString())
-    e.body.Push("}\n\n")
+    e.item("olang_fvadapt_" $key, HomeShared, $hdr "entry:\n" $fe.code.ToString() "}\n\n")
 }
 
 # a destructor as the runtime calls it, fn(ptr instance, ptr scope): the scope being closed passed for every scope
@@ -2199,7 +2482,7 @@ fn (e mut Emitter&) dtorThunk(k mir.FnKey) {
     s := e.sym(k)
     ty := e.codeType(k)
     b := StringBuilder()
-    b.Push("define internal void @" $s "_rt(ptr %inst, ptr %scope) #0 {\nentry:\n  call " $t.RetLlvm(ty) " @" $s "(")
+    b.Push("define linkonce_odr void @" $s "_rt(ptr %inst, ptr %scope) #0 {\nentry:\n  call " $t.RetLlvm(ty) " @" $s "(")
     n := e.passedOf(k, ty)
     for i in range n {
         if i > 0 { b.Push(", ") }
@@ -2207,7 +2490,7 @@ fn (e mut Emitter&) dtorThunk(k mir.FnKey) {
     }
     if n > 0 { b.Push(", ") }
     b.Push("ptr %inst)\n  ret void\n}\n\n")
-    e.body.Push(b.ToString())
+    e.item($s "_rt", HomeShared, b.ToString())
 }
 
 # ---- terminators ----
@@ -2451,7 +2734,7 @@ fn (fe mut fnEm&) externArg(v String&, ty types.TypeId) String {
 fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
     t := e.T
     name := $e.text(e.P.FnDecl(f).Name)
-    if e.seen.Has(name) { return name }
+    if e.has(name) { return name }
     b := StringBuilder()
     b.Push($e.externRet(ty) " @" $name "(")
     ps := t.Items(t.Params(ty))
@@ -2482,7 +2765,7 @@ fn (e mut Emitter&) externRet(ty types.TypeId) String {
 
 # a runtime function, declared as std/runtime/runtime.ll defines it
 fn (e mut Emitter&) runtime(name String&) {
-    if e.seen.Has(name) { return }
+    if e.has(name) { return }
     d := match name {
         case "__olang_check_failed" => "void @__olang_check_failed(ptr)"
         case "__olang_check_failed_text" => "void @__olang_check_failed_text(ptr, { i64, ptr })"
@@ -2533,7 +2816,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     errs := t.Items(t.Errors(ty))
     if errs.Len() == 0 {
         b.Push("  call void @" $e.sym(k) "()\n  ret i32 0\n}\n\n")
-        e.body.Push(b.ToString())
+        e.item("main", e.P.L.Root, b.ToString())
         return
     }
     b.Push("  %c = call i32 @" $e.sym(k) "()\n  %bad = icmp ne i32 %c, 0\n  br i1 %bad, label %err, label %ok\nok:\n  ret i32 0\n")
@@ -2558,7 +2841,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     }
     b.Push("  call i32 @fputs(ptr " $msg ", ptr %s)\n")
     b.Push("  call i32 @fputs(ptr " $e.cstr("(build with -debug to see where it came from)\n") ", ptr %s)\n  ret i32 1\n}\n\n")
-    e.body.Push(b.ToString())
+    e.item("main", e.P.L.Root, b.ToString())
 }
 
 # an error type's name as a program writes it outside its module: "io.IoError" (its module's base name and its name)
@@ -2622,7 +2905,7 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     b.Push("  %np = load i32, ptr %pass\n  %nf = load i32, ptr %fail\n")
     b.Push("  call i32 (ptr, ...) @printf(ptr " $e.cstr("%d passed, %d failed\n") ", i32 %np, i32 %nf)\n")
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
-    e.body.Push(b.ToString())
+    e.item("main", e.P.L.Root, b.ToString())
 }
 
 # a test's name, as its declaration writes it (between the quotes)
@@ -2876,7 +3159,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
         }
     }
     b.Push("  ret ptr null\n}\n\n")
-    e.body.Push(b.ToString())
+    e.item(name, HomeLocal, b.ToString())
     return name
 }
 
