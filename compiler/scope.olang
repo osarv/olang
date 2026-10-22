@@ -5564,6 +5564,7 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # where its own obligations say (O18c): "adj[a].Push(v)" is "inner := adj[a]; inner.Push(v)"
     vals := Array<Val>(n)
     landed := Array<Bool>(n)
+    firstArg := Array<I64>(vars.Len(), -1)   # by scope variable: the argument that bound it first
     for i in range n {
         vals[i] = plain()
         a := c.Args[i]
@@ -5679,9 +5680,12 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
         k := owner[i]
         if beta[k] == Term.None {
             beta[k] = v.T
+            firstArg[k] = i
         } else if beta[k] != v.T {
-            # said at the call (at a constructor's argument, C2d)
-            s.disagree(a.Span() if s.P.T.Role(fty) == types.RoleCtor else s.nameSpan(sp), beta[k], v.T)
+            # said at the call (at a constructor's argument, C2d), with where to make the one made in a block that closes
+            # first (B11)
+            rec := s.disagree(a.Span() if s.P.T.Role(fty) == types.RoleCtor else s.nameSpan(sp), beta[k], v.T)
+            if rec >= 0 and firstArg[k] >= 0 { s.noteDisagree(rec, c.Args[firstArg[k]], beta[k], a, v.T) }
         }
     }
     # what a task is handed lasts until its join (P2): an argument's storage, and what it holds
@@ -6361,6 +6365,20 @@ fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
     }
 }
 
+# the name a plain call of a declared function writes, "" for another call
+fn (s mut Scoper&) calleeName(c typed.Call&) String {
+    match c.Target {
+        case typed.Callee.Body(id) {
+            match s.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(inst) { return $s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name) }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return ""
+}
+
 # whether a call is an operator's - an index's At or SetAt, which has no "f(...)" written
 fn (s mut Scoper&) indexCall(c typed.Call&) Bool {
     match c.Target {
@@ -6479,6 +6497,16 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr&, w I64, wname String
         # a result whose references come from an argument is fixed where that argument is made
         if s.noteThroughResult(rec, ic, w, wname, depth) { return }
         if s.isMethodCall(ic) or s.indexCall(ic) { return }
+        # a result the callee builds: made where its scope argument says (E25)
+        fname := s.calleeName(ic)
+        unscoped := match ic.Scoped {
+            case typed.Mark.None => true
+            case _ => false
+        }
+        if fname.Len() > 0 and unscoped and s.resultVarOf(s.calleeType(ic)) >= 0 {
+            s.note(rec, s.B.File, at, msgs.NoteMakeWhere(name, wname, fname, wname))
+            return
+        }
     }
     ty := loc.Ty
     k := s.P.T.KindOf(ty)
@@ -6489,6 +6517,26 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr&, w I64, wname String
     writable := (s.P.T.PermOf(ty) & types.Writable) != 0 if s.isRef(ty) else true
     full := $("mut " if writable and not s.isFunc(shown) else "") $s.Spell(shown)
     s.note(rec, s.B.File, at, msgs.NoteDeclareWhere(name, wname, name, full, wname))
+}
+
+# B11/O25: a collection made in this block put in place of one kept longer ("still := List<I64>(); ... w.alive = still"):
+# where to make it, and - a type with a Clear - refilling the one kept instead, since every one made where it is kept
+# stays until that scope closes (stage 0's noteRefillKept)
+fn (s mut Scoper&) noteRefill(rec I64, p typed.Place&, x typed.Expr&) {
+    w := s.shownLocal(flRoot(p), 0)
+    if w < 0 { return }
+    wname := s.P.L.Names.Text(s.B.Locals[w].Name)
+    s.noteMadeNamed(rec, x, w, wname, 0)
+    made := s.madeLocal(x, 0)
+    if made < 0 or made == w or s.B.Locals[made].Name == source.NameId(0) { return }
+    t := x.Type()
+    dt := s.P.T.Referent(t) if s.isRef(t) else t
+    if s.P.MethodOf(dt, s.P.L.Names.Intern("Clear")) < 0 { return }
+    text := try s.texts.Get(s.B.File) catch default ""
+    sp := p.Span()
+    if I64(sp.End) > text.Len() or sp.Start >= sp.End { return }
+    loc := s.B.Locals[made]
+    s.note(rec, s.B.File, s.wordAt(loc.Sp, s.P.L.Names.Text(loc.Name)), msgs.NoteRefillKept(text[I64(sp.Start):I64(sp.End)], wname))
 }
 
 # whether body b is (inside) an instance of a generic function or a generic type's method
@@ -6606,13 +6654,43 @@ fn (s mut Scoper&) paramBinding(c typed.Call&, p I64, beta Array<Term>&) Term {
 }
 
 # two arguments determining one scope variable in different scopes (O25e)
-fn (s mut Scoper&) disagree(at source.Span, t Term, u Term) {
+fn (s mut Scoper&) disagree(at source.Span, t Term, u Term) I64 {
     if s.judgeOut(t, u) == Obliged and s.judgeOut(u, t) == Obliged {
         s.oblige(t, u, true)
+        return -1
+    }
+    if not s.report { return -1 }
+    return s.err(at, msgs.ScopeArgsDisagree())
+}
+
+# the reference parameter whose scope variable a term is, -1 for none
+fn (s mut Scoper&) paramOfTerm(t Term) I64 {
+    match t {
+        case Term.Var(k) {
+            if k < s.B.Vars.Len() {
+                match s.B.Vars[k] {
+                    case typed.ScopeVar.Param(l) { return I64(l) if s.B.Locals[I64(l)].Name != source.NameId(0) else -1 }
+                    case _ { }
+                }
+            }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# B11/O25e: of two arguments in different scopes, the one in a block that closes first is to be made where the other's
+# local lives
+fn (s mut Scoper&) noteDisagree(rec I64, a typed.Expr&, at Term, b typed.Expr&, bt Term) {
+    short, long := b, a
+    if s.isBlock(at) and not s.isBlock(bt) {
+        short, long = a, b
+    } else if not s.isBlock(bt) {
         return
     }
-    if not s.report { return }
-    s.err(at, msgs.ScopeArgsDisagree())
+    w := s.shownLocal(flRootExpr(s.unAway(long)), 0)
+    if w < 0 { return }
+    s.noteMadeNamed(rec, short, w, s.P.L.Names.Text(s.B.Locals[w].Name), 0)
 }
 
 # ---- the order and judging a fit ----
@@ -6836,10 +6914,16 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         # a reference stored where something can be stored through it lives exactly where its slot's references do
         # (O25) - a value local of this function's own, named, where it is what closes first
         name := s.valueLocalName(x) if not s.fitNarrow else ""
-        s.err(s.fitSp if s.fitAt else s.opTok(x), msgs.ReferenceNarrowedLocal(name) if name != "" else msgs.ReferenceNarrowed())
+        rec := s.err(s.fitSp if s.fitAt else s.opTok(x), msgs.ReferenceNarrowedLocal(name) if name != "" else msgs.ReferenceNarrowed())
+        if name != "" and s.targets.Len() > 0 { s.noteRefill(rec, s.targets[s.targets.Len() - 1], x) }
         return
     }
     rec := s.fitErrorAt(s.fitSp if s.fitAt else s.opTok(x), kind, exact)
+    # T17c: the payload's storage is to be made where the value is kept - a parameter's (B11)
+    if rec >= 0 and kind == FitPayload {
+        w := s.paramOfTerm(s.fitSlot)
+        if w >= 0 { s.noteMadeNamed(rec, x, w, s.P.L.Names.Text(s.B.Locals[w].Name), 0) }
+    }
     # a slice of a temporary borrows it in the block it is written in, which a reader would not guess (E16a)
     match s.unAway(x) {
         case typed.Expr.Slice(sp, _, sl) {

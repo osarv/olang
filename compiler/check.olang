@@ -3720,6 +3720,8 @@ fn (c mut Checker&) textLit(sp source.Span) typed.Expr&c {
 fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
     have := typeOf(x)
     if want == types.UnknownT or have == types.UnknownT or want == types.VoidT { return x }
+    # a reference to a type not known was said where the type is written (B11)
+    if c.deref(want) == types.UnknownT or c.deref(have) == types.UnknownT { return x }
     # T22: one type but for where a function type's references live - fitting would establish nothing the function
     # requires, and pass other hidden scope arguments than it takes
     if have != want and c.P.T.Same(have, want) and not c.P.T.ScopesFit(have, want) {
@@ -4296,8 +4298,8 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     }
     if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
     if ref.Kind == names.What.None {
-        # B11: said once in a body - each misspelling one error
-        if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) {
+        # B11: said once in a body - each misspelling one error - and not at all for a type said unknown already
+        if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) and not c.unknownTypes.Has(pair.Pair(c.fr().Mi, I64(n))) {
             c.err(sp, msgs.UnknownName(c.tok(n)))
             c.unknownSaid.Put(pair.Pair(c.fr().Body, I64(n)), true)
         }
@@ -6412,6 +6414,7 @@ fn (c mut Checker&) unknownType(sp source.Span, n source.NameId) {
     c.unknownTypes.Put(key, true)
     name := c.text(n)
     best := c.suggest(name, false)
+    if best.Len() == 0 { best = c.importedTypeNamed(name) }
     if best.Len() == 0 {
         c.err(sp, msgs.UnknownType(c.tok(n)))
     } else if c.P.T.Prim(best) != types.UnknownT {
@@ -6419,6 +6422,24 @@ fn (c mut Checker&) unknownType(sp source.Span, n source.NameId) {
     } else {
         c.err(sp, msgs.UnknownTypeMeant(c.tok(n), best))
     }
+}
+
+# B11: a public type of that very name in a module this one imports, written as reached through its alias ("json.Json")
+fn (c mut Checker&) importedTypeNamed(name String&) String {
+    if not load.Public(name) { return "" }
+    for imp in c.P.L.Mods[c.fr().Mi].Imports {
+        if imp.Target < 0 { continue }
+        for e in c.P.R.Tables[imp.Target].Entries {
+            if e.Kind != names.What.Type or c.text(e.Name) != name { continue }
+            alias := imp.Alias
+            if alias.Len() == 0 {
+                k := try imp.Spec.FindLast("/") catch default -1
+                alias = imp.Spec[k + 1:]
+            }
+            return $alias "." $name
+        }
+    }
+    return ""
 }
 
 # the name a misspelt one most likely meant (T4, B11): a number's name shortened to its letter and width (Int32 ->
