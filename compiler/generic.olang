@@ -102,6 +102,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     defaultTraits List<I64>            # beside each, its trait's DeclId
     instances List<instance>
     instanceOf Map<pair.Pair<I64, types.ListId>, I64>
+    argReps Map<types.ListId, types.ListId>  # arguments told apart only by function types' parameter names: the first
     said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
     expanding I64 = 0                  # how many instances' bodies are being made inside one another (G17)
     folding Map<I64, Bool>             # the globals being folded (a cycle folds to nothing)
@@ -467,7 +468,14 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
         }
         f = p.T.Func(p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
     }
-    return f
+    return p.T.WithNames(f, p.SigNames(s))
+}
+
+# a signature's parameters' names, interned for a function type to render with (E11a)
+fn (p mut Program&) SigNames(s ast.Sig&) I64 {
+    ns := Array<I64>(s.Params.Len())
+    for i in range s.Params.Len() { ns[i] = I64(s.Params[i].Name) }
+    return p.T.ParamNames(ns)
 }
 
 fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName source.NameId) types.TypeId {
@@ -1093,7 +1101,7 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
         case types.Kind.Func {
             return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
-                            p.substList(p.T.Errors(t), owner, args), p.T.ScopesOf(t))
+                            p.substList(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t))
         }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.Record { return p.T.Record(p.substList(p.T.Parts(t), owner, args)) }
@@ -1704,12 +1712,24 @@ fn (p mut Program&) MethodSig(f I64, t types.TypeId) types.TypeId {
 fn (p mut Program&) instanceArgs(written types.ListId) types.ListId {
     xs := p.T.Items(written)
     out := Array<types.TypeId>(xs.Len())
+    key := Array<types.TypeId>(xs.Len())
     changed := false
+    named := false
     for i in range xs.Len() {
         out[i] = xs[i] if p.T.KindOf(xs[i]) == types.Kind.Func else p.T.Plain(xs[i])
+        key[i] = p.T.Unnamed(out[i])
         if out[i] != xs[i] { changed = true }
+        if key[i] != out[i] { named = true }
     }
-    return p.T.List(out) if changed else written
+    args := p.T.List(out) if changed else written
+    if not named { return args }
+    # a function type argument's parameter names tell no instance apart: the first instance asked for keeps its own,
+    # which "$" renders (E11a, as stage 0)
+    k := p.T.List(key)
+    rep := try p.argReps.Get(k) catch default types.ListId(-1)
+    if rep >= types.ListId(0) { return rep }
+    p.argReps.Put(k, args)
+    return args
 }
 
 fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {

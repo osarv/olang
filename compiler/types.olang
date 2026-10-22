@@ -61,7 +61,7 @@ type Kind enum {
     Array       # A its element; B its length - a Const, or a constant pattern - or 0 for a length known at run time (T7)
     Ref         # A what it refers to, B its permission (Perm): T24, T25b, T25e
     Func        # A its parameters (a ListId), B its result (Void for none, a Tuple for several, D8c), C its errors, D its
-                # scopes (a ScopesId)
+                # scopes (a ScopesId), E its parameters' names where it is written (rendering only: E11a, Unnamed)
     Tuple       # several results (D8c): A its elements
     Record      # an anonymous struct - an enum case's payload: A its fields
     AnonEnum    # an anonymous enum (T27): A its shape (cases and payloads)
@@ -77,12 +77,13 @@ Writable I64 = 1
 Owning I64 = 2
 
 # a type's key: its kind and operands - what it is, and so what it is interned by
-type data struct(K Kind, A I64, B I64, C I64, D I64 = 0) {
+type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0) {
     K
     A
     B
     C
     D
+    E
 }
 
 # a function type's scopes, interned: 0 the scopes of a function type no marker of which names anything - each parameter
@@ -172,6 +173,8 @@ type Table struct(Names mut source.Names&) {
     plains List<TypeId>                 # each type with every function type's scopes left out (Plain)
     scopes List<Array<I64>&>            # a function type's scopes, by ScopesId: role, how many parameters, their entries,
     scopeKeys Map<Array<I64>&, ScopesId> # then the results'
+    nameLists List<Array<I64>&>         # a written function type's parameter names (NameIds), by index; 0 none
+    nameKeys Map<Array<I64>&, I64>
     refHolds Map<TypeId, I64>           # HoldsRefs, once asked: 1 being asked, 2 no, 3 yes
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
 }
@@ -182,6 +185,7 @@ fn NewTable(names mut source.Names&) Table {
     t := Table(names)
     t.lists.Push(Array<TypeId>(0))
     t.scopes.Push(Array<I64>(0))
+    t.nameLists.Push(Array<I64>(0))
     for k in Kind[Kind.Unknown, Kind.Void, Kind.Bool, Kind.I8, Kind.I16, Kind.I32, Kind.I64, Kind.U8, Kind.U16, Kind.U32
                   Kind.U64, Kind.F16, Kind.BF16, Kind.F32, Kind.F64, Kind.Null, Kind.DefaultErr, Kind.Noreturn] {
         t.intern(data(k, 0, 0, 0), 1)
@@ -287,14 +291,63 @@ fn (t mut Table&) Ref(of TypeId, perm I64) TypeId {
 
 # a function type: its parameters, its result (Void for none, a Tuple for several), its errors, in order (T22), and its
 # scopes - what its markers say, which T22's identity leaves out (Plain)
-fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0)) TypeId {
+fn (t mut Table&) Func(params ListId, result TypeId, errors ListId, scopes ScopesId = ScopesId(0), names I64 = 0) TypeId {
     d := t.deepest(params)
     if t.depthOf(result) > d { d = t.depthOf(result) }
-    id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes)), d + 1)
+    id := t.intern(data(Kind.Func, I64(params), I64(result), I64(errors), I64(scopes), names), d + 1)
     pp := t.PlainList(params)
     pr := t.Plain(result)
-    if scopes != ScopesId(0) or pp != params or pr != result { t.plains[I64(id)] = t.Func(pp, pr, errors) }
+    if scopes != ScopesId(0) or names != 0 or pp != params or pr != result { t.plains[I64(id)] = t.Func(pp, pr, errors) }
     return id
+}
+
+# a written function type's parameter names, interned (0 for none: a type no source wrote, or one with no parameters)
+fn (t mut Table&) ParamNames(ns Array<I64>&) I64 {
+    if ns.Len() == 0 { return 0 }
+    key mut Array<I64>&t = Array<I64>(ns.Len())
+    for i in range ns.Len() { key[i] = ns[i] }
+    id := try t.nameKeys.Get(key) catch default -1
+    if id >= 0 { return id }
+    id = t.nameLists.Len()
+    t.nameLists.Push(key)
+    t.nameKeys.Put(key, id)
+    return id
+}
+
+# the names entry of a function type (0 for none)
+fn (t Table&) NamesIdOf(f TypeId) I64 { return t.at(f).E if t.KindOf(f) == Kind.Func else 0 }
+
+# a function type's parameters' names as written (NameIds), none where no source wrote it
+fn (t Table&) NamesOf(f TypeId) Array<I64>&t { return t.nameLists[t.at(f).E] if t.KindOf(f) == Kind.Func else t.nameLists[0] }
+
+# the same function type carrying names - the names a declaration, a lambda or a written type gives its parameters
+fn (t mut Table&) WithNames(f TypeId, names I64) TypeId {
+    if t.KindOf(f) != Kind.Func { return f }
+    return t.Func(t.Params(f), t.Result(f), t.Errors(f), t.ScopesOf(f), names)
+}
+
+# a type with its function types' parameter names left out, scopes kept: what tells instances apart (G16a), where the
+# names only render (E11a)
+fn (t mut Table&) Unnamed(id TypeId) TypeId {
+    k := t.KindOf(id)
+    if k == Kind.Func {
+        return t.Func(t.unnamedList(t.Params(id)), t.Unnamed(t.Result(id)), t.Errors(id), t.ScopesOf(id))
+    }
+    if k == Kind.Ref { return t.Ref(t.Unnamed(t.Referent(id)), t.PermOf(id)) }
+    if k == Kind.Array { return t.Array(t.Unnamed(t.Elem(id)), t.Length(id)) }
+    if k == Kind.Tuple { return t.Tuple(t.unnamedList(t.Parts(id))) }
+    return id
+}
+
+fn (t mut Table&) unnamedList(l ListId) ListId {
+    xs := t.Items(l)
+    out := Array<TypeId>(xs.Len())
+    same := true
+    for i in range xs.Len() {
+        out[i] = t.Unnamed(xs[i])
+        same = same and out[i] == xs[i]
+    }
+    return l if same else t.List(out)
 }
 
 # several results (D8c): each keeps its scopes, as a result does
