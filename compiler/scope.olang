@@ -5449,12 +5449,18 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             s.build(pr.Site, s.here())
             landed[i] = true
             if v.K == ValKind.Fresh { v = existing(v.T) }
-            if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) and s.report {
-                # x[i]'s copy, said at its "[" (E31b)
-                if s.atCall(pr.X) {
-                    s.err(s.elemAt(pr.X), msgs.WriteThroughAtBuilds())
-                } else {
-                    s.err(s.argAt(a), msgs.BorrowSplitScopes())
+            if not ctorCallee and s.calleeKeepsArg(c, i) and not s.handleLent(c, i, a) {
+                if s.atCall(pr.X) and not s.calleeStoresArg(c, i) {
+                    # x[i]'s copy kept, never stored into: its variable is bound where the copy's storage is, which the
+                    # callee's obligations then judge (O10c), as stage 0 binds it
+                    v = existing(s.here())
+                } else if s.report {
+                    # x[i]'s copy, said at its "[" (E31b)
+                    if s.atCall(pr.X) {
+                        s.err(s.elemAt(pr.X), msgs.WriteThroughAtBuilds())
+                    } else {
+                        s.err(s.argAt(a), msgs.BorrowSplitScopes())
+                    }
                 }
             }
         } else if pr != null and s.oldValue(pr.X) {
