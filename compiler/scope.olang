@@ -70,6 +70,7 @@ type rel struct(Hi Term, Lo Term, Exact Bool, At source.Span, Why I64) {
 
 WhyHolds I64 = 1
 WhyField I64 = 2
+WhyResult I64 = 3 # what an instance a function returns holds (C2d through its result, said where the result lands)
 
 # what a judgment of "outlives" comes to (2.2): it holds; it is an obligation the body records; it fails because a
 # block is asked to outlive a scope variable (O10d) or another block it is nested in (O10); it cannot be judged here
@@ -269,6 +270,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     flGrew Bool = false
     flCaps Bool = true                     # whether carried follows what a function value captured
     kwTransient Bool = false               # the lambda kwExpr walks next never leaves where it is made (D16c)
+    landSite I64 = -1                      # the call an assignment's value is, and its "=" (C2d through a result)
+    landSp source.Span = source.Span(0, 0)
 }
 
 # every body judged, callees before callers, a component of the call graph until its obligations stop growing
@@ -3958,7 +3961,12 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Place&, x typed.Expr&) {
     }
     slot, exact, kind := s.slotOf(p)
     if s.isRef(t) { s.splitBorrow(x) }
+    # a call assigned: what its result holds is said at the "=" (C2d through a function's result)
+    savedLand, savedLandSp := s.landSite, s.landSp
+    ac := s.callOf(x)
+    if ac != null { s.landSite, s.landSp = I64(ac.Site), s.eqAfter(p.Span()) }
     v := s.val(x, slot if slot.Runs() else s.here())
+    s.landSite, s.landSp = savedLand, savedLandSp
     if wholeLocal(p) >= 0 { s.noteLate(wholeLocal(p), x) }
     if v.K == ValKind.Existing and s.bindingUnknown(p, slot) {
         # existing storage stored into a "&p" field of an instance whose construction binding is not known through this
@@ -5897,7 +5905,12 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             # what a constructor's instance holds, through a constructor building one of its fields: its own C2d, said
             # where it is called as such
             saved := s.why
-            if r.Why != 0 and s.instanceRel(hi, lo) { s.why = r.Why }
+            if r.Why != 0 and s.instanceRel(hi, lo) {
+                s.why = r.Why
+            } else if r.Why != 0 and s.resultVar >= 0 and lo == Term.Var(s.resultVar) and not s.isCtor() {
+                # an instance this function returns, holding what its argument names: the caller's C2d
+                s.why = WhyResult
+            }
             s.oblige(hi, lo, r.Exact)
             s.why = saved
             continue
@@ -5915,12 +5928,13 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         }
         if r.Why != 0 {
             # a constructor's instance outliving what it holds (C2d): said at the argument - once its arguments were
-            # found to disagree, said there instead
+            # found to disagree, said there instead; one a function returns, where its result is put
             if not agreed { continue }
             ai := s.argOfVar(c, r.Hi)
             if ai < 0 { ai = s.argOfVar(c, r.Lo) }
             at := s.argAt(c.Args[ai]) if ai >= 0 else s.nameSpan(sp)
-            s.err(at, msgs.InstanceOutlivesArg() if r.Why == WhyHolds else msgs.InstanceOutlivesReferent())
+            if r.Why == WhyResult and s.landSite == I64(c.Site) { at = s.landSp }
+            s.err(at, msgs.InstanceOutlivesReferent() if r.Why == WhyField else msgs.InstanceOutlivesArg())
             continue
         }
         m := msgs.ReferenceNarrowed() if r.Exact else msgs.ScopeObligationUnmet()
@@ -5973,6 +5987,13 @@ fn (s mut Scoper&) argsAgree(c typed.Call&, callee I64, rv I64, owner Array<I64>
 
 # one more value an instance holds, living at t (exactly there where ex), against the binding so far, bt (bx): the
 # binding after it, and whether it agrees (argsAgree)
+fn (s mut Scoper&) isCtor() Bool {
+    return match s.B.Of {
+        case typed.BodyOf.Ctor(_, _) => true
+        case _ => false
+    }
+}
+
 fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) (Term, Bool, Bool) {
     if bt == Term.None { return t, ex, true }
     if t == bt { return bt, bx, true }
