@@ -1045,3 +1045,35 @@ neither.
     Stage 0 accepted the old `v := verifier(f, t)` only by moving `v` into the result scope through a generic body's
     obligation the port computes per instantiation; built in the block, a spelling cached through `v.T` would have been
     built there and kept in the table.
+
+### 9.7 Decided while building M6 (round 5, the driver lowering by the plans)
+
+32. **What O26a may move, as stage 0 reads it**: a local whose initializer makes new storage - a conditional or a value
+    match each of whose values does, and a copy of constant data into an array value (`note := ""`), as well as the
+    calls, constructors, literals and zero values before. Stage 0 states it negatively (not a copy of existing storage,
+    `copiesExistingRefs`); the port keeps its positive list and grows it where they disagree.
+33. **An array value given a new length is built where the place's storage is** (T11b, O18a): lowering hands the place
+    the temporary's storage, so a temporary built in the block the assignment stands in (`path = $f(...)` inside an
+    `if`) was freed under the local that kept it. Only the place's storage term is right; for a local, its block or
+    where O26a moved it.
+34. **O13c through call results.** A body's returns, where each gives an instance (a constructor call, or a local whose
+    record is known), leave its summary the bindings that instance had, in the body's terms - only those the caller can
+    resolve exactly (a scope variable, the program's, a derived scope of a parameter); returns that disagree leave
+    `Untraced`. A call of such a body gives its result that record through its own bindings, so `it := m.Iter()` - a
+    for-in's hidden iterator too - knows its `&of` fields are the map's. Exact only: an underestimate would be read on
+    both sides of a relation.
+35. **A `&q` field's referent is not the lent region** (O17): the region a split value is lent as is its own storage and
+    what its bare references reach; what a `&q` field refers to lives where q's argument did, a derived scope the call
+    resolves. So handing out a value read through one (`return it.given.entry`) is no hand-out of the region. Reads
+    through one stay region reads for `reg` (what is read out of the region and stored back is not new).
+36. **Instance records** (O23a). The bindings of a constructor call form a record: one term per parameter, each with
+    the argument's own record where it was an instance whose record is known; a constructor's summary records its
+    fields' (in its terms: its parameters', its instance scope - where the holder's references are - the program's).
+    `d.left.inner` reads the record of `d`'s `&l` argument, `o.mid.leaf` the one Outer's constructor gave `mid`. A
+    record says where things were bound at construction, so it is used only for a field no body in the program assigns
+    after construction (nor the whole struct through a reference): a store into a `&q` field is judged against that
+    field's own binding, which says nothing of the bindings of the instance put there.
+37. **Lowering's copies of array values are made where their storage is** (T7b): a local's copy of existing storage or
+    of a literal in its block or home, a store's in the place's, a returned one in the result scope - and a returned
+    temporary, or a local O26a moved there, is not copied again. Under the stand-in placement they were all made in the
+    program's scope: a loop copying a literal held all of them to the end.

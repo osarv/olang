@@ -604,20 +604,21 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   namesdiff, layoutdiff, diaggold) and stage 1 rebuilding itself. Merged: M1 scanner, M2 diagnostics, M3 parser, M4
   loading and names, M5a types and the typed contract, M7's MIR contract, M10's driver (`compiler/build.olang`,
   `target.olang`, `olang.olang` - the word command line over the whole pipeline, the runtime filled in by
-  `runtime.olang`; `make drvdiff`; under an interim placement - every site and declared aggregate local in the program's
-  scope, the scope pass's errors not reported - the port builds itself at `-debug`, stage 1 == stage 2 == stage 3,
-  HISTORY.md "Port M10: the pipeline behind the driver"); the compiler under test is `OLANG ?= build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
+  `runtime.olang`; `make drvdiff`; lowering by the scope pass's plans, its errors reported, the port builds itself at
+  `-debug` (stage 1 == stage 2, 1.5 GB) and passes compiler/'s and std's tests, HISTORY.md "Port M10: the pipeline
+  behind the driver" and "Port M6 round 5"); the compiler under test is `OLANG ?= build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
   elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c"); M7, `compiler/lower.olang` (the typed core
-  lowered to MIR with the stand-in placement, helpers, adapters and initializations made as MIR functions; `make
+  lowered to MIR with the scope pass's placement - the stand-in, everything in the program's scope, where a body has no
+  plan - helpers, adapters and initializations made as MIR functions; `make
   lowerdump` verifies every function of the corpus, std, compiler and the checks' run cases - all clean but what check
   leaves wrong; nested tries fall to the try around them, a T29d literal's error edge is never taken, no releases or
   holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
   over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
   scope reclaimed as it closes, immutable globals baked into emitted data (K2), constants computed by calls (G21), the
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
-  plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 4: 265 of 280 refused
-  cases give stage 0's first error, 1 still gets none (kept on purpose), no error on compiler/*.olang stage 0 does not
-  give, an array value's result has a result scope (T7b); HISTORY.md "Port M6"). M19g is `compiler/views.olang`, a pass of its own after check
+  plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 5: 265 of 280 refused
+  cases give stage 0's first error, 1 still gets none (kept on purpose), no error on compiler/*.olang or std stage 0
+  does not give, call results and constructors' fields carry instance records (O13c, O23a); HISTORY.md "Port M6"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits

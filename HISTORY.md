@@ -20859,3 +20859,46 @@ pinned message 260 -> 261; silent still 1 (+2 where the checker errs first); acc
 `&p` field bound inside Outer's constructor to the instance's scope (tests/shared.olang's O10d rows, 9 of the 40) - and
 of call results (O13c), locals assigned after their declaration, for-in hidden locals; 15 cases still differing in
 their first error.
+
+
+## Port M6 round 5, and M10: the port builds itself under the scope pass's placement (2026-10-22)
+
+Round 4 made compiler/*.olang clean under the scope pass, so the driver (`compiler/olang.olang`'s `placement`) now
+lowers by the pass's plans and reports its errors; the interim placement - every site and every declared aggregate
+local in the program's scope, the pass's errors dropped - is gone. That was the self-hosting step's test: with nothing
+kept to the end any more, every placement the pass gets wrong is a use-after-free in the compiler compiling itself.
+
+**What broke, in order.** (1) Stage 1 refused check.olang (C2d): `zs := Array<typed.Expr&>(1, ...) if c else
+Array<typed.Expr&>(0)`, a value local a returned value holds, which stage 0 moves into the result scope - the port's
+O26a took only calls, constructors, literals and zero values as "made here", not a conditional of them (stage 0 states
+it negatively: not a copy of existing storage). (2) Stage 2 then failed in the loader with garbage import paths: `path
+= $Normalize(...)` inside an `if`, `path` declared outside it. Lowering gives a value array assigned a new length the
+temporary's storage, and the pass had built the temporary in the `if`'s block - freed at its brace, the local still
+holding it. A temporary assigned to an array value is now built where the place's storage is (T11b, O18a). With those
+two, stage 1 built stage 2 and the two were byte for byte equal. (3) std's prelude tests for `List` and `Map` were
+refused (O17, O10c) on a walk of a `Map<I64, mut List<I64>&>` - and so was the prelude's own `Map.Str`, so any program
+rendering such a Map: the for-in's hidden iterator (`it := m.Iter()`) is a split value, and its `Next` hands out
+`it.given.entry`, which the pass counted as handing out the lent region. Two pieces: O13c - a call's result carries the
+bindings its callee's returned instance had (the hidden iterator now knows its `&of` fields are the map's), and a value
+read through a `&q` field is not into the region (it lives where q's argument did). (4) Lowering made every copy of an
+array value - a local initialized from a literal, a returned array - in the program's scope: two million copies of a
+literal in a loop held 130 MB, 1.7 MB under stage 0. Each copy is now made where its storage is, and a returned
+temporary or a local already in the result scope is not copied again.
+
+**Then the leftovers.** Instance records: the bindings of a constructor call are a record holding its arguments' own
+records, and a constructor's summary records its fields' - so `o.mid.leaf`, `d.left.inner` and `h.box.left.inner`
+(tests/shared.olang's per-instance tests) read where they were bound. A record is a fact about construction, so it is
+trusted only for a field no body assigns afterwards (a store into a `&q` field is judged against that field's binding,
+not the bindings of the instance it puts there). And a copy of constant data into an array value (`note := ""`) counts
+as made here for O26a (c2dheldreturned).
+
+**Measured.** Stage 1 (the port built under the plans, at -debug) builds stage 2 in 31-44 s with a 1.49 GB peak, where
+the interim's stage 1 took 41 s and 3.9 GB on the same tree; stage1 == stage2 byte for byte. Through stage 1 the tests
+of every compiler/ module (28 files) and of std (33 files) pass, 421 tests - std/os, which lost one test under the
+interim, included. `make scopediff`: refused cases giving stage 0's first error 265 of 280 (unchanged), accepted
+programs scope clean 296 of 305 -> 299 of 307 at the binding-records commit, distinct error rows on them 40 -> 34;
+tests/shared.olang's rows 32 -> 22.
+
+**Left**: locals assigned after their declaration carry no record; b6elemvalue; the 15 cases differing in their first
+error; the remaining accepted programs the pass refuses (tests/shared.olang 22 rows, bench/run's E31b, three O17 cases
+through lambdas) - which the port now refuses where stage 0 builds them.
