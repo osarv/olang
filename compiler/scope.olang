@@ -2764,11 +2764,13 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
     handle := s.isHandle(et)
     if spawned and handle and how == 1 { at = s.nameSpan(callSp) }
     if how == 0 { return }
-    if how == 1 and not spawned {
+    if not spawned {
         match c.Target {
             case typed.Callee.Body(id) {
+                # a handle - x[i]'s, or a try's element or default ("(try m.Get(k) catch default L()).Push(v)") - is a
+                # second name for its collection, lent as its reference to a callee using it only through it (O17b)
                 if handle and s.uses(I64(id), i, UseThru) { return }
-                if not handle and s.isStruct(et) and s.uses(I64(id), i, UseView) { return }
+                if how == 1 and not handle and s.isStruct(et) and s.uses(I64(id), i, UseView) { return }
             }
             case _ { }
         }
