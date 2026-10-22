@@ -272,6 +272,23 @@ fn (c mut Checker&) CheckProgram() {
     }
 }
 
+# B4: a program's root declares main - "fn main() { }" or "fn main() ? { }", no parameters, no result, never noreturn.
+# A missing one is said only where no syntax error may have hidden it
+fn (c mut Checker&) CheckMain() {
+    root := c.P.L.Root
+    file := c.P.L.Mods[root].File
+    f := c.P.FnNamed(root, c.P.L.Names.Intern("main"))
+    if f < 0 {
+        if c.syntaxMark <= 0 { c.P.L.Diags.Error(diag.Where.File(file), msgs.NoMain()) }
+        return
+    }
+    fd := c.P.FnDecl(f)
+    sig := c.P.Sig(f)
+    if fd.Recv != null or fd.S.Params.Len() > 0 or (fd.S.Results != null and fd.S.Results.Len() > 0) or fd.S.NoReturn or c.P.T.Result(sig) != types.VoidT {
+        c.P.L.Diags.Error(diag.Where.File(file), msgs.MainSignature())
+    }
+}
+
 # every collection a check of the program fills, empty again for another attempt (R1a)
 fn (c mut Checker&) reset() {
     c.Bodies = List<mut typed.Body&>()
@@ -501,19 +518,32 @@ fn (c mut Checker&) fnTypeParams(f I64) {
     if fd.TypeParams != null {
         for tp in fd.TypeParams {
             if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
+            # G19: a constraint naming no type at all
+            match tp.Ty {
+                case ast.TypeRef.Named(usp, upath, _) {
+                    if upath.Len() == 1 and c.P.R.Use(c.P.L.Mods[mi].File, usp.Start).Kind == names.What.None {
+                        c.unknownType(usp, upath[0])
+                        continue
+                    }
+                }
+                nomatch { }
+            }
             # G19: a variable written after a type that is no trait, used as a type - its "constraint" constrains nothing
             if tp.Ty != null and not c.traitRef(mi, tp.Ty) and c.typeUseIn(fd, tp.Name) {
                 c.err(tp.Ty.Span(), msgs.ConstraintNotTrait(c.src(tp.Ty.Span())))
             }
-            # T30: a variable constrained by a trait, used as a constant - a trait is no value's type
+            # G22: a variable constrained by a trait, used as a constant - a constant takes no constraint
             if tp.Ty != null and c.traitRef(mi, tp.Ty) and c.constUseIn(fd, tp.Name) {
-                c.err(tp.Ty.Span(), msgs.TraitNotAType(c.src(tp.Ty.Span())))
+                c.err(tp.Ty.Span(), msgs.ConstVarConstrained(c.text(tp.Name)))
             }
+            # G20: a constant variable's type
+            if tp.Ty != null and not c.traitRef(mi, tp.Ty) { c.constParamRules(c.resolve(tp.Ty), tp.Ty.Span()) }
         }
     }
     owner := generic.FnOwner(f)
     nv := c.P.VarCount(owner)
     if nv > 0 {
+        c.constVarRules(fd, mi, owner, nv)
         sig := c.P.Sig(f)
         seen := Array<Bool>(nv, false)
         for q in c.P.T.Items(c.P.T.Params(sig)) { c.varsIn(q, owner, seen, 0) }
@@ -540,6 +570,103 @@ fn (c mut Checker&) fnTypeParams(f I64) {
         }
     }
     c.pop()
+}
+
+# G22: each variable of a signature is a type everywhere it is written or a constant everywhere, and a constant of one
+# type - its own, written "<N I32>" where it is introduced, or the parameter's it fills first
+fn (c mut Checker&) constVarRules(fd ast.Func&, mi I64, owner I64, nv I64) {
+    for i in range nv {
+        row := c.P.VarAt(owner, i)
+        tys List<types.TypeId>
+        sps List<source.Span>
+        if fd.Recv != null { c.varUses(fd.Recv.Ty, row.Name, mi, types.UnknownT, tys, sps) }
+        for prm in fd.S.Params { c.varUses(prm.Ty, row.Name, mi, types.UnknownT, tys, sps) }
+        if fd.S.Results != null {
+            for r in fd.S.Results { c.varUses(r, row.Name, mi, types.UnknownT, tys, sps) }
+        }
+        first := row.Const
+        asType := false
+        asConst := first != types.UnknownT
+        for k in range tys.Len() {
+            if tys[k] == types.VoidT { asType = true } else { asConst = true }
+        }
+        if asType and asConst {
+            firstConst := row.Const != types.UnknownT or tys[0] != types.VoidT
+            for k in range tys.Len() {
+                if (tys[k] == types.VoidT) == firstConst {
+                    c.err(sps[k], msgs.ConstVarTypeAndConst(c.text(row.Name)))
+                    break
+                }
+            }
+            continue
+        }
+        for k in range tys.Len() {
+            if tys[k] == types.VoidT or tys[k] == types.UnknownT { continue }
+            if first == types.UnknownT {
+                first = tys[k]
+                continue
+            }
+            if not c.P.T.Same(first, tys[k]) {
+                c.err(sps[k], msgs.ConstVarTwoTypes(c.text(row.Name), c.ty(first), c.ty(tys[k])))
+                break
+            }
+        }
+    }
+}
+
+# where a written type names variable n bare as a type argument: the constant type of the parameter it fills, VoidT
+# where it fills a type parameter (or stands as a type itself), slot the type of the position t is in
+fn (c mut Checker&) varUses(t ast.TypeRef&, n source.NameId, mi I64, slot types.TypeId, tys mut List<types.TypeId>&, sps mut List<source.Span>&) {
+    if t == null { return }
+    match t {
+        case ast.TypeRef.Named(sp, path, args) {
+            if path.Len() == 1 and args.Len() == 0 and path[0] == n {
+                tys.Push(types.VoidT if slot == types.UnknownT else slot)
+                sps.Push(sp)
+                return
+            }
+            ref := c.P.R.Use(c.P.L.Mods[mi].File, sp.Start)
+            d := types.DeclId(-1)
+            if ref.Kind == names.What.Type and ref.Index >= 0 { d = c.P.DeclFor(ref.Module, ref.Index) }
+            array := ref.Kind == names.What.Builtin and c.text(path[path.Len() - 1]) == "Array"
+            for i in range args.Len() {
+                s := types.UnknownT
+                if array and i == 1 { s = c.i64() }
+                if d >= types.DeclId(0) and c.P.T.ParamIsConst(d, i) {
+                    s = c.P.VarAt(generic.DeclOwner(d), i).Const
+                    if s == types.UnknownT { s = types.UnknownT }
+                }
+                c.varUses(args[i], n, mi, s, tys, sps)
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _) { c.varUses(of, n, mi, types.UnknownT, tys, sps) }
+        case ast.TypeRef.Perm(_, of, _, _) { c.varUses(of, n, mi, types.UnknownT, tys, sps) }
+        case ast.TypeRef.Func(_, s) {
+            for prm in s.Params { c.varUses(prm.Ty, n, mi, types.UnknownT, tys, sps) }
+            if s.Results != null {
+                for r in s.Results { c.varUses(r, n, mi, types.UnknownT, tys, sps) }
+            }
+        }
+        nomatch { }
+    }
+}
+
+# G20: a constant parameter's type is an integer, a Bool, a declared type over one with no constructor (T29d), or an
+# enum without payloads - and declares no Eq, since a constant compares by its value alone
+fn (c mut Checker&) constParamRules(t types.TypeId, sp source.Span) {
+    if t == types.UnknownT { return }
+    ok := false
+    if c.isEnum(t) {
+        ok = not c.P.T.HasPayload(c.P.T.Cases(t))
+    } else if not c.isRef(t) {
+        u := c.under(t)
+        ok = (u == types.BoolT or c.P.T.IsInt(u)) and not (c.isNamed(t) and c.P.CtorSig(t) != types.UnknownT)
+    }
+    if not ok {
+        c.err(sp, msgs.ConstParamType(c.ty(t)))
+        return
+    }
+    if c.isNamed(t) and c.P.MethodOf(t, c.P.L.Names.Intern("Eq")) >= 0 { c.err(sp, msgs.ConstParamEq(c.ty(t))) }
 }
 
 # whether a signature writes a variable where a constant goes: inside a constant expression, or as an array's length
@@ -947,6 +1074,13 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
     if td.Params != null {
         for tp in td.Params {
             if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
+        }
+    }
+    # G20: a constant parameter's type
+    if td.Params != null {
+        for i in range td.Params.Len() {
+            tp := td.Params[i]
+            if tp.Ty != null and c.P.T.ParamIsConst(d, i) { c.constParamRules(c.P.Resolve(fr.Ctx, tp.Ty), tp.Ty.Span()) }
         }
     }
     if td.Params != null and td.Params.Len() > 0 {
@@ -2493,7 +2627,24 @@ fn (c mut Checker&) resolve(t ast.TypeRef&) types.TypeId {
     if t == null { return types.UnknownT }
     r := c.P.Resolve(c.fr().Ctx, t)
     if not c.writtenMet(t) { return types.UnknownT }   # what was said of it is the one error
+    # G22: a constant variable written where a type goes
+    match t {
+        case ast.TypeRef.Named(sp, path, args) {
+            if path.Len() == 1 and args.Len() == 0 and c.isConstVar(r) {
+                c.err(sp, msgs.ConstVarAsType(c.text(path[0])))
+                return types.UnknownT
+            }
+        }
+        nomatch { }
+    }
     return r
+}
+
+# whether a type is a constant variable, or what one is bound to (G22)
+fn (c mut Checker&) isConstVar(t types.TypeId) Bool {
+    k := c.P.T.KindOf(t)
+    if k == types.Kind.Const or k == types.Kind.ConstExpr { return true }
+    return k == types.Kind.Var and c.P.VarAt(c.P.T.A(t), c.P.T.B(t)).Const != types.UnknownT
 }
 
 # what a written type says about where its reference lives (O3, O25a)
@@ -3060,7 +3211,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
                 case typed.Expr.Make(msp, _, m) {
                     if m.Kind == typed.MakeKind.Array {
                         from := c.exprs.Len()
-                        for it in m.Items { c.exprs.Push(c.fit(unpromoted(it), c.P.T.Elem(wa), it.Span())) }
+                        for it in m.Items { c.exprs.Push(c.fit(c.unadapted(it), c.P.T.Elem(wa), it.Span())) }
                         at := c.P.T.Array(c.P.T.Elem(wa), c.P.T.Length(have))
                         y := typed.Expr.Make(msp, at, typed.Make(typed.MakeKind.Array, 0, gather(c.exprs, from), null, m.Site, m.Checked))
                         return c.fit(y, want, sp)
@@ -3380,6 +3531,16 @@ fn unpromoted(x typed.Expr&) typed.Expr&x {
     }
 }
 
+# an element as it was before it was fitted to a literal's element type: unpromoted, and a place borrowed read back,
+# so it can be borrowed again at the target's permission (T25b)
+fn (c mut Checker&) unadapted(x typed.Expr&c) typed.Expr&c {
+    match x {
+        case typed.Expr.Promote(_, _, pr) { return pr.X }
+        case typed.Expr.Borrow(sp, _, p) { return c.read(sp, p) }
+        nomatch { return x }
+    }
+}
+
 # an array literal, or a conditional or match all of whose values are (D15: ":=" from one declares Array<T>)
 fn (c mut Checker&) litArray(x ast.Expr&) Bool {
     match x {
@@ -3563,6 +3724,11 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     if ref.Kind == names.What.TypeVar {
         t := try c.fr().Ctx.Vars.Get(n) catch default types.UnknownT
         if c.P.T.KindOf(t) == types.Kind.Const { return c.lit(sp, c.P.T.ConstType(t), c.P.T.ConstValue(t)) }
+        # G23: a type variable is no value
+        if t != types.UnknownT and not c.isConstVar(t) {
+            c.err(sp, msgs.TypeVarAsValue(c.text(n)))
+            return c.unknown(sp)
+        }
     }
     c.gap(sp, "a name of this kind as a value")
     return c.unknown(sp)
@@ -6390,7 +6556,20 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                 }
             }
         }
-        if e != null and k < ps.Len() and typeOf(e) != types.UnknownT and typeOf(e) != types.NoreturnT { c.unify(ps[k], c.bindType(e), b, false, false) }
+        if e != null and k < ps.Len() and typeOf(e) != types.UnknownT and typeOf(e) != types.NoreturnT {
+            # G24: a constant variable one argument gives one value and another a different one
+            b2 := generic.Binding(owner, nv)
+            c.unify(ps[k], c.bindType(e), b2, false, false)
+            for j in range nv {
+                x := b.Vals[j]
+                y := b2.Vals[j]
+                if x != types.UnknownT and y != types.UnknownT and c.P.T.KindOf(x) == types.Kind.Const and c.P.T.KindOf(y) == types.Kind.Const and c.P.T.ConstValue(x) != c.P.T.ConstValue(y) {
+                    c.err(args[i].Span() if pre == null else nsp, msgs.ConstVarMismatch(c.text(c.P.VarAt(owner, j).Name), c.P.T.ConstValue(x), c.P.T.ConstValue(y)))
+                    return c.unknown(sp)
+                }
+            }
+            c.unify(ps[k], c.bindType(e), b, false, false)
+        }
         vals.Push(e)
         k++
     }
@@ -6434,6 +6613,21 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     }
     for i in range nv {
         if b.Vals[i] == types.UnknownT {
+            # G24: a constant variable a fixed array's length gives, reached by an array whose length is known only at
+            # run time
+            for kk in range vals.Len() {
+                pk := kk + k0w
+                if vals[kk] == null or pk >= ps.Len() { continue }
+                pa := c.arrayOf(c.deref(ps[pk]))
+                if pa == types.UnknownT { continue }
+                pl := c.P.T.Length(pa)
+                at := c.deref(typeOf(vals[kk]))
+                aa := c.arrayOf(at)
+                if pl != types.TypeId(0) and c.P.T.KindOf(pl) == types.Kind.Var and c.P.T.A(pl) == owner and c.P.T.B(pl) == i and aa != types.UnknownT and c.P.T.Length(aa) == types.TypeId(0) {
+                    c.err(args[kk].Span() if pre == null else nsp, msgs.ConstVarNotInType(c.ty(at)))
+                    return c.unknown(sp)
+                }
+            }
             c.err(nsp, msgs.TypeArgsNotInferable(c.text(c.P.FnDecl(f).Name)))
             return c.unknown(sp)
         }
@@ -6444,7 +6638,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     # G17: a chain of instances one function asks of itself (a constant counting down, G26) is bounded
     made := try c.instsOf.Get(f) catch default 0
     if made > 1000 {
-        c.gap(nsp, "more than 1,000 instances of one function (G17)")
+        c.P.L.Diags.ErrorOncePerLine(c.at(nsp), msgs.UnboundedInstantiation())
         return c.unknown(sp)
     }
     if c.P.FnTooDeep(f, c.P.T.List(b.Vals), c.fnNameAt(f)) { return c.unknown(sp) }   # G17
@@ -7047,6 +7241,9 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId) typed.E
     ref := c.P.R.Member(c.fr().File, sp.End)
     nsp := memberSpan(sp, c.text(n).Len())
     if ref.Kind == names.What.Global { return c.read(sp, typed.Place.Global(sp, c.globalType(ref.Module, n), ref.Module, n)) }
+    # T21: a function named through an import alias, as a value - as one named bare
+    if ref.Kind == names.What.Func { return c.fnValue(nsp, c.P.FnNamed(ref.Module, n)) }
+    if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
     if ref.Kind != names.What.None {
         c.gap(nsp, "a member reached through an import, of this kind")
         return c.unknown(sp)
@@ -8979,6 +9176,9 @@ fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
         if b >= 0 {
             c.Asks.Push(Ask(b, c.fr().File, i.Cond.Span().Start, i, c.fr().Body, c.lastFixed.ToArray()))
             asked = true
+        } else if not c.readsConst(i.Cond) {
+            # it reads a local no evaluation can stand for: the running program's, what its branches hold reported (S7)
+            c.Running(i)
         }
     }
     if i.Then.Group >= 0 and d.IsDropped(i.Then.Group) {

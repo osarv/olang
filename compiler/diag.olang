@@ -474,6 +474,9 @@ fn (d mut Diagnostics&) AllSaid() List<Said> {
 # the number of errors Render writes
 fn (d mut Diagnostics&) Errors() I64 { return d.written().Len() + (1 if d.fatal else 0) }
 
+# whether a fatal error was reported: nothing after it is worth judging
+fn (d Diagnostics&) HasFatal() Bool { return d.fatal }
+
 # every diagnostic, in source order: each error with its source and its notes, then the fatal one if there is one
 fn (d mut Diagnostics&) Render() String {
     b := StringBuilder()

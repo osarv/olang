@@ -21222,3 +21222,61 @@ value of a conditional (O26a covers an arm of a conditional there). A 20-line re
 -sanitize by the port and runs under stage 0 (lowerdump: `call mk(...) [S1]`, S1 the if's block). Left to the scope
 pass; emit's `compare` returns twice meanwhile; with that the -sanitize stage 1 builds the whole compiler clean, its output
 byte for byte stage 1's.
+
+## Port M12: the suite with the port as the compiler under test, first round (2026-10-22)
+
+The goal is that stage 1 - the port built by stage 0, `build/out build compiler/olang.olang`, kept as `build/stage1`
+(it finds `std/` beside it) - passes the whole suite as `$OLANG`, so `bootstrap/` can go once the stage-0 comparisons
+are stored outputs. First measured on 0984609 (scope round 6): the test files but checks/checks.olang 518 tests passed
+and none failed across 91 of 92 files (tests/shared.olang not linked: its LTO link through the port takes ~7.4 GB in
+ld, and was killed beside another build); checks/checks.olang 28 of its 59 tests, 125 of its 1,061 cases failing - 40
+compiled where stage 0 refuses them, 83 with another first diagnostic, 2 not building.
+
+**Fixed, by pass.**
+- *driver*: the scope pass judges a program the checker refused too (`placement` run for its errors when the checker
+  reported some and none was fatal), as stage 0 reports its section 8 errors beside the checker's - 14 cases whose first
+  error was T25c now also say stage 0's O17, O23, O25, O10c, C2d, O1b, T22a; B4's main checked (no main, a main with
+  parameters, a result or noreturn); the IR written at its readable path, BASE[.main|.test|.inst][mode].ll, as stage
+  0's (B3; the objects keep their hashed names, a second unit of one readable name the hashed one), which the
+  scenarios grep; the compiler runs on the stack it has where the address space is limited below the 1 GB it asks
+  for (RLIMIT_AS), as stage 0 falls back - `ulimit -v` made `os.RunOnStack` abort every file of a `test` run.
+- *check*: G20 (a constant parameter's type, and Eq on it), G22 (one kind and one type for a variable - declared
+  `<N I32>`, or the parameter it fills first; a constant written as a type; a constant takes no constraint), G23 (a
+  type variable as a value), G24 (two values for one constant, and a run-time length where a fixed one binds it), G17
+  as an error, not a gap; an unknown type as a constraint (G19); an array literal's element borrowed read-only is
+  borrowed again at the target's permission when the literal is refitted (T25b - `Cur&[c]` into `Array<mut Cur&>`); a
+  function named through an import alias is a value (T21, `say := io.Println`).
+- *generic*: G21 - a type where a constant parameter goes and a value where a type parameter goes, said once where
+  written; a typed value of another integer type (`K<X + 1>`, X a U8, for an I8) - never a literal, whose value adapts
+  (`KfMin<-9223372036854775808>`, a U64's digits for I64's minimum).
+- *eval/interp*: G21's constant arguments the evaluator refuses or that abort are errors where they are written, with
+  "instantiated here, with N = 0"; a condition that does not evaluate is the running program's only once nothing more
+  is decided - the evaluator's round 4 had made it so in the first attempt, which reported the held syntax errors of a
+  branch a later attempt drops (B9c's chain through a function whose own if a later check decides: tests/shared,
+  runner and worker stopped at `AnotherMissingType{0}` through the port, master included).
+- *lower*: deferred code is not pending while it is lowered - a leaving path inside it (one S19 never lets happen, or a
+  caught one) lowered it again without end (a `-debug` build of checks' interp fixture).
+- *parse*: stage 0's words where the parser stops - `'}'` for a second entry on an enum's or a trait's line (T17,
+  T19), "an element type before the [" (E19), "a name" for `<` in a type (QW), `']'` for a bracket closed by `)`.
+- *emit*: an error escaping main is named as B5 says, `TypeName.WORD` (it was qualified by its module's base name);
+  a symbol's leading digit is escaped (B3b, a module named `2digitname`).
+- *checks*: the stale scenario reads plain at run time, so its object exists under a compiler that compiles only what
+  a program reaches, and counts uses' objects past their hash (stage 0's `.d<hash>` is a naming detail, B10b's
+  behaviour is what is checked).
+
+**Measured after the round** (a debug build of the port, 52c42b3 and the G21 literal fix): tests/shared.olang 713 of
+713 through it (at -debug, which links small), runner 25 of 25, worker 15 of 15; the other test files as before, all
+passing; checks/checks.olang 34 of its 59 tests (at the merge, -O3), and of its 1,061 cases 85 still failing (from 125),
+27 of them compiling where stage 0 refuses.
+
+**Left, by pass.** *eval* (the evaluator's round
+in progress): S18c asserts false while compiling, K2 globals that abort, S8a dead branches, T29d literals through a
+constructor, D13c zero values, E33's NaN bits, B9a's MIN / -1, B9c's unseen condition. *check*: B5a's initialization
+order and its cycle errors (lowering still runs initializers in checked order - a correctness gap, not only a
+message), the remaining E12-first cases (T22, T27), E31's shape messages, M6b's private-spelling note, P1g, T6a's
+notes, D15. *scope*: the O10c/O25/O17 notes (provenance, held index, text copies), b6elemvalue. *emit*: a struct over
+128 bytes still moved as one LLVM value (e31bviewbigcond's link ran over 36 minutes), and the scenarios that grep
+stage 0's IR shapes (TBAA, baked globals, ret.common, payload words) - the emit agent's. *found, not fixed*: a runtime
+`if` whose branch does not parse is compiled with that branch empty, its syntax error never said, when its condition
+reads a parameter (`fn f(n I64) { if n < 0 { x := } }` builds) - fixed in the checker at the end of the round, not yet
+measured through stage 1.

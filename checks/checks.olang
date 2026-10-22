@@ -605,12 +605,12 @@ fn stale(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/stale/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -define Level=1 -define Want=2 uses.olang > out.txt 2>&1 && ./build/uses") == 0
                  "first build", dir)
-    try r.expect(sh(dir, "stat -c %Y.%N build/plain.*.o > before.txt && ls build/uses.*.d*.main.o | wc -l > first.txt") == 0
+    try r.expect(sh(dir, "stat -c %Y.%N build/plain.*.o > before.txt && ls build/uses.*.main.o | wc -l > first.txt") == 0
                  "reading the first build's objects", dir)
     try r.expect(sh(dir, "sleep 1 && \"$OLANG\" build -define Level=5 -define Want=6 uses.olang > out.txt 2>&1 && ./build/uses") == 0
                  "second build", dir)
     try r.expect(sh(dir, "stat -c %Y.%N build/plain.*.o | cmp -s - before.txt") == 0, "plain's object was rebuilt", dir)
-    try r.expect(sh(dir, "test $(ls build/uses.*.d*.main.o | wc -l) -gt $(cat first.txt)") == 0
+    try r.expect(sh(dir, "test $(ls build/uses.*.main.o | wc -l) -gt $(cat first.txt)") == 0
                  "uses was not rebuilt", dir)
 }
 

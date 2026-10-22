@@ -35,7 +35,18 @@ fn main() ? {
     args := os.Args()
     # every pass recurses over the program's nesting, so the compiler runs on a stack sized for it, reserved and
     # touched only as it is used (L21 bounds the nesting the parser takes well inside it)
-    os.RunOnStack(1 << 30, fn() { os.Exit(drive(args)) })
+    # where the address space is limited below that (ulimit -v), on the stack it has, as stage 0 falls back to
+    if roomFor(1 << 30) { os.RunOnStack(1 << 30, fn() { os.Exit(drive(args)) }) }
+    os.Exit(drive(args))
+}
+
+extern fn getrlimit(resource I32, limit Array<U64>) I32
+
+# whether the process may map a stack of that many bytes: no limit on its address space below it (RLIMIT_AS, 9)
+fn roomFor(bytes I64) Bool {
+    lim := Array<U64>(2)
+    if getrlimit(9, lim) != 0 { return true }
+    return lim[0] > U64(bytes)
 }
 
 # ---- the command line ----
@@ -355,9 +366,15 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     tests := kind == build.Kind.Tests
     l mut load.Loader&cfg = try p.load(root, cfg, d)
     c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
+    if kind == build.Kind.Program { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     interp.DecideAsserts(c, asserts)
-    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if d.Errors() > 0 {
+        # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
+        # left an unknown type in is not judged (scope.judge)
+        if not d.HasFatal() { placement(c, cfg) }
+        error build.Failed.REPORTED
+    }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
     lw.Plans = placement(c, cfg)

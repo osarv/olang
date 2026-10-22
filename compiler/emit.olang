@@ -3271,16 +3271,8 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     e.item("main", e.P.L.Root, b.ToString())
 }
 
-# an error type's name as a program writes it outside its module: "io.IoError" (its module's base name and its name)
-fn (e mut Emitter&) errName(et types.TypeId) String {
-    t := e.T
-    d := t.DeclOf(et)
-    id := e.P.L.Mods[t.DeclModule(d)].Identity
-    k := try id.FindLast("/") catch default -1
-    base := id[k + 1:]
-    if t.DeclModule(d) == e.P.L.Root { return $e.text(t.DeclName(d)) }
-    return $base "." $e.text(t.DeclName(d))
-}
+# an error type's name as B5 says it escaping main: its own name alone ("IoError"), as stage 0 writes it
+fn (e mut Emitter&) errName(et types.TypeId) String { return $e.text(e.T.DeclName(e.T.DeclOf(et))) }
 
 # the test harness (S15/S16): each test run behind a recovery point, a failed check (or an error leaving it) ending
 # that test alone - "ok - NAME" or "FAIL - NAME", then the counts; the status 1 when any failed

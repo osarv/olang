@@ -548,6 +548,8 @@ fn (p mut Parser&) entryEnd() ? Fail {
         p.skipEnds()
         return
     }
+    # the next entry on the same line: the body's end was wanted (T17, T19)
+    if not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and not p.sees(token.Tok.Eof) { try p.fail(token.Tok.RBrace.Describe()) }
     try p.endStmt()
     p.skipEnds()
 }
@@ -932,6 +934,8 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
             if p.sees(token.Tok.Lt) { args = try p.typeArgs() }
             return ast.TypeRef.Named(p.from(at), path, args)
         }
+        # QW: a variable is introduced in the list after a function's name, never as "<T>" in a parameter's type
+        case token.Tok.Lt { try p.fail("a name") }
         nomatch { try p.fail("a type") }
     }
     unreachable
@@ -2121,6 +2125,7 @@ fn (p Parser&) isQualifiedType(x ast.Expr&) Bool {
 fn (p mut Parser&) index(x ast.Expr&p) ast.Expr&p ? Fail {
     start := x.Span().Start
     p.advance()
+    if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace) { try p.fail(token.Tok.RBrack.Describe()) }
     wasNoGt := p.noGt
     p.noGt = false
     p.brackets++
@@ -2289,6 +2294,8 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             p.advance()
             return ast.Expr.Name(p.from(at), name)
         }
+        # a bracket with no element type before it (E19): a literal states its element type once
+        case token.Tok.LBrack { try p.fail("an element type before the [, as in I32[...]") }
         nomatch { try p.fail("an expression") }
     }
     unreachable
@@ -2344,6 +2351,7 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&p) ast.Expr&p ? Fail {
     }
     from := p.exprs.Len()
     if not p.sees(token.Tok.RBrack) {
+        if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace) { try p.fail(token.Tok.RBrack.Describe()) }
         first := try p.elem()
         if p.comprehends() { return try p.comprehension(at, elem, first) }
         p.exprs.Push(first)

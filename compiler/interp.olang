@@ -65,7 +65,9 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     made := false
-    for a in c.Asks {
+    undecided List<I64>
+    for i in range c.Asks.Len() {
+        a := c.Asks[i]
         key := pair.Pair(a.File, I64(a.At))
         if decided.Has(key) { continue }
         v, ok := x.Cond(a.Body)
@@ -73,9 +75,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
             decided.Put(key, v)
             made = true
         } else {
-            # a condition that does not evaluate: the running program's, as this check checked it - what its branches
-            # hold reported
-            c.Running(a.If)
+            undecided.Push(i)
         }
     }
     # G21: a constant argument a call computes, evaluated in its module's context
@@ -84,10 +84,21 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         if lengths.Has(key) { continue }
         b := c.ExprBodyIn(a.Mi, a.Owner, a.Names, a.Vals, a.Expr, a.Want)
         if b < 0 { continue }
-        v, ok := x.Int(b, a.Want)
-        if ok {
-            lengths.Put($key, v)
-            made = true
+        k := mir.FnKey.Body(typed.BodyId(I32(b)))
+        x.Need(k)
+        s := x.M.Eval(k, Array<I64>(0))
+        sp := a.Expr.Span()
+        at := diag.Where.Span(l.Mods[a.Mi].File, I64(sp.Start), I64(sp.End))
+        match s {
+            case eval.Stop.None {
+                lengths.Put($key, x.M.Int(x.M.Result, a.Want))
+                made = true
+            }
+            # the evaluator refused it, or it aborts: no instance has that argument (G21) - said where it is written; a
+            # later attempt that decides something forgets it and asks again
+            case eval.Stop.Refused(why, _, _) { askNote(c, a, l.Diags.Error(at, msgs.ConstArgNotComputable(why))) }
+            case eval.Stop.Exited(kind, _, _, _) { askNote(c, a, l.Diags.Error(at, msgs.ConstArgNotComputable(AbortWhy(kind)))) }
+            case _ { }
         }
     }
     for t in tops {
@@ -99,7 +110,29 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
             made = true
         }
     }
+    # a condition that does not evaluate once nothing more is decided (one calling a function whose own if a later check
+    # decides evaluates then): the running program's, as this check checked it - what its branches hold reported
+    if not made {
+        for i in undecided { c.Running(c.Asks[i].If) }
+    }
     return made
+}
+
+# where the type instance a constant argument belongs to was asked for (G16b): "instantiated here, with N = 0"
+fn askNote(c mut typecheck.Checker&, a generic.ConstAsk&, rec I64) {
+    if a.Owner < 0 or a.Owner % 2 != 0 or a.Vals.Len() == 0 { return }
+    d := types.DeclId(I32(a.Owner / 2))
+    o := c.P.TypeOrigin(c.P.T.Named(d, c.P.T.List(a.Vals)))
+    if o.File < 0 { return }
+    b := StringBuilder()
+    b.Push("instantiated here")
+    for j in range a.Vals.Len() {
+        b.Push(", with " if j == 0 else ", ")
+        b.Push(c.P.L.Names.Text(a.Names[j]))
+        b.Push(" = ")
+        b.Push(c.Ty(a.Vals[j]))
+    }
+    c.P.L.Diags.Note(rec, diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), msgs.Msg(msgs.NoteHere().Kind, "", b.ToString()))
 }
 
 # a pending top-level if's branch, its conditions evaluated in order (B9c): the first true one's, the else's after
@@ -602,11 +635,7 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     w := code & 0xFFFF
     word := $x.P.T.Names.Text(ws[w]) if w < ws.Len() else $w
     name := x.P.T.Names.Text(x.P.T.DeclName(dl))
-    m := x.P.T.DeclModule(dl)
-    if m == x.P.L.Root or x.P.L.Mods[m].Prelude { return $name "." $word }
-    id := x.P.L.Mods[x.P.T.DeclModule(dl)].Identity
-    k := try id.FindLast("/") catch default -1
-    return $id[k + 1:] "." $name "." $word
+    return $name "." $word   # B5: the type's own name, wherever it is declared
 }
 
 fn say(t String&) { try io.Print(t) catch io.IoError { } }

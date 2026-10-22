@@ -1138,8 +1138,9 @@ fn UnsignedText(bits I64) String { return U64(bits).Format() }
 # (its byte in hex); a symbol longer than 120 characters is its beginning and a 128-bit hash of the whole text
 fn Symbol(text String&) String {
     b := StringBuilder()
-    for c in text {
-        if c.IsLetter() or c.IsDigit() {
+    for i, c in text {
+        # an LLVM name begins with no digit (B3b: a module "2go" is "_32go")
+        if c.IsLetter() or (c.IsDigit() and i > 0) {
             b.PushChar(c)
         } else if c == '_' {
             b.Push("__")

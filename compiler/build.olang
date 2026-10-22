@@ -348,7 +348,12 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     flags := c.CompileFlags(ir)
     path := c.ObjectPath(base, k, ir, flags)
     if os.Exists(path) or path in j.finals { return path }
+    # the IR is an intermediate written afresh before each compile, so it keeps the readable name alone (B3), as stage 0's
+    # does - BASE[.main|.test|.inst][.race][.debug][.san].ll - but for the runtime's, named by its hash, and a second unit
+    # of this build whose readable name is taken, which keeps the object's
     irPath := $path[:path.Len() - 2] ".ll"
+    readable := $c.Dir "/" $base $kindSuffix(k) $c.modeSuffix() ".ll"
+    if not base.StartsWith("olang_") and readable not in j.irs { irPath = readable }
     try os.WriteFile(irPath, ir) catch os.OsError {
         fileFatal(irPath, msgs.CannotOpen(), d)
         error Failed.REPORTED
