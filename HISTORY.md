@@ -21003,3 +21003,13 @@ unparse.olang changed 4.0 s (only `unparse`'s object compiled); through stage 2 
 35 s. Stage 1 runs the tests of compiler/ and std (61 files): 421 passed, none failed, in 9.5 minutes. `make emitdiff` 989 of 1013
 tests as stage 0's (25 of 26 files), `make drvdiff` 83 of 83 command lines, `make scopediff` as round 5's (265 of 280,
 300 of 307, 24 rows).
+
+Then wt-merge - the checker's round 4 on master - was merged in. It had made the same S19 copy in `ret`, for every
+placement; it is kept for the stand-in placement only, the plan's copy being retArrays' (into the result scope, where a
+join is pending too). And its E31b write-back for `x[i][j] = v` held the value in a local of its own, so
+`names[i][0] = kept` (checks' s6handleloop, which stage 0 builds) asked the stored text to live in the statement's block
+- what `v := kept; names.SetAt(0, v)` asks, which both compilers refuse (O25a, O10c). A local's own value is now read
+where it is stored, nothing between the hold and the store being able to change it. On the merged tree: emitdiff 1009 of
+1013 (tests/shared 707 of 711), drvdiff 83 of 83, scopediff 265 of 280 and 300 of 307 with 23 rows; stage 1 builds
+stage 2 in 44 s (1.63 GB) and stage 2 stage 3 in 42 s, all three equal; stage 1 passes the 421 tests of compiler/ and
+std.
