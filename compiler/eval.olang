@@ -2997,9 +2997,9 @@ fn (m mut Machine&) returned(fr frame) {
                 # (R6, R1b - a named function whose set is another order of the type's)
                 match c.Target {
                     case mir.Callee.Value(_) {
-                        own := m.T.Errors(m.fns[fr.Fn].Ty)
+                        its := m.T.Errors(m.fns[fr.Fn].Ty)
                         seen := m.T.Errors(m.calleeType(caller, c.Target))
-                        if own != seen { code = m.recode(code, own, seen) }
+                        if its != seen { code = m.recode(code, its, seen) }
                     }
                     case _ { }
                 }

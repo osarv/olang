@@ -1023,6 +1023,30 @@ fn (c mut Checker&) traitSets(mi I64, td ast.TypeDecl&) {
     }
 }
 
+# E10b: the supplied Hash hashes a part whose type declares Hash - or, in that type's own module, a private hash (M6b) -
+# by it: each such method's body made, for lowering's helper to call
+fn (c mut Checker&) partHashes(t types.TypeId, depth I64) {
+    if depth > 8 { return }
+    r := c.P.T.Repr(c.deref(t))
+    if depth > 0 and c.isNamed(r) {
+        for name in String&["Hash", "hash"] {
+            m := c.P.MethodOf(r, c.P.L.Names.Intern(name))
+            if m < 0 or c.P.VarCount(generic.FnOwner(m)) > 0 { continue }
+            if name == "hash" and c.P.FnModule(m) != c.fr().Mi { continue }
+            c.fnBody(c.P.FnInstance(m, types.ListId(0)))
+            return
+        }
+    }
+    k := c.P.T.KindOf(r)
+    if k == types.Kind.Array { c.partHashes(c.P.T.Elem(r), depth + 1) }
+    if k == types.Kind.Tuple or k == types.Kind.Record {
+        for x in c.P.T.Items(c.P.T.Parts(r)) { c.partHashes(x, depth + 1) }
+    }
+    if c.isStruct(r) and c.P.Body(r) {
+        for x in c.P.T.Items(c.P.T.Fields(r)) { c.partHashes(x, depth + 1) }
+    }
+}
+
 # a type's constructor checked whether or not a call asks for it (C2, T29d): a struct's, or a declared number's that
 # declares one - neither a generic's (checked per instance, G16) nor one whose parameters introduce variables (G10d)
 fn (c mut Checker&) declaredCtor(mi I64, td ast.TypeDecl&) {
@@ -1325,8 +1349,9 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
     c.pop()
     c.state[id] = 2
-    # the instances it asks for, made here, checked before it is evaluated (G21: a length an instance computes)
-    c.drain()
+    # the instances it asks for, made here, checked before it is evaluated (G21: a length an instance computes) - only
+    # there: a condition's (S18c) would check what its own body queued, its errors then forgotten with its own
+    if ns.Len() > 0 { c.drain() }
     if d.Count() > mark or c.Gaps.Len() > gaps {
         d.Forget(mark)
         c.Gaps.Truncate(gaps)
@@ -6788,6 +6813,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         return typed.Expr.Prim(sp, r, op, typed.Check.None, gather(c.exprs, from))
     }
     if name == "Hash" and args.Len() == 0 {
+        c.partHashes(rt, 0)
         return c.callOf(sp, c.i64(), typed.Callee.Helper(typed.Helper.Hash, rt), c.one(c.value(rx, sp)))
     }
     return null
@@ -7137,8 +7163,10 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     }
     if c.clauseRules(clauses, cls, asValue, typeOf(x)) and asValue { return c.unknown(sp) }
     k := c.caught(mark, end, cls)
-    c.escapes(source.Span(sp.Start, sp.Start + (7 if isChecked else 3)), mark, k)
-    return typed.Expr.Try(sp, typeOf(x), typed.Try(x, cls.ToArray()))
+    # E15a, E35: a clause-less checked inside what a try or "!" covers only turns checks on - its errors go on to them
+    passes := isChecked and cls.Len() == 0 and fr.Tries > 0
+    c.escapes(source.Span(sp.Start, sp.Start + (7 if isChecked else 3)), mark, k, passes)
+    return typed.Expr.Try(sp, typeOf(x), typed.Try(x, cls.ToArray(), false, passes))
 }
 
 # a try or checked covering nothing that can fail (R8, E15a): a try whose operand only checked would make fallible says
@@ -7467,9 +7495,9 @@ fn (c mut Checker&) leaks1(e types.TypeId) { c.fr().leaks.Push(e) }
 # what a try's operand lets out past its clauses, held where it goes (R9, R13, S16): nowhere in a test, which fails, nor
 # in a set being inferred; else the function's written set must hold each - k entries from mark. Only the outermost
 # try of a nest says so: an inner one's go on to it
-fn (c mut Checker&) escapes(at source.Span, mark I64, k I64) {
+fn (c mut Checker&) escapes(at source.Span, mark I64, k I64, passes Bool = false) {
     fr := c.fr()
-    if k == 0 { return }
+    if k == 0 or (passes and fr.Tries > 0) { return }
     c.escapeRules(at, mark, k)
     if fr.Tries == 0 { return }
     # a try in another's operand: what it lets out leaves the body there (R13) - the outer try's clauses never see it
@@ -8382,6 +8410,24 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
                 case typed.Expr.Prim(_, _, pop, _, _) {
                     # S4: a conversion is no place - what it converts is
                     if pop == typed.PrimOp.Convert {
+                        c.err(c.argSpan(target), msgs.NotAssignable())
+                        c.expr(value, types.UnknownT)
+                        return
+                    }
+                }
+                nomatch { }
+            }
+        }
+        case typed.Place.Deref(_, _, rv) {
+            # T29a: the storage a conversion names (the place of its argument) - no place an assignment may name
+            isConv := false
+            match target {
+                case ast.Expr.Call(_, _, _) { isConv = true }
+                nomatch { }
+            }
+            match rv {
+                case typed.Expr.Prim(_, _, pop, _, _) {
+                    if pop == typed.PrimOp.Convert and isConv {
                         c.err(c.argSpan(target), msgs.NotAssignable())
                         c.expr(value, types.UnknownT)
                         return

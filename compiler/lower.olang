@@ -2233,6 +2233,20 @@ fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
 fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
     t := ln.T
     r := t.Repr(ty)
+    # a part whose type declares Hash (or, in its own module, hash: M6b) hashes by it (E10b)
+    hb := -1 if top else ln.methodBody(ty, "Hash", "hash")
+    if hb >= 0 {
+        callee, fty := ln.bodyCallee(typed.BodyId(I32(hb)))
+        p0 := t.Items(t.Params(fty))[0]
+        recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp) if t.IsRef(p0) else ln.into(p0, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        ok := ln.F.NewBlock()
+        dest := ln.temp(mir.I64T, sp)
+        k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+                                   true, ok, mir.NoLocal, mir.NoBlock))
+        ln.end(mir.Term.Call(sp, k))
+        ln.start(ok)
+        return mir.Operand.Copy(mir.L(dest))
+    }
     if ln.scalar(ty) {
         x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
         return ln.mix(ln.asI64(x, ty, sp), sp)
@@ -2632,8 +2646,19 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
     if t.KindOf(r) != types.Kind.Named { return -1 }
     got := try lw.strOf.Get(r) catch default -2
     if got != -2 { return got }
+    id := ln.methodBody(ty, "Str", "str")
+    lw.strOf.Put(r, id)
+    return id
+}
+
+# the checked body of a one-parameter method a type declares, by either spelling (M6b) - -1 where none was made
+fn (ln mut lowering&) methodBody(ty types.TypeId, cap String&, low String&) I64 {
+    lw := ln.L
+    t := ln.T
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Named { return -1 }
     id := -1
-    for name in String&["Str", "str"] {
+    for name in String&[cap, low] {
         m := lw.P.MethodOf(r, t.Names.Intern(name))
         if m < 0 { continue }
         for i in range lw.Bodies.Len() {
@@ -2651,7 +2676,6 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
             }
         }
     }
-    lw.strOf.Put(r, id)
     return id
 }
 
