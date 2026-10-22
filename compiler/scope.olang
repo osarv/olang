@@ -6458,6 +6458,11 @@ fn (s mut Scoper&) nameSpan(sp source.Span) source.Span {
         }
         # a store written "x[i] = v" calls SetAt (E31b): said at its "="
         if ch == '=' and depth == 0 and not found and k + 1 < end and text[k + 1] != '=' and k > at and text[k - 1] != '=' and text[k - 1] != '!' and text[k - 1] != '<' and text[k - 1] != '>' {
+            # a compound one ("x[i] += v") at its operator, as stage 0 says it
+            p := text[k - 1]
+            if k - 1 > at and (p == '+' or p == '-' or p == '*' or p == '/' or p == '%' or p == '&' or p == '|' or p == '^') {
+                return source.Span(I32(k - 1), I32(k + 1))
+            }
             return source.Span(I32(k), I32(k + 1))
         }
         k++
