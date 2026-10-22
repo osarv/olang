@@ -1,25 +1,39 @@
-# astdiff [FILE...] - compares the self-hosted parser's tree with the C parser's (compiler/DESIGN.md section 4):
-# every declaration and statement, as its kind and the span of its tokens, and the syntax errors - each item's first,
-# by rule and position, and the lexical ones - and that each tree, written back as source, holds the file's tokens and
-# reads back as itself ("dump roundtrip"). With no FILE, every .olang file of the repository. Prints the first
+# astdiff [FILE...] - holds the self-hosted parser's tree to the C parser's (compiler/DESIGN.md section 4): every
+# declaration and statement, as its kind and the span of its tokens, and the syntax errors - each item's first, by rule
+# and position, and the lexical ones - and checks that each tree, written back as source, holds the file's tokens and
+# reads back as itself ("dump roundtrip"). The C parser's trees, normalized, are stored in compiler/goldens/ast.txt (a
+# hash of each file's text and of its tree) and ast.full.txt (the whole tree of each small file with syntax errors), captured
+# by "astdiff -capture" (make astgold). With no FILE, every .olang file of the repository. A file edited since the
+# capture is compared with the C parser itself where build/astdump is built, else reported as stale. Prints the first
 # differences and exits 1 if there are any.
 #
-# Run from the repository root after "make build/astdump build/compiler_tools_dump". What is normalized away, as
-# DESIGN.md section 4 lists: the order of lines (each file's structure, and its diagnostics, are sorted - the trees
-# hold the same nodes in different shapes), the C diagnostics' text and notes (only "error RULE LINE:COL" is kept),
-# the C parser's reports beyond an item's first (it reports one an item; the self-hosted parser goes on and the
-# dump keeps its first), an L21 said inside an item kept whole (stage 0 says one where a form it tried and dropped
-# reached the limit), and the position of an L21 that ends an item (for the same reason; the rows say which item
-# ends). A missing tool, or one printing fewer files than it was given, is a failure. ASTDIFF_ORACLE and ASTDIFF_DUMP
-# name other builds of the two tools; ASTDIFF_KEEP names a directory to leave the renderings in.
+#     astdiff [FILE...]          the parser against the golden, then the round trip
+#     astdiff -capture [port]    the golden captured again from build/astdump, or from the parser (make astgold,
+#                                ASTGOLD=port)
+#
+# Run from the repository root after "make build/compiler_tools_dump". What is normalized away, as DESIGN.md section 4
+# lists: the order of lines (each file's structure, and its diagnostics, are sorted - the trees hold the same nodes in
+# different shapes), the C diagnostics' text and notes (only "error RULE LINE:COL" is kept), the C parser's reports
+# beyond an item's first (it reports one an item; the self-hosted parser goes on and the dump keeps its first), an L21
+# said inside an item kept whole (stage 0 says one where a form it tried and dropped reached the limit), and the
+# position of an L21 that ends an item (for the same reason; the rows say which item ends). A missing tool, or one
+# printing fewer files than it was given, is a failure. ASTDIFF_ORACLE and ASTDIFF_DUMP name other builds of the two
+# tools; ASTDIFF_KEEP names a directory to leave the renderings in.
 
 import "std/os"
 import "toolkit"
 
+Golden String& = "compiler/goldens/ast"
+
 fn main() {
-    files := toolkit.FilesOr(os.Args(), toolkit.Tracked("*.olang"))
+    args := os.Args()
     oracle := toolkit.Env("ASTDIFF_ORACLE", "build/astdump")
     dump := toolkit.Env("ASTDIFF_DUMP", "build/compiler_tools_dump")
+    if args.Len() > 1 and args[1] == "-capture" {
+        capture(oracle, dump, args.Len() > 2 and args[2] == "port")
+        return
+    }
+    files := toolkit.FilesOr(args, toolkit.Tracked("*.olang"))
     keep := toolkit.Env("ASTDIFF_KEEP", "")
     work String& = ""
     if keep != "" {
@@ -31,41 +45,56 @@ fn main() {
     defer {
         if keep == "" { toolkit.Clean(work) }
     }
-    for t in String&[oracle, dump] {
-        if not toolkit.Built(t) { toolkit.Die("astdiff: " $t " is not built (make " $t ")") }
-    }
-    args := List<String&>()
-    args.Push(oracle)
-    for f in files { args.Push(f) }
-    craw := toolkit.RunShowing(args.ToArray()).Stdout
-    args.Clear()
-    args.Push(dump)
-    args.Push("ast")
-    for f in files { args.Push(f) }
-    oraw := toolkit.RunShowing(args.ToArray()).Stdout
-    toolkit.Write($work "/c.raw", craw)
+    if not toolkit.Built(dump) { toolkit.Die("astdiff: " $dump " is not built (make " $dump ")") }
+    g := toolkit.HashGoldenRead(Golden, "astgold")
+    oraw := run(dump, "ast", files)
     toolkit.Write($work "/olang.raw", oraw)
-    sections(craw, files.Len(), oracle)
     sections(oraw, files.Len(), $dump " ast")
-    c := normalize(craw)
     olang := normalize(oraw)
-    toolkit.Write($work "/c", c)
     toolkit.Write($work "/olang", olang)
-    if c != olang {
-        toolkit.Say(toolkit.Head(toolkit.Diff(work, c, olang), 60))
-        toolkit.Say("astdiff: the trees differ\n")
+    o := toolkit.DumpSections(olang)
+    stale := toolkit.HashGoldenStale(g, files)
+    isStale := Map<String&, Bool>()
+    for f in stale { isStale.Put(f, true) }
+    bad I64 = 0
+    for f in files {
+        if f in isStale { continue }
+        rep := toolkit.HashGoldenCheck(g, work, f, try o.Bodies.Get(f) catch default "")
+        if rep != "" {
+            bad++
+            if bad <= 5 { toolkit.Say(rep) }
+        }
+    }
+    if stale.Len() > 0 {
+        if toolkit.Built(oracle) {
+            craw := run(oracle, "", stale)
+            toolkit.Write($work "/c.raw", craw)
+            sections(craw, stale.Len(), oracle)
+            c := toolkit.DumpSections(normalize(craw))
+            for f in stale {
+                a := try c.Bodies.Get(f) catch default "?"
+                b := try o.Bodies.Get(f) catch default ""
+                if a != b {
+                    bad++
+                    if bad <= 5 { toolkit.Say($"-- " $f " (< " $oracle ", > the parser)\n" $toolkit.Head(toolkit.Diff(work, a, b), 60)) }
+                }
+            }
+            toolkit.Say("astdiff: " $stale.Len() " files changed since the golden, compared with " $oracle " (make astgold captures them)\n")
+        } else {
+            for f in stale { toolkit.Say("astdiff: " $f " changed since the golden was captured (make astgold)\n") }
+            bad += stale.Len()
+        }
+    }
+    if bad > 0 {
+        toolkit.Say("astdiff: the trees of " $bad " of " $files.Len() " files differ\n")
         os.Exit(1)
     }
     toolkit.Say("astdiff: no difference over " $files.Len() " files\n")
     # each tree written back as source holds the file's tokens, and reads back as itself
-    args.Clear()
-    args.Push(dump)
-    args.Push("roundtrip")
-    for f in files { args.Push(f) }
-    rt := toolkit.RunShowing(args.ToArray()).Stdout
+    rt := run(dump, "roundtrip", files)
     toolkit.Write($work "/rt", rt)
     sections(rt, files.Len(), $dump " roundtrip")
-    bad := false
+    broken := false
     header String& = ""
     for line in toolkit.Rows(rt) {
         if line.StartsWith("== ") {
@@ -74,13 +103,36 @@ fn main() {
         }
         if line == "ok" or line.StartsWith("skipped") { continue }
         toolkit.Say($header "\n" $line "\n")
-        bad = true
+        broken = true
     }
-    if bad {
+    if broken {
         toolkit.Say("astdiff: a tree written back is not the file's\n")
         os.Exit(1)
     }
     toolkit.Say("astdiff: every tree written back reads as itself\n")
+}
+
+# what a tool printed for the files, its own diagnostics passed on
+fn run(tool String&, mode String&, files List<String&>&) String {
+    args := List<String&>()
+    args.Push(tool)
+    if mode != "" { args.Push(mode) }
+    for f in files { args.Push(f) }
+    return $toolkit.RunShowing(args.ToArray()).Stdout
+}
+
+# every tracked file's tree, normalized, from the C parser or from the self-hosted one, written as the golden
+fn capture(oracle String&, dump String&, port Bool) {
+    files := toolkit.Tracked("*.olang")
+    tool := dump if port else oracle
+    if not toolkit.Built(tool) { toolkit.Die("astdiff: " $tool " is not built (make " $tool ")") }
+    raw := run(dump, "ast", files) if port else run(oracle, "", files)
+    sections(raw, files.Len(), tool)
+    s := toolkit.DumpSections(normalize(raw))
+    toolkit.HashGoldenWrite(Golden, "the C parser's trees, normalized (compiler/tools/astdiff.olang)", files, s, fn(body String&) Bool {
+        return body.Len() < 8192 and (try body.Find("\nerror") catch default -1) >= 0
+    })
+    toolkit.Say("astdiff: " $files.Len() " files captured from " $tool " into " $Golden ".txt\n")
 }
 
 # a tool that stops early prints fewer sections than files: that is a failure, never an empty match

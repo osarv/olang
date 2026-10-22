@@ -336,3 +336,188 @@ test "a hash is FNV-1a's" {
     assert Hash("") == "cbf29ce484222325"
     assert Hash("a") == "af63dc4c8601ec8c"
 }
+
+# ---- stored runs (compiler/goldens/run.txt, captured by compiler/tools/rungold.olang) ----
+#
+# A file of tests is stored under "test FILE" as its status and its tests' endings, "ok - NAME" or "FAIL - NAME" a row
+# each in the order they ran; a checks case that runs under "run NAME" as its program's status and standard output.
+# Either body's first row is "status N", and a case whose output differed between two runs says "status N unstable"
+# and is held to its status alone.
+
+# the key a file is stored under: a checks case by its name, a file of tests by its path
+fn RunKey(f String&) String {
+    if f.StartsWith("checks/cases/") { return $"run " $f[13:] }
+    return $"test " $f
+}
+
+# a stored run's body
+fn RunBody(status I64, unstable Bool, text String&) String {
+    return $"status " $status $(" unstable" if unstable else "") "\n" $text
+}
+
+# what a stored run holds: whether there is one, its status, whether its output is held, and the output (a file of
+# tests: its endings)
+type StoredRun struct() {
+    Found Bool = true
+    Status I64 = 0
+    Stable Bool = true
+    Out String& = ""
+}
+
+fn RunParse(body String&) StoredRun {
+    r := StoredRun()
+    nl := try body.FindByte('\n') catch default body.Len()
+    head := Fields(body[:nl])
+    if head.Len() >= 2 { r.Status = try head[1].ParseInt() catch default -999 }
+    r.Stable = head.Len() < 3
+    r.Out = $body[nl + 1:] if nl < body.Len() else ""
+    return r
+}
+
+# a test run's standard output reduced to its tests' endings, as RunBody stores them: "ok - NAME", "FAIL - NAME"
+fn TestEndings(out String&) String {
+    b := StringBuilder()
+    for row in Rows(out) {
+        if row.StartsWith("ok - ") {
+            b.Push(row)
+            b.PushChar('\n')
+        } else if row.StartsWith("FAIL - ") {
+            n := row[7:]
+            k := try n.Find(": ") catch default -1
+            b.Push("FAIL - ")
+            b.Push(n[:k] if k >= 0 else n)
+            b.PushChar('\n')
+        }
+    }
+    return b.ToString()
+}
+
+test "a stored run reads back" {
+    r := RunParse(RunBody(3, false, "a\nb"))
+    assert r.Status == 3 and r.Stable and r.Out == "a\nb"
+    u := RunParse(RunBody(0, true, ""))
+    assert u.Status == 0 and not u.Stable and u.Out == ""
+    assert RunKey("checks/cases/x.olang") == "run x.olang"
+    assert RunKey("tests/shared.olang") == "test tests/shared.olang"
+    assert TestEndings("== f ==\nok - a b\nFAIL - c: assertion failed\nx\n") == "ok - a b\nFAIL - c\n"
+}
+
+# the run stored for a file in a golden; Found is false where it holds none
+fn RunStored(g Golden&, f String&) StoredRun {
+    body := try g.Bodies.Get(RunKey(f)) catch {
+        r := StoredRun()
+        r.Found = false
+        return r
+    }
+    return RunParse(body)
+}
+
+# a program's output as a stored run holds it: the working directory - the repository's root - written $ROOT
+fn RunText(out String&) String {
+    here := try os.Cwd() catch os.OsError { return $out }
+    return out.Replace(here, "$ROOT")
+}
+
+# ---- hashed goldens (compiler/goldens/tokens.*, ast.*: tokdiff, astdiff) ----
+#
+# A dump of every file of the repository is too large to keep whole, so a hashed golden keeps, in BASE.txt, a row per
+# file - "SOURCE DUMP PATH", the hash of the file's text and of its dump's section - and, in BASE.full.txt, the whole
+# section (a golden section keyed by its path) of the small files whose dump says something worth reading back: their
+# diagnostics. The whole section is only for reading a difference; the hash is what is compared, and the two must agree. A file whose text no longer has the stored hash is stale: its golden says nothing about it until it is
+# captured again.
+
+# a dump tool's rendering split at its "== PATH" headers: the paths in order, and each path's rows
+fn DumpSections(t String&) Golden {
+    g := Golden()
+    key String& = ""
+    body := StringBuilder()
+    open := false
+    for r in Rows(t) {
+        if r.StartsWith("== ") {
+            if open { g.Bodies.Put($key, body.ToString()) }
+            key = $r[3:]
+            g.Keys.Push($key)
+            body.Clear()
+            open = true
+        } else if open {
+            body.Push(r)
+            body.PushChar('\n')
+        }
+    }
+    if open { g.Bodies.Put($key, body.ToString()) }
+    return g
+}
+
+type HashGolden struct() {
+    Paths List<String&> = List<String&>()
+    Source Map<String&, String&> = Map<String&, String&>()
+    Dump Map<String&, String&> = Map<String&, String&>()
+    Full Golden = Golden()
+}
+
+# the hashed golden at BASE.txt and BASE.full.txt; a missing one ends the tool, naming the target that captures it
+fn HashGoldenRead(base String&, target String&) HashGolden {
+    h := HashGolden()
+    table := try os.ReadFile($base ".txt") catch os.OsError {
+        Die("no golden " $base ".txt - capture it with make " $target)
+        unreachable
+    }
+    for r in Rows(table) {
+        if r.StartsWith("#") or r == "" { continue }
+        f := Fields(r)
+        if f.Len() != 3 { Die($base ".txt: not a golden row: " $r) }
+        h.Paths.Push($f[2])
+        h.Source.Put($f[2], $f[0])
+        h.Dump.Put($f[2], $f[1])
+    }
+    h.Full = GoldenRead($base ".full.txt", target)
+    for f in h.Full.Keys {
+        if Hash(try h.Full.Bodies.Get(f) catch default "") != (try h.Dump.Get(f) catch default "") {
+            Die($base ".full.txt: " $f "'s section is not the one " $base ".txt hashes - capture it again (make " $target ")")
+        }
+    }
+    return h
+}
+
+# writes a hashed golden of the files' sections; full says which sections are kept whole too
+fn HashGoldenWrite(base String&, what String&, files List<String&>&, sections Golden&, full fn(body String&) Bool) {
+    table := StringBuilder()
+    table.Push("# " $what " - a row per file: the hash of its text, the hash of its section, its path (compiler/tools/toolkit.olang)\n")
+    whole := StringBuilder()
+    for f in files {
+        body := try sections.Bodies.Get(f) catch { Die($base ": no section for " $f) }
+        table.Push($Hash(Read(f)) " " $Hash(body) " " $f "\n")
+        if full(body) { whole.Push(GoldenSection(f, body)) }
+    }
+    GoldenWrite($base ".txt", table.ToString())
+    GoldenWrite($base ".full.txt", whole.ToString())
+}
+
+# the files of a list whose text is not the one the golden was captured from (new files included)
+fn HashGoldenStale(h HashGolden&, files List<String&>&) List<String&> {
+    l := List<String&>()
+    for f in files {
+        src := try h.Source.Get(f) catch default ""
+        if src != Hash(Read(f)) { l.Push(f) }
+    }
+    return l
+}
+
+# a file's section against the golden: "" where it has the stored hash, else a report of how it differs - a diff against
+# the section kept whole where there is one, else the section's first rows
+fn HashGoldenCheck(h HashGolden&, dir String&, f String&, body String&) String {
+    want := try h.Dump.Get(f) catch default ""
+    if Hash(body) == want { return "" }
+    whole := try h.Full.Bodies.Get(f) catch {
+        return $"-- " $f ": its section is not the golden's (hash " $Hash(body) ", golden " $want "); it begins\n" $Head(body, 20)
+    }
+    return $"-- " $f " (< golden, > now)\n" $Head(Diff(dir, whole, body), 30)
+}
+
+test "dump sections are split at their headers" {
+    g := DumpSections("== a\n1 x\n2 y\n== b\n== c\nz\n")
+    assert g.Keys.Len() == 3
+    assert (try g.Bodies.Get("a") catch default "?") == "1 x\n2 y\n"
+    assert (try g.Bodies.Get("b") catch default "?") == ""
+    assert (try g.Bodies.Get("c") catch default "?") == "z\n"
+}

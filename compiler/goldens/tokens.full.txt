@@ -1,0 +1,536 @@
+=== checks/cases/blockcomment.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 ?
+| 3 {
+| 3 }
+| error L4a 4:1
+=== checks/cases/commaendsline.olang
+| 3 fn
+| 3 add
+| 3 (
+| 3 a
+| 3 I64
+| 3 ,
+| 3 b
+| 3 I64
+| 3 )
+| 3 I64
+| 3 {
+| 3 return
+| 3 a
+| 3 +
+| 3 b
+| 3 }
+| 4 fn
+| 4 main
+| 4 (
+| 4 )
+| 4 ?
+| 4 {
+| 5 assert
+| 5 add
+| 5 (
+| 5 1
+| 5 ,
+| 6 2
+| 6 )
+| 6 ==
+| 6 3
+| 6 ;
+| 7 }
+| error L18a 5:17
+=== checks/cases/l10bdouble.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 ?
+| 3 {
+| 4 x
+| 4 :=
+| 4 1__000
+| 4 ;
+| 5 }
+| error L10b 4:11
+=== checks/cases/l10bprefix.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 ?
+| 3 {
+| 4 x
+| 4 U64
+| 4 =
+| 4 0x_FF
+| 4 ;
+| 5 }
+| error L10b 4:15
+=== checks/cases/l13eof.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 ?
+| 3 {
+| 4 x
+| 4 :=
+| 4 '
+| 4 ;
+| error L13 4:10
+=== checks/cases/l13newline.olang
+| 5 import
+| 5 "std/io"
+| 5 ;
+| 6 fn
+| 6 main
+| 6 (
+| 6 )
+| 6 ?
+| 6 {
+| 7 a
+| 7 :=
+| 7 'q
+| 7 ;
+| 8 b
+| 8 :=
+| 8 2
+| 8 ;
+| 9 try
+| 9 io
+| 9 .
+| 9 Println
+| 9 (
+| 9 $
+| 9 b
+| 9 )
+| 9 ;
+| 10 }
+| error L13 7:10
+=== checks/cases/l14eof.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 ?
+| 3 {
+| 4 x
+| 4 :=
+| 4 "abc
+| 4 ;
+| error L14 4:10
+=== checks/cases/l14newline.olang
+| 5 import
+| 5 "std/io"
+| 5 ;
+| 6 fn
+| 6 main
+| 6 (
+| 6 )
+| 6 ?
+| 6 {
+| 7 a
+| 7 :=
+| 7 "abc
+| 7 ;
+| 8 b
+| 8 :=
+| 8 2
+| 8 ;
+| 9 try
+| 9 io
+| 9 .
+| 9 Println
+| 9 (
+| 9 $
+| 9 b
+| 9 )
+| 9 ;
+| 10 }
+| error L14 7:10
+=== checks/cases/l16unknown.olang
+| 5 fn
+| 5 f
+| 5 (
+| 5 x
+| 5 I32
+| 5 )
+| 5 I32
+| 5 {
+| 6 if
+| 6 (
+| 6 x
+| 6 ==
+| 6 1
+| 6 )
+| 6 {
+| 7 return
+| 7 2
+| 7 ;
+| 8 }
+| 9 y
+| 9 I32
+| 9 =
+| 9 x
+| 9 +
+| 9 1
+| 9 ;
+| 10 return
+| 10 y
+| 10 ;
+| 11 }
+| 12 fn
+| 12 main
+| 12 (
+| 12 )
+| 12 ?
+| 12 {
+| 12 assert
+| 12 f
+| 12 (
+| 12 1
+| 12 )
+| 12 ==
+| 12 2
+| 12 }
+| error L16 6:8
+=== checks/cases/l18semicolon.olang
+| 5 import
+| 5 "std/io"
+| 5 ;
+| 6 fn
+| 6 main
+| 6 (
+| 6 )
+| 6 ?
+| 6 {
+| 7 f
+| 7 :=
+| 7 fn
+| 7 (
+| 7 x
+| 7 I64
+| 7 )
+| 7 I64
+| 7 {
+| 7 y
+| 7 :=
+| 7 x
+| 7 +
+| 7 1
+| 7 ;
+| 7 return
+| 7 y
+| 7 }
+| 8 try
+| 8 io
+| 8 .
+| 8 Println
+| 8 (
+| 8 $
+| 8 f
+| 8 (
+| 8 1
+| 8 )
+| 8 )
+| 8 ;
+| 9 }
+| error L18 7:36
+=== checks/cases/l1junkline.olang
+| 5 import
+| 5 "std/io"
+| 5 ;
+| 6 fn
+| 6 main
+| 6 (
+| 6 )
+| 6 ?
+| 6 {
+| 7 x
+| 7 :=
+| 7 1
+| 7 ;
+| 9 y
+| 9 :=
+| 9 x
+| 9 +
+| 9 1
+| 9 ;
+| 10 try
+| 10 io
+| 10 .
+| 10 Println
+| 10 (
+| 10 $
+| 10 y
+| 10 )
+| 10 ;
+| 11 }
+| error L16 8:1
+=== checks/cases/l1nul.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 ?
+| 3 {
+| 3 }
+| 5 fn
+| 5 later
+| 5 (
+| 5 )
+| 5 I32
+| 5 {
+| 5 return
+| 5 "not an I32"
+| 5 }
+| error L1 4:1
+=== checks/cases/l3crlf.olang
+| 4 fn
+| 4 main
+| 4 (
+| 4 )
+| 4 ?
+| 4 {
+| 5 x
+| 5 :=
+| 5 1
+| 5 ;
+| 6 }
+| error L3 4:14
+=== checks/cases/strayfnbody.olang
+| 3 fn
+| 3 f
+| 3 (
+| 3 )
+| 3 {
+| 4 x
+| 4 :=
+| 4 1
+| 4 2
+| 4 ;
+| 5 }
+| 6 fn
+| 6 main
+| 6 (
+| 6 )
+| 6 ?
+| 6 {
+| 6 }
+| error L16 4:12
+=== compiler/testdata/lex/bytes.olang
+| 1 a
+| 1 b
+| 1 ;
+| 2 c
+| 2 ;
+| 3 d
+| 3 e
+| 3 ;
+| 4 !
+| 4 x
+| 4 !=
+| 4 y
+| 4 ;
+| error L1 1:3
+| error L3 1:7
+| error L1 3:3
+=== compiler/testdata/lex/charateof.olang
+| 1 a
+| 1 :=
+| 1 '
+| 1 ;
+| error L13 1:6
+=== compiler/testdata/lex/charnewline.olang
+| 1 a
+| 1 :=
+| 1 'q
+| 1 ;
+| 2 b
+| 2 :=
+| 2 ''
+| 2 ;
+| 3 c
+| 3 :=
+| 3 'ab
+| 3 ;
+| 4 d
+| 4 :=
+| 4 '\
+| 4 ;
+| 5 e
+| 5 :=
+| 5 'xy'
+| 5 ;
+| 6 f
+| 6 :=
+| 6 '
+| 6 ;
+| error L13 1:6
+| error L13 2:6
+| error L13 3:6
+| error L13 4:6
+| error L13 5:6
+| error L13 6:6
+=== compiler/testdata/lex/comments.olang
+| 1 x
+| 1 :=
+| 1 1
+| 1 +
+| 1 2
+| 1 ;
+| 2 y
+| 2 :=
+| 2 3
+| 2 ;
+| 3 z
+| 3 ;
+| error L4a 4:1
+=== compiler/testdata/lex/escapes.olang
+| 1 a
+| 1 :=
+| 1 "\q\n\0\r\t\\\""
+| 1 +
+| 1 1
+| 1 ;
+| 2 b
+| 2 :=
+| 2 '\"'
+| 2 ;
+| 3 c
+| 3 :=
+| 3 '\''
+| 3 ;
+| error L15 1:7
+| error L15 2:7
+=== compiler/testdata/lex/escateof.olang
+| 1 a
+| 1 :=
+| 1 "x\
+| 1 ;
+| error L14 1:6
+=== compiler/testdata/lex/junkeof.olang
+| 1 x
+| 1 :=
+| 1 1
+| 1 ;
+| error L16 2:1
+=== compiler/testdata/lex/junkline.olang
+| 1 x
+| 1 :=
+| 1 1
+| 1 ;
+| 3 y
+| 3 :=
+| 3 2
+| 3 ;
+| error L16 2:1
+=== compiler/testdata/lex/numbers.olang
+| 1 a
+| 1 :=
+| 1 1
+| 1 e_x
+| 1 ;
+| 2 b
+| 2 :=
+| 2 1.5
+| 2 .
+| 2 Hash
+| 2 (
+| 2 )
+| 2 ;
+| 3 c
+| 3 :=
+| 3 1
+| 3 .
+| 3 _x
+| 3 ;
+| 4 d
+| 4 :=
+| 4 1.
+| 4 ;
+| 5 e
+| 5 :=
+| 5 1
+| 5 e
+| 5 +
+| 6 f
+| 6 :=
+| 6 0x
+| 6 ;
+| 7 g
+| 7 :=
+| 7 0b1
+| 7 2
+| 7 ;
+| 8 h
+| 8 :=
+| 8 1__0
+| 8 ;
+| 9 i
+| 9 :=
+| 9 1_
+| 9 ;
+| 10 j
+| 10 :=
+| 10 0X1
+| 10 g
+| 10 ;
+| error L12 4:7
+| error L10a 6:6
+| error L10c 7:9
+| error L10b 8:7
+| error L10b 9:7
+| error L10a 10:9
+=== compiler/testdata/lex/semicolons.olang
+| 1 x
+| 1 :=
+| 1 1
+| 1 ;
+| 3 y
+| 3 :=
+| 3 2
+| 3 ;
+| 3 z
+| 3 :=
+| 3 3
+| 3 ;
+| 4 f
+| 4 (
+| 4 a
+| 4 ;
+| 4 b
+| 4 )
+| 4 ;
+| error L18 2:1
+| error L18 3:7
+| error L18 4:4
+| error L18 5:1
+=== compiler/testdata/lex/strateof.olang
+| 1 a
+| 1 :=
+| 1 "abc
+| 1 ;
+| error L14 1:6
+=== compiler/testdata/lex/strnewline.olang
+| 1 a
+| 1 :=
+| 1 "abc
+| 1 ;
+| 2 b
+| 2 :=
+| 2 2
+| 2 ;
+| 3 c
+| 3 :=
+| 3 "ab\
+| 3 ;
+| 4 d
+| 4 :=
+| 4 4
+| 4 ;
+| error L14 1:6
+| error L14 3:6

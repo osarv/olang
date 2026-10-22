@@ -1,0 +1,389 @@
+=== checks/cases/b10cnodefine.olang
+| VAR 10:5-10:28
+| VAR 4:1-4:17
+| VAR 5:1-5:16
+| VAR 8:5-8:27
+| -- diagnostics
+| error  15:48
+=== checks/cases/bareadj.olang
+| ERRORS 2:1-2:14
+| FN 3:1-3:23
+| -- diagnostics
+| error E11b 6:11
+=== checks/cases/blockcomment.olang
+| FN 3:1-3:16
+| -- diagnostics
+| error L4a 4:1
+=== checks/cases/blockunclosed.olang
+| ASSERT 12:12-12:23
+| TEST 12:1-12:25
+| -- diagnostics
+| error  12:1
+| error  8:1
+=== checks/cases/bodyunparsed.olang
+| ASSERT 16:5-16:34
+| FIELD 6:24-6:25
+| FN 14:1-14:34
+| FN 15:1-17:2
+| RETURN 14:14-14:32
+| TYPE 6:1-6:27
+| -- diagnostics
+| error  13:1
+| error L9 9:5
+=== checks/cases/c4punmut.olang
+| FN 5:1-5:16
+| -- diagnostics
+| error  4:30
+=== checks/cases/c7destructinbody.olang
+| FN 7:1-7:16
+| -- diagnostics
+| error C7 5:5
+=== checks/cases/commaendsline.olang
+| ASSERT 5:5-6:23
+| FN 3:1-3:42
+| FN 4:1-7:2
+| RETURN 3:28-3:40
+| -- diagnostics
+| error L18a 5:17
+=== checks/cases/comprnotype.olang
+| -- diagnostics
+| error  4:10
+=== checks/cases/condnoelse.olang
+| -- diagnostics
+| error  5:23
+=== checks/cases/e11bafterrendering.olang
+| IMPORT 3:1-3:16
+| -- diagnostics
+| error E11b 7:28
+=== checks/cases/e11bcalledtext.olang
+| IMPORT 3:1-3:16
+| -- diagnostics
+| error E11b 7:17
+=== checks/cases/e11bjoinvalue.olang
+| FN 3:1-3:39
+| FN 4:1-4:23
+| RETURN 3:27-3:37
+| -- diagnostics
+| error E11b 6:10
+=== checks/cases/e11blongchain.olang
+| IMPORT 5:1-5:16
+| -- diagnostics
+| error E11b 9:20
+=== checks/cases/g21paren.olang
+| -- diagnostics
+| error G21 4:19
+=== checks/cases/l10bdouble.olang
+| FN 3:1-5:2
+| VAR 4:5-4:16
+| -- diagnostics
+| error L10b 4:11
+=== checks/cases/l10bprefix.olang
+| FN 3:1-5:2
+| VAR 4:5-4:18
+| -- diagnostics
+| error L10b 4:15
+=== checks/cases/l13eof.olang
+| -- diagnostics
+| error  4:11
+| error L13 4:10
+=== checks/cases/l13newline.olang
+| EXPR 9:5-9:23
+| FN 6:1-10:2
+| IMPORT 5:1-5:16
+| VAR 7:5-7:12
+| VAR 8:5-8:11
+| -- diagnostics
+| error L13 7:10
+=== checks/cases/l14eof.olang
+| -- diagnostics
+| error  4:14
+| error L14 4:10
+=== checks/cases/l14newline.olang
+| EXPR 9:5-9:23
+| FN 6:1-10:2
+| IMPORT 5:1-5:16
+| VAR 7:5-7:14
+| VAR 8:5-8:11
+| -- diagnostics
+| error L14 7:10
+=== checks/cases/l16unknown.olang
+| ASSERT 12:15-12:31
+| FN 12:1-12:33
+| FN 5:1-11:2
+| IF 6:5-8:6
+| RETURN 10:5-10:13
+| RETURN 7:9-7:17
+| VAR 9:5-9:18
+| -- diagnostics
+| error L16 6:8
+=== checks/cases/l18atrailing.olang
+| -- diagnostics
+| error L18a 4:19
+=== checks/cases/l18bifline.olang
+| IMPORT 4:1-4:16
+| -- diagnostics
+| error  8:10
+=== checks/cases/l18endofline.olang
+| FN 4:1-6:2
+| RETURN 5:5-5:13
+| -- diagnostics
+| error  9:14
+=== checks/cases/l18operatorline.olang
+| EXPR 9:15-9:44
+| FN 9:1-9:46
+| IMPORT 3:1-3:16
+| -- diagnostics
+| error L18 6:9
+=== checks/cases/l18semicolon.olang
+| EXPR 8:5-8:26
+| FN 6:1-9:2
+| IMPORT 5:1-5:16
+| LAMBDA 7:10-7:48
+| RETURN 7:38-7:46
+| VAR 7:26-7:36
+| VAR 7:5-7:48
+| -- diagnostics
+| error L18 7:36
+=== checks/cases/l1junkline.olang
+| EXPR 10:5-10:23
+| FN 6:1-11:2
+| IMPORT 5:1-5:16
+| VAR 7:5-7:11
+| VAR 9:5-9:15
+| -- diagnostics
+| error L16 8:1
+=== checks/cases/l1nul.olang
+| FN 3:1-3:16
+| FN 5:1-5:39
+| RETURN 5:18-5:37
+| -- diagnostics
+| error L1 4:1
+=== checks/cases/l20aline.olang
+| FN 4:1-4:16
+| -- diagnostics
+| error D12 3:17
+=== checks/cases/l3crlf.olang
+| FN 4:1-6:2
+| VAR 5:5-5:11
+| -- diagnostics
+| error L3 4:14
+=== checks/cases/l9keywordfield.olang
+| FN 8:1-8:16
+| -- diagnostics
+| error L9a 6:13
+=== checks/cases/l9keywordname.olang
+| FN 4:1-4:16
+| -- diagnostics
+| error L9 3:4
+=== checks/cases/l9typeunparsed.olang
+| EXPR 21:5-21:33
+| FN 17:1-17:35
+| FN 18:1-22:2
+| IMPORT 5:1-5:16
+| RETURN 17:25-17:33
+| TYPE 6:1-9:2
+| VAR 19:5-19:21
+| VAR 20:5-20:21
+| -- diagnostics
+| error L9 11:9
+| error L9 15:5
+=== checks/cases/nomainhidden.olang
+| -- diagnostics
+| error R1a 3:12
+=== checks/cases/parsedropcomp.olang
+| -- diagnostics
+| error  4:15
+=== checks/cases/parsedroplit.olang
+| FN 3:1-3:24
+| RETURN 3:14-3:22
+| -- diagnostics
+| error  5:18
+=== checks/cases/parsedropop.olang
+| FN 3:1-3:24
+| RETURN 3:14-3:22
+| -- diagnostics
+| error  5:15
+=== checks/cases/parsedropret.olang
+| EXPR 6:15-6:18
+| FN 6:1-6:20
+| -- diagnostics
+| error  5:1
+=== checks/cases/qerror.olang
+| -- diagnostics
+| error R1a 3:12
+=== checks/cases/qwnointro.olang
+| FN 5:1-5:16
+| -- diagnostics
+| error  4:11
+=== checks/cases/r3bareerror.olang
+| FN 6:1-6:14
+| -- diagnostics
+| error  4:22
+=== checks/cases/s12barrowleaves.olang
+| EXPR 11:15-11:39
+| FN 11:1-11:41
+| IMPORT 3:1-3:16
+| -- diagnostics
+| error S12b 8:20
+=== checks/cases/s12barrowreturncall.olang
+| EXPR 18:15-18:42
+| FN 10:1-10:31
+| FN 18:1-18:44
+| IMPORT 5:1-5:16
+| RETURN 10:21-10:29
+| TYPE 6:1-9:2
+| -- diagnostics
+| error S12b 13:25
+=== checks/cases/s12bvaluecomma.olang
+| EXPR 13:5-13:26
+| FN 11:1-14:2
+| IMPORT 4:1-4:16
+| MULTI 12:5-12:23
+| -- diagnostics
+| error S12b, D8c 7:27
+=== checks/cases/s12casetype.olang
+| FIELD 4:29-4:30
+| TYPE 4:1-4:32
+| -- diagnostics
+| error  8:16
+=== checks/cases/s8bfixedbuild.olang
+| ERRORS 2:1-2:14
+| FN 6:1-6:30
+| RETURN 6:20-6:28
+| VAR 3:1-3:17
+| VAR 4:1-4:18
+| VAR 5:1-5:37
+| -- diagnostics
+| error  10:45
+=== checks/cases/strayfnbody.olang
+| FN 6:1-6:16
+| -- diagnostics
+| error  4:14
+| error L16 4:12
+=== checks/cases/t17sep.olang
+| FN 4:1-4:16
+| -- diagnostics
+| error  3:23
+=== checks/cases/t30sep.olang
+| FN 4:1-4:16
+| -- diagnostics
+| error  3:28
+=== checks/cases/toprecover.olang
+| FN 10:1-10:16
+| -- diagnostics
+| error  6:7
+=== checks/cases/varlistcount.olang
+| FN 3:1-5:2
+| VAR 4:5-4:17
+| VAR 4:8-4:13
+| -- diagnostics
+| error D12b 4:5
+=== checks/fixtures/format/broken.olang
+| -- diagnostics
+| error  3:1
+=== compiler/testdata/lex/brackets.olang
+| FN 3:1-3:11
+| TYPE 5:1-5:20
+| -- diagnostics
+| error  2:4
+| error  3:4
+| error  4:6
+=== compiler/testdata/lex/bytes.olang
+| VAR 1:1-1:7
+| VAR 3:1-3:6
+| -- diagnostics
+| error  2:2
+| error  4:1
+| error L1 1:3
+| error L1 3:3
+| error L3 1:7
+=== compiler/testdata/lex/charateof.olang
+| VAR 1:1-1:7
+| -- diagnostics
+| error L13 1:6
+=== compiler/testdata/lex/charnewline.olang
+| VAR 1:1-1:8
+| VAR 2:1-2:8
+| VAR 3:1-3:9
+| VAR 4:1-4:8
+| VAR 5:1-5:10
+| VAR 6:1-6:7
+| -- diagnostics
+| error L13 1:6
+| error L13 2:6
+| error L13 3:6
+| error L13 4:6
+| error L13 5:6
+| error L13 6:6
+=== compiler/testdata/lex/comments.olang
+| VAR 1:1-1:19
+| VAR 2:1-2:7
+| -- diagnostics
+| error  3:11
+| error L4a 4:1
+=== compiler/testdata/lex/escapes.olang
+| VAR 1:1-1:26
+| VAR 2:1-2:10
+| VAR 3:1-3:10
+| -- diagnostics
+| error L15 1:7
+| error L15 2:7
+=== compiler/testdata/lex/escateof.olang
+| VAR 1:1-1:9
+| -- diagnostics
+| error L14 1:6
+=== compiler/testdata/lex/junkeof.olang
+| VAR 1:1-1:7
+| -- diagnostics
+| error L16 2:1
+=== compiler/testdata/lex/junkline.olang
+| VAR 1:1-1:7
+| VAR 3:1-3:7
+| -- diagnostics
+| error L16 2:1
+=== compiler/testdata/lex/memberwords.olang
+| FN 4:1-4:22
+| -- diagnostics
+| error  1:2
+| error  2:2
+| error  3:7
+=== compiler/testdata/lex/numbers.olang
+| VAR 2:1-2:16
+| VAR 3:1-3:10
+| VAR 4:1-4:8
+| VAR 8:1-8:10
+| VAR 9:1-9:8
+| -- diagnostics
+| error  10:9
+| error  1:7
+| error  5:7
+| error  7:9
+| error L10a 10:9
+| error L10a 6:6
+| error L10b 8:7
+| error L10b 9:7
+| error L10c 7:9
+| error L12 4:7
+=== compiler/testdata/lex/semicolons.olang
+| VAR 1:1-1:7
+| VAR 3:1-3:7
+| VAR 3:9-3:15
+| -- diagnostics
+| error  4:2
+| error  4:7
+| error L18 2:1
+| error L18 3:7
+| error L18 4:4
+| error L18 5:1
+=== compiler/testdata/lex/strateof.olang
+| VAR 1:1-1:10
+| -- diagnostics
+| error L14 1:6
+=== compiler/testdata/lex/strnewline.olang
+| VAR 1:1-1:10
+| VAR 2:1-2:7
+| VAR 3:1-3:10
+| VAR 4:1-4:7
+| -- diagnostics
+| error L14 1:6
+| error L14 3:6
