@@ -8913,6 +8913,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     c.lastErrs = types.ListId(0)
     fr.Tries++
     task typed.Expr&c = null
+    banged := false
     match inner {
         case ast.Expr.Lambda(lsp, lf) {
             if lf.S.Params.Len() > 0 { c.err(lsp, msgs.SpawnLambdaParams()) }
@@ -8922,7 +8923,11 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
             }
         }
         case ast.Expr.Call(_, _, _) { task = c.expr(inner, types.UnknownT) }
-        case ast.Expr.Postfix(_, op, y) if op == token.Tok.Bang and callLike(y) { task = c.expr(inner, types.UnknownT) }
+        case ast.Expr.Postfix(_, op, y) if op == token.Tok.Bang and callLike(y) {
+            # E35: "spawn f(x)!" - its errors end the program from the task's thread (P6), none reaches the join
+            banged = true
+            task = c.expr(inner, types.UnknownT)
+        }
         nomatch {
             c.err(inner.Span(), msgs.SpawnNotCall())
             c.expr(inner, types.UnknownT)
@@ -8935,6 +8940,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     fr.leaks.Truncate(lm)
     if task == null { return }
     errs := c.P.T.Items(c.lastErrs)
+    if banged { errs = Array<types.TypeId>(0) }
     if errs.Len() > 0 and not tried {
         c.err(inner.Span(), msgs.SpawnFallible())
         fr.spawnSaid++   # said once: its "try join" is not then said to need no try

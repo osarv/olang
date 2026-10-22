@@ -1516,7 +1516,10 @@ fn scopesan(r mut report&) ? Failed {
     dir := fresh("scopesan")
     os.Run("cp checks/fixtures/scopesan/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
-    try r.expect(sh(dir, ("objcopy --redefine-sym main=olang_main build/stub.*.main.debug.san.o > out.txt 2>&1"
+    # main renamed, and Touch named stub_Touch as drive.c declares it, whatever symbol the compiler gave it (B3b)
+    rename String& = ("for o in build/*.debug.san.o; do for s in $(nm $o | awk '$2 == \"T\" && $3 ~ /Touch$/ { print $3 }'); do"
+                      " objcopy --redefine-sym $s=stub_Touch $o || exit 1; done; done")
+    try r.expect(sh(dir, ("objcopy --redefine-sym main=olang_main build/stub.*.main.debug.san.o > out.txt 2>&1 && " $rename
                           " && clang -O0 drive.c build/*.debug.san.o -o drive -lpthread -ldl -lm >> out.txt 2>&1")) == 0
                  "drive.c did not link", dir)
     try r.expect(sh(dir, "./drive ok > out.txt 2>&1") == 0 and outOf(dir) == "ok 1499500\n", "drive ok", dir)

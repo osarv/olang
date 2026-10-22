@@ -524,6 +524,8 @@ fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
         case eval.Stop.Raised(code) { return "an error escapes, code " $code }
         case eval.Stop.Exited(kind, file, sp, msg) {
             what := mir.ExitText(kind)
+            # E35: an error a "!" took, where the "!" is - as a debug build says it
+            if kind == mir.ExitKind.Error { return $line(d, file, sp) ": " $msg }
             if what == "" { return $msg }
             if msg == "" { return $line(d, file, sp) ": " $what }
             return $line(d, file, sp) ": " $what ": " $msg
@@ -608,6 +610,12 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
             # what interpret cannot run, or the built program leaves undefined: interpret's own stop (B3e)
             sayErr("olang interpret: " $x.StopText(s, entry, d) "\n")
             return 1
+        }
+        case eval.Stop.Exited(kind, _, _, _) {
+            sayErr($x.StopText(s, entry, d) "\n")
+            # E35, S18d: where the error a "!" took came from, as a debug build prints it
+            if kind == mir.ExitKind.Error { sayErr(x.TraceText(d)) }
+            return 134
         }
         case _ {
             sayErr($x.StopText(s, entry, d) "\n")

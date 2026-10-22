@@ -1,4 +1,6 @@
 # the scope sanitizer's runtime for drive.c (B2f): built with -b -d -s, its objects linked with drive.c in place of main
+# (which reaches Touch, so a compiler emitting only what a program reaches emits it too; it never runs)
+import "std/os"
 fn Touch(n I64) I64 {
     a := Array<I64>(n, 1)
     l := List<I64>()
@@ -6,4 +8,6 @@ fn Touch(n I64) I64 {
     return l.Len()
 }
 
-fn main() ? { }
+fn main() ? {
+    if Touch(os.Args().Len()) < 0 { os.Exit(1) }
+}
