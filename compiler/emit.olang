@@ -1301,13 +1301,7 @@ fn (fe mut fnEm&) run() {
             fe.head.Push("  %lp" $i " = alloca ptr\n")
             if l.Kind != mir.LocalKind.Var and l.Kind != mir.LocalKind.Temp { fe.gap("a parameter or capture in an arena") }
         } else if fe.size(l.Ty) > 65536 {
-            if not fe.big {
-                fe.big = true
-                fe.head.Push("  %big = alloca %olang.scope\n")
-                fe.pro.Push("  store %olang.scope zeroinitializer, ptr %big\n")
-                fe.E.runtime("__olang_scope_alloc_a")
-                fe.E.runtime("__olang_scope_close")
-            }
+            fe.bigArena()
             a := fe.align(l.Ty)
             fe.pro.Push("  %l" $i " = call ptr @__olang_scope_alloc_a(ptr %big, i64 " $fe.size(l.Ty) ", i64 " $(a if a > 8 else 8) ")\n")
         } else {
@@ -1333,8 +1327,9 @@ fn (fe mut fnEm&) run() {
         if not fe.isFrame(f.Locals[l].Home) { fe.gap("a parameter homed in an arena") }
         match pass[i] {
             case 'm' {
-                fe.pro.Push("  %pv" $i " = load " $fe.ty(lt) ", ptr %a" $i "\n")
-                fe.pro.Push("  store " $fe.ty(lt) " %pv" $i ", ptr %l" $l "\n")
+                # the caller's copy, made before the call: moved into the local's storage
+                fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+                fe.pro.Push("  call void @llvm.memmove.p0.p0.i64(ptr %l" $l ", ptr %a" $i ", i64 " $fe.size(lt) ", i1 false)\n")
             }
             case 's' {
                 fe.pro.Push("  %pf" $i " = insertvalue { ptr, ptr } undef, ptr %a" $i "c, 0\n")
@@ -1362,8 +1357,13 @@ fn (fe mut fnEm&) run() {
             lt := fe.ty(f.Locals[l].Ty)
             if not fe.isFrame(f.Locals[l].Home) { fe.gap("a capture homed in an arena") }
             fe.pro.Push("  %cp" $i " = getelementptr " $et ", ptr %env, i32 0, i32 " $i "\n")
-            fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i ", !tbaa !28\n")
-            fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
+            if fe.viaMem(f.Locals[l].Ty) {
+                fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+                fe.pro.Push("  call void @llvm.memmove.p0.p0.i64(ptr %l" $l ", ptr %cp" $i ", i64 " $fe.size(f.Locals[l].Ty) ", i1 false)\n")
+            } else {
+                fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i ", !tbaa !28\n")
+                fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
+            }
         }
         # the captured scopes (D16c), each as this thread may build into it: its own part of a scope another thread
         # owns, the program's (null) as this thread reaches it (P2, decision 48)
@@ -1396,6 +1396,159 @@ fn (fe mut fnEm&) run() {
         fe.w("ret " $rt " %rr")
     } else {
         fe.w("ret void")
+    }
+}
+
+# the frame's own arena for storage over 64KB (T7c), opened at entry and closed at the one return
+fn (fe mut fnEm&) bigArena() {
+    if fe.big { return }
+    fe.big = true
+    fe.head.Push("  %big = alloca %olang.scope\n")
+    fe.pro.Push("  store %olang.scope zeroinitializer, ptr %big\n")
+    fe.E.runtime("__olang_scope_alloc_a")
+    fe.E.runtime("__olang_scope_close")
+}
+
+# a value too large to carry as one LLVM value (types.ViaMemory: a struct, a tuple, a record or a fixed array over
+# 128 bytes) - moved through memory, as stage 0 moves it: copied by memmove, built part by part, a parameter as a
+# pointer to the callee's own copy, a result through the hidden out pointer. LLVM expands an aggregate value element by
+# element, and a link of a program moving one of 72KB as a value ran for over half an hour
+fn (fe mut fnEm&) viaMem(ty types.TypeId) Bool {
+    if ty == types.VoidT or ty == types.NoreturnT or ty == types.UnknownT { return false }
+    fe.E.P.Layout(ty)
+    return fe.E.T.ViaMemory(ty)
+}
+
+# a slot of type ty in the frame: an alloca in the entry block, over 64KB storage from the frame's arena (T7c)
+fn (fe mut fnEm&) slot(ty types.TypeId) String {
+    if fe.size(ty) <= 65536 { return fe.alloca(fe.ty(ty), fe.align(ty)) }
+    fe.bigArena()
+    a := fe.align(ty)
+    s := "%" $fe.fresh("bs")
+    fe.pro.Push("  " $s " = call ptr @__olang_scope_alloc_a(ptr %big, i64 " $fe.size(ty) ", i64 " $(a if a > 8 else 8) ")\n")
+    return s
+}
+
+fn (fe mut fnEm&) memmove(dst String&, src String&, n I64) {
+    fe.E.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+    fe.w("call void @llvm.memmove.p0.p0.i64(ptr " $dst ", ptr " $src ", i64 " $n ", i1 false)")
+}
+
+# where an operand of a type moved through memory already is: a place's address, constant data's global; "" for
+# none (a constant: all zero bits)
+fn (fe mut fnEm&) srcAddr(x mir.Operand) String {
+    match x {
+        case mir.Operand.Copy(q) {
+            at, _ := fe.addr(q)
+            return at
+        }
+        case mir.Operand.Data(ty, c, file, sp) { return fe.data(ty, c, file, sp, true) }
+        case _ { return "" }
+    }
+}
+
+# operand x, of type ty, written into memory at at: a value too large to carry moved by memmove (all zero bits by a
+# memset), anything else stored
+fn (fe mut fnEm&) put(at String&, ty types.TypeId, x mir.Operand, tag String& = "") {
+    if fe.viaMem(ty) {
+        src := fe.srcAddr(x)
+        if src != "" {
+            if src != at { fe.memmove(at, src, fe.size(ty)) }
+            return
+        }
+        match x {
+            case mir.Operand.Const(_, _), mir.Operand.None {
+                fe.E.declare("llvm.memset.p0.i64", "void @llvm.memset.p0.i64(ptr, i8, i64, i1)")
+                fe.w("call void @llvm.memset.p0.i64(ptr " $at ", i8 0, i64 " $fe.size(ty) ", i1 false)")
+                return
+            }
+            case _ { }
+        }
+    }
+    fe.store(fe.ty(ty), fe.val(x, ty), at, tag)
+}
+
+# an assignment of a value moved through memory: a copy by memmove, an aggregate built where it lands - straight into
+# the place where nothing its parts read can be the place, else in a slot of its own first
+fn (fe mut fnEm&) intoPlace(p mir.Place, pt types.TypeId, rv mir.Rvalue) Bool {
+    t := fe.E.T
+    match rv {
+        case mir.Rvalue.Use(x) {
+            at, _ := fe.addr(p)
+            fe.put(at, pt, x)
+            return true
+        }
+        case mir.Rvalue.Aggregate(ty, _, args) {
+            r := t.Repr(ty)
+            k := t.KindOf(r)
+            if k == types.Kind.AnonEnum or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum) {
+                return false
+            }
+            if fe.apart(p, args) {
+                at, _ := fe.addr(p)
+                fe.buildInto(at, pt, args)
+                return true
+            }
+            tmp := fe.slot(pt)
+            fe.buildInto(tmp, pt, args)
+            at, _ := fe.addr(p)
+            fe.memmove(at, tmp, fe.size(pt))
+            return true
+        }
+        case _ { return false }
+    }
+}
+
+# whether place p is a local of the frame no part in args can read: each a constant, constant data, or a copy of
+# another local reached without a reference
+fn (fe mut fnEm&) apart(p mir.Place, args mir.Range) Bool {
+    dst := mir.NoLocal
+    match p.B {
+        case mir.Base.Local(l) { dst = l }
+        case _ { return false }
+    }
+    if fe.derefs(p) { return false }
+    for i in range args.N {
+        match fe.arg(args, i) {
+            case mir.Operand.Copy(q) {
+                if fe.derefs(q) or fe.baseIs(q, dst) { return false }
+                match q.B {
+                    case mir.Base.Local(_) { }
+                    case _ { return false }
+                }
+            }
+            case _ { }
+        }
+    }
+    return true
+}
+
+fn (fe mut fnEm&) derefs(p mir.Place) Bool {
+    for i in range p.Path.N {
+        match fe.F.Projs[I64(p.Path.At) + i] {
+            case mir.Proj.Deref { return true }
+            case _ { }
+        }
+    }
+    return false
+}
+
+# an aggregate of a type moved through memory, built in place at at: each part written where it lives
+fn (fe mut fnEm&) buildInto(at String&, ty types.TypeId, args mir.Range) {
+    t := fe.E.T
+    r := t.Repr(ty)
+    lt := fe.ty(r)
+    a := fe.arrayOf(r)
+    if a != types.UnknownT {
+        el := t.Elem(a)
+        for i in range fe.fixedLen(a) {
+            fe.put(fe.let("getelementptr " $lt ", ptr " $at ", i64 0, i64 " $i), el, fe.arg(args, i), fe.E.tbaa(el, true))
+        }
+        return
+    }
+    fs := t.Items(fe.fieldList(r))
+    for i in range fs.Len() {
+        fe.put(fe.let("getelementptr " $lt ", ptr " $at ", i32 0, i32 " $i), fs[i], fe.arg(args, i), fe.E.tbaa(fs[i], false))
     }
 }
 
@@ -1736,7 +1889,7 @@ fn (e mut Emitter&) constText(ty types.TypeId, bits I64) String {
 # read-only constant storage (T25d): a private constant, one for each distinct content, and the operand's value - the
 # pair { length, storage } for a run-time-length array or a reference to one, the storage for a reference to a fixed
 # array, the array itself for a fixed array's value
-fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span) String {
+fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where Bool = false) String {
     t := fe.E.T
     r := t.Repr(ty)
     x := t.Referent(r) if t.IsRef(r) else r
@@ -1748,8 +1901,9 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span) String 
     # T25d: one instance for each site written, two sites two - what lowering synthesizes (no span) by its contents
     site := "" if sp.Start == I32(0) and sp.End == I32(0) else $file ":" $sp.Start ":" $sp.End ":" $c ":" $t.Canon(ty)
     g, n := fe.constGlobal(t.Elem(a), c, site)
-    if t.IsRef(r) and fe.fixed(a) { return g }
-    if fe.fixed(a) { return fe.load(fe.ty(a), g) }
+    if t.IsRef(r) and fe.fixed(a) { return "" if where else g }
+    if fe.fixed(a) { return g if where else fe.load(fe.ty(a), g) }
+    if where { return "" }
     return "{ i64 " $n ", ptr " $g " }"
 }
 
@@ -1890,6 +2044,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         case mir.Stmt.Assign(_, p, rv) {
             pt := fe.placeType(p)
             if fe.fillInPlace(p, pt, rv) { return }
+            if fe.viaMem(pt) and fe.intoPlace(p, pt, rv) { return }
             v := fe.rvalue(rv, pt)
             if pt == types.VoidT or pt == types.NoreturnT { return }
             at, _ := fe.addr(p)
@@ -2087,6 +2242,11 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         case mir.Rvalue.Aggregate(ty, tag, args) { return fe.aggregate(ty, tag, args) }
         case mir.Rvalue.New(s, x, ty) {
             rt := t.Referent(t.Repr(ty))
+            if fe.viaMem(rt) {
+                p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
+                fe.put(p, rt, x)
+                return p
+            }
             v := fe.val(x, rt)
             if fe.runTime(rt) { return fe.copyArray(s, v, rt) }
             p := fe.alloc(s, $fe.size(rt), fe.align(rt), fe.ty(rt))
@@ -2168,7 +2328,8 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     } else {
         fe.E.runtime("__olang_scope_alloc")
         p = fe.let("call ptr @__olang_scope_alloc(ptr " $sc ", i64 " $bytes ")")
-        v := fe.val(fill, el)
+        big := fe.viaMem(el)
+        v := "" if big else fe.val(fill, el)
         elt := fe.ty(el)
         i := fe.alloca("i64")
         fe.store("i64", "0", i)
@@ -2180,7 +2341,11 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
         fe.w("br i1 " $more ", label %" $body ", label %" $done)
         fe.label(body)
         at := fe.let("getelementptr " $elt ", ptr " $p ", i64 " $k)
-        fe.store(elt, v, at)
+        if big {
+            fe.put(at, el, fill)
+        } else {
+            fe.store(elt, v, at)
+        }
         fe.store("i64", fe.let("add i64 " $k ", 1"), i)
         fe.w("br label %" $head)
         fe.label(done)
@@ -2632,7 +2797,12 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
         for i in range args.N {
             x := fe.arg(args, i)
             xt := fe.otype(x)
-            fe.store(fe.ty(xt), fe.val(x, xt), fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i), ", !tbaa !28")
+            at := fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i)
+            if fe.viaMem(xt) {
+                fe.put(at, xt, x)
+            } else {
+                fe.store(fe.ty(xt), fe.val(x, xt), at, ", !tbaa !28")
+            }
         }
         # where the captures holding references live (D16c): null for the program's, and for each the plan did not say
         for j in range nc {
@@ -2898,7 +3068,7 @@ fn (fe mut fnEm&) term(tm mir.Term) {
         case mir.Term.Return(_, x) {
             rt := t.RetLlvm(fe.F.Ty)
             if fe.via {
-                fe.store(fe.ty(fe.res), fe.val(x, fe.res), "%out")
+                fe.put("%out", fe.res, x)
                 if fe.errs { fe.store("i32", "0", "%rv") }
             } else if fe.errs {
                 if fe.res == types.VoidT {
@@ -3030,7 +3200,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     out := ""
     if via {
-        out = fe.alloca(fe.ty(res), fe.align(res))
+        out = fe.slot(res)
         if not first { args.Push(", ") }
         args.Push("ptr " $out)
         first = false
@@ -3046,17 +3216,19 @@ fn (fe mut fnEm&) call(c mir.Call) {
         if not first { args.Push(", ") }
         first = false
         x := fe.arg(c.Args, i)
+        if not isExtern and pass[i] == 'm' {
+            # the callee's own copy, made before the arguments after it run
+            p := fe.slot(ps[i])
+            fe.put(p, ps[i], x)
+            args.Push("ptr " $p)
+            continue
+        }
         v := fe.val(x, ps[i])
         if isExtern {
             args.Push(fe.externArg(v, ps[i]))
             continue
         }
         match pass[i] {
-            case 'm' {
-                p := fe.alloca(fe.ty(ps[i]), fe.align(ps[i]))
-                fe.store(fe.ty(ps[i]), v, p)
-                args.Push("ptr " $p)
-            }
             case 's' {
                 args.Push("ptr " $fe.let("extractvalue { ptr, ptr } " $v ", 0") ", ptr " $fe.let("extractvalue { ptr, ptr } " $v ", 1"))
             }
@@ -3076,7 +3248,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     value := ""
     if via {
-        value = fe.load(fe.ty(res), out)
+        value = out
     } else if res != types.VoidT {
         value = fe.let("extractvalue " $rt " " $r ", 1") if errs else r
     }
@@ -3090,7 +3262,11 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     if c.HasDest and value != "" {
         at, dt := fe.addr(c.Dest)
-        fe.store(fe.ty(dt), value, at)
+        if via {
+            fe.memmove(at, out, fe.size(res))
+        } else {
+            fe.store(fe.ty(dt), value, at)
+        }
     }
     fe.w("br label %" $blockName(c.Ok))
 }
@@ -3408,9 +3584,10 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
         fields.Push("{ ptr, ptr }")
         vals.Push(fv)
     }
+    # an argument moved through memory is copied into the environment where it lands, below: "" here
     for i in range ps.Len() {
         fields.Push(fe.ty(ps[i]))
-        vals.Push(fe.val(fe.arg(k.Args, i), ps[i]))
+        vals.Push("" if fe.viaMem(ps[i]) else fe.val(fe.arg(k.Args, i), ps[i]))
     }
     subs List<String&>
     for i in range k.Scopes.N {
@@ -3451,8 +3628,14 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
     e.runtime("__olang_scope_alloc_a")
     size := fe.let("ptrtoint ptr " $fe.let("getelementptr " $envT ", ptr null, i32 1") " to i64")
     env := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 " $size ", i64 8)")
+    first := 1 if isValue else 0
     for i in range fields.Len() {
-        fe.store(fields[i], vals[i], fe.let("getelementptr " $envT ", ptr " $env ", i32 0, i32 " $i))
+        at := fe.let("getelementptr " $envT ", ptr " $env ", i32 0, i32 " $i)
+        if vals[i] == "" {
+            fe.put(at, ps[i - first], fe.arg(k.Args, i - first))
+        } else {
+            fe.store(fields[i], vals[i], at)
+        }
     }
     # the task's node (%olang.task: next, done, merges, error) and its stand-ins' merge records
     node := fe.let("call ptr @__olang_scope_alloc_a(ptr " $js ", i64 32, i64 8)")
@@ -3546,8 +3729,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
     }
     value := ""
     if via {
-        b.Push("  %v = load " $e.ty(res) ", ptr %out\n")
-        value = "%v"
+        value = "%out"
     } else if res != types.VoidT and res != types.NoreturnT {
         if errs {
             b.Push("  %v = extractvalue " $rt " %r, 1\n")
@@ -3566,7 +3748,22 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
     }
     if ntargets > 0 and value != "" {
         t0 := at + ps.Len() + nscopes
-        if ntargets == 1 {
+        if via {
+            # a result moved through memory, moved into its targets
+            e.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+            e.P.Layout(res)
+            if ntargets == 1 {
+                b.Push("  %d0 = load ptr, ptr %f" $t0 "\n  call void @llvm.memmove.p0.p0.i64(ptr %d0, ptr %out, i64 " $t.Size(res) ", i1 false)\n")
+            } else {
+                parts := t.Items(t.Parts(t.Repr(res)))
+                for i in range ntargets {
+                    e.P.Layout(parts[i])
+                    b.Push("  %d" $i " = load ptr, ptr %f" $(t0 + i) "\n")
+                    b.Push("  %o" $i " = getelementptr " $e.ty(res) ", ptr %out, i32 0, i32 " $i "\n")
+                    b.Push("  call void @llvm.memmove.p0.p0.i64(ptr %d" $i ", ptr %o" $i ", i64 " $t.Size(parts[i]) ", i1 false)\n")
+                }
+            }
+        } else if ntargets == 1 {
             b.Push("  %d0 = load ptr, ptr %f" $t0 "\n  store " $e.ty(res) " " $value ", ptr %d0\n")
         } else {
             parts := t.Items(t.Parts(t.Repr(res)))
