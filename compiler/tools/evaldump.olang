@@ -1,5 +1,6 @@
-# evaldump - a program checked by the self-hosted checker, lowered (compiler/lower.olang) and run by the self-hosted
-# evaluator (compiler/eval.olang, compiler/interp.olang) as interpret runs it: M8's tool, as emitdump is M9's.
+# evaldump - a program checked by the self-hosted checker, placed by the scope pass, lowered (compiler/lower.olang)
+# and run by the self-hosted evaluator (compiler/eval.olang, compiler/interp.olang) as interpret runs it: M8's tool,
+# as emitdump is M9's.
 #
 #     evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]
 #

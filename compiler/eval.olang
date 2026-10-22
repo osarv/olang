@@ -291,15 +291,16 @@ type cfn struct() {
 # the flat forms (cfn.Fast): a local of a number set from another (fCopy), from a constant (fConst), from an operator
 # on two (fBin) or one (fUn) operands each a local or a constant, from an array local's element at an index local
 # (fLoad); an array local's element at an index local set from a local or a constant (fStore). The words: kind, the
-# destination local, its width, operand A (a local, or -1 and its bits), operand B (the same), A's type, B's type,
-# the result's type
+# destination local, its width, operand A (a local and its width, or -1 and the constant's bits), operand B (the same;
+# a load's or store's index local), A's type (a load's or store's array), B's type (the index's), the result's type
+# (a store's value's), and 1 where the operator is on two I64s (computed in line, as intOp would)
 fCopy I64 = 1
 fConst I64 = 2
 fBin I64 = 3
 fUn I64 = 4
 fLoad I64 = 5
 fStore I64 = 6
-fastStride I64 = 10
+fastStride I64 = 11
 
 # ---- the machine ----
 
@@ -498,6 +499,9 @@ fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt, c mut cfn&, k I64) {
                         } else {
                             if args.N != 2 or not m.flatOperand(f, f.Ops[I64(args.At) + 1], c, o + 5, o + 8) { return }
                             c.Fast[o] = fBin
+                            if m.i64(types.TypeId(I32(c.Fast[o + 7]))) and m.i64(types.TypeId(I32(c.Fast[o + 8]))) and wordOp(op) {
+                                c.Fast[o + 10] = 1
+                            }
                         }
                         c.FastOp[k] = op
                     }
@@ -568,6 +572,18 @@ fn flatOp(op typed.PrimOp) Bool {
     return match op {
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul
              typed.PrimOp.Div, typed.PrimOp.Rem, typed.PrimOp.Shl, typed.PrimOp.Shr, typed.PrimOp.BitAnd, typed.PrimOp.BitOr
+             typed.PrimOp.BitXor, typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt
+             typed.PrimOp.Ge => true
+        nomatch => false
+    }
+}
+
+fn (m mut Machine&) i64(ty types.TypeId) Bool { return m.shape(ty) == vInt and m.width(ty) == 8 }
+
+# the operators flat computes itself on two I64s: those intOp gives the plain 64-bit answer for
+fn wordOp(op typed.PrimOp) Bool {
+    return match op {
+        case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.BitAnd, typed.PrimOp.BitOr
              typed.PrimOp.BitXor, typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt
              typed.PrimOp.Ge => true
         nomatch => false
@@ -1400,18 +1416,58 @@ fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
         } else {
             b := m.flatValue(fi, fast, o + 5)
             if m.halted { return }
-            v = m.numOp(op, a, b, at, types.TypeId(I32(fast[o + 8])), m.shape(at))
+            if fast[o + 10] == 1 {
+                v = match op {
+                    case typed.PrimOp.Add => a + b
+                    case typed.PrimOp.Sub => a - b
+                    case typed.PrimOp.Mul => a * b
+                    case typed.PrimOp.BitAnd => a & b
+                    case typed.PrimOp.BitOr => a | b
+                    case typed.PrimOp.BitXor => a ^ b
+                    case typed.PrimOp.Eq => 1 if a == b else 0
+                    case typed.PrimOp.Ne => 1 if a != b else 0
+                    case typed.PrimOp.Lt => 1 if a < b else 0
+                    case typed.PrimOp.Le => 1 if a <= b else 0
+                    case typed.PrimOp.Gt => 1 if a > b else 0
+                    nomatch => 1 if a >= b else 0
+                }
+            } else {
+                v = m.numOp(op, a, b, at, types.TypeId(I32(fast[o + 8])), m.shape(at))
+            }
         }
     }
     if m.halted { return }
-    m.wr(m.localPtr(fi, mir.LocalId(I32(fast[o + 1]))), w, v)
+    d := m.localAt(fi, fast[o + 1], w, true)
+    if d < 0 { return }
+    m.unmark(d, w)
+    m.wrRaw(d, w, v)
+}
+
+# where local l's n bytes are in the heap, read or written (write): at's checks, the commonest case in line; -1 where
+# at refuses
+fn (m mut Machine&) localAt(fi I64, l I64, n I64, write Bool) I64 {
+    id := m.ws[m.fs[fi].Locals + l]
+    if id == 0 {
+        m.refuse(WhyClosed)
+        return -1
+    }
+    slot := id & slotMask
+    if m.halted or slot >= m.nAl { return m.at(Ptr(id, 0), n, write) }
+    a := m.al[slot]
+    if a.Kind == aFree or a.Gen != id >> slotBits or n > a.Size { return m.at(Ptr(id, 0), n, write) }
+    if write and (a.ReadOnly or (m.When == Mode.Compile and a.Owner >= 0 and a.Owner != m.initGlobal)) {
+        return m.at(Ptr(id, 0), n, write)
+    }
+    return a.Base
 }
 
 # a flat form's operand at slot: a local's bits (its width after it), or the constant's
 fn (m mut Machine&) flatValue(fi I64, fast Array<I64>&, slot I64) I64 {
     l := fast[slot]
     if l < 0 { return fast[slot + 1] }
-    return m.rd(m.localPtr(fi, mir.LocalId(I32(l))), fast[slot + 1])
+    a := m.localAt(fi, l, fast[slot + 1], false)
+    if a < 0 { return 0 }
+    return m.rdRaw(a, fast[slot + 1])
 }
 
 # a flat load's or store's index: its local's value

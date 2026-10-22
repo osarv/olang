@@ -1,5 +1,5 @@
 # evaldiff - M8's acceptance, measured: each program run by stage 0 and by the self-hosted pipeline's evaluator (load,
-# names, check, lower with the stand-in placement, eval - compiler/tools/evaldump.olang), and the two runs compared.
+# names, check, scope, lower with its placement, eval - compiler/tools/evaldump.olang), and the two runs compared.
 #
 #     evaldiff [-v] [-i] [FILE...]
 #
