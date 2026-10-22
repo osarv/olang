@@ -1,0 +1,4 @@
+# check: fail error[R1]: unknown error type 'peErr'
+# R1: an error set names declared error types - a misspelled one is not one
+fn f() I64 ? peErr { return 1 }
+fn main() ? { x := try f() }

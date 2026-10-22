@@ -456,6 +456,7 @@ fn (c mut Checker&) attempt() {
         if c.P.FnIsExtern(f) or c.P.FnDecl(f).Body == null { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
+        c.errorSetKnown(f)
         if c.P.FnDecl(f).Recv != null {
             c.operatorMethod(f)
             c.inheritClash(f)
@@ -473,6 +474,21 @@ fn (c mut Checker&) attempt() {
     c.drain()
     c.failForms()
     c.roSettle()
+}
+
+# R1: every item of a function's written error set names an error type, or one of its words
+fn (c mut Checker&) errorSetKnown(f I64) {
+    fd := c.P.FnDecl(f)
+    if fd.S.Errors == null { return }
+    mi := c.P.FnModule(f)
+    ctx := generic.Context(mi, -1)
+    for e in fd.S.Errors {
+        if e == null or e.Parts.Len() == 0 or c.P.ErrorType(ctx, e) != types.UnknownT { continue }
+        n := e.Parts.Len()
+        if n >= 2 and c.P.ErrorType(ctx, ast.Path(e.Sp, e.Parts[:n - 1])) != types.UnknownT { continue }
+        text := c.P.L.Mods[mi].Src.Text[I64(e.Sp.Start):I64(e.Sp.End)]
+        c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(e.Sp.Start), I64(e.Sp.End)), msgs.UnknownErrorType(msgs.Tok(text)))
+    }
 }
 
 # X2: what crosses the C boundary - a number, or for a parameter an array of numbers; a runtime function's parameter
@@ -5013,6 +5029,19 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
                      c.lit(sp, c.i64(), k))
         return c.negate(sp, r0) if negated else r0
     }
+    # E32: a case of another enum - one sharing the name in another module, say - is no case of this one
+    if c.isEnum(c.deref(typeOf(x))) {
+        match b {
+            case ast.Expr.Member(_, prefix, _) {
+                pt := c.typeNamed(prefix)
+                if pt >= types.TypeId(0) and c.isEnum(pt) {
+                    c.err(prefix.Span(), msgs.AsNeedsCase(c.ty(c.deref(typeOf(x))), "'" $c.src(prefix.Span()) "'"))
+                    return c.unknown(sp)
+                }
+            }
+            nomatch { }
+        }
+    }
     y := c.expr(b, typeOf(x))
     if (not c.isRef(typeOf(x)) and typeOf(x) != types.NullT and c.P.T.KindOf(typeOf(x)) != types.Kind.Func) or (typeOf(x) == types.NullT and typeOf(y) == types.NullT) {
         # E10c: identity is of references (or function values) - two values, or two nulls, have none
@@ -7656,6 +7685,8 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         c.dropArgs(args)
         return c.unknown(sp)
     }
+    # M6: a method is public by its first letter - another module's private one is said, and called still
+    if not name[0].IsUpper() and c.P.FnModule(m) != c.fr().Mi { c.err(nsp, msgs.MethodIsPrivate(c.tok(n))) }
     return c.invoke(sp, nsp, m, rx, args, null)
 }
 
@@ -7848,6 +7879,11 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n so
         c.gap(nsp, "a field the checker cannot place")
         return null
     }
+    # M6a: a member is public by its own first letter - another module's private one is said, its type carried on
+    # (of a private type itself, M6 said where the type is named)
+    if not c.text(n)[0].IsUpper() and c.P.T.DeclModule(c.P.T.DeclOf(t)) != c.fr().Mi and c.text(c.P.T.DeclName(c.P.T.DeclOf(t)))[0].IsUpper() {
+        c.err(nsp, msgs.MemberIsPrivate(c.text(n), c.ty(t)))
+    }
     return typed.Place.Field(sp, fs[i], base, i)
 }
 
@@ -7901,6 +7937,7 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
         c.err(nsp, c.noCase(t, n))
         return c.unknown(sp)
     }
+    c.casePublic(t, n, nsp)
     sig := c.P.CaseSig(t, tag)
     ps := c.P.T.Items(c.P.T.Params(sig))
     given I64 = 0
@@ -8606,7 +8643,13 @@ fn (c mut Checker&) errorWord(p ast.Path&) (I64, types.TypeId) {
     head := ast.Path(p.Sp, p.Parts[:n - 1])
     et := c.P.ErrorType(c.fr().Ctx, head)
     if et == types.UnknownT { return -1, types.UnknownT }
-    return c.wordIndex(c.P.T.DeclOf(et), p.Parts[n - 1]), et
+    w := p.Parts[n - 1]
+    k := c.wordIndex(c.P.T.DeclOf(et), w)
+    # M6a: an error word is public by its own first letter
+    if k >= 0 and not c.text(w)[0].IsUpper() and c.P.T.DeclModule(c.P.T.DeclOf(et)) != c.fr().Mi {
+        c.P.L.Diags.ErrorOncePerLine(c.at(source.Span(p.Sp.End - I32(c.text(w).Len()), p.Sp.End)), msgs.ErrorWordIsPrivate(c.tok(w)))
+    }
+    return k, et
 }
 
 # a word's position among an error type's (T19); -1 for none
@@ -11247,12 +11290,22 @@ fn (c mut Checker&) caseTag(x ast.Expr&, et types.TypeId) I64 {
             cn := c.P.T.CaseNames(et)
             if cn == null { return -1 }
             for i in range cn.Len() {
-                if cn[i] == n { return i }
+                if cn[i] == n {
+                    xsp := x.Span()
+                    c.casePublic(et, n, source.Span(xsp.End - I32(c.text(n).Len()), xsp.End))
+                    return i
+                }
             }
             return -1
         }
         nomatch { return -1 }
     }
+}
+
+# M6a: an enum's case is public by its own first letter - another module's private one is said where it is named
+fn (c mut Checker&) casePublic(t types.TypeId, n source.NameId, sp source.Span) {
+    if c.text(n)[0].IsUpper() or c.frames.Len() == 0 or c.P.T.DeclModule(c.P.T.DeclOf(t)) == c.fr().Mi { return }
+    c.P.L.Diags.ErrorOncePerLine(c.at(sp), msgs.CaseIsPrivate(c.tok(n)))
 }
 
 fn (c mut Checker&) and2(sp source.Span, a typed.Expr&c, b typed.Expr&c) typed.Expr&c {

@@ -19,3 +19,8 @@ fn Fail(n I32) ? Err {
   error Err.Loud
 }
 fn South() Dir { return Dir.south }
+fn helper() I32 { return 1 }
+count I32 = 2
+type Box struct(v I32) {
+  inner I32 = v
+}

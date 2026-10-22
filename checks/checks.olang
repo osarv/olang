@@ -1056,6 +1056,9 @@ fn typereview(r mut report&) ? Failed {
     try oneError(r, dir, "privword", "error[M6a]: error word")
     try oneError(r, dir, "privmethod", "error[M6]: method")
     try oneError(r, dir, "privtype", "error[M6]: type")
+    try oneError(r, dir, "privfn", "error[M6]: 'helper' is private to its module")
+    try oneError(r, dir, "privglobal", "error[M6]: 'count' is private to its module")
+    try oneError(r, dir, "privmember", "error[M6a]: member 'inner' of Box is private to its module")
     try oneError(r, dir, "lambdaalias", "is an import's alias in this module")
 }
 

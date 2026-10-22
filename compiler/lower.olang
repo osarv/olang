@@ -1896,6 +1896,15 @@ fn (ln mut lowering&) primChecks(op typed.PrimOp, chk typed.Check, ops Array<mir
             }
         }
         case typed.PrimOp.Convert {
+            # T7d: an array of a run-time length copied into fixed storage - its length checked, once
+            fa := ln.arrayOf(ty)
+            sa := ln.arrayOf(args[0].Type())
+            if fa != types.UnknownT and sa != types.UnknownT and ln.fixedLen(fa) >= 0 and ln.fixedLen(sa) < 0 {
+                n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[ops[0]], sp)
+                same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[n, mir.Operand.Const(mir.I64T, ln.fixedLen(fa))], sp)
+                ln.check(same, chk, mir.ExitKind.FixedLength, OutOfBounds, sp)
+                return
+            }
             if t.IsInt(rt) and (t.IsInt(at) or t.IsFloat(at)) {
                 if t.IsFloat(at) {
                     # a NaN or an infinity: x - x is not 0
