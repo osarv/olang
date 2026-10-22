@@ -86,9 +86,16 @@ fmtdiff: build/compiler_tools_fmt
 build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
 	$(OLANG) build compiler/olang.olang
 
-# the compiler a golden is captured from (compiler/goldens/): stage 0 while there is one, else the port ("make drvgold
-# GOLD_OLANG=build/stage1"). A golden is captured only by its own target, never by a check
-GOLD_OLANG ?= build/out
+# where a golden (compiler/goldens/) is captured from: stage 0 and its C oracles while there are some (GOLD_FROM=stage0),
+# else the port (GOLD_FROM=port: the self-hosted passes, and GOLD_OLANG the driver - build/compiler_olang, or name
+# another, "make drvgold GOLD_FROM=port GOLD_OLANG=build/stage1"). A golden is captured only by its own target
+# (drvgold, rungold, tokgold, astgold, diaggold, layoutgold, modgold), never by a check
+GOLD_FROM ?= stage0
+GOLD_OLANG ?= $(if $(filter port,$(GOLD_FROM)),build/compiler_olang,build/out)
+GOLD_PORT = $(if $(filter port,$(GOLD_FROM)),port)
+# the C oracles, while bootstrap/ has them: a tool compares a file edited since its golden was captured with its oracle
+TOKDUMP = $(if $(wildcard bootstrap/oracle/tokdump.c),build/tokdump)
+ASTDUMP = $(if $(wildcard bootstrap/oracle/astdump.c),build/astdump)
 
 # M10's acceptance: the driver says what compiler/goldens/drv.txt stores - what stage 0 said - for command lines decided
 # before code generation and for whole builds
@@ -99,14 +106,24 @@ drvdiff: build/compiler_olang build/compiler_tools_drvdiff
 drvgold: $(GOLD_OLANG) build/compiler_tools_drvdiff
 	build/compiler_tools_drvdiff -capture $(GOLD_OLANG)
 
-# M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository
-tokdiff: build/tokdump build/compiler_tools_dump build/compiler_tools_tokdiff
+# M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository, as
+# compiler/goldens/tokens.txt stores it (a file edited since is compared with build/tokdump while bootstrap/ has it)
+tokdiff: build/compiler_tools_dump build/compiler_tools_tokdiff $(TOKDUMP)
 	build/compiler_tools_tokdiff
 
+# captures compiler/goldens/tokens.txt and tokens.full.txt again, after .olang files are edited, added or removed
+tokgold: build/compiler_tools_dump build/compiler_tools_tokdiff $(if $(GOLD_PORT),,build/tokdump)
+	build/compiler_tools_tokdiff -capture $(GOLD_PORT)
+
 # M3's acceptance: the self-hosted parser's tree and syntax errors are the C parser's on every file of the repository,
+# as compiler/goldens/ast.txt stores them (a file edited since is compared with build/astdump while bootstrap/ has it),
 # and each tree written back as source and read again is the same tree (compiler/tools/astdiff.olang)
-astdiff: build/astdump build/compiler_tools_dump build/compiler_tools_astdiff
+astdiff: build/compiler_tools_dump build/compiler_tools_astdiff $(ASTDUMP)
 	build/compiler_tools_astdiff
+
+# captures compiler/goldens/ast.txt and ast.full.txt again, after .olang files are edited, added or removed
+astgold: build/compiler_tools_dump build/compiler_tools_astdiff $(if $(GOLD_PORT),,build/astdump)
+	build/compiler_tools_astdiff -capture $(GOLD_PORT)
 
 # M4's acceptance: on every checks case the self-hosted loader and name resolver report the errors of their rules that
 # stage 0 reported, at the same position (compiler/tools/namesdiff.olang, against compiler/goldens/diag.txt)
@@ -152,20 +169,20 @@ lowerdump: build/compiler_tools_lowerdump
 	build/compiler_tools_lowerdump $(LOWER_CASES) > build/lowerdump.cases.txt
 	grep '^== total' build/lowerdump.txt build/lowerdump.cases.txt
 
-# M9's acceptance, measured: each program of the corpus and std's tests built by stage 0 and by the self-hosted
-# pipeline (load, names, check, lower with the stand-in placement, emit - compiler/tools/emitdump.olang), compiled by
-# clang with stage 0's runtime, run, and the two runs compared test by test (compiler/tools/emitdiff.olang; the rows in
-# build/emitdiff.txt, not in verify until it is required)
+# M9's acceptance, measured: each program of the corpus and std's tests built by the self-hosted pipeline (load, names,
+# check, the scope pass, lower, emit - compiler/tools/emitdump.olang), compiled by clang with the port's runtime, run,
+# and compared test by test with stage 0's run as compiler/goldens/run.txt stores it (compiler/tools/emitdiff.olang; the
+# rows in build/emitdiff.txt, not in verify until it is required)
 build/compiler_tools_emitdump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/emitdump.olang
 	$(OLANG) build compiler/tools/emitdump.olang
 emitdiff: build/compiler_tools_emitdump build/compiler_tools_emitdiff
 	build/compiler_tools_emitdiff -v > build/emitdiff.txt
 	grep '^== total' build/emitdiff.txt
 
-# M8's acceptance, measured: each file of tests in the corpus and std run by stage 0 and by the self-hosted pipeline's
-# evaluator (load, names, check, lower, eval - compiler/tools/evaldump.olang), compared test by test, and the checks'
-# run cases compared as programs (compiler/tools/evaldiff.olang; the rows in build/evaldiff.txt, not in verify until
-# it is required)
+# M8's acceptance, measured: each file of tests in the corpus and std run by the self-hosted pipeline's evaluator (load,
+# names, check, scope, lower, eval - compiler/tools/evaldump.olang) and compared test by test with stage 0's run as
+# compiler/goldens/run.txt stores it, and the checks' run cases compared as programs (compiler/tools/evaldiff.olang; the
+# rows in build/evaldiff.txt, not in verify until it is required)
 build/compiler_tools_evaldump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/evaldump.olang
 	$(OLANG) build compiler/tools/evaldump.olang
 EVAL_CASES = $(shell grep -L '^\# flags' $$(grep -l '^\# check: run' checks/cases/*.olang))
@@ -174,15 +191,28 @@ evaldiff: build/compiler_tools_evaldump build/compiler_tools_evaldiff
 	build/compiler_tools_evaldiff $(EVAL_CASES) > build/evaldiff.cases.txt
 	grep '^== total' build/evaldiff.txt build/evaldiff.cases.txt
 
-# captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
-# (minutes: stage 0 checks each root program whole)
-layoutgold: build/layoutdump build/compiler_tools_layoutgold
-	build/compiler_tools_layoutgold
+# captures compiler/goldens/run.txt again from $(GOLD_OLANG) - stage 0's runs of the corpus's and std's tests and of
+# the checks' run cases, which emitdiff and evaldiff hold the port to - after a test or a run case is added or changes
+# what it prints (minutes)
+rungold: $(GOLD_OLANG) build/compiler_tools_rungold
+	build/compiler_tools_rungold $(GOLD_OLANG)
 
-# M4's acceptance: from every root program, the module graph the self-hosted loader reaches is stage 0's
-# (compiler/tools/modgraph.olang)
-modgraph: build/modgraph build/compiler_tools_dump build/compiler_tools_modgraph
+# captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
+# (minutes: stage 0 checks each root program whole); GOLD_FROM=port lays the golden's own types out again by the
+# self-hosted type table instead
+layoutgold: build/compiler_tools_layoutgold $(if $(GOLD_PORT),build/compiler_tools_dump,build/layoutdump)
+	build/compiler_tools_layoutgold $(if $(GOLD_PORT),-port)
+
+# M4's acceptance: from every root program, the module graph the self-hosted loader reaches is stage 0's, as
+# compiler/goldens/modgraph.txt stores it (a graph that differs is compared with build/modgraph while bootstrap/ has it -
+# compiler/tools/modgraph.olang)
+MODGRAPH = $(if $(wildcard bootstrap/oracle/modgraph.c),build/modgraph)
+modgraph: build/compiler_tools_dump build/compiler_tools_modgraph $(MODGRAPH)
 	build/compiler_tools_modgraph
+
+# captures compiler/goldens/modgraph.txt again, after an import changes
+modgold: build/compiler_tools_dump build/compiler_tools_modgraph $(if $(GOLD_PORT),,build/modgraph)
+	build/compiler_tools_modgraph -capture $(GOLD_PORT)
 
 build/stage0.obj/%.o: bootstrap/%.c
 	mkdir -p build/stage0.obj
@@ -331,20 +361,20 @@ scopefuzz: $(OLANG)
 # M2 of the port (compiler/DESIGN.md section 6): the self-hosted compiler's diagnostics - msgs.olang's and diag.olang's own
 # tests, and compiler/tools/diaggold.olang rendering stage 0's diagnostics on every failing checks/cases program again,
 # byte for byte, and its -e on every rule a message names. Part of "make test"; "make diaggold" captures the goldens
-# again from build/out (compiler/goldens/diag.txt), after a message or a case changes.
+# again from $(GOLD_OLANG) (compiler/goldens/diag.txt), after a message or a case changes.
 DIAG_TESTS = compiler/msgs.olang compiler/diag.olang compiler/tools/diaggold.olang
 OLANG_TESTS += compiler/tools/diaggold.olang  # msgs and diag are already in compiler/*.olang
-diagtest: build/out
-	build/out test $(DIAG_TESTS)
-diaggold: build/out build/compiler_tools_diaggold_capture
-	build/compiler_tools_diaggold_capture build/out
+diagtest: $(OLANG)
+	$(OLANG_ENV) $(OLANG) test $(DIAG_TESTS)
+diaggold: $(GOLD_OLANG) build/compiler_tools_diaggold_capture
+	build/compiler_tools_diaggold_capture $(GOLD_OLANG)
 
 all: clean build run
 
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap stage0 seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap stage0 seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
