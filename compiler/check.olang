@@ -1719,6 +1719,11 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
     if k < v.Values.Len() {
         x = c.exprTo(v.Values[k], want)
         if v.Ty == null { want = c.inferred(v.Values[k], x) }
+        # B10c: a build constant's default, which -D's value replaces - fitted to its type as a literal written there
+        if c.buildDefaulted(mi, n, v) and want != types.UnknownT {
+            d := c.defineValue(sp, n, want)
+            if d != null { x = d }
+        }
         # T25c: a mutable global is stored where it can be written
         if writtenMut(v.Ty) and not c.isRef(want) { c.roStore(x, v.Values[k].Span(), RoGlobal) }
     } else if v.Values.Len() == 1 and v.Names.Len() > 1 {
@@ -3043,8 +3048,24 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         c.err(sp, msgs.ArraySizeMismatch(c.ty(have), c.ty(want)))
         return x
     }
-    c.err(sp, msgs.TypeMismatch(c.ty(want), c.ty(have)))
+    c.err(sp, msgs.TypeMismatch(c.ty(want), c.tyOf(x)))
     return x
+}
+
+# a value's type as a message spells it: written text as the literal it is, "Array<Char, N>" (E12, as stage 0 says)
+fn (c mut Checker&) tyOf(x typed.Expr&) String {
+    match x {
+        case typed.Expr.Data(_, dt, _, k) {
+            match k {
+                case typed.Const.Bytes(b) {
+                    if c.isRef(dt) and c.P.T.Referent(dt) == c.textType() { return "Array<Char, " $b.Len() ">" }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return c.ty(typeOf(x))
 }
 
 # a fixed array's storage handed to an extern's array parameter (X3): the place borrowed and read as a run-time-length
@@ -3362,6 +3383,26 @@ fn (c mut Checker&) adapter(sp source.Span, x typed.Expr&c, want types.TypeId) t
     c.roFns.Push(roFn(id, 1, c.at(sp), "'" $c.text(c.P.FnDecl(m).Name) "'"))   # T25c
     recv := c.fit(x, hp[0], sp)
     return typed.Expr.Fn(sp, want, typed.FnVal.Adapter(typed.BodyId(I32(id)), recv, c.site(typed.SiteKind.Closure, sp)))
+}
+
+# whether a global is a build constant's default that -D gives a value (B10c): immutable, at a module's top level outside
+# std, its name defined
+fn (c mut Checker&) buildDefaulted(mi I64, n source.NameId, v ast.VarDecl&) Bool {
+    m := c.P.L.Mods[mi]
+    if m.Prelude or m.Identity.StartsWith("std/") or writtenMut(v.Ty) { return false }
+    return c.P.L.Consts.Defined(c.text(n))
+}
+
+# -D's value for n as a literal of type want (B10c); null where it is no literal of it (names reports that)
+fn (c mut Checker&) defineValue(sp source.Span, n source.NameId, want types.TypeId) typed.Expr&c {
+    v, big := try c.P.L.Consts.ValueOf(c.text(n)) catch { return null }
+    w := c.under(want)
+    if v.Kind == cond.ValueKind.Bool and w == types.BoolT { return c.lit(sp, want, 1 if v.I != 0 else 0) }
+    if v.Kind == cond.ValueKind.Int and c.P.T.IsInt(w) { return c.lit(sp, want, v.I) }
+    if v.Kind == cond.ValueKind.Int and c.P.T.IsFloat(w) { return c.lit(sp, want, intFloatBits(w, litv(true, false, big, v.I, 0.0))) }
+    if v.Kind == cond.ValueKind.Float and c.P.T.IsFloat(w) { return c.lit(sp, want, floatBits(w, v.F)) }
+    if v.Kind == cond.ValueKind.Text and want == c.textType() { return c.buildConst(sp, n) }
+    return null
 }
 
 fn (c mut Checker&) buildConst(sp source.Span, n source.NameId) typed.Expr&c {
@@ -9747,7 +9788,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
                 }
                 ok := false
                 v, ok = c.fitQuiet(v, rt, cs.Value.Span())
-                if not ok { c.err(cs.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.ty(typeOf(v)))) }
+                if not ok { c.err(cs.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.tyOf(v))) }
             }
         }
         code := c.close(id, outer, mark, bfrom)
@@ -9781,7 +9822,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         if nm.Value != null and isValue {
             ok := false
             v, ok = c.fitQuiet(c.expr(nm.Value, rt), rt, nm.Value.Span())
-            if not ok { c.err(nm.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.ty(typeOf(v)))) }
+            if not ok { c.err(nm.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.tyOf(v))) }
         }
         code := c.close(id, outer, mark, bfrom)
         noMatch = typed.Arm(nm.Sp, Array<typed.Alt&>(0), null, code, v)
@@ -10253,7 +10294,7 @@ fn (c mut Checker&) isCase(sp source.Span, place typed.Place&c, tag I64) typed.E
 fn (c mut Checker&) valueTest(sp source.Span, place typed.Place&c, x ast.Expr&, t types.TypeId) typed.Expr&c {
     v := c.expr(x, c.literalBeside(t) if c.isNumber(t) else t)
     if not c.meets(c.deref(t), c.deref(typeOf(v))) {
-        c.err(x.Span(), msgs.CaseValueType(c.ty(c.deref(t)), c.ty(typeOf(v))))
+        c.err(x.Span(), msgs.CaseValueType(c.ty(c.deref(t)), c.tyOf(v)))
         return c.lit(sp, types.BoolT, 0)
     }
     return c.opValues(sp, sp, token.Tok.EqEq, c.value(c.read(sp, place), sp), v, sp, x.Span())
