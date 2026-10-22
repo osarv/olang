@@ -8668,8 +8668,14 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
             if typeOf(x) != pt and c.isNumber(typeOf(x)) and c.P.Flows(typeOf(x), pt) { x = c.convert(vsp, x, pt) }
         }
     }
-    hv := c.local(source.NameId(0), vsp, typeOf(x), typed.LocalKind.Held, typed.Mark.None)
-    c.emit(typed.Stmt.Let(vsp, typed.LocalId(I32(hv)), x))
+    # a local's own value is read where it is stored - nothing between can change it, and held in a local of its own
+    # it would live in the statement's block where the local lives in its own (O25a)
+    direct := op == token.Tok.Assign and localRead(x)
+    hv I64 = -1
+    if not direct {
+        hv = c.local(source.NameId(0), vsp, typeOf(x), typed.LocalKind.Held, typed.Mark.None)
+        c.emit(typed.Stmt.Let(vsp, typed.LocalId(I32(hv)), x))
+    }
     # each element read by At into a local, the outermost first, the next read out of it
     temps Array<I64> = Array<I64>(nl, -1)
     bases mut List<typed.Place&>&c = List<typed.Place&>()
@@ -8691,7 +8697,7 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
     # the store into the innermost, then every level written back by SetAt, the innermost first
     p2 := c.replaceTemp(p, temps[0])
     c.notCapture(p2, sp)
-    v := c.readLocal(sp, hv)
+    v := x if direct else c.readLocal(sp, hv)
     if setM >= 0 {
         sa mut Array<typed.Expr&>&c = Array<typed.Expr&>(setHeld.Len() + 1)
         for i in range setHeld.Len() { sa[i] = c.readLocal(sp, setHeld[i]) }
@@ -8709,6 +8715,20 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
         c.emit(typed.Stmt.Eval(sp, c.invoke(sp, sp, sms[l], c.read(sp, bases[l]), null, sargs)))
     }
     return true
+}
+
+# whether x reads a local's own value (not through a reference it holds)
+fn localRead(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Local(_, _, _) { return true }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
 }
 
 # a method's parameters, the receiver's first, as a receiver of type recv binds the method's variables (boundParam's);
