@@ -115,6 +115,16 @@ fn (d mut Diagnostics&) lineOf(file I64, at I64) (I64, I64) {
     return lo + 1, d.starts[from + lo]
 }
 
+# a file's path, as the build names it
+fn (d Diagnostics&) PathOf(file I64) String { return $d.paths[file] if file >= 0 and file < d.paths.Len() else "?" }
+
+# the line an offset of a file is on (B2e: where a debugger shows the code)
+fn (d mut Diagnostics&) LineAt(file I64, at I64) I64 {
+    if file < 0 or file >= d.paths.Len() { return 0 }
+    line, _ := d.lineOf(file, at)
+    return line
+}
+
 # where an offset of a file is, as a row writes it: "PATH:LINE:COL"
 fn (d mut Diagnostics&) Locate(file I64, at I64) String {
     if file < 0 or file >= d.paths.Len() { return "?" }

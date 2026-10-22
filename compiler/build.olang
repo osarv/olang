@@ -88,8 +88,14 @@ type Config struct() {
     Built String& = ""  # the binary the last BuildProgram made
     Compiled I64 = 0
     Linked I64 = 0
+    Thin Bool = false   # an optimized build of a large program: ThinLTO, its link cached (B2d, ThinFrom)
     version String& = ""
 }
+
+# the IR, in bytes, from which an optimized build links by ThinLTO rather than full LTO: the compiler itself (55 MB)
+# links in 91 s against 172, and an edit relinks in 23 s from the cache where full LTO takes the 172 again; a small
+# program keeps full LTO, which measured no slower to build there and is what its benchmarks were tuned on (B2d)
+ThinFrom I64 = 8 << 20
 
 # the terminal's colour code around text, where colour is on
 fn (c Config&) paint(code String&, text String&) String {
@@ -126,7 +132,7 @@ fn (c Config&) ModeFlags() List<String&> {
         return out
     }
     out.Push("-O3")
-    out.Push("-flto")
+    if c.Thin { out.Push("-flto=thin") } else { out.Push("-flto") }
     return out
 }
 
@@ -380,6 +386,9 @@ fn fileFatal(path String&, m msgs.Msg, d mut diag.Diagnostics&) {
 # every object the program's link reads, in its units' order and then the runtime's (and the dynamic call's): the ones
 # not there yet compiled, side by side, each renamed into place once clang has written it
 fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&> ? Failed {
+    size I64 = 0
+    for u in prog.Units { size += u.Ir.Len() }
+    c.Thin = not c.Debug and not c.Race and size >= ThinFrom
     j := compiles()
     paths List<String&>
     for u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d)) }
@@ -415,6 +424,9 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool) ? Failed
     args List<String&>
     args.Push($c.Clang)
     for f in c.ModeFlags() { args.Push($f) }
+    # ThinLTO's link keeps each module's code generated, keyed by what it was made from, so a relink after an edit
+    # generates only what the edit changed (the linker's LLVM plugin's cache)
+    if c.Thin { args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto") }
     args.Push("-o")
     args.Push($bin)
     for o in objs { args.Push($o) }
@@ -663,6 +675,9 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     c.version = "clang 18"
     f := c.ModeFlags()
     assert f.Len() == 2 and f[0] == "-O3" and f[1] == "-flto"
+    c.Thin = true
+    assert c.ModeFlags()[1] == "-flto=thin"
+    c.Thin = false
     a := c.ObjectPath("m", UnitKind.Module, "define void @f() { ret void }", f)
     assert a.StartsWith("build/m.") and a.EndsWith(".o") and a.Len() == "build/m.".Len() + 16 + 2
     assert c.ObjectPath("m", UnitKind.Module, "define void @f() { ret void }", f) == a

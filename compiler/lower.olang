@@ -1277,6 +1277,7 @@ fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.Loc
         if tc.entries[ci] == mir.NoBlock { continue }
         cl := cls[ci]
         ln.start(tc.entries[ci])
+        ln.F.Taken.Push(tc.entries[ci])
         if cl.Code != null { ln.block(cl.Code) }
         if not ln.dead and slot != mir.NoLocal and cl.Defaults.Len() > 0 {
             if cl.Defaults.Len() == 1 {

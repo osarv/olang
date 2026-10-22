@@ -13,7 +13,8 @@ clang compiles and links with the runtime the port fills in (`make emitdiff` com
 while compiling (B9c, S8b, S18c) and as `olang interpret` (`make evaldiff`). The driver (`olang.olang`,
 `build/compiler_olang`) builds, runs, tests, compiles and interprets through the pipeline, with the runtime filled in
 by `runtime.olang`; built by stage 0, it builds itself (`build/compiler_olang build -output build/stage1
-compiler/olang.olang`, M11). The command line is stage 0's (`build`, `compile`, `test`, ...).
+compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but the seed, its own IR
+(`seed/`, written by `tools/seed.olang` - `make seed`). The command line is stage 0's (`build`, `compile`, `test`, ...).
 
 ## Modules (one file per pass)
 
@@ -59,7 +60,7 @@ compiler/olang.olang`, M11). The command line is stage 0's (`build`, `compile`, 
   for the placement of before the scope pass), `emitdump.olang` (a program written as LLVM IR), `emitdiff.olang`
   (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldump.olang` (a program or its
   tests run by the evaluator), `evaldiff.olang` (stage 0's runs against the evaluator's),
-  `diaggold.olang`, `genmsgs.olang`
+  `seed.olang` (writes the bootstrap seed, `make seed` - `seed/README.md`), `diaggold.olang`, `genmsgs.olang`
   (writes `msgs.olang` from the C table; from the
   repository root, `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
 - `goldens/` - what stage 0 gave, captured: `diag.txt` (diagnostics per checks case), `layout.txt` and

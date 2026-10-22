@@ -21178,3 +21178,106 @@ stage 0's IR shapes (TBAA, baked globals, ret.common, payload words) - the emit 
 `if` whose branch does not parse is compiled with that branch empty, its syntax error never said, when its condition
 reads a parameter (`fn f(n I64) { if n < 0 { x := } }` builds) - fixed in the checker at the end of the round, not yet
 measured through stage 1.
+
+## Port M11: the seed, and rebuilding the compiler from nothing (2026-10-22)
+
+The user decided on 2026-10-18 that once the port builds itself, rebuilding it from nothing is one run from a
+committed seed - LLVM IR the compiler writes of itself, never by hand, compiled by clang - with no chain of intermediate
+compilers (Zig's `zig1.wasm`). Built now: `compiler/tools/seed.olang`, `make seed`, `make bootstrap`, `seed/README.md`;
+`bootstrap/CHAIN` is gone, and the old `make bootstrap` (stage 0 at -O2) is `make stage0`.
+
+**A tool, not a driver mode.** The tool imports the driver (`import "../olang"` - a module declaring `main` imports
+like any other) and runs its own `Prepare` and `Passes` on the command line `olang build -target x86-64
+compiler/olang.olang`, so the seed is exactly what that build compiles, with nothing added to the command line (B1)
+or to drvdiff's oracle. It writes each object's IR under the object's identity rather than its hash. The whole front
+end, at -O3, takes 3 s.
+
+**What had to be kept out of it.** A failed check's message names its file as the loader found it, and std is found
+beside the compiler, so every std path in the IR was this checkout's (`/home/user/wt/drv/std/filepath.olang:107: slice
+bounds out of range` - stage 0 writes the same); the tool requires `OLANG_STD` to be relative and `make seed` runs it
+with `OLANG_STD=std` from the repository root. The target is baseline x86-64 (`-target x86-64`), so the seed runs on any
+x86-64 Linux; what it builds is for its own machine. Release IR carries no DWARF.
+
+**Sizes, and why xz per object.** 48 MB of IR in 43 files (1.5 million lines, 5,460 functions): xz -9 3.5 MB, gzip
+6.4 MB, bitcode 15 MB (5.0 MB with xz); optimized per file by `clang -Oz -S -emit-llvm`, 28 MB and 1.7 MB with xz -
+not taken, since the seed would be clang's output, depending on clang's version, rather than the compiler's. A
+one-string edit of compiler/source.olang changed six lines of compiler_source.ll and no other file. Stored in a git
+repository over three seeds a few commits apart (6be11ce, d7a5208, 3c47a77) and packed by `git gc`, the history grew by
+0.6 and 2.5 MB per new seed as xz files and by 1.4 and 5.1 MB as plain text - git's deltas do poorly on files this
+large - so the seed is one xz file per object, and `make seed` leaves a file whose IR did not change untouched (another
+xz version could otherwise rewrite it).
+
+**Measured.** The seed compiles with `clang -O2` in 18 s on 4 cores (5.7 s at -O0; the seed compiler built either way
+builds the same compiler, a front end at -O0 costing little beside the -O3 LTO link). From a clean clone with
+`bootstrap/` deleted and no `build/`: `make -j4 bootstrap` 366 s, 1.6 GB peak - the seed's compiles, then two builds
+of the compiler of about 3 minutes each, mostly their links; `build/olang.1` and `build/olang.2` byte for byte equal;
+no C compiler run. Then `make seed` in that clone, its tool built by the installed `build/olang`, wrote the seed it was
+built from, byte for byte - the seed is reproducible from its source by the compiler it makes. The tool run twice gives
+the same files.
+## Port M9, round 4: alias tags, the runtime read from its text, DWARF, ThinLTO (2026-10-22)
+
+**Measured first.** The port's -O3 output against stage 0's on bench/ (sum, vec, nbody, spectral, best of three,
+interleaved on a shared machine): `for x in a` over an Array 0.25 s against 0.054, `a.Iter().Fold` 1.2 against 0.16,
+`v[i] = v[i] * 2` over a Vec 0.19 against 0.038 - nothing vectorized. The optimized IR said why: every loop body's
+scope was opened and closed by calls the module could not see into. A module only *declared* the runtime's functions,
+from a hand-kept list, where stage 0 gives every module the bodies the runtime marks for inlining as
+`available_externally` (emitRuntimeDecls). With them a module's own -O3 folds an empty scope (its header zeroed, then
+read) before the vectorizer runs; the link's optimization, which inlines them later, did not recover the loops.
+
+**The runtime read from its text** (`emit.runtimeItems`): `runtime.Decls` over the filled-in `runtime.Text(arch, san)`
+gives the types, a declaration per function, an external declaration per global and the inline bodies; each is an
+item (shared, copied into an object only where named), so an object declares exactly what it calls and the hand-kept
+list is gone (`Emitter.runtime` now only checks that the runtime defines the name). A builder's type stays emission's
+own (the runtime reaches it by offsets). The bodies carry the runtime's header tags (!59, !60), so:
+
+**TBAA (T36)**, as stage 0's: `addr` follows a place's path and leaves the access tag of what is there - Bool's and
+each number's (a declared type its base's), a run-time array's descriptor, a reference to a struct or an enum - in
+the family of the path's last step (an element for an index, a field otherwise); the descriptor loads indexing makes
+carry the descriptor's tag; a closure's environment `!28`. Untagged: aggregates, fixed arrays, function values, and
+(unlike stage 0) anything inside an enum's payload, since MIR may write a payload's field and two cases share its bytes.
+The type tree, stage 0's numbering, ends every object.
+
+**The instances in the root's object outside -debug.** With the runtime visible, one shape stayed slow: `for x in v`
+over a Vec in the root, its `At` and `Len` in the instances' object - the root could not inline them before the link,
+and the link did not recover the vectorized loop (0.050 against stage 0's 0.032). Merged as stage 0's (B3d) it is 0.032;
+`Array.Iter().Fold` goes the other way (0.15 apart, 0.28 merged - its iterator lives in an arena, so the position's store
+after the loop stays and blocks vectorizing: a placement question, not emission's). Every other case was level or
+better merged, so -O3 merges; -debug keeps `.inst`, where nothing is optimized and an edit to the root recompiles only
+its code. After: Array 0.035, List 0.035, Vec store 0.034, Sort 0.125 - at or under stage 0 - nbody, spectral,
+mandelbrot, fannkuch, binarytrees level; left 1.4x: Vec push, text; 1.7x: Array Fold.
+
+**DWARF under -debug (B2e).** A DISubprogram per function with source - its own name and no linkage name, as stage 0's
+(with a C compile unit gdb would take the linkage name for the name) - a DILocation per line where a statement or a
+terminator starts (the function's own span, its frame's opening and closing, keeps the line before it, and before the
+first statement only calls are located: so `break f` stops at the first statement, as clang's prologue_end does),
+`llvm.dbg.declare` for named parameters and locals of numbers, Bool and word-sized references. Metadata is numbered
+from 1000 (below are the fixed tags) and renumbered in each object in the order it is named, the shared nodes -
+compile unit, a file each, the subroutine type, the basic types - items of their own found by `!N` references, so an
+object's text still depends only on what it holds. Checked with gdb in batch mode: `break scale`, `break f.olang:12`,
+`next`, `info args`, `info locals` and a source backtrace; on stage 1, `break Locate` resolves to
+`compiler/diag.olang:130`. Stage 1 == stage 2 == stage 3 at -debug, DWARF in all.
+
+**S18d's clear.** Where a clause takes an error the trace is cleared (`__olang_ert_clear`, stage 0's), at each clause's
+entry block, which lowering now lists (`mir.Fn.Taken`).
+
+**ThinLTO for large programs (B2d, DESIGN.md 3.4 item 7, revisited).** The compiler's own clean -O3 build took 213 s,
+172 of them the full LTO link. Measured by hand on its 42 objects: ThinLTO compiles in 38 s (full LTO's 41) and links in
+91 s; with the plugin's cache, a relink after one module changed 23 s and an unchanged one 0.3 s. The ThinLTO-built
+compiler runs as fast (its front end 5.6-5.9 s against 5.6-6.0) and writes the same stage 1, byte for byte. So an
+optimized build whose IR is 8 MB or more compiles `-flto=thin` and links with a cache in the build directory; below
+that full LTO stays (B2d's measurement: no faster to build there, and what the benchmarks were tuned on). Through the
+driver: the clean self-build 213 s -> 108 s, one function of unparse.olang changed ~3.5 min -> 43 s.
+
+**The four tests of tests/shared emitdiff still differs on are not emission's:** S8b (7107) is the evaluator's decision;
+K1 (7151) is `interp.Bake` baking `KtFromDropped`, whose initializer's callee builds a value with a destructor (K2c:
+stage 0 sets it at startup), so the destructor never runs - only emitdump bakes (the driver never sets `e.Baked`);
+13459 and 16020 are the scope pass's C2g/E16a placement. emitdiff stays at 1009 of 1013.
+
+**A -sanitize stage 1 segfaulted building the compiler**, in `__olang_sb_put` from `fnEm.store` (reported by the scope
+agent; it predates this round). With the new DWARF and a hardware watchpoint on the faulting address, gdb showed the
+string written by `fe.let` in `compare` and poisoned when the `if` block holding it closed: `return both if op == Eq
+else fe.let(...)`. The scope pass places the call building `both` in the `if`'s block though `both` is returned as one
+value of a conditional (O26a covers an arm of a conditional there). A 20-line reproducer segfaults built -debug
+-sanitize by the port and runs under stage 0 (lowerdump: `call mk(...) [S1]`, S1 the if's block). Left to the scope
+pass; emit's `compare` returns twice meanwhile; with that the -sanitize stage 1 builds the whole compiler clean, its output
+byte for byte stage 1's.

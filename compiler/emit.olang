@@ -21,6 +21,7 @@
 # The runtime (std/runtime/runtime.ll, filled in for the build) is linked beside: a module declares what it calls.
 
 import "std/io"
+import "std/os"
 import "source"
 import "ast"
 import "diag"
@@ -30,6 +31,7 @@ import "typed"
 import "mir"
 import "lower"
 import "eval"
+import olrt "runtime"
 
 # the emission of a program: P the checked program, Lw its lowering, D for where things are (FILE:LINE)
 type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Diagnostics&, T mut types.Table&) {
@@ -79,6 +81,18 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # K2: the immutable globals evaluated while compiling, by their initializer's body - each written as its value,
     # its initializer not run at startup (interp.Bake)
     Baked Map<I64, eval.Image>
+    Arch String& = "x86_64"         # the target's architecture, for the runtime's text (B12)
+    San Bool = false                # a -sanitize build: the runtime's text holds the scope sanitizer (B2f)
+    rtTypes String& = ""            # the runtime's types, as its text defines them
+    rtRead Bool = false
+    # B2e, in a -debug build: metadata numbered from 1000 (below it the fixed alias tags), renumbered in each object;
+    # the shared nodes - the compile unit, a file each, the subroutine type, a basic type each - as items "!N"
+    dbgN I64 = 1000
+    dbgCuN I64 = -1
+    dbgSubN I64 = -1
+    dbgPtrN I64 = -1
+    dbgFiles Map<I64, I64>
+    dbgBasics Map<I64, I64>
 }
 
 # whether the error return trace is kept (S18d): test and -debug builds
@@ -110,14 +124,15 @@ type Object struct(Identity String&, Kind ObjectKind, Ir String&) {
 fn (e mut Emitter&) Program(w mut io.Writer&) {
     e.emitAll()
     w.Write(e.head())
-    w.Write(runtimeTypes)
+    w.Write(e.rtTypes)
     for d in e.tyDef { w.Write(d) }
     for t in e.itemText { w.Write(t) }
+    if e.dbgCuN >= 0 { w.Write(dbgTail(e.dbgCuN)) }
     w.Write(e.attributes())
 }
 
 # the program as one object per module (B3, B3d): each module's functions and globals in its own, every instance in
-# the root's instances object, main or the test harness in the root's; each declares what it names of the others and
+# the root's (in a -debug build the root's instances object), main or the test harness in the root's; each declares what it names of the others and
 # carries a copy of the declarations, helpers and constant data it uses. An object's text depends only on what is in
 # it: its items in the order of their symbols, its private symbols numbered in the order it names them. Compiling one
 # module (Module) gives that one object, the instances it uses in it
@@ -136,8 +151,14 @@ fn (e mut Emitter&) Objects() List<Object> {
     for m in range mods.Len() {
         if m != root and used.Has(m) { out.Push(Object($mods[m].Identity, ObjectKind.Module, e.assemble(m, false))) }
     }
-    if used.Has(HomeInst) { out.Push(Object($mods[root].Identity, ObjectKind.Instances, e.assemble(HomeInst, false))) }
-    out.Push(Object($mods[root].Identity, rootKind, e.assemble(root, false)))
+    # B3d: the instances in an object of their own where nothing is optimized (-debug: an edit to the root recompiles
+    # only its own code), and in the root's otherwise - as stage 0's - so the root's code inlines the instances it
+    # calls before the link: a loop over a Vec in the root, its At and Len in another object, measured 2x slower
+    # (`for x in v`, bench/vec.olang walk), the link's optimization not recovering what the module's missed
+    if e.Debug and used.Has(HomeInst) {
+        out.Push(Object($mods[root].Identity, ObjectKind.Instances, e.assemble(HomeInst, false)))
+    }
+    out.Push(Object($mods[root].Identity, rootKind, e.assemble(root, not e.Debug)))
     return out
 }
 
@@ -146,13 +167,18 @@ fn (e Emitter&) head() String {
     return $"; olang - emitted by the self-hosted compiler (compiler/emit.olang)\ntarget triple = \"" $e.Triple "\"\n\n"
 }
 
-fn (e mut Emitter&) attributes() String { return $"attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n" }
+# what every module ends with: the type tree its access tags name (T36), the runtime's header tags among them, and
+# the attribute group every function carries
+fn (e mut Emitter&) attributes() String {
+    return $tbaaTree "attributes #0 = { null_pointer_is_valid " $e.Attrs " }\n"
+}
 
 # every function the program reaches written as an item, from main or the tests (or, compiling one module, from its
 # own bodies), then the thunks, adapters and the entry, and the types they name
 fn (e mut Emitter&) emitAll() {
     if e.emitted { return }
     e.emitted = true
+    e.runtimeItems()
     e.index()
     p := e.P
     inits := e.initOrder()
@@ -221,8 +247,8 @@ fn (e mut Emitter&) emitAll() {
 
 # ---- one object of several ----
 
-# the references in IR text, as positions: kind (0 a symbol after "@", 1 a type's name in %"..."), where its name
-# starts and ends. Quoted text is skipped (a constant's bytes, an attribute's value); a quote inside is always escaped
+# the references in IR text, as positions: kind (0 a symbol after "@", 1 a type's name in %"...", 2 a metadata node
+# "!N", the "!" included), where its name starts and ends. Quoted text is skipped (a constant's bytes, an attribute's value); a quote inside is always escaped
 fn refsIn(text String&) List<I64> {
     out List<I64>
     n := text.Len()
@@ -252,6 +278,13 @@ fn refsIn(text String&) List<I64> {
                 out.Push(s)
                 out.Push(i)
             }
+        } else if c == '!' and i + 1 < n and text[i + 1].IsDigit() {
+            s := i
+            i++
+            for i < n and text[i].IsDigit() { i++ }
+            out.Push(2)
+            out.Push(s)
+            out.Push(i)
         } else {
             i++
         }
@@ -318,17 +351,27 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
     }
     out := StringBuilder()
     out.Push(e.head())
-    out.Push(runtimeTypes)
+    out.Push(e.rtTypes)
     for t in tys { out.Push(e.tyDef[t]) }
+    # B2e: the debug metadata (numbered from 1000) renumbered in the order this object names it, from 1000
+    meta Map<I64, I64>
     for it in order {
         text := e.itemText[it]
-        if rename.Len() == 0 {
+        if rename.Len() == 0 and not e.Debug {
             out.Push(text)
             continue
         }
         at I64 = 0
         rs := e.refs(it)
         for r in range 0, rs.Len(), 3 {
+            if rs[r] == 2 {
+                old := try text[rs[r + 1] + 1:rs[r + 2]].ParseInt() catch default 0
+                if old < 1000 { continue }
+                out.Push(text[at:rs[r + 1]])
+                out.Push("!" $metaNumber(meta, old))
+                at = rs[r + 2]
+                continue
+            }
             if rs[r] != 0 { continue }
             j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
             if j < 0 or not rename.Has(j) { continue }
@@ -339,8 +382,21 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
         out.Push(text[at:])
     }
     out.Push(decls.ToString())
+    if e.dbgCuN >= 0 and meta.Has(e.dbgCuN) { out.Push(dbgTail(metaNumber(meta, e.dbgCuN))) }
     out.Push(e.attributes())
     return out.ToString()
+}
+
+# a debug node's number in the object being assembled: the next one where it is new there
+fn metaNumber(meta mut Map<I64, I64>&, old I64) I64 {
+    if not meta.Has(old) { meta.Put(old, 1000 + meta.Len()) }
+    return try meta.Get(old) catch default 0
+}
+
+# what a module with debug information ends with: its compile unit named, and the versions it is written in
+fn dbgTail(cu I64) String {
+    return $"!llvm.dbg.cu = !{!" $cu "}\n!llvm.module.flags = !{!1, !2}\n!1 = !{i32 7, !\"Dwarf Version\", i32 4}\n" $
+           "!2 = !{i32 2, !\"Debug Info Version\", i32 3}\n"
 }
 
 # a type's definition wanted in the object, and the types its body names
@@ -532,6 +588,172 @@ fn (e mut Emitter&) where(file I64, sp source.Span) String {
     return $s[:k] if k > 0 else $s
 }
 
+# ---- debug information (B2e) ----
+
+# a metadata node's number, new; a shared one made an item
+fn (e mut Emitter&) dbgNew() I64 {
+    n := e.dbgN
+    e.dbgN++
+    return n
+}
+
+fn (e mut Emitter&) dbgShared(n I64, text String&) { e.item("!" $n, HomeShared, $"!" $n " = " $text "\n") }
+
+# the compile unit, made with the file of the program's root (each object copies it, and names it in !llvm.dbg.cu)
+fn (e mut Emitter&) dbgCu() I64 {
+    if e.dbgCuN >= 0 { return e.dbgCuN }
+    e.dbgCuN = e.dbgNew()
+    f := e.dbgFile(e.P.L.Mods[e.P.L.Root].File)
+    e.dbgShared(e.dbgCuN, $"distinct !DICompileUnit(language: DW_LANG_C, file: !" $f ", producer: \"olang\", " $
+                "isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug)")
+    return e.dbgCuN
+}
+
+# a source file's DIFile, its path as the build names it and the working directory beside it
+fn (e mut Emitter&) dbgFile(file I64) I64 {
+    if e.dbgFiles.Has(file) { return try e.dbgFiles.Get(file) catch default -1 }
+    n := e.dbgNew()
+    e.dbgFiles.Put(file, n)
+    path := e.D.PathOf(file)
+    dir := try os.Cwd() catch os.OsError default "."
+    e.dbgShared(n, $"!DIFile(filename: \"" $escape(path) "\", directory: \"" $escape(dir) "\")")
+    return n
+}
+
+fn (e mut Emitter&) dbgSubTy() I64 {
+    if e.dbgSubN < 0 {
+        e.dbgSubN = e.dbgNew()
+        e.dbgShared(e.dbgSubN, "!DISubroutineType(types: !{})")
+    }
+    return e.dbgSubN
+}
+
+# the debug type a variable of type ty is shown as: a number's, Bool's, a pointer for a reference held in one word -
+# -1 for what is not described yet (an aggregate, a run-time-length array's pair, a function value)
+fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
+    t := e.T
+    r := t.Repr(ty)
+    if r >= types.BoolT and r <= types.TypeId(14) {
+        if e.dbgBasics.Has(I64(r)) { return try e.dbgBasics.Get(I64(r)) catch default -1 }
+        n := e.dbgNew()
+        e.dbgBasics.Put(I64(r), n)
+        enc := "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
+        bits := 8 if r == types.BoolT else t.Bits(r)
+        e.dbgShared(n, $"!DIBasicType(name: \"" $t.Canon(r) "\", size: " $bits ", encoding: " $enc ")")
+        return n
+    }
+    if e.ty(r) == "ptr" and t.IsRef(r) {
+        if e.dbgPtrN < 0 {
+            e.dbgPtrN = e.dbgNew()
+            e.dbgShared(e.dbgPtrN, "!DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)")
+        }
+        return e.dbgPtrN
+    }
+    return -1
+}
+
+# the name a debugger knows a function by: a function's or a method's own (no linkage name - with a C compile unit
+# gdb would take it for the name, and "break f" would find nothing), a type's constructor and destructor by the type
+fn (e mut Emitter&) dbgName(k mir.FnKey) String {
+    t := e.T
+    match k {
+        case mir.FnKey.Body(id) {
+            return match e.Lw.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(inst) => $e.text(e.P.FnDecl(e.P.InstanceFn(inst)).Name)
+                case typed.BodyOf.Ctor(ty, _) => $t.Canon(ty)
+                case typed.BodyOf.Dtor(ty) => $t.Canon(ty) ".dtor"
+                case typed.BodyOf.Lambda(_) => "lambda"
+                case typed.BodyOf.Test(_) => "test"
+                case typed.BodyOf.Global(_, n) => $e.text(n) ".init"
+                case _ => e.sym(k)
+            }
+        }
+        case _ { return e.sym(k) }
+    }
+}
+
+# the function's subprogram, where it has source to point at
+fn (fe mut fnEm&) subprogram() {
+    f := fe.F
+    if f.File < 0 or (f.Sp.Start == I32(0) and f.Sp.End == I32(0)) { return }
+    e := fe.E
+    file := e.dbgFile(f.File)
+    line := e.D.LineAt(f.File, I64(f.Sp.Start))
+    fe.dbgSp = e.dbgNew()
+    fe.dbgMeta.Push($"!" $fe.dbgSp " = distinct !DISubprogram(name: \"" $escape(e.dbgName(f.Of)) "\", scope: !" $file $
+                    ", file: !" $file ", line: " $line ", type: !" $e.dbgSubTy() ", scopeLine: " $line $
+                    ", spFlags: DISPFlagDefinition, unit: !" $e.dbgCu() ")\n")
+}
+
+# the location of a line of this function, made once
+fn (fe mut fnEm&) dbgLine(line I64) String {
+    n := try fe.dbgLocs.Get(line) catch default -1
+    if n < 0 {
+        n = fe.E.dbgNew()
+        fe.dbgLocs.Put(line, n)
+        fe.dbgMeta.Push($"!" $n " = !DILocation(line: " $line ", column: 1, scope: !" $fe.dbgSp ")\n")
+    }
+    return ", !dbg !" $n
+}
+
+# what the entry's calls and the code before the first statement carry: the function's own line (the prologue's other
+# instructions carry nothing, so the debugger stops after the parameters are stored, as clang's)
+fn (fe mut fnEm&) dbgEntry() String {
+    if fe.dbgSp < 0 { return "" }
+    return fe.dbgLine(fe.E.D.LineAt(fe.F.File, I64(fe.F.Sp.Start)))
+}
+
+# the instructions written from now on at sp's line; a span lowering made up (none) keeps the line before, and so
+# does the function's own (its frame's opening and closing), so that the debugger stops at the first statement
+fn (fe mut fnEm&) locate(sp source.Span) {
+    if sp.Start == I32(0) and sp.End == I32(0) { return }
+    if sp.Start == fe.F.Sp.Start and sp.End == fe.F.Sp.End { return }
+    fe.dbgLoc = fe.dbgLine(fe.E.D.LineAt(fe.F.File, I64(sp.Start)))
+}
+
+# each named parameter and local in a frame slot, described where the debugger can show it (info args, info locals)
+fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
+    e := fe.E
+    f := fe.F
+    file := e.dbgFile(f.File)
+    arg I64 = 0
+    for i in range f.Locals.Len() {
+        l := f.Locals[i]
+        if l.Kind == mir.LocalKind.Param { arg++ }
+        if l.Kind != mir.LocalKind.Param and l.Kind != mir.LocalKind.Var { continue }
+        if l.Name == source.NameId(0) or not fe.isFrame(l.Home) { continue }
+        name := e.text(l.Name)
+        if name == "" or name.StartsWith("$") { continue }
+        dt := e.dbgType(l.Ty)
+        if dt < 0 { continue }
+        n := e.dbgNew()
+        line := e.D.LineAt(f.File, I64(l.Sp.Start)) if l.Sp.Start != I32(0) else e.D.LineAt(f.File, I64(f.Sp.Start))
+        argText := ", arg: " $arg if l.Kind == mir.LocalKind.Param else ""
+        fe.dbgMeta.Push($"!" $n " = !DILocalVariable(name: \"" $escape(name) "\"" $argText ", scope: !" $fe.dbgSp $
+                        ", file: !" $file ", line: " $line ", type: !" $dt ")\n")
+        e.declare("llvm.dbg.declare", "void @llvm.dbg.declare(metadata, metadata, metadata)")
+        b.Push("  call void @llvm.dbg.declare(metadata ptr %l" $i ", metadata !" $n ", metadata !DIExpression())" $
+               fe.dbgEntry() "\n")
+    }
+}
+
+fn stmtSpan(s mir.Stmt) source.Span {
+    return match s {
+        case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _) => sp
+        case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _) => sp
+        case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Write(sp, _, _, _) => sp
+        case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _) => sp
+    }
+}
+
+fn termSpan(tm mir.Term) source.Span {
+    return match tm {
+        case mir.Term.Call(sp, _), mir.Term.Return(sp, _), mir.Term.Raise(sp, _) => sp
+        case mir.Term.Wait(sp, _, _, _, _), mir.Term.Exit(sp, _, _) => sp
+        case _ => source.Span(I32(0), I32(0))
+    }
+}
+
 # ---- types ----
 
 # a type's LLVM spelling, every declared struct it names recorded to be defined
@@ -694,10 +916,62 @@ fn escape(t String&) String {
     return b.ToString()
 }
 
-# the runtime's types, as std/runtime/runtime.ll defines them
-runtimeTypes String& = ("%olang.scope = type { ptr, ptr, ptr, ptr, ptr, ptr }\n"
-                        "%olang.builder = type { ptr, i64, i64, ptr, ptr }\n"
-                        "%olang.unwind = type { ptr, ptr, ptr }\n")
+
+# ---- alias tags (T36) ----
+
+# the type tree the access tags name, stage 0's numbering: one root, a leaf per tagged type, all siblings - so two
+# different tagged types are proven not to alias, and anything untagged aliases everything. Bool and each number (T4)
+# have two leaves, a field's and an element's (the same type reached by indexing, "[]"); the run-time-length array's
+# descriptor { i64, ptr } and a reference to a struct or an enum (one pointer, "ref") two each; a closure's environment
+# one (written where the closure is made, read only by its code); the runtime's scope and chunk headers one each, the
+# tags its inlined bodies carry (std/runtime/runtime.ll's !59, !60)
+tbaaTree String& = ("\n!20 = !{!\"olang\"}\n"
+                    "!49 = !{!\"scopehdr\", !20, i64 0}\n!50 = !{!\"chunkhdr\", !20, i64 0}\n"
+                    "!59 = !{!49, !49, i64 0}\n!60 = !{!50, !50, i64 0}\n"
+                    "!17 = !{!\"arraydesc\", !20, i64 0}\n!18 = !{!\"closure\", !20, i64 0}\n"
+                    "!47 = !{!\"arraydesc[]\", !20, i64 0}\n!19 = !{!\"ref\", !20, i64 0}\n"
+                    "!48 = !{!\"ref[]\", !20, i64 0}\n!29 = !{!19, !19, i64 0}\n!39 = !{!48, !48, i64 0}\n"
+                    "!27 = !{!17, !17, i64 0}\n!28 = !{!18, !18, i64 0}\n!37 = !{!47, !47, i64 0}\n" $tbaaLeaves() "\n")
+
+# by primitive id (types.primNames): the leaf's name, its field and element access tags (a field's type node at the
+# tag less 10, an element's at the tag plus 10)
+tbaaName := String&["", "", "bool", "i8", "i16", "int32", "int64", "byte", "u16", "u32", "u64", "f16", "bf16", "float32"
+                    "float64"]
+tbaaField := I64[0, 0, 21, 61, 62, 23, 24, 22, 63, 64, 65, 66, 67, 25, 26]
+tbaaElem := I64[0, 0, 31, 81, 82, 33, 34, 32, 83, 84, 85, 86, 87, 35, 36]
+
+fn tbaaLeaves() String {
+    b := StringBuilder()
+    for i in range 2, 15 {
+        f, x := tbaaField[i], tbaaElem[i]
+        b.Push("!" $(f - 10) " = !{!\"" $tbaaName[i] "\", !20, i64 0}\n!" $f " = !{!" $(f - 10) ", !" $(f - 10) ", i64 0}\n")
+        b.Push("!" $(x + 10) " = !{!\"" $tbaaName[i] "[]\", !20, i64 0}\n!" $x " = !{!" $(x + 10) ", !" $(x + 10) ", i64 0}\n")
+    }
+    return b.ToString()
+}
+
+# the access tag of a value of type ty in storage reached as an element (elem) or a field: Bool's and each number's
+# (a declared type's its base's), a run-time-length array's descriptor, a reference to a struct or an enum; empty -
+# untagged, aliasing anything - for an aggregate, a fixed array, a function value
+fn (e mut Emitter&) tbaa(ty types.TypeId, elem Bool) String {
+    t := e.T
+    r := t.Repr(ty)
+    if r >= types.BoolT and r <= types.TypeId(14) { return ", !tbaa !" $(tbaaElem[I64(r)] if elem else tbaaField[I64(r)]) }
+    if t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0) { return e.descTag(elem, false) }
+    if t.IsRef(r) {
+        x := t.Repr(t.Referent(r))
+        k := t.KindOf(x)
+        if k == types.Kind.Array and t.Length(x) == types.TypeId(0) { return e.descTag(elem, false) }
+        if k == types.Kind.Named or k == types.Kind.AnonEnum { return ", !tbaa !39" if elem else ", !tbaa !29" }
+    }
+    return ""
+}
+
+# the descriptor's tag, untagged within a payload
+fn (e mut Emitter&) descTag(elem Bool, payload Bool) String {
+    if payload { return "" }
+    return ", !tbaa !37" if elem else ", !tbaa !27"
+}
 
 # ---- a function ----
 
@@ -717,6 +991,13 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     via Bool = false
     env Bool = false
     big Bool = false
+    tagAt String& = ""      # T36: the access tag of the place addr last found, for a scalar there (empty: untagged)
+    # B2e, in a -debug build: this function's subprogram (-1 none), the location every instruction written now carries
+    # (", !dbg !N"), a location per line, and the metadata written after the function
+    dbgSp I64 = -1
+    dbgLoc String& = ""
+    dbgLocs Map<I64, I64>
+    dbgMeta StringBuilder
     sites Map<I32, I64>     # S18d: where this function's calls (1) and joins (2) are, by the start of their span
     sited Bool = false
 }
@@ -750,6 +1031,13 @@ fn (fe mut fnEm&) tmp() String {
 fn (fe mut fnEm&) w(line String&) {
     fe.code.Push("  ")
     fe.code.Push(line)
+    # B2e: before the first statement's line only a call is located (the verifier wants it), so the debugger stops at
+    # the first statement, as clang's prologue_end does
+    if fe.dbgLoc != "" {
+        fe.code.Push(fe.dbgLoc)
+    } else if fe.dbgSp >= 0 and line.Contains("call ") {
+        fe.code.Push(fe.dbgEntry())
+    }
     fe.code.PushChar('\n')
 }
 
@@ -791,9 +1079,9 @@ fn (fe mut fnEm&) let(text String&) String {
     return t
 }
 
-fn (fe mut fnEm&) load(ty String&, at String&) String { return fe.let("load " $ty ", ptr " $at) }
+fn (fe mut fnEm&) load(ty String&, at String&, tag String& = "") String { return fe.let("load " $ty ", ptr " $at $tag) }
 
-fn (fe mut fnEm&) store(ty String&, v String&, at String&) { fe.w("store " $ty " " $v ", ptr " $at) }
+fn (fe mut fnEm&) store(ty String&, v String&, at String&, tag String& = "") { fe.w("store " $ty " " $v ", ptr " $at $tag) }
 
 fn blockName(b mir.BlockId) String { return "bb" $b }
 
@@ -902,6 +1190,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     fe.passed = passed
     fe.env = env
     e.badType = false
+    if e.Debug { fe.subprogram() }
     fe.run()
     if e.badType {
         # a type the program's layouts do not settle (a length a call computes, G21, is the evaluator's, M8)
@@ -910,13 +1199,22 @@ fn (e mut Emitter&) function(k mir.FnKey) {
         return
     }
     b := StringBuilder()
-    b.Push(hdr)
+    if fe.dbgSp >= 0 {
+        # B2e: the define line names its subprogram
+        b.Push(hdr[:hdr.Len() - 2])
+        b.Push(" !dbg !" $fe.dbgSp " {\n")
+    } else {
+        b.Push(hdr)
+    }
     b.Push("entry:\n")
     b.Push(fe.head.ToString())
     b.Push(fe.pro.ToString())
+    if fe.dbgSp >= 0 { fe.declareVars(b) }
     b.Push("  br label %start\n")
     b.Push(fe.code.ToString())
-    b.Push("}\n\n")
+    b.Push("}\n")
+    b.Push(fe.dbgMeta.ToString())
+    b.PushChar('\n')
     e.fnItem(k, f.Ty, symbol, passed, env, b.ToString())
 }
 
@@ -1008,7 +1306,7 @@ fn (fe mut fnEm&) run() {
             lt := fe.ty(f.Locals[l].Ty)
             if not fe.isFrame(f.Locals[l].Home) { fe.gap("a capture homed in an arena") }
             fe.pro.Push("  %cp" $i " = getelementptr " $et ", ptr %env, i32 0, i32 " $i "\n")
-            fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i "\n")
+            fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i ", !tbaa !28\n")
             fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
         }
         # the captured scopes (D16c), each as this thread may build into it: its own part of a scope another thread
@@ -1016,13 +1314,22 @@ fn (fe mut fnEm&) run() {
         fe.E.runtime("__olang_capture_scope")
         for j in range fe.E.capVars(f.Of) {
             fe.pro.Push("  %vq" $j " = getelementptr " $et ", ptr %env, i32 0, i32 " $(f.Captures.Len() + j) "\n")
-            fe.pro.Push("  %vr" $j " = load ptr, ptr %vq" $j "\n")
-            fe.pro.Push("  %vc" $j " = call ptr @__olang_capture_scope(ptr %vr" $j ")\n")
+            fe.pro.Push("  %vr" $j " = load ptr, ptr %vq" $j ", !tbaa !28\n")
+            fe.pro.Push("  %vc" $j " = call ptr @__olang_capture_scope(ptr %vr" $j ")" $fe.dbgEntry() "\n")
         }
+    }
+    taken Map<I64, Bool>
+    if fe.E.traced() {
+        for b in f.Taken { taken.Put(I64(b), true) }
     }
     for b in range f.Blocks.Len() {
         fe.label(blockName(mir.BlockId(I32(b))))
         bb := f.Blocks[b]
+        # S18d: a clause takes the error - the trace it left is no one's now
+        if taken.Has(b) {
+            fe.E.runtime("__olang_ert_clear")
+            fe.w("call void @__olang_ert_clear()")
+        }
         for s in bb.Stmts { fe.stmt(s) }
         fe.term(bb.T)
     }
@@ -1183,11 +1490,15 @@ fn (fe mut fnEm&) fixedLen(a types.TypeId) I64 {
     return t.ConstValue(n) if t.KindOf(n) == types.Kind.Const else 0
 }
 
-# a place's address and type: its base's, each projection followed
+# a place's address and type: its base's, each projection followed - and (tagAt) the access tag a scalar there is
+# loaded and stored with (T36): its type's, in the family of the path's last step, an element's for an index and a
+# field's otherwise; untagged within an enum's payload, whose bytes two cases' fields share
 fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
     t := fe.E.T
     at := ""
     ty := types.UnknownT
+    elem := false
+    payload := false
     match p.B {
         case mir.Base.Local(l) {
             at = fe.localAt(l)
@@ -1207,17 +1518,30 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
                 fs := t.Items(fe.fieldList(r))
                 at = fe.let("getelementptr " $fe.ty(r) ", ptr " $at ", i32 0, i32 " $k)
                 ty = fs[k]
+                elem = false
             }
             case mir.Proj.Index(l) {
-                ix := fe.index(fe.load(fe.ty(fe.localType(l)), fe.localAt(l)), fe.localType(l))
-                at, ty = fe.elemAt(at, ty, ix)
+                lt := fe.localType(l)
+                ix := fe.index(fe.load(fe.ty(lt), fe.localAt(l), fe.E.tbaa(lt, false)), lt)
+                if fe.runTime(ty) { payload = false }
+                at, ty = fe.elemAt(at, ty, ix, fe.E.descTag(elem, payload))
+                elem = true
             }
-            case mir.Proj.At(k) { at, ty = fe.elemAt(at, ty, $k) }
+            case mir.Proj.At(k) {
+                if fe.runTime(ty) { payload = false }
+                at, ty = fe.elemAt(at, ty, $k, fe.E.descTag(elem, payload))
+                elem = true
+            }
             case mir.Proj.Deref {
                 rt := t.Referent(r)
+                tag := "" if payload else fe.E.tbaa(r, elem)
                 ty = rt
                 # a reference to a run-time-length array is the pair the array's value is (T11): the same storage
-                if not fe.runTime(rt) { at = fe.load("ptr", at) }
+                if not fe.runTime(rt) {
+                    at = fe.load("ptr", at, tag)
+                    payload = false
+                    elem = false
+                }
             }
             case mir.Proj.Payload(_) {
                 at = fe.let("getelementptr " $fe.ty(r) ", ptr " $at ", i32 0, i32 1")
@@ -1227,9 +1551,11 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
                     case mir.Proj.Payload(tag) { ty = cs[tag] }
                     case _ { }
                 }
+                payload = true
             }
         }
     }
+    fe.tagAt = "" if payload else fe.E.tbaa(ty, elem)
     return at, ty
 }
 
@@ -1248,7 +1574,8 @@ fn (fe mut fnEm&) index(v String&, ty types.TypeId) String {
 }
 
 # an element's address in the array at at, of type ty
-fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&) (String, types.TypeId) {
+# (desc: the access tag of the array's descriptor where it is a run-time-length one)
+fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&, desc String& = "") (String, types.TypeId) {
     t := fe.E.T
     a := fe.arrayOf(ty)
     if a == types.UnknownT {
@@ -1257,7 +1584,7 @@ fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&) (String, types
     }
     el := t.Elem(a)
     if fe.fixed(a) { return fe.let("getelementptr " $fe.ty(a) ", ptr " $at ", i64 0, i64 " $ix), el }
-    data := fe.load("ptr", fe.let("getelementptr { i64, ptr }, ptr " $at ", i32 0, i32 1"))
+    data := fe.load("ptr", fe.let("getelementptr { i64, ptr }, ptr " $at ", i32 0, i32 1"), desc)
     return fe.let("getelementptr " $fe.ty(el) ", ptr " $data ", i64 " $ix), el
 }
 
@@ -1311,7 +1638,7 @@ fn (fe mut fnEm&) val(x mir.Operand, want types.TypeId = types.UnknownT) String 
         case mir.Operand.None { return "undef" }
         case mir.Operand.Copy(p) {
             at, ty := fe.addr(p)
-            return fe.load(fe.ty(ty), at)
+            return fe.load(fe.ty(ty), at, fe.tagAt)
         }
         case mir.Operand.Const(ty, bits) {
             k := ty
@@ -1499,6 +1826,7 @@ fn (fe mut fnEm&) alloc(r mir.ScopeRef, size String&, align I64, stack String& =
 
 fn (fe mut fnEm&) stmt(s mir.Stmt) {
     t := fe.E.T
+    if fe.dbgSp >= 0 { fe.locate(stmtSpan(s)) }
     match s {
         case mir.Stmt.Assign(_, p, rv) {
             pt := fe.placeType(p)
@@ -1506,7 +1834,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             v := fe.rvalue(rv, pt)
             if pt == types.VoidT or pt == types.NoreturnT { return }
             at, _ := fe.addr(p)
-            fe.store(fe.ty(pt), v, at)
+            fe.store(fe.ty(pt), v, at, fe.tagAt)
         }
         case mir.Stmt.Live(_, l) {
             home := fe.F.Locals[I64(l)].Home
@@ -1575,7 +1903,7 @@ fn (fe mut fnEm&) dataPtr(p mir.Place) String {
     at, ty := fe.addr(p)
     a := fe.arrayOf(ty)
     if a != types.UnknownT and fe.fixed(a) { return at }
-    return fe.load("ptr", fe.let("getelementptr { i64, ptr }, ptr " $at ", i32 0, i32 1"))
+    return fe.load("ptr", fe.let("getelementptr { i64, ptr }, ptr " $at ", i32 0, i32 1"), fe.tagAt)
 }
 
 # an array value's (or a reference to one's) data pointer and length
@@ -1757,7 +2085,7 @@ fn (fe mut fnEm&) ref(p mir.Place, ty types.TypeId) String {
     if fe.runTime(rt) {
         a := fe.arrayOf(pty)
         if a != types.UnknownT and fe.fixed(a) { return fe.pair($fe.fixedLen(a), at) }
-        return fe.load("{ i64, ptr }", at)
+        return fe.load("{ i64, ptr }", at, fe.tagAt)
     }
     return at
 }
@@ -2034,7 +2362,10 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
         a := fe.let("icmp eq " $w0 $fe.let("extractvalue " $lt " " $x ", 0") ", " $fe.let("extractvalue " $lt " " $y ", 0"))
         b := fe.let("icmp eq ptr " $fe.let("extractvalue " $lt " " $x ", 1") ", " $fe.let("extractvalue " $lt " " $y ", 1"))
         both := fe.let("and i1 " $a ", " $b)
-        return both if op == typed.PrimOp.Eq else fe.let("xor i1 " $both ", true")
+        # a returned local as one value of a conditional is placed in the if's block by the scope pass, not the result
+        # scope (O26a) - a use after free under -sanitize; written as two returns until the pass is fixed
+        if op == typed.PrimOp.Eq { return both }
+        return fe.let("xor i1 " $both ", true")
     }
     return fe.let("icmp " $c " " $lt " " $x ", " $y)
 }
@@ -2242,7 +2573,7 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
         for i in range args.N {
             x := fe.arg(args, i)
             xt := fe.otype(x)
-            fe.store(fe.ty(xt), fe.val(x, xt), fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i))
+            fe.store(fe.ty(xt), fe.val(x, xt), fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i), ", !tbaa !28")
         }
         # where the captures holding references live (D16c): null for the program's, and for each the plan did not say
         for j in range nc {
@@ -2255,7 +2586,7 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
                 }
                 if not isProg { sc = fe.scope(r) }
             }
-            fe.store("ptr", sc, fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $(I64(args.N) + j)))
+            fe.store("ptr", sc, fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $(I64(args.N) + j)), ", !tbaa !28")
         }
     }
     a := fe.let("insertvalue { ptr, ptr } undef, ptr @" $sym ", 0")
@@ -2484,6 +2815,7 @@ fn (e mut Emitter&) dtorThunk(k mir.FnKey) {
 
 fn (fe mut fnEm&) term(tm mir.Term) {
     t := fe.E.T
+    if fe.dbgSp >= 0 { fe.locate(termSpan(tm)) }
     match tm {
         case mir.Term.None { fe.w("unreachable") }
         case mir.Term.Goto(b) { fe.w("br label %" $blockName(b)) }
@@ -2765,36 +3097,64 @@ fn (e mut Emitter&) externRet(ty types.TypeId) String {
 
 # ---- the runtime ----
 
-# a runtime function, declared as std/runtime/runtime.ll defines it
-fn (e mut Emitter&) runtime(name String&) {
-    if e.has(name) { return }
-    d := match name {
-        case "__olang_check_failed" => "void @__olang_check_failed(ptr)"
-        case "__olang_check_failed_text" => "void @__olang_check_failed_text(ptr, { i64, ptr })"
-        case "__olang_scope_alloc" => "ptr @__olang_scope_alloc(ptr, i64)"
-        case "__olang_scope_alloc_a" => "ptr @__olang_scope_alloc_a(ptr, i64, i64)"
-        case "__olang_scope_alloc_zeroed" => "ptr @__olang_scope_alloc_zeroed(ptr, i64)"
-        case "__olang_scope_close" => "void @__olang_scope_close(ptr)"
-        case "__olang_int_bf16" => "bfloat @__olang_int_bf16(i64, i1)"
-        case "__olang_scope_register_dtor" => "void @__olang_scope_register_dtor(ptr, ptr, ptr)"
-        case "__olang_sb_room" => "ptr @__olang_sb_room(ptr, i64)"
-        case "__olang_sb_add" => "void @__olang_sb_add(ptr, i64)"
-        case "__olang_sb_put" => "void @__olang_sb_put(ptr, ptr, i64)"
-        case "__olang_sb_done" => "void @__olang_sb_done(ptr)"
-        case "__olang_fmt_i64" => "i64 @__olang_fmt_i64(ptr, i64)"
-        case "__olang_fmt_u64" => "i64 @__olang_fmt_u64(ptr, i64)"
-        case "__olang_fmt_float" => "i64 @__olang_fmt_float(ptr, i64, double, i32)"
-        case "__olang_rd_quote" => "i64 @__olang_rd_quote(ptr, i64, ptr, i64, i8)"
-        case "__olang_thread_init" => "void @__olang_thread_init()"
-        case "__olang_capture_scope" => "ptr @__olang_capture_scope(ptr)"
-        case "__olang_test_failed" => "void @__olang_test_failed(ptr)"
-        case _ => ""
-    }
-    if d == "" {
-        e.gap("an undeclared runtime function " $name)
+# what a module carries of the runtime (std/runtime/runtime.ll, filled in for the build as the runtime's own object
+# is): its types, and an item for each symbol it defines - a function's declaration, a global's external declaration,
+# and the body of what it marks for inlining as available_externally, so a module's own optimization sees through a
+# scope's close and the arena's fast path (runtime.Decls, stage 0's emitRuntimeDecls). Each item is copied into an
+# object only where named, so an object declares exactly what it calls
+fn (e mut Emitter&) runtimeItems() {
+    if e.rtRead { return }
+    e.rtRead = true
+    text := try olrt.Text(e.Arch, e.San, false) catch olrt.Bad {
+        e.gap("the runtime's text (std/runtime/runtime.ll could not be filled in)")
         return
     }
-    e.declare(name, d)
+    tys := StringBuilder()
+    body := StringBuilder()
+    bodySym := ""
+    for line in olrt.Decls(text).Lines() {
+        if bodySym != "" {
+            body.Push(line)
+            body.PushChar('\n')
+            if line == "}" {
+                e.item(bodySym, HomeShared, body.ToString())
+                body = StringBuilder()
+                bodySym = ""
+            }
+            continue
+        }
+        if line.StartsWith("%") {
+            tys.Push(line)
+            tys.PushChar('\n')
+            continue
+        }
+        sym := declaredSymbol(line)
+        if sym == "" { continue }
+        if line.StartsWith("define ") {
+            bodySym = sym
+            body.Push(line)
+            body.PushChar('\n')
+        } else {
+            e.item(sym, HomeShared, $line "\n")
+        }
+    }
+    # a text builder's layout, which the runtime reaches by offsets and so does not name: emission's own (E11b)
+    tys.Push("%olang.builder = type { ptr, i64, i64, ptr, ptr }\n")
+    e.rtTypes = tys.ToString()
+}
+
+# the symbol a line of the runtime's declarations declares or defines: after its first "@", to "(" or " = "
+fn declaredSymbol(line String&) String {
+    at := try line.Find("@") catch { return "" }
+    i := at + 1
+    for i < line.Len() and symbolChar(line[i]) { i++ }
+    return $line[at + 1:i]
+}
+
+# a runtime function: the runtime declares it (runtimeItems), which this only checks
+fn (e mut Emitter&) runtime(name String&) {
+    e.runtimeItems()
+    if not e.has(name) { e.gap("an undeclared runtime function " $name) }
 }
 
 # ---- the program's entry ----

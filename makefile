@@ -10,7 +10,7 @@ SRC = $(wildcard bootstrap/*.c)
 # objects under build/obj/, not build/: a checkout built before the move to bootstrap/ holds build/*.d files naming
 # codegen.c and the rest at the top level, and make would read them and stop at "No rule to make target 'codegen.c'"
 OBJ = $(addprefix build/obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
-# the same sources built optimized, as the compiler a bootstrap starts from (make bootstrap)
+# the same sources built optimized (make stage0)
 STAGE0_CFLAGS = -O2 -Wall -Werror -Wextra -Wpedantic -MMD -MP
 STAGE0_OBJ = $(addprefix build/stage0.obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
 DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
@@ -179,17 +179,61 @@ build/stage0.obj/%.o: bootstrap/%.c
 	mkdir -p build/stage0.obj
 	$(CC) $(STAGE0_CFLAGS) -c $< -o $@
 
+# stage 0 built optimized (bootstrap/README.md): the C compiler, kept until the seed has rebuilt the compiler from nothing
 build/stage0: $(STAGE0_OBJ)
 	$(CC) $(STAGE0_CFLAGS) $^ -o build/stage0 -lm -lffi -ldl -lpthread
 
-# rebuilds the compiler from nothing but the repository (bootstrap/README.md, compiler/DESIGN.md section 5): stage 0,
-# the C compiler in bootstrap/, needs only gcc. No binary is committed, so this is also how a lost compiler comes back.
-# TODO once compiler/ holds the olang compiler: walk bootstrap/CHAIN (each entry's compiler/ and std/ extracted with
-# git archive and built at -d by the compiler before it), build stage 1 from compiler/ with the last of them at -d,
-# stage 2 with stage 1 and stage 3 with stage 2, compare every .ll of stages 2 and 3 byte for byte and then the
-# binaries, and install stage 2 as build/olang.
-bootstrap: build/stage0
-	@echo "bootstrap: stage 0 is build/stage0 - compiler/ holds no olang compiler yet, so there are no later stages"
+stage0: build/stage0
+
+# ---- the seed (compiler/DESIGN.md section 5, seed/README.md) ----
+#
+# The seed is the compiler's own LLVM IR, as the compiler writes it of itself for baseline x86-64 Linux: one
+# xz-compressed .ll per object in seed/. "make bootstrap" rebuilds the compiler from it with nothing but clang and xz -
+# no other compiler, no bootstrap/: clang makes the seed into build/olang.seed, which builds compiler/olang.olang into
+# build/olang.1, which builds it again into build/olang.2; the two must be byte for byte equal, and build/olang.2 is
+# installed as build/olang. The seed need not be current - an older seed builds the current source as long as that
+# source uses nothing the seed's compiler lacks - and "make seed" writes it again from the current source.
+SEED = seed
+SEED_FILES = $(wildcard $(SEED)/*.ll.xz)
+SEED_OBJ = $(patsubst $(SEED)/%.ll.xz,build/seed/%.o,$(SEED_FILES))
+SEED_CLANG ?= clang
+# the compiler that builds the seed tool: the one make bootstrap installed, else stage 0. Which one it is changes
+# nothing in the seed - the tool runs the current source's passes over the current source
+SEED_OLANG ?= $(if $(wildcard build/olang),build/olang,build/out)
+
+build/seed/%.o: $(SEED)/%.ll.xz
+	@mkdir -p build/seed
+	xz -dc $< > build/seed/$*.ll
+	$(SEED_CLANG) -O2 -c build/seed/$*.ll -o $@
+
+build/olang.seed: $(SEED_OBJ)
+	@test -n "$(SEED_OBJ)" || { echo "bootstrap: no seed in $(SEED)/ - make seed writes one"; exit 1; }
+	$(SEED_CLANG) $(SEED_OBJ) -o $@ -lm -lpthread -ldl -lffi
+
+bootstrap: build/olang.seed
+	build/olang.seed build -output build/olang.1 compiler/olang.olang
+	build/olang.1 build -output build/olang.2 compiler/olang.olang
+	cmp build/olang.1 build/olang.2
+	cp build/olang.2 build/olang
+	@echo "bootstrap: build/olang.1 and build/olang.2 are byte for byte equal; build/olang installed"
+
+# the seed written again from the current source (compiler/tools/seed.olang), from the repository root and with the
+# standard library named relatively, so no path of this checkout is in it. A file whose IR did not change is left as
+# it is, so another xz cannot change a seed file whose content is the same
+# the seed tool runs the passes it was built from, so it is built again whenever compiler/ or std/ changes
+build/compiler_tools_seed: $(SEED_OLANG) compiler/tools/seed.olang $(wildcard compiler/*.olang) $(wildcard std/*.olang) \
+		$(wildcard std/prelude/*.olang) $(wildcard std/runtime/*.ll)
+	$(SEED_OLANG) build compiler/tools/seed.olang
+
+seed: build/compiler_tools_seed
+	OLANG_STD=std build/compiler_tools_seed build/seed.new
+	@mkdir -p $(SEED)
+	@for f in $(SEED)/*.ll.xz; do \
+		[ -e "$$f" ] || continue; b=$$(basename $$f .xz); [ -e build/seed.new/$$b ] || rm -f $$f; done
+	@for f in build/seed.new/*.ll; do \
+		b=$$(basename $$f); \
+		if [ -e $(SEED)/$$b.xz ] && xz -dc $(SEED)/$$b.xz | cmp -s - $$f; then continue; fi; \
+		echo "seed: $(SEED)/$$b.xz"; xz -9 -T1 -c $$f > $(SEED)/$$b.xz; done
 
 run: $(OLANG)
 	$(OLANG_ENV) $(OLANG) build tests/runner.olang
@@ -291,7 +335,7 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph race fuzz scopesan scopefuzz clean
+.PHONY: all build bootstrap stage0 seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph race fuzz scopesan scopefuzz clean
 
 # kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
 # ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.

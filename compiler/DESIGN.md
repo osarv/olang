@@ -852,7 +852,12 @@ golden dumps in `lower`'s tests stand in for round trips.
   object is its module's items sorted by symbol, what they name of the shared and local items, a declaration for each
   item another object defines, and the named types used, so its text depends only on what it holds; the driver builds
   one object per module (`emit.Objects`) and an edit recompiles only the objects whose IR changed. The error return
-  trace (S18d) is read off MIR's structure at each `Raise`, as the evaluator reads it. TBAA and DWARF are still to do.
+  trace (S18d) is read off MIR's structure at each `Raise`, as the evaluator reads it.
+- **Built (M9 round 4, 2026-10-22).** TBAA (T36) from each place's path and type, stage 0's tree; the runtime's
+  declarations and inline bodies read from its text (`runtime.Decls`), each an item copied where named, so a module's
+  own optimization folds an empty scope's close; DWARF under `-debug` (subprograms, a line per statement, parameters
+  and locals in words), its metadata renumbered per object; S18d's trace cleared where a clause takes an error
+  (`mir.Fn.Taken`). At -O3 the root's object holds the instances again (item 3 of section 3.4).
 
 ### 1.10 The runtime (`std/runtime/*.ll`) - built in C (P0)
 
@@ -1131,7 +1136,9 @@ These are extrapolations from the measurements above, to be measured at M10.
    an importer whose IR did not change (`resolve` above). B3's text is restated to match. (Built, M10.)
 3. **Put instances in their own object** (`<root>.inst`), so editing one module no longer recompiles every instance
    with the root. With item 2, the instance object is rebuilt only when the instance set or an instance's code
-   changes. (Built, M10: `UnitKind.Instances`.)
+   changes. (Built, M10: `UnitKind.Instances`.) Under `-debug` only since M9 round 4: at -O3 the root's code could
+   not inline an instance before the link and the link did not recover it (`for x in v` over a Vec measured 2x slower),
+   so there the root's object holds them, as stage 0's does.
 4. **Skip the link when nothing it reads changed**: the binary records a hash of its inputs. A no-op build is then
    the front end alone: about 1.5 s here instead of 10.7 s. (Built, M10: the stamp `BIN.link`.)
 5. **Run clang in parallel** over stale modules, bounded by the core count, using `join` and `spawn` over
@@ -1139,7 +1146,9 @@ These are extrapolations from the measurements above, to be measured at M10.
 6. **Use FastISel under `-d` unless the module's IR contains `bfloat`.** B2c's workaround for LLVM 18 costs 70% of
    `-O0` time, and the compiler uses no BF16. (Built, M10: `CompileFlags`.)
 7. **LTO only where it pays.** Release builds keep full LTO; ThinLTO measured twice as slow to link at this size,
-   so revisit it if the compiler's own link passes about 60 s. Development builds of the compiler use `-d`.
+   so revisit it if the compiler's own link passes about 60 s. Development builds of the compiler use `-d`. Revisited
+   (M9 round 4): the compiler's link had reached 172 s; a program of 8 MB of IR or more now links by ThinLTO with the
+   plugin's cache - the clean -O3 self-build 213 s -> 108 s, an edit 3.5 min -> 43 s, the compiler as fast.
 8. **Parse modules in parallel** (section 1.4). This is small but free.
 
 Make targets: `make dev` (the compiler at `-d`, incremental) is the edit loop; `make` builds a release compiler
@@ -1259,53 +1268,61 @@ for scanner and parser regressions until the grammar moves past what stage 0 par
 
 ## 5. Bootstrap
 
-**Layout.** No binaries are committed.
+**The seed (the user's decision, 2026-10-18).** Once the port builds itself, rebuilding it from nothing is one run: a
+committed seed - the compiler's own LLVM IR, written by the compiler of itself and never by hand - is compiled by
+clang, and that compiler builds the current source (Zig's approach, its `zig1.wasm`). No chain of intermediate
+compilers, no binary committed, and no second compiler maintained: the C compiler in `bootstrap/` is frozen, and is
+removed from the tree (tagged `stage0-final`) once the seed has rebuilt the compiler from nothing (QAL).
+
+**Layout.**
 
 ```
-bootstrap/          the C compiler (frozen once the port works), its makefile, oracle/, CHAIN
-compiler/           the olang compiler, this file, tools/dump.olang
+seed/               the seed: one xz-compressed .ll per object, baseline x86-64 Linux (seed/README.md)
+compiler/           the olang compiler, this file, tools/ (tools/seed.olang writes the seed)
 std/                the standard library; std/runtime/*.ll
-build/stage0        the C compiler, built with gcc -O2 for bootstrapping (the C development build stays -g)
-build/olang         the compiler in use: stage 2 after `make bootstrap`
+bootstrap/          stage 0, the C compiler - frozen; `make stage0` builds build/stage0 from it
+build/olang.seed    the seed made a compiler by clang
+build/olang         the compiler in use, after `make bootstrap`
 ```
 
 **Targets.**
 
-- `make bootstrap`:
-  1. builds `build/stage0` from C;
-  2. walks `bootstrap/CHAIN` (below), if it has entries;
-  3. builds stage 1 with the last compiler at `-d` (fast to build; fast enough to run);
-  4. builds stage 2 with stage 1, release;
-  5. builds stage 3 with stage 2, release;
-  6. compares stages 2 and 3: every emitted `.ll` byte for byte, then the binaries;
-  7. installs stage 2 as `build/olang`.
+- `make bootstrap` (needs clang and xz, nothing else):
+  1. decompresses each seed file into `build/seed/` and compiles it with `clang -O2`, side by side under `-j`;
+  2. links them into `build/olang.seed` (with `-lm -lpthread -ldl -lffi`, as every build of the compiler links);
+  3. `build/olang.seed` builds `compiler/olang.olang` into `build/olang.1` - a release build, for this machine;
+  4. `build/olang.1` builds it again into `build/olang.2`;
+  5. compares the two byte for byte - objects are named by a hash of their IR (B3), so they are equal exactly when the
+     second compiler wrote the IR the first did;
+  6. installs `build/olang.2` as `build/olang`.
 
-  Each stage builds in a directory of its own with `OLANG_STD` set to that tree's `std/`, since the compiler finds
-  std at `<compiler>/../std`.
-- `make dev` builds `build/olang.debug` from `compiler/` with `build/olang -d`.
-- `make` builds a release `build/olang.next` with `build/olang`. `make install` replaces `build/olang` after
-  `make verify OLANG=build/olang.next`.
+  Measured from a clean clone with `bootstrap/` deleted (2026-10-22, 4 cores shared with other work): 366 s, 1.6 GB at
+  most - the seed's compiles 18 s, each build of the compiler about 3 minutes, mostly its link (`-O3 -flto`).
+- `make seed` writes the seed from the current source: `compiler/tools/seed.olang` - built by `build/olang` when
+  there is one, else by stage 0, which changes nothing in what it writes - runs the driver's own `Prepare` and `Passes`
+  on the command line `olang build -target x86-64 compiler/olang.olang`, from the repository root with
+  `OLANG_STD=std`, and writes each object's IR as IDENTITY.ll; each file is compressed with `xz -9`, one whose IR did
+  not change left as it is. Deterministic: the seed written by the compiler `make bootstrap` installed is the seed it
+  was built from, byte for byte.
 
-Estimated `make bootstrap` time on an idle machine: about 6 minutes (stage 0 about 1, stage 1 about 1, stages 2 and 3
-about 2 each).
+**Decisions (mine).**
 
-**`bootstrap/CHAIN`.** Entries are listed oldest first. Each entry is built by the compiler of the line before it;
-the first is built by `bootstrap/`'s C compiler, and the compiler at `HEAD` by the last entry.
-
-```
-# olang bootstrap chain, oldest first. Each entry is built by the one above it (the first by bootstrap/'s C
-# compiler); HEAD is built by the last.  tag  commit  root  why
-bootstrap/1  4c1f0e2a9d...(40 hex)  compiler/olang.olang  last commit stage 0 builds: the next uses Array<T, N> in compiler/
-```
-
-- **When a line is added.** In the commit that first makes `compiler/` or `std/` use something its predecessor
-  cannot compile. The line names that commit's parent, the last commit the predecessor builds, and a tag
-  `bootstrap/N` on it is pushed.
-- **How a step is built.** `make bootstrap` extracts that commit's `compiler/` and `std/` with `git archive`, with
-  no worktree, and builds them at `-d` with the previous binary.
-- **Tags as well as hashes.** Tags survive history rewriting (git-filter-repo rewrites tags, not hashes written in
-  files), so the tag is used and the hash beside it is checked. After a rewrite the hashes are refreshed from the
-  tags.
+- **The target is baseline x86-64**, not the writing machine's CPU: the seed runs on any x86-64 Linux, and the
+  compilers it builds are built for their own machine (B12). The module triple is clang's for this host
+  (`x86_64-pc-linux-gnu`).
+- **No path of the writing checkout is in it.** A failed check's message names its file as the loader found it, so
+  with std found beside the compiler every std path would be absolute; the tool refuses an absolute `OLANG_STD`.
+  Compiler modules are named from the repository root (`compiler/check.olang:52:`), as in every build.
+- **The IR as the compiler writes it, release mode (no DWARF), not optimized by clang.** Optimizing each file with
+  `clang -Oz -S -emit-llvm` halves it (1.7 MB compressed against 3.5 MB), but the seed would then be clang's output,
+  depending on clang's version, rather than the compiler's.
+- **One xz file per object.** As written the IR is 48 MB in 43 files (1.5 million lines); xz -9 makes it 3.5 MB, gzip
+  6.4 MB, bitcode 15 MB (5 MB with xz). A one-string edit of a module changes six lines of that module's file and no
+  other, so one file per object keeps a new seed's cost in history to what changed: over three seeds a few commits
+  apart, the history grew by 0.6 and 2.5 MB compressed, 1.4 and 5.1 MB as plain text.
+- **When it is written again.** It must be in the commit that first makes `compiler/` (or the std it uses) need
+  something the seed's compiler cannot build, and may be at any other time; `make bootstrap` shows whether the seed
+  still builds the current source.
 
 **Freeze.** Once stage 1 passes the suite and the fixed point holds (M12), `bootstrap/` stops changing. From then
 on, steps 2 and 3 of the CLAUDE.md checklist ("checker and codegen", "compile-time evaluator") mean the modules in
@@ -1315,7 +1332,7 @@ on, steps 2 and 3 of the CLAUDE.md checklist ("checker and codegen", "compile-ti
 
 **P0, before the port, in the C repository.** Part of this is already queued.
 
-- The C compiler moves to `bootstrap/` as part of the modest refactor. (Done: `make bootstrap` builds `build/stage0`.)
+- The C compiler moves to `bootstrap/` as part of the modest refactor. (Done: `make stage0` builds `build/stage0`.)
 - `OLANG` is parametrized in the makefile, checks, fuzz and bench. (Done with M1: a relative `OLANG` is read against the
   repository root.)
 - The runtime is extracted to `std/runtime/runtime.ll` and linked as one object by the C compiler (section 1.10).
@@ -1342,10 +1359,10 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M6 | `scope` | M5a's `typed` contract | written first as a small formal model of section 8 and section 8.8 (the rules and why each is sound, `docs/scope-model.md`), reviewed before code; then every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38); the scope fuzzer and sanitizer find nothing (`scope` begun 2026-10-18: terms, obligations over the call graph's components, O18a-O18c, O26a, C2d, O17/O17b, derived scopes; its placement read by `lower`; `make scopediff` - HISTORY.md "Port M6: the scope pass") |
 | M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1; `lower` built 2026-10-18 with the stand-in placement: `make lowerdump` - 58,932 of 58,955 corpus bodies and every helper verify clean, the rest check's; no releases or holds, own being removed - HISTORY.md "Port M7: lowering") |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
-| M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 (in progress: emitdiff 989 of 1013 tests as stage 0's; one object per module and S18d done 2026-10-22; TBAA, DWARF left) |
+| M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 (in progress: emitdiff 1009 of 1013 tests as stage 0's, the 4 left the scope pass's and the evaluator's; one object per module and S18d done 2026-10-22; TBAA, DWARF, ThinLTO round 4) |
 | M10 | `build`, `target`, `olang` (driver) | from the start; integrates last | every mode and flag; content-addressed objects (B3, B10b, B12b); a no-op build links nothing; checks' build scenarios; `-t` self-exec (built 2026-10-17 over a `Frontend` interface, all but checks' scenarios - section 1.11) |
 | M11 | stage 1 | all | emit acceptance (section 4); per-file `-t` peak under 500 MB |
-| M12 | self-hosting | M11 | stage 1 builds `compiler/`; stage 2 equals stage 3; `make bootstrap`; freeze |
+| M12 | self-hosting | M11 | stage 1 builds `compiler/`; stage 2 equals stage 3; the seed and `make bootstrap` (built 2026-10-22: the seed rebuilds the compiler from nothing, the last two builds equal - section 5); freeze |
 
 Notes on the schedule:
 

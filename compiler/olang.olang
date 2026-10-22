@@ -385,6 +385,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
     e.Module = kind == build.Kind.Module
     e.Triple = cfg.Target.Triple
+    e.Arch = cfg.Target.Arch
+    e.San = cfg.San
     e.Debug = cfg.Debug
     objs := e.Objects&prog()
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {

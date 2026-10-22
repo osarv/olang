@@ -469,7 +469,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   own artifact. Globals initialize imports first, then in dependency order (B5a; a cycle is an error). No interface
   file exists because a function's scope obligations are derived from its body, which only the source has.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (what the machine can do unless asked otherwise; LTO also
-  made builds faster, ThinLTO measured no better at this size); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
+  made builds faster, ThinLTO measured no better at this size; the port links a program of 8 MB of IR or more by
+  ThinLTO with a cache - the compiler's own -O3 build 213 s -> 108 s, an edit 43 s); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
   the scope sanitizer (B2f: closed chunks poisoned and protected).
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile (`compile` only); target
   constants `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's
@@ -595,8 +596,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### The C compiler and the port
 
-- **The C compiler is `bootstrap/`, stage 0 (the user's call, 2026-10-10).** It builds `build/out`; `make bootstrap`
-  rebuilds it from C with no committed binary,; after self-hosting it is frozen and a generated seed (LLVM IR the olang compiler writes of itself, committed) rebuilds from nothing in one run (the user, 2026-10-18). From the port's
+- **The C compiler is `bootstrap/`, stage 0 (the user's call, 2026-10-10).** It builds `build/out`; `make stage0`
+  builds it optimized. It is frozen; the generated seed (`seed/`, LLVM IR the olang compiler writes of itself for baseline
+  x86-64, `make seed`) rebuilds the compiler from nothing in one run, `make bootstrap`, with clang alone (the user,
+  2026-10-18; built 2026-10-22, compiler/DESIGN.md section 5). From the port's
   start it takes fixes only (QB, the user's call). The refactor was modest: no splitting files for size (the user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
   demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`
@@ -621,7 +624,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   accepts is scope clean (307 of 307), 274 of 280 refused cases give stage 0's first error, 1 still gets none (kept on
   purpose), call results and constructors' fields carry instance records (O13c, O23a); HISTORY.md "Port M6"). M9, `compiler/emit.olang` (MIR written as LLVM IR, one object per module - each module's, the root's
   instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
-  only what changed; the error trace S18d; `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
+  only what changed (at -O3 the instances in the root's, as stage 0's); the error trace S18d; TBAA, DWARF and the runtime's
+  declarations read from its text (round 4); `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
   M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;
