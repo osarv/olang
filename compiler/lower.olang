@@ -538,10 +538,14 @@ fn (ln mut lowering&) exitLevel(i I64) {
     for k in range ln.defers.Len() {
         if ln.deferAt[k] == lv.S { mine.Push(k) }
     }
+    # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
+    # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
+    for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
     for k := mine.Len() - 1, k >= 0, k-- {
         # deferred code runs as a block of its own, inside the block it is registered in
         ln.block(ln.defers[mine[k]])
     }
+    for k in mine { ln.deferAt[k] = lv.S }
     for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
     if ln.dead { return }
     sp := ln.B.Blocks[I64(lv.Block)].Sp if lv.Block >= typed.BlockId(0) else ln.B.Sp
