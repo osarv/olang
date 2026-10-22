@@ -98,6 +98,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dbgPtrN I64 = -1
     dbgFiles Map<I64, I64>
     dbgBasics Map<I64, I64>
+    dbgTypes Map<I64, I64>          # the debug types of aggregates, arrays, enums, references and function values
 }
 
 # whether the error return trace is kept (S18d): test and -debug builds
@@ -690,8 +691,11 @@ fn (e mut Emitter&) dbgSubTy() I64 {
     return e.dbgSubN
 }
 
-# the debug type a variable of type ty is shown as: a number's, Bool's, a pointer for a reference held in one word -
-# -1 for what is not described yet (an aggregate, a run-time-length array's pair, a function value)
+# the debug type a variable of type ty is shown as (B2e): a number's and Bool's basic type, a reference a pointer to
+# what it names, a struct, a tuple or a record its fields by name and offset, a fixed array its elements, a run-time
+# array its length and a pointer to its elements (text so shown as characters), an enum its cases (the tag and the
+# payload's words where one carries a payload), a function value its code and environment - -1 for what has no
+# layout. Each is made once, before its parts, so a type that holds itself through a reference is described once
 fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     t := e.T
     r := t.Repr(ty)
@@ -700,18 +704,169 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         n := e.dbgNew()
         e.dbgBasics.Put(I64(r), n)
         enc := "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
+        # a byte as a character, as C's unsigned char, so that text's elements print as text
+        if t.Bits(r) == 8 and t.IsUnsigned(r) { enc = "DW_ATE_unsigned_char" }
         bits := 8 if r == types.BoolT else t.Bits(r)
         e.dbgShared(n, $"!DIBasicType(name: \"" $t.Canon(r) "\", size: " $bits ", encoding: " $enc ")")
         return n
     }
-    if e.ty(r) == "ptr" and t.IsRef(r) {
-        if e.dbgPtrN < 0 {
-            e.dbgPtrN = e.dbgNew()
-            e.dbgShared(e.dbgPtrN, "!DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)")
+    if e.dbgTypes.Has(I64(r)) { return try e.dbgTypes.Get(I64(r)) catch default -1 }
+    k := t.KindOf(r)
+    if k == types.Kind.Ref {
+        rt := t.Referent(r)
+        if e.ty(r) != "ptr" { return e.dbgPair(r, "len", t.Prim("I64"), "data", t.Elem(t.Repr(rt))) }
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        b := e.dbgType(rt)
+        e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " $("!" $b if b >= 0 else "null") ", size: 64)")
+        return n
+    }
+    if k == types.Kind.Func { return e.dbgPair(r, "code", types.UnknownT, "env", types.UnknownT) }
+    e.P.Layout(r)
+    size := t.Size(r) * 8
+    if k == types.Kind.Array {
+        if t.Length(r) == types.TypeId(0) { return e.dbgPair(r, "len", t.Prim("I64"), "data", t.Elem(r)) }
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        el := e.dbgType(t.Elem(r))
+        if el < 0 { el = e.dbgBytes() }
+        sub := e.dbgNew()
+        e.dbgShared(sub, $"!{!DISubrange(count: " $t.ConstValue(t.Length(r)) ")}")
+        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_array_type, baseType: !" $el ", size: " $size ", elements: !" $sub ")")
+        return n
+    }
+    isStruct := k == types.Kind.Tuple or k == types.Kind.Record or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct)
+    if isStruct {
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        fs := t.Items(t.Parts(r) if k != types.Kind.Named else t.Fields(r))
+        names := e.fieldNames(r, fs.Len())
+        offs := t.Offsets(r)
+        ms StringBuilder
+        for i in range fs.Len() {
+            e.P.Layout(fs[i])
+            mt := e.dbgType(fs[i])
+            if mt < 0 { mt = e.dbgBytes() }
+            m := e.dbgNew()
+            e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $escape(names[i]) "\", baseType: !" $mt ", size: " $
+                        (t.Size(fs[i]) * 8) ", offset: " $(offs[i] * 8) ")")
+            if i > 0 { ms.Push(", ") }
+            ms.Push($"!" $m)
         }
-        return e.dbgPtrN
+        el := e.dbgNew()
+        e.dbgShared(el, $"!{" $ms.ToString() "}")
+        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $size $
+                    ", elements: !" $el ")")
+        return n
+    }
+    isEnum := k == types.Kind.AnonEnum or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum)
+    if isEnum {
+        n := e.dbgNew()
+        e.dbgTypes.Put(I64(r), n)
+        cn := t.CaseNames(r) if k == types.Kind.Named else null
+        cs := t.Items(t.ShapeCases(r) if k == types.Kind.AnonEnum else t.Cases(r))
+        es StringBuilder
+        for i in range cs.Len() {
+            m := e.dbgNew()
+            name := e.text(cn[i]) if cn != null and i < cn.Len() else $i
+            e.dbgShared(m, $"!DIEnumerator(name: \"" $escape(name) "\", value: " $i ")")
+            if i > 0 { es.Push(", ") }
+            es.Push($"!" $m)
+        }
+        el := e.dbgNew()
+        e.dbgShared(el, $"!{" $es.ToString() "}")
+        words := e.enumWords(r)
+        tag := n if not words else e.dbgNew()
+        tbase := e.dbgType(t.Prim("I64") if words else t.Prim("I32"))
+        e.dbgShared(tag, $"!DICompositeType(tag: DW_TAG_enumeration_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $
+                    (64 if words else 32) ", baseType: !" $tbase ", elements: !" $el ")")
+        if not words { return n }
+        # the case, then the payload's words (its fields share them, by case)
+        w := t.PayloadSize(r) / 8
+        pw := e.dbgNew()
+        sub := e.dbgNew()
+        e.dbgShared(sub, $"!{!DISubrange(count: " $w ")}")
+        e.dbgShared(pw, $"!DICompositeType(tag: DW_TAG_array_type, baseType: !" $e.dbgType(t.Prim("I64")) ", size: " $(w * 64) $
+                    ", elements: !" $sub ")")
+        m0, m1, ml := e.dbgNew(), e.dbgNew(), e.dbgNew()
+        e.dbgShared(m0, $"!DIDerivedType(tag: DW_TAG_member, name: \"case\", baseType: !" $tag ", size: 64, offset: 0)")
+        e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"payload\", baseType: !" $pw ", size: " $(w * 64) ", offset: 64)")
+        e.dbgShared(ml, $"!{!" $m0 ", !" $m1 "}")
+        e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: " $size $
+                    ", elements: !" $ml ")")
+        return n
     }
     return -1
+}
+
+# the pair a run-time array or a function value is: two words, the second a pointer to b's description (the first a
+# number of type a, or both pointers to nothing where a is Unknown)
+fn (e mut Emitter&) dbgPair(r types.TypeId, an String&, a types.TypeId, bn String&, b types.TypeId) I64 {
+    n := e.dbgNew()
+    e.dbgTypes.Put(I64(r), n)
+    at := e.dbgVoidPtr()
+    if a != types.UnknownT { at = e.dbgType(a) }
+    bt := e.dbgVoidPtr()
+    if b != types.UnknownT {
+        bd := e.dbgType(b)
+        bt = e.dbgNew()
+        e.dbgShared(bt, $"!DIDerivedType(tag: DW_TAG_pointer_type, baseType: " $("!" $bd if bd >= 0 else "null") ", size: 64)")
+    }
+    m0, m1, ml := e.dbgNew(), e.dbgNew(), e.dbgNew()
+    e.dbgShared(m0, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $an "\", baseType: !" $at ", size: 64, offset: 0)")
+    e.dbgShared(m1, $"!DIDerivedType(tag: DW_TAG_member, name: \"" $bn "\", baseType: !" $bt ", size: 64, offset: 64)")
+    e.dbgShared(ml, $"!{!" $m0 ", !" $m1 "}")
+    e.dbgShared(n, $"!DICompositeType(tag: DW_TAG_structure_type, name: \"" $escape(e.dbgTypeName(r)) "\", size: 128, elements: !" $
+                ml ")")
+    return n
+}
+
+fn (e mut Emitter&) dbgVoidPtr() I64 {
+    if e.dbgPtrN < 0 {
+        e.dbgPtrN = e.dbgNew()
+        e.dbgShared(e.dbgPtrN, "!DIDerivedType(tag: DW_TAG_pointer_type, baseType: null, size: 64)")
+    }
+    return e.dbgPtrN
+}
+
+# a part with no description of its own shown as its bytes
+fn (e mut Emitter&) dbgBytes() I64 { return e.dbgType(e.T.Prim("U8")) }
+
+# a type's name as a debugger shows it: as the program writes it, its module left off
+fn (e mut Emitter&) dbgTypeName(r types.TypeId) String {
+    c := e.T.Canon(r)
+    k := try c.Find(":") catch default -1
+    return $c[k + 1:] if k >= 0 and not c.StartsWith("Array<") else $c
+}
+
+# a struct's field names in order, from its constructor's field declarations (C2); a tuple's or a record's by position
+fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
+    out := Array<String&>(n, "")
+    for i in range n { out[i] = $i }
+    if e.T.KindOf(r) != types.Kind.Named { return out }
+    td := e.P.TypeDecl(e.T.DeclOf(r))
+    if td == null or td.Body == null { return out }
+    match td.Body {
+        case ast.TypeBody.Struct(sb) {
+            if sb.Body == null { return out }
+            k I64 = 0
+            for st in sb.Body {
+                match st {
+                    case ast.Stmt.Var(_, v) {
+                        if v.Field {
+                            for vn in v.Names {
+                                if k < n { out[k] = $e.text(vn) }
+                                k++
+                            }
+                        }
+                    }
+                    nomatch { }
+                }
+            }
+        }
+        nomatch { }
+    }
+    return out
 }
 
 # the name a debugger knows a function by: a function's or a method's own (no linkage name - with a C compile unit
@@ -786,6 +941,7 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
         if l.Name == source.NameId(0) or not fe.isFrame(l.Home) { continue }
         name := e.text(l.Name)
         if name == "" or name.StartsWith("$") { continue }
+        if fe.size(l.Ty) > 65536 { continue }
         dt := e.dbgType(l.Ty)
         if dt < 0 { continue }
         n := e.dbgNew()
