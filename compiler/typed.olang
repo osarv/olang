@@ -386,8 +386,9 @@ type Try struct(X Expr&, Clauses Array<Clause&>&, Ends Bool = false, Passes Bool
     X
     Clauses
     Ends       # "x!" (E35): no clauses, and an error reaching it ends the program as a failed assert does
-    Passes     # a loop's own call taking Exhausted (S9a): what its clause does not take goes on to the try around it -
-               # the loop's own "in try" (S9e), a comprehension's try (E27) - where any other try's leaves the body (R13)
+    Passes     # what its clauses do not take goes on to the try around it, where any other try's leaves the body (R13):
+               # a loop's own call taking Exhausted (S9a) - to the loop's "in try" (S9e), a comprehension's try (E27) -
+               # and a clause-less checked inside a try or a "!" (E15a, E35)
 }
 
 type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block&, Defaults Array<Expr&>&) {

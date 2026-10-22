@@ -54,7 +54,6 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     P
     Bodies
     Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
-    renderReps Map<types.TypeId, types.TypeId>  # a type rendered, by its Unnamed: the first asked for (helperTy)
     Gaps List<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
@@ -1498,14 +1497,9 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
 }
 
 # the type a helper is made for: one helper per type but for its function types' parameter names (types.Unnamed) - a
-# Render helper the first one asked for, whose names its function values render with (E11a)
+# Render helper per type with them, which its function values render with (E11a)
 fn (lw mut Lowerer&) helperTy(kind mir.HelperKind, ty types.TypeId) types.TypeId {
-    u := lw.P.T.Unnamed(ty)
-    if kind != mir.HelperKind.Render { return u }
-    r := try lw.renderReps.Get(u) catch default types.TypeId(-1)
-    if r >= types.TypeId(0) { return r }
-    lw.renderReps.Put(u, ty)
-    return ty
+    return ty if kind == mir.HelperKind.Render else lw.P.T.Unnamed(ty)
 }
 
 # a type's zero value (D13c), a call of its Zero helper: all zero bits, its constructor on its parameters' defaults or
@@ -2348,6 +2342,20 @@ fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
 fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
     t := ln.T
     r := t.Repr(ty)
+    # a part whose type declares Hash (or, in its own module, hash: M6b) hashes by it (E10b)
+    hb := -1 if top else ln.methodBody(ty, "Hash", "hash")
+    if hb >= 0 {
+        callee, fty := ln.bodyCallee(typed.BodyId(I32(hb)))
+        p0 := t.Items(t.Params(fty))[0]
+        recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp) if t.IsRef(p0) else ln.into(p0, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        ok := ln.F.NewBlock()
+        dest := ln.temp(mir.I64T, sp)
+        k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+                                   true, ok, mir.NoLocal, mir.NoBlock))
+        ln.end(mir.Term.Call(sp, k))
+        ln.start(ok)
+        return mir.Operand.Copy(mir.L(dest))
+    }
     if ln.scalar(ty) {
         x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
         return ln.mix(ln.asI64(x, ty, sp), sp)
@@ -2729,8 +2737,10 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         if res != types.VoidT { out.Push(" " $ln.spell(res, true)) }
         es := t.Items(t.Errors(ty))
         if es.Len() > 0 {
-            out.Push(" ?")
-            for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
+            # QY: a function type's several error items parenthesized
+            out.Push(" ? (" if es.Len() > 1 else " ? ")
+            for i in range es.Len() { out.Push($(", " if i > 0 else "") $ln.spell(t.ErrOf(es[i]), true)) }
+            if es.Len() > 1 { out.PushChar(')') }
         }
         return out.ToString()
     }
@@ -2746,8 +2756,19 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
     if t.KindOf(r) != types.Kind.Named { return -1 }
     got := try lw.strOf.Get(r) catch default -2
     if got != -2 { return got }
+    id := ln.methodBody(ty, "Str", "str")
+    lw.strOf.Put(r, id)
+    return id
+}
+
+# the checked body of a one-parameter method a type declares, by either spelling (M6b) - -1 where none was made
+fn (ln mut lowering&) methodBody(ty types.TypeId, cap String&, low String&) I64 {
+    lw := ln.L
+    t := ln.T
+    r := t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Named { return -1 }
     id := -1
-    for name in String&["Str", "str"] {
+    for name in String&[cap, low] {
         m := lw.P.MethodOf(r, t.Names.Intern(name))
         if m < 0 { continue }
         for i in range lw.Bodies.Len() {
@@ -2765,7 +2786,6 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
             }
         }
     }
-    lw.strOf.Put(r, id)
     return id
 }
 
