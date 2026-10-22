@@ -107,6 +107,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     globalDecls List<pair.Pair<I64, I64>>  # (module, name): the globals in declaration order, the branches chosen (B5a)
     b5aSaid Map<I64, Bool>                 # the global bodies in a cycle said already (B5a)
     litLocals Map<pair.Pair<I64, I64>, Bool>  # (body, local): a number ":=" declared of its literal's own type (T6a)
+    rangeEnds Map<pair.Pair<I64, I64>, source.Span>  # (body, local): a for-in's variable over literals, its range's end
+    rangeExprs Map<pair.Pair<I64, I64>, Bool>        # ... whose end is a literal-only expression, not one literal
+    rangeEnd source.Span = source.Span(-1, -1)       # the range being walked, while its variable is declared
+    rangeEndLit Bool = false
     exprs List<typed.Expr&>                # nodes being gathered into lists, nested lists on top
     stmts List<typed.Stmt&>
     atRecs List<atRec>                     # each x[i] read through At as a place: what writing back through it needs
@@ -312,6 +316,8 @@ fn (c mut Checker&) reset() {
     c.globalDecls = List<pair.Pair<I64, I64>>()
     c.b5aSaid = Map<I64, Bool>()
     c.litLocals = Map<pair.Pair<I64, I64>, Bool>()
+    c.rangeEnds = Map<pair.Pair<I64, I64>, source.Span>()
+    c.rangeExprs = Map<pair.Pair<I64, I64>, Bool>()
     c.exprs = List<typed.Expr&>()
     c.stmts = List<typed.Stmt&>()
     c.atRecs = List<atRec>()
@@ -4026,7 +4032,8 @@ fn (c mut Checker&) literalLocalIn(x typed.Expr&, ty types.TypeId) I64 {
         case typed.Expr.Read(_, rt, p, _) {
             match p {
                 case typed.Place.Local(_, _, id) {
-                    if c.P.T.Same(rt, ty) and c.litLocals.Has(pair.Pair(c.fr().Body, I64(id))) { return I64(id) }
+                    k := pair.Pair(c.fr().Body, I64(id))
+                    if c.P.T.Same(rt, ty) and (c.litLocals.Has(k) or c.rangeExprs.Has(k)) { return I64(id) }
                 }
                 case _ { }
             }
@@ -4046,6 +4053,17 @@ fn (c mut Checker&) literalLocalIn(x typed.Expr&, ty types.TypeId) I64 {
 fn (c mut Checker&) literalLocalNote(rec I64, id I64, want types.TypeId) {
     if id < 0 { return }
     l := c.cur().Locals[id]
+    k := pair.Pair(c.fr().Body, id)
+    end := try c.rangeEnds.Get(k) catch default source.Span(-1, -1)
+    if end.Start >= 0 {
+        # a for-in's variable over a range of literals: the end to convert, which gives the range its type (S9b)
+        if c.rangeExprs.Has(k) {
+            c.P.L.Diags.Note(rec, c.at(end), msgs.NoteLiteralRangeExpr(c.text(l.Name), c.ty(l.Ty), c.ty(want), c.ty(want)))
+        } else {
+            c.P.L.Diags.Note(rec, c.at(end), msgs.NoteLiteralRange(c.text(l.Name), c.ty(l.Ty), c.ty(want), c.src(end), c.ty(want)))
+        }
+        return
+    }
     c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteLiteralLocal(c.text(l.Name), c.ty(l.Ty), c.text(l.Name), c.ty(want)))
 }
 
@@ -10537,7 +10555,16 @@ fn (c mut Checker&) forRange(sp source.Span, f ast.ForIn&, rargs Array<ast.Expr&
         c.exprs.Push(v)
     }
     vals := gather(c.exprs, vfrom)
-    if t == types.UnknownT { t = c.i64() }
+    if t == types.UnknownT {
+        t = c.i64()
+        # T6a/B11: the loop's variable an I64 by the range's literals - the note where it does not flow names its end
+        e := rargs[0] if rargs.Len() == 1 else rargs[1]
+        c.rangeEnd = e.Span()
+        c.rangeEndLit = match e {
+            case ast.Expr.Lit(_, _) => true
+            case _ => false
+        }
+    }
     # S9b: a literal step is positive
     if rargs.Len() > 2 {
         fs := c.fold(rargs[2])
@@ -10608,6 +10635,11 @@ fn (c mut Checker&) counted(sp source.Span, f ast.ForIn&, k I64, n I64, coll I64
         e = c.prim(sp, kt, typed.PrimOp.Add, c.readLocal(sp, lo), c.prim(sp, kt, typed.PrimOp.Mul, c.readLocal(sp, k), c.readLocal(sp, st)))
     }
     x := c.local(f.Name, sp, typeOf(e), typed.LocalKind.Var, typed.Mark.Infer)
+    if c.rangeEnd.Start >= 0 {
+        c.rangeEnds.Put(pair.Pair(c.fr().Body, x), c.rangeEnd)
+        if c.rangeEndLit { c.litLocals.Put(pair.Pair(c.fr().Body, x), true) } else { c.rangeExprs.Put(pair.Pair(c.fr().Body, x), true) }
+        c.rangeEnd = source.Span(-1, -1)
+    }
     c.roLet(x, e)   # T25c: an element of a collection reached read-only is a read-only copy
     c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(x)), e))
     c.walkBody(f, cm, ce)
