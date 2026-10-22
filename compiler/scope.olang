@@ -4491,6 +4491,13 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     if sw.Targets.Len() == 1 {
         slot, _, _ := s.slotOf(sw.Targets[0])
         dest = slot
+        # a run-time array value holding no reference - a String - takes the storage the call builds it in: built where
+        # the target's own storage is, never in the join block that closes before the target is read (P1g, T7b)
+        tt := sw.Targets[0].Type()
+        if s.arenaValue(tt) and not s.holds(tt) {
+            st := s.peekPlace(sw.Targets[0], false)
+            if st.Runs() { dest = st }
+        }
     }
     for c in sw.Clauses {
         # a clause runs on the task's thread: what it captured is handed to the task (P2), and the default it gives is
