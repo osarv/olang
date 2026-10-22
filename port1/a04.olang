@@ -1,0 +1,13 @@
+# spawn target String outside a loop of joins
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+fn txt(i I64) String { return $i "abc" $i }
+fn main() ? io.IoError {
+    s String = "none"
+    for i in range 3 {
+        join { spawn s = txt(i * 11) }
+    }
+    c := churn.Churn()
+    try io.Println($c " " $s)
+}

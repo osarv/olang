@@ -1,0 +1,14 @@
+import "std/io"
+type Node struct(v I64) { v }
+fn churn() I64 {
+    t := 0
+    for i in range 200 {
+        b Node& = Node(12345)
+        t = t + b.v
+    }
+    return t
+}
+fn main() ? io.IoError {
+    n Node& = Node(5)
+    try io.Println($churn() " " $n.v)
+}

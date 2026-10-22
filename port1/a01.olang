@@ -1,0 +1,16 @@
+# O26a: a returned local List filled in a loop with text built per turn
+import "std/io"
+import "churn"
+type Node struct(v I64) { v }
+fn mk(n I64) List<String&> {
+    l := List<String&>()
+    for i in range n { l.Push($i "-x") }
+    return l
+}
+fn main() ? io.IoError {
+    l := mk(5)
+    c := churn.Churn()
+    s := ""
+    for x in l { s = $s $x }
+    try io.Println($c " " $s)
+}
