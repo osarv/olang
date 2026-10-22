@@ -239,6 +239,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     temps Map<I64, Term>                   # by site: a temporary place's value judged (tempTerm), the term its references are at
     partDest Map<I64, Term>                # by call site: where a part read out of its built result is put (O18a)
     resAt Term = Term.None                 # the result scope the call judged last was bound to
+    lifted Map<I64, I64>                   # by block: a "for" statement's own, which stands for the block around it (S9)
     trMemo Map<pair.Pair<I64, I64>, I64>   # transient's answers, by (body, parameter): 1 being asked, 2 no, 3 yes
     useMemo Map<pair.Pair<I64, I64>, I64>  # uses' answers, by (body and mode, parameter): 1 being asked, 2 no, 3 yes
     regionOnly List<I64>                   # by local: the parameter whose region it holds only reads of (O17), -1 none
@@ -488,6 +489,8 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.under.Clear()
     s.underElem.Clear()
     s.temps.Clear()
+    s.partDest.Clear()
+    s.lifted.Clear()
     # G16b, B11: what is said in an instance's body is said at the program's use of it, as the checker says it
     pushed := 0
     base := 0
@@ -1039,9 +1042,31 @@ fn (s mut Scoper&) stmts(ss Array<typed.Stmt&>&) {
     }
 }
 
+# whether a block is a three-clause "for"'s own: the variables it declares, then the loop (S9)
+fn (s mut Scoper&) forWrap(b typed.Block&) Bool {
+    if s.B.Blocks[I64(b.Id)].Kind != typed.BlockKind.Plain or b.Stmts.Len() < 2 { return false }
+    for i in range b.Stmts.Len() {
+        match b.Stmts[i] {
+            case typed.Stmt.Let(_, l, _) {
+                if i == b.Stmts.Len() - 1 or s.B.Locals[I64(l)].Kind != typed.LocalKind.Var { return false }
+            }
+            case typed.Stmt.Loop(_, _, _) {
+                if i != b.Stmts.Len() - 1 { return false }
+            }
+            case _ { return false }
+        }
+    }
+    return true
+}
+
+# the block whose scope block b stands for: itself, or for a three-clause "for"'s own, the block around the loop
+fn (s mut Scoper&) lift(b typed.BlockId) typed.BlockId {
+    return typed.BlockId(I32(try s.lifted.Get(I64(b)) catch default I64(b)))
+}
+
 # the block statements stand in now: a temporary nothing else places is built there (O18a's last row)
 fn (s mut Scoper&) here() Term {
-    b := s.blocks[s.blocks.Len() - 1]
+    b := s.lift(s.blocks[s.blocks.Len() - 1])
     # what a constructor's top level builds is built in its instance scope (C2g); a global's initializer's in the
     # program's (O1b)
     if b == typed.BlockId(0) {
@@ -3291,7 +3316,12 @@ fn (s mut Scoper&) stmt(st typed.Stmt&) {
             s.val(c, Term.None)
             s.val(m, Term.None)
         }
-        case typed.Stmt.Block(_, b) { s.block(b) }
+        case typed.Stmt.Block(_, b) {
+            # a three-clause "for" declares its variable in a block of its own, evaluated once in the block around the
+            # loop (S9): that is where the variable lives and what its initializer builds is built, as stage 0 has it
+            if s.forWrap(b) { s.lifted.Put(I64(b.Id), I64(s.lift(s.blocks[s.blocks.Len() - 1]))) }
+            s.block(b)
+        }
         case typed.Stmt.Defer(_, b) { s.block(b) }
         case typed.Stmt.Join(_, jn) {
             s.joins.Push(jn.Code.Id)
@@ -3728,7 +3758,8 @@ fn (s mut Scoper&) whereLives(x typed.LocalId) Term {
 }
 
 # a block's term: a constructor's top level is its instance scope (C2g), a global's initializer's the program's (O1b)
-fn (s mut Scoper&) blockTerm(b typed.BlockId) Term {
+fn (s mut Scoper&) blockTerm(bl typed.BlockId) Term {
+    b := s.lift(bl)
     if b == typed.BlockId(0) {
         match s.B.Of {
             case typed.BodyOf.Ctor(_, _) {
@@ -5053,11 +5084,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     land := s.landing
     s.landing = false
     # a part of its result read where it is put (O18a): there, unless its obligations force it elsewhere (O18c)
-    partD := false
-    if dest == Term.None {
-        dest = try s.partDest.Get(I64(c.Site)) catch default Term.None
-        partD = dest != Term.None
-        if partD { land = false }
+    pd := try s.partDest.Get(I64(c.Site)) catch default Term.None
+    partD := pd != Term.None
+    if partD {
+        dest = pd
+        land = false
     }
     spawned := s.inSpawn
     s.inSpawn = false
