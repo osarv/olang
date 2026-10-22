@@ -189,10 +189,11 @@ type loopCtx struct(Body typed.BlockId, Depth I64) {
 
 # a try being lowered: the level it stands at, its clauses and each one's entry (made when an error first reaches it),
 # whether "!" ends the program instead (E35)
-type tryCtx struct(Depth I64, Clauses Array<typed.Clause&>&, Ends Bool) {
+type tryCtx struct(Depth I64, Clauses Array<typed.Clause&>&, Ends Bool, Passes Bool = false) {
     Depth
     Clauses
     Ends
+    Passes     # what its clauses do not take goes on to the try around it (typed.Try.Passes)
     entries List<mir.BlockId>
 }
 
@@ -777,6 +778,8 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
     }
     res := ln.T.Result(ln.B.Ty)
     v := ln.fit(ln.val(value), value, res, sp)
+    # S19: deferred code runs after the result is computed - an array value read out of storage it may write is copied
+    if not ln.dead and ln.defers.Len() > 0 and ln.copiesArray(value, res) { v = ln.arrayCopy(v, res, sp) }
     if ln.dead { return }
     l := ln.local(v, res, sp)
     ln.retArrays(l, res, value, sp)
@@ -1160,8 +1163,8 @@ fn (ln mut lowering&) module() I64 {
 }
 
 # an error with code, under list from, reaching here: to the first clause of the innermost try taking it, the scopes
-# opened since the try closed on the way; what its clauses do not take, to the try around it; what none takes leaves the
-# body under its own list (R17), every scope closed
+# opened since the try closed on the way; what its clauses do not take leaves the body under its own list (R13, R17),
+# every scope closed - a try around it never sees it, but for a loop's own call (Passes), whose leftovers go on to it
 fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Span) {
     t := ln.T
     xs := t.Items(from)
@@ -1200,11 +1203,12 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
             ln.toClause(tc, ci)
             ln.start(no)
         }
-        # what this try's clauses do not take goes to the try around it - but past a "!", which ends the program
+        # what this try's clauses do not take leaves the body - past a "!", it ends the program
         if tc.Ends {
             ln.bang(code, from, sp)
             return
         }
+        if not tc.Passes { break }
     }
     # with no try at all, the call is a T29d literal's constructor - decided while compiling not to fail (Key.Literal),
     # its error edge never taken
@@ -1242,7 +1246,7 @@ fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Opera
     ty := x.Type()
     slot := mir.NoLocal
     if ty != types.VoidT and ty != types.NoreturnT { slot = ln.temp(ty, sp) }
-    tc mut tryCtx&ln = tryCtx(ln.levels.Len(), t.Clauses, t.Ends)
+    tc mut tryCtx&ln = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
     for c in t.Clauses { tc.entries.Push(mir.NoBlock) }
     ln.tries.Push(tc)
     v := ln.val(t.X)
@@ -1503,6 +1507,7 @@ fn (ln mut lowering&) valueCallee(x typed.Expr&) (mir.Callee, types.TypeId) {
 
 fn (ln mut lowering&) helperCallee(k typed.Helper, ht types.TypeId) (mir.Callee, types.TypeId) {
     kind := mir.HelperKind.Equal if k == typed.Helper.Equal else mir.HelperKind.Hash
+    ht = ln.L.helperTy(kind, ht)
     ty := mir.HelperType(ln.T, kind, ht)
     ln.L.Want(mir.FnKey.Helper(kind, ht))
     return mir.Callee.Fn(mir.FnKey.Helper(kind, ht), ty), ty
@@ -1567,10 +1572,17 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     return mir.Operand.Copy(mir.L(dest))
 }
 
+# the type a helper is made for: one helper per type but for its function types' parameter names (types.Unnamed) - a
+# Render helper per type with them, which its function values render with (E11a)
+fn (lw mut Lowerer&) helperTy(kind mir.HelperKind, ty types.TypeId) types.TypeId {
+    return ty if kind == mir.HelperKind.Render else lw.P.T.Unnamed(ty)
+}
+
 # a type's zero value (D13c), a call of its Zero helper: all zero bits, its constructor on its parameters' defaults or
 # zeros, as eval decides once per type (Key.Zero) - the helper's to say which
 fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
+    ty = ln.L.helperTy(mir.HelperKind.Zero, ty)
     hty := mir.HelperType(t, mir.HelperKind.Zero, ty)
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Zero, ty), hty)
     ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Zero, ty))
@@ -2081,6 +2093,7 @@ fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp 
         ln.emit(mir.Stmt.Write(sp, b, how, v))
         return
     }
+    ty = ln.L.helperTy(mir.HelperKind.Render, ty)
     hty := mir.HelperType(t, mir.HelperKind.Render, ty)
     ref := ln.into(t.Items(t.Params(hty))[0], mir.Rvalue.Ref(mir.L(ln.local(v, ty, sp)), t.Items(t.Params(hty))[0]), sp)
     callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Render, ty), hty)
@@ -2189,6 +2202,7 @@ fn (ln mut lowering&) refTo(p pl, ty types.TypeId, sp source.Span) mir.Operand {
 # a helper of kind for type ty called with args (and its kind's scopes), its result, if any, into a temporary of res
 fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Array<mir.Operand>&, scopes Array<mir.ScopeRef>&
                                  res types.TypeId, sp source.Span) mir.Operand {
+    ty = ln.L.helperTy(kind, ty)
     hty := mir.HelperType(ln.T, kind, ty)
     k := mir.FnKey.Helper(kind, ty)
     ln.L.Want(k)
@@ -2404,6 +2418,20 @@ fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
 fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
     t := ln.T
     r := t.Repr(ty)
+    # a part whose type declares Hash (or, in its own module, hash: M6b) hashes by it (E10b)
+    hb := -1 if top else ln.methodBody(ty, "Hash", "hash")
+    if hb >= 0 {
+        callee, fty := ln.bodyCallee(typed.BodyId(I32(hb)))
+        p0 := t.Items(t.Params(fty))[0]
+        recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp) if t.IsRef(p0) else ln.into(p0, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        ok := ln.F.NewBlock()
+        dest := ln.temp(mir.I64T, sp)
+        k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+                                   true, ok, mir.NoLocal, mir.NoBlock))
+        ln.end(mir.Term.Call(sp, k))
+        ln.start(ok)
+        return mir.Operand.Copy(mir.L(dest))
+    }
     if ln.scalar(ty) {
         x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
         return ln.mix(ln.asI64(x, ty, sp), sp)
@@ -2650,7 +2678,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.start(after)
     } else if ln.arrayOf(ty) != types.UnknownT {
         el := t.Elem(ln.arrayOf(ty))
-        ln.word(b, $ln.spell(ln.readOnly(el), false) "[", sp)
+        ln.word(b, $ln.spell(ln.readOnly(el), true) "[", sp)
         n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
         ln.eachIndex(n, sp, fn(i mir.LocalId) {
             first := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(0)], sp)
@@ -2774,8 +2802,10 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         if fnWord { out.Push("fn") }
         out.PushChar('(')
         ps := t.Items(t.Params(ty))
+        ns := t.NamesOf(ty)
         for i in range ps.Len() {
             if i > 0 { out.Push(", ") }
+            if ns.Len() == ps.Len() { out.Push($t.Names.Text(source.NameId(I32(ns[i]))) " ") }
             out.Push(ln.spell(ps[i], true))
         }
         out.PushChar(')')
@@ -2783,8 +2813,10 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         if res != types.VoidT { out.Push(" " $ln.spell(res, true)) }
         es := t.Items(t.Errors(ty))
         if es.Len() > 0 {
-            out.Push(" ?")
-            for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
+            # QY: a function type's several error items parenthesized
+            out.Push(" ? (" if es.Len() > 1 else " ? ")
+            for i in range es.Len() { out.Push($(", " if i > 0 else "") $ln.spell(t.ErrOf(es[i]), true)) }
+            if es.Len() > 1 { out.PushChar(')') }
         }
         return out.ToString()
     }
@@ -2800,8 +2832,20 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
     if t.KindOf(r) != types.Kind.Named { return -1 }
     got := try lw.strOf.Get(r) catch default -2
     if got != -2 { return got }
+    id := ln.methodBody(ty, "Str", "str")
+    lw.strOf.Put(r, id)
+    return id
+}
+
+# the checked body of a one-parameter method a type declares, by either spelling (M6b) - -1 where none was made
+fn (ln mut lowering&) methodBody(ty types.TypeId, cap String&, low String&) I64 {
+    lw := ln.L
+    t := ln.T
+    # a declared type over a number or an array is its own type here, with its own methods (E11c)
+    r := ty if t.KindOf(ty) == types.Kind.Named else t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Named { return -1 }
     id := -1
-    for name in String&["Str", "str"] {
+    for name in String&[cap, low] {
         m := lw.P.MethodOf(r, t.Names.Intern(name))
         if m < 0 { continue }
         for i in range lw.Bodies.Len() {
@@ -2819,7 +2863,6 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
             }
         }
     }
-    lw.strOf.Put(r, id)
     return id
 }
 

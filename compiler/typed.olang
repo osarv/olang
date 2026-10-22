@@ -382,10 +382,13 @@ type Bind struct(To LocalId, From Expr&) {
 # a try: X is evaluated, and an error any call or checked operation in it fails with - none nested in an inner Try -
 # goes to the first clause naming it; one no clause names leaves the body, re-encoded under its own errors (R17).
 # Eval'd as a statement, a clause falls through to after it; in value position it leaves or gives its Defaults (R9b)
-type Try struct(X Expr&, Clauses Array<Clause&>&, Ends Bool = false) {
+type Try struct(X Expr&, Clauses Array<Clause&>&, Ends Bool = false, Passes Bool = false) {
     X
     Clauses
     Ends       # "x!" (E35): no clauses, and an error reaching it ends the program as a failed assert does
+    Passes     # what its clauses do not take goes on to the try around it, where any other try's leaves the body (R13):
+               # a loop's own call taking Exhausted (S9a) - to the loop's "in try" (S9e), a comprehension's try (E27) -
+               # and a clause-less checked inside a try or a "!" (E15a, E35)
 }
 
 type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block&, Defaults Array<Expr&>&) {

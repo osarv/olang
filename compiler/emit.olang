@@ -515,7 +515,7 @@ fn (e mut Emitter&) sym(k mir.FnKey) String {
     t := e.T
     return match k {
         case mir.FnKey.Body(id) => e.bodySym(I64(id))
-        case mir.FnKey.Helper(kind, ty) => types.Symbol("olang." $kind "." $t.Canon(ty))
+        case mir.FnKey.Helper(kind, ty) => types.Symbol("olang." $kind "." $t.Canon(ty) $("" if t.Unnamed(ty) == ty else "." $I64(ty)))
         case mir.FnKey.Adapter(call) => $e.bodySym(I64(call)) "_adapter"
         case mir.FnKey.Init(m) => types.Symbol("olang.init." $e.P.L.Mods[m].Identity)
     }

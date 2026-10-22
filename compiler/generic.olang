@@ -102,6 +102,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     defaultTraits List<I64>            # beside each, its trait's DeclId
     instances List<instance>
     instanceOf Map<pair.Pair<I64, types.ListId>, I64>
+    argReps Map<types.ListId, types.ListId>  # arguments told apart only by function types' parameter names: the first
     said Map<I64, Bool>                # the declarations whose T16 or G17 error is said
     expanding I64 = 0                  # how many instances' bodies are being made inside one another (G17)
     folding Map<I64, Bool>             # the globals being folded (a cycle folds to nothing)
@@ -109,17 +110,23 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     Asking Origin = NoOrigin           # where the checker is asking from: recorded by the instances it makes (G16b)
     typeFrom Map<types.TypeId, Origin> # a type instance: where it was first asked for
     walkedBodies Map<types.TypeId, Bool> # the types bodiesOf has walked
-    # G21: a constant argument no fold reaches, evaluated while compiling - by its module's file and offset, what an
-    # evaluation found (set before checking; interp's Analyze), and the ones a check met undecided (ConstAsks)
-    Lengths Map<pair.Pair<I64, I64>, I64>
+    # G21: a constant argument no fold reaches, evaluated while compiling - by its module's file and offset and the
+    # variables bound where it is read (LengthKey), what an evaluation found (set before checking; interp's Analyze),
+    # and the ones a check met undecided (ConstAsks)
+    Lengths Map<String&, I64>
     ConstAsks List<ConstAsk>
 }
 
-# a constant argument a fold could not compute: its expression, the module whose context reads it, its type
-type ConstAsk struct(Mi I64, Expr ast.Expr&, Want types.TypeId) {
+# a constant argument a fold could not compute: its expression, the module whose context reads it, its type, the
+# context's variables as they are bound there (an instance's own length, T7c), and its LengthKey
+type ConstAsk struct(Mi I64, Expr ast.Expr&, Want types.TypeId, Owner I64, Names Array<source.NameId>&, Vals Array<types.TypeId>&, Key String&) {
     Mi
     Expr
     Want
+    Owner
+    Names
+    Vals
+    Key
 }
 
 # the owners of variables: a type declaration's, a function's
@@ -461,7 +468,14 @@ fn (p mut Program&) funcType(c Context&, sp source.Span, s ast.Sig&) types.TypeI
         }
         f = p.T.Func(p.T.Params(f), p.T.Result(f), types.ListId(0), p.T.ScopesOf(f))
     }
-    return f
+    return p.T.WithNames(f, p.SigNames(s))
+}
+
+# a signature's parameters' names, interned for a function type to render with (E11a)
+fn (p mut Program&) SigNames(s ast.Sig&) I64 {
+    ns := Array<I64>(s.Params.Len())
+    for i in range s.Params.Len() { ns[i] = I64(s.Params[i].Name) }
+    return p.T.ParamNames(ns)
 }
 
 fn (p mut Program&) sigType(c Context&, s ast.Sig&, recv types.TypeId, recvName source.NameId) types.TypeId {
@@ -721,6 +735,9 @@ fn (p mut Program&) fold(c Context&, e ast.Expr&, want types.TypeId) types.TypeI
 
 fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&) types.TypeId {
     if f.St == Folded { return p.T.Const(want, p.wrap(f.V, want)) }
+    # one needing evaluation in a context whose variables are not bound yet - a generic's own declaration - is a
+    # pattern too: each instance evaluates it with its own arguments (T7c, G21)
+    if f.St == Unfolded and e != null and c.Owner >= 0 and not p.varsBound(c) { f = folded(Pending, 0, types.UnknownT) }
     if f.St == Pending and e != null {
         sp := e.Span()
         k := p.T.ConstExpr($c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End ":" $I64(want))
@@ -730,15 +747,45 @@ fn (p mut Program&) constOf(c Context&, f folded, want types.TypeId, e ast.Expr&
     # G21: one needing evaluation, reading no variable (a call, a global a call computes) - what the evaluator found
     # where it has, else asked for once and the unknown constant meanwhile
     if f.St == Unfolded and e != null {
-        key := pair.Pair(p.L.Mods[c.Mi].File, I64(e.Span().Start))
+        key String&p = p.LengthKey(c, e)
         if p.Lengths.Has(key) { return p.T.Const(want, p.wrap(try p.Lengths.Get(key) catch default 0, want)) }
         seen := false
         for a in p.ConstAsks {
-            if a.Mi == c.Mi and a.Expr.Span().Start == e.Span().Start { seen = true }
+            if a.Key == key { seen = true }
         }
-        if not seen { p.ConstAsks.Push(ConstAsk(c.Mi, e, want)) }
+        if not seen {
+            ns mut Array<source.NameId>&p = Array<source.NameId>(c.Vars.Len())
+            vs mut Array<types.TypeId>&p = Array<types.TypeId>(c.Vars.Len())
+            k I64 = 0
+            for v in c.Vars {
+                ns[k], vs[k] = v.Key, v.Value
+                k++
+            }
+            p.ConstAsks.Push(ConstAsk(c.Mi, e, want, c.Owner, ns, vs, key))
+        }
     }
     return p.UnknownConst()
+}
+
+# whether every variable of a context is bound to a type holding no variable
+fn (p mut Program&) varsBound(c Context&) Bool {
+    for v in c.Vars {
+        if not p.T.Closed(v.Value) { return false }
+    }
+    return true
+}
+
+# what an evaluated constant argument is kept by: its module's file and offset, and each variable bound where it is
+# read, as the type's canonical text - the same in every check of the program, where a TypeId need not be. Each
+# instance of a generic computes its own (T7c)
+fn (p mut Program&) LengthKey(c Context&, e ast.Expr&) String {
+    b := StringBuilder()
+    b.Push($p.L.Mods[c.Mi].File ":" $e.Span().Start)
+    for v in c.Vars {
+        b.Push(" ")
+        b.Push(p.T.Canon(v.Value))
+    }
+    return b.ToString()
 }
 
 # a constant's value in a type's width: an unsigned one's bits, a signed one's sign-extended (E6c: integer arithmetic
@@ -1054,7 +1101,7 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         case types.Kind.Ref { return p.T.Ref(p.Subst(p.T.Referent(t), owner, args), p.T.PermOf(t)) }
         case types.Kind.Func {
             return p.T.Func(p.substList(p.T.Params(t), owner, args), p.Subst(p.T.Result(t), owner, args)
-                            p.substList(p.T.Errors(t), owner, args), p.T.ScopesOf(t))
+                            p.substList(p.T.Errors(t), owner, args), p.T.ScopesOf(t), p.T.NamesIdOf(t))
         }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.Record { return p.T.Record(p.substList(p.T.Parts(t), owner, args)) }
@@ -1665,12 +1712,24 @@ fn (p mut Program&) MethodSig(f I64, t types.TypeId) types.TypeId {
 fn (p mut Program&) instanceArgs(written types.ListId) types.ListId {
     xs := p.T.Items(written)
     out := Array<types.TypeId>(xs.Len())
+    key := Array<types.TypeId>(xs.Len())
     changed := false
+    named := false
     for i in range xs.Len() {
         out[i] = xs[i] if p.T.KindOf(xs[i]) == types.Kind.Func else p.T.Plain(xs[i])
+        key[i] = p.T.Unnamed(out[i])
         if out[i] != xs[i] { changed = true }
+        if key[i] != out[i] { named = true }
     }
-    return p.T.List(out) if changed else written
+    args := p.T.List(out) if changed else written
+    if not named { return args }
+    # a function type argument's parameter names tell no instance apart: the first instance asked for keeps its own,
+    # which "$" renders (E11a, as stage 0)
+    k := p.T.List(key)
+    rep := try p.argReps.Get(k) catch default types.ListId(-1)
+    if rep >= types.ListId(0) { return rep }
+    p.argReps.Put(k, args)
+    return args
 }
 
 fn (p mut Program&) FnInstance(f I64, written types.ListId) I64 {
