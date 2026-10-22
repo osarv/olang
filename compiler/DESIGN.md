@@ -846,6 +846,13 @@ golden dumps in `lower`'s tests stand in for round trips.
   copies for importers.
 - **Parallel emission.** Emission reads only tables that no longer change, so modules can be emitted by parallel
   tasks once that is measured to pay. The first version is sequential.
+- **Built (M9 round 3, 2026-10-22).** Emission makes items (a function, a global, constant data, a declaration), each
+  homed in its module, with the instances (the root's `.inst`), shared (copied where named: `linkonce_odr` helpers and
+  thunks, declarations) or local (copied and renumbered per object: constants, lambdas, task trampolines, tests). An
+  object is its module's items sorted by symbol, what they name of the shared and local items, a declaration for each
+  item another object defines, and the named types used, so its text depends only on what it holds; the driver builds
+  one object per module (`emit.Objects`) and an edit recompiles only the objects whose IR changed. The error return
+  trace (S18d) is read off MIR's structure at each `Raise`, as the evaluator reads it. TBAA and DWARF are still to do.
 
 ### 1.10 The runtime (`std/runtime/*.ll`) - built in C (P0)
 
@@ -922,7 +929,9 @@ golden dumps in `lower`'s tests stand in for round trips.
 - **The pipeline behind it (M10, 2026-10-21).** `Passes.Analyze` loads, checks with evaluation's decisions
   (`interp.Analyze`, `DecideAsserts`), runs the scope pass for its local homes, lowers and emits; emission writes the
   whole program as one module, so every build is one object for the program (the root's, `.main` or `.test`) beside
-  the runtime's - `compile` too, which writes the program its file is the root of. `runtime.olang` fills in
+  the runtime's - `compile` too, which writes the program its file is the root of. (Since M9 round 3: one object per
+  module, `compile` writing its module's; a clean -debug build of the compiler 38 s -> 32 s, an edit of one module 38 s
+  -> 22 s, a clean -O3 build ~8 -> 4 minutes, its LTO link 3.3 of them.) `runtime.olang` fills in
   `std/runtime/*.ll` as stage 0 does (identical text, checked), and derives the dynamic call's declarations. Running a
   file is `os.ExecInPlace` (the runtime's `__olang_exec`: the program in the driver's place, its first word the file as
   written); `format` calls `compiler/fmt.olang` (`Files`, with the oracle loading and `unparse.olang` moved under
@@ -1333,7 +1342,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M6 | `scope` | M5a's `typed` contract | written first as a small formal model of section 8 and section 8.8 (the rules and why each is sound, `docs/scope-model.md`), reviewed before code; then every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38); the scope fuzzer and sanitizer find nothing (`scope` begun 2026-10-18: terms, obligations over the call graph's components, O18a-O18c, O26a, C2d, O17/O17b, derived scopes; its placement read by `lower`; `make scopediff` - HISTORY.md "Port M6: the scope pass") |
 | M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1; `lower` built 2026-10-18 with the stand-in placement: `make lowerdump` - 58,932 of 58,955 corpus bodies and every helper verify clean, the rest check's; no releases or holds, own being removed - HISTORY.md "Port M7: lowering") |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
-| M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 |
+| M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 (in progress: emitdiff 989 of 1013 tests as stage 0's; one object per module and S18d done 2026-10-22; TBAA, DWARF left) |
 | M10 | `build`, `target`, `olang` (driver) | from the start; integrates last | every mode and flag; content-addressed objects (B3, B10b, B12b); a no-op build links nothing; checks' build scenarios; `-t` self-exec (built 2026-10-17 over a `Frontend` interface, all but checks' scenarios - section 1.11) |
 | M11 | stage 1 | all | emit acceptance (section 4); per-file `-t` peak under 500 MB |
 | M12 | self-hosting | M11 | stage 1 builds `compiler/`; stage 2 equals stage 3; `make bootstrap`; freeze |

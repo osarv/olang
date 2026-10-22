@@ -778,16 +778,14 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
     }
     res := ln.T.Result(ln.B.Ty)
     v := ln.fit(ln.val(value), value, res, sp)
-    # S19: deferred code runs after the result is computed - an array value read out of storage it may write is copied,
-    # into the result scope (T7b), and not again by retArrays
-    copied := false
-    if not ln.dead and ln.defers.Len() > 0 and ln.copiesArray(value, res) {
-        v = ln.arrayCopy(v, res, sp, ln.resultScope())
-        copied = true
+    # S19: deferred code runs after the result is computed - an array value read out of storage it may write is copied
+    # (under the stand-in placement here, into the program's scope; under the plan by retArrays, into the result scope)
+    if not ln.dead and not ln.planned and ln.defers.Len() > 0 and ln.copiesArray(value, res) {
+        v = ln.arrayCopy(v, res, sp, mir.ScopeRef.Program)
     }
     if ln.dead { return }
     l := ln.local(v, res, sp)
-    if not copied { ln.retArrays(l, res, value, sp) }
+    ln.retArrays(l, res, value, sp)
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
 }
@@ -822,6 +820,11 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
 # whether a returned array value is copied into the result scope: existing storage, but for a local living there
 fn (ln mut lowering&) retCopies(x typed.Expr&, ty types.TypeId) Bool {
     if not ln.copiesArray(x, ty) { return false }
+    # deferred code or a join's tasks still to run on the way out may write the local after the result is computed
+    if ln.defers.Len() > 0 { return true }
+    for lv in ln.levels {
+        if lv.Kind == mir.ScopeKind.Join { return true }
+    }
     match x {
         case typed.Expr.Read(_, _, p, _) {
             match p {
@@ -1120,7 +1123,7 @@ fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind,
 
 # E35: the error a "!" took ends the program, named as a program writes it - another module's error type by its
 # module's base name, the prelude's and this module's bare ("io.IoError.FULL") - a test and an exit for each word
-fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span) {
+fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, kind mir.ExitKind = mir.ExitKind.Error) {
     t := ln.T
     xs := t.Items(from)
     for j in range xs.Len() {
@@ -1141,11 +1144,11 @@ fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span) 
             same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w)], sp)
             ln.end(mir.Term.Branch(same, yes, no))
             ln.start(yes)
-            ln.end(mir.Term.Exit(sp, mir.ExitKind.Error, ln.textData(name, sp)))
+            ln.end(mir.Term.Exit(sp, kind, ln.textData(name, sp)))
             ln.start(no)
         }
     }
-    ln.end(mir.Term.Exit(sp, mir.ExitKind.Error, ln.textData("unhandled error", sp)))
+    ln.end(mir.Term.Exit(sp, kind, ln.textData("unhandled error", sp)))
 }
 
 # text as constant data (T25d), a String&
@@ -1213,6 +1216,16 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
     # with no try at all, the call is a T29d literal's constructor - decided while compiling not to fail (Key.Literal),
     # its error edge never taken
     mineErrs := ln.T.Errors(ln.B.Ty)
+    match ln.B.Of {
+        case typed.BodyOf.Test(_) {
+            # S16: an error a try lets out of a test body fails the test, named on its FAIL line
+            if ln.tries.Len() > 0 {
+                ln.bang(code, from, sp, mir.ExitKind.Escaped)
+                return
+            }
+        }
+        case _ { }
+    }
     if t.Items(mineErrs).Len() == 0 or ln.tries.Len() == 0 {
         ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
         return

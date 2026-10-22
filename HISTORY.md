@@ -20839,6 +20839,52 @@ a text literal's type `String&`. Also found: stage 0's interpreter
 called execv without unistd.h (a warning gcc -Werror refuses).
 
 
+## Port M9, round 3: one object per module, the error trace (2026-10-22)
+
+**One object per module.** Emission wrote the whole program as one LLVM module, so a build of the compiler was one
+43 MB object: any edit recompiled all of it, and at -O3 its `-flto -c` alone ran single-threaded for minutes. Emit now
+makes *items* - a function, a global, constant data, a declaration - each with a home, and `emit.Objects` writes one
+object per home: each module's own (its plain functions, a non-generic type's constructor and destructor, its globals
+and their initializers, its initialization), the root's instances (generic instances and constructor twins, B3d: the
+root's `.inst` object), and the root's with `main` or the test harness. What an object names of another is declared
+(`declare`, `external global` with the baked global's own packed type); what is *shared* - helpers, a named function's
+value thunk, adapters, destructor thunks, the runtime's and C's declarations - is copied into each object naming it,
+`linkonce_odr` where it is a definition, so a function value is one address across objects (T21); what is *local* -
+constant data, lambdas, task trampolines, tests - is copied in as `internal`/`private` and renumbered per object in the
+order it is named. References are found by scanning each item's text once for `@NAME` and `%"TYPE"`, quoted text
+skipped. **An object's text depends only on what it holds**: its items are sorted by symbol, local names renumbered,
+and thunk and adapter names spell their types (`_fv_` + the canonical type) where they spelled a type's number - so an
+edit recompiles exactly the objects whose IR changed. `compile FILE` writes that module's object (its own bodies and
+the instances they use); `Program(w)` still writes one module for emitdump and emitdiff. The driver takes the objects
+where its program lives (`e.Objects&prog()`), the target's triple now written by emit rather than replaced in the text.
+
+Measured on the compiler (stage-0-built driver, a container shared with other agents): a clean `-debug` build 38 s ->
+32 s (57 objects, 53.6 MB of IR in all - 25% more than the single module, the shared copies - compiled four at once);
+nothing changed 20.8 s (the front end); one function of unparse.olang changed 38 s -> 22.4 s, only `unparse`'s object
+compiled; a clean -O3 build about 8 -> 4 minutes, of which the full LTO link is 3.3. Stage 1 still builds stage 2 and
+stage 3 byte for byte equal to itself. Decided: objects are built from what the program reaches (main or the tests), as
+before - emitting every function of a module would let two programs share its object, at the cost of lowering and
+compiling what no program calls.
+
+**The error return trace (S18d)** in test and -debug builds. MIR needed no Trace statement: at a `Raise`, a call that
+failed at the same place means the error is passed on ("try passed it on"), a join there that "a task failed, and its
+join passed it on", anything else that it was raised here - how the evaluator reads it (eval.traced). `main`'s
+unhandled error prints the trace under -debug, and `!` no longer adds "(build with -debug ...)" where the trace is
+kept. An error a `try` lets out of a test body was lowered as `unreachable` ("reached unreachable code", the test
+failing unnamed); it is its own exit now, `mir.ExitKind.Escaped`, emitted as stage 0's: "left the test" added to the
+trace, then the FAIL line naming the error (`FAIL - name: E.BAD`) and the trace. Output identical to stage 0's on a
+program and a test file raising, passing on, catching, ending at `!` and leaving a test. Not done: stage 0 clears the
+trace where a clause takes an error; a later raise restarts it anyway.
+
+**std/os's "the test before ended with f's scopes closed"** was the driver's interim placement, not emission: it builds
+every site in the program's scope, so the lambda's `stackRes()` never destructs before the program ends. Placed by the
+scope pass, std/os passes whole (and io, json, chan, cancel, linalg); but stage 1 then cannot load a program - import
+paths read as garbage. The driver gained `OLANG_SCOPE_PLAN=LO:HI` (those bodies placed by the pass, the interim the
+default), and halving found one body: `load.resolve`, where `path := ""` is later assigned `$Normalize(...)` inside an
+`if`. The pass builds that join in the `if`'s block, and lowering adopts the fresh array as `path`'s storage, so `path`
+is read after its block closed; stage 0 builds such a value in the target's scope. Left to the scope pass (or lowering
+must copy), with the reproducer in PROGRESS.md.
+
 ## Port M6: the scope pass, round 4 - compiler/*.olang clean, a result scope for array values (2026-10-21)
 
 The goal of the round: no scope error on compiler/*.olang that stage 0 does not give, and placement the driver (M10)
@@ -20939,6 +20985,35 @@ distinct error rows on them 40 -> 24; tests/shared.olang's rows 32 -> 19.
 (tests/shared.olang 19 rows, bench/run's E31b, three O17 cases through lambdas) - which the port now refuses where
 stage 0 builds them.
 
+## Port M10: per-module objects under the scope pass's placement (2026-10-22)
+
+wt-emit (M9 round 3: one object per module, S18d) and wt-scope6 (M6 round 5: the driver lowers by the scope pass's
+plans) were merged. The driver's placement is the scope pass's alone (`sc.Run(); return sc.Plans`, its errors
+reported); the interim placement and `OLANG_SCOPE_PLAN` went with it - round 5 found and fixed the `load.resolve` join
+that variable was bisecting for (T11b, O18a), so it had nothing left to narrow. One fix the merge needed, a regression
+from round 5's lowering: a returned local the pass homes in the result scope was returned as it is, with no T7b copy,
+even when deferred code or a join's tasks still ran on the way out - `defer { m[0] = 99 }` then `return m` gave the
+caller 99 (tests/shared's T7b test, one of emitdiff's 989). Lowering copies again whenever a defer or a join is pending
+at the return, stage 0's own condition.
+
+Measured on the merged tree (-debug, the container shared with other work): the stage-0-built driver builds stage 1
+clean in 12-15 s (0.92 GB); stage 1 builds stage 2 clean in 46 s (1.61 GB), stage 2 builds stage 3 in 47 s, and the
+three are byte for byte equal. Incremental, through the -O3 driver: nothing changed 3.8 s, one function of
+unparse.olang changed 4.0 s (only `unparse`'s object compiled); through stage 2 (an -O0 front end) nothing changed is
+35 s. Stage 1 runs the tests of compiler/ and std (61 files): 421 passed, none failed, in 9.5 minutes. `make emitdiff` 989 of 1013
+tests as stage 0's (25 of 26 files), `make drvdiff` 83 of 83 command lines, `make scopediff` as round 5's (265 of 280,
+300 of 307, 24 rows).
+
+Then wt-merge - the checker's round 4 on master - was merged in. It had made the same S19 copy in `ret`, for every
+placement; it is kept for the stand-in placement only, the plan's copy being retArrays' (into the result scope, where a
+join is pending too). And its E31b write-back for `x[i][j] = v` held the value in a local of its own, so
+`names[i][0] = kept` (checks' s6handleloop, which stage 0 builds) asked the stored text to live in the statement's block
+- what `v := kept; names.SetAt(0, v)` asks, which both compilers refuse (O25a, O10c). A local's own value is now read
+where it is stored, nothing between the hold and the store being able to change it. On the merged tree: emitdiff 1009 of
+1013 (tests/shared 707 of 711), drvdiff 83 of 83, scopediff 265 of 280 and 300 of 307 with 23 rows; stage 1 builds
+stage 2 in 44 s (1.63 GB) and stage 2 stage 3 in 42 s, all three equal; stage 1 passes the 421 tests of compiler/ and
+std.
+
 ## Port M6 round 6: every program stage 0 accepts is scope clean (2026-10-22)
 
 Round 5 had the driver report the pass's errors, so every program stage 0 builds and the pass refuses is one the port
@@ -20968,9 +21043,10 @@ in each capture).
 
 **Two fixes outside the pass.** The checker's new write-back for `x[i][j] = v` (553ee2c) held the value at the
 SetAt parameter's referent type: `users[0][0][0] = kept` copied `kept`'s text into the loop's block and stored a
-borrow of the copy into the list - a use-after-free the pass caught. It is held at the parameter's own type now. And
-the merge met two `arrayCopy` arities (the S19 copy before deferred code, and round 5's copies made where their
-storage is); the S19 copy is made in the result scope and not made again.
+borrow of the copy into the list - a use-after-free the pass caught. It is held at the parameter's own type now (master
+fixed a local's value read the same way, 275fede - both kept: this one covers a value that is no local). And the merge
+met two `arrayCopy` arities (the S19 copy before deferred code, and round 5's copies made where their storage is),
+which master resolved too (c776f77: the S19 copy under the stand-in only, retArrays copying under the plan) - taken.
 
 **First errors.** Stage 0's `bindHereFrom` checks that the arguments a constructor's instance holds agree on one scope
 before anything else - an exact one where something can be stored through it, outliving ones narrowing - and says O25e

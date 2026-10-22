@@ -216,6 +216,7 @@ fn AbortWhy(k mir.ExitKind) String& {
         case mir.ExitKind.FixedLength => "it copies an array of another length into fixed storage, which aborts the program"
         case mir.ExitKind.As => "an 'as' that does not hold aborts the program"
         case mir.ExitKind.Error => "an error reaches '!', which ends the program"
+        case mir.ExitKind.Escaped => "an error leaves the test, which ends it"
         nomatch => "it ends the test or the process"
     }
 }

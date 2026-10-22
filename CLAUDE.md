@@ -605,8 +605,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   loading and names, M5a types and the typed contract, M7's MIR contract, M10's driver (`compiler/build.olang`,
   `target.olang`, `olang.olang` - the word command line over the whole pipeline, the runtime filled in by
   `runtime.olang`; `make drvdiff`; lowering by the scope pass's plans, its errors reported, the port builds itself at
-  `-debug` (stage 1 == stage 2, 1.5 GB) and passes compiler/'s and std's tests, HISTORY.md "Port M10: the pipeline
-  behind the driver" and "Port M6 round 5"); the compiler under test is `OLANG ?= build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
+  `-debug`, one object per module (stage 1 == stage 2 == stage 3, 1.6 GB; a clean self-build 46 s, an edit
+  recompiling only its module's object) and passes compiler/'s and std's tests, HISTORY.md "Port M10: the pipeline
+  behind the driver", "Port M6 round 5" and "Port M10: per-module objects under the scope pass's placement"); the compiler under test is `OLANG ?= build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
   elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c"); M7, `compiler/lower.olang` (the typed core
   lowered to MIR with the scope pass's placement - the stand-in, everything in the program's scope, where a body has no
   plan - helpers, adapters and initializations made as MIR functions; `make
@@ -618,7 +619,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
   plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 6: every program stage 0
   accepts is scope clean (307 of 307), 274 of 280 refused cases give stage 0's first error, 1 still gets none (kept on
-  purpose), call results and constructors' fields carry instance records (O13c, O23a); HISTORY.md "Port M6"). M19g is `compiler/views.olang`, a pass of its own after check
+  purpose), call results and constructors' fields carry instance records (O13c, O23a); HISTORY.md "Port M6"). M9, `compiler/emit.olang` (MIR written as LLVM IR, one object per module - each module's, the root's
+  instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
+  only what changed; the error trace S18d; `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
