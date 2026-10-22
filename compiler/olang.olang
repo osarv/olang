@@ -355,6 +355,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     tests := kind == build.Kind.Tests
     l mut load.Loader&cfg = try p.load(root, cfg, d)
     c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
+    if kind == build.Kind.Program { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     interp.DecideAsserts(c, asserts)
     if d.Errors() > 0 {

@@ -252,6 +252,23 @@ fn (c mut Checker&) CheckProgram() {
     }
 }
 
+# B4: a program's root declares main - "fn main() { }" or "fn main() ? { }", no parameters, no result, never noreturn.
+# A missing one is said only where no syntax error may have hidden it
+fn (c mut Checker&) CheckMain() {
+    root := c.P.L.Root
+    file := c.P.L.Mods[root].File
+    f := c.P.FnNamed(root, c.P.L.Names.Intern("main"))
+    if f < 0 {
+        if c.syntaxMark <= 0 { c.P.L.Diags.Error(diag.Where.File(file), msgs.NoMain()) }
+        return
+    }
+    fd := c.P.FnDecl(f)
+    sig := c.P.Sig(f)
+    if fd.Recv != null or fd.S.Params.Len() > 0 or (fd.S.Results != null and fd.S.Results.Len() > 0) or fd.S.NoReturn or c.P.T.Result(sig) != types.VoidT {
+        c.P.L.Diags.Error(diag.Where.File(file), msgs.MainSignature())
+    }
+}
+
 # every collection a check of the program fills, empty again for another attempt (R1a)
 fn (c mut Checker&) reset() {
     c.Bodies = List<mut typed.Body&>()
@@ -374,6 +391,16 @@ fn (c mut Checker&) fnTypeParams(f I64) {
     if fd.TypeParams != null {
         for tp in fd.TypeParams {
             if c.namesType(mi, tp.Name) { c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.TypeVarNamesType(c.tok(tp.Name))) }
+            # G19: a constraint naming no type at all
+            match tp.Ty {
+                case ast.TypeRef.Named(usp, upath, _) {
+                    if upath.Len() == 1 and c.P.R.Use(c.P.L.Mods[mi].File, usp.Start).Kind == names.What.None {
+                        c.unknownType(usp, upath[0])
+                        continue
+                    }
+                }
+                nomatch { }
+            }
             # G19: a variable written after a type that is no trait, used as a type - its "constraint" constrains nothing
             if tp.Ty != null and not c.traitRef(mi, tp.Ty) and c.typeUseIn(fd, tp.Name) {
                 c.err(tp.Ty.Span(), msgs.ConstraintNotTrait(c.src(tp.Ty.Span())))
