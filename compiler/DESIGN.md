@@ -852,7 +852,12 @@ golden dumps in `lower`'s tests stand in for round trips.
   object is its module's items sorted by symbol, what they name of the shared and local items, a declaration for each
   item another object defines, and the named types used, so its text depends only on what it holds; the driver builds
   one object per module (`emit.Objects`) and an edit recompiles only the objects whose IR changed. The error return
-  trace (S18d) is read off MIR's structure at each `Raise`, as the evaluator reads it. TBAA and DWARF are still to do.
+  trace (S18d) is read off MIR's structure at each `Raise`, as the evaluator reads it.
+- **Built (M9 round 4, 2026-10-22).** TBAA (T36) from each place's path and type, stage 0's tree; the runtime's
+  declarations and inline bodies read from its text (`runtime.Decls`), each an item copied where named, so a module's
+  own optimization folds an empty scope's close; DWARF under `-debug` (subprograms, a line per statement, parameters
+  and locals in words), its metadata renumbered per object; S18d's trace cleared where a clause takes an error
+  (`mir.Fn.Taken`). At -O3 the root's object holds the instances again (item 3 of section 3.4).
 
 ### 1.10 The runtime (`std/runtime/*.ll`) - built in C (P0)
 
@@ -1131,7 +1136,9 @@ These are extrapolations from the measurements above, to be measured at M10.
    an importer whose IR did not change (`resolve` above). B3's text is restated to match. (Built, M10.)
 3. **Put instances in their own object** (`<root>.inst`), so editing one module no longer recompiles every instance
    with the root. With item 2, the instance object is rebuilt only when the instance set or an instance's code
-   changes. (Built, M10: `UnitKind.Instances`.)
+   changes. (Built, M10: `UnitKind.Instances`.) Under `-debug` only since M9 round 4: at -O3 the root's code could
+   not inline an instance before the link and the link did not recover it (`for x in v` over a Vec measured 2x slower),
+   so there the root's object holds them, as stage 0's does.
 4. **Skip the link when nothing it reads changed**: the binary records a hash of its inputs. A no-op build is then
    the front end alone: about 1.5 s here instead of 10.7 s. (Built, M10: the stamp `BIN.link`.)
 5. **Run clang in parallel** over stale modules, bounded by the core count, using `join` and `spawn` over
@@ -1139,7 +1146,9 @@ These are extrapolations from the measurements above, to be measured at M10.
 6. **Use FastISel under `-d` unless the module's IR contains `bfloat`.** B2c's workaround for LLVM 18 costs 70% of
    `-O0` time, and the compiler uses no BF16. (Built, M10: `CompileFlags`.)
 7. **LTO only where it pays.** Release builds keep full LTO; ThinLTO measured twice as slow to link at this size,
-   so revisit it if the compiler's own link passes about 60 s. Development builds of the compiler use `-d`.
+   so revisit it if the compiler's own link passes about 60 s. Development builds of the compiler use `-d`. Revisited
+   (M9 round 4): the compiler's link had reached 172 s; a program of 8 MB of IR or more now links by ThinLTO with the
+   plugin's cache - the clean -O3 self-build 213 s -> 108 s, an edit 3.5 min -> 43 s, the compiler as fast.
 8. **Parse modules in parallel** (section 1.4). This is small but free.
 
 Make targets: `make dev` (the compiler at `-d`, incremental) is the edit loop; `make` builds a release compiler
@@ -1350,7 +1359,7 @@ it starts. One agent per row; rows on the same line of the dependency column may
 | M6 | `scope` | M5a's `typed` contract | written first as a small formal model of section 8 and section 8.8 (the rules and why each is sound, `docs/scope-model.md`), reviewed before code; then every O-rule case passes; placement complete; confinement, regions and reach (O33, O34, O38); the scope fuzzer and sanitizer find nothing (`scope` begun 2026-10-18: terms, obligations over the call graph's components, O18a-O18c, O26a, C2d, O17/O17b, derived scopes; its placement read by `lower`; `make scopediff` - HISTORY.md "Port M6: the scope pass") |
 | M7 | `mir`, `lower` | M5, with M6's placement interface | the MIR verifier is clean on the corpus; releases, holds and registrations placed by lowering; O39-O41's liveness over MIR; a stand-in placement (everything in the program's scope) is allowed until M6 lands (`mir`, its verifier and dump written 2026-10-12, for review - section 1.8.1; `lower` built 2026-10-18 with the stand-in placement: `make lowerdump` - 58,932 of 58,955 corpus bodies and every helper verify clean, the rest check's; no releases or holds, own being removed - HISTORY.md "Port M7: lowering") |
 | M8 | `eval` | M7 | lower + eval acceptance; decisions under their keys; a body per global in B5a's order; evaluation with and without the plan agrees |
-| M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 (in progress: emitdiff 989 of 1013 tests as stage 0's; one object per module and S18d done 2026-10-22; TBAA, DWARF left) |
+| M9 | `emit`, `dwarf`, runtime linking | M7 | the corpus `test` blocks pass with the stand-in placement (destructor-timing tests excepted), then all of them with M6 (in progress: emitdiff 1009 of 1013 tests as stage 0's, the 4 left the scope pass's and the evaluator's; one object per module and S18d done 2026-10-22; TBAA, DWARF, ThinLTO round 4) |
 | M10 | `build`, `target`, `olang` (driver) | from the start; integrates last | every mode and flag; content-addressed objects (B3, B10b, B12b); a no-op build links nothing; checks' build scenarios; `-t` self-exec (built 2026-10-17 over a `Frontend` interface, all but checks' scenarios - section 1.11) |
 | M11 | stage 1 | all | emit acceptance (section 4); per-file `-t` peak under 500 MB |
 | M12 | self-hosting | M11 | stage 1 builds `compiler/`; stage 2 equals stage 3; the seed and `make bootstrap` (built 2026-10-22: the seed rebuilds the compiler from nothing, the last two builds equal - section 5); freeze |
