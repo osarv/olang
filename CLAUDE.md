@@ -629,8 +629,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
   M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;
-  checks/checks.olang is the open part - its cases' first errors and the scenarios grepping stage 0's IR (HISTORY.md
-  "Port M12").
+  checks/checks.olang is the open part - some cases' first errors and a few scenarios (HISTORY.md "Port M12", two
+  rounds). The scenarios that grepped stage 0's IR state the same facts in either compiler's spelling, as alternatives
+  of one expression (`irHas`, `gsym` - decided by me, never loosened); the port now orders globals (B5a), bakes them
+  (K2), enforces M6/M6a/M6b across modules, and calls X8's exact math functions as intrinsics.
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is
