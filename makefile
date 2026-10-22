@@ -10,7 +10,7 @@ SRC = $(wildcard bootstrap/*.c)
 # objects under build/obj/, not build/: a checkout built before the move to bootstrap/ holds build/*.d files naming
 # codegen.c and the rest at the top level, and make would read them and stop at "No rule to make target 'codegen.c'"
 OBJ = $(addprefix build/obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
-# the same sources built optimized, as the compiler a bootstrap starts from (make bootstrap)
+# the same sources built optimized (make stage0)
 STAGE0_CFLAGS = -O2 -Wall -Werror -Wextra -Wpedantic -MMD -MP
 STAGE0_OBJ = $(addprefix build/stage0.obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
 DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
