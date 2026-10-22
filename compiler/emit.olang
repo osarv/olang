@@ -38,6 +38,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     D
     T
     Tests Bool = false              # a test build: the harness runs the root's tests
+    Debug Bool = false              # a -debug build: the error return trace kept (S18d), as in a test build
     Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
     Gaps List<String&>              # what emission met and does not emit yet, a line each
     queue List<mir.FnKey>           # the functions to write, in the order first referred to
@@ -84,6 +85,9 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # its initializer not run at startup (interp.Bake)
     Baked Map<I64, eval.Image>
 }
+
+# whether the error return trace is kept (S18d): test and -debug builds
+fn (e Emitter&) traced() Bool { return e.Tests or e.Debug }
 
 fn (e mut Emitter&) gap(what String&) {
     if what not in e.Gaps { e.Gaps.Push($what) }
@@ -769,6 +773,29 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     via Bool = false
     env Bool = false
     big Bool = false
+    sites Map<I32, I64>     # S18d: where this function's calls (1) and joins (2) are, by the start of their span
+    sited Bool = false
+}
+
+# S18d: what a Raise at sp did, as the evaluator reads it (eval.traced): passed on the error of the call or join
+# at the same place - "try passed it on", a join's failure restarting the trace with its own line - else it raised it
+fn (fe mut fnEm&) trace(sp source.Span) {
+    if not fe.E.traced() { return }
+    if not fe.sited {
+        fe.sited = true
+        for b in fe.F.Blocks {
+            match b.T {
+                case mir.Term.Call(csp, _) { fe.sites.Put(csp.Start, 1) }
+                case mir.Term.Wait(wsp, _, _, _, _) { fe.sites.Put(wsp.Start, 2) }
+                case _ { }
+            }
+        }
+    }
+    k := try fe.sites.Get(sp.Start) catch default 0
+    what := "try passed it on" if k == 1 else ("a task failed, and its join passed it on" if k == 2 else "raised here")
+    rf := "__olang_ert_pass" if k == 1 else "__olang_ert_raise"
+    fe.E.declare(rf, $"void @" $rf "(ptr)")
+    fe.w($"call void @" $rf "(ptr " $fe.E.cstr($fe.E.where(fe.F.File, sp) ": " $what "\n") ")")
 }
 
 fn (fe mut fnEm&) tmp() String {
@@ -876,18 +903,20 @@ fn linkFor(home I64) String {
 # makes in every module whose code calls it, local to each object
 fn (e mut Emitter&) homeOf(k mir.FnKey) I64 {
     p := e.P
-    return match k {
-        case mir.FnKey.Body(id) => match e.Lw.Bodies[I64(id)].Of {
-            case typed.BodyOf.Fn(inst) => HomeInst if p.InstanceArgs(inst) != types.ListId(0) else p.FnModule(p.InstanceFn(inst))
-            case typed.BodyOf.Ctor(ty, twin) => HomeInst if twin != types.ListId(0) else e.typeHome(ty)
-            case typed.BodyOf.Dtor(ty) => e.typeHome(ty)
-            case typed.BodyOf.Global(m, _) => m
-            case typed.BodyOf.Test(_) => p.L.Root
-            case _ => HomeLocal
+    match k {
+        case mir.FnKey.Body(id) {
+            match e.Lw.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(i) { return HomeInst if p.InstanceArgs(i) != types.ListId(0) else p.FnModule(p.InstanceFn(i)) }
+                case typed.BodyOf.Ctor(ty, twin) { return HomeInst if twin != types.ListId(0) else e.typeHome(ty) }
+                case typed.BodyOf.Dtor(ty) { return e.typeHome(ty) }
+                case typed.BodyOf.Global(m, _) { return m }
+                case typed.BodyOf.Test(_) { return p.L.Root }
+                case _ { return HomeLocal }
+            }
         }
-        case mir.FnKey.Helper(_, _) => HomeShared
-        case mir.FnKey.Adapter(call) => e.homeOf(mir.FnKey.Body(call))
-        case mir.FnKey.Init(m) => m
+        case mir.FnKey.Helper(_, _) { return HomeShared }
+        case mir.FnKey.Adapter(call) { return e.homeOf(mir.FnKey.Body(call)) }
+        case mir.FnKey.Init(m) { return m }
     }
 }
 
@@ -922,7 +951,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
             return
         }
         e.runtime("__olang_check_failed")
-        e.fnItem(k, f.Ty, symbol, passed, env, $hdr "entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not lowered by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
+        e.fnItem(k, f.Ty, symbol, passed, env, $hdr $e.stub("not lowered", symbol))
         return
     }
     fe mut fnEm&e = fnEm(e, f, k)
@@ -933,7 +962,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     if e.badType {
         # a type the program's layouts do not settle (a length a call computes, G21, is the evaluator's, M8)
         e.runtime("__olang_check_failed")
-        e.fnItem(k, f.Ty, symbol, passed, env, $hdr "entry:\n  call void @__olang_check_failed(ptr " $e.cstr("not emitted by the self-hosted compiler: " $symbol "\n") ")\n  unreachable\n}\n\n")
+        e.fnItem(k, f.Ty, symbol, passed, env, $hdr $e.stub("not emitted", symbol))
         return
     }
     b := StringBuilder()
@@ -945,6 +974,12 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     b.Push(fe.code.ToString())
     b.Push("}\n\n")
     e.fnItem(k, f.Ty, symbol, passed, env, b.ToString())
+}
+
+# the body of a function the compiler could not make: it fails when called, saying so
+fn (e mut Emitter&) stub(what String&, symbol String&) String {
+    msg := e.cstr($what " by the self-hosted compiler: " $symbol "\n")
+    return $"entry:\n  call void @__olang_check_failed(ptr " $msg ")\n  unreachable\n}\n\n"
 }
 
 fn (fe mut fnEm&) run() {
@@ -2545,7 +2580,8 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             }
             fe.w("br label %ret")
         }
-        case mir.Term.Raise(_, code) {
+        case mir.Term.Raise(sp, code) {
+            fe.trace(sp)
             rt := t.RetLlvm(fe.F.Ty)
             c := fe.val(code, mir.I32T)
             if rt == "i32" {
@@ -2580,6 +2616,20 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         fe.gap("an Exit " $kind)
         what = "ended"
     }
+    if kind == mir.ExitKind.Escaped {
+        # S16, S18d: "left the test" in the trace, the error named on the test's FAIL line
+        text := ""
+        match msg {
+            case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
+            case _ { }
+        }
+        fe.E.declare("__olang_ert_pass", "void @__olang_ert_pass(ptr)")
+        fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr)")
+        fe.w("call void @__olang_ert_pass(ptr " $fe.E.cstr($where ": left the test\n") ")")
+        fe.w("call void @__olang_test_error(ptr " $fe.E.cstr(text) ")")
+        fe.w("unreachable")
+        return
+    }
     if kind == mir.ExitKind.Error {
         # E35: "FILE:LINE: Type.WORD", where the error came from not kept outside a test or a debug build (S18d)
         text := ""
@@ -2587,7 +2637,7 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
             case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
             case _ { }
         }
-        hint := "" if fe.E.Tests else "(build with -debug to see where it came from)\n"
+        hint := "" if fe.E.traced() else "(build with -debug to see where it came from)\n"
         fe.E.declare("__olang_bang_failed", "void @__olang_bang_failed(ptr)")
         fe.w("call void @__olang_bang_failed(ptr " $fe.E.cstr($where ": " $text "\n" $hint) ")")
         fe.w("unreachable")
@@ -2851,7 +2901,13 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
         }
     }
     b.Push("  call i32 @fputs(ptr " $msg ", ptr %s)\n")
-    b.Push("  call i32 @fputs(ptr " $e.cstr("(build with -debug to see where it came from)\n") ", ptr %s)\n  ret i32 1\n}\n\n")
+    if e.traced() {
+        # S18d: where it came from, in a build that keeps the trace
+        e.declare("__olang_ert_print", "void @__olang_ert_print(ptr)")
+        b.Push("  call void @__olang_ert_print(ptr %s)\n  ret i32 1\n}\n\n")
+    } else {
+        b.Push("  call i32 @fputs(ptr " $e.cstr("(build with -debug to see where it came from)\n") ", ptr %s)\n  ret i32 1\n}\n\n")
+    }
     e.item("main", e.P.L.Root, b.ToString())
 }
 
