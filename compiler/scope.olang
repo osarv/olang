@@ -5390,10 +5390,15 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # a scope variable no argument determines: where the callee's obligations say it must live (O18b), else where the
     # call's result lands, else where the call stands (O18a)
     callee := s.bodyOf(c.Target)
+    # a result borrowed from a parameter (O13) given a temporary lives where the temporary is built: where the result
+    # lands, as a built result does (O18a)
+    ev := -1
+    ef := s.P.T.ResultFrom(fty, 0)
+    if ef >= 0 and ef < n { ev = owner[ef] }
     for v in range vars.Len() {
         if beta[v] != Term.None { continue }
         t := s.requiredBy(callee, v, beta)
-        if t == Term.None { t = beta[rv] if rv >= 0 else here }
+        if t == Term.None { t = beta[rv] if rv >= 0 else (dest if v == ev and dest.Runs() else here) }
         beta[v] = t
     }
     # the temporaries built where their scope variable is bound - a task's, what they hold lasting until its join (P2)
