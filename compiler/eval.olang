@@ -2124,6 +2124,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         case typed.PrimOp.IsCase {
             return 1 if m.tagOf(m.addr(fi, x, 1), at) == m.scalar(fi, m.arg(fi, args, 1)) else 0
         }
+        case typed.PrimOp.Retire { return 0 }
         case typed.PrimOp.Convert { return m.convert(m.scalar(fi, x), at, ty) }
         case typed.PrimOp.Bitcast { return m.bitcast(m.scalar(fi, x), at) }
         case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap
