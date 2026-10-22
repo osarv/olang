@@ -2421,7 +2421,10 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
         a := fe.let("icmp eq " $w0 $fe.let("extractvalue " $lt " " $x ", 0") ", " $fe.let("extractvalue " $lt " " $y ", 0"))
         b := fe.let("icmp eq ptr " $fe.let("extractvalue " $lt " " $x ", 1") ", " $fe.let("extractvalue " $lt " " $y ", 1"))
         both := fe.let("and i1 " $a ", " $b)
-        return both if op == typed.PrimOp.Eq else fe.let("xor i1 " $both ", true")
+        # a returned local as one value of a conditional is placed in the if's block by the scope pass, not the result
+        # scope (O26a) - a use after free under -sanitize; written as two returns until the pass is fixed
+        if op == typed.PrimOp.Eq { return both }
+        return fe.let("xor i1 " $both ", true")
     }
     return fe.let("icmp " $c " " $lt " " $x ", " $y)
 }
