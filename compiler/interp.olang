@@ -383,14 +383,13 @@ fn valueWhy(s eval.Stop, at source.Span) (String, I64, source.Span) {
 # ---- globals baked into the program's data (K2) ----
 
 # every immutable global c checked whose value the evaluator gives while compiling (K1), and which is plain data or
-# reaches only storage its own initializer made, by its initializer's body: emit writes each as its value and runs
+# reaches only storage the program's globals made, by its initializer's body: emit writes each as its value and runs
 # none of them at startup. One the evaluator refuses is set at startup as before
 fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     out Map<I64, eval.Image>
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.start()
-    reached Map<I64, I64>
     d := c.P.L.Diags
     abortsAt Map<pair.Pair<I64, I64>, Bool>
     for i in x.Globals {
@@ -426,22 +425,87 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
                     continue
                 }
                 out.Put(i, img)
-                for sl in img.Slots { reached.Put(sl, (try reached.Get(sl) catch default 0) + 1) }
             }
             case _ { }
         }
     }
-    # K2b: storage two globals reach - a slice of another's array, the same constant text - is one instance; each
-    # would write its own copy, so such globals are set at startup, where they name that very storage
-    shared List<I64>
+    # K2b: storage two globals reach - one naming the instance another's initializer made, a slice of another's array,
+    # the same constant text - is one instance, written once per module: with the first global (in the order they are
+    # set) whose image holds it, which every other names. A global naming storage no baked global of its own module
+    # holds - another module's, or one set at startup's - is set at startup itself
+    home Map<I64, pair.Pair<I64, I64>>        # an allocation: the global (body) whose image holds it, and its blob there
     for i in x.Globals {
         img := try out.Get(i) catch { continue }
-        for sl in img.Slots {
-            if (try reached.Get(sl) catch default 0) > 1 and i not in shared { shared.Push(i) }
+        mi := globalModule(x.Bodies[i])
+        ok := true
+        newIdx := Array<I64>(img.Blobs.Len(), -1)
+        k I64 = 0
+        for j in range img.Blobs.Len() {
+            sl := img.Slots[j]
+            if j > 0 and home.Has(sl) {
+                h := try home.Get(sl) catch default pair.Pair(I64(-1), I64(-1))
+                if globalModule(x.Bodies[h.First]) != mi { ok = false }
+                continue
+            }
+            newIdx[j] = k
+            k++
         }
+        for b in img.Blobs {
+            for e in b.Ext {
+                if e < 0 { continue }
+                h := try home.Get(e) catch default pair.Pair(I64(-1), I64(-1))
+                if h.First < 0 or globalModule(x.Bodies[h.First]) != mi { ok = false }
+            }
+        }
+        if not ok {
+            out.Remove(i)
+            continue
+        }
+        kept := eval.Image()
+        for j in range img.Blobs.Len() {
+            if newIdx[j] < 0 { continue }
+            b := img.Blobs[j]
+            nb := eval.Blob()
+            nb.Bytes = b.Bytes
+            nb.Align = b.Align
+            nb.Constant = b.Constant
+            for r in range b.At.Len() {
+                nb.At.Push(b.At[r])
+                nb.Off.Push(b.Off[r])
+                target := b.Ext[r] if b.To[r] < 0 else img.Slots[b.To[r]]
+                if b.To[r] >= 0 and newIdx[b.To[r]] >= 0 {
+                    nb.To.Push(newIdx[b.To[r]])
+                    nb.Ext.Push(-1)
+                    continue
+                }
+                h := try home.Get(target) catch default pair.Pair(I64(-1), I64(-1))
+                hm, hn := globalName(x.Bodies[h.First])
+                nb.To.Push(-1)
+                nb.Ext.Push(target)
+                nb.ExtMod.Push(hm)
+                nb.ExtName.Push(hn)
+                nb.ExtIdx.Push(h.Second)
+            }
+            kept.Blobs.Push(nb)
+            kept.Slots.Push(img.Slots[j])
+            home.Put(img.Slots[j], pair.Pair(i, newIdx[j]))
+        }
+        out.Put(i, kept)
     }
-    for i in shared { out.Remove(i) }
     return out
+}
+
+fn globalModule(b typed.Body&) I64 {
+    m, _ := globalName(b)
+    return m
+}
+
+# a global initializer's global: its module and name
+fn globalName(b typed.Body&) (I64, source.NameId) {
+    match b.Of {
+        case typed.BodyOf.Global(m, n) { return m, n }
+        case _ { return -1, source.NameId(0) }
+    }
 }
 
 # M19g: where a stale view was read, and where the program grew its Vec

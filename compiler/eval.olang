@@ -3997,8 +3997,13 @@ type Blob struct() {
     Align I64 = 8
     Constant Bool = false
     At List<I64>
-    To List<I64>
+    To List<I64>        # the blob each reference names - -1 for one another global's image holds (K2b)
     Off List<I64>
+    Ext List<I64>       # beside each: the evaluator's allocation it names where To is -1 (the caller resolves it), else -1
+    # where To is -1, once resolved: the global whose image holds it, and its blob there
+    ExtMod List<I64>
+    ExtName List<source.NameId>
+    ExtIdx List<I64>
 }
 
 # an immutable global's value baked (K2): blob 0 its own storage, then each allocation it reaches, once (K2b: two
@@ -4044,8 +4049,15 @@ fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
             if ts >= m.nAl or m.al[ts].Kind == aFree or m.al[ts].Gen != id >> slotBits { error NotBaked.REFUSED }
             if ts != root and m.al[ts].Kind != aValue and m.al[ts].Kind != aData { error NotBaked.REFUSED }
             if m.al[ts].Kind == aValue and m.al[ts].Scope != m.program { error NotBaked.REFUSED }
-            # an instance another global's initializer made is that global's: written once, with it (K2b)
-            if ts != root and m.al[ts].Owner >= 0 and m.al[ts].Owner != g { error NotBaked.REFUSED }
+            # an instance another global's initializer made is that global's: written once, with it, and named here
+            # (K2b) - the caller resolves which global's image holds it
+            if ts != root and m.al[ts].Owner >= 0 and m.al[ts].Owner != g {
+                b.At.Push(8 * w)
+                b.To.Push(-1)
+                b.Ext.Push(ts)
+                b.Off.Push(m.rdRaw(a.Base + 8 * w, 8))
+                continue
+            }
             to := try blobOf.Get(ts) catch default -1
             if to < 0 {
                 to = work.Len()
@@ -4054,6 +4066,7 @@ fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
             }
             b.At.Push(8 * w)
             b.To.Push(to)
+            b.Ext.Push(-1)
             b.Off.Push(m.rdRaw(a.Base + 8 * w, 8))
         }
         img.Blobs.Push(b)
