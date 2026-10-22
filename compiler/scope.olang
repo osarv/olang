@@ -251,6 +251,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     lifted Map<I64, I64>                   # by block: a "for" statement's own, which stands for the block around it (S9)
     trMemo Map<pair.Pair<I64, I64>, I64>   # transient's answers, by (body, parameter): 1 being asked, 2 no, 3 yes
     useMemo Map<pair.Pair<I64, I64>, I64>  # uses' answers, by (body and mode, parameter): 1 being asked, 2 no, 3 yes
+    useWhy Map<pair.Pair<I64, I64>, source.Span>   # ... and for a no, the body's statement that made it one
+    ueBad source.Span = source.Span(0, 0)
     regionOnly List<I64>                   # by local: the parameter whose region it holds only reads of (O17), -1 none
     aliasOf List<I64>                      # by local: the reference parameter it was declared as a second name for, -1 none
     rlChanged Bool = false
@@ -2859,7 +2861,17 @@ fn (s mut Scoper&) writtenCopy(c typed.Call&, i I64, spawned Bool, callSp source
             case _ { }
         }
     }
-    s.err(at, msgs.SpawnAtElement() if spawned and handle and how == 1 else msgs.WriteThroughAtCall())
+    rec := s.err(at, msgs.SpawnAtElement() if spawned and handle and how == 1 else msgs.WriteThroughAtCall())
+    # E31b: with the callee's statement that made it no view of the element, where there is one
+    if not spawned and how == 1 and not handle and s.isStruct(et) {
+        match c.Target {
+            case typed.Callee.Body(id) {
+                why := try s.useWhy.Get(pair.Pair(I64(id) * 4 + UseView, i)) catch default source.Span(0, 0)
+                if why.End > I32(0) { s.note(rec, s.Bodies[I64(id)].File, why, msgs.NoteViewRefusedBy()) }
+            }
+            case _ { }
+        }
+    }
 }
 
 # where an element read is said: its "[" - the element a try reads, for a try's
@@ -2979,15 +2991,23 @@ fn (s mut Scoper&) uses(b I64, j I64, mode I64) Bool {
     body := s.Bodies[b]
     if body.Root == null or not s.judged[b] or j >= body.Params.Len() { return false }
     s.useMemo.Put(key, 1)
+    saved := s.ueBad
+    s.ueBad = source.Span(0, 0)
     r := s.ueBlock(body, body.Root, I64(body.Params[j]), mode)
     s.useMemo.Put(key, 3 if r else 2)
+    if not r and s.ueBad.End > I32(0) { s.useWhy.Put(key, s.ueBad) }
+    s.ueBad = saved
     return r
 }
 
 fn (s mut Scoper&) ueBlock(b typed.Body&, bl typed.Block&, l I64, mode I64) Bool {
     if bl == null { return true }
     for st in bl.Stmts {
-        if not s.ueStmt(b, st, l, mode) { return false }
+        if not s.ueStmt(b, st, l, mode) {
+            # the innermost statement that made it no use of the kind asked (E31b's note)
+            if s.ueBad.End == I32(0) { s.ueBad = st.Span() }
+            return false
+        }
     }
     return true
 }
@@ -6663,6 +6683,32 @@ fn (s mut Scoper&) disagree(at source.Span, t Term, u Term) I64 {
     return s.err(at, msgs.ScopeArgsDisagree())
 }
 
+# E28/S12b: a conditional's or a match's value that does not fit where it is stored, each value judged as though alone -
+# the note at it (B11)
+fn (s mut Scoper&) noteCondValue(rec I64, x typed.Expr&) {
+    vals List<typed.Expr&>
+    match s.unAway(x) {
+        case typed.Expr.Cond(_, _, c) {
+            vals.Push(c.A)
+            vals.Push(c.B)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for a in m.Arms {
+                if a.Value != null { vals.Push(a.Value) }
+            }
+            if m.NoMatch != null and m.NoMatch.Value != null { vals.Push(m.NoMatch.Value) }
+        }
+        case _ { return }
+    }
+    for v in vals {
+        t := s.peekTerm(v)
+        if t != Term.None and s.order(t, s.fitSlot) != Holds {
+            s.note(rec, s.B.File, s.opTok(v), msgs.NoteCondValue())
+            return
+        }
+    }
+}
+
 # the reference parameter whose scope variable a term is, -1 for none
 fn (s mut Scoper&) paramOfTerm(t Term) I64 {
     match t {
@@ -6919,6 +6965,7 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         return
     }
     rec := s.fitErrorAt(s.fitSp if s.fitAt else s.opTok(x), kind, exact)
+    if rec >= 0 { s.noteCondValue(rec, x) }
     # T17c: the payload's storage is to be made where the value is kept - a parameter's (B11)
     if rec >= 0 and kind == FitPayload {
         w := s.paramOfTerm(s.fitSlot)
