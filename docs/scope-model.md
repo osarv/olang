@@ -1080,3 +1080,41 @@ neither.
     of a literal in its block or home, a store's in the place's, a returned one in the result scope - and a returned
     temporary, or a local O26a moved there, is not copied again. Under the stand-in placement they were all made in the
     program's scope: a loop copying a literal held all of them to the end.
+
+### 9.8 Decided while building M6 (round 6, every program stage 0 accepts scope clean)
+
+38. **A part of a call's built result lands where the part is put** (O18a): a field, an element, a payload or a slice
+    of what a call built - read through the temporary holding it, a held local's (D8d), an array value's elements -
+    has its call land where the read is put, when that is elsewhere than the block it stands in (`f = mkBox(i).n` with
+    `f` outside the loop). Only where the call's own obligations let it: each scope they need its result scope to be
+    outlived by, read off its arguments, outlives the landing - else it stands where it is and the error is the outer
+    one, as stage 0 says it. An argument read so lands where its callee's obligations keep it (O18b,
+    `c5Keep(g, g.fresh(i).Data)`), or, for the parameter a result is borrowed from, where the result goes (O13).
+39. **A three-clause `for`'s own block stands for the block around it** (S9): its variable is declared there, and
+    what its initializer builds is built there, as stage 0 evaluates the initializer in the block around the loop - so
+    `for c Link& = a, c != null, c = c.next` walks a structure of an outer block. The block is still a block at run
+    time; nothing is placed in it.
+40. **Landing by obligations** (O18c) reads a derived scope's record (O23a) - `for x in It<T>(nodes)` lands each
+    element where the nodes are; skips a variable no argument determines yet (it is bound after, by its own obligations
+    or where the result lands); and lands in the program's scope where constant data determines the variable and the
+    callee builds nothing there (`s5Pairish("lit").a`).
+41. **A temporary given for the parameter a result is borrowed from is built where the result lands** (O13, O18a):
+    `return astSimplify(Ast.Add(...))` builds the node where the result goes, as a built result would be.
+42. **A bare `&` local of a conditional or match of references from different scopes is held where it is declared**
+    (E28, O12): its scope is the set, read there and never built into - the values a written type's declaration builds
+    are built at its claim, so `q mut Nd& = n if c else Nd(7)` is such a set and `q.next = Nd(1)` is O12's error.
+43. **What decides an S4d copy** is the place: a borrow, in the value an assignment writes over, of the place or of
+    storage within it (reached through no reference), as the checker made it (`y = wrap(y)`).
+44. **A lambda that never leaves where it is made** - called there, held in a local only called, or given to a callee
+    keeping nothing of it (D16c) - keeps a capture only where its body does (O17, as stage 0: "a lambda made where it
+    is called is judged by its body"). A lambda's summary records, by capture, what O17 records by parameter.
+45. **A constructor's arguments the instance holds agree on one scope** (C2d, O25e; T17c for a payload's items), as
+    stage 0's `bindHereFrom`: in order, each existing one exactly where the binding is when something can be stored
+    through it (and no `&q` field keeps it), else outliving it; two of this function's scope variables are both kept.
+    The first that does not agree is the error, and the call's other C2d errors are not said.
+46. **A value field a reference is taken to lives in the instance scope** (C2g): its slot in the constructor's frame
+    closes as the constructor returns (`r mut List<I64>& = v`, `view Array<I64>& = small[0:2]`).
+47. **What an instance a function returns holds is the caller's C2d** (WhyResult), said where the result is put - an
+    assignment's `=` - as stage 0 says it; and a compound assignment through `SetAt` is said at its operator.
+48. **A condition's and an assert message's body for the evaluator** (BodyOf.Cond) builds in the program's scope, as a
+    global's initializer does: it has no caller, its value is the evaluator's.

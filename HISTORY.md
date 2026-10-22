@@ -21064,3 +21064,59 @@ where it is stored, nothing between the hold and the store being able to change 
 1013 (tests/shared 707 of 711), drvdiff 83 of 83, scopediff 265 of 280 and 300 of 307 with 23 rows; stage 1 builds
 stage 2 in 44 s (1.63 GB) and stage 2 stage 3 in 42 s, all three equal; stage 1 passes the 421 tests of compiler/ and
 std.
+
+## Port M6 round 6: every program stage 0 accepts is scope clean (2026-10-22)
+
+Round 5 had the driver report the pass's errors, so every program stage 0 builds and the pass refuses is one the port
+refuses: 24 distinct rows on accepted programs (tests/shared.olang 19, bench/run, three O17 cases through lambdas).
+Round 6 took them to none - `make scopediff`: accepted programs scope clean 307 of 307, refused cases giving stage 0's
+first error 265 -> 274 of 280 (251 -> 262 exactly), pinned 261 -> 269, the silent ones unchanged.
+
+**The shapes, and stage 0's rule each follows** (docs/scope-model.md 9.8). The largest group was a part of a call's
+built result put somewhere: `f = mkBox(i).n`, `e = mkNodes(i)[0]`, `s = mkArr(i)[0:2]` with the local outside the
+loop - stage 0 lands the call where the read is put (O18a), the port had judged it where it stands, so its result was
+the loop's. The call now lands at the read's destination, but only where each scope its own obligations need its
+result to be outlived by outlives that destination (read off its arguments): two refused cases, where landing the
+inner call there broke its own obligation, moved their error onto the inner call until that condition was added - stage
+0 says it at the outer call. An argument read so (`c5Keep(g, g.fresh(i).Data)`) lands where its callee's obligations
+keep it, and a temporary for the parameter a result is borrowed from (`astSimplify(Ast.Add(...))`, several results
+passed on, D8d) where the result goes. A three-clause `for`'s variable lived in the for's own block in the port, in
+the block around the loop in stage 0 (it evaluates the initializer there - `innerCtx` keeps the depth), so `for c
+Link& = a, ...` over an outer structure narrowed `a`: the for's block now stands for the block around it. Landing by
+obligations had given up at a variable no argument determined yet and at a derived scope (an iterator's `&of`): it
+skips the first, reads the second's record, and lands in the program's scope for constant data where the callee
+builds nothing. The rest were one each: a bare `&` local of a conditional of two scopes held where declared (E28), a
+borrowed call result in a conditional read where its argument's referent is, S4d's copy recognized by the place
+within the target (`y = wrap(y)`, the checker had written `Promote(Read(L))`, not `Read(Target)`), the evaluator's
+condition and message bodies building in the program's scope, a handle from a try's default lent as its reference,
+and O17 through a lambda that never leaves where it is made judged by the lambda's body (a summary of what it keeps
+in each capture).
+
+**Two fixes outside the pass.** The checker's new write-back for `x[i][j] = v` (553ee2c) held the value at the
+SetAt parameter's referent type: `users[0][0][0] = kept` copied `kept`'s text into the loop's block and stored a
+borrow of the copy into the list - a use-after-free the pass caught. It is held at the parameter's own type now (master
+fixed a local's value read the same way, 275fede - both kept: this one covers a value that is no local). And the merge
+met two `arrayCopy` arities (the S19 copy before deferred code, and round 5's copies made where their storage is),
+which master resolved too (c776f77: the S19 copy under the stand-in only, retArrays copying under the plan) - taken.
+
+**First errors.** Stage 0's `bindHereFrom` checks that the arguments a constructor's instance holds agree on one scope
+before anything else - an exact one where something can be stored through it, outliving ones narrowing - and says O25e
+(T17c for a payload) at the first that does not; the port now does the same and then says none of that call's C2d
+errors. An instance a function returns carries its constructor's C2d to the caller, said at the `=`. Storing what lives
+where a scope variable says into a global is O1b's error at the store in stage 0, where the port had made it an
+obligation on the callers - accepting `keep(G2)` stage 0 refuses at `G = p`; it is the error now. A part of x[i]'s copy
+lent to a callee that can build into it is E31b at its member, and a copy only kept, never stored into, is bound where
+its storage is so that O10c says the rest.
+
+**A use-after-free stage 1 showed** (run through stage 1, not visible to scopediff): a value field of a constructor a
+reference is taken to (`r mut List<I64>& = v`, a view of a fixed array field) lived in the constructor's frame, which
+closes as it returns - two shared.olang tests failed through stage 1. Such a field is stored in the instance scope (C2g).
+
+**Measured through stage 1** (built by the final tree's port, -debug): stage 1 == stage 2 byte for byte; tests/
+shared.olang 710 of 711 through it (the S8b one reaches a build-decided local `if`'s dropped branch at run time - not
+placement), worker 15, runner 25. An apparent stage 1 != stage 2 on the way was sources edited during the chain.
+Found and left: the sanitized stage 1 segfaults building the compiler, in `__olang_sb_put` from emit - round 5's tree
+does too.
+
+**Left**: b6elemvalue (a value local landed where it is kept), the notes O10c gives through a value's provenance and
+the held-index and text-copy notes, `MayBuild`.

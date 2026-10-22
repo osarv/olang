@@ -8807,6 +8807,9 @@ fn (c mut Checker&) writeBack(sp source.Span, op token.Tok, p typed.Place&c, val
             setHeld.Push(h)
         }
         pt = pts[pts.Len() - 1] if pts.Len() > 0 else types.UnknownT
+        # a reference parameter takes the value as a reference - a place borrowed, not copied into the hold (E12c)
+        rt := c.paramOn(setM, p.Type(), pts.Len() - 1)
+        if rt != types.UnknownT and c.isRef(rt) { pt = rt }
     }
     # then the value
     x typed.Expr&c = null
@@ -8899,6 +8902,22 @@ fn (c mut Checker&) paramsOn(f I64, recv types.TypeId) Array<types.TypeId> {
     if nv > 0 and ps.Len() > 0 { c.unify(ps[0], recv, b, false, true) }
     for k in range ps.Len() { out[k] = c.deref(ps[k]) if nv == 0 else c.boundParam(ps, k, b) }
     return out
+}
+
+# a method's parameter k as a receiver of type recv binds the method's variables, a reference kept as one (paramsOn
+# gives its referent); Unknown where one is left open
+fn (c mut Checker&) paramOn(f I64, recv types.TypeId, k I64) types.TypeId {
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))
+    if k < 0 or k >= ps.Len() { return types.UnknownT }
+    owner := generic.FnOwner(f)
+    nv := c.P.VarCount(owner)
+    if nv == 0 { return ps[k] }
+    b := generic.Binding(owner, nv)
+    c.unify(ps[0], recv, b, false, true)
+    part := Array<types.TypeId>(b.N)
+    for j in range b.N { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(b.Owner, j, types.ReadOnly) }
+    t := c.P.Subst(ps[k], b.Owner, c.P.T.List(part))
+    return t if c.P.T.Closed(t) else types.UnknownT
 }
 
 # the value of the Temp a store reaches (valueTemp's)
