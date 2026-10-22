@@ -821,8 +821,32 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
     }
 }
 
-# whether a returned array value is copied into the result scope: existing storage, but for a local living there
+# whether a returned array value is copied into the result scope: existing storage, but for a local living there - a
+# conditional, a match or a try's default by any value it may give (as stage 0's cgBuiltInResult)
 fn (ln mut lowering&) retCopies(x typed.Expr&, ty types.TypeId) Bool {
+    if x == null { return false }
+    if ln.valueArray(ty) {
+        match x {
+            case typed.Expr.Cond(_, _, c) { return ln.retCopies(c.A, ty) or ln.retCopies(c.B, ty) }
+            case typed.Expr.Match(_, _, m) {
+                for a in m.Arms {
+                    if a != null and ln.retCopies(a.Value, ty) { return true }
+                }
+                return m.NoMatch != null and ln.retCopies(m.NoMatch.Value, ty)
+            }
+            case typed.Expr.Try(_, _, t) {
+                if ln.retCopies(t.X, ty) { return true }
+                for c in t.Clauses {
+                    for df in c.Defaults {
+                        if ln.retCopies(df, ty) { return true }
+                    }
+                }
+                return false
+            }
+            case typed.Expr.Seq(_, _, q) { return ln.retCopies(q.X, ty) }
+            case _ { }
+        }
+    }
     if not ln.copiesArray(x, ty) { return false }
     # deferred code or a join's tasks still to run on the way out may write the local after the result is computed
     if ln.defers.Len() > 0 { return true }
