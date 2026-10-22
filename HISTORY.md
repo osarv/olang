@@ -16475,7 +16475,7 @@ compiler/check.olang's and scope.olang's test builds (4,761 bodies in shared.ola
 **Fifth round (2026-10-22): what the corpus and the emitter's comparison found (checkdiff 438/439 refused cases giving
 stage 0's first error, 398 exactly; pinned messages 421 of 439, from 413; 300 of 304 accepted programs clean, the four
 the B9c rows checkdump cannot decide; tests/shared through Analyze: 22 compile-time asserts the port decided false,
-now none - emitdiff on the emitter's branch merged with this one: SHARED_RESULT).** **R13 in the port**: a try's
+now none - and run (emitdump, the emitter's branch d02ca86 merged with this one, -O0) 707 of its 711 tests end as stage 0's, from 687; worker, runner and the prelude's map the same).** **R13 in the port**: a try's
 leftovers leave the body - the checker held them for the try around it (decision 8 of the second round, now reversed:
 `try f(try g()) catch default 5` in a function declaring nothing is R9's error at the inner try, as stage 0 says), and
 lowering's dispatch handed them to that try's clauses, so the fuzzer's seed-551 program (`ktOuterArg`) baked 5 where it
