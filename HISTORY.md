@@ -16472,6 +16472,39 @@ pin the routes: a growth in the function, through a second name and through a ca
 grow its Vec, a task holding one; another Vec growing, a view taken again each turn. Cost: about 0.1-0.2 s on
 compiler/check.olang's and scope.olang's test builds (4,761 bodies in shared.olang's within its 0.4 s).
 
+**Fifth round (2026-10-22): what the corpus and the emitter's comparison found (checkdiff 438/439 refused cases giving
+stage 0's first error, 398 exactly; pinned messages 421 of 439, from 413; 300 of 304 accepted programs clean, the four
+the B9c rows checkdump cannot decide; tests/shared through Analyze: 22 compile-time asserts the port decided false,
+now none - and run (emitdump, the emitter's branch d02ca86 merged with this one, -O0) 707 of its 711 tests end as stage 0's, from 687; worker, runner and the prelude's map the same).** **R13 in the port**: a try's
+leftovers leave the body - the checker held them for the try around it (decision 8 of the second round, now reversed:
+`try f(try g()) catch default 5` in a function declaring nothing is R9's error at the inner try, as stage 0 says), and
+lowering's dispatch handed them to that try's clauses, so the fuzzer's seed-551 program (`ktOuterArg`) baked 5 where it
+runs 9. Two kinds of try still pass what they do not take on (`typed.Try.Passes`): a loop's own call taking Exhausted
+(S9a, to the loop's `in try`, S9e, or a comprehension's try, E27) and a clause-less `checked` inside a try or a `!`
+(E15a, E35). **Function types carry their parameters' names, for rendering only (E11a)**: `types.data` has a fifth
+operand, an interned list of NameIds (`ParamNames`, `NamesOf`, `WithNames`); `Plain` leaves it out, so T22's identity
+and every fit are unchanged, and `Unnamed` (scopes kept) is what tells function instances apart - the first instance
+asked for keeping its own names, as stage 0's first instantiation does (`argReps`). A written function type, a named
+function as a value and a lambda with nothing expected carry names; `$`, diagnostics and the Render helper read them,
+and the emitter names a helper of a named type apart (`emit.sym`: the one-line change in emit.olang). **G21 per
+instance**: an asked constant is keyed by its file, offset and the canonical text of the variables bound where it is
+read (`LengthKey`), and one needing evaluation in a generic's own declaration is a pattern, evaluated per instance
+(`c2eCap(Array<T>(0))` gives `Array<F64, 5>` and `Array<I32, 2>`); `ExprBodyIn` checks it with the variables bound,
+draining the instances it asks for. **Also**: a literal-only expression holding a U64 literal is a U64 and meets an
+I64 literal at U64 (T6a), a character literal in one is its code (`'a' + 1` is the I64 98); an integer literal rounds
+once to a float type (T4); `-define` replaces a build constant's default (B10c); a mismatch spells written text
+`Array<Char, N>` (E12); a literal entering a declared number with a constructor runs it (T29d: initializers,
+assignments, arguments, returns - `litCtor`); a conversion of an array named by a place names its storage (T29a - a
+copy where read into a value, a borrow where lent, a fixed array lent as a slice; no assignment target); `x[i][j] = v`
+with `x[i]` read through At writes `x[i]` back (E31b - `writeBack` with the inner SetAt); a part's declared Hash, or a
+private `hash` in its own module, hashes it in the supplied Hash (E10b, M6b); a signature renders `b T&a`; a function
+type's several errors render parenthesized (QY). Outside the checker, minimal: the evaluator re-encodes an error through
+a function value under the value's type's list (R6, R1b - eval.olang's `returned`), lowering copies a returned array
+value read out of storage before deferred code runs (S19) and keys Equal/Hash/Zero helpers by `Unnamed`. **Decided
+(mine)**: (1) names live in the type key beside the scopes rather than in a side table, since a side table keyed by
+TypeId cannot tell `fn(n I32) I32` from `fn(x I32) I32` (the corpus renders both); (2) instances share the first
+asked for's names, as stage 0's; (3) the R13 exceptions are exactly the two above.
+
 ### Port M7: the MIR contract (DESIGN.md 1.8.1; S4, S19, P1b, P4, R6-R21, E15a, O2, O16, O30-O35, T7c, B5a, 2026-10-12)
 
 `compiler/mir.olang` is what `lower` makes of each typed body, and all that `eval`, `emit` and O39-O41's liveness check
