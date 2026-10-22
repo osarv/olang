@@ -285,6 +285,7 @@ type cfn struct() {
     # with the same checks the general path makes, without walking its operands and places again
     Fast mut Array<I64>&
     FastOp mut Array<typed.PrimOp>&
+    NVars I64 = 0               # its scope variables, how many
     Sps mut Array<source.Span>&
 }
 
@@ -422,6 +423,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
     nb := f.Blocks.Len()
     c.Stmts = Array<mir.Stmt>(n)
     c.Global = Array<Bool>(n)
+    c.NVars = f.Vars.Len()
     c.Fast = Array<I64>(n * fastStride)
     c.FastOp = Array<typed.PrimOp>(n, typed.PrimOp.Add)
     c.Sps = Array<source.Span>(n, source.Span(0, 0))
@@ -952,7 +954,9 @@ fn (m mut Machine&) allocate(n I64, kind I64, s I64) Ptr {
     base := m.free[c]
     if base != 0 {
         m.free[c] = m.rdRaw(base, 8)
-        for i in range (1 << c) / 8 {
+        # its own words zeroed: the rest of the block is beyond its size, never read (at), and zeroed by whichever
+        # allocation of the block reaches it
+        for i in range (n + 7) / 8 {
             m.hw[base / 8 + i] = 0
             m.prov[base / 8 + i] = 0
         }
@@ -998,7 +1002,7 @@ fn (m mut Machine&) release(slot I64) {
         if a.Prev != 0 { m.al[a.Prev].Next = a.Next } else { m.scopes[sc].Allocs = a.Next }
         if a.Next != 0 { m.al[a.Next].Prev = a.Prev }
     }
-    for i in range (1 << a.Class) / 8 { m.prov[a.Base / 8 + i] = 0 }
+    for i in range (a.Size + 7) / 8 { m.prov[a.Base / 8 + i] = 0 }
     m.wrRaw(a.Base, 8, m.free[a.Class])
     m.free[a.Class] = a.Base
     m.Live -= a.Size
@@ -1334,9 +1338,8 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
         m.refuse(WhyDepth if m.When == Mode.Compile else WhyRunDepth)
         return -1
     }
-    f := m.fns[fi]
     ls := m.cf[fi].Locals
-    nl, ns, nv := ls.Len(), f.Scopes.Len(), f.Vars.Len()
+    nl, ns, nv := ls.Len(), m.cf[fi].Scopes.Len(), m.cf[fi].NVars
     fr := frame()
     fr.Fn, fr.Ret, fr.RetArg = fi, ret, retArg
     fr.Locals, fr.Scopes, fr.Vars = m.nWs, m.nWs + nl, m.nWs + nl + ns
