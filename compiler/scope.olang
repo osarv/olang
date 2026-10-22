@@ -539,6 +539,11 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
         sm.BuildAt.Push(s.buildAt[k])
     }
     s.computeKeeps(body)
+    # what the body may build into each of its scope variables, directly or through a call (decision 48): a lambda's
+    # prologue need ask for its thread's part only of a captured scope it may build into
+    for k in range s.buildsVar.Len() {
+        if k < s.plan.MayBuild.Len() { s.plan.MayBuild[k] = s.buildsVar[k] }
+    }
     if report { s.Plans[b] = s.plan }
 }
 
@@ -7134,15 +7139,23 @@ if TestBuild {
                         "    }\n"
                         "    return \"\"\n"
                         "}\n"
+                        "fn twoLambdas(n I64) I64 {\n"
+                        "    l mut List<I64>& = List<I64>()\n"
+                        "    add := fn(x I64) { l.Push(x) }\n"
+                        "    has := fn(x I64) Bool { return l.Len() > x }\n"
+                        "    add(n)\n"
+                        "    return 1 if has(0) else 0\n"
+                        "}\n"
                         "fn main() {\n"
                         "    p := P()\n"
                         "    e := p.build(4)\n"
                         "    assert shout(3).Len() == 3\n"
                         "    assert label(5).Len() == 2\n"
                         "    assert pickArm(3, true).Len() == 2\n"
+                        "    assert twoLambdas(4) == 1\n"
                         "}\n")
 
-    test "plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there, as one a conditional's arm returns (O26a)" {
+    test "plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there, as one a conditional's arm returns (O26a); a lambda may build only into what it builds into (decision 48)" {
         dir := try os.MkTemp() catch os.OsError { unreachable }
         defer { try os.RemoveAll(dir) catch os.OsError { } }
         try os.WriteFile($dir "/main.olang", jpArrays) catch os.OsError { }
@@ -7188,5 +7201,22 @@ if TestBuild {
             if x == typed.Scope.Var(0) { moved = true }
         }
         assert moved, "both is stored where the result goes"
+        # of two lambdas capturing one list, the one pushing may build into the scope it captured, the one reading may
+        # not - what a closure's prologue asks for (decision 48)
+        tl := bodyAt(l, c.Bodies, 25)
+        assert tl >= 0
+        building, reading := 0, 0
+        for i in range c.Bodies.Len() {
+            match c.Bodies[i].Of {
+                case typed.BodyOf.Lambda(parent) {
+                    if I64(parent) != tl { continue }
+                    any := false
+                    for mb in s.Plans[i].MayBuild { any = any or mb }
+                    if any { building++ } else { reading++ }
+                }
+                case _ { }
+            }
+        }
+        assert building == 1 and reading == 1, $building " " $reading
     }
 }
