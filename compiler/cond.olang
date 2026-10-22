@@ -265,6 +265,9 @@ type Scope struct(Std Bool) {
     Std
     globals List<Global&>
     Locals List<source.NameId>    # a local condition's (S8b): every parameter and local named so far in its item
+    # of them, those declared with a value of their own: a local that may be fixed (S8c), which only the checker can
+    # tell - a condition reading one is left to compile-time evaluation, as one calling a function is
+    Fixed List<source.NameId>
 }
 
 fn (s mut Scope&) Add(g Global&) {
@@ -380,6 +383,7 @@ fn (e mut Eval&) Local(c ast.Expr&) (Outcome, Bool) {
 }
 
 fn (e Eval&) isLocal(n source.NameId) Bool {
+    if e.isFixed(n) { return false }
     for l in e.scope.Locals {
         if l == n { return true }
     }
@@ -479,7 +483,15 @@ fn decode(t String&) String {
     return b.ToString()
 }
 
+fn (e Eval&) isFixed(n source.NameId) Bool {
+    for l in e.scope.Fixed {
+        if l == n { return true }
+    }
+    return false
+}
+
 fn (e mut Eval&) name(sp source.Span, n source.NameId) Value {
+    if e.isFixed(n) { return e.defer(sp) }
     if e.isLocal(n) { return e.runtimeValue(sp, msgs.CondName(e.tokText(sp)), true) }
     t := e.names.Text(n)
     # B10c: the module's own declaration of the name first - a build constant's default, or B10's error

@@ -7129,6 +7129,25 @@ test "S8b: a provably fixed local decides an if; a written one does not" {
     assert ccWrittenLocal(1) == 0
 }
 
+# S8c: a fixed local's initializer may read another fixed local - the condition reads the chain to its build constant;
+# the then branch is the run time's too, and a fixed local read by an assert is decided while compiling (S18c)
+fn ccFixedChain() I32 {
+    a I64 = TargetOs.Len()
+    b := a + 1
+    k Bool = b > 1
+    if k and b > a {
+        return 2
+    } else {
+        return NotOnThisTarget{0}.v
+    }
+}
+
+test "S8c: a fixed local read through another decides an if, and an assert" {
+    assert ccFixedChain() == 2
+    n I64 = TargetArch.Len()
+    assert n > 0 and n == TargetArch.Len()
+}
+
 # K1: building a value whose type has a destructor is not evaluable at compile time - the destructor's effect
 # would be lost - so this global is set at startup, and its destructor runs then
 ktDtorRuns mut I32 = 0
@@ -7149,6 +7168,26 @@ KtFromDropped I32 = ktMakeAndDrop()
 test "K1: a global whose initializer runs a destructor is set at startup, destructor and all" {
     assert KtFromDropped == 7
     assert ktDtorRuns == 1
+}
+
+# K2c: an instance built in a global's own initializer lives in the program's scope, which never closes - it is never
+# destructed, so the evaluator may bake it (and what is read from it) while compiling; one built in a function the
+# initializer calls is not (KtFromDropped above)
+k2cDtorRuns mut I32 = 0
+
+type K2cHandle struct(v I32) {
+    v
+} destruct {
+    k2cDtorRuns++
+}
+
+K2cKept K2cHandle& = K2cHandle(5)
+K2cKeptV I32 = K2cKept.v + 1
+
+test "K2c: an instance built in a global's own initializer is never destructed, and is decided while compiling" {
+    assert K2cKeptV == 6
+    assert K2cKept.v == 5
+    assert k2cDtorRuns == 0
 }
 
 # S9/S9a/S10: the loop keyword is "for" in every position. "for { }" runs until something leaves it,

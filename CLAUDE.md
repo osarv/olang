@@ -614,8 +614,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   lowerdump` verifies every function of the corpus, std, compiler and the checks' run cases - all clean but what check
   leaves wrong; a try's leftovers leave the body (R13) but for a loop's own Exhausted try and a clause-less checked, which pass them to the try around them, a T29d literal's error edge is never taken, no releases or
   holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
-  over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
-  scope reclaimed as it closes, immutable globals baked into emitted data (K2), constants computed by calls (G21), the
+  over `eval.olang`: the build's conditions and asserts decided by evaluation, fixed locals included (S8c), `olang
+  interpret` running main placed by the scope pass, each scope reclaimed and its destructors run as it closes, immutable globals baked into emitted data (K2), constants computed by calls (G21), the
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
   plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 5: 265 of 280 refused
   cases give stage 0's first error, 1 still gets none (kept on purpose), no error on compiler/*.olang or std stage 0

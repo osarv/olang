@@ -20620,6 +20620,57 @@ times out). Left as round 2 listed: linalg (6 of 35 in 900s), map (3, check), os
 (interleaving), and the cases chunkpool, d16blambdaorder, e31btryelem, gemmflat, o15deepchain, o25harrayslice and
 o26acycle (twice), r1cwords.
 
+## Port M8: evaluation in the pipeline, fourth round (2026-10-22)
+
+**S8c in the port.** A local is fixed when it is a plain scalar (a number, `Bool`, an enum without payloads) declared
+with its own value and never written in its function; a condition the build decides may read one (and an assert the
+evaluator decides, S18c, too). The resolver cannot tell (it knows neither types nor later writes), so a condition reading
+a local declared with a value of its own (`cond.Scope.Fixed`, filled by the resolver per item) is no longer the running
+program's there but left to compile-time evaluation, as one calling a function is; the checker decides. It records each
+such local's initializer and type (`fixedInits`) and every local a body writes - a store, an increment, a target, an
+atomic (`mustWrite`, the atomics' place) - and `ExprBodyIn` builds a condition's body with each fixed local it reads, at
+any depth through initializers, checked as its initializer (`onlyFixed`, the frame's `fixed`). An ask records the
+locals it read as fixed; once every body is checked, one whose body wrote such a local after all is settled as running
+(`settleFixed`), and an ask whose condition does not evaluate is running too (`interp.decide`). **Found on the way,
+pre-existing**: an asked if whose condition then did not evaluate left its branches' groups pending, so what they held
+(an error in a branch of a running if) was never reported; and a runtime if whose else did not parse was a gap rather
+than the parse error. `Running` now chooses the groups of every if checked as running. **Decided (mine)**: S8a's
+"fixed on every build" error is not made here - the port's evaluation does not track whether a build constant was read,
+so a fixed condition reading none is decided silently where stage 0 reports S8a (a refused program only; s8acall had
+the same gap already).
+
+**Destructors under interpret.** `olang interpret` and evaldump lowered with the stand-in placement, which builds every
+site in the program's scope - so no destructor ever ran (the program's scope never closes), and a mutable counter a
+destructor bumped read 0. Interpret now places by the scope pass (`interp.Exec.Place`, as emitdump does), a body the
+pass errs in, or a check error is within, keeping the stand-in plan; the pass's own errors are not shown (stage 0's
+checker reports section 8's). Compile-time evaluation still runs MIR lowered without a plan (DESIGN.md 1.6.1). **Decided
+(mine)**: the port's interpret runs destructors as each scope closes, which stage 0's interpret (stage 1) refuses - DESIGN.md's
+"scopes are arenas freed when they close, and destructors run then". tests/shared under the evaluator: 676 of 711 tests
+ending as stage 0's with the stand-in placement, 709 of 713 with the scope pass's (two tests added); the four left are use-after-close stops
+where the pass's plan is stage 0's but not yet right (O1b, C2d/C2g, O17b, E16a), the same as emit's.
+
+**K2c.** Without a plan every instance lowers into the program's scope, so the evaluator, which let a destructor be
+registered while compiling only in the program's scope during a global's initializer, baked `KtFromDropped` (whose
+initializer calls a function building and dropping a destructor-bearing value): emit wrote it as data and its destructor
+never ran. Registration while compiling is now allowed only in the initializer's own frame or a constructor it calls
+directly (`initFrame`) - stage 0's narrowing - and a test beside it pins the allowed case (`K2cKept`, baked with what is
+read from it).
+
+**Speed.** The commonest statements - a number moved between locals, set from a constant, computed by an operator on
+locals and constants, read from or written into an array local at an index local - are decoded into a flat form when
+their function is defined (`cfn.Fast`, eleven words a statement) and run by `flat` with the general path's checks
+(`localAt` is `at` with the common case in line), a block's run of them without going round the machine's loop; an
+operator on two I64s is computed in line. An allocation zeroes only its own words, and a frame is pushed without copying
+its MIR function. A 128-cube F32 product in plain loops: 4.97s to 2.24s (stage 0's interpret 14s). std/linalg's tests
+still stop at the seventh: its kernel is calls (about 25 allocations of frame locals per multiply-add, an extern `fma`
+through libffi per element), which a flat form of statements does not reach - the register form of whole functions is
+still the next step.
+
+**Measured** (evaldiff, the corpus and std's tests and the checks' run cases): see PROGRESS.md for the rows. Checks'
+flag-free run cases 143 of 145 behave as stage 0's (round 3: 135 of 144) - chunkpool (it measures the process's own
+memory, the compiler's under interpret) and gemmflat (std/linalg's speed) left. checkdiff unchanged (438/439, 398
+exactly, 421 pinned).
+
 ## Port M6: the scope pass, round 2 - soundness (2026-10-18)
 
 Round 1 left 147 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error at all from the port:

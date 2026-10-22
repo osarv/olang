@@ -24,6 +24,7 @@ import "mir"
 import typecheck "check"
 import "views"
 import "lower"
+import "scope"
 import "eval"
 
 # ---- checking with the build's decisions (B9c, S8b) ----
@@ -71,6 +72,10 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         if ok {
             decided.Put(key, v)
             made = true
+        } else {
+            # a condition that does not evaluate: the running program's, as this check checked it - what its branches
+            # hold reported
+            c.Running(a.If)
         }
     }
     # G21: a constant argument a call computes, evaluated in its module's context
@@ -265,6 +270,25 @@ type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval
     # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
     Faulty Map<I64, Bool>
     started Bool = false
+}
+
+# under interpret, where things live is the scope pass's (M6) - each scope closes where the built program's does, so
+# what it registers (destructors, O16; owners, O35) runs then, as stage 0's interpret does not. Its own errors are not
+# shown (stage 0's checker reports section 8's, and the pass is still being finished): a body it erred in, or one a
+# check error is within, is placed by lowering's stand-in placement, its plan not one to trust. While compiling
+# nothing is placed: evaluation there runs what lowering makes without a plan (DESIGN.md 1.6.1)
+fn (x mut Exec&) Place() {
+    d := x.P.L.Diags
+    mark := d.Count()
+    sc mut scope.Scoper&x = scope.Scoper(x.P, x.Bodies)
+    sc.Run()
+    upto := d.RecordCount()
+    for b in range x.Bodies.Len().Min(sc.Plans.Len()) {
+        body := x.Bodies[b]
+        if d.ErrorWithin(body.File, I64(body.Sp.Start), I64(body.Sp.End), upto) { sc.Plans[b] = typed.NewPlan(body) }
+    }
+    d.Forget(mark)
+    x.Lw.Plans = sc.Plans
 }
 
 # the machine's program defined: every global, with its initializer, and the bodies by what they are
