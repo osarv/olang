@@ -21,7 +21,6 @@ import "fetch"
 import "source"
 import "scope"
 import "typed"
-import "types"
 import "lower"
 import "fmt"
 import "emit"
@@ -343,10 +342,10 @@ fn drive(args Array<String&>&) I32 {
 # ---- the front end ----
 
 # the passes: the program loaded (M4: its imports, fetched where they are remote, its top-level conditions decided
-# where B9a can), resolved and checked with the decisions evaluation makes (M5, M8: B9c, S8b, S18c), lowered to MIR
-# (M7) with each local where the scope pass (M6) homes it (placement, below) and written as LLVM IR (M9), one object
-# per module (emit.Objects): each module's own, the instances', the root's holding main or the test harness - compile
-# writing the one module's
+# where B9a can), resolved and checked with the decisions evaluation makes (M5, M8: B9c, S8b, S18c), held to section 8
+# by the scope pass (M6), lowered to MIR (M7) with each temporary and local where that pass places it, and written as
+# LLVM IR (M9), one object per module (emit.Objects): each module's own, the instances', the root's holding main or
+# the test harness - compile writing the one module's
 type Passes struct() {
     Loaded I64 = 0
 }
@@ -362,6 +361,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
     lw.Plans = placement(c, cfg)
+    if d.Errors() > 0 { error build.Failed.REPORTED }
     e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
     e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
@@ -396,60 +396,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
 }
 
-# where lowering puts things, for now - the interim, safe and keeping everything to the end: every site building in
-# the program's scope, every declared local holding a struct, an enum or several values there too (a reference may be
-# borrowed from one and kept where it outlives the frame), and a local the scope pass homes in a scope variable (O26a:
-# one the function returns) there. The pass's own placement (M6) is not followed yet: placed by it, the compiler's own
-# load.olang tests read freed text (an import's path), so stage 1 cannot load a program. While that is found, the
-# environment's OLANG_SCOPE_PLAN=LO:HI places the bodies numbered LO to HI-1 by the pass (each one the pass reports no
-# error in), to narrow it down by halves. Its errors are not reported: stage 0 holds a program to section 8 until the
-# pass agrees with it
-# OLANG_SCOPE_PLAN=LO:HI's bodies, none where it is not set
-fn planRange() (I64, I64) {
-    v := try os.Env("OLANG_SCOPE_PLAN") catch default ""
-    k := try v.FindByte(':') catch default -1
-    if k < 0 { return 0, 0 }
-    lo := try v[:k].ParseInt() catch default 0
-    hi := try v[k + 1:].ParseInt() catch default 0
-    return lo, hi
-}
-
+# where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
+# temporary built where the pass places it and each local where it homes it
 fn placement(c mut typecheck.Checker&, cfg mut build.Config&) List<typed.Plan> {
-    d := c.P.L.Diags
     sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
-    mark := d.Count()
     sc.Run()
-    upto := d.RecordCount()
-    plans List<typed.Plan>
-    lo, hi := planRange()
-    for i in range c.Bodies.Len() {
-        b := c.Bodies[i]
-        if i >= lo and i < hi and i < sc.Plans.Len() and not d.ErrorWithin(b.File, I64(b.Sp.Start), I64(b.Sp.End), upto) {
-            plans.Push(sc.Plans[i])
-            continue
-        }
-        pl := typed.NewPlan(b)
-        for k in range pl.Stored.Len() {
-            l := b.Locals[k]
-            if l.Kind != typed.LocalKind.Var { continue }
-            kind := c.P.T.KindOf(c.P.T.Repr(l.Ty))
-            if kind == types.Kind.Named or kind == types.Kind.Tuple or kind == types.Kind.Record {
-                pl.Stored[k] = typed.Scope.Program
-            }
-        }
-        if i < sc.Plans.Len() {
-            from := sc.Plans[i]
-            for k in range pl.Stored.Len().Min(from.Stored.Len()) {
-                match from.Stored[k] {
-                    case typed.Scope.Var(_) { pl.Stored[k] = from.Stored[k] }
-                    case _ { }
-                }
-            }
-        }
-        plans.Push(pl)
-    }
-    d.Forget(mark)
-    return plans
+    return sc.Plans
 }
 
 fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) mut load.Loader&cfg ? build.Failed {

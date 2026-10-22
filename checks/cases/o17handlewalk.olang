@@ -1,0 +1,46 @@
+# check: run
+# O17/O17b: a value whose references live elsewhere than its storage (b, a copy of src.b) lent to a callee that walks a
+# List it holds - for-in, an index, RunFrom - or calls a handle's method handing a read-only view back: each walk lends
+# the List as its reference, so nothing is kept or stored in b's own storage, and the lend is a plain one
+import "std/io"
+type Node struct() {
+    next mut Node& = null
+    v I64 = 0
+}
+type St struct() {
+    first mut Array<mut Node&>& = Array<mut Node&>(2, null)
+}
+type Hd struct() {
+    st mut St& = St()
+}
+fn (h Hd&) view() Array<mut Node&>&h {
+    s := h.st
+    return s.first[0:1]
+}
+type Box struct() {
+    items List<mut Node&> = List<mut Node&>()
+    hd Hd = Hd()
+    n I64 = 0
+}
+type W struct(b Box) {
+    b
+}
+fn (b Box&) sum() I64 {
+    t I64 = 0
+    for x in b.items { t += x.v }
+    for i in range b.items.Len() { t += b.items[i].v * 10 }
+    r := try b.items.RunFrom(0) catch Exhausted { return t }
+    return t + r.Len() * 100 + b.hd.view().Len() * 1000
+}
+fn bump(src mut W&) I64 {
+    b := src.b
+    return b.sum()
+}
+fn main() ? {
+    w := W(Box())
+    w.b.items.Push(Node())
+    w.b.items[0].v = 3
+    n := bump(w)
+    assert n == 1133
+    try io.Println($n) catch io.IoError { }
+}

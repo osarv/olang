@@ -8,8 +8,8 @@ stage 0. It is the reference for behaviour only (diagnostics, edge cases, test r
 Built so far: the front end (source, tokens, parser, diagnostics, loader, name resolution) and the type table. The
 typed core and the MIR are written as contracts. Checking (`check.olang`), the scope pass (`scope.olang`) and lowering
 (`lower.olang`, which reads the scope pass's placement where it is given, else a stand-in) are in progress, and so is
-emission (`emit.olang`): the pipeline writes one LLVM module for a whole program, which clang compiles and links with
-stage 0's runtime (`make emitdiff`); and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
+emission (`emit.olang`): the pipeline writes one LLVM object per module (and one for the root's instances), which
+clang compiles and links with the runtime the port fills in (`make emitdiff` compares whole programs with stage 0's); and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
 while compiling (B9c, S8b, S18c) and as `olang interpret` (`make evaldiff`). The driver (`olang.olang`,
 `build/compiler_olang`) builds, runs, tests, compiles and interprets through the pipeline, with the runtime filled in
 by `runtime.olang`; built by stage 0, it builds itself (`build/compiler_olang build -output build/stage1
@@ -36,7 +36,7 @@ compiler/olang.olang`, M11). The command line is stage 0's (`build`, `compile`, 
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
-| `emit.olang` | MIR written as LLVM IR text, a whole program as one module streamed through a writer (M9, in progress) |
+| `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress) |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |
 | `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build, as stage 0 fills it |

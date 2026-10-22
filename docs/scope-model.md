@@ -1018,3 +1018,65 @@ neither.
 25. **Handed back through a shared scope.** A call can hand back an argument that shares the scope its result is
     borrowed from (O13), so a local lent there flows into the result (O26a); and landing by obligations (O18c) reads the
     summaries of the component being judged, as O18b does (21).
+
+### 9.6 Decided while building M6 (round 4)
+
+26. **An array value's result has a result scope** (T7b), as stage 0's has: `types.ScopeVarsOf` gives a function whose
+    result is a run-time-length array held by value a `ResultVar`, so a call passes the scope its result goes to and the
+    callee builds the array there. This supersedes 24's "built in the program's scope": `return b.ToString()` builds the
+    text where the caller puts it (the driver's site placement had built it in the callee's closed frame). Lowering's
+    T7b copy of a returned array value still goes to the program's scope under the stand-in placement.
+27. **A second name for a part of a parameter** (O17): a reference local a body declares as a borrow of storage reached
+    through a reference parameter, never assigned after - the hidden collection of `for x in p.L` - is what the
+    parameter's region is, for what the body keeps and stores, as `c := p` already was.
+28. **A handle lent as its reference** (O17b) in a body's region: what the callee keeps of it and hands back out of
+    where its reference leads is not kept in the region's own storage; only what the callee stores there itself (a
+    body's own store, or one of a callee that does - its `Puts`, apart from `Stores`, which counts handing a
+    reference out too) is a store into the region (`r.tags.Push(t)`), as stage 0 judges it.
+29. **A reference handed out is judged by what can be stored through it** (O17): a returned reference into a
+    parameter's region counts as a store where something can be stored through it at any depth - a read-only one's
+    writable references included (`return b.arr[0:1]` of an `Array<mut Node&>`) - and a slice of the region is such a
+    reference.
+30. **A copy stored into a part of what flows into the result flows its source** (O26a): `p.Lengths = lengths` with `p`
+    returned inside another value moves `lengths` too, its references kept where the copy's are (O25h); only a copy
+    taking a local's whole place is the copy's own.
+31. **Source, not rule**: the MIR verifier, the MIR dumper and the typed printer hold the type table writably (its
+    spellings are cached in it), so their walker lives where the table does (`v mut verifier&t = verifier(f, t)`).
+    Stage 0 accepted the old `v := verifier(f, t)` only by moving `v` into the result scope through a generic body's
+    obligation the port computes per instantiation; built in the block, a spelling cached through `v.T` would have been
+    built there and kept in the table.
+
+### 9.7 Decided while building M6 (round 5, the driver lowering by the plans)
+
+32. **What O26a may move, as stage 0 reads it**: a local whose initializer makes new storage - a conditional or a value
+    match each of whose values does, and a copy of constant data into an array value (`note := ""`), as well as the
+    calls, constructors, literals and zero values before. Stage 0 states it negatively (not a copy of existing storage,
+    `copiesExistingRefs`); the port keeps its positive list and grows it where they disagree.
+33. **An array value given a new length is built where the place's storage is** (T11b, O18a): lowering hands the place
+    the temporary's storage, so a temporary built in the block the assignment stands in (`path = $f(...)` inside an
+    `if`) was freed under the local that kept it. Only the place's storage term is right; for a local, its block or
+    where O26a moved it.
+34. **O13c through call results.** A body's returns, where each gives an instance (a constructor call, or a local whose
+    record is known), leave its summary the bindings that instance had, in the body's terms - only those the caller can
+    resolve exactly (a scope variable, the program's, a derived scope of a parameter); returns that disagree leave
+    `Untraced`. A call of such a body gives its result that record through its own bindings, so `it := m.Iter()` - a
+    for-in's hidden iterator too - knows its `&of` fields are the map's. Exact only: an underestimate would be read on
+    both sides of a relation.
+35. **A `&q` field's referent is not the lent region** (O17): the region a split value is lent as is its own storage and
+    what its bare references reach; what a `&q` field refers to lives where q's argument did, a derived scope the call
+    resolves. So handing out a value read through one (`return it.given.entry`) is no hand-out of the region. Reads
+    through one stay region reads for `reg` (what is read out of the region and stored back is not new).
+36. **Instance records** (O23a). The bindings of a constructor call form a record: one term per parameter, each with
+    the argument's own record where it was an instance whose record is known; a constructor's summary records its
+    fields' (in its terms: its parameters', its instance scope - where the holder's references are - the program's).
+    `d.left.inner` reads the record of `d`'s `&l` argument, `o.mid.leaf` the one Outer's constructor gave `mid`. A
+    record says where things were bound at construction, so it is used only for a field no body in the program assigns
+    after construction (nor the whole struct through a reference): a store into a `&q` field is judged against that
+    field's own binding, which says nothing of the bindings of the instance put there. A local assigned after its
+    declaration carries the record all its values share, merged term by term (`Untraced` where they differ, none
+    where one value has no record - a task's target among them): gathered by judging its body once quietly first, so
+    the merge holds at every read, flow-insensitively.
+37. **Lowering's copies of array values are made where their storage is** (T7b): a local's copy of existing storage or
+    of a literal in its block or home, a store's in the place's, a returned one in the result scope - and a returned
+    temporary, or a local O26a moved there, is not copied again. Under the stand-in placement they were all made in the
+    program's scope: a loop copying a literal held all of them to the end.

@@ -593,7 +593,7 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Let(sp, l, init) {
             ty := ln.B.Locals[I64(l)].Ty
             v := ln.fit(ln.val(init), init, ty, sp)
-            if ln.copiesArray(init, ty) and not ln.dead { v = ln.arrayCopy(v, ty, sp) }
+            if ln.copiesArray(init, ty) and not ln.dead { v = ln.arrayCopy(v, ty, sp, ln.storageOf(l)) }
             if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
             ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
         }
@@ -603,7 +603,8 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             v := ln.fit(ln.val(value), value, target.Type(), sp)
             try ln.targets.Pop() catch { }
             if ln.valueArray(target.Type()) and not ln.dead {
-                ln.arrayStore(ln.mk(p), v, target.Type(), ln.copiesArray(value, target.Type()), sp)
+                copies := ln.copiesArray(value, target.Type())
+                ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
             } else {
                 ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
             }
@@ -662,22 +663,49 @@ fn derefOf(x typed.Expr&) typed.Expr&x {
     }
 }
 
-# an array value's elements copied into storage of its own (T7b), made in the program's scope under the stand-in
-# placement
-fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
+# an array value's elements copied into storage of its own (T7b), made in scope at
+fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
     t := ln.T
     src := ln.local(v, ty, sp)
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
     buf := ln.temp(ty, sp)
     el := t.Elem(t.Repr(ty))
-    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(mir.ScopeRef.Program, ty, n, mir.Operand.Const(el, 0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.Const(el, 0))))
     ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
     return mir.Operand.Copy(mir.L(buf))
 }
 
+# where local l's own storage is, so a copy of an array value it takes is made there: its home where the scope pass
+# moved it, else the scope of the block declaring it; the program's for the stand-in placement
+fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
+    if not ln.planned { return mir.ScopeRef.Program }
+    h := ln.F.Locals[I64(l)].Home
+    if h != mir.ScopeRef.Frame { return h }
+    return ln.scopeRef(typed.Scope.Block(ln.B.Locals[I64(l)].In))
+}
+
+# where the storage of an array value place is: a local's, a global's in the program's scope (a value array is held
+# by value only there, T7b)
+fn (ln mut lowering&) placeStorage(p typed.Place&) mir.ScopeRef {
+    return match p {
+        case typed.Place.Local(_, _, id) => ln.storageOf(id)
+        case _ => mir.ScopeRef.Program
+    }
+}
+
+# where a function's result is built: its result scope, else the program's
+fn (ln mut lowering&) resultScope() mir.ScopeRef {
+    if not ln.planned { return mir.ScopeRef.Program }
+    for k in range ln.B.Vars.Len() {
+        if ln.B.Vars[k] == typed.ScopeVar.Result { return mir.ScopeRef.Var(k) }
+    }
+    return mir.ScopeRef.Program
+}
+
 # v stored into the value array at dst (T11b): written into the storage dst holds where the length is unchanged, else
 # dst given v's storage - a copy of it where v is existing storage
-fn (ln mut lowering&) arrayStore(dst mir.Place, v mir.Operand, ty types.TypeId, copies Bool, sp source.Span) {
+fn (ln mut lowering&) arrayStore(dst mir.Place, v mir.Operand, ty types.TypeId, copies Bool, sp source.Span
+    at mir.ScopeRef) {
     src := ln.local(v, ty, sp)
     old := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(dst)], sp)
     n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
@@ -688,7 +716,7 @@ fn (ln mut lowering&) arrayStore(dst mir.Place, v mir.Operand, ty types.TypeId, 
     ln.emit(mir.Stmt.CopyElems(sp, dst, mir.L(src), n))
     ln.goto(after)
     ln.start(fresh)
-    w := ln.arrayCopy(mir.Operand.Copy(mir.L(src)), ty, sp) if copies else mir.Operand.Copy(mir.L(src))
+    w := ln.arrayCopy(mir.Operand.Copy(mir.L(src)), ty, sp, at) if copies else mir.Operand.Copy(mir.L(src))
     ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
     ln.goto(after)
     ln.start(after)
@@ -751,29 +779,62 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
     v := ln.fit(ln.val(value), value, res, sp)
     if ln.dead { return }
     l := ln.local(v, res, sp)
-    ln.retArrays(l, res, sp)
+    ln.retArrays(l, res, value, sp)
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
 }
 
 # T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
-# closes - into the program's scope, since a result holding no reference has no result scope to be built in
-# (types.ScopeVarsOf); under the stand-in placement it is there already
-fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, sp source.Span) {
+# closes into its result scope (types.ScopeVarsOf gives such a result one) - where it is existing storage that is not
+# there already: a temporary the scope pass built there, and a local it moved there (O26a), are returned as they are;
+# under the stand-in placement it is in the program's scope already
+fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Expr&, sp source.Span) {
     if not ln.planned { return }
     t := ln.T
     if ln.valueArray(res) {
-        ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp))))
+        if ln.retCopies(value, res) {
+            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, ln.resultScope())
+            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
+        }
         return
     }
     r := t.Repr(res)
     if t.KindOf(r) != types.Kind.Tuple { return }
     parts := t.Items(t.Parts(r))
+    items := tupleItems(value)
     for i in range parts.Len() {
         if not ln.valueArray(parts[i]) { continue }
+        if items != null and i < items.Len() and not ln.retCopies(items[i], parts[i]) { continue }
         at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
-        ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp))))
+        cp := ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp, ln.resultScope())
+        ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
     }
+}
+
+# whether a returned array value is copied into the result scope: existing storage, but for a local living there
+fn (ln mut lowering&) retCopies(x typed.Expr&, ty types.TypeId) Bool {
+    if not ln.copiesArray(x, ty) { return false }
+    match x {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return true
+}
+
+# the items of a tuple a return makes, else null
+fn tupleItems(x typed.Expr&) Array<typed.Expr&>&x {
+    match x {
+        case typed.Expr.Make(_, _, m) {
+            if m.Kind == typed.MakeKind.Tuple { return m.Items }
+        }
+        case _ { }
+    }
+    return null
 }
 
 # the body failing with code, under its own list, once every scope is closed

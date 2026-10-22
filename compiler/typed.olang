@@ -679,7 +679,7 @@ fn (s Stmt&) Span() source.Span {
 
 # a body as text: a statement a line, indented by its block, an expression as a parenthesized term naming its kind
 fn (b Body&) Print(t mut types.Table&) String {
-    w := printer(t)
+    w mut printer&t = printer(t)
     w.line(0, "body " $b.Locals.Len() " locals " $b.Blocks.Len() " blocks " $b.Sites.Len() " sites")
     if b.Root != null { w.block(b.Root, 1) }
     return w.out.ToString()
@@ -900,7 +900,7 @@ test "a body's marks and scope variables come from its type; constants, temporar
     region := b.AddSite(SiteKind.Region, sp)
     tmp := b.AddSite(SiteKind.Temp, sp)
     owner := t.Ref(n, types.Owning | types.Writable)
-    w := printer(t)
+    w mut printer&t = printer(t)
     borrow := Expr.Read(sp, roN, Place.Local(sp, owner, a), region)
     assert w.expr(borrow) == "(read L0 site 0)", w.expr(borrow)
     temp := Place.Temp(sp, i64, Expr.Lit(sp, i64, 7), tmp)
