@@ -33,6 +33,7 @@ import "types"
 import "typed"
 import "mir"
 import "std/ffi"
+import "std/os"
 
 # ---- requests and what they give ----
 
@@ -2936,11 +2937,19 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     if name.StartsWith("__olang_") { return m.runtimeFn(fi, name, args, ty, dst, hasDst) }
     if m.When == Mode.Run and m.waitsForTask(name) { return false }
     kinds := Array<U8>(ps.Len())
+    nulls := Array<Bool>(ps.Len())
     nwords I64 = 0
     for i in range ps.Len() {
         if m.shape(ps[i]) == vPair or m.shape(ps[i]) == vFixed {
             ax := f.Ops[I64(args.At) + i]
             data, n := m.arrayView(m.addr(fi, ax, 1), m.opType(fi, ax))
+            if data.Id == 0 {
+                # a null array reference: the null pointer the built program passes (X3), as a word
+                nulls[i] = true
+                nwords++
+                kinds[i] = ffi.Code(ffi.Kind.U64)
+                continue
+            }
             nwords += 1 + ffi.WordsFor(n * m.size(m.elemOf(ps[i])))
             kinds[i] = ffi.ArrayOf(m.ffiKind(m.elemOf(ps[i])))
         } else {
@@ -2962,6 +2971,9 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
                 words[w + 1 + b / 8] = words[w + 1 + b / 8] | (v << (U64(b % 8) * 8))
             }
             w += 1 + ffi.WordsFor(bytes)
+        } else if nulls[i] {
+            words[w] = 0
+            w++
         } else {
             words[w] = U64(m.scalar(fi, x))
             if m.shape(ps[i]) == vInt { words[w] = U64(m.intValue(I64(words[w]), ps[i])) }
@@ -3071,7 +3083,18 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
         case "__olang_dyncall_check" {
             v = I64(__olang_dyncall_check(m.bytesOf(fi, x(0)), m.bytesOf(fi, x(1)), U8(m.intArg(fi, x(2)))))
         }
-        case "__olang_on_crash" { }
+        case "__olang_on_crash" {
+            # S2 under -i: the program's message written first, then the compiler's own - a crash now is likeliest in
+            # a foreign function the program calls
+            if m.When == Mode.Run {
+                b := m.bytesOf(fi, x(0))
+                n := m.intArg(fi, x(1))
+                t := StringBuilder()
+                for k in range n { t.PushChar(Char(b[k])) }
+                t.Push(InterpCrash)
+                os.OnCrash(t.ToString())
+            }
+        }
         case _ {
             m.refuse(WhyFfiFind)
             return false
@@ -3084,6 +3107,10 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
     if hasDst and res != types.VoidT { m.wr(dst, m.width(res), v) }
     return true
 }
+
+# what a crash while a program is interpreted says (B3e): an extern runs in the compiler's own process (X1a)
+InterpCrash String& = ("olang: internal compiler error: the compiler crashed while interpreting - in a foreign function the "
+                       "program calls, if its extern declaration is wrong (X1a), or else a bug in the compiler\n")
 
 fn (m mut Machine&) intArg(fi I64, x mir.Operand) I64 { return m.intValue(m.scalar(fi, x), m.opType(fi, x)) }
 
@@ -3891,6 +3918,7 @@ type Blob struct() {
 # references to one instance stay one, a cycle is written as itself)
 type Image struct() {
     Blobs List<Blob>
+    Slots List<I64>   # each blob's allocation in the evaluator: storage two images reach is shared (interp.Bake)
 }
 
 error NotBaked {
@@ -3942,7 +3970,16 @@ fn (m mut Machine&) Image(module I64, name source.NameId) Image ? NotBaked {
             b.Off.Push(m.rdRaw(a.Base + 8 * w, 8))
         }
         img.Blobs.Push(b)
+        img.Slots.Push(slot)
         k++
+    }
+    # K2b: what only the global's own read-only reference reaches, holding no reference itself, nothing can write - a
+    # constant, as the global itself is
+    gt := types.TypeId(I32(m.globals[g].Ty))
+    if m.T.IsRef(gt) and (m.T.PermOf(gt) & types.Writable) == 0 {
+        for to in img.Blobs[0].To {
+            if to > 0 and img.Blobs[to].At.Len() == 0 { img.Blobs[to].Constant = true }
+        }
     }
     return img
 }

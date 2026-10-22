@@ -1186,7 +1186,10 @@ fn (r mut Resolver&) member(sp source.Span, a ast.Expr&, n source.NameId) {
     t := r.aliasTarget(a)
     if t >= 0 {
         ref := r.memberOf(t, n)
-        if ref.Kind != What.None { r.members.Put(key(r.L.Mods[r.mi].File, sp.End), ref) }
+        if ref.Kind != What.None {
+            r.notPrivate(t, ref, n, source.Span(sp.End - I32(r.text(n).Len()), sp.End))
+            r.members.Put(key(r.L.Mods[r.mi].File, sp.End), ref)
+        }
         return
     }
     r.expr(a)
@@ -1386,7 +1389,20 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
         }
     }
     t := r.aliasModule(path)
-    if t >= 0 { r.record(sp, r.memberOf(t, path[path.Len() - 1])) }
+    if t >= 0 {
+        last := path[path.Len() - 1]
+        ref := r.memberOf(t, last)
+        r.notPrivate(t, ref, last, source.Span(sp.End - I32(r.text(last).Len()), sp.End))
+        r.record(sp, ref)
+    }
+}
+
+# M6: a name another module declares, reached through an alias, is visible only where it is public - its first letter
+# a capital; one that is not is said where it is written (and resolved still, so nothing else is said of it)
+fn (r mut Resolver&) notPrivate(t I64, ref Ref, n source.NameId, sp source.Span) {
+    if t == r.mi or ref.Kind == What.None or ref.Kind == What.Import or load.Public(r.text(n)) { return }
+    m := msgs.TypeIsPrivate(r.tok(n)) if ref.Kind == What.Type else msgs.VarIsPrivate(r.tok(n))
+    r.L.Diags.Error(r.at(r.mi, sp), m)
 }
 
 # ---- tests ----

@@ -239,15 +239,27 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.start()
+    reached Map<I64, I64>
     for i in x.Globals {
         match x.Bodies[i].Of {
             case typed.BodyOf.Global(m, n) {
                 img := try x.M.Image(m, n) catch eval.NotBaked { continue }
                 out.Put(i, img)
+                for sl in img.Slots { reached.Put(sl, (try reached.Get(sl) catch default 0) + 1) }
             }
             case _ { }
         }
     }
+    # K2b: storage two globals reach - a slice of another's array, the same constant text - is one instance; each
+    # would write its own copy, so such globals are set at startup, where they name that very storage
+    shared List<I64>
+    for i in x.Globals {
+        img := try out.Get(i) catch { continue }
+        for sl in img.Slots {
+            if (try reached.Get(sl) catch default 0) > 1 and i not in shared { shared.Push(i) }
+        }
+    }
+    for i in shared { out.Remove(i) }
     return out
 }
 
@@ -306,7 +318,7 @@ type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval
     defined Map<mir.FnKey, Bool>
     dtorOf Map<types.TypeId, I64>
     externs Map<I64, Bool>
-    Globals List<I64>               # the global initializers' bodies, in the order check made them
+    Globals List<I64>               # the global initializers' bodies, in B5a's order (P.InitOrder)
     # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
     Faulty Map<I64, Bool>
     ReadsBuild Map<I64, Bool>       # S8a: the bodies reading a build constant (check's)
@@ -352,6 +364,16 @@ fn (x mut Exec&) start() {
             case _ { }
         }
     }
+    # B5a: set in check's order - a module's after its imports', each after the globals it reads
+    ordered List<I64>
+    for i in x.P.InitOrder {
+        if i in x.Globals { ordered.Push(i) }
+    }
+    for i in x.Globals {
+        if i not in ordered { ordered.Push(i) }
+    }
+    x.Globals.Clear()
+    for i in ordered { x.Globals.Push(i) }
     for i in x.Globals { x.Need(mir.FnKey.Body(typed.BodyId(I32(i)))) }
 }
 
@@ -529,6 +551,8 @@ fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
         case eval.Stop.Raised(code) { return "an error escapes, code " $code }
         case eval.Stop.Exited(kind, file, sp, msg) {
             what := mir.ExitText(kind)
+            # E35: an error a "!" took, where the "!" is - as a debug build says it
+            if kind == mir.ExitKind.Error { return $line(d, file, sp) ": " $msg }
             if what == "" { return $msg }
             if msg == "" { return $line(d, file, sp) ": " $what }
             return $line(d, file, sp) ": " $what ": " $msg
@@ -546,7 +570,7 @@ fn line(d mut diag.Diagnostics&, file I64, sp source.Span) String {
 
 # ---- running a program (B3e) ----
 
-# each global set, in the order check made their initializers - each after the ones it reads (B5a). One that stops
+# each global set in B5a's order - a module's after its imports', each after the globals it reads. One that stops
 # leaves its global unset, read later as the stop again: the first such stop
 fn (x mut Exec&) InitGlobals() eval.Stop {
     x.start()
@@ -613,6 +637,12 @@ fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
             # what interpret cannot run, or the built program leaves undefined: interpret's own stop (B3e)
             sayErr("olang interpret: " $x.StopText(s, entry, d) "\n")
             return 1
+        }
+        case eval.Stop.Exited(kind, _, _, _) {
+            sayErr($x.StopText(s, entry, d) "\n")
+            # E35, S18d: where the error a "!" took came from, as a debug build prints it
+            if kind == mir.ExitKind.Error { sayErr(x.TraceText(d)) }
+            return 134
         }
         case _ {
             sayErr($x.StopText(s, entry, d) "\n")

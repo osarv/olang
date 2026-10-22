@@ -1920,6 +1920,15 @@ fn (ln mut lowering&) primChecks(op typed.PrimOp, chk typed.Check, ops Array<mir
             }
         }
         case typed.PrimOp.Convert {
+            # T7d: an array of a run-time length copied into fixed storage - its length checked, once
+            fa := ln.arrayOf(ty)
+            sa := ln.arrayOf(args[0].Type())
+            if fa != types.UnknownT and sa != types.UnknownT and ln.fixedLen(fa) >= 0 and ln.fixedLen(sa) < 0 {
+                n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[ops[0]], sp)
+                same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[n, mir.Operand.Const(mir.I64T, ln.fixedLen(fa))], sp)
+                ln.check(same, chk, mir.ExitKind.FixedLength, OutOfBounds, sp)
+                return
+            }
             if t.IsInt(rt) and (t.IsInt(at) or t.IsFloat(at)) {
                 if t.IsFloat(at) {
                     # a NaN or an infinity: x - x is not 0
@@ -2535,6 +2544,29 @@ fn (ln mut lowering&) zeroOf(ty types.TypeId, sp source.Span) mir.Operand {
 
 # an instance's Call as a function value (E31): its environment the instance, its code calling Call on it with the
 # value's own arguments, its result and its errors Call's
+# the scopes an adapter passes its Call: for the receiver's, the scope its instance lives in (the capture's, O4b, D16c)
+# - which the runtime gives this thread's part of where it is called elsewhere (P2) - for another parameter's, the
+# adapter's own for that parameter, for the result's the adapter's result scope
+fn (ln mut lowering&) adapterPassed(cty types.TypeId, recv types.TypeId) mir.Range {
+    t := ln.T
+    cvs := t.ScopeVarsOf(cty)
+    avs := t.ScopeVarsOf(ln.F.Ty)
+    xs := Array<mir.ScopeRef>(cvs.Len())
+    for i in range cvs.Len() {
+        xs[i] = mir.ScopeRef.Program
+        v := cvs[i]
+        if v == 0 and t.HoldsRefs(recv) {
+            xs[i] = mir.ScopeRef.Var(avs.Len())
+            continue
+        }
+        want := v - 1 if v > 0 else v
+        for j in range avs.Len() {
+            if avs[j] == want { xs[i] = mir.ScopeRef.Var(j) }
+        }
+    }
+    return ln.F.ScopeRefs(xs)
+}
+
 fn (lw mut Lowerer&) adapterFn(call typed.BodyId) mir.Fn {
     cty := lw.Bodies[I64(call)].Ty
     ps := lw.P.T.Items(lw.P.T.Params(cty))
@@ -2574,7 +2606,7 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
         eb = ln.F.NewBlock()
     }
     callee := mir.Callee.Fn(mir.FnKey.Body(call), cty)
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(args), ln.passed(mir.PassedCount(t, callee, cty))
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(args), ln.adapterPassed(cty, recv)
                                mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
     ln.end(mir.Term.Call(sp, k))
     if eb != mir.NoBlock {
@@ -2590,14 +2622,14 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
     ln.epilogue(mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest)))
 }
 
-# a module's initialization (B5a): each of its globals' initializers run, in the order the bodies were checked - B5a's
-# order is a summary of their reads, computed once a module's bodies are checked (DESIGN.md 1.6), which is to come
+# a module's initialization (B5a): each of its globals' initializers run, each after the globals it reads - check's
+# order (P.InitOrder), a summary of their reads computed once every body is checked (DESIGN.md 1.6)
 fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
     ty := lw.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0))
     b := standIn(ty)
     ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Init(m), ty))
     ln.prologue(mir.VarKind[])
-    for i in range lw.Bodies.Len() {
+    for i in lw.P.InitOrder {
         match lw.Bodies[i].Of {
             case typed.BodyOf.Global(gm, _) {
                 if gm == m and lw.Bodies[i].Root != null {
@@ -2911,11 +2943,19 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
     res := t.Result(fty)
     ok := ln.F.NewBlock()
     dest := ln.temp(res, sp)
-    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+    # E11c: what Str builds for its result is built in a scope "$" opens for the call, closed once the text is copied -
+    # its destructors run there, and an unwind through it closes it
+    rs := ln.F.AddScope(mir.ScopeKind.Block, ln.top().S, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, rs))
+    vs := t.ScopeVarsOf(fty)
+    xs := Array<mir.ScopeRef>(vs.Len())
+    for i in range vs.Len() { xs[i] = mir.ScopeRef.Scope(rs) if vs[i] == types.ResultVar else mir.ScopeRef.Program }
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.L(dest)
                                true, ok, mir.NoLocal, mir.NoBlock))
     ln.end(mir.Term.Call(sp, k))
     ln.start(ok)
     ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(dest))))
+    ln.emit(mir.Stmt.Close(sp, rs))
     return true
 }
 

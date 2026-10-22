@@ -448,6 +448,7 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     x.Lw.AssertsTrue = asserts
     x.Place()
     for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
+    os.OnCrash(eval.InterpCrash)
     return x.RunMain(d)
 }
 

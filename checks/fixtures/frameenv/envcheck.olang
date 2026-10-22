@@ -1,5 +1,7 @@
 # envcheck FILE.ll - counts the capturing lambdas of an emitted module whose environment is a stack slot: a
-# "{ ptr @..lambda$N, ptr undef }" pair whose environment operand is an alloca of the same function. Prints
+# "{ ptr @..lambda$N, ptr undef }" pair whose environment operand is an alloca of the same function - or, as the
+# self-hosted compiler writes one, "%p = insertvalue { ptr, ptr } undef, ptr @..lambda_N, 0" and then
+# "insertvalue { ptr, ptr } %p, ptr ENV, 1". Prints
 # "ONSTACK ELSEWHERE": the pairs whose environment is an alloca, and the pairs whose environment is not.
 
 import "std/pair"
@@ -23,6 +25,7 @@ fn main() {
 # the pairs whose environment is an alloca of their function, and the others
 fn count(text String&) pair.Pair<I64, I64> {
     allocas := Map<String&, Bool>()
+    halves := Map<String&, Bool>()
     onstack I64 = 0
     heap I64 = 0
     at I64 = 0
@@ -30,12 +33,17 @@ fn count(text String&) pair.Pair<I64, I64> {
         nl := try text[at:].FindByte('\n') catch default (text.Len() - at)
         line := text[at:at + nl]
         at += nl + 1
-        if line.StartsWith("define ") { allocas.Clear() }
+        if line.StartsWith("define ") {
+            allocas.Clear()
+            halves.Clear()
+        }
         if line.Contains("= alloca ") {
             sp := firstField(line)
             allocas.Put($sp, true)
         }
+        if codeHalf(line) { halves.Put($firstField(line), true) }
         env := environmentOf(line)
+        if env == "" { env = secondHalf(line, halves) }
         if env != "" {
             if env in allocas { onstack++ } else { heap++ }
         }
@@ -71,6 +79,28 @@ fn environmentOf(line String&) String {
     return $v[0:end]
 }
 
+# whether a line puts a lambda's code into a pair's first half: "%p = insertvalue { ptr, ptr } undef, ptr @..lambda_N, 0"
+fn codeHalf(line String&) Bool {
+    marker := "insertvalue { ptr, ptr } undef, ptr @"
+    m := try line.Find(marker) catch default -1
+    if m < 0 or not line.EndsWith(", 0") { return false }
+    callee := line[m + marker.Len():line.Len() - 3]
+    lam := try callee.FindLast("lambda_") catch default -1
+    return lam >= 0 and isNumber(callee[lam + 7:])
+}
+
+# for a line putting an environment into the second half of a pair one of halves began, the environment; "" for any
+# other line
+fn secondHalf(line String&, halves Map<String&, Bool>&) String {
+    marker := "insertvalue { ptr, ptr } %"
+    m := try line.Find(marker) catch default -1
+    if m < 0 or not line.EndsWith(", 1") { return "" }
+    rest := line[m + marker.Len() - 1:line.Len() - 3]
+    comma := try rest.FindByte(',') catch default -1
+    if comma < 0 or not halves.Has(rest[0:comma]) or not rest[comma:].StartsWith(", ptr ") { return "" }
+    return $rest[comma + 6:]
+}
+
 fn isNumber(t String&) Bool {
     if t.Len() == 0 { return false }
     for c in t {
@@ -84,6 +114,13 @@ test "a closure pair whose environment is an alloca of the function is on the st
     r := count(ir)
     assert r.First == 1
     assert r.Second == 2
+}
+
+test "the self-hosted compiler's two halves of a pair are one pair" {
+    ir := "define void @f() {\n  %env = alloca i64\n  %a = insertvalue { ptr, ptr } undef, ptr @olang_lambda_3, 0\n  %b = insertvalue { ptr, ptr } %a, ptr %env, 1\n  %c = insertvalue { ptr, ptr } undef, ptr @olang_lambda_4, 0\n  %d = insertvalue { ptr, ptr } %c, ptr %t2, 1\n  %e = insertvalue { ptr, ptr } %x, ptr %env, 1\n}\n"
+    r := count(ir)
+    assert r.First == 1
+    assert r.Second == 1
 }
 
 test "other lines make no pair" {

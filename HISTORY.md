@@ -21380,3 +21380,65 @@ stage 0's IR shapes (TBAA, baked globals, ret.common, payload words) - the emit 
 `if` whose branch does not parse is compiled with that branch empty, its syntax error never said, when its condition
 reads a parameter (`fn f(n I64) { if n < 0 { x := } }` builds) - fixed in the checker at the end of the round, not yet
 measured through stage 1.
+
+## Port M12: the suite with the port as the compiler under test, second round (2026-10-22)
+
+**B5a in the port.** Lowering ran a module's global initializers in the order check made them, which follows reads
+only where a `:=` global's type asked for another's; the emitter had an order of its own from its call graph that
+missed functions named in a global holding a function value, and `-i` set globals in body order across modules. Now
+check computes it once every body is checked (`orderGlobals`, stage 0's `CtOrderGlobals` over the typed bodies): a
+module after its imports (the prelude's first, then the root's depth first), within one each after the globals its
+initializer reads - directly, through what it calls, through a `$` reaching a `Str` - a call through a function value
+reaching every function named as one in what runs and in the initializers of the globals it reads that hold one;
+declaration order (the branches chosen) breaks ties. `P.InitOrder` is read by lowering's module initialization, the
+emitter's main and harness, and `-i`. A cycle is said once, at its first global (`A -> B -> A`, or "reads itself"):
+among typed globals by that order, among `:=` globals where check meets one being checked (`typeCycle`) - it gapped
+there, so `A := A + 1` built with an unknown type. A corpus test pins the function-value and tie cases (`EvOrd*`).
+
+**The scenarios that grepped stage 0's IR** (the user's decision: they become checks both compilers meet). Each states
+the same fact as before, in either compiler's spelling as alternatives of one expression (`irHas`, `gsym`: a global
+`@ct_Fib` or `@G_2ect_2eFib`, a constant `i32 610` or the evaluator's bytes `c"\62\02\00\00"`) - nothing loosened:
+- *static*: the constant array and text handed to read-only parameters, the text's site unmerged. The port gave an
+  array of constants to a read-only reference as a copy in the program's scope, every evaluation (T25d) - fixed: it is
+  the constant data.
+- *k2*, *bits*, *protopriv*'s Inside, *agree*'s math and share: the port never baked a global in a build (only the
+  emit dump tool set `Emitter.Baked`) - now `interp.Bake` runs in the driver; a baked global is a `constant`, plain
+  data declared to importers `available_externally` with its value; a referent only an immutable global's read-only
+  reference reaches, holding no reference, is a constant (K2b). **Decided (mine)**: storage two baked images would
+  reach (a slice of another global's array, one constant's data) makes both set at startup - each image wrote its own
+  copy, so `Sl is Arr[1:3]` was false; stage 0 writes one set per module, which the port's per-global images cannot yet.
+- *retslot*: stage 0's `ret.common:` label became what it stands for - divmod has one `ret`.
+- *tbaa*: the metadata leaf by any number; the port's emitter tags since its round 4 (merged here).
+- *listloop*: RunFrom called and At never, by either symbol spelling, over the root's objects (the port puts instances
+  in `.inst`).
+- *capscope*: lambdas named `lambda$N` or `olang_lambda_N`; the Call adapter passing Call the scope it asked for,
+  followed through the IR - the port's adapter asked and then passed the program's scope (fixed, `adapterPassed`).
+- *frameenv*: envcheck reads the port's two-half closure pair too (and tests it).
+- *agree*'s X8 declarations: `memory(none)` or the intrinsic. The port declared every math function plainly, so `fma`
+  was a call and `pow` could be rewritten - an exact one of its exact prototype is now LLVM's intrinsic (*target*'s
+  FMA instruction), any other `nobuiltin memory(write)`.
+- *scopesan*: drive.c links the stub's Touch by whatever symbol the compiler gave it (renamed with objcopy), and the
+  stub's main reaches Touch, since the port emits only what a program reaches.
+
+**Check-side.** E4a: integer literals whose exact sum, difference or product no type holds (it wrapped in U64). P1g
+names the function's result when the target is a reference to it. T6a's note at a `:=` local of its literal's own type
+where it does not flow (B11), through arithmetic too. E31: an operator, `-`, `x[i] = v`, `x[lo:hi]`, `in`, `for` and
+`++` on a type whose method of that name is shaped otherwise name it (`notOperator`). **M6/M6a were not enforced at
+all**: another module's private function, global, type, method, member, case and error word were usable through an
+alias - now errors where named (`names.notPrivate`; check's field, methodCall, casePublic, errorWord), and M6b's
+private protocol methods are errors at the operation using them (`roleUse`: operators, unary, `[`, `for`, `in`, Call,
+`$`, the supplied Hash) - before, the private method was simply called. A private spelling's shape error says why
+(`shapeErr`). R1: an error set naming no error type (the scope agent's find). E32: `is` naming another enum's case. A
+lambda's `?` alone is inferred (R1a). T6b: a declared number flows in a compound assignment. E11b: a piece naming a
+fixed array borrows it. T7d: a run-time array copied into fixed storage has its length checked (no MIR emitted
+FixedLength). E11c: what a Str builds for its result is built in a scope `$` opens for the call, closed once the text
+is copied - it was the program's, so those destructors never ran (testends). Under interpret, an `os.OnCrash` message
+is written before the compiler's own, which says it crashed while interpreting, and a null array reference reaches an
+extern as the null pointer; a "!" that ends a program says where, and the trace of its error (E35, S18d). T6a's note
+reaches a for-in variable over a range of literals, naming the end to convert. "spawn f(x)!" is no longer P4's error -
+lowering such a task is still a gap. The scopesan stub reaches Touch, since the port emits only what a program reaches.
+
+**Emit changes (minimal, all named above)**: baked roots `constant` and their importers' declarations; X8's
+intrinsics and `nobuiltin`; the B5a order read from check; the old order code removed.
+
+**Numbers, through stage 1 (debug driver)**: checks.olang's scenarios 37 of 56 at the start of the round, 46 of 56 at its end (k2, agree, strheld, testends, landing, cgreview, fuzz, interp, spawnerr and vechandle still failing - PROGRESS.md says whose each is); cases 85 failing at round 1's end, 75 of 1,061 now (one new, r1unknownerror); every test file but compiler/*.olang passes, 948 + 150 tests. The changed scenarios pass with stage 0 as well.

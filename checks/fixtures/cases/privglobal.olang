@@ -1,0 +1,5 @@
+# M6: a private global of another module, through its alias
+import "lib"
+fn main() ? {
+  n := lib.count
+}
