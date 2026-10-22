@@ -1422,6 +1422,22 @@ fn (s mut Scoper&) argPartOK(a typed.Expr&, t Term) Bool {
     }
 }
 
+# the place an argument borrows when it is a part of x[i]'s copy - a field of an element At gave - else null
+fn (s mut Scoper&) atPart(a typed.Expr&) typed.Place&a {
+    match s.unAway(a) {
+        case typed.Expr.Borrow(_, _, p) {
+            match p {
+                case typed.Place.Temp(_, _, _, _) { return null }
+                case _ { }
+            }
+            v := tempOf(p)
+            if v != null and s.atCall(v) { return p }
+        }
+        case _ { }
+    }
+    return null
+}
+
 # whether every argument determining a call's scope variable v is constant data (T25d), and one is
 fn (s mut Scoper&) staticVar(c typed.Call&, v I64) Bool {
     fty := s.calleeType(c)
@@ -5503,7 +5519,15 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
                 handle := rf.Runs() and s.handleLent(c, i, a)
                 loop := cr == Term.None and s.lentLoopCopy(a)
                 if s.calleeKeepsArg(c, i) and not handle {
-                    if s.report { s.err(s.argAt(a), msgs.BorrowSplitScopes()) }
+                    if s.report {
+                        # a part of x[i]'s copy, said at its member as E31b's (stage 0: "E31, O17")
+                        ap := s.atPart(a)
+                        if ap != null {
+                            s.err(s.lastName(ap.Span()), msgs.WriteThroughAtBuilds())
+                        } else {
+                            s.err(s.argAt(a), msgs.BorrowSplitScopes())
+                        }
+                    }
                 } else if cr != Term.None or handle or not loop {
                     v = existing(rf)
                 }
