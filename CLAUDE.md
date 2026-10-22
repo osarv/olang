@@ -613,9 +613,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   over `eval.olang`: the build's conditions and asserts decided by evaluation, `olang interpret` running main, each
   scope reclaimed as it closes, immutable globals baked into emitted data (K2), constants computed by calls (G21), the
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
-  plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 3: 264 of 280 refused
-  cases give stage 0's first error, 1 still gets none (kept on purpose), per-instance bindings for locals; HISTORY.md
-  "Port M6"). M19g is `compiler/views.olang`, a pass of its own after check
+  plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 4: 265 of 280 refused
+  cases give stage 0's first error, 1 still gets none (kept on purpose), no error on compiler/*.olang stage 0 does not
+  give, an array value's result has a result scope (T7b); HISTORY.md "Port M6"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
