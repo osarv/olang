@@ -22,7 +22,7 @@ What the language means is `SPEC.md`; why is `CLAUDE.md` and `HISTORY.md`. The f
 
 ```
 make            # build/out, the development build (-g): what make test, make verify and checks use
-make bootstrap  # build/stage0, the same sources at -O2: the compiler a bootstrap starts from
+make stage0     # build/stage0, the same sources at -O2
 ```
 
 Both need gcc, libffi and libdl; the compiler then needs clang (18 or later) on `PATH` to build programs. The binary
@@ -38,19 +38,9 @@ M12 of DESIGN.md section 6), `bootstrap/` stops changing altogether, and the che
 
 ## Re-bootstrapping
 
-No binary is committed, so a lost compiler is always rebuilt from this directory and the repository:
-
-1. `make bootstrap` builds `build/stage0` from C.
-2. It walks `bootstrap/CHAIN`, oldest entry first: each entry names a tag and a commit, and that commit's `compiler/`
-   and `std/`, extracted with `git archive`, are built at `-d` by the compiler before it - the first by stage 0.
-3. The last compiler builds stage 1 from `compiler/` at `-d`; stage 1 builds stage 2, release; stage 2 builds stage 3.
-4. Stages 2 and 3 must agree: every emitted `.ll` byte for byte, then the binaries. Stage 2 is installed as
-   `build/olang`.
-
-A line is added to `CHAIN` in the commit that first makes `compiler/` or `std/` use something the compiler before it
-cannot build: it names that commit's parent - the last commit the older compiler builds - and a tag `bootstrap/N` is
-pushed on it. Tags survive a history rewrite where hashes written in a file do not, so the tag is used and the hash
-beside it checked. As long as `CHAIN` is empty, stage 0 builds `HEAD` directly.
-
-Today only step 1 exists: `compiler/` holds no olang compiler yet, and `make bootstrap` says so. The rest is a TODO in
-the makefile, built with the port's last milestone.
+The compiler is no longer rebuilt from here. `seed/` holds the olang compiler's own LLVM IR, written by the compiler of
+itself, and `make bootstrap` rebuilds the compiler from it with clang alone - the seed made a compiler, which builds
+`compiler/olang.olang`, which builds it again, the last two compared byte for byte (`seed/README.md`,
+`compiler/DESIGN.md` section 5). No chain of intermediate compilers is kept (the user's decision, 2026-10-18), so
+`bootstrap/CHAIN` is gone. Once the seed has rebuilt the compiler from nothing, this directory is removed from the
+tree, its last commit tagged `stage0-final` (QAL).

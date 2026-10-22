@@ -21120,3 +21120,38 @@ does too.
 
 **Left**: b6elemvalue (a value local landed where it is kept), the notes O10c gives through a value's provenance and
 the held-index and text-copy notes, `MayBuild`.
+## Port M11: the seed, and rebuilding the compiler from nothing (2026-10-22)
+
+The user decided on 2026-10-18 that once the port builds itself, rebuilding it from nothing is one run from a
+committed seed - LLVM IR the compiler writes of itself, never by hand, compiled by clang - with no chain of intermediate
+compilers (Zig's `zig1.wasm`). Built now: `compiler/tools/seed.olang`, `make seed`, `make bootstrap`, `seed/README.md`;
+`bootstrap/CHAIN` is gone, and the old `make bootstrap` (stage 0 at -O2) is `make stage0`.
+
+**A tool, not a driver mode.** The tool imports the driver (`import "../olang"` - a module declaring `main` imports
+like any other) and runs its own `Prepare` and `Passes` on the command line `olang build -target x86-64
+compiler/olang.olang`, so the seed is exactly what that build compiles, with nothing added to the command line (B1)
+or to drvdiff's oracle. It writes each object's IR under the object's identity rather than its hash. The whole front
+end, at -O3, takes 3 s.
+
+**What had to be kept out of it.** A failed check's message names its file as the loader found it, and std is found
+beside the compiler, so every std path in the IR was this checkout's (`/home/user/wt/drv/std/filepath.olang:107: slice
+bounds out of range` - stage 0 writes the same); the tool requires `OLANG_STD` to be relative and `make seed` runs it
+with `OLANG_STD=std` from the repository root. The target is baseline x86-64 (`-target x86-64`), so the seed runs on any
+x86-64 Linux; what it builds is for its own machine. Release IR carries no DWARF.
+
+**Sizes, and why xz per object.** 48 MB of IR in 43 files (1.5 million lines, 5,460 functions): xz -9 3.5 MB, gzip
+6.4 MB, bitcode 15 MB (5.0 MB with xz); optimized per file by `clang -Oz -S -emit-llvm`, 28 MB and 1.7 MB with xz -
+not taken, since the seed would be clang's output, depending on clang's version, rather than the compiler's. A
+one-string edit of compiler/source.olang changed six lines of compiler_source.ll and no other file. Stored in a git
+repository over three seeds a few commits apart (6be11ce, d7a5208, 3c47a77) and packed by `git gc`, the history grew by
+0.6 and 2.5 MB per new seed as xz files and by 1.4 and 5.1 MB as plain text - git's deltas do poorly on files this
+large - so the seed is one xz file per object, and `make seed` leaves a file whose IR did not change untouched (another
+xz version could otherwise rewrite it).
+
+**Measured.** The seed compiles with `clang -O2` in 18 s on 4 cores (5.7 s at -O0; the seed compiler built either way
+builds the same compiler, a front end at -O0 costing little beside the -O3 LTO link). From a clean clone with
+`bootstrap/` deleted and no `build/`: `make -j4 bootstrap` 366 s, 1.6 GB peak - the seed's compiles, then two builds
+of the compiler of about 3 minutes each, mostly their links; `build/olang.1` and `build/olang.2` byte for byte equal;
+no C compiler run. Then `make seed` in that clone, its tool built by the installed `build/olang`, wrote the seed it was
+built from, byte for byte - the seed is reproducible from its source by the compiler it makes. The tool run twice gives
+the same files.
