@@ -1077,13 +1077,13 @@ fn (s mut Scoper&) lift(b typed.BlockId) typed.BlockId {
 fn (s mut Scoper&) here() Term {
     b := s.lift(s.blocks[s.blocks.Len() - 1])
     # what a constructor's top level builds is built in its instance scope (C2g); a global's initializer's in the
-    # program's (O1b)
+    # program's (O1b), and so does a condition's or an assert message's the evaluator computes (B9c, S18c)
     if b == typed.BlockId(0) {
         match s.B.Of {
             case typed.BodyOf.Ctor(_, _) {
                 if s.resultVar >= 0 { return Term.Var(s.resultVar) }
             }
-            case typed.BodyOf.Global(_, _) { return Term.Program }
+            case typed.BodyOf.Global(_, _), typed.BodyOf.Cond(_, _) { return Term.Program }
             case _ { }
         }
     }
@@ -3840,7 +3840,7 @@ fn (s mut Scoper&) blockTerm(bl typed.BlockId) Term {
             case typed.BodyOf.Ctor(_, _) {
                 if s.resultVar >= 0 { return Term.Var(s.resultVar) }
             }
-            case typed.BodyOf.Global(_, _) { return Term.Program }
+            case typed.BodyOf.Global(_, _), typed.BodyOf.Cond(_, _) { return Term.Program }
             case _ { }
         }
     }
@@ -4986,6 +4986,14 @@ fn (s mut Scoper&) choicePeek(x typed.Expr&) Term {
             if r < 0 or s.B.Locals[r].Kind == typed.LocalKind.Binding or s.B.Locals[r].Kind == typed.LocalKind.Held { return Term.None }
         }
         case typed.Expr.Away(_, _, y) { return s.choicePeek(y) }
+        # a result borrowed from an argument lives where that argument's referent does (O13)
+        case typed.Expr.Call(_, _, c) {
+            fty := s.calleeType(c)
+            if fty == types.UnknownT { return Term.None }
+            e := s.P.T.ResultFrom(fty, 0)
+            if e < 0 or e >= c.Args.Len() { return Term.None }
+            return s.choicePeek(c.Args[e])
+        }
         case _ { return Term.None }
     }
     return s.peekTerm(x)
