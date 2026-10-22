@@ -2765,7 +2765,8 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
 fn (ln mut lowering&) methodBody(ty types.TypeId, cap String&, low String&) I64 {
     lw := ln.L
     t := ln.T
-    r := t.Repr(ty)
+    # a declared type over a number or an array is its own type here, with its own methods (E11c)
+    r := ty if t.KindOf(ty) == types.Kind.Named else t.Repr(ty)
     if t.KindOf(r) != types.Kind.Named { return -1 }
     id := -1
     for name in String&[cap, low] {

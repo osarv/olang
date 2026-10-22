@@ -1027,7 +1027,8 @@ fn (c mut Checker&) traitSets(mi I64, td ast.TypeDecl&) {
 # by it: each such method's body made, for lowering's helper to call
 fn (c mut Checker&) partHashes(t types.TypeId, depth I64) {
     if depth > 8 { return }
-    r := c.P.T.Repr(c.deref(t))
+    d := c.deref(t)
+    r := d if c.isNamed(d) else c.P.T.Repr(d)
     if depth > 0 and c.isNamed(r) {
         for name in String&["Hash", "hash"] {
             m := c.P.MethodOf(r, c.P.L.Names.Intern(name))
@@ -1037,10 +1038,11 @@ fn (c mut Checker&) partHashes(t types.TypeId, depth I64) {
             return
         }
     }
-    k := c.P.T.KindOf(r)
-    if k == types.Kind.Array { c.partHashes(c.P.T.Elem(r), depth + 1) }
+    u := c.P.T.Repr(d)
+    k := c.P.T.KindOf(u)
+    if k == types.Kind.Array { c.partHashes(c.P.T.Elem(u), depth + 1) }
     if k == types.Kind.Tuple or k == types.Kind.Record {
-        for x in c.P.T.Items(c.P.T.Parts(r)) { c.partHashes(x, depth + 1) }
+        for x in c.P.T.Items(c.P.T.Parts(u)) { c.partHashes(x, depth + 1) }
     }
     if c.isStruct(r) and c.P.Body(r) {
         for x in c.P.T.Items(c.P.T.Fields(r)) { c.partHashes(x, depth + 1) }
