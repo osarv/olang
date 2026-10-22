@@ -61,6 +61,9 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     thunkFor Map<String&, Bool>
     thunkKeys List<mir.FnKey>
     thunkTys List<types.TypeId>
+    adaptFrom List<types.TypeId>    # function values converted between ABIs (R6): an adapter per pair, its from and to
+    adaptTo List<types.TypeId>
+    adaptAt Map<String&, Bool>
     dtorKeys List<mir.FnKey>        # destructor thunks to write (the runtime's fn(ptr instance, ptr scope))
     dtorSeen Map<mir.FnKey, Bool>
     ctorOf Map<types.TypeId, I64>
@@ -114,6 +117,7 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
     }
     e.cur = -1
     for i in range e.thunkKeys.Len() { e.thunk(e.thunkKeys[i], e.thunkTys[i]) }
+    for i in range e.adaptFrom.Len() { e.fvAdapter(e.adaptFrom[i], e.adaptTo[i]) }
     for d in e.dtorKeys { e.dtorThunk(d) }
     if e.Tests {
         e.harness(tests)
@@ -321,6 +325,27 @@ fn (e mut Emitter&) isGlobalInit(k mir.FnKey) Bool {
 }
 
 # whether a function takes an environment first: a lambda, an adapter
+# how many scope variables a closure's code takes from its environment: one for each capture holding references (D16c)
+fn (e mut Emitter&) capVars(k mir.FnKey) I64 {
+    n I64 = 0
+    match k {
+        case mir.FnKey.Body(id) {
+            for v in e.Lw.Bodies[I64(id)].Vars {
+                match v {
+                    case typed.ScopeVar.Capture(_) { n++ }
+                    case _ { }
+                }
+            }
+        }
+        case mir.FnKey.Adapter(call) {
+            ps := e.T.Items(e.T.Params(e.Lw.Bodies[I64(call)].Ty))
+            if ps.Len() > 0 and e.T.HoldsRefs(ps[0]) { n = 1 }
+        }
+        case _ { }
+    }
+    return n
+}
+
 fn (e mut Emitter&) hasEnv(k mir.FnKey) Bool {
     return match k {
         case mir.FnKey.Adapter(_) => true
@@ -601,7 +626,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     passed := e.passedOf(k, f.Ty)
     bad := "" if e.Lw.Gapped else f.Verify(e.T)
     if e.Lw.Gapped or bad != "" {
-        e.gap("not lowered: " $symbol)
+        e.gap($"not lowered: " $symbol $(" (" $bad.Trim() ")" if bad != "" else ""))
         e.body.Push(e.header(k, f.Ty, symbol, passed, env))
         if e.isGlobalInit(k) {
             # a global's initializer: the global left at its zero value, so that the rest of the program still runs
@@ -649,7 +674,11 @@ fn (fe mut fnEm&) run() {
         l := f.Locals[i]
         if l.Ty == types.VoidT or l.Ty == types.NoreturnT { continue }
         lt := fe.ty(l.Ty)
-        if fe.size(l.Ty) > 65536 {
+        if not fe.isFrame(l.Home) {
+            # its storage in an arena, made by its Live (O26a): the local's slot holds where it is
+            fe.head.Push("  %lp" $i " = alloca ptr\n")
+            if l.Kind != mir.LocalKind.Var and l.Kind != mir.LocalKind.Temp { fe.gap("a parameter or capture in an arena") }
+        } else if fe.size(l.Ty) > 65536 {
             if not fe.big {
                 fe.big = true
                 fe.head.Push("  %big = alloca %olang.scope\n")
@@ -669,6 +698,7 @@ fn (fe mut fnEm&) run() {
         } else {
             fe.head.Push("  %s" $i " = alloca %olang.scope\n")
             if f.Scopes[i].Kind == mir.ScopeKind.Join { fe.head.Push("  %jh" $i " = alloca ptr\n") }
+            if fe.E.Tests { fe.head.Push("  %u" $i " = alloca %olang.unwind\n") }
         }
     }
     rt := t.RetLlvm(f.Ty)
@@ -678,6 +708,7 @@ fn (fe mut fnEm&) run() {
     for i in range f.Params.Len() {
         l := I64(f.Params[i])
         lt := f.Locals[l].Ty
+        if not fe.isFrame(f.Locals[l].Home) { fe.gap("a parameter homed in an arena") }
         match pass[i] {
             case 'm' {
                 fe.pro.Push("  %pv" $i " = load " $fe.ty(lt) ", ptr %a" $i "\n")
@@ -707,9 +738,18 @@ fn (fe mut fnEm&) run() {
         for i in range f.Captures.Len() {
             l := I64(f.Captures[i])
             lt := fe.ty(f.Locals[l].Ty)
+            if not fe.isFrame(f.Locals[l].Home) { fe.gap("a capture homed in an arena") }
             fe.pro.Push("  %cp" $i " = getelementptr " $et ", ptr %env, i32 0, i32 " $i "\n")
             fe.pro.Push("  %cv" $i " = load " $lt ", ptr %cp" $i "\n")
             fe.pro.Push("  store " $lt " %cv" $i ", ptr %l" $l "\n")
+        }
+        # the captured scopes (D16c), each as this thread may build into it: its own part of a scope another thread
+        # owns, the program's (null) as this thread reaches it (P2, decision 48)
+        fe.E.runtime("__olang_capture_scope")
+        for j in range fe.E.capVars(f.Of) {
+            fe.pro.Push("  %vq" $j " = getelementptr " $et ", ptr %env, i32 0, i32 " $(f.Captures.Len() + j) "\n")
+            fe.pro.Push("  %vr" $j " = load ptr, ptr %vq" $j "\n")
+            fe.pro.Push("  %vc" $j " = call ptr @__olang_capture_scope(ptr %vr" $j ")\n")
         }
     }
     for b in range f.Blocks.Len() {
@@ -844,6 +884,8 @@ fn (fe mut fnEm&) envType() String {
         if i > 0 { b.Push(", ") }
         b.Push(fe.ty(f.Locals[I64(f.Captures[i])].Ty))
     }
+    # then where each capture holding references lives (D16c): the closure's Capture scope variables, in order
+    for k in range fe.E.capVars(f.Of) { b.Push(", ptr") }
     b.Push(" }")
     return b.ToString()
 }
@@ -851,6 +893,12 @@ fn (fe mut fnEm&) envType() String {
 # ---- places and operands ----
 
 fn (fe mut fnEm&) localType(l mir.LocalId) types.TypeId { return fe.F.Locals[I64(l)].Ty }
+
+# where local l's storage is: its stack slot, or the arena storage its Live made (O26a)
+fn (fe mut fnEm&) localAt(l mir.LocalId) String {
+    if fe.isFrame(fe.F.Locals[I64(l)].Home) { return "%l" $l }
+    return fe.load("ptr", "%lp" $l)
+}
 
 # an array type, past a declared type over one; Unknown for none
 fn (fe mut fnEm&) arrayOf(ty types.TypeId) types.TypeId {
@@ -874,7 +922,7 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
     ty := types.UnknownT
     match p.B {
         case mir.Base.Local(l) {
-            at = "%l" $l
+            at = fe.localAt(l)
             ty = fe.localType(l)
         }
         case mir.Base.Global(m, n, gt) {
@@ -896,7 +944,7 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
                 ty = fs[k]
             }
             case mir.Proj.Index(l) {
-                ix := fe.index(fe.load(fe.ty(fe.localType(l)), "%l" $l), fe.localType(l))
+                ix := fe.index(fe.load(fe.ty(fe.localType(l)), fe.localAt(l)), fe.localType(l))
                 at, ty = fe.elemAt(at, ty, ix)
             }
             case mir.Proj.At(k) { at, ty = fe.elemAt(at, ty, $k) }
@@ -1131,7 +1179,8 @@ fn (fe mut fnEm&) scope(r mir.ScopeRef) String {
         case mir.ScopeRef.Scope(s) { return "%s" $s }
         case mir.ScopeRef.Var(i) {
             if i < fe.passed { return "%v" $i }
-            return fe.program()   # a capture's scope: the program's under the stand-in placement
+            if fe.F.Captures.Len() > 0 and i - fe.passed < fe.E.capVars(fe.F.Of) { return "%vc" $(i - fe.passed) }
+            return fe.program()
         }
         case mir.ScopeRef.Program { return fe.program() }
         case mir.ScopeRef.Frame {
@@ -1157,6 +1206,23 @@ fn (fe mut fnEm&) isFrame(r mir.ScopeRef) Bool {
     }
 }
 
+# P1d (S18b): in a test build each scope this function opens is on the runtime's chain of open scopes while it is open
+# - its header and, for a join, its task list - so a failed check unwinds it (joining its tasks, running its
+# destructors) before its longjmp ends the test
+fn (fe mut fnEm&) unwindPush(sc mir.ScopeId, joins Bool) {
+    fe.E.define("__olang_unwind_top", "@__olang_unwind_top = external thread_local(initialexec) global ptr")
+    top := fe.load("ptr", "@__olang_unwind_top")
+    fe.store("ptr", top, fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 0"))
+    fe.store("ptr", "%s" $sc, fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 1"))
+    fe.store("ptr", ("%jh" $sc) if joins else "null", fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 2"))
+    fe.store("ptr", "%u" $sc, "@__olang_unwind_top")
+}
+
+fn (fe mut fnEm&) unwindPop(sc mir.ScopeId) {
+    prev := fe.load("ptr", fe.let("getelementptr %olang.unwind, ptr %u" $sc ", i32 0, i32 0"))
+    fe.store("ptr", prev, "@__olang_unwind_top")
+}
+
 # size bytes of storage aligned to align, in scope r: on the stack for the frame (size a constant), else in its arena
 fn (fe mut fnEm&) alloc(r mir.ScopeRef, size String&, align I64, stack String& = "") String {
     if fe.isFrame(r) and stack != "" { return fe.alloca(stack, align) }
@@ -1178,7 +1244,12 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             fe.store(fe.ty(pt), v, at)
         }
         case mir.Stmt.Live(_, l) {
-            if not fe.isFrame(fe.F.Locals[I64(l)].Home) { fe.gap("a local in an arena") }
+            home := fe.F.Locals[I64(l)].Home
+            if not fe.isFrame(home) {
+                lt := fe.localType(l)
+                at := fe.alloc(home, $fe.size(lt), fe.align(lt))
+                fe.store("ptr", at, "%lp" $l)
+            }
         }
         case mir.Stmt.Dead(_, _) { }
         case mir.Stmt.Open(_, sc) {
@@ -1188,7 +1259,9 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             } else {
                 if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Region { fe.gap("a region") }
                 fe.w("store %olang.scope zeroinitializer, ptr %s" $sc)
-                if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Join { fe.w("store ptr null, ptr %jh" $sc) }
+                joins := fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Join
+                if joins { fe.w("store ptr null, ptr %jh" $sc) }
+                if fe.E.Tests { fe.unwindPush(sc, joins) }
             }
         }
         case mir.Stmt.Close(_, sc) {
@@ -1198,6 +1271,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             } else {
                 fe.E.runtime("__olang_scope_close")
                 fe.w("call void @__olang_scope_close(ptr %s" $sc ")")
+                if fe.E.Tests { fe.unwindPop(sc) }
             }
         }
         case mir.Stmt.Give(_, _) { fe.gap("Give") }
@@ -1369,7 +1443,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         }
         case mir.Rvalue.NewArray(s, ty, n, fill) { return fe.newArray(s, ty, n, fill) }
         case mir.Rvalue.Slice(p, lo, hi, ty) { return fe.slice(p, lo, hi, ty) }
-        case mir.Rvalue.Closure(code, ty, s, args) { return fe.closure(code, ty, s, args) }
+        case mir.Rvalue.Closure(code, ty, s, args, caps) { return fe.closure(code, ty, s, args, caps) }
         case mir.Rvalue.Recode(code, from, tl) { return fe.recode(fe.val(code, mir.I32T), from, tl) }
         case mir.Rvalue.Text(b, into, ty) {
             bp := fe.scope(b)
@@ -1559,7 +1633,11 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
     un := t.IsUnsigned(r)
     x := fe.val(a0, t0)
     match op {
-        case typed.PrimOp.Neg { return fe.let("fneg " $lt " " $x) if fl else fe.let("sub " $lt " 0, " $x) }
+        case typed.PrimOp.Neg {
+            # a BF16's sign flipped in its bits (T4)
+            if lt == "bfloat" { return fe.let("bitcast i16 " $fe.let("xor i16 " $fe.let("bitcast bfloat " $x " to i16") ", -32768") " to bfloat") }
+            return fe.let("fneg " $lt " " $x) if fl else fe.let("sub " $lt " 0, " $x)
+        }
         case typed.PrimOp.BitNot { return fe.let("xor " $lt " " $x ", " $("true" if r == types.BoolT else "-1")) }
         case typed.PrimOp.Not { return fe.let("xor i1 " $x ", true") }
         case typed.PrimOp.Convert { return fe.convert(x, t0, ty) }
@@ -1577,6 +1655,27 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case _ { }
     }
     y := fe.val(fe.arg(args, 1), t0)
+    if lt == "bfloat" {
+        # BF16 arithmetic and comparisons through F32, the result narrowed in integers: exact for a comparison, one
+        # rounding for + - * / % (F32's 24 bits hold any of them before BF16's 8 do) - LLVM's own calls the runtime
+        # library (T4)
+        a, b := fe.widenBF16(x, "float"), fe.widenBF16(y, "float")
+        w := match op {
+            case typed.PrimOp.Add => "fadd"
+            case typed.PrimOp.Sub => "fsub"
+            case typed.PrimOp.Mul => "fmul"
+            case typed.PrimOp.Div => "fdiv"
+            case typed.PrimOp.Rem => "frem"
+            case _ => ""
+        }
+        if w != "" { return fe.narrowBF16(fe.let($w " float " $a ", " $b)) }
+        match op {
+            case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge {
+                return fe.compare(op, types.TypeId(13), a, b)   # F32
+            }
+            case _ { }
+        }
+    }
     match op {
         case typed.PrimOp.Add { return fe.let($("fadd " if fl else "add ") $lt " " $x ", " $y) }
         case typed.PrimOp.Sub { return fe.let($("fsub " if fl else "sub ") $lt " " $x ", " $y) }
@@ -1680,6 +1779,7 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
     t := fe.E.T
     f, g := t.Repr(from), t.Repr(to)
     fl, gl := fe.ty(f), fe.ty(g)
+    if t.KindOf(f) == types.Kind.Func and t.KindOf(g) == types.Kind.Func and fe.E.abiDiffers(f, g) { return fe.adapt(v, f, g) }
     if fl == gl { return $v }
     fi, gi := t.IsInt(f) or f == types.BoolT, t.IsInt(g) or g == types.BoolT
     if fi and gi {
@@ -1857,17 +1957,19 @@ fn (e mut Emitter&) pow2(k I64) String { return e.constText(types.TypeId(14), I6
 # ---- function values ----
 
 # a function value (T21): the pair { code, environment } - the environment, where there are captures, built in s
-fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args mir.Range) String {
+fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args mir.Range, caps mir.Range) String {
     fe.E.want(code)
     sym := fe.E.codeFor(code, ty)
     env := "null"
     if args.N > I32(0) {
+        nc := fe.E.capVars(code)
         b := StringBuilder()
         b.Push("{ ")
         for i in range args.N {
             if i > 0 { b.Push(", ") }
             b.Push(fe.ty(fe.otype(fe.arg(args, i))))
         }
+        for k in range nc { b.Push(", ptr") }
         b.Push(" }")
         et := b.ToString()
         size := fe.let("ptrtoint ptr " $fe.let("getelementptr " $et ", ptr null, i32 1") " to i64")
@@ -1876,6 +1978,19 @@ fn (fe mut fnEm&) closure(code mir.FnKey, ty types.TypeId, s mir.ScopeRef, args 
             x := fe.arg(args, i)
             xt := fe.otype(x)
             fe.store(fe.ty(xt), fe.val(x, xt), fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $i))
+        }
+        # where the captures holding references live (D16c): null for the program's, and for each the plan did not say
+        for j in range nc {
+            sc := "null"
+            if j < I64(caps.N) {
+                r := fe.F.Refs[I64(caps.At) + j]
+                isProg := match r {
+                    case mir.ScopeRef.Program => true
+                    case _ => false
+                }
+                if not isProg { sc = fe.scope(r) }
+            }
+            fe.store("ptr", sc, fe.let("getelementptr " $et ", ptr " $env ", i32 0, i32 " $(I64(args.N) + j)))
         }
     }
     a := fe.let("insertvalue { ptr, ptr } undef, ptr @" $sym ", 0")
@@ -1956,19 +2071,126 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
         }
     }
     rt := t.RetLlvm(mine)
+    vt := t.RetLlvm(ty)
     if rt == "void" {
-        b.Push("  call void @" $s "(" $args.ToString() ")\n  ret void\n}\n\n")
+        b.Push("  call void @" $s "(" $args.ToString() ")\n")
+        # a function that cannot fail as a value that can (R6): it never fails
+        b.Push("  ret void\n}\n\n" if vt == "void" else "  ret i32 0\n}\n\n")
+        e.body.Push(b.ToString())
+        return
+    }
+    b.Push("  %r = call " $rt " @" $s "(" $args.ToString() ")\n")
+    if vt == rt and t.Errors(mine) == t.Errors(ty) {
+        b.Push("  ret " $rt " %r\n}\n\n")
+        e.body.Push(b.ToString())
+        return
+    }
+    # the value's error list differs from its function's (R6, R17): its result, and its code re-encoded under the
+    # value's list - a code its list does not name being the value's default error
+    fe mut fnEm&e = fnEm(e, mir.Fn(code, ty, 0, source.Span(0, 0)), code)
+    from := t.Errors(mine)
+    to := t.Errors(ty)
+    res2 := t.Result(mine)
+    hasRes := res2 != types.VoidT and res2 != types.NoreturnT and not t.ViaMemory(res2)
+    code0 := "0"
+    if t.Items(from).Len() > 0 { code0 = "%r" if not hasRes else fe.let("extractvalue " $rt " %r, 0") }
+    c := fe.recode(code0, from, to) if t.Items(from).Len() > 0 else "0"
+    if vt == "i32" {
+        fe.w("ret i32 " $c)
+    } else if t.Items(to).Len() == 0 {
+        fe.w("ret " $vt " " $(fe.let("extractvalue " $rt " %r, 1") if t.Items(from).Len() > 0 else "%r"))
     } else {
-        b.Push("  %r = call " $rt " @" $s "(" $args.ToString() ")\n")
-        vt := t.RetLlvm(ty)
-        if vt == rt {
-            b.Push("  ret " $rt " %r\n}\n\n")
+        v := fe.let("extractvalue " $rt " %r, 1") if t.Items(from).Len() > 0 else "%r"
+        a := fe.let("insertvalue " $vt " zeroinitializer, i32 " $c ", 0")
+        fe.w("ret " $vt " " $fe.let("insertvalue " $vt " " $a ", " $e.ty(t.Result(ty)) " " $v ", 1"))
+    }
+    b.Push(fe.code.ToString())
+    b.Push("}\n\n")
+    e.body.Push(b.ToString())
+}
+
+# whether a call through a function value of type f and one of type g differ in what is returned (R6: a function that
+# cannot fail as a value that can, or another error list)
+fn (e mut Emitter&) abiDiffers(f types.TypeId, g types.TypeId) Bool {
+    t := e.T
+    return t.RetLlvm(f) != t.RetLlvm(g) or t.Errors(f) != t.Errors(g)
+}
+
+# a function value of type f as one of type g whose ABI differs: an environment holding the value, in the program's
+# scope (it may be kept anywhere), called through an adapter that re-encodes what it returns
+fn (fe mut fnEm&) adapt(v String&, f types.TypeId, g types.TypeId) String {
+    e := fe.E
+    key := $f "_" $g
+    if not e.adaptAt.Has(key) {
+        e.adaptAt.Put($key, true)
+        e.adaptFrom.Push(f)
+        e.adaptTo.Push(g)
+    }
+    e.runtime("__olang_scope_alloc")
+    env := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.program() ", i64 16)")
+    fe.store("{ ptr, ptr }", v, env)
+    a := fe.let("insertvalue { ptr, ptr } undef, ptr @olang_fvadapt_" $key ", 0")
+    return fe.let("insertvalue { ptr, ptr } " $a ", ptr " $env ", 1")
+}
+
+# the adapter of fvAdapt: the inner value's code called with its environment, the outer's scopes (the program's for
+# any more the inner takes) and arguments, its error code re-encoded under g's list (R6, R17)
+fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
+    t := e.T
+    vp := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), g)
+    ip := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), f)
+    key := $f "_" $g
+    hdr := e.header(mir.FnKey.Init(0), g, "olang_fvadapt_" $key, vp, true)
+    fe mut fnEm&e = fnEm(e, mir.Fn(mir.FnKey.Init(0), g, 0, source.Span(0, 0)), mir.FnKey.Init(0))
+    code := fe.load("ptr", "%env")
+    inner := fe.load("ptr", fe.let("getelementptr { ptr, ptr }, ptr %env, i32 0, i32 1"))
+    args := StringBuilder()
+    args.Push("ptr " $inner)
+    res := t.Result(f)
+    if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr %out") }
+    for i in range ip {
+        if i < vp {
+            args.Push(", ptr %v" $i)
         } else {
-            e.gap("a function value whose errors differ from its function's")
-            b.Push("  ret " $vt " zeroinitializer\n}\n\n")
+            args.Push(", ptr " $fe.program())
         }
     }
-    e.body.Push(b.ToString())
+    ps := t.Items(t.Params(g))
+    pass := t.Passing(g)
+    for i in range ps.Len() {
+        match pass[i] {
+            case 'm' { args.Push(", ptr %a" $i) }
+            case 's' { args.Push(", ptr %a" $i "c, ptr %a" $i "e") }
+            case _ { args.Push(", " $e.ty(ps[i]) " %a" $i) }
+        }
+    }
+    rt := t.RetLlvm(f)
+    vt := t.RetLlvm(g)
+    from := t.Errors(f)
+    to := t.Errors(g)
+    if rt == "void" {
+        fe.w("call void " $code "(" $args.ToString() ")")
+        fe.w("ret void" if vt == "void" else "ret i32 0")
+    } else {
+        r := fe.let("call " $rt " " $code "(" $args.ToString() ")")
+        hasRes := res != types.VoidT and res != types.NoreturnT and not t.ViaMemory(res)
+        errs := t.Items(from).Len() > 0
+        c := "0"
+        if errs { c = fe.recode(r if not hasRes else fe.let("extractvalue " $rt " " $r ", 0"), from, to) }
+        val := (fe.let("extractvalue " $rt " " $r ", 1") if errs else r) if hasRes else ""
+        if vt == "i32" {
+            fe.w("ret i32 " $c)
+        } else if t.Items(to).Len() == 0 {
+            fe.w("ret " $vt " " $val)
+        } else {
+            a := fe.let("insertvalue " $vt " zeroinitializer, i32 " $c ", 0")
+            fe.w("ret " $vt " " $fe.let("insertvalue " $vt " " $a ", " $e.ty(t.Result(g)) " " $val ", 1"))
+        }
+    }
+    e.body.Push(hdr)
+    e.body.Push("entry:\n")
+    e.body.Push(fe.code.ToString())
+    e.body.Push("}\n\n")
 }
 
 # a destructor as the runtime calls it, fn(ptr instance, ptr scope): the scope being closed passed for every scope
@@ -2046,7 +2268,7 @@ fn (fe mut fnEm&) term(tm mir.Term) {
                 fe.w("br label %" $blockName(ok))
             } else {
                 c := fe.let("trunc i64 " $e " to i32")
-                if code != mir.NoLocal { fe.store("i32", c, "%l" $code) }
+                if code != mir.NoLocal { fe.store("i32", c, fe.localAt(code)) }
                 bad := fe.let("icmp ne i32 " $c ", 0")
                 fe.w("br i1 " $bad ", label %" $blockName(failed) ", label %" $blockName(ok))
             }
@@ -2184,7 +2406,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     }
     if errs {
         code := r if (via or res == types.VoidT) else fe.let("extractvalue " $rt " " $r ", 0")
-        if c.Code != mir.NoLocal { fe.store("i32", code, "%l" $c.Code) }
+        if c.Code != mir.NoLocal { fe.store("i32", code, fe.localAt(c.Code)) }
         bad := fe.let("icmp ne i32 " $code ", 0")
         ok := fe.fresh("ok")
         fe.w("br i1 " $bad ", label %" $blockName(c.Err) ", label %" $ok)
@@ -2279,6 +2501,7 @@ fn (e mut Emitter&) runtime(name String&) {
         case "__olang_fmt_float" => "i64 @__olang_fmt_float(ptr, i64, double, i32)"
         case "__olang_rd_quote" => "i64 @__olang_rd_quote(ptr, i64, ptr, i64, i8)"
         case "__olang_thread_init" => "void @__olang_thread_init()"
+        case "__olang_capture_scope" => "ptr @__olang_capture_scope(ptr)"
         case "__olang_test_failed" => "void @__olang_test_failed(ptr)"
         case _ => ""
     }

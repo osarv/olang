@@ -20650,6 +20650,53 @@ function value or type as `fn(params) R ? (A, B)` (one item stays unparenthesize
 `$` of functions yet, so nothing there changed. `checks/cases/d16blambdaorder.olang` pinned the old text and was updated;
 `tests/shared.olang` has a test comparing both forms, whose asserts the evaluator also decides while compiling (S18c).
 
+## Port M9: the emitter placed by the scope pass, round 2 (2026-10-21)
+
+`compiler/emit.olang` now writes programs as the scope pass (M6) places them: emitdump and emitdiff run `scope.Scoper`
+and lower with its plans (`-standin` keeps lowering's stand-in placement). Of 711 tests in `tests/shared.olang`, 680 end
+as stage 0's (637 under the stand-in placement, where every instance lived in the program's scope and so no destructor
+ran before the end); every destructor-timing test passes. PROGRESS.md has the rest.
+
+**What placement needed from emission.** A local the plan moves into a scope variable (O26a) is made at its `Live` in that
+scope's arena. A closure carries where its captures holding references live: `mir.Rvalue.Closure` gained the scopes (the
+plan's `Passed` at the closure's site), the environment holds them after the captures, and the closure's code asks the
+runtime for each as its thread may build there (`__olang_capture_scope`, decision 48) - before, a build through a capture
+went to the program's scope, so what a task a destructor spawned built was never destructed. A test build keeps P1d's
+chain of open scopes, so a failed check unwinds, joins and destructs before it jumps.
+
+**Decided.** A body the scope pass reports an error in is placed by the stand-in placement: its plan is not one to trust
+while the pass is finished, and the two mix safely since the stand-in only builds in the program's scope. An array value a
+function returns is copied into the program's scope under the plan: `types.ScopeVarsOf` gives no result scope to a result
+holding no reference, where stage 0 gives every function returning an array value one - a leak per call until the ABI
+does too (recorded as left). A function value converted to a type with another error list (an infallible function where a
+fallible type is wanted, R6) is called through an adapter re-encoding its code. The runtime is filled in by the port
+(`emit.RuntimeFill`, `RuntimeModule`, `RuntimeDecls`) - stage 0's facts table and rewrite, its output byte for byte stage
+0's - and emitdiff links with it.
+
+**Found on the way**, fixed in check and lower (each with stage 0's meaning): a struct's zero value ignored its
+constructor's defaults and a declared number's its constructor (D13c, T29d); `==` on two array references took an empty
+array for a null (E10); `==` on a declared number never called its `Eq` (E10a); `x in c` evaluated `c` first (E29); a
+declared type over a number rendered as its base, its `Str` never called (E11c); checked float division and narrowing
+reported IEEE exceptions for infinite operands (E15a); a fixed array a reference names was copied where it should have
+been the caller's (D9b); a length's byte count was unchecked (D14b); two literal sites with one content were one instance
+(T25d). And in the scope pass, reported to its owner: a temporary passed to a call whose borrowed result is returned, a
+build through a constructed cursor's `&of` field, and a constructor field a reference or view is taken to are each placed
+in a block that closes first.
+
+After merging master (cd2c701) the run of `tests/shared.olang` crashed in the O17a test (`rvSplitWalk`): the scope pass
+read a for-in's hidden borrow of a split value - a value local or a by-value parameter whose references live elsewhere
+than its storage - at the storage's scope, so `for x in h.items { x.next = rvN(...) }` built each node in the frame and
+`for x in l` over a by-value `List` parameter in its block. Stage 0 gives each element the references' scope (O17a); the
+pass now records that scope for such a borrow (`splitHome`) and reads the borrow there. Its errors are unchanged
+(scopediff identical). emitdiff: 25 of 26 files and 989 of 1013 tests as stage 0's, tests/shared 687 of 711.
+
+Merged with master 30b555f (the scope pass's round 3) and with the driver's branch (M10), which had each written the
+same two things. An arena-homed local is emit's (`%lp` slot made at entry, storage allocated at `Live`; the driver's
+identical `%l<i>p` copy dropped). The runtime has one generator, compiler/runtime.olang (the driver's: it also fills
+san.ll and does the race attributes); emit's copy (`RuntimeFill`/`RuntimeModule`/`RuntimeDecls`) is gone and
+`emitdump -rt` writes runtime.olang's output, still stage 0's byte for byte. After both merges: emitdiff 989 of 1013
+tests, drvdiff no difference over 83 command lines, scopediff unchanged, and stage 1 == stage 2 at -debug.
+
 ## Port M6: the scope pass, round 3 - the last silent cases, per-instance bindings, stage 0's messages (2026-10-21)
 
 Round 2 left 18 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error from the port. Round 3
@@ -20720,3 +20767,41 @@ and four of the seven on compiler/olang.olang: parse.olang's `pun` pushed in a p
 field, two in interp.olang) - stage 0 lands the local where it is kept; the verifier shape (`v := verifier(f, t); v.run(); return
 v.out.ToString()`), which stage 0 accepts by moving `v` into a result scope the port's types give a `String` value
 result no scope for; 16 cases still differing in their first error (columns, and rules the checker or O18c decide).
+## Port M10: the pipeline behind the driver, and the port building itself (2026-10-21)
+
+The driver's `Passes` was load and names, reporting "does not generate code yet"; master had since gained check, scope,
+lower, eval and emit. `Passes.Analyze` now runs them all and gives build.olang one object's IR for the whole program
+(emit writes one module per program, so per-module objects wait for it), and the runtime's text, filled in by a new
+`compiler/runtime.olang` - a port of bootstrap/runtime.c's filling and of the attribute rewrite, whose output is byte
+for byte stage 0's (checked on a build of hello world), and of the declarations a module carries, for the dynamic
+call's object (also identical). Running a file now replaces the driver's process, as stage 0's execv does: a runtime
+function `__olang_exec` and `os.ExecInPlace(path, args)` in std (both interpreters know it). `format` calls
+`compiler/fmt.olang` (`Files`; the oracle loading moved there from tools/fmt.olang, `unparse.olang` to `compiler/`).
+What emission or lowering does not do is said as one row each and nothing is built.
+
+**How far it got, and what was in the way.** The first stage 1 (the driver built by stage 0, building
+compiler/olang.olang) linked after 5 minutes (one 43 MB module at -O3 with LTO) and crashed at once in name resolution;
+the port's own test files crashed the same way in six modules. Three causes, found one under another:
+1. **The stand-in placement left O26a locals in the frame**: `testLoader()` returns a Loader holding a reference to
+   its local `consts`, which stage 0 moves into the result scope. Lowering with the scope pass's homes fixed it, and
+   emit needed one thing for that: a local homed in an arena (`Live` allocates it, a slot holds where).
+2. **The scope pass's site placement is not sound yet**: it builds a returned call's result in the callee's closed
+   frame (`fn two() (String, String) { return word("a").ToLower(), word("b") }` read freed text, so the target was
+   taken for a foreign one). So sites stay the stand-in's, the program's scope.
+3. **It keeps in the frame a value local that a longer-lived reference is borrowed from**, which stage 0 lands where
+   the reference is stored (O18c): the parser's `nt := ast.TypeRef.Named(...)` then `p.markers(at, nt)` (every marked
+   array literal's element type read back as garbage - written `nt ast.TypeRef&p` now), and check's
+   `qx := typed.Place.Payload(...)` read through a `Field` built of it. For now every declared aggregate local lives in
+   the program's scope.
+And the pass reports 51 errors on compiler/ that stage 0 does not (O10c 34, T17c 5, O25e 5, C2d 3, O17 2, O25h 1,
+O20 1), so its errors are not reported by the driver yet: stage 0 holds programs to section 8 until it agrees.
+
+Under that interim, stage 1 (22 s to build at -debug) passes the tests of all 27 compiler/ modules and builds stage 2
+(39 s, 2.1 GB); stage 2 builds stage 3; the three are byte for byte equal and their IR is the IR the stage-0-built
+port writes. At -O3 too: stage 1 builds stage 2 byte for byte equal to itself (8 minutes for stage 1, nearly all of it
+LTO over one 43 MB module). The leaks are the cost: nothing built is freed before the program ends. drvdiff gained 11
+whole builds (build, run with arguments, exit statuses, test, interpret, format -check), all as stage 0 - but for two
+port bugs it now avoids and records: B10c's `-define` over a top-level default is ignored, and E12's message spells
+a text literal's type `String&`. Also found: stage 0's interpreter
+called execv without unistd.h (a warning gcc -Werror refuses).
+

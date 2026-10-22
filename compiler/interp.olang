@@ -347,7 +347,7 @@ fn (x mut Exec&) reach(f mir.Fn&, work mut List<mir.FnKey>&) {
     for bb in f.Blocks {
         for s in bb.Stmts {
             match s {
-                case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _)) { work.Push(code) }
+                case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _, _)) { work.Push(code) }
                 case mir.Stmt.RegisterDtor(_, _, ty, _) {
                     d := try x.dtorOf.Get(ty) catch default -1
                     if d >= 0 {

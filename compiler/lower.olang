@@ -257,6 +257,7 @@ fn (ln mut lowering&) run() {
         if ln.planned and i < ln.plan.Stored.Len() {
             match ln.plan.Stored[i] {
                 case typed.Scope.Var(v) { home = mir.ScopeRef.Var(v) }
+                case typed.Scope.Program { home = mir.ScopeRef.Program }
                 case _ { }
             }
         }
@@ -644,7 +645,20 @@ fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
     if not ln.valueArray(ty) { return false }
     return match x {
         case typed.Expr.Read(_, _, _, _) => true
+        # a fixed array a reference names, converted (it names that storage)
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and derefOf(args[0]) != null
         case _ => false
+    }
+}
+
+# the reference a read of what it names reads through, else null
+fn derefOf(x typed.Expr&) typed.Expr&x {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => match p {
+            case typed.Place.Deref(_, _, r) => r
+            case _ => null
+        }
+        case _ => null
     }
 }
 
@@ -737,8 +751,29 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
     v := ln.fit(ln.val(value), value, res, sp)
     if ln.dead { return }
     l := ln.local(v, res, sp)
+    ln.retArrays(l, res, sp)
     ln.leave(0)
     ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
+}
+
+# T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
+# closes - into the program's scope, since a result holding no reference has no result scope to be built in
+# (types.ScopeVarsOf); under the stand-in placement it is there already
+fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, sp source.Span) {
+    if not ln.planned { return }
+    t := ln.T
+    if ln.valueArray(res) {
+        ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp))))
+        return
+    }
+    r := t.Repr(res)
+    if t.KindOf(r) != types.Kind.Tuple { return }
+    parts := t.Items(t.Parts(r))
+    for i in range parts.Len() {
+        if not ln.valueArray(parts[i]) { continue }
+        at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
+        ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp))))
+    }
 }
 
 # the body failing with code, under its own list, once every scope is closed
@@ -1410,7 +1445,9 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         a := c.Args[i]
         v := ln.val(a)
         if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
-        if helper and i < ps.Len() and t.IsRef(ps[i]) and not t.IsRef(a.Type()) {
+        # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
+        held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
+        if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
             l := ln.local(v, a.Type(), a.Span())
             v = ln.into(ps[i], mir.Rvalue.Ref(mir.L(l), ps[i]), a.Span())
         }
@@ -1421,7 +1458,7 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
 
 fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
     t := ln.T
-    if c.Zero { return ln.zero(ty, sp) }
+    if c.Zero and c.Args.Len() == 0 { return ln.zero(ty, sp) }
     callee, fty := ln.callee(c.Target, sp)
     if ln.dead { return mir.Operand.None }
     args := ln.args(c, callee, fty)
@@ -1550,7 +1587,28 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
     n := mir.Operand.None
     if m.Length != null { n = ln.val(m.Length) }
     fv := mir.Operand.Const(el, 0)
-    if m.Items.Len() > 0 { fv = ln.val(m.Items[0]) }
+    if m.Items.Len() > 0 {
+        zero := match m.Items[0] {
+            case typed.Expr.Call(_, _, k) => k.Zero
+            case _ => false
+        }
+        if zero and n != mir.Operand.None and not ln.dead {
+            # an element type's zero value made only for an array that has an element: Array<T>(0) needs none (D13c)
+            v := ln.temp(el, sp)
+            ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(fv)))
+            some := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[ln.asI64(n, m.Length.Type(), sp), ln.constI64(0)], sp)
+            yes, after := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(some, yes, after))
+            ln.start(yes)
+            z := ln.val(m.Items[0])
+            if not ln.dead { ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(z))) }
+            ln.goto(after)
+            ln.start(after)
+            fv = mir.Operand.Copy(mir.L(v))
+        } else {
+            fv = ln.val(m.Items[0])
+        }
+    }
     if ln.dead { return mir.Operand.None }
     fixed := ln.fixedLen(at)
     if fixed >= 0 {
@@ -1568,6 +1626,13 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
     if m.Checked != typed.Check.None {
         ok := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[n64, ln.constI64(0)], sp)
         ln.check(ok, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
+        # ... and its byte count an I64 (D14b)
+        ln.L.P.Layout(el)
+        size := t.Size(el)
+        if size > 1 {
+            fits := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[n64, ln.constI64(9223372036854775807 / size)], sp)
+            ln.check(fits, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
+        }
     }
     return ln.into(ty, mir.Rvalue.NewArray(ln.built(m.Site), ty, n64, fv), sp)
 }
@@ -1656,6 +1721,16 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         ln.check(b, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.SliceBounds, OutOfBounds, sp)
         return v
     }
+    # a fixed array a reference names, as a run-time-length array value: the pair naming that storage, not a copy of it
+    # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a
+    # declaration's or a body that writes it)
+    r typed.Expr&args = null
+    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) { r = derefOf(args[0]) }
+    if r != null and ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 {
+        v := ln.val(r)
+        if ln.dead { return mir.Operand.None }
+        return ln.prim(op, ty, mir.Operand[v], sp)
+    }
     ops := ln.vals(args)
     if ln.dead { return mir.Operand.None }
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
@@ -1735,7 +1810,17 @@ fn (ln mut lowering&) primChecks(op typed.PrimOp, chk typed.Check, ops Array<mir
                 over := ln.into(types.BoolT, mir.Rvalue.Overflows(op, ty, ln.F.Args(ops)), sp)
                 ln.fails(over, chk, kind, Overflow, sp)
             } else if t.IsFloat(rt) {
-                ln.finite(ln.prim(op, ty, ops, sp), ty, chk, Overflow, sp)
+                # OVERFLOW when a finite value becomes infinite: an infinity converted stays one
+                res := ln.prim(op, ty, ops, sp)
+                d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[res, res], sp)
+                ok := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+                ok = ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ok, ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[res, res], sp)], sp)
+                if t.IsFloat(at) {
+                    d0 := ln.prim(typed.PrimOp.Sub, args[0].Type(), mir.Operand[ops[0], ops[0]], sp)
+                    fin0 := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d0, mir.Operand.Const(args[0].Type(), 0)], sp)
+                    ok = ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ok, ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[fin0], sp)], sp)
+                }
+                ln.check(ok, chk, kind, Overflow, sp)
             }
         }
         case _ { }
@@ -1756,13 +1841,27 @@ fn (ln mut lowering&) floatResult(op typed.PrimOp, ty types.TypeId, ops Array<mi
     }
     bad := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[nan, ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[argsNan], sp)], sp)
     ln.fails(bad, chk, mir.ExitKind.Abort, Invalid, sp)
+    # whether each operand is finite: x - x == 0 holds for a finite float only
+    argsFinite := ln.constBool(true, sp)
+    for x in ops {
+        d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[x, x], sp)
+        xf := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+        argsFinite = ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[argsFinite, xf], sp)
+    }
     if op == typed.PrimOp.Div {
         z := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[ops[1], mir.Operand.Const(ty, 0)], sp)
         nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[ops[0], mir.Operand.Const(ty, 0)], sp)
-        byZero := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[z, nz], sp)
+        d0 := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[ops[0], ops[0]], sp)
+        fin0 := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d0, mir.Operand.Const(ty, 0)], sp)
+        byZero := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[z, nz], sp), fin0], sp)
         ln.fails(byZero, chk, mir.ExitKind.Abort, DivideByZero, sp)
     }
-    ln.finite(r, ty, chk, Overflow, sp)
+    # OVERFLOW only for an infinite result from finite operands
+    d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[r, r], sp)
+    fin := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+    ok := ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[fin, nan], sp)
+                                                                ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[argsFinite], sp)], sp)
+    ln.check(ok, chk, mir.ExitKind.Abort, Overflow, sp)
 }
 
 # r - r == 0 holds for a finite float only: a check failing with word where it does not (an infinity; a NaN was said)
@@ -1807,7 +1906,7 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
 
 fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
     return match fv {
-        case typed.FnVal.Named(body) => ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty), sp)
+        case typed.FnVal.Named(body) => ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
         case typed.FnVal.Lambda(body, caps, site) => ln.lambda(body, caps, site, ty, sp)
         case typed.FnVal.Adapter(call, recv, site) => ln.adapter(call, recv, site, ty, sp)
     }
@@ -1819,14 +1918,24 @@ fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, sit
     for i in range caps.Len() { ops[i] = ln.val(caps[i].Outer) }
     if ln.dead { return mir.Operand.None }
     s := mir.ScopeRef.Frame if caps.Len() == 0 else ln.built(site)
-    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops)), sp)
+    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
 }
 
 fn (ln mut lowering&) adapter(call typed.BodyId, recv typed.Expr&, site typed.SiteId, ty types.TypeId, sp source.Span) mir.Operand {
     r := ln.val(recv)
     if ln.dead { return mir.Operand.None }
     ln.L.Want(mir.FnKey.Adapter(call))
-    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Adapter(call), ty, ln.built(site), ln.F.Args(mir.Operand[r])), sp)
+    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Adapter(call), ty, ln.built(site), ln.F.Args(mir.Operand[r]), ln.capScopes(site))
+                   sp)
+}
+
+# where a closure's captures holding references live, in order (D16c): the plan's at its site, none recorded under the
+# stand-in placement
+fn (ln mut lowering&) capScopes(site typed.SiteId) mir.Range {
+    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() { return mir.Empty }
+    xs List<mir.ScopeRef>
+    for i := I64(0), ln.plan.Passed(site, i) != typed.Scope.Unset, i++ { xs.Push(ln.scopeRef(ln.plan.Passed(site, i))) }
+    return ln.F.ScopeRefs(xs.ToArray())
 }
 
 # ---- text ----
@@ -2610,7 +2719,8 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
 fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
     lw := ln.L
     t := ln.T
-    r := t.Repr(ty)
+    # a declared type over a number or an array is its own type here, with its own Str (E11c)
+    r := ty if t.KindOf(ty) == types.Kind.Named else t.Repr(ty)
     if t.KindOf(r) != types.Kind.Named { return -1 }
     got := try lw.strOf.Get(r) catch default -2
     if got != -2 { return got }
@@ -2625,7 +2735,7 @@ fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
                         ps := t.Items(t.Params(lw.Bodies[i].Ty))
                         if ps.Len() == 1 {
                             p0 := t.Referent(ps[0]) if t.IsRef(ps[0]) else ps[0]
-                            if t.Same(t.Repr(p0), r) { id = i }
+                            if t.Same(t.Repr(p0), t.Repr(r)) { id = i }
                         }
                     }
                 }

@@ -2,10 +2,10 @@
 # spaces a level, a single space between tokens where the language allows one. Nothing is added that the tree does
 # not hold - no parentheses, so a tree written and read again is the same tree, which "dump roundtrip" checks. A
 # literal is written as its text, so the source the tree was read from is given beside it.
-import "../source"
-import "../token"
-import "../ast"
-import "../diag"
+import "source"
+import "token"
+import "ast"
+import "diag"
 
 # the declarations of a file, written as source; a branch the build may decide that met a syntax error (diags holds it)
 # is written as the text it was

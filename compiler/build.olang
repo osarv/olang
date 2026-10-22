@@ -53,6 +53,7 @@ type Program struct() {
 }
 
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
+# (said by Unbuildable)
 error Failed {
     REPORTED
     UNBUILT
@@ -455,12 +456,15 @@ fn finish(d mut diag.Diagnostics&) I32 {
     return 1
 }
 
-# what a front end that cannot make code yet writes
-fn unbuilt() I32 {
-    sayln("olang: error: this compiler does not generate code yet - its checker and back end are compiler/DESIGN.md's " $
-            "M5b-M9; build with build/out")
-    return 1
-}
+# what a front end that cannot make code for a program yet says, a line for each thing it cannot (UNBUILT), on the
+# standard output where diagnostics go: what the self-hosted back end does not do yet, not a mistake in the program
+fn Unbuildable(why String&) { sayln($"olang: error: the self-hosted compiler cannot build this yet: " $why) }
+
+# a front end's UNBUILT: what it could not do is said already
+fn unbuilt() I32 { return 1 }
+
+# this process's id, for temporary files' names
+fn Pid() I32 { return getpid() }
 
 fn (c Config&) ensureDir(d mut diag.Diagnostics&) ? Failed {
     try os.MkDirAll(c.Dir) catch os.OsError {
@@ -517,21 +521,20 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
     return 0
 }
 
-# FILE.olang ARGS: the program built, saying nothing when it is, then run with ARGS; the status it ends with (B3g).
-# Unlike stage 0, which runs it in this process's place (execv), it runs as a child with this process's output: its
-# command line's first word is the binary's path rather than the file as written
+# FILE.olang ARGS: the program built, saying nothing when it is, then run in this process's place with FILE (as
+# written) and ARGS as its command line - its status, a signal's included, the program's own (B3g)
 fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&c) I32 {
     c.Quiet = true
     status := BuildProgram(fe, c, file, d)
     if status != 0 { return status }
     av List<String&>
-    av.Push(Shown(c.Built))
+    av.Push($file)
     for a in args { av.Push($a) }
-    out := try os.Exec(av.ToArray(), "", false) catch os.OsError {
+    try os.ExecInPlace(Shown(c.Built), av.ToArray()) catch os.OsError {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
     }
-    return out.Status
+    unreachable
 }
 
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed

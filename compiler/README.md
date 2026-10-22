@@ -10,9 +10,10 @@ typed core and the MIR are written as contracts. Checking (`check.olang`), the s
 (`lower.olang`, which reads the scope pass's placement where it is given, else a stand-in) are in progress, and so is
 emission (`emit.olang`): the pipeline writes one LLVM module for a whole program, which clang compiles and links with
 stage 0's runtime (`make emitdiff`); and evaluation (`eval.olang`, `interp.olang`), which runs what lowering makes -
-while compiling (B9c, S8b, S18c) and as `olang interpret` (`make evaldiff`). The driver does not compile with the
-pipeline yet. The formatter (`olang format`) is the one part already in use. The command line
-is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
+while compiling (B9c, S8b, S18c) and as `olang interpret` (`make evaldiff`). The driver (`olang.olang`,
+`build/compiler_olang`) builds, runs, tests, compiles and interprets through the pipeline, with the runtime filled in
+by `runtime.olang`; built by stage 0, it builds itself (`build/compiler_olang build -output build/stage1
+compiler/olang.olang`, M11). The command line is stage 0's (`build`, `compile`, `test`, ...).
 
 ## Modules (one file per pass)
 
@@ -36,10 +37,12 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
 | `emit.olang` | MIR written as LLVM IR text, a whole program as one module streamed through a writer (M9, in progress) |
-| `fmt.olang` | the formatter's layout (B13), over the scanner's tokens; `tools/fmt.olang` is its program |
+| `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
+| `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |
+| `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build, as stage 0 fills it |
 | `target.olang` | the machine a build is for (B12): clang asked, without clang for `interpret` |
 | `build.olang` | objects named by their content, compiled side by side, the link, the modes, over a `Frontend` trait |
-| `olang.olang` | the driver: the command line in words (B1), as stage 0 reads it; the front end so far |
+| `olang.olang` | the driver: the command line in words (B1), as stage 0 reads it, and the passes behind it |
 
 ## Subfolders
 
@@ -51,11 +54,11 @@ is stage 0's (`build`, `compile`, `test`, ...), run by `build/out`.
   compiler/tools/tokdiff.olang && build/compiler_tools_tokdiff [FILE...]`. Also `dump.olang` (prints what the passes
   make of a file), `checkdump.olang` (what the checker says of a program), `checkdiff.olang` (the
   checker against stage 0's goldens), `scopedump.olang` (what the scope pass says of a program, `-plan` for its
-  placement), `scopediff.olang` (the scope pass against stage 0's goldens), `drvdiff.olang` (the driver's command line
-  against stage 0's), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
+  placement), `scopediff.olang` (the scope pass against stage 0's goldens), `drvdiff.olang` (the driver's command lines
+  and whole builds against stage 0's), `lowerdump.olang` (every function of a program lowered and verified, `-mir` to dump, `-standin`
   for the placement of before the scope pass), `emitdump.olang` (a program written as LLVM IR), `emitdiff.olang`
   (programs built by stage 0 and by the pipeline, run, and their outcomes compared), `evaldump.olang` (a program or its
-  tests run by the evaluator), `evaldiff.olang` (stage 0's runs against the evaluator's), `unparse.olang`,
+  tests run by the evaluator), `evaldiff.olang` (stage 0's runs against the evaluator's),
   `diaggold.olang`, `genmsgs.olang`
   (writes `msgs.olang` from the C table; from the
   repository root, `build/out build compiler/tools/genmsgs.olang && build/compiler_tools_genmsgs`).
@@ -79,7 +82,7 @@ make diaggold      # capture diag.txt again from build/out
 make fmtdiff       # every file formatted reads back as the same tree, keeps its comments, and is its own layout
 make checkdiff     # the checker's first errors equal stage 0's on refused cases; accepted programs check clean
 make scopediff     # the scope pass's first errors equal stage 0's on cases refused by section 8; accepted programs are clean
-make drvdiff       # the driver says what stage 0 says, on every command line decided before code generation
+make drvdiff       # the driver says what stage 0 says: command lines decided before code generation, and whole builds
 make lowerdump     # every body and helper of the corpus and the checks' run cases lowered to MIR and verified
 make emitdiff      # the corpus and std's tests built through emit, run, and each test's outcome compared with stage 0's
 make evaldiff      # the corpus, std's tests and the checks' run cases run by the evaluator, compared with stage 0's runs
