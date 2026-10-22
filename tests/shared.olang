@@ -11469,6 +11469,25 @@ test "B5a: a global is set after the globals its initializer reads, directly or 
     assert EvEarly == 16 and EvLate == 15 and EvViaFn == 30
 }
 
+# B5a: a call through a function value reaches any function named as one - here evOrdTwice, named by the global holding
+# it, which reads EvOrdBase - and declaration order decides among globals with no dependency between them (EvOrdLog
+# records the order the initializers ran in)
+EvOrdLog mut String& = ""
+fn evOrdNote(s String&) I64 {
+    EvOrdLog = $EvOrdLog $s
+    return 1
+}
+fn evOrdTwice(n I64) I64 { return n * 2 + EvOrdBase }
+EvOrdF mut fn(n I64) I64 = evOrdTwice
+fn evOrdVia() I64 { return EvOrdF(1) }
+EvOrdZ mut I64 = evOrdNote("z") + EvOrdLate
+EvOrdY mut I64 = evOrdVia() + evOrdNote("y")
+EvOrdLate mut I64 = evOrdNote("late") + 10
+EvOrdBase mut I64 = evOrdNote("base") + 4
+test "B5a: through a function value, and declaration order among globals with no dependency between them" {
+    assert EvOrdZ == 12 and EvOrdY == 8 and EvOrdLog == "latezbasey"
+}
+
 # T11b: a value array is assigned into the storage it has unless its length changes, a struct in place (a literal was
 # given new storage where another array was not, and the evaluator always gave new storage)
 type EvIn struct(v I64) {

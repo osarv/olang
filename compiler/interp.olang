@@ -299,7 +299,7 @@ type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval
     defined Map<mir.FnKey, Bool>
     dtorOf Map<types.TypeId, I64>
     externs Map<I64, Bool>
-    Globals List<I64>               # the global initializers' bodies, in the order check made them
+    Globals List<I64>               # the global initializers' bodies, in B5a's order (P.InitOrder)
     # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
     Faulty Map<I64, Bool>
     started Bool = false
@@ -343,6 +343,16 @@ fn (x mut Exec&) start() {
             case _ { }
         }
     }
+    # B5a: set in check's order - a module's after its imports', each after the globals it reads
+    ordered List<I64>
+    for i in x.P.InitOrder {
+        if i in x.Globals { ordered.Push(i) }
+    }
+    for i in x.Globals {
+        if i not in ordered { ordered.Push(i) }
+    }
+    x.Globals.Clear()
+    for i in ordered { x.Globals.Push(i) }
     for i in x.Globals { x.Need(mir.FnKey.Body(typed.BodyId(I32(i)))) }
 }
 
@@ -519,7 +529,7 @@ fn line(d mut diag.Diagnostics&, file I64, sp source.Span) String {
 
 # ---- running a program (B3e) ----
 
-# each global set, in the order check made their initializers - each after the ones it reads (B5a). One that stops
+# each global set in B5a's order - a module's after its imports', each after the globals it reads. One that stops
 # leaves its global unset, read later as the stop again: the first such stop
 fn (x mut Exec&) InitGlobals() eval.Stop {
     x.start()

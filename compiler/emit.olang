@@ -44,11 +44,6 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     queue List<mir.FnKey>           # the functions to write, in the order first referred to
     queued Map<mir.FnKey, I64>      # each function's index in queue
     cur I64 = -1                    # the function being written
-    callFrom List<I64>              # what each function refers to (calls, function values, destructors): B5a's graph
-    callTo List<I64>
-    readFrom List<I64>              # the globals each function reads or writes
-    readM List<I64>
-    readN List<source.NameId>
     named List<types.TypeId>        # the declared structs whose types are spelled by name, to define
     namedSeen Map<types.TypeId, Bool>
     # what is written, one item per symbol in the order made (a function, a global, constant data, a declaration):
@@ -417,79 +412,22 @@ fn (e mut Emitter&) want(k mir.FnKey) {
         e.queued.Put(k, i)
         e.queue.Push(k)
     }
-    if e.cur >= 0 {
-        e.callFrom.Push(e.cur)
-        e.callTo.Push(i)
-    }
 }
 
 # ---- B5a: a module's globals initialized after the globals each reads ----
 
 # the global bodies of the modules in inits, in the order they run: a module's after its imports' (inits' order), and
-# within a module each after the globals its initializer reads, directly or through what it calls - else in the order
-# they were checked
+# within a module in check's order (P.InitOrder) - each after the globals its initializer reads, else as declared
 fn (e mut Emitter&) globalOrder(inits List<I64>) List<I64> {
     out List<I64>
-    state Map<I64, I64>
     for m in inits {
-        for i in range e.Lw.Bodies.Len() {
+        for i in e.P.InitOrder {
             match e.Lw.Bodies[i].Of {
                 case typed.BodyOf.Global(gm, _) {
-                    if gm == m and e.Lw.Bodies[i].Root != null { e.visitGlobal(i, state, out) }
+                    if gm == m { out.Push(i) }
                 }
                 case _ { }
             }
-        }
-    }
-    return out
-}
-
-fn (e mut Emitter&) visitGlobal(b I64, state mut Map<I64, I64>&, out mut List<I64>&) {
-    if state.Has(b) { return }
-    state.Put(b, 1)
-    gm := -1
-    match e.Lw.Bodies[b].Of {
-        case typed.BodyOf.Global(m, _) { gm = m }
-        case _ { }
-    }
-    for g in e.readsOf(b) {
-        if g != b and e.globalModule(g) == gm { e.visitGlobal(g, state, out) }
-    }
-    state.Put(b, 2)
-    out.Push(b)
-}
-
-fn (e mut Emitter&) globalModule(b I64) I64 {
-    return match e.Lw.Bodies[b].Of {
-        case typed.BodyOf.Global(m, _) => m
-        case _ => -1
-    }
-}
-
-# the global bodies whose globals body b's function reads, through every function it reaches
-fn (e mut Emitter&) readsOf(b I64) List<I64> {
-    out List<I64>
-    start := try e.queued.Get(mir.FnKey.Body(typed.BodyId(I32(b)))) catch default -1
-    if start < 0 { return out }
-    seen Map<I64, Bool>
-    work List<I64>
-    work.Push(start)
-    seen.Put(start, true)
-    k I64 = 0
-    for k < work.Len() {
-        f := work[k]
-        k++
-        for j in range e.callFrom.Len() {
-            if e.callFrom[j] == f and not seen.Has(e.callTo[j]) {
-                seen.Put(e.callTo[j], true)
-                work.Push(e.callTo[j])
-            }
-        }
-    }
-    for j in range e.readFrom.Len() {
-        if seen.Has(e.readFrom[j]) {
-            g := e.globalBody(e.readM[j], e.readN[j])
-            if g >= 0 and g not in out { out.Push(g) }
         }
     }
     return out
@@ -1251,9 +1189,6 @@ fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
         }
         case mir.Base.Global(m, n, gt) {
             at = fe.E.global(m, n, gt)
-            fe.E.readFrom.Push(fe.E.cur)
-            fe.E.readM.Push(m)
-            fe.E.readN.Push(n)
             ty = gt
         }
         case mir.Base.None { fe.gap("a place with no base") }

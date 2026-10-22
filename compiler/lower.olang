@@ -2565,14 +2565,14 @@ fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv type
     ln.epilogue(mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest)))
 }
 
-# a module's initialization (B5a): each of its globals' initializers run, in the order the bodies were checked - B5a's
-# order is a summary of their reads, computed once a module's bodies are checked (DESIGN.md 1.6), which is to come
+# a module's initialization (B5a): each of its globals' initializers run, each after the globals it reads - check's
+# order (P.InitOrder), a summary of their reads computed once every body is checked (DESIGN.md 1.6)
 fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
     ty := lw.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0))
     b := standIn(ty)
     ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Init(m), ty))
     ln.prologue(mir.VarKind[])
-    for i in range lw.Bodies.Len() {
+    for i in lw.P.InitOrder {
         match lw.Bodies[i].Of {
             case typed.BodyOf.Global(gm, _) {
                 if gm == m and lw.Bodies[i].Root != null {
