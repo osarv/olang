@@ -4265,7 +4265,15 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     }
     if ref.Kind == names.What.Build { return c.buildConst(sp, n) }
     if ref.Kind == names.What.None {
-        if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) { c.err(sp, msgs.UnknownName(c.tok(n))) }
+        # B11: said once in a body - each misspelling one error
+        if not c.unknownSaid.Has(pair.Pair(c.fr().Body, I64(n))) {
+            c.err(sp, msgs.UnknownName(c.tok(n)))
+            c.unknownSaid.Put(pair.Pair(c.fr().Body, I64(n)), true)
+        }
+        return c.unknown(sp)
+    }
+    if ref.Kind == names.What.Type {
+        c.err(sp, msgs.TypeNotAValue(c.tok(n)))
         return c.unknown(sp)
     }
     if ref.Kind == names.What.Func { return c.fnValue(sp, c.P.FnNamed(ref.Module, n)) }
@@ -7075,6 +7083,11 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         c.ctorCalled = was
         return r
     }
+    if k == types.DeclKind.Over and c.badOver(t) {
+        # its declaration said why it is no type to build (T29)
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
     if k == types.DeclKind.Over {
         sig := c.P.CtorSig(t)
         if sig != types.UnknownT {
@@ -7128,8 +7141,22 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         c.err(args[0].Span(), msgs.TypeMismatch(c.ty(base), c.ty(xt)))
         return c.unknown(sp)
     }
+    if k == types.DeclKind.Enum {
+        # an enum is no function: its values are its cases
+        c.err(nsp, msgs.TypeHasNoConstructor(msgs.Tok(c.src(nsp))))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
     c.gap(nsp, "a type of this kind called")
     return c.unknown(sp)
+}
+
+# whether t is a type declared over a struct, an enum, a trait or a generic type's instance - T29's error, said at its
+# declaration, its uses then said nothing more
+fn (c mut Checker&) badOver(t types.TypeId) Bool {
+    if not c.isNamed(t) or c.declKind(t) != types.DeclKind.Over { return false }
+    b := c.P.T.Base(t)
+    return c.isNamed(b) and (c.declKind(b) != types.DeclKind.Over or c.P.T.Args(b) != types.ListId(0))
 }
 
 # a call of a function or method f by name (recv its receiver, checked; pre its arguments checked, where args are not):
@@ -7685,6 +7712,11 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     if m >= 0 and c.fr().Checks > 0 { m = c.checkedMethod(c.deref(rt), name, m) }
     if m < 0 and name == "Len" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT {
         return c.prim(sp, c.i64(), typed.PrimOp.Len, rx, null)
+    }
+    if m < 0 and (c.deref(rt) == types.UnknownT or c.badOver(c.deref(rt))) {
+        # a receiver of a type not known, or of no type to build (T29), was said where the type is written (B11)
+        c.dropArgs(args)
+        return c.unknown(sp)
     }
     if m < 0 and name != "Len" and c.isNamed(c.deref(rt)) and c.isOver(c.deref(rt)) and not c.P.Extends(c.deref(rt)) and c.baseHas(c.deref(rt), n) {
         # T29f: a declared type that does not extend its base has none of its base's methods

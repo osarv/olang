@@ -260,6 +260,10 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     moveTo Term = Term.None
     landOK Bool = false
     landing Bool = false
+    # decide's answer for a local declared from a part of a call's built result ("x := mk(b).p"), read by the first
+    # temporary its initializer reads (tempVal): -1 none decided, else whether the call lands by its obligations (O18c)
+    landPart Bool = false
+    tempLand I64 = -1
     # the flow analysis (flowRun): fl the locals reached, flDirect those a return gives, flKept whether the local is kept
     # beyond its block (O18c), flMode which of the two is asked, flBlock the local's block, flGrew whether a pass grew fl
     fl List<I64>
@@ -1059,8 +1063,8 @@ fn (s mut Scoper&) stmts(ss Array<typed.Stmt&>&) {
         match st {
             case typed.Stmt.Let(_, l, x) {
                 s.decide(l, x, ss, i + 1)
-                # a capturing lambda held in a local only ever called lives in this frame (D16c)
-                if s.capturingLambda(x) and s.ocStmts(ss, i + 1, I64(l), false) { s.onFrame = true }
+                # a capturing lambda, or a Call adapter, held in a local only ever called lives in this frame (D16c, E31)
+                if (s.capturingLambda(x) or s.isAdapter(x)) and s.ocStmts(ss, i + 1, I64(l), false) { s.onFrame = true }
             }
             case _ { }
         }
@@ -1126,6 +1130,7 @@ fn (s mut Scoper&) gapAt(sp source.Span, what String&) { s.gap(s.B.File, sp, wha
 fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&, from I64) {
     s.moveTo = Term.None
     s.landOK = false
+    s.landPart = false
     loc := s.B.Locals[I64(l)]
     if loc.Kind == typed.LocalKind.Held { return }
     # a constructor's own top level is its instance's scope (C2g); a block inside it moves nothing there
@@ -1156,7 +1161,12 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
         case _ { return }
     }
     c := s.callOf(x)
-    if c == null { return }
+    if c == null {
+        # a part of a call's built result: the call lands as ":=" from it would (O18c)
+        c = s.partCallOf(x)
+        if c == null { return }
+        s.landPart = true
+    }
     callee := s.bodyOf(c.Target)
     if callee < 0 or not s.summed(callee) { return }
     # a constructor's instance is built where it is declared, C2d holding it to what it holds (O18a)
@@ -1312,6 +1322,26 @@ fn (s mut Scoper&) callOf(x typed.Expr&) typed.Call&x {
         case typed.Expr.Call(_, _, c) => c
         case typed.Expr.Try(_, _, t) => s.callOf(t.X)
         case typed.Expr.Away(_, _, y) => s.callOf(y)
+        case _ => null
+    }
+}
+
+# the call whose built result x reads a part of - a field, an element or a payload of it - null for none
+fn (s mut Scoper&) partCallOf(x typed.Expr&) typed.Call&x {
+    if x == null { return null }
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => s.placeCallOf(p)
+        case typed.Expr.Away(_, _, y) => s.partCallOf(y)
+        case _ => null
+    }
+}
+
+fn (s mut Scoper&) placeCallOf(p typed.Place&) typed.Call&p {
+    return match p {
+        case typed.Place.Field(_, _, b, _) => s.placeCallOf(b)
+        case typed.Place.Elem(_, _, e) => s.placeCallOf(e.Base)
+        case typed.Place.Payload(_, _, pl) => s.placeCallOf(pl.Base)
+        case typed.Place.Temp(_, _, v, _) => s.callOf(v) if s.isFresh(v) else null
         case _ => null
     }
 }
@@ -3228,6 +3258,20 @@ fn (s mut Scoper&) isNumberLike(t types.TypeId) Bool {
 # ---- lambdas that never leave the frame (D16c) ----
 
 # whether x is a lambda capturing a reference, or a value holding one
+fn (s mut Scoper&) isAdapter(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Fn(_, _, f) {
+            match f {
+                case typed.FnVal.Adapter(_, _, _) { return true }
+                case _ { }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { return s.isAdapter(y) }
+        case _ { }
+    }
+    return false
+}
+
 fn (s mut Scoper&) capturingLambda(x typed.Expr&) Bool {
     match x {
         case typed.Expr.Fn(_, _, f) {
@@ -3526,8 +3570,10 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
     if x != null { s.inits.Put(I64(l), x) }
     moved := s.moveTo
     land := s.landOK
+    part := s.landPart
     s.moveTo = Term.None
     s.landOK = false
+    s.landPart = false
     s.stors[I64(l)] = s.blockTerm(loc.In)
     if loc.Kind == typed.LocalKind.Field and not s.isRef(t) and s.borrowed(I64(l)) and loc.In == typed.BlockId(0) {
         # a value field a reference is taken to lives in the instance scope - its slot in the constructor's frame closes
@@ -3631,9 +3677,11 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
     if claim == Term.None {
         # ":=", or no marker on a value holding references: the initializer's own term; a temporary is built in the
         # local's block (O18a), a call's result where its obligations say where decide found that it lands (O18c)
-        s.landing = land
+        s.landing = land and not part
+        if part { s.tempLand = 1 if land else 0 }
         v := s.val(x, s.blockTerm(loc.In))
         s.landing = false
+        s.tempLand = -1
         s.bindLocal(l, x)
         s.terms[I64(l)] = s.valTerm(v, s.blockTerm(loc.In))
         h := try s.splitHome.Get(I64(l)) catch default Term.None
@@ -4287,7 +4335,10 @@ fn (s mut Scoper&) floorOf(t Term) Term {
 # a value with no storage of its own read through a place (a field of a call's result): a call lands where its
 # obligations say, as ":=" from it would (O18c: "m := r.mods[0]; m.top.Get(n)"), else where the place stands
 fn (s mut Scoper&) tempVal(v typed.Expr&) Val {
-    if s.callOf(v) != null and s.isFresh(v) {
+    # the part a local is declared from, its landing decided for it (decide); any other lands by its obligations
+    decided := s.tempLand
+    s.tempLand = -1
+    if s.callOf(v) != null and s.isFresh(v) and decided != 0 {
         s.landing = true
         x := s.val(v, Term.None)
         s.landing = false
@@ -5369,12 +5420,23 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             v := s.val(r, Term.None)
             t := s.valTerm(v, s.here())
             at := s.nameSpan(sp)
-            s.buildSite(site, t if t.Runs() else s.here(), at)
+            # held in a local only ever called, it lives in this frame (D16c, E31); an adapter of a Str's receiver's part
+            # lives in the block it is made in, as a lambda capturing one does (E11c)
+            if frame {
+                k := s.paramVar(I64(cb), 0)
+                if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
+                s.onFrameAt(site)
+                s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
+                return existing(s.here())
+            }
+            home := t if t.Runs() else s.here()
+            if s.noBuildTerm(home) { home = s.here() }
+            s.buildSite(site, home, at)
             # what the adapted Call builds where its receiver lives is built where the instance is
             k := s.paramVar(I64(cb), 0)
             if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
             s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
-            return existing(t)
+            return existing(home if s.noBuildTerm(t) else t)
         }
     }
 }
