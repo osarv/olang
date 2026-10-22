@@ -20689,6 +20689,14 @@ than its storage - at the storage's scope, so `for x in h.items { x.next = rvN(.
 `for x in l` over a by-value `List` parameter in its block. Stage 0 gives each element the references' scope (O17a); the
 pass now records that scope for such a borrow (`splitHome`) and reads the borrow there. Its errors are unchanged
 (scopediff identical). emitdiff: 25 of 26 files and 989 of 1013 tests as stage 0's, tests/shared 687 of 711.
+
+Merged with master 30b555f (the scope pass's round 3) and with the driver's branch (M10), which had each written the
+same two things. An arena-homed local is emit's (`%lp` slot made at entry, storage allocated at `Live`; the driver's
+identical `%l<i>p` copy dropped). The runtime has one generator, compiler/runtime.olang (the driver's: it also fills
+san.ll and does the race attributes); emit's copy (`RuntimeFill`/`RuntimeModule`/`RuntimeDecls`) is gone and
+`emitdump -rt` writes runtime.olang's output, still stage 0's byte for byte. After both merges: emitdiff 989 of 1013
+tests, drvdiff no difference over 83 command lines, scopediff unchanged, and stage 1 == stage 2 at -debug.
+
 ## Port M6: the scope pass, round 3 - the last silent cases, per-instance bindings, stage 0's messages (2026-10-21)
 
 Round 2 left 18 of the 279 checks cases stage 0 refuses by a section-8 rule with no scope error from the port. Round 3
