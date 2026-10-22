@@ -173,6 +173,7 @@ type Table struct(Names mut source.Names&) {
     scopes List<Array<I64>&>            # a function type's scopes, by ScopesId: role, how many parameters, their entries,
     scopeKeys Map<Array<I64>&, ScopesId> # then the results'
     refHolds Map<TypeId, I64>           # HoldsRefs, once asked: 1 being asked, 2 no, 3 yes
+    holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
 }
 
 # a table holding the types every program has, each at a fixed id: Unknown 0, Void 1, Bool 2, the numbers in T4's order
@@ -538,6 +539,8 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
     state := try t.refHolds.Get(id) catch default 0
     if state != 0 { return state == 3 }
     t.refHolds.Put(id, 1)
+    outer := t.holdsUnsure
+    t.holdsUnsure = false
     holds := false
     match k {
         case Kind.Named {
@@ -553,13 +556,19 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
         case Kind.AnonEnum { holds = t.listHolds(t.ShapeCases(id)) }
         nomatch { }
     }
-    t.refHolds.Put(id, 3 if holds else 2)
+    # a part not typed yet (a ":=" field the checker has not reached) leaves the answer to be asked again
+    if t.holdsUnsure { t.refHolds.Remove(id) } else { t.refHolds.Put(id, 3 if holds else 2) }
+    t.holdsUnsure = t.holdsUnsure or outer
     return holds
 }
 
 fn (t mut Table&) listHolds(l ListId) Bool {
     for x in t.Items(l) {
-        if x != TypeId(0) and t.HoldsRefs(x) { return true }
+        if x == TypeId(0) {
+            t.holdsUnsure = true
+        } else if t.HoldsRefs(x) {
+            return true
+        }
     }
     return false
 }

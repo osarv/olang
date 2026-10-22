@@ -2823,6 +2823,11 @@ o25enote.olang:19:5: note: 'text' is made here, in a block that closes first - m
    19 |     text := mk(n)
       |     ^~~~
 compilation failed with 1 error
+=== o25gfieldbinding.olang
+o25gfieldbinding.olang:17:15: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   17 |         c.cur = g
+      |               ^
+compilation failed with 1 error
 === o25hcopyelem.olang
 o25hcopyelem.olang:12:13: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
    12 |     return b[0]
