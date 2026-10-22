@@ -270,6 +270,7 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     flGrew Bool = false
     flCaps Bool = true                     # whether carried follows what a function value captured
     kwTransient Bool = false               # the lambda kwExpr walks next never leaves where it is made (D16c)
+    atDest Bool = false                    # the choice val judges next builds its new values at its destination (E28)
     landSite I64 = -1                      # the call an assignment's value is, and its "=" (C2d through a result)
     landSp source.Span = source.Span(0, 0)
 }
@@ -3611,7 +3612,12 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
         return
     }
     s.terms[I64(l)] = claim
+    # a conditional or a match of references a written type declares builds its new values at the claim, as any
+    # temporary it is given lands (O18a) - and so is a set where its other values live elsewhere (E28)
+    bareChoice := loc.Marked == typed.Mark.Bare and s.isRef(t) and s.choiceOfRefs(x)
+    s.atDest = bareChoice
     v := s.val(x, claim)
+    s.atDest = false
     s.bindLocal(l, x)
     # a conditional or a match of references living in different scopes declared with a bare "&" is held where it is
     # declared - every value it can give outlives this block - and where it lives is not known here: read, never built
@@ -4827,7 +4833,10 @@ fn (s mut Scoper&) val(x typed.Expr&, dest Term) Val {
             return s.join(a, b, d)
         }
         case typed.Expr.Seq(_, _, q) {
+            ad := s.atDest
+            s.atDest = false
             s.stmts(q.Stmts)
+            s.atDest = ad
             return s.val(q.X, dest)
         }
         case typed.Expr.Match(_, ty, m) { return s.match(m, dest) }
@@ -5075,6 +5084,10 @@ fn (s mut Scoper&) sliceTerm(base typed.Place&) Term {
 # where a choice's new values are built (E28, S12b): where the values it gives that already live somewhere share a scope,
 # read off their shape - else where the choice lands
 fn (s mut Scoper&) choiceDest(xs List<typed.Expr&>&, dest Term) Term {
+    if s.atDest {
+        s.atDest = false
+        return dest
+    }
     shared := Term.None
     for x in xs {
         if s.isFresh(x) or s.isNullLit(x) or not s.holds(x.Type()) { continue }
