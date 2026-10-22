@@ -21,6 +21,7 @@ import "fetch"
 import "source"
 import "scope"
 import "typed"
+import "types"
 import "lower"
 import "fmt"
 import "emit"
@@ -426,6 +427,9 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
 # temporary built where the pass places it and each local where it homes it
 fn placement(c mut typecheck.Checker&, cfg mut build.Config&) List<typed.Plan> {
     sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
+    # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
+    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
+    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Run()
     return sc.Plans
 }

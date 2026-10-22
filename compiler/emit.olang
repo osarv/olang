@@ -898,7 +898,7 @@ fn stmtSpan(s mir.Stmt) source.Span {
         case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _) => sp
         case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _) => sp
         case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Write(sp, _, _, _) => sp
-        case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _) => sp
+        case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp) => sp
     }
 }
 
@@ -2234,6 +2234,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             }
         }
         case mir.Stmt.Give(_, _) { fe.gap("Give") }
+        case mir.Stmt.Raised(sp) { fe.trace(sp) }
         case mir.Stmt.RegisterDtor(_, sr, ty, x) {
             id := try fe.E.dtorOf.Get(ty) catch default -1
             if id < 0 {
@@ -3040,7 +3041,8 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
                     hi = fe.let("fcmp olt double " $d ", " $fe.E.pow2(gb))
                 } else {
                     if gb == 64 {
-                        lo = fe.let("fcmp oge double " $d ", -" $fe.E.pow2(63))
+                        # -2^63: 2^63's bits with the sign bit set (a hex constant takes no "-")
+                        lo = fe.let("fcmp oge double " $d ", " $fe.E.constText(types.TypeId(14), (I64(F64(1.0).Bits()) + (I64(63) << 52)) | (I64(1) << 63)))
                     } else {
                         lo = fe.let("fcmp ogt double " $d ", " $fe.E.constText(types.TypeId(14), I64((F64(0) - F64(I64(1) << (gb - 1)) - 1.0).Bits())))
                     }
@@ -4126,8 +4128,13 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
         if code == "%c" { b.Push("  %c = extractvalue " $rt " %r, 0\n") }
         b.Push("  %bad = icmp ne i32 " $code ", 0\n  br i1 %bad, label %fail, label %ok\nfail:\n")
         fe.clauses(b, code, k, ty, at + ps.Len() + nscopes + ntargets, at + ps.Len() + nscopes)
-        rc := e.recodeText(b, code, t.Errors(ty), joinErrs)
-        b.Push("  %rc64 = zext i32 " $rc " to i64\n  %rp = inttoptr i64 %rc64 to ptr\n  ret ptr %rp\nok:\n")
+        if k.Ends.N > I32(0) {
+            fe.taskEnds(b, code, k)
+            b.Push("ok:\n")
+        } else {
+            rc := e.recodeText(b, code, t.Errors(ty), joinErrs)
+            b.Push("  %rc64 = zext i32 " $rc " to i64\n  %rp = inttoptr i64 %rc64 to ptr\n  ret ptr %rp\nok:\n")
+        }
     }
     if ntargets > 0 and value != "" {
         t0 := at + ps.Len() + nscopes
@@ -4234,6 +4241,30 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
         }
         b.Push("  ret ptr null\npass" $ci ":\n")
     }
+}
+
+# "spawn f(x)!" (E35, P6): the error code the task's call failed with ends the program from the task's thread, named
+# as a "!" names it, where the "!" is
+fn (fe mut fnEm&) taskEnds(b mut StringBuilder&, code String&, k mir.Task) {
+    e := fe.E
+    where := e.where(fe.F.File, k.EndsSp)
+    hint := "" if e.traced() else "(build with -debug to see where it came from)\n"
+    e.declare("__olang_bang_failed", "void @__olang_bang_failed(ptr)")
+    for i in range 0, I64(k.Ends.N), 2 {
+        v I64 = 0
+        match fe.F.Ops[I64(k.Ends.At) + i] {
+            case mir.Operand.Const(_, x) { v = x }
+            case _ { }
+        }
+        text := ""
+        match fe.F.Ops[I64(k.Ends.At) + i + 1] {
+            case mir.Operand.Data(_, c, _, _) { text = fe.constText(c) }
+            case _ { }
+        }
+        b.Push("  %bq" $i " = icmp eq i32 " $code ", " $v "\n  br i1 %bq" $i ", label %bang" $i ", label %bnext" $i "\nbang" $i ":\n")
+        b.Push("  call void @__olang_bang_failed(ptr " $e.cstr($where ": " $text "\n" $hint) ")\n  unreachable\nbnext" $i ":\n")
+    }
+    b.Push("  call void @__olang_bang_failed(ptr " $e.cstr($where ": unhandled error\n" $hint) ")\n  unreachable\n")
 }
 
 # a code under list from as the same error under list to, written into b: the name of its value

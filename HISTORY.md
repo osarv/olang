@@ -21537,6 +21537,88 @@ lowering such a task is still a gap. The scopesan stub reaches Touch, since the 
 intrinsics and `nobuiltin`; the B5a order read from check; the old order code removed.
 
 **Numbers, through stage 1 (debug driver)**: checks.olang's scenarios 37 of 56 at the start of the round, 46 of 56 at its end (k2, agree, strheld, testends, landing, cgreview, fuzz, interp, spawnerr and vechandle still failing - PROGRESS.md says whose each is); cases 85 failing at round 1's end, 75 of 1,061 now (one new, r1unknownerror); every test file but compiler/*.olang passes, 948 + 150 tests. The changed scenarios pass with stage 0 as well.
+## Port M12: the suite with the port as the compiler under test, third round (2026-10-22)
+
+Everything not the evaluator's (an evaluator round ran beside it). Measured through a debug build of stage 1 on the
+merge of master, suite round 2 and code generation round 5: checks/checks.olang's cases 995 of 1,062 passing at the
+start (67 failing, l1nul only a sweep script's grep), its scenarios 47 of 56.
+
+**Lowering and emit.** "spawn f(x)!" (E35, P6) is lowered: the call itself is the task, and its Task carries `Ends`,
+pairs of an error code and its name as "!" names it (lower's `bangNames`, shared with "!"'s own exits) - the
+trampoline ends the program from the task's thread where the call fails with one (`__olang_bang_failed`, where the "!"
+is), the evaluator the same at the task's end, keeping the task's own trace. A check a "!" takes starts its trace where
+it fails (S18d): `mir.Stmt.Raised`, emitted only on the way to a "!", is "raised here" in emit and the evaluator - a
+`(checked a[i])!` printed no trace at -debug or under interpret. A checked float-to-I64 conversion compared with
+`-0x43e0...`, which LLVM reads as no double (fuzz seed 2 at -debug): -2^63 is written as its bits.
+
+**The scope pass.** A local declared from a part of a call's built result (`x := mk(base, 64).p`, `t :=
+lx.next().text`) lands as `:=` from the call would (O18c: by its obligations only where that costs nothing or is
+forced) - `tempVal` landed every such call where its obligations say, so landing's callparts kept every turn's array
+where `base` lives and ran out of its 50 MB. A Call adapter held in a local only called lives in the frame, as a
+capturing lambda so held does (D16c) - strheld's adapterlocal and adaptercallee; one passed as an argument is still
+made where its instance is, so a Str's receiver's part is refused (stradapter, C8). The driver now hands the pass the
+checker's type spelling and instance notes (`Spell`, `InstNote`), which only the dump tools did - every note naming a
+type ("declare it where 'm' lives: 't mut String&m = ...'") was silently dropped by the compiler itself. Notes as
+stage 0 gives them: a local a built result made is made where the other lives (`'mk&s(...)'`, not where a scope
+argument is written), O25e's and T17c's and C2d's argument made where the other lives, O25's "or refill the one kept",
+E28's note at the value of a conditional or match that does not fit, E31b's at the callee's statement that makes it no
+view (`useWhy`, recorded where `uses` first finds a statement no view keeps), and a handle copied out of a collection
+named by the variable it was read from (O17b). An obligation on a `&p` field of an argument reached through an element
+is O23/O11's unknown binding, not O10c.
+
+**Check.** One error a cause (B11): an unknown name once a body, and not at all once its type was said unknown; an
+unknown type suggests an imported module's type of that name (`json.Json`); a receiver of an unknown type, or of a type
+T29 refused (declared over a struct or an instance), and a reference to an unknown type, say nothing more; an enum
+called is "has no constructor", a type as a value "a type, not a value" (an enum's name, read for its cases, and a
+generic's refused at its declaration say nothing). Spellings: a function type writes where its references live
+(`fn(a mut N&, b N&a)`, a borrowed result `mut N&a`, a built one writable - T22); M19's receiver as written
+(`Array<Char>&`); D9a's type as written (`Array<I16, N>&`, G22); S12b's mismatch names a first literal value's own type.
+Notes: C2a's at the parameter, T25b's at a read-only local or parameter naming `r mut P&`, E31a's instantiation.
+D16c's lambda parameter is "already declared here" (names: `lambdaParams`); a field named as a parameter is C2a's alone.
+O26: `&return` with no result scope is an error. T17: a missing case after `is` of the value's own enum. E15a: a try
+with nothing to fail keeps its operand (E31b's copy is then still judged). E11b: text called (`"," (...)`).
+
+**Numbers, through stage 1 (debug driver)**: cases 1,036 of 1,062 passing at the end (26 failing: 19 the evaluator's -
+S8a/S18c/K2/T29d/D13c/E33/B9a/B9c/retire, s5mapgetreturn, unseen; then g16bgenericonce, o17permute6, o17permute6b,
+t27anonpayload, vec160genericselfhold, and nothing else); scenarios 50 of 56 (agree's share_B, k2's Ring and interp's
+cyclic are the evaluator's; vechandle's -i stale view is the evaluator's retire; strheld's g9dorder and spawnerr's
+-d -s trace are the two left - see PROGRESS.md).
+
+**Left, not the evaluator's.** *scope*: g9dorder (strheld) - `pick(r, Res(2), true).k` builds the temporary `Res(2)`
+where `r` lives, not in the caller's block (pre-existing: the call's result scope lands at r's, so its destructor runs
+at main's end); g16bgenericonce (a scope error in a generic body once for every instantiation, its note spelled with
+the generic's variables - the pass reports it per instance and gives no note inside one); o17permute6/6b (O17 on a
+fixed-array value copy lent to a callee calling a function value with its element - the port finds no keeping).
+*check*: t27anonpayload (an anonymous enum's spelling with its payload's field names - the type table keeps none),
+vec160genericselfhold (T16 named for the first instantiation, `N<I64>`, not the generic). *found, not fixed*: spawnerr's
+`-debug -sanitize` tasks.olang printed, under the four-worker scenario run only, a "list.olang:510: raised here" after
+the join's trace line (alone, 20 of 20 runs are right) - load-dependent, not reproduced alone.
+
+**Stocktake: replacing the stage-0 comparisons with stored outputs** (the user's condition for deleting
+`bootstrap/`). What each compares and what it would take:
+- *tokdiff, astdiff*: the port's scanner and parser against the C oracles `bootstrap/oracle/tokdump.c` and `astdump.c`,
+  over every .olang file. Store each file's dump (or, to keep the repository small, its hash plus the full dump for the
+  files with lexical or syntax errors) in compiler/goldens/, captured once by the oracles; astdiff's round trip (written
+  back and read again) needs no oracle and stays. Every edit of a .olang file in the repository then needs the golden
+  captured again - by the port, at which point they are regression goldens, not acceptance against C.
+- *namesdiff, checkdiff, scopediff, layoutdiff, diaggold*: already read stored goldens (compiler/goldens/diag.txt,
+  layout.txt); only their capture (`make diaggold`, `make layoutgold`) runs stage 0. Switch the capture tools'
+  default compiler to stage 1 and they need nothing more. checkdiff/scopediff's second half (every root stage 0
+  accepts checks clean) is already against the port alone.
+- *emitdiff, evaldiff*: each program built (or run) by stage 0 and by the port, compared test by test. The test files
+  are self-checking (every test asserts), so "every test passes" is the golden for them; the checks run cases need
+  their output and status stored beside each case (a `.want` file beside each - 223 cases say `# check: run`).
+- *drvdiff*: stage 0's stdout, stderr and status for each of its command lines; store them with the scratch directory written
+  as W (the tool already substitutes it).
+- *modgraph*: against `bootstrap/oracle/modgraph.c`; store the module graph of each root.
+- *checks.olang*: two tests read `bootstrap/errmsg.h` and `bootstrap/*.c` (every C diagnostic call fits its message);
+  they go with bootstrap/, their port twins (msgs.olang's) stay. The makefile's `OLANG ?= build/out` default and
+  `make verify`'s `$(MAKE) test` become stage 1 (built by the seed, `make bootstrap`), whose -O3 link of
+  tests/shared.olang takes ~7.4 GB in ld.
+- *the 26 cases and 6 scenarios above* must pass first, the evaluator's 19 included.
+Order: the cases and scenarios, then the goldens for drvdiff and the run cases (small, mechanical), then
+tokdiff/astdiff's (decide hash or full), then OLANG's default, then tag `bootstrap/` and delete it.
+
 ## Port M9, round 5: big aggregates through memory, -race and -sanitize, DWARF for aggregates (2026-10-22)
 
 **Aggregates over 128 bytes go through memory**, as stage 0's do (types.ViaMemory: a struct, a tuple, a record or a
