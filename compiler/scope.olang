@@ -1381,15 +1381,23 @@ fn (s mut Scoper&) landByObligations(c typed.Call&, rv I64, beta Array<Term>&) T
     return best
 }
 
-# the call a reference argument is read out of a part of the built result of, else null
-fn (s mut Scoper&) argPartCall(a typed.Expr&) typed.Call&a {
+# the site of the call a reference argument is read out of a part of the built result of, else -1
+fn (s mut Scoper&) argPartCall(a typed.Expr&) I64 {
     match s.unAway(a) {
         case typed.Expr.Read(_, ty, p, _) {
             if s.isRef(ty) { return s.partCall(p) }
         }
         case _ { }
     }
-    return null
+    return -1
+}
+
+fn (s mut Scoper&) argPartOK(a typed.Expr&, t Term) Bool {
+    if not t.Runs() { return true }
+    match s.unAway(a) {
+        case typed.Expr.Read(_, _, p, _) { return s.partOK(p, t) }
+        case _ { return false }
+    }
 }
 
 # whether every argument determining a call's scope variable v is constant data (T25d), and one is
@@ -3414,8 +3422,10 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
         s.val(x, Term.None)
         return
     }
-    # a held local: its temporary is built where its one use puts it (typed.LocalKind.Held)
-    if loc.Kind == typed.LocalKind.Held and s.isFresh(x) {
+    # a held local: its temporary is built where its one use puts it (typed.LocalKind.Held) - a call's several results
+    # passed on as another's arguments (D8d) where the first of them is
+    spreadCall := loc.Kind == typed.LocalKind.Hidden and s.P.T.KindOf(t) == types.Kind.Tuple and s.callOf(x) != null
+    if (loc.Kind == typed.LocalKind.Held or spreadCall) and s.isFresh(x) {
         s.held.Put(I64(l), x)
         s.terms[I64(l)] = Term.None
         return
@@ -4806,39 +4816,94 @@ fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
 # noted for the call (O18a); -1 for none
 fn (s mut Scoper&) partLand(p typed.Place&, ty types.TypeId, dest Term) I64 {
     if not dest.Runs() or dest == s.here() or not s.holds(ty) { return -1 }
-    c := s.partCall(p)
-    if c == null { return -1 }
-    k := I64(c.Site)
-    if (try s.partDest.Get(k) catch default Term.None) != Term.None { return -1 }
+    k := s.partCall(p)
+    if k < 0 or (try s.partDest.Get(k) catch default Term.None) != Term.None or not s.partOK(p, dest) { return -1 }
     s.partDest.Put(k, dest)
     return k
 }
 
-# the call whose built result a place is a part of - a field, an element or a payload of it, through what it holds -
-# null for none
-fn (s mut Scoper&) partCall(p typed.Place&) typed.Call&p {
+# the site of the call whose built result a place is a part of - a field, an element or a payload of it, through what it
+# holds, or of a held local it initializes (D8d) - -1 for none
+fn (s mut Scoper&) partCall(p typed.Place&) I64 {
     return match p {
         case typed.Place.Field(_, _, b, _) => s.partCall(b)
         case typed.Place.Elem(_, _, e) => s.partCall(e.Base)
         case typed.Place.Payload(_, _, pl) => s.partCall(pl.Base)
         case typed.Place.Deref(_, _, r) => s.builtCall(r)
         case typed.Place.Temp(_, _, v, _) => s.builtCall(v)
-        case _ => null
+        case typed.Place.Local(_, _, id) => s.builtCall(try s.held.Get(I64(id)) catch default null)
+        case _ => -1
     }
 }
 
-# the call an expression is where its result is built (a temporary) - read out of the temporary holding it, or a part
-# of one - else null
-fn (s mut Scoper&) builtCall(x typed.Expr&) typed.Call&x {
-    if x == null { return null }
+# whether the call partCall finds can land in t: what its callee's obligations need its result scope to be outlived by
+# - read off its arguments without judging them - outlives t (as stage 0 lands it only there)
+fn (s mut Scoper&) partOK(p typed.Place&, t Term) Bool {
+    return match p {
+        case typed.Place.Field(_, _, b, _) => s.partOK(b, t)
+        case typed.Place.Elem(_, _, e) => s.partOK(e.Base, t)
+        case typed.Place.Payload(_, _, pl) => s.partOK(pl.Base, t)
+        case typed.Place.Deref(_, _, r) => s.builtOK(r, t)
+        case typed.Place.Temp(_, _, v, _) => s.builtOK(v, t)
+        case typed.Place.Local(_, _, id) => s.builtOK(try s.held.Get(I64(id)) catch default null, t)
+        case _ => false
+    }
+}
+
+fn (s mut Scoper&) builtOK(x typed.Expr&, t Term) Bool {
+    if x == null { return false }
+    match x {
+        case typed.Expr.Read(_, _, q, _) { return s.partOK(q, t) }
+        case typed.Expr.Away(_, _, y) { return s.builtOK(y, t) }
+        case _ { }
+    }
+    c := s.callOf(x)
+    if c == null { return false }
+    fty := s.calleeType(c)
+    callee := s.bodyOf(c.Target)
+    if callee < 0 or not s.summed(callee) { return false }
+    rv := s.resultVarOf(fty)
+    if rv < 0 { return true }
+    vars := s.P.T.ScopeVarsOf(fty)
+    for r in s.sums[callee].Rels {
+        if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv) { continue }
+        match r.Hi {
+            case Term.Var(v) {
+                b := Term.None
+                for i in range c.Args.Len() {
+                    k := s.P.T.ShareOf(fty, i)
+                    q := k if k >= 0 else i
+                    if v < vars.Len() and vars[v] == q {
+                        b = s.peekTerm(c.Args[i])
+                        break
+                    }
+                }
+                if b == Term.None and s.staticVar(c, v) { b = Term.Program }
+                # a temporary given for it is bound after, where the result lands
+                if b == Term.None { continue }
+                o := s.order(b, t)
+                if o != Holds and o != Obliged { return false }
+            }
+            case Term.Program { }
+            case _ { return false }
+        }
+    }
+    return true
+}
+
+# the site of the call an expression is where its result is built (a temporary) - read out of the temporary holding it,
+# or a part of one - else -1
+fn (s mut Scoper&) builtCall(x typed.Expr&) I64 {
+    if x == null { return -1 }
     match x {
         case typed.Expr.Read(_, _, q, _) { return s.partCall(q) }
         case typed.Expr.Away(_, _, y) { return s.builtCall(y) }
         case _ { }
     }
     # an array value a call gives is built in its result scope (T7b)
-    if not s.isFresh(x) and not s.arenaValue(x.Type()) { return null }
-    return s.callOf(x)
+    if not s.isFresh(x) and not s.arenaValue(x.Type()) { return -1 }
+    c := s.callOf(x)
+    return I64(c.Site) if c != null else -1
 }
 
 fn (s mut Scoper&) readPart(p typed.Place&, ty types.TypeId, dest Term) Val {
@@ -5208,6 +5273,11 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             if vars[v] == q { owner[i] = v }
         }
     }
+    # a result borrowed from a parameter (O13) given a temporary lives where the temporary is built: where the result
+    # lands, as a built result does (O18a)
+    ev := -1
+    ef := s.P.T.ResultFrom(fty, 0)
+    if ef >= 0 and ef < n { ev = owner[ef] }
     # existing arguments determine their scope variables (O17, O25e) - and so does a call's result passed on that lands
     # where its own obligations say (O18c): "adj[a].Push(v)" is "inner := adj[a]; inner.Push(v)"
     vals := Array<Val>(n)
@@ -5273,10 +5343,12 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
             # an argument before it determines: its call lands there, where the callee keeps it (O18b, O18c)
             pk := -1
             pc := s.argPartCall(a)
-            if pc != null {
+            if pc >= 0 and s.argPartOK(a, s.requiredBy(s.bodyOf(c.Target), owner[i], beta) if owner[i] != ev else dest) {
                 t := s.requiredBy(s.bodyOf(c.Target), owner[i], beta)
-                if t.Runs() and t != s.here() and (try s.partDest.Get(I64(pc.Site)) catch default Term.None) == Term.None {
-                    pk = I64(pc.Site)
+                # ... or for the parameter the result is borrowed from, where the result is put
+                if t == Term.None and owner[i] == ev and dest.Runs() { t = dest }
+                if t.Runs() and t != s.here() and (try s.partDest.Get(pc) catch default Term.None) == Term.None {
+                    pk = pc
                     s.partDest.Put(pk, t)
                 }
             }
@@ -5390,11 +5462,6 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # a scope variable no argument determines: where the callee's obligations say it must live (O18b), else where the
     # call's result lands, else where the call stands (O18a)
     callee := s.bodyOf(c.Target)
-    # a result borrowed from a parameter (O13) given a temporary lives where the temporary is built: where the result
-    # lands, as a built result does (O18a)
-    ev := -1
-    ef := s.P.T.ResultFrom(fty, 0)
-    if ef >= 0 and ef < n { ev = owner[ef] }
     for v in range vars.Len() {
         if beta[v] != Term.None { continue }
         t := s.requiredBy(callee, v, beta)
