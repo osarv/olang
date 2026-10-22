@@ -5420,8 +5420,8 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
             v := s.val(r, Term.None)
             t := s.valTerm(v, s.here())
             at := s.nameSpan(sp)
-            # held in a local only ever called, it lives in this frame (D16c, E31); an adapter of a Str's receiver's part
-            # lives in the block it is made in, as a lambda capturing one does (E11c)
+            # held in a local only ever called, it lives in this frame (D16c, E31) - anywhere else where its instance is,
+            # a Str's receiver's part's too, which E11c refuses (a callee keeping nothing of it may hand it on, C8)
             if frame {
                 k := s.paramVar(I64(cb), 0)
                 if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
@@ -5429,14 +5429,12 @@ fn (s mut Scoper&) fnVal(f typed.FnVal&, d Term, sp source.Span) Val {
                 s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
                 return existing(s.here())
             }
-            home := t if t.Runs() else s.here()
-            if s.noBuildTerm(home) { home = s.here() }
-            s.buildSite(site, home, at)
+            s.buildSite(site, t if t.Runs() else s.here(), at)
             # what the adapted Call builds where its receiver lives is built where the instance is
             k := s.paramVar(I64(cb), 0)
             if s.buildsSum(I64(cb), k) { s.buildsThrough(t, at, I64(cb), k) }
             s.plan.Pass(site, typed.Scope[s.scopeOf(t)])
-            return existing(home if s.noBuildTerm(t) else t)
+            return existing(t)
         }
     }
 }
@@ -6336,6 +6334,16 @@ fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
     loc := s.B.Locals[l]
     match loc.Kind {
         case typed.LocalKind.Var, typed.LocalKind.Param, typed.LocalKind.Binding, typed.LocalKind.Field {
+            # a handle copied out of a collection by a method ("l := try m.Get(k)"): its references are where the
+            # variable it was read from lives (O17b)
+            if loc.Kind == typed.LocalKind.Var and s.isHandle(loc.Ty) {
+                x := s.unAway(try s.inits.Get(l) catch default null)
+                c := s.callOf(x) if x != null else null
+                if c != null and c.Args.Len() > 0 and (s.isMethodCall(c) or s.indexCall(c)) {
+                    r := s.shownLocal(flRootExpr(s.unAway(c.Args[0])), depth + 1)
+                    if r >= 0 { return r }
+                }
+            }
             return l if loc.Name != source.NameId(0) else -1
         }
         case typed.LocalKind.Hidden, typed.LocalKind.Held {

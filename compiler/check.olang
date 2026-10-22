@@ -1044,7 +1044,9 @@ fn (c mut Checker&) failForms() {
             u := c.uncovered(mine, e)
             if u != types.UnknownT {
                 c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+                pushed := c.instContexts(inst)   # G16b: with where the instance was asked for
                 c.err(c.nameSpan(fd), msgs.CheckedNotSuperset(name, plainName, plainName, c.ty(u)))
+                for k2 in range pushed { c.P.L.Diags.PopContext() }
                 c.pop()
                 break
             }
@@ -2333,7 +2335,7 @@ fn (c mut Checker&) paramWritten(prm ast.Param&, t types.TypeId) {
     c.mutParam(prm.Ty, t)
     if prm.Ty != null and not c.namesTypeVar(prm.Ty) and not c.isRef(t) and c.P.T.KindOf(c.under(t)) == types.Kind.Array {
         nsp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
-        c.err(nsp, msgs.ArrayParamByValue(c.tok(prm.Name), c.ty(t)))
+        c.err(nsp, msgs.ArrayParamByValue(c.tok(prm.Name), c.src(prm.Ty.Span())))   # as written: a variable bare (G22)
     }
 }
 
@@ -2644,7 +2646,11 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
         case typed.Place.Deref(_, _, ref) {
             rt := typeOf(ref)
             if c.isRef(rt) and (c.P.T.PermOf(rt) & types.Writable) == 0 {
-                c.err(sp, msgs.CaptureReadOnly() if c.capturedValue(ref) else msgs.ReadOnlyRefWrite())
+                if c.capturedValue(ref) {
+                    c.err(sp, msgs.CaptureReadOnly())
+                } else {
+                    c.noteWritable(c.err(sp, msgs.ReadOnlyRefWrite()), ref)
+                }
             } else if c.isRef(rt) and c.roRoot(readPlace(ref)) >= 0 {
                 # T25c: a read-only copy writes nothing through the writable references it shares
                 rec := c.err(sp, msgs.ReadOnlyCopyWrite())
@@ -3004,11 +3010,23 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                     b.PushChar(' ')
                 }
                 c.spell(b, ps[i], false)
+                # T22: a parameter living where an earlier one does, "b N&a"
+                sh := c.P.T.ShareOf(t, i)
+                if sh >= 0 and sh != i and sh < ns.Len() and ns.Len() == ps.Len() { b.Push(c.text(source.NameId(I32(ns[sh])))) }
             }
             b.PushChar(')')
-            if c.P.T.Result(t) != types.VoidT {
+            res := c.P.T.Result(t)
+            if res != types.VoidT {
                 b.PushChar(' ')
-                c.spell(b, c.P.T.Result(t), false)
+                rf := c.P.T.ResultFrom(t, 0) if c.P.T.KindOf(res) == types.Kind.Ref else types.FromTypeVar
+                if rf == types.OwnScope {
+                    # a built result is new storage, writable (T25c)
+                    c.spell(b, c.P.T.Ref(c.P.T.Referent(res), types.Writable), false)
+                } else {
+                    c.spell(b, res, false)
+                    # a result borrowed from a parameter, "mut N&a" (T22)
+                    if rf >= 0 and rf < ns.Len() and ns.Len() == ps.Len() { b.Push(c.text(source.NameId(I32(ns[rf])))) }
+                }
             }
             es := c.P.T.Items(c.P.T.Errors(t))
             if es.Len() > 0 {
@@ -3149,13 +3167,26 @@ fn (c mut Checker&) isConstVar(t types.TypeId) Bool {
     return k == types.Kind.Var and c.P.VarAt(c.P.T.A(t), c.P.T.B(t)).Const != types.UnknownT
 }
 
+# whether the body being checked has a result scope (O13): a result it builds
+fn (c mut Checker&) hasResultScope() Bool {
+    if c.fr().Body < 0 { return false }
+    for v in c.P.T.ScopeVarsOf(c.cur().Ty) {
+        if v == types.ResultVar { return true }
+    }
+    return false
+}
+
 # what a written type says about where its reference lives (O3, O25a)
 fn (c mut Checker&) markOf(t ast.TypeRef&) typed.Mark {
     if t == null { return typed.Mark.Infer }
     match t {
         case ast.TypeRef.Ref(sp, _, sc) {
             if sc == source.NameId(0) { return typed.Mark.Bare }
-            if c.text(sc) == "return" { return typed.Mark.Return }
+            if c.text(sc) == "return" {
+                # O26: only where there is a result scope - a result built, not one borrowed or none
+                if not c.hasResultScope() { c.err(sp, msgs.ReturnScopeNone()) }
+                return typed.Mark.Return
+            }
             # in a lambda, a variable of a body around it is its capture (D16c)
             id := c.localOrCapture(sc, sp)
             if id >= 0 { return typed.Mark.Of(typed.LocalId(I32(id))) }
@@ -4273,7 +4304,9 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
         return c.unknown(sp)
     }
     if ref.Kind == names.What.Type {
-        c.err(sp, msgs.TypeNotAValue(c.tok(n)))
+        # an enum's name is where its cases are read; a generic's, refused at its declaration, says nothing more
+        t := c.typeNamed(ast.Expr.Name(sp, n))
+        if t >= types.TypeId(0) and not c.isEnum(t) { c.err(sp, msgs.TypeNotAValue(c.tok(n))) }
         return c.unknown(sp)
     }
     if ref.Kind == names.What.Func { return c.fnValue(sp, c.P.FnNamed(ref.Module, n)) }
@@ -5063,8 +5096,13 @@ fn (c mut Checker&) identity(sp source.Span, a ast.Expr&, b ast.Expr&, negated B
     # E32: a case of another enum - one sharing the name in another module, say - is no case of this one
     if c.isEnum(c.deref(typeOf(x))) {
         match b {
-            case ast.Expr.Member(_, prefix, _) {
+            case ast.Expr.Member(msp, prefix, mn) {
                 pt := c.typeNamed(prefix)
+                if pt >= types.TypeId(0) and c.P.T.Same(pt, c.deref(typeOf(x))) {
+                    # the value's own enum, with no case of this name (T17)
+                    c.err(memberSpan(msp, c.text(mn).Len()), c.noCase(pt, mn))
+                    return c.unknown(sp)
+                }
                 if pt >= types.TypeId(0) and c.isEnum(pt) {
                     c.err(prefix.Span(), msgs.AsNeedsCase(c.ty(c.deref(typeOf(x))), "'" $c.src(prefix.Span()) "'"))
                     return c.unknown(sp)
@@ -5827,6 +5865,21 @@ fn (c mut Checker&) roFix(n source.NameId, t types.TypeId) String {
 }
 
 # the note at the read-only copy a place is part of
+# B11: a write through a local or parameter whose written type is read-only - the note at it naming the type to write
+fn (c mut Checker&) noteWritable(rec I64, ref typed.Expr&) {
+    p := readPlace(ref)
+    if p == null { return }
+    match p {
+        case typed.Place.Local(_, _, id) {
+            l := c.cur().Local(id)
+            if l.Name == source.NameId(0) or l.Marked == typed.Mark.Infer { return }
+            if l.Kind != typed.LocalKind.Var and l.Kind != typed.LocalKind.Param { return }
+            c.P.L.Diags.Note(rec, c.at(l.Sp), msgs.NoteDeclareWritable(c.text(l.Name), c.text(l.Name), c.ty(l.Ty)))
+        }
+        case _ { }
+    }
+}
+
 fn (c mut Checker&) noteRo(rec I64, p typed.Place&) {
     id := c.roRoot(p)
     if id < 0 { return }
@@ -7742,7 +7795,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         if supplied(name) and name != "Eq" {
             c.gap(nsp, "a method the compiler supplies (E10b, E11c)")
         } else {
-            c.err(nsp, msgs.UnknownMethod(c.ty(c.deref(rt)), c.tok(n)))
+            c.err(nsp, msgs.UnknownMethod(c.ty(rt), c.tok(n)))   # the receiver as written, a reference one too
         }
         c.dropArgs(args)
         return c.unknown(sp)
@@ -8217,7 +8270,8 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     fr.Checks = checks
     if fr.Fallible == before and typeOf(x) != types.UnknownT and not c.inGeneric() {
         c.nothingFails(sp, isChecked, fr.Checkable > checkable or checkableAst(y))
-        return c.unknown(sp)
+        # the operand stands as written, so what follows from it is still judged (E31b's copy, section 8)
+        return x if clauses == null or clauses.Len() == 0 else c.unknown(sp)
     }
     end := fr.leaks.Len()
     c.produced(clauses, mark, end)
@@ -9212,7 +9266,10 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
         if v.Field {
             # C2a: a field named like a parameter is a pun, written bare
             pid := c.localNamed(v.Names[i])
-            if pid >= 0 and c.cur().Locals[pid].Kind == typed.LocalKind.Param { c.err(nsp, msgs.FieldHasParamName(c.tok(v.Names[i]))) }
+            if pid >= 0 and c.cur().Locals[pid].Kind == typed.LocalKind.Param {
+                rec := c.err(nsp, msgs.FieldHasParamName(c.tok(v.Names[i])))
+                c.P.L.Diags.Note(rec, c.at(c.cur().Locals[pid].Sp), msgs.NoteDeclaredHere(c.tok(v.Names[i])))
+            }
         }
         t := declared
         x typed.Expr&c = null
@@ -10969,6 +11026,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     }
     held := gather(c.stmts, from)
     rt := want if isValue else types.VoidT
+    said := types.UnknownT   # what a mismatch names the values as: a first literal value's own type, as written (S12b)
     arms mut List<typed.Arm&>&c = List<typed.Arm&>()
     covered mut List<Bool>&c = List<Bool>()
     et := c.deref(st)
@@ -11030,7 +11088,9 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
             if not isValue {
                 c.err(c.wordBefore(cs.Value.Span().Start, "=>"), msgs.ArrowInStatement())
             } else {
+                if said == types.UnknownT and rt != types.UnknownT and c.litLike(cs.Value) { said = typeOf(c.expr(cs.Value, types.UnknownT)) }
                 v = c.expr(cs.Value, rt)
+                if said == types.UnknownT { said = rt }
                 if rt == types.UnknownT and typeOf(v) != types.NullT {
                     rt = typeOf(v)
                     if c.P.T.KindOf(rt) == types.Kind.Array and c.P.T.Length(rt) != types.TypeId(0) and c.litArray(cs.Value) {
@@ -11039,7 +11099,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
                 }
                 ok := false
                 v, ok = c.fitQuiet(v, rt, cs.Value.Span())
-                if not ok { c.err(cs.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.tyOf(v))) }
+                if not ok { c.err(cs.Value.Span(), msgs.MatchValueTypes(c.ty(said if said != types.UnknownT else rt), c.tyOf(v))) }
             }
         }
         code := c.close(id, outer, mark, bfrom)
@@ -11073,7 +11133,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         if nm.Value != null and isValue {
             ok := false
             v, ok = c.fitQuiet(c.expr(nm.Value, rt), rt, nm.Value.Span())
-            if not ok { c.err(nm.Value.Span(), msgs.MatchValueTypes(c.ty(rt), c.tyOf(v))) }
+            if not ok { c.err(nm.Value.Span(), msgs.MatchValueTypes(c.ty(said if said != types.UnknownT else rt), c.tyOf(v))) }
         }
         code := c.close(id, outer, mark, bfrom)
         noMatch = typed.Arm(nm.Sp, Array<typed.Alt&>(0), null, code, v)

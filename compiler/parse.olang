@@ -2513,7 +2513,8 @@ fn (p mut Parser&) hint(want String&) Bool {
         return true
     }
     if (pk == token.Tok.StrLit or p.endsRendering(pr)) and pl == fl and (isOperandEndTok(fk) or fk == token.Tok.LParen) and
-       fk != token.Tok.RParen and fk != token.Tok.RBrack and p.joinPieceHint(f, p.operandEndAfter(f)) {
+       fk != token.Tok.RParen and fk != token.Tok.RBrack and not (pk == token.Tok.StrLit and fk == token.Tok.LParen) and
+       p.joinPieceHint(f, p.operandEndAfter(f)) {
         return true
     }
     if p.textPieceCalled(f) { return true }

@@ -89,6 +89,7 @@ type Resolver struct(L mut load.Loader&) {
     itemNames List<source.NameId>
     itemInits List<source.NameId>   # the locals of the item declared with an initializer, one value each: S8c's candidates
     inCond Bool = false
+    lambdaParams Bool = false   # declaring a lambda's parameters (D16c: "already declared here")
     item I64 = 0
     unknownSaid List<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
     # S8a: the local ifs whose condition B9a evaluated reading no build constant, by (file, the condition's start) - the
@@ -444,14 +445,17 @@ fn (r mut Resolver&) bind(n source.NameId, sp source.Span, what What, constant B
 
 # D3, D3a, D8c, M20, G22: a parameter or a local declared - a name its module, the build or a type already gives
 # is an error, as is one already declared here
-fn (r mut Resolver&) declare(n source.NameId, sp source.Span) {
+fn (r mut Resolver&) declare(n source.NameId, sp source.Span, field Bool = false) {
     name := r.text(n)
     if name == "_" {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.UnderscoreDeclared())
         return
     }
     i := try r.scope.Get(n) catch default -1
-    if i >= 0 and r.locals[i].Kind == What.Local { r.L.Diags.Error(r.at(r.mi, sp), msgs.DeclaredTwice(r.tok(n))) }
+    if i >= 0 and r.locals[i].Kind == What.Local and not field {
+        # D16c: a lambda's parameter reusing a name it could capture
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.AlreadyDeclared(r.tok(n)) if r.lambdaParams else msgs.DeclaredTwice(r.tok(n)))
+    }
     r.noShadow(n, sp)
     r.noAliasClash(r.mi, n, sp)
     r.bind(n, sp, What.Local, false)
@@ -885,7 +889,8 @@ fn (r mut Resolver&) varDecl(v ast.VarDecl&) {
     for x in v.Values { r.expr(x) }
     # a constructor's pun is its parameter, already in scope (C4)
     if v.Field and v.Ty == null and v.Values.Len() == 0 and not v.Infer { return }
-    for i in range v.Names.Len() { r.declare(v.Names[i], v.NameSps[i]) }
+    # a field named as a parameter is C2a's error, the checker's to say
+    for i in range v.Names.Len() { r.declare(v.Names[i], v.NameSps[i], v.Field) }
     # S8c: a local declared with its own value may be fixed - which the checker decides, knowing its type and its writes
     if not v.Field and v.Values.Len() == v.Names.Len() {
         for n in v.Names {
@@ -1101,7 +1106,12 @@ fn (r mut Resolver&) expr(x ast.Expr&) {
         case ast.Expr.Lambda(_, f) {
             wasCond := r.inCond
             r.inCond = false
-            r.func(f)
+            m := r.mark()
+            r.lambdaParams = true
+            r.sig(f, true)
+            r.lambdaParams = false
+            if f.Body != null { r.block(f.Body) }
+            r.popTo(m)
             r.inCond = wasCond
         }
         case ast.Expr.MatchE(_, mt) { r.matchOf(mt) }
