@@ -13414,6 +13414,32 @@ test "O26a: a local a conditional, a match or a try's default returns outlives t
     assert C3Arms == "v3v4v5v406"
 }
 
+# S12b/O18a: text a match's arm gives is the match's value, built where the match stands - never in the arm's block,
+# which closes as the arm ends (the port built it there)
+type c3Root enum {
+    Local(id I64)
+    Global(n I64)
+    Other
+}
+fn c3Where(r c3Root, path String&) String {
+    name := match r {
+        case c3Root.Local(id) => $c3Mk(id)
+        case c3Root.Global(n) => $c3Mk(n + 100)
+        case _ => "?"
+    }
+    sbChurn()
+    return $name $path
+}
+C3Where String = c3Where(c3Root.Global(1), "/g")
+test "S12b: text a match value's arm renders outlives the arm" {
+    out := StringBuilder()
+    for i in range 4 { out.Push(c3Where(c3Root.Local(i * sbRun), "/p")) }
+    out.Push(c3Where(c3Root.Other, "/o"))
+    sbChurn()
+    assert out.ToString() == "v0/pv1/pv2/pv3/p?/o"
+    assert C3Where == "v101/g"
+}
+
 # O25e: an immutable global List or Map is read through its methods - a global is in the program's scope, its storage
 # and its references alike
 C3Words List<String&> = c3Words()
@@ -16643,6 +16669,30 @@ test "P4a: defaults holding references outlive the join" {
     sbChurn()
     assert a == "n=5" and b == "none" and p.v == 40 and q.v == -1
     assert l1.Len() == 3 and l1[2] == 2 and l2.Len() == 0 and z == null
+}
+
+# P1g/T11b: an array value a task gives its target takes the result's storage, so the call builds it where the target's
+# own storage is - not in the join block, which closes at the join (the port built it there); of several targets, where
+# the longest-lived is
+fn peTwo(n I64) (String, String) { return "a" $n, "b" $(n + 1) }
+fn peTwoE(n I64) (String, I64) ? peErr {
+    if n < 0 { error peErr.NEG }
+    return "c" $n, n
+}
+test "P1g: array values tasks give their targets outlive the join" {
+    x, y String
+    u String
+    k I64
+    for i in range 3 {
+        join {
+            spawn x, y = peTwo(sbRun * 7)
+            spawn u, k = try peTwoE(-1) catch default "dflt" $i, 3
+        }
+        sbChurn()
+        assert x == "a7" and y == "b8" and u == "dflt" $i and k == 3
+    }
+    sbChurn()
+    assert x == "a7" and y == "b8" and u == "dflt2"
 }
 
 # P4b: a failure takes the place of the way the block is left - a return's value is dropped, a break is not taken - but

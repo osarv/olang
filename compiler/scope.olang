@@ -4505,10 +4505,20 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
         # a target is stored into when the task's call returns: it lasts until the join (P1g)
         if not s.lastsUntil(s.peekPlace(p, false), j) and s.report { s.err(p.Span(), msgs.SpawnResultTooShort()) }
     }
+    # where the task's result is built: where its target keeps it - an array value takes the result's storage (T11b, P1g),
+    # so that is where the target's own storage is; of several, the longest-lived, which outlives each
     dest := Term.None
-    if sw.Targets.Len() == 1 {
-        slot, _, _ := s.slotOf(sw.Targets[0])
-        dest = slot
+    for p in sw.Targets {
+        t := p.Type()
+        d := Term.None
+        if s.holds(t) {
+            slot, _, _ := s.slotOf(p)
+            d = slot
+        } else if s.arenaValue(t) {
+            d = s.peekPlace(p, false)
+        }
+        if not d.Runs() { continue }
+        if not dest.Runs() or s.order(d, dest) == Holds { dest = d }
     }
     for c in sw.Clauses {
         # a clause runs on the task's thread: what it captured is handed to the task (P2), and the default it gives is
@@ -5204,6 +5214,9 @@ fn (s mut Scoper&) match(m typed.Match&, dest Term) Val {
         }
         if m.NoMatch != null and m.NoMatch.Value != null { xs.Push(m.NoMatch.Value) }
         dest = s.choiceDest(xs, dest)
+        # a value an arm gives is the match's, built where the match stands - never in the arm's own block, which
+        # closes as the arm ends (S12b, O18a)
+        if not dest.Runs() { dest = s.here() }
     }
     d := dest if dest.Runs() else s.here()
     v := plain()
@@ -6004,7 +6017,13 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
         s.note(rec, cb.File, s.firstToken(cb.File, r.At), msgs.NoteObligationOrigin())
         # the argument too short a loop's copy of an element (B11, r06)
         ai := s.argOfVar(c, r.Hi)
-        if ai >= 0 and s.lentLoopCopy(c.Args[ai]) { s.noteLoopCopy(rec, c.Args[ai]) }
+        li := s.argOfVar(c, r.Lo)
+        if ai >= 0 and s.lentLoopCopy(c.Args[ai]) {
+            s.noteLoopCopy(rec, c.Args[ai])
+        } else if ai >= 0 and li >= 0 {
+            # an index held for At and SetAt is one (E31b), as its held local
+            s.noteMakeWhere(rec, s.nameSpan(sp), c, ai, li, lo)
+        }
     }
 }
 
@@ -6152,6 +6171,241 @@ fn (s mut Scoper&) noteLoopCopy(rec I64, a typed.Expr&) {
     } else if s.holds(s.B.Locals[l].Ty) {
         s.note(rec, s.B.File, at, msgs.NoteLoopCopyLent(name))
     }
+}
+
+# B11/O10c: where an argument lives too briefly for one it must outlive, what to change - it is made in a block of this
+# function that closes first, so the note goes where it is made and says how to make it where the other lives (stage 0's
+# noteMakeWhere): through a call whose result holds what an argument refers to, that argument, every one made in a block
+# of this function; then a text one passes a copy, an index held for a read and a write is made there first
+fn (s mut Scoper&) noteMakeWhere(rec I64, errAt source.Span, c typed.Call&, ai I64, li I64, lo Term) {
+    short := c.Args[ai]
+    long := c.Args[li]
+    w := s.shownLocal(flRootExpr(s.unAway(long)), 0)
+    if w < 0 { return }
+    wname := s.P.L.Names.Text(s.B.Locals[w].Name)
+    if s.noBuildTerm(lo) {
+        # E11c/O12: nothing is made where a Str's receiver lives - a declaration putting a local there is refused too
+        made := s.madeLocal(short, 0)
+        if made >= 0 and made != w and s.B.Locals[made].Name != source.NameId(0) {
+            name := s.P.L.Names.Text(s.B.Locals[made].Name)
+            s.note(rec, s.B.File, s.wordAt(s.B.Locals[made].Sp, name), msgs.NoteStrKeepCopies(name, wname))
+        }
+        return
+    }
+    s.noteMadeNamed(rec, short, w, wname, 0)
+    sl := flRootExpr(s.unAway(short))
+    # an index At and SetAt are given (the receiver first, a SetAt's value last), held for both in this block (E31b)
+    index := s.indexCall(c) and ai > 0 and (ai < c.Args.Len() - 1 or not s.setAtCall(c))
+    if sl >= 0 and s.B.Locals[sl].Kind == typed.LocalKind.Held and index {
+        s.note(rec, s.B.File, errAt, msgs.NoteHeldIndexWhere(wname))
+    } else if s.isText(short.Type()) and s.madeLocal(short, 0) >= 0 {
+        # said at the value as written, a held one's initializer
+        at := s.argAt(short)
+        if sl >= 0 and s.B.Locals[sl].Kind == typed.LocalKind.Held {
+            hx := try s.inits.Get(sl) catch default null
+            if hx != null { at = s.argAt(hx) }
+        }
+        s.note(rec, s.B.File, at, msgs.NoteTextCopyWhere(wname))
+    }
+}
+
+fn (s mut Scoper&) setAtCall(c typed.Call&) Bool {
+    match c.Target {
+        case typed.Callee.Body(id) {
+            match s.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(inst) {
+                    n := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
+                    return n == "SetAt" or n == "setAt" or n == "CheckedSetAt"
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
+# the local a note names for l - a copy the compiler held of an element, a handle's (E31b), named by the collection it
+# was read out of, whose state it shares; -1 where nothing written is to be named
+fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
+    if l < 0 or depth > 16 { return -1 }
+    loc := s.B.Locals[l]
+    match loc.Kind {
+        case typed.LocalKind.Var, typed.LocalKind.Param, typed.LocalKind.Binding, typed.LocalKind.Field {
+            return l if loc.Name != source.NameId(0) else -1
+        }
+        case typed.LocalKind.Hidden, typed.LocalKind.Held {
+            x := try s.inits.Get(l) catch default null
+            for guard in range 16 {
+                if x == null { return -1 }
+                x = s.unAway(x)
+                c := s.callOf(x)
+                if c == null or c.Args.Len() == 0 or not (s.isMethodCall(c) or s.indexCall(c)) { break }
+                x = c.Args[0]
+            }
+            return s.shownLocal(flRootExpr(x), depth + 1)
+        }
+        case _ { return -1 }
+    }
+}
+
+# whether a call is an operator's - an index's At or SetAt, which has no "f(...)" written
+fn (s mut Scoper&) indexCall(c typed.Call&) Bool {
+    match c.Target {
+        case typed.Callee.Body(id) {
+            match s.Bodies[I64(id)].Of {
+                case typed.BodyOf.Fn(inst) {
+                    n := s.P.L.Names.Text(s.P.FnDecl(s.P.InstanceFn(inst)).Name)
+                    return n == "At" or n == "at" or n == "SetAt" or n == "setAt" or n == "CheckedAt" or n == "CheckedSetAt"
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return false
+}
+
+fn (s mut Scoper&) isText(ty types.TypeId) Bool {
+    text := s.P.PreludeType("std/prelude/text", "String")
+    if text < types.TypeId(0) { return false }
+    return ty == text or (s.isRef(ty) and s.P.T.Referent(ty) == text)
+}
+
+# the local of this function an argument is made from - what it reads, through parts, borrows, slices and a call's
+# result borrowed from an argument; a local borrowing another (or holding a borrowed result) is where that one is
+# made, a value copying one is storage of its own. -1 for a parameter's, a global's, a temporary built here
+fn (s mut Scoper&) madeLocal(x typed.Expr&, depth I64) I64 {
+    if x == null or depth > 32 { return -1 }
+    x = s.unAway(x)
+    match x {
+        case typed.Expr.Promote(_, _, pr) { return s.madeLocal(pr.X, depth + 1) }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { return s.madePlace(p, depth + 1) }
+        case typed.Expr.Slice(_, _, sl) { return s.madePlace(sl.Base, depth + 1) }
+        case typed.Expr.Call(_, _, c) {
+            e := s.P.T.ResultFrom(s.calleeType(c), 0)
+            if e >= 0 and e < c.Args.Len() { return s.madeLocal(c.Args[e], depth + 1) }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+fn (s mut Scoper&) madePlace(p typed.Place&, depth I64) I64 {
+    if depth > 32 { return -1 }
+    match p {
+        case typed.Place.Field(_, _, b, _) { return s.madePlace(b, depth + 1) }
+        case typed.Place.Elem(_, _, e) { return s.madePlace(e.Base, depth + 1) }
+        case typed.Place.Payload(_, _, pl) { return s.madePlace(pl.Base, depth + 1) }
+        case typed.Place.Deref(_, _, r) { return s.madeLocal(r, depth + 1) }
+        case typed.Place.Temp(_, _, v, _) { return s.madeLocal(v, depth + 1) }
+        case typed.Place.Local(_, _, id) {
+            l := I64(id)
+            loc := s.B.Locals[l]
+            init := try s.inits.Get(l) catch default null
+            match loc.Kind {
+                case typed.LocalKind.Param, typed.LocalKind.Capture { return -1 }
+                case typed.LocalKind.Held { return s.madeLocal(init, depth + 1) }
+                case _ { }
+            }
+            if init == null { return l }
+            follows := match s.unAway(init) {
+                case typed.Expr.Read(_, _, _, _), typed.Expr.Borrow(_, _, _), typed.Expr.Slice(_, _, _) => true
+                case typed.Expr.Call(_, _, c) => s.P.T.ResultFrom(s.calleeType(c), 0) >= 0
+                case _ => false
+            }
+            isSlice := match s.unAway(init) {
+                case typed.Expr.Slice(_, _, _) => true
+                case _ => false
+            }
+            if not follows or (not s.isRef(loc.Ty) and not isSlice) { return l }
+            deeper := s.madeLocal(init, depth + 1)
+            return deeper if deeper >= 0 else l
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# the note at what a too short argument is made from (noteMakeWhere), w the local the other lives with
+fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr&, w I64, wname String&, depth I64) {
+    if depth > 8 or short == null { return }
+    # a call's value passed on directly (O18c): where its references come from is the argument to make elsewhere
+    cx := s.unAway(short)
+    for guard in range 16 {
+        match cx {
+            case typed.Expr.Promote(_, _, pr) { cx = s.unAway(pr.X) }
+            case typed.Expr.Read(_, ty, p, _) {
+                match p {
+                    case typed.Place.Field(_, _, b, _) {
+                        match b {
+                            case typed.Place.Temp(_, _, v, _) { cx = s.unAway(v) }
+                            case _ { break }
+                        }
+                    }
+                    case _ { break }
+                }
+            }
+            case _ { break }
+        }
+    }
+    c0 := s.callOf(cx)
+    if c0 != null and s.P.T.Role(s.calleeType(c0)) != types.RoleCtor and s.noteThroughResult(rec, c0, w, wname, depth) { return }
+    made := s.madeLocal(short, 0)
+    if made < 0 or made == w { return }
+    loc := s.B.Locals[made]
+    if loc.Name == source.NameId(0) or s.loopElement(made) { return }
+    match loc.Kind {
+        case typed.LocalKind.Var, typed.LocalKind.Binding { }
+        case _ { return }
+    }
+    name := s.P.L.Names.Text(loc.Name)
+    at := s.wordAt(loc.Sp, name)
+    init := try s.inits.Get(made) catch default null
+    ic := s.callOf(init) if init != null else null
+    if ic != null and s.P.T.Role(s.calleeType(ic)) != types.RoleCtor {
+        # a result whose references come from an argument is fixed where that argument is made
+        if s.noteThroughResult(rec, ic, w, wname, depth) { return }
+        if s.isMethodCall(ic) or s.indexCall(ic) { return }
+    }
+    ty := loc.Ty
+    k := s.P.T.KindOf(ty)
+    if not s.isRef(ty) and not s.holds(ty) and k != types.Kind.Array and k != types.Kind.Named { return }
+    # G16b: inside an instance the type would be written as the generic writes it, with its variables - not said
+    if s.Spell == null or s.instanceArgs(s.Id) { return }
+    shown := s.P.T.Referent(ty) if s.isRef(ty) else ty
+    writable := (s.P.T.PermOf(ty) & types.Writable) != 0 if s.isRef(ty) else true
+    full := $("mut " if writable and not s.isFunc(shown) else "") $s.Spell(shown)
+    s.note(rec, s.B.File, at, msgs.NoteDeclareWhere(name, wname, name, full, wname))
+}
+
+# whether body b is (inside) an instance of a generic function or a generic type's method
+fn (s mut Scoper&) instanceArgs(b I64) Bool {
+    inst := s.instanceOf(b)
+    return inst >= 0 and s.P.T.Items(s.P.InstanceArgs(inst)).Len() > 0
+}
+
+# B11: a call's result whose references come from its arguments - its callee requires them to outlive its result scope
+# - is fixed where those arguments are made: each made in a block of this function gets the note, else the first.
+# False where no such argument is known
+fn (s mut Scoper&) noteThroughResult(rec I64, c typed.Call&, w I64, wname String&, depth I64) Bool {
+    callee := s.bodyOf(c.Target)
+    if callee < 0 or not s.summed(callee) { return false }
+    rv := s.resultVarOf(s.calleeType(c))
+    if rv < 0 { return false }
+    first := -1
+    made List<I64>
+    for r in s.sums[callee].Rels {
+        if r.Lo != Term.Var(rv) or r.Hi == Term.Var(rv) { continue }
+        ai := s.argOfVar(c, r.Hi)
+        if ai < 0 { continue }
+        if first < 0 { first = ai }
+        if s.madeLocal(c.Args[ai], 0) >= 0 and not flHas(made, ai) { made.Push(ai) }
+    }
+    if first < 0 { return false }
+    if made.Len() == 0 { s.noteMadeNamed(rec, c.Args[first], w, wname, depth + 1) }
+    for ai in made { s.noteMadeNamed(rec, c.Args[ai], w, wname, depth + 1) }
+    return true
 }
 
 # where a name is written as a whole word on the line a span begins: its own span, else the span
