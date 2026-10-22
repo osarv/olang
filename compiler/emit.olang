@@ -3033,7 +3033,8 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
                     hi = fe.let("fcmp olt double " $d ", " $fe.E.pow2(gb))
                 } else {
                     if gb == 64 {
-                        lo = fe.let("fcmp oge double " $d ", -" $fe.E.pow2(63))
+                        # -2^63: 2^63's bits with the sign bit set (a hex constant takes no "-")
+                        lo = fe.let("fcmp oge double " $d ", " $fe.E.constText(types.TypeId(14), (I64(F64(1.0).Bits()) + (I64(63) << 52)) | (I64(1) << 63)))
                     } else {
                         lo = fe.let("fcmp ogt double " $d ", " $fe.E.constText(types.TypeId(14), I64((F64(0) - F64(I64(1) << (gb - 1)) - 1.0).Bits())))
                     }
