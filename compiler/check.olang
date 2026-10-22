@@ -391,7 +391,8 @@ fn (c mut Checker&) onlyFixed(x ast.Expr&, out mut Map<source.NameId, I64>&) Boo
             if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local { return false }
             if out.Has(n) { return true }
             id := c.localNamed(n)
-            if id < 0 { return false }
+            # written already (a write after it is settled once the body is checked)
+            if id < 0 or c.writes.Has(pair.Pair(c.fr().Body, id)) { return false }
             fi := try c.fixedInits.Get(pair.Pair(c.fr().Body, id)) catch { return false }
             out.Put(n, id)
             c.lastFixed.Push(id)
