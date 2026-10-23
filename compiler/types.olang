@@ -947,12 +947,24 @@ fn (t mut Table&) enumLlvm(id TypeId) String {
 
 fn (t mut Table&) namedLlvm(id TypeId) String {
     return match t.DeclKindOf(t.DeclOf(id)) {
-        case DeclKind.Struct => "%\"" $t.Canon(id) "\""
+        case DeclKind.Struct => t.structName(id)
         case DeclKind.Enum => t.enumLlvm(id)
         case DeclKind.Error => "i32"
         case DeclKind.Over => $t.Llvm(t.Base(id))
         case _ => "?"
     }
+}
+
+# a declared struct's LLVM name: its canonical name - or, for an instance of a generic struct, the generic's with a
+# hash of its body (%"std/prelude/list:List.H"), so instances laid out alike are one LLVM type and the functions of
+# two instances whose code is the same are spelled the same, which is what lets emit merge them (List<Node&> and
+# List<Expr&>: every reference is one pointer)
+fn (t mut Table&) structName(id TypeId) String {
+    c := t.Canon(id)
+    if t.Args(id) == ListId(0) { return $"%\"" $c "\"" }
+    lt := try c.Find("<") catch default c.Len()
+    h1, h2 := hash128(t.StructBody(id))
+    return $"%\"" $c[:lt] "." $hex16(h1) $hex16(h2) "\""
 }
 
 # a struct's fields spelled as an LLVM aggregate: "{ i32, ptr }"

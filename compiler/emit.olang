@@ -96,6 +96,11 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dbgFiles Map<I64, I64>
     dbgBasics Map<I64, I64>
     dbgTypes Map<I64, I64>          # the debug types of aggregates, arrays, enums, references and function values
+    # the functions merged into another whose code is the same (mergeSame): each one's item, the item it is merged
+    # into, and its LLVM function type, which the alias standing for it is written with
+    merged Map<I64, I64>
+    itemFnTy Map<I64, String&>
+    mergeDone Bool = false
 }
 
 # whether the error return trace is kept (S18d): test and -debug builds
@@ -147,12 +152,14 @@ fn (e mut Emitter&) Objects() List<Object> {
     mods := e.P.L.Mods
     root := e.P.L.Root
     if e.Module {
+        if not e.Debug { e.mergeSame() }
         out.Push(Object($mods[root].Identity, ObjectKind.Module, e.assemble(root, true)))
         return out
     }
     used Map<I64, Bool>
     for h in e.itemHome { used.Put(h, true) }
     rootKind := ObjectKind.Tests if e.Tests else ObjectKind.Main
+    if not e.Debug { e.mergeSame() }
     total I64 = 0
     for t in e.itemText { total += t.Len() }
     split := e.Debug or total >= e.SplitFrom
@@ -190,7 +197,8 @@ PartSize I64 = 2 << 20
 # in one, since a baked global may point into the private blobs beside another (K2b), which no other object can name
 fn (e Emitter&) partOf(i I64, n I64) I64 {
     if n <= 1 { return 0 }
-    sym := e.itemSym[i]
+    j := try e.merged.Get(i) catch default i  # an alias beside what it stands for, which it names
+    sym := e.itemSym[j]
     h := (I64(0) if sym.StartsWith("G_2e") else sym.Hash()) % n
     return h + n if h < 0 else h
 }
@@ -280,8 +288,97 @@ fn (e mut Emitter&) emitAll() {
         body := e.T.StructBody(nt)
         for x in e.T.Embedded(nt) { e.need(x) }
         name := e.T.Llvm(nt)
-        e.tyAt.Put($name[2:name.Len() - 1], e.tyDef.Len())
+        key := name[2:name.Len() - 1]
+        if e.tyAt.Has(key) { continue }   # another instance laid out alike: the same LLVM type (types.structName)
+        e.tyAt.Put($key, e.tyDef.Len())
         e.tyDef.Push($name " = type " $body "\n")
+    }
+}
+
+# ---- functions whose code is the same, merged ----
+
+# the instances and shared helpers whose code is the same once the functions they call are taken to be the same where
+# theirs is - List<Node&>.Push and List<Expr&>.Push, every reference being one pointer and every instance of List laid
+# out alike one LLVM type (types.structName). In the objects holding the instances each such class is written once,
+# as its member of the smallest symbol, the rest as aliases of it (an instance, which another object calls by its own
+# name) or not at all (a helper, copied wherever named, its callers there pointed at the one written); every other
+# object names what it names as before, so its text still depends on what it holds alone. Found by partition
+# refinement: classes by text with each reference to another candidate cut out, split by the classes those references
+# are in until none splits - the coarsest partition in which merged functions call merged functions, recursion and
+# mutual recursion included. Not in a -debug build, whose functions carry their own debug information
+fn (e mut Emitter&) mergeSame() {
+    if e.mergeDone { return }
+    e.mergeDone = true
+    cand List<I64>
+    at Map<I64, I64>
+    for i in range e.itemSym.Len() {
+        h := e.itemHome[i]
+        t := e.itemText[i]
+        if (h == HomeInst and t.StartsWith("define dso_local ")) or (h == HomeShared and t.StartsWith("define linkonce_odr ")) {
+            at.Put(i, cand.Len())
+            cand.Push(i)
+        }
+    }
+    n := cand.Len()
+    if n < 2 { return }
+    callees List<Array<I64>&>   # each candidate's references to candidates, as their indexes in cand, in order
+    cls := Array<I64>(n)
+    shapes Map<String&, I64>
+    for c in range n {
+        i := cand[c]
+        text := e.itemText[i]
+        rs := e.refs(i)
+        b := StringBuilder()
+        cs List<I64>
+        from I64 = 0
+        for r in range 0, rs.Len(), 3 {
+            if rs[r] != 0 { continue }
+            j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+            k := try at.Get(j) catch default -1
+            if k < 0 { continue }
+            b.Push(text[from:rs[r + 1]])
+            from = rs[r + 2]
+            cs.Push(k)
+        }
+        b.Push(text[from:])
+        key := b.ToString()
+        id := try shapes.Get(key) catch default -1
+        if id < 0 {
+            id = shapes.Len()
+            shapes.Put($key, id)
+        }
+        cls[c] = id
+        callees.Push(cs.ToArray())
+    }
+    count := shapes.Len()
+    for count < n {
+        next := Array<I64>(n)
+        keys Map<String&, I64>
+        for c in range n {
+            kb := StringBuilder()
+            kb.Push($cls[c])
+            for k in callees[c] { kb.Push(" " $cls[k]) }
+            key := kb.ToString()
+            id := try keys.Get(key) catch default -1
+            if id < 0 {
+                id = keys.Len()
+                keys.Put($key, id)
+            }
+            next[c] = id
+        }
+        cls = next
+        if keys.Len() == count { break }
+        count = keys.Len()
+    }
+    # each class's member of the smallest symbol stands for the rest
+    best := Array<I64>(count, -1)
+    for c in range n {
+        b := best[cls[c]]
+        if b < 0 or e.itemSym[cand[c]] < e.itemSym[cand[b]] { best[cls[c]] = c }
+    }
+    for c in range n {
+        b := best[cls[c]]
+        if b != c { e.merged.Put(cand[c], cand[b]) }
     }
 }
 
@@ -357,11 +454,18 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
     tys List<I64>
     tyHave Map<I64, Bool>
     rename Map<I64, String&>
+    # the objects holding the instances: what is merged into another (mergeSame) named as that one, an instance merged
+    # written as an alias of it
+    merging := alsoInst and e.merged.Len() > 0
+    if merging {
+        for m in e.merged { rename.Put(m.Key, $e.itemSym[m.Value]) }
+    }
     nloc I64 = 0
     k I64 = 0
     for k < order.Len() {
         it := order[k]
         k++
+        if merging and e.merged.Has(it) { continue }   # an alias, naming only what it stands for, which is here
         text := e.itemText[it]
         rs := e.refs(it)
         for r in range 0, rs.Len(), 3 {
@@ -372,6 +476,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 continue
             }
             j := try e.itemAt.Get(name) catch default -1
+            if merging and j >= 0 { j = try e.merged.Get(j) catch default j }
             if j < 0 or have.Has(j) or declared.Has(j) { continue }
             h := e.itemHome[j]
             if h == HomeShared or h == HomeLocal {
@@ -395,6 +500,12 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
     # B2e: the debug metadata (numbered from 1000) renumbered in the order this object names it, from 1000
     meta Map<I64, I64>
     for it in order {
+        if merging and e.merged.Has(it) {
+            into := try e.merged.Get(it) catch default it
+            fty := try e.itemFnTy.Get(it) catch default "void ()"
+            out.Push($"@" $e.itemSym[it] " = dso_local alias " $fty ", ptr @" $e.itemSym[into] "\n")
+            continue
+        }
         text := e.itemText[it]
         if rename.Len() == 0 and not e.Debug {
             out.Push(text)
@@ -1409,7 +1520,36 @@ fn (e mut Emitter&) typeHome(ty types.TypeId) I64 {
 # a function's item: its text, and its declaration for another object
 fn (e mut Emitter&) fnItem(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, text String&) {
     home := e.homeOf(k)
-    e.item(symbol, home, text, e.header(k, ty, symbol, passed, env, "declare"))
+    if e.itemAt.Has(symbol) { return }
+    decl := e.header(k, ty, symbol, passed, env, "declare")
+    e.itemFnTy.Put(e.itemSym.Len(), fnTypeOf(decl))
+    e.item(symbol, home, text, decl)
+}
+
+# the LLVM function type a declaration "declare RET @SYM(T1 %a, T2 %b)\n" states: "RET (T1, T2)" - each parameter's
+# type is what precedes its name, a "%" never being inside a type a parameter is declared with but a named struct's
+fn fnTypeOf(decl String&) String {
+    at := try decl.Find(" @") catch default 0
+    ret := decl[8:at]
+    open := try decl.Find("(") catch default decl.Len()
+    params := decl[open + 1:decl.Len() - 2]
+    b := StringBuilder()
+    b.Push($ret " (")
+    i I64 = 0
+    n := params.Len()
+    first := true
+    for i < n {
+        # a parameter: its type, up to the " %" that starts its name
+        st := i
+        for i < n and not (params[i] == ' ' and i + 1 < n and params[i + 1] == '%' and (i + 2 >= n or params[i + 2] != '"')) { i++ }
+        if not first { b.Push(", ") }
+        first = false
+        b.Push(params[st:i])
+        for i < n and params[i] != ',' { i++ }
+        i += 2
+    }
+    b.Push(")")
+    return b.ToString()
 }
 
 fn (e mut Emitter&) passedOf(k mir.FnKey, ty types.TypeId) I64 { return mir.PassedCount(e.T, mir.Callee.Fn(k, ty), ty) }
