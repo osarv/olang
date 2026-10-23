@@ -5,6 +5,11 @@
 | VAR 8:5-8:27
 | -- diagnostics
 | error  15:48
+=== checks/cases/b4droppedbranch.olang
+| ASSERT 11:15-11:33
+| TEST 11:1-11:35
+| -- diagnostics
+| error  6:26
 === checks/cases/bareadj.olang
 | ERRORS 2:1-2:14
 | FN 3:1-3:23
@@ -51,6 +56,12 @@
 === checks/cases/condnoelse.olang
 | -- diagnostics
 | error  5:23
+=== checks/cases/d10adroppedbranch.olang
+| EXPR 13:5-13:25
+| FN 12:1-14:2
+| IMPORT 4:1-4:16
+| -- diagnostics
+| error  8:26
 === checks/cases/e11bafterrendering.olang
 | IMPORT 3:1-3:16
 | -- diagnostics

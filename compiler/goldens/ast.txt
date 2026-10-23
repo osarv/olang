@@ -71,6 +71,7 @@ baef3108eba03a61 10d2809fb89f2a8f checks/cases/b11notevalue.olang
 42afa76b9f80ad93 93730b0593649f77 checks/cases/b12level.olang
 59aa7f4d876c0258 6864678024d5c268 checks/cases/b12unknown.olang
 2cdb754f87c16250 6864678024d5c268 checks/cases/b12unsupported.olang
+21d54ba10e4cd8e6 1dd48d2637c5f92c checks/cases/b4droppedbranch.olang
 46dd90c67bb015b6 30d2dbb133911c51 checks/cases/b5acycle.olang
 bb7f72828cb6153c 67a29d063691fa7b checks/cases/b5aself.olang
 e9e19d1d6d2bb82e 5ef1f52298b66590 checks/cases/b6condarg.olang
@@ -162,6 +163,7 @@ c0e9f8fb09f6744e 89c973c1625e30ed checks/cases/constraintarg.olang
 75a980e1cb075b9a 599cfd6eb12f3b6f checks/cases/constraintnotiface.olang
 75f8b7299896813b 462ff98aed45ccc5 checks/cases/copyoutrefs.olang
 bba1377c31a3123c d0d42552103f22da checks/cases/ctortempdestruct.olang
+014fd16c9a7b1a47 7ad59eee8d6ec4a1 checks/cases/d10adroppedbranch.olang
 933080ce2e3d1df8 6bb8d0904640189d checks/cases/d10aforbreak.olang
 0477848d8406a8ad 408a2cb44ed86b6d checks/cases/d11amutfn.olang
 22f435f1023bcdb4 2494b285f56ea454 checks/cases/d11amutinferred.olang
@@ -1281,9 +1283,9 @@ ad7367de57562da1 98ba40282a55ca2d checks/fixtures/vecalias/f3.olang
 007370a44d8f74de 3731be913f85ffe3 checks/fixtures/vechandle/stale.olang
 8edc6cb0ea109099 44f551c494e2043c compiler/ast.olang
 65352731f4cae057 07e5c9d951fad2af compiler/build.olang
-3a417004516659b7 a183a4ea90bac24a compiler/check.olang
+df26ee559fd13722 04bbaa55ca249b62 compiler/check.olang
 12af31fc7f832527 ef25e8ee74a3cdc1 compiler/cond.olang
-2fa796a5227631eb 14d6682a39984633 compiler/diag.olang
+34b00b29803b8a3a 5c0f347eced1601b compiler/diag.olang
 6bf8f2b442b16bcf 9e602fa65465a140 compiler/emit.olang
 0e87df69b3e9c994 54e20575f0d24c68 compiler/eval.olang
 062d2cf05aa3985d 05fa7eec2118d4c5 compiler/fetch.olang
