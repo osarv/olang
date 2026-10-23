@@ -5,7 +5,8 @@
 #     # also: <text>          and with <text> too - any number of these lines, each checked
 #     # never: <text>         and without <text> anywhere in them - any number, each checked
 #     # check: build          it must build
-#     # check: run            it must build, and the program must exit 0
+#     # check: run            it must build, and the program must exit 0 - and print what compiler/goldens/run.txt
+#                             stores for it, captured from stage 0 (make rungold), where it stores a stable output
 #     # flags: <arguments>    passed to the compiler (a -D value, say)
 # The multi-step scenarios below drive the compiler themselves, with their files in checks/fixtures.
 # Everything is built under build/checks, so nothing touches the tree.
@@ -42,6 +43,10 @@ Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<Strin
 # module beside them, and building the prelude again costs every case that gets as far as code about 1.6s, two thirds
 # of the cases' time again.
 Seed String& = "prelude"
+
+# the runs compiler/goldens/run.txt stores (compiler/tools/rungold.olang): a run case's program's status and output,
+# captured as runCase builds and runs it
+StoredRuns String& = try os.ReadFile("compiler/goldens/run.txt") catch default ""
 
 # what every check found - the scenarios', then the cases', in the order of Scenarios and Cases: "" for a check that
 # passed, and what went wrong for one that did not
@@ -202,10 +207,56 @@ fn runCase(name String&) String& {
         if f == "-sanitize" { san = true }
     }
     if san { bin = $bin ".san" }
-    if check.Eq("run") and sh(dir, "./build/" $bin " > out.txt 2>&1") != 0 {
-        return failure($name " built but did not run cleanly", dir)
+    if check.Eq("run") {
+        if sh(dir, "./build/" $bin " > out.txt 2> err.txt") != 0 {
+            return $failure($name " built but did not run cleanly", dir) $(try os.ReadFile($dir "/err.txt") catch default "")
+        }
+        want := storedOutput(name)
+        got := outOf(dir).Replace(dir, "$CASE").Replace(root(), "$ROOT")
+        if want.Stored and want.Out != got {
+            return ("check FAIL: " $name " printed other than compiler/goldens/run.txt stores (make rungold captures it " $
+                    "again)\n-- stored:\n" $want.Out "-- printed:\n" $got "\n")
+        }
     }
     return ""
+}
+
+# the output run.txt stores for a run case, where it stores one it holds (not "unstable")
+type stored struct() {
+    Stored Bool = false
+    Out String& = ""
+}
+
+# a case's stored run, read from its section - "=== run NAME", "| status N", then its output a row "| ROW" each, and
+# "\\ no newline at end" after the last when it ends in none (compiler/tools/toolkit.olang)
+fn storedOutput(name String&) stored {
+    r := stored()
+    at := try StoredRuns.Find($"=== run " $name "\n") catch { return r }
+    rest := StoredRuns[at:]
+    first := true
+    out := StringBuilder()
+    for row in rest.Split("\n") {
+        if first {
+            first = false
+            continue
+        }
+        if row.StartsWith("=== ") or row == "" { break }
+        if not r.Stored {
+            if not row.StartsWith("| status ") or row.EndsWith(" unstable") { return r }
+            r.Stored = true
+            continue
+        }
+        if row == "\\ no newline at end" {
+            t := out.ToString()
+            out.Clear()
+            out.Push(t[:t.Len() - 1] if t.Len() > 0 else t)
+        } else {
+            out.Push(row[2:] if row.StartsWith("| ") else "")
+            out.PushChar('\n')
+        }
+    }
+    r.Out = out.ToString()
+    return r
 }
 
 test "every case in checks/cases does what its header says" {
@@ -1836,4 +1887,12 @@ fn words(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("running a file"), "explain", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret prog.olang > out.txt 2>&1") == 0 and
                  outOf(dir) == "written where -output said\n", "interpret", dir)
+}
+
+test "a run case's stored output is read back from compiler/goldens/run.txt" {
+    one := storedOutput("c2dctorbuilds.olang")
+    assert one.Stored and one.Out.Len() > 0 and one.Out.EndsWith("\n")
+    none := storedOutput("c2swap.olang")
+    assert none.Stored and none.Out == ""
+    assert not storedOutput("no such case.olang").Stored
 }

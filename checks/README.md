@@ -18,7 +18,7 @@ The first lines of a file in `cases/` are a header:
 # also: <text>          and with <text> too (any number of these)
 # never: <text>         and without <text> anywhere in them (any number)
 # check: build          must build
-# check: run            must build, and the program must exit 0
+# check: run            must build, and the program must exit 0, printing what compiler/goldens/run.txt stores
 # flags: <arguments>    passed to the compiler, e.g. -D Level=3 or -d -s
 ```
 
@@ -43,4 +43,5 @@ Every check works in its own directory under `build/checks/`, so nothing touches
 `$OLANG`, else `build/out`. The run needs several GB of memory (the largest scenario, `agree`, about 3.5 GB).
 
 Part of `make verify`. The messages the cases expect are produced by `bootstrap/errmsg.c`;
-`compiler/goldens/diag.txt` is captured from the `fail` cases.
+`compiler/goldens/diag.txt` is captured from the `fail` cases, and `compiler/goldens/run.txt` holds what each `run`
+case printed under stage 0 (`make rungold` captures it again; a case it does not hold is held to its status alone).
