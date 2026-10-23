@@ -20,7 +20,7 @@ type TypeRef enum {
     Shape(sp source.Span, body TypeBody&)
     # a reference marker after a type: "&" (scope 0), "&x", "&return" (T24, O3)
     Ref(sp source.Span, of TypeRef&, scope source.NameId)
-    # the permission before a type: "mut", "own" or "own mut" (T25b, T25e)
+    # the permission before a type: "mut" (T25b) - owned never set by the parser, own being gone from the language
     Perm(sp source.Span, of TypeRef&, writable Bool, owned Bool)
 }
 
@@ -52,7 +52,7 @@ type Expr enum {
     Name(sp source.Span, name source.NameId)
     Lit(sp source.Span, kind token.Tok)                # IntLit, FloatLit, CharLit, StrLit, BoolLit, NullLit: its text
     Paren(sp source.Span, x Expr&)                     # kept: "try (x)" checks x (E15a), "(x.f)(a)" calls a field (E13b)
-    Unary(sp source.Span, op token.Tok, x Expr&)       # - ~ $ not take ++ --
+    Unary(sp source.Span, op token.Tok, x Expr&)       # - ~ $ not ++ --
     Postfix(sp source.Span, op token.Tok, x Expr&)     # x++ x-- x! (E35)
     Binary(sp source.Span, op token.Tok, a Expr&, b Expr&)
     NotIn(sp source.Span, a Expr&, b Expr&)            # a not in b (E29)

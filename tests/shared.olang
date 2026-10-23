@@ -17293,3 +17293,28 @@ test "G9a: a literal reaching a constrained variable - decided while compiling, 
     assert NtHalfLitBaked == 1.5 and ntHalf(3) == ntHalf(ntRun) and ntHalf(3 if ntRunI > 0 else 5) == 1.5
     assert ntKind(4) == 2 and ntNext(4) == 5
 }
+
+# E27/D9b, read back after a churn: a comprehension over an iterator grows its buffer where its storage is, and a
+# generic's by-value String it writes is its own copy each call - the caller's text unchanged (review port1 j01, j02:
+# the self-hosted compiler made both in the program's scope, one more each turn)
+fn rvUpper<T>(x T) I64 {
+    x[0] = 'Z'
+    return x.Len() + (1 if x[0] == 'Z' else 0)
+}
+test "E27, D9b: a grown comprehension and a written by-value String, read back after a churn" {
+    l mut List<I64>& = List<I64>()
+    for i in range 300 { l.Push(i) }
+    t I64 = 0
+    keep := I64[0]
+    for k in range 20 {
+        a := I64[x * 2 for x in l]
+        t = t + a[299]
+        keep = a
+    }
+    s := "abcdefgh"
+    u I64 = 0
+    for k in range 50 { u = u + rvUpper(s) }
+    c2dChurn()
+    assert t == 20 * 598 and keep.Len() == 300 and keep[150] == 300
+    assert u == 50 * 9 and s == "abcdefgh"
+}

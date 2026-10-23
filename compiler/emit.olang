@@ -1471,14 +1471,16 @@ fn (fe mut fnEm&) run() {
             case _ { fe.pro.Push("  store " $fe.ty(lt) " %a" $i ", ptr %l" $l "\n") }
         }
     }
-    # D9b: a by-value array parameter the body writes is the callee's own copy, else the caller's array
+    # D9b: a by-value array parameter the body writes is the callee's own copy, else the caller's array - the copy in
+    # the frame's own arena, reclaimed at the one return as the parameter's storage is
     fe.label("start")
     for i in range f.Params.Len() {
         l := f.Params[i]
         lt := f.Locals[I64(l)].Ty
         if fe.runTime(lt) and fe.writesInto(l) {
+            fe.bigArena()
             v := fe.load("{ i64, ptr }", "%l" $l)
-            fe.store("{ i64, ptr }", fe.copyArray(mir.ScopeRef.Program, v, lt), "%l" $l)
+            fe.store("{ i64, ptr }", fe.copyArrayIn("%big", v, lt), "%l" $l)
         }
     }
     fe.w("br label %bb0")
@@ -2538,14 +2540,17 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
 }
 
 # a run-time-length array value given storage of its own in scope s: its elements copied there
-fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String {
+fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String { return fe.copyArrayIn(fe.scope(s), v, ty) }
+
+# ... in the scope whose header is hdr
+fn (fe mut fnEm&) copyArrayIn(hdr String&, v String&, ty types.TypeId) String {
     t := fe.E.T
     el := t.Elem(fe.arrayOf(ty))
     n := fe.let("extractvalue { i64, ptr } " $v ", 0")
     data := fe.let("extractvalue { i64, ptr } " $v ", 1")
     bytes := fe.let("mul i64 " $n ", " $fe.size(el))
     fe.E.runtime("__olang_scope_alloc")
-    p := fe.let("call ptr @__olang_scope_alloc(ptr " $fe.scope(s) ", i64 " $bytes ")")
+    p := fe.let("call ptr @__olang_scope_alloc(ptr " $hdr ", i64 " $bytes ")")
     fe.E.declare("llvm.memcpy.p0.p0.i64", "void @llvm.memcpy.p0.p0.i64(ptr, ptr, i64, i1)")
     fe.w("call void @llvm.memcpy.p0.p0.i64(ptr " $p ", ptr " $data ", i64 " $bytes ", i1 false)")
     return fe.pair(n, p)

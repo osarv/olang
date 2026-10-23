@@ -1,0 +1,15 @@
+# check: fail error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+# O12/P1g: a task's built result stored into an element of an array whose scope is one of two - judged as the plain
+# assignment it is (review port1 l04)
+import "std/io"
+type Node struct(v I64) { v }
+fn mkNode(i I64) Node& { return Node(i) }
+fn main() ? io.IoError {
+    outer mut Array<Node&>& = Array<Node&>(1, Node(0))
+    for i in range 3 {
+        inner mut Array<Node&>& = Array<Node&>(1, Node(0))
+        arr := outer if i < 10 else inner
+        join { spawn arr[0] = mkNode(i + 50) }
+    }
+    try io.Println($outer[0].v)
+}

@@ -49,8 +49,6 @@ type Tok enum {
     Fn
     Error
     Mut
-    Own
-    Take
     Import
     Test
     Destruct
@@ -168,8 +166,6 @@ fn (k Tok) Text() String& {
         case Tok.Fn => "fn"
         case Tok.Error => "error"
         case Tok.Mut => "mut"
-        case Tok.Own => "own"
-        case Tok.Take => "take"
         case Tok.Import => "import"
         case Tok.Test => "test"
         case Tok.Destruct => "destruct"
@@ -302,7 +298,6 @@ fn Keyword(t String&, at I64, n I64) Tok {
         }
         case 'o' {
             if n == 2 and t[at + 1] == 'r' { return Tok.Or }
-            if n == 3 and spells(t, at, "own") { return Tok.Own }
         }
         case 'r' {
             if n == 5 and spells(t, at, "range") { return Tok.Range }
@@ -316,7 +311,6 @@ fn Keyword(t String&, at I64, n I64) Tok {
             if n == 3 and spells(t, at, "try") { return Tok.Try }
             if n == 4 {
                 if spells(t, at, "type") { return Tok.Type }
-                if spells(t, at, "take") { return Tok.Take }
                 if spells(t, at, "test") { return Tok.Test }
                 if spells(t, at, "true") { return Tok.BoolLit }
             }
@@ -341,7 +335,7 @@ test "Keyword finds every reserved word and nothing else" {
     for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Checked, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break
                  Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum
-                 Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Own, Tok.Take, Tok.Import, Tok.Test, Tok.Destruct
+                 Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
                  Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.NullLit] {
         w := k.Text()
         assert Keyword(w, 0, w.Len()) == k, "keyword " $w

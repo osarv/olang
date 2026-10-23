@@ -21660,3 +21660,41 @@ user's step):
 7. *Documents*: CLAUDE.md, compiler/README.md, compiler/DESIGN.md, bootstrap/README.md, bench/README.md, checks/README.md,
    tools/README.md, std/README.md, tests/README.md, fuzz/README.md, docs/memory.md, docs/own.md and the memory files
    describe stage 0 as present.
+## Port M6 round 8: the port1 soundness review, fixed (P1g, O12, C2d, T7a, D9a, D9b, E27, D11a, L9, 2026-10-22)
+
+A read-only review of the port's memory placement (`/home/user/review/port1`) found five holes, each reproduced under
+`-debug -sanitize` against stage 0; all are closed, and every one of its programs is now refused as stage 0 refuses it
+or runs clean.
+
+**A task's built result (P1g, O25, O12, C2d).** `scope.olang`'s `spawn()` fitted the targets only when the task's
+value was existing storage; a built one was placed at the longest-lived target's slot and stored into every target
+with none of an assignment's checks. Now the targets are judged as the plain assignment each is: several targets in
+different scopes with a result built (the task's, or a clause's default) are P1g's "these targets live in different
+scopes", as stage 0 says; a target whose slot no run-time scope stands for - a `&p` field of a parameter, a place of
+one of several scopes - is C2d's or O12's error (`freshIntoUnknown`); existing storage into a `&p` field whose binding
+is not known is O23's. **Decided (mine)**: `spawn h.r = mkNode(i)` with `h.r` a parameter's `&src` field is refused
+(C2d), as the port already refused the assignment `h.r = mkNode(i)` - stage 0 accepts both (it builds where the
+instance lives); refusing the task form keeps the two one rule.
+
+**Declared array types held by value (T7a, D9a).** `runArrayValue` asked whether the type itself was an array, never
+what a declared type is declared over, so a `String` or a `type Nums Array<I64>` field, element or payload was held by
+value and shared on copy - use-after-frees. It reads `under(t)` now; a pun of a parameter a type variable bound to a
+run-time array is T7a's error too, `Array<String>(n, v)` as an expression is (it was checked only where written as a
+declaration's type), and an enum case's payload holding a run-time array by value is D9a's (a fixed one is held in
+place, T7c). A type instance's constructor is checked with where the instance was asked for (G16b, `typeContexts`) -
+written as the type's first argument (`Box<String>` at `String`) - so an error in the standard library's code is said
+at the program's use with "instantiated here, with T = String".
+
+**Two leaks (E27, D9b).** A comprehension's grown buffer was made in the program's scope; it is made where the
+comprehension's storage is (`collectCtx.At`). D9b's copy of a generic's written by-value array parameter was made in the
+program's scope; it is made in the frame's own arena, reclaimed at the one return (208MB and 126MB -> 2MB). **Decided
+(mine)**: the scope pass now knows the copy - a by-value run-time array parameter the body writes, slices, or borrows
+writably has its elements in the frame (`copied`, read by `partsTerm`), and a result borrowed from it lives in the
+caller's argument, which nothing of the copy outlives: `fn headOf<T>(x T) Array<Char>&x { return x[0:3] }` is O10d's
+error, as in stage 0 (with the copy in the program's scope it had run, leaking; in the frame it would have been a
+use-after-free).
+
+**Found on the way, not memory.** `mut` before a function type was taken for a reference's permission, so `f mut fn(x
+I64) I64` on a local or a parameter gave no D11a/D9 - a function value is no reference. And the port's scanner still
+read `own` and `take` as keywords, removed from the language on 2026-10-18 - they are names now (the parser's and the
+checker's paths for them went; `ast.TypeRef.Perm`'s owned flag and `typed.Expr.Take` stay for the passes' own removal).

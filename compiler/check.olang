@@ -1185,6 +1185,19 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
         }
         case ast.TypeBody.Enum(cases) {
             self := c.P.SelfType(d)
+            # D9a, T7b: a payload holds a run-time array by reference, as a parameter does - a fixed one, Array<T, N>, by
+            # value, its elements being in it (T7c)
+            for cd in cases {
+                if cd.Payload == null { continue }
+                for prm in cd.Payload {
+                    if prm.Ty == null { continue }
+                    pt := c.P.Resolve(fr.Ctx, prm.Ty)
+                    if not c.isRef(pt) and c.runArrayValue(pt) {
+                        psp := source.Span(prm.Sp.Start, prm.Sp.Start + I32(c.text(prm.Name).Len()))
+                        c.err(psp, msgs.ArrayParamByValue(c.tok(prm.Name), c.src(prm.Ty.Span())))
+                    }
+                }
+            }
             said := false
             for cd in cases {
                 if said or cd.Payload == null { continue }
@@ -2301,6 +2314,26 @@ fn (c mut Checker&) instContexts(inst I64) I64 {
     return chain.Len()
 }
 
+# G16b: the contexts a type instance's constructor is checked in - where the instance was asked for, after where the
+# instance asking for it was in turn - "instantiated here, with T = String": how many were pushed
+fn (c mut Checker&) typeContexts(t types.TypeId, td ast.TypeDecl&) I64 {
+    o := c.P.TypeOrigin(t)
+    args := c.P.T.Items(c.P.T.Args(t))
+    if o.File < 0 or args.Len() == 0 or td == null or td.Params == null { return 0 }
+    pushed := c.instContexts(o.Within) if o.Within >= 0 else 0
+    b := StringBuilder()
+    b.Push("instantiated here")
+    for j in range args.Len() {
+        if j >= td.Params.Len() { break }
+        b.Push(", with " if j == 0 else ", ")
+        b.Push(c.text(td.Params[j].Name))
+        b.Push(" = ")
+        b.Push(c.ty(args[j]))
+    }
+    c.P.L.Diags.PushContext(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), b.ToString())
+    return pushed + 1
+}
+
 # the note an instance's context gives, and a type as source writes it, for the passes after checking (G16b, B11)
 fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 
@@ -2400,9 +2433,11 @@ fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
                     }
                 }
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
+                pushed := c.typeContexts(t, td)   # G16b: an instance's with where it was asked for
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
                 c.fieldTypes(t)
+                for k in range pushed { c.P.L.Diags.PopContext() }
                 if s.Dtor != null {
                     c.pop()
                     c.dtorBody(t, mi)
@@ -2881,7 +2916,7 @@ fn (c mut Checker&) mutBefore(tr ast.TypeRef&, t types.TypeId) source.Span {
         case ast.TypeRef.Perm(psp, of, writable, owned) {
             if not writable or owned { return source.Span(-1, -1) }
             if c.namesTypeVar(of) { return source.Span(-1, -1) }
-            if t != types.UnknownT and (c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Var or c.P.T.KindOf(t) == types.Kind.Func) { return source.Span(-1, -1) }
+            if t != types.UnknownT and (c.isRef(t) or c.P.T.KindOf(t) == types.Kind.Var) { return source.Span(-1, -1) }
             if t == types.UnknownT and tr.Span().End > psp.Start + 3 and c.writtenRefOrVar(tr) { return source.Span(-1, -1) }
             return source.Span(psp.Start, psp.Start + 3)
         }
@@ -3145,7 +3180,18 @@ fn (c mut Checker&) isEnum(t types.TypeId) Bool {
 # a written type read in the current body's context
 fn (c mut Checker&) resolve(t ast.TypeRef&) types.TypeId {
     if t == null { return types.UnknownT }
+    # G16b: a type instance written here is asked for at its first type argument
+    asking := c.P.Asking
+    at := t.Span()
+    match t {
+        case ast.TypeRef.Named(_, _, args) {
+            if args.Len() > 0 { at = c.leadWord(args[0].Span()) }
+        }
+        nomatch { }
+    }
+    c.P.Asking = generic.Origin(c.fr().File, at, c.curInst())
     r := c.P.Resolve(c.fr().Ctx, t)
+    c.P.Asking = asking
     if not c.writtenMet(t) { return types.UnknownT }   # what was said of it is the one error
     # G22: a constant variable written where a type goes
     match t {
@@ -4459,7 +4505,6 @@ fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.
         ps.Push(c.renderPiece(sp, y))
         return typed.Expr.Text(sp, c.textType(), typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))
     }
-    if op == token.Tok.Take { return c.takeExpr(sp, y) }
     c.gap(sp, "this prefix operator")
     return c.unknown(sp)
 }
@@ -6786,9 +6831,10 @@ fn (c mut Checker&) varInArray(t types.TypeId, owner I64, v I64, inArray Bool, d
 }
 
 # whether a type is an array of a run-time length held by value - which inside an array or a struct is held by
-# reference instead (T7a)
+# reference instead (T7a) - a declared array type (String, a "type Nums Array<I64>") too, being what it is declared over
 fn (c mut Checker&) runArrayValue(t types.TypeId) Bool {
-    return not c.isRef(t) and c.P.T.KindOf(t) == types.Kind.Array and c.P.T.Length(t) == types.TypeId(0)
+    u := c.under(t)
+    return not c.isRef(t) and c.P.T.KindOf(u) == types.Kind.Array and c.P.T.Length(u) == types.TypeId(0)
 }
 
 fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
@@ -6983,6 +7029,14 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
                                               c.site(typed.SiteKind.Make, sp), lchk))
 }
 
+# the name a span begins with - a written type's first word - else the span
+fn (c mut Checker&) leadWord(sp source.Span) source.Span {
+    t := c.src(sp)
+    k := 0
+    for k < t.Len() and (t[k].IsLetter() or t[k].IsDigit() or t[k] == '_') { k++ }
+    return source.Span(sp.Start, sp.Start + I32(k)) if k > 0 else sp
+}
+
 # Name<args>(...) an instance's constructor
 fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, targs Array<ast.TypeRef&>&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr&c {
     match g {
@@ -7004,7 +7058,19 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                     }
                     nomatch { }
                 }
-                return c.arrayMake(sp, c.resolve(targs[0]), args, want)
+                el := c.resolve(targs[0])
+                if el == types.UnknownT {
+                    # what was said of the element type is the one error
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                # T7a: an array's element that is a run-time array is held by reference
+                if c.runArrayValue(el) {
+                    c.err(c.leadWord(targs[0].Span()), msgs.ArrayNestedByValue(c.ty(el)))
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                return c.arrayMake(sp, el, args, want)
             }
             if ref.Kind == names.What.Builtin and c.text(n) == "Array" and targs.Len() == 2 {
                 # Array<T, N>(): a fixed array's zero value (T7c). QP1 drops the form for Array<T>(N), which makes the
@@ -8504,7 +8570,7 @@ fn stmtLike(x ast.Expr&) Bool {
     return match x {
         case ast.Expr.Call(_, _, _), ast.Expr.ScopeCall(_, _, _, _), ast.Expr.Try(_, _, _, _), ast.Expr.Postfix(_, _, _) => true
         case ast.Expr.Paren(_, y) => stmtLike(y)
-        case ast.Expr.Unary(_, op, _) => op == token.Tok.Inc or op == token.Tok.Dec or op == token.Tok.Take
+        case ast.Expr.Unary(_, op, _) => op == token.Tok.Inc or op == token.Tok.Dec
         case _ => false
     }
 }
@@ -8891,11 +8957,6 @@ fn (c mut Checker&) exprStmt(sp source.Span, x ast.Expr&) {
                 c.step(sp, y, op == token.Tok.Inc)
                 return
             }
-            if op == token.Tok.Take {
-                # "take p" standing alone releases what p held (E34, O30)
-                c.emit(typed.Stmt.Eval(sp, c.expr(x, types.UnknownT)))
-                return
-            }
         }
         case ast.Expr.Postfix(_, op, y) {
             if op == token.Tok.Bang {
@@ -9256,6 +9317,8 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
                 continue
             }
             nsp := v.NameSps[i]
+            # T7a: a parameter a type variable bound to a run-time array (G18) - held by reference in an instance
+            if c.runArrayValue(c.localType(pid)) { c.err(nsp, msgs.ArrayNestedByValue(c.ty(c.localType(pid)))) }
             id := c.local(source.NameId(0), nsp, c.localType(pid), typed.LocalKind.Field, c.cur().Locals[pid].Marked)
             c.roNeed(typed.Place.Local(nsp, c.localType(pid), typed.LocalId(I32(pid))))   # T25c: the instance keeps it
             c.emit(typed.Stmt.Let(nsp, typed.LocalId(I32(id)), c.readLocal(nsp, pid)))
@@ -10280,17 +10343,6 @@ fn (c mut Checker&) owningIn(t types.TypeId, depth I64) Bool {
         }
     }
     return false
-}
-
-# take p (E34): the owner a writable place holds, moved out, its zero value left
-fn (c mut Checker&) takeExpr(sp source.Span, y ast.Expr&) typed.Expr&c {
-    p := c.place(y)
-    if p == null { return c.unknown(sp) }
-    t := p.Type()
-    if t == types.UnknownT { return c.unknown(sp) }
-    if not c.owning(t) { return c.unknown(sp) }    # own is gone from the language (round 3); round 5 removes this
-    c.notCapture(p, y.Span())
-    return typed.Expr.Take(sp, t, p)
 }
 
 # ---- lambdas (D16) ----

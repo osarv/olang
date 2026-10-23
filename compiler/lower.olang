@@ -197,12 +197,14 @@ type tryCtx struct(Depth I64, Clauses Array<typed.Clause&>&, Ends Bool, Passes B
     entries List<mir.BlockId>
 }
 
-# a comprehension being lowered (E27): its buffer (an array reference), how many it holds, its element type
-type collectCtx struct(Buf mir.LocalId, N mir.LocalId, Elem types.TypeId, ArrT types.TypeId) {
+# a comprehension being lowered (E27): its buffer (an array reference), how many it holds, its element type, and the
+# scope its storage is made in - where a full buffer's bigger one is made too
+type collectCtx struct(Buf mir.LocalId, N mir.LocalId, Elem types.TypeId, ArrT types.TypeId, At mir.ScopeRef) {
     Buf
     N
     Elem
     ArrT
+    At
 }
 
 # a place being built: its base and its projections
@@ -1835,7 +1837,7 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(s, bt, cap, mir.Operand.Const(el, 0))))
     n := ln.temp(mir.I64T, sp)
     ln.emit(mir.Stmt.Assign(sp, mir.L(n), mir.Rvalue.Use(ln.constI64(0))))
-    ln.collects.Push(collectCtx(buf, n, el, bt))
+    ln.collects.Push(collectCtx(buf, n, el, bt, s))
     ln.block(c.Loop)
     try ln.collects.Pop() catch { }
     if ln.dead { return mir.Operand.None }
@@ -1865,7 +1867,7 @@ fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
     more := ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[ln.prim(typed.PrimOp.Mul, mir.I64T
                                                                    mir.Operand[n, ln.constI64(2)], sp), ln.constI64(1)], sp)
     nb := ln.temp(cc.ArrT, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(nb), mir.Rvalue.NewArray(mir.ScopeRef.Program, cc.ArrT, more, mir.Operand.Const(cc.Elem, 0))))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(nb), mir.Rvalue.NewArray(cc.At, cc.ArrT, more, mir.Operand.Const(cc.Elem, 0))))
     ln.emit(mir.Stmt.CopyElems(sp, ln.F.Place(mir.Base.Local(nb), mir.Proj[mir.Proj.Deref]), deref, n))
     ln.emit(mir.Stmt.Assign(sp, mir.L(cc.Buf), mir.Rvalue.Use(mir.Operand.Copy(mir.L(nb)))))
     ln.goto(store)

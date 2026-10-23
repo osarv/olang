@@ -1,0 +1,16 @@
+# check: run
+# L9: "own" and "take" are names like any other - the words were removed with owned references (2026-10-18), and the
+# self-hosted scanner still read them as keywords (review port1)
+import "std/io"
+import "std/os"
+type Pile struct(n I64) {
+    n
+    own I64 = 3
+}
+fn take(own I64) I64 { return own + 1 }
+fn main() ? io.IoError {
+    p := Pile(2)
+    r := take(p.own)
+    if r != 4 or p.n != 2 { os.Exit(1) }
+    try io.Println($r)
+}
