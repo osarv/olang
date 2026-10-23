@@ -12,7 +12,7 @@
 # function or a lambda, a "try ... catch { fail }" whose operand it cannot find - listing each for a person. Run it on
 # files or directories:
 #
-#     build/out build tools/donefail_migrate.olang && build/tools_donefail_migrate shared.olang std/ ...
+#     $OLANG build tools/donefail_migrate.olang && build/tools_donefail_migrate shared.olang std/ ...
 
 import "std/os"
 import "std/io"

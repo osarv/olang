@@ -19,11 +19,12 @@
 # that must fail keeps the failure it is about: nothing is applied from a diagnostic carrying its expected text.
 # Comments and string literals are never edited. Files are rewritten in place.
 #
-#     build/out build tools/int_literal_i64.olang && build/tools_int_literal_i64 [--olang PATH] [-j N] FILE|DIR...
+#     $OLANG build tools/int_literal_i64.olang && build/tools_int_literal_i64 [--olang PATH] [-j N] FILE|DIR...
 #
-#   --olang  the compiler to run (default: build/out in the repository this tool is in)
+#   --olang  the compiler to run (default: $OLANG, else build/out in the repository this tool is in, else its
+#            build/olang)
 #   -j       how many compilations run at once (default 3)
-# For oann: build/tools_int_literal_i64 --olang /home/user/olang/build/out /home/user/oann
+# For oann: build/tools_int_literal_i64 --olang /home/user/olang/build/olang /home/user/oann
 #
 # A port of the Python script of the same name (same arguments, same edits, same output); the files it writes get Python's
 # text-mode newlines ("\r\n" and "\r" become "\n"). Each compilation worker has a directory of its own (the Python script
@@ -267,7 +268,7 @@ fn apply(requests List<diagedit.Request>&) (I64, I64) {
 }
 
 fn main() ? {
-    olang := $srcmask.RepoRoot() "/build/out"
+    olang := srcmask.Compiler()
     jobs I64 = 3
     paths List<String&>
     args := os.Args()

@@ -2,7 +2,7 @@
 # whose try lets IoError escape (R9), `try` to a call of a function that can now fail (E15), and `catch io.IoError { }` to
 # a tried call in a test block or where nothing can fail (R13). Prints what it could not fix.
 #
-#     build/out build tools/io_fix.olang && build/tools_io_fix OLANG FILE...
+#     $OLANG build tools/io_fix.olang && build/tools_io_fix OLANG FILE...
 #
 # OLANG is the compiler to build with, as a path (a relative one is made absolute: the builds run in a directory of their
 # own). A file with tests is built with -t, one with a main with -b, any other with -c; the build directories are kept under

@@ -2,9 +2,9 @@
 # products, passes and im2col they replace: bench/fused.olang, built for this machine, every comparison timed
 # interleaved inside the program and given as medians. Not part of "make verify". Run from the repository root:
 #
-#   build/out build bench/runfused.olang && build/bench_runfused [attention|epilogue|conv|all] [repetitions]
+#   $OLANG build bench/runfused.olang && build/bench_runfused [attention|epilogue|conv|all] [repetitions]
 #   BENCH_LOCK=FILE         take this flock while timing, as run.olang does
-#   OLANG=PATH              the compiler to build with (default build/out)
+#   OLANG=PATH              the compiler to build with (default: build/out where it is built, else build/olang)
 
 import "std/os"
 import "benchlib"

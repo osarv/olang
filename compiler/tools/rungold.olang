@@ -18,7 +18,7 @@ Workers I64 = 4
 
 fn main() {
     args := os.Args()
-    given := $args[1] if args.Len() > 1 else "build/out"
+    given := $args[1] if args.Len() > 1 else toolkit.Compiler()
     root := try os.Cwd() catch os.OsError { toolkit.Die("rungold: no working directory") }
     dir := try os.RealPath(filepath.Dir(given)) catch os.OsError { toolkit.Die("rungold: no " $given) }
     olang := $dir "/" $filepath.Base(given)

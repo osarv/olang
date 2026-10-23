@@ -2,7 +2,7 @@
 # diagnostic row, compiling many files side by side, keeping a trailing comment where it was after an edit, and moving the
 # LINE:COL a checks/cases header names along with the edit on its line.
 #
-# Test it with: build/out test tools/diagedit.olang
+# Test it with: $OLANG test tools/diagedit.olang
 
 import "std/os"
 import "std/filepath"

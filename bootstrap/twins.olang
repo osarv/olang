@@ -1,0 +1,468 @@
+# twins - stage 0's diagnostics and the self-hosted compiler's are one table while both exist.
+#
+# compiler/msgs.olang is the source of the compiler's diagnostics, edited by hand (compiler/DESIGN.md section 1.3).
+# Stage 0's twin is the X-macro table in errmsg.h, beside this file. These tests hold the two to each other: every
+# entry X(ID, "RULE", "FORMAT") of errmsg.h is the function msgs.olang writes under "# ID" - its name, its rule and its
+# text, each %-directive a typed parameter (below) - the Diag enum names them in errmsg.h's order, and neither has an
+# entry the other lacks. They also hold stage 0's own calls to its table: each passes as many arguments as its message
+# takes, and every rule an entry names is one SPEC.md states. A diagnostic added or changed is added or changed on
+# both sides, in the same commit, while this directory exists (bootstrap/ takes fixes only).
+#
+# This file goes with bootstrap/: removing the directory removes these tests and nothing else needs to change. What
+# holds msgs.olang alone - its rules stated by the specification, its enum and its functions one to one - is in
+# checks/checks.olang.
+#
+#     %s %S   text: String&                    %d %l   a count: I64
+#     %n      a token, as a reader sees it: String& (Tok(text), EndOfLine or EndOfFile)
+#     %t      a type, as source writes it: String&
+#     %c      a byte, escaped where it does not print: Char
+#     %%      a '%'
+#
+# Run from the repository root, as make test runs it: "$OLANG test bootstrap/twins.olang".
+
+import "std/os"
+import "std/io"
+
+# the directives a format may hold, with the stem of the parameter each makes and its type
+DirectiveChars String& = "sSntdlc"
+Stems Array<String&>& = String&["text", "text", "tok", "ty", "n", "n", "ch"]
+Types Array<String&>& = String&["String&", "String&", "String&", "String&", "I64", "I64", "Char"]
+
+# a table this file cannot read: the test it happens in fails, saying why
+fn die(message String&) {
+    try io.PrintErr("check FAIL: " $message "\n") catch io.IoError { }
+    unreachable
+}
+
+# whether c is a letter, a digit or an underscore
+fn isWord(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# whether c is white space
+fn isSpace(c Char) Bool { return c == ' ' or c == '\t' or c == '\n' or c == '\r' or (c >= 11 and c <= 12) }
+
+# the position after the white space starting at i
+fn skipSpace(t String&, i I64) I64 {
+    j := i
+    for j < t.Len() and isSpace(t[j]) { j++ }
+    return j
+}
+
+# what literalEnd and readEntry fail with: the text is no C string literal, or the line no entry
+error notEntry {
+    TEXT
+}
+
+# the position after the C string literal starting at i (a quote), or notEntry.TEXT when it is none: a quote, then
+# any bytes but a quote or a backslash and any backslash with the byte after it, then a quote
+fn literalEnd(t String&, i I64) I64 ? {
+    if i >= t.Len() or t[i] != '"' { error notEntry.TEXT }
+    j := i + 1
+    for j < t.Len() and t[j] != '"' {
+        if t[j] == '\\' {
+            if j + 1 >= t.Len() { error notEntry.TEXT }
+            j += 2
+        } else {
+            j++
+        }
+    }
+    if j >= t.Len() { error notEntry.TEXT }
+    return j + 1
+}
+
+# the bytes of the string literal text[start:end] (quotes included), escapes decoded
+fn decode(lit String&) String {
+    out := StringBuilder()
+    body := lit[1:lit.Len() - 1]
+    i I64 = 0
+    for i < body.Len() {
+        c := body[i]
+        if c != '\\' {
+            out.PushChar(c)
+            i++
+            continue
+        }
+        e := body[i + 1]
+        i += 2
+        if e == 'n' {
+            out.PushChar('\n')
+        } else if e == 't' {
+            out.PushChar('\t')
+        } else if e == 'r' {
+            out.PushChar('\r')
+        } else if e == '0' {
+            out.PushChar(Char(0))
+        } else if e == '\\' or e == '"' or e == '\'' or e == '?' {
+            out.PushChar(e)
+        } else if e == 'x' {
+            j := i
+            for j < body.Len() and (body[j].IsDigit() or (body[j] >= 'a' and body[j] <= 'f') or (body[j] >= 'A' and body[j] <= 'F')) { j++ }
+            if j == i { die("errmsg.h: unknown escape \\x") }
+            value := try body[i:j].ParseUint(16) catch default 0
+            if value >= 127 { die("errmsg.h: a byte no olang literal writes: " $value) }
+            out.PushChar(Char(U8(value)))
+            i = j
+        } else {
+            die("errmsg.h: unknown escape \\" $e)
+        }
+    }
+    return out.ToString()
+}
+
+# one entry of the table, X(ID, "RULE", "FORMAT"...): its id, its rule and its format with the literals joined and
+# decoded - or notEntry.TEXT when the line is no entry
+fn readEntry(line String&) (String, String, String) ? {
+    i := skipSpace(line, 0)
+    if not line[i:].StartsWith("X(") { error notEntry.TEXT }
+    i += 2
+    start := i
+    for i < line.Len() and isWord(line[i]) { i++ }
+    if i == start or i >= line.Len() or line[i] != ',' { error notEntry.TEXT }
+    id := $line[start:i]
+    i = skipSpace(line, i + 1)
+    ruleEnd := try literalEnd(line, i)
+    rule := decode(line[i:ruleEnd])
+    if ruleEnd >= line.Len() or line[ruleEnd] != ',' { error notEntry.TEXT }
+    i = skipSpace(line, ruleEnd + 1)
+    format := StringBuilder()
+    count I64 = 0
+    for i < line.Len() and line[i] == '"' {
+        e := try literalEnd(line, i)
+        format.Push(decode(line[i:e]))
+        i = skipSpace(line, e)
+        count++
+    }
+    if count == 0 or i >= line.Len() or line[i] != ')' { error notEntry.TEXT }
+    return id, rule, format.ToString()
+}
+
+# text as an olang string literal (L14/L15)
+fn olangLit(text String&) String {
+    out := StringBuilder()
+    out.PushChar('"')
+    for c in text {
+        if c == '\\' {
+            out.Push("\\\\")
+        } else if c == '"' {
+            out.Push("\\\"")
+        } else if c == '\n' {
+            out.Push("\\n")
+        } else if c == '\t' {
+            out.Push("\\t")
+        } else if c == '\r' {
+            out.Push("\\r")
+        } else if U8(c) == 0 {
+            out.Push("\\0")
+        } else if U8(c) < 32 or U8(c) >= 127 {
+            die("errmsg.h: a byte no olang literal writes: " $U8(c))
+        } else {
+            out.PushChar(c)
+        }
+    }
+    out.PushChar('"')
+    return out.ToString()
+}
+
+# ERR_UNKNOWN_CHAR is UnknownChar, NOTE_IN_LIBRARY NoteInLibrary
+fn funcName(id String&) String {
+    out := StringBuilder()
+    words := id.Split("_")
+    for k, w in words {
+        if k == 0 and w == "ERR" { continue }
+        out.PushChar(w[0])
+        out.Push(w[1:].ToLower())
+    }
+    return out.ToString()
+}
+
+# the twin of one entry: its function's name and the function, as msgs.olang writes it
+fn function(id String&, rule String&, format String&) (String, String) {
+    stems List<String&>        # the stem of each parameter, in order
+    kinds List<I64>            # its directive's index in DirectiveChars
+    # pieces: a literal's text, or a parameter's number as "\0" and the number
+    literals List<String&>
+    order List<I64>            # -1 for a literal (the next of literals), else the parameter's number
+    lit := StringBuilder()
+    i I64 = 0
+    for i < format.Len() {
+        c := format[i]
+        if c != '%' {
+            lit.PushChar(c)
+            i++
+            continue
+        }
+        d := format[i + 1]
+        i += 2
+        if d == '%' {
+            lit.PushChar('%')
+            continue
+        }
+        k := try DirectiveChars.FindByte(d) catch {
+            die("errmsg.h: " $id ": unknown directive %" $d)
+            unreachable
+        }
+        if lit.Len() > 0 {
+            literals.Push(lit.ToString())
+            order.Push(-1)
+            lit = StringBuilder()
+        }
+        stems.Push(Stems[k])
+        kinds.Push(k)
+        order.Push(stems.Len() - 1)
+    }
+    if lit.Len() > 0 {
+        literals.Push(lit.ToString())
+        order.Push(-1)
+    }
+    # a stem used once is its own name; one used more than once is numbered from 1
+    names List<String&>
+    for k in range stems.Len() {
+        total I64 = 0
+        before I64 = 0
+        for j in range stems.Len() {
+            if stems[j] == stems[k] {
+                total++
+                if j < k { before++ }
+            }
+        }
+        if total == 1 { names.Push($stems[k]) } else { names.Push($stems[k] $(before + 1)) }
+    }
+    pieceText := StringBuilder()
+    pieces I64 = 0
+    next I64 = 0
+    for o in order {
+        if pieces > 0 { pieceText.PushChar(' ') }
+        pieces++
+        if o < 0 {
+            pieceText.Push(olangLit(literals[next]))
+            next++
+        } else if kinds[o] == 6 {
+            pieceText.Push("$Esc(" $names[o] ")")
+        } else {
+            pieceText.Push("$" $names[o])
+        }
+    }
+    text := pieceText.ToString() if pieces > 0 else "\"\""
+    name := funcName(id)
+    sig := StringBuilder()
+    for k in range stems.Len() {
+        if k > 0 { sig.Push(", ") }
+        sig.Push($names[k] " " $Types[kinds[k]])
+    }
+    return name, "fn " $name "(" $sig.ToString() ") Msg { return Msg(Diag." $name ", " $olangLit(rule) ", " $text ") }"
+}
+
+# errmsg.h's table: from its DIAGNOSTICS X-macro to the enum after it
+fn table() String& {
+    src := try os.ReadFile("bootstrap/errmsg.h") catch {
+        die("cannot read bootstrap/errmsg.h - run from the repository root")
+        unreachable
+    }
+    from := try src.Find("#define DIAGNOSTICS(X)") catch {
+        die("bootstrap/errmsg.h has no DIAGNOSTICS table")
+        unreachable
+    }
+    to := try src.Find("enum diag {") catch {
+        die("bootstrap/errmsg.h has no 'enum diag {' after its table")
+        unreachable
+    }
+    return src[from:to]
+}
+
+test "every message of compiler/msgs.olang is its errmsg.h entry's twin: id, name, rule and text" {
+    msgs := try os.ReadFile("compiler/msgs.olang") catch default ""
+    assert msgs.Len() > 0
+    bad I64 = 0
+    names List<String&>
+    entries I64 = 0
+    for line in table().Split("\n") {
+        if not line.TrimStart().StartsWith("X(") { continue }
+        id, rule, format := try readEntry(line) catch {
+            die("errmsg.h: cannot read: " $line)
+            unreachable
+        }
+        name, decl := function(id, rule, format)
+        if name in names {
+            try io.PrintErr("check FAIL: errmsg.h has two entries named " $name "\n") catch io.IoError { }
+            bad++
+        }
+        names.Push($name)
+        entries++
+        if not msgs.Contains("\n# " $id "\n" $decl "\n") {
+            try io.PrintErr("check FAIL: msgs.olang has no twin of errmsg.h's " $id " - write it as\n# " $id "\n" $decl "\n") catch io.IoError { }
+            bad++
+        }
+    }
+    assert entries > 0
+    # the Diag enum names every diagnostic, in errmsg.h's order
+    cases := StringBuilder()
+    cases.Push("\ntype Diag enum {\n")
+    for n in names { cases.Push("    " $n "\n") }
+    cases.Push("}\n")
+    if not msgs.Contains(cases.ToString()) {
+        try io.PrintErr("check FAIL: msgs.olang's Diag enum does not name errmsg.h's " $entries " entries in its order\n") catch io.IoError { }
+        bad++
+    }
+    # and msgs.olang has no diagnostic errmsg.h lacks: each is written under its id, a line "# ERR_..." or "# NOTE_..."
+    twins I64 = 0
+    for line in msgs.Split("\n") {
+        if line.StartsWith("# ERR_") or line.StartsWith("# NOTE_") { twins++ }
+    }
+    if twins != entries {
+        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries "\n") catch io.IoError { }
+        bad++
+    }
+    assert bad == 0
+}
+
+# B11: what stage 0's diagnostics are held to. Every call passes as many arguments as its message's directives take - a
+# wrong count is undefined behaviour in C's varargs, which nothing else would catch - and every rule a diagnostic names
+# is one the specification states, so "olang explain RULE" finds it
+test "every diagnostic's call in bootstrap/ fits its message, and every rule it names is in the specification" {
+    tab := try os.ReadFile("bootstrap/errmsg.h") catch default ""
+    spec := try os.ReadFile("SPEC.md") catch default ""
+    assert tab.Len() > 0 and spec.Len() > 0
+    bad := 0
+    entries := 0
+    # each entry's rules - "L10a, L10c" names two
+    rest String& = tab
+    for {
+        at := try rest.Find("    X(") catch { break }
+        rs, re := literalAfter(rest, at)
+        rules := rest[rs:re]
+        for rules.Len() > 0 {
+            comma := try rules.Find(", ") catch default -1
+            end I64 = rules.Len() if comma < 0 else comma
+            r := rules[:end]
+            if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
+                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n") catch io.IoError { }
+                bad++
+            }
+            rules = rules[end:] if comma < 0 else rules[end + 2:]
+        }
+        entries++
+        rest = rest[re:]
+    }
+    assert entries > 0
+    # each call naming a diagnostic, in every C source file
+    files := try os.ReadDir("bootstrap") catch default Array<String&>(0)
+    calls := 0
+    for f in files {
+        if not f.EndsWith(".c") { continue }
+        name := $"bootstrap/" $f
+        src := try os.ReadFile(name) catch default ""
+        for fname in String&["Err(", "ErrOncePerLine(", "ErrSyntax(", "ErrFile(", "ErrFatal(", "ErrUsage(", "Note("] {
+            from := I64(0)
+            for {
+                hit := try src[from:].Find(fname) catch { break }
+                at I64 = from + hit
+                from = at + fname.Len()
+                if at > 0 and isIdentChar(src[at - 1]) { continue }
+                s, e, after := callShape(src, at + fname.Len() - 1)
+                if s < 0 { continue }
+                id := src[s:e]
+                entry := try tab.Find("    X(" $id ",") catch default -1
+                if entry < 0 {
+                    try io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n") catch io.IoError { }
+                    bad++
+                    continue
+                }
+                _, re := literalAfter(tab, entry)
+                fs, fe := literalAfter(tab, re + 1)
+                want := directiveCount(tab[fs:fe])
+                if want != after {
+                    try io.PrintErr("check FAIL: " $name ": " $fname $id ", ... passes " $after " arguments, its message takes " $want "\n") catch io.IoError { }
+                    bad++
+                }
+                calls++
+            }
+        }
+    }
+    assert calls > 0
+    assert bad == 0
+}
+
+test "an entry's twin is written as msgs.olang writes it" {
+    assert funcName("ERR_UNKNOWN_CHAR") == "UnknownChar" and funcName("NOTE_IN_LIBRARY") == "NoteInLibrary"
+    assert olangLit("a\"b\\c\n") == "\"a\\\"b\\\\c\\n\""
+    name, decl := function("ERR_X", "R1", "expected %t, found %n and %n, 100%%")
+    assert name == "X"
+    assert decl == "fn X(ty String&, tok1 String&, tok2 String&) Msg { return Msg(Diag.X, \"R1\", \"expected \" $ty \", found \" $tok1 \" and \" $tok2 \", 100%\") }"
+    id, rule, format := try readEntry("    X(ERR_A, \"R1\", \"one \" \"two\\n\") \\") catch { unreachable }
+    assert id == "ERR_A" and rule == "R1" and format == "one two\n"
+    assert directiveCount("a %s and %d, 100%%") == 2
+}
+
+# the index of the quote closing the C string or character literal whose opening quote is at open
+fn cLiteralEnd(t String&, open I64) I64 {
+    i I64 = open + 1
+    for i < t.Len() {
+        if t[i] == '\\' {
+            i = i + 2
+        } else if t[i] == t[open] {
+            return i
+        } else {
+            i++
+        }
+    }
+    return t.Len()
+}
+
+# how many arguments a message takes: its %-directives, "%%" aside
+fn directiveCount(fmt String&) I64 {
+    n := 0
+    i := 0
+    for i < fmt.Len() - 1 {
+        if fmt[i] == '%' {
+            if fmt[i + 1] != '%' { n++ }
+            i = i + 2
+        } else {
+            i++
+        }
+    }
+    return n
+}
+
+fn isIdentChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
+
+# the call whose "(" is at open: where its diagnostic id is (start and end; -1 when no argument is one) and how many
+# arguments follow it - read past nested brackets and C string and character literals
+fn callShape(t String&, open I64) (I64, I64, I64) {
+    idStart, idEnd, after := I64(-1), I64(-1), I64(0)
+    depth := 0
+    argStart I64 = open + 1
+    i I64 = open + 1
+    for i < t.Len() {
+        c := t[i]
+        if c == '"' or c == '\'' {
+            i = cLiteralEnd(t, i) + 1
+            continue
+        }
+        closes Bool = (c == ')' or c == ']' or c == '}') and depth == 0
+        if closes or (c == ',' and depth == 0) {
+            s, e := argStart, i
+            for s < e and t[s].IsSpace() { s++ }
+            for e > s and t[e - 1].IsSpace() { e-- }
+            if idStart >= 0 {
+                if e > s { after++ }
+            } else if t[s:e].StartsWith("ERR_") or t[s:e].StartsWith("NOTE_") {
+                whole := true
+                for k in range s, e { whole = whole and isIdentChar(t[k]) }
+                if whole { idStart, idEnd = s, e }
+            }
+            argStart = i + 1
+            if closes { break }
+        } else if c == '(' or c == '[' or c == '{' {
+            depth++
+        } else if c == ')' or c == ']' or c == '}' {
+            depth--
+        }
+        i++
+    }
+    return idStart, idEnd, after
+}
+
+# the C string literal starting at the first quote at or after from, and where it ends
+fn literalAfter(t String&, from I64) (I64, I64) {
+    open I64 = from + (try t[from:].FindByte('"') catch default -1)
+    return open + 1, cLiteralEnd(t, open)
+}

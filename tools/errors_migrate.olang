@@ -12,7 +12,7 @@
 # Run from anywhere, on files or directories; each file is compiled with "-t" (a test build reaches everything the file
 # imports), what the diagnostics name is rewritten wherever they point, and that repeats until nothing more changes:
 #
-#     build/out build tools/errors_migrate.olang && build/tools_errors_migrate build/out shared.olang std/ ...
+#     $OLANG build tools/errors_migrate.olang && build/tools_errors_migrate "$OLANG" shared.olang std/ ...
 #
 # What it cannot decide - an operator that can now fail (E31: where the expression starts), a signature over several
 # lines, a bare "error" statement (each needs an error type of its own) - is listed at the end for a person.

@@ -19,18 +19,25 @@ DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # the prelude),
 # tests/ (the corpus: shared, worker, runner, Base, Lib) and tests/geom/ (two modules importing each other, imported by runner.olang), and checks/checks.olang - the checks a
 # test block cannot make about the compiler itself (programs that must not compile, whole builds), written
-# in olang like the rest; tools/ (the migration tools and what they share) and compiler/tools/genmsgs.olang have tests too
+# in olang like the rest; tools/ (the migration tools and what they share) has tests too, and so does
+# bootstrap/twins.olang (stage 0's diagnostics table held to compiler/msgs.olang), for as long as bootstrap/ exists
 OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcard std/*.olang) \
 	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) \
-	compiler/tools/genmsgs.olang $(wildcard tools/*.olang) checks/checks.olang \
+	$(wildcard bootstrap/*.olang) $(wildcard tools/*.olang) checks/checks.olang \
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
 	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/out, the C compiler, unless named - "make test
-# OLANG=build/stage1". What it runs - checks/checks.olang, fuzz/, bench/ - reads it from the environment, as an absolute
-# path, and falls back to build/out when it is unset
+# OLANG=build/stage1", or "make verify OLANG=build/olang" for the compiler make bootstrap installs (made by it when
+# missing). What it runs - checks/checks.olang, fuzz/, bench/, the tools - reads it from the environment, as an absolute
+# path; unset, each falls back to build/out where it is built, else build/olang
 OLANG ?= build/out
 OLANG_ENV = OLANG=$(abspath $(OLANG))
+# whether stage 0 takes part: "yes" while bootstrap/ exists and the compiler under test is stage 0 (build/out or
+# build/stage0), else empty. Empty, nothing runs stage 0 or its C oracles - the tools compare with the goldens alone, a
+# file edited since its golden failing, goldens are captured from the port - so "make verify OLANG=build/olang" checks
+# what is left once bootstrap/ is removed (bootstrap/README.md). STAGE0= forces it off, STAGE0=yes on
+STAGE0 ?= $(if $(wildcard bootstrap/main.c),$(if $(filter build/out build/stage0,$(OLANG)),yes))
 
 build/obj/%.o: bootstrap/%.c
 	mkdir -p build/obj
@@ -90,12 +97,12 @@ build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
 # else the port (GOLD_FROM=port: the self-hosted passes, and GOLD_OLANG the driver - build/compiler_olang, or name
 # another, "make drvgold GOLD_FROM=port GOLD_OLANG=build/stage1"). A golden is captured only by its own target
 # (drvgold, rungold, tokgold, astgold, diaggold, layoutgold, modgold), never by a check
-GOLD_FROM ?= stage0
+GOLD_FROM ?= $(if $(STAGE0),stage0,port)
 GOLD_OLANG ?= $(if $(filter port,$(GOLD_FROM)),build/compiler_olang,build/out)
 GOLD_PORT = $(if $(filter port,$(GOLD_FROM)),port)
-# the C oracles, while bootstrap/ has them: a tool compares a file edited since its golden was captured with its oracle
-TOKDUMP = $(if $(wildcard bootstrap/oracle/tokdump.c),build/tokdump)
-ASTDUMP = $(if $(wildcard bootstrap/oracle/astdump.c),build/astdump)
+# the C oracles, while stage 0 takes part: a tool compares a file edited since its golden was captured with its oracle
+TOKDUMP = $(if $(STAGE0),build/tokdump)
+ASTDUMP = $(if $(STAGE0),build/astdump)
 
 # M10's acceptance: the driver says what compiler/goldens/drv.txt stores - what stage 0 said - for command lines decided
 # before code generation and for whole builds
@@ -206,7 +213,7 @@ layoutgold: build/compiler_tools_layoutgold $(if $(GOLD_PORT),build/compiler_too
 # M4's acceptance: from every root program, the module graph the self-hosted loader reaches is stage 0's, as
 # compiler/goldens/modgraph.txt stores it (a graph that differs is compared with build/modgraph while bootstrap/ has it -
 # compiler/tools/modgraph.olang)
-MODGRAPH = $(if $(wildcard bootstrap/oracle/modgraph.c),build/modgraph)
+MODGRAPH = $(if $(STAGE0),build/modgraph)
 modgraph: build/compiler_tools_dump build/compiler_tools_modgraph $(MODGRAPH)
 	build/compiler_tools_modgraph
 
@@ -229,16 +236,20 @@ stage0: build/stage0
 # The seed is the compiler's own LLVM IR, as the compiler writes it of itself for baseline x86-64 Linux: one
 # xz-compressed .ll per object in seed/. "make bootstrap" rebuilds the compiler from it with nothing but clang and xz -
 # no other compiler, no bootstrap/: clang makes the seed into build/olang.seed, which builds compiler/olang.olang into
-# build/olang.1, which builds it again into build/olang.2; the two must be byte for byte equal, and build/olang.2 is
-# installed as build/olang. The seed need not be current - an older seed builds the current source as long as that
-# source uses nothing the seed's compiler lacks - and "make seed" writes it again from the current source.
+# build/olang.1, which builds it into build/olang.2, which builds it again into build/olang.3; the last two, each built
+# by a compiler made from the current source, must be byte for byte equal, and build/olang.3 is installed as
+# build/olang. build/olang.1 was built by the seed's compiler, so it equals build/olang.2 only while the seed is current:
+# the seed need not be - an older seed builds the current source as long as that source uses nothing the seed's
+# compiler lacks - and "make seed" writes it again from the current source. The third build reuses every object of the
+# second (an object is named by its IR) when the two compilers write the same IR, so it costs seconds.
 SEED = seed
 SEED_FILES = $(wildcard $(SEED)/*.ll.xz)
 SEED_OBJ = $(patsubst $(SEED)/%.ll.xz,build/seed/%.o,$(SEED_FILES))
 SEED_CLANG ?= clang
-# the compiler that builds the seed tool: the one make bootstrap installed, else stage 0. Which one it is changes
-# nothing in the seed - the tool runs the current source's passes over the current source
-SEED_OLANG ?= $(if $(wildcard build/olang),build/olang,build/out)
+# the compiler that builds the seed tool: the one make bootstrap installed, else stage 0 while it takes part, else
+# build/olang made by make bootstrap's steps. Which one it is changes nothing in the seed - the tool runs the current
+# source's passes over the current source
+SEED_OLANG ?= $(if $(wildcard build/olang),build/olang,$(if $(STAGE0),build/out,build/olang))
 
 build/seed/%.o: $(SEED)/%.ll.xz
 	@mkdir -p build/seed
@@ -249,12 +260,23 @@ build/olang.seed: $(SEED_OBJ)
 	@test -n "$(SEED_OBJ)" || { echo "bootstrap: no seed in $(SEED)/ - make seed writes one"; exit 1; }
 	$(SEED_CLANG) $(SEED_OBJ) -o $@ -lm -lpthread -ldl -lffi
 
-bootstrap: build/olang.seed
+define BOOTSTRAP
 	build/olang.seed build -output build/olang.1 compiler/olang.olang
 	build/olang.1 build -output build/olang.2 compiler/olang.olang
-	cmp build/olang.1 build/olang.2
-	cp build/olang.2 build/olang
-	@echo "bootstrap: build/olang.1 and build/olang.2 are byte for byte equal; build/olang installed"
+	build/olang.2 build -output build/olang.3 compiler/olang.olang
+	cmp build/olang.2 build/olang.3
+	cp build/olang.3 build/olang
+	@echo "bootstrap: build/olang.2 and build/olang.3 are byte for byte equal; build/olang installed"
+endef
+
+bootstrap: build/olang.seed
+	$(BOOTSTRAP)
+
+# build/olang as a file, for OLANG=build/olang: made by the same steps when missing or older than the sources it is
+# built from (what the compiler holds of std included), as build/out is from bootstrap/*.c
+build/olang: build/olang.seed $(wildcard compiler/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/*.olang) \
+		$(wildcard std/runtime/*.ll)
+	$(BOOTSTRAP)
 
 # the seed written again from the current source (compiler/tools/seed.olang), from the repository root and with the
 # standard library named relatively, so no path of this checkout is in it. A file whose IR did not change is left as

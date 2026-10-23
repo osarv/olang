@@ -2,9 +2,9 @@
 # optimization hands to code generation) to bench/repro/build/NAME.opt.ll, for reading what a reproducer's loop became.
 # From the repository root:
 #
-#   build/out build bench/repro/opt.olang && build/bench_repro_opt closure_call
+#   $OLANG build bench/repro/opt.olang && build/bench_repro_opt closure_call
 #
-# OLANG=PATH names the compiler to build with (default build/out).
+# OLANG=PATH names the compiler to build with (default: build/out where it is built, else build/olang).
 
 import "std/os"
 import "../benchlib"

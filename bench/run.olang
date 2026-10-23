@@ -3,14 +3,14 @@
 # median of each. Not part of "make verify" (and nothing here is a test: "make test" never sees this directory).
 # Run from the repository root:
 #
-#   build/out build bench/run.olang && build/bench_run [-r REPS] [-x] [-q] [NAME ...]
+#   $OLANG build bench/run.olang && build/bench_run [-r REPS] [-x] [-q] [NAME ...]
 #     -r REPS  timed repetitions of every program, interleaved (default 7); the table gives the median and the minimum
 #     -x       also build both for baseline x86-64 and time those (olang -target x86-64, C with no -march)
 #     -q       build and check the outputs only, no timing
 #     NAME     only the rows whose name contains NAME
 #   BENCH_LOCK=FILE  take this flock for the checking and timing runs - on a shared machine, the lock that other
 #                    heavy jobs take, so nothing heavy runs beside the measurements
-#   OLANG=PATH       the compiler to build with (default build/out)
+#   OLANG=PATH       the compiler to build with (default: build/out where it is built, else build/olang)
 #
 # The table is also written to bench/build/results.txt. A timed program's output is gathered and dropped.
 

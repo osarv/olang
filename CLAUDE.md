@@ -640,7 +640,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   stored"): drvdiff, tokdiff, astdiff, modgraph, emitdiff and evaldiff hold the port to what stage 0 gave, captured once
   by a make target each (drvgold, tokgold, astgold, modgold, rungold; `GOLD_FROM=port` captures from the port) - tokens
   and trees as a hash per file, a file edited since compared with the C oracle while bootstrap/ has it - and a checks run
-  case is held to its stored output too.
+  case is held to its stored output too. **Removing bootstrap/ is one commit** (bootstrap/README.md, "Removing this
+  directory"; 2026-10-23): compiler/msgs.olang is the diagnostics table's source (bootstrap/twins.olang holds errmsg.h to
+  it while both exist), every tool falls back to build/out only where it is built, else build/olang, and `make verify
+  OLANG=build/olang` runs everything with the port and stage 0 out (the makefile's `STAGE0`). `make bootstrap` compares
+  the second and third builds, so a seed older than the code generator still bootstraps.
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is

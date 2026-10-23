@@ -26,16 +26,21 @@ fn Fail(why String&, status I32) noreturn {
     os.Exit(status)
 }
 
-# the compiler: $OLANG (relative to the repository root when it is relative), else build/out - as an absolute path; when
-# it is not there, "make build/out" makes the default one
+# the compiler: $OLANG (relative to the repository root when it is relative), else build/out where it is built, else
+# build/olang - as an absolute path. A compiler named is used as it is; when neither default is built, make builds one:
+# build/out while bootstrap/ holds stage 0, else build/olang (make bootstrap)
 fn Compiler() String {
     root := try os.Cwd() catch os.OsError { Fail("cannot find the working directory", 1) }
     given := try os.Env("OLANG") catch default ""
-    path String = $given if given.Len() > 0 else "build/out"
-    if not path.StartsWith("/") { path = $root "/" $path }
-    if not os.Exists(path) {
-        Capture(String&["make", "build/out"])
+    path String = $given
+    if path.Len() == 0 {
+        path = "build/out" if os.Exists("build/out") else "build/olang"
+        if not os.Exists(path) {
+            path = "build/out" if os.Exists("bootstrap/main.c") else "build/olang"
+            Capture(String&["make", path])
+        }
     }
+    if not path.StartsWith("/") { path = $root "/" $path }
     return path
 }
 

@@ -1,7 +1,7 @@
 # A small HTTP server for std/http's tests: binds 127.0.0.1 on a free port, writes the port to the file named by its
 # argument, and answers the requests the tests make. It stops on GET /quit, or after 60 seconds whatever happens.
 #
-#     build/out build checks/fixtures/http/server.olang && build/checks_fixtures_http_server build/http_port
+#     $OLANG build checks/fixtures/http/server.olang && build/checks_fixtures_http_server build/http_port
 #
 # Written over the C library's socket calls through extern fn (std has no socket module): a sockaddr_in is sixteen bytes
 # that only the kernel reads, so it is sixteen bytes here (X3a - the element type is what decides the alignment, and
