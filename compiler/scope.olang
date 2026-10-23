@@ -1219,6 +1219,7 @@ fn (s mut Scoper&) decide(l typed.LocalId, x typed.Expr&, ss Array<typed.Stmt&>&
     s.flowStart(l, 1)
     s.flowRun(ss, from)
     s.landOK = s.flKept
+    s.flMode = 0
 }
 
 # whether an argument borrows a for-in's copy of an element: a value, its storage the loop's block (O17, O10c)
@@ -1960,10 +1961,14 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
 }
 
 # whether a call is a plain one to a function of a module after this body's in the order modules are found in, the
-# prelude's aside: the flow (O26a, O18c) takes it to keep whatever it is given, as stage 0 reads one whose body it has
-# not checked yet - what is handed to it flows where its result goes, so "return toolkit.Text(out)" moves out
+# prelude's aside: the flow into the result (O26a) takes it to keep whatever it is given, as stage 0 reads one whose
+# body it has not checked yet - what is handed to it flows where its result goes, so "return toolkit.Text(out)" moves
+# out. Whether a local is kept beyond its block (O18c, mode 1) reads the callee's body as stage 0 does there: "text :=
+# layout.FileLayout(src, std, ...)" keeps src nowhere, so src's call lands in its block, never split from its storage
+# (O17). Landing in the block is the strictest home a call can have - what then needs it longer is refused (O10c) - so
+# reading less as kept never accepts more
 fn (s mut Scoper&) laterModule(c typed.Call&, callee I64) Bool {
-    if callee < 0 or s.isMethodCall(c) { return false }
+    if callee < 0 or s.flMode == 1 or s.isMethodCall(c) { return false }
     match c.Target {
         case typed.Callee.Body(_) { }
         case _ { return false }
