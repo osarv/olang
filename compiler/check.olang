@@ -322,7 +322,7 @@ fn (c mut Checker&) CheckMain() {
     file := c.P.L.Mods[root].File
     f := c.P.FnNamed(root, c.P.L.Names.Intern("main"))
     if f < 0 {
-        if c.syntaxMark <= 0 { c.P.L.Diags.Error(diag.Where.File(file), msgs.NoMain()) }
+        if not c.P.L.Diags.ErrorBefore(c.syntaxMark) { c.P.L.Diags.Error(diag.Where.File(file), msgs.NoMain()) }
         return
     }
     fd := c.P.FnDecl(f)

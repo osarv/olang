@@ -248,12 +248,34 @@ fn (d Diagnostics&) ErrorWithin(file I64, from I64, to I64, upto I64) Bool {
     for i in range upto {
         if i >= d.records.Len() { break }
         r := d.records[i]
+        if not d.mayReport(r.group) { continue }
         match r.at {
             case Where.Span(f, s, _) { if f == file and s >= from and s < to { return true } }
             nomatch { }
         }
     }
     return false
+}
+
+# whether an error was reported before the records' count was upto - a syntax error that may have hidden what is checked
+# after it (B4: a missing main is said only where none was)
+fn (d Diagnostics&) ErrorBefore(upto I64) Bool {
+    for i in range upto {
+        if i >= d.records.Len() { break }
+        if d.mayReport(d.records[i].group) { return true }
+    }
+    return false
+}
+
+# whether what group g holds may still be reported: neither it nor a group it is inside dropped or cut off - one still
+# pending may yet be chosen. Held diagnostics of a branch the build did not take were recorded and never are
+fn (d Diagnostics&) mayReport(group I64) Bool {
+    g := group
+    for g >= 0 {
+        if d.groupState[g] == Dropped or d.groupState[g] == Cut { return false }
+        g = d.groupParent[g]
+    }
+    return true
 }
 
 # the innermost open context in the program's own files, when at is in the library: the use of the library's code at

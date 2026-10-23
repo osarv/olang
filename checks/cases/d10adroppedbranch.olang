@@ -1,0 +1,14 @@
+# check: fail error[D10a]: the end can be reached without returning I32
+# D10a: a branch the build does not take (S8b) is never checked, so a syntax error in it hides nothing - the port
+# had held that error's record, dropped it, and still counted it as an error inside the body, so it judged no return
+import "std/io"
+
+fn pick() I32 {
+    if TargetOs == "no-such-os" {
+        return NoSuchType{1}.v
+    }
+}
+
+fn main() {
+    io.Println($pick())!
+}
