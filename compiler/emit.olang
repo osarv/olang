@@ -83,6 +83,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Baked Map<I64, eval.Image>
     Arch String& = "x86_64"         # the target's architecture, for the runtime's text (B12)
     San Bool = false                # a -sanitize build: the runtime's text holds the scope sanitizer (B2f)
+    BF16Opaque Bool = false         # a -debug or -race build: every BF16 widening's bits kept opaque (bf16Bits)
     rtTypes String& = ""            # the runtime's types, as its text defines them
     rtRead Bool = false
     # B2e, in a -debug build: metadata numbered from 1000 (below it the fixed alias tags), renumbered in each object;
@@ -2734,7 +2735,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case typed.PrimOp.BitNot { return fe.let("xor " $lt " " $x ", " $("true" if r == types.BoolT else "-1")) }
         case typed.PrimOp.Not { return fe.let("xor i1 " $x ", true") }
         case typed.PrimOp.Convert { return fe.convert(x, t0, ty) }
-        case typed.PrimOp.Bitcast { return fe.let("bitcast " $lt " " $x " to " $fe.ty(ty)) }
+        case typed.PrimOp.Bitcast { return fe.bitcast(x, lt, fe.ty(ty)) }
         case typed.PrimOp.Retire {
             # M19d: an array a collection no longer uses - under -sanitize its storage poisoned and, where it has a
             # chunk of its own, made unreadable until its scope closes (B2f); nothing otherwise
@@ -2957,9 +2958,34 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
     return "undef"
 }
 
+# E33: the same bits read as the other type. LLVM 18's InstCombine takes a bitcast between half and bfloat for a
+# no-op cast, so F16 bits made into a BF16 (or the reverse) were merged with the conversion after them, which then read
+# the bits as the type they came from (fuzz/repro/bf16bitcastfold.ll); only an F16's bits put a half beside an i16, so
+# an empty asm on the integer of every F16 bitcast keeps the two apart - no instruction, but no loop vectorizes
+# through it. A BF16's bits are behind one always (bf16Bits: one value, nothing to vectorize)
+fn (fe mut fnEm&) bitcast(x String&, from String&, to String&) String {
+    if from == "bfloat" { return fe.bf16Bits(x, true) }
+    v := fe.opaque16(x) if to == "half" else $x
+    r := fe.let("bitcast " $from " " $v " to " $to)
+    return fe.opaque16(r) if from == "half" else r
+}
+
+# an i16 behind an empty asm: the same register, opaque to InstCombine and to instruction selection
+fn (fe mut fnEm&) opaque16(v String&) String { return fe.let("call i16 asm \"\", \"=r,0\"(i16 " $v ")") }
+
+# a BF16's bits as an i16. LLVM 18's x86 selection takes the sign bit of "bitcast bfloat to i16" for a known zero
+# wherever the bfloat is not an argument in a register (a load, a select, a phi), so a test of that bit was folded to
+# false (fuzz/repro/bf16signbit.ll); the empty asm keeps it. Since no loop vectorizes through one, the widening every
+# BF16 operation starts with is kept opaque only in a -debug or -race build (E.BF16Opaque), where nothing vectorizes;
+# under -O3 InstCombine has made a load's bits an i16 load before selection
+fn (fe mut fnEm&) bf16Bits(v String&, opaque Bool) String {
+    bits := fe.let("bitcast bfloat " $v " to i16")
+    return fe.opaque16(bits) if opaque else bits
+}
+
 # a BF16 widened to wide ("float", "double"): its bits are an F32's top half, exactly
 fn (fe mut fnEm&) widenBF16(v String&, wide String&) String {
-    bits := fe.let("bitcast bfloat " $v " to i16")
+    bits := fe.bf16Bits(v, fe.E.BF16Opaque)
     z := fe.let("zext i16 " $bits " to i32")
     sh := fe.let("shl i32 " $z ", 16")
     f := fe.let("bitcast i32 " $sh " to float")
