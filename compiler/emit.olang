@@ -230,16 +230,23 @@ fn (e mut Emitter&) emitAll() {
             case _ { }
         }
     }
-    if e.Module {
-        for i in range e.Lw.Bodies.Len() {
-            k := mir.FnKey.Body(typed.BodyId(I32(i)))
-            match e.Lw.Bodies[i].Of {
-                case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
-                    if e.Lw.Bodies[i].Root != null and e.homeOf(k) == p.L.Root { e.want(k) }
-                }
-                case _ { }
+    # every body homed in a module the object of which is built: compiling one module, its own; else every module's
+    # but the root's - so a module's object depends on the module and the build's mode alone, and every program built
+    # in one directory shares it (the prelude's above all, in every program), rather than each compiling its own of
+    # the functions it happens to reach
+    for i in range e.Lw.Bodies.Len() {
+        k := mir.FnKey.Body(typed.BodyId(I32(i)))
+        match e.Lw.Bodies[i].Of {
+            case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
+                if e.Lw.Bodies[i].Root == null { continue }
+                h := e.homeOf(k)
+                if (h == p.L.Root) == e.Module and h >= 0 { e.want(k) }
             }
+            case _ { }
         }
+    }
+    if e.Module {
+        # its own bodies only, wanted above
     } else if e.Tests {
         for t in tests { e.want(mir.FnKey.Body(typed.BodyId(I32(t)))) }
     } else if mainBody >= 0 {
@@ -1302,10 +1309,22 @@ fn blockName(b mir.BlockId) String { return "bb" $b }
 
 fn (fe mut fnEm&) gap(what String&) { fe.E.gap(what) }
 
+# function type ty's result and parameters laid out: whether each goes through memory (types.ViaMemory) is its size's
+# question, and a size is known only once laid out - asked before, a struct over 128 bytes read as small, so a
+# function's header returned it as a value where its body (whose locals lay it out) returned it through %out
+fn (e mut Emitter&) signature(ty types.TypeId) {
+    t := e.T
+    if t.KindOf(t.Repr(ty)) != types.Kind.Func { return }
+    res := t.Result(ty)
+    if res != types.VoidT and res != types.NoreturnT { e.P.Layout(res) }
+    for x in t.Items(t.Params(ty)) { e.P.Layout(x) }
+}
+
 # the function's LLVM header: linkage, result, name and parameters
 # a function's first line: "define LINK RET @SYM(PARAMS) #0 {" - or, with link "declare", how another object declares it
 fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal") String {
     t := e.T
+    e.signature(ty)
     b := StringBuilder()
     b.Push($("declare " if link == "declare" else $"define " $link " ") $t.RetLlvm(ty) " @" $symbol "(")
     first := true
@@ -1567,7 +1586,6 @@ fn foldSlots(body String&, nlocals I64) String {
     }
     return out.ToString()
 }
-
 
 # the body of a function the compiler could not make: it fails when called, saying so
 fn (e mut Emitter&) stub(what String&, symbol String&) String {
@@ -3466,6 +3484,7 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
     inner := fe.load("ptr", fe.let("getelementptr { ptr, ptr }, ptr %env, i32 0, i32 1"))
     args := StringBuilder()
     args.Push("ptr " $inner)
+    e.signature(f)
     res := t.Result(f)
     if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr %out") }
     for i in range ip {
@@ -3676,6 +3695,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
             env = fe.let("extractvalue { ptr, ptr } " $v ", 1")
         }
     }
+    fe.E.signature(ty)
     res := t.Result(ty)
     errs := t.Items(t.Errors(ty)).Len() > 0
     via := res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res)
@@ -4269,6 +4289,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
         first = false
         at = 1
     }
+    e.signature(ty)
     ps := t.Items(t.Params(ty))
     pass := t.Passing(ty)
     res := t.Result(ty)
@@ -4399,6 +4420,7 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
         b.Push("  br i1 " $cond ", label %take" $ci ", label %pass" $ci "\ntake" $ci ":\n")
         if cl.Handler != mir.Operand.None {
             ht := fe.otype(cl.Handler)
+            e.signature(ht)
             b.Push("  %hv" $ci " = load { ptr, ptr }, ptr %f" $h "\n")
             b.Push("  %hc" $ci " = extractvalue { ptr, ptr } %hv" $ci ", 0\n  %he" $ci " = extractvalue { ptr, ptr } %hv" $ci ", 1\n")
             args := StringBuilder()
