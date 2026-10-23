@@ -1254,7 +1254,8 @@ fn (s mut Scoper&) qualifiesMove(loc typed.Local, x typed.Expr&) Bool {
             case typed.Mark.Bare, typed.Mark.Infer { }
             case _ { return false }
         }
-        return s.isFresh(x) or s.isNullLit(x)
+        # (written text, constant data, as a temporary would be - O26a)
+        return s.isFresh(x) or s.isNullLit(x) or s.isData(x) or s.staticLiteral(x)
     }
     match loc.Marked {
         case typed.Mark.None, typed.Mark.Infer { }
@@ -1265,6 +1266,13 @@ fn (s mut Scoper&) qualifiesMove(loc typed.Local, x typed.Expr&) Bool {
     # a number or a Bool is never moved; storage a borrow can name may be
     k := s.P.T.KindOf(t)
     return k == types.Kind.Array or k == types.Kind.Named or k == types.Kind.Tuple
+}
+
+fn (s mut Scoper&) isData(x typed.Expr&) Bool {
+    return match s.unAway(x) {
+        case typed.Expr.Data(_, _, _, _) => true
+        case _ => false
+    }
 }
 
 # whether x is an array literal of constant data only, promoted into a read-only reference (T25d)
@@ -2056,8 +2064,8 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
             }
             if m.NoMatch != null { s.carried(m.NoMatch.Value, out) }
         }
-        case typed.Expr.Try(_, _, t) {
-            s.carriedAfterTry(t.X, out)
+        case typed.Expr.Try(sp, _, t) {
+            if s.writtenTry(sp) { s.carriedAfterTry(t.X, out) } else { s.carried(t.X, out) }
             for c in t.Clauses {
                 for df in c.Defaults { s.carried(df, out) }
             }
@@ -2083,6 +2091,14 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
 # ("try m.Get(k)"), the place a tried index or slice reads ("try a[i]"): it is not taken to flow (O26a, as stage 0 reads
 # the flow, so a local handing a returned value its references only through such a call stays in its block, and the
 # call's obligation refuses it - O10c - rather than the local being moved to the result scope)
+# whether a try is one the program writes, "try" at its start - not a loop's own call, which reads its collection
+fn (s mut Scoper&) writtenTry(sp source.Span) Bool {
+    text := try s.texts.Get(s.B.File) catch default ""
+    at := I64(sp.Start)
+    if at < 0 or at + 3 > text.Len() or text[at:at + 3] != "try" { return false }
+    return at + 3 == text.Len() or not (text[at + 3].IsLetter() or text[at + 3].IsDigit() or text[at + 3] == '_')
+}
+
 fn (s mut Scoper&) carriedAfterTry(x typed.Expr&, out mut List<I64>&) {
     if x == null { return }
     match x {

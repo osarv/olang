@@ -1228,11 +1228,41 @@ fn (c mut Checker&) instHoldsItself(t types.TypeId, d types.DeclId, sb ast.Struc
     fs := c.P.T.Items(c.P.T.Fields(t))
     sps := fieldSpans(sb)
     for i in range fs.Len() {
-        if i < sps.Len() and c.holdsBy(fs[i], d, 0) {
+        if i < sps.Len() and c.holdsInst(fs[i], t, 0) {
             c.err(sps[i], msgs.TypeHoldsItself(c.ty(t)))
             return
         }
     }
+}
+
+# whether a value of type x holds the instance t by value - x itself, or through a fixed array, a payload or another
+# value it holds; an instance of the same generic with other arguments is another type (finite where it nests no deeper)
+fn (c mut Checker&) holdsInst(x types.TypeId, t types.TypeId, depth I64) Bool {
+    if depth > 16 or x == types.UnknownT { return false }
+    if x == t { return true }
+    match c.P.T.KindOf(x) {
+        case types.Kind.Named {
+            if not c.P.Body(x) { return false }
+            k := c.declKind(x)
+            if k == types.DeclKind.Struct { return c.listHoldsInst(c.P.T.Fields(x), t, depth) }
+            if k == types.DeclKind.Enum { return c.listHoldsInst(c.P.T.Cases(x), t, depth) }
+            if k == types.DeclKind.Over { return c.holdsInst(c.P.T.Base(x), t, depth + 1) }
+            return false
+        }
+        case types.Kind.Array {
+            if c.P.T.Length(x) == types.TypeId(0) { return false }
+            return c.holdsInst(c.P.T.Elem(x), t, depth + 1)
+        }
+        case types.Kind.Tuple, types.Kind.Record { return c.listHoldsInst(c.P.T.Parts(x), t, depth) }
+        nomatch { return false }
+    }
+}
+
+fn (c mut Checker&) listHoldsInst(l types.ListId, t types.TypeId, depth I64) Bool {
+    for x in c.P.T.Items(l) {
+        if x != types.TypeId(0) and c.holdsInst(x, t, depth + 1) { return true }
+    }
+    return false
 }
 
 fn (c mut Checker&) holdsBy(t types.TypeId, d types.DeclId, depth I64) Bool {
