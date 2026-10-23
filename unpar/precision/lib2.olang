@@ -1,0 +1,51 @@
+type W struct(d Array<I64>&) {
+    D Array<I64>&d = d
+}
+
+fn Get(w W) Array<I64>& {
+    return w.D
+}
+
+fn GetR(w W&) Array<I64>&w {
+    return w.D
+}
+
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+
+fn Wrap(w W) H {
+    return H(w.D)
+}
+
+fn MkW(d Array<I64>&) W {
+    return W(d)
+}
+
+fn Id(w W) W {
+    return w
+}
+
+type WW struct(w W) {
+    In W = w
+}
+
+fn Inner(x WW) Array<I64>& {
+    return x.In.D
+}
+
+fn Count(w W) I64 {
+    return w.D.Len()
+}
+
+fn Rewrap(x W) W {
+    return W(x.D)
+}
+
+fn RewrapH(x W) H {
+    return H(x.D)
+}
+
+fn RewrapR(x W&) H {
+    return H(x.D)
+}

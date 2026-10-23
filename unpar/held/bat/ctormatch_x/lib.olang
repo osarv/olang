@@ -1,0 +1,10 @@
+type G struct(x Array<I64>&) {
+    X Array<I64>& = null
+    match x.Len() {
+        case 4 { X = x }
+        case _ { }
+    }
+}
+fn K(x Array<I64>&) G {
+    return G(x)
+}

@@ -1,0 +1,7 @@
+type H struct(x Array<I64>&) {
+    X List<Array<I64>&> = (List<Array<I64>&>() if x.Len() > 9 else List<Array<I64>&>())
+    X.Push(x)
+}
+fn K(x Array<I64>&) H {
+    return H(x)
+}

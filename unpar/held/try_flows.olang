@@ -1,0 +1,160 @@
+import "std/io"
+import "lib"
+
+fn mk() Map<I64, List<I64>> {
+    m := Map<I64, List<I64>>()
+    m.Put(1, List<I64>())
+    return m
+}
+
+fn t1() List<I64> {
+    m := mk()
+    l := try m.Get(2) catch { return List<I64>() }
+    l.Push(1)
+    return l
+}
+
+fn t2() List<I64> {
+    m := mk()
+    l := try m.Get(1) catch { m.Put(1, List<I64>()) } default List<I64>()
+    l.Push(2)
+    return l
+}
+
+fn t3(c Bool) List<I64> ? {
+    m := mk()
+    o := List<I64>()
+    l := (try m.Get(1)) if c else o
+    l.Push(3)
+    return l
+}
+
+fn t4() List<I64> ? {
+    m := mk()
+    l := try lib.Find(m, 1)
+    l.Push(4)
+    return l
+}
+
+fn t5() List<I64> ? {
+    m := mk()
+    l := try lib.FindR(m, 1)
+    l.Push(5)
+    return l
+}
+
+fn t6() List<I64> ? {
+    w := lib.W()
+    w.In.Put(1, List<I64>())
+    l := try w.In.Get(1)
+    l.Push(6)
+    return l
+}
+
+fn t7() List<I64> {
+    ls := List<List<I64>>()
+    ls.Push(List<I64>())
+    l := ls[0]
+    l.Push(7)
+    return l
+}
+
+fn t8() List<I64> ? {
+    l List<I64>
+    for i in range 4 {
+        m := mk()
+        l = try m.Get(1)
+        l.Push(8)
+        if i == 2 { break }
+    }
+    return l
+}
+
+fn t9() List<I64> ? {
+    m := mk()
+    l := try m.Get(1)
+    k := l
+    k.Push(9)
+    return l
+}
+
+fn t10() (List<I64>, I64) ? {
+    m := mk()
+    return try m.Get(1), 10
+}
+
+fn t11() List<I64> ? {
+    m := mk()
+    l := try (try m.Get(1)).Clone().Iter().ToList()
+    return l
+}
+
+fn t12() List<I64> ? {
+    vs := Vec<List<I64>>()
+    vs.Push(List<I64>())
+    l := try vs.First()
+    l.Push(12)
+    return l
+}
+
+fn t13() List<I64> ? {
+    m := Map<I64, Map<I64, List<I64>>>()
+    m.Put(1, mk())
+    l := try (try m.Get(1)).Get(1)
+    l.Push(13)
+    return l
+}
+
+fn t14() List<I64> ? {
+    m := mk()
+    l List<I64>
+    {
+        n := mk()
+        l = try n.Get(1) catch { l = try m.Get(1) } default List<I64>()
+    }
+    l.Push(14)
+    return l
+}
+
+fn main() ? {
+    r1 := t1()
+    r2 := t2()
+    r3 := try t3(true)
+    r4 := try t4()
+    r5 := try t5()
+    r6 := try t6()
+    r7 := t7()
+    r8 := try t8()
+    r9 := try t9()
+    r10, n := try t10()
+    r11 := try t11()
+    r12 := try t12()
+    r13 := try t13()
+    r14 := try t14()
+    churn()
+    r1.Push(0)
+    r2.Push(0)
+    r3.Push(0)
+    r4.Push(0)
+    r5.Push(0)
+    r6.Push(0)
+    r7.Push(0)
+    r8.Push(0)
+    r9.Push(0)
+    r10.Push(0)
+    r12.Push(0)
+    r13.Push(0)
+    r14.Push(0)
+    churn()
+    io.Println($r1 $r2 $r3 $r4 $r5 $r6 $r7 $r8 $r9 $r10 $r11 $r12 $r13 $r14)!
+}
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

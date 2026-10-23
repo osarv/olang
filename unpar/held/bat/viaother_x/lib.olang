@@ -1,0 +1,9 @@
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+fn inner(x Array<I64>&, h mut H&) { h.X = x }
+fn K(x Array<I64>&) H {
+    h := H(Array<I64>(4))
+    inner(x, h)
+    return h
+}

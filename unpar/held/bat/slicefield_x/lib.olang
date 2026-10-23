@@ -1,0 +1,6 @@
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x[1:3]
+}
+fn K(x Array<I64>&) H {
+    return H(x)
+}

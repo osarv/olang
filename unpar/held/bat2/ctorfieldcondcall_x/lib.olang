@@ -1,0 +1,7 @@
+fn tr(a Array<I64>&) Array<I64>&a { return a[0:2] }
+type H struct(x Array<I64>&) {
+    X Array<I64>& = (tr(x) if x.Len() > 0 else Array<I64>(2))
+}
+fn K(x Array<I64>&) H {
+    return H(x)
+}

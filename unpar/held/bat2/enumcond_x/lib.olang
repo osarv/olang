@@ -1,0 +1,7 @@
+type E enum {
+    A(x Array<I64>&)
+    N
+}
+fn K(x Array<I64>&) E {
+    return E.A(x if x.Len() > 0 else Array<I64>(4))
+}

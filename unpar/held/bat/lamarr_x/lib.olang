@@ -1,0 +1,3 @@
+fn K(x Array<I64>&) Array<fn() I64> {
+    return Array<fn() I64>(1, fn() I64 { return x[1] })
+}

@@ -1,0 +1,14 @@
+type E enum {
+    A(x Array<I64>&)
+    N
+}
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+fn K(x Array<I64>&) H {
+    e := E.A(x)
+    return match e {
+        case E.A(y) => H(y)
+        case _ => H(Array<I64>(4))
+    }
+}

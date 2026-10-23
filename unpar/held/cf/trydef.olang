@@ -1,0 +1,28 @@
+import "std/io"
+
+fn pk(a Array<I64>&) Array<I64>&a ? { if a.Len() > 9 { error } return a }
+type M struct(n I64, data Array<I64>&) {
+    n
+    Data Array<I64>& = try pk(data) catch default Array<I64>(n)
+}
+
+fn pick(a Array<I64>&, b Array<I64>&, c Bool) Array<I64>&a { return a }
+
+fn main() {
+    ms := List<M>()
+    for i in range 3 {
+        d := Array<I64>(4, i + 1)
+        ms.Push(M(2, d))
+    }
+    churn()
+    io.Println($ms[0].Data[1] " " $ms[2].Data[1])!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        assert a[3] == i
+    }
+}

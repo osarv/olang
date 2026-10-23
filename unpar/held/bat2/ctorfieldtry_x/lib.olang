@@ -1,0 +1,10 @@
+fn pick(x Array<I64>&) Array<I64>&x ? {
+    if x.Len() > 100 { error }
+    return x
+}
+type H struct(x Array<I64>&) {
+    X Array<I64>& = try pick(x) catch default Array<I64>(4)
+}
+fn K(x Array<I64>&) H {
+    return H(x)
+}

@@ -1,0 +1,7 @@
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x.Trimmed()
+}
+fn (a Array<I64>&) Trimmed() Array<I64>&a { return a[0:2] if a.Len() > 2 else a }
+fn K(x Array<I64>&) H {
+    return H(x)
+}

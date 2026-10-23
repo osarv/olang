@@ -1,0 +1,7 @@
+type G struct(x Array<I64>&) {
+    L List<Array<I64>&> = List<Array<I64>&>()
+    if x.Len() > 0 { L.Push(x) }
+}
+fn K(x Array<I64>&) G {
+    return G(x)
+}

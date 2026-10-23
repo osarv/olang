@@ -1,0 +1,7 @@
+type B struct(f fn() I64) {
+    F fn() I64 = f
+}
+fn K(x Array<I64>&) B {
+    f := (fn() I64 { return x[1] }) if x.Len() > 0 else (fn() I64 { return 0 })
+    return B(f)
+}

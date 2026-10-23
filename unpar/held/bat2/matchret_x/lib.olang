@@ -1,0 +1,10 @@
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+fn K(x Array<I64>&) H {
+    return match x.Len() {
+        case 0 => H(Array<I64>(4))
+        case _ if x[0] > 1000 => H(Array<I64>(3))
+        case _ => H(x)
+    }
+}

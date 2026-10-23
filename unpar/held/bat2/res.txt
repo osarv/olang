@@ -1,0 +1,36 @@
+arrfillcond_s/main.olang     branch rc=0                  | master rc=0                  | 9
+arrfillcond_x/main.olang     branch rc=0                  | master rc=0                  | 9
+condret_s/main.olang         branch rc=0                  | master rc=0                  | 9
+condret_x/main.olang         branch rc=0                  | master rc=0                  | 9
+ctorargcond_s/main.olang     branch rc=0                  | master rc=0                  | 9
+ctorargcond_x/main.olang     branch rc=0                  | master rc=0                  | 9
+ctorargmatch_s/main.olang    branch rc=0                  | master rc=0                  | 9
+ctorargmatch_x/main.olang    branch rc=0                  | master rc=0                  | 9
+ctorfieldcondcall_s/main.olang branch rc=0                  | master rc=134                | 9
+ctorfieldcondcall_x/main.olang branch rc=0                  | master rc=0                  | 9
+ctorfieldcondfield_s/main.olang branch rc=0                  | master rc=0                  | 0
+ctorfieldcondfield_x/main.olang branch rc=0                  | master rc=0                  | 0
+ctorfieldcondlist_s/main.olang branch rc=0                  | master rc=0                  | 9
+ctorfieldcondlist_x/main.olang branch rc=0                  | master rc=0                  | 9
+ctorfieldcondmeth_s/main.olang branch rc=1   error[M19d]    | master rc=1   error[M19d]    | ctorfieldcondmeth_s/main.olang:6:20: error[M19d]: only the prelude declares methods of Arr
+ctorfieldcondmeth_x/main.olang branch rc=1   error[M19d]    | master rc=1   error[M19d]    | ctorfieldcondmeth_x/lib.olang:4:20: error[M19d]: only the prelude declares methods of Arra
+ctorfieldmeth_s/main.olang   branch rc=1   error[M19d]    | master rc=1   error[M19d]    | ctorfieldmeth_s/main.olang:6:20: error[M19d]: only the prelude declares methods of Array<I
+ctorfieldmeth_x/main.olang   branch rc=1   error[M19d]    | master rc=1   error[M19d]    | ctorfieldmeth_x/lib.olang:4:20: error[M19d]: only the prelude declares methods of Array<I6
+ctorfieldtry_s/main.olang    branch rc=1   error[R8]      | master rc=1   error[R8]      | ctorfieldtry_s/main.olang:4:30: error: expected a name, found '}'
+ctorfieldtry_x/main.olang    branch rc=1   error[R8]      | master rc=1   error[R8]      | ctorfieldtry_x/lib.olang:2:30: error: expected a name, found '}'
+ctorgenfield_s/main.olang    branch rc=0                  | master rc=0                  | 9
+ctorgenfield_x/main.olang    branch rc=0                  | master rc=0                  | 9
+enumcond_s/main.olang        branch rc=0                  | master rc=0                  | E.A(I64[9, 9, 9, 9])
+enumcond_x/main.olang        branch rc=0                  | master rc=0                  | E.A(I64[9, 9, 9, 9])
+fieldstorecond_s/main.olang  branch rc=0                  | master rc=0                  | 9
+fieldstorecond_x/main.olang  branch rc=0                  | master rc=0                  | 9
+listcond_s/main.olang        branch rc=0                  | master rc=0                  | 9
+listcond_x/main.olang        branch rc=0                  | master rc=0                  | 9
+localcond_s/main.olang       branch rc=0                  | master rc=0                  | 9
+localcond_x/main.olang       branch rc=0                  | master rc=0                  | 9
+localcondref_s/main.olang    branch rc=1   error[C2d]     | master rc=1   error[C2d]     | localcondref_s/main.olang:8:14: error[C2d]: this instance holds a reference to an argument
+localcondref_x/main.olang    branch rc=1   error[C2d]     | master rc=1   error[C2d]     | localcondref_x/lib.olang:6:14: error[C2d]: this instance holds a reference to an argument 
+matchret_s/main.olang        branch rc=0                  | master rc=0                  | 9
+matchret_x/main.olang        branch rc=0                  | master rc=0                  | 9
+nestedctorcond_s/main.olang  branch rc=0                  | master rc=0                  | 9
+nestedctorcond_x/main.olang  branch rc=0                  | master rc=0                  | 9

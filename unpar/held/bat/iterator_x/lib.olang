@@ -1,0 +1,12 @@
+type It struct(a Array<I64>&) {
+    A Array<I64>& = a
+    at I64 = 0
+}
+fn (i mut It&) Next() I64 ? Exhausted {
+    if i.at >= i.A.Len() { error Exhausted.END }
+    i.at++
+    return i.A[i.at - 1]
+}
+fn K(x Array<I64>&) It {
+    return It(x)
+}

@@ -1,0 +1,40 @@
+import "std/io"
+
+fn K(x Array<I64>&) Array<fn() I64> {
+    return Array<fn() I64>(1, fn() I64 { return x[1] })
+}
+
+fn get() Array<fn() I64> {
+    d := Array<I64>(4, 9)
+    r := K(d)
+    return r
+}
+
+fn getloop() Array<fn() I64> {
+    r Array<fn() I64>
+    for i in range 3 {
+        d := Array<I64>(4, 5 + i)
+        r = K(d)
+    }
+    return r
+}
+
+fn main() {
+    v := get()
+    churn()
+    io.Println($v[0]())!
+    v = getloop()
+    churn()
+    io.Println($v[0]())!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

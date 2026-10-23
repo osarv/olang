@@ -1,0 +1,44 @@
+import "std/io"
+
+type E enum {
+    A(f fn() I64)
+    N
+}
+fn K(x Array<I64>&) E {
+    return E.A(fn() I64 { return x[1] })
+}
+
+fn get() E {
+    d := Array<I64>(4, 9)
+    r := K(d)
+    return r
+}
+
+fn getloop() E {
+    r E
+    for i in range 3 {
+        d := Array<I64>(4, 5 + i)
+        r = K(d)
+    }
+    return r
+}
+
+fn main() {
+    v := get()
+    churn()
+    io.Println($(match v { case E.A(f) => f() case _ => 0 }))!
+    v = getloop()
+    churn()
+    io.Println($(match v { case E.A(f) => f() case _ => 0 }))!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

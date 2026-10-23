@@ -1,0 +1,9 @@
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+type G struct(x Array<I64>&) {
+    In H = H(x)
+}
+fn K(x Array<I64>&) G {
+    return G(x)
+}

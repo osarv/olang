@@ -1,0 +1,8 @@
+type H struct() {
+    X Array<I64>& = null
+}
+fn K(x Array<I64>&) H {
+    h := H()
+    h.X = x if x.Len() > 0 else Array<I64>(4)
+    return h
+}

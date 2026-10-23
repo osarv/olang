@@ -1,0 +1,7 @@
+type H<T> struct(x T, n I64) {
+    X T = x
+    Y Array<T>& = (Array<T>(1, x) if n > 0 else Array<T>(0))
+}
+fn K(x Array<I64>&) H<Array<I64>&> {
+    return H<Array<I64>&>(x, 1)
+}
