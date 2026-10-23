@@ -748,6 +748,7 @@
 | ok - E35: a postfix '!' gives the value where nothing fails
 | ok - T35c: Float, Integer and Number - decided while compiling, and the same at run time
 | ok - G9a: a literal reaching a constrained variable - decided while compiling, and the same at run time
+| ok - E27, D9b: a grown comprehension and a written by-value String, read back after a churn
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -1204,6 +1205,9 @@
 | 6
 === run l9afields.olang
 | status 0
+=== run l9aowntake.olang
+| status 0
+| 4
 === run listscopetext.olang
 | status 0
 === run m19g20allowed.olang

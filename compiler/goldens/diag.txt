@@ -610,6 +610,14 @@ d10aforbreak.olang:3:4: error[D10a]: the end can be reached without returning I3
     3 | fn f(x Bool) I32 {
       |    ^
 compilation failed with 1 error
+=== d11amutfn.olang
+d11amutfn.olang:6:10: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and fn(x I64) I64 is none
+    6 | fn use(f mut fn(x I64) I64) I64 { return f(1) }
+      |          ^~~
+d11amutfn.olang:8:7: error[D11a]: a local is always writable - 'mut' is for a reference, and fn(x I64) I64 is none
+    8 |     f mut fn(x I64) I64 = dbl
+      |       ^~~
+compilation failed with 2 errors
 === d11amutinferred.olang
 d11amutinferred.olang:5:7: error[D11a]: ':=' gives a local its initializer's permission - remove 'mut', or write the type: 'x mut T& = ...'
     5 |     p mut := P(1)
@@ -672,6 +680,9 @@ d16arity.olang:5:16: error[D16a]: fn(x I32) I32 takes 1 parameter, and this lamb
     5 |     n := apply(fn(a, b) { return a })
       |                ^~
 d16arity.olang:5:16: error[E12]: expected fn(x I32) I32, found fn(a I32, b I32) I32
+    5 |     n := apply(fn(a, b) { return a })
+      |                ^~
+d16arity.olang:5:16: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a I32, b I32) I32', or pass a lambda calling it
     5 |     n := apply(fn(a, b) { return a })
       |                ^~
 compilation failed with 2 errors
@@ -850,6 +861,14 @@ d9alambdawritten.olang:7:30: error[D9a]: array parameter 'x' is passed by refere
     7 |     try io.Println($a.Any(fn(x Array<I32, 2>) Bool { return x[0] == 5 }))
       |                              ^
 compilation failed with 1 error
+=== d9apayloadstring.olang
+d9apayloadstring.olang:7:7: error[D9a]: array parameter 's' is passed by reference - write String&
+    7 |     A(s String)
+      |       ^
+d9apayloadstring.olang:8:7: error[D9a]: array parameter 'c' is passed by reference - write Array<Char>&
+    8 |     B(c Array<Char>)
+      |       ^
+compilation failed with 2 errors
 === d9mutvalueparam.olang
 d9mutvalueparam.olang:3:11: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and I32 is none
     3 | fn bump(n mut I32) I32 {
@@ -2482,6 +2501,19 @@ o10cresultlanding.olang:19:9: note: 'x' is declared here, in a block that closes
    19 |         x := $i
       |         ^
 compilation failed with 1 error
+=== o10dd9bslice.olang
+o10dd9bslice.olang:5:43: error[O10d]: this value lives in this function's own scope, which closes first
+    5 | fn headOf<T>(x T) Array<Char>&x { return x[0:3] }
+      |                                           ^
+o10dd9bslice.olang:8:10: note: instantiated here, with T = String
+    8 |     h := headOf(t)
+      |          ^~~~~~
+compilation failed with 1 error
+=== o12spawntarget.olang
+o12spawntarget.olang:12:16: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+   12 |         join { spawn arr[0] = mkNode(i + 50) }
+      |                ^~~~~
+compilation failed with 1 error
 === o13acopywrap.olang
 o13acopywrap.olang:14:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
    14 |     return W(f)
@@ -3027,6 +3059,11 @@ p1gtargetsnarrow.olang:15:9: error[O25]: a reference never narrows - keep its sc
    15 |         spawn x, k = pick(m)
       |         ^~~~~
 compilation failed with 1 error
+=== p1gtargetstwoblocks.olang
+p1gtargetstwoblocks.olang:18:13: error[P1g]: these targets live in different scopes, and the results are built in one
+   18 |             spawn a, b = two(i + 5)
+      |             ^~~~~
+compilation failed with 1 error
 === p2blocklocal.olang
 p2blocklocal.olang:17:24: error[P2]: this argument's storage closes before the join does - declare it at the join's level or wider
    17 |             spawn look(o)
@@ -3297,6 +3334,14 @@ r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.EMPTY, not thi
     8 |     if n == 0 { error LE.GONE }
       |                          ^~~~
 compilation failed with 1 error
+=== r1unknownerror.olang
+r1unknownerror.olang:3:14: error[R1]: unknown error type 'peErr'
+    3 | fn f() I64 ? peErr { return 1 }
+      |              ^~~~~
+r1unknownerror.olang:4:20: error[R8]: nothing here can fail - write it without 'try'
+    4 | fn main() ? { x := try f() }
+      |                    ^~~
+compilation failed with 2 errors
 === r20nothing.olang
 r20nothing.olang:4:13: error[R8]: nothing here can fail - write it without 'checked'
     4 |     r I32 = checked (a == 1) catch default 0
@@ -4536,6 +4581,14 @@ t22aobligation.olang:17:11: error[T22a]: 'hang' relates its arguments' scopes, w
    17 |     apply(hang, a, b)
       |           ^~~~
 compilation failed with 2 errors
+=== t22borrowedresult.olang
+t22borrowedresult.olang:15:10: error[E12]: expected fn(a mut N&) mut N&, found fn(a mut N&) mut N&a
+   15 |     keep(self, x, 42)
+      |          ^~~~
+t22borrowedresult.olang:15:10: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a mut N&) mut N&a', or pass a lambda calling it
+   15 |     keep(self, x, 42)
+      |          ^~~~
+compilation failed with 1 error
 === t22callunsafe.olang
 t22callunsafe.olang:20:29: error[E12]: expected fn(n P&) I64, found fn(n mut P&) I64
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
@@ -4544,6 +4597,30 @@ t22callunsafe.olang:20:48: error[E12]: expected fn(n P&) I64, found R
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
       |                                                ^
 compilation failed with 2 errors
+=== t22sharedscope.olang
+t22sharedscope.olang:13:9: error[E12]: expected fn(a mut N&, b N&), found fn(a mut N&, b N&a)
+   13 |     put(link, x, 42)
+      |         ^~~~
+t22sharedscope.olang:13:9: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a mut N&, b N&a)', or pass a lambda calling it
+   13 |     put(link, x, 42)
+      |         ^~~~
+compilation failed with 1 error
+=== t22sharedscopenote.olang
+t22sharedscopenote.olang:9:28: error[E12]: expected fn(a mut N&, b N&), found fn(a mut N&, b N&a)
+    9 |     f fn(a mut N&, b N&) = link
+      |                            ^~~~
+t22sharedscopenote.olang:9:28: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a mut N&, b N&a)', or pass a lambda calling it
+    9 |     f fn(a mut N&, b N&) = link
+      |                            ^~~~
+compilation failed with 1 error
+=== t22sharedscopetype.olang
+t22sharedscopetype.olang:11:5: error[O25e]: these arguments live in different scopes, and the signature requires one ('&p')
+   11 |     f(a, t)
+      |     ^
+t22sharedscopetype.olang:10:5: note: 't' is declared here, in a block that closes first - declare it where 'a' lives: 't mut N&a = ...'
+   10 |     t := N(5)
+      |     ^
+compilation failed with 1 error
 === t24primref.olang
 t24primref.olang:4:10: error[T24]: I32 cannot be a reference - only a struct, an enum or an array can
     4 |     x I32& = 3
@@ -4918,6 +4995,25 @@ t6f32range.olang:4:13: error[T6]: '1e39' does not fit F32
     4 |     f F32 = 1e39
       |             ^~~~
 compilation failed with 1 error
+=== t7adeclaredelem.olang
+t7adeclaredelem.olang:6:27: error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+    6 | type Box<T> struct(v T) { v }
+      |                           ^
+t7adeclaredelem.olang:9:14: note: instantiated here, with T = String
+    9 |     b := Box<String>("start")
+      |              ^~~~~~
+t7adeclaredelem.olang:8:16: error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+    8 |     a := Array<String>(3, "init")
+      |                ^~~~~~
+compilation failed with 2 errors
+=== t7adeclaredfield.olang
+t7adeclaredfield.olang:8:5: error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+    8 |     t := $n "-text"
+      |     ^
+t7adeclaredfield.olang:9:5: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Nums&, or a length, Array<T, N>, to hold it in place
+    9 |     a Nums = Nums(Array<I64>(n, 7))
+      |     ^
+compilation failed with 2 errors
 === t7aelem.olang
 t7aelem.olang:3:14: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<I32>&, or a length, Array<T, N>, to hold it in place
     3 | fn f(m Array<Array<I32>>&) I32 { return 0 }
