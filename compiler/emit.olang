@@ -3853,7 +3853,11 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
 fn (e mut Emitter&) errName(et types.TypeId) String { return $e.text(e.T.DeclName(e.T.DeclOf(et))) }
 
 # the test harness (S15/S16): each test run behind a recovery point, a failed check (or an error leaving it) ending
-# that test alone - "ok - NAME" or "FAIL - NAME", then the counts; the status 1 when any failed
+# that test alone - "ok - NAME" or "FAIL - NAME", then the counts; the status 1 when any failed. The initializers and
+# the tests are tables, each walked by one loop behind one recovery point. Unrolled, main held a setjmp for each, and
+# the link inlined every test (each called once) into it: one function the size of the program, on which the
+# optimizer spent most of a large test build (tests/shared.olang's, 223 s and 2.0 GB, 93 s and 1.35 GB as tables). The
+# counters are read and written volatile: they live across the setjmp, written only on the paths it returns to (X3b)
 fn (e mut Emitter&) harness(tests List<I64>) {
     inits := e.initOrder()
     e.define("__olang_argc", "@__olang_argc = external global i32")
@@ -3866,41 +3870,56 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     e.declare("fflush", "i32 @fflush(ptr)")
     e.runtime("__olang_thread_init")
     e.runtime("__olang_test_failed")
+    # each global's initializer behind the recovery point: one that fails a check leaves its global at its zero value
+    # and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
+    gs List<String&>
+    for i in e.globalOrder(inits) {
+        if e.Baked.Has(i) { continue }
+        gs.Push($"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))))
+    }
+    ts List<String&>
+    for id in tests {
+        ts.Push($"{ ptr, ptr } { ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id)))) ", ptr " $e.cstr(e.testName(id)) " }")
+    }
     b := StringBuilder()
-    b.Push("define i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
-    b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %jb = alloca [200 x i8], align 16\n")
-    b.Push("  store i32 0, ptr %pass\n  store i32 0, ptr %fail\n")
+    if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" $gs.Len() " x ptr] [" $gs.Join(", ") "]\n") }
+    if ts.Len() > 0 { b.Push($"@olang.harness.tests = private constant [" $ts.Len() " x { ptr, ptr }] [" $ts.Join(", ") "]\n") }
+    b.Push("\ndefine i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
+    b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  store volatile i32 0, ptr %pass\n  store volatile i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
     e.sanInit(b)
-    # each global's initializer behind a recovery point of its own: one that fails a check leaves its global at its
-    # zero value and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
-    g I64 = 0
-    for i in e.globalOrder(inits) {
-        if e.Baked.Has(i) { continue }
-        key := mir.FnKey.Body(typed.BodyId(I32(i)))
-        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj" $g " = call i32 @setjmp(ptr %jb)\n")
-        b.Push("  %gz" $g " = icmp eq i32 %gj" $g ", 0\n  br i1 %gz" $g ", label %grun" $g ", label %gnext" $g "\n")
-        b.Push("grun" $g ":\n  call void @" $e.sym(key) "()\n  br label %gnext" $g "\ngnext" $g ":\n")
-        g++
+    if gs.Len() > 0 {
+        b.Push("  store volatile i64 0, ptr %k\n  br label %gloop\ngloop:\n  %gk = load volatile i64, ptr %k\n")
+        b.Push($"  %gm = icmp slt i64 %gk, " $gs.Len() "\n  br i1 %gm, label %gbody, label %gdone\ngbody:\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  %gz = icmp eq i32 %gj, 0\n  br i1 %gz, label %grun, label %gnext\ngrun:\n  %gk2 = load volatile i64, ptr %k\n")
+        b.Push($"  %gp = getelementptr [" $gs.Len() " x ptr], ptr @olang.harness.inits, i64 0, i64 %gk2\n")
+        b.Push("  %gf = load ptr, ptr %gp\n  call void %gf()\n  br label %gnext\ngnext:\n")
+        b.Push("  %gk3 = load volatile i64, ptr %k\n  %gk4 = add i64 %gk3, 1\n  store volatile i64 %gk4, ptr %k\n")
+        b.Push("  br label %gloop\ngdone:\n")
     }
-    okFmt := e.cstr("ok - %s\n")
-    for i in range tests.Len() {
-        id := tests[i]
-        name := e.cstr(e.testName(id))
-        b.Push("  %top" $i " = load ptr, ptr @__olang_unwind_top\n  store ptr %top" $i ", ptr @__olang_unwind_mark\n")
-        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %j" $i " = call i32 @setjmp(ptr %jb)\n")
-        b.Push("  %z" $i " = icmp eq i32 %j" $i ", 0\n  br i1 %z" $i ", label %run" $i ", label %bad" $i "\n")
-        b.Push("run" $i ":\n  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id)))) "()\n")
-        b.Push("  %p" $i " = load i32, ptr %pass\n  %pp" $i " = add i32 %p" $i ", 1\n  store i32 %pp" $i ", ptr %pass\n")
-        b.Push("  call i32 (ptr, ...) @printf(ptr " $okFmt ", ptr " $name ")\n  call i32 @fflush(ptr null)\n")
-        b.Push("  br label %next" $i "\n")
-        b.Push("bad" $i ":\n  %f" $i " = load i32, ptr %fail\n  %ff" $i " = add i32 %f" $i ", 1\n  store i32 %ff" $i ", ptr %fail\n")
-        b.Push("  call void @__olang_test_failed(ptr " $name ")\n  call i32 @fflush(ptr null)\n  br label %next" $i "\n")
-        b.Push("next" $i ":\n")
+    if ts.Len() > 0 {
+        tt := $"[" $ts.Len() " x { ptr, ptr }]"
+        b.Push("  store volatile i64 0, ptr %k\n  br label %tloop\ntloop:\n  %tk = load volatile i64, ptr %k\n")
+        b.Push($"  %tm = icmp slt i64 %tk, " $ts.Len() "\n  br i1 %tm, label %tbody, label %tdone\ntbody:\n")
+        b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %tj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  %tk2 = load volatile i64, ptr %k\n")
+        b.Push($"  %tfp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 0\n")
+        b.Push($"  %tnp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 1\n")
+        b.Push("  %tf = load ptr, ptr %tfp\n  %tn = load ptr, ptr %tnp\n")
+        b.Push("  %tz = icmp eq i32 %tj, 0\n  br i1 %tz, label %trun, label %tbad\ntrun:\n  call void %tf()\n")
+        b.Push("  %p = load volatile i32, ptr %pass\n  %pp = add i32 %p, 1\n  store volatile i32 %pp, ptr %pass\n")
+        b.Push($"  call i32 (ptr, ...) @printf(ptr " $e.cstr("ok - %s\n") ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
+        b.Push("  br label %tnext\ntbad:\n  %f = load volatile i32, ptr %fail\n  %ff = add i32 %f, 1\n")
+        b.Push("  store volatile i32 %ff, ptr %fail\n  call void @__olang_test_failed(ptr %tn)\n  call i32 @fflush(ptr null)\n")
+        b.Push("  br label %tnext\ntnext:\n  %tk3 = load volatile i64, ptr %k\n  %tk4 = add i64 %tk3, 1\n")
+        b.Push("  store volatile i64 %tk4, ptr %k\n  br label %tloop\ntdone:\n")
     }
     b.Push("  store ptr null, ptr @__olang_jmp_target\n")
-    b.Push("  %np = load i32, ptr %pass\n  %nf = load i32, ptr %fail\n")
+    b.Push("  %np = load volatile i32, ptr %pass\n  %nf = load volatile i32, ptr %fail\n")
     b.Push("  call i32 (ptr, ...) @printf(ptr " $e.cstr("%d passed, %d failed\n") ", i32 %np, i32 %nf)\n")
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
     e.item("main", e.P.L.Root, b.ToString())
