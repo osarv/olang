@@ -267,6 +267,8 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     # temporary its initializer reads (tempVal): -1 none decided, else whether the call lands by its obligations (O18c)
     landPart Bool = false
     tempLand I64 = -1
+    # whether the place read holds no reference, read by the first temporary it goes through (tempVal)
+    plainRead Bool = false
     # the flow analysis (flowRun): fl the locals reached, flDirect those a return gives, flKept whether the local is kept
     # beyond its block (O18c), flMode which of the two is asked, flBlock the local's block, flGrew whether a pass grew fl
     fl List<I64>
@@ -2705,6 +2707,15 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
                     }
                 }
             }
+            # a copy of a value read out of the region holding writable references, given to a function value: its body,
+            # not known, can store through those references into the region (O17 - a by-value parameter holding writable
+            # references is a store from outside)
+            if rr >= 0 and flThroughRefExpr(ua) and not s.isRef(ua.Type()) and s.storeThrough(ua.Type()) {
+                match c.Target {
+                    case typed.Callee.Value(_) { s.storeParam(rr, true) }
+                    case _ { }
+                }
+            }
             # a capturing lambda made for a callee keeping nothing of it never leaves the call (D16c)
             if s.capturingLambda(a) and s.transient(s.bodyOf(c.Target), k) { s.kwTransient = true }
             s.kwExpr(a, false)
@@ -4397,6 +4408,11 @@ fn (s mut Scoper&) tempVal(v typed.Expr&) Val {
     # the part a local is declared from, its landing decided for it (decide); any other lands by its obligations
     decided := s.tempLand
     s.tempLand = -1
+    plainRead := s.plainRead
+    s.plainRead = false
+    # a part holding no reference read out of it, nothing put anywhere: it lands by its obligations only where they need
+    # its result scope to outlive an argument's (O18a, O18c - "pick(r, Res(2), true).k" builds Res(2) in this block)
+    if plainRead and decided == -1 and s.callOf(v) != null and s.isFresh(v) { return s.val(v, Term.None) }
     if s.callOf(v) != null and s.isFresh(v) and decided != 0 {
         s.landing = true
         x := s.val(v, Term.None)
@@ -5165,7 +5181,10 @@ fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
 # has its call land there (O18a: "f = mkBox(i).n" with f outside the loop)
 fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
     k := s.partLand(p, ty, dest)
+    saved := s.plainRead
+    s.plainRead = saved or not s.holds(ty)
     v := s.readPart(p, ty, dest)
+    s.plainRead = saved
     if k >= 0 { s.partDest.Remove(k) }
     return v
 }
@@ -6616,9 +6635,18 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr&, w I64, wname String
     ty := loc.Ty
     k := s.P.T.KindOf(ty)
     if not s.isRef(ty) and not s.holds(ty) and k != types.Kind.Array and k != types.Kind.Named { return }
-    # G16b: inside an instance the type would be written as the generic writes it, with its variables - not said
-    if s.Spell == null or s.instanceArgs(s.Id) { return }
+    if s.Spell == null { return }
     shown := s.P.T.Referent(ty) if s.isRef(ty) else ty
+    # G16b: inside an instance the type is written as the generic writes it, with its variables - and where two of them
+    # are bound to one type, another instance's error says it
+    inst := s.instanceOf(s.Id)
+    if inst >= 0 and s.P.T.Items(s.P.InstanceArgs(inst)).Len() > 0 {
+        shown = s.P.Unsubst(shown, generic.FnOwner(s.P.InstanceFn(inst)), s.P.InstanceArgs(inst))
+        if shown == types.UnknownT {
+            s.P.L.Diags.Yield(rec)
+            return
+        }
+    }
     writable := (s.P.T.PermOf(ty) & types.Writable) != 0 if s.isRef(ty) else true
     full := $("mut " if writable and not s.isFunc(shown) else "") $s.Spell(shown)
     s.note(rec, s.B.File, at, msgs.NoteDeclareWhere(name, wname, name, full, wname))

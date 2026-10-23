@@ -1172,7 +1172,8 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
     match td.Body {
         case ast.TypeBody.Struct(sb) {
             self := c.P.SelfType(d)
-            if c.P.Body(self) {
+            # a generic's is said per instance, as its constructor is checked (holdsItself)
+            if c.P.T.Items(c.P.T.Args(self)).Len() == 0 and c.P.Body(self) {
                 fs := c.P.T.Items(c.P.T.Fields(self))
                 sps := fieldSpans(sb)
                 for i in range fs.Len() {
@@ -1221,6 +1222,19 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
 
 # whether a value of type t holds a value of declaration d by value: itself, or through a struct's fields, an enum's
 # payloads, a fixed array's elements or what a type is declared over - never through a reference or a run-time array
+# T16 for a generic struct: each instance that holds itself by value, said at the field, named as the instance
+fn (c mut Checker&) instHoldsItself(t types.TypeId, d types.DeclId, sb ast.StructBody&) {
+    if not c.P.Body(t) { return }
+    fs := c.P.T.Items(c.P.T.Fields(t))
+    sps := fieldSpans(sb)
+    for i in range fs.Len() {
+        if i < sps.Len() and c.holdsBy(fs[i], d, 0) {
+            c.err(sps[i], msgs.TypeHoldsItself(c.ty(t)))
+            return
+        }
+    }
+}
+
 fn (c mut Checker&) holdsBy(t types.TypeId, d types.DeclId, depth I64) Bool {
     if depth > 16 or t == types.UnknownT { return false }
     match c.P.T.KindOf(t) {
@@ -2433,6 +2447,7 @@ fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
                     }
                 }
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
+                if c.P.T.Items(c.P.T.Args(t)).Len() > 0 { c.instHoldsItself(t, d, s) }
                 pushed := c.typeContexts(t, td)   # G16b: an instance's with where it was asked for
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
@@ -3077,12 +3092,30 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.AnonEnum {
             # "enum { A(I32) B }", as an anonymous enum is written (T27)
             b.Push("enum {")
+            # each payload's field named as the first declaration written gave them
             ns := c.P.T.ShapeNames(t)
             cs := c.P.T.Items(c.P.T.ShapeCases(t))
+            fs := c.P.T.ShapeFields(t)
+            at := 0
             for i in range ns.Len() {
                 b.PushChar(' ')
                 b.Push(c.text(ns[i]))
-                if i < cs.Len() and cs[i] != types.TypeId(0) and c.P.T.Items(c.P.T.Parts(cs[i])).Len() > 0 { c.spellList(b, c.P.T.Parts(cs[i]), "(", ")") }
+                if i >= cs.Len() or cs[i] == types.TypeId(0) { continue }
+                parts := c.P.T.Items(c.P.T.Parts(cs[i]))
+                if parts.Len() == 0 { continue }
+                if fs.Len() < at + parts.Len() {
+                    c.spellList(b, c.P.T.Parts(cs[i]), "(", ")")
+                    continue
+                }
+                b.PushChar('(')
+                for j in range parts.Len() {
+                    if j > 0 { b.Push(", ") }
+                    b.Push(c.text(fs[at + j]))
+                    b.PushChar(' ')
+                    c.spell(b, parts[j], false)
+                }
+                b.PushChar(')')
+                at += parts.Len()
             }
             b.Push(" }")
         }

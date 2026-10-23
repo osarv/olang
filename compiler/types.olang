@@ -154,6 +154,7 @@ type Table struct(Names mut source.Names&) {
     listKeys Map<Array<TypeId>&, ListId>
     shapes List<Array<source.NameId>&>  # an anonymous enum's case names, by AnonEnum's A; its payloads in shapeCases
     shapeCases List<ListId>
+    shapeFields List<Array<source.NameId>&>  # its payloads' field names, case after case, as the first written gave them
     shapeKeys Map<String&, I64>
     patterns List<String&>              # a constant pattern's key, by ConstExpr's A (its owner and expression)
     patternKeys Map<String&, I64>
@@ -366,7 +367,9 @@ fn (t mut Table&) Record(fields ListId) TypeId {
 }
 
 # an anonymous enum: its cases' names and payloads (a Record, or 0 for none) - one type exactly when both agree (T27)
-fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId) TypeId {
+# (fields: the payloads' field names, case after case - not part of its identity, kept from the first that gives them to
+# spell it, T27)
+fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Array<source.NameId>& = null) TypeId {
     payloads := t.PlainList(cases)
     key := StringBuilder()
     for n in names { key.Push($I32(n) ",") }
@@ -379,7 +382,13 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId) TypeId {
         s = t.shapes.Len()
         t.shapes.Push(kept)
         t.shapeCases.Push(payloads)
+        t.shapeFields.Push(Array<source.NameId>(0))
         t.shapeKeys.Put($k, s)
+    }
+    if fields != null and fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
+        fs mut Array<source.NameId>&t = Array<source.NameId>(fields.Len())
+        for i in range fields.Len() { fs[i] = fields[i] }
+        t.shapeFields[s] = fs
     }
     return t.intern(data(Kind.AnonEnum, s, 0, 0), t.deepest(payloads) + 1)
 }
@@ -440,6 +449,7 @@ fn (t Table&) Pattern(id TypeId) String&t { return t.patterns[t.A(id)] }
 # an anonymous enum's case names and payloads
 fn (t Table&) ShapeNames(id TypeId) Array<source.NameId>&t { return t.shapes[t.A(id)] }
 fn (t Table&) ShapeCases(id TypeId) ListId { return t.shapeCases[t.A(id)] }
+fn (t Table&) ShapeFields(id TypeId) Array<source.NameId>&t { return t.shapeFields[t.A(id)] }
 
 # G17: how deep a type nests - a number 1, Array<List<I64>> 3
 fn (t Table&) Depth(id TypeId) I64 { return I64(t.depthOf(id)) }
