@@ -434,6 +434,7 @@ identical IR, which would force the C design onto the port. (The 2026-10-09 line
 fixes and the refactor" is long done; the port is under way, see plan.md.)
 
 ## What goes into the C compiler (stage 0)
+**MOOT since 2026-10-23: stage 0 (bootstrap/) is removed; every change is made in olang only. Kept as history.**
 The user, 2026-10-17, first: "The C compiler only changes when a change is necessary to compile the 'real' self-hosted
 Olang compiler ... always build the best solution and amend the C compiler if that is necessary. We don't want to
 restrict the self-hosted compiler because the C compiler needs it." Then, refining it: "if something really
