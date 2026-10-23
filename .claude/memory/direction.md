@@ -22,6 +22,11 @@ rule that composes over special cases, and fix rough edges found while building 
 Written out as `PRINCIPLES.md` in the repo root (the user: "Record the general language-vibe specs"), imported by
 CLAUDE.md so every session loads it; keep it current when the direction moves.
 
+**Compile speed (the user, 2026-10-23): "Making compilation faster is going to matter a lot."** After being told the
+port's -O3 self-build takes ~108 s against the C compiler's ~32 s, mostly clang on the port's generated IR. So build
+time is a first-class goal of the port, measured as performance is: weigh it in every emit/lowering decision, and keep
+a compile-speed round going (instance merging and sharing, less IR per line, parallel and cached objects).
+
 **FPGA (2026-10-09):** the user wants olang to target FPGAs for spiking neural network implementations - a long-term
 domain to weigh when designing numeric types (bit widths, fixed point, saturation) and concurrency (dataflow).
 
