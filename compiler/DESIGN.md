@@ -1292,10 +1292,13 @@ build/olang         the compiler in use, after `make bootstrap`
   1. decompresses each seed file into `build/seed/` and compiles it with `clang -O2`, side by side under `-j`;
   2. links them into `build/olang.seed` (with `-lm -lpthread -ldl -lffi`, as every build of the compiler links);
   3. `build/olang.seed` builds `compiler/olang.olang` into `build/olang.1` - a release build, for this machine;
-  4. `build/olang.1` builds it again into `build/olang.2`;
-  5. compares the two byte for byte - objects are named by a hash of their IR (B3), so they are equal exactly when the
-     second compiler wrote the IR the first did;
-  6. installs `build/olang.2` as `build/olang`.
+  4. `build/olang.1` builds it again into `build/olang.2`, and `build/olang.2` into `build/olang.3`;
+  5. compares the last two byte for byte - objects are named by a hash of their IR (B3), so they are equal exactly when
+     the third compiler wrote the IR the second did. Both are built by compilers made from the current source; the
+     first is the seed's compiler's work and equals them only while the seed is current (2026-10-23: comparing the
+     first two failed once the code generator had moved on from 1f7a849's seed - the third build, reusing every
+     object, takes seconds);
+  6. installs `build/olang.3` as `build/olang`.
 
   Measured from a clean clone with `bootstrap/` deleted (2026-10-22, 4 cores shared with other work): 366 s, 1.6 GB at
   most - the seed's compiles 18 s, each build of the compiler about 3 minutes, mostly its link (`-O3 -flto`).
