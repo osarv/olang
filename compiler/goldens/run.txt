@@ -1121,6 +1121,9 @@
 | status 0
 === run ctortempdestruct.olang
 | status 0
+=== run d13crunlength.olang
+| status 0
+| 10
 === run d15forward.olang
 | status 0
 === run d16blambdaorder.olang
