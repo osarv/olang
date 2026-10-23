@@ -1956,7 +1956,20 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
             if r.Hi == Term.Var(v) or (r.Exact and r.Lo == Term.Var(v)) { return true }
         }
     }
+    # what the argument's "&p" fields refer to, where an obligation holds it (O23a): kept through the argument too -
+    # "fn RewrapR(x W&) H { return H(x.D) }" keeps what x.D names in its result
+    for r in s.sums[callee].Rels {
+        if derivedOf(r.Hi, j) or (r.Exact and derivedOf(r.Lo, j)) { return true }
+    }
     return false
+}
+
+# whether t is a derived scope of parameter j (O23a)
+fn derivedOf(t Term, j I64) Bool {
+    return match t {
+        case Term.Derived(p, _) => p == j
+        case _ => false
+    }
 }
 
 # whether x carries what local l refers to, or its storage, where it is put (mode 1's local is fl's first)

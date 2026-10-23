@@ -1,0 +1,52 @@
+# check: run
+# flags: -debug -sanitize
+# O26a, O23a (the unpar review's precision note): a callee keeping only what its argument's "&d" field refers to keeps
+# the argument - RewrapR's result holds x.D - so a local handed to it in a return moves into the result scope, and so
+# does what that local's field names. It was refused (O26): canKeep read only the parameter's own scope's obligations
+import "std/io"
+
+type W struct(d Array<I64>&) {
+    D Array<I64>&d = d
+}
+
+type H struct(x Array<I64>&) {
+    X Array<I64>& = x
+}
+
+fn RewrapR(x W&) H {
+    return H(x.D)
+}
+
+fn Rewrap(x W) H {
+    return H(x.D)
+}
+
+fn f3() H {
+    d := Array<I64>(4, 63)
+    w1 := W(d)
+    return RewrapR(w1)
+}
+
+fn f4(n I64) H {
+    d := Array<I64>(4, n)
+    w1 := W(d)
+    return Rewrap(w1)
+}
+
+fn main() {
+    c := f3()
+    e := f4(5)
+    churn()
+    io.Println($c.X[0] " " $e.X[3])!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}
