@@ -8588,6 +8588,8 @@ fn checkableAst(x ast.Expr&) Bool {
 # whether the body being checked is a generic's instance, or a lambda in one (R8)
 # the function instance whose body is being checked, -1 for none (a constructor's, a global's, a test's)
 fn (c mut Checker&) curInst() I64 {
+    # a frame for no body (fnTypeParams' -1, a signature's) is in no instance: c.cur() would index Bodies[-1] (E16e)
+    if c.frames.Len() == 0 or c.fr().Body < 0 { return -1 }
     return match c.cur().Of {
         case typed.BodyOf.Fn(inst) => inst
         case _ => -1

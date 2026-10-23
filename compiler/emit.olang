@@ -186,10 +186,12 @@ fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKi
 # the IR of one part an object is cut into, at most (Objects)
 PartSize I64 = 2 << 20
 
-# the part of n item i is in: its symbol's hash, so where an item goes depends on its symbol alone
+# the part of n item i is in: its symbol's hash, so where an item goes depends on its symbol alone - but every global
+# in one, since a baked global may point into the private blobs beside another (K2b), which no other object can name
 fn (e Emitter&) partOf(i I64, n I64) I64 {
     if n <= 1 { return 0 }
-    h := e.itemSym[i].Hash() % n
+    sym := e.itemSym[i]
+    h := (I64(0) if sym.StartsWith("G_2e") else sym.Hash()) % n
     return h + n if h < 0 else h
 }
 

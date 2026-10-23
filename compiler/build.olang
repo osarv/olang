@@ -16,6 +16,7 @@ import "msgs"
 import "cond"
 import "target"
 import "std/io"
+import "std/time"
 
 extern fn getpid() I32
 extern fn sysconf(name I32) I64
@@ -96,6 +97,16 @@ type Config struct() {
 # links in 91 s against 172, and an edit relinks in 23 s from the cache where full LTO takes the 172 again; a small
 # program keeps full LTO, which measured no slower to build there and is what its benchmarks were tuned on (B2d)
 ThinFrom I64 = 8 << 20
+
+# OLANG_TIMES set in the environment: how long each phase of a build took, in milliseconds, written to the standard
+# error as the phase ends - the front end's passes, clang's compiles, the link
+PhaseAt mut I64 = 0
+fn Phase(name String&) {
+    try os.Env("OLANG_TIMES") catch os.OsError { return }
+    now := time.Now()
+    if PhaseAt != 0 { sayErr($"olang: " $name " " $((now - PhaseAt) / 1000000) " ms\n") }
+    PhaseAt = now
+}
 
 # the terminal's colour code around text, where colour is on
 fn (c Config&) paint(code String&, text String&) String {
@@ -528,11 +539,13 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
+    Phase("compile")
     bin := $c.Output if c.Output != "" else $c.Dir "/" $Readable(prog.rootIdentity()) $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(bin))
         return finish(d)
     }
+    Phase("link")
     c.Built = $bin
     if not c.Quiet { sayln(c.paint("32", $"built " $(bin if c.Output != "" else Shown(bin)))) }
     return 0
@@ -564,11 +577,13 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     if d.Errors() > 0 or prog.Units.Len() == 0 { return c.skipped(file, d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
+    Phase("compile")
     bin := $c.Dir "/" $Readable(prog.rootIdentity()) "_test" $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
         sayln(c.paint("31", $file ": native compilation failed"))
         return 1
     }
+    Phase("link")
     if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
     out := try os.Exec(String&[Shown(bin)], "", false) catch os.OsError { return 1 }
     if out.Status > 128 {
