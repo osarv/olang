@@ -1,0 +1,31 @@
+# B3e: a stop on what interpret does not run - here an index outside the array - leaves every block it is in as the
+# built program, going on, would leave them: in each frame, innermost first, each block's deferred code runs, last
+# registered first, a loop's for this turn only; what already ran on a way out does not run again
+import "std/io"
+
+fn say(t String&) { io.Println(t)! }
+
+fn reach(a Array<I64>&, i I64) I64 {
+    defer say("reach's")
+    return a[i]
+}
+
+fn walk(a Array<I64>&) I64 {
+    defer say("walk's")
+    t I64 = 0
+    {
+        defer say("walk's block")
+        for i in range 4 {
+            defer say("turn " $i)
+            t += reach(a, i)
+        }
+    }
+    return t
+}
+
+fn main() {
+    defer say("main's first")
+    defer say("main's second")
+    a := Array<I64>(3, 5)
+    io.Println("sum " $walk(a))!
+}

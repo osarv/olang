@@ -640,7 +640,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   checks/checks.olang is the open part - after the fourth round 19 of its 1,069 cases and 4 of its 56 scenarios, all the
   evaluator's (HISTORY.md "Port M12", four rounds, the third with what replacing the stage-0 comparisons by stored
   outputs takes; the fourth reads stage 0's flow - a local named right after a written "try", a later module's
-  function - as stage 0 does, so nothing it refuses is accepted). The scenarios that grepped stage 0's IR state the same facts in either compiler's spelling, as alternatives
+  function - as stage 0 does, so nothing it refuses is accepted; the fifth, parity before bootstrap/ goes: of the
+  repository's 1,422 files the port builds every one stage 0 builds and refuses every one it refuses - a later module's
+  callee read by its body where a local's landing is decided (O18c), interpret running the deferred code of the blocks a
+  stop leaves and aborting on a failed check as stage 0 does (B3e), a dropped branch's syntax error hiding nothing (B4,
+  D10a)). The scenarios that grepped stage 0's IR state the same facts in either compiler's spelling, as alternatives
   of one expression (`irHas`, `gsym` - decided by me, never loosened); the port now orders globals (B5a), bakes them
   (K2), enforces M6/M6a/M6b across modules, and calls X8's exact math functions as intrinsics. **The stage-0
   comparisons read stored goldens** (compiler/goldens/, 2026-10-22, HISTORY.md "Port M12: the stage-0 comparisons

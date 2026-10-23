@@ -256,6 +256,11 @@ type Stmt enum {
     CopyElems(sp source.Span, dst Place, src Place, n Operand)     # n elements of array src into array dst, from 0
     Spawn(sp source.Span, j ScopeId, task I32)    # f.Tasks[task] started in join j (P1): see Task
     Raised(sp source.Span)    # S18d: an error raised at sp that a "!" takes in this body - its trace's first place
+    # B3e: deferred code registered at s, its cleanup at entry - blocks reached by nothing but this, a copy of the
+    # deferred code ending in Resume, which interpret runs for each block a stop leaves (S19's "on every way out", as
+    # the built program, going on, would run it); with entry NoBlock, the newest registered at s about to run on this
+    # way out of s, so no longer pending. Only lowering for interpret makes these
+    Deferred(sp source.Span, s ScopeId, entry BlockId)
 }
 
 # ---- terminators ----
@@ -274,6 +279,7 @@ type Term enum {
     # the test or the process ends (S16, S16a, S18): no deferred code runs, the scopes still open are left to the
     # runtime's unwinding (S19c, P1d). msg is an Assert's message (S17), None for none
     Exit(sp source.Span, kind ExitKind, msg Operand)
+    Resume(sp source.Span)    # a cleanup's end (Stmt.Deferred): the stop it ran for goes on to the next
 }
 
 # how an Exit ends: as S16-S16d say, or as a failed check names itself (S18a)
@@ -824,6 +830,10 @@ fn (v mut verifier&) stmtShape(st Stmt) {
             if k < I32(0) or I64(k) >= v.F.Tasks.Len() { v.bad("no task " $k) }
         }
         case Stmt.Raised(_) { }
+        case Stmt.Deferred(_, s, e) {
+            v.scope(s)
+            if e != NoBlock { v.block(e) }
+        }
     }
 }
 
@@ -885,6 +895,7 @@ fn (v mut verifier&) termShape(t Term) {
                 v.local(code)
             }
         }
+        case Term.Resume(_) { }
     }
 }
 
@@ -918,7 +929,18 @@ fn (v mut verifier&) reach() {
     v.reached[0] = true
     for work.Len() > 0 {
         b := try work.Pop() catch { unreachable }
-        for s in v.succs(v.F.Blocks[I64(b)].T) {
+        succ List<BlockId>
+        for s in v.succs(v.F.Blocks[I64(b)].T) { succ.Push(s) }
+        # a cleanup's entry, reached from where its deferred code is registered
+        for st in v.F.Blocks[I64(b)].Stmts {
+            match st {
+                case Stmt.Deferred(_, _, e) {
+                    if e != NoBlock { succ.Push(e) }
+                }
+                case _ { }
+            }
+        }
+        for s in succ {
             if not v.reached[I64(s)] {
                 v.reached[I64(s)] = true
                 work.Push(s)
@@ -1799,6 +1821,11 @@ fn (v mut verifier&) stmtFlow(s Stmt) {
             v.pend[I64(j)] = true
         }
         case Stmt.Raised(_) { }
+        # a cleanup entered with the state where its deferred code is registered, inside the scope registering it
+        case Stmt.Deferred(_, x, e) {
+            if not v.open(x) { v.bad("deferred code registered at S" $x ", which is not open") }
+            if e != NoBlock { v.enter(e) }
+        }
     }
 }
 
@@ -2083,6 +2110,7 @@ fn (w mut dumper&) stmt(s Stmt) String {
         case Stmt.CopyElems(_, d, src, n) => "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
         case Stmt.Spawn(_, j, k) => "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])
         case Stmt.Raised(_) => "raised"
+        case Stmt.Deferred(_, x, e) => "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
     }
 }
 
@@ -2128,6 +2156,7 @@ fn (w mut dumper&) term(term Term) String {
         case Term.Wait(_, j, ok, code, failed) => ("wait S" $j " then bb" $ok
                                                   $(" failed L" $code " bb" $failed if failed != NoBlock else ""))
         case Term.Exit(_, kind, msg) => "exit " $short($kind) $(" " $w.operand(msg) if msg != Operand.None else "")
+        case Term.Resume(_) => "resume"
     }
 }
 
@@ -2263,6 +2292,42 @@ test "control flow: a loop's scope every turn, a call's error edge, an error rai
     h.Blocks[5].Stmts.Clear()
     h.Add(BlockId(5), Stmt.Assign(Sp0, L(LocalId(1)), Rvalue.Use(Operand.Copy(L(LocalId(3))))))
     expect(t, h, "L3 read before it is initialized on every path")
+}
+
+# "fn f() { x := 1; defer { x = 2 }; x = 3 }" as interpret's lowering makes it (B3e): the deferred code registered with
+# its cleanup - a copy reached from nothing else, ending in resume - then the registration dropped where the inline copy
+# runs on the way out
+fn deferFn(t mut types.Table&) Fn {
+    i32 := t.Prim("I32")
+    f := tfn(t, t.Func(types.ListId(0), types.VoidT, types.ListId(0)))
+    x := f.AddLocal(Local(t.Names.Intern("x"), Sp0, i32, LocalKind.Var, ScopeRef.Frame))
+    b0, clean := BlockId(0), f.NewBlock()
+    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 1))))
+    f.Add(b0, Stmt.Deferred(Sp0, ScopeId(0), clean))
+    f.Add(clean, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 2))))
+    f.End(clean, Term.Resume(Sp0))
+    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 3))))
+    f.Add(b0, Stmt.Deferred(Sp0, ScopeId(0), NoBlock))
+    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 2))))
+    f.Add(b0, Stmt.Close(Sp0, ScopeId(0)))
+    f.End(b0, Term.Return(Sp0, Operand.None))
+    return f
+}
+
+test "a cleanup: reached from where its deferred code is registered, inside the scope registering it" {
+    names := source.Names()
+    t := types.NewTable(names)
+    f := deferFn(t)
+    assert f.Verify(t) == "", f.Verify(t)
+    got := f.Dump(t)
+    want := ("fn B9: fn()\n  L0 Var x: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L0 = const I32 1\n"
+             "  deferred at S0 cleanup bb1\n  L0 = const I32 3\n  deferred at S0 runs\n  L0 = const I32 2\n  close S0\n"
+             "  return\nbb1:\n  L0 = const I32 2\n  resume\n")
+    assert got == want, got
+    # registered at a scope that is not open
+    g := deferFn(t)
+    g.Blocks[0].Stmts[2] = Stmt.Deferred(Sp0, g.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0), BlockId(1))
+    expect(t, g, "deferred code registered at S1, which is not open")
 }
 
 test "a malformed function: every malformation is caught" {

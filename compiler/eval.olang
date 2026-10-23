@@ -374,6 +374,13 @@ type Machine struct(T mut types.Table&, When Mode) {
     ws mut Array<I64>& = Array<I64>(1024)
     nWs I64 = 0
     closing List<I64>
+    # B3e: the cleanups of the deferred code registered and not yet run, oldest first, each frame's together: the frame
+    # each is registered in, the scope it is registered at, and its entry block - run, under interpret, for the blocks a
+    # stop leaves. A frame's own are the last ones while it runs, since every frame above it has returned
+    defF List<I64>
+    defS List<I64>
+    defB List<I64>
+    resumed Bool = false
     program I64 = 0
     scratch I64 = 0
     tmps mut Array<I64>& = Array<I64>(3)
@@ -1474,6 +1481,7 @@ fn (m mut Machine&) popFrame() {
     m.nFs--
     if m.cf[m.fs[m.nFs].Fn].Equal { m.eqDepth-- }
     m.nWs = m.fs[m.nFs].Locals
+    m.dropOwnDefers(m.nFs)
 }
 
 fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
@@ -2619,6 +2627,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             }
         }
         case mir.Stmt.Close(_, s) {
+            m.dropDefers(fi, I64(s), false)
             id := m.ws[m.fs[fi].Scopes + I64(s)]
             m.ws[m.fs[fi].Scopes + I64(s)] = 0
             if m.live(id) {
@@ -2628,6 +2637,15 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             }
         }
         case mir.Stmt.Raised(sp) { m.traced(fi, fk, sp) }
+        case mir.Stmt.Deferred(_, s, entry) {
+            if entry == mir.NoBlock {
+                m.dropDefers(fi, I64(s), true)
+            } else if m.When == Mode.Run {
+                m.defF.Push(fi)
+                m.defS.Push(I64(s))
+                m.defB.Push(I64(entry))
+            }
+        }
         case mir.Stmt.Give(_, s) {
             id := m.ws[m.fs[fi].Scopes + I64(s)]
             m.ws[m.fs[fi].Scopes + I64(s)] = 0
@@ -3342,6 +3360,11 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
             m.atK(k, sp)
             m.exit(fi, m.cf[k].File, sp, kind, msg)
         }
+        # a cleanup run (runCleanups): its frame's next, or the frame's end
+        case mir.Term.Resume(_) {
+            m.resumed = true
+            m.halted = true
+        }
     }
 }
 
@@ -4001,25 +4024,99 @@ fn (m mut Machine&) InitGlobal(module I64, name source.NameId) Stop {
     return m.Stopped
 }
 
-# a stopped request's frames and scopes dropped, freed with no registration run
+# a stopped request's frames and scopes dropped, freed with no registration run - under interpret, after a stop on what
+# it does not run, once each frame's pending deferred code has run (runCleanups)
 fn (m mut Machine&) unwind(base I64) {
-    for m.nFs > base {
-        fi := m.nFs - 1
-        fr := m.fs[fi]
-        for i in range fr.Vars - fr.Scopes {
-            id := m.ws[fr.Scopes + i]
-            if m.live(id) { m.dropScope(id) }
+    if m.halted and m.When == Mode.Run and m.nFs > base {
+        match m.Stopped {
+            case Stop.Refused(_, _, _) { m.runCleanups(base) }
+            case _ { }
         }
-        if m.live(fr.Store) { m.dropScope(fr.Store) }
-        m.closing.Truncate(fr.Closing)
-        m.popFrame()
     }
+    for m.nFs > base { m.dropFrame() }
     if m.initGlobal >= 0 and m.halted {
         for g in range m.globals.Len() {
             if m.globals[g].State == 1 { m.globals[g].State = 0 }
         }
         m.initGlobal = -1
     }
+}
+
+# the top frame dropped, its scopes freed with no registration run
+fn (m mut Machine&) dropFrame() {
+    fi := m.nFs - 1
+    fr := m.fs[fi]
+    for i in range fr.Vars - fr.Scopes {
+        id := m.ws[fr.Scopes + i]
+        if m.live(id) { m.dropScope(id) }
+    }
+    if m.live(fr.Store) { m.dropScope(fr.Store) }
+    m.closing.Truncate(fr.Closing)
+    m.popFrame()
+}
+
+# frame fi's pending cleanups of scope s dropped: the newest alone (its deferred code runs on this way out of s), or all
+# (s closes)
+fn (m mut Machine&) dropDefers(fi I64, s I64, newest Bool) {
+    for k := m.defS.Len() - 1, k >= 0 and m.defF[k] == fi, k-- {
+        if m.defS[k] != s { continue }
+        for j in range k, m.defS.Len() - 1 {
+            m.defF[j] = m.defF[j + 1]
+            m.defS[j] = m.defS[j + 1]
+            m.defB[j] = m.defB[j + 1]
+        }
+        m.defF.Truncate(m.defF.Len() - 1)
+        m.defS.Truncate(m.defS.Len() - 1)
+        m.defB.Truncate(m.defB.Len() - 1)
+        if newest { return }
+    }
+}
+
+# the pending cleanups of frame fi and of every frame above it dropped - they are gone
+fn (m mut Machine&) dropOwnDefers(fi I64) {
+    n := m.defF.Len()
+    for n > 0 and m.defF[n - 1] >= fi { n-- }
+    m.defF.Truncate(n)
+    m.defS.Truncate(n)
+    m.defB.Truncate(n)
+}
+
+# B3e: a running program interpret stops, on what it does not run, leaves its blocks all the same - as the built
+# program, which goes on, leaves them in time: the deferred code registered in each, innermost frame first, last
+# registered first, runs (a temporary directory removed, a line printed) before the frame is dropped. A stop inside
+# deferred code ends that one; the first stop is the one reported, as stage 0's, unless deferred code ends the program
+fn (m mut Machine&) runCleanups(base I64) {
+    first := m.Stopped
+    waitFile, waitSp := m.WaitTaskFile, m.WaitTaskSp
+    for m.nFs > base {
+        fi := m.nFs - 1
+        last := m.defF.Len() - 1
+        if last < 0 or m.defF[last] != fi {
+            m.dropFrame()
+            continue
+        }
+        entry := m.defB[last]
+        m.defF.Truncate(last)
+        m.defS.Truncate(last)
+        m.defB.Truncate(last)
+        m.closing.Truncate(m.fs[fi].Closing)
+        m.fs[fi].Block, m.fs[fi].Stmt, m.fs[fi].Pending = entry, 0, false
+        m.halted, m.resumed, m.Stopped = false, false, Stop.None
+        m.loop(fi)
+        if not m.resumed {
+            match m.Stopped {
+                # what ends the program in deferred code - an assert failing there - ends it here, as it would
+                case Stop.Exited(_, _, _, _) {
+                    first = m.Stopped
+                    break
+                }
+                case _ { }
+            }
+        }
+        m.resumed = false
+    }
+    m.halted, m.Stopped = true, first
+    m.WaitTaskFile, m.WaitTaskSp = waitFile, waitSp
 }
 
 fn (m mut Machine&) dropScope(id I64) {

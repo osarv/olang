@@ -1,0 +1,26 @@
+# check: fail error[O17]: this value's references live where its own storage does not, and the callee can store through it
+# O18c/O17, beside o18claterlend: a local whose references are kept beyond its block - pushed into a list outside the
+# loop - has its call landed where those references must live, so it is a split value, and lending it to a callee that
+# keeps something in it (stores into its slots) is refused, whatever module the other calls on it are in
+import "std/filepath"
+
+type Src struct(Path String&, Text String&) {
+    Path
+    Text
+}
+
+fn read(path String&) Src { return Src(path, $path "!") }
+
+fn retext(s mut Src&, t String&) { s.Text = t }
+
+fn main() {
+    args := String&["a", "bb"]
+    dir String& = "d"
+    kept List<String&>
+    for k in range args.Len() {
+        s := read(args[k])
+        kept.Push(s.Path)
+        j := filepath.Join(dir, s.Path)
+        retext(s, j)
+    }
+}

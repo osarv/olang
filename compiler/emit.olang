@@ -1052,6 +1052,7 @@ fn stmtSpan(s mir.Stmt) source.Span {
         case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _) => sp
         case mir.Stmt.RegisterOwner(sp, _, _), mir.Stmt.Release(sp, _), mir.Stmt.Write(sp, _, _, _) => sp
         case mir.Stmt.CopyElems(sp, _, _, _), mir.Stmt.Spawn(sp, _, _), mir.Stmt.Raised(sp) => sp
+        case mir.Stmt.Deferred(sp, _, _) => sp
     }
 }
 
@@ -2598,6 +2599,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.Give(_, _) { fe.gap("Give") }
         case mir.Stmt.Raised(sp) { fe.trace(sp) }
+        case mir.Stmt.Deferred(_, _, _) { fe.gap("a cleanup (interpret's)") }
         case mir.Stmt.RegisterDtor(_, sr, ty, x) {
             id := try fe.E.dtorOf.Get(ty) catch default -1
             if id < 0 {
@@ -3859,6 +3861,7 @@ fn (fe mut fnEm&) term(tm mir.Term) {
             }
         }
         case mir.Term.Exit(sp, kind, msg) { fe.exit(sp, kind, msg) }
+        case mir.Term.Resume(_) { fe.gap("a cleanup (interpret's)") }
     }
 }
 

@@ -692,6 +692,11 @@ fn interp(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" interpret tasks.olang x > out.txt 2>&1") == 1, "-i tasks.olang x did not stop", dir)
     try r.expect(outOf(dir).Contains("sum 10\ncleanup ran\nolang interpret: ") and outOf(dir).Contains(": it waits for another task") and
                  outOf(dir).Contains("in the task spawned at tasks.olang:39"), "-i tasks.olang x output", dir)
+    # ... and every block a stop is in, in every frame, runs its deferred code as it leaves, innermost first
+    try r.expect(sh(dir, "\"$OLANG\" interpret defers.olang > out.txt 2>&1") == 1, "-i defers.olang did not stop", dir)
+    try r.expect(outOf(dir) == ("reach's\nturn 0\nreach's\nturn 1\nreach's\nturn 2\nreach's\nturn 3\nwalk's block\nwalk's\n" $
+                                "main's second\nmain's first\nolang interpret: defers.olang:10: it indexes outside the " $
+                                "array, which is undefined at run time\n"), "-i defers.olang output", dir)
     try r.expect(sh(dir, "\"$OLANG\" build ends.olang > out.txt 2>&1 && ./build/ends > want.txt 2>&1") == 134
                  "ends did not abort", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret ends.olang > out.txt 2>&1") == 134, "-i ends.olang did not abort", dir)

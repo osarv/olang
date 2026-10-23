@@ -1268,6 +1268,9 @@
 | status 0
 === run o18ckeptloop.olang
 | status 0
+=== run o18claterlend.olang
+| status 0
+| 36
 === run o18cnestedfield.olang
 | status 0
 === run o18cnestedhandles.olang

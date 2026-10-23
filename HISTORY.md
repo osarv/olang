@@ -22145,3 +22145,79 @@ module's object by its inputs (its source and its imports', the compiler, the fl
 still enqueue the instances a skipped module calls. The rest of the front end is spread out: allocation (the arena's
 alloc 6%, memset 4%), refsIn 6%, the scope pass and views 25% between them. The scope close split, with an
 alignment-controlled measurement.
+## Port M12, round 5: parity (2026-10-23)
+
+Before bootstrap/ goes, the port has to accept what stage 0 accepts and refuse what it refuses. Two differences were
+known at the start (5ea0499): compiler/tools/fmt.olang refused by the port (O17), and interpret's
+tasks.olang x (checks' interp scenario). Then every `.olang` file of the repository was built by both.
+
+**O17, fmt.olang:55 (O18c, scope.olang).** `what := verify(src, text, std, prelude)` was refused: src, `try
+source.Read(path)`, was a split value - its references where `args` lives, its storage in the loop's block - and
+verify's body keeps the reference in a local. Why src's call landed where args lives: the fourth round's second
+reading, "a function of a module found after the caller's, called by name, is taken to keep whatever it is given",
+was read by both of the port's flow walks - the flow into the result (O26a) and whether a local is kept beyond its block
+(mode 1, which decides where a `:=` from a call lands, O18c). Stage 0 uses that reading in the first only: whether a
+local is kept beyond its block (`localKeptBeyondBlock`) asks a call to keep an argument in another only where the
+callee's body says so (`calleeMayHoldArg`, after checking it on demand). So `text := layout.FileLayout(src, std, ...)`,
+layout found after fmt, made src kept, its call landed by its obligations where args lives, and src was split. Fixed:
+in mode 1 a later module's callee is read by its body, as every other callee is (`laterModule`). Reduced to
+checks/cases/o18claterlend (`# check: run`, 36 with both compilers, clean under the port's `-debug -sanitize`), beside
+o18claterkept, its must-fail neighbour: the same local kept by `kept.Push(s.Path)` and then lent to a callee that can
+store through it, O17 from both.
+
+*Why it is sound.* Mode 1 decides only where a `:=` from a call lands: kept beyond its block, where its obligations say
+(a longer-lived scope); else in its block. The block is the strictest home a call can have: everything that then
+needs the value to live longer - a store into a longer-lived container, a lend to a callee keeping it, a return - is
+judged against the block and refused (O10c, O17, O25), so reading fewer locals as kept can refuse more programs, never
+accept one more. The reading that keeps a later module's callee conservative where it matters for the other direction -
+the flow into the result, which moves a local to the result scope (O26a) - is unchanged. Two probes (not in the
+repository) found what stays different, both sound: the port refuses `kept.Push(s.Path)` before `verify(s)` where
+verify builds a local holding the reference (its Keeps summary takes a parameter read into a constructor as kept), and
+accepts `lib.Keep(out, r)` with `r := mk(nm, i)` in a loop where stage 0 refuses with O10c (stage 0's r06 limit: a
+borrowed split value bound to its storage). Neither shape is in the repository. `make scopediff` is as before: 280 of
+283 refused cases give stage 0's first error (the same three), 310 of 310 accepted programs scope clean (309 before
+o18claterlend).
+
+**Interpret runs a stop's deferred code (B3e; mir, lower, eval).** Stage 0's evaluator, stopping under interpret on what
+it does not run (a wait for another task, undefined behaviour), runs each enclosing block's deferred code as it leaves
+it, innermost first, frame by frame - as the built program, going on, would on its way out - then reports the first
+stop; so tasks.olang x prints "cleanup ran" before "it waits for another task". The port's MIR carried deferred code
+only as copies inlined on each way out (S19), so a stop ran none. Built, for interpret only (`Lowerer.Cleanups`; a
+build never has them): each `defer` registers a cleanup - its deferred code lowered once more where it is registered,
+blocks reached from nothing but the registration (`Stmt.Deferred(sp, s, entry)`), ending in `Term.Resume` - and each
+inline copy on a way out first marks the registration as run (`Stmt.Deferred` with no entry), so a stop inside deferred
+code does not run it again. The machine keeps the pending cleanups per frame - dropped as their scope closes, cut back as
+the frame pops - and on a refused stop runs them, newest first, frame by frame, before the frames go; the first stop is
+the one reported, and a cleanup that ends the program (a failed check, which aborts) ends it there, as stage 0's abort()
+does part way through. The verifier enters a cleanup from its registration with the state there, inside the scope
+registering it; emit never sees either (a gap if it did). checks' interp scenario gained defers.olang: a stop three
+frames deep, a loop's blocks, deferred code in a block of a frame and in main, against stage 0's text.
+
+*Found by that scenario, the next check in it:* a failed check or a `!` under interpret ends stage 0 by abort() -
+SIGABRT, after the message - where the port exited with status 134. A parent waiting sees 134 either way, but a shell
+does not: dash writes "Aborted" into the command's redirected output, so ends.olang's interpreted output differed from
+the built program's. The port now empties its crash message (the handler then only raises the signal again) and calls
+abort() when main's run ends in 134.
+
+**The sweep.** Every one of the repository's 1,420 `.olang` files built (`olang build`) by stage 0 and by the port, each
+in a directory of its own (a link farm per compiler and worker), three at a time, at most two of the large ones
+(compiler/, tests/, checks.olang, linalg, the fuzzers) together, 600 s each; accepted means status 0. Stage 0 accepts 428
+(429 with compiler/olang.olang, which timed out at 600 s under the sweep's load and built in four minutes alone - the port
+in this round is built from it), the port 429: no other difference. bench/ir.olang, recorded as failing to link under
+the port (String.Compare undefined), built and linked in the sweep's fresh directories.
+
+Where both refuse, the errors differ on 42 files (the rule sets in what each said) - all known diagnostic differences
+of the kinds checkdiff, namesdiff and scopediff measure (a cascade one says and the other does not, a second rule beside
+the first), but two: tests/shared.olang and tests/worker.olang, which have tests and no main, were refused by stage 0
+with B4 and by the port only at the link (`undefined reference to main`). The checker says B4 only where no syntax
+error may have hidden main, and counted for that every record made before checking began - including those of a
+branch the build does not take (S8b), whose syntax errors (shared.olang's `NoSuchType{1}` under `TargetOs ==
+"no-such-os"`) are held and dropped, never reported. The same count kept D10a from judging a body holding such a
+branch, so `fn pick() I32 { if TargetOs == "no-such-os" { return NoSuchType{1}.v } }` built - a function that falls off
+its end, aborting with "reached unreachable code" there - where stage 0 refuses it with D10a: an accept the sweep could not
+see, since no file has the shape. Only a record that may still be reported counts now (`diag.ErrorBefore`,
+`ErrorWithin`); checks/cases/b4droppedbranch and d10adroppedbranch pin both, refused by both compilers with stage 0's
+message. With that the port says B4 on both test files, and a second sweep of the port alone over every file, with the
+round's final compiler (b39f784), gave the same 429 accepted - 1,422 files, the two new cases refused as stage 0 refuses them - and no internal error; where both refuse, the rule sets now differ on 40 files.
+
+**The port builds itself**: stage 1 (built by stage 0 at b39f784) builds stage 2, stage 2 builds stage 3, and stage 2 and stage 3 are the same file, byte for byte.

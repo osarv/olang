@@ -56,6 +56,9 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
     Gaps List<Gap>
     Gapped Bool = false     # whether the body lowered last met a gap
+    # B3e: for interpret - each registration of deferred code made with a cleanup of its own (Stmt.Deferred), which
+    # interpret runs for the blocks a stop leaves; never for a build (emit has no use for them)
+    Cleanups Bool = false
     # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
     AssertsTrue Map<pair.Pair<I64, I64>, Bool>
     # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
@@ -552,6 +555,10 @@ fn (ln mut lowering&) exitLevel(i I64) {
     # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
     for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
     for k := mine.Len() - 1, k >= 0, k-- {
+        # no longer pending once it runs here (B3e): a stop inside it does not run it again
+        if ln.L.Cleanups {
+            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[mine[k]].Id)].Sp, lv.S, mir.NoBlock))
+        }
         # deferred code runs as a block of its own, inside the block it is registered in
         ln.block(ln.defers[mine[k]])
     }
@@ -578,6 +585,23 @@ fn (ln mut lowering&) exitLevel(i I64) {
         ln.start(ok)
     }
     ln.emit(mir.Stmt.Close(sp, lv.S))
+}
+
+# B3e: deferred code k, just registered, lowered once more as its cleanup - blocks nothing but the registration reaches
+# (Stmt.Deferred), ending in Resume - which interpret runs for each block a stop on what it does not run leaves, as the
+# built program, going on, would leave them. Lowered where it is registered: inside its block, nothing above it open
+fn (ln mut lowering&) cleanup(sp source.Span, k I64) {
+    if ln.dead { return }
+    s := ln.deferAt[k]
+    entry := ln.F.NewBlock()
+    ln.emit(mir.Stmt.Deferred(sp, s, entry))
+    back := ln.cur
+    ln.start(entry)
+    ln.deferAt[k] = mir.ScopeId(-1)
+    ln.block(ln.defers[k])
+    ln.deferAt[k] = s
+    ln.end(mir.Term.Resume(sp))
+    ln.start(back)
 }
 
 # join s, at level i, failed with code under its list: its clauses, then the tries around it, take it - as an error
@@ -636,9 +660,10 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
         case typed.Stmt.Exit(sp, _) { ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None)) }
         case typed.Stmt.Assert(sp, c, msg) { ln.assert(sp, c, msg) }
         case typed.Stmt.Block(_, bl) { ln.block(bl) }
-        case typed.Stmt.Defer(_, bl) {
+        case typed.Stmt.Defer(sp, bl) {
             ln.defers.Push(bl)
             ln.deferAt.Push(ln.top().S)
+            if ln.L.Cleanups { ln.cleanup(sp, ln.defers.Len() - 1) }
         }
         case typed.Stmt.Join(sp, j) { ln.join(sp, j) }
         case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }

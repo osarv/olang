@@ -1,0 +1,41 @@
+# check: run
+# O18c/O17: whether a local is kept beyond its block reads a callee in a module found later as its body says, as stage
+# 0 does - here filepath.Join keeps nothing of s.Path in dir, so s's call lands in the loop's block, its references
+# where its storage is, and lending s to verify (which keeps the reference in a local P) is no split value (O17). The
+# port had taken any such call to keep whatever it is given anywhere, landed s where args lives, and refused the lend
+import "std/filepath"
+import "std/io"
+
+type Src struct(Path String&, Text String&) {
+    Path
+    Text
+    lines Array<I32>& = starts(Text)
+}
+
+fn starts(t String&) Array<I32>& { return Array<I32>(t.Len() + 1) }
+
+fn read(path String&) Src { return Src(path, $path "!") }
+
+type P struct(s Src&) {
+    s
+}
+
+fn (p P&) n() I64 { return p.s.Text.Len() + p.s.lines.Len() }
+
+fn verify(s Src&) I64 {
+    p := P(s)
+    return p.n()
+}
+
+fn main() {
+    args := String&["a", "bb", "ccc"]
+    dir String& = "d"
+    total I64 = 0
+    for k in range args.Len() {
+        s := read(args[k])
+        j := filepath.Join(dir, s.Path)
+        churn := Array<I64>(64, k)
+        total += verify(s) + j.Len() + churn[0]
+    }
+    io.Println($total)!
+}

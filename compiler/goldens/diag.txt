@@ -154,6 +154,9 @@ olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back en
 olang: error[B12]: unknown target 'pentium9000' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
 === b12unsupported.olang
 olang: error[B12]: olang does not build for 'riscv64-linux-gnu' - it builds for x86_64 and aarch64 Linux with the GNU C library
+=== b4droppedbranch.olang
+b4droppedbranch.olang: error[B4]: no main function - a program starts at 'fn main() { }'
+compilation failed with 1 error
 === b5acycle.olang
 b5acycle.olang:6:1: error[B5a]: these globals' initializers read each other, so none can be set first: A -> B -> A
     6 | A mut I32 = B + 1
@@ -605,6 +608,11 @@ copyoutrefs.olang:15:7: error[O25h]: this value holds references into a scope th
    15 |     d = src
       |       ^
 compilation failed with 2 errors
+=== d10adroppedbranch.olang
+d10adroppedbranch.olang:6:4: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
+    6 | fn pick() I32 {
+      |    ^~~~
+compilation failed with 1 error
 === d10aforbreak.olang
 d10aforbreak.olang:3:4: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
     3 | fn f(x Bool) I32 {
@@ -2709,6 +2717,11 @@ compilation failed with 1 error
 o17tempreadonly.olang:28:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    28 |         addVia(mkBox(seed), i + 1)
       |                ^~~~~
+compilation failed with 1 error
+=== o18claterkept.olang
+o18claterkept.olang:24:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+   24 |         retext(s, j)
+      |                ^
 compilation failed with 1 error
 === o18cprojectionborrow.olang
 o18cprojectionborrow.olang:17:14: error[O10]: this reference lives in a scope that may not outlive where it is put
