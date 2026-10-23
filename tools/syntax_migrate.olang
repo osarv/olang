@@ -327,7 +327,7 @@ fn (g mut migration&) listing() {
 fn (g migration&) skipType(at I64) I64 {
     i := at
     n := g.v.Len()
-    for i < n and (g.v[i].k == token.Tok.Mut or g.v[i].k == token.Tok.Own) { i++ }
+    for i < n and g.v[i].k == token.Tok.Mut { i++ }
     if i >= n { return -1 }
     k := g.v[i].k
     if k == token.Tok.Lt {
