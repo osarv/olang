@@ -98,14 +98,21 @@ type Config struct() {
 # program keeps full LTO, which measured no slower to build there and is what its benchmarks were tuned on (B2d)
 ThinFrom I64 = 8 << 20
 
+# the largest function, in instructions, a ThinLTO link copies into another module to inline there (LLVM's own
+# default 100): the compiler's link 171 -> 133 s of CPU at 70, its front end measured no slower (at 40 the link took
+# 120 s and the front end 5-10% longer), and a program below ThinFrom - every benchmark - does not link by ThinLTO
+ImportLimit I64 = 70
+
 # OLANG_TIMES set in the environment: how long each phase of a build took, in milliseconds, written to the standard
-# error as the phase ends - the front end's passes, clang's compiles, the link
+# error as the phase ends - the front end's passes, clang's compiles, the link; set to "front", the build ends after
+# the front end, so the compiler's own speed is measured apart from clang's
 PhaseAt mut I64 = 0
 fn Phase(name String&) {
-    try os.Env("OLANG_TIMES") catch os.OsError { return }
+    v := try os.Env("OLANG_TIMES") catch os.OsError { return }
     now := time.Now()
     if PhaseAt != 0 { sayErr($"olang: " $name " " $((now - PhaseAt) / 1000000) " ms\n") }
     PhaseAt = now
+    if v == "front" and name == "lower+emit" { os.Exit(0) }
 }
 
 # the terminal's colour code around text, where colour is on
@@ -437,7 +444,10 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool) ? Failed
     for f in c.ModeFlags() { args.Push($f) }
     # ThinLTO's link keeps each module's code generated, keyed by what it was made from, so a relink after an edit
     # generates only what the edit changed (the linker's LLVM plugin's cache)
-    if c.Thin { args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto") }
+    if c.Thin {
+        args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto")
+        args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit)
+    }
     args.Push("-o")
     args.Push($bin)
     for o in objs { args.Push($o) }
