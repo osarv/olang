@@ -119,7 +119,7 @@ overrated".
   8. `embed` (ideas #6).
   9. `errdefer` (ideas #7).
   10. Generic enums (ideas #12).
-  11. Instance merging and sharing among reference type arguments (below).
+  11. DONE 2026-10-23 (round 7, wt-speed): instance merging - identical instances and helpers written once, instance structs named by layout; sharing among reference type arguments comes through it (HISTORY.md "Port M9, round 7").
   12. Runtime interfaces `any Trait&` (decided 2026-10-08, ledger).
   13. Memory rounds 4-7 (docs/memory.md: prelude let-go and Map.Take, the port's early freeing, `x.Destroy()`), M19g in
       the port, QZ2's prelude moves (helpers onto Vec, List to std/list), a test that a long-running Map stays flat (QF).
