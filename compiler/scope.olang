@@ -267,6 +267,11 @@ type Scoper struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     # temporary its initializer reads (tempVal): -1 none decided, else whether the call lands by its obligations (O18c)
     landPart Bool = false
     tempLand I64 = -1
+    # whether the place read holds no reference, read by the first temporary it goes through (tempVal)
+    plainRead Bool = false
+    # whether a return's value is being judged: a call it makes that puts this function's own storage in the result is
+    # O26's, said there; one a local moved to the result scope made is O10c's
+    inRet Bool = false
     # the flow analysis (flowRun): fl the locals reached, flDirect those a return gives, flKept whether the local is kept
     # beyond its block (O18c), flMode which of the two is asked, flBlock the local's block, flGrew whether a pass grew fl
     fl List<I64>
@@ -1249,7 +1254,8 @@ fn (s mut Scoper&) qualifiesMove(loc typed.Local, x typed.Expr&) Bool {
             case typed.Mark.Bare, typed.Mark.Infer { }
             case _ { return false }
         }
-        return s.isFresh(x) or s.isNullLit(x)
+        # (written text, constant data, as a temporary would be - O26a)
+        return s.isFresh(x) or s.isNullLit(x) or s.isData(x) or s.staticLiteral(x)
     }
     match loc.Marked {
         case typed.Mark.None, typed.Mark.Infer { }
@@ -1260,6 +1266,13 @@ fn (s mut Scoper&) qualifiesMove(loc typed.Local, x typed.Expr&) Bool {
     # a number or a Bool is never moved; storage a borrow can name may be
     k := s.P.T.KindOf(t)
     return k == types.Kind.Array or k == types.Kind.Named or k == types.Kind.Tuple
+}
+
+fn (s mut Scoper&) isData(x typed.Expr&) Bool {
+    return match s.unAway(x) {
+        case typed.Expr.Data(_, _, _, _) => true
+        case _ => false
+    }
 }
 
 # whether x is an array literal of constant data only, promoted into a read-only reference (T25d)
@@ -1933,6 +1946,7 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
     if e >= 0 and s.P.T.ShareOf(fty, j) == e { return true }
     callee := s.bodyOf(c.Target)
     if callee < 0 or not s.sums[callee].Done { return true }
+    if s.laterModule(c, callee) { return true }
     vars := s.P.T.ScopeVarsOf(fty)
     k := s.P.T.ShareOf(fty, j)
     q := k if k >= 0 else j
@@ -1943,6 +1957,31 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
         }
     }
     return false
+}
+
+# whether a call is a plain one to a function of a module after this body's in the order modules are found in, the
+# prelude's aside: the flow (O26a, O18c) takes it to keep whatever it is given, as stage 0 reads one whose body it has
+# not checked yet - what is handed to it flows where its result goes, so "return toolkit.Text(out)" moves out
+fn (s mut Scoper&) laterModule(c typed.Call&, callee I64) Bool {
+    if callee < 0 or s.isMethodCall(c) { return false }
+    match c.Target {
+        case typed.Callee.Body(_) { }
+        case _ { return false }
+    }
+    match s.Bodies[callee].Of {
+        case typed.BodyOf.Fn(_) { }
+        case _ { return false }
+    }
+    from, to := -1, -1
+    for i in range s.P.L.Mods.Len() {
+        m := s.P.L.Mods[i]
+        if m.File == s.B.File { from = i }
+        if m.File == s.Bodies[callee].File {
+            if m.Prelude { return false }
+            to = i
+        }
+    }
+    return from >= 0 and to > from
 }
 
 # whether x carries what local l refers to, or its storage, where it is put (mode 1's local is fl's first)
@@ -2003,7 +2042,7 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
         case typed.Expr.Slice(_, _, sl) { s.carriedPlace(sl.Base, out) }
         case typed.Expr.Promote(_, _, pr) { s.carried(pr.X, out) }
         case typed.Expr.Call(_, ty, c) {
-            if not s.holds(ty) { return }
+            if not s.holds(ty) and not s.laterModule(c, s.bodyOf(c.Target)) { return }
             for j in range c.Args.Len() {
                 if s.canKeep(c, j) { s.carried(c.Args[j], out) }
             }
@@ -2025,8 +2064,8 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
             }
             if m.NoMatch != null { s.carried(m.NoMatch.Value, out) }
         }
-        case typed.Expr.Try(_, _, t) {
-            s.carried(t.X, out)
+        case typed.Expr.Try(sp, _, t) {
+            if s.writtenTry(sp) { s.carriedAfterTry(t.X, out) } else { s.carried(t.X, out) }
             for c in t.Clauses {
                 for df in c.Defaults { s.carried(df, out) }
             }
@@ -2045,6 +2084,42 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
             }
         }
         case _ { }
+    }
+}
+
+# what a try's operand carries, leaving out the local written first after "try" - the receiver of a tried method call
+# ("try m.Get(k)"), the place a tried index or slice reads ("try a[i]"): it is not taken to flow (O26a, as stage 0 reads
+# the flow, so a local handing a returned value its references only through such a call stays in its block, and the
+# call's obligation refuses it - O10c - rather than the local being moved to the result scope)
+# whether a try is one the program writes, "try" at its start - not a loop's own call, which reads its collection
+fn (s mut Scoper&) writtenTry(sp source.Span) Bool {
+    text := try s.texts.Get(s.B.File) catch default ""
+    at := I64(sp.Start)
+    if at < 0 or at + 3 > text.Len() or text[at:at + 3] != "try" { return false }
+    return at + 3 == text.Len() or not (text[at + 3].IsLetter() or text[at + 3].IsDigit() or text[at + 3] == '_')
+}
+
+fn (s mut Scoper&) carriedAfterTry(x typed.Expr&, out mut List<I64>&) {
+    if x == null { return }
+    match x {
+        case typed.Expr.Away(_, _, y) { s.carriedAfterTry(y, out) }
+        case typed.Expr.Read(_, _, _, _), typed.Expr.Take(_, _, _), typed.Expr.Borrow(_, _, _), typed.Expr.Slice(_, _, _) { }
+        case typed.Expr.Call(_, ty, c) {
+            if not s.holds(ty) { return }
+            if not s.isMethodCall(c) {
+                s.carried(x, out)
+                return
+            }
+            for j in range c.Args.Len() {
+                if not s.canKeep(c, j) { continue }
+                if j == 0 {
+                    s.carriedAfterTry(c.Args[0], out)
+                } else {
+                    s.carried(c.Args[j], out)
+                }
+            }
+        }
+        case _ { s.carried(x, out) }
     }
 }
 
@@ -2703,6 +2778,15 @@ fn (s mut Scoper&) kwCall(c typed.Call&) {
                     case _ {
                         if s.calleeStoresArg(c, k) { s.storeParam(rr, s.calleePutsArg(c, k)) }
                     }
+                }
+            }
+            # a copy of a value read out of the region holding writable references, given to a function value: its body,
+            # not known, can store through those references into the region (O17 - a by-value parameter holding writable
+            # references is a store from outside)
+            if rr >= 0 and flThroughRefExpr(ua) and not s.isRef(ua.Type()) and s.storeThrough(ua.Type()) {
+                match c.Target {
+                    case typed.Callee.Value(_) { s.storeParam(rr, true) }
+                    case _ { }
                 }
             }
             # a capturing lambda made for a callee keeping nothing of it never leaves the call (D16c)
@@ -4397,6 +4481,11 @@ fn (s mut Scoper&) tempVal(v typed.Expr&) Val {
     # the part a local is declared from, its landing decided for it (decide); any other lands by its obligations
     decided := s.tempLand
     s.tempLand = -1
+    plainRead := s.plainRead
+    s.plainRead = false
+    # a part holding no reference read out of it, nothing put anywhere: it lands by its obligations only where they need
+    # its result scope to outlive an argument's (O18a, O18c - "pick(r, Res(2), true).k" builds Res(2) in this block)
+    if plainRead and decided == -1 and s.callOf(v) != null and s.isFresh(v) { return s.val(v, Term.None) }
     if s.callOf(v) != null and s.isFresh(v) and decided != 0 {
         s.landing = true
         x := s.val(v, Term.None)
@@ -4474,6 +4563,13 @@ fn (s mut Scoper&) tempTerm(v typed.Expr&, site typed.SiteId) Term {
 # a return (O13, O14, O26): the value judged against the result's term
 fn (s mut Scoper&) ret(sp source.Span, x typed.Expr&) {
     if x == null { return }
+    saved := s.inRet
+    s.inRet = true
+    s.retValue(sp, x)
+    s.inRet = saved
+}
+
+fn (s mut Scoper&) retValue(sp source.Span, x typed.Expr&) {
     rt := s.P.T.Result(s.B.Ty)
     if s.P.T.KindOf(rt) == types.Kind.Tuple {
         match x {
@@ -5165,7 +5261,10 @@ fn (s mut Scoper&) item(x typed.Expr&, d Term, kind I64) {
 # has its call land there (O18a: "f = mkBox(i).n" with f outside the loop)
 fn (s mut Scoper&) read(p typed.Place&, ty types.TypeId, dest Term) Val {
     k := s.partLand(p, ty, dest)
+    saved := s.plainRead
+    s.plainRead = saved or not s.holds(ty)
     v := s.readPart(p, ty, dest)
+    s.plainRead = saved
     if k >= 0 { s.partDest.Remove(k) }
     return v
 }
@@ -6201,7 +6300,7 @@ fn (s mut Scoper&) discharge(sp source.Span, callee I64, beta Array<Term>&, c ty
             s.err(s.taskAt, msgs.SpawnFuncTooShort() if s.taskFunc else msgs.SpawnArgHoldsShort())
             continue
         }
-        if r.Lo == Term.Var(s.resultVarOf(s.calleeType(c))) and s.ownIntoResult(hi, lo) {
+        if s.inRet and r.Lo == Term.Var(s.resultVarOf(s.calleeType(c))) and s.ownIntoResult(hi, lo) {
             # a result returned holding this function's own storage, through the call that put it there (O26)
             s.err(s.nameSpan(sp), msgs.ReturnOwnStorage())
             continue
@@ -6616,9 +6715,18 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr&, w I64, wname String
     ty := loc.Ty
     k := s.P.T.KindOf(ty)
     if not s.isRef(ty) and not s.holds(ty) and k != types.Kind.Array and k != types.Kind.Named { return }
-    # G16b: inside an instance the type would be written as the generic writes it, with its variables - not said
-    if s.Spell == null or s.instanceArgs(s.Id) { return }
+    if s.Spell == null { return }
     shown := s.P.T.Referent(ty) if s.isRef(ty) else ty
+    # G16b: inside an instance the type is written as the generic writes it, with its variables - and where two of them
+    # are bound to one type, another instance's error says it
+    inst := s.instanceOf(s.Id)
+    if inst >= 0 and s.P.T.Items(s.P.InstanceArgs(inst)).Len() > 0 {
+        shown = s.P.Unsubst(shown, generic.FnOwner(s.P.InstanceFn(inst)), s.P.InstanceArgs(inst))
+        if shown == types.UnknownT {
+            s.P.L.Diags.Yield(rec)
+            return
+        }
+    }
     writable := (s.P.T.PermOf(ty) & types.Writable) != 0 if s.isRef(ty) else true
     full := $("mut " if writable and not s.isFunc(shown) else "") $s.Spell(shown)
     s.note(rec, s.B.File, at, msgs.NoteDeclareWhere(name, wname, name, full, wname))

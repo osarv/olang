@@ -696,11 +696,15 @@ fn (p mut Program&) shape(c Context&, body ast.TypeBody&) types.TypeId {
 fn (p mut Program&) anonEnum(c Context&, cases Array<ast.CaseDecl&>&) types.TypeId {
     ns := Array<source.NameId>(cases.Len())
     ps := Array<types.TypeId>(cases.Len())
+    fs List<source.NameId>
     for i in range cases.Len() {
         ns[i] = cases[i].Name
         ps[i] = p.payload(c, cases[i])
+        if cases[i].Payload != null {
+            for f in cases[i].Payload { fs.Push(f.Name) }
+        }
     }
-    return p.T.AnonEnum(ns, p.T.List(ps))
+    return p.T.AnonEnum(ns, p.T.List(ps), fs.ToArray())
 }
 
 # an enum case's payload: a record of its fields, none (0) for a case carrying none
@@ -1159,7 +1163,37 @@ fn (p mut Program&) Subst(t types.TypeId, owner I64, args types.ListId) types.Ty
         }
         case types.Kind.Tuple { return p.T.Tuple(p.substList(p.T.Parts(t), owner, args)) }
         case types.Kind.Record { return p.T.Record(p.substList(p.T.Parts(t), owner, args)) }
-        case types.Kind.AnonEnum { return p.T.AnonEnum(p.T.ShapeNames(t), p.substList(p.T.ShapeCases(t), owner, args)) }
+        case types.Kind.AnonEnum { return p.T.AnonEnum(p.T.ShapeNames(t), p.substList(p.T.ShapeCases(t), owner, args), p.T.ShapeFields(t)) }
+        nomatch { return t }
+    }
+}
+
+# a type with each part that is one of args written as the owner's variable it is bound to (G16b): an instance's type
+# as the generic writes it. UnknownT where two of args are one type, so that a part could stand for either
+fn (p mut Program&) Unsubst(t types.TypeId, owner I64, args types.ListId) types.TypeId {
+    xs := p.T.Items(args)
+    for i in range xs.Len() {
+        for j in range i {
+            if xs[i] == xs[j] { return types.UnknownT }
+        }
+    }
+    return p.unsubst(t, owner, xs)
+}
+
+fn (p mut Program&) unsubst(t types.TypeId, owner I64, xs Array<types.TypeId>&) types.TypeId {
+    for i in range xs.Len() {
+        if xs[i] == t { return p.T.Var(owner, i, types.ReadOnly) }
+    }
+    match p.T.KindOf(t) {
+        case types.Kind.Named {
+            if p.T.Args(t) == types.ListId(0) { return t }
+            ys := p.T.Items(p.T.Args(t))
+            out := Array<types.TypeId>(ys.Len())
+            for i in range ys.Len() { out[i] = p.unsubst(ys[i], owner, xs) }
+            return p.Instance(p.T.DeclOf(t), p.T.List(out))
+        }
+        case types.Kind.Array { return p.T.Array(p.unsubst(p.T.Elem(t), owner, xs), p.unsubst(p.T.Length(t), owner, xs)) }
+        case types.Kind.Ref { return p.T.Ref(p.unsubst(p.T.Referent(t), owner, xs), p.T.PermOf(t)) }
         nomatch { return t }
     }
 }

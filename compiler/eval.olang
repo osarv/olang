@@ -3348,6 +3348,11 @@ fn (m mut Machine&) term(fi I64, t mir.Term, glob Bool) {
 fn (m mut Machine&) jump(fi I64, b mir.BlockId) {
     m.fs[fi].Block = I64(b)
     m.fs[fi].Stmt = 0
+    # S18d: a clause takes the error - the trace it left is no one's now (as emit clears it there)
+    if m.trace.Len() > 0 and b in m.fns[m.fs[fi].Fn].Taken {
+        m.trace.Clear()
+        m.TraceDropped = 0
+    }
 }
 
 fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
@@ -3555,6 +3560,9 @@ fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
     kind := m.fs[fi].ErrKind
     if kind < 0 or m.fs[fi].ErrAt != sp.Start {
         kind = tRaised
+    }
+    # raised here, or a join's failure: the trace starts again, with its own line (as the built program's does)
+    if kind != tCall {
         m.trace.Clear()
         m.TraceDropped = 0
     }

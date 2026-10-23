@@ -72,6 +72,7 @@ type Diagnostics struct(Color Bool) {
     ctxFrom I64 = 0                 # the first of them in effect: those below belong to a body set aside (ContextBase)
     scopeOn Bool = false            # inside a statement's group of errors about where things live (ScopeGroupStart)
     scopeSeen Bool = false
+    yielding := List<I64>()         # errors a later one of the same text at the same place replaces (Yield)
     fatalAt Where = Where.Nowhere
     fatalRule String& = ""
     fatalText String& = ""
@@ -185,6 +186,12 @@ fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
 fn (d mut Diagnostics&) Note(rec I64, at Where, m msgs.Msg) {
     if rec < 0 { return }
     d.notes.Push(note(rec, at, $m.Text))
+}
+
+# G16b: the error numbered rec yields to a later one of the same text at the same place - one an instance of a generic
+# reported where what its note would say needs bindings two variables share, so another instance's says it
+fn (d mut Diagnostics&) Yield(rec I64) {
+    if rec >= 0 { d.yielding.Push(rec) }
 }
 
 # an error that ends the compilation: Render writes it after every other, as a row with no line and no excerpt
@@ -439,10 +446,13 @@ fn (d mut Diagnostics&) written() Array<I64> {
         # one cause several checks meet is one error: the same text at the same place again, or a second of a kind
         # reported once per line
         repeated := false
-        for k in keep {
+        for j in range keep.Len() {
+            k := keep[j]
             other := d.records[k]
             if file[k] == file[r] and line[k] == line[r] and col[k] == col[r] and other.text == rec.text {
                 repeated = true
+                # one that yields is replaced by a later one that does not (G16b)
+                if k in d.yielding and r not in d.yielding { keep[j] = r }
             }
             if rec.oncePerLine and other.oncePerLine and other.kind == rec.kind and file[k] == file[r] and line[k] == line[r] {
                 repeated = true

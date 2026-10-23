@@ -1203,7 +1203,8 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
     match td.Body {
         case ast.TypeBody.Struct(sb) {
             self := c.P.SelfType(d)
-            if c.P.Body(self) {
+            # a generic's is said per instance, as its constructor is checked (holdsItself)
+            if c.P.T.Items(c.P.T.Args(self)).Len() == 0 and c.P.Body(self) {
                 fs := c.P.T.Items(c.P.T.Fields(self))
                 sps := fieldSpans(sb)
                 for i in range fs.Len() {
@@ -1252,6 +1253,49 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl&) {
 
 # whether a value of type t holds a value of declaration d by value: itself, or through a struct's fields, an enum's
 # payloads, a fixed array's elements or what a type is declared over - never through a reference or a run-time array
+# T16 for a generic struct: each instance that holds itself by value, said at the field, named as the instance
+fn (c mut Checker&) instHoldsItself(t types.TypeId, d types.DeclId, sb ast.StructBody&) {
+    if not c.P.Body(t) { return }
+    fs := c.P.T.Items(c.P.T.Fields(t))
+    sps := fieldSpans(sb)
+    for i in range fs.Len() {
+        if i < sps.Len() and c.holdsInst(fs[i], t, 0) {
+            c.err(sps[i], msgs.TypeHoldsItself(c.ty(t)))
+            return
+        }
+    }
+}
+
+# whether a value of type x holds the instance t by value - x itself, or through a fixed array, a payload or another
+# value it holds; an instance of the same generic with other arguments is another type (finite where it nests no deeper)
+fn (c mut Checker&) holdsInst(x types.TypeId, t types.TypeId, depth I64) Bool {
+    if depth > 16 or x == types.UnknownT { return false }
+    if x == t { return true }
+    match c.P.T.KindOf(x) {
+        case types.Kind.Named {
+            if not c.P.Body(x) { return false }
+            k := c.declKind(x)
+            if k == types.DeclKind.Struct { return c.listHoldsInst(c.P.T.Fields(x), t, depth) }
+            if k == types.DeclKind.Enum { return c.listHoldsInst(c.P.T.Cases(x), t, depth) }
+            if k == types.DeclKind.Over { return c.holdsInst(c.P.T.Base(x), t, depth + 1) }
+            return false
+        }
+        case types.Kind.Array {
+            if c.P.T.Length(x) == types.TypeId(0) { return false }
+            return c.holdsInst(c.P.T.Elem(x), t, depth + 1)
+        }
+        case types.Kind.Tuple, types.Kind.Record { return c.listHoldsInst(c.P.T.Parts(x), t, depth) }
+        nomatch { return false }
+    }
+}
+
+fn (c mut Checker&) listHoldsInst(l types.ListId, t types.TypeId, depth I64) Bool {
+    for x in c.P.T.Items(l) {
+        if x != types.TypeId(0) and c.holdsInst(x, t, depth + 1) { return true }
+    }
+    return false
+}
+
 fn (c mut Checker&) holdsBy(t types.TypeId, d types.DeclId, depth I64) Bool {
     if depth > 16 or t == types.UnknownT { return false }
     match c.P.T.KindOf(t) {
@@ -2494,6 +2538,7 @@ fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
                     }
                 }
                 c.cur().SetVars(c.P.ScopeVarsOf(sig))
+                if c.P.T.Items(c.P.T.Args(t)).Len() > 0 { c.instHoldsItself(t, d, s) }
                 pushed := c.typeContexts(t, td)   # G16b: an instance's with where it was asked for
                 root := c.rootStmts(s.Body)
                 c.cur().Root = root
@@ -3142,12 +3187,30 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.AnonEnum {
             # "enum { A(I32) B }", as an anonymous enum is written (T27)
             b.Push("enum {")
+            # each payload's field named as the first declaration written gave them
             ns := c.P.T.ShapeNames(t)
             cs := c.P.T.Items(c.P.T.ShapeCases(t))
+            fs := c.P.T.ShapeFields(t)
+            at := 0
             for i in range ns.Len() {
                 b.PushChar(' ')
                 b.Push(c.text(ns[i]))
-                if i < cs.Len() and cs[i] != types.TypeId(0) and c.P.T.Items(c.P.T.Parts(cs[i])).Len() > 0 { c.spellList(b, c.P.T.Parts(cs[i]), "(", ")") }
+                if i >= cs.Len() or cs[i] == types.TypeId(0) { continue }
+                parts := c.P.T.Items(c.P.T.Parts(cs[i]))
+                if parts.Len() == 0 { continue }
+                if fs.Len() < at + parts.Len() {
+                    c.spellList(b, c.P.T.Parts(cs[i]), "(", ")")
+                    continue
+                }
+                b.PushChar('(')
+                for j in range parts.Len() {
+                    if j > 0 { b.Push(", ") }
+                    b.Push(c.text(fs[at + j]))
+                    b.PushChar(' ')
+                    c.spell(b, parts[j], false)
+                }
+                b.PushChar(')')
+                at += parts.Len()
             }
             b.Push(" }")
         }
@@ -7572,7 +7635,13 @@ fn (c mut Checker&) boundParam(ps Array<types.TypeId>&, k I64, b generic.Binding
     part := Array<types.TypeId>(b.N)
     for j in range b.N { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(b.Owner, j, types.ReadOnly) }
     t := c.P.Subst(ps[k], b.Owner, c.P.T.List(part))
-    return c.deref(t) if c.P.T.Closed(t) else types.UnknownT
+    if not c.P.T.Closed(t) { return types.UnknownT }
+    # C11: a type declaring a destructor is never a value - a conditional of its instances is a reference to one (E28)
+    if c.isRef(t) {
+        r := c.P.T.Referent(t)
+        if c.isNamed(r) and c.P.Body(r) and c.P.T.Destructs(r) { return t }
+    }
+    return c.deref(t)
 }
 
 # G9a: a variable only literals reach, whose constraint (G19) the widest of their types fails, takes the first type
