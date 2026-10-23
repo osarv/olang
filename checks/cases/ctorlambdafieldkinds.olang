@@ -1,0 +1,58 @@
+# check: run
+# flags: -debug -sanitize
+# C2g, D16d, E31 (the unpar review's neighbours): what a constructor field's function value captures lives with the
+# instance or where the instance may not outlive - a by-value parameter holding references, an inline array field
+# borrowed, a field called in the body too, a Call adapter of a reference parameter; a ":=" field given a lambda or a
+# conditional is typed by its constructor wherever it is read first (D15)
+import "std/io"
+
+type Box struct(v I64) {
+    v
+    head mut Box& = null
+}
+type W struct(h Box) { h }
+type M struct(w W) {
+    F fn() I64 = fn() I64 { return w.h.v }
+}
+type A struct(n I64) {
+    arr Array<I64, 3> = I64[n, n + 1, n + 2]
+    G fn() I64 = fn() I64 { return arr[1] }
+}
+type C struct(d Array<I64>&) {
+    F fn() I64 = fn() I64 { return d[0] }
+    k I64 = F()
+}
+type Ctr struct(n I64) {
+    n
+}
+fn (c Ctr&) Call() I64 { return c.n }
+type D struct(c Ctr&) {
+    F fn() I64 = c
+}
+type E struct(d Array<I64>&) {
+    F := fn() I64 { return d[1] }
+    K := 3 if d.Len() > 2 else 4
+}
+
+fn main() {
+    m := M(W(Box(5)))
+    a := A(9)
+    d := Array<I64>(2, 4)
+    c := C(d)
+    ct := Ctr(11)
+    dd := D(ct)
+    e := E(d)
+    churn()
+    io.Println($m.F() " " $a.G() " " $c.F() " " $c.k " " $dd.F() " " $e.F() " " $e.K)!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

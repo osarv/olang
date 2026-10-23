@@ -8272,6 +8272,15 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n so
         return null
     }
     fs := c.P.T.Items(c.P.T.Fields(t))
+    if i < fs.Len() and fs[i] == types.UnknownT and not c.mentionsVar(t, -1) and c.P.CtorSig(t) != types.UnknownT {
+        # a ":=" field whose type needs the checker (D15: a lambda, a conditional) is its constructor's to say - checked
+        # now where it has not been (fieldTypes fills the field in)
+        id := c.ctorBody(t)
+        if c.state[id] == 0 {
+            c.checkNow(id)
+            fs = c.P.T.Items(c.P.T.Fields(t))
+        }
+    }
     if i >= fs.Len() {
         c.gap(nsp, "a field the checker cannot place")
         return null
