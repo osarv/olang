@@ -2724,9 +2724,17 @@ fn (c mut Checker&) pop() {
     try c.frames.Pop() catch { }
 }
 
-fn (c mut Checker&) fr() mut frame&c { return c.frames[c.frames.Len() - 1] }
+# the innermost frame, and the body it checks: asked only where there is one (an index out of range is unchecked,
+# E16e, and read garbage that differed between the two compilers' builds of the port)
+fn (c mut Checker&) fr() mut frame&c {
+    assert c.frames.Len() > 0, "the checker asked for a frame with none open"
+    return c.frames[c.frames.Len() - 1]
+}
 
-fn (c mut Checker&) cur() mut typed.Body&c { return c.Bodies[c.fr().Body] }
+fn (c mut Checker&) cur() mut typed.Body&c {
+    assert c.fr().Body >= 0, "the checker asked for the body of a frame that checks none"
+    return c.Bodies[c.fr().Body]
+}
 
 # a block of statements checked in a block of its own (O2), its names gone after it
 fn (c mut Checker&) blockOf(body Array<ast.Stmt&>&, kind typed.BlockKind, sp source.Span) typed.Block&c {
@@ -8588,6 +8596,8 @@ fn checkableAst(x ast.Expr&) Bool {
 # whether the body being checked is a generic's instance, or a lambda in one (R8)
 # the function instance whose body is being checked, -1 for none (a constructor's, a global's, a test's)
 fn (c mut Checker&) curInst() I64 {
+    # a frame with no body (fnTypeParams': a signature's rules) is in no instance - c.cur() would index Bodies at -1
+    if c.frames.Len() == 0 or c.fr().Body < 0 { return -1 }
     return match c.cur().Of {
         case typed.BodyOf.Fn(inst) => inst
         case _ => -1
