@@ -1,0 +1,31 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# C2g, D16d (the unpar review): a constructor field's lambda captures the argument, so the instance holds it - kept in a
+# list outliving the loop body the argument dies with, it is refused. It was accepted, the closure in the
+# constructor's frame, and read freed memory
+import "std/io"
+
+type M struct(n I64, data Array<I64>&) {
+    n
+    F fn() I64 = fn() I64 { return data[1] }
+}
+
+fn main() {
+    ms := List<M>()
+    for i in range 3 {
+        d := Array<I64>(4, i + 1)
+        ms.Push(M(2, d))
+    }
+    churn()
+    io.Println($ms[0].F() " " $ms[2].F())!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

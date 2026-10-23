@@ -1101,7 +1101,7 @@ fn (s mut Scoper&) stmts(ss Array<typed.Stmt&>&) {
             case typed.Stmt.Let(_, l, x) {
                 s.decide(l, x, ss, i + 1)
                 # a capturing lambda, or a Call adapter, held in a local only ever called lives in this frame (D16c, E31)
-                if (s.capturingLambda(x) or s.isAdapter(x)) and s.ocStmts(ss, i + 1, I64(l), false) { s.onFrame = true }
+                if (s.capturingLambda(x) or s.isAdapter(x)) and s.onlyCalled(ss, i + 1, I64(l)) { s.onFrame = true }
             }
             case _ { }
         }
@@ -2475,7 +2475,7 @@ fn (s mut Scoper&) kwBlock(b typed.Block&) {
         # a capturing lambda held in a local only ever called never leaves the frame (D16c)
         match st {
             case typed.Stmt.Let(_, l, x) {
-                if s.capturingLambda(x) and s.ocStmts(b.Stmts, i + 1, I64(l), false) { s.kwTransient = true }
+                if s.capturingLambda(x) and s.onlyCalled(b.Stmts, i + 1, I64(l)) { s.kwTransient = true }
             }
             case _ { }
         }
@@ -3416,6 +3416,14 @@ fn (s mut Scoper&) transientNow(callee I64, j I64) Bool {
     pl := I64(b.Params[j])
     if not s.isFunc(b.Locals[pl].Ty) { return true }
     return s.ocBlock(b.Root, pl, true)
+}
+
+# whether local l, declared just before ss[from], is only ever called through after it (D16c, E31): never a constructor's
+# field, which its instance is assembled from as the constructor returns - a use no statement shows - so that a lambda
+# or an adapter given to one lives where the instance can reach it, never in the constructor's frame (C2g, D16d)
+fn (s mut Scoper&) onlyCalled(ss Array<typed.Stmt&>&, from I64, l I64) Bool {
+    if s.B.Locals[l].Kind == typed.LocalKind.Field { return false }
+    return s.ocStmts(ss, from, l, false)
 }
 
 # whether every use of local l in these statements is a call through it (D16c) - or, where passOn, its being handed

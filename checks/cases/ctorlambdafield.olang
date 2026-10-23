@@ -1,0 +1,30 @@
+# check: run
+# flags: -debug -sanitize
+# C2g, D16d (the unpar review): a constructor field given a lambda capturing a reference parameter - the closure lives
+# where what it captured does, the argument's scope, which C2d holds the instance to. It was placed in the constructor's
+# frame (a lambda held in a local only ever called), though a field is assembled into the instance as the constructor
+# returns: the call after the churn read freed memory
+import "std/io"
+
+type M struct(n I64, data Array<I64>&) {
+    n
+    F fn() I64 = fn() I64 { return data[1] }
+}
+
+fn main() {
+    d := Array<I64>(4, 7)
+    m := M(2, d)
+    churn()
+    io.Println($m.F())!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}

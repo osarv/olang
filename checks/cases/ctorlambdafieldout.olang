@@ -1,0 +1,19 @@
+# check: fail error[C2d]: this instance holds a reference to an argument it would outlive
+# C2g, D16d, E31 (the unpar review's neighbours): a constructor field's Call adapter holds its instance - a counter made
+# in the loop body - so the holder, kept outside the loop, is refused
+type Ctr struct(n I64) {
+    n
+}
+fn (c Ctr&) Call() I64 { return c.n }
+type D struct(c Ctr&) {
+    F fn() I64 = c
+}
+
+fn main() {
+    ds := List<D>()
+    for i in range 3 {
+        ct := Ctr(i)
+        ds.Push(D(ct))
+    }
+    assert ds[0].F() == 0
+}

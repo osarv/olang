@@ -1,0 +1,29 @@
+# check: run
+# flags: -debug -sanitize
+# C2g, D16d (the unpar review): a constructor field given a lambda capturing another field of the constructor, whose
+# referent lives with the instance - so does the closure. It was placed in the constructor's frame
+import "std/io"
+
+type M struct(n I64, d Array<I64>&) {
+    n
+    own Array<I64>& = Array<I64>(4, 8)
+    f fn() I64 = fn() I64 { return own[1] + d[0] }
+}
+
+fn main() {
+    d := Array<I64>(4, 7)
+    m := M(2, d)
+    churn()
+    io.Println($m.f())!
+}
+
+fn churn() {
+    for i in range 300 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        m := Map<I64, List<I64>>()
+        m.Put(i, b)
+        assert a[3] == i
+    }
+}
