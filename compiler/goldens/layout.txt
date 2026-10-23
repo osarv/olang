@@ -11391,11 +11391,17 @@ fn(mut checks/checks:report&, std/prelude/text:String&, std/prelude/text:String&
 fn(mut checks/checks:report&, std/prelude/text:String&, std/prelude/text:String&, I32, std/prelude/text:String&) ? checks/checks:Failed	16 8	{ ptr, ptr }	-	ret i32 pass vvvvv
 fn(mut checks/checks:report&, std/prelude/text:String&, std/prelude/text:String&, std/prelude/text:String&) ? checks/checks:Failed	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
 fn(mut std/chan:Chan<I64>&, mut Array<std/prelude/text:String&>&)	16 8	{ ptr, ptr }	-	ret void pass vv
+fn(mut std/prelude/map:MapIter<std/prelude/text:String&, Bool>&) ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret i32 pass v
+fn(mut std/prelude/map:MapIter<std/prelude/text:String&, Bool>&) std/prelude/map:MapEntry<std/prelude/text:String&, Bool> ? std/prelude/iterator:Exhausted	16 8	{ ptr, ptr }	-	ret { i32, %"std/prelude/map:MapEntry<std/prelude/text:String&, Bool>" } pass v
+fn(std/prelude/map:Map<std/prelude/text:String&, Bool>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
+fn(std/prelude/map:Map<std/prelude/text:String&, Bool>&) std/prelude/map:MapIter<std/prelude/text:String&, Bool>	16 8	{ ptr, ptr }	-	ret %"std/prelude/map:MapIter<std/prelude/text:String&, Bool>" pass v
+fn(std/prelude/map:Map<std/prelude/text:String&, Bool>&, std/prelude/text:String&) Bool ? std/prelude/map:MapError	16 8	{ ptr, ptr }	-	ret { i32, i1 } pass vv
 fn(std/prelude/text:String&) checks/checks:stored	16 8	{ ptr, ptr }	-	ret %"checks/checks:stored" pass v
-fn(std/prelude/text:String&, I64) (I64, I64, I64)	16 8	{ ptr, ptr }	-	ret { i64, i64, i64 } pass vv
 fn(std/prelude/text:String&, std/prelude/text:String&) std/os:Output	16 8	{ ptr, ptr }	-	ret %"std/os:Output" pass vv
 fn(std/prelude/text:String&, std/prelude/text:String&, std/prelude/text:String&, std/prelude/text:String&, std/prelude/text:String&, I64) mut std/prelude/text:String&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvvvvv
 mut checks/checks:report&	8 8	ptr	-	-
+mut std/prelude/map:MapIter<std/prelude/text:String&, Bool>&	8 8	ptr	-	-
+std/prelude/map:MapIter<std/prelude/text:String&, Bool>	32 8	%"std/prelude/map:MapIter<std/prelude/text:String&, Bool>"	{ ptr, i64, ptr, ptr }	fields 0,8,16,24
 == fuzz/fuzz.olang
 Array<Bool, 4096>	4096 1	[4096 x i1]	-	-
 Array<Bool, 4>	4 1	[4 x i1]	-	-
