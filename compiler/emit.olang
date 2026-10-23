@@ -75,6 +75,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dtorOf Map<types.TypeId, I64>
     indexed Bool = false
     Module Bool = false             # one module compiled alone (compile): its own bodies, no entry
+    SplitFrom I64 = 1 << 62         # the IR from which an object larger than PartSize is cut into parts (Objects)
     emitted Bool = false
     tyDef List<String&>             # each type spelled by name, defined: "%\"NAME\" = type BODY"
     tyAt Map<String&, I64>          # a type's definition by its name (between the quotes)
@@ -137,7 +138,9 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
 # the root's (in a -debug build the root's instances object), main or the test harness in the root's; each declares what it names of the others and
 # carries a copy of the declarations, helpers and constant data it uses. An object's text depends only on what is in
 # it: its items in the order of their symbols, its private symbols numbered in the order it names them. Compiling one
-# module (Module) gives that one object, the instances it uses in it
+# module (Module) gives that one object, the instances it uses in it. In a -debug build, or one whose IR is SplitFrom
+# or more (which links by ThinLTO), an object holding more than PartSize of items is cut into parts, each item in the
+# part its symbol's hash picks, so the parts compile side by side and an edit recompiles the part holding it
 fn (e mut Emitter&) Objects() List<Object> {
     e.emitAll()
     out List<Object>
@@ -150,18 +153,44 @@ fn (e mut Emitter&) Objects() List<Object> {
     used Map<I64, Bool>
     for h in e.itemHome { used.Put(h, true) }
     rootKind := ObjectKind.Tests if e.Tests else ObjectKind.Main
+    total I64 = 0
+    for t in e.itemText { total += t.Len() }
+    split := e.Debug or total >= e.SplitFrom
     for m in range mods.Len() {
-        if m != root and used.Has(m) { out.Push(Object($mods[m].Identity, ObjectKind.Module, e.assemble(m, false))) }
+        if m != root and used.Has(m) { e.parts(out, $mods[m].Identity, ObjectKind.Module, m, false, split) }
     }
     # B3d: the instances in an object of their own where nothing is optimized (-debug: an edit to the root recompiles
     # only its own code), and in the root's otherwise - as stage 0's - so the root's code inlines the instances it
     # calls before the link: a loop over a Vec in the root, its At and Len in another object, measured 2x slower
     # (`for x in v`, bench/vec.olang walk), the link's optimization not recovering what the module's missed
-    if e.Debug and used.Has(HomeInst) {
-        out.Push(Object($mods[root].Identity, ObjectKind.Instances, e.assemble(HomeInst, false)))
-    }
-    out.Push(Object($mods[root].Identity, rootKind, e.assemble(root, not e.Debug)))
+    if e.Debug and used.Has(HomeInst) { e.parts(out, $mods[root].Identity, ObjectKind.Instances, HomeInst, false, split) }
+    e.parts(out, $mods[root].Identity, rootKind, root, not e.Debug, split)
     return out
+}
+
+# the objects holding home's items (and the instances', alsoInst): one, or where split and they are more than
+# PartSize, as many parts as it takes - the first named identity, the others identity-K
+fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKind, home I64, alsoInst Bool, split Bool) {
+    size I64 = 0
+    for i in range e.itemSym.Len() {
+        h := e.itemHome[i]
+        if h == home or (alsoInst and h == HomeInst) { size += e.itemText[i].Len() }
+    }
+    n := (size + PartSize - 1) / PartSize if split else 1
+    if n < 1 { n = 1 }
+    for k in range n {
+        out.Push(Object($identity if k == 0 else $identity "-" $k, kind, e.assemble(home, alsoInst, k, n)))
+    }
+}
+
+# the IR of one part an object is cut into, at most (Objects)
+PartSize I64 = 2 << 20
+
+# the part of n item i is in: its symbol's hash, so where an item goes depends on its symbol alone
+fn (e Emitter&) partOf(i I64, n I64) I64 {
+    if n <= 1 { return 0 }
+    h := e.itemSym[i].Hash() % n
+    return h + n if h < 0 else h
 }
 
 # a module's first lines
@@ -296,14 +325,14 @@ fn refsIn(text String&) List<I64> {
 
 fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c == '.' or c == '$' or c == '-' }
 
-# one object's text: the items homed at home (with the instances' too, alsoInst), each shared or local item they name
+# one object's text: the items homed at home (with the instances' too, alsoInst) in its part of parts, each shared or local item they name
 # copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
 # another object, and the types they name
-fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
+fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1) String {
     mine List<I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
-        if h == home or (alsoInst and h == HomeInst) { mine.Push(i) }
+        if (h == home or (alsoInst and h == HomeInst)) and e.partOf(i, parts) == part { mine.Push(i) }
     }
     syms := e.itemSym
     sorted := mine.ToArray()
@@ -343,9 +372,8 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
                     rename.Put(j, $prefixOf(e.itemSym[j]) $nloc)
                     nloc++
                 }
-            } else if h == home or (alsoInst and h == HomeInst) {
-                # homed here (always in order already)
             } else {
+                # homed in another object (another part of this one's home included)
                 declared.Put(j, true)
                 decls.Push(e.itemDecl[j])
             }
