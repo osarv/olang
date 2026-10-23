@@ -11365,6 +11365,7 @@ fn(std/prelude/text:String&, Array<std/prelude/text:String&>&) I32	16 8	{ ptr, p
 compiler/tools/layoutdiff:outcome	40 8	%"compiler/tools/layoutdiff:outcome"	{ { i64, ptr }, i64, i64, i64 }	fields 0,16,24,32
 fn() compiler/tools/layoutdiff:outcome	16 8	{ ptr, ptr }	-	ret %"compiler/tools/layoutdiff:outcome" pass 
 fn(std/prelude/list:List<std/prelude/text:String&>&, std/prelude/list:List<std/prelude/text:String&>&, Array<std/prelude/text:String&>&) compiler/tools/layoutdiff:outcome	16 8	{ ptr, ptr }	-	ret %"compiler/tools/layoutdiff:outcome" pass vvv
+fn(std/prelude/text:String&, std/prelude/map:Map<std/prelude/text:String&, std/prelude/text:String&>&, I64) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vvv
 == compiler/tools/layoutgold.olang
 fn(std/prelude/text:String&, mut std/prelude/text:StringBuilder&, std/prelude/text:String&, std/prelude/text:String&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vvvv
 == compiler/tools/lowerdump.olang

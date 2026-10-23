@@ -1278,7 +1278,7 @@ ad7367de57562da1 9a6c43de42c37da3 checks/fixtures/vecalias/f3.olang
 007370a44d8f74de e0d8c45607b95cda checks/fixtures/vechandle/stale.olang
 8edc6cb0ea109099 41da8907a6dddc3c compiler/ast.olang
 64349a76431afaac 03801515d7c3e61c compiler/build.olang
-3c978618e806434c 100738aa5cfcbcf2 compiler/check.olang
+3a417004516659b7 749c03025eebaa61 compiler/check.olang
 12af31fc7f832527 c046e16c5f4e3c62 compiler/cond.olang
 2fa796a5227631eb 2e568744b665260b compiler/diag.olang
 bb54c10d2432756e 86bc1e00aa8d081f compiler/emit.olang
@@ -1327,7 +1327,7 @@ b96c47d2da152abc e187928785f2e635 compiler/tools/emitdump.olang
 6ab2b984cab60597 d9aca3c097a70053 compiler/tools/evaldiff.olang
 22a2fcec0b5a2341 4422f803ebf2944e compiler/tools/evaldump.olang
 dda496b853398dcb ee7b02e8b16426ff compiler/tools/fmt.olang
-93e9ab4b2c823ebd 72c9b070ff5f1768 compiler/tools/layoutdiff.olang
+e41110cef516f3fc 0322785e25a57af2 compiler/tools/layoutdiff.olang
 97900de1bfb3d3fd 18123b34a65b6a31 compiler/tools/layoutgold.olang
 ef89763b5a0d90d1 93aeefa2fc19e9d4 compiler/tools/lowerdump.olang
 a76034d3eec73c43 ef7b3ae293649a3c compiler/tools/modgraph.olang
