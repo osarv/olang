@@ -5021,8 +5021,11 @@ text), which carries nothing of it. A local declared from a call whose result ho
 argument living in a block of this function refers to (the callee holds that argument's scope to outlive its result
 scope, O10b - `l := groups.Get(k)`, `groups` a local) is not moved by such a flow: its result cannot live where the function's does,
 and the move would only make an error of what is correct in the block. Returned **directly** - `return l`, or as a
-value the return reads it into - it is moved all the same, and the callee's obligation then makes the call an error
-(O10c): `l := try groups.Get(k); return l`, `groups` a local, would hand back the local map's state. So the recursive-descent and Pratt idioms are
+value the return reads it into - it is moved all the same, and so is what its initializer reads, which flows into it as
+into any returned local, a `try` written before the call changing nothing: `l := try groups.Get(k); return l`,
+`groups` a local, moves `groups` to the result scope too, so the state `l` hands back lives there. Where what it reads
+is a parameter's (`groups` a parameter), the callee's obligation is the function's own, met at each of its calls
+(O10c). So the recursive-descent and Pratt idioms are
 correct as written:
 
 ```
