@@ -19,7 +19,7 @@ build/out build bench/runfused.olang && build/bench_runfused  # the batched, fus
 
 `run.olang`, `ir.olang`, `rungemm.olang`, `runfused.olang` and `repro/opt.olang` are the drivers; `benchlib.olang` is what
 they share (the compiler to build with, running a program in this directory without a shell, the `BENCH_LOCK` flock).
-`OLANG=PATH` names another compiler to build with (default `build/out`). Each driver runs from the repository root and
+`OLANG=PATH` names another compiler to build with (default `build/out` where it is built, else `build/olang`). Each driver runs from the repository root and
 keeps its files under `bench/build/`. (`rungemm` and `runfused` carry a `run` in their names because `gemm.olang` and
 `fused.olang` are the programs they run.)
 

@@ -96,4 +96,5 @@ make evaldiff      # the corpus, std's tests and the checks' run cases run by th
 
 The `*diff` targets build `build/compiler_tools_dump` first, and the C oracles in `bootstrap/oracle/` where a golden's
 capture or a file edited since needs them.
-`make verify` runs tokdiff, astdiff, namesdiff, layoutdiff, fmtdiff and drvdiff.
+`make verify` runs tokdiff, astdiff, namesdiff, layoutdiff, fmtdiff and drvdiff; `make verify OLANG=build/olang`
+runs the whole verify with the port and without stage 0 or its oracles (the makefile's `STAGE0`).

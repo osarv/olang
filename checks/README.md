@@ -40,7 +40,7 @@ build/out test checks/checks.olang       # only this
 ```
 
 Every check works in its own directory under `build/checks/`, so nothing touches the tree. It uses the compiler in
-`$OLANG`, else `build/out`. The run needs several GB of memory (the largest scenario, `agree`, about 3.5 GB).
+`$OLANG`, else `build/out` where it is built, else `build/olang`. The run needs several GB of memory (the largest scenario, `agree`, about 3.5 GB).
 
 Part of `make verify`. The messages the cases expect are produced by `bootstrap/errmsg.c`;
 `compiler/goldens/diag.txt` is captured from the `fail` cases, and `compiler/goldens/run.txt` holds what each `run`

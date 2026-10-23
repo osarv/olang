@@ -1327,7 +1327,7 @@ a76034d3eec73c43 ef7b3ae293649a3c compiler/tools/modgraph.olang
 31e02919f714ef5c 729cdcfa3dd69470 compiler/tools/scopediff.olang
 4598e2497e542d2e 320581748d6cc726 compiler/tools/scopedump.olang
 e870046081c5ec29 91d2773c8159dd37 compiler/tools/seed.olang
-c5e5f4bf93a21310 f4497d7a17c994bb compiler/tools/tokdiff.olang
+391df24009b2d5c2 a936ff3ff3fc3421 compiler/tools/tokdiff.olang
 7ac5bb22e308ae23 993786a80cafdcae compiler/tools/toolkit.olang
 928dbf33d736c5dc ca23941a04fc37f0 compiler/typed.olang
 a64c5c68e5171924 b9970808b42cf1b4 compiler/types.olang
