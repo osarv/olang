@@ -1151,6 +1151,11 @@ These are extrapolations from the measurements above, to be measured at M10.
    (M9 round 4): the compiler's link had reached 172 s; a program of 8 MB of IR or more now links by ThinLTO with the
    plugin's cache - the clean -O3 self-build 213 s -> 108 s, an edit 3.5 min -> 43 s, the compiler as fast.
 8. **Parse modules in parallel** (section 1.4). This is small but free.
+9. **Objects that compile side by side and are shared** (M9 round 6, built): every body of every module but the root
+   is emitted, so a module's object depends on the module and the mode alone and every program in one directory
+   shares it; in a -debug build or one of 8 MB of IR or more, an object over 2 MB is cut into parts by its items'
+   symbols' hashes; a stack slot stored once and loaded once is folded before clang reads it; the test harness is a
+   table and one loop. tests/shared.olang's test build 223 s -> 55 s, the port-run verify 40.7 -> 28.4 minutes.
 
 Make targets: `make dev` (the compiler at `-d`, incremental) is the edit loop; `make` builds a release compiler
 with the installed one; `make bootstrap` is section 5.

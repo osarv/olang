@@ -21765,3 +21765,79 @@ miscompile: the source had undefined behaviour, and the two compilers' arenas la
   share_B, k2's Ring, interp's cyclic, vechandle's interpreted stale view, spawnerr's -debug -sanitize tasks, strheld's
   g9dorder). checkir, tokdiff, astdiff, namesdiff, fmtdiff and drvdiff pass; layoutdiff differed only by the
   Emitter's new field, captured again (`make layoutgold`).
+
+## Port M9, round 6: what building with the port costs (2026-10-23)
+
+The suite with the port as the compiler under test (`make -i verify OLANG=build/olang`) took 37-41 minutes, its largest
+process 8.9 GB, and an -O3 test build of tests/shared.olang had been seen at 7.4 GB. Measured first, one build at a
+time with the process tree's resident memory sampled every half second (on a machine shared with other agents, so
+times are within about 20%):
+
+- **The front end is not where it goes.** The port's front end on tests/shared.olang takes 4.5 s and 0.97 GB (an
+  unchanged rebuild, everything cached); on the compiler itself about 20 s and 1.1-1.25 GB; a hello world 0.17 s.
+  tests/shared.olang's test build took 223 s and 2.0 GB, nearly all of it clang: its root object was one 19.5 MB IR
+  file, compiled by one `clang -O3 -flto=thin -c` (28 s, one core) and optimized again by one ThinLTO backend (most of
+  the rest). Stage 0's build of the same: 320 s, 3.0 GB.
+- **The 8.9 GB process is `olang interpret cyclic.olang`** (checks' interp scenario: `==` on data that holds itself,
+  which recurses without end): the port's evaluator reaches 8.8 GB in 31 s and stops with "uses storage after the scope
+  it was made in closed", not at its depth budget (lowering the budget from 10,000,000 to 2,000,000 frames changed
+  neither, and was not kept). Stage 0 stops at 100,000 frames with "the comparison recurses deeper than interpret
+  allows"; the scenario fails on the port already. Left open: it is the evaluator's memory per frame of that
+  recursion, not building.
+- No 7.4 GB link was seen: the test build links by ThinLTO (its IR is over B2d's 8 MB), the link's largest process
+  1.0 GB.
+
+What was changed, each committed alone, none changing what a program means:
+
+1. **The test harness is two tables walked by one loop each** (initializers, tests), behind one recovery point. It was
+   unrolled: a setjmp per initializer and per test in `main` (846 in tests/shared.olang's), and since each test is
+   called once, the link inlined every one into `main` - a function the size of the program, which the optimizer
+   spent most of the build on. The counters live across the setjmp, so they are read and written volatile (X3b).
+   tests/shared.olang's test build 223 s / 2.0 GB -> 93 s / 1.35 GB.
+2. **Large objects are cut into parts** (`emit.Objects`, `PartSize` 2 MB): in a -debug build, or one whose IR is 8 MB
+   or more (one that links by ThinLTO, `ThinFrom`), the items of an object holding more than 2 MB are spread over as
+   many parts as that takes, each item in the part its symbol's hash picks - so the parts compile side by side, the
+   ThinLTO backends run side by side, and an edit recompiles the part holding what changed. A part is another object of
+   the same home (its identity `NAME-K`, declaring what the other parts define); a small program, the benchmarks
+   included, keeps one object per module and full LTO, as B2d and B3d measured them.
+3. **A stack slot stored once and loaded once is folded away** (`emit.foldSlots`, over each function's text as it is
+   written): when its alloca, one store and one load are a slot's only mentions, the store in the load's block and
+   before it (or in the entry block), the three lines go and what the load defined is named by the stored value. Nothing
+   else reads, writes or takes the address of such a slot, so the load gives the stored value: what LLVM's mem2reg makes
+   of it, done before clang parses it. Lowering makes one for most values in flight: 44,000 of tests/shared.olang's
+   88,000 slots, its IR 19.5 -> 14.8 MB. The machine code at -O3 is what it was (checked below); at -O0 those values
+   no longer go through memory.
+4. **Every body of every module but the root is emitted**, not only what the program reaches - which reverses round
+   3's "objects are built from what the program reaches". A module's object now depends on the module and the build's
+   mode alone, so programs built in one directory share it - the compiler's modules are compiled once for the
+   twenty-odd test builds of compiler/'s files (776 s -> 434 s of the port-run verify), and checks.olang's seeded
+   prelude objects are reused again (with the port each case's had held what that case reached, so none matched). The
+   cost is compiling and linking what no program calls: a hello world in an empty directory 0.82 s -> 2.24 s, the
+   whole prelude compiled once; a second program there 0.74 s -> 0.83 s, its root's object alone compiled but more
+   bitcode linked. Kept, since the suite and any directory building many programs pays that once.
+   Emitting in another order found a latent bug: whether a function's result or parameter goes through memory
+   (types.ViaMemory) depends on its size, known only once laid out, and a function's header asked before its body's
+   locals had laid the type out - `Lowerer.Lower`'s 192-byte mir.Fn read as small in the header and was returned
+   through %out by the body, which clang refused. A function type's result and parameters are now laid out before a
+   header, a call, an adapter or a task asks (`Emitter.signature`).
+
+Numbers (before = 356eb5c, after = this round; the port built by itself unless said, each run alone):
+
+| | before | after |
+|---|---|---|
+| `make -i verify OLANG=build/olang` | 2444 s (40.7 min) | 1702 s (28.4 min), the same failures |
+| its compiler/ test files (25-27 test builds of the whole compiler) | 776 s | 434 s |
+| its largest process | 9.2 GB, `interpret cyclic.olang` | 9.2 GB, the same (open, above); else 2.4 GB (build/olang.1 building olang.2) |
+| tests/shared.olang's test build | 223 s, 2.02 GB | 54.5 s, 1.42 GB (stage 0: 320 s, 3.03 GB) |
+| its IR | 20.4 MB in 15 objects | 16.3 MB in 21, the root's in 7 parts of 1.9-2.4 MB |
+| the self-build at -O3, clean | 133 s, 1.96 GB | 113 s, 1.67 GB |
+| the self-build at -debug, clean | 38.8 s, 2.38 GB | 34.9 s, 1.89 GB |
+| a hello world in an empty build directory | 0.82 s | 2.24 s (the whole prelude's objects compiled, once) |
+| a second program there | 0.74 s | 0.83 s (its root's object alone compiled) |
+
+stage 1 == stage 2 at -debug (the new compiler built by itself, then by that, byte for byte), and `make bootstrap`'s
+build/olang.2 == build/olang.3 at -O3. The benchmarks' machine code (nbody, spectral, sum, vec, binarytrees, text,
+mandelbrot, fannkuch, built by the port before and after) is instruction for instruction the same but for vec's one
+`cmp $0x20; jae` that is now `cmp $0x1f; ja` - so principle 2 is where it was. Not done: the front end's own memory
+(about 1 GB, held while clang runs; every pass allocates in the configuration's scope, so it is freed only at exit);
+the evaluator's memory on the cyclic recursion.
