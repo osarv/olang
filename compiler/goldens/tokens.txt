@@ -107,6 +107,8 @@ d6cf37382bfc9f9f 08d44f655dd8a633 checks/cases/c2afieldparam.olang
 db41416a2af6a616 710d5663ea4527de checks/cases/c2dbuildarg.olang
 cdd796c3b45c49fe 00c3c0139af7e86c checks/cases/c2dbuildassign.olang
 7ae9c0edabd97fb8 9241cfe923652f11 checks/cases/c2dbuildlocal.olang
+9b1359b18ed7a9d0 86f6249532bd9079 checks/cases/c2dcondfield.olang
+a4c262d395cb8cf1 948ef7fe214f0d82 checks/cases/c2dcondfieldok.olang
 54a47714c4338466 904a00081d0dd15a checks/cases/c2dctorarg.olang
 27c988c0f2e46b75 7515d47aa9580522 checks/cases/c2dctorbuilds.olang
 31b63b250bb35726 858d1423a93773b3 checks/cases/c2de25blocklocal.olang
@@ -116,6 +118,7 @@ a631bb5e784e3de1 bf4df153773b223f checks/cases/c2dexactobliged.olang
 d3b3dbf823a3d01e 0b0d8e6ddc5db672 checks/cases/c2dfieldoutlives.olang
 bd0c3c362aba1d27 76159d1b3bad9bfa checks/cases/c2dheldpush.olang
 58cb8928f700309f bdc86e51e5a0ae63 checks/cases/c2dheldreturned.olang
+9a04463eef77af3d 1333f276a6a6ab67 checks/cases/c2dmatchfield.olang
 ed248d12740dcc12 bec3d8da4ad08606 checks/cases/c2dmixedscopes.olang
 8672e1abc0d1305c a01122aa8317213c checks/cases/c2downarr.olang
 5724168666bd8f2f e97179aa2599d8b1 checks/cases/c2downfield.olang
@@ -600,6 +603,8 @@ c385af11748be396 192d55a90c8b6b30 checks/cases/o25scopeargborrow.olang
 496ed6c78718abd9 fd0f8a0aeb81ecda checks/cases/o26acyclereceiver.olang
 006d185f64b7bd20 89df8066935d5ce7 checks/cases/o26afieldafter.olang
 fdaa2b081e9aab3f 5bede9e0d32fdd53 checks/cases/o26ainlinearray.olang
+0373d0a22919b9fb 473773bf72a99df4 checks/cases/o26alatermodule.olang
+ab2e0bf6dfe8f19c 443a6b2d82bd5726 checks/cases/o26alatermodulekept.olang
 b560e6c5fe64c208 7765a1e5dc0b787e checks/cases/o26anumberstore.olang
 6f9a5f5dfe19ce21 5bd8e04fabab71ac checks/cases/o26anumberstorefix.olang
 aa974ec2e0a39d63 682a97aa3e03b164 checks/cases/o26areflocal.olang
@@ -837,7 +842,9 @@ a0f90b440e1e4ec3 668cd744ed44c3a9 checks/cases/s5handlerepoint.olang
 ab2925ddac2b8d70 1a0da3bd48e7e6d4 checks/cases/s5heldindexnote.olang
 5418484143d9f2f3 19d9b3d9a3a7962f checks/cases/s5helperlist.olang
 f176ec7c9db0660b e093ed5e6781ffe9 checks/cases/s5keepcall.olang
-4943145317e9b2e5 4e1fce78c6506c68 checks/cases/s5mapgetreturn.olang
+7a4d8ffdbf16d100 bf868bb2e7ae343a checks/cases/s5mapgetreturn.olang
+7c643bb21e1d7d70 31deca61904d09cb checks/cases/s5mapgetreturnparam.olang
+eaed0e45745d5387 3239dc4f0d98b390 checks/cases/s5mapgetreturnsan.olang
 03253b024e11f7d3 4d37ce00ce972bdb checks/cases/s5nestedhandle.olang
 8c42dc386f1b982e 2a6c75ca5791033e checks/cases/s5nestedhandlemap.olang
 130f1bedf710bce1 8b54029b66cf7834 checks/cases/s5projection.olang
@@ -1300,7 +1307,7 @@ f4a00eaad6bbd836 033b7f58784464f2 compiler/olang.olang
 4670264aff7b2b79 6b9f507f0c637563 compiler/parse.olang
 ccc000d5f2aa68e5 62b82c76b0b65e77 compiler/runtime.olang
 54d8b0747fd20c3d 65b4634831f63fdb compiler/scan.olang
-7267c15de0fa59d7 cd82a0918ba15a40 compiler/scope.olang
+0442dd8d6f006966 18ae2cef4001d527 compiler/scope.olang
 2fcf14bf51027aaf e739c0b2ca9489d3 compiler/source.olang
 2f117e004f83056f 95a2b4c76526191b compiler/target.olang
 6a532120b548d9b9 1f959f62979af9eb compiler/testdata/lex/brackets.olang
@@ -1366,7 +1373,7 @@ f8eb9903e0fd1405 2f351680a962dbc6 fuzz/repro/bf16fastisel.olang
 7f0ccc6c8abe7127 a83f600723bcb54e fuzz/repro/scopepayloadcopy.olang
 cc965165e6e229ae f831f156f55a8d9b fuzz/repro/trygenericindex.olang
 bcaca9898b51c76c 4cccee54556e71ed fuzz/repro/trystmtarg.olang
-125d6aa5b7f7252c 8d566d1d77883771 fuzz/scopegen.olang
+72b8f83c09245781 5557f73662b15e5e fuzz/scopegen.olang
 e35ad78253a0233f fc339a29aeecea0a std/cancel.olang
 65739b3a2d0cd066 4f56eee50530ab83 std/chan.olang
 5c772f20fa8ceeda 7dcf69d6c39c7c5f std/csv.olang
