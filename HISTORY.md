@@ -22246,3 +22246,70 @@ libdl, the makefile of that commit having the rules); the old compiler's checks 
 **What replaced it**: as the oracle, the stored goldens (`compiler/goldens/`, what stage 0 said: tokens, trees, module
 graphs, layouts, diagnostics, driver outputs, test runs); a golden is changed only by its make target, from the port. For
 building from nothing, the seed (`seed/`, `make bootstrap`), which needs clang and xz alone.
+
+## Port: the parity readings reverted (2026-10-23)
+
+While stage 0 existed the port matched it exactly, including two cautious readings of the flow into the result
+(O26a) that the suite's fourth round (above, "Port M12 ... fourth round") copied in only so that nothing stage 0
+refused was accepted. With stage 0 gone (the user: "once the C compiler is gone, we have free reins to do anything
+optimization we want. Revert it then"), both are reverted, and the port reads that flow as SPEC O26a states it.
+
+**1. A local named after a written `try` flows like any other (s5mapgetreturn).** Stage 0 found a local's flow on the
+tokens and skipped the local written first after a `try` - the receiver of a tried method call, the place a tried
+index reads - so `l := try m.Get(1); l.Push(5); return l`, `m` a local Map, left m in its block and Get's obligation
+refused the call (O10c). The port had moved m to the result scope and accepted the program, which is sound: what l
+hands back is m's state, which then lives where the result does. `writtenTry` and `carriedAfterTry` are gone; a try's
+operand is carried as any other value (`carried`). SPEC O26a's example said the cautious reading (the call an error);
+it now says what the flow reads, and that a parameter's map makes the obligation the function's own, met at its calls.
+
+*Why it is sound.* Moving a local to the result scope only lengthens where its storage and what is built into it live
+- the result scope outlives every block of the function. Nothing is judged less: what the moved local then holds is
+held to the result scope by the same obligations (O10b), so a map that cannot move - a parameter's - leaves the
+obligation to the callers, and a caller handing in a map from a block that closes first is refused at its call
+(checks/cases/s5mapgetreturnparam, O10c).
+
+**2. A plain call to a function of a module found later is read by its checked body.** Stage 0, which had not checked
+such a body yet, took the callee to keep whatever it is given, and the fourth round read it so in O26a's walk
+(`laterModule`; the fifth round had already narrowed it to that walk). The scope pass judges bodies callee first, a
+component of the call graph at a time, so a later module's callee is summarized before its caller is judged, as every
+other callee is; one not summarized yet (in a cycle) is still taken to keep everything (`canKeep`). A call whose
+result holds no reference now carries nothing, as for every other callee.
+
+*Why it is sound.* The flow decides only which locals are moved to the result scope; reading a callee as keeping
+less moves fewer. A local left in its block is then judged in its block: whatever needs it to live longer - a return
+of what refers to it, a store into a longer-lived place - is refused by the obligations the callee's body records
+(O10c, O26), which the flow does not replace. So the precision it loses can only refuse, never accept a program that
+reads freed storage - provided the callee's obligations are complete, which is what the next item was not.
+
+**Found by it: a constructor field given a conditional or a match was not judged (C2d, E28; a use after free in the
+port before this round).** Reverting item 2 made `m := try linalg.View(d, 0, n, n); return m`, `d` a local array, read
+freed storage under `-sanitize`: View's result is a Matrix whose `Data` field is `(data[...] if data != null else
+Array<T>(...))`, and a bare field initialized with a conditional or a match of references living in different scopes
+took the path a local takes - "held where it is declared, not known here" - and returned before C2d's fit, so the
+instance's holding its argument was never recorded. With later modules read as keeping everything, `d` had been moved
+to the result scope anyway, which hid it there; elsewhere it was open in the port: keeping a view of a loop
+body's array in a list outliving the loop (`ms.Push(try linalg.View(d, 0, 2, 2))`) was accepted and read freed memory.
+A constructor field is the instance's slot whatever value it gets, so each value the choice can give is now judged as
+stored there alone (E28's rule, which SPEC already stated), exactly where something can be stored through it (O25g);
+the new value is built with the instance. checks/cases/c2dcondfield and c2dmatchfield (C2d), o26alatermodulekept
+(O10c, the linalg shape) must fail; c2dcondfieldok, o26alatermodule, s5mapgetreturn and s5mapgetreturnsan run (all but
+s5mapgetreturn under `-debug -sanitize`), each read back after an arena churn. The scope fuzzer writes the shape
+now (`ctorScopeOp`'s kinds 5 and 6: a field choosing the argument or new text): the compiler before this round gives 2
+findings on seeds 1-150, this one none on 1-600.
+
+**Measured.** `make scopediff`: refused cases 284 of 287 give the stored first error (the same three position
+differences as before), 287 of 287 say their pinned message, 0 cases the scope pass misses (s5mapgetreturn was the one
+left "on purpose"), 314 of 314 accepted programs scope clean. The goldens of the new and changed cases were captured
+from the port, one case at a time - the others still hold what stage 0 said (a wholesale `make diaggold` would replace
+389 lines of stage 0's diagnostics with the port's, which scopediff and namesdiff measure the port against); a full
+`make rungold` differed from the stored runs only by the four new run cases.
+
+**Other readings kept for parity, looked for.** None else accepts less than SPEC states. What the compiler's comments
+still credit to stage 0 is behaviour SPEC states (O18c's landing by obligations only where forced, C2d's binding of an
+instance's arguments, a three-clause `for`'s variable in the block around the loop), where a diagnostic is said, or
+code-generation choices (instances in the root's object, stage 0's measured writes). Listed for later, not changed:
+storing what lives where a scope variable says into a global is O1b's error rather than an obligation on the callers
+(scope.olang, `fit` with `FitGlobal`); mir.olang's `Fn.Add` pushes through a local because stage 0 built a list
+element's first chunk in the call's frame (`f.Blocks[i].Stmts.Push(s)`); and a plain copy of a value local
+(`keep := l; return keep`) is no flow of its source (O25h's guard), so with `l` from a local map that program is O26's
+error where `return l` runs.

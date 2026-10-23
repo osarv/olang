@@ -394,7 +394,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   demand and at a fixed point); temporaries built where the obligation says (O18b/O18c). A `:=` from a call lands by
   obligations only where something is kept.
 - **A returned local lives where the result goes (O26a).** A value or reference local the function returns, or that
-  flows into what it returns, lives in the result scope - Go's escape analysis, static.
+  flows into what it returns, lives in the result scope - Go's escape analysis, static. The flow is read as SPEC states
+  it, every callee by its checked body and a `try` changing nothing (2026-10-23: the two cautious readings the port
+  copied from stage 0 for parity reverted, HISTORY.md "Port: the parity readings reverted"). A constructor field
+  given a conditional or a match is the instance's slot, each value judged as stored there alone (C2d, E28).
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
 - **Derived and unknown scopes (O12, O23, O23a).** A `&p` field of a parameter reads at a derived scope resolved per
@@ -624,7 +627,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   interpret` running main placed by the scope pass, each scope reclaimed and its destructors run as it closes, immutable globals baked into emitted data by the driver too (K2, K2c), what two baked globals reach written once per module (K2b), a local condition decided reading no build constant an error (S8a), a top-level condition that does not decide an error (B9c), T29d's literals and D13c's zero values decided, a global that aborts an error (K2), a stale Vec view stopping evaluation (M19g), tasks run in sequence at the join under interpret too (B3e, decided: interp's tasks.olang pins it), constants computed by calls (G21), the
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
   plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 7: every program stage 0
-  accepts is scope clean (307 of 307), 275 of 280 refused cases give stage 0's first error, 1 still gets none (kept on
+  accepts is scope clean (307 of 307), 275 of 280 refused cases give stage 0's first error, 1 still gets none (s5mapgetreturn, 0 since 2026-10-23: it runs; kept on
   purpose), call results and constructors' fields carry instance records (O13c, O23a); the port built `-debug
   -sanitize` runs the compiler's, std's and the corpus's tests with no use after a scope closed; HISTORY.md "Port M6"). M9, `compiler/emit.olang` (MIR written as LLVM IR, one object per module - each module's, the root's
   instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
@@ -642,7 +645,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   checks/checks.olang is the open part - after the fourth round 19 of its 1,069 cases and 4 of its 56 scenarios, all the
   evaluator's (HISTORY.md "Port M12", four rounds, the third with what replacing the stage-0 comparisons by stored
   outputs takes; the fourth reads stage 0's flow - a local named right after a written "try", a later module's
-  function - as stage 0 does, so nothing it refuses is accepted; the fifth, parity before bootstrap/ goes: of the
+  function - as stage 0 does, so nothing it refuses is accepted (both reverted once stage 0 went); the fifth, parity before bootstrap/ goes: of the
   repository's 1,422 files the port builds every one stage 0 builds and refuses every one it refuses - a later module's
   callee read by its body where a local's landing is decided (O18c), interpret running the deferred code of the blocks a
   stop leaves and aborting on a failed check as stage 0 does (B3e), a dropped branch's syntax error hiding nothing (B4,
