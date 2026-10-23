@@ -3850,6 +3850,16 @@ fn (s mut Scoper&) let(sp source.Span, l typed.LocalId, x typed.Expr&) {
     # into nor stored through (E28, O12)
     match v.T {
         case Term.Set(_) {
+            if loc.Kind == typed.LocalKind.Field {
+                # a constructor's field is a slot of the instance, wherever its values live (C2d): each value the choice
+                # can give is judged as stored there alone (E28) - a new one is built there, an argument's must live
+                # where the instance does, as a field given it alone is judged below
+                exact := s.storeThrough(t)
+                s.why = WhyHolds
+                s.fit(v.T, claim, exact, x, FitField if exact else FitDecl)
+                s.why = 0
+                return
+            }
             if loc.Marked == typed.Mark.Bare and s.isRef(t) and s.choiceOfRefs(x) {
                 s.terms[I64(l)] = v.T
                 return

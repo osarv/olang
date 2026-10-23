@@ -1,0 +1,21 @@
+# check: fail this instance holds a reference to an argument it would outlive
+# C2d, S12b: c2dcondfield with a match value, read-only - a field need only be outlived by what it holds, and here the
+# argument dies with the turn's block while the instance is kept in the list
+import "std/io"
+
+type M struct(n I64, data Array<F64>& = null) {
+    n
+    Data Array<F64>& = match n {
+        case 0 => Array<F64>(1)
+        case _ => data[0:n]
+    }
+}
+
+fn main() {
+    ms := List<M>()
+    for i in range 3 {
+        d := Array<F64>(4, F64(i))
+        ms.Push(M(2, d))
+    }
+    io.Println($ms[0].Data[1] " " $ms[2].Data[1])!
+}

@@ -1,0 +1,26 @@
+# check: run
+# flags: -debug -sanitize
+# C2d, E28: c2dcondfield's constructor used where the instance lives no longer than its argument, and with no argument
+# (the new array, built with the instance) - both accepted, and read under the scope sanitizer
+import "std/io"
+
+type M struct(n I64, data mut Array<F64>& = null) {
+    n
+    Data mut Array<F64>& = (data[0:n] if data != null else Array<F64>(n))
+}
+
+fn main() {
+    t F64 = 0.0
+    kept := List<M>()
+    for i in range 3 {
+        d := Array<F64>(4, F64(i))
+        m := M(2, d)
+        kept.Push(M(3))
+        t += m.Data[1] + kept[i].Data[2]
+    }
+    for i in range 200 {
+        a := Array<F64>(4, 9.0)
+        assert a[0] == 9.0
+    }
+    io.Println($t " " $kept.Len() " " $kept[2].Data[0])!
+}
