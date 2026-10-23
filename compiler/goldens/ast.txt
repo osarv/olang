@@ -1269,10 +1269,10 @@ ad7367de57562da1 98ba40282a55ca2d checks/fixtures/vecalias/f3.olang
 007370a44d8f74de 3731be913f85ffe3 checks/fixtures/vechandle/stale.olang
 f68b69cd8d38c665 44f551c494e2043c compiler/ast.olang
 65352731f4cae057 07e5c9d951fad2af compiler/build.olang
-e0a874142dc15f64 c119a97703f8517e compiler/check.olang
+d9c7c51de193b2f4 290741080c943837 compiler/check.olang
 12af31fc7f832527 ef25e8ee74a3cdc1 compiler/cond.olang
 932d934297ce5c74 199bf531e43847fa compiler/diag.olang
-3d97e1c3d552c8fa 07b1ee7f7d1f3e34 compiler/emit.olang
+eb773c84ddfe5742 ca14c66645822367 compiler/emit.olang
 a152ac2c7cb35079 b132e25fd635b73c compiler/eval.olang
 062d2cf05aa3985d 05fa7eec2118d4c5 compiler/fetch.olang
 714045157a060a8f 274a6f8a332acdbb compiler/fmt.olang
@@ -1283,7 +1283,7 @@ f29061d6b82759db 4d6dfa8e2158e790 compiler/lower.olang
 2450034b42e98516 7adaeae750a50240 compiler/mir.olang
 431bed085c96ac7c beb896fc9651389a compiler/msgs.olang
 02e1f52c314e5fcb 202775458db70e48 compiler/names.olang
-ccb52a32d40d92bb 724c370e221e9633 compiler/olang.olang
+31a9bff62ae8f2ac e782ad1428bb8172 compiler/olang.olang
 cd9ee65ed355eae7 8329e6b2c02e61a6 compiler/parse.olang
 511ba5215e0463a6 021eb49d90cc7fba compiler/runtime.olang
 54d8b0747fd20c3d c5b97638f3ccd664 compiler/scan.olang
