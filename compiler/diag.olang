@@ -261,6 +261,25 @@ fn (d Diagnostics&) programUse(at Where) I64 {
     return -1
 }
 
+# where an error at at is reported: the program's use of the library's code at is in, or at itself (B11)
+fn (d Diagnostics&) UseOf(at Where) Where {
+    use := d.programUse(at)
+    return at if use < 0 else d.contexts[use].at
+}
+
+# the innermost context open now - where and its note - and "" for none
+fn (d Diagnostics&) TopContext() (Where, String) {
+    i := d.contexts.Len() - 1
+    for i >= d.ctxFrom {
+        if d.contexts[i].text.Len() > 0 { return d.contexts[i].at, $d.contexts[i].text }
+        i--
+    }
+    return Where.Nowhere, ""
+}
+
+# a file's text
+fn (d Diagnostics&) TextOf(file I64) String&d { return d.texts[file] }
+
 fn (d Diagnostics&) isLibrary(at Where) Bool {
     match at {
         case Where.File(f) { return d.library[f] }

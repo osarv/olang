@@ -1026,11 +1026,13 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
 }
 
 # a baked global's definition (K2, K2b): its storage, then each blob it reaches as a private global beside it - the
-# bytes as the evaluator laid them out, the target's layout, a reference among them the address it names
+# bytes as the evaluator laid them out, the target's layout, a reference among them the address it names (one another
+# global's image holds, that global's blob)
 fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
     out := StringBuilder()
     for j in range img.Blobs.Len() {
         b := img.Blobs[j]
+        q I64 = 0       # the next of its references another global's image holds (K2b)
         name := "@" $s if j == 0 else "@" $s ".k" $j
         # K2: an immutable global's own storage is never written once set - only immutable ones are baked - so it is a
         # constant, whose loads LLVM folds
@@ -1055,6 +1057,12 @@ fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
                 valText.Push(", ")
             }
             to := "@" $s if b.To[r] == 0 else "@" $s ".k" $b.To[r]
+            if b.To[r] < 0 {
+                # K2b: storage another baked global of this module holds, written once, with it
+                other := e.global(b.ExtMod[q], b.ExtName[q], types.UnknownT)
+                to = other if b.ExtIdx[q] == 0 else $other ".k" $b.ExtIdx[q]
+                q++
+            }
             tyText.Push("ptr")
             if b.Off[r] == 0 {
                 valText.Push("ptr " $to)

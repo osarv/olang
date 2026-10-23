@@ -173,6 +173,13 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # S18c: the asserts whose condition reads no local, each with its condition's body and its message's, for the
     # evaluator to decide while compiling
     AssertAsks List<AssertAsk>
+    # T29d, D13c: the literals entering a declared number through its constructor, and the zero values a constructor
+    # makes, each with a body giving that value for the evaluator to decide while compiling
+    ValueAsks List<ValueAsk>
+    asking Bool = false         # a ValueAsk's body is being built: what it makes asks nothing again
+    # G27: an assert's condition is being made a body of its own - a constant variable the instance it is checked for
+    # binds is read as its value (a condition's is not: one parse of a local if serves every instance, S8b)
+    constsRead Bool = false
     Faulty Map<I64, Bool>       # the bodies checking met an error or a gap in (K1a: never evaluated while compiling)
     # S8c: by (body, local), a plain scalar local declared with its own value - its initializer and type; and every local
     # a body writes (stores, increments, targets, atomics). A condition or assert asked for reading such a local reads
@@ -194,7 +201,8 @@ type fixedInit struct(Init ast.Expr&, Ty types.TypeId) {
 
 # an assert the evaluator may decide (S18c): the body it is in, where it is (its file and span), its condition's body
 # (BodyOf.Cond) and its message's, -1 for none
-type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I64, Msg I64, Fixed Array<I64>&) {
+type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I64, Msg I64, Fixed Array<I64>&
+    Ctx diag.Where, CtxText String&) {
     Body
     File
     Sp
@@ -202,6 +210,27 @@ type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I
     Cond
     Msg
     Fixed      # the locals of Body it reads as fixed (S8c)
+    # G27, G16b: the instance it was checked for, where its constant variables are read - where it was asked for and
+    # the note naming it ("instantiated here, with N = 6"); "" for none
+    Ctx
+    CtxText
+}
+
+# a value the evaluator decides while compiling (T29d, D13c): what it is, where it is needed (its file and span), its
+# type, and the body giving it (BodyOf.Cond)
+type ValueAsk struct(Kind ValueKind, File I64, Sp source.Span, Ty types.TypeId, Body I64, Use diag.Where) {
+    Kind
+    File
+    Sp
+    Ty
+    Body
+    Use        # the program's use of the library's code it is in, where it is in the library (B11); else where it is
+}
+
+type ValueKind enum {
+    Literal      # a literal through its type's constructor (T29d)
+    Zero         # a zero value its constructor makes (D13c)
+    Fill         # the same, filling every element of an array: copied, so it must hold no reference
 }
 
 # a local if whose condition the build decides and B9a could not evaluate (S8b): the condition's body (BodyOf.Cond),
@@ -350,6 +379,7 @@ fn (c mut Checker&) reset() {
     c.unfillable = Map<I64, Bool>()
     c.Asks = List<Ask>()
     c.AssertAsks = List<AssertAsk>()
+    c.ValueAsks = List<ValueAsk>()
     c.Faulty = Map<I64, Bool>()
     c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
     c.writes = Map<pair.Pair<I64, I64>, Bool>()
@@ -424,6 +454,7 @@ fn (c mut Checker&) onlyFixed(x ast.Expr&, out mut Map<source.NameId, I64>&) Boo
     match x {
         case ast.Expr.Name(sp, n) {
             if not c.namesLocal(sp) { return true }
+            if c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.TypeVar { return c.constsRead and c.fr().Ctx.Vars.Has(n) }
             if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local { return false }
             if out.Has(n) { return true }
             id := c.localNamed(n)
@@ -1678,8 +1709,13 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     sp := x.Span()
     id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
     c.state[id] = 1
+    outerCtx := c.fr().Ctx if c.constsRead and c.frames.Len() > 0 else generic.Context(mi, owner)
     fr := c.push(id, mi, ty, types.ListId(0))
     fr.Ctx = generic.Context(mi, owner)
+    if c.constsRead {
+        fr.Ctx = generic.Context(mi, outerCtx.Owner)
+        for e in outerCtx.Vars { fr.Ctx.Vars.Put(e.Key, e.Value) }
+    }
     for i in range ns.Len() { fr.Ctx.Vars.Put(ns[i], vals[i]) }
     for e in fixed { fr.fixed.Put(e.Key, e.Value) }
     fr.fixedIn = fixedIn
@@ -2339,6 +2375,21 @@ fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 
 fn (c mut Checker&) Ty(t types.TypeId) String { return c.ty(t) }
 
+# the same for a type instance: "instantiated here, with T = I32, N = 6"
+fn (c mut Checker&) typeInstNote(t types.TypeId) String {
+    b := StringBuilder()
+    b.Push("instantiated here")
+    owner := generic.DeclOwner(c.P.T.DeclOf(t))
+    args := c.P.T.Items(c.P.T.Args(t))
+    for j in range args.Len() {
+        b.Push(", with " if j == 0 else ", ")
+        b.Push(c.text(c.P.VarAt(owner, j).Name))
+        b.Push(" = ")
+        b.Push(c.ty(args[j]))
+    }
+    return b.ToString()
+}
+
 # "instantiated here, with K = K, V = I32"
 fn (c mut Checker&) instNote(inst I64) String {
     b := StringBuilder()
@@ -2412,6 +2463,16 @@ fn (c mut Checker&) nameSpan(fd ast.Func&) source.Span {
 
 # a constructor's body (C2): its parameters, then its statements, every field declaration one of its Fields
 fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
+    # B11, G16b: an instance's constructor is checked where it was asked for - what it meets in the library reported at
+    # the program's use
+    o := c.P.TypeOrigin(t)
+    pushed := o.File >= 0 and c.P.T.KindOf(t) == types.Kind.Named and c.P.T.Args(t) != types.ListId(0)
+    if pushed { c.P.L.Diags.PushContext(diag.Where.Span(o.File, I64(o.Sp.Start), I64(o.Sp.End)), c.typeInstNote(t)) }
+    c.ctorChecked(id, t, twin)
+    if pushed { c.P.L.Diags.PopContext() }
+}
+
+fn (c mut Checker&) ctorChecked(id I64, t types.TypeId, twin types.ListId) {
     d := c.P.T.DeclOf(t)
     td := c.P.TypeDecl(d)
     mi := c.P.T.DeclModule(d)
@@ -2444,11 +2505,14 @@ fn (c mut Checker&) checkCtor(id I64, t types.TypeId, twin types.ListId) {
                     return
                 }
             }
-            case ast.TypeBody.Over(_, ctor) {
+            case ast.TypeBody.Over(bref, ctor) {
                 # T29d: its one parameter the value, which the body may check or change; its final value the result -
                 # the body's one field
                 ps := c.P.T.Items(c.P.T.Params(sig))
-                if ctor != null and ctor.S.Params != null and ctor.S.Params.Len() == 1 and ps.Len() == 1 {
+                one := ctor != null and ctor.S.Params != null and ctor.S.Params.Len() == 1 and ps.Len() == 1
+                if ctor != null and not one {
+                    c.err(source.Span(ctor.Sp.Start, ctor.Sp.Start + 1), msgs.PrimCtorParam(c.ty(c.resolve(bref))))
+                } else if one {
                     pr := ctor.S.Params[0]
                     c.param(pr.Name, pr.Sp, ps[0], 0)
                     c.cur().SetVars(c.P.ScopeVarsOf(sig))
@@ -2572,6 +2636,7 @@ fn (c mut Checker&) checkGlobal(id I64, mi I64, n source.NameId) {
         c.gap(sp, "several globals given one value (D8c)")
     } else {
         x = c.zero(sp, want)
+        c.askValue(ValueKind.Zero, sp, want, null)
     }
     c.globalTypes.Put(key, want)
     if x != null {
@@ -4203,7 +4268,47 @@ fn (c mut Checker&) zeroCalls(t types.TypeId) Bool {
     if c.isStruct(t) { return true }
     if not c.isNamed(t) or c.declKind(t) != types.DeclKind.Over or not c.P.Body(t) { return false }
     sig := c.P.CtorSig(t)
-    return sig != types.UnknownT and c.P.T.Items(c.P.T.Errors(sig)).Len() == 0 and c.P.T.Items(c.P.T.Params(sig)).Len() == 1
+    return sig != types.UnknownT and c.P.T.Items(c.P.T.Params(sig)).Len() == 1
+}
+
+# T29d, D13c: a value the evaluator decides once the program has checked - its body built here, in the context checking
+# is in, from the literal x through t's constructor, or (x null) t's zero value
+fn (c mut Checker&) askValue(kind ValueKind, sp source.Span, t types.TypeId, x ast.Expr&) {
+    if c.asking or c.frames.Len() == 0 or t == types.UnknownT { return }
+    if kind != ValueKind.Literal and not c.zeroCalls(t) { return }
+    d := c.P.L.Diags
+    # G10d: a constructor introducing type variables runs only where a call binds them - no zero does
+    if kind != ValueKind.Literal and c.isStruct(t) and c.P.CtorVars(c.P.T.DeclOf(t)) > 0 {
+        c.err(sp, msgs.NoZeroValue(c.ty(t), "it introduces a type variable, which no zero binds"))
+        return
+    }
+    mark := d.Count()
+    gaps := c.Gaps.Len()
+    c.asking = true
+    outer := c.fr()
+    mi := outer.Mi
+    file := outer.File
+    ctx := outer.Ctx
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), t, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, mi, t, types.ListId(0))
+    fr.Ctx = ctx
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    v := c.litCtor(x, t) if x != null else c.zero(sp, t)
+    if v == null { v = c.unknown(sp) }
+    c.stmts.Push(typed.Stmt.Return(sp, v))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    c.asking = false
+    if d.Count() > mark or c.Gaps.Len() > gaps {
+        d.Forget(mark)
+        c.Gaps.Truncate(gaps)
+        c.Bodies[id].Root = null
+        return
+    }
+    c.ValueAsks.Push(ValueAsk(kind, file, sp, t, id, d.UseOf(diag.Where.Span(file, I64(sp.Start), I64(sp.End)))))
 }
 
 # the zero value of a type (D13c): zero bits for a number, a Bool, a reference, a function value, an array; a struct's
@@ -7021,7 +7126,13 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
         c.exprs.Push(x)
     }
     # no fill: each element its type's zero value (D13c), a struct's made by its constructor
-    if args.Len() == 1 and c.zeroCalls(elem) { c.exprs.Push(c.zero(sp, elem)) }
+    if args.Len() == 1 and c.zeroCalls(elem) {
+        c.exprs.Push(c.zero(sp, elem))
+        # an array of none needs no zero value (D13c)
+        nk := c.P.FoldConst(c.fr().Ctx, args[0], c.i64())
+        none := c.P.T.KindOf(nk) == types.Kind.Const and c.P.T.ConstValue(nk) == 0
+        if not none { c.askValue(ValueKind.Fill, sp, elem, null) }
+    }
     items := gather(c.exprs, from)
     # its length checked once (D14b), under try failing into the try (E15a)
     lchk := c.checkOp(typed.Check.Abort)
@@ -7086,6 +7197,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 if elem == types.UnknownT { return c.unknown(sp) }
                 # each element its type's zero value (D13c), a struct's made by its constructor
                 zs := Array<typed.Expr&>(1, c.zero(sp, elem)) if c.zeroCalls(elem) else Array<typed.Expr&>(0)
+                if not (c.P.T.KindOf(length) == types.Kind.Const and c.P.T.ConstValue(length) == 0) { c.askValue(ValueKind.Fill, sp, elem, null) }
                 return typed.Expr.Make(sp, c.P.T.Array(elem, length), typed.Make(typed.MakeKind.Fill, 0, zs
                                        c.lit(sp, c.i64(), c.P.T.ConstValue(length) if c.P.T.KindOf(length) == types.Kind.Const else 0)
                                        c.site(typed.SiteKind.Make, sp), typed.Check.Abort))
@@ -7234,8 +7346,11 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
             id := c.ctorBody(t)
             # T29d: on a literal the constructor runs while compiling, so a failure is a compile-time error, never one
             # the call can fail with
-            c.decided = args.Len() == 1 and c.litLike(args[0])
-            return c.callBody(sp, nsp, sig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, null)
+            lit := args.Len() == 1 and c.litLike(args[0])
+            c.decided = lit
+            r := c.callBody(sp, nsp, sig, typed.Callee.Body(typed.BodyId(I32(id))), -1, null, args, null)
+            if lit { c.askValue(ValueKind.Literal, args[0].Span(), t, args[0]) }
+            return r
         }
         if args.Len() != 1 {
             c.err(sp, msgs.ArgCount(1, "", args.Len()))
@@ -8910,7 +9025,9 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
             # S18c: one that reads no local is the evaluator's to decide - in a test only in a test build (B3a)
             fr := c.fr()
             if c.Tests or not fr.InTest {
+                c.constsRead = true
                 cb := c.CondBody(fr.Mi, k)
+                c.constsRead = false
                 fixed := List<I64>()
                 for id in c.lastFixed { fixed.Push(id) }
                 mb I64 = -1
@@ -8919,7 +9036,9 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
                     for id in c.lastFixed { fixed.Push(id) }
                 }
                 if cb >= 0 and (msg == null or mb >= 0) {
-                    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb, fixed.ToArray()))
+                    cw, ct := c.P.L.Diags.TopContext()
+                    if not c.readsConst(k) { ct = "" }
+                    c.AssertAsks.Push(AssertAsk(fr.Body, fr.File, sp, c.operatorOf(k), cb, mb, fixed.ToArray(), cw, $ct))
                 }
             }
         }
@@ -9370,6 +9489,7 @@ fn (c mut Checker&) varDecl(sp source.Span, v ast.VarDecl&) {
             }
         } else {
             x = c.zero(nsp, t)
+            c.askValue(ValueKind.Zero, nsp, t, null)
         }
         if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(nsp, typed.Place.Deref(nsp, t, x)) }
         # T7a: a field holding a run-time array by value - held by reference instead
@@ -9483,7 +9603,11 @@ fn (c mut Checker&) multi(sp source.Span, m ast.Multi&) {
     if m.Define {
         for i in range n {
             v := c.expr(m.Values[i], types.UnknownT)
-            c.putTarget(m.Targets[i], true, v, c.inferred(m.Values[i], v))
+            t := c.inferred(m.Values[i], v)
+            # T29c: text written in the program declares a String value, as "x := text" does
+            vsp := m.Values[i].Span()
+            if t == c.textType() and c.isRef(typeOf(v)) { v = c.read(vsp, typed.Place.Deref(vsp, t, v)) }
+            c.putTarget(m.Targets[i], true, v, t)
         }
         return
     }
