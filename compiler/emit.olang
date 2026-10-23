@@ -41,6 +41,10 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     T
     Tests Bool = false              # a test build: the harness runs the root's tests
     Debug Bool = false              # a -debug build: the error return trace kept (S18d), as in a test build
+    # each function's MIR verified before it is written (mir.Fn.Verify), one not well formed stubbed and reported:
+    # in test and -debug builds, where the compiler is tested; an optimized build trusts lowering, the verifier's walk
+    # having been a sixth of the front end's work on the compiler's own build
+    VerifyMir Bool = true
     Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
     Gaps List<String&>              # what emission met and does not emit yet, a line each
     queue List<mir.FnKey>           # the functions to write, in the order first referred to
@@ -75,6 +79,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dtorOf Map<types.TypeId, I64>
     indexed Bool = false
     Module Bool = false             # one module compiled alone (compile): its own bodies, no entry
+    SplitFrom I64 = 1 << 62         # the IR from which an object larger than PartSize is cut into parts (Objects)
     emitted Bool = false
     tyDef List<String&>             # each type spelled by name, defined: "%\"NAME\" = type BODY"
     tyAt Map<String&, I64>          # a type's definition by its name (between the quotes)
@@ -95,6 +100,11 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dbgFiles Map<I64, I64>
     dbgBasics Map<I64, I64>
     dbgTypes Map<I64, I64>          # the debug types of aggregates, arrays, enums, references and function values
+    # the functions merged into another whose code is the same (mergeSame): each one's item, the item it is merged
+    # into, and its LLVM function type, which the alias standing for it is written with
+    merged Map<I64, I64>
+    itemFnTy Map<I64, String&>
+    mergeDone Bool = false
 }
 
 # whether the error return trace is kept (S18d): test and -debug builds
@@ -137,31 +147,64 @@ fn (e mut Emitter&) Program(w mut io.Writer&) {
 # the root's (in a -debug build the root's instances object), main or the test harness in the root's; each declares what it names of the others and
 # carries a copy of the declarations, helpers and constant data it uses. An object's text depends only on what is in
 # it: its items in the order of their symbols, its private symbols numbered in the order it names them. Compiling one
-# module (Module) gives that one object, the instances it uses in it
+# module (Module) gives that one object, the instances it uses in it. In a -debug build, or one whose IR is SplitFrom
+# or more (which links by ThinLTO), an object holding more than PartSize of items is cut into parts, each item in the
+# part its symbol's hash picks, so the parts compile side by side and an edit recompiles the part holding it
 fn (e mut Emitter&) Objects() List<Object> {
     e.emitAll()
     out List<Object>
     mods := e.P.L.Mods
     root := e.P.L.Root
     if e.Module {
+        if not e.Debug { e.mergeSame() }
         out.Push(Object($mods[root].Identity, ObjectKind.Module, e.assemble(root, true)))
         return out
     }
     used Map<I64, Bool>
     for h in e.itemHome { used.Put(h, true) }
     rootKind := ObjectKind.Tests if e.Tests else ObjectKind.Main
+    if not e.Debug { e.mergeSame() }
+    total I64 = 0
+    for t in e.itemText { total += t.Len() }
+    split := e.Debug or total >= e.SplitFrom
     for m in range mods.Len() {
-        if m != root and used.Has(m) { out.Push(Object($mods[m].Identity, ObjectKind.Module, e.assemble(m, false))) }
+        if m != root and used.Has(m) { e.parts(out, $mods[m].Identity, ObjectKind.Module, m, false, split) }
     }
     # B3d: the instances in an object of their own where nothing is optimized (-debug: an edit to the root recompiles
     # only its own code), and in the root's otherwise - as stage 0's - so the root's code inlines the instances it
     # calls before the link: a loop over a Vec in the root, its At and Len in another object, measured 2x slower
     # (`for x in v`, bench/vec.olang walk), the link's optimization not recovering what the module's missed
-    if e.Debug and used.Has(HomeInst) {
-        out.Push(Object($mods[root].Identity, ObjectKind.Instances, e.assemble(HomeInst, false)))
-    }
-    out.Push(Object($mods[root].Identity, rootKind, e.assemble(root, not e.Debug)))
+    if e.Debug and used.Has(HomeInst) { e.parts(out, $mods[root].Identity, ObjectKind.Instances, HomeInst, false, split) }
+    e.parts(out, $mods[root].Identity, rootKind, root, not e.Debug, split)
     return out
+}
+
+# the objects holding home's items (and the instances', alsoInst): one, or where split and they are more than
+# PartSize, as many parts as it takes - the first named identity, the others identity-K
+fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKind, home I64, alsoInst Bool, split Bool) {
+    size I64 = 0
+    for i in range e.itemSym.Len() {
+        h := e.itemHome[i]
+        if h == home or (alsoInst and h == HomeInst) { size += e.itemText[i].Len() }
+    }
+    n := (size + PartSize - 1) / PartSize if split else 1
+    if n < 1 { n = 1 }
+    for k in range n {
+        out.Push(Object($identity if k == 0 else $identity "-" $k, kind, e.assemble(home, alsoInst, k, n)))
+    }
+}
+
+# the IR of one part an object is cut into, at most (Objects)
+PartSize I64 = 2 << 20
+
+# the part of n item i is in: its symbol's hash, so where an item goes depends on its symbol alone - but every global
+# in one, since a baked global may point into the private blobs beside another (K2b), which no other object can name
+fn (e Emitter&) partOf(i I64, n I64) I64 {
+    if n <= 1 { return 0 }
+    j := try e.merged.Get(i) catch default i  # an alias beside what it stands for, which it names
+    sym := e.itemSym[j]
+    h := (I64(0) if sym.StartsWith("G_2e") else sym.Hash()) % n
+    return h + n if h < 0 else h
 }
 
 # a module's first lines
@@ -201,16 +244,23 @@ fn (e mut Emitter&) emitAll() {
             case _ { }
         }
     }
-    if e.Module {
-        for i in range e.Lw.Bodies.Len() {
-            k := mir.FnKey.Body(typed.BodyId(I32(i)))
-            match e.Lw.Bodies[i].Of {
-                case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
-                    if e.Lw.Bodies[i].Root != null and e.homeOf(k) == p.L.Root { e.want(k) }
-                }
-                case _ { }
+    # every body homed in a module the object of which is built: compiling one module, its own; else every module's
+    # but the root's - so a module's object depends on the module and the build's mode alone, and every program built
+    # in one directory shares it (the prelude's above all, in every program), rather than each compiling its own of
+    # the functions it happens to reach
+    for i in range e.Lw.Bodies.Len() {
+        k := mir.FnKey.Body(typed.BodyId(I32(i)))
+        match e.Lw.Bodies[i].Of {
+            case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
+                if e.Lw.Bodies[i].Root == null { continue }
+                h := e.homeOf(k)
+                if (h == p.L.Root) == e.Module and h >= 0 { e.want(k) }
             }
+            case _ { }
         }
+    }
+    if e.Module {
+        # its own bodies only, wanted above
     } else if e.Tests {
         for t in tests { e.want(mir.FnKey.Body(typed.BodyId(I32(t)))) }
     } else if mainBody >= 0 {
@@ -242,8 +292,97 @@ fn (e mut Emitter&) emitAll() {
         body := e.T.StructBody(nt)
         for x in e.T.Embedded(nt) { e.need(x) }
         name := e.T.Llvm(nt)
-        e.tyAt.Put($name[2:name.Len() - 1], e.tyDef.Len())
+        key := name[2:name.Len() - 1]
+        if e.tyAt.Has(key) { continue }   # another instance laid out alike: the same LLVM type (types.structName)
+        e.tyAt.Put($key, e.tyDef.Len())
         e.tyDef.Push($name " = type " $body "\n")
+    }
+}
+
+# ---- functions whose code is the same, merged ----
+
+# the instances and shared helpers whose code is the same once the functions they call are taken to be the same where
+# theirs is - List<Node&>.Push and List<Expr&>.Push, every reference being one pointer and every instance of List laid
+# out alike one LLVM type (types.structName). In the objects holding the instances each such class is written once,
+# as its member of the smallest symbol, the rest as aliases of it (an instance, which another object calls by its own
+# name) or not at all (a helper, copied wherever named, its callers there pointed at the one written); every other
+# object names what it names as before, so its text still depends on what it holds alone. Found by partition
+# refinement: classes by text with each reference to another candidate cut out, split by the classes those references
+# are in until none splits - the coarsest partition in which merged functions call merged functions, recursion and
+# mutual recursion included. Not in a -debug build, whose functions carry their own debug information
+fn (e mut Emitter&) mergeSame() {
+    if e.mergeDone { return }
+    e.mergeDone = true
+    cand List<I64>
+    at Map<I64, I64>
+    for i in range e.itemSym.Len() {
+        h := e.itemHome[i]
+        t := e.itemText[i]
+        if (h == HomeInst and t.StartsWith("define dso_local ")) or (h == HomeShared and t.StartsWith("define linkonce_odr ")) {
+            at.Put(i, cand.Len())
+            cand.Push(i)
+        }
+    }
+    n := cand.Len()
+    if n < 2 { return }
+    callees List<Array<I64>&>   # each candidate's references to candidates, as their indexes in cand, in order
+    cls := Array<I64>(n)
+    shapes Map<String&, I64>
+    for c in range n {
+        i := cand[c]
+        text := e.itemText[i]
+        rs := e.refs(i)
+        b := StringBuilder()
+        cs List<I64>
+        from I64 = 0
+        for r in range 0, rs.Len(), 3 {
+            if rs[r] != 0 { continue }
+            j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+            k := try at.Get(j) catch default -1
+            if k < 0 { continue }
+            b.Push(text[from:rs[r + 1]])
+            from = rs[r + 2]
+            cs.Push(k)
+        }
+        b.Push(text[from:])
+        key := b.ToString()
+        id := try shapes.Get(key) catch default -1
+        if id < 0 {
+            id = shapes.Len()
+            shapes.Put($key, id)
+        }
+        cls[c] = id
+        callees.Push(cs.ToArray())
+    }
+    count := shapes.Len()
+    for count < n {
+        next := Array<I64>(n)
+        keys Map<String&, I64>
+        for c in range n {
+            kb := StringBuilder()
+            kb.Push($cls[c])
+            for k in callees[c] { kb.Push(" " $cls[k]) }
+            key := kb.ToString()
+            id := try keys.Get(key) catch default -1
+            if id < 0 {
+                id = keys.Len()
+                keys.Put($key, id)
+            }
+            next[c] = id
+        }
+        cls = next
+        if keys.Len() == count { break }
+        count = keys.Len()
+    }
+    # each class's member of the smallest symbol stands for the rest
+    best := Array<I64>(count, -1)
+    for c in range n {
+        b := best[cls[c]]
+        if b < 0 or e.itemSym[cand[c]] < e.itemSym[cand[b]] { best[cls[c]] = c }
+    }
+    for c in range n {
+        b := best[cls[c]]
+        if b != c { e.merged.Put(cand[c], cand[b]) }
     }
 }
 
@@ -296,14 +435,14 @@ fn refsIn(text String&) List<I64> {
 
 fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c == '.' or c == '$' or c == '-' }
 
-# one object's text: the items homed at home (with the instances' too, alsoInst), each shared or local item they name
+# one object's text: the items homed at home (with the instances' too, alsoInst) in its part of parts, each shared or local item they name
 # copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
 # another object, and the types they name
-fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
+fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1) String {
     mine List<I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
-        if h == home or (alsoInst and h == HomeInst) { mine.Push(i) }
+        if (h == home or (alsoInst and h == HomeInst)) and e.partOf(i, parts) == part { mine.Push(i) }
     }
     syms := e.itemSym
     sorted := mine.ToArray()
@@ -319,11 +458,18 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
     tys List<I64>
     tyHave Map<I64, Bool>
     rename Map<I64, String&>
+    # the objects holding the instances: what is merged into another (mergeSame) named as that one, an instance merged
+    # written as an alias of it
+    merging := alsoInst and e.merged.Len() > 0
+    if merging {
+        for m in e.merged { rename.Put(m.Key, $e.itemSym[m.Value]) }
+    }
     nloc I64 = 0
     k I64 = 0
     for k < order.Len() {
         it := order[k]
         k++
+        if merging and e.merged.Has(it) { continue }   # an alias, naming only what it stands for, which is here
         text := e.itemText[it]
         rs := e.refs(it)
         for r in range 0, rs.Len(), 3 {
@@ -334,6 +480,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
                 continue
             }
             j := try e.itemAt.Get(name) catch default -1
+            if merging and j >= 0 { j = try e.merged.Get(j) catch default j }
             if j < 0 or have.Has(j) or declared.Has(j) { continue }
             h := e.itemHome[j]
             if h == HomeShared or h == HomeLocal {
@@ -343,9 +490,8 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
                     rename.Put(j, $prefixOf(e.itemSym[j]) $nloc)
                     nloc++
                 }
-            } else if h == home or (alsoInst and h == HomeInst) {
-                # homed here (always in order already)
             } else {
+                # homed in another object (another part of this one's home included)
                 declared.Put(j, true)
                 decls.Push(e.itemDecl[j])
             }
@@ -358,6 +504,12 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool) String {
     # B2e: the debug metadata (numbered from 1000) renumbered in the order this object names it, from 1000
     meta Map<I64, I64>
     for it in order {
+        if merging and e.merged.Has(it) {
+            into := try e.merged.Get(it) catch default it
+            fty := try e.itemFnTy.Get(it) catch default "void ()"
+            out.Push($"@" $e.itemSym[it] " = dso_local alias " $fty ", ptr @" $e.itemSym[into] "\n")
+            continue
+        }
         text := e.itemText[it]
         if rename.Len() == 0 and not e.Debug {
             out.Push(text)
@@ -1285,10 +1437,22 @@ fn blockName(b mir.BlockId) String { return "bb" $b }
 
 fn (fe mut fnEm&) gap(what String&) { fe.E.gap(what) }
 
+# function type ty's result and parameters laid out: whether each goes through memory (types.ViaMemory) is its size's
+# question, and a size is known only once laid out - asked before, a struct over 128 bytes read as small, so a
+# function's header returned it as a value where its body (whose locals lay it out) returned it through %out
+fn (e mut Emitter&) signature(ty types.TypeId) {
+    t := e.T
+    if t.KindOf(t.Repr(ty)) != types.Kind.Func { return }
+    res := t.Result(ty)
+    if res != types.VoidT and res != types.NoreturnT { e.P.Layout(res) }
+    for x in t.Items(t.Params(ty)) { e.P.Layout(x) }
+}
+
 # the function's LLVM header: linkage, result, name and parameters
 # a function's first line: "define LINK RET @SYM(PARAMS) #0 {" - or, with link "declare", how another object declares it
 fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal") String {
     t := e.T
+    e.signature(ty)
     b := StringBuilder()
     b.Push($("declare " if link == "declare" else $"define " $link " ") $t.RetLlvm(ty) " @" $symbol "(")
     first := true
@@ -1360,7 +1524,36 @@ fn (e mut Emitter&) typeHome(ty types.TypeId) I64 {
 # a function's item: its text, and its declaration for another object
 fn (e mut Emitter&) fnItem(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, text String&) {
     home := e.homeOf(k)
-    e.item(symbol, home, text, e.header(k, ty, symbol, passed, env, "declare"))
+    if e.itemAt.Has(symbol) { return }
+    decl := e.header(k, ty, symbol, passed, env, "declare")
+    e.itemFnTy.Put(e.itemSym.Len(), fnTypeOf(decl))
+    e.item(symbol, home, text, decl)
+}
+
+# the LLVM function type a declaration "declare RET @SYM(T1 %a, T2 %b)\n" states: "RET (T1, T2)" - each parameter's
+# type is what precedes its name, a "%" never being inside a type a parameter is declared with but a named struct's
+fn fnTypeOf(decl String&) String {
+    at := try decl.Find(" @") catch default 0
+    ret := decl[8:at]
+    open := try decl.Find("(") catch default decl.Len()
+    params := decl[open + 1:decl.Len() - 2]
+    b := StringBuilder()
+    b.Push($ret " (")
+    i I64 = 0
+    n := params.Len()
+    first := true
+    for i < n {
+        # a parameter: its type, up to the " %" that starts its name
+        st := i
+        for i < n and not (params[i] == ' ' and i + 1 < n and params[i + 1] == '%' and (i + 2 >= n or params[i + 2] != '"')) { i++ }
+        if not first { b.Push(", ") }
+        first = false
+        b.Push(params[st:i])
+        for i < n and params[i] != ',' { i++ }
+        i += 2
+    }
+    b.Push(")")
+    return b.ToString()
 }
 
 fn (e mut Emitter&) passedOf(k mir.FnKey, ty types.TypeId) I64 { return mir.PassedCount(e.T, mir.Callee.Fn(k, ty), ty) }
@@ -1372,7 +1565,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     env := e.hasEnv(k)
     passed := e.passedOf(k, f.Ty)
     hdr := e.header(k, f.Ty, symbol, passed, env, linkFor(e.homeOf(k)))
-    bad := "" if e.Lw.Gapped else f.Verify(e.T)
+    bad := "" if e.Lw.Gapped or not e.VerifyMir else f.Verify(e.T)
     if e.Lw.Gapped or bad != "" {
         e.gap($"not lowered: " $symbol $(" (" $bad.Trim() ")" if bad != "" else ""))
         if e.isGlobalInit(k) {
@@ -1413,7 +1606,169 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     b.Push("}\n")
     b.Push(fe.dbgMeta.ToString())
     b.PushChar('\n')
-    e.fnItem(k, f.Ty, symbol, passed, env, b.ToString())
+    e.fnItem(k, f.Ty, symbol, passed, env, foldSlots(b.ToString(), f.Locals.Len()))
+}
+
+# ---- single-use slots ----
+
+# a function's text with the stack slot of each local that is stored once and loaded once folded away - the store in
+# the load's block and before it, or in the entry block: its alloca, its store and its load gone, and what the load
+# defined named by the value the store wrote. Those three lines are the slot's only mentions, so nothing else reads or
+# writes it, nor takes its address: the load gives the stored value, as LLVM's mem2reg would make it. Lowering makes
+# such a slot for most values in flight (in the corpus's largest test build, half of all slots); the IR they take is
+# what clang parses, and keeps whole at -O0. nlocals is how many locals the function has (the slots are %l0 ...)
+fn foldSlots(body String&, nlocals I64) String {
+    n := body.Len()
+    starts Vec<I64>      # each line's start, its end, and the block it is in (a label line starts one)
+    ends Vec<I64>
+    blocks Vec<I64>
+    s I64 = 0
+    blk I64 = 0
+    for s < n {
+        e := s
+        for e < n and body[e] != '\n' { e++ }
+        if e > s and body[s] != ' ' and body[e - 1] == ':' { blk++ }
+        starts.Push(s)
+        ends.Push(e)
+        blocks.Push(blk)
+        s = e + 1
+    }
+    mentions := Array<I64>(nlocals)
+    allocaAt := Array<I64>(nlocals, -1)
+    storeAt := Array<I64>(nlocals, -1)
+    loadAt := Array<I64>(nlocals, -1)
+    for li in range starts.Len() {
+        a := starts[li]
+        z := ends[li]
+        i := a
+        for i < z {
+            c := body[i]
+            if c == '"' {
+                i++
+                for i < z and body[i] != '"' { i++ }
+                i++
+                continue
+            }
+            if c != '%' or i + 2 >= z or body[i + 1] != 'l' or not body[i + 2].IsDigit() {
+                i++
+                continue
+            }
+            j := i + 2
+            v I64 = 0
+            for j < z and body[j].IsDigit() {
+                v = v * 10 + I64(body[j]) - I64('0')
+                j++
+            }
+            if j < z and symbolChar(body[j]) or v >= nlocals {
+                i = j
+                continue
+            }
+            mentions[v] += 1
+            atEnd := j == z or body[j] == ','
+            if i == a + 2 and body[a:i] == "  " and body[j:z].StartsWith(" = alloca ") {
+                allocaAt[v] = li
+            } else if atEnd and i >= a + 6 and body[i - 6:i] == ", ptr " {
+                if body[a:z].StartsWith("  store ") {
+                    storeAt[v] = li
+                } else if body[a:z].Contains(" = load ") {
+                    loadAt[v] = li
+                }
+            }
+            i = j
+        }
+    }
+    skip := Array<Bool>(starts.Len())
+    # by the number of the temporary a folded load defined (%tK, fnEm.tmp), the value it is named by instead: a
+    # temporary's number read where it is written - a Map of names asked of every name in the body had been a third
+    # of this function's work
+    subst Vec<String&>
+    folded := false
+    for v in range nlocals {
+        if mentions[v] != 3 or allocaAt[v] < 0 or storeAt[v] < 0 or loadAt[v] < 0 { continue }
+        sl := storeAt[v]
+        ll := loadAt[v]
+        if not (blocks[sl] == blocks[ll] and sl < ll or blocks[sl] == 1 and blocks[ll] != 1) { continue }
+        al := allocaAt[v]
+        tyAt := try body[starts[al]:ends[al]].Find(" = alloca ") catch { continue }
+        ty := body[starts[al] + tyAt + 10:ends[al]]
+        if ty.Contains(", align") { continue }
+        slot := $"%l" $v
+        # the load: "  %X = load TY, ptr %lN..."
+        ld := body[starts[ll]:ends[ll]]
+        eq := try ld.Find(" = load ") catch { continue }
+        if not ld[eq + 8:].StartsWith($ty ", ptr " $slot) { continue }
+        name := ld[2:eq]
+        if not name.StartsWith("%t") { continue }
+        k := try name[2:].ParseInt() catch { continue }
+        # the store: "  store TY V, ptr %lN...", V one token
+        st := body[starts[sl]:ends[sl]]
+        if not st[8:].StartsWith($ty " ") { continue }
+        vs := 8 + ty.Len() + 1
+        ve := try st.Find($", ptr " $slot) catch { continue }
+        if ve <= vs { continue }
+        val := st[vs:ve]
+        if val.Contains(" ") or val.Contains(",") { continue }
+        skip[al] = true
+        skip[sl] = true
+        skip[ll] = true
+        for subst.Len() <= k { subst.Push("") }
+        subst[k] = $val
+        folded = true
+    }
+    if not folded { return $body }
+    out := StringBuilder()
+    for li in range starts.Len() {
+        if skip[li] { continue }
+        a := starts[li]
+        z := ends[li]
+        at := a
+        i := a
+        for i < z {
+            c := body[i]
+            if c == '"' {
+                i++
+                for i < z and body[i] != '"' { i++ }
+                i++
+                continue
+            }
+            if c != '%' {
+                i++
+                continue
+            }
+            j := i + 1
+            m := tempNumber(body, i, z)
+            for j < z and symbolChar(body[j]) { j++ }
+            if m >= 0 and m < subst.Len() and subst[m] != "" {
+                out.Push(body[at:i])
+                r := subst[m]
+                for {
+                    q := tempNumber(r, 0, r.Len())
+                    if q < 0 or q >= subst.Len() or subst[q] == "" { break }
+                    r = subst[q]
+                }
+                out.Push(r)
+                at = j
+            }
+            i = j
+        }
+        out.Push(body[at:z])
+        if z < n { out.PushChar('\n') }
+    }
+    return out.ToString()
+}
+
+# the number K of a temporary "%tK" starting at i of text and ending before z, the whole name (what follows it no
+# part of a name); -1 for any other name
+fn tempNumber(text String&, i I64, z I64) I64 {
+    if i + 2 >= z or text[i + 1] != 't' or not text[i + 2].IsDigit() { return -1 }
+    j := i + 2
+    v I64 = 0
+    for j < z and text[j].IsDigit() {
+        v = v * 10 + I64(text[j]) - I64('0')
+        j++
+    }
+    if j < z and symbolChar(text[j]) { return -1 }
+    return v
 }
 
 # the body of a function the compiler could not make: it fails when called, saying so
@@ -3376,6 +3731,7 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
     inner := fe.load("ptr", fe.let("getelementptr { ptr, ptr }, ptr %env, i32 0, i32 1"))
     args := StringBuilder()
     args.Push("ptr " $inner)
+    e.signature(f)
     res := t.Result(f)
     if res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res) { args.Push(", ptr %out") }
     for i in range ip {
@@ -3586,6 +3942,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
             env = fe.let("extractvalue { ptr, ptr } " $v ", 1")
         }
     }
+    fe.E.signature(ty)
     res := t.Result(ty)
     errs := t.Items(t.Errors(ty)).Len() > 0
     via := res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res)
@@ -3927,7 +4284,11 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
 fn (e mut Emitter&) errName(et types.TypeId) String { return $e.text(e.T.DeclName(e.T.DeclOf(et))) }
 
 # the test harness (S15/S16): each test run behind a recovery point, a failed check (or an error leaving it) ending
-# that test alone - "ok - NAME" or "FAIL - NAME", then the counts; the status 1 when any failed
+# that test alone - "ok - NAME" or "FAIL - NAME", then the counts; the status 1 when any failed. The initializers and
+# the tests are tables, each walked by one loop behind one recovery point. Unrolled, main held a setjmp for each, and
+# the link inlined every test (each called once) into it: one function the size of the program, on which the
+# optimizer spent most of a large test build (tests/shared.olang's, 223 s and 2.0 GB, 93 s and 1.35 GB as tables). The
+# counters are read and written volatile: they live across the setjmp, written only on the paths it returns to (X3b)
 fn (e mut Emitter&) harness(tests List<I64>) {
     inits := e.initOrder()
     e.define("__olang_argc", "@__olang_argc = external global i32")
@@ -3940,41 +4301,56 @@ fn (e mut Emitter&) harness(tests List<I64>) {
     e.declare("fflush", "i32 @fflush(ptr)")
     e.runtime("__olang_thread_init")
     e.runtime("__olang_test_failed")
+    # each global's initializer behind the recovery point: one that fails a check leaves its global at its zero value
+    # and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
+    gs List<String&>
+    for i in e.globalOrder(inits) {
+        if e.Baked.Has(i) { continue }
+        gs.Push($"ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))))
+    }
+    ts List<String&>
+    for id in tests {
+        ts.Push($"{ ptr, ptr } { ptr @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id)))) ", ptr " $e.cstr(e.testName(id)) " }")
+    }
     b := StringBuilder()
-    b.Push("define i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
-    b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %jb = alloca [200 x i8], align 16\n")
-    b.Push("  store i32 0, ptr %pass\n  store i32 0, ptr %fail\n")
+    if gs.Len() > 0 { b.Push($"@olang.harness.inits = private constant [" $gs.Len() " x ptr] [" $gs.Join(", ") "]\n") }
+    if ts.Len() > 0 { b.Push($"@olang.harness.tests = private constant [" $ts.Len() " x { ptr, ptr }] [" $ts.Join(", ") "]\n") }
+    b.Push("\ndefine i32 @main(i32 %argc, ptr %argv) #0 {\nentry:\n")
+    b.Push("  %pass = alloca i32\n  %fail = alloca i32\n  %k = alloca i64\n  %jb = alloca [200 x i8], align 16\n")
+    b.Push("  store volatile i32 0, ptr %pass\n  store volatile i32 0, ptr %fail\n")
     b.Push("  store i32 %argc, ptr @__olang_argc\n  store ptr %argv, ptr @__olang_argv\n")
     b.Push("  call void @__olang_thread_init()\n")
     e.sanInit(b)
-    # each global's initializer behind a recovery point of its own: one that fails a check leaves its global at its
-    # zero value and the rest still run (a stage 0 build computes them while compiling, K2, or stops there)
-    g I64 = 0
-    for i in e.globalOrder(inits) {
-        if e.Baked.Has(i) { continue }
-        key := mir.FnKey.Body(typed.BodyId(I32(i)))
-        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj" $g " = call i32 @setjmp(ptr %jb)\n")
-        b.Push("  %gz" $g " = icmp eq i32 %gj" $g ", 0\n  br i1 %gz" $g ", label %grun" $g ", label %gnext" $g "\n")
-        b.Push("grun" $g ":\n  call void @" $e.sym(key) "()\n  br label %gnext" $g "\ngnext" $g ":\n")
-        g++
+    if gs.Len() > 0 {
+        b.Push("  store volatile i64 0, ptr %k\n  br label %gloop\ngloop:\n  %gk = load volatile i64, ptr %k\n")
+        b.Push($"  %gm = icmp slt i64 %gk, " $gs.Len() "\n  br i1 %gm, label %gbody, label %gdone\ngbody:\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %gj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  %gz = icmp eq i32 %gj, 0\n  br i1 %gz, label %grun, label %gnext\ngrun:\n  %gk2 = load volatile i64, ptr %k\n")
+        b.Push($"  %gp = getelementptr [" $gs.Len() " x ptr], ptr @olang.harness.inits, i64 0, i64 %gk2\n")
+        b.Push("  %gf = load ptr, ptr %gp\n  call void %gf()\n  br label %gnext\ngnext:\n")
+        b.Push("  %gk3 = load volatile i64, ptr %k\n  %gk4 = add i64 %gk3, 1\n  store volatile i64 %gk4, ptr %k\n")
+        b.Push("  br label %gloop\ngdone:\n")
     }
-    okFmt := e.cstr("ok - %s\n")
-    for i in range tests.Len() {
-        id := tests[i]
-        name := e.cstr(e.testName(id))
-        b.Push("  %top" $i " = load ptr, ptr @__olang_unwind_top\n  store ptr %top" $i ", ptr @__olang_unwind_mark\n")
-        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %j" $i " = call i32 @setjmp(ptr %jb)\n")
-        b.Push("  %z" $i " = icmp eq i32 %j" $i ", 0\n  br i1 %z" $i ", label %run" $i ", label %bad" $i "\n")
-        b.Push("run" $i ":\n  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(id)))) "()\n")
-        b.Push("  %p" $i " = load i32, ptr %pass\n  %pp" $i " = add i32 %p" $i ", 1\n  store i32 %pp" $i ", ptr %pass\n")
-        b.Push("  call i32 (ptr, ...) @printf(ptr " $okFmt ", ptr " $name ")\n  call i32 @fflush(ptr null)\n")
-        b.Push("  br label %next" $i "\n")
-        b.Push("bad" $i ":\n  %f" $i " = load i32, ptr %fail\n  %ff" $i " = add i32 %f" $i ", 1\n  store i32 %ff" $i ", ptr %fail\n")
-        b.Push("  call void @__olang_test_failed(ptr " $name ")\n  call i32 @fflush(ptr null)\n  br label %next" $i "\n")
-        b.Push("next" $i ":\n")
+    if ts.Len() > 0 {
+        tt := $"[" $ts.Len() " x { ptr, ptr }]"
+        b.Push("  store volatile i64 0, ptr %k\n  br label %tloop\ntloop:\n  %tk = load volatile i64, ptr %k\n")
+        b.Push($"  %tm = icmp slt i64 %tk, " $ts.Len() "\n  br i1 %tm, label %tbody, label %tdone\ntbody:\n")
+        b.Push("  %top = load ptr, ptr @__olang_unwind_top\n  store ptr %top, ptr @__olang_unwind_mark\n")
+        b.Push("  store ptr %jb, ptr @__olang_jmp_target\n  %tj = call i32 @setjmp(ptr %jb)\n")
+        b.Push("  %tk2 = load volatile i64, ptr %k\n")
+        b.Push($"  %tfp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 0\n")
+        b.Push($"  %tnp = getelementptr " $tt ", ptr @olang.harness.tests, i64 0, i64 %tk2, i32 1\n")
+        b.Push("  %tf = load ptr, ptr %tfp\n  %tn = load ptr, ptr %tnp\n")
+        b.Push("  %tz = icmp eq i32 %tj, 0\n  br i1 %tz, label %trun, label %tbad\ntrun:\n  call void %tf()\n")
+        b.Push("  %p = load volatile i32, ptr %pass\n  %pp = add i32 %p, 1\n  store volatile i32 %pp, ptr %pass\n")
+        b.Push($"  call i32 (ptr, ...) @printf(ptr " $e.cstr("ok - %s\n") ", ptr %tn)\n  call i32 @fflush(ptr null)\n")
+        b.Push("  br label %tnext\ntbad:\n  %f = load volatile i32, ptr %fail\n  %ff = add i32 %f, 1\n")
+        b.Push("  store volatile i32 %ff, ptr %fail\n  call void @__olang_test_failed(ptr %tn)\n  call i32 @fflush(ptr null)\n")
+        b.Push("  br label %tnext\ntnext:\n  %tk3 = load volatile i64, ptr %k\n  %tk4 = add i64 %tk3, 1\n")
+        b.Push("  store volatile i64 %tk4, ptr %k\n  br label %tloop\ntdone:\n")
     }
     b.Push("  store ptr null, ptr @__olang_jmp_target\n")
-    b.Push("  %np = load i32, ptr %pass\n  %nf = load i32, ptr %fail\n")
+    b.Push("  %np = load volatile i32, ptr %pass\n  %nf = load volatile i32, ptr %fail\n")
     b.Push("  call i32 (ptr, ...) @printf(ptr " $e.cstr("%d passed, %d failed\n") ", i32 %np, i32 %nf)\n")
     b.Push("  %any = icmp sgt i32 %nf, 0\n  %st = zext i1 %any to i32\n  ret i32 %st\n}\n\n")
     e.item("main", e.P.L.Root, b.ToString())
@@ -4160,6 +4536,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields List<String&>, isValue Bool, c
         first = false
         at = 1
     }
+    e.signature(ty)
     ps := t.Items(t.Params(ty))
     pass := t.Passing(ty)
     res := t.Result(ty)
@@ -4290,6 +4667,7 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
         b.Push("  br i1 " $cond ", label %take" $ci ", label %pass" $ci "\ntake" $ci ":\n")
         if cl.Handler != mir.Operand.None {
             ht := fe.otype(cl.Handler)
+            e.signature(ht)
             b.Push("  %hv" $ci " = load { ptr, ptr }, ptr %f" $h "\n")
             b.Push("  %hc" $ci " = extractvalue { ptr, ptr } %hv" $ci ", 0\n  %he" $ci " = extractvalue { ptr, ptr } %hv" $ci ", 1\n")
             args := StringBuilder()
@@ -4372,4 +4750,27 @@ fn (e mut Emitter&) recodeText(b mut StringBuilder&, code String&, from types.Li
     }
     b.Push("  %rs = shl i32 " $pos ", 16\n  %rv2 = or i32 %rs, %rw\n")
     return "%rv2"
+}
+
+# ---- tests ----
+
+test "a slot stored once and loaded once is folded into the value stored; any other slot is kept" {
+    body := "define i64 @f(i64 %a0) #0 {\nentry:\n  %l0 = alloca i64\n  %l1 = alloca i64\n  %l2 = alloca ptr\n" $
+        "  %l3 = alloca i64\n  %l4 = alloca i1\n  store i64 %a0, ptr %l0\n  br label %start\nstart:\n" $
+        "  %t1 = load i64, ptr %l0, !tbaa !24\n  %t2 = add i64 %t1, 1\n  store i64 %t2, ptr %l1, !tbaa !24\n" $
+        "  store ptr %l1, ptr %l2\n  %t3 = load i64, ptr %l1, !tbaa !24\n  %t4 = load i64, ptr %l3\n" $
+        "  store i64 %t3, ptr %l3\n  store i1 true, ptr %l4\n  br label %bb1\nbb1:\n  %t5 = load i1, ptr %l4\n" $
+        "  %t6 = select i1 %t5, i64 %t4, i64 %t2\n  ret i64 %t6\n}\n"
+    want := "define i64 @f(i64 %a0) #0 {\nentry:\n  %l1 = alloca i64\n  %l2 = alloca ptr\n" $
+        "  %l3 = alloca i64\n  %l4 = alloca i1\n  br label %start\nstart:\n" $
+        "  %t2 = add i64 %a0, 1\n  store i64 %t2, ptr %l1, !tbaa !24\n" $
+        "  store ptr %l1, ptr %l2\n  %t3 = load i64, ptr %l1, !tbaa !24\n  %t4 = load i64, ptr %l3\n" $
+        "  store i64 %t3, ptr %l3\n  store i1 true, ptr %l4\n  br label %bb1\nbb1:\n  %t5 = load i1, ptr %l4\n" $
+        "  %t6 = select i1 %t5, i64 %t4, i64 %t2\n  ret i64 %t6\n}\n"
+    assert foldSlots(body, 5) == want
+    # a chain: each value folded through the one before, and a constant stored
+    chain := "define i1 @g() #0 {\nentry:\n  %l0 = alloca i1\n  %l1 = alloca i1\n  br label %start\nstart:\n" $
+        "  store i1 false, ptr %l0\n  %t1 = load i1, ptr %l0\n  store i1 %t1, ptr %l1\n  %t2 = load i1, ptr %l1\n" $
+        "  ret i1 %t2\n}\n"
+    assert foldSlots(chain, 2) == "define i1 @g() #0 {\nentry:\n  br label %start\nstart:\n  ret i1 false\n}\n"
 }

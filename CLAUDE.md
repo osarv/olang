@@ -470,7 +470,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   file exists because a function's scope obligations are derived from its body, which only the source has.
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (what the machine can do unless asked otherwise; LTO also
   made builds faster, ThinLTO measured no better at this size; the port links a program of 8 MB of IR or more by
-  ThinLTO with a cache - the compiler's own -O3 build 213 s -> 108 s, an edit 43 s); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
+  ThinLTO with a cache, importing functions of at most 70 instructions - the compiler's own -O3 build 213 s -> 108 s, an
+  edit 43 s; then round 7's 238 -> 176 s of CPU); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
   the scope sanitizer (B2f: closed chunks poisoned and protected).
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile (`compile` only); target
   constants `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's
@@ -627,7 +628,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
   only what changed (at -O3 the instances in the root's, as stage 0's); the error trace S18d; TBAA, DWARF and the runtime's
   declarations read from its text (round 4); aggregates over 128 bytes through memory, -race and -sanitize, DWARF for
-  aggregates and arrays (round 5); `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
+  aggregates and arrays (round 5); every module's bodies but the root's emitted, so programs built in one directory
+  share its object, objects over 2 MB cut into parts compiled side by side (-debug and ThinLTO builds), single-use
+  stack slots folded, the test harness as tables (round 6: the port-run verify 40.7 -> 28.4 min); instances and helpers
+  whose code is the same written once, a generic struct's instances named by layout so they meet, the ThinLTO import
+  limit 70, compiles started heaviest first, MIR verified only in test and -debug builds (round 7, compile speed: the
+  -O3 self-build 238 -> 176 s of CPU, `OLANG_TIMES` reports the phases); `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
   M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;

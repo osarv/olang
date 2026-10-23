@@ -365,8 +365,11 @@ type Passes struct() {
 fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&, prog mut build.Program&
     d mut diag.Diagnostics&cfg) ? build.Failed {
     tests := kind == build.Kind.Tests
+    build.Phase("start")
     l mut load.Loader&cfg = try p.load(root, cfg, d)
+    build.Phase("load")
     c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
+    build.Phase("check")
     if kind == build.Kind.Program { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: on a program that checked cleanly, the values evaluation decides - a literal's constructor, a
@@ -376,6 +379,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     interp.DecideAsserts(c, asserts)
     baked mut Map<I64, eval.Image>&cfg = Map<I64, eval.Image>()
     if clean { baked = interp.Bake(c) }
+    build.Phase("evaluate")
     if d.Errors() > 0 {
         # section 8 judges what checked too, as stage 0 reports its errors beside the checker's: a body the checker
         # left an unknown type in is not judged (scope.judge)
@@ -385,6 +389,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
     lw.Plans = placement(c, cfg)
+    build.Phase("scope")
     if d.Errors() > 0 { error build.Failed.REPORTED }
     e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
     e.Tests = tests
@@ -395,8 +400,11 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     e.Arch = cfg.Target.Arch
     e.San = cfg.San
     e.Debug = cfg.Debug
+    e.VerifyMir = tests or cfg.Debug
     e.BF16Opaque = cfg.Debug or cfg.Race
+    e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
     objs := e.Objects&prog()
+    build.Phase("lower+emit")
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
         for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
         for g in lw.Gaps { build.Unbuildable($d.Locate(g.File, I64(g.Sp.Start)) ": it does not lower " $g.What " yet") }

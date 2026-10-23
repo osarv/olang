@@ -16,6 +16,7 @@ import "msgs"
 import "cond"
 import "target"
 import "std/io"
+import "std/time"
 
 extern fn getpid() I32
 extern fn sysconf(name I32) I64
@@ -96,6 +97,23 @@ type Config struct() {
 # links in 91 s against 172, and an edit relinks in 23 s from the cache where full LTO takes the 172 again; a small
 # program keeps full LTO, which measured no slower to build there and is what its benchmarks were tuned on (B2d)
 ThinFrom I64 = 8 << 20
+
+# the largest function, in instructions, a ThinLTO link copies into another module to inline there (LLVM's own
+# default 100): the compiler's link 171 -> 133 s of CPU at 70, its front end measured no slower (at 40 the link took
+# 120 s and the front end 5-10% longer), and a program below ThinFrom - every benchmark - does not link by ThinLTO
+ImportLimit I64 = 70
+
+# OLANG_TIMES set in the environment: how long each phase of a build took, in milliseconds, written to the standard
+# error as the phase ends - the front end's passes, clang's compiles, the link; set to "front", the build ends after
+# the front end, so the compiler's own speed is measured apart from clang's
+PhaseAt mut I64 = 0
+fn Phase(name String&) {
+    v := try os.Env("OLANG_TIMES") catch os.OsError { return }
+    now := time.Now()
+    if PhaseAt != 0 { sayErr($"olang: " $name " " $((now - PhaseAt) / 1000000) " ms\n") }
+    PhaseAt = now
+    if v == "front" and name == "lower+emit" { os.Exit(0) }
+}
 
 # the terminal's colour code around text, where colour is on
 fn (c Config&) paint(code String&, text String&) String {
@@ -304,15 +322,20 @@ fn (c mut Config&) ObjectPath(base String&, k UnitKind, ir String&, flags List<S
 # ---- running programs side by side ----
 
 # runs every command, width of them at a time, each through os.Exec with what it writes gathered: its status (127
-# where it could not be started), and what it wrote to its standard output and error, by the command's number
-fn RunAll(cmds Array<Array<String&>&>&, width I64) (Array<I32>, Array<String&>) {
+# where it could not be started), and what it wrote to its standard output and error, by the command's number. The
+# commands start in the order of their weights, heaviest first (where weights are given: a compile's, its IR's
+# size), so the longest is not the last to start, keeping every core busy to the end
+fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = null) (Array<I32>, Array<String&>) {
     n := cmds.Len()
     status mut Array<I32>&return = Array<I32>(n)
     said mut Array<String&>&return = Array<String&>(n)
     if n == 0 { return status, said }
+    order := Array<I64>(n)
+    for k in range n { order[k] = k }
+    if weights != null { order.Sort(fn(a I64, b I64) Bool { return weights[a] > weights[b] }) }
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
-    for k in range n { try chan.Send(queue, k) catch chan.ChanError { unreachable } }
+    for k in order { try chan.Send(queue, k) catch chan.ChanError { unreachable } }
     workers := width if width < n else n
     join {
         for w in range workers { spawn runner(queue, cmds, status, said) }
@@ -341,6 +364,7 @@ type compiles struct() {
     temps List<String&>
     finals List<String&>
     irs List<String&>
+    sizes List<I64>
 }
 
 # the object made from ir: its path, and - when no such object is there yet - its compile queued in j, its IR written
@@ -374,6 +398,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     j.temps.Push($tmp)
     j.finals.Push($path)
     j.irs.Push($irPath)
+    j.sizes.Push(ir.Len())
     return path
 }
 
@@ -394,7 +419,7 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&>
     for u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d)) }
     if prog.Runtime != "" { paths.Push(try c.want(j, "olang_runtime", UnitKind.Module, prog.Runtime, d)) }
     if prog.Dyncall != "" { paths.Push(try c.want(j, "olang_dyncall", UnitKind.Module, prog.Dyncall, d)) }
-    status, said := RunAll(j.cmds.ToArray(), c.width())
+    status, said := RunAll(j.cmds.ToArray(), c.width(), j.sizes.ToArray())
     c.Compiled += j.cmds.Len()
     failed := false
     for i in range status.Len() {
@@ -426,7 +451,10 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool) ? Failed
     for f in c.ModeFlags() { args.Push($f) }
     # ThinLTO's link keeps each module's code generated, keyed by what it was made from, so a relink after an edit
     # generates only what the edit changed (the linker's LLVM plugin's cache)
-    if c.Thin { args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto") }
+    if c.Thin {
+        args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto")
+        args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit)
+    }
     args.Push("-o")
     args.Push($bin)
     for o in objs { args.Push($o) }
@@ -528,11 +556,13 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
     if d.Errors() > 0 or prog.Units.Len() == 0 { return finish(d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
+    Phase("compile")
     bin := $c.Output if c.Output != "" else $c.Dir "/" $Readable(prog.rootIdentity()) $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(bin))
         return finish(d)
     }
+    Phase("link")
     c.Built = $bin
     if not c.Quiet { sayln(c.paint("32", $"built " $(bin if c.Output != "" else Shown(bin)))) }
     return 0
@@ -564,11 +594,13 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     if d.Errors() > 0 or prog.Units.Len() == 0 { return c.skipped(file, d) }
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
+    Phase("compile")
     bin := $c.Dir "/" $Readable(prog.rootIdentity()) "_test" $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
         sayln(c.paint("31", $file ": native compilation failed"))
         return 1
     }
+    Phase("link")
     if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
     out := try os.Exec(String&[Shown(bin)], "", false) catch os.OsError { return 1 }
     if out.Status > 128 {
@@ -710,6 +742,14 @@ test "commands run side by side, each one's status and output kept by its number
         assert said[i] == $"out" $i "\n"
     }
     assert status[9] == 127
+    # started heaviest first, each one's status and output still kept by its own number
+    weights := I64[3, 9, 1, 7, 5, 2, 8, 4, 6, 0]
+    status2, said2 := RunAll(cmds.ToArray(), 2, weights)
+    for i in range 9 {
+        assert status2[i] == I32(i % 3)
+        assert said2[i] == $"out" $i "\n"
+    }
+    assert status2[9] == 127
 }
 
 # a front end for the build's own tests: a program of three modules, "lib" giving a number (-define N, else 41), "util"
