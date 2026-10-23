@@ -609,14 +609,14 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
         case Kind.Named {
             match t.DeclKindOf(t.DeclOf(id)) {
                 case DeclKind.Struct { holds = t.listHolds(t.Fields(id)) }
-                case DeclKind.Enum { holds = t.listHolds(t.Cases(id)) }
+                case DeclKind.Enum { holds = t.listHolds(t.Cases(id), true) }
                 case DeclKind.Over { holds = t.HoldsRefs(t.Base(id)) }
                 nomatch { }
             }
         }
         case Kind.Array { holds = t.HoldsRefs(t.Elem(id)) }
         case Kind.Tuple, Kind.Record { holds = t.listHolds(t.Parts(id)) }
-        case Kind.AnonEnum { holds = t.listHolds(t.ShapeCases(id)) }
+        case Kind.AnonEnum { holds = t.listHolds(t.ShapeCases(id), true) }
         nomatch { }
     }
     # a part not typed yet (a ":=" field the checker has not reached) leaves the answer to be asked again
@@ -636,10 +636,13 @@ fn (t mut Table&) setHolds(id TypeId, state U8) {
     t.refHolds[i] = state
 }
 
-fn (t mut Table&) listHolds(l ListId) Bool {
+# a list's holding: a part's 0 is one not typed yet - but among cases (cases), a case without a payload, which holds
+# nothing (taken for a part not typed, no enum with a payload-less case was ever remembered, and every type holding
+# one was worked out again at each asking: 4% of the front end's work on the compiler's own build)
+fn (t mut Table&) listHolds(l ListId, cases Bool = false) Bool {
     for x in t.Items(l) {
         if x == TypeId(0) {
-            t.holdsUnsure = true
+            if not cases { t.holdsUnsure = true }
         } else if t.HoldsRefs(x) {
             return true
         }

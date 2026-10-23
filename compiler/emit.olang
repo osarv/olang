@@ -1619,9 +1619,9 @@ fn (e mut Emitter&) function(k mir.FnKey) {
 # what clang parses, and keeps whole at -O0. nlocals is how many locals the function has (the slots are %l0 ...)
 fn foldSlots(body String&, nlocals I64) String {
     n := body.Len()
-    starts List<I64>     # each line's start, its end, and the block it is in (a label line starts one)
-    ends List<I64>
-    blocks List<I64>
+    starts Vec<I64>      # each line's start, its end, and the block it is in (a label line starts one)
+    ends Vec<I64>
+    blocks Vec<I64>
     s I64 = 0
     blk I64 = 0
     for s < n {
@@ -1678,7 +1678,11 @@ fn foldSlots(body String&, nlocals I64) String {
         }
     }
     skip := Array<Bool>(starts.Len())
-    subst Map<String&, String&>
+    # by the number of the temporary a folded load defined (%tK, fnEm.tmp), the value it is named by instead: a
+    # temporary's number read where it is written - a Map of names asked of every name in the body had been a third
+    # of this function's work
+    subst Vec<String&>
+    folded := false
     for v in range nlocals {
         if mentions[v] != 3 or allocaAt[v] < 0 or storeAt[v] < 0 or loadAt[v] < 0 { continue }
         sl := storeAt[v]
@@ -1694,6 +1698,8 @@ fn foldSlots(body String&, nlocals I64) String {
         eq := try ld.Find(" = load ") catch { continue }
         if not ld[eq + 8:].StartsWith($ty ", ptr " $slot) { continue }
         name := ld[2:eq]
+        if not name.StartsWith("%t") { continue }
+        k := try name[2:].ParseInt() catch { continue }
         # the store: "  store TY V, ptr %lN...", V one token
         st := body[starts[sl]:ends[sl]]
         if not st[8:].StartsWith($ty " ") { continue }
@@ -1705,9 +1711,11 @@ fn foldSlots(body String&, nlocals I64) String {
         skip[al] = true
         skip[sl] = true
         skip[ll] = true
-        subst.Put($name, $val)
+        for subst.Len() <= k { subst.Push("") }
+        subst[k] = $val
+        folded = true
     }
-    if subst.Len() == 0 { return $body }
+    if not folded { return $body }
     out := StringBuilder()
     for li in range starts.Len() {
         if skip[li] { continue }
@@ -1728,11 +1736,16 @@ fn foldSlots(body String&, nlocals I64) String {
                 continue
             }
             j := i + 1
+            m := tempNumber(body, i, z)
             for j < z and symbolChar(body[j]) { j++ }
-            if j > i + 1 and subst.Has(body[i:j]) {
+            if m >= 0 and m < subst.Len() and subst[m] != "" {
                 out.Push(body[at:i])
-                r := try subst.Get(body[i:j]) catch default ""
-                for subst.Has(r) { r = try subst.Get(r) catch default "" }
+                r := subst[m]
+                for {
+                    q := tempNumber(r, 0, r.Len())
+                    if q < 0 or q >= subst.Len() or subst[q] == "" { break }
+                    r = subst[q]
+                }
                 out.Push(r)
                 at = j
             }
@@ -1742,6 +1755,20 @@ fn foldSlots(body String&, nlocals I64) String {
         if z < n { out.PushChar('\n') }
     }
     return out.ToString()
+}
+
+# the number K of a temporary "%tK" starting at i of text and ending before z, the whole name (what follows it no
+# part of a name); -1 for any other name
+fn tempNumber(text String&, i I64, z I64) I64 {
+    if i + 2 >= z or text[i + 1] != 't' or not text[i + 2].IsDigit() { return -1 }
+    j := i + 2
+    v I64 = 0
+    for j < z and text[j].IsDigit() {
+        v = v * 10 + I64(text[j]) - I64('0')
+        j++
+    }
+    if j < z and symbolChar(text[j]) { return -1 }
+    return v
 }
 
 # the body of a function the compiler could not make: it fails when called, saying so
