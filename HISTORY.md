@@ -21660,3 +21660,67 @@ user's step):
 7. *Documents*: CLAUDE.md, compiler/README.md, compiler/DESIGN.md, bootstrap/README.md, bench/README.md, checks/README.md,
    tools/README.md, std/README.md, tests/README.md, fuzz/README.md, docs/memory.md, docs/own.md and the memory files
    describe stage 0 as present.
+
+## Port M12: ready to remove bootstrap/ (2026-10-23)
+
+The user's decision is that `bootstrap/` goes once the port passes everything. This round makes that removal one
+commit with nothing else breaking - without removing it and without switching the default compiler - and runs the whole
+verify with the port to say exactly what still fails. The removal itself is written down as a checklist in
+bootstrap/README.md ("Removing this directory").
+
+- **The diagnostics table's source is compiler/msgs.olang** (decided, mine). It was generated from bootstrap/errmsg.h by
+  compiler/tools/genmsgs.olang; generating the port's table from the C one points the dependency the wrong way once the
+  C one is to go, and a data file the port reads would be a second spelling of what msgs.olang already is (typed
+  functions the checker holds each call to). So genmsgs is retired and msgs.olang is edited by hand. While both exist,
+  **bootstrap/twins.olang** (in `make test` through `$(wildcard bootstrap/*.olang)`, and removed with the directory)
+  holds them to each other: every errmsg.h entry's twin - genmsgs's own rendering of it, id, name, rule and text - must
+  be in msgs.olang under its id, the Diag enum must name them in errmsg.h's order, and msgs.olang may have no entry
+  errmsg.h lacks. That is stronger than the check it replaces, which compared ids and rules only, not the text. The test
+  of stage 0's calls (every Err/Note call passes as many arguments as its message's directives) moved there from
+  checks/checks.olang unchanged, reading bootstrap/ with os.ReadDir rather than `ls`. checks/checks.olang keeps what
+  holds msgs.olang alone, now stronger too: every rule a message names is one SPEC.md states, and the Diag enum and the
+  functions are one to one, each function's Kind its own case. Both new checks were seen to fail on a changed message
+  text and on a function giving another case. layout.txt lost genmsgs's group by hand (the group is per program).
+- **Every tool falls back to build/out only where it is built, else build/olang** (decided, mine: stage 0 stays the
+  default while it exists, and the switch happens by itself when it goes). checks/checks.olang's `olang()`, fuzz,
+  std/http's test server, compiler/tools (toolkit.Compiler for emitdiff, evaldiff, rungold and diaggold_capture;
+  diaggold's -e checks), bench/benchlib (which makes build/out only while bootstrap/ holds stage 0, else build/olang, and
+  never makes anything when `OLANG` names a compiler - it made build/out whatever `OLANG` said) and tools/srcmask's
+  Compiler for int_literal_i64 and perm_mut (which honour `OLANG` now beside `--olang`); usage lines write `$OLANG`,
+  cli_words recognizes build/olang as an invocation. With `OLANG` set none of them needs build/out.
+- **The makefile's `STAGE0`**: "yes" while bootstrap/ exists and the compiler under test is stage 0 (build/out or
+  build/stage0), else empty. Empty, no C oracle is built or read - tokdiff and astdiff compare with the goldens alone,
+  so a file edited since its golden fails as it will once bootstrap/ is gone - and goldens are captured from the port
+  (`GOLD_FROM ?= port`); `SEED_OLANG` falls back to build/olang. `build/olang` is a file target made by make
+  bootstrap's steps (a shared recipe), depending on what the compiler holds (compiler/, std, the runtime), so
+  `make verify OLANG=build/olang` - whose first step deletes build/ - builds it again and runs everything with it.
+- **make bootstrap compared the wrong two builds** (found running it, a bug on master): it compared build/olang.1 (built
+  by the seed's compiler) with build/olang.2 (built by build/olang.1), equal only while the seed is current - and the
+  seed, from 1f7a849, predates the code generator's later changes, so `make bootstrap` failed on b4b7b91. A third build
+  now follows and the second and third, both built by compilers made from the current source, are compared; the third
+  reuses every object of the second (an object is named by its IR) and took 4 s. This is what makes seed/README.md's
+  "an older seed builds the current source" true.
+- tokens.txt and ast.txt were captured again from stage 0 (bootstrap/twins.olang added, genmsgs gone, the edited
+  tools), so nothing is stale for a run without the oracles.
+
+**`make -i verify OLANG=build/olang`** (each step run whatever the one before gave; 25 minutes on the shared machine,
+the largest process 8.9 GB resident) - what fails:
+1. **The self-built compiler segfaults deciding a top-level condition that reads another module's global** -
+   `import "m"` then `if m.G == "cm" { ... }` - in compiler/check.olang's `readsLocal`, called from interp.decide
+   (a load through a null chunk of a list, inlined). The same source built by stage 0 (`build/out build
+   compiler/olang.olang`) gives a compiler that builds it; so it is the port's own code generation of itself, which the
+   bootstrap's fixed point cannot see (build/olang.2 and build/olang.3 are the same wrong compiler). Every file of the
+   corpus (tests/runner, shared, worker, geom/measure, geom/rect - B9a's import of measure's global), `make run`, and 16
+   checks cases deciding conditions (b10text, b10undefined, b9aglobal, b9awrap, b9cmethod, b9scanbranch, badcond,
+   callcond, condcall, e33opnan, e33snan, g21divzero, g21effect, g21mutable, t16inlinelate, unseen) stop on it.
+2. 21 more checks cases fail, the third round's known ones (19 the evaluator's): b9aminover, d13czeroref, g10dnozero,
+   g16bgenericonce, g27assert, k1globalaborts, k1matchnull, litctoreffect, o17permute6, o17permute6b, retire01assert,
+   retire02global, s5mapgetreturn, t27anonpayload, t29dliteral, t29dparams, t29dradixbad, vec160genericselfhold,
+   zeroeffect, zerofails, zeroshared; and 8 of checks.olang's scenarios (the cases' test, -i against the build, a
+   failed check's place, computed globals as data, Vec built/sanitized/interpreted, failing tasks, evaluator agreement,
+   joins reaching a Str), several of them reaching item 1.
+3. compiler/tools/tokdiff.olang did not build: the port refuses `out.Push(row)` of a loop's text into a list outside
+   the loop (O10c) where stage 0 lands it there (O18c) - a port over-rejection, left to the port's section 8; the tool
+   pushes `$row` now (as its other rows already were), and builds and passes with the port.
+4. Everything else passes with the port and without stage 0: the std, prelude, compiler, tools and bootstrap/twins
+   tests, checkir, tokdiff (once 3 was worked around), astdiff, namesdiff, layoutdiff, fmtdiff and drvdiff.
