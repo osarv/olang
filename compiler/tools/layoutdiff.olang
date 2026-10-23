@@ -3,6 +3,10 @@
 # table, stage 0's size, alignment, LLVM spelling, struct body and field offsets, a function type's result spelling and
 # how it is passed, and an enum's payload offsets - read back from its canonical text, resolved in the program it came
 # from and laid out once. A type may be left unlaid ("deferred") only where compiler/goldens/layout.deferred lists it.
+# A generic's instance is named differently by the two compilers - stage 0 by its type arguments (%"m:Vec<I64>"), the
+# port by its layout, so instances laid out alike share one struct (%"m:Vec.<32 hex digits>") - so a row that differs
+# only there is read again with each instance's name replaced by its generic and the struct body it stands for, which
+# each side's own rows give: the layout is compared, never the spelling.
 # Prints the differences and exits 1 if there are any.
 #
 # Run from the repository root after "make build/compiler_tools_dump". If the golden is older than a change to std's
@@ -50,11 +54,13 @@ fn compare(golden List<String&>&, got List<String&>&, allowed Array<String&>&) o
     ok := Map<String&, Bool>()
     for a in allowed { ok.Put(a, true) }
     seen := Map<String&, Bool>()
+    gbodies := bodies(golden)
+    rbodies := bodies(got)
     r := outcome()
     b := StringBuilder()
     for i, row in got {
         g String& = golden[i] if i < golden.Len() else ""
-        if g == row {
+        if g == row or (g != "" and laidOut(g, gbodies, 0) == laidOut(row, rbodies, 0)) {
             if not row.StartsWith("== ") { r.same++ }
             continue
         }
@@ -83,18 +89,76 @@ fn compare(golden List<String&>&, got List<String&>&, allowed Array<String&>&) o
 }
 
 # the first tab-separated field of a row
-fn key(row String&) String&row {
-    tab := try row.FindByte('\t') catch default row.Len()
-    return row[0:tab]
-}
+fn key(row String&) String&row { return field(row, 0) }
 
 # the second
-fn rest(row String&) String&row {
-    tab := try row.FindByte('\t') catch default -1
-    if tab < 0 { return row[row.Len():] }
-    after := row[tab + 1:]
-    tab2 := try after.FindByte('\t') catch default after.Len()
-    return after[0:tab2]
+fn rest(row String&) String&row { return field(row, 1) }
+
+# the n-th tab-separated field of a row, empty past its last
+fn field(row String&, n I64) String&row {
+    at I64 = 0
+    for k in range n {
+        tab := try row[at:].FindByte('\t') catch default -1
+        if tab < 0 { return row[row.Len():] }
+        at += tab + 1
+    }
+    tab := try row[at:].FindByte('\t') catch default (row.Len() - at)
+    return row[at:at + tab]
+}
+
+# what each instance name a side spells stands for: the struct body of the row whose LLVM spelling (the third field) it is
+fn bodies(rows List<String&>&) Map<String&, String&> {
+    m := Map<String&, String&>()
+    for row in rows {
+        spelling := field(row, 2)
+        if isInstance(spelling) and not m.Has(spelling) { m.Put($spelling, $field(row, 3)) }
+    }
+    return m
+}
+
+# a quoted LLVM struct name is an instance's when it carries type arguments (stage 0's) or ends in "." and 32 hex
+# digits (the port's)
+fn isInstance(name String&) Bool { return genericLen(name) > 0 }
+
+# how much of an instance's name, after %", names its generic - 0 when the name is no instance's
+fn genericLen(name String&) I64 {
+    if not name.StartsWith("%\"") or not name.EndsWith("\"") or name.Len() < 4 { return 0 }
+    inner := name[2:name.Len() - 1]
+    lt := try inner.FindByte('<') catch default -1
+    if lt > 0 { return lt }
+    if inner.Len() <= 33 or inner[inner.Len() - 33] != '.' { return 0 }
+    for c in inner[inner.Len() - 32:] {
+        if not c.IsDigit() and not (c >= 'a' and c <= 'f') { return 0 }
+    }
+    return inner.Len() - 33
+}
+
+# a row with every instance name in it replaced by its generic and the body it stands for, read the same way - deep
+# enough for any type stage 0 lays out (T16: nothing holds itself by value), cut off past it
+fn laidOut(row String&, names Map<String&, String&>&, depth I64) String {
+    b := StringBuilder()
+    at I64 = 0
+    for at < row.Len() {
+        q := try row[at:].Find("%\"") catch default -1
+        if q < 0 { break }
+        start := at + q
+        close := try row[start + 2:].FindByte('"') catch default -1
+        if close < 0 { break }
+        end := start + 2 + close + 1
+        name := row[start:end]
+        b.Push(row[at:start])
+        n := genericLen(name)
+        if n == 0 {
+            b.Push(name)
+        } else {
+            b.Push("%\"" $name[2:2 + n] "<>\"")
+            body := try names.Get(name) catch default "?"
+            b.Push(laidOut(body, names, depth + 1) if depth < 16 else "...")
+        }
+        at = end
+    }
+    b.Push(row[at:])
+    return b.ToString()
 }
 
 test "equal rows count, a deferred row is allowed where listed, anything else is a difference" {
@@ -111,4 +175,21 @@ test "a listed type that is laid out, and a different number of rows, are differ
     golden := toolkit.Rows("== A\nint\t4 4\n")
     r := compare(golden, toolkit.Rows("== A\nint\t4 4\nextra\t1 1\n"), String&["int"])
     assert r.bad == 3
+}
+
+test "an instance named differently but laid out alike is the same; laid out differently it is a difference" {
+    golden := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V<I64>\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V<I64>\" }\tfields 0 8\n")
+    got := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V.0123456789abcdef0123456789abcdef\" }\tfields 0 8\n")
+    r := compare(golden, got, String&[])
+    assert r.same == 2, r.text
+    assert r.bad == 0, r.text
+    broken := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ i64 }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V.0123456789abcdef0123456789abcdef\" }\tfields 0 8\n")
+    r2 := compare(golden, broken, String&[])
+    assert r2.bad == 2, r2.text
+    assert r2.text.Contains("layoutdiff: m:V<I64>\n")
+    assert r2.text.Contains("layoutdiff: m:W\n")
+    offset := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:V.0123456789abcdef0123456789abcdef\" }\tfields 0 4\n")
+    assert compare(golden, offset, String&[]).bad == 1
+    other := toolkit.Rows("== A\nm:V<I64>\t8 8\t%\"m:V.0123456789abcdef0123456789abcdef\"\t{ ptr }\tfields 0\nm:W\t16 8\t%\"m:W\"\t{ i64, %\"m:U.0123456789abcdef0123456789abcdef\" }\tfields 0 8\n")
+    assert compare(golden, other, String&[]).bad == 1
 }

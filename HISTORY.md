@@ -22070,7 +22070,10 @@ What was changed, each committed alone, none changing what a program means:
    information). Self-build: 1,956 instance functions in 799 classes, 1,028 aliases; IR 38.6 -> 36.3 MB, CPU 228 ->
    213 s. tests/shared.olang's IR 12.1 -> 11.2 MB. The saving is smaller than "40% of the functions are instances"
    suggested, because a small instance is inlined at every call anyway: merging saves its out-of-line copy, not the
-   inlined ones.
+   inlined ones. `make layoutdiff` compared LLVM spellings literally, so every instance (2,130 rows) then differed from
+   stage 0's `%"m:List<U64>"`; it now reads such a row again with each instance's name replaced by its generic and the
+   body it stands for (each side's own rows give it), so a layout is compared and a spelling is not - its tests show a
+   different body, offset or generic is still reported.
    **Sharing one instance among type arguments that do not change the code** (the second half of that decision,
    polymorphization) is what this merging gives for the output: two instances whose arguments make no difference to
    the code are exactly two instances with the same text. Deciding it from the arguments before lowering would also
