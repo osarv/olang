@@ -176,7 +176,7 @@ type Table struct(Names mut source.Names&) {
     scopeKeys Map<Array<I64>&, ScopesId> # then the results'
     nameLists List<Array<I64>&>         # a written function type's parameter names (NameIds), by index; 0 none
     nameKeys Map<Array<I64>&, I64>
-    refHolds Map<TypeId, I64>           # HoldsRefs, once asked: 1 being asked, 2 no, 3 yes
+    refHolds Vec<U8>                    # HoldsRefs, once asked, by type: 1 being asked, 2 no, 3 yes (0 not asked)
     holdsUnsure Bool = false            # HoldsRefs met a part whose type is not known yet: nothing it found is kept
 }
 
@@ -599,9 +599,9 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
     if k == Kind.Ref or k == Kind.Func or k == Kind.Var { return true }
     if k != Kind.Named and k != Kind.Array and k != Kind.Tuple and k != Kind.Record and k != Kind.AnonEnum { return false }
     if k == Kind.Named and not t.HasBody(id) { return true }
-    state := try t.refHolds.Get(id) catch default 0
+    state := t.holdsState(id)
     if state != 0 { return state == 3 }
-    t.refHolds.Put(id, 1)
+    t.setHolds(id, 1)
     outer := t.holdsUnsure
     t.holdsUnsure = false
     holds := false
@@ -620,9 +620,20 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
         nomatch { }
     }
     # a part not typed yet (a ":=" field the checker has not reached) leaves the answer to be asked again
-    if t.holdsUnsure { t.refHolds.Remove(id) } else { t.refHolds.Put(id, 3 if holds else 2) }
+    t.setHolds(id, 0 if t.holdsUnsure else 3 if holds else 2)
     t.holdsUnsure = t.holdsUnsure or outer
     return holds
+}
+
+fn (t Table&) holdsState(id TypeId) U8 {
+    i := I64(id)
+    return t.refHolds[i] if i < t.refHolds.Len() else 0
+}
+
+fn (t mut Table&) setHolds(id TypeId, state U8) {
+    i := I64(id)
+    for t.refHolds.Len() <= i { t.refHolds.Push(0) }
+    t.refHolds[i] = state
 }
 
 fn (t mut Table&) listHolds(l ListId) Bool {

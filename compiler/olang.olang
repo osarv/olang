@@ -400,6 +400,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     e.Arch = cfg.Target.Arch
     e.San = cfg.San
     e.Debug = cfg.Debug
+    e.VerifyMir = tests or cfg.Debug
     e.BF16Opaque = cfg.Debug or cfg.Race
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
     objs := e.Objects&prog()
