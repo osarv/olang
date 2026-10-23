@@ -42,6 +42,7 @@ fn main() ? {
 }
 
 extern fn getrlimit(resource I32, limit Array<U64>) I32
+extern fn abort() noreturn
 
 # whether the process may map a stack of that many bytes: no limit on its address space below it (RLIMIT_AS, 9)
 fn roomFor(bytes I64) Bool {
@@ -461,10 +462,19 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     if d.Errors() > 0 { error build.Failed.REPORTED }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
+    x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
     x.Place()
     for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
     os.OnCrash(eval.InterpCrash)
-    return x.RunMain(d)
+    status := x.RunMain(d)
+    # a failed check, or a "!", ends interpret as it ends the built program: by SIGABRT, after what it wrote - so a
+    # shell sees the same signal as stage 0's abort gives it - the crash message emptied first, so the compiler's own
+    # handler adds nothing
+    if status == 134 {
+        os.OnCrash("")
+        abort()
+    }
+    return status
 }
 
 # ---- tests ----
