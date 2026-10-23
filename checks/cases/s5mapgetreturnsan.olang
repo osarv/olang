@@ -1,0 +1,43 @@
+# check: run
+# flags: -debug -sanitize
+# O26a: s5mapgetreturn's shapes under the scope sanitizer - a local List of Lists whose first element is returned
+# through a written "try", and a Map declared in an inner block that flows into the returned list there - each moved to
+# the result scope, so nothing returned is reclaimed with its block (read back after a churn)
+import "std/io"
+
+fn first() List<I64> ? {
+    lists := List<List<I64>>()
+    lists.Push(List<I64>())
+    l := try lists.First()
+    for i in range 30 {
+        l.Push(i + 7)
+    }
+    return l
+}
+
+fn inner() List<I64> ? {
+    l List<I64>
+    {
+        m := Map<I64, List<I64>>()
+        m.Put(1, List<I64>())
+        l = try m.Get(1)
+    }
+    l.Push(5)
+    return l
+}
+
+fn churn() {
+    for i in range 200 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        assert b[0] == i
+    }
+}
+
+fn main() ? {
+    a := try first()
+    b := try inner()
+    churn()
+    io.Println($a.Len() " " $a[29] " " $b.Len() " " $b[0])!
+}

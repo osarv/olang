@@ -2039,8 +2039,8 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
             }
             if m.NoMatch != null { s.carried(m.NoMatch.Value, out) }
         }
-        case typed.Expr.Try(sp, _, t) {
-            if s.writtenTry(sp) { s.carriedAfterTry(t.X, out) } else { s.carried(t.X, out) }
+        case typed.Expr.Try(_, _, t) {
+            s.carried(t.X, out)
             for c in t.Clauses {
                 for df in c.Defaults { s.carried(df, out) }
             }
@@ -2059,42 +2059,6 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
             }
         }
         case _ { }
-    }
-}
-
-# what a try's operand carries, leaving out the local written first after "try" - the receiver of a tried method call
-# ("try m.Get(k)"), the place a tried index or slice reads ("try a[i]"): it is not taken to flow (O26a, as stage 0 reads
-# the flow, so a local handing a returned value its references only through such a call stays in its block, and the
-# call's obligation refuses it - O10c - rather than the local being moved to the result scope)
-# whether a try is one the program writes, "try" at its start - not a loop's own call, which reads its collection
-fn (s mut Scoper&) writtenTry(sp source.Span) Bool {
-    text := try s.texts.Get(s.B.File) catch default ""
-    at := I64(sp.Start)
-    if at < 0 or at + 3 > text.Len() or text[at:at + 3] != "try" { return false }
-    return at + 3 == text.Len() or not (text[at + 3].IsLetter() or text[at + 3].IsDigit() or text[at + 3] == '_')
-}
-
-fn (s mut Scoper&) carriedAfterTry(x typed.Expr&, out mut List<I64>&) {
-    if x == null { return }
-    match x {
-        case typed.Expr.Away(_, _, y) { s.carriedAfterTry(y, out) }
-        case typed.Expr.Read(_, _, _, _), typed.Expr.Take(_, _, _), typed.Expr.Borrow(_, _, _), typed.Expr.Slice(_, _, _) { }
-        case typed.Expr.Call(_, ty, c) {
-            if not s.holds(ty) { return }
-            if not s.isMethodCall(c) {
-                s.carried(x, out)
-                return
-            }
-            for j in range c.Args.Len() {
-                if not s.canKeep(c, j) { continue }
-                if j == 0 {
-                    s.carriedAfterTry(c.Args[0], out)
-                } else {
-                    s.carried(c.Args[j], out)
-                }
-            }
-        }
-        case _ { s.carried(x, out) }
     }
 }
 

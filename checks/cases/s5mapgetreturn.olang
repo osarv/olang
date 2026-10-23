@@ -1,15 +1,33 @@
-# check: fail the callee needs one argument's scope to outlive another's
-# O26a (the review of study 5's fixes, F4): a local returned directly lives in the result scope - what a local Map gives
-# for it is a copy of the map's handle state, which the function's own block holds, so it cannot be returned
+# check: run
+# O26a (the review of study 5's fixes, F4): a local returned directly lives in the result scope, and so does what flows
+# into it - here the local Map m, whose handle state the list l is a copy of. A written "try" in front of the call that
+# hands l its references does not stop the flow (it did while the port matched stage 0's reading of it, which refused
+# this sound program with O10c); the list is read back after an arena churn
+import "std/io"
+
 fn group() List<I64> ? {
     m := Map<I64, List<I64>>()
     m.Put(1, List<I64>())
     l := try m.Get(1)
-    l.Push(5)
+    for i in range 40 {
+        l.Push(i * 3)
+    }
     return l
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 200 {
+        a := Array<I64>(64, i)
+        b := List<I64>()
+        b.Push(a[3])
+        t += b[0]
+    }
+    return t
 }
 
 fn main() ? {
     l := try group()
-    assert l.Len() == 1
+    c := churn()
+    io.Println($l.Len() " " $l[0] " " $l[39] " " $c)!
 }

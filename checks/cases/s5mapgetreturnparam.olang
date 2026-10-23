@@ -1,0 +1,20 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# O10c beside s5mapgetreturn: the map is a parameter, so what the returned list holds is where the caller's map lives -
+# an obligation the call must meet. The map here dies with its block while the list is kept after it
+import "std/io"
+
+fn get(m mut Map<I64, List<I64>>&) List<I64> ? {
+    l := try m.Get(1)
+    return l
+}
+
+fn main() ? {
+    keep List<I64>
+    {
+        m := Map<I64, List<I64>>()
+        m.Put(1, List<I64>())
+        keep = try get(m)
+    }
+    keep.Push(1)
+    io.Println($keep.Len())!
+}
