@@ -1276,14 +1276,14 @@ ad7367de57562da1 9a6c43de42c37da3 checks/fixtures/vecalias/f3.olang
 007370a44d8f74de e0d8c45607b95cda checks/fixtures/vechandle/stale.olang
 8edc6cb0ea109099 41da8907a6dddc3c compiler/ast.olang
 65352731f4cae057 f8014897a38393eb compiler/build.olang
-6dfd97cef83ef47c 49ef41f30ae1f142 compiler/check.olang
+33f2fc57d368a67e 442f56ae6fa59a09 compiler/check.olang
 12af31fc7f832527 c046e16c5f4e3c62 compiler/cond.olang
-932d934297ce5c74 8e287428c51a275e compiler/diag.olang
-645a93d1401c60a7 9761e92493121047 compiler/emit.olang
-a152ac2c7cb35079 894cdd4c6d617d26 compiler/eval.olang
+dfe073d5f33b37f0 43ad2ea00f7cc96c compiler/diag.olang
+3dcfe170a11b5316 64a588eb3efc7a92 compiler/emit.olang
+caba86233fe815b2 30a349ce37c90b29 compiler/eval.olang
 062d2cf05aa3985d 061f0deecc6d96ec compiler/fetch.olang
 714045157a060a8f be16dcbfa6e440c6 compiler/fmt.olang
-788a8cbedceffed1 7344789cafa19008 compiler/generic.olang
+ef5e624da5b1bf51 c725f3cd5a82fd80 compiler/generic.olang
 102a4d1366063571 db890114dbff89cd compiler/interp.olang
 c5ce474b969c4152 d1e82aa87c7eda1b compiler/load.olang
 a9080e825784e3b8 ecd3c672077ddabf compiler/lower.olang
@@ -1294,7 +1294,7 @@ ccb52a32d40d92bb 882f405f65cbb2a1 compiler/olang.olang
 4670264aff7b2b79 6b9f507f0c637563 compiler/parse.olang
 511ba5215e0463a6 62b82c76b0b65e77 compiler/runtime.olang
 54d8b0747fd20c3d 65b4634831f63fdb compiler/scan.olang
-ddc2fff0b5368042 96af09619118309a compiler/scope.olang
+7b166ea03be86865 df419b9227173413 compiler/scope.olang
 2fcf14bf51027aaf e739c0b2ca9489d3 compiler/source.olang
 2f117e004f83056f 95a2b4c76526191b compiler/target.olang
 6a532120b548d9b9 1f959f62979af9eb compiler/testdata/lex/brackets.olang
@@ -1338,7 +1338,7 @@ e870046081c5ec29 91d2773c8159dd37 compiler/tools/seed.olang
 c5e5f4bf93a21310 f4497d7a17c994bb compiler/tools/tokdiff.olang
 a29245dd12906d75 e3428ab5db640c9d compiler/tools/toolkit.olang
 928dbf33d736c5dc ca23941a04fc37f0 compiler/typed.olang
-a64c5c68e5171924 b9970808b42cf1b4 compiler/types.olang
+4f87e5ebad67133a cb5d6635cf6cd78a compiler/types.olang
 94aeba031348e09d 384947fe2ea1d3dd compiler/unparse.olang
 d512f693f1acbe16 01b17a955dfb02c2 compiler/views.olang
 1983bd1590a8de30 29c51e4baa95a2f8 fuzz/fuzz.olang

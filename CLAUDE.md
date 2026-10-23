@@ -631,9 +631,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
   M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;
-  checks/checks.olang is the open part - 26 of its 1,062 cases (19 the evaluator's) and 6 of its 56 scenarios after the
-  third round (HISTORY.md "Port M12", three rounds, the third with what replacing the stage-0 comparisons by stored
-  outputs takes). The scenarios that grepped stage 0's IR state the same facts in either compiler's spelling, as alternatives
+  checks/checks.olang is the open part - after the fourth round 19 of its 1,069 cases and 4 of its 56 scenarios, all the
+  evaluator's (HISTORY.md "Port M12", four rounds, the third with what replacing the stage-0 comparisons by stored
+  outputs takes; the fourth reads stage 0's flow - a local named right after a written "try", a later module's
+  function - as stage 0 does, so nothing it refuses is accepted). The scenarios that grepped stage 0's IR state the same facts in either compiler's spelling, as alternatives
   of one expression (`irHas`, `gsym` - decided by me, never loosened); the port now orders globals (B5a), bakes them
   (K2), enforces M6/M6a/M6b across modules, and calls X8's exact math functions as intrinsics. **The stage-0
   comparisons read stored goldens** (compiler/goldens/, 2026-10-22, HISTORY.md "Port M12: the stage-0 comparisons

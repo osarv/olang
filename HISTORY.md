@@ -21698,3 +21698,62 @@ use-after-free).
 I64) I64` on a local or a parameter gave no D11a/D9 - a function value is no reference. And the port's scanner still
 read `own` and `take` as keywords, removed from the language on 2026-10-18 - they are names now (the parser's and the
 checker's paths for them went; `ast.TypeRef.Perm`'s owned flag and `typed.Expr.Take` stay for the passes' own removal).
+
+## Port M12: the suite with the port as the compiler under test, fourth round (2026-10-23)
+
+Everything left through a debug build of stage 1 that is not the evaluator's or the self-built compiler's (another
+round each). At the start (8515916, master and the review fixes): checks/checks.olang's cases 1,044 of 1,069 passing
+(25 failing: 19 the evaluator's - their fixes are on wt-eval, not merged here - then g16bgenericonce, o17permute6,
+o17permute6b, s5mapgetreturn, t27anonpayload, vec160genericselfhold), its scenarios 50 of 56.
+
+**The scope pass.**
+- *A part holding no reference read out of a call's result (O18a, O18c)*: `pick(r, Res(2), true).k` landed pick's
+  result where its obligations say - at r's scope, the shortest of what its arguments must outlive - so `Res(2)`, the
+  argument bound with it, was built where r lives and destructed at main's end (strheld's g9dorder). A part read that
+  holds no reference puts the call's result nowhere, and stage 0 lands such a call by its obligations only where they
+  need its result scope to outlive an argument's (`forced`); `tempVal` now does the same (`plainRead`).
+- *O17, a function value's argument (o17permute6/6b)*: a value read out of a lent region that holds writable
+  references, handed by value to a function value - whose body is not known - can be stored through into the region:
+  the callee keeping it (`kwCall`), as stage 0's "a by-value parameter holding writable references is a store from
+  outside".
+- *What stage 0's flow reads, read the same (O26a, O18c)*. Stage 0 finds a local's flow into the result on the tokens,
+  and two of its readings decide programs: **decided (mine, under the user's rule that nothing stage 0 refuses may be
+  accepted)** the port reads them as it does. (1) The local written first after a written `try` is no flow - `l := try
+  m.Get(1); l.Push(5); return l` leaves the local Map m in its block, so Get's obligation refuses the call (O10c), where
+  the port had moved m to the result scope and accepted a sound program (s5mapgetreturn); only a `try` written in the
+  program - a for-in's own calls read their collection. And O26 (this function's own storage returned) is said only in
+  a return; a local moved to the result scope that a call ties to a block is O10c's, at the call. (2) A function of a
+  module found after the caller's, called by name (the prelude aside), is taken to keep whatever it is given, as stage 0
+  reads one whose body it has not checked yet: `return toolkit.Text(out)` moves out, and `out.Push(row)` with it moves
+  row (tokdiff, refused by the port with O10c); written text initializing a reference local (`pending String& = ""`) is
+  a temporary that local may be moved for, as stage 0's.
+
+**Check.**
+- *G16b, a scope error in a generic body*: said once for every instantiation (the same text at the same place), and its
+  note now spells the local's type as the generic writes it (`'n mut Node<K, V>&c = ...'`, `generic.Unsubst` writing
+  each instance argument as its variable). Where two variables are bound to one type the spelling could stand for either,
+  so that instance's error yields to a later instance's (`diag.Yield`) - stage 0's "a record that had to spell bindings
+  two variables share yields to a later instantiation's".
+- *T27*: an anonymous enum is spelled with its payloads' field names (`enum { A(n I32) B }`), kept by the type table
+  beside the shape (`shapeFields`) from the first declaration that gives them - not part of its identity.
+- *T16 for a generic struct*: said per instance, as the instance its constructor is checked for (`N<I64> cannot hold
+  itself`), and an instance holds itself only where it holds that very instance - `G<G<I32>>` holding a `G<I32>` is
+  finite (the corpus's G16a names).
+- *C11/E28*: a method argument for a parameter bound to a reference to a destructor-bearing type was checked against
+  the referent, so `r.Push(Res(22) if c else Res(23))` made the conditional a value and promoted a copy of the instance
+  - two destructions of one (strheld's regbattery, pre-existing). `boundParam` keeps the reference for such a type.
+
+**The interpreter (S18d).** strheld's spawnerr printed `list.olang:510: raised here` after the join's line under
+`interpret` - every run, not under load as the third round recorded (it was the scenario's `-i` comparison). Two
+differences from the built program: a join's failure did not start the trace again, and a clause taking an error did
+not clear it, so a for-in's Exhausted taken earlier stayed. Both now as emit's.
+
+**Emit.** A frame or block scope nothing is built in, registered with, handed on or captured gets no header (`idle`):
+a Render helper's own frame was one, 48 bytes and a close per level of a recursion through a Str, so strheld's
+strdepth (28,000 deep in 8MB) overflowed - the frame is now 0xa0 against 0x108.
+
+**Numbers, through stage 1 (debug driver)**: cases 1,050 of 1,069 (the 19 failing all the evaluator's, fixed on wt-eval
+and not merged here); scenarios 52 of 56 (agree's share_B, interp's cyclic, k2's Ring and vechandle's stale interpreted,
+all the evaluator's); the test files but compiler/*.olang's and checks.olang's, at -debug, 1,109 tests, none failing;
+scopediff's accepted programs 308 of 308 scope clean (305 at one point of the round, the try reading at first taken from
+a for-in's own calls too).
