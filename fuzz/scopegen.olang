@@ -712,7 +712,7 @@ fn (g mut SG&) cellOp(b String&, ind String&) String& {
 
 # a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own
 fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
-    if t == 0 and g.chance(6) { return g.ctorScopeOp(a, ind, g.r(7)) }
+    if t == 0 and g.chance(6) { return g.ctorScopeOp(a, ind, g.r(10)) }
     if t == 0 { return g.nodeOp(a, ind, d) }
     if t == 1 {
         if g.chance(60) { return g.boxOp(a, ind, d) }
@@ -739,7 +739,11 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # call given a scope argument naming the parameter ("y := mk&p(n)"), or held through a function returning the instance -
 # the instance holds what the argument refers to, so one given an inner block's text and kept outside it must be refused
 # (C2d); one read inside that block, or one whose field lives with the instance, is accepted. Or the field is a
-# conditional or a match choosing the parameter or new text: the instance holds the argument through it all the same
+# conditional or a match choosing the parameter or new text: the instance holds the argument through it all the same.
+# Or (k 7 to 9, the unpar review) a field is a lambda capturing the parameter (7, 9 - 9 the legal side, read where the
+# argument lives), so the instance holds the argument through it; or capturing only another field, whose referent lives
+# with the instance (8, accepted): either way the closure lives where what it captured does, never in the
+# constructor's frame
 fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     v := g.val()
     ty := g.name("cs")
@@ -754,13 +758,18 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     if k == 6 {
         field = "    y String& = match n >= 0 {\n        case true => p\n        case false => $n \"-new-text-in-the-instance\"\n    }\n"
     }
+    if k >= 7 {
+        field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn() I64 = fn() I64 { return p.Len() + I64(p[0]) + y.Len() }\n"
+        if k == 8 { field = "    y String& = $n \"-new-text-in-the-instance\"\n    f fn() I64 = fn() I64 { return y.Len() + I64(y[0]) }\n" }
+    }
     g.addHelper(("fn " $mkt "(n I64) String& { return $n \"-made-in-p\" }\ntype " $ty " struct(p String&, n I64) {\n" $field
                 "}\nfn " $mkh "(p String&, n I64) " $ty " { return " $ty "(p, n) }\n"))
     make := $ty "(" $tt ", " $v " + i)" if k != 1 else $mkh "(" $tt ", " $v " + i)"
-    use := $ind $a ".next = Node(" $hh ".y.Len() + I64(" $hh ".y[0]))\n"
-    if k == 3 {    # the legal side: read where the argument lives
+    read := $hh ".y.Len() + I64(" $hh ".y[0])" if k < 7 else $hh ".f()"
+    use := $ind $a ".next = Node(" $read ")\n"
+    if k == 3 or k == 9 {    # the legal side: read where the argument lives
         return ($ind "for i in range 2 {\n" $ind "    " $tt " := $i \"-inner-text\"\n" $ind "    " $hh " := " $make "\n" $ind
-                "    churn()\n" $ind "    " $a ".next = Node(" $hh ".y.Len() + I64(" $hh ".y[0]))\n" $ind "}\n")
+                "    churn()\n" $ind "    " $a ".next = Node(" $read ")\n" $ind "}\n")
     }
     return ($ind "{\n" $ind $hh " := " $ty "(\"outer\", " $v ")\n" $ind "for i in range 2 {\n" $ind "    " $tt " := $i \"-inner-text\"\n"
             $ind "    " $hh " = " $make "\n" $ind "}\n" $ind "churn()\n" $use $ind "}\n")
