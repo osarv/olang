@@ -21752,9 +21752,10 @@ user's step):
 6. *Defaults to build/out*: bench/benchlib.olang (runs `make build/out` when missing), bench/run, runfused, rungemm,
    fuzz/fuzz.olang, std/http.olang's test server build, tools/int_literal_i64 and tools/perm_mut (`RepoRoot()/build/out`),
    tools/cli_words (recognizes build/out and build/stage0 as invocations - harmless); the tools' usage lines.
-7. *Documents*: CLAUDE.md, compiler/README.md, compiler/DESIGN.md, bootstrap/README.md, bench/README.md, checks/README.md,
-   tools/README.md, std/README.md, tests/README.md, fuzz/README.md, docs/memory.md, docs/own.md and the memory files
-   describe stage 0 as present.
+7. *Documents*: CLAUDE.md, compiler/README.md, compiler/DESIGN.md, bench/README.md, checks/README.md,
+   tools/README.md, std/README.md, tests/README.md and fuzz/README.md describe stage 0 as removed, as of the
+   deletion commit (HISTORY.md "Stage 0 removed"); docs/memory.md and docs/own.md are design records of their time and
+   keep naming `bootstrap/*.c` as where their work was done; the memory files are kept by the user.
 ## Port M6 round 8: the port1 soundness review, fixed (P1g, O12, C2d, T7a, D9a, D9b, E27, D11a, L9, 2026-10-22)
 
 A read-only review of the port's memory placement (`/home/user/review/port1`) found five holes, each reproduced under
@@ -22221,3 +22222,27 @@ message. With that the port says B4 on both test files, and a second sweep of th
 round's final compiler (b39f784), gave the same 429 accepted - 1,422 files, the two new cases refused as stage 0 refuses them - and no internal error; where both refuse, the rule sets now differ on 40 files.
 
 **The port builds itself**: stage 1 (built by stage 0 at b39f784) builds stage 2, stage 2 builds stage 3, and stage 2 and stage 3 are the same file, byte for byte.
+
+## Stage 0 removed (2026-10-23)
+
+The C compiler, `bootstrap/` (stage 0), is gone from the tree, in one commit after the port passed everything: on
+e49da49, tagged `stage0-final` (and pushed as the branch `stage0-final`), both `make verify` with stage 0 and `make
+verify OLANG=build/olang` with the port built from the committed seed by itself passed, and every golden in
+`compiler/goldens/` had been captured from stage 0 there.
+
+**Removed**: all of `bootstrap/` (the C sources of the tokenizer, parser, checker, evaluator, code generator, runtime
+filler, diagnostics and driver, `oracle/` with the four oracle programs, `twins.olang`, README.md); the makefile's `CC`,
+`CFLAGS`, `SRC`, `OBJ`, `STAGE0*`, `DEP`, `-include $(DEP)` and the rules for `build/obj`, `build/out`, `build/tokdump`,
+`build/astdump`, `build/modgraph`, `build/layoutdump`, `build/stage0` and `stage0`; `GOLD_FROM` and `GOLD_PORT` (every
+golden is captured from the port); the C-oracle comparisons of `tokdiff`, `astdiff` and `modgraph` (a file edited since
+its golden is reported stale and captured again by `make tokgold`/`astgold`/`modgold`), `layoutgold`'s capture from
+`layoutdump` (it only lays the golden's own types out again, as `-port` did), the `normalize` of tokdiff that existed for
+the C tokenizer's stream, and every fallback to `build/out` or to `bootstrap/main.c` in the tools, the checks, the fuzzer,
+the benchmarks and std/http's test server. `OLANG ?= build/olang`; `SEED_OLANG` is `build/olang`.
+
+**Getting it back**: `git checkout stage0-final -- bootstrap` restores the sources (they build with `gcc`, libffi and
+libdl, the makefile of that commit having the rules); the old compiler's checks and oracles then run from that commit.
+
+**What replaced it**: as the oracle, the stored goldens (`compiler/goldens/`, what stage 0 said: tokens, trees, module
+graphs, layouts, diagnostics, driver outputs, test runs); a golden is changed only by its make target, from the port. For
+building from nothing, the seed (`seed/`, `make bootstrap`), which needs clang and xz alone.

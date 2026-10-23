@@ -5,21 +5,21 @@ a good olang programmer would write it (`*.olang`) and as plain idiomatic C (`c/
 same sizes and byte-identical output, timed against each other.
 
 ```
-build/out build bench/run.olang      # the drivers are olang programs (they were shell scripts); build one once, from the
+build/olang build bench/run.olang      # the drivers are olang programs (they were shell scripts); build one once, from the
 build/bench_run                      # repository root, then run it: build both, check the outputs agree, time (median of 7, interleaved)
 build/bench_run -x                   # also baseline x86-64 for both (olang -target x86-64, C with no -march)
 build/bench_run -q                   # build and check only
 build/bench_run -r 9 nbody text      # 9 repetitions, only some rows
 BENCH_LOCK=/home/user/verify.lock build/bench_run   # hold a lock while checking and timing, on a shared machine
-build/out build bench/ir.olang && build/bench_ir spectral   # whole-program optimized IR and disassembly of both versions, in bench/build/lto/
-build/out build bench/repro/opt.olang && build/bench_repro_opt NAME   # the same for one reproducer in repro/
-build/out build bench/rungemm.olang && build/bench_rungemm    # std/linalg against C and OpenBLAS (below)
-build/out build bench/runfused.olang && build/bench_runfused  # the batched, fused and implicit products (below)
+build/olang build bench/ir.olang && build/bench_ir spectral   # whole-program optimized IR and disassembly of both versions, in bench/build/lto/
+build/olang build bench/repro/opt.olang && build/bench_repro_opt NAME   # the same for one reproducer in repro/
+build/olang build bench/rungemm.olang && build/bench_rungemm    # std/linalg against C and OpenBLAS (below)
+build/olang build bench/runfused.olang && build/bench_runfused  # the batched, fused and implicit products (below)
 ```
 
 `run.olang`, `ir.olang`, `rungemm.olang`, `runfused.olang` and `repro/opt.olang` are the drivers; `benchlib.olang` is what
 they share (the compiler to build with, running a program in this directory without a shell, the `BENCH_LOCK` flock).
-`OLANG=PATH` names another compiler to build with (default `build/out` where it is built, else `build/olang`). Each driver runs from the repository root and
+`OLANG=PATH` names another compiler to build with (default: `build/olang`). Each driver runs from the repository root and
 keeps its files under `bench/build/`. (`rungemm` and `runfused` carry a `run` in their names because `gemm.olang` and
 `fused.olang` are the programs they run.)
 

@@ -4,7 +4,7 @@
 #
 #   $OLANG build bench/repro/opt.olang && build/bench_repro_opt closure_call
 #
-# OLANG=PATH names the compiler to build with (default: build/out where it is built, else build/olang).
+# OLANG=PATH names the compiler to build with (default: build/olang).
 
 import "std/os"
 import "../benchlib"

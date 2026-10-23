@@ -8,7 +8,7 @@
 # by test: a row per file, "same N" where every test ends as the stored run's does, else what each said - "golden P ok
 # F fail; port P ok F fail; D differ" - and with -v each test that differs. A checks case ("# check: run") is a program,
 # run, its output and status compared (its status alone where the stored output was unstable) - with -i against "$OLANG
-# interpret" too (else build/out where it is built, else build/olang). Then the totals. The evaluator is
+# interpret" too (else build/olang). Then the totals. The evaluator is
 # build/compiler_tools_evaldump (or $EVALDUMP), each of its runs stopped after $EVALTIMEOUT seconds (300): tasks run in
 # sequence (K1), so one waiting for another that has not run never ends.
 

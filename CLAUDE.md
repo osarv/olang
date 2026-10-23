@@ -44,7 +44,7 @@ Go through this for every change to what olang means - a rule added, revised or 
 
 1. **Spec first**: write or revise the rule in `SPEC.md`, grammar included.
 2. **Checker and codegen**: implement it so the code conforms to what was just written.
-3. **Compile-time evaluator** (`bootstrap/comptime.c`, K1): give it the same semantics - never leave it refusing or diverging
+3. **Compile-time evaluator** (`compiler/eval.olang`, K1): give it the same semantics - never leave it refusing or diverging
    from the run time. Prove the two agree with a test the evaluator actually runs (an `assert` it can decide, S18c,
    or a global it bakes, K2) beside the run-time test.
 4. **Tests**: corpus tests for what now works (read back after an arena churn where scopes are involved), and
@@ -495,7 +495,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 - **Anything computable at compile time may be (K1/K1a, the user's request); no function colouring** (no `constexpr`:
   a call is evaluable when what it does is, and the places that need a value ask for one). The evaluator
-  (`bootstrap/comptime.c`) interprets the checked program with the run time's semantics and refuses only what it must
+  (`compiler/eval.olang`) interprets the checked program with the run time's semantics and refuses only what it must
   (effects skipping would show, externs but libm, undefined behaviour, a step and memory budget). Whether a function
   is evaluable is a property of the function (K1a). It must handle everything it can (the user's rule).
 - **Constant contexts:** immutable globals are baked as data, references and arrays included (K2, K2b); an assert it
@@ -597,11 +597,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### The C compiler and the port
 
-- **The C compiler is `bootstrap/`, stage 0 (the user's call, 2026-10-10).** It builds `build/out`; `make stage0`
-  builds it optimized. It is frozen; the generated seed (`seed/`, LLVM IR the olang compiler writes of itself for baseline
+- **The C compiler, stage 0, is removed (2026-10-23; the user's decision: remove `bootstrap/` once the port passes
+  everything).** It was `bootstrap/*.c` (the user's call, 2026-10-10), built to `build/out`; its last commit is tagged
+  `stage0-final` (also a branch), and `git checkout stage0-final -- bootstrap` brings it back. What replaced it as the
+  oracle is `compiler/goldens/` (what it said, captured once) and, for building from nothing, the seed. The compiler is
+  `build/olang`, `OLANG ?= build/olang`. The generated seed (`seed/`, LLVM IR the olang compiler writes of itself for baseline
   x86-64, `make seed`) rebuilds the compiler from nothing in one run, `make bootstrap`, with clang alone (the user,
-  2026-10-18; built 2026-10-22, compiler/DESIGN.md section 5). From the port's
-  start it takes fixes only (QB, the user's call). The refactor was modest: no splitting files for size (the user).
+  2026-10-18; built 2026-10-22, compiler/DESIGN.md section 5). The refactor was modest: no splitting files for size (the user).
 - **The port is a redesign (the user's rule):** a hand-written scanner, recursive descent with Pratt expressions, a
   demand-driven checker over an AST of enums, §8 as its own pass, MIR, one evaluator for comptime and `interpret`
   (`compiler/DESIGN.md`). Acceptance is the test suite plus per-stage diffs against stage 0 (tokdiff, astdiff,
@@ -611,7 +613,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `runtime.olang`; `make drvdiff`; lowering by the scope pass's plans, its errors reported, the port builds itself at
   `-debug`, one object per module (stage 1 == stage 2 == stage 3, 1.6 GB; a clean self-build 46 s, an edit
   recompiling only its module's object) and passes compiler/'s and std's tests, HISTORY.md "Port M10: the pipeline
-  behind the driver", "Port M6 round 5" and "Port M10: per-module objects under the scope pass's placement"); the compiler under test is `OLANG ?= build/out`. In progress: M5b/M5c, `compiler/check.olang` (the checker
+  behind the driver", "Port M6 round 5" and "Port M10: per-module objects under the scope pass's placement"); the compiler under test is `OLANG ?= build/olang`. In progress: M5b/M5c, `compiler/check.olang` (the checker
   elaborating the resolved AST into typed core; HISTORY.md "Port M5b/M5c"); M7, `compiler/lower.olang` (the typed core
   lowered to MIR with the scope pass's placement - the stand-in, everything in the program's scope, where a body has no
   plan - helpers, adapters and initializations made as MIR functions; `make
@@ -649,12 +651,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (K2), enforces M6/M6a/M6b across modules, and calls X8's exact math functions as intrinsics. **The stage-0
   comparisons read stored goldens** (compiler/goldens/, 2026-10-22, HISTORY.md "Port M12: the stage-0 comparisons
   stored"): drvdiff, tokdiff, astdiff, modgraph, emitdiff and evaldiff hold the port to what stage 0 gave, captured once
-  by a make target each (drvgold, tokgold, astgold, modgold, rungold; `GOLD_FROM=port` captures from the port) - tokens
-  and trees as a hash per file, a file edited since compared with the C oracle while bootstrap/ has it - and a checks run
-  case is held to its stored output too. **Removing bootstrap/ is one commit** (bootstrap/README.md, "Removing this
-  directory"; 2026-10-23): compiler/msgs.olang is the diagnostics table's source (bootstrap/twins.olang holds errmsg.h to
-  it while both exist), every tool falls back to build/out only where it is built, else build/olang, and `make verify
-  OLANG=build/olang` runs everything with the port and stage 0 out (the makefile's `STAGE0`). `make bootstrap` compares
+  by a make target each (drvgold, tokgold, astgold, modgold, rungold; captured from the port since stage 0 went) - tokens
+  and trees as a hash per file, a file edited since reported as stale until captured again - and a checks run
+  case is held to its stored output too. **Stage 0 was removed in one commit (2026-10-23, HISTORY.md "Stage 0
+  removed")**: compiler/msgs.olang is the diagnostics table's source, and `make verify` runs everything with the port. `make bootstrap` compares
   the second and third builds, so a seed older than the code generator still bootstraps. With the port built by itself
   (2026-10-23) every test file passes and checks/checks.olang fails only known cases (25, 20 the evaluator's) and the 6 known
   scenarios of stage 1's third round; its

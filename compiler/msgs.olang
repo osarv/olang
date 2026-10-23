@@ -5,9 +5,7 @@
 # one line with no period at the end (B11). diag records a Msg against where it is about.
 #
 # This file is the table's source, edited by hand: a diagnostic is a case of Diag and a function written under the id
-# it is known by (# ERR_... or # NOTE_...). While bootstrap/ holds stage 0, each has a twin in bootstrap/errmsg.h - the
-# same id, rule and text - and bootstrap/twins.olang holds the two to each other, so a diagnostic added or changed is
-# added or changed in both; checks/checks.olang holds this file alone to the specification.
+# it is known by (# ERR_... or # NOTE_...). checks/checks.olang holds this file to the specification.
 #
 # A token parameter is the token as a reader sees it - Tok(text), or EndOfLine or EndOfFile - and a type parameter is
 # the type as source writes it.

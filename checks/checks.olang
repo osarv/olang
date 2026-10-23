@@ -140,10 +140,10 @@ fn fresh(tag String&) String& {
 }
 
 # the compiler under test, as an absolute path: $OLANG - relative to the repository root when it is relative - else
-# build/out where it is built (stage 0, while bootstrap/ exists), else build/olang (make bootstrap) - compiler/DESIGN.md
+# build/olang (make bootstrap) - compiler/DESIGN.md
 # section 4; the makefile's OLANG
 fn olang() String& {
-    o := try os.Env("OLANG") catch default ("build/out" if os.Exists("build/out") else "build/olang")
+    o := try os.Env("OLANG") catch default "build/olang"
     if o.StartsWith("/") { return $o }
     return $root() "/" $o
 }
@@ -1374,7 +1374,7 @@ fn lazytype(r mut report&) ? Failed {
 # B11: what the compiler's diagnostics are held to (compiler/msgs.olang, compiler/DESIGN.md section 1.3, the table's
 # source). Every rule a message names is one the specification states, so "olang explain RULE" finds it; the Diag enum
 # and the functions are one to one, each function's Kind its own case. Their arguments need no counting: they are typed
-# parameters. While bootstrap/ exists, bootstrap/twins.olang holds the table to stage 0's errmsg.h as well
+# parameters.
 test "every message of compiler/msgs.olang names rules the specification states, and is its own Diag" {
     msgs := try os.ReadFile("compiler/msgs.olang") catch default ""
     spec := try os.ReadFile("SPEC.md") catch default ""

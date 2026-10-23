@@ -4,7 +4,7 @@
 #
 #   $OLANG build bench/runfused.olang && build/bench_runfused [attention|epilogue|conv|all] [repetitions]
 #   BENCH_LOCK=FILE         take this flock while timing, as run.olang does
-#   OLANG=PATH              the compiler to build with (default: build/out where it is built, else build/olang)
+#   OLANG=PATH              the compiler to build with (default: build/olang)
 
 import "std/os"
 import "benchlib"

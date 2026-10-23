@@ -10,7 +10,7 @@
 #     NAME     only the rows whose name contains NAME
 #   BENCH_LOCK=FILE  take this flock for the checking and timing runs - on a shared machine, the lock that other
 #                    heavy jobs take, so nothing heavy runs beside the measurements
-#   OLANG=PATH       the compiler to build with (default: build/out where it is built, else build/olang)
+#   OLANG=PATH       the compiler to build with (default: build/olang)
 #
 # The table is also written to bench/build/results.txt. A timed program's output is gathered and dropped.
 

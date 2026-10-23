@@ -31,13 +31,13 @@ written `import "std/name"`; a module is one file, and a directory only groups f
   `prelude/tests/` holds the tests of some of its files; they are compiled only in test builds.
 - `runtime/` - the runtime as LLVM IR text: `runtime.ll` (arena allocator, chunk pools, regions, worker cache),
   `san.ll` (scope sanitizer, linked only under `-s`), `dyncall.ll` (calls by name over libffi). The compiler
-  fills it in for each build (`bootstrap/runtime.c`).
+  fills it in for each build (`compiler/runtime.olang`).
 
 ## Tests
 
 Each module has `test { }` blocks.
 
 ```
-build/out test std/json.olang          # one module
+build/olang test std/json.olang          # one module
 make test                            # all of std, with the rest of the suite
 ```

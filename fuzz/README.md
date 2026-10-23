@@ -38,6 +38,6 @@ build/fuzz_fuzz.debug scope START COUNT [JOBS [SCENARIOS [avoid]]]
 build/fuzz_fuzz.debug scopeshow SEED [SCENARIOS [ONLY]]
 ```
 
-Build it first with `build/out build -debug fuzz/fuzz.olang` (the make targets do). Each run works in
+Build it first with `build/olang build -debug fuzz/fuzz.olang` (the make targets do). Each run works in
 `build/fz/runXXXXXX`. That directory is removed when nothing was found, and kept (with `findings.txt` and
 `found/<seed>`) otherwise. Neither target is part of `make verify`; `checks/checks.olang` runs a few fixed seeds.

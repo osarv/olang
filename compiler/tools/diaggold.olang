@@ -1,13 +1,12 @@
 # diaggold - holds the new diagnostics module (compiler/diag.olang) to stage 0's rendering (compiler/DESIGN.md section 4,
 # item 3).
 #
-# compiler/goldens/diag.txt is what stage 0 (build/out) printed for every checks/cases program that must fail to
+# compiler/goldens/diag.txt is what stage 0 (the C compiler, removed; tagged stage0-final) printed for every checks/cases program that must fail to
 # compile, captured by compiler/tools/diaggold_capture.olang. Each row there - "path:line:col: error[RULE]: text", a note,
 # a file's or the compilation's - is read back into a record (the span from its line, column and caret, the rule, the
 # text) and reported to diag again, and what diag renders must be the case's output byte for byte: the rows, their
 # order, the source lines, the carets and the summary. -e is held to stage 0 the same way, for every rule msgs.olang
-# names. Run from the repository root (make diagtest); the -e checks run $OLANG, else build/out where it is built,
-# else build/olang.
+# names. Run from the repository root (make diagtest); the -e checks run $OLANG, else build/olang.
 
 import "std/os"
 import "../diag"
@@ -198,8 +197,8 @@ fn rules(src String&) List<String&> {
 test "-e prints each rule a message names as stage 0 does" {
     spec := try os.ReadFile("SPEC.md") catch default ""
     src := try os.ReadFile("compiler/msgs.olang") catch default ""
-    # the compiler $OLANG names, else stage 0 where it is built, else the one make bootstrap installs
-    olang := try os.Env("OLANG") catch default ("build/out" if os.Exists("build/out") else "build/olang")
+    # the compiler $OLANG names, else the one make bootstrap installs
+    olang := try os.Env("OLANG") catch default "build/olang"
     out := try os.MkTemp() catch default "/tmp"
     bad := 0
     count := 0

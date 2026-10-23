@@ -6,7 +6,7 @@
 ; the dynamic call over libffi (S3), an object of its own linked only into a program declaring it.
 ;
 ; The compiler reads these files when it builds - found as std is, under OLANG_STD or <compiler>/../std - and fills
-; in two things before clang compiles them (bootstrap/runtime.c):
+; in two things before clang compiles them (compiler/runtime.olang):
 ;   @@NAME@@         a fact about the target's C library, the size of a structure or where a field of it is (STAT_BYTES,
 ;                    JMP_BUF_BYTES, ...) - the row for the target's architecture, the host's checked against its headers;
 ;   ; @if COND       the lines up to "; @else" or "; @end" are kept only where COND holds, and those after "; @else"
@@ -16,7 +16,7 @@
 ; as each function the compiler generates is (B12, P7). The constants the kernel and the C library define alike on
 ; every architecture here - errno values, signal numbers, the S_IF* kinds, mmap's, sigaction's and sigaltstack's flags,
 ; sysconf's names - are written as numbers, named in a comment beside them and checked against the compiler's own
-; headers (bootstrap/runtime.c).
+; headers (compiler/runtime.olang).
 ;
 ; Every definition here exists once in a program; a module's code reaches it through declarations the compiler derives
 ; from this text, so a name defined here is a declaration in every module, and an "extern fn" naming one refers to it

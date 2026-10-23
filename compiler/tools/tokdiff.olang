@@ -1,29 +1,27 @@
 # tokdiff [FILE...] - holds the self-hosted scanner's token stream to the C tokenizer's (compiler/DESIGN.md section 4):
-# every token's line and text, every statement end, and every lexical error's rule and position. The C tokenizer's
-# stream is stored in compiler/goldens/tokens.txt (a hash of each file's text and of its stream) and tokens.full.txt
-# (the whole stream of each small file with lexical errors), captured by "tokdiff -capture" (make tokgold). With no FILE, every
-# .olang file of the repository. A file edited since the capture is compared with the C tokenizer itself where
-# build/tokdump is built, else reported as stale. Prints the first differences and exits 1 if there are any.
+# every token's line and text, every statement end, and every lexical error's rule and position. The C tokenizer (stage
+# 0, removed; tagged stage0-final) wrote the stream stored in compiler/goldens/tokens.txt (a hash of each file's text and
+# of its stream) and tokens.full.txt (the whole stream of each small file with lexical errors); "tokdiff -capture" (make
+# tokgold) writes them again from the scanner. With no FILE, every .olang file of the repository. A file edited since
+# the capture is reported as stale. Prints the first differences and exits 1 if there are any.
 #
 #     tokdiff [FILE...]          the scanner against the golden
-#     tokdiff -capture [port]    the golden captured again from build/tokdump, or from the scanner (make tokgold,
-#                                TOKGOLD=port)
+#     tokdiff -capture           the golden captured again from the scanner (make tokgold)
 #
-# Run from the repository root after "make build/compiler_tools_dump". The one documented difference is normalized
-# away: the C tokenizer puts a statement end before a "catch" beginning a line, which its parser skips; the scanner puts
-# none there (R9b).
+# Run from the repository root after "make build/compiler_tools_dump". The one documented difference from the C
+# tokenizer's stream, normalized away when the golden was captured: it put a statement end before a "catch" beginning a
+# line, which its parser skipped; the scanner puts none there (R9b).
 
 import "std/os"
 import "toolkit"
 
 Golden String& = "compiler/goldens/tokens"
-Oracle String& = "build/tokdump"
 Dump String& = "build/compiler_tools_dump"
 
 fn main() {
     args := os.Args()
     if args.Len() > 1 and args[1] == "-capture" {
-        capture(args.Len() > 2 and args[2] == "port")
+        capture()
         return
     }
     files := toolkit.FilesOr(args, toolkit.Tracked("*.olang"))
@@ -44,23 +42,8 @@ fn main() {
             if bad <= 5 { toolkit.Say(rep) }
         }
     }
-    if stale.Len() > 0 {
-        if toolkit.Built(Oracle) {
-            c := toolkit.DumpSections(normalize(run(Oracle, "", stale)))
-            for f in stale {
-                a := try c.Bodies.Get(f) catch default "?"
-                b := try olang.Bodies.Get(f) catch default ""
-                if a != b {
-                    bad++
-                    if bad <= 5 { toolkit.Say($"-- " $f " (< " $Oracle ", > the scanner)\n" $toolkit.Head(toolkit.Diff(work, a, b), 30)) }
-                }
-            }
-            toolkit.Say("tokdiff: " $stale.Len() " files changed since the golden, compared with " $Oracle " (make tokgold captures them)\n")
-        } else {
-            for f in stale { toolkit.Say("tokdiff: " $f " changed since the golden was captured (make tokgold)\n") }
-            bad += stale.Len()
-        }
-    }
+    for f in stale { toolkit.Say("tokdiff: " $f " changed since the golden was captured (make tokgold)\n") }
+    bad += stale.Len()
     if bad > 0 {
         toolkit.Say("tokdiff: " $bad " of " $files.Len() " files differ\n")
         os.Exit(1)
@@ -77,84 +60,14 @@ fn run(tool String&, mode String&, files List<String&>&) String {
     return $toolkit.RunShowing(args.ToArray()).Stdout
 }
 
-# every tracked file's stream, from the C tokenizer or from the scanner, written as the golden
-fn capture(port Bool) {
+# every tracked file's stream, from the scanner, written as the golden
+fn capture() {
     files := toolkit.Tracked("*.olang")
-    tool := Dump if port else Oracle
-    if not toolkit.Built(tool) { toolkit.Die("tokdiff: " $tool " is not built (make " $tool ")") }
-    raw := run(Dump, "tokens", files) if port else normalize(run(Oracle, "", files))
-    s := toolkit.DumpSections(raw)
-    if s.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " $tool " printed " $s.Keys.Len() " of " $files.Len() " files") }
+    if not toolkit.Built(Dump) { toolkit.Die("tokdiff: " $Dump " is not built (make " $Dump ")") }
+    s := toolkit.DumpSections(run(Dump, "tokens", files))
+    if s.Keys.Len() != files.Len() { toolkit.Die("tokdiff: " $Dump " printed " $s.Keys.Len() " of " $files.Len() " files") }
     toolkit.HashGoldenWrite(Golden, "the C tokenizer's stream (compiler/tools/tokdiff.olang)", files, s, fn(body String&) Bool {
         return body.Len() < 8192 and (body.StartsWith("error ") or (try body.Find("\nerror ") catch default -1) >= 0)
     })
-    toolkit.Say("tokdiff: " $files.Len() " files captured from " $tool " into " $Golden ".txt\n")
-}
-
-# the C tokenizer's rendering reduced to what the scanner's is: its diagnostics as "error RULE LINE:COL", and a statement
-# end dropped where "catch" follows it
-fn normalize(raw String&) String {
-    out := List<String&>()
-    pending String& = ""
-    diag := false
-    for line in toolkit.Rows(raw) {
-        if line.StartsWith("== ") {
-            if pending != "" { out.Push(pending) }
-            pending = ""
-            diag = false
-            out.Push($line)
-            continue
-        }
-        if line == "-- diagnostics" {
-            if pending != "" { out.Push(pending) }
-            pending = ""
-            diag = true
-            continue
-        }
-        if diag {
-            row := diagRow(line)
-            if row != "" { out.Push($row) }
-            continue
-        }
-        text := toolkit.AfterSpace(line)
-        if pending != "" {
-            if text != "catch" { out.Push(pending) }
-            pending = ""
-        }
-        if text == ";" {
-            pending = $line
-            continue
-        }
-        out.Push($line)
-    }
-    if pending != "" { out.Push(pending) }
-    return toolkit.Text(out)
-}
-
-# "error RULE LINE:COL" of a diagnostic row "path:LINE:COL: error[RULE]: text", "" for a row of another shape
-fn diagRow(line String&) String {
-    e := try line.Find(": error[") catch default -1
-    if e < 0 { return "" }
-    close := try line[e:].FindByte(']') catch default -1
-    if close < 0 { return "" }
-    head := line[0:e]
-    # the position is the last two colon-separated numbers of what comes before
-    c2 := try head.FindLast(":") catch default -1
-    if c2 < 0 { return "" }
-    c1 := try head[0:c2].FindLast(":") catch default -1
-    if c1 < 0 { return "" }
-    if not toolkit.IsNumber(head[c2 + 1:]) or not toolkit.IsNumber(head[c1 + 1:c2]) { return "" }
-    return "error " $line[e + 8:e + close] " " $head[c1 + 1:]
-}
-
-test "diagnostic rows are reduced to rule and position" {
-    assert diagRow("a/b.olang:3:14: error[L5]: bad") == "error L5 3:14"
-    assert diagRow("a/b.olang:3:14: error: bad") == ""
-    assert diagRow("  note") == ""
-}
-
-test "a statement end before catch is dropped" {
-    assert normalize("== f\n3 x\n3 ;\n4 catch\n4 y\n") == "== f\n3 x\n4 catch\n4 y\n"
-    assert normalize("== f\n3 ;\n4 z\n") == "== f\n3 ;\n4 z\n"
-    assert normalize("== f\n3 ;\n-- diagnostics\nf:1:2: error[L1]: m\nf:x\n") == "== f\n3 ;\nerror L1 1:2\n"
+    toolkit.Say("tokdiff: " $files.Len() " files captured from " $Dump " into " $Golden ".txt\n")
 }

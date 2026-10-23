@@ -1,51 +1,20 @@
 # layoutgold - captures compiler/goldens/layout.txt, the layouts M5a's acceptance compares the self-hosted type table
-# with (compiler/DESIGN.md section 4, compiler/tools/layoutdiff.olang): every type stage 0 holds for every root program
-# of the repository - the corpus, std, compiler/ and its tools, checks, fuzz and bench, each as an ordinary and as a test
-# build - and for every checks case that builds or runs, with the case's flags. Each type is written once, under the
-# first program that holds it ("== ROOT FLAGS"), as build/layoutdump prints it.
+# with (compiler/DESIGN.md section 4, compiler/tools/layoutdiff.olang). Stage 0 (the C compiler, removed; tagged
+# stage0-final) wrote the golden: every type it held for every root program of the repository - the corpus, std,
+# compiler/ and its tools, checks, fuzz and bench, each as an ordinary and as a test build - and for every checks case
+# that builds or runs, with the case's flags, each type written once, under the first program that holds it
+# ("== ROOT FLAGS"). Captured again here, the golden's own types are laid out again by the self-hosted type table ("dump
+# layout", as layoutdiff reads it, LAYOUTDIFF_DUMP naming another build), a deferred or unparsed one keeping the golden's
+# row: the set of types stays the one stage 0 captured.
 #
-# Run from the repository root after "make build/layoutdump" (make layoutgold), after a change to a layout or to the
-# types a program holds - a field added to a std type, a new instance. It takes minutes: stage 0 checks each program
-# whole. LAYOUTGOLD_OUT names another file to write than the golden (to compare a capture without replacing it).
-#
-#     layoutgold          every type stage 0 holds, from build/layoutdump
-#     layoutgold -port    the golden's own types laid out again by the self-hosted type table ("dump layout", as
-#                         layoutdiff reads it, LAYOUTDIFF_DUMP naming another build), a deferred or unparsed one keeping
-#                         the golden's row: the set of types stays the one stage 0 captured (make layoutgold GOLD_FROM=port)
+# Run from the repository root after "make build/compiler_tools_dump" (make layoutgold), after a change to a layout.
+# LAYOUTGOLD_OUT names another file to write than the golden (to compare a capture without replacing it).
 
 import "std/os"
 import "toolkit"
 
 fn main() {
-    oracle := "build/layoutdump"
-    golden := toolkit.Env("LAYOUTGOLD_OUT", "compiler/goldens/layout.txt")
-    args := os.Args()
-    if args.Len() > 1 and args[1] == "-port" {
-        fromPort(golden)
-        return
-    }
-    if not toolkit.Built(oracle) { toolkit.Die("layoutgold: " $oracle " is not built (make " $oracle ")") }
-    all := StringBuilder()
-    runs I64 = 0
-    refused I64 = 0
-    for mode in String&["", "-t"] {
-        for f in roots() {
-            if one(oracle, all, mode, f) { runs++ } else { refused++ }
-        }
-    }
-    for c in toolkit.Matching("checks/cases", ".olang") {
-        text := toolkit.Read(c)
-        first := toolkit.Rows(text)[0] if text.Len() > 0 else ""
-        if not (first.StartsWith("# check: build") or first.StartsWith("# check: run")) { continue }
-        if one(oracle, all, flagsOf(text), c) { runs++ } else { refused++ }
-    }
-    types := keepFirst(all.ToString())
-    toolkit.Write(golden, types)
-    count I64 = 0
-    for r in toolkit.Rows(types) {
-        if not r.StartsWith("== ") { count++ }
-    }
-    toolkit.Say("layoutgold: " $runs " programs (" $refused " refused by stage 0), " $count " types\n")
+    fromPort(toolkit.Env("LAYOUTGOLD_OUT", "compiler/goldens/layout.txt"))
 }
 
 # the golden laid out again by the self-hosted type table, row for row; a row it leaves unlaid keeps the golden's
@@ -74,96 +43,4 @@ fn fromPort(out String&) {
     }
     toolkit.Write(out, b.ToString())
     toolkit.Say("layoutgold: " $old.Len() " rows laid out by " $dump " into " $out " (" $kept " left as the golden had them)\n")
-}
-
-# the root programs: the corpus, std, the compiler and its tools, checks, fuzz and bench
-fn roots() List<String&> {
-    l := List<String&>()
-    for dir in String&["tests", "tests/geom", "std", "compiler", "compiler/tools"] {
-        for f in toolkit.Matching(dir, ".olang") { l.Push($f) }
-    }
-    l.Push("checks/checks.olang")
-    for dir in String&["fuzz", "bench"] {
-        for f in toolkit.Matching(dir, ".olang") { l.Push($f) }
-    }
-    return l
-}
-
-# the oracle's rendering of one program, with its flags, appended to all under "== ROOT FLAGS"; false when stage 0
-# refuses the program
-fn one(oracle String&, all mut StringBuilder&, flags String&, root String&) Bool {
-    args := List<String&>()
-    args.Push(oracle)
-    for f in toolkit.Fields(flags) { args.Push($f) }
-    args.Push(root)
-    o := toolkit.Run(args.ToArray())
-    if o.Status != 0 { return false }
-    all.Push("== " $root)
-    if flags != "" { all.Push(" " $flags) }
-    all.PushChar('\n')
-    all.Push(o.Stdout)
-    return true
-}
-
-# the layoutdump flags a case's "# flags:" line stands for: -t, and -D for the word after -define
-fn flagsOf(text String&) String {
-    line String& = ""
-    for l in toolkit.Rows(text) {
-        if l.StartsWith("# flags:") {
-            line = $l[8:]
-            break
-        }
-    }
-    out := List<String&>()
-    want := false
-    for f in toolkit.Fields(line) {
-        if f == "-t" {
-            out.Push("-t")
-        } else if f == "-define" {
-            want = true
-            continue
-        } else if want {
-            out.Push("-D")
-            out.Push($f)
-        }
-        want = false
-    }
-    return out.ToArray().Join(" ")
-}
-
-# each type under the first program holding it; a program holding none that came before it is left out
-fn keepFirst(all String&) String {
-    seen := Map<String&, Bool>()
-    out := StringBuilder()
-    group String& = ""
-    said := false
-    for row in toolkit.Rows(all) {
-        if row.StartsWith("== ") {
-            group = $row
-            said = false
-            continue
-        }
-        tab := try row.FindByte('\t') catch default row.Len()
-        key := row[0:tab]
-        if key in seen { continue }
-        seen.Put($key, true)
-        if not said {
-            out.Push(group)
-            out.PushChar('\n')
-            said = true
-        }
-        out.Push(row)
-        out.PushChar('\n')
-    }
-    return out.ToString()
-}
-
-test "a case's flags become layoutdump's" {
-    assert flagsOf("# check: run\n# flags: -debug -define X=1 -t\n") == "-D X=1 -t"
-    assert flagsOf("# check: run\n") == ""
-}
-
-test "each type is written under the first program that holds it" {
-    all := "== a\nint\t4\nbool\t1\n== b -t\nint\t4\nlist\t16\n== c\nint\t4\n"
-    assert keepFirst(all) == "== a\nint\t4\nbool\t1\n== b -t\nlist\t16\n"
 }

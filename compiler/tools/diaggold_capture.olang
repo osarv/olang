@@ -3,8 +3,7 @@
 # what the C compiler printed on stdout for "olang build FLAGS CASE", run in a directory of its own with the case copied
 # in, as the checks run it. The repository's root is written $ROOT, so the file does not depend on where the checkout
 # is. The cases run four at a time.
-# Run from the repository root (make diaggold); COMPILER defaults to $OLANG, else build/out where it is built, else
-# build/olang.
+# Run from the repository root (make diaggold); COMPILER defaults to $OLANG, else build/olang.
 
 import "std/os"
 import "std/filepath"

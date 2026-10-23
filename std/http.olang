@@ -231,12 +231,11 @@ if TestBuild {
     }
 
     # the port the test server, started in the background, answers on - or -1 when curl is missing, or -2 when the
-    # server (checks/fixtures/http/server.olang, built here with the compiler running the tests: $OLANG, else build/out
-    # where it is built, else build/olang) could not be built or did not start
+    # server (checks/fixtures/http/server.olang, built here with the compiler running the tests: $OLANG, else build/olang) could not be built or did not start
     fn startServer() I64 {
         if os.Run("command -v curl >/dev/null 2>&1") != 0 { return -1 }
         try os.Remove("build/http_port") catch { }      # a port written by an earlier run is not this server's
-        given := try os.Env("OLANG") catch default ("build/out" if os.Exists("build/out") else "build/olang")
+        given := try os.Env("OLANG") catch default "build/olang"
         compiler := try os.RealPath(given) catch { return -2 }
         if os.Run($os.Quote(compiler) " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0 { return -2 }
         os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")

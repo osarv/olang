@@ -13,24 +13,24 @@
 # For each file, "== FILE", then:
 #
 # - tokens: one line per token - its line and its text, ";" for a statement end - and then one line per lexical error,
-#   "error RULE LINE:COL". bootstrap/oracle/tokdump prints the C tokenizer's stream the same way, and
-#   compiler/tools/tokdiff.olang compares the two.
+#   "error RULE LINE:COL". The C tokenizer's stream (stage 0, removed) was printed the same way and is
+#   stored in compiler/goldens/tokens.txt, which compiler/tools/tokdiff.olang compares.
 # - speed: the fastest of ten scans, in MB/s.
 # - ast: one line per declaration and statement, "KIND LINE:COL-LINE:COL", the span of its tokens - an item the parser
 #   met an error in prints none - then "-- diagnostics" and the first syntax error of each item, "error RULE LINE:COL".
-#   Every branch of an if is parsed and its diagnostics said, as if each were taken. bootstrap/oracle/astdump prints
-#   the C parser's tree the same way, and compiler/tools/astdiff.olang compares the two.
+#   Every branch of an if is parsed and its diagnostics said, as if each were taken. The C parser's tree (stage 0, removed) was printed
+#   the same way and is stored in compiler/goldens/ast.txt, which compiler/tools/astdiff.olang compares.
 # - parse: the fastest of ten scans and parses, in MB/s.
 # - roundtrip: the tree written back as source (unparse) must hold the file's own tokens - statement ends, trailing
 #   commas and comments aside, a token of "<", ">" and "=" read a character at a time ("List<List<I32>>= ...") - and
 #   read again must give the same text written: "ok", or where they first differ. A file with syntax errors outside a
 #   branch the build may decide is skipped; such a branch is written as its text.
 # - modules: the program the file is the root of, loaded (load): "module IDENTITY" for every module, then one
-#   "  ALIAS IDENTITY" per import it loaded, sorted. bootstrap/oracle/modgraph prints stage 0's the same way, and
-#   compiler/tools/modgraph.olang compares the two. -D defines build constants, -t makes TestBuild true.
+#   "  ALIAS IDENTITY" per import it loaded, sorted. Stage 0's was printed the same way and is stored in
+#   compiler/goldens/modgraph.txt, which compiler/tools/modgraph.olang compares. -D defines build constants, -t makes TestBuild true.
 # - names: the program loaded and its names resolved (names): the diagnostics both said, rendered as the compiler
 #   renders them. compiler/tools/namesdiff.olang compares their load and names rules with stage 0's goldens.
-# - layout: GOLDEN is bootstrap/oracle/layoutdump's output for many programs (compiler/goldens/layout.txt), a group per
+# - layout: GOLDEN is stage 0's layout oracle's output for many programs (compiler/goldens/layout.txt), a group per
 #   program, "== ROOT [FLAGS]" and then one line per type the C checker held. For each group the program is loaded and
 #   its names resolved, and each line's type read back from its canonical text (generic) and laid out (types), then
 #   printed as the oracle prints it: "CANON\tSIZE ALIGN\tLLVM\tBODY\tPARTS". A type the text names no type of is

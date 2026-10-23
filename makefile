@@ -1,75 +1,22 @@
-CC = gcc
-# -MMD -MP make gcc emit a .d file per object listing the headers it actually included, which the
-# -include below feeds back to make. Without them a header edit rebuilt nothing: an incremental build
-# after changing a struct in a .h silently produced object files compiled against DIFFERENT layouts of
-# the same struct, and the resulting compiler segfaulted on valid input. "make verify" always ran clean
-# so it never caught this - the failure only ever appeared mid-edit.
-CFLAGS = -Wall -Werror -Wextra -Wpedantic -g -MMD -MP
-# the C compiler - stage 0 of the bootstrap (bootstrap/README.md) - is bootstrap/*.c, built to build/out
-SRC = $(wildcard bootstrap/*.c)
-# objects under build/obj/, not build/: a checkout built before the move to bootstrap/ holds build/*.d files naming
-# codegen.c and the rest at the top level, and make would read them and stop at "No rule to make target 'codegen.c'"
-OBJ = $(addprefix build/obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
-# the same sources built optimized (make stage0)
-STAGE0_CFLAGS = -O2 -Wall -Werror -Wextra -Wpedantic -MMD -MP
-STAGE0_OBJ = $(addprefix build/stage0.obj/, $(addsuffix .o, $(basename $(notdir $(SRC)))))
-DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # M1: a module is one file, and a directory only groups them - the std modules and the prelude's files (with the
 # tests of some prelude files in std/prelude/tests, a directory of ordinary modules - only std/prelude's own files are
 # the prelude),
 # tests/ (the corpus: shared, worker, runner, Base, Lib) and tests/geom/ (two modules importing each other, imported by runner.olang), and checks/checks.olang - the checks a
 # test block cannot make about the compiler itself (programs that must not compile, whole builds), written
-# in olang like the rest; tools/ (the migration tools and what they share) has tests too, and so does
-# bootstrap/twins.olang (stage 0's diagnostics table held to compiler/msgs.olang), for as long as bootstrap/ exists
+# in olang like the rest; tools/ (the migration tools and what they share) has tests too
 OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcard std/*.olang) \
 	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) \
-	$(wildcard bootstrap/*.olang) $(wildcard tools/*.olang) checks/checks.olang \
+	$(wildcard tools/*.olang) checks/checks.olang \
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
 	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang
-# the compiler under test (compiler/DESIGN.md section 4): build/out, the C compiler, unless named - "make test
-# OLANG=build/stage1", or "make verify OLANG=build/olang" for the compiler make bootstrap installs (made by it when
-# missing). What it runs - checks/checks.olang, fuzz/, bench/, the tools - reads it from the environment, as an absolute
-# path; unset, each falls back to build/out where it is built, else build/olang
-OLANG ?= build/out
+# the compiler under test (compiler/DESIGN.md section 4): build/olang, which make bootstrap installs (made by it when
+# missing) - "make test OLANG=build/stage1" names another. What it runs - checks/checks.olang, fuzz/, bench/, the tools -
+# reads it from the environment, as an absolute path; unset, each falls back to build/olang
+OLANG ?= build/olang
 OLANG_ENV = OLANG=$(abspath $(OLANG))
-# whether stage 0 takes part: "yes" while bootstrap/ exists and the compiler under test is stage 0 (build/out or
-# build/stage0), else empty. Empty, nothing runs stage 0 or its C oracles - the tools compare with the goldens alone, a
-# file edited since its golden failing, goldens are captured from the port - so "make verify OLANG=build/olang" checks
-# what is left once bootstrap/ is removed (bootstrap/README.md). STAGE0= forces it off, STAGE0=yes on
-STAGE0 ?= $(if $(wildcard bootstrap/main.c),$(if $(filter build/out build/stage0,$(OLANG)),yes))
 
-build/obj/%.o: bootstrap/%.c
-	mkdir -p build/obj
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# build/out is the real target (not "build") so make tracks it by the file's own mtime - naming the
-# target "build" instead would let the already-existing build/ directory satisfy it, silently skipping
-# relinking after a .o changes.
-build/out: $(OBJ)
-	$(CC) $(CFLAGS) $^ -o build/out -lm -lffi -ldl -lpthread
-
-build: build/out
-
-# the token oracle (compiler/DESIGN.md section 4): the C tokenizer's stream, which the self-hosted scanner's must equal.
-# It links the tokenizer alone, so it stays buildable once bootstrap/ is frozen
-build/tokdump: bootstrap/oracle/tokdump.c build/obj/token.o build/obj/util.o build/obj/errmsg.o
-	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm
-
-# the structure oracle (compiler/DESIGN.md section 4): every declaration and statement the C parser finds, with its span,
-# which the self-hosted parser's must equal (compiler/tools/astdiff.olang)
-build/astdump: bootstrap/oracle/astdump.c build/obj/syntax.o build/obj/token.o build/obj/util.o build/obj/errmsg.o
-	$(CC) -O2 -Wall -Werror -Wextra -Wpedantic $^ -o $@ -lm -lpthread
-
-# the module-graph oracle (compiler/DESIGN.md section 4): the modules and import edges the C compiler's loader reaches
-# from a root, with its build-decided branches decided, which the self-hosted loader's must equal (compiler/tools/modgraph.olang)
-build/modgraph: bootstrap/oracle/modgraph.c $(filter-out build/obj/main.o,$(OBJ))
-	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
-
-# the layout oracle (compiler/DESIGN.md section 4): every type the C checker holds for a program, with its size,
-# alignment, LLVM spelling and offsets, which the self-hosted type table's must equal (compiler/tools/layoutdiff.olang)
-build/layoutdump: bootstrap/oracle/layoutdump.c $(filter-out build/obj/main.o,$(OBJ))
-	$(CC) -O2 -Wall -Werror -Wextra $^ -o $@ -lm -lffi -ldl -lpthread
+build: build/olang
 
 # what the self-hosted compiler's passes make of a file (compiler/tools/dump.olang), built by the compiler under test
 build/compiler_tools_dump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/dump.olang
@@ -93,18 +40,13 @@ fmtdiff: build/compiler_tools_fmt
 build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
 	$(OLANG) build compiler/olang.olang
 
-# where a golden (compiler/goldens/) is captured from: stage 0 and its C oracles while there are some (GOLD_FROM=stage0),
-# else the port (GOLD_FROM=port: the self-hosted passes, and GOLD_OLANG the driver - build/compiler_olang, or name
-# another, "make drvgold GOLD_FROM=port GOLD_OLANG=build/stage1"). A golden is captured only by its own target
-# (drvgold, rungold, tokgold, astgold, diaggold, layoutgold, modgold), never by a check
-GOLD_FROM ?= $(if $(STAGE0),stage0,port)
-GOLD_OLANG ?= $(if $(filter port,$(GOLD_FROM)),build/compiler_olang,build/out)
-GOLD_PORT = $(if $(filter port,$(GOLD_FROM)),port)
-# the C oracles, while stage 0 takes part: a tool compares a file edited since its golden was captured with its oracle
-TOKDUMP = $(if $(STAGE0),build/tokdump)
-ASTDUMP = $(if $(STAGE0),build/astdump)
+# A golden (compiler/goldens/) is captured from the port: the self-hosted passes, and GOLD_OLANG the driver -
+# build/compiler_olang, or name another, "make drvgold GOLD_OLANG=build/stage1". It is captured only by its own target
+# (drvgold, rungold, tokgold, astgold, diaggold, layoutgold, modgold), never by a check. The goldens were captured from
+# the C compiler, stage 0 (removed, tagged stage0-final): a file edited since is compared with its golden alone
+GOLD_OLANG ?= build/compiler_olang
 
-# M10's acceptance: the driver says what compiler/goldens/drv.txt stores - what stage 0 said - for command lines decided
+# M10's acceptance: the driver says what compiler/goldens/drv.txt stores - what stage 0 said when it was captured - for command lines decided
 # before code generation and for whole builds
 drvdiff: build/compiler_olang build/compiler_tools_drvdiff
 	build/compiler_tools_drvdiff
@@ -114,23 +56,23 @@ drvgold: $(GOLD_OLANG) build/compiler_tools_drvdiff
 	build/compiler_tools_drvdiff -capture $(GOLD_OLANG)
 
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository, as
-# compiler/goldens/tokens.txt stores it (a file edited since is compared with build/tokdump while bootstrap/ has it)
-tokdiff: build/compiler_tools_dump build/compiler_tools_tokdiff $(TOKDUMP)
+# compiler/goldens/tokens.txt stores it
+tokdiff: build/compiler_tools_dump build/compiler_tools_tokdiff
 	build/compiler_tools_tokdiff
 
 # captures compiler/goldens/tokens.txt and tokens.full.txt again, after .olang files are edited, added or removed
-tokgold: build/compiler_tools_dump build/compiler_tools_tokdiff $(if $(GOLD_PORT),,build/tokdump)
-	build/compiler_tools_tokdiff -capture $(GOLD_PORT)
+tokgold: build/compiler_tools_dump build/compiler_tools_tokdiff
+	build/compiler_tools_tokdiff -capture
 
 # M3's acceptance: the self-hosted parser's tree and syntax errors are the C parser's on every file of the repository,
-# as compiler/goldens/ast.txt stores them (a file edited since is compared with build/astdump while bootstrap/ has it),
+# as compiler/goldens/ast.txt stores them,
 # and each tree written back as source and read again is the same tree (compiler/tools/astdiff.olang)
-astdiff: build/compiler_tools_dump build/compiler_tools_astdiff $(ASTDUMP)
+astdiff: build/compiler_tools_dump build/compiler_tools_astdiff
 	build/compiler_tools_astdiff
 
 # captures compiler/goldens/ast.txt and ast.full.txt again, after .olang files are edited, added or removed
-astgold: build/compiler_tools_dump build/compiler_tools_astdiff $(if $(GOLD_PORT),,build/astdump)
-	build/compiler_tools_astdiff -capture $(GOLD_PORT)
+astgold: build/compiler_tools_dump build/compiler_tools_astdiff
+	build/compiler_tools_astdiff -capture
 
 # M4's acceptance: on every checks case the self-hosted loader and name resolver report the errors of their rules that
 # stage 0 reported, at the same position (compiler/tools/namesdiff.olang, against compiler/goldens/diag.txt)
@@ -204,38 +146,25 @@ evaldiff: build/compiler_tools_evaldump build/compiler_tools_evaldiff
 rungold: $(GOLD_OLANG) build/compiler_tools_rungold
 	build/compiler_tools_rungold $(GOLD_OLANG)
 
-# captures compiler/goldens/layout.txt again from stage 0, after a change to a layout or to what a program holds
-# (minutes: stage 0 checks each root program whole); GOLD_FROM=port lays the golden's own types out again by the
-# self-hosted type table instead
-layoutgold: build/compiler_tools_layoutgold $(if $(GOLD_PORT),build/compiler_tools_dump,build/layoutdump)
-	build/compiler_tools_layoutgold $(if $(GOLD_PORT),-port)
+# captures compiler/goldens/layout.txt again, laying the golden's own types out by the self-hosted type table, after a
+# change to a layout or to what a program holds
+layoutgold: build/compiler_tools_layoutgold build/compiler_tools_dump
+	build/compiler_tools_layoutgold
 
 # M4's acceptance: from every root program, the module graph the self-hosted loader reaches is stage 0's, as
-# compiler/goldens/modgraph.txt stores it (a graph that differs is compared with build/modgraph while bootstrap/ has it -
-# compiler/tools/modgraph.olang)
-MODGRAPH = $(if $(STAGE0),build/modgraph)
-modgraph: build/compiler_tools_dump build/compiler_tools_modgraph $(MODGRAPH)
+# compiler/goldens/modgraph.txt stores it (compiler/tools/modgraph.olang)
+modgraph: build/compiler_tools_dump build/compiler_tools_modgraph
 	build/compiler_tools_modgraph
 
 # captures compiler/goldens/modgraph.txt again, after an import changes
-modgold: build/compiler_tools_dump build/compiler_tools_modgraph $(if $(GOLD_PORT),,build/modgraph)
-	build/compiler_tools_modgraph -capture $(GOLD_PORT)
-
-build/stage0.obj/%.o: bootstrap/%.c
-	mkdir -p build/stage0.obj
-	$(CC) $(STAGE0_CFLAGS) -c $< -o $@
-
-# stage 0 built optimized (bootstrap/README.md): the C compiler, kept until the seed has rebuilt the compiler from nothing
-build/stage0: $(STAGE0_OBJ)
-	$(CC) $(STAGE0_CFLAGS) $^ -o build/stage0 -lm -lffi -ldl -lpthread
-
-stage0: build/stage0
+modgold: build/compiler_tools_dump build/compiler_tools_modgraph
+	build/compiler_tools_modgraph -capture
 
 # ---- the seed (compiler/DESIGN.md section 5, seed/README.md) ----
 #
 # The seed is the compiler's own LLVM IR, as the compiler writes it of itself for baseline x86-64 Linux: one
 # xz-compressed .ll per object in seed/. "make bootstrap" rebuilds the compiler from it with nothing but clang and xz -
-# no other compiler, no bootstrap/: clang makes the seed into build/olang.seed, which builds compiler/olang.olang into
+# no other compiler: clang makes the seed into build/olang.seed, which builds compiler/olang.olang into
 # build/olang.1, which builds it into build/olang.2, which builds it again into build/olang.3; the last two, each built
 # by a compiler made from the current source, must be byte for byte equal, and build/olang.3 is installed as
 # build/olang. build/olang.1 was built by the seed's compiler, so it equals build/olang.2 only while the seed is current:
@@ -246,10 +175,9 @@ SEED = seed
 SEED_FILES = $(wildcard $(SEED)/*.ll.xz)
 SEED_OBJ = $(patsubst $(SEED)/%.ll.xz,build/seed/%.o,$(SEED_FILES))
 SEED_CLANG ?= clang
-# the compiler that builds the seed tool: the one make bootstrap installed, else stage 0 while it takes part, else
-# build/olang made by make bootstrap's steps. Which one it is changes nothing in the seed - the tool runs the current
-# source's passes over the current source
-SEED_OLANG ?= $(if $(wildcard build/olang),build/olang,$(if $(STAGE0),build/out,build/olang))
+# the compiler that builds the seed tool: the one make bootstrap installed (made by its steps when missing). Which one it
+# is changes nothing in the seed - the tool runs the current source's passes over the current source
+SEED_OLANG = build/olang
 
 build/seed/%.o: $(SEED)/%.ll.xz
 	@mkdir -p build/seed
@@ -273,7 +201,7 @@ bootstrap: build/olang.seed
 	$(BOOTSTRAP)
 
 # build/olang as a file, for OLANG=build/olang: made by the same steps when missing or older than the sources it is
-# built from (what the compiler holds of std included), as build/out is from bootstrap/*.c
+# built from (what the compiler holds of std included)
 build/olang: build/olang.seed $(wildcard compiler/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/*.olang) \
 		$(wildcard std/runtime/*.ll)
 	$(BOOTSTRAP)
@@ -323,7 +251,7 @@ checkir:
 	  END { if (bad) { print "FAIL: " bad " alloca(s) outside an entry block"; exit 1 } }' build/*.ll
 	@echo "checkir: every alloca is in its entry block"
 
-# the one command to run before considering any change done: a from-scratch build with -Werror, the full
+# the one command to run before considering any change done: a from-scratch build, the full
 # olang test suite (every test{} block across every .olang file), and an end-to-end smoke test of the -c
 # production compile path (build tests/runner.olang as a real program, then actually run the resulting binary -
 # not just compile it, since "run" alone only builds). Each step is a separate recursive make invocation so
@@ -396,9 +324,4 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap stage0 seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
-
-# kept at the very END of this file on purpose: -include splices in the .d files' own explicit rules
-# ("build/obj/codegen.o: bootstrap/codegen.c ..."), and the first explicit rule make reads becomes its default goal.
-# Placed higher up, that silently made "make" build one object file instead of build/out.
--include $(DEP)
+.PHONY: all build bootstrap seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean

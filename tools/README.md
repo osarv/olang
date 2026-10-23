@@ -4,13 +4,13 @@ Programs that rewrite olang sources after a language change. Each was written fo
 kept so other code (a branch, oann) can be migrated the same way. They edit files in place, so commit first.
 
 They are olang programs (they were Python scripts; the ports give the same edits and the same output). Build one with
-`build/out build tools/NAME.olang` (from the repository root), which writes `build/tools_NAME`, and run that with the
-arguments below. `build/out interpret tools/NAME.olang ARGS` runs one without building, which is fine for a few files.
+`build/olang build tools/NAME.olang` (from the repository root), which writes `build/tools_NAME`, and run that with the
+arguments below. `build/olang interpret tools/NAME.olang ARGS` runs one without building, which is fine for a few files.
 `srcmask.olang` is the module they share: telling code from comments and literals, reading files as Python's text mode
 did, walking a directory for `.olang` files; `diagedit.olang` is what the two driven by the compiler's diagnostics share
-(reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/out test
-tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. Every tool has a few tests of its own
-(`build/out test tools/NAME.olang`), and `make test` runs them with the rest.
+(reading a diagnostic row, compiling many files side by side, keeping a comment's column); `build/olang test
+tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests. Every tool has a few tests of its own
+(`build/olang test tools/NAME.olang`), and `make test` runs them with the rest.
 
 | tool | the change | run |
 |---|---|---|
@@ -29,7 +29,7 @@ tools/srcmask.olang` and `build/out test tools/diagedit.olang` run their tests. 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
 - `perm_mut` and `int_literal_i64` are driven by the compiler's own diagnostics: they compile each file with
-  `--olang` (default `$OLANG`, else `build/out` where it is built, else `build/olang`) and apply what it reports, repeating until nothing changes.
+  `--olang` (default `$OLANG`, else `build/olang`) and apply what it reports, repeating until nothing changes.
 - `errors_migrate` is driven by the compiler's diagnostics too (its first argument, the compiler); `donefail_migrate`
   works on the text alone. Both list at the end what they leave for a person.
 - `io_fix` needs the compiler path as its first argument (an absolute path; a relative one is made absolute).

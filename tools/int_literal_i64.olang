@@ -21,8 +21,7 @@
 #
 #     $OLANG build tools/int_literal_i64.olang && build/tools_int_literal_i64 [--olang PATH] [-j N] FILE|DIR...
 #
-#   --olang  the compiler to run (default: $OLANG, else build/out in the repository this tool is in, else its
-#            build/olang)
+#   --olang  the compiler to run (default: $OLANG, else build/olang in the repository this tool is in)
 #   -j       how many compilations run at once (default 3)
 # For oann: build/tools_int_literal_i64 --olang /home/user/olang/build/olang /home/user/oann
 #

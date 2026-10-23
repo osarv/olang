@@ -218,13 +218,10 @@ fn RepoRoot() String {
     return $filepath.Dir(filepath.Dir(AbsPath(exe)))
 }
 
-# the compiler a tool runs when none is named: $OLANG, else the repository's build/out where it is built (stage 0, while
-# bootstrap/ exists), else its build/olang (make bootstrap)
+# the compiler a tool runs when none is named: $OLANG, else the repository's build/olang (make bootstrap)
 fn Compiler() String {
     given := try os.Env("OLANG") catch default ""
     if given.Len() > 0 { return AbsPath(given) }
-    stage0 := $RepoRoot() "/build/out"
-    if os.Exists(stage0) { return stage0 }
     return $RepoRoot() "/build/olang"
 }
 

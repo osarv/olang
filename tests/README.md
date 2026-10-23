@@ -29,7 +29,7 @@ working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so o
 From the repository root:
 
 - `make test` - every `test { }` block in the repository, these files included.
-- `build/out -t tests/shared.olang` - one file's tests.
+- `build/olang test tests/shared.olang` - one file's tests.
 - `make run` - build `tests/runner.olang` as a program; `make verify` then runs `build/tests_runner`.
 - `make verify` - the full check before calling a change done.
 - `make race`, `make scopesan` - the same suite under ThreadSanitizer and the scope

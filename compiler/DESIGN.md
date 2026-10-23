@@ -9,7 +9,7 @@ root program is interned and laid out as stage 0 lays it out (the layout diff, s
 written, reviewed and revised (section 1.6.1); the MIR contract (`mir`, section 1.8.1) written 2026-10-12 for review;
 the rest is design.
 `SPEC.md` says what olang means; this file says how the compiler written in olang computes it. The C compiler
-(`bootstrap/`) is the reference for behaviour only: its diagnostics, edge cases and test results, never its structure.
+(stage 0, removed 2026-10-23, tagged `stage0-final`) was the reference for behaviour only: its diagnostics, edge cases and test results, never its structure.
 Where the C compiler and `SPEC.md` disagree, the port follows `SPEC.md`, and the disagreement is fixed in C as well (or
 the spec amended) and recorded.
 
@@ -177,7 +177,7 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
 - **Built (M2, 2026-10-11).**
   - `compiler/msgs.olang`: 562 functions, one per entry of errmsg.h's table (which has grown past the 424 counted
     above), first generated from it by a tool, and since 2026-10-23 the table's source, edited by hand
-    (`bootstrap/twins.olang` holds stage 0's errmsg.h to it - id, name, rule and text - while `bootstrap/` exists). Beside them: `Msg` (`Kind`, `Rule`, `Text`), the `Diag` enum
+    (`bootstrap/twins.olang` held stage 0's errmsg.h to it until stage 0 was removed). Beside them: `Msg` (`Kind`, `Rule`, `Text`), the `Diag` enum
     naming every diagnostic, `Tok` and `Esc` (C's `%n` and `%c` spelling), and `EndOfLine`/`EndOfFile`.
   - `compiler/diag.olang`: `Diagnostics` - `AddFile`, `Error`, `ErrorOncePerLine`, `Note`, `Fatal`,
     `ScopeGroupStart`/`End`, `PushContext`/`PopContext`, `Hold`/`EndHold`/`Choose`/`Drop`, `Render`, `Summary`,
@@ -188,9 +188,9 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
     2. **`%n` and `%t` are `String&` until their types exist.** A token parameter holds the token as a reader sees it
        (`Tok(text)`, `EndOfLine`, `EndOfFile`), a type parameter the type as source writes it. Once M3's `Token` and
        M5's type ids exist, the parameters become `tok token.Token` and `ty types.TypeId`, spelled inside msgs; the
-       generator was retired on 2026-10-23 (the parameters still `String&`), msgs.olang is edited by hand, and
-       `bootstrap/twins.olang` keeps errmsg.h its twin, entry for entry - id, name, rule and text - for as long as
-       bootstrap/ exists (bootstrap/ takes fixes only); `checks/checks.olang` holds msgs.olang alone to the spec.
+       generator was retired on 2026-10-23 (the parameters still `String&`), msgs.olang is edited by hand
+       (`bootstrap/twins.olang` kept errmsg.h its twin until stage 0 was removed); `checks/checks.olang` holds msgs.olang
+       to the spec.
     3. **A span is offsets into a file's text** (`Where.Span(file, start, end)`); its line and column come from a line
        table diag makes for a file the first time a diagnostic needs it. `lineStarts(text)` is the one function to
        replace with M1's source line table.
@@ -1256,7 +1256,7 @@ with the installed one; `make bootstrap` is section 5.
    - Unit `test` blocks live in the compiler's own modules (scanner cases, interning, the pattern converter), and
      `make test` runs them.
 7. **Behaviour against stage 1.**
-   - P0 parametrizes the compiler under test: the makefile gets `OLANG ?= build/out` (done). `checks/checks.olang`
+   - P0 parametrizes the compiler under test: the makefile gets `OLANG ?= build/out` (done; `build/olang` since stage 0 was removed). `checks/checks.olang`
      (which today hard-codes `build/out`), `fuzz/` and `bench/` read `$OLANG`.
    - `make verify OLANG=build/stage1`.
    - `make race OLANG=build/stage1` must report exactly the one known race.
@@ -1276,16 +1276,16 @@ with the installed one; `make bootstrap` is section 5.
 | emit | `make verify OLANG=build/stage1`; fuzz across compilers; benchmarks; race |
 | self-host | stage 2 equals stage 3 (section 5) |
 
-After the freeze the token and structure oracles stay buildable, because `bootstrap/` does not change. They serve
-for scanner and parser regressions until the grammar moves past what stage 0 parses.
+The token and structure oracles went with stage 0; their output is stored in `compiler/goldens/`, which serves for
+scanner and parser regressions until the grammar moves past what stage 0 parsed.
 
 ## 5. Bootstrap
 
 **The seed (the user's decision, 2026-10-18).** Once the port builds itself, rebuilding it from nothing is one run: a
 committed seed - the compiler's own LLVM IR, written by the compiler of itself and never by hand - is compiled by
 clang, and that compiler builds the current source (Zig's approach, its `zig1.wasm`). No chain of intermediate
-compilers, no binary committed, and no second compiler maintained: the C compiler in `bootstrap/` is frozen, and is
-removed from the tree (tagged `stage0-final`) once the seed has rebuilt the compiler from nothing (QAL).
+compilers, no binary committed, and no second compiler maintained: the C compiler that was in `bootstrap/` is
+removed from the tree (2026-10-23, tagged `stage0-final`; `git checkout stage0-final -- bootstrap` restores it).
 
 **Layout.**
 
@@ -1293,7 +1293,6 @@ removed from the tree (tagged `stage0-final`) once the seed has rebuilt the comp
 seed/               the seed: one xz-compressed .ll per object, baseline x86-64 Linux (seed/README.md)
 compiler/           the olang compiler, this file, tools/ (tools/seed.olang writes the seed)
 std/                the standard library; std/runtime/*.ll
-bootstrap/          stage 0, the C compiler - frozen; `make stage0` builds build/stage0 from it
 build/olang.seed    the seed made a compiler by clang
 build/olang         the compiler in use, after `make bootstrap`
 ```
@@ -1340,7 +1339,7 @@ build/olang         the compiler in use, after `make bootstrap`
   something the seed's compiler cannot build, and may be at any other time; `make bootstrap` shows whether the seed
   still builds the current source.
 
-**Freeze.** Once stage 1 passes the suite and the fixed point holds (M12), `bootstrap/` stops changing. From then
+**Freeze.** Once stage 1 passed the suite and the fixed point held (M12), `bootstrap/` stopped changing, and it was then removed. From then
 on, steps 2 and 3 of the CLAUDE.md checklist ("checker and codegen", "compile-time evaluator") mean the modules in
 `compiler/`.
 

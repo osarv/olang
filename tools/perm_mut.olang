@@ -20,8 +20,7 @@
 #
 #     $OLANG build tools/perm_mut.olang && build/tools_perm_mut [--olang PATH] [-j N] FILE|DIR...
 #
-#   --olang  the compiler to run (default: $OLANG, else build/out in the repository this tool is in, else its
-#            build/olang)
+#   --olang  the compiler to run (default: $OLANG, else build/olang in the repository this tool is in)
 #   -j       how many compilations run at once (default 3)
 #
 # A port of the Python script of the same name (same arguments, same edits, same output); the files it writes get Python's

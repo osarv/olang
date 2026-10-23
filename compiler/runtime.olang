@@ -1,11 +1,11 @@
-# runtime - the runtime's IR (std/runtime/*.ll, compiler/DESIGN.md section 1.10) filled in for one build, as stage 0's
-# bootstrap/runtime.c fills it: each file's "; @if COND" / "; @else" / "; @end" runs decided (COND "san" - a -sanitize
+# runtime - the runtime's IR (std/runtime/*.ll, compiler/DESIGN.md section 1.10) filled in for one build, as the C compiler's
+# runtime.c (stage 0, removed) filled it: each file's "; @if COND" / "; @else" / "; @end" runs decided (COND "san" - a -sanitize
 # build - or an architecture, either after "!"; not nested), every @@NAME@@ outside a comment replaced by the
 # architecture's fact about its C library, and the whole given the target's triple and the attributes every function
 # the compiler generates carries (B12; sanitize_thread under -race, P7). The text is what build compiles, once per
 # configuration, into the runtime's object (B3).
 #
-# The table's facts are stage 0's (bootstrap/runtime.c holds them, and checks the host's row against its C headers);
+# The table's facts are stage 0's (its runtime.c held them, and checked the host's row against its C headers);
 # a runtime file the compiler cannot read - an @@NAME@@ it has no fact for, an "; @if" left open - is a mistake in the
 # repository, said as stage 0 says it: "olang: FILE:LINE: why".
 
@@ -280,7 +280,7 @@ fn modulesInline(line String&) Bool {
 }
 
 # what a module carries for the runtime's text: its types, its globals as external, its functions as declarations,
-# and every body marked for inlining as available_externally (bootstrap/runtime.c's emitRuntimeDecls)
+# and every body marked for inlining as available_externally (as the C compiler's emitRuntimeDecls did)
 fn Decls(text String&) String {
     out := StringBuilder()
     copying := false
