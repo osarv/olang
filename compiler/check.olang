@@ -7520,7 +7520,13 @@ fn (c mut Checker&) boundParam(ps Array<types.TypeId>&, k I64, b generic.Binding
     part := Array<types.TypeId>(b.N)
     for j in range b.N { part[j] = b.Vals[j] if b.Vals[j] != types.UnknownT else c.P.T.Var(b.Owner, j, types.ReadOnly) }
     t := c.P.Subst(ps[k], b.Owner, c.P.T.List(part))
-    return c.deref(t) if c.P.T.Closed(t) else types.UnknownT
+    if not c.P.T.Closed(t) { return types.UnknownT }
+    # C11: a type declaring a destructor is never a value - a conditional of its instances is a reference to one (E28)
+    if c.isRef(t) {
+        r := c.P.T.Referent(t)
+        if c.isNamed(r) and c.P.Body(r) and c.P.T.Destructs(r) { return t }
+    }
+    return c.deref(t)
 }
 
 # G9a: a variable only literals reach, whose constraint (G19) the widest of their types fails, takes the first type

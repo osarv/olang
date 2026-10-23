@@ -1184,6 +1184,9 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     # E11b: the builders whose text is measured and then written straight where it lands (direct), and the pieces of
     # the one being written
     direct Map<I64, Bool>
+    # the frame and block scopes nothing is built in, registered with, handed on or captured: no header is made for one
+    # (a render helper's frame - a recursion through a Str keeps no header per level that it never uses, as stage 0's)
+    idle Map<I64, Bool>
     pieceKinds List<mir.WriteKind>
     pieceOps List<mir.Operand>
 }
@@ -1439,8 +1442,9 @@ fn (fe mut fnEm&) run() {
         }
     }
     fe.findDirect()
+    fe.findIdle()
     for i in range f.Scopes.Len() {
-        if fe.direct.Has(i) { continue }
+        if fe.direct.Has(i) or fe.idle.Has(i) { continue }
         if f.Scopes[i].Kind == mir.ScopeKind.Builder {
             fe.head.Push("  %s" $i " = alloca %olang.builder\n  %s" $i "room = alloca [64 x i8], align 8\n")
         } else {
@@ -2191,6 +2195,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
         }
         case mir.Stmt.Dead(_, _) { }
         case mir.Stmt.Open(_, sc) {
+            if fe.idle.Has(I64(sc)) { return }
             if fe.direct.Has(I64(sc)) {
                 fe.pieceKinds.Clear()
                 fe.pieceOps.Clear()
@@ -2208,7 +2213,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt) {
             }
         }
         case mir.Stmt.Close(_, sc) {
-            if fe.direct.Has(I64(sc)) { return }
+            if fe.direct.Has(I64(sc)) or fe.idle.Has(I64(sc)) { return }
             if fe.F.Scopes[I64(sc)].Kind == mir.ScopeKind.Builder {
                 # a builder that never outgrew its room made no scope of its own: nothing to close (the rest is the
                 # runtime's __olang_sb_done)
@@ -2298,6 +2303,62 @@ fn (fe mut fnEm&) findDirect() {
             }
             if textOk and closeOk { fe.direct.Put(sc, true) }
         }
+    }
+}
+
+fn (fe mut fnEm&) findIdle() {
+    f := fe.F
+    used := Array<Bool>(f.Scopes.Len())
+    frame := false
+    for r in f.Refs { frame = fe.useRef(r, used) or frame }
+    for bb in f.Blocks {
+        for st in bb.Stmts {
+            match st {
+                case mir.Stmt.RegisterDtor(_, r, _, _), mir.Stmt.RegisterOwner(_, r, _), mir.Stmt.Write(_, r, _, _) {
+                    frame = fe.useRef(r, used) or frame
+                }
+                case mir.Stmt.Spawn(_, j, _) { used[I64(j)] = true }
+                case mir.Stmt.Give(_, x) { used[I64(x)] = true }
+                case mir.Stmt.Assign(_, _, rv) {
+                    match rv {
+                        case mir.Rvalue.New(r, _, _), mir.Rvalue.NewArray(r, _, _, _), mir.Rvalue.Closure(_, _, r, _, _) {
+                            frame = fe.useRef(r, used) or frame
+                        }
+                        case mir.Rvalue.Text(b, into, _) {
+                            frame = fe.useRef(b, used) or frame
+                            frame = fe.useRef(into, used) or frame
+                        }
+                        case _ { }
+                    }
+                }
+                case _ { }
+            }
+        }
+        match bb.T {
+            case mir.Term.Wait(_, j, _, _, _) { used[I64(j)] = true }
+            case _ { }
+        }
+    }
+    for l in f.Locals {
+        if not fe.isFrame(l.Home) { frame = fe.useRef(l.Home, used) or frame }
+    }
+    for i in range f.Scopes.Len() {
+        k := f.Scopes[i].Kind
+        if k != mir.ScopeKind.Frame and k != mir.ScopeKind.Block { continue }
+        if used[i] or (frame and i == fe.frameScope) { continue }
+        fe.idle.Put(i, true)
+    }
+}
+
+# a scope a reference names, marked used; whether it is the frame's
+fn (fe mut fnEm&) useRef(r mir.ScopeRef, used mut Array<Bool>&) Bool {
+    match r {
+        case mir.ScopeRef.Scope(s) {
+            used[I64(s)] = true
+            return false
+        }
+        case mir.ScopeRef.Frame { return true }
+        case _ { return false }
     }
 }
 
