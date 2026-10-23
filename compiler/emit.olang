@@ -1430,8 +1430,144 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     b.Push("}\n")
     b.Push(fe.dbgMeta.ToString())
     b.PushChar('\n')
-    e.fnItem(k, f.Ty, symbol, passed, env, b.ToString())
+    e.fnItem(k, f.Ty, symbol, passed, env, foldSlots(b.ToString(), f.Locals.Len()))
 }
+
+# ---- single-use slots ----
+
+# a function's text with the stack slot of each local that is stored once and loaded once folded away - the store in
+# the load's block and before it, or in the entry block: its alloca, its store and its load gone, and what the load
+# defined named by the value the store wrote. Those three lines are the slot's only mentions, so nothing else reads or
+# writes it, nor takes its address: the load gives the stored value, as LLVM's mem2reg would make it. Lowering makes
+# such a slot for most values in flight (in the corpus's largest test build, half of all slots); the IR they take is
+# what clang parses, and keeps whole at -O0. nlocals is how many locals the function has (the slots are %l0 ...)
+fn foldSlots(body String&, nlocals I64) String {
+    n := body.Len()
+    starts List<I64>     # each line's start, its end, and the block it is in (a label line starts one)
+    ends List<I64>
+    blocks List<I64>
+    s I64 = 0
+    blk I64 = 0
+    for s < n {
+        e := s
+        for e < n and body[e] != '\n' { e++ }
+        if e > s and body[s] != ' ' and body[e - 1] == ':' { blk++ }
+        starts.Push(s)
+        ends.Push(e)
+        blocks.Push(blk)
+        s = e + 1
+    }
+    mentions := Array<I64>(nlocals)
+    allocaAt := Array<I64>(nlocals, -1)
+    storeAt := Array<I64>(nlocals, -1)
+    loadAt := Array<I64>(nlocals, -1)
+    for li in range starts.Len() {
+        a := starts[li]
+        z := ends[li]
+        i := a
+        for i < z {
+            c := body[i]
+            if c == '"' {
+                i++
+                for i < z and body[i] != '"' { i++ }
+                i++
+                continue
+            }
+            if c != '%' or i + 2 >= z or body[i + 1] != 'l' or not body[i + 2].IsDigit() {
+                i++
+                continue
+            }
+            j := i + 2
+            v I64 = 0
+            for j < z and body[j].IsDigit() {
+                v = v * 10 + I64(body[j]) - I64('0')
+                j++
+            }
+            if j < z and symbolChar(body[j]) or v >= nlocals {
+                i = j
+                continue
+            }
+            mentions[v] += 1
+            atEnd := j == z or body[j] == ','
+            if i == a + 2 and body[a:i] == "  " and body[j:z].StartsWith(" = alloca ") {
+                allocaAt[v] = li
+            } else if atEnd and i >= a + 6 and body[i - 6:i] == ", ptr " {
+                if body[a:z].StartsWith("  store ") {
+                    storeAt[v] = li
+                } else if body[a:z].Contains(" = load ") {
+                    loadAt[v] = li
+                }
+            }
+            i = j
+        }
+    }
+    skip := Array<Bool>(starts.Len())
+    subst Map<String&, String&>
+    for v in range nlocals {
+        if mentions[v] != 3 or allocaAt[v] < 0 or storeAt[v] < 0 or loadAt[v] < 0 { continue }
+        sl := storeAt[v]
+        ll := loadAt[v]
+        if not (blocks[sl] == blocks[ll] and sl < ll or blocks[sl] == 1 and blocks[ll] != 1) { continue }
+        al := allocaAt[v]
+        tyAt := try body[starts[al]:ends[al]].Find(" = alloca ") catch { continue }
+        ty := body[starts[al] + tyAt + 10:ends[al]]
+        if ty.Contains(", align") { continue }
+        slot := $"%l" $v
+        # the load: "  %X = load TY, ptr %lN..."
+        ld := body[starts[ll]:ends[ll]]
+        eq := try ld.Find(" = load ") catch { continue }
+        if not ld[eq + 8:].StartsWith($ty ", ptr " $slot) { continue }
+        name := ld[2:eq]
+        # the store: "  store TY V, ptr %lN...", V one token
+        st := body[starts[sl]:ends[sl]]
+        if not st[8:].StartsWith($ty " ") { continue }
+        vs := 8 + ty.Len() + 1
+        ve := try st.Find($", ptr " $slot) catch { continue }
+        if ve <= vs { continue }
+        val := st[vs:ve]
+        if val.Contains(" ") or val.Contains(",") { continue }
+        skip[al] = true
+        skip[sl] = true
+        skip[ll] = true
+        subst.Put($name, $val)
+    }
+    if subst.Len() == 0 { return $body }
+    out := StringBuilder()
+    for li in range starts.Len() {
+        if skip[li] { continue }
+        a := starts[li]
+        z := ends[li]
+        at := a
+        i := a
+        for i < z {
+            c := body[i]
+            if c == '"' {
+                i++
+                for i < z and body[i] != '"' { i++ }
+                i++
+                continue
+            }
+            if c != '%' {
+                i++
+                continue
+            }
+            j := i + 1
+            for j < z and symbolChar(body[j]) { j++ }
+            if j > i + 1 and subst.Has(body[i:j]) {
+                out.Push(body[at:i])
+                r := try subst.Get(body[i:j]) catch default ""
+                for subst.Has(r) { r = try subst.Get(r) catch default "" }
+                out.Push(r)
+                at = j
+            }
+            i = j
+        }
+        out.Push(body[at:z])
+        if z < n { out.PushChar('\n') }
+    }
+    return out.ToString()
+}
+
 
 # the body of a function the compiler could not make: it fails when called, saying so
 fn (e mut Emitter&) stub(what String&, symbol String&) String {
@@ -4345,4 +4481,27 @@ fn (e mut Emitter&) recodeText(b mut StringBuilder&, code String&, from types.Li
     }
     b.Push("  %rs = shl i32 " $pos ", 16\n  %rv2 = or i32 %rs, %rw\n")
     return "%rv2"
+}
+
+# ---- tests ----
+
+test "a slot stored once and loaded once is folded into the value stored; any other slot is kept" {
+    body := "define i64 @f(i64 %a0) #0 {\nentry:\n  %l0 = alloca i64\n  %l1 = alloca i64\n  %l2 = alloca ptr\n" $
+        "  %l3 = alloca i64\n  %l4 = alloca i1\n  store i64 %a0, ptr %l0\n  br label %start\nstart:\n" $
+        "  %t1 = load i64, ptr %l0, !tbaa !24\n  %t2 = add i64 %t1, 1\n  store i64 %t2, ptr %l1, !tbaa !24\n" $
+        "  store ptr %l1, ptr %l2\n  %t3 = load i64, ptr %l1, !tbaa !24\n  %t4 = load i64, ptr %l3\n" $
+        "  store i64 %t3, ptr %l3\n  store i1 true, ptr %l4\n  br label %bb1\nbb1:\n  %t5 = load i1, ptr %l4\n" $
+        "  %t6 = select i1 %t5, i64 %t4, i64 %t2\n  ret i64 %t6\n}\n"
+    want := "define i64 @f(i64 %a0) #0 {\nentry:\n  %l1 = alloca i64\n  %l2 = alloca ptr\n" $
+        "  %l3 = alloca i64\n  %l4 = alloca i1\n  br label %start\nstart:\n" $
+        "  %t2 = add i64 %a0, 1\n  store i64 %t2, ptr %l1, !tbaa !24\n" $
+        "  store ptr %l1, ptr %l2\n  %t3 = load i64, ptr %l1, !tbaa !24\n  %t4 = load i64, ptr %l3\n" $
+        "  store i64 %t3, ptr %l3\n  store i1 true, ptr %l4\n  br label %bb1\nbb1:\n  %t5 = load i1, ptr %l4\n" $
+        "  %t6 = select i1 %t5, i64 %t4, i64 %t2\n  ret i64 %t6\n}\n"
+    assert foldSlots(body, 5) == want
+    # a chain: each value folded through the one before, and a constant stored
+    chain := "define i1 @g() #0 {\nentry:\n  %l0 = alloca i1\n  %l1 = alloca i1\n  br label %start\nstart:\n" $
+        "  store i1 false, ptr %l0\n  %t1 = load i1, ptr %l0\n  store i1 %t1, ptr %l1\n  %t2 = load i1, ptr %l1\n" $
+        "  ret i1 %t2\n}\n"
+    assert foldSlots(chain, 2) == "define i1 @g() #0 {\nentry:\n  br label %start\nstart:\n  ret i1 false\n}\n"
 }
