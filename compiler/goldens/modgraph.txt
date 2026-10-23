@@ -382,6 +382,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
+|   time std/time
 | module compiler/cond
 |   ast compiler/ast
 |   diag compiler/diag
@@ -422,6 +423,7 @@
 | module std/prelude/number
 | module std/prelude/text
 | module std/prelude/vec
+| module std/time
 ===  compiler/check.olang
 | module compiler/ast
 |   source compiler/source
@@ -641,6 +643,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -751,6 +754,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -771,6 +775,7 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/pair
 | module std/prelude/array
 | module std/prelude/builtin
 | module std/prelude/complex
@@ -987,6 +992,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -1445,6 +1451,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
+|   time std/time
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -1488,6 +1495,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -1671,6 +1679,7 @@
 | module std/prelude/number
 | module std/prelude/text
 | module std/prelude/vec
+| module std/time
 ===  compiler/parse.olang
 | module compiler/ast
 |   source compiler/source
@@ -2585,6 +2594,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -2802,6 +2812,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -3004,27 +3015,6 @@
 |   token compiler/token
 | module std/cancel
 | module std/filepath
-| module std/io
-| module std/os
-|   cancel std/cancel
-|   io std/io
-| module std/prelude/array
-| module std/prelude/builtin
-| module std/prelude/complex
-| module std/prelude/f8
-| module std/prelude/float
-| module std/prelude/hash
-| module std/prelude/iterator
-| module std/prelude/list
-| module std/prelude/map
-| module std/prelude/number
-| module std/prelude/text
-| module std/prelude/vec
-===  compiler/tools/genmsgs.olang
-| module compiler/tools/genmsgs
-|   io std/io
-|   os std/os
-| module std/cancel
 | module std/io
 | module std/os
 |   cancel std/cancel
@@ -3478,6 +3468,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
+|   time std/time
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -3521,6 +3512,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -3710,6 +3702,7 @@
 | module std/prelude/number
 | module std/prelude/text
 | module std/prelude/vec
+| module std/time
 ===  compiler/tools/tokdiff.olang
 | module compiler/tools/tokdiff
 |   os std/os
@@ -4665,6 +4658,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
+|   time std/time
 | module compiler/cond
 |   ast compiler/ast
 |   diag compiler/diag
@@ -4705,6 +4699,7 @@
 | module std/prelude/number
 | module std/prelude/text
 | module std/prelude/vec
+| module std/time
 === -t compiler/check.olang
 | module compiler/ast
 |   source compiler/source
@@ -4924,6 +4919,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -5034,6 +5030,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -5054,6 +5051,7 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/pair
 | module std/prelude/array
 | module std/prelude/builtin
 | module std/prelude/complex
@@ -5270,6 +5268,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -5740,6 +5739,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
+|   time std/time
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -5783,6 +5783,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -5978,6 +5979,7 @@
 | module std/prelude/number
 | module std/prelude/text
 | module std/prelude/vec
+| module std/time
 === -t compiler/parse.olang
 | module compiler/ast
 |   source compiler/source
@@ -6940,6 +6942,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -7169,6 +7172,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -7383,27 +7387,6 @@
 |   token compiler/token
 | module std/cancel
 | module std/filepath
-| module std/io
-| module std/os
-|   cancel std/cancel
-|   io std/io
-| module std/prelude/array
-| module std/prelude/builtin
-| module std/prelude/complex
-| module std/prelude/f8
-| module std/prelude/float
-| module std/prelude/hash
-| module std/prelude/iterator
-| module std/prelude/list
-| module std/prelude/map
-| module std/prelude/number
-| module std/prelude/text
-| module std/prelude/vec
-=== -t compiler/tools/genmsgs.olang
-| module compiler/tools/genmsgs
-|   io std/io
-|   os std/os
-| module std/cancel
 | module std/io
 | module std/os
 |   cancel std/cancel
@@ -7869,6 +7852,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
+|   time std/time
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -7912,6 +7896,7 @@
 |   ffi std/ffi
 |   mir compiler/mir
 |   os std/os
+|   pair std/pair
 |   source compiler/source
 |   typed compiler/typed
 |   types compiler/types
@@ -8113,6 +8098,7 @@
 | module std/prelude/number
 | module std/prelude/text
 | module std/prelude/vec
+| module std/time
 === -t compiler/tools/tokdiff.olang
 | module compiler/tools/tokdiff
 |   os std/os
