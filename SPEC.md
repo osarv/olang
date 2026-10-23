@@ -5478,7 +5478,7 @@ never evaluated.
 
 **C7.** `destruct-block ::= "destruct" block`. A destructor's body has no error union of its own —
 every fallible call within it must be fully caught by a `catch` that leaves nothing uncaught
-(§7.5), the same rule a `test { }` block follows,
+(§7.5),
 since a destructor is never invoked by ordinary calling code and so has no caller to propagate an
 error to. Declaring this block also makes the type reference-only — see C11.
 
@@ -5788,8 +5788,9 @@ decision.
 ### 10.4 Test blocks
 
 **B7.** `test-decl ::= "test" STR_LIT block`, valid as a top-level declaration in any module.
-`STR_LIT` is the test's description. A `test` block has no error union of its own — the same rule a
-destructor's body follows (§9.3 C7): every fallible call inside it must be fully caught.
+`STR_LIT` is the test's description. A `test` block has no error union of its own and raises nothing with
+`error` (R3); a `try` in it need not catch everything it covers, and an error that leaves its body fails the test
+(S16).
 
 **B8.** A `test` block is only ever executed under `test` (§10.1 B3a), and only for the file it is
 directly declared in. Each test in a run prints its own description together with pass/fail, and
