@@ -1157,6 +1157,13 @@ These are extrapolations from the measurements above, to be measured at M10.
    symbols' hashes; a stack slot stored once and loaded once is folded before clang reads it; the test harness is a
    table and one loop. tests/shared.olang's test build 223 s -> 55 s, the port-run verify 40.7 -> 28.4 minutes.
 
+10. **Compile speed, measured** (M9 round 7, built): `OLANG_TIMES` reports each phase (`front` stops after the front
+   end); functions whose code is the same written once (a generic struct's instance named by its layout, partition
+   refinement, aliases for merged instances); a ThinLTO link imports functions of at most 70 instructions; compiles
+   start heaviest first; MIR verified in test and -debug builds only. The clean -O3 self-build 238 -> 176 s of CPU,
+   tests/shared.olang's test build 56 -> 41. Three quarters of a clean build is still the ThinLTO link, set by how much
+   is inlined; a leaf edit is now mostly the front end re-lowering modules whose objects are cached (HISTORY.md).
+
 Make targets: `make dev` (the compiler at `-d`, incremental) is the edit loop; `make` builds a release compiler
 with the installed one; `make bootstrap` is section 5.
 

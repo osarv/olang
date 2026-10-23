@@ -22032,3 +22032,113 @@ mandelbrot, fannkuch, built by the port before and after) is instruction for ins
 `cmp $0x20; jae` that is now `cmp $0x1f; ja` - so principle 2 is where it was. Not done: the front end's own memory
 (about 1 GB, held while clang runs; every pass allocates in the configuration's scope, so it is freed only at exit);
 the evaluator's memory on the cyclic recursion.
+
+## Port M9, round 7: compile speed (2026-10-23)
+
+The user: "Making compilation faster is going to matter a lot." Measured first, on the port built by itself, with an
+environment variable added for it (`OLANG_TIMES` writes each phase's milliseconds to the standard error - load, check,
+evaluate, scope, lower+emit, compile, link; `OLANG_TIMES=front` ends the build after the front end, so the compiler's
+own speed is measured apart from clang's). The machine is shared (four cores, other agents' builds beside), so every
+comparison below was run interleaved, before and after alternating, and CPU time is given beside wall time.
+
+**Where a clean -O3 self-build went** (82 s that time): the front end 6 s (load 0.15, check 1.4, evaluate 0.1, scope
+0.8, lower+emit 3.4), clang's compiles 34 s of CPU in 19 s, the ThinLTO link 165 s of CPU in 57 s - three quarters of
+all the work. In the link, half was the backends' optimization and half code generation; its output is 6.7 MB of
+machine code (stage 0's, for a compiler half the size in lines, 1.6 MB). Without cross-module importing the link took
+98 s of CPU and the binary 4.8 MB: importing - every module copying in the List and Map instances it calls, all held in
+the root's object, and inlining them - was nearly half the link. tests/shared.olang's test build: 28 s, the front end
+4.3 s of it. A hello world: 1.4 s in an empty directory (the prelude's objects compiled once), 0.5 s after.
+
+**The IR**: 38.6 MB in 55 objects, 1.08 M lines, 18.7 per source line. 76% of it is plain functions, 18% the
+generics' instances (1,776 functions), the rest helpers and the runtime's inline bodies. The largest single functions
+are the checker's, scope pass's and emitter's big matches (Scoper.call 210 KB of IR, 49 KB of code). Patterns: 108k
+allocas, 220k loads, 142k stores, 150k branches - 72k of them an unconditional branch into a block with that one
+predecessor (a call ends its MIR block), 1,793 calls of an Equal helper for a payload-free enum.
+
+What was changed, each committed alone, none changing what a program means:
+
+1. **Merging functions whose code is the same** (the user's decision of 2026-10-18; `emit.mergeSame`). An instance of a
+   generic struct is now named for its generic and a hash of its body (`types.structName`: `%"std/prelude/list:List.H"`)
+   rather than for its type arguments, so instances laid out alike are one LLVM type and List<Node&>'s functions are
+   spelled exactly as List<Expr&>'s. Then partition refinement over the instances' and the shared helpers' text: a
+   first class by the text with every reference to another candidate cut out, split by the classes those references
+   are in until nothing splits - the coarsest partition in which merged functions call merged functions, so recursion
+   and mutual recursion merge too. Each class is written once, as its member of the smallest symbol; another member is
+   an alias of it (an instance, which a module's object calls by its own name - so a module's object still depends on
+   that module alone) or not written at all (a helper, copied wherever named, its callers in that object pointed at the
+   one kept). Only in the objects holding the instances, and not under -debug (each function carries its own debug
+   information). Self-build: 1,956 instance functions in 799 classes, 1,028 aliases; IR 38.6 -> 36.3 MB, CPU 228 ->
+   213 s. tests/shared.olang's IR 12.1 -> 11.2 MB. The saving is smaller than "40% of the functions are instances"
+   suggested, because a small instance is inlined at every call anyway: merging saves its out-of-line copy, not the
+   inlined ones.
+   **Sharing one instance among type arguments that do not change the code** (the second half of that decision,
+   polymorphization) is what this merging gives for the output: two instances whose arguments make no difference to
+   the code are exactly two instances with the same text. Deciding it from the arguments before lowering would also
+   skip lowering and emitting the copies, which measured at most 0.6 s of the front end (instances are 18% of the IR,
+   lower+emit 3.4 s) - not built (decided, mine).
+2. **A ThinLTO link imports functions of at most 70 instructions** (`build.ImportLimit`, LLVM's default 100): link CPU
+   171 -> 133 s on the same objects. The compiler built so ran its front end no slower (eight interleaved runs each,
+   user time 4.46-5.16 s against 4.56-5.42); at 40 the link took 120 s but the front end ran 5-10% slower, and at 30
+   106 s. Only programs of 8 MB of IR or more link by ThinLTO (`ThinFrom`) - no benchmark does, so their code is
+   untouched (checked below).
+3. **clang's compiles start heaviest first** (`RunAll`'s weights, each its IR's size): the root's parts, the largest
+   objects, had started last, leaving cores idle at the end. The compile step 14-18 -> 11 s wall.
+4. **An optimized build does not verify each function's MIR** (`mir.Fn.Verify`; test and -debug builds still do, and
+   `make lowerdump` verifies every function): the verifier's walk was a sixth of the front end's instructions on the
+   self-build. Decided (mine): a release build trusts lowering, as a C compiler's release build skips LLVM's verifier;
+   a function lowering made wrong is still caught in every test build, where the suite runs.
+5. **HoldsRefs remembers by type in a Vec, and a payload-less case holds nothing.** listHolds took a case list's 0 (no
+   payload) for a part not typed yet, so no enum with a payload-less case - nor any type holding one - was ever
+   remembered, and each asking walked the whole type again (ScopeVarsOf asked 800k times): 4% of the front end.
+6. **foldSlots finds a folded temporary by its number**: its last pass hashed every `%name` in a function's text into a
+   Map to see whether it was substituted; now a temporary's number indexes a Vec. Its output is byte for byte the same
+   (all 55 objects of the self-build compared).
+
+Items 4-6 together: the self-build's front end 5.0 -> 3.9 s of CPU (instructions 16.9 -> 13.8 G, callgrind on a
+baseline-x86 build, valgrind not knowing AVX-512).
+
+Also fixed on the way, both from merging round 6 with master: (1) a baked global's private blobs (`G.m.X.k1`) could land
+in another part of a cut object than a baked global pointing into them (K2b), undefined there - tests/shared.olang's
+test build did not compile with the port; a module's globals now go in one part. (2) The self-built compiler crashed
+checking tests/shared.olang: `Checker.curInst` read `c.cur()` on fnTypeParams' frame for no body (Bodies[-1], E16e),
+the same class of bug as M12's `c.fr()`; stage 0's build had read garbage there silently.
+
+**Measured and not taken:**
+- *The scope close split* (std/runtime/runtime.ll): inlining only the commonest close (no destructor, no part - give
+  back the chunks) and calling the rest out of line cut the compiler's machine code 11% and its link 5%, but the
+  benchmarks moved by up to 20% both ways (fannkuch and spectral slower, text and k-nucleotide faster, in loops that
+  close no scope - code placement), so principle 2 could not be shown to hold. Kept as it was.
+- *Merging blocks* (a call's continuation into the block before it, then folding the slots that became single-block):
+  the IR 14% smaller and 23% fewer lines (a prototype over the self-build's IR), clang's compile step 6% less CPU, the
+  link unchanged - the optimizer does the same at once. Not worth a text pass in the front end, where it would cost
+  about what it saves.
+- *StringBuilder on a Vec rather than a List*: no faster (the fill of each new buffer cost what the chunk walk had).
+- *A table-driven skip in refsIn*: no measurable change.
+
+**Numbers** (before = 4aaf284's port, after = this round's, each built by itself; the same source, HEAD's, built by
+both; two interleaved runs each, machine shared - the load was higher than in the profile above):
+
+| | before | after |
+|---|---|---|
+| the -O3 self-build, clean | 123-129 s wall, 238-246 s CPU | 91-94 s, 173-180 s CPU |
+| an edit to a function inlined everywhere (types.Repr) | 69 s, 128-131 s CPU | 46-54 s, 86-98 s CPU |
+| an edit to a leaf (a function added to fmt.olang) | 9.9-11.5 s, 8.1-9.5 s CPU | 9.1 s, 6.3-7.3 s CPU |
+| the -debug self-build, clean | 28-29 s, 42-45 s CPU | 28-31 s, 42-48 s CPU (unchanged: no merging, no ThinLTO there) |
+| tests/shared.olang's test build | 35-36 s, 56-59 s CPU | 23.5-29 s, 37-45 s CPU |
+| a hello world in an empty directory | 1.6-1.8 s | 1.6-1.7 s |
+| a second program there | 0.55-0.61 s | 0.49-0.55 s |
+| the self-build's front end (OLANG_TIMES=front, user time) | 5.0 s | 3.9 s |
+| the compiler's machine code | 6.66 MB | 5.41 MB |
+
+stage 1 == stage 2 == stage 3 (`build/out build` the port, it builds itself, that builds itself, `cmp` of the last
+two). The benchmarks' machine code (binary-trees, sum, text, vec, k-nucleotide, nbody, spectral-norm, fannkuch,
+mandelbrot, built by the port before and after) is instruction for instruction the same, only symbol names differing.
+
+**Left:** the link is still most of a clean build (about 110 s of CPU), its size set by how much is inlined - the
+List/Map instances held in the root's object and imported into every module; placing instances where they are used
+(C++'s linkonce copies) would move that work into the compile step rather than remove it. The front end is now most
+of a leaf edit (4 of 9 s): lower+emit re-lowers and re-writes every module whose object is cached already - keying a
+module's object by its inputs (its source and its imports', the compiler, the flags) would skip them, but it must
+still enqueue the instances a skipped module calls. The rest of the front end is spread out: allocation (the arena's
+alloc 6%, memset 4%), refsIn 6%, the scope pass and views 25% between them. The scope close split, with an
+alignment-controlled measurement.
