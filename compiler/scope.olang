@@ -1947,7 +1947,6 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
     if e >= 0 and s.P.T.ShareOf(fty, j) == e { return true }
     callee := s.bodyOf(c.Target)
     if callee < 0 or not s.sums[callee].Done { return true }
-    if s.laterModule(c, callee) { return true }
     vars := s.P.T.ScopeVarsOf(fty)
     k := s.P.T.ShareOf(fty, j)
     q := k if k >= 0 else j
@@ -1958,35 +1957,6 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
         }
     }
     return false
-}
-
-# whether a call is a plain one to a function of a module after this body's in the order modules are found in, the
-# prelude's aside: the flow into the result (O26a) takes it to keep whatever it is given, as stage 0 reads one whose
-# body it has not checked yet - what is handed to it flows where its result goes, so "return toolkit.Text(out)" moves
-# out. Whether a local is kept beyond its block (O18c, mode 1) reads the callee's body as stage 0 does there: "text :=
-# layout.FileLayout(src, std, ...)" keeps src nowhere, so src's call lands in its block, never split from its storage
-# (O17). Landing in the block is the strictest home a call can have - what then needs it longer is refused (O10c) - so
-# reading less as kept never accepts more
-fn (s mut Scoper&) laterModule(c typed.Call&, callee I64) Bool {
-    if callee < 0 or s.flMode == 1 or s.isMethodCall(c) { return false }
-    match c.Target {
-        case typed.Callee.Body(_) { }
-        case _ { return false }
-    }
-    match s.Bodies[callee].Of {
-        case typed.BodyOf.Fn(_) { }
-        case _ { return false }
-    }
-    from, to := -1, -1
-    for i in range s.P.L.Mods.Len() {
-        m := s.P.L.Mods[i]
-        if m.File == s.B.File { from = i }
-        if m.File == s.Bodies[callee].File {
-            if m.Prelude { return false }
-            to = i
-        }
-    }
-    return from >= 0 and to > from
 }
 
 # whether x carries what local l refers to, or its storage, where it is put (mode 1's local is fl's first)
@@ -2047,7 +2017,7 @@ fn (s mut Scoper&) carried(x typed.Expr&, out mut List<I64>&) {
         case typed.Expr.Slice(_, _, sl) { s.carriedPlace(sl.Base, out) }
         case typed.Expr.Promote(_, _, pr) { s.carried(pr.X, out) }
         case typed.Expr.Call(_, ty, c) {
-            if not s.holds(ty) and not s.laterModule(c, s.bodyOf(c.Target)) { return }
+            if not s.holds(ty) { return }
             for j in range c.Args.Len() {
                 if s.canKeep(c, j) { s.carried(c.Args[j], out) }
             }

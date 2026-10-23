@@ -1,0 +1,37 @@
+# check: run
+# flags: -debug -sanitize
+# O26a: a plain call to a function of a module found after the caller's is read by its checked body, as every other
+# callee is (it had been taken to keep whatever it is given, stage 0's reading of a body it had not checked yet).
+# linalg.View's result holds a slice of its data, so the local array d flows into the returned matrix and lives in the
+# result scope - in a loop too, where the last turn's array is the one returned - read back after a churn
+import "std/io"
+import "std/linalg"
+
+fn mk(n I64) linalg.Matrix<F64> ? {
+    d := Array<F64>(n * n, 1.5)
+    m := try linalg.View(d, 0, n, n)
+    return m
+}
+
+fn last(n I64) linalg.Matrix<F64> ? {
+    m linalg.Matrix<F64>
+    for i in range 3 {
+        d := Array<F64>(n * n, F64(i))
+        m = try linalg.View(d, 0, n, n)
+    }
+    return m
+}
+
+fn churn() {
+    for i in range 200 {
+        a := Array<F64>(64, F64(i))
+        assert a[3] == F64(i)
+    }
+}
+
+fn main() ? {
+    a := try mk(4)
+    b := try last(2)
+    churn()
+    io.Println($a.Get(3, 3) " " $b.Get(1, 1))!
+}
