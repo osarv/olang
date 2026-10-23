@@ -19,10 +19,11 @@ DEP = $(OBJ:.o=.d) $(STAGE0_OBJ:.o=.d)
 # the prelude),
 # tests/ (the corpus: shared, worker, runner, Base, Lib) and tests/geom/ (two modules importing each other, imported by runner.olang), and checks/checks.olang - the checks a
 # test block cannot make about the compiler itself (programs that must not compile, whole builds), written
-# in olang like the rest; tools/ (the migration tools and what they share) and compiler/tools/genmsgs.olang have tests too
+# in olang like the rest; tools/ (the migration tools and what they share) has tests too, and so does
+# bootstrap/twins.olang (stage 0's diagnostics table held to compiler/msgs.olang), for as long as bootstrap/ exists
 OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcard std/*.olang) \
 	$(wildcard std/prelude/*.olang) $(wildcard std/prelude/tests/*.olang) $(wildcard compiler/*.olang) \
-	compiler/tools/genmsgs.olang $(wildcard tools/*.olang) checks/checks.olang \
+	$(wildcard bootstrap/*.olang) $(wildcard tools/*.olang) checks/checks.olang \
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
 	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang

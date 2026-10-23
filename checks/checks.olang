@@ -1223,11 +1223,7 @@ fn agree(r mut report&) ? Failed {
                  "share_Sl", dir)
 }
 
-# B11: what the diagnostics are held to. Every call passes as many arguments as its message's directives take - a wrong
-# count is undefined behaviour in C's varargs, which nothing else would catch - and every rule a diagnostic names is one
-# the specification states, so "olang explain RULE" finds it
-
-# the index of the quote closing the C string or character literal whose opening quote is at open
+# the index of the quote closing the string or character literal whose opening quote is at open
 fn cLiteralEnd(t String&, open I64) I64 {
     i I64 = open + 1
     for i < t.Len() {
@@ -1242,61 +1238,7 @@ fn cLiteralEnd(t String&, open I64) I64 {
     return t.Len()
 }
 
-# how many arguments a message takes: its %-directives, "%%" aside
-fn directiveCount(fmt String&) I64 {
-    n := 0
-    i := 0
-    for i < fmt.Len() - 1 {
-        if fmt[i] == '%' {
-            if fmt[i + 1] != '%' { n++ }
-            i = i + 2
-        } else {
-            i++
-        }
-    }
-    return n
-}
-
-fn isIdentChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
-
-# the call whose "(" is at open: where its diagnostic id is (start and end; -1 when no argument is one) and how many
-# arguments follow it - read past nested brackets and C string and character literals
-fn callShape(t String&, open I64) (I64, I64, I64) {
-    idStart, idEnd, after := I64(-1), I64(-1), I64(0)
-    depth := 0
-    argStart I64 = open + 1
-    i I64 = open + 1
-    for i < t.Len() {
-        c := t[i]
-        if c == '"' or c == '\'' {
-            i = cLiteralEnd(t, i) + 1
-            continue
-        }
-        closes Bool = (c == ')' or c == ']' or c == '}') and depth == 0
-        if closes or (c == ',' and depth == 0) {
-            s, e := argStart, i
-            for s < e and t[s].IsSpace() { s++ }
-            for e > s and t[e - 1].IsSpace() { e-- }
-            if idStart >= 0 {
-                if e > s { after++ }
-            } else if t[s:e].StartsWith("ERR_") or t[s:e].StartsWith("NOTE_") {
-                whole := true
-                for k in range s, e { whole = whole and isIdentChar(t[k]) }
-                if whole { idStart, idEnd = s, e }
-            }
-            argStart = i + 1
-            if closes { break }
-        } else if c == '(' or c == '[' or c == '{' {
-            depth++
-        } else if c == ')' or c == ']' or c == '}' {
-            depth--
-        }
-        i++
-    }
-    return idStart, idEnd, after
-}
-
-# the C string literal starting at the first quote at or after from, and where it ends
+# the string literal starting at the first quote at or after from, and where it ends
 fn literalAfter(t String&, from I64) (I64, I64) {
     open I64 = from + (try t[from:].FindByte('"') catch default -1)
     return open + 1, cLiteralEnd(t, open)
@@ -1423,121 +1365,76 @@ fn lazytype(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" test b.olang > out.txt 2>&1") == 0, "b.olang's tests", dir)
 }
 
-test "every diagnostic's call fits its message, and every rule it names is in the specification" {
-    table := try os.ReadFile("bootstrap/errmsg.h") catch default ""
-    spec := try os.ReadFile("SPEC.md") catch default ""
-    assert table.Len() > 0 and spec.Len() > 0
-    bad := 0
-    entries := 0
-    # each entry's rules - "L10a, L10c" names two
-    rest String& = table
-    for {
-        at := try rest.Find("    X(") catch { break }
-        rs, re := literalAfter(rest, at)
-        rules := rest[rs:re]
-        for rules.Len() > 0 {
-            comma := try rules.Find(", ") catch default -1
-            end I64 = rules.Len() if comma < 0 else comma
-            r := rules[:end]
-            if not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: errmsg.h names rule " $r ", which SPEC.md does not state\n") catch io.IoError { }
-                bad++
-            }
-            rules = rules[end:] if comma < 0 else rules[end + 2:]
-        }
-        entries++
-        rest = rest[re:]
-    }
-    assert entries > 0
-    # each call naming a diagnostic, in every source file
-    dir := fresh("diags")
-    os.Run("ls bootstrap/*.c > " $os.Quote($dir "/sources.txt"))
-    list := try os.ReadFile($dir "/sources.txt") catch default ""
-    calls := 0
-    for name in list.Split("\n") {
-        if name.Len() == 0 { continue }
-        src := try os.ReadFile(name) catch default ""
-        for fname in String&["Err(", "ErrOncePerLine(", "ErrSyntax(", "ErrFile(", "ErrFatal(", "ErrUsage(", "Note("] {
-            from := I64(0)
-            for {
-                hit := try src[from:].Find(fname) catch { break }
-                at I64 = from + hit
-                from = at + fname.Len()
-                if at > 0 and isIdentChar(src[at - 1]) { continue }
-                s, e, after := callShape(src, at + fname.Len() - 1)
-                if s < 0 { continue }
-                id := src[s:e]
-                entry := try table.Find("    X(" $id ",") catch default -1
-                if entry < 0 {
-                    try io.PrintErr("check FAIL: " $name " names " $id ", which errmsg.h does not declare\n") catch io.IoError { }
-                    bad++
-                    continue
-                }
-                _, re := literalAfter(table, entry)
-                fs, fe := literalAfter(table, re + 1)
-                want := directiveCount(table[fs:fe])
-                if want != after {
-                    try io.PrintErr("check FAIL: " $name ": " $fname $id ", ... passes " $after " arguments, its message takes " $want "\n") catch io.IoError { }
-                    bad++
-                }
-                calls++
-            }
-        }
-    }
-    assert calls > 0
-    assert bad == 0
-}
-
-# The self-hosted compiler's messages (compiler/msgs.olang, compiler/DESIGN.md section 1.3) are held to the same: every
-# rule one names is one the specification states, and each is the twin of an errmsg.h entry - the id it is written under,
-# with the same rules - so no diagnostic is on one side only. Its arguments need no counting: they are typed parameters
-test "every message of compiler/msgs.olang names rules the specification states, as its errmsg.h twin does" {
-    table := try os.ReadFile("bootstrap/errmsg.h") catch default ""
+# B11: what the compiler's diagnostics are held to (compiler/msgs.olang, compiler/DESIGN.md section 1.3, the table's
+# source). Every rule a message names is one the specification states, so "olang explain RULE" finds it; the Diag enum
+# and the functions are one to one, each function's Kind its own case. Their arguments need no counting: they are typed
+# parameters. While bootstrap/ exists, bootstrap/twins.olang holds the table to stage 0's errmsg.h as well
+test "every message of compiler/msgs.olang names rules the specification states, and is its own Diag" {
     msgs := try os.ReadFile("compiler/msgs.olang") catch default ""
     spec := try os.ReadFile("SPEC.md") catch default ""
-    assert table.Len() > 0 and msgs.Len() > 0 and spec.Len() > 0
+    assert msgs.Len() > 0 and spec.Len() > 0
     bad := 0
-    twins := 0
+    # the enum's cases, in order
+    from := try msgs.Find("\ntype Diag enum {\n") catch default -1
+    assert from >= 0
+    body := msgs[from + 18:]
+    to := try body.Find("\n}\n") catch default -1
+    assert to >= 0
+    cases := Map<String&, Bool>()
+    for line in body[:to].Split("\n") {
+        name := line.Trim()
+        if name.Len() == 0 { continue }
+        if name in cases {
+            try io.PrintErr("check FAIL: msgs.olang's Diag names " $name " twice\n") catch io.IoError { }
+            bad++
+        }
+        cases.Put(name, false)
+    }
+    assert cases.Len() > 0
+    functions := 0
     rest String& = msgs
     for {
-        at := try rest.Find("\n# ERR_") catch default -1
-        note := try rest.Find("\n# NOTE_") catch default -1
-        if at < 0 or (note >= 0 and note < at) { at = note }
-        if at < 0 { break }
-        rest = rest[at + 3:]
-        eol := try rest.FindByte('\n') catch default 0
-        id := rest[:eol]
-        call := try rest.Find("Msg(Diag.") catch default 0
-        rs, re := literalAfter(rest, call)
+        at := try rest.Find("\nfn ") catch { break }
+        rest = rest[at + 4:]
+        open := try rest.FindByte('(') catch default 0
+        name := rest[:open]
+        call := try rest.Find(") Msg { return Msg(Diag.") catch default -1
+        eol := try rest.FindByte('\n') catch default rest.Len()
+        if call < 0 or call > eol { continue }
+        functions++
+        kindAt I64 = call + 24
+        kindEnd I64 = kindAt + (try rest[kindAt:].FindByte(',') catch default 0)
+        kind := rest[kindAt:kindEnd]
+        if kind != name {
+            try io.PrintErr("check FAIL: msgs.olang's " $name " gives Diag." $kind "\n") catch io.IoError { }
+            bad++
+        }
+        seen := try cases.Get(name) catch default false
+        if name not in cases {
+            try io.PrintErr("check FAIL: msgs.olang's " $name " is no case of Diag\n") catch io.IoError { }
+            bad++
+        } else if seen {
+            try io.PrintErr("check FAIL: msgs.olang has two functions " $name "\n") catch io.IoError { }
+            bad++
+        } else {
+            cases.Put(name, true)
+        }
+        rs, re := literalAfter(rest, kindEnd)
         rules := rest[rs:re]
         for r in rules.Split(", ") {
             if r.Len() > 0 and not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: msgs.olang's " $id " names rule " $r ", which SPEC.md does not state\n") catch io.IoError { }
+                try io.PrintErr("check FAIL: msgs.olang's " $name " names rule " $r ", which SPEC.md does not state\n") catch io.IoError { }
                 bad++
             }
         }
-        entry := try table.Find("    X(" $id ",") catch default -1
-        if entry < 0 {
-            try io.PrintErr("check FAIL: msgs.olang has " $id ", which errmsg.h does not declare\n") catch io.IoError { }
+    }
+    for e in cases.Iter() {
+        if not e.Value {
+            try io.PrintErr("check FAIL: msgs.olang's Diag." $e.Key " has no function\n") catch io.IoError { }
             bad++
-        } else {
-            ts, te := literalAfter(table, entry)
-            if table[ts:te] != rules {
-                try io.PrintErr("check FAIL: " $id " applies " $rules " in msgs.olang, " $(table[ts:te]) " in errmsg.h\n") catch io.IoError { }
-                bad++
-            }
         }
-        twins++
     }
-    entries := 0
-    for line in table.Split("\n") {
-        if line.StartsWith("    X(") { entries++ }
-    }
-    if twins != entries {
-        try io.PrintErr("check FAIL: msgs.olang has " $twins " messages, errmsg.h " $entries " - run compiler/tools/genmsgs.olang\n") catch io.IoError { }
-        bad++
-    }
-    assert twins > 0
+    assert functions == cases.Len()
     assert bad == 0
 }
 
