@@ -21857,3 +21857,44 @@ the largest process 8.9 GB resident) - what fails:
    pushes `$row` now (as its other rows already were), and builds and passes with the port.
 4. Everything else passes with the port and without stage 0: the std, prelude, compiler, tools and bootstrap/twins
    tests, checkir, tokdiff (once 3 was worked around), astdiff, namesdiff, layoutdiff, fmtdiff and drvdiff.
+
+## Port M12: the self-built compiler's crash was the checker's own out-of-range index (2026-10-23)
+
+The first failure of the port-run verify ("Port M12: ready to remove bootstrap/", item 1) - build/olang, the port built
+by itself, segfaulting in compiler/check.olang's `readsLocal` where build/compiler_olang, the same source built by stage
+0, worked - read as the port miscompiling itself, which the bootstrap's fixed point cannot see. It was not a
+miscompile: the source had undefined behaviour, and the two compilers' arenas lay memory out differently.
+
+- **The cause.** A condition the build decides (a top-level `if`, B9c, or a constant argument a call computes, G21) is
+  checked by `ExprBodyIn` as a body of its own with no body around it - `c.frames` empty. It first asked whether the
+  expression reads a local, and `namesLocal` asked `c.fr().File`: `c.frames[c.frames.Len() - 1]`, the empty list at -1,
+  an index out of range (E16e). `List.At(-1)` reads `first[-1]`, the word in front of the list's first chunk. gdb on
+  both builds shows the same instructions (the count at offset 0x50, the first chunk's data at 0x18) over different
+  memory: in stage 0's build that word belonged to an array filled with a pointer to an object whose third word was 0,
+  read as file 0 - a prelude file, where `Resolver.Use` found nothing at that offset, so every name read as no local,
+  right by luck; in the self-built compiler it was 0, a null frame, and `.File` a null read. Every corpus file and 16
+  checks cases decide such a condition.
+- **The fix.** `declaresNames` replaces `readsLocal`: with no body being checked there are no frames to ask, a name is
+  never a local, and a type or constant variable is one the context binds (ExprBodyIn's `ns`) or one checking it
+  reports - what stage 0's build computed by luck. A test (check.olang, "a top-level condition is checked with no body
+  around it") calls CondBody on a checker whose frame list was never pushed, so its first chunk is null and the old
+  code segfaults in every build (seen) - a regression the port as the compiler under test catches whatever its arena
+  does.
+- **A sweep for its kind.** Stage 0 built the port with an assert in `List.At`, `Vec.At` and `Vec.SetAt` (the index in
+  range), and that compiler built every checks case (1,062), ran the corpus's tests and built compiler/olang.olang:
+  no other List or Vec index out of range. An array's own index is not covered - it has no library method to hold an
+  assert. (An assert with a message, or one in `List.SetAt`, made stage 0 refuse E31b's write-backs in
+  compiler/load.olang - O10c, the message being text At builds - so the sweep's carried none and SetAt had none.)
+- **Behind it, the port's emitter lacked E33/T4's empty asm fences**, so tests/shared.olang's "E33: the bits of one
+  16-bit float made into the other are read as the other" failed once the corpus ran: LLVM 18 merged an F16's bits made
+  into a BF16 with the conversion after them, `5 2048 5 5 5 5` where `2050 2048 2048 2.312 2.3125 2` is right, at -O3
+  and -debug. The emitter now writes stage 0's fences: the integer of every F16 bitcast and a BF16's bits behind `call
+  i16 asm ""`, and a -debug or -race build's BF16 widening too (`bitcast`, `bf16Bits`, `Emitter.BF16Opaque`).
+- **Numbers.** `make bootstrap` passes (build/olang.2 and build/olang.3 equal). `make -i verify OLANG=build/olang` (37
+  minutes alone, the largest process 8.9 GB): every test file passes - the corpus, std, the prelude, compiler/'s and
+  the tools' - and checks/checks.olang passes 52 of its 59 tests. What fails is what failed through stage 1 at the third
+  round: 25 cases - the 21 of "ready to remove bootstrap/" item 2 and badcond, e33opnan, e33snan and unseen, which the
+  crash had hidden (B9c and E33's undecided conditions, the evaluator's) - and the 6 scenarios the third round left (agree's
+  share_B, k2's Ring, interp's cyclic, vechandle's interpreted stale view, spawnerr's -debug -sanitize tasks, strheld's
+  g9dorder). checkir, tokdiff, astdiff, namesdiff, fmtdiff and drvdiff pass; layoutdiff differed only by the
+  Emitter's new field, captured again (`make layoutgold`).
