@@ -1656,7 +1656,7 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     if c.frames.Len() > 0 {
         fixedIn = c.fr().Body
         if not c.onlyFixed(x, fixed) { return -1 }
-    } else if c.readsLocal(x) {
+    } else if c.declaresNames(x) {
         return -1
     }
     read := c.lastFixed.ToArray()
@@ -1691,32 +1691,32 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     return id
 }
 
-# whether an expression names a local of the body it is in, or a type or constant variable - what a body of its own in
-# module context cannot read (S8b, S18c); what declares names of its own (a lambda, a comprehension, a match, a catch
-# clause) counts as reading one
-fn (c mut Checker&) readsLocal(x ast.Expr&) Bool {
+# whether an expression declares names of its own (a lambda, a comprehension, a match, a catch clause), which a body of
+# its own with no body around it (S8b, S18c, G21) does not check. A name is never a local there - no body is being
+# checked, so there are no frames to ask (c.fr() would index the empty list at -1, E16e) - and a type or constant
+# variable it names is one the context binds (ExprBodyIn's ns), else checking it reports it
+fn (c mut Checker&) declaresNames(x ast.Expr&) Bool {
     if x == null { return false }
     return match x {
-        case ast.Expr.Name(sp, _) => c.namesLocal(sp)
-        case ast.Expr.Lit(_, _), ast.Expr.Default(_) => false
-        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _) => c.readsLocal(a)
-        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _) => c.readsLocal(a)
-        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => c.readsLocal(a) or c.readsLocal(b)
-        case ast.Expr.Cond(_, a, k, b) => c.readsLocal(a) or c.readsLocal(k) or c.readsLocal(b)
-        case ast.Expr.Chain(_, ch) => c.anyReadsLocal(ch.Xs)
-        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args) => c.readsLocal(f) or c.anyReadsLocal(args)
-        case ast.Expr.Index(_, a, items) => c.readsLocal(a) or c.anyReadsLocal(items)
-        case ast.Expr.Slice(_, a, lo, hi) => c.readsLocal(a) or c.readsLocal(lo) or c.readsLocal(hi)
-        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.anyReadsLocal(items)
-        case ast.Expr.Try(_, a, clauses, _) => c.readsLocal(a) or (clauses != null and clauses.Len() > 0)
+        case ast.Expr.Name(_, _), ast.Expr.Lit(_, _), ast.Expr.Default(_) => false
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _) => c.declaresNames(a)
+        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _) => c.declaresNames(a)
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => c.declaresNames(a) or c.declaresNames(b)
+        case ast.Expr.Cond(_, a, k, b) => c.declaresNames(a) or c.declaresNames(k) or c.declaresNames(b)
+        case ast.Expr.Chain(_, ch) => c.anyDeclaresNames(ch.Xs)
+        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args) => c.declaresNames(f) or c.anyDeclaresNames(args)
+        case ast.Expr.Index(_, a, items) => c.declaresNames(a) or c.anyDeclaresNames(items)
+        case ast.Expr.Slice(_, a, lo, hi) => c.declaresNames(a) or c.declaresNames(lo) or c.declaresNames(hi)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.anyDeclaresNames(items)
+        case ast.Expr.Try(_, a, clauses, _) => c.declaresNames(a) or (clauses != null and clauses.Len() > 0)
         nomatch => true
     }
 }
 
-fn (c mut Checker&) anyReadsLocal(xs Array<ast.Expr&>&) Bool {
+fn (c mut Checker&) anyDeclaresNames(xs Array<ast.Expr&>&) Bool {
     if xs == null { return false }
     for x in xs {
-        if c.readsLocal(x) { return true }
+        if c.declaresNames(x) { return true }
     }
     return false
 }
@@ -11972,4 +11972,31 @@ test "a destructor reads its fields bare (C9, C10)" {
     c.CheckProgram()
     assert rootRules(l) == "E12 ", rootRules(l)
     assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
+}
+
+# a top-level condition the build decides (B9c) is checked as a body of its own with no body around it - as the
+# pipeline does once a check has left nothing on the frames - so no name in it may be asked of the frames: the empty
+# list's index -1 (E16e) read whatever lay in front of its first chunk, a frame by luck in one build of the compiler
+# and a null in another, where it crashed
+test "a top-level condition is checked with no body around it (B9c)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    l := testLoad(dir, ("fn f() I64 { return 1 }\nG I64 = 2\nif f() == 1 and G > 1 { fn g() I64 { return 1 } }\n"
+                       "fn main() ? { }\n"))
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := Checker(p, false)
+    c.RootOnly = true
+    assert c.frames.Len() == 0
+    x ast.Expr& = null
+    for d in l.Mods[l.Root].Decls {
+        match d {
+            case ast.Decl.If(_, ti) { x = ti.Cond }
+            case _ { }
+        }
+    }
+    assert x != null
+    assert c.CondBody(l.Root, x) >= 0
+    assert rootRules(l) == "", rootRules(l)
 }
