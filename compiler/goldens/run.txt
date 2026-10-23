@@ -1102,6 +1102,9 @@
 | status 0
 === run b9scanbranch.olang
 | status 0
+=== run c2dcondfieldok.olang
+| status 0
+| 3 3 0
 === run c2dctorbuilds.olang
 | status 0
 | ok
@@ -1302,6 +1305,9 @@
 === run o26ainlinearray.olang
 | status 0
 | alpha3
+=== run o26alatermodule.olang
+| status 0
+| 1.5 2
 === run o26anumberstorefix.olang
 | status 0
 === run o26areflocal.olang
@@ -1431,6 +1437,12 @@
 | status 0
 === run s1ablock.olang
 | status 0
+=== run s5mapgetreturn.olang
+| status 0
+| 40 0 117 19900
+=== run s5mapgetreturnsan.olang
+| status 0
+| 30 36 1 5
 === run s5spawnhandlerun.olang
 | status 0
 === run s6handleloop.olang
