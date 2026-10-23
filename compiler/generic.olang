@@ -755,6 +755,14 @@ fn (p mut Program&) UnknownConst() types.TypeId { return p.T.ConstExpr("?") }
 # variable not bound yet, the unknown constant where it needs evaluating
 fn (p mut Program&) FoldConst(c Context&, e ast.Expr&, want types.TypeId) types.TypeId { return p.fold(c, e, want) }
 
+# a constant's value where it folds as written (a literal, a constant variable, an immutable global's value), else the
+# unknown constant - never asked of the evaluator, for a question the program does not need answered while compiling
+fn (p mut Program&) FoldKnown(c Context&, e ast.Expr&, want types.TypeId) types.TypeId {
+    f := p.eval(c, e)
+    if f.St == Folded { return p.T.Const(want, p.wrap(f.V, want)) }
+    return p.UnknownConst()
+}
+
 # a fold's outcome: Folded, its value (in Ty's width, Ty Unknown for a literal's exact value, which adapts - T6, E4a);
 # Pending, it reads a variable not bound yet; Unfolded, it needs evaluating
 Folded I64 = 0

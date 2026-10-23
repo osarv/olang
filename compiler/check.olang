@@ -453,7 +453,8 @@ fn (c mut Checker&) onlyFixed(x ast.Expr&, out mut Map<source.NameId, I64>&) Boo
     if x == null { return true }
     match x {
         case ast.Expr.Name(sp, n) {
-            if not c.namesLocal(sp) { return true }
+            # a name the checker binds (a match binding, which the resolver leaves to it) is a local too, never fixed
+            if not c.namesLocal(sp) { return c.localNamed(n) < 0 }
             if c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.TypeVar { return c.constsRead and c.fr().Ctx.Vars.Has(n) }
             if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local { return false }
             if out.Has(n) { return true }
@@ -7191,8 +7192,9 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     # no fill: each element its type's zero value (D13c), a struct's made by its constructor
     if args.Len() == 1 and c.zeroCalls(elem) {
         c.exprs.Push(c.zero(sp, elem))
-        # an array of none needs no zero value (D13c)
-        nk := c.P.FoldConst(c.fr().Ctx, args[0], c.i64())
+        # an array of none needs no zero value (D13c) - known only where its length folds as written: a run-time one
+        # is no constant argument to evaluate (FoldConst would ask, and report the length it cannot compute)
+        nk := c.P.FoldKnown(c.fr().Ctx, args[0], c.i64())
         none := c.P.T.KindOf(nk) == types.Kind.Const and c.P.T.ConstValue(nk) == 0
         if not none { c.askValue(ValueKind.Fill, sp, elem, null) }
     }
