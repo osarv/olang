@@ -8,10 +8,10 @@
 #     -d -r -s -u              -debug -race -sanitize -update
 #     -a NAME   -D N=V         -target NAME   -define N=V
 #
-# An invocation is the compiler named as "$OLANG", \"$OLANG\", $(OLANG), ${OLANG}, $OLANG, build/out, build/stage0 or
-# olang, followed by one-character flags: the flags are rewritten and the mode's word put first, everything from the
-# first word that is no such flag left as it was. A checks case's "# flags:" header is rewritten the same way (its flags
-# follow "build"). Re-runnable: text already in words is left alone.
+# An invocation is the compiler named as "$OLANG", \"$OLANG\", $(OLANG), ${OLANG}, $OLANG, build/out, build/stage0,
+# build/olang or olang, followed by one-character flags: the flags are rewritten and the mode's word put first,
+# everything from the first word that is no such flag left as it was. A checks case's "# flags:" header is rewritten the
+# same way (its flags follow "build"). Re-runnable: text already in words is left alone.
 #
 #     olang build tools/cli_words.olang && build/tools_cli_words FILE...    rewrites the files, naming each one changed
 
@@ -54,7 +54,7 @@ fn invoker(line String&, i I64) I64 {
         e := i + 6
         if e == line.Len() or not isWord(line[e]) { return e }
     }
-    for p in String&["build/out", "build/stage0", "olang"] {
+    for p in String&["build/out", "build/stage0", "build/olang", "olang"] {
         if not line[i:].StartsWith(p) { continue }
         e := i + p.Len()
         if i > 0 and (isWord(line[i - 1]) or line[i - 1] == '/' or line[i - 1] == '.' or line[i - 1] == '-') { continue }

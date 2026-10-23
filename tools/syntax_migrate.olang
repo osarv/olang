@@ -15,7 +15,7 @@
 # migrated. Files are rewritten in place, and a count of each kind of change is printed; --check writes nothing and the
 # exit status says whether anything would change. A Markdown file has its "```olang" blocks migrated.
 #
-#     build/out build tools/syntax_migrate.olang && build/tools_syntax_migrate [--old] [--check] [-v] FILE|DIR...
+#     $OLANG build tools/syntax_migrate.olang && build/tools_syntax_migrate [--old] [--check] [-v] FILE|DIR...
 #
 # Running it again changes nothing. One case cannot be told apart by the text alone: a line ending in a name, a literal or
 # a ")" inside a list whose lines end in no comma, with the next line starting something an item can start ("f(a" then

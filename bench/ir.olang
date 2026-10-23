@@ -3,7 +3,7 @@
 # The IR is what the link-time optimizer hands to code generation (save-temps' precodegen), so it is exactly what runs.
 # Run bench/run first, which leaves the program's IR in bench/build. From the repository root:
 #
-#   build/out build bench/ir.olang && build/bench_ir spectral
+#   $OLANG build bench/ir.olang && build/bench_ir spectral
 
 import "std/os"
 import "benchlib"

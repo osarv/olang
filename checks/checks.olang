@@ -140,9 +140,10 @@ fn fresh(tag String&) String& {
 }
 
 # the compiler under test, as an absolute path: $OLANG - relative to the repository root when it is relative - else
-# build/out (compiler/DESIGN.md section 4; the makefile's OLANG)
+# build/out where it is built (stage 0, while bootstrap/ exists), else build/olang (make bootstrap) - compiler/DESIGN.md
+# section 4; the makefile's OLANG
 fn olang() String& {
-    o := try os.Env("OLANG") catch default "build/out"
+    o := try os.Env("OLANG") catch default ("build/out" if os.Exists("build/out") else "build/olang")
     if o.StartsWith("/") { return $o }
     return $root() "/" $o
 }
@@ -1446,7 +1447,7 @@ fn fuzz(r mut report&) ? Failed {
     dir := fresh("fuzz")
     os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
-    # the compiler it tests is this one, handed on: fuzz falls back to build/out under the directory it runs in
+    # the compiler it tests is this one, handed on: fuzz's own default is under the directory it runs in
     try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/run*/found)", dir)
     # B2f: scope-stress programs built under the scope sanitizer and interpreted give one output (seeds that ran clean)
     try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug scope 3 2 1 12 > out.txt 2>&1") == 0

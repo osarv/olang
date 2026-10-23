@@ -5,9 +5,9 @@
 # bench/c/mlp.c). Every time is the best of several runs inside the program. Not part of "make verify". From the
 # repository root:
 #
-#   build/out build bench/rungemm.olang && build/bench_rungemm [-q]      -q: build only
+#   $OLANG build bench/rungemm.olang && build/bench_rungemm [-q]      -q: build only
 #   BENCH_LOCK=FILE         take this flock while timing, as run.olang does
-#   OLANG=PATH              the compiler to build with (default build/out)
+#   OLANG=PATH              the compiler to build with (default: build/out where it is built, else build/olang)
 
 import "std/os"
 import "benchlib"

@@ -1,7 +1,7 @@
 # Migrates olang sources from std/math's free functions to the numbers' methods (M19d, 2026-10-18): std/math is gone,
 # its functions are methods of the numbers in the prelude, and its constants the prelude's own.
 #
-#     build/out build tools/math_methods.olang && build/tools_math_methods [--dry] PATH...
+#     $OLANG build tools/math_methods.olang && build/tools_math_methods [--dry] PATH...
 #
 # Each PATH is an .olang file or a directory searched for them. In code (never inside a string, a character literal or
 # a comment), through the alias the file imports std/math as:

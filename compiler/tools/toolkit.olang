@@ -175,6 +175,12 @@ fn Built(path String&) Bool {
     return os.Exists(path)
 }
 
+# the compiler a tool runs when none is named: $OLANG, else build/out where it is built (stage 0, while bootstrap/
+# exists), else build/olang (make bootstrap) - paths relative to the repository root, where the tools run
+fn Compiler() String {
+    return Env("OLANG", "build/out" if Built("build/out") else "build/olang")
+}
+
 # ---- comparing ----
 
 # diff(1)'s report of two texts, "" for none - the texts go through files in dir

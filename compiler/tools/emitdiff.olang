@@ -10,8 +10,9 @@
 # built and run, its output and status compared (its status alone where the stored output was unstable). Then the
 # totals. The port's module is compiled by clang (at -O LEVEL, 0 by default) with the port's filled-in runtime beside it;
 # a module clang refuses counts as "does not compile". The emitter is build/compiler_tools_emitdump (or $EMITDUMP); with
-# -standin the port's modules are placed by lowering's stand-in placement instead of the scope pass's. Where $OLANG
-# (build/out) is built, the port's runtime is also compared with the one it fills in, as a row.
+# -standin the port's modules are placed by lowering's stand-in placement instead of the scope pass's. Where the
+# compiler ($OLANG, else build/out where it is built, else build/olang) is built, the port's runtime is also compared
+# with the one it fills in, as a row.
 
 import "std/os"
 import "std/io"
@@ -19,7 +20,7 @@ import "toolkit"
 
 fn main() {
     args := os.Args()
-    olang := absolute(toolkit.Env("OLANG", "build/out"))
+    olang := absolute(toolkit.Compiler())
     emitdump := toolkit.Env("EMITDUMP", "build/compiler_tools_emitdump")
     verbose := false
     level := "0"
