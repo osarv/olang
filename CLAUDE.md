@@ -635,7 +635,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   third round (HISTORY.md "Port M12", three rounds, the third with what replacing the stage-0 comparisons by stored
   outputs takes). The scenarios that grepped stage 0's IR state the same facts in either compiler's spelling, as alternatives
   of one expression (`irHas`, `gsym` - decided by me, never loosened); the port now orders globals (B5a), bakes them
-  (K2), enforces M6/M6a/M6b across modules, and calls X8's exact math functions as intrinsics.
+  (K2), enforces M6/M6a/M6b across modules, and calls X8's exact math functions as intrinsics. **The stage-0
+  comparisons read stored goldens** (compiler/goldens/, 2026-10-22, HISTORY.md "Port M12: the stage-0 comparisons
+  stored"): drvdiff, tokdiff, astdiff, modgraph, emitdiff and evaldiff hold the port to what stage 0 gave, captured once
+  by a make target each (drvgold, tokgold, astgold, modgold, rungold; `GOLD_FROM=port` captures from the port) - tokens
+  and trees as a hash per file, a file edited since compared with the C oracle while bootstrap/ has it - and a checks run
+  case is held to its stored output too.
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is

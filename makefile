@@ -25,7 +25,7 @@ OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcar
 	compiler/tools/genmsgs.olang $(wildcard tools/*.olang) checks/checks.olang \
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
-	compiler/tools/diaggold_capture.olang checks/fixtures/frameenv/envcheck.olang
+	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/out, the C compiler, unless named - "make test
 # OLANG=build/stage1". What it runs - checks/checks.olang, fuzz/, bench/ - reads it from the environment, as an absolute
 # path, and falls back to build/out when it is unset

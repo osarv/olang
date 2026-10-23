@@ -21590,3 +21590,73 @@ driver - 85 failing, the suite agent's 84 and l1nul (its harness's grep on a NUL
 `call B177 [V0, V0]`, not this round's); scopesan's drive.c links stage 0's
 symbol spelling (`stub_Touch`) of a function no program path reaches; capscope and the other IR-shape scenarios grep
 stage 0's spellings; frameenv's errors and -i's stale view are the checker's and the interpreter's.
+
+## Port M12: the stage-0 comparisons stored (2026-10-22)
+
+The user's condition for deleting `bootstrap/` is that the port passes everything and that no check needs stage 0 to
+run. Every comparison that ran stage 0 (or its C oracles) beside the port now reads what stage 0 gave from
+compiler/goldens/, captured once by a make target of its own and never written by a check (the stocktake's order,
+"Port M12, third round"). The shared reading and writing is compiler/tools/toolkit.olang's: a golden file is sections,
+a row `=== KEY` and the body's rows each written `| ROW` (so any text, a row beginning `===` included, is a body), and
+`\ no newline at end` where the body ends in none.
+
+- **drvdiff** (compiler/goldens/drv.txt, `make drvgold`, 19 KB): stage 0's stdout, stderr and status for each of the 83
+  command lines and whole builds, the scratch directory written W, the directory of programs D and the repository's
+  root $ROOT. The driver is held to it (`DRVDIFF_DRIVER` names another); a line missing from the golden, or a golden line
+  no longer run, fails. drvdiff no longer needs build/out.
+- **The runs** (compiler/goldens/run.txt, `make rungold`, 84 KB, ten minutes from stage 0): each file of tests of the
+  corpus and std run as `olang test FILE` runs it - its status and its tests' endings (`ok - NAME`, `FAIL - NAME`) - and
+  each of the 223 `# check: run` cases built and run exactly as checks/checks.olang runs it (copied into a directory of
+  its own, `olang build FLAGS CASE`, then its program): status and standard output, the case's directory written
+  $CASE. Each program runs twice; one whose output differs would be stored as unstable and held to its status (none
+  is). emitdiff and evaldiff read it in place of running stage 0 ("golden P ok F fail" in their rows); emitdiff still
+  compares the port's runtime with the one `$OLANG` fills in, as a row, where `$OLANG` is built. **checks/checks.olang
+  holds every run case to its stored output too**, not only to its status (a case run.txt does not hold keeps the
+  status check alone) - stronger than before, and what "the port gives the stored output" means for the driver. One
+  stored ending is a FAIL: std/os's "Exec without capture" test fails whenever its own standard output is a memory file
+  (`seen.Stdout != mine` compares two memfds), as it is under toolkit.Run - the harness the old comparisons ran stage 0
+  through as well, so the golden is what they compared against.
+- **tokdiff and astdiff** (compiler/goldens/tokens.txt + tokens.full.txt, ast.txt + ast.full.txt; `make tokgold`,
+  `make astgold`; ~200 KB together). Decided (mine): a hash per file rather than the dumps, which are 8.5 MB of tokens
+  alone - each row `SOURCE DUMP PATH`, FNV-1a 64 of the file's text and of its normalized section, and the whole section
+  kept beside it for the small files (under 8 KB) whose dump holds diagnostics (26 and 67 files - the interesting ones,
+  readable as a diff; tests/shared.olang's 286 KB tree is hashed only). The hash is what is compared; a whole section
+  that disagrees with its hash stops the tool. **A file edited since the capture is stale**: while bootstrap/ has the C
+  oracles it is compared with the oracle itself, exactly as before (the makefile builds build/tokdump and build/astdump
+  only while bootstrap/oracle/ exists), and the tool says how many such files there are; without the oracle a stale
+  file is a failure naming `make tokgold`. So nothing is weaker than it was, and other branches editing .olang files are
+  not made to capture anything while stage 0 exists. astdiff's round trip needs no oracle and is unchanged.
+- **modgraph** (compiler/goldens/modgraph.txt, `make modgold`, 204 KB): stage 0's module graph of every root, ordinary
+  and test builds (192), and of the remote program with its lock's keys; a graph that is not the stored one is compared
+  with build/modgraph while it is built (then only the golden is stale). 5 s against the oracle's 12 minutes.
+- **Capturing from the port** (`GOLD_FROM=port`, `GOLD_OLANG` naming the driver, build/compiler_olang by default):
+  drvgold, rungold and diaggold run that driver; tokgold, astgold and modgold the self-hosted passes (`-capture port`);
+  layoutgold `-port` lays the golden's own types out again through the type table, a deferred or unparsed row keeping
+  the golden's - the set of types stays the one stage 0 found, since the port has no "every type a program holds"
+  rendering. Every port capture of today's goldens reproduces them byte for byte (drv, tokens, layout checked).
+- `make diagtest` runs `$(OLANG)`.
+
+**What still names bootstrap/ or build/out**, and what each needs once bootstrap/ is gone (not changed here - the
+user's step):
+1. *makefile*: `OLANG ?= build/out` and its build rules (`build/obj`, `build/out`, `build/stage0`, `stage0`), the
+   oracles (`build/tokdump`, `build/astdump`, `build/modgraph`, `build/layoutdump` - only captures and stale files use
+   them now; the conditional `TOKDUMP`/`ASTDUMP`/`MODGRAPH` drop them by themselves), `GOLD_OLANG`'s default and
+   `SEED_OLANG`'s fallback (build/out) - all become the port (`build/olang` from `make bootstrap`, or build/stage1);
+   `GOLD_FROM`'s default becomes `port`; `layoutgold` without `-port` goes with layoutdump.
+2. *checks/checks.olang*: the two tests that read `bootstrap/errmsg.h` and `ls bootstrap/*.c` ("every diagnostic's call
+   fits its message", "every message of compiler/msgs.olang names rules ... as its errmsg.h twin") go with bootstrap/;
+   msgs.olang's own tests stay. `olang()` falls back to build/out (line 140), the fuzz scenario's comment says so too.
+3. *compiler/tools/genmsgs.olang* reads bootstrap/errmsg.h to write compiler/msgs.olang: msgs.olang becomes the source
+   (genmsgs retired, or the table moved out of bootstrap/ first); msgs.olang's header says "edit the table there".
+4. *compiler/tools*: emitdiff's and evaldiff's `OLANG` default (the runtime row and `-i` only), diaggold.olang's -e
+   checks (`$OLANG`, else build/out), diaggold_capture's and rungold's default argument (build/out), drvdiff's,
+   tokdiff's, astdiff's and modgraph's oracle fallbacks (inert without the oracles), dump.olang's comments naming the
+   oracles, fmt.olang's comment naming bootstrap/main.c.
+5. *Comments only*: compiler/runtime.olang and std/runtime/runtime.ll (bootstrap/runtime.c "fills" the runtime -
+   compiler/runtime.olang is what does it for the port), checks/fixtures/http/server.olang's usage line.
+6. *Defaults to build/out*: bench/benchlib.olang (runs `make build/out` when missing), bench/run, runfused, rungemm,
+   fuzz/fuzz.olang, std/http.olang's test server build, tools/int_literal_i64 and tools/perm_mut (`RepoRoot()/build/out`),
+   tools/cli_words (recognizes build/out and build/stage0 as invocations - harmless); the tools' usage lines.
+7. *Documents*: CLAUDE.md, compiler/README.md, compiler/DESIGN.md, bootstrap/README.md, bench/README.md, checks/README.md,
+   tools/README.md, std/README.md, tests/README.md, fuzz/README.md, docs/memory.md, docs/own.md and the memory files
+   describe stage 0 as present.
