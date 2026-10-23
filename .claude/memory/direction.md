@@ -26,6 +26,8 @@ CLAUDE.md so every session loads it; keep it current when the direction moves.
 port's -O3 self-build takes ~108 s against the C compiler's ~32 s, mostly clang on the port's generated IR. So build
 time is a first-class goal of the port, measured as performance is: weigh it in every emit/lowering decision, and keep
 a compile-speed round going (instance merging and sharing, less IR per line, parallel and cached objects).
+Then: "That is the first approved item we fix" - read as: of the decided-but-unbuilt items (plan.md's build list), compile
+speed comes first, ahead of every language feature queued for after self-hosting.
 
 **FPGA (2026-10-09):** the user wants olang to target FPGAs for spiking neural network implementations - a long-term
 domain to weigh when designing numeric types (bit widths, fixed point, saturation) and concurrency (dataflow).
