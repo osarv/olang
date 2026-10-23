@@ -627,7 +627,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   instances', the root's with main or the harness - its text depending only on what it holds, so an edit recompiles
   only what changed (at -O3 the instances in the root's, as stage 0's); the error trace S18d; TBAA, DWARF and the runtime's
   declarations read from its text (round 4); aggregates over 128 bytes through memory, -race and -sanitize, DWARF for
-  aggregates and arrays (round 5); `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
+  aggregates and arrays (round 5); every module's bodies but the root's emitted, so programs built in one directory
+  share its object, objects over 2 MB cut into parts compiled side by side (-debug and ThinLTO builds), single-use
+  stack slots folded, the test harness as tables (round 6: the port-run verify 40.7 -> 28.4 min); `make emitdiff`;
+  HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
   M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;
