@@ -213,7 +213,6 @@ type frame struct() {
     Ret I64 = 0
     RetArg I64 = 0       # rCall: the caller's call; rTask, rClause: the task's slot; rGlobal: the global
     Closing I64 = 0      # where its scopes being closed start in closing
-    Defers I64 = 0       # where its pending cleanups start in defS and defB (B3e)
     Pending Bool = false # a statement or a terminator waits for closes, tasks or a return to finish
     Done Bool = false    # its Return or Raise has delivered its value and closes its storage
     Raised Bool = false
@@ -375,8 +374,10 @@ type Machine struct(T mut types.Table&, When Mode) {
     ws mut Array<I64>& = Array<I64>(1024)
     nWs I64 = 0
     closing List<I64>
-    # B3e: the cleanups of the deferred code registered and not yet run, oldest first, each frame's together (its
-    # Defers): the scope each is registered at, and its entry block - run, under interpret, for the blocks a stop leaves
+    # B3e: the cleanups of the deferred code registered and not yet run, oldest first, each frame's together: the frame
+    # each is registered in, the scope it is registered at, and its entry block - run, under interpret, for the blocks a
+    # stop leaves. A frame's own are the last ones while it runs, since every frame above it has returned
+    defF List<I64>
     defS List<I64>
     defB List<I64>
     resumed Bool = false
@@ -1447,7 +1448,6 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
     fr.Fn, fr.Ret, fr.RetArg = fi, ret, retArg
     fr.Locals, fr.Scopes, fr.Vars = m.nWs, m.nWs + nl, m.nWs + nl + ns
     fr.Closing = m.closing.Len()
-    fr.Defers = m.defS.Len()
     fr.Store = m.newScope(sStore)
     need := m.nWs + nl + ns + nv
     if need > m.ws.Len() {
@@ -1481,8 +1481,7 @@ fn (m mut Machine&) popFrame() {
     m.nFs--
     if m.cf[m.fs[m.nFs].Fn].Equal { m.eqDepth-- }
     m.nWs = m.fs[m.nFs].Locals
-    m.defS.Truncate(m.fs[m.nFs].Defers)
-    m.defB.Truncate(m.fs[m.nFs].Defers)
+    m.dropOwnDefers(m.nFs)
 }
 
 fn (m mut Machine&) localPtr(fi I64, l mir.LocalId) Ptr {
@@ -2642,6 +2641,7 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
             if entry == mir.NoBlock {
                 m.dropDefers(fi, I64(s), true)
             } else if m.When == Mode.Run {
+                m.defF.Push(fi)
                 m.defS.Push(I64(s))
                 m.defB.Push(I64(entry))
             }
@@ -4058,16 +4058,27 @@ fn (m mut Machine&) dropFrame() {
 # frame fi's pending cleanups of scope s dropped: the newest alone (its deferred code runs on this way out of s), or all
 # (s closes)
 fn (m mut Machine&) dropDefers(fi I64, s I64, newest Bool) {
-    for k := m.defS.Len() - 1, k >= m.fs[fi].Defers, k-- {
+    for k := m.defS.Len() - 1, k >= 0 and m.defF[k] == fi, k-- {
         if m.defS[k] != s { continue }
         for j in range k, m.defS.Len() - 1 {
+            m.defF[j] = m.defF[j + 1]
             m.defS[j] = m.defS[j + 1]
             m.defB[j] = m.defB[j + 1]
         }
+        m.defF.Truncate(m.defF.Len() - 1)
         m.defS.Truncate(m.defS.Len() - 1)
         m.defB.Truncate(m.defB.Len() - 1)
         if newest { return }
     }
+}
+
+# the pending cleanups of frame fi and of every frame above it dropped - they are gone
+fn (m mut Machine&) dropOwnDefers(fi I64) {
+    n := m.defF.Len()
+    for n > 0 and m.defF[n - 1] >= fi { n-- }
+    m.defF.Truncate(n)
+    m.defS.Truncate(n)
+    m.defB.Truncate(n)
 }
 
 # B3e: a running program interpret stops, on what it does not run, leaves its blocks all the same - as the built
@@ -4079,13 +4090,15 @@ fn (m mut Machine&) runCleanups(base I64) {
     waitFile, waitSp := m.WaitTaskFile, m.WaitTaskSp
     for m.nFs > base {
         fi := m.nFs - 1
-        if m.defS.Len() <= m.fs[fi].Defers {
+        last := m.defF.Len() - 1
+        if last < 0 or m.defF[last] != fi {
             m.dropFrame()
             continue
         }
-        entry := m.defB[m.defB.Len() - 1]
-        m.defS.Truncate(m.defS.Len() - 1)
-        m.defB.Truncate(m.defB.Len() - 1)
+        entry := m.defB[last]
+        m.defF.Truncate(last)
+        m.defS.Truncate(last)
+        m.defB.Truncate(last)
         m.closing.Truncate(m.fs[fi].Closing)
         m.fs[fi].Block, m.fs[fi].Stmt, m.fs[fi].Pending = entry, 0, false
         m.halted, m.resumed, m.Stopped = false, false, Stop.None
