@@ -21757,3 +21757,11 @@ miscompile: the source had undefined behaviour, and the two compilers' arenas la
   into a BF16 with the conversion after them, `5 2048 5 5 5 5` where `2050 2048 2048 2.312 2.3125 2` is right, at -O3
   and -debug. The emitter now writes stage 0's fences: the integer of every F16 bitcast and a BF16's bits behind `call
   i16 asm ""`, and a -debug or -race build's BF16 widening too (`bitcast`, `bf16Bits`, `Emitter.BF16Opaque`).
+- **Numbers.** `make bootstrap` passes (build/olang.2 and build/olang.3 equal). `make -i verify OLANG=build/olang` (37
+  minutes alone, the largest process 8.9 GB): every test file passes - the corpus, std, the prelude, compiler/'s and
+  the tools' - and checks/checks.olang passes 52 of its 59 tests. What fails is what failed through stage 1 at the third
+  round: 25 cases - the 21 of "ready to remove bootstrap/" item 2 and badcond, e33opnan, e33snan and unseen, which the
+  crash had hidden (B9c and E33's undecided conditions, the evaluator's) - and the 6 scenarios the third round left (agree's
+  share_B, k2's Ring, interp's cyclic, vechandle's interpreted stale view, spawnerr's -debug -sanitize tasks, strheld's
+  g9dorder). checkir, tokdiff, astdiff, namesdiff, fmtdiff and drvdiff pass; layoutdiff differed only by the
+  Emitter's new field, captured again (`make layoutgold`).

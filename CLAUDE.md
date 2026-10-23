@@ -644,7 +644,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   directory"; 2026-10-23): compiler/msgs.olang is the diagnostics table's source (bootstrap/twins.olang holds errmsg.h to
   it while both exist), every tool falls back to build/out only where it is built, else build/olang, and `make verify
   OLANG=build/olang` runs everything with the port and stage 0 out (the makefile's `STAGE0`). `make bootstrap` compares
-  the second and third builds, so a seed older than the code generator still bootstraps.
+  the second and third builds, so a seed older than the code generator still bootstraps. With the port built by itself
+  (2026-10-23) every test file passes and checks/checks.olang fails only known cases (25, 20 the evaluator's) and the 6 known
+  scenarios of stage 1's third round; its
+  crash on every condition the build decides was check.olang's own out-of-range index (`c.fr()` with no frame, E16e),
+  which the two compilers' arenas laid out differently - not a miscompile (HISTORY.md, "Port M12: the self-built
+  compiler's crash").
 - **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is
