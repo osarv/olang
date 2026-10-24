@@ -117,6 +117,11 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     # where it is in its top-level item rather than by its line, defined in an object of its home's own compiled
     # without link-time optimization (ObjectKind.Locations). False compiling one module, and for the tools
     LocApart Bool = false
+    # B3d where objects are cut: each instance's group, the module whose code first reaches it (instGroups), and the
+    # groups in their modules' order
+    instGroup Map<I64, I64>
+    groupOrder List<I64>
+    groupAt Map<I64, I64>           # each group's place in groupOrder
 }
 
 # a module's objects as one emission wrote them, kept to stand for it in a later one (B3i): its index, its parts' names,
@@ -192,7 +197,6 @@ fn (e mut Emitter&) Objects() List<Object> {
     used Map<I64, Bool>
     for h in e.itemHome { used.Put(h, true) }
     rootKind := ObjectKind.Tests if e.Tests else ObjectKind.Main
-    if not e.Debug { e.mergeSame() }
     # what decides whether objects are cut: the IR of the program's own items - its modules' and instances', not the
     # helpers and constants copied into each object that names them - a reused module's as it was written
     total I64 = 0
@@ -210,6 +214,9 @@ fn (e mut Emitter&) Objects() List<Object> {
             return out
         }
     }
+    inst := split and used.Has(HomeInst)
+    if inst { e.instGroups() }
+    if not e.Debug { e.mergeSame() }
     for m in range mods.Len() {
         if m == root { continue }
         ri := try e.ReusedAt.Get(m) catch default -1
@@ -239,16 +246,135 @@ fn (e mut Emitter&) Objects() List<Object> {
     # from the instances it calls, so the instances have parts of their own: an edit to the root then leaves them as
     # they were, where a part mixing the two changed with every edit - and since every module imports instances, so did
     # the cache key of every module's ThinLTO backend (a test build of tests/shared.olang relinked in 6 s, not 1)
-    inst := split and used.Has(HomeInst)
-    if inst { e.parts(out, $mods[root].Identity, ObjectKind.Instances, HomeInst, false, split) }
+    # where objects are cut, the instances in groups (instGroups), the objects of each the instances first reached
+    # from one module's code: an edit making instances changes its own module's group, which the modules before it -
+    # importing nothing of it - leave as it was
+    if inst {
+        for g in e.groupOrder {
+            gid := $mods[root].Identity $("" if g == root else $"~" $mods[g].Identity)
+            e.parts(out, gid, ObjectKind.Instances, HomeInst, false, split, null, g)
+        }
+    }
     e.parts(out, $mods[root].Identity, rootKind, root, not inst, split)
     return out
+}
+
+# B3d, where objects are cut: each instance in the group of the first module whose code reaches it - directly, or
+# through instances, helpers and lambdas - the modules in their order, the root's last; a reused module (B3i) reaching
+# the instances its record names. The modules before an edited one do not reach what it newly instantiates, so its new
+# instances go into a group of their own module's: the other groups' objects - which every module's ThinLTO backend
+# imports from - stay as they were, where with the instances cut by their symbols' hashes alone a new instance changed
+# a part every module imported, and the link redid nearly every module's code
+fn (e mut Emitter&) instGroups() {
+    mods := e.P.L.Mods
+    root := e.P.L.Root
+    order List<I64>
+    for m in range mods.Len() {
+        if m != root { order.Push(m) }
+    }
+    order.Push(root)
+    # each module's items, as a chain: its first item, and each item's next of the same home (-1 none)
+    first := Array<I64>(mods.Len(), -1)
+    next := Array<I64>(e.itemSym.Len(), -1)
+    for k in range e.itemSym.Len() {
+        i := e.itemSym.Len() - 1 - k
+        h := e.itemHome[i]
+        if h >= 0 and h < mods.Len() {
+            next[i] = first[h]
+            first[h] = i
+        }
+    }
+    for m in order {
+        work List<I64>
+        ri := try e.ReusedAt.Get(m) catch default -1
+        if ri >= 0 {
+            for sym in e.Reuse[ri].Inst {
+                j := try e.itemAt.Get(sym) catch default -1
+                if j >= 0 and e.itemHome[j] == HomeInst and not e.instGroup.Has(j) {
+                    e.instGroup.Put(j, m)
+                    work.Push(j)
+                }
+            }
+        } else {
+            for i := first[m], i >= 0, i = next[i] { work.Push(i) }
+        }
+        seen Map<I64, Bool>
+        w I64 = 0
+        for w < work.Len() {
+            i := work[w]
+            w++
+            text := e.itemText[i]
+            rs := e.refs(i)
+            for r in range 0, rs.Len(), 3 {
+                if rs[r] != 0 { continue }
+                j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+                if j < 0 { continue }
+                h := e.itemHome[j]
+                if h == HomeInst {
+                    if e.instGroup.Has(j) { continue }
+                    e.instGroup.Put(j, m)
+                    work.Push(j)
+                } else if (h == HomeShared or h == HomeLocal) and not seen.Has(j) {
+                    seen.Put(j, true)
+                    work.Push(j)
+                }
+            }
+        }
+    }
+    have Map<I64, Bool>
+    for i in range e.itemSym.Len() {
+        if e.itemHome[i] != HomeInst { continue }
+        if not e.instGroup.Has(i) { e.instGroup.Put(i, root) }
+        have.Put(try e.instGroup.Get(i) catch default root, true)
+    }
+    for m in order {
+        if have.Has(m) {
+            e.groupAt.Put(m, e.groupOrder.Len())
+            e.groupOrder.Push(m)
+        }
+    }
+}
+
+# the instance group item i is in (instGroups), -1 for none
+fn (e Emitter&) instGroupOf(i I64) I64 { return try e.instGroup.Get(i) catch default -1 }
+
+# where item i's group comes among the groups (instGroups): -1 for an item in none
+fn (e Emitter&) groupRank(i I64) I64 { return try e.groupAt.Get(e.instGroupOf(i)) catch default -1 }
+
+# whether item i, merged into another (mergeSame), is written as an alias of it - beside it, in its object - or, being in
+# another instance group than what it stands for, as a function of its own calling that one (wrapper)
+fn (e Emitter&) aliased(i I64) Bool {
+    into := try e.merged.Get(i) catch default i
+    return e.instGroupOf(i) == e.instGroupOf(into)
+}
+
+# a merged instance in another group than the one it stands for (aliased): its own definition, calling that one in its
+# place - its signature that one's, which merging made the same, so the call is a tail call that leaves no frame
+fn (e Emitter&) wrapper(i I64, into I64) String {
+    text := e.itemText[into]
+    nl := try text.Find("\n") catch default text.Len()
+    line := text[:nl]
+    at := $"@" $e.itemSym[into] "("
+    p := try line.Find(at) catch default -1
+    q := try line.FindLast(") #0 {") catch default -1
+    if p < 0 or q < p { return "" }
+    head := line[:p]          # "define dso_local RET "
+    params := line[p + at.Len():q]
+    ret := head["define dso_local ".Len():head.Len() - 1]
+    b := StringBuilder()
+    b.Push($head "@" $e.itemSym[i] "(" $params ") #0 {\nentry:\n")
+    if ret == "void" {
+        b.Push($"  musttail call void @" $e.itemSym[into] "(" $params ")\n  ret void\n}\n\n")
+    } else {
+        b.Push($"  %r = musttail call " $ret " @" $e.itemSym[into] "(" $params ")\n  ret " $ret " %r\n}\n\n")
+    }
+    return b.ToString()
 }
 
 # the objects holding home's items (and the instances', alsoInst): one, or where split and they are more than
 # PartSize, as many parts as it takes - the first named identity, the others identity-K
 fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKind, home I64, alsoInst Bool, split Bool
-    inst mut List<String&>& = null) {
+    inst mut List<String&>& = null, ig I64 = -1) {
     # a test build's root cut into parts: its tests (and the harness naming them) apart from the code they call, in
     # parts of their own, a quarter the size - nothing imports a test, so an edit to one recompiles its part and
     # relinks only that part's code, where a part holding the functions tests call is imported by every part calling
@@ -262,7 +388,8 @@ fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKi
         size I64 = 0
         for i in range e.itemSym.Len() {
             h := e.itemHome[i]
-            if (h == home or (alsoInst and h == HomeInst)) and (grp < 0 or e.groupOf(i) == grp) { size += e.itemText[i].Len() }
+            if (h == home or (alsoInst and h == HomeInst)) and (grp < 0 or e.groupOf(i) == grp) and
+                (ig < 0 or e.instGroupOf(i) == ig) { size += e.itemText[i].Len() }
         }
         cut := PartSize / 4 if grp == 1 else PartSize
         n := (size + cut - 1) / cut if split else 1
@@ -270,7 +397,7 @@ fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKi
         if grp == 1 and size == 0 { continue }
         for k in range n {
             name := ($identity if k == 0 else $identity "-" $k) if grp != 1 else $identity "-t" $k
-            out.Push(Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp, locs)))
+            out.Push(Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp, locs, ig)))
         }
     }
     if locs.Len() > 0 {
@@ -304,7 +431,7 @@ PartSize I64 = 2 << 20
 # in one, since a baked global may point into the private blobs beside another (K2b), which no other object can name
 fn (e Emitter&) partOf(i I64, n I64) I64 {
     if n <= 1 { return 0 }
-    j := try e.merged.Get(i) catch default i  # an alias beside what it stands for, which it names
+    j := (try e.merged.Get(i) catch default i) if e.aliased(i) else i  # an alias beside what it stands for, which it names
     sym := e.itemSym[j]
     h := (I64(0) if sym.StartsWith("G_2e") else sym.Hash()) % n
     return h + n if h < 0 else h
@@ -564,11 +691,17 @@ fn (e mut Emitter&) mergeSame() {
         if keys.Len() == count { break }
         count = keys.Len()
     }
-    # each class's member of the smallest symbol stands for the rest
+    # each class's member of the smallest symbol stands for the rest - of the earliest group where the instances are
+    # grouped (instGroups): a new member, which is in the group of the module whose edit made it, then never takes the
+    # place of one in an earlier group, whose object stays as it was
     best := Array<I64>(count, -1)
     for c in range n {
         b := best[cls[c]]
-        if b < 0 or e.itemSym[cand[c]] < e.itemSym[cand[b]] { best[cls[c]] = c }
+        if b < 0 { best[cls[c]] = c } else {
+            rc := e.groupRank(cand[c])
+            rb := e.groupRank(cand[b])
+            if rc < rb or rc == rb and e.itemSym[cand[c]] < e.itemSym[cand[b]] { best[cls[c]] = c }
+        }
     }
     for c in range n {
         b := best[cls[c]]
@@ -629,11 +762,12 @@ fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c
 # copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
 # another object, and the types they name
 fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut List<String&>& = null
-    group I64 = -1, locs mut Map<I64, Bool>& = null) String {
+    group I64 = -1, locs mut Map<I64, Bool>& = null, ig I64 = -1) String {
     mine List<I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
-        if (h == home or (alsoInst and h == HomeInst)) and (group < 0 or e.groupOf(i) == group) and e.partOf(i, parts) == part {
+        if (h == home or (alsoInst and h == HomeInst)) and (group < 0 or e.groupOf(i) == group) and
+            (ig < 0 or e.instGroupOf(i) == ig) and e.partOf(i, parts) == part {
             mine.Push(i)
         }
     }
@@ -658,11 +792,30 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
         for m in e.merged { rename.Put(m.Key, $e.itemSym[m.Value]) }
     }
     nloc I64 = 0
+    wrapped Map<I64, String&>   # each merged instance written as a wrapper here, its text
     k I64 = 0
     for k < order.Len() {
         it := order[k]
         k++
-        if merging and e.merged.Has(it) { continue }   # an alias, naming only what it stands for, which is here
+        if merging and e.merged.Has(it) {
+            # an alias, naming only what it stands for, which is here - or a wrapper, which declares it
+            into := try e.merged.Get(it) catch default it
+            if not e.aliased(it) {
+                w := e.wrapper(it, into)
+                wrapped.Put(it, $w)
+                rw := refsIn(w)
+                for r in range 0, rw.Len(), 3 {
+                    if rw[r] != 1 { continue }
+                    t := try e.tyAt.Get(w[rw[r + 1]:rw[r + 2]]) catch default -1
+                    if t >= 0 and not tyHave.Has(t) { e.wantType(t, tys, tyHave) }
+                }
+                if not have.Has(into) and not declared.Has(into) {
+                    declared.Put(into, true)
+                    decls.Push(e.itemDecl[into])
+                }
+            }
+            continue
+        }
         text := e.itemText[it]
         rs := e.refs(it)
         for r in range 0, rs.Len(), 3 {
@@ -701,6 +854,10 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
     for it in order {
         if merging and e.merged.Has(it) {
             into := try e.merged.Get(it) catch default it
+            if not e.aliased(it) {
+                out.Push(try wrapped.Get(it) catch default "")
+                continue
+            }
             fty := try e.itemFnTy.Get(it) catch default "void ()"
             out.Push($"@" $e.itemSym[it] " = dso_local alias " $fty ", ptr @" $e.itemSym[into] "\n")
             continue
@@ -937,6 +1094,32 @@ fn (e mut Emitter&) where(file I64, sp source.Span) String {
     return $s[:k] if k > 0 else $s
 }
 
+# what a place's name starts with for the function k (located): its symbol - but a lambda's, numbered among every
+# body of the program, is named after the top-level item it is written in and where in it, which no edit elsewhere
+# moves
+fn (e mut Emitter&) locBase(k mir.FnKey) String {
+    id I64 = -1
+    adapter := false
+    match k {
+        case mir.FnKey.Body(b) { id = I64(b) }
+        case mir.FnKey.Adapter(b) {
+            id = I64(b)
+            adapter = true
+        }
+        case _ { }
+    }
+    if id < 0 or not e.isLambda(id) { return e.sym(k) }
+    off := I64(e.Lw.Bodies[id].Sp.Start)
+    top := id
+    for e.isLambda(top) {
+        match e.Lw.Bodies[top].Of {
+            case typed.BodyOf.Lambda(parent) { top = I64(parent) }
+            case _ { break }
+        }
+    }
+    return $e.bodySym(top) "|" $(off - I64(e.Lw.Bodies[top].Sp.Start)) $("|adapter" if adapter else "")
+}
+
 # "FILE:LINE" where sp is, then rest, as a C string the function being written names: its symbol. Kept apart (B3l,
 # LocApart), it is named by the function's symbol and how many places the function named before it - neither of which
 # a line added above the function changes - and its text is defined in its home's Locations object: so such an edit
@@ -945,7 +1128,7 @@ fn (fe mut fnEm&) located(sp source.Span, rest String&) String {
     e := fe.E
     text := $e.where(fe.F.File, sp) $rest
     if not e.LocApart { return e.cstr(text) }
-    key := $e.sym(fe.Key) "|" $fe.nloc "|" $rest
+    key := $e.locBase(fe.Key) "|" $fe.nloc "|" $rest
     fe.nloc++
     second := $"~" $key
     sym := $"olang_loc_" $U64(key.Hash()).Format(16) "_" $U64(second.Hash()).Format(16)
