@@ -264,3 +264,4 @@ on sight per rules.md, "Code rules".
   tools/equality_migrate.olang and helper_rename.olang for oann. Round 3 (nullable) running.
 - QUEUED after lang24 + stdx merge: the std naming pass (no module stutter: io.Error, json.Value, chan.Channel ...),
   with tools/stutter_rename.olang for oann.
+- QUEUED after lang24: `olang fix` (runs tools/*_migrate.olang in order, idempotent; oann's catch-up uses it).

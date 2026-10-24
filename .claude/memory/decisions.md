@@ -984,3 +984,8 @@ errors and documentation - generic `+` already works).
   error types are named by subject (linalg ShapeError, ActivationError); the prelude is the exception (bare names:
   ListError, MapError, TextError stay) and must never declare a plain `Error`. New modules follow it now (stdx told);
   existing types renamed in one pass, with a tool (oann too), after lang24 and stdx merge. A rule in std/README.md.
+- 2026-10-24 (the user): 4 errors carrying data DEFERRED; 6 `olang fix` YES (runs every idempotent migration tool in
+  order; no version marker; after lang24); 11 yes; 12 neovim: a plugin dir (filetype, syntax, format on save,
+  errorformat, LSP config) plus `olang lsp`, and `olang mcp` (MCP tools: check, explain, doc, format, test) - the user:
+  "do it. Please explain" (explained). On 3 the user thought `.Destroy()` was rejected: told it was decided FOR (proven
+  safe only, 2026-10-18); stays unless they say drop it.
