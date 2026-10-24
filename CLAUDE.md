@@ -87,7 +87,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   statement; a declaration, an `if`, a loop, a `match`, a `join`, a `defer` or a block is an error naming the block
   form. The statement ends at its line's end or at an `else`/`catch` on its line; `else` may begin the next line, as
   `catch` does. Not for the forever `for` or a `do` loop. `:` inside brackets stays a slice's. The formatter keeps
-  either form and spaces `: ` (and no longer writes `f() !`).
+  either form and spaces `: ` (and no longer writes `f() !`). **A lambda's body too (D16, the user's decision
+  2026-10-24):** `xs.Count(fn(x): return x > 3)` - its statement also ends where the bracket around the lambda closes or
+  at a `,` of its list, so a lambda that is a list item returns one value (L18c wraps one returning several, mine).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
   compile test interpret format explain help doc lsp mcp`; options `-output -debug -race -sanitize -target -define -update
   -check -quick -html`,

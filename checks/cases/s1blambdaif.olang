@@ -1,0 +1,5 @@
+# check: fail error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
+# S1b, D16: a lambda's one-line body is one simple statement
+fn main() {
+    f := fn(x I64) I64: if x > 0 { return 1 }
+}

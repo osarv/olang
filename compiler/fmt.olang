@@ -72,7 +72,7 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     argOpen mut Array<I64>& = Array<I64>(toks.Len())
     group mut Array<Bool>& = Array<Bool>(toks.Len())     # a "(" grouping a function type in a list (L18c)
     closes mut Array<I64>& = Array<I64>(toks.Len())
-    bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S8b), outside every bracket
+    bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
     # the tokens with text, by index into toks, and beside each whether a statement end stands before it
     real List<I64>
     ended List<Bool>
@@ -129,13 +129,14 @@ fn (f mut formatter&) run() {
         if k == token.Tok.LParen { opens.Push(j) }
         if k == token.Tok.RParen and opens.Len() > 0 { f.match_[j] = try opens.Pop() catch default 0 }
     }
-    # S8b: a ":" whose innermost open bracket is a block's "{" (or none) begins a one-line body; any other is a slice's
+    # S1b: a ":" whose innermost open bracket is a block's "{" (or none), or a "(" (a lambda's in an argument list,
+    # D16), begins a one-line body; one in a "[" is a slice's
     inner List<token.Tok>
     for j in f.real {
         k := f.kind(j)
         if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace { inner.Push(k) }
         if (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace) and inner.Len() > 0 { inner.Pop()! }
-        if k == token.Tok.Colon { f.bodyColon[j] = inner.Len() == 0 or (try inner.Last() catch default token.Tok.LBrace) == token.Tok.LBrace }
+        if k == token.Tok.Colon { f.bodyColon[j] = inner.Len() == 0 or (try inner.Last() catch default token.Tok.LBrace) != token.Tok.LBrack }
     }
     at I64 = 0
     r I64 = 0

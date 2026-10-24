@@ -23148,3 +23148,14 @@ converted to `I64` and taken modulo the width - LLVM's funnel shifts take it so,
 negative one rotates the other way), where a shift's out-of-range amount is undefined (E8a); a declared type has them
 only where it extends an integer (T29f) and may not declare one (T29e) - `MethodClashesSupplied` now names E37. Found
 writing the test: `(x >> k) & 1 == 1` still parses as `(x >> k) & (1 == 1)` - item 6 below changes that.
+
+**One-line lambdas (D16, S1b).** `fn(x): return x > 3` - a lambda's body may be S1b's one-line body. The parser reads
+it with `lineBody` under a flag (`inLam`) that makes three more tokens end the statement: the `)` or `]` closing the
+bracket the lambda stands in, and a `,` of that bracket's list - inside brackets no line end separates anything (L18a),
+so without them `xs.Map(fn(x): return x + 1)` had no end. The statement also leaves the line end it stops at for the
+statement the lambda is part of (`f := fn(x): return x` ends both). Decided (mine): a lambda that is an item of a list
+(`p.item`, L18c) returns one value - `apply(fn(x): return x * 2, 21)` is two arguments, not a lambda returning two
+values - and one returning several is wrapped whole, `give((fn(): return 1, 2))`, as a function type with several
+results is in a list. The formatter's "body colon" test counted only a `:` whose innermost bracket was a `{`; a `:`
+directly inside `(` is a lambda's (nothing else stands there), so it is spaced too; one inside `[` stays a slice's.
+Nothing past the parser changed: a line body is a block of one statement.

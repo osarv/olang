@@ -1,0 +1,6 @@
+# check: fail error[S1b]: a one-line body stands on the line of its ':' - write a block, '{ ... }'
+# S1b, D16: a lambda's one-line body stands on the line of its ':'
+fn main() {
+    f := fn(x I64) I64:
+        return x
+}

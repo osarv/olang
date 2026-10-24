@@ -75,6 +75,8 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     noGt Bool = false                  # in a type-argument list: ">" closes it, and a comparison or shift is no operator
     inCtor Bool = false                # at a constructor body's top level: a bare name is a field (C2)
     inLine Bool = false                # in a one-line body (S1b): "else" and "catch" end its statement too
+    lamItem Bool = false               # ... and the lambda an item of a list: its "," is the list's (L18c)
+    inLam Bool = false                 # in a lambda's one-line body (S1b, D16): what closes its bracket ends it, a line end is left
     ctorBody Bool = false              # the next block is a constructor's body
     brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
     skip Bool = false                  # in a parenthesized expression or a comprehension: a line's end separates
@@ -329,11 +331,12 @@ fn (p mut Parser&) release(m stackMarks) {
 fn (p mut Parser&) endStmt() ? Fail {
     k := p.peek()
     if k == token.Tok.StmtEnd {
-        p.advance()
+        if not p.inLam { p.advance() }    # a lambda's line ends the statement the lambda stands in too
         return
     }
     if k == token.Tok.RBrace or k == token.Tok.Eof { return }
     if p.inLine and (k == token.Tok.Else or k == token.Tok.Catch) { return }
+    if p.inLam and (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.Comma) { return }
     pk := p.prevKind
     if (pk == token.Tok.Amp or pk == token.Tok.Gt or pk == token.Tok.RBrace) and p.breakBefore() { return }
     try p.fail(token.Tok.StmtEnd.Describe())
@@ -344,6 +347,7 @@ fn (p mut Parser&) endStmt() ? Fail {
 fn (p mut Parser&) atEnd() Bool {
     k := p.peek()
     if k == token.Tok.StmtEnd or k == token.Tok.RBrace or k == token.Tok.Eof { return true }
+    if p.inLam and (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.Comma) { return true }
     return p.inLine and (k == token.Tok.Else or k == token.Tok.Catch)
 }
 
@@ -1168,6 +1172,12 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
     wasLine := p.inLine
     p.inLine = false
     defer { p.inLine = wasLine }
+    wasLam, wasLamItem := p.inLam, p.lamItem
+    p.inLam, p.lamItem = false, false
+    defer {
+        p.inLam = wasLam
+        p.lamItem = wasLamItem
+    }
     from := p.stmts.Len()
     for {
         p.skipEnds()
@@ -1234,7 +1244,10 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         case token.Tok.Return {
             p.advance()
             values Array<ast.Expr&>&p = Array<ast.Expr&>(0)
-            if not p.atEnd() {
+            if not p.atEnd() and p.lamItem {
+                # a lambda's one-line body, the lambda an item of a list: its "," is the list's (L18c)
+                values = ast.Expr&[try p.expr()]
+            } else if not p.atEnd() {
                 p.listTry = p.here()
                 values = try p.exprList()
             }
@@ -1689,6 +1702,19 @@ fn (p mut Parser&) branch() ast.Branch&p ? Fail {
 fn (p mut Parser&) body() Array<ast.Stmt&>&p ? Fail {
     if p.sees(token.Tok.Colon) { return try p.lineBody() }
     return try p.block()
+}
+
+# a lambda's body (D16): a block, or a one-line body (S1b) - its statement ending at its line's end, or at what closes
+# the bracket the lambda stands in or a comma of that bracket's list
+fn (p mut Parser&) lambdaBody(item Bool) Array<ast.Stmt&>&p ? Fail {
+    if not p.sees(token.Tok.Colon) { return try p.block() }
+    wasLam, wasItem := p.inLam, p.lamItem
+    p.inLam, p.lamItem = true, item
+    defer {
+        p.inLam = wasLam
+        p.lamItem = wasItem
+    }
+    return try p.lineBody()
 }
 
 # S1b: ":" and one simple statement on its line - an assignment, a call or an increment, a return, a break or continue,
@@ -2418,8 +2444,9 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
         }
         case token.Tok.Fn {
             p.advance()
+            item := p.item
             s := try p.sig(true, true)
-            body := try p.block()
+            body := try p.lambdaBody(item)
             return ast.Expr.Lambda(p.from(at), ast.Func(p.from(at), null, source.NameId(0), s, body))
         }
         case token.Tok.Match {

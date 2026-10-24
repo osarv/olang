@@ -1602,13 +1602,18 @@ name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then li
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```
-lambda       ::= "fn" "(" list(lambda-param) ")" [ ret-type ] [ "?" [ error-list ] ] block
+lambda       ::= "fn" "(" list(lambda-param) ")" [ ret-type ] [ "?" [ error-list ] ] body
 lambda-param ::= IDEN [ type-expr ]
 ```
 
 Its value has the function type its signature describes (T21), and it is checked and behaves as a function
 declaration's body does: `return` leaves the lambda, and is required to give a result - a lambda's body never
 yields one implicitly - and `error` and an uncaught `try` leave it with an error of its own.
+
+Its body may be a **one-line body** (S1b): `xs.Count(fn(x): return x > 3)`, `f := fn(a I64, b I64) I64: return a *
+b`. Its statement ends at the end of its line, or where the bracket the lambda is written in closes, or at a `,` of
+that bracket's list - so a lambda that is an item of a list returns one value there (L18c: a lambda returning several
+is parenthesized whole). The `return` is written, as in a block.
 
 **D16a.** Where a lambda is written against an **expected function type** - an argument for a parameter of
 function type, the initializer of a declaration with a written type, the right-hand side of an assignment,
@@ -3482,12 +3487,13 @@ block. It runs once, and it leaves (D10a) when its statements do.
 **S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4), expression
 statement (S3, an increment included), `return`, `break`, `continue`, `error`, `unreachable`, `assert` or `spawn`
 statement, beginning on the line of its `:`. An `if`'s and an `else`'s body and a `for` loop's body (but not the
-forever form's, nor a `do` loop's) may be one: `if x < 0: return 0`, `for x in xs: total += x`, `else: count++`. It is
+forever form's, nor a `do` loop's) may be one, and so may a lambda's (D16): `if x < 0: return 0`, `for x in xs: total
++= x`, `else: count++`, `fn(x): return x > 3`. It is
 exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
 after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the
 block, with braces and no `:`). Its statement ends at the end of its line, or at an `else` or a `catch` on that line;
-an `else` (`else:`, `else if`) may also begin the next line, as a `catch` clause may (R9b). A `:` inside brackets is a
-slice's (E16a), never a body's.
+an `else` (`else:`, `else if`) may also begin the next line, as a `catch` clause may (R9b). A lambda's one-line body
+ends where D16 says. A `:` inside square brackets is a slice's (E16a), never a body's.
 
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt

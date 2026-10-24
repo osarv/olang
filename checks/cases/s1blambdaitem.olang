@@ -1,0 +1,9 @@
+# check: fail error[E14]: expected 1 argument, found 2
+# S1b, D16, L18c: in a list a lambda's one-line body ends at the list's ","
+fn give(f (fn() I64, I64)) I64 {
+    a, b := f()
+    return a + b
+}
+fn main() {
+    n := give(fn(): return 1, 2)
+}

@@ -9567,6 +9567,24 @@ LamAdded I32 = lamApply(lamAdder(5), 2)
 LamOver I32 = lamCountOver(I32[1, 5, 9], 4)
 LamSame Bool = lamIdentity(1)
 
+# D16, S1b: a lambda's one-line body - its statement ends at its line's end, at the bracket closing around the lambda,
+# or at a "," of that bracket's list. Baked (K2) and at run time
+fn lamOneLine(k I32) Bool {
+    big := fn(x I32) Bool: return x > 3
+    d := lamApply(fn(x): return x * k, 6)
+    n := lamCount(I32[1, 5, 2, 8 * k], fn(x): return x > 3)
+    m := lamMap(I32[1, 2, 3], fn(x): return I64(x) * 10 + I64(k))
+    w := I32[1, 2, 3].Fold(0, fn(acc, x): return acc + x * k)
+    t := lamTry(fn(x): return x + k, 1)! == 2
+    return big(4) and not big(3) and d == 6 * k and n == 2 and m == I64[11, 21, 31] and w == 6 and t
+}
+LamOneLine := lamOneLine(1)
+
+test "D16, S1b: a lambda's one-line body" {
+    assert LamOneLine
+    assert lamOneLine(WdMutable / 2000000000)
+}
+
 test "D16c: a lambda captures values by copy and references by reference" {
     k I32 = ctRuntimeZero
     limit I32 = k + 3
