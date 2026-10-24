@@ -703,3 +703,14 @@ errors and documentation - generic `+` already works).
   5 nullable references `?Node&` PREFIX (suffix clashes with `fn f() Node&?`), the user now wants `?` nullable;
   `x!` unwraps, narrowing by `is not null`; rec yes. 6 traits: type lists `trait Float { F16, BF16, F32, F64 }` (also 9b),
   `and` constraints, `trait A extends B`, explicit type args `big<I64>` (G12 today: a generic is no value) - rec all four.
+- AGENDA ROUND 4 2026-10-24, DECIDED (the user): enum case tests by `==` ("I want == always. It generalizes better into
+  the payload case"): `e == Shape.Circle` tests the case, with a payload compares it, `_` matches a part; narrowing after
+  `if e == C` (the user's e.f idea); `is` only `x is null`/`is not null`; equality = stored values, references by
+  identity unless Eq (prelude collections declare Eq by contents); contracts in brackets after the parameter list,
+  any comptime-evaluable condition, scope relation `a outlives b` only (word kept, nothing shorter found); NO
+  overloading and no extra constructors ("only generics with defaults ... monomorphism of generics ... the only way to
+  achieve polymorphism") - the user's skip-by-type default idea declined by me (overloading in disguise; `default`
+  covers it); explicit type arguments `big<I64>`; `trait A extends B`; traits open (methods), parameter type lists
+  closed (the user's split). RUNTIME TRAITS (`any Trait&`): the user wants to discuss them before anything is built.
+  ASKED: 1 nullable prefix `?Node&` (rec) or suffix `Node&?` with error sets marked `!`; 2 type lists spelled
+  `<T (I32, F64)>`; 3 Float/Integer/Number as named type lists `type Float (F16, BF16, F32, F64)` (rec) or sealed traits.
