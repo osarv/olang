@@ -758,3 +758,7 @@ errors and documentation - generic `+` already works).
   taken: QAM's removal reversed for that case; awaiting a yes.
   The user asked whether `<T I32, F64>` may be bare when T is the only parameter: rec no - parentheses always (comma
   means next parameter there, `<T Shape>` trait vs one-member set, one spelling).
+- CONSTRAINT ALGEBRA PROPOSED 2026-10-24 (the user: "isn't listing several traits narrowing ... <T Shape House>"):
+  side by side = intersection (`<T Shape House>`, `<T Shape (Circle, Square)>`), parentheses = union of member types,
+  comma = next type parameter; named: `trait Number for Integer, Float` (union), `trait Dwelling extends Shape, House`
+  (intersection). Rec juxtaposition over `and`. Supersedes the earlier `and` proposal; awaiting a yes.
