@@ -860,3 +860,7 @@ errors and documentation - generic `+` already works).
   suffices. PROPOSED (rec): a brace-less body for `if`/`else`/`for` is ONE simple statement on the condition's line
   (return/break/continue/error/unreachable/assignment/call/increment - never if/for/match/block, so no dangling else);
   `else` may begin the next line as `catch` does; the formatter never adds or removes braces. ASKED: take it in?
+- BRACES 2026-10-24: the user: "We could add : for the one line case?" - rec yes: `if x < 0: return 0`, `for x in xs:
+  total += x`, `else: count++` (may begin the next line); one simple statement, same line, never if/for/match; a block
+  keeps braces and no colon. Spends `:` (the deferred `lib:Name` module separator would need another spelling); no clash
+  with slices (inside [ ]). Awaiting a yes.
