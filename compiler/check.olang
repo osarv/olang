@@ -13601,7 +13601,7 @@ test "a literal reaching a constrained variable takes the type the constraint na
     c2 := Checker(p2, false)
     c2.RootOnly = true
     c2.CheckProgram()
-    assert rootRules(l2) == "G19, T31 G19, T31 ", rootRules(l2)
+    assert rootRules(l2) == "G19, T31a G19, T31a ", rootRules(l2)
 }
 
 test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {

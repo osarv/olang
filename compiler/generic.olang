@@ -1706,12 +1706,14 @@ fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) List<I64>
     for i in range p.defaultFns.Len() {
         f := p.defaultFns[i]
         if p.fns[f].F.Name != name { continue }
-        td := p.typeDecl(types.DeclId(I32(p.defaultTraits[i])))
+        d := types.DeclId(I32(p.defaultTraits[i]))
+        td := p.typeDecl(d)
         if td is null or td.Body is null { continue }
         ok := false
         match td.Body {
-            case ast.TypeBody.Trait(methods, _, _) {
-                ok = true
+            case ast.TypeBody.Trait(methods, _, members) {
+                # T31a: a closed trait's defaults reach the types it lists alone
+                ok = members.Len() == 0 or p.Member(x, p.SelfType(d))
                 for m in methods {
                     if p.MethodOf(x, m.Name) < 0 { ok = false }
                 }
