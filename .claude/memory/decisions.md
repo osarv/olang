@@ -691,3 +691,15 @@ errors and documentation - generic `+` already works).
   COUNT only, extra constructors as functions named for the type ending in a call to the main one (D2 exception);
   overloading by type stays generics + match T, 9b `<T Vec2 or I64>`. ASKED, numbered: 1 dev build name `-quickbuild`
   or `-draft`; 2 the ==/is plan with 5a; 3 `outlives`; 4 overloading by count + named-for-type constructors; 5 9b.
+- AGENDA ROUND 3 2026-10-24: DECIDED dev build flag `-quick` (build, compile, test, run; the user leaned to it). Asked,
+  numbered: 1 narrowing instead of pattern names (`if e is Expr.Call { e.f }`, locals/params not assigned in the block,
+  also after a leaving `if e is not C`) - the user: "without the args we can just access them as e.f"; rec yes.
+  2 the user's equality: "Don't follow references but compare them ... equal in memory" - made precise: `==` = stored
+  values, references by identity unless the type declares Eq (then Eq at any depth), prelude Array/String/List/Map/Vec
+  declare Eq by contents; `is` = null/case only (`a is b` removed; `x == null` an error); rec yes. 3 scope relation
+  `a outlives b` only (equality is `b Node&a`); contract conditions any comptime-evaluable expression (the user). 4
+  overloading: (a) generics+defaults, (b) Java-style full overloading without defaults, (c) defaults+by-count - rec (c);
+  constructors listed one per line under `type Color` each declaring the same fields (the user wanted them in the decl).
+  5 nullable references `?Node&` PREFIX (suffix clashes with `fn f() Node&?`), the user now wants `?` nullable;
+  `x!` unwraps, narrowing by `is not null`; rec yes. 6 traits: type lists `trait Float { F16, BF16, F32, F64 }` (also 9b),
+  `and` constraints, `trait A extends B`, explicit type args `big<I64>` (G12 today: a generic is no value) - rec all four.
