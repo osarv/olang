@@ -478,6 +478,15 @@ fn landing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build callparts.olang > out.txt 2>&1") == 0, "callparts build", dir)
     try r.expect(sh(dir, "(ulimit -v 50000 && ./build/callparts) > out.txt 2>&1") == 0, "callparts", dir)
     try r.expect(outOf(dir) == "43444445 47000000 11000000 43444445\n", "callparts output", dir)
+    #T7c, O18a: an array literal or fill of a known length made a run-time-length array lands where it is put - given
+    #to a call, a constructor, returned, assigned (34 MB here before: its storage went to the program's scope), and
+    #under -debug -sanitize nothing it holds is read after a scope closed
+    try r.expect(sh(dir, "\"$OLANG\" build litarg.olang > out.txt 2>&1") == 0, "litarg build", dir)
+    try r.expect(sh(dir, "(ulimit -v 50000 && ./build/litarg) > out.txt 2>&1") == 0, "litarg", dir)
+    try r.expect(outOf(dir) == "6000049111115\n", "litarg output", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize litarg.olang > out.txt 2>&1 && ./build/litarg.debug.san 20000 > out.txt 2>&1") == 0
+                 "litarg -sanitize", dir)
+    try r.expect(outOf(dir) == "600351115\n", "litarg -sanitize output", dir)
     #O17b: handles lent as their references - built, built -d and interpreted, read back after the arena churned
     try r.expect(sh(dir, "\"$OLANG\" build handles.olang > out.txt 2>&1 && ./build/handles > b.txt 2>&1") == 0, "handles", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug handles.olang > out.txt 2>&1 && ./build/handles.debug > d.txt 2>&1") == 0

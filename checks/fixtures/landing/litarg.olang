@@ -1,0 +1,37 @@
+# T7c, O18a: an array literal or a fill of a known length made a run-time-length array - given straight to a call, to a
+# constructor, returned, assigned - is built where it lands, never in the program's scope (it was: each element boxed
+# there, ~16 bytes an element an evaluation, 34 MB over these 2M calls). Run under an address-space limit, and built
+# -debug -sanitize with fewer turns: nothing read after its scope closed
+import "std/io"
+import "std/os"
+
+fn len0(a Array<String&>&) I64 { return a[0].Len() }
+fn sum(a Array<I64>&) I64 { return a[0] + a[1] }
+type Held struct(A Array<String&>&) {
+    A
+}
+fn arg(i I64) I64 { return len0(String&[$i]) }
+fn ctor(i I64) I64 {
+    e := Held(String&[$i, "q"])
+    return e.A[0].Len() + e.A[1].Len()
+}
+fn made(i I64) Array<String&> { return String&[$i] }
+fn returned(i I64) I64 { return len0(made(i)) }
+fn assigned(i I64) I64 {
+    v := Array<I64>(0)
+    if i >= 0 {
+        v = I64[i, i]
+    }
+    return v[0] + v.Len()
+}
+fn filled(i I64) I64 { return sum(Array<I64>(2, i)) }
+fn chosen(i I64) I64 { return len0(String&[$i] if i % 2 == 0 else String&["a", "b"]) }
+
+fn main() {
+    args := os.Args()
+    n := 2000000
+    if args.Len() > 1: n = args[1].ParseInt(10)!
+    t I64 = 0
+    for i in range n { t += arg(i) + ctor(i) + returned(i) + assigned(i) + filled(i) + chosen(i) }
+    io.Println($t)!
+}

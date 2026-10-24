@@ -23187,3 +23187,23 @@ the obvious reading of `x & 1 == 1` legal. Then the change, and `--verify`, whic
 and compares the spans of every operator's node (`parse.Operators`, recorded under `RecordOperators`; unparse could
 not serve - it writes back the same text for both trees): all 1,445 files that parse read alike. Kept for oann, whose
 code is migrated by the same run.
+
+**The array-literal leak (T7c, O18a; the uafcc review's pre-existing finding 1).** `len0(String&[$i])` in a function
+called 2M times grew to 34 MB, ~16 bytes an element an evaluation; through a local it was flat. Read in the MIR: the
+literal is fixed (T7c, its length known) and is made where it stands as an aggregate, then `Convert` made it the
+run-time-length array the reference parameter wants, and the code generator gave a converted fixed value storage of its
+own in the only scope it could name - the program's (its own comment said so: "storage of its own, which MIR does not
+place - the program's under the stand-in placement") - before the promotion copied it again into the block. The
+storage's place was never missing: the checker gives every array literal and fill a site (`SiteKind.Make`) and the
+scope pass places it; lowering ignored it for a fixed one, held in place. Fixed in lowering, two ways: a `Convert` of a
+fresh literal or fill of a known length to a run-time-length value is made as a run-time-length array at its own site
+(`arrayLit`/`fill` given the scope to make it in); and where that conversion is what a `Promote` promotes, it is made
+where the promoted reference goes, with no second copy. Both leaks are flat now (1.8 MB), and so are a literal returned
+as a run-time value (34 MB before), assigned to one in a block inside its local's (49 MB before), a fill of a known
+length and a conditional of literals. checks' landing scenario runs them all under a 50 MB address-space limit and
+under `-debug -sanitize` (nothing read after its scope closed); `lowerdump` gives the corpus's MIR as clean as before.
+**Not fixed, recorded:** a fixed array that already lives in a place (a fixed local) made a run-time-length value -
+`v = x`, `return x` with `x := I64[i, 3]` - still takes the conversion's copy in the program's scope (34 MB over 2M
+calls), though what consumes it (T11b's assignment, T7b's return) copies again where the value goes. It needs the
+conversion's storage placed by the scope pass, so a site the checker gives it, or the converted value made a view the
+consumers copy from where they do and adopt nowhere - plan.md has it.

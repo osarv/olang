@@ -1505,6 +1505,24 @@ fn (ln mut lowering&) promote(pr typed.Promote&, ty types.TypeId, sp source.Span
                     return r
                 }
             }
+            case typed.Expr.Prim(_, _, op, _, args) {
+                # a literal or a fill of a known length (T7c, held in place: no site) converted to the run-time-length
+                # array promoted: made where the reference goes - the conversion's storage of its own had no place but
+                # the program's, so a call given one in a loop grew it every turn (the uafcc review's leak)
+                if op == typed.PrimOp.Convert and args.Len() == 1 and t0.Length(a0) == types.TypeId(0) {
+                    match args[0] {
+                        case typed.Expr.Make(_, mt, m) {
+                            fa := ln.arrayOf(mt)
+                            if (m.Kind == typed.MakeKind.Fill or m.Kind == typed.MakeKind.Array) and not t0.IsRef(t0.Repr(mt)) and
+                               fa != types.UnknownT and ln.fixedLen(fa) >= 0 {
+                                at := ln.built(pr.Site)
+                                return ln.fill(m, ty, sp, true, at) if m.Kind == typed.MakeKind.Fill else ln.arrayLit(m, ty, sp, true, at)
+                            }
+                        }
+                        case _ { }
+                    }
+                }
+            }
             case _ { }
         }
     }
@@ -1784,7 +1802,8 @@ fn (ln mut lowering&) fixedLen(at types.TypeId) I64 {
 }
 
 # an array literal (E19): a fixed array made of its elements, or a run-time one's storage made and filled
-fn (ln mut lowering&) arrayLit(m typed.Make&, ty types.TypeId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) arrayLit(m typed.Make&, ty types.TypeId, sp source.Span, adopt Bool = false
+                               into mir.ScopeRef = mir.ScopeRef.Program) mir.Operand {
     t := ln.T
     at := ln.arrayOf(ty)
     if at == types.UnknownT {
@@ -1800,7 +1819,7 @@ fn (ln mut lowering&) arrayLit(m typed.Make&, ty types.TypeId, sp source.Span) m
     }
     el := t.Elem(at)
     a := ln.temp(ty, sp)
-    ln.emit(mir.Stmt.Assign(sp, mir.L(a), mir.Rvalue.NewArray(ln.madeAt(m.Site), ty, ln.constI64(ops.Len())
+    ln.emit(mir.Stmt.Assign(sp, mir.L(a), mir.Rvalue.NewArray(into if adopt else ln.madeAt(m.Site), ty, ln.constI64(ops.Len())
                                                              mir.Operand.Const(el, 0))))
     deref := t.IsRef(t.Repr(ty))
     for i in range ops.Len() {
@@ -1811,7 +1830,8 @@ fn (ln mut lowering&) arrayLit(m typed.Make&, ty types.TypeId, sp source.Span) m
 }
 
 # Array<T>(n, fill) (D14, T8): its length checked (D14b), its storage n of the fill - or of the zero value
-fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span, adopt Bool = false
+                           into mir.ScopeRef = mir.ScopeRef.Program) mir.Operand {
     t := ln.T
     at := ln.arrayOf(ty)
     if at == types.UnknownT {
@@ -1869,7 +1889,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             ln.check(fits, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
         }
     }
-    return ln.into(ty, mir.Rvalue.NewArray(ln.madeAt(m.Site), ty, n64, fv), sp)
+    return ln.into(ty, mir.Rvalue.NewArray(into if adopt else ln.madeAt(m.Site), ty, n64, fv), sp)
 }
 
 # a comprehension (E27): its buffer made at its reservation (or 100), each Yield stored at its count, the buffer grown
@@ -1965,6 +1985,21 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         v := ln.val(r)
         if ln.dead { return mir.Operand.None }
         return ln.prim(op, ty, mir.Operand[v], sp)
+    }
+    # T7c: a literal or a fill of a known length (held in place) made a run-time-length array value: made at its own
+    # site, where the scope pass placed it - the conversion's storage of its own had no place but the program's
+    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) {
+        match args[0] {
+            case typed.Expr.Make(_, mt, m) {
+                fa := ln.arrayOf(mt)
+                if (m.Kind == typed.MakeKind.Fill or m.Kind == typed.MakeKind.Array) and not t.IsRef(t.Repr(mt)) and
+                   fa != types.UnknownT and ln.fixedLen(fa) >= 0 and ln.fixedLen(ln.arrayOf(ty)) < 0 and m.Site >= typed.SiteId(0) {
+                    at := ln.built(m.Site)
+                    return ln.fill(m, ty, sp, true, at) if m.Kind == typed.MakeKind.Fill else ln.arrayLit(m, ty, sp, true, at)
+                }
+            }
+            case _ { }
+        }
     }
     ops := ln.vals(args)
     if ln.dead { return mir.Operand.None }
