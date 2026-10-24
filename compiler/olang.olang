@@ -301,8 +301,10 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
     # the tools that only analyze need no clang, as interpret does not (B12)
-    tool := cl.Mode == Interp or cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp
-    c.Target = try target.Resolve(cl.Spec, c.Clang, tool and c.Clang == "", d) catch target.Bad { error Bad.USAGE }
+    tool := cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp
+    c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == Interp or (tool and c.Clang == ""), d) catch target.Bad {
+        error Bad.USAGE
+    }
     if c.Target.Foreign and cl.Mode != Compile { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
     c.Tests = cl.Mode == Test
     # an editor's and an agent's files are checked as "olang test" checks them, their tests included (B15, B16)
@@ -797,7 +799,7 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
     assert mistake(String&["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
-            "interpret, format, explain and help, and a file ending in .olang is built and run\n")
+            "interpret, format, explain, help, doc, lsp and mcp, and a file ending in .olang is built and run\n")
     assert mistake(String&["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
     assert mistake(String&["test", "-output", "x", "m.olang"]) ==
@@ -909,6 +911,22 @@ fn explained(name String&) String {
     fe := Passes()
     text := try fe.Explain(file, name, c, d) catch build.Failed { return d.Render() }
     return text
+}
+
+test "doc, lsp and mcp: their files, names and options (B14-B16)" {
+    assert prepared(String&["doc"]) == "olang: error[B1]: doc needs a file\n"
+    assert prepared(String&["doc", "a.olang", "b.olang"]) == "olang: error[B1]: doc takes exactly one file\n"
+    assert mistake(String&["doc", "a.olang", "Item", "More"]) ==
+        "olang: error[B14]: doc a.olang takes at most the name of one of its items, as 'olang doc a.olang main'\n"
+    assert prepared(String&["lsp", "a.olang"]) == "olang: error[B1]: lsp takes no files - its client names them as it goes\n"
+    assert mistake(String&["mcp", "-quick"]) ==
+        "olang: error[B1]: -quick applies to running a file, build, compile and test, not to mcp\n"
+    assert mistake(String&["build", "-html", "d", "a.olang"]) == "olang: error[B1]: -html applies to doc, not to build\n"
+    if target.FindClang() == "" { return }
+    assert prepared(String&["doc", "-html", "out"]) == "no mistake: doc"
+    assert prepared(String&["doc", "a.olang", "Item"]) == "no mistake: doc"
+    assert prepared(String&["lsp"]) == "no mistake: lsp"
+    assert prepared(String&["mcp", "-define", "X=1"]) == "no mistake: mcp"
 }
 
 test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {

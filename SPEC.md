@@ -5684,8 +5684,8 @@ beginning with `-` that is no option is an error:
 |---|---|---|
 | `-output PATH` | build, compile | B3h |
 | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
-| `-target NAME` | running a file, build, compile, test, interpret, explain, doc | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc | B10, §4 M23c |
+| `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
 | `-check` | format | B13 |
 | `-html DIR` | doc | B14 |
 

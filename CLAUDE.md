@@ -89,7 +89,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `catch` does. Not for the forever `for` or a `do` loop. `:` inside brackets stays a slice's. The formatter keeps
   either form and spaces `: ` (and no longer writes `f() !`).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
-  compile test interpret format explain help`; options `-output -debug -race -sanitize -target -define -update -check`,
+  compile test interpret format explain help doc lsp mcp`; options `-output -debug -race -sanitize -target -define -update
+  -check -quick -html`,
   each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
 - **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
   link-time optimization, objects apart (`.quick`); an error beside `-debug` or `-race`, which set their own levels.
@@ -101,6 +102,21 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   enum's cases, an error type's words, a trait's methods; a global's type and its baked value (`$` of it, through the
   evaluator), else `# set at startup`. `Type.Method` names a method. `-target`, `-define` and `-update` apply.
   compiler/explain.olang.
+- **Doc comments (L4b) and `olang doc` (B14).** Go's rule, no new syntax: the `#` lines directly above a declaration,
+  member or global are its documentation (a member or global with none takes its line's trailing comment; an aligned
+  continuation of a trailing comment is no doc comment; a block comment never is); a module's is the comment lines its
+  file begins with. Read from the text by the declaration's span (`compiler/doc.olang`) - scanner and parser unchanged.
+  `olang doc FILE [NAME]` prints them with explain's signatures; `doc -html DIR [FILE...]` writes static HTML (all of
+  std when no file is named). Exported items only in a listing (mine).
+- **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
+  integration").** LSP over stdio - diagnostics, hover, definition, symbols, completion, formatting; MCP over stdio -
+  `check`, `explain`, `doc`, `format`, `test`. Each analysis runs in a forked process (mine): a compiler crash never
+  ends the server and an analysis's memory goes with its process (the compiler reclaims nothing before a scope closes);
+  the language server forks a worker once the open files have settled for 40 ms, checks the changed files and the open
+  files importing them, publishes the checker's diagnostics before section 8's, then answers requests from that
+  analysis. Not incremental per module - the checker is whole-program; measured 70-100 ms from an edit to diagnostics
+  on a small program, 0.7-1.4 s on one of the compiler's modules. `compiler/session.olang` holds what both share; the
+  Neovim plugin and editor notes are `editors/`.
 - **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs in the
   compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program
