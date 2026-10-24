@@ -5,7 +5,7 @@
 # 5,000 turns of the first loop, where it now runs in a few MB)
 import "std/io"
 type Big struct() {
-    a Array<I64, 9000> = Array<I64, 9000>()
+    a Array<I64> = Array<I64>(9000)
 }
 type V struct(d mut Array<I64>&, n I64) {
     d
@@ -22,7 +22,7 @@ fn put(v mut V&, x I64) I64 {
 }
 type Node struct(k I64) {
     k
-    pad Array<I64, 64>
+    pad := Array<I64>(64)
 }
 fn key(n Node&) I64 { return n.k }
 type BigN struct(k I64) {

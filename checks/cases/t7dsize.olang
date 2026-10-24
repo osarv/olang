@@ -1,6 +1,6 @@
-# check: fail error[T7d]: Array<I32, 2> does not fit Array<I32, 3> - a fixed length is part of the type
+# check: fail error[T7d]: an array of 2 elements stored where 3 are laid out - fixed storage takes an array of its own length
 # T7d: two known lengths that differ are a compile-time error, never a truncation or a padding
-type M struct() { a Array<I32, 3> }
+type M struct() { a := Array<I32>(3) }
 test "never runs" {
     m M = M()
     m.a = I32[1, 2]

@@ -14,7 +14,7 @@ type V struct(d mut Array<I64>&, n I64) {
     d
     n
     kind K = K.A
-    inl Array<I64, 2> = Array<I64, 2>()
+    inl Array<I64> = Array<I64>(2)
     p Pt = Pt()
 }
 type Vs struct(d mut Array<I64>&) {

@@ -162,7 +162,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `xs.Iter()`); labeled break (2026-10-08); interface switch dispatch (dropped by the user, "it gains very little and
   causes a lot of problems"); Str purity (E11c, decision 49); `done`, `fail`, `abort` (2026-10-17, QU: a test ends by
   returning, a program by `os.Exit`); `own` and `take` (2026-10-18, `docs/memory.md` round 3: freeing early is the
-  compiler's).
+  compiler's); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (2026-10-24, QP1-QP4: a
+  length is inferred where an array is made, a view is a slice).
 
 ### Types
 
@@ -194,12 +195,22 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`null` is the zero value of every reference (T2a); a null read traps (T2b).** Nothing is uninitialized: a
   declaration with no value takes its type's zero value, made by the constructor from its parameters' defaults (D13c,
   the user's design); a type whose constructor has effects has none.
-- **Arrays: `Array<T>` and `Array<T, N>` (T7-T7d, the user's design 2026-10-01 and 2026-10-09).** The length is never
-  in a run-time-length type; `Array<T, N>` is a fixed value laid out in place, `Array<T, N>&` one pointer. An array is
-  a value only where its storage is made and held by reference everywhere else (T7b): parameters must be references
-  (D9a), a value array inside a struct or element must be written `&` unless fixed (T7a). `Array<T>(n[, fill])` makes
-  one; literals `I32[1, 2]`; storage over 64KB never on the stack. No 2-D arrays (the user's call) - arrays of arrays.
-  `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone).
+- **Arrays: one type, `Array<T>`, a length never written (T7-T7d, QP1-QP4, the user's design 2026-10-01 and 2026-10-17;
+  `Array<T, N>` and constant parameters removed 2026-10-24).** `Array<T>(n[, fill])` makes one, literals `I32[1, 2]`;
+  storage is **fixed** - laid out in place, `Len()` a constant - wherever its length is known where it is made (T7c: a
+  literal, text, `Array<T>(n)` with `n` the evaluator can compute, a slice with known bounds, `lo + k` included),
+  inferred, never written. A local is fixed when its value's length is known and nothing assigns it as a whole later (a
+  pre-scan of the body); an inline field when its declaration gives it a length (`m := Array<F32>(16)`); an immutable
+  global from its initializer; an array of arrays held by value takes its elements' length from its fill or literal. A
+  value array elsewhere inside a value is `&` (T7a), a payload's included (in place only through a struct). Arrays may
+  be **passed by value** (D9a): a function is compiled once per argument length (an instance, G29), in which `a.Len()`
+  is a constant and an `if`, conditional or `match` on it is decided per instance (G30); a run-time-length argument is
+  an error naming `&` or a slice. A by-value aggregate parameter holds at most 128 bytes (D9c), a bare type variable
+  aside. A run-time array stored into fixed field or element storage is an error naming a slice of its length (`s.m =
+  v[0:16]`, T7d) - no store is checked. Storage over 64KB is never on the stack. No 2-D arrays (the user's call) -
+  arrays of arrays. `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone). Not yet built: inferred result
+  lengths (D8f), asserts decided at every call (S18e), constructors by value (`tools/arrays_migrate.olang` migrates
+  code; `docs/arrays.md` section 7).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
   `a[lo:hi]` is a borrow tagged with the base's scope and permission; `checked a[i]` checks; an out-of-range index, a
@@ -261,9 +272,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   headers have their own (a loop body's empty scope folds away); aggregates and function values are untagged.
 - **Parameters (D9, D9b).** `&` says whose instance, `mut` whether it can be written; an immutable lvalue never binds
   a `mut &` parameter. A generic's by-value parameter bound to a run-time-length array is copied exactly when its body
-  writes it (D9b, `paramWritten`), else is the caller's array. ON HOLD (the user): passing arrays by value.
+  writes it (D9b, `paramWritten`), else is the caller's array. Arrays are passed by value as instances (D9a, G29).
 - **Assignability (E12, E12c).** Value into reference borrows an lvalue (with a lifetime check) or builds a temporary
-  in the target's scope; reference into value copies out; `Array<T, N>&` widens to `Array<T>&` with no copy. All four
+  in the target's scope; reference into value copies out; a reference to fixed storage is lent where a run-time one is
+  wanted with no copy. All four
   combinations read the same for structs and arrays.
 - **Function types (T22, T22a).** Errors compared in order, `mut` and permissions on T22's terms (read-only for
   writable parameters, writable for read-only results is safe); a function with scope obligations or a `Call` that
@@ -284,9 +296,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Generics
 
-- **Type parameter lists (QW, G3, G8b, G22, the user's decision 2026-10-17, reversing G8b's `<T>` introductions and
-  G3's no-list rule).** A function's type variables are a list after its name, constraints and constants in it: `fn
-  max<T>(a T, b T) T`, `fn area<T Shape>(x T)`, `fn count<N I64>(a Array<I32, N>&) I64`; a method gets its type's
+- **Type parameter lists (QW, G3, G8b, the user's decision 2026-10-17, reversing G8b's `<T>` introductions and
+  G3's no-list rule).** A function's type variables are a list after its name, constraints in it: `fn
+  max<T>(a T, b T) T`, `fn area<T Shape>(x T)`; a constraint is a trait (G6, G19); a method gets its type's
   parameters from its receiver's type arguments, bare (`fn (l List<T>&) Push(x T)` - names there that are no type
   introduce), plus a list for variables of its own (`fn (l List<T>&) Map<U>(f fn(x T) U) List<U>`). A constrained
   receiver is listed after the method name, a listed name taking the list's constraint (`fn (it mut I&) Count<I
@@ -303,17 +315,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   not name (G10d).
 - **References as type arguments (G11), bare marker only.** `<T>&` on a type variable (G11a).
 - **Constraints (G19)** checked where a variable is bound; written types' constraints checked after all signatures.
-- **Constant parameters and `Array<T, N>` (G20-G28, the user's design 2026-10-09).** Integers, Bool, Char and
-  payload-free enums; arguments are compile-time expressions, folded exactly as the program computes (G21); inference
-  by value only; an `if`/`match` on a constant is decided per instantiation (G26); value constraints are asserts
-  (G27). Run-time-known dimensions are the library's (`Dynamic` in std/linalg, the user's call). `Array<T, N>&`
-  carries its length (D9a kept, the user's call), reversing T11a's "the size in a type is irrelevant" for fixed arrays
-  only.
+- **Instances per array length (G29-G31; constant parameters G20-G28 removed 2026-10-24, QP2, the user's call: "This
+  still doesn't give more information than inferring a known size at compile time").** A by-value array parameter
+  (at any level under a reference too) binds its length per call; each instance checks, decides asserts on lengths
+  (S18c, with G16b's note naming the lengths); D9c's cap, reported once by the first instance over it (whose body is
+  then not checked), stops a growing length long before G17's bound. A length `Array<T>(n)` gives is folded exactly as
+  the program computes (in its operands' types, wrapping), else evaluated, else run-time - never an error.
 - **Generics composition (G8a, G15).** A type variable may be a type argument (`Vec<T>`); a still-generic receiver
   matches any application; an application with unknown arguments is a pattern, never laid out. `match T` is
   exhaustiveness-checked and compiles only the chosen arm; inside it the variable is the concrete type.
-- **A default reading a type's constants is each instantiation's (D8a/G23)**; a literal default for a type-variable
-  parameter is fitted per call (G18).
+- **A literal default for a type-variable parameter is fitted per call (G18).**
 
 ### Errors
 
@@ -629,7 +640,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   leaves wrong; a try's leftovers leave the body (R13) but for a loop's own Exhausted try and a clause-less checked, which pass them to the try around them, a T29d literal's error edge is never taken, no releases or
   holds since own is being removed; HISTORY.md "Port M7: lowering"); M8, evaluation in the pipeline (`compiler/interp.olang`
   over `eval.olang`: the build's conditions and asserts decided by evaluation, fixed locals included (S8c), `olang
-  interpret` running main placed by the scope pass, each scope reclaimed and its destructors run as it closes, immutable globals baked into emitted data by the driver too (K2, K2c), what two baked globals reach written once per module (K2b), a local condition decided reading no build constant an error (S8a), a top-level condition that does not decide an error (B9c), T29d's literals and D13c's zero values decided, a global that aborts an error (K2), a stale Vec view stopping evaluation (M19g), tasks run in sequence at the join under interpret too (B3e, decided: interp's tasks.olang pins it), constants computed by calls (G21), the
+  interpret` running main placed by the scope pass, each scope reclaimed and its destructors run as it closes, immutable globals baked into emitted data by the driver too (K2, K2c), what two baked globals reach written once per module (K2b), a local condition decided reading no build constant an error (S8a), a top-level condition that does not decide an error (B9c), T29d's literals and D13c's zero values decided, a global that aborts an error (K2), a stale Vec view stopping evaluation (M19g), tasks run in sequence at the join under interpret too (B3e, decided: interp's tasks.olang pins it), array lengths computed by calls (QP1), the
   error trace (S18d); `make evaldiff`; HISTORY.md "Port M8: evaluation in the pipeline"). M6, `compiler/scope.olang` (section 8 over the typed core, filling each body's
   plan, which lowering reads; `make scopediff` measures it against stage 0's goldens - round 7: every program stage 0
   accepts is scope clean (307 of 307), 275 of 280 refused cases give stage 0's first error, 1 still gets none (s5mapgetreturn, 0 since 2026-10-23: it runs; kept on

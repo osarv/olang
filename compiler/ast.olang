@@ -14,8 +14,6 @@ type TypeRef enum {
     Named(sp source.Span, path Array<source.NameId>&, args Array<TypeRef&>&)
     # fn(params) results ? errors
     Func(sp source.Span, sig Sig&)
-    # a constant type argument: the "N + 1" of Array<T, N + 1> (G21)
-    Const(sp source.Span, value Expr&)
     # an inline shape - an anonymous enum, struct or trait - kept as the declaration it would be
     Shape(sp source.Span, body TypeBody&)
     # a reference marker after a type: "&" (scope 0), "&x", "&return" (T24, O3)
@@ -311,7 +309,7 @@ fn (e Expr&) Span() source.Span {
 
 fn (t TypeRef&) Span() source.Span {
     return match t {
-        case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _), TypeRef.Const(sp, _) => sp
+        case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _) => sp
         case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _), TypeRef.Perm(sp, _, _, _) => sp
     }
 }

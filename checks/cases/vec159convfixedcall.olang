@@ -2,9 +2,9 @@
 # flags: -debug -sanitize
 # vec7 X1b (T29a): a conversion of a call giving a fixed-length array reference names the referent's storage, as one of
 # a run-time-length reference does - at run time, under -i and in a baked global alike (the run time used to copy it)
-fn view(a Array<Char, 4>&) Array<Char, 4>&a { return a }
+fn view(a Array<Char>&) Array<Char>&a { return a }
 fn named() I64 {
-    b Array<Char, 4> = Char['a', 'a', 'a', 'a']
+    b Array<Char> = Char['a', 'a', 'a', 'a']
     w String& = String(view(b))
     b[0] = 'z'
     return 1 if w[0] == 'z' and w.Len() == 4 else 0

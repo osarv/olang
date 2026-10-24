@@ -1,0 +1,12 @@
+# check: fail error[D9c]: parameter 'a' holds 136 bytes by value - a by-value parameter holds at most 128
+# D9c: an array taken by value whose instance asks for one of a larger length - the cap stops the chain of instances
+# long before G17 would, once, at the first instance over it, whose body is then not checked
+# never: holds 144 bytes
+fn grow(a Array<I64>) I64 {
+    b := Array<I64>(a.Len() + 1)
+    return grow(b)
+}
+fn main() ? {
+    a := Array<I64>(1)
+    x := grow(a)
+}

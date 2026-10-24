@@ -58,5 +58,5 @@ fn main() ? E {
     assert Chain.next.v == 2 and Chain.next.next == null and Ring.next == Ring and Looped
     assert Kept.id == 7 and Dropped == 1 and closed == 1
     ctlib.Counter = ctlib.Counter + 1
-    assert ctlib.Tile == 12 and ctlib.Tiles[1] == 2 and ctlib.Counter == 6
+    assert ctlib.Tile == 12 and ctlib.Tiles[1] == 2 and ctlib.Rows[1] == 4 and ctlib.Counter == 6
 }

@@ -4,7 +4,7 @@ type Node struct() {
     v I64 = 0
 }
 type B struct() {
-    arr Array<mut Node&, 2>
+    arr := Array<mut Node&>(2)
 }
 fn mk() B {
     b := B()

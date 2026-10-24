@@ -982,7 +982,7 @@ fn (p mut Parser&) closeAngle() ? Fail {
     p.prevEnd = at + 1
 }
 
-# "<" type-or-constant {"," ...} ">"
+# "<" type {"," type} ">"
 fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
     try p.openAngle()
     wasNoGt := p.noGt
@@ -1000,38 +1000,9 @@ fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
     return gather(p.tys, from)
 }
 
-# a type argument: a type, or a constant (G21) - a name starting one is read as a type, and continued as an expression
-# where an operator follows it (DESIGN.md point 9)
+# a type argument: a type (G8) - a length is never one (T7)
 fn (p mut Parser&) typeArg() ast.TypeRef&p ? Fail {
-    at := p.here()
-    k := p.peek()
-    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.Enum or
-       k == token.Tok.Struct or k == token.Tok.Trait {
-        t := try p.typeExpr()
-        if p.sees(token.Tok.Comma) or p.sees(token.Tok.StmtEnd) or p.closesAngle() { return t }
-        x := try p.typeAsExpr(t)
-        e := try p.postfixFrom(x)
-        e = try p.binaryFrom(e, 1)
-        return ast.TypeRef.Const(p.from(at), e)
-    }
-    e := try p.binary(1)
-    return ast.TypeRef.Const(p.from(at), e)
-}
-
-# a type read where an expression stood: a plain path, Name or alias.Name
-fn (p mut Parser&) typeAsExpr(t ast.TypeRef&p) ast.Expr&p ? Fail {
-    match t {
-        case ast.TypeRef.Named(sp, path, args) {
-            if args.Len() == 0 {
-                e ast.Expr&p = ast.Expr.Name(sp, path[0])
-                for i in range 1, path.Len() { e = ast.Expr.Member(sp, e, path[i]) }
-                return e
-            }
-        }
-        nomatch { }
-    }
-    try p.fail(token.Tok.Gt.Describe())
-    unreachable
+    return try p.typeExpr()
 }
 
 # the type an expression path names, where only a type can stand (a comprehension's element type)
@@ -1727,26 +1698,9 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
     return ast.Match(p.from(at), subject, onType, cases.ToArray(), noMatch)
 }
 
-# a case of "match T" on an introduced variable: a type, or a constant where the variable is one (G26) - a name is read
-# as a type and continued as an expression where an operator follows it, as a type argument is (point 9)
+# a case of "match T" on a type variable: a type (G15)
 fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
-    at := p.here()
-    k := p.peek()
-    if k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.Enum or
-       k == token.Tok.Struct or k == token.Tok.Trait {
-        t := try p.typeExpr()
-        n := p.peek()
-        if n == token.Tok.Comma or n == token.Tok.LBrace or n == token.Tok.Arrow or n == token.Tok.If or
-           n == token.Tok.StmtEnd {
-            return t
-        }
-        x := try p.typeAsExpr(t)
-        e := try p.postfixFrom(x)
-        e = try p.binaryFrom(e, 1)
-        return ast.TypeRef.Const(p.from(at), e)
-    }
-    e := try p.binary(1)
-    return ast.TypeRef.Const(p.from(at), e)
+    return try p.typeExpr()
 }
 
 # a case's block, or "=> value"
@@ -1872,7 +1826,7 @@ fn (p mut Parser&) condFrom(a ast.Expr&p) ast.Expr&p ? Fail {
 }
 
 # the binding power of an operator in infix position (E5), 0 for none. In a type-argument list a comparison or a
-# shift is none: it would reach across the list's own ">" (G21)
+# shift is none: it would reach across the list's own ">" (G8)
 fn (p Parser&) prec(k token.Tok) I64 {
     return match k {
         case token.Tok.Or => 1
@@ -2520,12 +2474,6 @@ fn (p mut Parser&) hint(want String&) Bool {
     # L18a: "f(a, b,)" - a comma before a list's closing bracket separates nothing
     if (fk == token.Tok.RParen or fk == token.Tok.RBrack) and pk == token.Tok.Comma and pl == fl {
         p.reportAt(pr, msgs.TrailingComma(p.named(f)))
-        return true
-    }
-    # G21: "Array<U8, 1 << 12>" - a comparison or shift in a constant argument reads across the list's own '>'
-    if (fk == token.Tok.Shl or fk == token.Tok.Lt or fk == token.Tok.Le or fk == token.Tok.Ge or fk == token.Tok.Shr or
-        fk == token.Tok.Gt) and want == token.Tok.Gt.Describe() {
-        p.reportAt(f, msgs.ConstArgParen(p.named(f)))
         return true
     }
     # R15: "fn f() ?error {" - '?' is the whole of the default error

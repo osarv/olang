@@ -603,7 +603,7 @@ constraintcall.olang:8:10: error[G19]: I64 does not satisfy the constraint CtSha
       |          ^~~~~~
 compilation failed with 1 error
 === constraintnotiface.olang
-constraintnotiface.olang:3:8: error[G19]: I32 is not a trait, so it cannot constrain a type variable
+constraintnotiface.olang:3:8: error[G6, G19]: I32 is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)
     3 | fn f<T I32>(x T) I32 { return 1 }
       |        ^~~
 compilation failed with 1 error
@@ -885,13 +885,13 @@ d8ereturn.olang:4:16: error[D8e]: a 'noreturn' function never returns - end this
       |                ^~~~~~
 compilation failed with 1 error
 === d9abarevariable.olang
-d9abarevariable.olang:4:24: error[D9a]: array parameter 'taps' is passed by reference - write Array<I16, N>&
-    4 | type Fir<N I64> struct(taps Array<I16, N>) {
-      |                        ^~~~
+d9abarevariable.olang:4:17: error[D9a]: array parameter 'taps' is passed by reference - write Array<I16>&
+    4 | type Fir struct(taps Array<I16>) {
+      |                 ^~~~
 compilation failed with 1 error
 === d9alambdawritten.olang
-d9alambdawritten.olang:7:30: error[D9a]: array parameter 'x' is passed by reference - write Array<I32, 2>&
-    7 |     try io.Println($a.Any(fn(x Array<I32, 2>) Bool { return x[0] == 5 }))
+d9alambdawritten.olang:7:30: error[D9a]: array parameter 'x' is passed by reference - write Array<I32>&
+    7 |     try io.Println($a.Any(fn(x Array<I32>) Bool { return x[0] == 5 }))
       |                              ^
 compilation failed with 1 error
 === d9apayloadstring.olang
@@ -901,7 +901,24 @@ d9apayloadstring.olang:7:7: error[D9a]: array parameter 's' is passed by referen
 d9apayloadstring.olang:8:7: error[D9a]: array parameter 'c' is passed by reference - write Array<Char>&
     8 |     B(c Array<Char>)
       |       ^
-compilation failed with 2 errors
+d9apayloadstring.olang:9:7: error[D9a]: array parameter 'f' is passed by reference - write Array<I64>&
+    9 |     F(f Array<I64>)
+      |       ^
+compilation failed with 3 errors
+=== d9cgrowing.olang
+d9cgrowing.olang:5:9: error[D9c]: parameter 'a' holds 136 bytes by value - a by-value parameter holds at most 128: take it as 'Array<I64>&'
+    5 | fn grow(a Array<I64>) I64 {
+      |         ^
+d9cgrowing.olang:7:12: note: instantiated here, with a.Len() = 17
+    7 |     return grow(b)
+      |            ^~~~
+d9cgrowing.olang:7:12: note: instantiated here, with a.Len() = 16
+    7 |     return grow(b)
+      |            ^~~~
+d9cgrowing.olang:11:10: note: instantiated here, with a.Len() = 1
+   11 |     x := grow(a)
+      |          ^~~~
+compilation failed with 1 error
 === d9mutvalueparam.olang
 d9mutvalueparam.olang:3:11: error[D9]: a by-value parameter is the callee's own copy, always writable - 'mut' is for a reference, and I32 is none
     3 | fn bump(n mut I32) I32 {
@@ -1014,9 +1031,15 @@ e15atryonlychecks.olang:3:37: error[E15a]: nothing here fails as written - write
       |                                     ^~~
 compilation failed with 1 error
 === e16atrydefaultslice.olang
-e16atrydefaultslice.olang:11:100: error[O10d]: this value lives in this function's own scope, which closes first
-   11 | fn view(a Array<Array<I64, 2>>&) Array<I64>&a { return (checked a[0] catch default Array<I64, 2>())[0:2] }
-      |                                                                                                    ^
+e16atrydefaultslice.olang:11:53: error[O10d]: this value lives in this function's own scope, which closes first
+   11 | fn view(a Array<Array<I64>>&) Array<I64>&a { return (checked a[0] catch default Array<I64>(2))[0:2] }
+      |                                                     ^
+e16atrydefaultslice.olang:22:10: note: instantiated here, with a[0].Len() = 2
+   22 |     v := view(a)
+      |          ^~~~
+e16atrydefaultslice.olang:11:95: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+   11 | fn view(a Array<Array<I64>>&) Array<I64>&a { return (checked a[0] catch default Array<I64>(2))[0:2] }
+      |                                                                                               ^
 compilation failed with 1 error
 === e16constnotry.olang
 e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
@@ -1189,7 +1212,7 @@ e31bviewenumfield.olang:32:8: error[E31b]: x[i] gives a copy of the element, whi
       |        ^
 e31bviewenumfield.olang:25:5: note: the callee is no view of the element because of this statement
    25 |     match c.kind {
-      |     ^~~~~
+      |     ^~~~~~~~~~~~~~
 compilation failed with 1 error
 === e31bviewfield.olang
 e31bviewfield.olang:16:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1246,6 +1269,9 @@ e31bviewnoindexnote.olang:39:24: error[O10c]: the callee needs one argument's sc
 e31bviewnoindexnote.olang:35:38: note: the callee requires it because of this statement
    35 | fn f(c mut V&, out mut List<Pt&>&) { out.Push(id(c.p)) }
       |                                      ^~~
+e31bviewnoindexnote.olang:37:5: note: 's' is declared here, in a block that closes first - declare it where 'out' lives: 's mut Vs&out = ...'
+   37 |     s := Vs(Array<I64>(4))
+      |     ^
 compilation failed with 1 error
 === e31bviewpass.olang
 e31bviewpass.olang:14:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1336,11 +1362,6 @@ e31opshapeuse.olang:23:15: note: 'Less' is declared here
    23 | fn (g Graph&) Less(a Graph&, b Graph&) Bool { return true }
       |               ^~~~
 compilation failed with 8 errors
-=== e32blength.olang
-e32blength.olang:5:12: error[E32b]: this array's length is 2, not 3
-    5 |     e := d as Array<I32, 3>&
-      |            ^~
-compilation failed with 1 error
 === e32marker.olang
 e32marker.olang:11:28: error[E32]: '&mask' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x as T) & mask'
    11 |     x I32 = b as Box.Val & mask
@@ -1585,27 +1606,27 @@ g16bgenericonce.olang:22:5: note: 'n' is declared here, in a block that closes f
 compilation failed with 2 errors
 === g16boutermost.olang
 g16boutermost.olang:7:14: error[E16]: index 0 is outside the array's 0 elements
-    7 |     return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+    7 |     return a[0] + Total(a[1:])
       |              ^
-g16boutermost.olang:7:19: note: instantiated here, with N = 0
-    7 |     return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 0
+    7 |     return a[0] + Total(a[1:])
       |                   ^~~~~
-g16boutermost.olang:7:19: note: instantiated here, with N = 1
-    7 |     return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 1
+    7 |     return a[0] + Total(a[1:])
       |                   ^~~~~
-g16boutermost.olang:11:21: note: instantiated here, with N = 3
+g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
    11 |     try io.Println($Total(x))
       |                     ^~~~~
-g16boutermost.olang:7:45: error[T7c]: an array's length is from 0 to the largest whose bytes fit an I64, found -1
-    7 |     return a[0] + Total(a[1:] as Array<I64, N - 1>&)
-      |                                             ^
-g16boutermost.olang:7:19: note: instantiated here, with N = 0
-    7 |     return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+g16boutermost.olang:7:25: error[D9a]: 'a' takes its array by value, so its length must be known while compiling - this Array<I64>'s is known only at run time: take it as 'Array<I64>&', or pass a slice of a known length ('x[0:4]')
+    7 |     return a[0] + Total(a[1:])
+      |                         ^~~~~
+g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 0
+    7 |     return a[0] + Total(a[1:])
       |                   ^~~~~
-g16boutermost.olang:7:19: note: instantiated here, with N = 1
-    7 |     return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+g16boutermost.olang:7:19: note: instantiated here, with a.Len() = 1
+    7 |     return a[0] + Total(a[1:])
       |                   ^~~~~
-g16boutermost.olang:11:21: note: instantiated here, with N = 3
+g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
    11 |     try io.Println($Total(x))
       |                     ^~~~~
 compilation failed with 2 errors
@@ -1623,20 +1644,6 @@ g16note.olang:13:8: note: instantiated here, with T = Bool
    13 |   b := describe(true)
       |        ^~~~~~~~
 compilation failed with 2 errors
-=== g17constchain.olang
-g17constchain.olang:3:4: error[G17]: this generic's instantiations never end - each one requires a larger one
-    3 | fn grow<N>(a Array<I64, N>&) I64 {
-      |    ^~~~
-g17constchain.olang:5:12: note: instantiated here, with N = 1000
-    5 |     return grow(b)
-      |            ^~~~
-g17constchain.olang:5:12: note: instantiated here, with N = 999
-    5 |     return grow(b)
-      |            ^~~~
-g17constchain.olang:5:12: note: instantiated here, with N = 980
-    5 |     return grow(b)
-      |            ^~~~
-compilation failed with 1 error
 === g17func.olang
 g17func.olang:4:4: error[G17]: this generic's instantiations never end - each one requires a larger one
     4 | fn deep<T>(x T, n I32) I32 {
@@ -1700,162 +1707,29 @@ g1typename.olang:6:6: error[G1]: type variable 'P' is named after a type - choos
     6 | fn f<P>(a P) P { return a }
       |      ^
 compilation failed with 1 error
-=== g20eqafter.olang
-g20eqafter.olang:5:12: error[G20]: K declares Eq - a constant parameter's type compares by its value alone
-    5 | type Box<N K> struct() { x I32 }
-      |            ^
-compilation failed with 1 error
-=== g20eqbefore.olang
-g20eqbefore.olang:7:12: error[G20]: K declares Eq - a constant parameter's type compares by its value alone
-    7 | type Box<N K> struct() { x I32 }
-      |            ^
-compilation failed with 1 error
-=== g20float.olang
-g20float.olang:3:14: error[G20]: a constant parameter is an integer, a Bool or an enum without payloads, found F32
-    3 | type Scale<K F32> struct() { v I32 }
-      |              ^~~
-compilation failed with 1 error
 === g21divzero.olang
-g21divzero.olang:7:21: error[G21]: a constant argument must be computable while compiling: it divides by zero
-    7 |     a Array<I32, 10 / N>
-      |                     ^
-g21divzero.olang:10:14: note: instantiated here, with N = 0
-   10 |     b := Box<0>()
-      |              ^
-compilation failed with 1 error
-=== g21effect.olang
-g21effect.olang:9:17: error[G21]: a constant argument must be computable while compiling: it writes a global, which the running program would then not see written
-    9 |     a Array<U8, next()>
-      |                 ^~~~
-compilation failed with 1 error
-=== g21kind.olang
-g21kind.olang:7:12: error[G21]: this constant argument is not a value of I8
-    7 |     k := K<X + 1>()
-      |            ^
-compilation failed with 1 error
-=== g21mutable.olang
-g21mutable.olang:5:17: error[G21]: a constant argument must be computable while compiling: it reads a mutable global
-    5 |     a Array<U8, Size>
-      |                 ^~~~
-compilation failed with 1 error
-=== g21paren.olang
-g21paren.olang:4:19: error[G21]: '<<' in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own
-    4 |     h Array<U8, 1 << 12>
-      |                   ^~
-compilation failed with 1 error
-=== g21typeargs.olang
-g21typeargs.olang:8:17: error[G21]: Ring's parameter N is a constant - write a value, as 'Ring<..., 3>'
-    8 |     f Ring<I32, I32>
-      |                 ^~~
-g21typeargs.olang:9:12: error[G21]: Ring's parameter T is a type, and this is a value
-    9 |     g Ring<3, 4>
-      |            ^
-compilation failed with 2 errors
-=== g22asttype.olang
-g22asttype.olang:3:36: error[G22]: N is a constant, not a type
-    3 | fn asType<N>(a Array<I32, N>&) { x N = 3 }
-      |                                    ^
-g22asttype.olang:6:5: note: instantiated here, with N = 3
-    6 |     asType(a)
-      |     ^~~~~~
-compilation failed with 1 error
-=== g22constrained.olang
-g22constrained.olang:4:18: error[T30]: Shaped is a trait - a constraint on a type variable, never the type of a value
-    4 | fn constrained<N Shaped>(a Array<I32, N>&) { }
-      |                  ^~~~~~
-g22constrained.olang:4:39: error[G22]: a constant variable takes no constraint - N's type is its parameter's, or one written '<N I64>' where it is introduced
-    4 | fn constrained<N Shaped>(a Array<I32, N>&) { }
-      |                                       ^
-compilation failed with 2 errors
-=== g22global.olang
-g22global.olang:4:10: error[D3a]: 'N' is already declared in this module - a name means one thing in it
-    4 | fn total<N>(a Array<I64, N>&) I64 {
-      |          ^
-g22global.olang:3:1: note: 'N' is declared here
-    3 | N I64 = 3
-      | ^
+g21divzero.olang:5:26: error[E6a]: division by zero
+    5 |     a := Array<I32>(10 / 0)
+      |                          ^
 compilation failed with 1 error
 === g22local.olang
-g22local.olang:4:5: error[G22, D3a]: 'M' is a constant variable of this declaration - a name means one thing, so name this apart
+g22local.olang:4:5: error[D3a]: 'M' is a type's name - choose another
     4 |     M := 3
       |     ^
-g22local.olang:7:22: note: instantiated here, with M = 2
-    7 | fn main() ? { assert f(I64[1, 2]) == 3 }
-      |                      ^
 compilation failed with 1 error
 === g22param.olang
-g22param.olang:3:28: error[G22, D3a]: 'K' is a constant variable of this declaration - a name means one thing, so name this apart
-    3 | type Ring<T, K I64> struct(K I64) {
-      |                            ^
-g22param.olang:6:25: note: instantiated here, with T = I32, K = 3
-    6 | fn main() ? { r := Ring<I32, 3>(1) }
-      |                         ^~~
+g22param.olang:3:24: error[D3a]: 'K' is a type's name - choose another
+    3 | type Ring<T, K> struct(K I64) {
+      |                        ^
 compilation failed with 1 error
-=== g22twotypes.olang
-g22twotypes.olang:6:46: error[G22]: N fills constant parameters of two types, I64 and I32
-    6 | fn twoTypes<N>(a Array<I32, N>&, b Ring<I32, N>&) { }
-      |                                              ^
-compilation failed with 1 error
-=== g22typeandconst.olang
-g22typeandconst.olang:3:20: error[G22]: N is a type in one place and a constant in another
-    3 | fn both<N>(a Array<N, N>&) { }
-      |                    ^
-compilation failed with 1 error
-=== g22typed.olang
-g22typed.olang:3:30: error[G22]: N fills constant parameters of two types, I32 and I64
-    3 | fn typed<N I32>(a Array<I32, N>&) I64 { return N }
-      |                              ^
-g22typed.olang:3:48: error: unknown name 'N'
-    3 | fn typed<N I32>(a Array<I32, N>&) I64 { return N }
-      |                                                ^
-compilation failed with 2 errors
 === g23narrow.olang
-g23narrow.olang:4:12: error[T6b]: I64 does not flow into U8 - convert it, as U8(x)
-    4 |     x U8 = N
-      |            ^
-g23narrow.olang:9:10: note: instantiated here, with N = 3
+g23narrow.olang:4:14: error[T6b]: I64 does not flow into U8 - convert it, as U8(x)
+    4 |     x U8 = a.Len()
+      |              ^~~
+g23narrow.olang:9:10: note: instantiated here, with a.Len() = 3
     9 |     q := first(a)
       |          ^~~~~
 compilation failed with 1 error
-=== g23typevar.olang
-g23typevar.olang:3:37: error[G23]: T is a type variable, not a value
-    3 | fn typeAsValue<T>(a T) I64 { return T }
-      |                                     ^
-g23typevar.olang:5:10: note: instantiated here, with T = I64
-    5 |     r := typeAsValue(3)
-      |          ^~~~~~~~~~~
-compilation failed with 1 error
-=== g24mismatch.olang
-g24mismatch.olang:11:10: error[G24]: N is 3 by one argument and 4 by another
-   11 |     x := dot(a, b)
-      |          ^~~
-compilation failed with 1 error
-=== g24runtime.olang
-g24runtime.olang:10:10: error[G24, E32b]: Array<F32>'s length is known only at run time - view it with 'x as Array<T, N>&'
-   10 |     x := total(r)
-      |          ^~~~~
-compilation failed with 1 error
-=== g27assert.olang
-g27assert.olang:5:18: error[S18c]: this assertion is false, evaluated while compiling
-    5 |     assert N > 0 and (N & (N - 1)) == 0
-      |                  ^~~
-g27assert.olang:10:17: note: instantiated here, with T = I32, N = 6
-   10 |     bad := Ring<I32, 6>()
-      |                 ^~~
-compilation failed with 1 error
-=== g4constexpr.olang
-g4constexpr.olang:3:29: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
-    3 | fn onlyExpr<N>(a Array<I32, N + 1>&) { }
-      |                             ^
-compilation failed with 1 error
-=== g4constgenericbody.olang
-g4constgenericbody.olang:7:23: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
-    7 | fn mk<N>() Array<I64, N> {
-      |                       ^
-g4constgenericbody.olang:11:32: error[G4, G24]: constant variable N appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length
-   11 | fn mk2<T, N I64>(x T) Array<T, N> {
-      |                                ^
-compilation failed with 2 errors
 === g4resultbare.olang
 g4resultbare.olang:4:17: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
     4 | fn mk<T>(n I32) T { return n }
@@ -2663,17 +2537,17 @@ compilation failed with 2 errors
 o17permute5.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    25 |     each(recs, fn(x mut Rec&) { x.name = s })
       |          ^~~~
-o17permute5.olang:25:16: error[T22a]: this lambda keeps 's' beyond the call, which a call through a function value cannot check - keep a copy instead
+o17permute5.olang:25:16: error[T22a]: this lambda relates its arguments' scopes, which a call through a function value cannot check
    25 |     each(recs, fn(x mut Rec&) { x.name = s })
       |                ^~
 compilation failed with 2 errors
 === o17permute6.olang
+o17permute6.olang:25:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
+   25 |     each(ns, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 o17permute6.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    25 |     each(ns, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
       |          ^~
-o17permute6.olang:25:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
-   25 |     each(ns, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
-      |              ^~
 compilation failed with 2 errors
 === o17permute6b.olang
 o17permute6b.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2681,7 +2555,7 @@ o17permute6b.olang:25:10: error[O17]: this value's references live where its own
       |          ^~
 o17permute6b.olang:29:12: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
    29 |     run(h, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
-      |            ^~
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === o17readonlycapture.olang
 o17readonlycapture.olang:21:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2946,15 +2820,9 @@ o26aborrowparam.olang:10:12: error[O20]: the container outlives what this refers
       |            ^
 compilation failed with 1 error
 === o26alatermodulekept.olang
-o26alatermodulekept.olang:13:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   13 |         ms.Push(try linalg.View(d, 0, 2, 2))
-      |            ^~~~
-$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
-   67 |     if s.used == s.room { s.grow(x) }
-      |                           ^
-o26alatermodulekept.olang:12:9: note: 'd' is declared here, in a block that closes first - declare it where 'ms' lives: 'd mut Array<F64>&ms = ...'
-   12 |         d := Array<F64>(4, F64(i))
-      |         ^
+o26alatermodulekept.olang:14:33: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   14 |         ms.Push(try linalg.View(d, 0, 2, 2))
+      |                                 ^
 compilation failed with 1 error
 === o26anumberstore.olang
 o26anumberstore.olang:19:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3568,7 +3436,7 @@ rv3roforin.olang:21:10: error[T25c]: 'look' writes through or keeps its paramete
       |          ^
 rv3roforin.olang:17:9: note: 'x' is declared here
    17 | fn look(x B) {
-      |         ^
+      |         ^~~
 compilation failed with 1 error
 === rv3roget.olang
 rv3roget.olang:5:5: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made with 'Clone()'
@@ -3597,9 +3465,9 @@ rv3strreceiver.olang:11:10: error[E11c, T25c]: '$' renders read-only values too,
       |          ^~~
 compilation failed with 1 error
 === rv3viewsplit.olang
-rv3viewsplit.olang:12:18: error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call
-   12 |     v := b.items as Array<mut Node&, 2>&
-      |                  ^~
+rv3viewsplit.olang:12:17: error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed - index the value itself, or lend it whole to a call
+   12 |     v := b.items[0:2]
+      |                 ^
 compilation failed with 1 error
 === rv5condas.olang
 rv5condas.olang:34:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -3655,28 +3523,28 @@ rv9slicetemp.olang:18:18: note: this borrows a value made here, which lives only
       |                  ^
 compilation failed with 1 error
 === rv9slicetempas.olang
-rv9slicetempas.olang:20:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   20 |     h.r = (mkE(n) as E.C)[0:2]
+rv9slicetempas.olang:22:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
+   22 |     h.r = (mkE(n) as E.C).a[0:2]
       |         ^
-rv9slicetempas.olang:20:26: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
-   20 |     h.r = (mkE(n) as E.C)[0:2]
-      |                          ^
+rv9slicetempas.olang:22:28: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+   22 |     h.r = (mkE(n) as E.C).a[0:2]
+      |                            ^
 compilation failed with 1 error
 === rv9slicetempctor.olang
-rv9slicetempctor.olang:12:29: error[O10]: this reference lives in a scope that may not outlive where it is put
+rv9slicetempctor.olang:12:21: error[O10]: this reference lives in a scope that may not outlive where it is put
    12 |     r Array<I64>& = Big(n).a[0:2]
-      |                             ^
+      |                     ^~~
 rv9slicetempctor.olang:12:29: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
    12 |     r Array<I64>& = Big(n).a[0:2]
       |                             ^
 compilation failed with 1 error
 === rv9slicetempview.olang
 rv9slicetempview.olang:11:9: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
-   11 |     h.r = Array<I64>(4, n) as Array<I64, 4>&
+   11 |     h.r = Array<I64>(4, n)[0:4]
       |         ^
-rv9slicetempview.olang:11:28: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
-   11 |     h.r = Array<I64>(4, n) as Array<I64, 4>&
-      |                            ^~
+rv9slicetempview.olang:11:27: note: this borrows a value made here, which lives only in this block - make the value where the borrow is kept ('x T&c = ...'), then slice or view that
+   11 |     h.r = Array<I64>(4, n)[0:4]
+      |                           ^
 compilation failed with 1 error
 === s12barrow.olang
 s12barrow.olang:6:16: error[S12b]: '=>' gives a value, which only a match used as a value takes - a statement's case runs a block
@@ -3709,7 +3577,7 @@ s12bstays.olang:5:16: error[S12b]: this block can finish without leaving - give 
       |                ^
 compilation failed with 1 error
 === s12btypes.olang
-s12btypes.olang:4:45: error[S12b]: every value of this match is I64, found Array<Char, 3>
+s12btypes.olang:4:45: error[S12b]: every value of this match is I64, found String
     4 |     return match n { case 1 => 1 nomatch => "one" }
       |                                             ^~~~~
 compilation failed with 1 error
@@ -3762,7 +3630,7 @@ s13calttype.olang:9:26: error[S13c]: 'x' is bound as I32 by an earlier alternati
       |                          ^
 compilation failed with 1 error
 === s13dliteral.olang
-s13dliteral.olang:9:18: error[S13]: a case value here is I32, found Array<Char, 3>
+s13dliteral.olang:9:18: error[S13]: a case value here is I32, found String
     9 |         case S.A("one") { return 1 }
       |                  ^~~~~
 compilation failed with 1 error
@@ -4539,17 +4407,20 @@ t13holdsitself.olang:9:5: error[T16]: S cannot hold itself by value - hold it th
 compilation failed with 2 errors
 === t16inlinearray.olang
 t16inlinearray.olang:5:3: error[T16]: N cannot hold itself by value - hold it through a reference ('&')
-    5 |   kids Array<N, 2>
+    5 |   kids := Array<N>(2)
       |   ^~~~
 compilation failed with 1 error
 === t16inlineenum.olang
 t16inlineenum.olang:4:3: error[T16]: W cannot hold itself by value - hold it through a reference ('&')
-    4 |   a Array<E, 2>
+    4 |   a := Array<E>(2)
       |   ^
-compilation failed with 1 error
+t16inlineenum.olang:8:8: error[T16]: E cannot hold itself by value - hold it through a reference ('&')
+    8 |   Node(w W)
+      |        ^
+compilation failed with 2 errors
 === t16inlinelate.olang
 t16inlinelate.olang:6:3: error[T16]: N cannot hold itself by value - hold it through a reference ('&')
-    6 |   kids Array<N, two()>
+    6 |   kids := Array<N>(two())
       |   ^~~~
 compilation failed with 1 error
 === t17casemeant.olang
@@ -5045,28 +4916,31 @@ t6f32range.olang:4:13: error[T6]: '1e39' does not fit F32
       |             ^~~~
 compilation failed with 1 error
 === t7adeclaredelem.olang
-t7adeclaredelem.olang:6:27: error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+t7adeclaredelem.olang:6:27: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
     6 | type Box<T> struct(v T) { v }
       |                           ^
 t7adeclaredelem.olang:9:14: note: instantiated here, with T = String
     9 |     b := Box<String>("start")
       |              ^~~~~~
-t7adeclaredelem.olang:8:16: error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+t7adeclaredelem.olang:9:14: note: instantiated here, with T = String
+    9 |     b := Box<String>("start")
+      |              ^~~~~~
+t7adeclaredelem.olang:8:16: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
     8 |     a := Array<String>(3, "init")
       |                ^~~~~~
 compilation failed with 2 errors
 === t7adeclaredfield.olang
-t7adeclaredfield.olang:8:5: error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+t7adeclaredfield.olang:8:5: error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
     8 |     t := $n "-text"
       |     ^
-t7adeclaredfield.olang:9:5: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Nums&, or a length, Array<T, N>, to hold it in place
+t7adeclaredfield.olang:9:5: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Nums&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
     9 |     a Nums = Nums(Array<I64>(n, 7))
       |     ^
 compilation failed with 2 errors
 === t7aelem.olang
-t7aelem.olang:3:14: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<I32>&, or a length, Array<T, N>, to hold it in place
-    3 | fn f(m Array<Array<I32>>&) I32 { return 0 }
-      |              ^~~~~
+t7aelem.olang:4:27: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I32>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    4 | type M struct() { m Array<Array<I32>>& = null }
+      |                           ^~~~~~~~~~
 t7aelem.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === t7alambdaresult.olang
@@ -5075,18 +4949,18 @@ t7alambdaresult.olang:9:39: error[T7a]: this result binds U to String, which the
       |                                       ^~~~~~
 compilation failed with 1 error
 === t7anested.olang
-t7anested.olang:4:24: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<I32>&, or a length, Array<T, N>, to hold it in place
+t7anested.olang:4:24: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I32>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
     4 | type W struct(n I32) { a Array<I32> = Array<I32>(n) }
       |                        ^
 t7anested.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === t7cnegative.olang
-t7cnegative.olang:4:18: error[T7c]: an array's length is from 0 to the largest whose bytes fit an I64, found -1
-    4 |     a Array<I32, 2 - 3>
-      |                  ^
+t7cnegative.olang:4:21: error[T7c]: an array's length is from 0 to the largest whose bytes fit an I64, found -1
+    4 |     a := Array<I32>(2 - 3)
+      |                     ^~~~~
 compilation failed with 1 error
 === t7dsize.olang
-t7dsize.olang:6:9: error[T7d]: Array<I32, 2> does not fit Array<I32, 3> - a fixed length is part of the type
+t7dsize.olang:6:9: error[T7d]: an array of 2 elements stored where 3 are laid out - fixed storage takes an array of its own length
     6 |     m.a = I32[1, 2]
       |         ^
 t7dsize.olang: error[B4]: no main function - a program starts at 'fn main() { }'
@@ -5095,11 +4969,6 @@ compilation failed with 2 errors
 t7elemnamed.olang:5:24: error[T24]: a nested reference lives in its container's scope - write a bare '&' here
     5 | fn f(p P&) { a Array<P&p>& = null }
       |                        ^
-compilation failed with 1 error
-=== t8fill.olang
-t8fill.olang:4:24: error[T8]: Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'
-    4 |     b := Array<F32, 3>(1.0)
-      |                        ^~~
 compilation failed with 1 error
 === tagunknownscope.olang
 tagunknownscope.olang:14:16: error[O12]: where 'l' lives is not known here, so nothing is declared to live there - read it through 'l', or declare the local with ':='

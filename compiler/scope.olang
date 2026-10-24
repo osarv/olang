@@ -4898,13 +4898,12 @@ fn (s mut Scoper&) valueAdmits(t types.TypeId) Bool {
     return r
 }
 
-# where a slice is said: its "[", a view at its "as"
+# where a slice is said: its "["
 fn (s mut Scoper&) sliceAt(sp source.Span, sl typed.Slice&) source.Span {
     text := try s.texts.Get(s.B.File) catch default ""
     k := I64(sl.Base.Span().End)
     for k < I64(sp.End) and k < text.Len() {
-        if not sl.Exact and text[k] == '[' { return source.Span(I32(k), I32(k + 1)) }
-        if sl.Exact and k + 2 <= text.Len() and text[k] == 'a' and text[k + 1] == 's' { return source.Span(I32(k), I32(k + 2)) }
+        if text[k] == '[' { return source.Span(I32(k), I32(k + 1)) }
         k++
     }
     return sp
@@ -6590,6 +6589,10 @@ fn (s mut Scoper&) madeLocal(x typed.Expr&, depth I64) I64 {
             e := s.P.T.ResultFrom(s.calleeType(c), 0)
             if e >= 0 and e < c.Args.Len() { return s.madeLocal(c.Args[e], depth + 1) }
         }
+        # a conversion names its argument's storage (T29a), a widened reference to fixed storage too (E12, T7c)
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 { return s.madeLocal(args[0], depth + 1) }
+        }
         case _ { }
     }
     return -1
@@ -7134,8 +7137,9 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         w := s.paramOfTerm(s.fitSlot)
         if w >= 0 { s.noteMadeNamed(rec, x, w, s.P.L.Names.Text(s.B.Locals[w].Name), 0) }
     }
-    # a slice of a temporary borrows it in the block it is written in, which a reader would not guess (E16a)
-    match s.unAway(x) {
+    # a slice of a temporary borrows it in the block it is written in, which a reader would not guess (E16a) - a slice
+    # of a known length widened to a run-time one too (T7c)
+    match unWidened(s.unAway(x)) {
         case typed.Expr.Slice(sp, _, sl) {
             if rec >= 0 and throughTemp(sl.Base) { s.note(rec, s.B.File, s.sliceAt(sp, sl), msgs.NoteSliceOfTemporary()) }
         }
@@ -7151,6 +7155,22 @@ fn (s mut Scoper&) valueLocalName(x typed.Expr&) String {
 }
 
 # whether a place is a part of a temporary, reached without a reference
+# a reference to fixed storage widened to one of a run-time length (E12, T7c): the reference widened
+fn unWidened(x typed.Expr&) typed.Expr&x {
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if op == typed.PrimOp.Convert and args.Len() == 1 {
+                match args[0] {
+                    case typed.Expr.Slice(_, _, _) { return args[0] }
+                    case _ { }
+                }
+            }
+        }
+        case _ { }
+    }
+    return x
+}
+
 fn throughTemp(p typed.Place&) Bool {
     return match p {
         case typed.Place.Temp(_, _, _, _) => true

@@ -1,4 +1,4 @@
-# check: fail error[G19]: I32 is not a trait, so it cannot constrain a type variable
-# G19: only an interface constrains
+# check: fail error[G6, G19]: I32 is not a trait, so it cannot constrain a type variable
+# G19: only a trait constrains - and a length is no type parameter (T7)
 fn f<T I32>(x T) I32 { return 1 }
 fn main() ? { }

@@ -22524,3 +22524,79 @@ user's call (proposed in the round's report).
 **Left:** the front end is now most of a leaf edit: check 0.75 s, scope 0.4 s and lower+emit 0.4 s, which go over every
 module and over the instances every build. Further gains there would need a persisted checker state or instance-level
 records. The ThinLTO link of an edit that many modules inline (14 s). The page faults of the front end's 0.6-1 GB.
+
+## Arrays: one constructor, lengths inferred, arrays by value (QP1-QP4, phase 2, 2026-10-24)
+
+The user decided the arrays batch on 2026-10-17 (ledger QP1-QP4): one constructor `Array<T>(n[, fill])` making fixed
+storage where `n` is known while compiling; no written `Array<T, N>` and no constant parameters ("This still doesn't
+give more information than inferring a known size at compile time"); fixed storage inferred where an array is made,
+results' lengths inferred too, arrays passed by value as one instance per length with a run-time length by value an
+error ("Do A for now"); and a 128-byte cap on every by-value aggregate parameter. Phase 1 (`wt-arrays`, 2026-10-17)
+wrote `docs/arrays.md` and a SPEC rewrite against stage 0; by the time phase 2 started stage 0 was gone and the spec had
+moved on (error sets, the listing rule, QW's lists, `checked`), so the phase-1 branch was not merged: `docs/arrays.md`
+was brought over and its SPEC changes re-applied rule by rule on the current text (D8e and S18d had been taken in the
+meantime, so phase 1's inferred result lengths are D8f and its asserts at a call S18e).
+
+*Two stages, because the compiler builds itself.* The seed accepts only the old spellings, so stage A added the new
+rules beside them: QP1's fold (`generic.FoldLength`: a literal, a global, arithmetic in the operands' types and wrapping
+as the program does - `Array<I32>(B + 1)` with `B U8 = 255` has no elements - else asked of the evaluator, which
+answers a length or "known only at run time", never an error); fixed locals (a pre-scan of the body, `storedIn`: a
+local assigned as a whole after its declaration keeps a run-time length - decided once, so a representation never
+changes behaviour, where phase 1 had a re-check demoting locals); inline fields and immutable globals taking their
+length from their declaration (`StorageOf`, `GlobalStorage`); an array of arrays held by value taking its elements'
+length from its fill or literal; G29's instances - each by-value array level of a parameter (`a`, or `m[0]` under a
+reference) is a hidden constant variable of the function, named `a.Len()`, bound at each call by G24's old
+inference-by-value machinery, which is what made reusing it cheap; `a.Len()` a constant in an instance, so S18c decides
+an assert on it and G30 decides an `if`, a conditional or a `match` on it; slices whose bounds give a known length
+(`raw[off:off + 4]` included, but not a `checked` slice, which may give its clause's value instead); D9a's error for a
+run-time-length array by value, naming `&` or a slice; D9c's cap; and G9a's meeting of two lengths at the run-time one.
+Then the seed was written again with the stage-A compiler, and stage B removed the old forms: `ast.TypeRef.Const`, the
+constant-argument cover grammar in type-argument lists and type cases, constant type parameters (a non-trait after a
+type parameter is G6/G19's error now), names' constant variables, `generic.constArg`/`ConstArg`/`wrongKind` and enum
+cases as constants, G26's `match N`, E32b's `x as Array<T, N>&` views (`as` asks an enum's case; a view is a slice),
+T29a's fixed-base view, `Array<T, N>()`, and twenty messages. `Array<T, 3>` is G8's count error now ("a length is never
+written in a type: 'Array<T>(n)' makes n elements"), and a run-time array stored into fixed field storage is a
+compile-time error naming a slice of its length (T7d), where it used to be a copy checked at run time - no store is
+checked for its length implicitly. Diagnostics and `$` spell every array type without a length (`Array<I64>[I64[1, 2,
+3]]`), a text literal is spelled `String` in messages.
+
+*Decided (mine).* The pre-scan for fixed locals; checked slices keep a run-time length; a conversion of fixed storage to
+a declared array type (`String(raw)`) names its storage as a run-time one would, so a value declaration from it copies
+(it borrowed); S18c's error for an assert false in an instance stays at the assert, with G16b's note at the call naming
+the lengths (`with a.Len() = 2`); a parameter `m Array<Array<I32>>&` is fine (its rows' length is an instance's), T7a's
+error being for fields and elements; a field's or element's array of arrays written `Array<Array<T>>` is fine where its
+value gives the rows one length (`aa Array<Array<I64>> = Array<I64>[I64[1, 2], I64[3, 4]]`); mutable globals keep a
+run-time length; std's `Rand.SetState` fails with the new `RandError.WRONG_LENGTH` for a state of other than four words
+(it was a type-checked length); constructors taking arrays by value, D8f and S18e are left for a later round (SPEC marks
+them *not yet implemented*), and a lambda's or function type's by-value array parameter stays D9a's error, as SPEC says.
+
+*Found on the way and fixed.* (1) **The evaluator aliased an array copied out of a reference parameter** (master too):
+`fn copyOut(a Array<F64>&) Array<F64> { return a }`, then the caller writing its own array, gave the old value at run
+time and the new one in a baked global - under the stand-in placement the evaluator lowers with, T7b's copy-out was
+skipped as "already in the program's scope", which says where storage is, not that nobody else names it. It is now made
+wherever the returned value is storage another name reaches. (2) An array literal of arrays held its rows as run-time
+arrays sharing their storage where the rows had one known length - a copy of it would have shared them (T7a's hazard);
+its rows are laid out at that length now, and rows of different lengths are T7a's error. (3) The layout pass typed
+`Array<Array<F32>>(4, Array<F32>(4))` as run-time rows while the checker laid them out at 4 - a struct holding one
+crashed; both read the fill now. (4) A local or a constructor parameter named like a type variable was accepted (D3a).
+
+*Migration.* `tools/arrays_migrate.olang` (an olang tool, re-runnable, for oann later): `x Array<T, N>` with no value
+becomes `x := Array<T>(N)`, `Array<T, N>()` becomes `Array<T>(N)`, any other `Array<T, N>` loses its length; type
+arguments, `as` views and constant type parameters are listed for a person. It migrated compiler/build.olang's SHA-256,
+std (chan's mutex blobs, io, os, cancel, rand, linalg's tiles, text), tests/shared.olang and tests/worker.olang, checks
+cases and fixtures, and the fuzz generators; the constant-generic section of shared.olang was rewritten by hand to the
+new rules (instances per length, slices, marker types for what enum and Bool constants chose), each test still beside
+the global the evaluator bakes and the assert it decides. 20 checks cases went with their rules (G20-G28, E32b, T8's
+fill), 54 were rewritten or respelled, and one replaced (below); compiler/goldens/diag.txt was spliced for those cases
+alone - the rest of it is still stage 0's text - and the token, tree and layout goldens captured again.
+
+*Decided in stage B (mine).* **D9c is reported once per parameter**, by the first instance over 128 bytes, and that
+instance's body is not checked: a length growing by value (`grow(a Array<I64>)` calling itself one longer) reported
+986 errors, one per instance up to G17's bound, and with the cap a by-value chain can never reach G17 at all
+(`checks/cases/g17constchain` became `d9cgrowing`; G17 still guards type instances, `D<Array<T>>`). A constructor's
+pun of a parameter D9a has already reported adds no T7a error for the field it makes (one cause, one error). A
+payload holds an array in place only through a struct holding it (`rv9slicetempas` migrated so), since a payload has
+no declaration to give a length. With no store checked for its length, the guaranteed check "array length does not
+match its fixed storage" can no longer fire from a program (the assertloc fixture lost that case); its lowering stays
+for an undecided length. Dead code went with the spellings: `typed.Slice`'s view flag and a declaration's constant
+parameters in the type table.

@@ -25,7 +25,7 @@ fn mk() String {
     m2.Put(K(1, "one"), l)
     m3 := Map<I64, S>()
     m3.Put(4, S(5))
-    m4 := Map<E, Array<I64, 2>>()
+    m4 := Map<E, Array<I64>&>()
     m4.Put(E.B("t"), I64[1, 2])
     m5 := Map<I64, Map<I64, String&>>()
     inner := Map<I64, String&>()

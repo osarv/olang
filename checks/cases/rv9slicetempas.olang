@@ -1,10 +1,12 @@
 # check: fail error[O20]: the container outlives what this refers to
 # also: note: this borrows a value made here
 # E16a (tonight9's review): a payload read with "as" from an enum held by value is a copy made where it is read - a
-# temporary - so a slice of it lives in that block. It was accepted, and h.r read a dead frame (0 where 8 was right)
+# temporary - so a slice of it lives in that block. It was accepted, and h.r read a dead frame (0 where 8 was right).
+# A payload holds an array in place through a struct (T7a)
 import "std/io"
+type Q struct() { a := Array<I64>(4) }
 type E enum {
-    C(a Array<I64, 4>)
+    C(q Q)
     D
 }
 type H struct(k I64) {
@@ -12,12 +14,12 @@ type H struct(k I64) {
     r Array<I64>& = null
 }
 fn mkE(n I64) E {
-    a Array<I64, 4>
-    a[1] = n + 1
-    return E.C(a)
+    q := Q()
+    q.a[1] = n + 1
+    return E.C(q)
 }
 fn set(h mut H&, n I64) {
-    h.r = (mkE(n) as E.C)[0:2]
+    h.r = (mkE(n) as E.C).a[0:2]
 }
 fn main() ? {
     h mut H& = H(1)

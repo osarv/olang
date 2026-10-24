@@ -4,7 +4,7 @@
 # without "checked" - and none under it (E16d), where the checked form fails with OUT_OF_BOUNDS at run time
 import "std/io"
 fn main() ? {
-    z Array<I32, 2> = I32[1, 2]
+    z Array<I32> = I32[1, 2]
     a := checked z[7] catch default 0
     b := z[5]
     try io.Println($a $b)

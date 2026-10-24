@@ -63,9 +63,9 @@ type Chan<T> struct(cap I64) {
     sent I64 = 0
     taken I64 = 0
     closed Bool = false
-    lock Array<I64, MutexWords>                    # in the channel itself (T7c): its length is its type's
-    notEmpty Array<I64, CondWords>
-    notFull Array<I64, CondWords>
+    lock := Array<I64>(MutexWords)      # in the channel itself (T7d): its length is known where it is declared
+    notEmpty := Array<I64>(CondWords)
+    notFull := Array<I64>(CondWords)
 }
 
 # a channel must be initialised before use: a constructor cannot call these, because pthread wants the
@@ -183,7 +183,7 @@ fn (c mut Chan<T>&) Next() T ? Exhausted {
 # was never sent. The wait wakes at the token's deadline, and every few milliseconds besides to notice a Cancel()
 # (cancel.WakeAt).
 fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, ChanError {
-    ts Array<I64, 2>
+    ts := Array<I64>(2)
     pthread_mutex_lock(c.lock)
     for c.count == c.data.Len() and not c.closed {
         if tok.Cancelled() {
@@ -214,7 +214,7 @@ fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, ChanEr
 # Recv, giving up - with the token's reason - once the token fires while the channel is still empty and open; fails
 # with ChanError.CLOSED once it is closed and drained
 fn RecvUntil<T>(c mut Chan<T>&, tok cancel.Token&) T ? cancel.Stopped, ChanError {
-    ts Array<I64, 2>
+    ts := Array<I64>(2)
     pthread_mutex_lock(c.lock)
     for c.count == 0 and not c.closed {
         if tok.Cancelled() {

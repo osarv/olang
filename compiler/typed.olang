@@ -208,7 +208,7 @@ type Expr enum {
     Make(sp source.Span, ty types.TypeId, m Make&)          # a tuple, an enum case, an array
     Collect(sp source.Span, ty types.TypeId, c Collect&)    # a comprehension's array, filled by its Yields (E27)
     Prim(sp source.Span, ty types.TypeId, op PrimOp, check Check, args Array<Expr&>&)
-    Slice(sp source.Span, ty types.TypeId, s Slice&)        # part of an array's storage (E16a); a view (E32b)
+    Slice(sp source.Span, ty types.TypeId, s Slice&)        # part of an array's storage (E16a)
     Cond(sp source.Span, ty types.TypeId, c Cond&)          # "a if c else b" (E28), "and", "or" (E7)
     Seq(sp source.Span, ty types.TypeId, s Seq&)            # statements, then a value
     Match(sp source.Span, ty types.TypeId, m Match&)        # a match in value position (S12b); Eval'd as a statement
@@ -331,12 +331,11 @@ type PrimOp enum {
     Retire
 }
 
-type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check, Exact Bool) {
+type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check) {
     Base
     Lo
     Hi         # both always present: an absent end is the base's length
     Checked    # Abort (E16b) or Try (E16c)
-    Exact      # "x as Array<T, N>&": the whole of x, whose length must be N (E32b)
 }
 
 # a choice of two values; only the one chosen is evaluated
@@ -879,7 +878,7 @@ test "a body's marks and scope variables come from its type; constants, temporar
     names := source.Names()
     t := types.NewTable(names)
     m := t.AddModule("t")
-    n := t.Named(t.AddDecl(m, names.Intern("N"), types.DeclKind.Struct, 0, 0), types.ListId(0))
+    n := t.Named(t.AddDecl(m, names.Intern("N"), types.DeclKind.Struct, 0), types.ListId(0))
     i64 := t.Prim("I64")
     t.SetStructBody(n, t.List1(i64), false)
     mutN, roN := t.Ref(n, types.Writable), t.Ref(n, types.ReadOnly)

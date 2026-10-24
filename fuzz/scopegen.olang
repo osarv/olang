@@ -126,7 +126,7 @@ Prelude := (
     "}\n"
     "fn gridPush(b mut Bag&, v I64) { b.grid[0][0].S.Push(Node(v)) }\n"
     "type Two struct() {\n"
-    "    items Array<mut Node&, 2>\n"
+    "    items := Array<mut Node&>(2)\n"
     "}\n"
     "# allocates and gives back: whatever reuses a closed scope's storage writes -7 and text over it\n"
     "fn churn() I64 {\n"
@@ -663,9 +663,9 @@ fn (g mut SG&) twoOp(t String&, ind String&, d I64) String& {
         s := g.name("s")
         return $ind $s " := " $t ".items[0:2]\n" $ind $s "[1].next = " $g.newNode() "\n"
     }
-    if k == 2 {    # a view of it
+    if k == 2 {    # a slice of it from the start, as a view was
         s := g.name("s")
-        return $ind $s " := " $t ".items as Array<mut Node&, 2>&\n" $ind $s "[0].next = " $g.newNode() "\n"
+        return $ind $s " := " $t ".items[0:2]\n" $ind $s "[0].next = " $g.newNode() "\n"
     }
     if k == 3 {    # a copy of the struct: its references are the struct's
         c := g.name("c")

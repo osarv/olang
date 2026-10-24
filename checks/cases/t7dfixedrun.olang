@@ -1,11 +1,11 @@
 # check: run
-# T7d/E32b: a checked copy, a checked view, and a fixed array meeting a run-time one in "==" - all at run time
+# T7d/E16a: a copy, a checked slice and fixed storage meeting a run-time array in "==" - all at run time
 fn main() ? {
     r := Array<I32>(3, 4)
-    f Array<I32, 3> = r
+    f Array<I32> = r
     assert f == r and f[2] == 4
-    v := checked (r as Array<I32, 3>&) catch default I32[0, 0, 0]
+    v := checked r[0:3] catch default I32[0, 0, 0]
     assert v[0] == 4
-    w := checked (r as Array<I32, 2>&) catch default I32[5, 5]
+    w := checked r[0:4] catch default I32[5, 5]
     assert w[1] == 5
 }

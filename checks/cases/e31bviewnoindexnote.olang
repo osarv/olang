@@ -27,7 +27,7 @@ fn churn() ? io.IoError {
     }
 }
 fn clobber(n I64) I64 {
-    a := Array<I64, 64>()
+    a := Array<I64>(64)
     for k in range 64 { a[k] = n * 1000 + k }
     if n > 0 { return clobber(n - 1) + a[3] }
     return a[5]
