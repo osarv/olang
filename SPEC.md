@@ -428,7 +428,8 @@ by a test (S8e), or unwrapped by `x!` (E35), which ends the program on a null. T
 null; `==`, `is null`, assignment and passing it on as a `T?&` need nothing. `x is null` and `x is not null` on a
 reference that is never null are compile-time errors (always false, always true). Where `null` and a `T&` meet - the
 values of a conditional or a match (E28, S12b), a `catch default null` beside a call giving `T&` (R11) - the result is
-`T?&`. A function value stays nullable (T21).
+`T?&`. A function value stays nullable (T21). A type whose zero value would hold a reference never null - an enum whose first
+case carries one, a struct whose constructor has no value for one - has no zero value (D13c).
 
 **An array is never null.** Its zero value is the empty array, which stands for "no array" wherever one is missing - so
 an array reference is never nullable: `Array<T>?&` and `String?&` are compile-time errors naming `&` alone, `null` given

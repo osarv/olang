@@ -4122,7 +4122,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     if hk == types.Kind.Ref and wk == types.Kind.Ref and c.P.T.IsNullable(have) != c.P.T.IsNullable(want) {
         if c.P.T.IsNullable(have) {
             xsp := x.Span()
-            c.err(xsp, msgs.MayBeNull(c.src(xsp), c.ty(have), c.ty(want)))
+            c.err(xsp, msgs.MayBeNull(c.src(xsp), c.ty(have), c.ty(want), bangOf(c.src(xsp))))
             return x
         }
         return c.convert(sp, c.fit(x, c.P.T.NonNull(want), sp), want)
@@ -4209,7 +4209,7 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     if hk == types.Kind.Ref and wk != types.Kind.Ref {
         r := c.P.T.Referent(have)
         if c.P.T.Same(r, want) or c.flowsInto(r, want) {
-            if c.P.T.IsNullable(have) { c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(have))) }
+            if c.P.T.IsNullable(have) { c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(have), bangOf(c.src(x.Span())))) }
             return c.fit(c.read(sp, typed.Place.Deref(sp, r, x)), want, sp)
         }
     }
@@ -4656,6 +4656,20 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr&c {
         return typed.Expr.Call(sp, t, typed.Call(typed.Callee.Body(typed.BodyId(I32(id))), args, typed.Mark.None
                                                  c.site(typed.SiteKind.Call, sp), true))
     }
+    # T2c: an enum's zero value is its first case with its payload's zero bits - none where a part of it is a reference
+    # never null
+    if c.isEnum(t) and not c.isRef(t) {
+        sig := c.P.CaseSig(t, 0)
+        if sig != types.UnknownT {
+            for pt in c.P.T.Items(c.P.T.Params(sig)) {
+                if c.isRef(pt) and not c.P.T.IsNullable(pt) and not c.P.T.ArrayRef(pt) and c.deref(pt) != types.UnknownT {
+                    rec := c.err(sp, msgs.NoZeroNonNull(c.ty(pt), c.ty(c.P.T.OrNull(pt))))
+                    c.declNote(rec)
+                    return c.unknown(sp)
+                }
+            }
+        }
+    }
     # a declared number with a constructor (T29d): its constructor on its base's zero
     if c.zeroCalls(t) {
         id := c.ctorBody(t)
@@ -4664,6 +4678,18 @@ fn (c mut Checker&) zero(sp source.Span, t types.TypeId) typed.Expr&c {
                                                  c.site(typed.SiteKind.Call, sp), true))
     }
     return c.lit(sp, t, 0)
+}
+
+# T2c, E35: an expression as "!" is written after it - parenthesized where a space outside brackets says it is more
+# than a postfix chain ("(s as E.C)!"), since "!" binds to the last operand
+fn bangOf(t String&) String {
+    depth I64 = 0
+    for ch in t {
+        if ch == '(' or ch == '[' { depth++ }
+        if ch == ')' or ch == ']' { depth-- }
+        if ch == ' ' and depth == 0 { return "(" $t ")" }
+    }
+    return $t
 }
 
 # ---- expressions ----
@@ -7576,7 +7602,11 @@ fn (c mut Checker&) arrayMake(sp source.Span, elem types.TypeId, args Array<ast.
     at := c.P.T.Array(elem, length)
     from := c.exprs.Len()
     if args.Len() == 2 {
+        # T2c: the type written for the declaration is not the element's - no note pointing at it
+        wasFill := c.nullDecl
+        c.nullDecl = diag.Where.Nowhere
         x := filled if filled is not null else c.exprTo(args[1], elem)
+        c.nullDecl = wasFill
         if not c.isRef(elem) { c.roStore(x, args[1].Span(), RoStored) }   # T25c: every element is writable
         c.exprs.Push(x)
     }
@@ -8231,7 +8261,10 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         if args.Len() > 0 and i < args.Len() { asp = args[i].Span() }
         if spreadAt.Start >= 0 { asp = spreadAt }
         if pre.Len() > 0 and i < pre.Len() and pre[i] != c.hole {
+            wasPre := c.nullDecl
+            c.nullDecl = c.paramAt(target, f, k)    # T2c: where the parameter's type is written
             e = c.fit(pre[i], ps[k], asp)
+            c.nullDecl = wasPre
         } else if args.Len() > 0 and i < args.Len() {
             isDefault := false
             match args[i] {
@@ -8513,7 +8546,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
     # T2c: what the compiler supplies, and a function value in a field, are reached through the receiver - not through
     # one that may be null (a method fits its receiver as an argument, which says so there)
     if m < 0 and c.isRef(rt) and c.P.T.IsNullable(rt) {
-        c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt)))
+        c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span()))))
         rt = c.P.T.NonNull(rt)
     }
     if m < 0 and name == "Len" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT {
@@ -9172,11 +9205,45 @@ fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.E
     return c.unwrapNull(sp, r) if nullable else r
 }
 
+# whether reading place p twice reads the same thing and runs nothing: a local, a global, a field of one, or what a
+# reference read from such a place names
+fn purePlace(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Local(_, _, _), typed.Place.Global(_, _, _, _) => true
+        case typed.Place.Field(_, _, base, _) => purePlace(base)
+        case typed.Place.Deref(_, _, r) => pureRead(r)
+        case _ => false
+    }
+}
+
+fn pureRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => purePlace(p)
+        case _ => false
+    }
+}
+
 # T2c, E35: a reference that may be null, as one that is not - ending the program where it is null
 fn (c mut Checker&) unwrapNull(sp source.Span, x typed.Expr&c) typed.Expr&c {
     t := typeOf(x)
+    # a place read with nothing to evaluate twice - a local, a global, a field through them - is tested and read where
+    # it is, so what is read keeps where it lives (O20, O25a)
+    match x {
+        case typed.Expr.Read(rsp, _, p, site) {
+            if purePlace(p) {
+                pf := c.stmts.Len()
+                isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, c.lit(sp, t, 0))
+                ef := c.stmts.Len()
+                c.stmts.Push(typed.Stmt.Exit(sp, typed.ExitKind.NullReached, null))
+                ends := typed.Block(typed.BlockId(I32(c.fr().Block)), gather(c.stmts, ef))
+                c.stmts.Push(typed.Stmt.If(sp, typed.If(isNull, ends, null)))
+                return typed.Expr.Seq(sp, c.P.T.NonNull(t), typed.Seq(gather(c.stmts, pf), typed.Expr.Read(rsp, c.P.T.NonNull(t), p, site)))
+            }
+        }
+        nomatch { }
+    }
     from := c.stmts.Len()
-    id := c.local(source.NameId(0), sp, t, typed.LocalKind.Var, typed.Mark.Infer)
+    id := c.local(source.NameId(0), sp, t, typed.LocalKind.Held, typed.Mark.None)   # holding x where it lives (O25a)
     c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), x))
     isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, id), c.lit(sp, t, 0))
     efrom := c.stmts.Len()
@@ -9891,13 +9958,19 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     tcs mut List<typed.TaskClause&>&c = List<typed.TaskClause&>()
     taken List<typed.Clause&>
     if clauses.Len() > 0 {
+        # T2c: a task's default goes into its target, so a target that may be null takes a null default
+        crt := typeOf(task)
+        if places.Len() == 1 and places[0] is not null {
+            pt := places[0]!.Type()
+            if c.isRef(crt) and c.isRef(pt) and c.P.T.IsNullable(pt) and c.P.T.Referent(pt) == c.P.T.Referent(crt) { crt = c.P.T.OrNull(crt) }
+        }
         for cl in clauses {
             items List<typed.Item>
             if cl.Items.Len() > 0 {
                 for p in cl.Items { c.catchItem(p, items) }
             }
             all := cl.Items.Len() == 0 or cl.Items.Len() == 0
-            tcs.Push(typed.TaskClause(cl.Sp, items.ToArray(), all, c.clauseHandler(cl, typeOf(task), places.Len())))
+            tcs.Push(typed.TaskClause(cl.Sp, items.ToArray(), all, c.clauseHandler(cl, crt, places.Len())))
             taken.Push(typed.Clause(cl.Sp, items.ToArray(), all, null, Array<typed.Expr&>(0)))
         }
     }
@@ -11739,7 +11812,7 @@ fn (c mut Checker&) nullRead(p typed.Place&) {
     t := p.Type()
     if not c.P.T.IsNullable(t) { return }
     sp := p.Span()
-    c.err(sp, msgs.ReadMaybeNull(c.src(sp), c.ty(t)))
+    c.err(sp, msgs.ReadMaybeNull(c.src(sp), c.ty(t), bangOf(c.src(sp))))
 }
 
 # T2c: where the type of a place assigned is written, for declNote - a local's or a parameter's, a struct's field's

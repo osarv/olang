@@ -981,14 +981,15 @@ fn (v mut verifier&) canon(ty types.TypeId) String { return v.T.Canon(ty) }
 # whether a value of type from may be put where a to is: one representation (T29: a declared type over another is its
 # representation, an array of a declared number one of its base's, T29h), null into a reference or a function value,
 # and a reference into one of the same referent with no permission it lacks - writable or owning dropped (T25b; a
-# borrow of an own slot, O32)
+# borrow of an own slot, O32), whether either may be null (T2c)
 fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
     t := v.T
     if from == types.UnknownT or to == types.UnknownT { return false }
     if v.sameRepr(from, to) { return true }
     if from == types.NullT { return t.IsRef(to) or t.KindOf(to) == types.Kind.Func }
     if t.IsRef(from) and t.IsRef(to) {
-        pf, pt := t.PermOf(from), t.PermOf(to)
+        # T2c: never null into may be null too - one representation, and a narrowed read the other way
+        pf, pt := t.PermOf(from) | types.Nullable, t.PermOf(to)
         return v.sameRepr(t.Referent(from), t.Referent(to)) and (pf | pt) == pf
     }
     return false

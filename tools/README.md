@@ -29,6 +29,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `math_methods.olang` | M19d: std/math removed - its functions are the numbers' methods (`math.Sqrt(x)` -> `x.Sqrt()`), its constants the prelude's (`Pi`, `Euler`, `Inf`, `NaN`) | `build/tools_math_methods [--dry] PATH...` |
 | `equality_migrate.olang` | E10/E10c/E32: `x == null` -> `x is null`, `x is E.Case` -> `x == E.Case`, identity `a is b` -> `a == b` (listed, for a person to check where the type declares `Eq`) | `build/tools_equality_migrate [--check] [-v] FILE\|DIR...` |
 | `helper_rename.olang` | the helpers `Any`/`All` renamed `Some`/`Every`, calls and declarations | `build/tools_helper_rename [--check] [-v] FILE\|DIR...` |
+| `null_migrate.olang` | T2c: references never null unless written `?&` - an array never null (`?` dropped, `null` its empty array, `is null` a length test), a declaration made nullable where a note says, `!` where a value may be null | `build/tools_null_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.
@@ -48,6 +49,11 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 - `arrays_migrate` works on the text alone and lists for a person what depends on the code: an `Array<T, N>` as a type
   argument (`Array<T>&` unless its storage is made where it is declared, T7a), `as` views (now slices) and constant
   type parameters.
+- `null_migrate` is driven by the compiler's diagnostics, in rounds to a fixed point (array fixes, then nullable
+  declarations, then `!`), and lists what it could not decide (`by hand:`). Each `!` it writes on an argument is a place
+  a callee may once have handled null by matching it: look at those, and make the callee take `?&` where it did.
+  Bootstrapping a compiler across this change needs one built by the old compiler from the source with the `?&`s and
+  inserted `!`s taken out.
 - `results_migrate` works on the tokens alone and is idempotent; a Markdown file's olang code blocks are migrated too.
   `checks/cases/l18coldresults.olang` is written in the old form on purpose: leave it out, or restore it after a run.
   `--check` writes nothing and the exit status says whether anything would change.

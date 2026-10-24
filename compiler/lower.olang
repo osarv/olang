@@ -2787,12 +2787,18 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     r := t.Repr(ty)
     if t.IsRef(r) {
         x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
-        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
-        some, none, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
-        ln.end(mir.Term.Branch(nn, some, none))
-        ln.start(none)
-        ln.word(b, "null", sp)
-        ln.goto(after)
+        some, after := ln.F.NewBlock(), ln.F.NewBlock()
+        if t.ArrayRef(r) {
+            # T2c: an array is never null - its zero bits are the empty array, rendered as one
+            ln.goto(some)
+        } else {
+            nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+            none := ln.F.NewBlock()
+            ln.end(mir.Term.Branch(nn, some, none))
+            ln.start(none)
+            ln.word(b, "null", sp)
+            ln.goto(after)
+        }
         ln.start(some)
         # references followed 8 deep, then "..." - a cycle is cut off
         d := ln.depth()

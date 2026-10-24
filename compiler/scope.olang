@@ -5426,6 +5426,11 @@ fn (s mut Scoper&) choicePeek(x typed.Expr&) Term {
             if r < 0 or s.B!.Locals[r].Kind == typed.LocalKind.Binding or s.B!.Locals[r].Kind == typed.LocalKind.Held { return Term.None }
         }
         case typed.Expr.Away(_, _, y) { return s.choicePeek(y) }
+        # "x!" (E35), its test before it: what it reads
+        case typed.Expr.Seq(_, _, q) {
+            if q.X is null { return Term.None }
+            return s.choicePeek(q.X!)
+        }
         # a result borrowed from an argument lives where that argument's referent does (O13)
         case typed.Expr.Call(_, _, c) {
             fty := s.calleeType(c)
