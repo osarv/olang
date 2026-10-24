@@ -661,21 +661,13 @@ fn TargetNoClang(text String&) Msg { return Msg(Diag.TargetNoClang, "B12", "clan
 # ERR_EXPLAIN_NEEDS_RULE
 fn ExplainNeedsRule() Msg { return Msg(Diag.ExplainNeedsRule, "B11a", "explain takes one rule, as 'olang explain B1'") }
 
-fn ExplainNeedsName(file String&) Msg {
-    return Msg(Diag.ExplainNeedsName, "B11b", $"explain " $file " takes the name of one of its items, as 'olang explain " $file " main'")
-}
+fn ExplainNeedsName(file String&) Msg { return Msg(Diag.ExplainNeedsName, "B11b", $"explain " $file " takes the name of one of its items, as 'olang explain " $file " main'") }
 
-fn LineBodyOnLine() Msg {
-    return Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'")
-}
+fn LineBodyOnLine() Msg { return Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
 
-fn LineBodyNotSimple(what String&) Msg {
-    return Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " $what " - write a block, '{ ... }'")
-}
+fn LineBodyNotSimple(what String&) Msg { return Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " $what " - write a block, '{ ... }'") }
 
-fn ExplainNoItem(name String&, file String&) Msg {
-    return Msg(Diag.ExplainNoItem, "B11b", $"'" $name "' is no top-level item of " $file)
-}
+fn ExplainNoItem(name String&, file String&) Msg { return Msg(Diag.ExplainNoItem, "B11b", $"'" $name "' is no top-level item of " $file) }
 
 # ERR_NO_SPEC
 fn NoSpec(text String&) Msg { return Msg(Diag.NoSpec, "B11a", "no specification at " $text) }

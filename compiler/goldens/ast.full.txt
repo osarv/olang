@@ -277,6 +277,18 @@
 | TYPE 4:1-4:32
 | -- diagnostics
 | error  8:16
+=== checks/cases/s1bblock.olang
+| -- diagnostics
+| error S1b 5:15
+=== checks/cases/s1bdecl.olang
+| -- diagnostics
+| error S1b 4:23
+=== checks/cases/s1bnested.olang
+| -- diagnostics
+| error S1b 5:15
+=== checks/cases/s1bsameline.olang
+| -- diagnostics
+| error S1b 5:13
 === checks/cases/s8bfixedbuild.olang
 | ERRORS 2:1-2:14
 | FN 6:1-6:30

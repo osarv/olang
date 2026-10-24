@@ -823,6 +823,11 @@ b606ff8d837dacbc 6d3895c8df9eb900 checks/cases/s19error.olang
 95bdac61ef9100e1 1e4b6f91afffe9bc checks/cases/s19spawn.olang
 c0a82dbdbca3f670 4f20c21eb237dae0 checks/cases/s19try.olang
 427baa3d630d787a af67d248983a0ed9 checks/cases/s1ablock.olang
+0707551b913a1e28 c5d34fb0a4bb7f58 checks/cases/s1bblock.olang
+3170e57dc0c92206 3c7f5720be55d0a6 checks/cases/s1bdecl.olang
+6c9d6daa133cba7f 73d29e8ecace675f checks/cases/s1bline.olang
+4a36da5c29d2a822 14bd091e17be2486 checks/cases/s1bnested.olang
+d4e2190baab6f4c8 1265c64993675f7f checks/cases/s1bsameline.olang
 b8c07d3e375ec10e 24aa821d0ca4920a checks/cases/s3joinnextline.olang
 dc037ccafbe31473 4bf61e80ad400355 checks/cases/s5atbuilds.olang
 d15d13a6f2c7e506 1881fa7f0293f0cc checks/cases/s5atnosetat.olang
@@ -1300,6 +1305,7 @@ b7487e5bbcb5bfe9 282e9835296a78e3 compiler/cond.olang
 3f1492b275e2d8ec effab9c25de669e9 compiler/diag.olang
 15fefb79bc3e066e 50765f8cdea99038 compiler/emit.olang
 4071fdc6f1d524c4 2cf3f256af40ed80 compiler/eval.olang
+f4374c12b28fb432 2735399903843334 compiler/explain.olang
 062d2cf05aa3985d 061f0deecc6d96ec compiler/fetch.olang
 ae335dd78bf86cf0 6a33c1be6633c53c compiler/fmt.olang
 e610b2a4bcad05c5 ce84453ff4ea08f5 compiler/generic.olang
@@ -1307,7 +1313,7 @@ e7e04ff4bfa435bb 2f35cba1edf978f6 compiler/interp.olang
 62e237def3f7a69d 392423341d3d388d compiler/load.olang
 353bd0f16661d943 09a702874755c4bc compiler/lower.olang
 0d1b00c6a658c656 bee5d9a8099fab7b compiler/mir.olang
-fe12ac94cb5bce58 08ee96ce62f03f3a compiler/msgs.olang
+1443b6a3786e8a64 2ab7b17237d57efe compiler/msgs.olang
 8f411b6d77737fac 49f931a7f48976e5 compiler/names.olang
 38f42b8bcd89d1a4 d2acd107a1807e2d compiler/olang.olang
 db5e407c518d0269 b44bcf3458799b22 compiler/parse.olang
