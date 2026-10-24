@@ -740,3 +740,7 @@ errors and documentation - generic `+` already works).
   (the trait module's defaults count); `match T` complete; a member may be a closed trait (flattened); a pure set needs
   no methods (`trait Number for Integer, Float`); no `for` = open as today; no inline sets; `and`, trait `extends`, the
   match-with-nomatch bridge. Proposed; awaiting the user.
+- TRAITS 2026-10-24: the user LIKES the `for` syntax (decided: `trait Float for F16, BF16, F32, F64 { ... }`), and asked
+  for unnamed sets in declarations "as with errors and return values". Proposed: inline members joined by `or` (commas
+  separate type parameters): `fn mix<T for I32 or F64>(a T, b T)`, `<T Shape for Circle or Square>` (closed and must
+  have Shape's methods); named traits keep commas. Rec; awaiting a yes.
