@@ -4050,7 +4050,8 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 
 ```
 case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
-case-alt       ::= pattern | "_" | binary
+case-alt       ::= pattern | type-case | "_" | binary
+type-case      ::= alias-chain IDEN ( IDEN | "_" )                     (T34)
 nomatch-clause ::= "nomatch" case-body
 case-body      ::= block | "=>" expr [ STMNT_END ]
 pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]
@@ -4058,7 +4059,8 @@ sub-pattern    ::= IDEN | pattern | literal | "-" ( INT_LIT | FLOAT_LIT )
 ```
 
 A `case-alt` is a `pattern` when everything before its last name names a known type and the whole of it parses as
-one, followed by `,`, `if`, `{`, `=>` or its line's end; `_` alone takes every value (S13f); anything else is a value,
+one, followed by `,`, `if`, `{`, `=>` or its line's end; a path followed on its line by a name is a `type-case`, taken
+on an `any` of a closed trait (T34); `_` alone takes every value (S13f); anything else is a value,
 a `binary` expression (E1) - so the `if` of a guard is never read as a conditional (E28). Alternatives follow the
 listing rule (L18a): `,` between two on one line, the line break between lines - a clause's header runs on to its
 guard, `{` or `=>`, so a line ending in an alternative is followed by the next. In a match statement every `case-body`

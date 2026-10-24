@@ -353,12 +353,23 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **No shadowing (D3a, the user's call)**, types included: no local or parameter named like a global, a function, a
   build constant or a type; a type and a function or global of one module may not share a name (D2).
 - **`:=` declares any settled expression's type (D15, the user's call).** `null` and a call giving nothing are errors.
-- **Traits are constraints only (T30-T35, G19, the user's call 2026-10-08).** `trait` declares method signatures,
-  satisfied implicitly (Go-style: a declared `implements` would point dependencies the wrong way and could never make
-  a built-in type conform); a private method name seals a trait; written anywhere but a constraint it is an error.
-  Defaults are methods on a constrained type variable, overridable (M19e). Removed: run-time interface values
-  (2026-10-08 - bugs clustered in tables and boxing; enums and function values cover most uses). Planned back as `any
-  Trait&` (decided 2026-10-08, ledger).
+- **Traits are constraints; `any Trait&` is the run-time form (T30-T35, G19, the user's calls 2026-10-08 and
+  2026-10-24).** `trait` declares method signatures, satisfied implicitly (Go-style: a declared `implements` would point
+  dependencies the wrong way and could never make a built-in type conform); a private method name seals a trait; a bare
+  trait written as a type is an error naming `any R&`. Defaults are methods on a constrained type variable, overridable
+  (M19e). The 2026-10-08 interfaces were removed (bugs clustered in tables and boxing).
+- **`any Trait&` (T32-T34, D17f, 2026-10-24, the user's design; HISTORY.md "Run-time trait values").** Two words, the
+  instance and a static table per (type, trait) - its type's identity, `$`'s renderings, a function per slot (the
+  trait's and extended traits' methods, defaults the receiver binds alone), the slots again for `checked`. A struct or
+  enum variable is borrowed, a temporary built where the any lands, a number/Bool/Char/array copied (the user); placement
+  is the scope pass's (`AnyMake` read as a conversion), never emit's. A method saying more than the trait's signature
+  (scopes, obligations) cannot be in a table (an error at the conversion). Calls dispatch through the table, `mut` only
+  through `mut any`, defaults reaching overrides; `for x in it` walks an `any Iterator<T>&`; the any satisfies its
+  trait for generic code; no task calls through one. `==` is identity, `$` renders the instance, no `Hash`. A closed
+  trait's any is matched by type cases `case Button b` (complete or `nomatch`) and `w as Button` (WRONG_CASE under
+  `checked`); an open trait's never (the user). A trait's methods take contracts (D17f), held to every call through an
+  any; the implementation's own are checked only under `checked`, after dispatch. Tables are `linkonce_odr`, named by
+  type and trait; the evaluator calls through them (K2 bakes through anys).
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
   field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk

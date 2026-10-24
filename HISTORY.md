@@ -23305,3 +23305,92 @@ of the first. D2 says two such names are an error, and now they are.
 **Not built, as decided:** run-time checks anywhere `checked` is not written (no test or `-debug` entry checks); a
 prover; conditions on trait methods, lambdas, externs and destructors. **Mine, left for later:** a requirement whose
 arguments read a fixed local (S8c) is not asked at the call - only closed expressions are.
+
+## Run-time trait values: `any Trait&` (T32-T34, D17f, 2026-10-24)
+
+The user's design of the day (decisions.md, the ANY entries; "ENUMS AND `any`"): a trait stays a constraint, and `any
+Trait&` is a run-time value written on purpose - the run-time interfaces removed on 2026-10-08 back in a narrower form.
+What was removed then failed in its tables, boxing and scopes (HISTORY.md, "Interfaces removed"); the old code (T30 in
+git) was read for reference only.
+
+**The value.** `any R&` is `types.Kind.Any` under a reference: two words, the instance and a static table. A table per
+(type, trait) pair - the type's identity word (T34), `$`'s two renderings (inside another value, at the top of a piece),
+then one function per slot: R's methods and those of every trait it extends, by name, then R's defaults whose type
+variables the receiver alone binds (a default introducing its own, `Fold<U>`, has no slot: it is instantiated for the
+`any`, T32c) - and then the same slots again, for calls under `checked` (below). Each slot's function is a typed body of
+its own (`BodyOf.Thunk`), checked by the checker as a call of the instance's method or the default it takes, its
+receiver the instance as stored. Thunks and tables are named by the type and the trait (`olang.slot.T|R.k`,
+`olang.table.T|R`), `linkonce_odr`, so one table stands for a pair in every object and identity words compare across
+modules. Dispatch (`Callee.Dispatch`) loads the slot from the table and hands the thunk the instance word alone.
+
+**Making one (T32a), decided by the user: struct and enum variables borrowed, temporaries built where the any lands,
+numbers, Bools and Chars copied.** All three reuse what exists: a borrow is E12c's (`fit` to `Ref(T)`), a temporary a
+`Promote`, a copy a `Promote` of the value - so where the copy lives is the scope pass's question, answered as for any
+temporary. An array is copied too (mine: its storage of its own, as a number's), boxed in a one-part tuple so the instance
+stays one word. The conversion is `PrimOp.AnyMake(instance, table)`, and the scope pass reads it - and `AnyInstance` -
+as it reads a conversion (`typed.PassesRefs`): the any lives where its instance's reference does. That was the point the
+old interfaces got wrong (boxes placed in emit): here nothing about placement is decided outside the scope pass.
+
+**What a table may hold (mine).** A call through a table knows only the trait's signature, so a method saying more than
+it - a result borrowed from its receiver, parameters sharing a scope (T22's terms), or an obligation in its body
+(O10b, D17d) - cannot be called through it: an error at the first conversion naming the method (AnyMethodScopes in the
+checker, AnyMethodObligations in the scope pass, which judges every thunk's summary once every body is judged, as
+`fnValues` judges function values for T22a). Called directly or from generic code it stays fine.
+
+**Calls (T32b).** Through the table, `mut` methods only through `mut any`; defaults too, so the instance's own method
+of that name runs (an override reaches an any). `for x in it` walks an `any Iterator<T>&` through its table's `Next`, and a
+generic default (`Fold`) instantiated for the any calls through it. A task never calls through a table (mine: a task is a
+function or a function value; `spawn fn() { s.M() }` is written instead).
+
+**Identity and text (T33).** `==` on two anys is identity, both words compared (the same instance through the same
+table); `$` renders the instance as `$` renders its type - the render slots are Render helpers over the instance's type,
+`Str` included. An any has no `Hash`.
+
+**Closed traits (T34), decided by the user: inspection only for a closed trait's any.** `case Button b` type cases
+(the parser's: a path, then a name on the line) test the table's identity word against the type's (`PrimOp.AnyIs`, a
+`null` any reading a table of none) and bind the instance itself - a reference with the any's permission, or a
+number's value. They must cover every member unless a `nomatch` or `case _` stands; a non-member, a member matched by an
+earlier clause, a binding type case sharing a clause (mine: `_` cases may share one) and a type case on anything but a
+closed trait's any are errors. `w as Button` (mine, for symmetry with enums) gives the instance, aborting on another type
+or failing `CheckError.WRONG_CASE` under `checked`. An open trait's any is used only through its methods (the user).
+
+**Contracts through an any (D17f), decided by the user: the trait's conditions, and the implementation's checked only
+under `checked` after dispatch.** A trait's method may now carry a contract (`mut Withdraw(n I64) left I64 [n > 0,
+left >= 0]`), parsed and resolved as a function's, its receiver unnamed and no `outlives` (a call through a table
+discharges no obligation). Its owner is a body with no code (`BodyOf.Slot`), so the contract machinery applies unchanged:
+requirements decided at calls whose arguments the evaluator computes, guarantees wherever the evaluator runs a call
+(lowering's `Ensures`, through `Program.SlotContracts`), both checked by `checked`. The implementation's own contract is
+checked by the second set of slots: a `checked s.M(x)` dispatches to a thunk that calls the instance's method under
+`checked`, its signature the slot's plus `CheckError.CONTRACT`. Mine: a default's contract is an implementation's, so it
+too binds only under `checked`; a non-generic trait's contracts are checked with the trait, a generic one's at its
+first call.
+
+**The evaluator** calls through tables as the program does: a table is an allocation of code pointers, a type's identity
+an allocation of its own, `AnyMake`/`AnyInstance`/`AnyIs` and dispatch modelled exactly; `interpret` reaches every thunk
+and rendering a table names. Globals computed through anys bake (K2) and asserts on them are decided (S18c); a global
+holding an any is set at startup (its table is no data the baking writes).
+
+**`olang explain`** spells any types (`fn total(xs List<any Shape&>&) F64`) and a trait's contracts; the checker's and
+the renderings' spellings write `any R&`.
+
+**Found on the way, fixed.** (1) The checker reused tables across its attempts (R1a's fixed point checks the program
+again when an inferred error set grows): a table's slots named bodies of the previous attempt, so a program importing
+`tests/shared.olang` got false obligation errors - tables and slot contracts are reset with the bodies now. (2)
+**Pre-existing**: a trait reached through an import alias written as a type (`x sh.Shape&`) was accepted - a type's path
+is recorded at its start, and three checks looked it up at its end; they find it now (`sh.Shape& is a trait ...`).
+(3) **Pre-existing**: `$` of a `List<Node?&>` wrote its element type without the `?`. (4) A conditional of two temporaries
+passed where an any is wanted was checked against the any's referent and recursed without end - an argument's wanted
+type is the any itself now.
+
+**Tests.** `tests/any.olang` (structs, enums, numbers, text and another module's types in `List<any R&>`, read back after
+an arena churn; mut methods through mut anys; defaults and generic code over anys; identity and rendering; closed-trait
+matches and `as`; contracts through anys; iterators; globals baked through tables beside the same calls at run time),
+also under `-debug -sanitize`; 22 `checks/cases/t32*` for every error. The scope fuzzer writes anys over its bag target
+(open, mut and closed traits, borrows, copies, conditionals, inner-block locals kept outward, writes through a type case):
+seeds 1-40 and 100-399, no findings. `bench/dispatch.olang` against C (1M shapes x 100 passes, three runs): through an
+any's table 0.98-1.05 s against C's function-pointer table 0.93-0.97 s (1.05-1.1x, olang's instances in the List's
+arena, C's malloc'd); an enum match 0.75-0.77 s against a switch 0.63-0.64 s; one type called directly 0.041-0.058 s
+against 0.040-0.042 s.
+
+**Not built (mine, additive later).** A type case naming a generic instance (`case Box<I64> b`); an any of a closed
+trait holding numbers matched by a guard on the value (written through the binding); `Hash` on anys.

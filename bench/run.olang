@@ -61,6 +61,9 @@ fn table() Array<String&>& {
         "Array: opaque call|vec|vec|opaque array 1000000 100"
         "Vec Sort|vec|vec|sort vec 1000000 0"
         "Array Sort|vec|vec|sort array 1000000 0"
+        "dispatch: any Shape&|dispatch|dispatch|any 1000000 100"
+        "dispatch: enum match|dispatch|dispatch|enum 1000000 100"
+        "dispatch: one type, direct|dispatch|dispatch|direct 1000000 100"
     ]
 }
 

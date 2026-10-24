@@ -118,7 +118,37 @@ Prelude := (
     "    boxes List<Box>\n"
     "    cells List<Cell>\n"
     "    grid List<List<Cell>>\n"
+    "    anys List<any Ag&>\n"
+    "    cls List<mut any Cl&>\n"
     "}\n"
+    "# run-time trait values (T32): an open trait met by nodes, boxes, a number and the enum, a mut one, a closed one\n"
+    "type Ag trait {\n    Val() I64\n}\n"
+    "type Gr trait {\n    Val() I64\n    mut Grow(v I64)\n}\n"
+    "type Cl trait for Node, Cnt {\n    Val() I64\n}\n"
+    "type Cnt extends I64\n"
+    "fn (c Cnt) Val() I64 { return I64(c) * 3 }\n"
+    "fn (n Node&) Val() I64 { return chain(n) }\n"
+    "fn (n mut Node&) Grow(v I64) { n.next = Node(v) }\n"
+    "fn (b Box&) Val() I64 { return chain(b.head) * 5 }\n"
+    "fn (b mut Box&) Grow(v I64) { b.head.next = Node(v) }\n"
+    "fn (e E) Val() I64 { return sumE(e) + 1 }\n"
+    "fn sumAg(l List<any Ag&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for x in l { t = t * 7 + x.Val() }\n"
+    "    return t\n"
+    "}\n"
+    "fn sumCl(l List<mut any Cl&>&) I64 {\n"
+    "    t I64 = 0\n"
+    "    for x in l {\n"
+    "        match x {\n"
+    "            case Node n { t = t * 7 + chain(n) }\n"
+    "            case Cnt c { t = t * 11 + I64(c) }\n"
+    "        }\n"
+    "    }\n"
+    "    return t\n"
+    "}\n"
+    "fn growAny(g mut any Gr&, v I64) { g.Grow(v) }\n"
+    "fn anyOf(v I64) any Ag& { return Node(v) if v % 2 == 0 else Cnt(v) }\n"
     "fn sumCells(l List<Cell>&) I64 {\n"
     "    t I64 = 0\n"
     "    for c in l { t = t * 7 + sumList(c.S) }\n"
@@ -290,7 +320,7 @@ Checks := String&[
     "sumList(l)"
     "sumMap(m)"
     "sumArr(a)"
-    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes) * 5 + sumCells(bag.cells) * 3 + sumCells(bag.grid[0])"
+    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes) * 5 + sumCells(bag.cells) * 3 + sumCells(bag.grid[0]) + sumAg(bag.anys) * 13 + sumCl(bag.cls) * 17"
     "sumE(e)"
     "sumList(l)"
     "chain(t.items[0]) * 7 + chain(t.items[1])"
@@ -710,6 +740,36 @@ fn (g mut SG&) cellOp(b String&, ind String&) String& {
     return $ind "{\n" $ind "    " $q " := " $b ".cells[0].S\n" $ind "    churn()\n" $ind "    " $q ".Push(" $g.newNode() ")\n" $ind "}\n"
 }
 
+# T32-T34: a statement making run-time trait values over the bag b - built where its lists live, borrowed (an element's
+# box, an outer node), copied (a number), chosen by a conditional, made in an inner block and kept outward (refused
+# where it is a borrow), written through a mut any and a closed trait's type case
+fn (g mut SG&) anyOp(b String&, ind String&) String& {
+    v := g.val()
+    q := g.name("q")
+    k := g.r(12)
+    if k == 0 { return $ind $b ".anys.Push(" $g.newNode() ")\n" }
+    if k == 1 { return $ind $b ".anys.Push(Cnt(" $v "))\n" }
+    if k == 2 { return $ind $b ".anys.Push(Box())\n" }
+    if k == 3 { return $ind $b ".anys.Push(E.A(Box()))\n" }
+    if k == 4 { return $ind $b ".anys.Push(" $g.newNode() " if Run > 0 else Cnt(" $v "))\n" }
+    if k == 5 { return $ind $b ".anys.Push(anyOf(" $v "))\n" }
+    if k == 6 {    # made in an inner block, kept outward: a borrow of it refused, a copy (a number) fine
+        return $ind "{\n" $ind "    " $q " := Node(" $v ")\n" $ind "    " $b ".anys.Push(" $q ")\n" $ind "}\n"
+    }
+    if k == 7 { return $ind "{\n" $ind "    " $q " := Cnt(" $v ")\n" $ind "    churn()\n" $ind "    " $b ".anys.Push(" $q ")\n" $ind "}\n" }
+    if k == 8 {    # an element's box, written through a mut any: a copy of the element, its references the element's
+        return $ind "if " $b ".boxes.Len() > 0 {\n" $ind "    " $q " mut any Gr& = " $b ".boxes[0]\n" $ind "    growAny(" $q ", " $v ")\n" $ind "}\n"
+    }
+    if k == 9 { return $ind $b ".cls.Push(" $g.newNode() ")\n" $ind $b ".cls.Push(Cnt(" $v "))\n" }
+    if k == 10 {    # a closed trait's type case, building through the binding
+        x := g.name("x")
+        return ($ind "for " $x " in " $b ".cls {\n" $ind "    match " $x " {\n" $ind "        case Node n { n.next = Node(" $v ") }\n"
+                $ind "        case Cnt _ { }\n" $ind "    }\n" $ind "}\n")
+    }
+    return ($ind "{\n" $ind "    " $q " mut any Gr& = Node(" $v ")\n" $ind "    growAny(" $q ", " $v " + 1)\n" $ind "    churn()\n" $ind "    "
+            $b ".anys.Push(Cnt(" $q ".Val()))\n" $ind "}\n")
+}
+
 # a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own
 fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
     if t == 0 and g.chance(6) { return g.ctorScopeOp(a, ind, g.r(14)) }
@@ -722,6 +782,7 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
     if t == 3 { return g.mapOp(a, ind) }
     if t == 4 { return g.arrOp(a, ind, d) }
     if t == 5 {
+        if g.chance(50) { return g.anyOp(a, ind) }
         if g.chance(40) { return g.cellOp(a, ind) }
         k := g.r(4)
         if k == 0 { return $ind $a ".boxes.Push(Box())\n" }

@@ -28,7 +28,7 @@ So the design has to be **solid and smooth**: rules that compose, no rough edges
    - scripting: `interpret`, running a file by naming it, text joined by adjacency, `$x` for any value;
    - AI and data: F16/BF16/F8, complex numbers, comprehensions, SIMD-aligned arrays, parallel `join`/`spawn`;
    - systems work: `extern fn`, C layouts;
-   - GUIs: run-time interfaces (`any Trait&`) are planned for open sets of widgets.
+   - GUIs: run-time trait values (`any Trait&`) for open sets of widgets.
    - hardware: FPGAs are planned, for spiking neural networks - a compiler-checked subset synthesized to hardware.
 
    A feature that serves only one of these needs a reason.

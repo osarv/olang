@@ -49,6 +49,7 @@ so one differing bit in any result fails the check.
 | `parallel` | longest Collatz chain, four tasks: `join`/`spawn` against pthreads |
 | `text` | `$n` renderings into a `StringBuilder`, `Split`, `ParseInt` against snprintf and strtoll |
 | `sha256` | `std/sha256` over 64 MB, 4 times: U32 arithmetic in the compression loop, against a plain portable C SHA-256 (olang 1.37-1.45 s, C 1.24-1.29 s, 2026-10-24) |
+| `dispatch` | a sum of areas over 1M mixed shapes: through `any Shape&` (T32b, a table call) against C's struct of function pointers, an enum `match` against a tagged union's switch, one type called directly against a plain loop (2026-10-24: 0.98-1.05 s against 0.93-0.97 s, 0.75-0.77 s against 0.63-0.64 s, 0.041 s against 0.040 s) |
 | `regex` | `std/regex` counting two patterns' matches in generated words, against glibc's POSIX `regexec` with `REG_STARTEND` (32 MB: olang 0.72-0.78 s, C 0.76-0.79 s, 2026-10-24) |
 
 ## Results
