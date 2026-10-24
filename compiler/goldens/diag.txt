@@ -751,6 +751,112 @@ d16untyped.olang:4:13: error[D16a]: lambda parameter 'x' has no type, and nothin
     4 |     f := fn(x) { return x }
       |             ^
 compilation failed with 1 error
+=== d17convfit.olang
+d17convfit.olang:4:10: error[D17g]: 300 does not fit U8, so the conversion's requirement 'x fits U8' is false - write a value that fits, or 'checked U8(x)' to fail with an error
+    4 |     b := U8(300)
+      |          ^~~~~~~
+compilation failed with 1 error
+=== d17convglobal.olang
+d17convglobal.olang:6:10: error[D17g]: Big does not fit I32, so the conversion's requirement 'x fits I32' is false - write a value that fits, or 'checked I32(x)' to fail with an error
+    6 |     n := I32(Big)
+      |          ^~~~~~~~
+compilation failed with 1 error
+=== d17entrywritable.olang
+d17entrywritable.olang:5:44: error[D17b]: a guarantee reads 'a' at entry through what the call may write - write the value it needs of it (its 'Len()', an element), or 'return a' for its value at return
+    5 | fn fill(a mut Array<I64>&) [same(return a, a)] { a[0] = 1 }
+      |                                            ^
+compilation failed with 1 error
+=== d17fitsnotnumber.olang
+d17fitsnotnumber.olang:3:21: error[D17a]: 'fits' names a number type and takes a number, found Bool
+    3 | fn f(x I64) [x fits Bool] { }
+      |                     ^~~~
+compilation failed with 1 error
+=== d17fnvalue.olang
+d17fnvalue.olang:10:10: error[T22a]: 'keep' relates its arguments' scopes, which a call through a function value cannot check - call it directly
+   10 |     f := keep
+      |          ^~~~
+compilation failed with 1 error
+=== d17guarassert.olang
+d17guarassert.olang:3:36: error[D17e]: Grow's guarantee 'return l.Len() == l.Len() + 2' does not hold for a call evaluated while compiling
+    3 | fn (l mut List<I64>&) Grow(x I64) [return l.Len() == l.Len() + 2] { l.Push(x) }
+      |                                    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+d17guarassert.olang:7:5: note: the call evaluated here
+    7 |     l.Grow(1)
+      |     ^~~~~~~~~
+compilation failed with 1 error
+=== d17guarfalse.olang
+d17guarfalse.olang:4:23: error[D17e]: half's guarantee 'h * 2 == x' does not hold for a call evaluated while compiling
+    4 | fn half(x I64) h I64 [h * 2 == x] { return x / 2 }
+      |                       ^~~~~~~~~~
+d17guarfalse.olang:6:11: note: the call evaluated here
+    6 | Odd I64 = half(7)
+      |           ^~~~~~~
+compilation failed with 1 error
+=== d17notbool.olang
+d17notbool.olang:3:14: error: a condition is a Bool, found I64
+    3 | fn f(x I64) [x + 1] { }
+      |              ^~~~~
+compilation failed with 1 error
+=== d17outlivescall.olang
+d17outlivescall.olang:13:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   13 |         keep(a, b)
+      |         ^~~~
+d17outlivescall.olang:7:43: note: the callee requires it because of this statement
+    7 | fn keep(a mut Node&, b Node&) [b outlives a] { }
+      |                                           ^
+d17outlivescall.olang:12:9: note: 'b' is declared here, in a block that closes first - declare it where 'a' lives: 'b mut Node&a = ...'
+   12 |         b := Node(i)
+      |         ^
+compilation failed with 1 error
+=== d17outlivesnested.olang
+d17outlivesnested.olang:7:47: error[D17d]: an 'outlives' item stands at the top of a contract, not inside a 'for' or an 'if'
+    7 | fn link(a mut Node&, b Node&, c Bool) [if c { b outlives a }] { }
+      |                                               ^
+compilation failed with 1 error
+=== d17outlivesnoscope.olang
+d17outlivesnoscope.olang:7:30: error[D17d]: 'k' names no scope - an 'outlives' item names a reference parameter, a parameter holding references, or 'return'
+    7 | fn link(a mut Node&, k I64) [k outlives a] { }
+      |                              ^
+compilation failed with 1 error
+=== d17outlivesnotparam.olang
+d17outlivesnotparam.olang:8:43: error[D17d]: 'q' is no parameter of this function - an 'outlives' item names its parameters and 'return'
+    8 | fn link(a mut Node&, b Node&) [b outlives q] { }
+      |                                           ^
+compilation failed with 1 error
+=== d17reqfalse.olang
+d17reqfalse.olang:9:10: error[D17e]: this call breaks percent's requirement 'whole > 0'
+    9 |     p := percent(5, Whole)
+      |          ^~~~~~~
+d17reqfalse.olang:4:40: note: the condition
+    4 | fn percent(part I64, whole I64) p I64 [whole > 0, 0 <= part <= whole] { return part * 100 / whole }
+      |                                        ^~~~~~~~~
+d17reqfalse.olang:9:10: error[D17e]: this call breaks percent's requirement '0 <= part <= whole'
+    9 |     p := percent(5, Whole)
+      |          ^~~~~~~
+d17reqfalse.olang:4:51: note: the condition
+    4 | fn percent(part I64, whole I64) p I64 [whole > 0, 0 <= part <= whole] { return part * 100 / whole }
+      |                                                   ^~~~~~~~~~~~~~~~~~
+compilation failed with 2 errors
+=== d17resultnamesmixed.olang
+d17resultnamesmixed.olang:3:32: error[D17]: name every result or none, as 'q I64, r I64'
+    3 | fn divmod(a I64, b I64) q I64, I64 [b > 0] { return a / b, a % b }
+      |                                ^
+compilation failed with 1 error
+=== d17returnresult.olang
+d17returnresult.olang:3:20: error[D17b]: a result has only its value at return - write 'r' without 'return'
+    3 | fn f(x I64) r I64 [return r > 0] { return x }
+      |                    ^~~~~~
+compilation failed with 1 error
+=== d17returnvalue.olang
+d17returnvalue.olang:3:20: error[D17b]: 'return' reads a value at return through a reference, and 'x' reads none the call can change - write it without 'return'
+    3 | fn f(x I64) r I64 [return x > 0, r > 0] { return x }
+      |                    ^~~~~~
+compilation failed with 1 error
+=== d2duplicatefn.olang
+d2duplicatefn.olang:4:4: error[D2]: 'f' is already declared in this module
+    4 | fn f(x I64) I64 { return x + 1 }
+      |    ^
+compilation failed with 1 error
 === d3abuild.olang
 d3abuild.olang:5:14: error[D3a]: 'TargetOs' is a build constant - choose another name
     5 | fn f() { for TargetOs := 0, TargetOs < 1, TargetOs++ { } }
