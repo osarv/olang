@@ -458,7 +458,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   flows into what it returns, lives in the result scope - Go's escape analysis, static. The flow is read as SPEC states
   it, every callee by its checked body and a `try` changing nothing (2026-10-23: the two cautious readings the port
   copied from stage 0 for parity reverted, HISTORY.md "Port: the parity readings reverted"). A constructor field
-  given a conditional or a match is the instance's slot, each value judged as stored there alone (C2d, E28).
+  given a conditional or a match is the instance's slot, each value judged as stored there alone (C2d, E28); a choice
+  of new values and constants passed as an argument is a temporary, built where the parameter's scope is bound - for a
+  constructor, with the instance (2026-10-24, uafcc).
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
 - **Derived and unknown scopes (O12, O23, O23a).** A `&p` field of a parameter reads at a derived scope resolved per

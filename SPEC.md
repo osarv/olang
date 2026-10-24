@@ -3069,7 +3069,11 @@ error: the call would write the copy and the place would never see it. A field o
 conditional is the same, and so is a `match` giving values (S12b). Make the call on the place itself (`if k > 0 {
 bump(l[0]) } else { bump(l[1]) }`), or hold the values by reference. A conditional of references lives where the values it can give share a scope (§8 O25a) -
 `null` fits any, and a new value is built there (text written in place being constant data or a copy made there) - so
-`x := p.one() if c else p.two()` lives where both do and `x := p.leaf() if b else null` where `p.leaf()` does. Values
+`x := p.one() if c else p.two()` lives where both do and `x := p.leaf() if b else null` where `p.leaf()` does. One
+none of whose values is existing storage - new values and constants (text written in place, `null`) - is a temporary
+like any of them: passed as an argument its new value is built where the parameter's scope variable is bound (§8 O18a,
+O18b) - for a constructor, where the instance lands (C2d) - so `E($t, mk(t) if at >= 0 else "")` returned holds text
+that lives with the instance. Values
 that already live in different scopes share none: where such a conditional lives is **not known here** (§8 O12) - it is
 no temporary, so nothing is built for it and it is shown to outlive nothing. Declared - with `:=` or a bare `&` - it is
 held where it is declared, as a reference's block is (every value it can give is visible there, so outlives it), and read

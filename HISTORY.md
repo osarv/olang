@@ -22840,3 +22840,52 @@ error types names them by subject (`regex.SyntaxError`, `regex.NotFound`).
   `&` binds looser than `==` as in C (`(b & 0xC0) != 0x80` needs parentheses); error words are not values, so a helper
   cannot take the word to raise (flags' `say` then `error`); a field named as its constructor's parameter is written as
   a bare pun, and `destruct` follows the body's `}`; `Mutex<I64>` cannot lend `mut I64&`.
+
+## A conditional or a match given to a constructor (C2d, E28, 2026-10-24)
+
+Found by the lsp agent (wt-lsp, `compiler/doc.olang`'s `e := Entry(firstLines(full) if isFn else $lines[0], "", $name)`),
+reduced in `/home/user/review/uaf-condctor`: **a constructor argument given a conditional of a new value and a constant
+read freed text once the instance was returned.**
+
+```
+type E struct(A String&, B String&) { A  B }
+fn mk(s String&) String { return $s "-made" }
+fn f(t String&, at I64) E { e := E($t, mk(t) if at >= 0 else ""); return e }
+```
+
+`f("x", 0).B` was stale under `-debug -sanitize` (and `interpret` said the storage was used after its scope closed).
+The reviewer's reproducer read `e.B.Len()`, which is the length word held in the instance and touches no freed memory,
+so it ran clean; reading the text itself (`e.B == "x-made"`) shows it.
+
+*The cause.* In the scope pass a call's argument is judged one of two ways: a **temporary** (`isFresh`) is built where
+its parameter's scope variable is bound - for a constructor, where the instance lands (C2d) - and anything else is
+judged as existing storage, built where the call stands. `isFresh` took a conditional as a temporary only when both its
+values were, so `mk(t) if c else ""` - a new text and a constant - was not one; it took a value `match` as never one.
+Such a choice therefore went the existing-storage path: `choiceDest` found no existing value to share a scope with,
+the new value was built in the calling function's own block (`%s0` in the IR, then copied into the same block for the
+reference parameter), and its value came back `Fresh` - which on that path binds no scope variable, so nothing tied
+the instance to it. O26a moved `e` to the result scope as the return asked, but the text it held stayed in the block
+that closes at the return. The constructor-field form (`c2dcondfield`, fixed 2026-10-23) was the same rule on the
+other side of the call.
+
+*The fix.* A conditional, or a value match, none of whose values is existing storage - each a new value or a constant
+(text data, `null`, a static literal) and at least one new - is a temporary like its values (`newOrConst`,
+`matchFresh`). It then takes the argument's ordinary path: built where the scope variable is bound, a constant arm
+living anywhere a new value would. No rule changed - SPEC E28 already said a new value is built where the conditional
+lands; it now says so for an argument in words (E28).
+
+*Siblings found, all the same cause, each a use after free before the fix:* a match value as the argument, both values
+new in a match, the constant arm first, nested in another constructor, a constructor held by value in another, a
+conditional of a new instance and `null`, instances pushed in a loop and returned, and - not a constructor - a method
+keeping its argument in its receiver (`h.Keep(mk(t) if c else "")`). `l.Push(...)` of the same shape happened to be
+right (List's obligations bind the variable). One over-rejection went too: `b := mk(t) if c else ""; return E($t, b)`
+was O26's error and is now moved to the result scope like any temporary local (O26a). A catch default
+(`try fails(t) catch default ""`) was already right. A conditional of a new value and an inner block's text, kept
+outside the block, is still refused (C2d).
+
+*Tests.* `tests/shared.olang`'s "C2d/E28: a conditional or match passed to a constructor lands with the instance", read
+after an arena churn, with an assert the evaluator decides; `checks/cases/c2dcondarg` (the review's shapes) and
+`c2dcondargkinds` (the siblings) run under `-debug -sanitize`; `c2dcondargshort` must fail with C2d. The scope fuzzer
+writes the shape (`ctorChoiceArgOp`, `ctorScopeOp` kinds 10-13: through a local, a match returned directly, nested by
+value, the constant first): over seeds 1-600 the compiler before the fix gives 21 findings, every one in a program with
+the shape, and the fixed one none, with the same 2,777 scenarios run and 4,423 refused.
