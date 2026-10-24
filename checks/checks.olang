@@ -1489,6 +1489,15 @@ fn cinterop(r mut report&) ? Failed {
     try r.expect(sh(dir, "nm -D --defined-only build/libmylib.so | grep -v ' [TWV] \\(add\\|sum\\|seen\\|greet\\|parse\\|check\\|norm2\\|scale\\|mid\\|pidKnown\\|squares\\)$' | grep -q ' [TDBRW] '") != 0, "the library shows more than its entries", dir)
     try r.expect(sh(dir, "clang -O1 -Wall -Werror use.c -o use -Lbuild -lmylib -lpthread > out.txt 2>&1") == 0, "use.c did not compile against mylib.h", dir)
     try r.expect(sh(dir, "LD_LIBRARY_PATH=build ./use > use.txt && cmp -s use.txt use.out") == 0, "use printed otherwise than use.out says", dir)
+    # X16: bindgen writes bind.h's declarations as bind.gen holds them, and a program using them calls bind.c's code
+    try r.expect(sh(dir, "clang -c -O2 bind.c -o bind.o > out.txt 2>&1") == 0, "bind.c did not compile", dir)
+    try r.expect(sh(dir, "\"$OLANG\" bindgen bind.h -output gen.olang > out.txt 2>&1 && cmp -s gen.olang bind.gen") == 0, "bindgen wrote otherwise than bind.gen", dir)
+    try r.expect(sh(dir, "cat gen.olang binduse.part > bindprog.olang && \"$OLANG\" build bindprog.olang > out.txt 2>&1") == 0, "bindprog.olang", dir)
+    try r.expect(sh(dir, "./build/bindprog > bindprog.txt && cmp -s bindprog.txt bindprog.out") == 0, "bindprog printed otherwise than bindprog.out says", dir)
+    if os.Exists("/usr/include/zlib.h") {
+        try r.expect(sh(dir, "\"$OLANG\" bindgen /usr/include/zlib.h -output zlib.olang > out.txt 2>&1 && cat zlib.olang zdemo.part > zdemo.olang") == 0, "bindgen of zlib.h", dir)
+        try r.expect(sh(dir, "\"$OLANG\" build zdemo.olang > out.txt 2>&1 && ./build/zdemo > zdemo.txt && grep -q 'back: hello hello' zdemo.txt") == 0, "zdemo", dir)
+    }
     if sh(dir, "command -v python3 > /dev/null 2>&1") != 0 { return }
     try os.WriteFile($dir "/use_ctypes.py", CtypesScript) catch os.Error { try r.failed("use_ctypes.py", dir) }
     try r.expect(sh(dir, "python3 -I use_ctypes.py build/libmylib.so > py.txt 2>&1") == 0, "ctypes", dir)
@@ -1945,7 +1954,7 @@ fn output(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build -output out prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("is a directory"), "a directory", dir)
     try r.expect(sh(dir, "\"$OLANG\" test -output out/t prog.olang > out.txt 2>&1") == 1 and
-                 outOf(dir).Contains("-output applies to build and compile, not to test"), "test -output", dir)
+                 outOf(dir).Contains("-output applies to build, compile and bindgen, not to test"), "test -output", dir)
     try r.expect(sh(dir, "\"$OLANG\" -output out/q prog.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("not to running a file"), "running a file with -output", dir)
 }

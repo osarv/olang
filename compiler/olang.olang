@@ -30,6 +30,7 @@ import rt "runtime"
 import "eval"
 import "interp"
 import "explain"
+import "bindgen"
 import "session"
 import "lsp"
 import "mcp"
@@ -61,7 +62,8 @@ fn roomFor(bytes I64) Bool {
 # the modes, by number: running a file (no word - a file ending in .olang written first, B3g), then each mode's word
 ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", "format", "explain", "help", "doc", "lsp"
     "mcp"
-    "fix"]
+    "fix"
+    "bindgen"]
 Run I64 = 0
 Build I64 = 1
 Compile I64 = 2
@@ -74,6 +76,7 @@ Doc I64 = 8
 Lsp I64 = 9
 Mcp I64 = 10
 Fix I64 = 11
+Bindgen I64 = 12
 
 # what each mode is, for help
 ModeUsage Array<String&> = String&[
@@ -89,6 +92,7 @@ ModeUsage Array<String&> = String&[
     "olang lsp [OPTION...]"
     "olang mcp [OPTION...]"
     "olang fix [OPTION...] FILE.olang|DIR..."
+    "olang bindgen [OPTION...] HEADER.h"
 ]
 ModeWhat Array<String&> = String&[
     "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
@@ -103,6 +107,7 @@ ModeWhat Array<String&> = String&[
     "serves the Language Server Protocol on the standard input and output, for editors (B15)"
     "serves the Model Context Protocol on the standard input and output, for agents (B16)"
     "rewrites old code to the language of today: every migration tool of tools/, in the order the changes were made (B17)"
+    "writes a C header's declarations as olang declares them, read by clang (X16)"
 ]
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
@@ -110,9 +115,9 @@ ModeWhat Array<String&> = String&[
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
     "-quick", "-html", "-library"]
 OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", ""]
-OptModes Array<I64> = I64[6, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2]
+OptModes Array<I64> = I64[4102, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2]
 OptWhat Array<String&> = String&[
-    "writes the executable or the object to PATH (B3h)"
+    "writes the executable, the object or bindgen's declarations to PATH (B3h, X16)"
     "builds unoptimized, with debug information (B2c, B2e)"
     "builds with the data race detector (B2b)"
     "builds with the scope sanitizer (B2f)"
@@ -299,11 +304,12 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     if cl.Files.Len() == 0 and cl.Mode != Lsp and cl.Mode != Mcp and cl.Mode != Doc {
         try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode)))
     }
-    if (cl.Mode == Build or cl.Mode == Compile) and cl.Files.Len() != 1 {
+    if (cl.Mode == Build or cl.Mode == Compile or cl.Mode == Bindgen) and cl.Files.Len() != 1 {
         try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
     }
     if cl.Mode == Format or cl.Mode == Fix { return cl }
     if cl.Output != "" { try checkOutput(cl.Output, d) }
+    if cl.Mode == Bindgen { return cl }
     c.Output = $cl.Output
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
@@ -383,6 +389,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         exe := try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]
         return fix.Files(cl.Check, cl.Files.ToArray(), exe, load.StdDir())
     }
+    if cl.Mode == Bindgen { return bindgen.Run(cl.Files[0], cl.Output, target.FindClang()) }
     if cl.Mode == Doc { return session.DocMode(cl.Files.ToArray(), cl.Word, cl.Html, c) }
     if cl.Mode == Lsp { return lsp.Serve(c) }
     if cl.Mode == Mcp { return mcp.Serve(c, try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]) }
@@ -831,11 +838,11 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
     assert mistake(String&["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
-            "interpret, format, explain, help, doc, lsp, mcp and fix, and a file ending in .olang is built and run\n")
+            "interpret, format, explain, help, doc, lsp, mcp, fix and bindgen, and a file ending in .olang is built and run\n")
     assert mistake(String&["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
     assert mistake(String&["test", "-output", "x", "m.olang"]) ==
-        "olang: error[B1]: -output applies to build and compile, not to test\n"
+        "olang: error[B1]: -output applies to build, compile and bindgen, not to test\n"
     assert mistake(String&["format", "-debug", "m.olang"]) ==
         "olang: error[B1]: -debug applies to running a file, build, compile and test, not to format\n"
     assert mistake(String&["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"

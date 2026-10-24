@@ -1,0 +1,18 @@
+
+# what checks/checks.olang appends to what bindgen wrote of the system's zlib.h, where there is one: a program using it
+link "z"
+import "std/io"
+
+fn main() {
+    v := zlibVersion()
+    if v is not null { io.Println("zlib " $v.StringFromC(32))! }
+    text := String("hello hello hello hello hello hello, zlib!")
+    src := text.ToC()
+    dest := Array<U8>(I64(compressBound(U64(src.Len()))))
+    dlen := Array<U64>(1, U64(dest.Len()))
+    assert compress(dest, dlen, src, U64(src.Len())) == Z_OK
+    back := Array<U8>(src.Len())
+    blen := Array<U64>(1, U64(back.Len()))
+    assert uncompress(back, blen, dest, dlen[0]) == Z_OK
+    io.Println("compressed " $src.Len() " bytes to " $dlen[0] ", back: " $String(back[:I64(blen[0]) - 1]))!
+}

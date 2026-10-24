@@ -5933,6 +5933,7 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
+            | "bindgen"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library"
 ```
@@ -5940,14 +5941,14 @@ option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-t
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-(B14), `lsp` (B15), `mcp` (B16) and `fix` (B17). An
+(B14), `lsp` (B15), `mcp` (B16), `fix` (B17) and `bindgen` (§11 X16). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
 
 | option | applies to | rule |
 |---|---|---|
-| `-output PATH` | build, compile | B3h |
+| `-output PATH` | build, compile, bindgen | B3h, §11 X16 |
 | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
 | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
 | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
@@ -5955,7 +5956,7 @@ beginning with `-` that is no option is an error:
 | `-html DIR` | doc | B14 |
 | `-library` | build | §11 X14 |
 
-`build` and `compile` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
+`build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
@@ -6754,6 +6755,27 @@ declared `extern fn getenv(name Array<U8>) CStr?&` - and is read as text with `p
 holding its bytes up to the first NUL, or its first `max` where there is none sooner (none for a `max` of 0 or less).
 That `p` names a C string at all, and that what it names is still there, is the foreign function's word, taken as
 its prototype is (X1a). Nothing else reads what a `CStr&` names.
+
+**X16 (bindgen).** `olang bindgen HEADER.h` writes a C header's declarations as this section declares them, on the
+standard output or into the file `-output` names (B1); clang reads the header, as a C compiler of the target would,
+and nothing of olang's is built. What it writes is olang source - declarations only, for a module to hold and write its
+own functions over:
+- each function the header itself declares, as an `extern fn` of the C name, its parameters named as the header names
+  them (`a0`, `a1`... where a name is none olang can declare); a variadic function, one static or inline in the header,
+  and one whose types have no form below are not declared, but listed at the end, each with why;
+- each struct a declaration reaches, or the header defines, as a plain-data struct (X11) of its fields where it is one,
+  and else - an incomplete struct, a union, bitfields, a field with no form, a struct some function gives back by
+  pointer - as an `extern type` (X10), named by the typedef naming it where one does, else by its tag;
+- each enumerator of the header's enums, and each macro it defines as an object whose value clang computes as an
+  integer constant, as an immutable global of that value, an `I32` where the value fits one and an `I64` otherwise.
+
+The types are those of C on the target (on x86-64 and AArch64 Linux, `long` is 64 bits): `char` an `I8` held, a `U8`
+pointed to; `_Bool` a `Bool`; an enum an `I32`. A pointer parameter to numbers is an array of them (`const T *` an
+`Array<T>`, `T *` a `mut Array<T>&`, so `const char *` takes `t.ToC()`, X15); to a struct, its reference (`S?&`, a
+plain struct's `mut S?&` where it is not `const`); to a pointer to a struct, to `char` or to `void`, an array of the
+references (`mut Array<S?&>&`, C's out parameter); a function pointer, a function type (X13). A pointer to `char`,
+`signed char` or `unsigned char` given back, or held in a field, is a `CStr?&`; a pointer to anything else not
+already named - `void *` above all - is a `CVoid?&`, an extern type the output declares where it needs it.
 
 ## 12. Generics
 
