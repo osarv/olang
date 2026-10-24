@@ -1,0 +1,15 @@
+== build -debug -sanitize
+lab ext
+lab ext
+lab ext
+status 0
+== build
+lab ext
+lab ext
+lab ext
+status 0
+== interpret
+lab ext
+lab ext
+lab ext
+status 0
