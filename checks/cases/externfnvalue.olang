@@ -1,7 +1,10 @@
-# check: fail error[X2]: fn() cannot cross the C boundary
-# X2: a function value crosses the C boundary only to the runtime's own functions (a name beginning "__olang_"), which
-# call it on threads they made themselves (os.RunOnStack) - never to a C function, which could call it on any thread,
-# or after the call
+# check: fail error[X13]: a C function is given a function by the name of an export fn
+# X2, X13: a function value crosses the C boundary to a C function only as an export fn named where it is passed (X13),
+# which has a C entry setting up the thread C calls it on - an ordinary function has none
 extern fn atexit(f fn()) I32
 
-fn main() ? { }
+fn bye() { }
+
+fn main() ? {
+    atexit(bye)
+}
