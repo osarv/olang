@@ -364,12 +364,17 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   enum variable is borrowed, a temporary built where the any lands, a number/Bool/Char/array copied (the user); placement
   is the scope pass's (`AnyMake` read as a conversion), never emit's. A method saying more than the trait's signature
   (scopes, obligations) cannot be in a table (an error at the conversion). Calls dispatch through the table, `mut` only
-  through `mut any`, defaults reaching overrides; `for x in it` walks an `any Iterator<T>&`; the any satisfies its
+  through `mut any`, defaults reaching overrides, a default instantiated for a type only where some call through an any
+  reaches it (so `any Iterator<String>&` exists), an argument left off taking the trait's default; `for x in it` walks an
+  `any Iterator<T>&`; the any satisfies its
   trait for generic code; no task calls through one. `==` is identity, `$` renders the instance, no `Hash`. A closed
-  trait's any is matched by type cases `case Button b` (complete or `nomatch`) and `w as Button` (WRONG_CASE under
+  trait's any is matched by type cases `case Button b`, `case Box<I64> b` (complete or `nomatch`) and `w as Button` (WRONG_CASE under
   `checked`); an open trait's never (the user). A trait's methods take contracts (D17f), held to every call through an
   any; the implementation's own are checked only under `checked`, after dispatch. Tables are `linkonce_odr`, named by
-  type and trait; the evaluator calls through them (K2 bakes through anys).
+  type and trait; the evaluator calls through them (K2 bakes through anys). An array copied in (a slice, `Lab(s)` too)
+  has its elements' references judged where the any lands; `$` counts an any as a reference (8 deep); an array of
+  anys is written `any W&[a, b]`, as `$` renders it (the review of 2026-10-24, HISTORY.md "`any Trait&`: the soundness
+  review, fixed").
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
   field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk

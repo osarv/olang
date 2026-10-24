@@ -23395,6 +23395,68 @@ against 0.040-0.042 s.
 **Not built (mine, additive later).** A type case naming a generic instance (`case Box<I64> b`); an any of a closed
 trait holding numbers matched by a guard on the value (written through the binding); `Hash` on anys.
 
+## `any Trait&`: the soundness review, fixed (T32-T34, O14, M21, E30, 2026-10-24)
+
+A read-only review of 70cf549 (/home/user/review/any, reproducers in `repro/`) found two use-after-frees, a crash, an
+over-rejection, a gap and minor diagnostics in the new feature, and two pre-existing holes. All are fixed, each with a
+corpus test in `tests/any.olang` (read back after an arena churn, a global baked beside the same call at run time) or a
+`checks/cases` program.
+
+**1. An array copied into an any kept its elements' references unjudged (use-after-free).** A fixed array's box is a
+`Promote` of the array's value itself (only a run-time-length one is boxed in a one-part tuple), and the scope pass took a
+`Promote` of existing storage as a temporary: `fresh(d)`, its item never fitted. A copy of existing storage holding
+references is new storage whose references still name what they did - so the promotion now fits them where the box
+lands, as an array literal's elements are fitted (O25c), with a message of its own (T32a: "the 'any' outlives what this
+array's elements refer to"). The run-time-length case was caught already, as O20; inside an any's box it says T32a too.
+
+**2. `Lab(s)` was not copied into the box (use-after-free and aliasing).** T29a makes a conversion name its argument's
+storage, and lowering's `copiesArray` copies only a read - a conversion of a read is no read. The box copies now whenever
+what it holds names existing storage: a read, a slice, or conversions of either (`anyCopiesItem`); and the scope pass
+no longer takes the box for the converted storage (`convertedPlace` skipped for an any's box). Decided: a slice is
+copied as an array is (T32a said "an array", a slice is one).
+
+**3. `$` through an any field followed no depth limit (a crash on a cycle).** An any is a reference to E11a: the render
+helper counts it, 8 deep then `...`, the interpreter agreeing since it runs the same MIR.
+
+**4. An `any Iterator<String>&` could not be made (over-rejection).** A table instantiated every default of the trait
+for the instance's type, so `Sum`'s `T Number`, `Min`'s `<` and `Filter`'s `List<T>` stood in the way of every
+non-number iterator. Decided (the task left the choice open): instantiate lazily, by the calls. A default's thunk is an
+`unreachable` until some call through an any of that trait reaches its slot (anyCall, loopCall); `drain` then checks it
+again as the call of the default, to a fixed point. A default the type does not fit is then an error at the conversion
+with a note at the call that reached it - the call cannot be the error's place, since it does not know the instance's
+type. A list of slots reached is the whole-program fact this needs, and the checker is whole-program.
+
+**5. A closed trait listing generic instances could not be matched.** `case Box<I64> b` parses (a type case is a path
+with type arguments or none, `isTypeCasePath`); `case Box b`, a bare generic in a closed trait's `for` list, and an
+unknown case name are each one error where written (G7 / unknown type), the match then taken as complete so nothing
+cascades (`caseBroken`).
+
+**6. Minor.** A trait method's parameter default fills an argument left off a call through an any (`argDefault`: the
+trait's signature is what the call sees, so its default, not the instance method's - generic code over the concrete type
+keeps the method's own). T31's "receiver is writable if and only if the signature is `mut`" now holds in both directions
+(`meets`), so a `mut` method meeting a read-only trait method is "no method that fits" at the conversion, with a note at
+the method, instead of a T25b error inside the table's thunk; a failed conversion gives the unknown stand-in, so it is
+one error. The spawn hint keeps its target (`spawn r = fn() I64 { return a.Peek() }()`). A match binding's note says
+to make what it is bound to elsewhere instead of offering a declaration a binding cannot have. `$` of an array of anys
+renders `any W&[...]`, which now parses (E19: an element type `any R&`, the one expression `any` begins) - decided over
+rendering the instances bare, since a rendering is source.
+
+**7. Pre-existing (master too).** (a) `fn bor(p Pt) Pt&p { return p }` returned the call's frame copy as borrowed: a
+by-value parameter holding no reference has no scope variable, so the return's slot was `None` and nothing was judged.
+Decided: refuse, with a note naming `p Pt&` (O14), rather than move the parameter's storage to the result scope - a
+borrowed result names the caller's storage, and a copy is not it. (b) A method declared for one instance of a generic
+(`fn (b Box<String&>&) Describe()`) was taken for every instance: `MethodOf` checks the receiver applies
+(`recvApplies`), and another instance takes the trait default (M21).
+
+**8. Fuzzers.** The scope fuzzer writes arrays of nodes copied into anys (refused now) and inner blocks' text converted
+by `Lab(...)` into anys: on 70cf549 seeds 1-40 give 2 findings, both these shapes (seeds 9, 38); with the fixes seeds
+1-200, no findings. The differential fuzzer's drift was mostly the compiler's: a literal in a comparison chain did not
+adapt to the operand beside it (`5 > u >= 2` with `u` a `U64` was T6b's "do not meet", E30), an index that was a match or
+a conditional of `U64`s was fitted to `I64` (E16), `-9223372036854775808` with no target was taken for a `U64` (E4a), and
+arrays of two known lengths could not be compared (E10) - all fixed in the checker. The generator's own drift was D17g:
+a conversion of a constant expression that does not fit is a compile-time error, so it converts only from a variable,
+else under `checked` (`lossless` says which conversions cannot fail).
+
 ## The std naming pass (2026-10-24)
 
 The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name
