@@ -2,6 +2,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -16,6 +17,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -31,6 +33,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -61,6 +64,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -77,6 +81,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -106,6 +111,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -123,6 +129,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -141,6 +148,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -155,6 +163,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -171,6 +180,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -185,6 +195,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -199,6 +210,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -213,6 +225,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -227,6 +240,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -241,6 +255,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -255,6 +270,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -269,6 +285,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -283,6 +300,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -303,6 +321,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -317,6 +336,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -331,6 +351,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -346,6 +367,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -362,6 +384,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -381,6 +404,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -395,6 +419,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -408,6 +433,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -422,6 +448,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -438,6 +465,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -453,6 +481,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -468,6 +497,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -482,6 +512,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -496,6 +527,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -510,6 +542,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -535,6 +568,35 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+===  compiler/bindgen.olang
+| module compiler/bindgen
+|   filepath std/filepath
+|   io std/io
+|   json std/json
+|   os std/os
+|   token compiler/token
+| module compiler/token
+| module std/cancel
+| module std/filepath
+| module std/io
+| module std/json
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/array
+| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -552,6 +614,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -581,6 +644,7 @@
 | module std/cancel
 | module std/chan
 |   cancel std/cancel
+| module std/filepath
 | module std/io
 | module std/os
 |   cancel std/cancel
@@ -588,6 +652,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -598,6 +663,32 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module std/time
+===  compiler/cabi.olang
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
+| module compiler/source
+|   os std/os
+| module compiler/types
+|   source compiler/source
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/array
+| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
 ===  compiler/check.olang
 | module compiler/ast
 |   source compiler/source
@@ -613,6 +704,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -668,6 +760,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -698,6 +791,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -736,6 +830,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -761,6 +856,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -785,6 +881,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -905,6 +1002,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -952,6 +1050,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -965,6 +1064,9 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -976,6 +1078,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -993,6 +1096,7 @@
 |   source compiler/source
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -1070,6 +1174,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -1105,6 +1210,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1144,6 +1250,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1168,6 +1275,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -1277,6 +1385,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -1324,6 +1433,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1347,6 +1457,36 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+===  compiler/fix.olang
+| module compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module compiler/fix
+|   fetch compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/filepath
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/array
+| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1403,6 +1543,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1467,6 +1608,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -1494,6 +1636,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1518,6 +1661,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -1617,6 +1761,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -1664,6 +1809,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1729,6 +1875,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1753,6 +1900,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -1826,6 +1974,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -1856,6 +2005,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -1873,6 +2023,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -1889,6 +2040,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -2031,6 +2183,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -2116,6 +2269,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2134,6 +2288,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -2150,6 +2305,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -2291,6 +2447,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -2376,6 +2533,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2406,6 +2564,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2420,6 +2579,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2471,6 +2631,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -2496,6 +2657,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2509,15 +2671,25 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/bindgen
+|   filepath std/filepath
+|   io std/io
+|   json std/json
+|   os std/os
+|   token compiler/token
 | module compiler/build
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
 |   time std/time
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -2529,6 +2701,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -2557,6 +2730,7 @@
 |   types compiler/types
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -2587,6 +2761,11 @@
 |   typed compiler/typed
 |   types compiler/types
 | module compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module compiler/fix
+|   fetch compiler/fetch
 |   filepath std/filepath
 |   io std/io
 |   os std/os
@@ -2694,9 +2873,11 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/olang
+|   bindgen compiler/bindgen
 |   build compiler/build
 |   cond compiler/cond
 |   diag compiler/diag
@@ -2704,6 +2885,7 @@
 |   eval compiler/eval
 |   explain compiler/explain
 |   fetch compiler/fetch
+|   fix compiler/fix
 |   fmt compiler/fmt
 |   interp compiler/interp
 |   io std/io
@@ -2809,6 +2991,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2849,6 +3032,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2918,6 +3102,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2934,6 +3119,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -2998,6 +3184,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -3036,6 +3223,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3053,6 +3241,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -3069,6 +3258,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -3200,6 +3390,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -3284,6 +3475,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3305,6 +3497,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3334,6 +3527,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3348,6 +3542,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3373,6 +3568,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3395,6 +3591,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3429,6 +3626,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3493,6 +3691,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -3531,6 +3730,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3555,6 +3755,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3576,6 +3777,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3600,6 +3802,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -3655,6 +3858,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -3705,6 +3909,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3735,6 +3940,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3761,6 +3967,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3785,6 +3992,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3849,6 +4057,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -3900,6 +4109,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3926,6 +4136,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -3939,6 +4150,9 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -3950,6 +4164,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -3967,6 +4182,7 @@
 |   source compiler/source
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -4062,6 +4278,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -4133,6 +4350,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4157,6 +4375,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4181,6 +4400,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -4280,6 +4500,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -4345,6 +4566,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4410,6 +4632,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4434,6 +4657,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4458,6 +4682,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4482,6 +4707,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -4555,6 +4781,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -4607,6 +4834,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4631,6 +4859,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4657,6 +4886,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4683,6 +4913,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4704,6 +4935,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4728,6 +4960,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -4783,6 +5016,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -4835,6 +5069,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -4848,15 +5083,25 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/bindgen
+|   filepath std/filepath
+|   io std/io
+|   json std/json
+|   os std/os
+|   token compiler/token
 | module compiler/build
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
 |   time std/time
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -4868,6 +5113,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -4896,6 +5142,7 @@
 |   types compiler/types
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -4926,6 +5173,11 @@
 |   typed compiler/typed
 |   types compiler/types
 | module compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module compiler/fix
+|   fetch compiler/fetch
 |   filepath std/filepath
 |   io std/io
 |   os std/os
@@ -5033,9 +5285,11 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/olang
+|   bindgen compiler/bindgen
 |   build compiler/build
 |   cond compiler/cond
 |   diag compiler/diag
@@ -5043,6 +5297,7 @@
 |   eval compiler/eval
 |   explain compiler/explain
 |   fetch compiler/fetch
+|   fix compiler/fix
 |   fmt compiler/fmt
 |   interp compiler/interp
 |   io std/io
@@ -5154,6 +5409,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5179,6 +5435,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5200,6 +5457,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5225,6 +5483,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5254,6 +5513,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5268,6 +5528,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5282,6 +5543,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5303,6 +5565,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5324,6 +5587,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5345,6 +5609,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5371,6 +5636,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5398,6 +5664,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5424,6 +5691,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5445,6 +5713,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5466,6 +5735,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5487,6 +5757,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5513,6 +5784,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5536,6 +5808,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5557,6 +5830,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5579,6 +5853,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5607,6 +5882,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5632,6 +5908,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5656,6 +5933,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5680,6 +5958,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5703,6 +5982,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5724,6 +6004,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5745,6 +6026,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5766,6 +6048,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5779,6 +6062,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5793,6 +6077,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5808,6 +6093,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5840,6 +6126,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5856,6 +6143,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5887,6 +6175,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5904,6 +6193,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5922,6 +6212,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5936,6 +6227,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5952,6 +6244,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5966,6 +6259,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5980,6 +6274,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -5994,6 +6289,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6008,6 +6304,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6022,6 +6319,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6036,6 +6334,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6050,6 +6349,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6064,6 +6364,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6087,6 +6388,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6101,6 +6403,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6121,6 +6424,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6136,6 +6440,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6152,6 +6457,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6171,6 +6477,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6185,6 +6492,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6198,6 +6506,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6212,6 +6521,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6228,6 +6538,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6243,6 +6554,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6258,6 +6570,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6272,6 +6585,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6286,6 +6600,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6300,6 +6615,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6325,6 +6641,36 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+=== -t compiler/bindgen.olang
+| module compiler/bindgen
+|   filepath std/filepath
+|   io std/io
+|   json std/json
+|   os std/os
+|   token compiler/token
+| module compiler/token
+| module std/cancel
+| module std/filepath
+| module std/io
+| module std/json
+|   os std/os
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/array
+| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6342,6 +6688,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -6371,6 +6718,7 @@
 | module std/cancel
 | module std/chan
 |   cancel std/cancel
+| module std/filepath
 | module std/io
 | module std/os
 |   cancel std/cancel
@@ -6378,6 +6726,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6388,6 +6737,32 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module std/time
+=== -t compiler/cabi.olang
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
+| module compiler/source
+|   os std/os
+| module compiler/types
+|   source compiler/source
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/array
+| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
 === -t compiler/check.olang
 | module compiler/ast
 |   source compiler/source
@@ -6403,6 +6778,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -6458,6 +6834,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -6488,6 +6865,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6526,6 +6904,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6551,6 +6930,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6575,6 +6955,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -6695,6 +7076,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -6754,6 +7136,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6767,6 +7150,9 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -6778,6 +7164,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -6795,6 +7182,7 @@
 |   source compiler/source
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -6872,6 +7260,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -6907,6 +7296,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6946,6 +7336,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -6970,6 +7361,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -7079,6 +7471,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -7138,6 +7531,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7161,6 +7555,36 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+=== -t compiler/fix.olang
+| module compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module compiler/fix
+|   fetch compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/filepath
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/array
+| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7217,6 +7641,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7281,6 +7706,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -7308,6 +7734,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7332,6 +7759,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -7431,6 +7859,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -7490,6 +7919,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7555,6 +7985,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7579,6 +8010,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -7652,6 +8084,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -7682,6 +8115,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7699,6 +8133,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -7715,6 +8150,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -7857,6 +8293,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -7955,6 +8392,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -7973,6 +8411,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -7989,6 +8428,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -8130,6 +8570,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -8228,6 +8669,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8258,6 +8700,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8272,6 +8715,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8323,6 +8767,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -8348,6 +8793,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8361,15 +8807,25 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/bindgen
+|   filepath std/filepath
+|   io std/io
+|   json std/json
+|   os std/os
+|   token compiler/token
 | module compiler/build
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
 |   time std/time
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -8381,6 +8837,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -8409,6 +8866,7 @@
 |   types compiler/types
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -8439,6 +8897,11 @@
 |   typed compiler/typed
 |   types compiler/types
 | module compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module compiler/fix
+|   fetch compiler/fetch
 |   filepath std/filepath
 |   io std/io
 |   os std/os
@@ -8546,9 +9009,11 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/olang
+|   bindgen compiler/bindgen
 |   build compiler/build
 |   cond compiler/cond
 |   diag compiler/diag
@@ -8556,6 +9021,7 @@
 |   eval compiler/eval
 |   explain compiler/explain
 |   fetch compiler/fetch
+|   fix compiler/fix
 |   fmt compiler/fmt
 |   interp compiler/interp
 |   io std/io
@@ -8674,6 +9140,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8714,6 +9181,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8783,6 +9251,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8799,6 +9268,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8823,6 +9293,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -8878,6 +9349,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -8922,6 +9394,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -8939,6 +9412,7 @@
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
@@ -8955,6 +9429,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -9086,6 +9561,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -9182,6 +9658,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9203,6 +9680,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9232,6 +9710,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9246,6 +9725,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9271,6 +9751,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9293,6 +9774,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9327,6 +9809,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9351,6 +9834,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -9406,6 +9890,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -9450,6 +9935,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9474,6 +9960,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9495,6 +9982,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9519,6 +10007,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -9574,6 +10063,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -9630,6 +10120,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9660,6 +10151,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9686,6 +10178,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9710,6 +10203,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9774,6 +10268,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -9825,6 +10320,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9851,6 +10347,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -9864,6 +10361,9 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -9875,6 +10375,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -9892,6 +10393,7 @@
 |   source compiler/source
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -9987,6 +10489,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -10070,6 +10573,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10094,6 +10598,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10118,6 +10623,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -10217,6 +10723,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -10294,6 +10801,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10359,6 +10867,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10383,6 +10892,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10407,6 +10917,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10431,6 +10942,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -10504,6 +11016,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -10562,6 +11075,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10586,6 +11100,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10612,6 +11127,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10638,6 +11154,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10659,6 +11176,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10683,6 +11201,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -10738,6 +11257,7 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/parse
@@ -10796,6 +11316,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -10809,15 +11330,25 @@
 | module compiler/ast
 |   source compiler/source
 |   token compiler/token
+| module compiler/bindgen
+|   filepath std/filepath
+|   io std/io
+|   json std/json
+|   os std/os
+|   token compiler/token
 | module compiler/build
 |   chan std/chan
 |   cond compiler/cond
 |   diag compiler/diag
+|   filepath std/filepath
 |   io std/io
 |   msgs compiler/msgs
 |   os std/os
 |   target compiler/target
 |   time std/time
+| module compiler/cabi
+|   source compiler/source
+|   types compiler/types
 | module compiler/check
 |   ast compiler/ast
 |   cond compiler/cond
@@ -10829,6 +11360,7 @@
 |   names compiler/names
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 |   typed compiler/typed
@@ -10857,6 +11389,7 @@
 |   types compiler/types
 | module compiler/emit
 |   ast compiler/ast
+|   cabi compiler/cabi
 |   diag compiler/diag
 |   eval compiler/eval
 |   generic compiler/generic
@@ -10887,6 +11420,11 @@
 |   typed compiler/typed
 |   types compiler/types
 | module compiler/fetch
+|   filepath std/filepath
+|   io std/io
+|   os std/os
+| module compiler/fix
+|   fetch compiler/fetch
 |   filepath std/filepath
 |   io std/io
 |   os std/os
@@ -10994,9 +11532,11 @@
 |   msgs compiler/msgs
 |   os std/os
 |   pair std/pair
+|   scan compiler/scan
 |   source compiler/source
 |   token compiler/token
 | module compiler/olang
+|   bindgen compiler/bindgen
 |   build compiler/build
 |   cond compiler/cond
 |   diag compiler/diag
@@ -11004,6 +11544,7 @@
 |   eval compiler/eval
 |   explain compiler/explain
 |   fetch compiler/fetch
+|   fix compiler/fix
 |   fmt compiler/fmt
 |   interp compiler/interp
 |   io std/io
@@ -11128,6 +11669,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11153,6 +11695,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11174,6 +11717,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11199,6 +11743,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11228,6 +11773,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11242,6 +11788,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11256,6 +11803,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11277,6 +11825,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11298,6 +11847,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11319,6 +11869,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11345,6 +11896,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11372,6 +11924,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11398,6 +11951,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11419,6 +11973,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11440,6 +11995,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11461,6 +12017,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11487,6 +12044,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11510,6 +12068,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11531,6 +12090,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11553,6 +12113,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11581,6 +12142,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11606,6 +12168,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11630,6 +12193,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11654,6 +12218,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11677,6 +12242,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11698,6 +12264,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11719,6 +12286,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11740,6 +12308,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
@@ -11759,6 +12328,7 @@
 | module std/prelude/array
 | module std/prelude/check
 | module std/prelude/complex
+| module std/prelude/enums
 | module std/prelude/f8
 | module std/prelude/float
 | module std/prelude/hash
