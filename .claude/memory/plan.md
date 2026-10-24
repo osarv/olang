@@ -290,3 +290,8 @@ on sight per rules.md, "Code rules".
   items (limits/bit ops, one-line lambdas, raw values, text literals, bitwise precedence) and the array-literal leak.
 - 2026-10-24: lang24 round 4 merged (9171148, verified): T30a `type A trait extends B, C`, T31a closed traits
   `type Float trait for F16, BF16, F32, F64 { }` (prelude number traits now closed), G19 intersections `<T Shape House>`.
+- 2026-10-24: wt-contracts merged (ec09350, verified): D17 contracts (one block before the body; requirements decided
+  at calls with closed arguments, guarantees where the evaluator runs a call, `checked f(x)` -> CheckError.CONTRACT;
+  fits, for, if, outlives chains as obligations; conversions as contracts), R20 BuiltinError -> CheckError
+  (tools/checkerror_rename.olang), D2 duplicate functions an error (a port bug). Left: requirements over fixed locals,
+  trait-method/lambda/extern/destructor conditions, the prover.
