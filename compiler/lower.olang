@@ -216,11 +216,11 @@ type pl struct(B mir.Base) {
     Ps List<mir.Proj>
 }
 
-type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, F mir.Fn) {
+type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut mir.Fn&) {
     L
     B
     T
-    F
+    F mir.Fn = made        # its own copy (D9c: a by-value parameter holds at most 128 bytes)
     file I64 = 0
     rdepth mir.Operand = mir.Operand.None   # in a Render helper, how many references were followed to reach it (E11a)
     cur mir.BlockId = mir.BlockId(0)
@@ -366,7 +366,7 @@ fn (ln mut lowering&) instance() mir.ScopeRef {
 
 # ---- emitting ----
 
-fn (ln mut lowering&) emit(s mir.Stmt) {
+fn (ln mut lowering&) emit(s mir.Stmt&) {
     if not ln.dead { ln.F.Add(ln.cur, s) }
 }
 

@@ -440,7 +440,7 @@ fn (f mut Fn&) NewBlock() BlockId {
 
 # through a local: stage 0 builds the first chunk of a list pushed to as `f.Blocks[i].Stmts.Push(s)` (E31b's held copy
 # of an element of a parameter's list) where the call's frame is, and frees it on return
-fn (f mut Fn&) Add(b BlockId, s Stmt) {
+fn (f mut Fn&) Add(b BlockId, s Stmt&) {
     blk := f.Blocks[I64(b)]
     blk.Stmts.Push(s)
 }
@@ -799,7 +799,7 @@ fn (v mut verifier&) callee(c Callee) {
     }
 }
 
-fn (v mut verifier&) stmtShape(st Stmt) {
+fn (v mut verifier&) stmtShape(st Stmt&) {
     match st {
         case Stmt.Assign(_, p, rv) {
             v.place(p)
@@ -1136,7 +1136,7 @@ fn (v mut verifier&) operandType(x Operand) types.TypeId {
 
 fn (v mut verifier&) arg(r Range, i I64) Operand { return v.F.Ops[I64(r.At) + i] }
 
-fn (v mut verifier&) stmtTypes(s Stmt) {
+fn (v mut verifier&) stmtTypes(s Stmt&) {
     t := v.T
     match s {
         case Stmt.Assign(_, p, rv) {
@@ -1756,7 +1756,7 @@ fn (v mut verifier&) usesScope(s ScopeRef) {
     }
 }
 
-fn (v mut verifier&) stmtFlow(s Stmt) {
+fn (v mut verifier&) stmtFlow(s Stmt&) {
     f := v.F
     match s {
         case Stmt.Assign(_, p, rv) {
@@ -2095,7 +2095,7 @@ fn (w mut dumper&) rvalue(rv Rvalue) String {
     }
 }
 
-fn (w mut dumper&) stmt(s Stmt) String {
+fn (w mut dumper&) stmt(s Stmt&) String {
     return match s {
         case Stmt.Assign(_, p, rv) => $w.place(p) " = " $w.rvalue(rv)
         case Stmt.Live(_, l) => "live L" $l

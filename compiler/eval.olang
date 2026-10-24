@@ -427,7 +427,7 @@ fn NewMachine(t mut types.Table&, mode Mode) Machine {
 # ---- defining the program ----
 
 # a MIR function, by its key
-fn (m mut Machine&) Define(f mir.Fn) {
+fn (m mut Machine&) Define(f mut mir.Fn&) {
     i := m.fns.Len()
     m.fnOf.Put(f.Of, i)
     m.fns.Push(f)
@@ -488,7 +488,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
 }
 
 # statement k of f in a flat form, where it has one of the shapes cfn.Fast holds
-fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt, c mut cfn&, k I64) {
+fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt&, c mut cfn&, k I64) {
     match st {
         case mir.Stmt.Assign(sp, p, rv) {
             c.Sps[k] = sp
@@ -693,7 +693,7 @@ fn rangeNamesGlobal(f mir.Fn&, r mir.Range) Bool {
 }
 
 # whether a statement's place or operands name a global: what globalsReady reads
-fn stmtNamesGlobal(f mir.Fn&, st mir.Stmt) Bool {
+fn stmtNamesGlobal(f mir.Fn&, st mir.Stmt&) Bool {
     return match st {
         case mir.Stmt.Assign(_, p, rv) => placeNamesGlobal(p) or match rv {
             case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => opNamesGlobal(x)
