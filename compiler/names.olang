@@ -43,7 +43,7 @@ type Ref struct(Kind What, Module I64, Index I64) {
 }
 
 # a top-level declaration: its name and where it is written, and what it is. Decl is a type's declaration (null else)
-type Entry struct(Name source.NameId, Sp source.Span, Kind What, Mut Bool, Decl ast.TypeDecl&) {
+type Entry struct(Name source.NameId, Sp source.Span, Kind What, Mut Bool, Decl ast.TypeDecl?&) {
     Name
     Sp
     Kind
@@ -120,7 +120,7 @@ fn (r mut Resolver&) Resolve() {
     }
     for mi in range r.L.Mods.Len() {
         m := r.L.Mods[mi]
-        if m.Decls is not null { r.bodies(mi, m.Decls) }
+        if m.Decls.Len() > 0 { r.bodies(mi, m.Decls) }
     }
 }
 
@@ -136,7 +136,7 @@ fn (r mut Resolver&) DecideTop(mi I64, condStart I32, chosen I64) {
     for d in m.Decls {
         match d {
             case ast.Decl.If(_, ti) {
-                if ti.Cond.Span().Start == condStart {
+                if ti.Cond!.Span().Start == condStart {
                     r.collectIf(mi, ti, chosen, 0)
                     r.bodiesIf(mi, ti, chosen, 0)
                 }
@@ -145,7 +145,7 @@ fn (r mut Resolver&) DecideTop(mi I64, condStart I32, chosen I64) {
         }
     }
     for k in range before, r.L.Mods.Len() {
-        if r.L.Mods[k].Decls is not null { r.bodies(k, r.L.Mods[k].Decls) }
+        if r.L.Mods[k].Decls.Len() > 0 { r.bodies(k, r.L.Mods[k].Decls) }
     }
 }
 
@@ -173,7 +173,7 @@ fn (r mut Resolver&) tok(n source.NameId) String { return msgs.Tok(r.text(n)) }
 # span does not give apart
 fn (r mut Resolver&) nameSpan(mi I64, from I32, n source.NameId) source.Span {
     m := r.L.Mods[mi]
-    toks := m.Toks.Toks
+    toks := m.Toks!.Toks
     lo I64 = 0
     hi := toks.Len()
     for lo < hi {
@@ -188,7 +188,7 @@ fn (r mut Resolver&) nameSpan(mi I64, from I32, n source.NameId) source.Span {
     for i in range lo, toks.Len() {
         t := toks[i]
         if t.Kind == token.Tok.Eof or i - lo > 256 { break }
-        if t.Kind == token.Tok.Iden and m.Src.Text[t.Start:t.End] == want { return source.Span(t.Start, t.End) }
+        if t.Kind == token.Tok.Iden and m.Src!.Text[t.Start:t.End] == want { return source.Span(t.Start, t.End) }
     }
     return source.Span(from, from)
 }
@@ -198,7 +198,7 @@ fn (r mut Resolver&) nameSpan(mi I64, from I32, n source.NameId) source.Span {
 fn (r mut Resolver&) tableOf(mi I64) {
     r.aliasesOf(mi)
     m := r.L.Mods[mi]
-    if m.Decls is not null { r.collect(mi, m.Decls) }
+    if m.Decls.Len() > 0 { r.collect(mi, m.Decls) }
 }
 
 fn (r mut Resolver&) aliasesOf(mi I64) {
@@ -213,7 +213,7 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
     for d in decls {
         match d {
             case ast.Decl.If(_, ti) {
-                chosen := r.L.Chosen(mi, ti.Cond.Span().Start)
+                chosen := r.L.Chosen(mi, ti.Cond!.Span().Start)
                 if chosen == load.Pending {
                     r.waitAside(mi, ti)
                 } else {
@@ -221,7 +221,7 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
                 }
             }
             case ast.Decl.Fn(f), ast.Decl.Extern(f) {
-                from := f.Recv.Sp.End if f.Recv is not null else f.Sp.Start
+                from := f.Recv!.Sp.End if f.Recv is not null else f.Sp.Start
                 r.addValue(mi, f.Name, r.nameSpan(mi, from, f.Name), false, true, f.Recv is not null, null)
             }
             case ast.Decl.Type(sp, t) { r.addType(mi, t.Name, r.nameSpan(mi, sp.Start, t.Name), t) }
@@ -235,20 +235,20 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
 }
 
 fn (r mut Resolver&) collectIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
-    if chosen == index and ti.Then.Decls is not null { r.collect(mi, ti.Then.Decls) }
-    if ti.ElseIf is not null { r.collectIf(mi, ti.ElseIf, chosen, index + 1) }
-    if ti.Else is not null and chosen == index + 1 and ti.Else.Decls is not null { r.collect(mi, ti.Else.Decls) }
+    if chosen == index and ti.Then!.Decls.Len() > 0 { r.collect(mi, ti.Then!.Decls) }
+    if ti.ElseIf is not null { r.collectIf(mi, ti.ElseIf!, chosen, index + 1) }
+    if ti.Else is not null and chosen == index + 1 and ti.Else!.Decls.Len() > 0 { r.collect(mi, ti.Else!.Decls) }
 }
 
 # the names a pending if's branches declare, which wait aside until it is decided
 fn (r mut Resolver&) waitAside(mi I64, ti ast.TopIf&) {
-    r.waitBranch(mi, ti.Then)
-    if ti.ElseIf is not null { r.waitAside(mi, ti.ElseIf) }
-    if ti.Else is not null { r.waitBranch(mi, ti.Else) }
+    r.waitBranch(mi, ti.Then!)
+    if ti.ElseIf is not null { r.waitAside(mi, ti.ElseIf!) }
+    if ti.Else is not null { r.waitBranch(mi, ti.Else!) }
 }
 
 fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
-    if b.Decls is null { return }
+    if b.Decls.Len() == 0 { return }
     t := r.Tables[mi]
     for d in b.Decls {
         match d {
@@ -262,7 +262,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             case ast.Decl.Import(_, alias, path) {
                 name := alias
                 if name == source.NameId(0) {
-                    spec := r.L.Mods[mi].Src.Text[path.Start + 1:path.End - 1]
+                    spec := r.L.Mods[mi].Src!.Text[path.Start + 1:path.End - 1]
                     name = r.L.Names.Intern(load.DeriveAlias(spec))
                 }
                 t.waiting.Put(name, true)
@@ -273,7 +273,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
 }
 
 # whether a declaration's written type makes it assignable: "mut" at its top (T2)
-fn writable(t ast.TypeRef&) Bool {
+fn writable(t ast.TypeRef?&) Bool {
     if t is null { return false }
     return match t {
         case ast.TypeRef.Perm(_, _, w, _) => w
@@ -282,7 +282,7 @@ fn writable(t ast.TypeRef&) Bool {
 }
 
 # D2, D3a, M20: a type or an error type
-fn (r mut Resolver&) addType(mi I64, n source.NameId, sp source.Span, decl ast.TypeDecl&) {
+fn (r mut Resolver&) addType(mi I64, n source.NameId, sp source.Span, decl ast.TypeDecl?&) {
     t := r.Tables[mi]
     m := r.L.Mods[mi]
     name := r.text(n)
@@ -300,7 +300,7 @@ fn (r mut Resolver&) addType(mi I64, n source.NameId, sp source.Span, decl ast.T
 
 # D2, D8c, B10, B10c, M20: a function or a global (a method is in no namespace of names)
 fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable Bool, isFunc Bool, isMethod Bool
-                              v ast.VarDecl&) {
+                              v ast.VarDecl?&) {
     t := r.Tables[mi]
     m := r.L.Mods[mi]
     name := r.text(n)
@@ -336,11 +336,11 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
 }
 
 # B10c: an immutable global giving a build constant a default - of a type a -D value can have, which the value fits
-fn (r mut Resolver&) buildDefault(mi I64, n source.NameId, sp source.Span, v ast.VarDecl&) {
+fn (r mut Resolver&) buildDefault(mi I64, n source.NameId, sp source.Span, v ast.VarDecl?&) {
     if v is null { return }
     ty := ""
     if v.Ty is not null {
-        ty = $r.L.Mods[mi].Src.Text[v.Ty.Span().Start:v.Ty.Span().End]
+        ty = $r.L.Mods[mi].Src!.Text[v.Ty!.Span().Start:v.Ty!.Span().End]
     } else if v.Values.Len() == 1 {
         ty = $literalType(v.Values[0])
     }
@@ -500,7 +500,7 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
     for d in decls {
         match d {
             case ast.Decl.If(_, ti) {
-                chosen := r.L.Chosen(mi, ti.Cond.Span().Start)
+                chosen := r.L.Chosen(mi, ti.Cond!.Span().Start)
                 if chosen == load.Pending {
                     r.startItem(mi)
                     r.topConds(ti)
@@ -535,9 +535,9 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
 }
 
 fn (r mut Resolver&) bodiesIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
-    if chosen == index and ti.Then.Decls is not null { r.bodies(mi, ti.Then.Decls) }
-    if ti.ElseIf is not null { r.bodiesIf(mi, ti.ElseIf, chosen, index + 1) }
-    if ti.Else is not null and chosen == index + 1 and ti.Else.Decls is not null { r.bodies(mi, ti.Else.Decls) }
+    if chosen == index and ti.Then!.Decls.Len() > 0 { r.bodies(mi, ti.Then!.Decls) }
+    if ti.ElseIf is not null { r.bodiesIf(mi, ti.ElseIf!, chosen, index + 1) }
+    if ti.Else is not null and chosen == index + 1 and ti.Else!.Decls.Len() > 0 { r.bodies(mi, ti.Else!.Decls) }
 }
 
 # a pending top-level if's conditions, which the checker evaluates (B9c): their names, and B10's unknown ones
@@ -545,14 +545,14 @@ fn (r mut Resolver&) topConds(ti ast.TopIf&) {
     r.inCond = true
     r.expr(ti.Cond)
     r.inCond = false
-    if ti.ElseIf is not null { r.topConds(ti.ElseIf) }
+    if ti.ElseIf is not null { r.topConds(ti.ElseIf!) }
 }
 
 # a function, a method or a lambda: its type variables, its parameters and its body
 fn (r mut Resolver&) func(f ast.Func&) {
     m := r.mark()
     r.sig(f, true)
-    if f.Body is not null { r.block(f.Body) }
+    if f.Body.Len() > 0 { r.block(f.Body) }
     r.popTo(m)
 }
 
@@ -560,9 +560,9 @@ fn (r mut Resolver&) func(f ast.Func&) {
 fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     s := f.S
     r.typeParams(f.TypeParams)
-    if f.Recv is not null and f.Recv.Ty is not null {
-        r.receiverVars(f.Recv.Ty, false)
-        r.typeRef(f.Recv.Ty)
+    if f.Recv is not null and f.Recv!.Ty is not null {
+        r.receiverVars(f.Recv!.Ty, false)
+        r.typeRef(f.Recv!.Ty)
     }
     for p in s.Params {
         if p.Ty is not null { r.typeRef(p.Ty) }
@@ -572,14 +572,14 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     for p in s.Params {
         if p.Dflt is not null { r.expr(p.Dflt) }
     }
-    if f.Recv is not null and f.Recv.Name != source.NameId(0) { r.param(f.Recv, body) }
+    if f.Recv is not null and f.Recv!.Name != source.NameId(0) { r.param(f.Recv!, body) }
     for p in s.Params { r.param(p, body) }
 }
 
 # a function's or a constructor's type-parameter list (G3, G10d, QW): every item declared for the rest of its item,
 # then the constraints read, so an item's may name a later one
 fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
-    if tps is null { return }
+    if tps.Len() == 0 { return }
     for p in tps {
         nsp := r.nameSpan(r.mi, p.Sp.Start, p.Name)
         r.bind(p.Name, nsp, What.TypeVar)
@@ -592,7 +592,7 @@ fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
 
 # the type variables a method's receiver introduces (QW: "fn (l List<T>&) Push(x T)"): its type's arguments that name
 # no type and no variable already declared
-fn (r mut Resolver&) receiverVars(t ast.TypeRef&, inArgs Bool) {
+fn (r mut Resolver&) receiverVars(t ast.TypeRef?&, inArgs Bool) {
     if t is null { return }
     match t {
         case ast.TypeRef.Named(sp, path, args) {
@@ -615,7 +615,7 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef&, inArgs Bool) {
                 }
             }
         }
-        case ast.TypeRef.Ref(_, of, _) { r.receiverVars(of, inArgs) }
+        case ast.TypeRef.Ref(_, of, _, _) { r.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
         nomatch { }
     }
@@ -636,7 +636,7 @@ fn (r mut Resolver&) param(p ast.Param&, body Bool) {
 }
 
 fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
-    if t.Params is not null {
+    if t.Params.Len() > 0 {
         for p in t.Params {
             if p.Ty is not null { r.typeRef(p.Ty) }
             r.bind(p.Name, p.Sp, What.TypeVar)
@@ -651,17 +651,17 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
                 if p.Ty is not null { r.typeRef(p.Ty) }
             }
             if s.Errs is not null {
-                for e in s.Errs.Errors { r.path(e) }
+                for e in s.Errs!.Errors { r.path(e) }
             }
             m := r.mark()
             for p in s.Params {
                 if p.Dflt is not null { r.expr(p.Dflt) }
                 r.param(p, true)
             }
-            if s.Body is not null { r.block(s.Body) }
+            if s.Body.Len() > 0 { r.block(s.Body) }
             r.popTo(m)
             r.popTo(m0)
-            if s.Dtor is not null {
+            if s.Dtor.Len() > 0 {
 
                 m2 := r.mark()
                 for f in fieldNames(s) { r.bind(f, source.Span(0, 0), What.Local) }
@@ -694,7 +694,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
 fn fieldNames(s ast.StructBody&) List<source.NameId> {
     out List<source.NameId>
     for p in s.Params { out.Push(p.Name) }
-    if s.Body is null { return out }
+    if s.Body.Len() == 0 { return out }
     for st in s.Body {
         match st {
             case ast.Stmt.Var(_, v) {
@@ -709,13 +709,13 @@ fn fieldNames(s ast.StructBody&) List<source.NameId> {
 # ---- statements ----
 
 fn (r mut Resolver&) block(body Array<ast.Stmt&>&) {
-    if body is null { return }
+    if body.Len() == 0 { return }
     m := r.mark()
     for s in body { r.stmt(s) }
     r.popTo(m)
 }
 
-fn (r mut Resolver&) stmt(s ast.Stmt&) {
+fn (r mut Resolver&) stmt(s ast.Stmt?&) {
     if s is null { return }
     match s {
         case ast.Stmt.ExprS(_, x) { r.expr(x) }
@@ -837,24 +837,24 @@ fn (r mut Resolver&) forName(from I32, id source.NameId) {
 # a local if: its condition's names, B10's unknown ones, and S8b - a condition the build decides chooses its branch
 fn (r mut Resolver&) ifStmt(i ast.If&) {
     if i.Cond is null {
-        r.branch(i.Then)
+        r.branch(i.Then!)
         return
     }
     r.inCond = true
     r.expr(i.Cond)
     r.inCond = false
-    outcome, value := r.decideLocal(i.Cond)
-    if outcome == cond.Outcome.Same { r.Same.Put(pair.Pair(r.L.Mods[r.mi].File, I64(i.Cond.Span().Start)), true) }
+    outcome, value := r.decideLocal(i.Cond!)
+    if outcome == cond.Outcome.Same { r.Same.Put(pair.Pair(r.L.Mods[r.mi].File, I64(i.Cond!.Span().Start)), true) }
     decided := outcome == cond.Outcome.Decided
     runtime := outcome != cond.Outcome.Deferred
-    r.choose(i.Then, decided, value, runtime)
-    r.branch(i.Then)
+    r.choose(i.Then!, decided, value, runtime)
+    r.branch(i.Then!)
     if i.Else is null { return }
     match i.Else {
         case ast.Stmt.If(_, e) {
             if e.Cond is null {
-                r.choose(e.Then, decided, not value, runtime)
-                r.branch(e.Then)
+                r.choose(e.Then!, decided, not value, runtime)
+                r.branch(e.Then!)
             } else if decided and value {
                 r.dropAll(e)
             } else {
@@ -881,7 +881,7 @@ fn (r mut Resolver&) choose(b ast.Branch&, decided Bool, taken Bool, runtime Boo
 
 # an else-if chain after a branch the build took: none of it is compiled
 fn (r mut Resolver&) dropAll(i ast.If&) {
-    if i.Then.Group >= 0 { r.L.Diags.CutOff(i.Then.Group) }
+    if i.Then!.Group >= 0 { r.L.Diags.CutOff(i.Then!.Group) }
     if i.Else is null { return }
     match i.Else {
         case ast.Stmt.If(_, e) { r.dropAll(e) }
@@ -899,16 +899,16 @@ fn (r mut Resolver&) branch(b ast.Branch&) {
 fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Outcome, Bool {
     m := r.L.Mods[r.mi]
     r.L.CondParser(m)
-    m.Scope.Locals.Clear()
-    for n in r.itemNames { m.Scope.Locals.Push(n) }
-    m.Scope.Fixed.Clear()
-    for n in r.itemInits { m.Scope.Fixed.Push(n) }
-    e mut cond.Eval&m = cond.Eval(m.Src.Text, r.L.Names, m.Scope, r.L.Consts)
+    m.Scope!.Locals.Clear()
+    for n in r.itemNames { m.Scope!.Locals.Push(n) }
+    m.Scope!.Fixed.Clear()
+    for n in r.itemInits { m.Scope!.Fixed.Push(n) }
+    e mut cond.Eval&m = cond.Eval(m.Src!.Text, r.L.Names, m.Scope!, r.L.Consts)
     return e.Local(c)
 }
 
 fn (r mut Resolver&) clauses(cl Array<ast.Catch&>&) {
-    if cl is null { return }
+    if cl.Len() == 0 { return }
     for c in cl {
         for p in c.Items { r.path(p) }
         r.block(c.Body)
@@ -919,16 +919,16 @@ fn (r mut Resolver&) clauses(cl Array<ast.Catch&>&) {
 fn (r mut Resolver&) matchOf(mt ast.Match&) {
     r.expr(mt.Subject)
     for c in mt.Cases { r.caseOf(c) }
-    if mt.NoMatch is not null { r.caseOf(mt.NoMatch) }
+    if mt.NoMatch is not null { r.caseOf(mt.NoMatch!) }
 }
 
 fn (r mut Resolver&) caseOf(c ast.Case&) {
     m := r.mark()
-    if c.Alts is not null {
+    if c.Alts.Len() > 0 {
         bound List<source.NameId>
         for p in c.Alts { r.pattern(p, bound) }
     }
-    if c.Types is not null {
+    if c.Types.Len() > 0 {
         for t in c.Types { r.typeRef(t) }
     }
     if c.Guard is not null { r.expr(c.Guard) }
@@ -957,7 +957,7 @@ fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut List<source.NameId>&) {
 
 # ---- expressions ----
 
-fn (r mut Resolver&) expr(x ast.Expr&) {
+fn (r mut Resolver&) expr(x ast.Expr?&) {
     if x is null { return }
     match x {
         case ast.Expr.Name(sp, n) { r.name(sp, n) }
@@ -1027,7 +1027,7 @@ fn (r mut Resolver&) expr(x ast.Expr&) {
             r.lambdaParams = true
             r.sig(f, true)
             r.lambdaParams = false
-            if f.Body is not null { r.block(f.Body) }
+            if f.Body.Len() > 0 { r.block(f.Body) }
             r.popTo(m)
             r.inCond = wasCond
         }
@@ -1168,7 +1168,7 @@ fn (r mut Resolver&) unknownHead(sp source.Span, n source.NameId) {
 }
 
 # an error set's, a catch clause's or an error statement's path: alias chain, then the type and its word
-fn (r mut Resolver&) path(p ast.Path&) {
+fn (r mut Resolver&) path(p ast.Path?&) {
     if p is null or p.Parts.Len() == 0 { return }
     head := p.Parts[0]
     sp := r.nameSpan(r.mi, p.Sp.Start, head)
@@ -1179,7 +1179,7 @@ fn (r mut Resolver&) path(p ast.Path&) {
 
 # ---- types ----
 
-fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
+fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
     if t is null { return }
     match t {
         case ast.TypeRef.Named(sp, path, args) {
@@ -1212,7 +1212,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
                 nomatch { }
             }
         }
-        case ast.TypeRef.Ref(sp, of, scope) {
+        case ast.TypeRef.Ref(sp, of, scope, _) {
             r.typeRef(of)
             if scope != source.NameId(0) and r.text(scope) != "return" {
                 r.record(r.nameSpan(r.mi, of.Span().End, scope), r.lookup(scope))
@@ -1223,7 +1223,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
 }
 
 # a type variable's introduction by a receiver (QW): declared for the rest of its item, once
-fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef&) {
+fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef?&) {
     if c is not null { r.typeRef(c) }
     i := try r.scope.Get(n) catch default -1
     if i >= 0 and r.locals[i].Kind == What.TypeVar {

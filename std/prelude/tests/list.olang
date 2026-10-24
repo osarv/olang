@@ -211,7 +211,7 @@ test "reshaping a List, evaluated while compiling as at run time" {
 # out by every new operation, and still the same instances afterwards
 type listNode struct(v I64) {
     v
-    next mut listNode& = null
+    next mut listNode?& = null
 }
 
 test "a List of mutable references, reordered and emptied" {
@@ -227,7 +227,7 @@ test "a List of mutable references, reordered and emptied" {
     f.next = k                                              # still writable, and still the list's own instances
     assert x.v == 27 and p.v == 1 and f == x and l[0].next == k and k.v == 2
     l.Clear()
-    assert l.Len() == 0 and x.next.v == 2
+    assert l.Len() == 0 and x.next!.v == 2
 }
 
 # a List is a handle: its chunks and its counts are one record, so a copy of a List value is another name for the same

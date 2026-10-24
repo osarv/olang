@@ -196,7 +196,7 @@ type Viewer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     compFrom List<I64>
     compNodes List<I64>
     # the body being walked
-    B typed.Body& = null
+    B typed.Body?& = null
     Id I64 = -1
     check Bool = false # its errors are said; else its summary is found
     quiet Bool = false # deriving what a value holds only: no use judged, no growth made
@@ -213,7 +213,7 @@ type Viewer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
 fn (v mut Viewer&) Run() {
     for m in v.P.L.Mods {
         if m.File < 0 { continue }
-        if m.Src is not null { v.texts.Put(m.File, m.Src.Text) }
+        if m.Src is not null { v.texts.Put(m.File, m.Src!.Text) }
         if m.Identity.StartsWith("std/") { v.library.Put(m.File, true) }
         if m.Identity == "std/prelude/vec" { v.vecFile = m.File }
     }
@@ -329,8 +329,8 @@ fn (v mut Viewer&) quoted(b I64) String {
 # where a place is, as a message says it: "l.toks"
 fn (v mut Viewer&) where(p place) String {
     name := match p.R {
-        case Root.Local(id) => $v.text(v.B.Locals[id].Name)
-        case Root.Param(i) => $v.text(v.B.Locals[I64(v.B.Params[i])].Name)
+        case Root.Local(id) => $v.text(v.B!.Locals[id].Name)
+        case Root.Param(i) => $v.text(v.B!.Locals[I64(v.B!.Params[i])].Name)
         case Root.Global(_, n) => $v.text(n)
         case _ => "?"
     }
@@ -352,7 +352,7 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
         if td is not null and td.Body is not null {
             match td.Body {
                 case ast.TypeBody.Struct(s) {
-                    if s.Body is not null {
+                    if s.Body.Len() > 0 {
                         for st in s.Body {
                             match st {
                                 case ast.Stmt.Var(_, vd) {
@@ -376,7 +376,7 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
 # ---- tokens: where stage 0's rows put an operation (the method's name, an index's bracket) ----
 
 fn (v mut Viewer&) charAt(at I64) Char {
-    t := try v.texts.Get(v.B.File) catch default ""
+    t := try v.texts.Get(v.B!.File) catch default ""
     return t[at] if at >= 0 and at < t.Len() else '\0'
 }
 
@@ -487,7 +487,7 @@ fn placeAdd(out mut List<place>&, p place) {
 }
 
 # the places an expression names - a local's, a parameter's, a global's, a field's of one, either of a conditional's
-fn (v mut Viewer&) exprPlaces(x typed.Expr&, st state&, out mut List<place>&) {
+fn (v mut Viewer&) exprPlaces(x typed.Expr?&, st state&, out mut List<place>&) {
     if x is null { return }
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { v.placePlaces(p, st, out) }
@@ -500,7 +500,7 @@ fn (v mut Viewer&) exprPlaces(x typed.Expr&, st state&, out mut List<place>&) {
     }
 }
 
-fn (v mut Viewer&) placePlaces(p typed.Place&, st state&, out mut List<place>&) {
+fn (v mut Viewer&) placePlaces(p typed.Place?&, st state&, out mut List<place>&) {
     if p is null { return }
     match p {
         case typed.Place.Local(_, _, id) {
@@ -605,8 +605,8 @@ fn (v mut Viewer&) rootLocal(p typed.Place&) I64 {
 }
 
 # the local or global a place is below
-fn (v mut Viewer&) rootPlace(p typed.Place&) typed.Place&p {
-    q := p
+fn (v mut Viewer&) rootPlace(p typed.Place&) typed.Place?&p {
+    q typed.Place?&p = p
     for depth in range 64 {
         if q is null { return null }
         match q {
@@ -639,7 +639,7 @@ fn unAway(x typed.Expr&) typed.Expr&x {
 }
 
 # the place an argument names, for a keep
-fn argPlace(x typed.Expr&) typed.Place&x {
+fn argPlace(x typed.Expr&) typed.Place?&x {
     y := unAway(x)
     return match y {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) => p
@@ -731,10 +731,10 @@ fn weight(s state&) I64 {
 
 # ---- uses and growths ----
 
-fn (v mut Viewer&) at(sp source.Span) diag.Where { return diag.Where.Span(v.B.File, I64(sp.Start), I64(sp.End)) }
+fn (v mut Viewer&) at(sp source.Span) diag.Where { return diag.Where.Span(v.B!.File, I64(sp.Start), I64(sp.End)) }
 
 fn (v mut Viewer&) seen(sp source.Span) Bool {
-    k := (v.B.File << 32) | I64(sp.Start)
+    k := (v.B!.File << 32) | I64(sp.Start)
     if v.reported.Has(k) { return true }
     v.reported.Put(k, true)
     return false
@@ -745,12 +745,12 @@ fn (v mut Viewer&) use(id I64, sp source.Span, st state&) {
     if not v.check or v.quiet or v.skip { return }
     for h in st.Holds {
         if h.L != id or not h.V.Stale or not real(h.V.P.R) { continue }
-        k := (v.B.File << 40) | (id << 24) | I64(h.V.GrowAt.Start)
+        k := (v.B!.File << 40) | (id << 24) | I64(h.V.GrowAt.Start)
         if v.reportedHolds.Has(k) { return }
         v.reportedHolds.Put(k, true)
         if v.seen(sp) { return }
         w := v.where(h.V.P)
-        n := v.B.Locals[id].Name
+        n := v.B!.Locals[id].Name
         m := msgs.VecHiddenViewStale(w, w) if n == source.NameId(0) else msgs.VecViewStale(v.text(n), w, w)
         rec := v.P.L.Diags.Error(v.at(sp), m)
         grewIn := v.strs[h.V.GrowIn]
@@ -816,13 +816,13 @@ fn (v mut Viewer&) factPut(fs mut List<fact>&, param I64, module I64, name sourc
         if f.Any and v.prefix(f.Path, pid) { return }
     }
     show := g.Show if g.Show <= v.strs[pid].Len() else v.strs[pid].Len()
-    fs.Push(fact(param, module, name, pid, show, any, v.B.File, sp))
+    fs.Push(fact(param, module, name, pid, show, any, v.B!.File, sp))
     v.changed = true
 }
 
 # ---- statements ----
 
-fn (v mut Viewer&) block(bl typed.Block&, st mut state&) {
+fn (v mut Viewer&) block(bl typed.Block?&, st mut state&) {
     if bl is null { return }
     for s in bl.Stmts {
         if st.Dead { return }
@@ -840,7 +840,7 @@ fn (v mut Viewer&) block(bl typed.Block&, st mut state&) {
     }
 }
 
-fn (v mut Viewer&) stmt(s typed.Stmt&, st mut state&) {
+fn (v mut Viewer&) stmt(s typed.Stmt?&, st mut state&) {
     if s is null or st.Dead { return }
     scratch := List<view>()
     match s {
@@ -914,7 +914,7 @@ fn (v mut Viewer&) stmt(s typed.Stmt&, st mut state&) {
     }
 }
 
-fn (v mut Viewer&) loop(body typed.Block&, post typed.Block&, st mut state&) {
+fn (v mut Viewer&) loop(body typed.Block&, post typed.Block?&, st mut state&) {
     v.loops.Push(loopFrame(body.Id))
     frame := v.loops[v.loops.Len() - 1]
     head := st.copy()
@@ -937,12 +937,12 @@ fn (v mut Viewer&) loop(body typed.Block&, post typed.Block&, st mut state&) {
 
 # a try's or a join's clauses: each from the state after what was tried, merged with the state none is taken in
 fn (v mut Viewer&) clauses(cs Array<typed.Clause&>&, st mut state&, out mut List<view>&) {
-    if cs is null or cs.Len() == 0 { return }
+    if cs.Len() == 0 or cs.Len() == 0 { return }
     after := st.copy()
     for c in cs {
         s := st.copy()
         v.block(c.Code, s)
-        if c.Defaults is not null {
+        if c.Defaults.Len() > 0 {
             for d in c.Defaults { v.expr(d, s, out) }
         }
         merge(after, s)
@@ -973,7 +973,7 @@ fn (v mut Viewer&) spawn(sp source.Span, t typed.Spawn&, st mut state&) {
 }
 
 # what a local holds from now on: the views its value holds, and the places it is a second name of
-fn (v mut Viewer&) bind(id I64, x typed.Expr&, refs List<view>&, whole Bool, st mut state&) {
+fn (v mut Viewer&) bind(id I64, x typed.Expr?&, refs List<view>&, whole Bool, st mut state&) {
     if whole {
         # its views of what it named before go: a new value, of another Vec perhaps
         for i in range st.Holds.Len() {
@@ -999,11 +999,11 @@ fn (v mut Viewer&) bind(id I64, x typed.Expr&, refs List<view>&, whole Bool, st 
         }
     }
     # a local whose type can hold no view - an array or a struct by value with no reference in it - takes a copy
-    if not v.carries(v.B.Locals[id].Ty) { return }
+    if not v.carries(v.B!.Locals[id].Ty) { return }
     for r in refs { holdAdd(st, id, r) }
 }
 
-fn (v mut Viewer&) assign(target typed.Place&, x typed.Expr&, refs List<view>&, st mut state&) {
+fn (v mut Viewer&) assign(target typed.Place?&, x typed.Expr?&, refs List<view>&, st mut state&) {
     if target is null { return }
     match target {
         case typed.Place.Local(_, _, id) {
@@ -1045,7 +1045,7 @@ fn (v mut Viewer&) parts(p typed.Place&, st mut state&) {
 }
 
 # a store into a place below a local: what the local holds gains the value's views; the views of a Vec there go
-fn (v mut Viewer&) storeInto(target typed.Place&, refs List<view>&, st mut state&) {
+fn (v mut Viewer&) storeInto(target typed.Place&, refs List<view>?&, st mut state&) {
     root := v.rootLocal(target)
     ps List<place>
     v.placePlaces(target, st, ps)
@@ -1073,7 +1073,7 @@ fn (v mut Viewer&) storeInto(target typed.Place&, refs List<view>&, st mut state
 
 # what a store into place into puts there: its views held by the local the place is below; a parameter's own value (a
 # summary's mark) stored below another parameter is what the body keeps
-fn (v mut Viewer&) keepIn(into typed.Place&, ty types.TypeId, refs List<view>&, st mut state&) {
+fn (v mut Viewer&) keepIn(into typed.Place?&, ty types.TypeId, refs List<view>&, st mut state&) {
     if into is null or not v.carries(ty) { return }
     holder := v.rootLocal(into)
     if holder >= 0 {
@@ -1100,7 +1100,7 @@ fn (v mut Viewer&) keepIn(into typed.Place&, ty types.TypeId, refs List<view>&, 
                 if o.Param == mi and o.Into == pi { have = true }
             }
             if have { continue }
-            k := fact(mi, -1, source.NameId(0), 0, 0, false, v.B.File, source.Span(I32(f.Site), I32(f.Site)))
+            k := fact(mi, -1, source.NameId(0), 0, 0, false, v.B!.File, source.Span(I32(f.Site), I32(f.Site)))
             k.Into = pi
             v.sums[v.Id].Keeps.Push(k)
             v.changed = true
@@ -1111,7 +1111,7 @@ fn (v mut Viewer&) keepIn(into typed.Place&, ty types.TypeId, refs List<view>&, 
 # ---- expressions ----
 
 # an expression evaluated: its parts in order, its calls' effects, and into out what its value holds of views
-fn (v mut Viewer&) expr(x typed.Expr&, st mut state&, out mut List<view>&) {
+fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut List<view>&) {
     if x is null or st.Dead { return }
     mine := List<view>()
     scratch := List<view>()
@@ -1194,7 +1194,7 @@ fn (v mut Viewer&) expr(x typed.Expr&, st mut state&, out mut List<view>&) {
 # what a place holds of views, read - or borrowed in place, where inPlace: an element or a field borrowed by a
 # reference parameter is the storage it is in, a view's element (E12c); one read out of it is a value apart from the
 # buffer, a reference element included (it refers where the Vec's elements do, M19d)
-fn (v mut Viewer&) placeRefs(p typed.Place&, inPlace Bool, st mut state&, out mut List<view>&) {
+fn (v mut Viewer&) placeRefs(p typed.Place?&, inPlace Bool, st mut state&, out mut List<view>&) {
     if p is null or st.Dead { return }
     match p {
         case typed.Place.Local(sp, _, id) {
@@ -1242,7 +1242,7 @@ fn (v mut Viewer&) matchOf(m typed.Match&, st mut state&, out mut List<view>&) {
     }
     if m.NoMatch is not null {
         s := st.copy()
-        v.arm(m.NoMatch, s, out)
+        v.arm(m.NoMatch!, s, out)
         merge(after, s)
     } else {
         merge(after, st)
@@ -1449,12 +1449,12 @@ fn (v mut Viewer&) callsItself(b I64) Bool {
 }
 
 # the bodies a block calls by name
-fn calls(bl typed.Block&, out mut List<I64>&) {
+fn calls(bl typed.Block?&, out mut List<I64>&) {
     if bl is null { return }
     for s in bl.Stmts { callsStmt(s, out) }
 }
 
-fn callsStmt(s typed.Stmt&, out mut List<I64>&) {
+fn callsStmt(s typed.Stmt?&, out mut List<I64>&) {
     if s is null { return }
     match s {
         case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x) { callsExpr(x, out) }
@@ -1489,7 +1489,7 @@ fn callsStmt(s typed.Stmt&, out mut List<I64>&) {
     }
 }
 
-fn callsPlace(p typed.Place&, out mut List<I64>&) {
+fn callsPlace(p typed.Place?&, out mut List<I64>&) {
     if p is null { return }
     match p {
         case typed.Place.Deref(_, _, r) { callsExpr(r, out) }
@@ -1504,7 +1504,7 @@ fn callsPlace(p typed.Place&, out mut List<I64>&) {
     }
 }
 
-fn callsExpr(x typed.Expr&, out mut List<I64>&) {
+fn callsExpr(x typed.Expr?&, out mut List<I64>&) {
     if x is null { return }
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { callsPlace(p, out) }
@@ -1576,7 +1576,7 @@ fn callsExpr(x typed.Expr&, out mut List<I64>&) {
     }
 }
 
-fn callsArm(a typed.Arm&, out mut List<I64>&) {
+fn callsArm(a typed.Arm?&, out mut List<I64>&) {
     if a is null { return }
     for alt in a.Alts {
         callsExpr(alt.Test, out)

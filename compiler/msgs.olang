@@ -390,6 +390,15 @@ type Diag enum {
     NullCompared
     FieldOfEnum
     NarrowedWrite
+    MayBeNull
+    NullToNonNull
+    NoteNullableDecl
+    NeverNull
+    NoZeroNonNull
+    ReadMaybeNull
+    ArrayNullable
+    NullToArray
+    ArrayIsNull
     AsNeedsCase
     PatternType
     CaseIsPrivate
@@ -1639,6 +1648,15 @@ fn CaseTestOther(text String&, ty String&) Msg { return Msg(Diag.CaseTestOther, 
 fn IsNullOfNull() Msg { return Msg(Diag.IsNullOfNull, "E10c", "'null is null' tests nothing - 'is null' follows a reference or a function value") }
 fn IsNullOfValue(ty String&) Msg { return Msg(Diag.IsNullOfValue, "E10c", $"only a reference or a function value can be null, and this is " $ty) }
 
+fn MayBeNull(text String&, ty1 String&, ty2 String&) Msg { return Msg(Diag.MayBeNull, "T2c", "'" $text "' is a " $ty1 ", which may be null, and " $ty2 " never is - test it first ('if x is not null'), or write '" $text "!'") }
+fn NullToNonNull(ty1 String&, ty2 String&) Msg { return Msg(Diag.NullToNonNull, "T2c", $ty1 " is never null - a reference that may be is written " $ty2) }
+fn NoteNullableDecl() Msg { return Msg(Diag.NoteNullableDecl, "", "the type is written here - write '?&' for '&' where it may be null") }
+fn NeverNull(text String&, ty String&, val String&) Msg { return Msg(Diag.NeverNull, "T2c", "'" $text "' is a " $ty ", never null, so this is always " $val) }
+fn NoZeroNonNull(ty1 String&, ty2 String&) Msg { return Msg(Diag.NoZeroNonNull, "T2c", $ty1 " is never null, so it has no zero value - give it a value, or write " $ty2) }
+fn ReadMaybeNull(text String&, ty String&) Msg { return Msg(Diag.ReadMaybeNull, "T2c", "'" $text "' is a " $ty ", which may be null - read through it where a test says it is not ('if x is not null'), or write '" $text "!'") }
+fn ArrayNullable() Msg { return Msg(Diag.ArrayNullable, "T2c", "an array is never null - its zero value is the empty array: write '&', not '?&'") }
+fn NullToArray(ty String&, empty String&) Msg { return Msg(Diag.NullToArray, "T2c", "an array is never null - its zero value is the empty array: write '" $empty "', or no value, for an empty " $ty) }
+fn ArrayIsNull(text String&, empty String&) Msg { return Msg(Diag.ArrayIsNull, "T2c", "an array is never null - test whether it is empty: write '" $text $empty "'") }
 fn NarrowedWrite() Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)") }
 fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', assigned nowhere there") }
 

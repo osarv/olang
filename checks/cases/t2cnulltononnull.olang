@@ -1,0 +1,8 @@
+# check: fail error[T2c]: N& is never null - a reference that may be is written N?&
+# also: the type is written here - write '?&' for '&' where it may be null
+# T2c: a reference written "N&" is never null - null fits only one written "N?&"
+type N struct(v I64) { v }
+fn main() {
+    n N& = null
+    assert n.v == 1
+}

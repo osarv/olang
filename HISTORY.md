@@ -22775,3 +22775,51 @@ Migration: `tools/equality_migrate.olang`, re-runnable for oann, rewrote 90 file
 identities (each listed; a dozen hand-checked in tests/shared.olang, std/json, std/linalg, std/filepath, the agree
 fixture, whose expected output changed for its now-content comparisons). The fuzz generators, which write programs as
 text the tool skips, were changed by hand.
+
+## The decisions of 2026-10-24, round 3: references never null unless written `?&` (2026-10-24)
+
+The user decided (2026-10-24): a reference is never null unless its type says so, written `?&` on the marker it
+modifies (`Node?&`, `mut Node?&`, `List<Node?&>`); `Node&` flows into `Node?&`; reading through a `?&` needs a test
+or `x!`. The coordinator added, before the round started: narrowing holds after a leaving null test (`if n is null:
+return 0` then `n.v`) and in the `else` of `if n is null`, with S8d's rule - locals and parameters only.
+
+**What was built (T2c, S8e, E35).** A permission bit, `Nullable`, on a reference type; `null` fits only such a type (or
+a function type); `T?&` into `T&` is an error naming the test or `!` (MayBeNull), a read through one is ReadMaybeNull,
+`x is null` on a reference never null is NeverNull with a note at the written type, a declaration with no value of a
+never-null reference type has no zero value (D13c). S8e narrows a local or parameter: in `if p is not null`, the `else`
+of `if p is null`, after `if p is null { leave }` (D10a's structural leaving), after `assert p is not null`, in the
+right of `p is not null and ...` / `p is null or ...` and the block or loop body such a condition guards, in a loop
+whose condition is `p is not null`, after a `for p is null { }` with no `break` in it, and after a statement assigning
+it a value never null; it holds until a statement assigns it and, inside a loop, only where nothing in the loop does,
+and never inside a lambda. A field is never narrowed - a call may change it (`n := s.head; if n is not null`). `x!` on a
+nullable reference ends the program as a failed assert does (`FILE:LINE: null reached`), in a test failing it, in the
+evaluator and `interpret` alike. `==` with an operand typed `?&` whose referent declares `Eq` compares nulls by
+identity first (a null equals only a null) and calls `Eq` only on two that are not null.
+
+**Arrays are never null (mine).** The first migration made every array that some caller passed `null` nullable, and
+callers then had to write `!` wherever the callee read it - though nearly every such callee treated a null array as
+empty. Since an array's zero bits already are the empty array (`{0, null}`), the rule chosen is that no array is
+nullable: `Array<T>?&` and `String?&` are errors (ArrayNullable), `null` given for an array names its empty array
+(NullToArray: `""` for a `String`, `Array<T>(0)` otherwise, spelled as the module writing it would, another module's
+type by its alias), and `x is null` on an array names `x.Len() == 0` (ArrayIsNull). Considered and rejected: allowing
+`Array<T>?&` beside never-null arrays. Zero bits are both the empty array and null, so a never-null zero array passed
+for an `Array<T>?&` would test as null - telling them apart needs a second representation of null (a length of -1) in
+the code generator, the evaluator and every zero-filled field, for a distinction Go programmers are told not to rely
+on. Where absent and empty genuinely differ the type says so with a flag: the port's own AST needed two -
+`Catch.Braced` (`catch E { }` against `catch E default v`, which the formatter must write back) and `Func.Bodied`
+(an extern, a trait method and a body that did not parse are checked differently from an empty body) - and a
+destructor's presence is read from its span, a case's block form from its `Value` being null.
+
+**Migration (`tools/null_migrate.olang`).** An olang tool driven by the compiler's own diagnostics, rounds to a fixed
+point: array fixes first (drop `?` on an array, `null` to the empty array, `is null` to a length test, a `!` with
+nothing to unwrap removed), then a declaration made nullable where a note points at its `&`, then `!` where a value
+may be null. It cannot see what a null meant: every `!` it would write on an argument is a place a callee may have
+handled null by matching it (a null matches no case) - in the compiler such callees were changed to take `?&` instead
+(`roNeed`, `roRoot`, `noteRo`, `paramOf`, `rootLocal`, `callArgs`, `jump`'s message, the for-in walkers' comprehension,
+the scope pass skipping a discarded spawn target). Bootstrapping went through a compiler built by the round-2 compiler
+from the source with every inserted `!` and `?&` removed (the new rules in the old syntax), which then built the
+migrated source.
+
+**Found on the way.** A generic constructor's literal arguments, deferred until the other arguments bind (G9a), were
+pushed as null into the argument list and then fitted as "nothing" - they now hold the checker's hole marker; a
+parameter written `msg ast.Expr& = null` was accepted though its default can never fit.

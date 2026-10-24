@@ -221,9 +221,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   instance (no per-field immutability, C3), a global keeps `mut` as its binding. Writable converts to read-only only
   at the top. A copy of a value holding `mut` references taken from a place reached read-only is read-only itself (QC,
   the user's decision); a function made a value may not need a writable copy.
-- **`null` is the zero value of every reference (T2a); a null read traps (T2b).** Nothing is uninitialized: a
-  declaration with no value takes its type's zero value, made by the constructor from its parameters' defaults (D13c,
-  the user's design); a type whose constructor has effects has none.
+- **References are never null unless written `?&` (T2c, S8e, E35, the user's decision 2026-10-24).** `Node&` never
+  is null, `Node?&` may be (`mut Node?&`, `List<Node?&>`, `Node?&x`); `T&` flows into `T?&`, `T?&` into `T&` only where
+  a test narrows it - locals and parameters only, never fields (S8e, as S8d): in `if p is not null`, the `else` of `if p
+  is null`, after an `if p is null { leave }`, after an assert, in the right of `and`/`or`, in a loop on `p is not null`,
+  after a `for p is null` loop with no break, after assigning a never-null value - or `x!`, which ends the program with
+  "null reached". Nothing is read through a `T?&` before that; `x is null` on a never-null reference is an error. A
+  reference never null has no zero value (D13c). **An array is never null (mine)**: its zero value is the empty array,
+  which stands for its absence, so `Array<T>?&`/`String?&` are errors, `null` for an array names its empty one and `x
+  is null` on one names `x.Len() == 0` - where absent and empty must differ, a flag says so (the port's AST:
+  `Catch.Braced`, `Func.Bodied`). A null read traps (T2b); nothing is uninitialized: a declaration with no value takes
+  its type's zero value, made by the constructor from its parameters' defaults (D13c, the user's design); a type whose
+  constructor has effects has none. `tools/null_migrate.olang` migrates code from the compiler's own diagnostics.
 - **Arrays: one type, `Array<T>`, a length never written (T7-T7d, QP1-QP4, the user's design 2026-10-01 and 2026-10-17;
   `Array<T, N>` and constant parameters removed 2026-10-24).** `Array<T>(n[, fill])` makes one, literals `I32[1, 2]`;
   storage is **fixed** - laid out in place, `Len()` a constant - wherever its length is known where it is made (T7c: a

@@ -1,0 +1,8 @@
+# check: fail error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
+# T2c, D13c: a declaration with no value takes its type's zero value, and a reference never null has none
+type N struct(v I64) { v }
+fn main() {
+    n N&
+    n = N(1)
+    assert n.v == 1
+}

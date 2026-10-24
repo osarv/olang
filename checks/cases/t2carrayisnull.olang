@@ -1,0 +1,4 @@
+# check: fail error[T2c]: an array is never null - test whether it is empty: write 'a.Len() == 0'
+# T2c, E10c: an array is never null, so "is null" on one asks for its length
+fn empty(a Array<I64>&) Bool { return a is null }
+fn main() { assert empty(Array<I64>(0)) }

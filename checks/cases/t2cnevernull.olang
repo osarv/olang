@@ -1,0 +1,8 @@
+# check: fail error[T2c]: 'n' is a N&, never null, so this is always false
+# T2c: a test for null of a reference that never is one is dead code
+type N struct(v I64) { v }
+fn get(n N&) I64 {
+    if n is null { return 0 }
+    return n.v
+}
+fn main() { assert get(N(1)) == 1 }

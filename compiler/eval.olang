@@ -1925,6 +1925,11 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
             }
             # a function value is the same two words whatever function type it is seen as (a noreturn function for
             # one with no result, D8e)
+            # a reference seen as one that may be null (T2c) is the same address
+            if op == typed.PrimOp.Convert and m.T.KindOf(m.T.Repr(ty)) == types.Kind.Ref {
+                m.put(fi, dst, ty, m.arg(fi, args, 0))
+                return
+            }
             if op == typed.PrimOp.Convert and m.T.KindOf(m.T.Repr(ty)) == types.Kind.Func {
                 m.put(fi, dst, ty, m.arg(fi, args, 0))
                 return

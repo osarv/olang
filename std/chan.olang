@@ -54,8 +54,10 @@ extern fn pthread_cond_timedwait(c Array<I64>, m Array<I64>, ts Array<I64>) I32
 # or gives each batch a channel of its own, in a block that ends.
 type Chan<T> struct(cap I64) {
         # the ring buffer, and the two cursors into it. A bare "&" field lives where the channel does
-        # (C2d), which is what a run-time-sized field needs.
-    data mut Array<T>& = Array<T>(1 if cap == 0 else cap)
+        # (C2d), which is what a run-time-sized field needs. It is made by the first send, filled with what is sent,
+        # so the elements need no zero value (T2c: a reference never null has none)
+    size I64 = 1 if cap == 0 else cap
+    data mut Array<T>& = Array<T>(0)
     head I64 = 0
     tail I64 = 0
     count I64 = 0
@@ -78,8 +80,9 @@ fn Init<T>(c mut Chan<T>&) {
 
 # v into the ring, the lock held and a slot free; returns its ticket - how many values were placed before it
 fn place<T>(c mut Chan<T>&, v T) I64 {
+    if c.data.Len() == 0 { c.data = Array<T>(c.size, v) }
     c.data[c.tail] = v
-    c.tail = (c.tail + 1) % c.data.Len()
+    c.tail = (c.tail + 1) % c.size
     c.count = c.count + 1
     c.sent = c.sent + 1
     pthread_cond_broadcast(c.notEmpty)
@@ -89,7 +92,7 @@ fn place<T>(c mut Chan<T>&, v T) I64 {
 # the oldest value out of the ring, the lock held and the ring not empty
 fn oldest<T>(c mut Chan<T>&) T {
     v := c.data[c.head]
-    c.head = (c.head + 1) % c.data.Len()
+    c.head = (c.head + 1) % c.size
     c.count = c.count - 1
     c.taken = c.taken + 1
     pthread_cond_broadcast(c.notFull)   # a sender waiting for a slot, or for its value to be taken
@@ -141,7 +144,7 @@ fn withdraw<T>(c mut Chan<T>&) {
 # taken. A condition variable may wake spuriously, so each wait is in a loop re-reading the count under the lock.
 fn Send<T>(c mut Chan<T>&, v T) ? ChanError {
     pthread_mutex_lock(c.lock)
-    for c.count == c.data.Len() and not c.closed {
+    for c.count == c.size and not c.closed {
         pthread_cond_wait(c.notFull, c.lock)
     }
     try sendOpen(c)
@@ -185,7 +188,7 @@ fn (c mut Chan<T>&) Next() T ? Exhausted {
 fn SendUntil<T>(c mut Chan<T>&, v T, tok cancel.Token&) ? cancel.Stopped, ChanError {
     ts := Array<I64>(2)
     pthread_mutex_lock(c.lock)
-    for c.count == c.data.Len() and not c.closed {
+    for c.count == c.size and not c.closed {
         if tok.Cancelled() {
             pthread_mutex_unlock(c.lock)
             try tok.Reason()

@@ -322,7 +322,7 @@ fn (j Json&) Hash() I64 {
 # the value the JSON text holds: one value, with nothing but whitespace around it (a byte order mark before it is
 # ignored). Fails with the JsonError that says why the text is not JSON; "at", when given, is set to where reading
 # stopped - the start of the problem, or the end of the text.
-fn Parse(text String&, at mut Position& = null) Json& ? JsonError {
+fn Parse(text String&, at mut Position?& = null) Json& ? JsonError {
     r mut reader&return = reader(text)
     defer {
         if at is not null { r.place(at) }
@@ -337,9 +337,9 @@ fn Parse(text String&, at mut Position& = null) Json& ? JsonError {
 type reader struct(src String&) {
     src
     pos I64 = 0
-    vals mut Array<mut Json&>& = Array<mut Json&>(64)
+    vals mut Array<mut Json&>& = Array<mut Json&>(64, Json.Null)   # the slots past nv not read
     nv I64 = 0
-    names mut Array<String&>& = Array<String&>(16)
+    names mut Array<String&>& = Array<String&>(16, "")
     nn I64 = 0
     starts mut Array<I64>& = Array<I64>(16)     # for each open array, where its items start in vals; for an object,
     nameStarts mut Array<I64>& = Array<I64>(16) # also where its names start in names - -1 for an array
@@ -365,7 +365,7 @@ fn (r reader&) place(at mut Position&) {
 fn (r mut reader&) push(v mut Json&) {
     if r.nv == r.vals.Len() {
         old := r.vals
-        r.vals = Array<mut Json&>(r.nv * 2)
+        r.vals = Array<mut Json&>(r.nv * 2, old[0])
         for i in range r.nv { r.vals[i] = old[i] }
     }
     r.vals[r.nv] = v
@@ -375,7 +375,7 @@ fn (r mut reader&) push(v mut Json&) {
 fn (r mut reader&) pushName(name String&) {
     if r.nn == r.names.Len() {
         old := r.names
-        r.names = Array<String&>(r.nn * 2)
+        r.names = Array<String&>(r.nn * 2, old[0])
         for i in range r.nn { r.names[i] = old[i] }
     }
     r.names[r.nn] = name
@@ -405,14 +405,14 @@ fn (r mut reader&) close() {
     r.depth--
     from I64 = r.starts[r.depth]
     n I64 = r.nv - from
-    items mut Array<Json&>&r = Array<Json&>(n)
+    items mut Array<Json&>&r = Array<Json&>(n, r.vals[0])     # each written below
     for i in range n { items[i] = r.vals[from + i] }
     r.nv = from
     namesFrom I64 = r.nameStarts[r.depth]
     if namesFrom < 0 {
         r.push(Json.Arr(items))
     } else {
-        names mut Array<String&>&r = Array<String&>(n)
+        names mut Array<String&>&r = Array<String&>(n, r.names[0])
         for i in range n { names[i] = r.names[namesFrom + i] }
         r.nn = namesFrom
         r.push(Json.Obj(try Object(names, items) catch { unreachable }))
@@ -557,7 +557,7 @@ fn (r mut reader&) string() String& ? JsonError {
         c := r.src[r.pos]
         if c == '"' { break }
         if c == '\\' {
-            size += try r.escape(start, null)
+            size += try r.escape(start, "")
         } else if c < 0x20 {
             error JsonError.UNEXPECTED
         } else if c < 0x80 {
@@ -633,7 +633,7 @@ fn (r mut reader&) escape(w I64, out mut String&) I64 ? JsonError {
     } else {
         error JsonError.BAD_ESCAPE
     }
-    if out is not null { out[w] = b }
+    if out.Len() > 0 { out[w] = b }
     r.pos += 2
     return 1
 }
@@ -666,25 +666,25 @@ fn (r mut reader&) hex4(i I64) I64 ? JsonError {
 # code point cp's UTF-8 bytes, written into out at w when out is given, and how many there are
 fn putUtf8(cp I64, w I64, out mut String&) I64 {
     if cp < 0x80 {
-        if out is not null { out[w] = Char(cp) }
+        if out.Len() > 0 { out[w] = Char(cp) }
         return 1
     }
     if cp < 0x800 {
-        if out is not null {
+        if out.Len() > 0 {
             out[w] = Char(0xC0 | (cp >> 6))
             out[w + 1] = Char(0x80 | (cp & 0x3F))
         }
         return 2
     }
     if cp < 0x10000 {
-        if out is not null {
+        if out.Len() > 0 {
             out[w] = Char(0xE0 | (cp >> 12))
             out[w + 1] = Char(0x80 | ((cp >> 6) & 0x3F))
             out[w + 2] = Char(0x80 | (cp & 0x3F))
         }
         return 3
     }
-    if out is not null {
+    if out.Len() > 0 {
         out[w] = Char(0xF0 | (cp >> 18))
         out[w + 1] = Char(0x80 | ((cp >> 12) & 0x3F))
         out[w + 2] = Char(0x80 | ((cp >> 6) & 0x3F))

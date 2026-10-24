@@ -110,7 +110,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     for t in tops {
         ti := findIf(l.Mods[t.First].Decls, t.Second)
         if ti is null { continue }
-        chosen, ok, why, at := chain(x, c, t.First, ti)
+        chosen, ok, why, at := chain(x, c, t.First, ti!)
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
         if not ok and why == "" and condSaid(l.Diags, at) { continue }
         if not ok {
@@ -152,11 +152,11 @@ fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool
     d := c.P.L.Diags
     file := c.P.L.Mods[mi].File
     k I64 = 0
-    link := ti
+    link ast.TopIf?&ti = ti
     for link is not null {
-        csp := link.Cond.Span()
+        csp := link.Cond!.Span()
         at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
-        b := c.CondBody(mi, link.Cond)
+        b := c.CondBody(mi, link.Cond!)
         if b < 0 { return 0, false, "", at }
         v, s := x.CondStop(b)
         match s {
@@ -174,12 +174,12 @@ fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool
 }
 
 # the top-level if whose first condition starts at that offset, in decls or a branch of an if in them
-fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf&ds {
-    if ds is null { return null }
+fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?&ds {
+    if ds.Len() == 0 { return null }
     for d in ds {
         match d {
             case ast.Decl.If(_, ti) {
-                if ti.Cond is not null and ti.Cond.Span().Start == at { return ti }
+                if ti.Cond is not null and ti.Cond!.Span().Start == at { return ti }
                 f := findInIf(ti, at)
                 if f is not null { return f }
             }
@@ -189,14 +189,14 @@ fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf&ds {
     return null
 }
 
-fn findInIf(ti ast.TopIf&, at I32) ast.TopIf&ti {
+fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?&ti {
     if ti is null { return null }
     if ti.Then is not null {
-        f := findIf(ti.Then.Decls, at)
+        f := findIf(ti.Then!.Decls, at)
         if f is not null { return f }
     }
     if ti.Else is not null {
-        f := findIf(ti.Else.Decls, at)
+        f := findIf(ti.Else!.Decls, at)
         if f is not null { return f }
     }
     return findInIf(ti.ElseIf, at)
@@ -498,6 +498,7 @@ fn staleNotes(x mut Exec&, d mut diag.Diagnostics&, rec I64, file I64, sp source
 fn AbortWhy(k mir.ExitKind) String& {
     return match k {
         case mir.ExitKind.Unreachable => "it reaches unreachable code, which aborts the program"
+        case mir.ExitKind.NullReached => "a '!' in it meets a null, which aborts the program"
         case mir.ExitKind.Assert => "an assertion in it fails, which aborts the program"
         case mir.ExitKind.SliceBounds => "it slices out of range, which aborts the program"
         case mir.ExitKind.ArrayLength => "it makes an array of a length out of range, which aborts the program"
@@ -635,7 +636,7 @@ fn (x mut Exec&) buildDefault(m I64, ty types.TypeId, mutable Bool) Bool {
 
 # a global's type, as its initializer's store into it says (check writes one Assign to the global)
 fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
-    for s in b.Root.Stmts {
+    for s in b.Root!.Stmts {
         match s {
             case typed.Stmt.Assign(_, typed.Place.Global(_, ty, gm, gn), _) {
                 if gm == m and gn == n { return ty }
@@ -646,7 +647,7 @@ fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
     return types.UnknownT
 }
 
-fn writtenMut(v ast.VarDecl&) Bool {
+fn writtenMut(v ast.VarDecl?&) Bool {
     if v is null or v.Ty is null { return false }
     return match v.Ty {
         case ast.TypeRef.Perm(_, _, w, _) => w
@@ -753,13 +754,13 @@ fn (x mut Exec&) TestName(id I64) String {
     m := x.P.L.Mods[x.P.L.Root]
     name := findTest(m.Decls, x.Bodies[id].Sp)
     if name.End == I32(0) { return "test" }
-    s := m.Src.TextOf(name)
+    s := m.Src!.TextOf(name)
     if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
     return $s
 }
 
 fn findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
-    if ds is null { return source.Span(0, 0) }
+    if ds.Len() == 0 { return source.Span(0, 0) }
     for d in ds {
         match d {
             case ast.Decl.Test(dsp, name, _) {
@@ -775,14 +776,14 @@ fn findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
     return source.Span(0, 0)
 }
 
-fn findTestIf(ti ast.TopIf&, sp source.Span) source.Span {
+fn findTestIf(ti ast.TopIf?&, sp source.Span) source.Span {
     if ti is null { return source.Span(0, 0) }
     if ti.Then is not null {
-        f := findTest(ti.Then.Decls, sp)
+        f := findTest(ti.Then!.Decls, sp)
         if f.End > I32(0) { return f }
     }
     if ti.Else is not null {
-        f := findTest(ti.Else.Decls, sp)
+        f := findTest(ti.Else!.Decls, sp)
         if f.End > I32(0) { return f }
     }
     return findTestIf(ti.ElseIf, sp)

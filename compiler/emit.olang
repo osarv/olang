@@ -239,7 +239,7 @@ fn (e mut Emitter&) Objects() List<Object> {
 # the objects holding home's items (and the instances', alsoInst): one, or where split and they are more than
 # PartSize, as many parts as it takes - the first named identity, the others identity-K
 fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKind, home I64, alsoInst Bool, split Bool
-    inst mut List<String&>& = null) {
+    inst mut List<String&>?& = null) {
     # a test build's root cut into parts: its tests (and the harness naming them) apart from the code they call, in
     # parts of their own, a quarter the size - nothing imports a test, so an edit to one recompiles its part and
     # relinks only that part's code, where a part holding the functions tests call is imported by every part calling
@@ -593,7 +593,7 @@ fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c
 # one object's text: the items homed at home (with the instances' too, alsoInst) in its part of parts, each shared or local item they name
 # copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
 # another object, and the types they name
-fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut List<String&>& = null
+fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut List<String&>?& = null
     group I64 = -1) String {
     mine List<I64>
     for i in range e.itemSym.Len() {
@@ -1013,12 +1013,12 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     if isEnum {
         n := e.dbgNew()
         e.dbgTypes.Put(I64(r), n)
-        cn := t.CaseNames(r) if k == types.Kind.Named else null
+        cn := t.CaseNames(r) if k == types.Kind.Named else Array<source.NameId>(0)
         cs := t.Items(t.ShapeCases(r) if k == types.Kind.AnonEnum else t.Cases(r))
         es StringBuilder
         for i in range cs.Len() {
             m := e.dbgNew()
-            name := e.text(cn[i]) if cn is not null and i < cn.Len() else $i
+            name := e.text(cn[i]) if cn.Len() > 0 and i < cn.Len() else $i
             e.dbgShared(m, $"!DIEnumerator(name: \"" $escape(name) "\", value: " $i ")")
             if i > 0 { es.Push(", ") }
             es.Push($"!" $m)
@@ -1098,7 +1098,7 @@ fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
     if td is null or td.Body is null { return out }
     match td.Body {
         case ast.TypeBody.Struct(sb) {
-            if sb.Body is null { return out }
+            if sb.Body.Len() == 0 { return out }
             k I64 = 0
             for st in sb.Body {
                 match st {
@@ -1275,12 +1275,12 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
     e.itemText.Push($text)
     e.itemHome.Push(home)
     e.itemDecl.Push($decl)
-    e.itemRefs.Push(null)
+    e.itemRefs.Push(Array<I64>(0))
 }
 
 # item i's references, found once
 fn (e mut Emitter&) refs(i I64) Array<I64>&e {
-    if e.itemRefs[i] is null { e.itemRefs[i] = refsIn(e.itemText[i]).ToArray() }
+    if e.itemRefs[i].Len() == 0 { e.itemRefs[i] = refsIn(e.itemText[i]).ToArray() }
     return e.itemRefs[i]
 }
 
@@ -4549,13 +4549,13 @@ fn (e mut Emitter&) testName(id I64) String {
     sp := e.Lw.Bodies[id].Sp
     name := e.findTest(m.Decls, sp)
     if name.End == I32(0) { return "test" }
-    s := m.Src.TextOf(name)
+    s := m.Src!.TextOf(name)
     if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
     return $s
 }
 
 fn (e mut Emitter&) findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
-    if ds is null { return source.Span(0, 0) }
+    if ds.Len() == 0 { return source.Span(0, 0) }
     for d in ds {
         match d {
             case ast.Decl.Test(dsp, name, _) {
@@ -4571,14 +4571,14 @@ fn (e mut Emitter&) findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
     return source.Span(0, 0)
 }
 
-fn (e mut Emitter&) findTestIf(ti ast.TopIf&, sp source.Span) source.Span {
+fn (e mut Emitter&) findTestIf(ti ast.TopIf?&, sp source.Span) source.Span {
     if ti is null { return source.Span(0, 0) }
     if ti.Then is not null {
-        f := e.findTest(ti.Then.Decls, sp)
+        f := e.findTest(ti.Then!.Decls, sp)
         if f.End > I32(0) { return f }
     }
     if ti.Else is not null {
-        f := e.findTest(ti.Else.Decls, sp)
+        f := e.findTest(ti.Else!.Decls, sp)
         if f.End > I32(0) { return f }
     }
     return e.findTestIf(ti.ElseIf, sp)

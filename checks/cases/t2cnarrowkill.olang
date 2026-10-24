@@ -1,0 +1,10 @@
+# check: fail error[T2c]: 'p' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
+# S8e: a narrowing holds until a statement assigns the local - after it, p may be null again
+type N struct(v I64, next N?&) { v, next }
+fn f(h N&) I64 {
+    p := h.next
+    if p is null { return 0 }
+    p = p.next
+    return p.v
+}
+fn main() { assert f(N(1, N(2, N(3, null)))) == 3 }

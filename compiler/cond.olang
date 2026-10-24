@@ -405,7 +405,7 @@ fn (e Eval&) isLocal(n source.NameId) Bool {
 
 # whether a condition names a local anywhere - the evaluator stops at the first thing it cannot read, so one further
 # on was never seen
-fn (e Eval&) mentionsLocal(c ast.Expr&) Bool {
+fn (e Eval&) mentionsLocal(c ast.Expr?&) Bool {
     if c is null { return false }
     return match c {
         case ast.Expr.Name(_, n) => e.isLocal(n)

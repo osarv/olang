@@ -1,0 +1,14 @@
+# check: fail error[T2c]: 'p' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
+# S8e: after "for p is null { }" p is known not null only where the loop holds no break - a break may leave with p null
+type N struct(v I64) { v }
+fn f(a Array<N?&>&) I64 {
+    p := a[0]
+    i I64 = 0
+    for p is null {
+        i++
+        if i == a.Len() { break }
+        p = a[i]
+    }
+    return p.v
+}
+fn main() { assert f(N?&[null, N(4)]) == 4 }

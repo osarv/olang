@@ -1,0 +1,5 @@
+# check: fail error[T2c]: N& is never null - a reference that may be is written N?&
+# D8a, T2c: a literal default fits its parameter where it is written, though no call leaves it out
+type N struct(v I64) { v }
+fn f(n N& = null) I64 { return n.v }
+fn main() { assert f(N(1)) == 1 }

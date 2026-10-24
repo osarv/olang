@@ -288,6 +288,7 @@ type ExitKind enum {
     Fail           # S16a
     Abort          # S16c: "aborted"
     Unreachable    # S16d: "unreachable reached" - a value match no clause selects too (S12b); msg its message
+    NullReached    # T2c, E35: "null reached" - "x!" on a null reference
     Assert         # S18: "assertion failed"
     SliceBounds    # E16b: "slice bounds out of range"
     ArrayLength    # D14b: "array length out of range"
@@ -303,6 +304,7 @@ fn ExitText(k ExitKind) String& {
         case ExitKind.Done, ExitKind.Fail, ExitKind.Error, ExitKind.Escaped => ""
         case ExitKind.Abort => "aborted"
         case ExitKind.Unreachable => "unreachable reached"
+        case ExitKind.NullReached => "null reached"
         case ExitKind.Assert => "assertion failed"
         case ExitKind.SliceBounds => "slice bounds out of range"
         case ExitKind.ArrayLength => "array length out of range"
@@ -583,18 +585,18 @@ type verifier struct(F Fn&, T mut types.Table&) {
     report Bool = true
     # the dataflow, per block's entry: whether it is reached yet, which locals are initialized and which arena locals
     # live (flat, nb x nl), which joins have tasks not waited for (nb x ns), and the stack of open scopes (in stacks)
-    seen mut Array<Bool>& = null
-    initAt mut Array<Bool>& = null
-    liveAt mut Array<Bool>& = null
-    pendAt mut Array<Bool>& = null
-    stackAt mut Array<I64>& = null
-    stackN mut Array<I64>& = null
+    seen mut Array<Bool>& = Array<Bool>(0)
+    initAt mut Array<Bool>& = Array<Bool>(0)
+    liveAt mut Array<Bool>& = Array<Bool>(0)
+    pendAt mut Array<Bool>& = Array<Bool>(0)
+    stackAt mut Array<I64>& = Array<I64>(0)
+    stackN mut Array<I64>& = Array<I64>(0)
     stacks List<ScopeId>
-    reached mut Array<Bool>& = null
+    reached mut Array<Bool>& = Array<Bool>(0)
     # the state walking a block
-    init mut Array<Bool>& = null
-    live mut Array<Bool>& = null
-    pend mut Array<Bool>& = null
+    init mut Array<Bool>& = Array<Bool>(0)
+    live mut Array<Bool>& = Array<Bool>(0)
+    pend mut Array<Bool>& = Array<Bool>(0)
     stack List<ScopeId>
     changed Bool = false
 }

@@ -415,22 +415,38 @@ or a method's receiver, is written as its bare name, a `type-ref` (G8b).
 
 **T2a (`null`).** `null` is a literal denoting the **absent reference**. It has no type of its own: like a
 numeric literal (T6), it adapts to whatever type it is used against, and the types it may adapt to are
-exactly the **nullable** ones — a `&`/`&x`-marked struct, enum or array, an array value (`Array<T>`, which `null`
-makes the empty array), and a function type (T21, D16d). Used
-against any other type it is a compile-time error. Calling through a null function value is a null dereference
-(T2b).
+exactly the **nullable** ones — a reference marked `?&` (T2c) and a function type (T21, D16d). Used against any other
+type - a reference marked `&` without `?` included - it is a compile-time error naming the nullable form (`Node?&`); used
+against an array, a value or a reference (`String&` included), it is one naming the empty array, which is what the
+array's absence is (`""`, `Array<T>(0)`, T2c). Calling through a null function value is a null dereference (T2b).
+
+**T2c (nullable references).** A reference marker is `&` or `?&` (T24): `Node&` is never null, `Node?&` may be -
+`mut Node?&`, `Node?&x`, `List<Node?&>`, `Array<Node?&>&`. The two are different types of one representation: a
+`T&` fits wherever a `T?&` is wanted (E12), and a `T?&` fits a `T&` only where it is known not to be null - narrowed
+by a test (S8e), or unwrapped by `x!` (E35), which ends the program on a null. Through a `T?&` nothing is read or written
+- no field, element, slice, method call or `Len()` - and it is not passed for a `T&` parameter, until it is known not to be
+null; `==`, `is null`, assignment and passing it on as a `T?&` need nothing. `x is null` and `x is not null` on a
+reference that is never null are compile-time errors (always false, always true). Where `null` and a `T&` meet - the
+values of a conditional or a match (E28, S12b), a `catch default null` beside a call giving `T&` (R11) - the result is
+`T?&`. A function value stays nullable (T21).
+
+**An array is never null.** Its zero value is the empty array, which stands for "no array" wherever one is missing - so
+an array reference is never nullable: `Array<T>?&` and `String?&` are compile-time errors naming `&` alone, `null` given
+for an array is an error naming its empty array (`""` for a `String`, `Array<T>(0)` otherwise), and `x is null` /
+`x is not null` on an array is an error naming `x.Len() == 0` / `x.Len() > 0`. Nothing reads through a null array, so an
+array reference needs no narrowing and no `!`.
 
 Its representation is **all-zero bits**, at every nullable type. For a single-pointer type that is the null
-pointer; for the two-word shapes it is each word zeroed, so a null `Array<T>` is `{ 0, null }` — `Len()` (E23) of
-it is `0` and it reads as genuinely empty.
+pointer; for the two-word shapes it is each word zeroed, and for an array that is its zero value, the empty array
+`{ 0, null }` — `Len()` (E23) of it is `0` and it reads as genuinely empty.
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
-scope without a containment check. Whether a reference holds none is asked with `p is null` (E10c) - for an array
-reference too, which is null only when it has no storage, and so differs from an empty array that has. A null equals
+scope without a containment check. Whether a reference holds none is asked with `p is null` (E10c). A null equals
 only a null (E10).
 
-**T2b (memory safety).** Every reference is nullable; there is no separate non-nullable reference type.
-Reading or writing a field or element through a null reference, or calling through a null function value,
+**T2b (memory safety).** A reference is null only where its type says it may be (T2c), and the compiler holds every
+read through one to a test; a narrowing of a field path can still meet a null that a call stored there since the test
+(S8e). Reading or writing a field or element through a null reference, or calling through a null function value,
 **traps**: the program ends there with the platform's fault signal (`SIGSEGV`), as when a stack overflows -
 writing `os.OnCrash`'s message first if one is set (std/os) - and nothing after the access runs. It costs nothing
 per access: null is the all-zero representation and the lowest addresses are never mapped, so the access itself
@@ -913,7 +929,7 @@ whose scope is fixed by its position. The full semantics are specified in §8.
 ### 2.9 Type references and reference markers
 
 **T24.** `type-ref ::= alias-chain IDEN [ type-args ] [ reference-marker ]`, where
-`reference-marker ::= "&" [ IDEN | "return" ]`, `type-args` is defined in §12.3 G8 (required when, and only when, the
+`reference-marker ::= [ "?" ] "&" [ IDEN | "return" ]` (`?&`: nullable, T2c), `type-args` is defined in §12.3 G8 (required when, and only when, the
 named type is generic, and always for `Array`, T7), and `alias-chain IDEN` (§4.4 M8) names a primitive
 type, `Array`, or a struct/enum/error type (or, in a constraint, a trait) declared in the referencing module or reached through
 an import alias chain. This is the `type-ref` alternative of `type-expr` (T2). A struct, enum or array type may
@@ -1476,7 +1492,8 @@ compile time** (§13 K1): a literal, or any expression the compile-time evaluato
 constructor call (`p Point = Point(0, 0)`). It is evaluated on behalf of callers the declaration cannot
 see, so it must have a value and no other behaviour - it reads no mutable global, calls no `extern fn`,
 and builds nothing with a destructor. It is checked in the declaring module, and one that cannot be
-computed is a compile-time error naming what stops it. A literal default for a parameter whose type is a type
+computed is a compile-time error naming what stops it. A literal default fits its parameter's type where it is written,
+whether or not any call leaves it out (`n Node& = null` is an error, T2c). A literal default for a parameter whose type is a type
 variable (`alpha T = 1`) has no type to fit there: it is fitted at each call against the instantiation's type, adapting
 as a literal argument does (G18), and a call whose instantiation it does not fit is the error. A default may read the
 length of a by-value array parameter before it (`k I64 = a.Len() * 2`), which is a constant in each instance (G29): it
@@ -1676,7 +1693,9 @@ of that kind is - a local, a global (`X, Y mut I32 = 0, 0`) - and as constructor
 also be puns (`x, y`) or inferred (`p, q := a, b`).
 
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
-`0`/`0.0` for numeric types, `null` (T2a) for anything nullable, an empty array (0 elements, T7c) for `Array<T>`,
+`0`/`0.0` for numeric types, `null` (T2a) for anything nullable - a `T?&`; a `T&` has **no zero value**, so a
+declaration of one with no initializer, an `Array<T&>(n)` with no fill, and a struct field of one with no default or
+parameter to give it are compile-time errors naming `T?&` - an empty array (0 elements, T7c) for `Array<T>`,
 and the first-declared case for an enum — an enum and an error type have no other meaningful "zero", so this is the type's
 first case by representation, not by any declared meaning. A type with a **constructor** - every struct (T13), and a
 declared number with one (T29d) - makes its own zero value (D13c). Nothing is ever uninitialized. For a **global**
@@ -2522,7 +2541,7 @@ is-expr ::= operand "is" [ "not" ] "null"
 ```
 
 `is` asks nothing else: `a is b` for any `b` but `null`, a case or a type after it, `null is null`, and `x is null` for an
-`x` that cannot be null (a number, a struct value) are compile-time errors - a value and a case are compared with `==`
+`x` that cannot be null (a number, a struct value, an array - T2c, a reference not marked `?&`) are compile-time errors - a value and a case are compared with `==`
 (E10, E32). Comparing with the `null` literal, `x == null` or `x != null`, is an error naming `x is null`.
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
@@ -3036,7 +3055,7 @@ the condition first, in the order the values are walked.
 
 Its storage is allocated before the first element where the source's length is known before the loop - an array's
 length or a range's count, at most - and otherwise grows: room for 100 elements, then double whenever full. A
-comprehension that keeps nothing is an empty array with storage of its own, never a null one (T2a).
+comprehension that keeps nothing is an empty array with storage of its own.
 
 An element type that is or holds a reference (T24) is not admitted: a comprehension's elements are values.
 
@@ -3342,8 +3361,10 @@ writes `FILE:LINE: ` and the error - its type, named as the program writes it, a
 of its path (`io.IoError.FAILED`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; `checked`
 asks for checks, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
-`fn main() { io.Println("Hello World!")! }` is a program. `!` on an expression that cannot fail as written is a
-compile-time error, as `try` there is (R8), with the same exception in a generic's body. It binds as a postfix
+`fn main() { io.Println("Hello World!")! }` is a program. On a value of a nullable reference type (T2c), `x!` is that
+reference as a `T&`, ending the program as a failed `assert` does (`FILE:LINE: null reached`) when it is null - after
+handling a failure first, where the expression can also fail. `!` on an expression that neither can fail as written nor
+is a nullable reference is a compile-time error, as `try` there is (R8), with the same exception in a generic's body. It binds as a postfix
 operator, tighter than any prefix one: `-f(x)!` is `-(f(x)!)`; the chain may go on after it (`f()!.g()`, `g` then not
 covered). A `!` directly followed by `=` is the `!=` token (L16), which a postfix `!` never needs to stand before.
 While compiling, an error reaching `!` is in K1's abort class: where a value is required it is a compile-time error,
@@ -3510,6 +3531,21 @@ payload's fields are read once, where the narrowing begins: what `e` is known to
 are read there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a
 compile-time error naming the whole-value assignment. A field of a
 case the local is not known to hold is no member of an enum, and a compile-time error.
+
+**S8e (null narrowing).** A local or a parameter holding a `T?&` is known not to be null (T2c), and reads as a `T&`:
+- in the block of `if p is not null { }`, and in the `else` of `if p is null { } else { }`;
+- after `if p is null { ... }` with no `else` whose block always leaves (D10a: `if n is null: return 0`), to the end of
+  the block the `if` stands in, and after `assert p is not null`;
+- in the right operand of `p is not null and ...`, and of `p is null or ...` - so in a condition built of them, and in the
+  block of an `if` or the body of a loop whose condition is `p is not null and ...`;
+- in a loop's body when its condition is `p is not null` (`for c is not null { }`, the three-clause form's condition);
+- after a loop whose condition is `p is null` and which holds no `break` (`for p is null { p = next() }`): it is left only
+  by that condition failing;
+- after a statement assigning it a value never null (`p = Node(1)`).
+It holds from there until a statement assigns it (an assignment, a compound one, a target - `p = p.next` reading
+`p.next` before the store), and inside a loop only where nothing in the loop assigns it; not inside a lambda written
+there. As for S8d, a field is never narrowed - a call may change it: a field read through is tested through a local
+(`n := s.head; if n is not null { n.v }`) or unwrapped (`s.head!.v`).
 
 **S8b.** A condition the **build decides** — one S8a describes, except that it does read a build constant —
 makes the `if` conditional compilation, exactly as at the top level (B9): only the branch it chooses is

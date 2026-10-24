@@ -480,7 +480,7 @@ type ChunkSize I64(v I64) ? ArrayError.BAD_CHUNK {
 # (so a piece outlives nothing it views), allocated once at its exact length
 fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>&a {
     n := I64(size)
-    pieces mut Array<mut Array<T>&>&a = Array<mut Array<T>&>((a.Len() + n - 1) / n)
+    pieces mut Array<mut Array<T>&>&a = Array<mut Array<T>&>((a.Len() + n - 1) / n, a)   # each piece written below
     for k in range pieces.Len() {
         start I64 = k * n
         end I64 = start + n if a.Len() - start > n else a.Len()

@@ -16,14 +16,14 @@ type TypeRef enum {
     Func(sp source.Span, sig Sig&)
     # an inline shape - an anonymous enum, struct or trait - kept as the declaration it would be
     Shape(sp source.Span, body TypeBody&)
-    # a reference marker after a type: "&" (scope 0), "&x", "&return" (T24, O3)
-    Ref(sp source.Span, of TypeRef&, scope source.NameId)
+    # a reference marker after a type: "&" (scope 0), "&x", "&return" (T24, O3); "?&" nullable (T2c)
+    Ref(sp source.Span, of TypeRef&, scope source.NameId, nullable Bool)
     # the permission before a type: "mut" (T25b) - owned never set by the parser, own being gone from the language
-    Perm(sp source.Span, of TypeRef&, writable Bool, owned Bool)
+    Perm(sp source.Span, of TypeRef?&, writable Bool, owned Bool)
 }
 
 # a parameter: name type [= default]. A lambda's parameter may leave its type out (null)
-type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef&, Dflt Expr&) {
+type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&) {
     Sp
     Name
     Ty
@@ -68,12 +68,12 @@ type Expr enum {
     # x[i, j] - an index, or, where x names a type, an array literal (the resolver decides, DESIGN.md point 1). "T[]"
     # has no items and is always a literal
     Index(sp source.Span, x Expr&, items Array<Expr&>&)
-    Slice(sp source.Span, x Expr&, lo Expr&, hi Expr&)
-    ArrayLit(sp source.Span, elem TypeRef&, items Array<Expr&>&)   # an element type that is a literal's by its form
+    Slice(sp source.Span, x Expr&, lo Expr?&, hi Expr?&)
+    ArrayLit(sp source.Span, elem TypeRef?&, items Array<Expr&>&)   # an element type that is a literal's by its form
     Row(sp source.Span, items Array<Expr&>&)           # "[...]" nested in a literal: no 2-D arrays (E21), kept to report
     Compr(sp source.Span, c Compr&)                    # T[e for x in s if c] (E27)
     Join(sp source.Span, parts Array<Expr&>&)          # "a" $b "c" (E11b)
-    Try(sp source.Span, x Expr&, clauses Array<Catch&>&, isChecked Bool)   # try, or checked (E15a)
+    Try(sp source.Span, x Expr&, clauses Array<Catch&>&, isChecked Bool)    # try, or checked (E15a)
     Lambda(sp source.Span, f Func&)
     MatchE(sp source.Span, m Match&)
     Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
@@ -86,7 +86,7 @@ type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
 }
 
 # a comprehension: its element type, the value, the names it walks with (Key 0 for none), the source and the filter
-type Compr struct(Elem TypeRef&, Value Expr&, Key source.NameId, Name source.NameId, Source Expr&, Filter Expr&) {
+type Compr struct(Elem TypeRef?&, Value Expr&, Key source.NameId, Name source.NameId, Source Expr&, Filter Expr?&) {
     Elem
     Value
     Key
@@ -96,15 +96,16 @@ type Compr struct(Elem TypeRef&, Value Expr&, Key source.NameId, Name source.Nam
 }
 
 # catch A + B.word { block } default v, w - a clause with no items takes every error left (R9b)
-type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defaults Array<Expr&>&) {
+type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defaults Array<Expr&>&, Braced Bool = true) {
     Sp
     Items
-    Body       # null for none
+    Body
     Defaults
+    Braced     # whether a block is written - "catch E { }" has one, empty, "catch E default v" none
 }
 
 # a match, a statement's or a value's; OnType for "match T" on an introduced type variable, whose cases are types
-type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>&, NoMatch Case&) {
+type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>&, NoMatch Case?&) {
     Sp
     Subject
     OnType
@@ -113,13 +114,13 @@ type Match struct(Sp source.Span, Subject Expr&, OnType Bool, Cases Array<Case&>
 }
 
 # one case: its alternatives (patterns, or types for "match T"), its guard, and a block or a value ("=> v")
-type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr&, Body Array<Stmt&>&
-                 Value Expr&) {
+type Case struct(Sp source.Span, Alts Array<Pattern&>&, Types Array<TypeRef&>&, Guard Expr?&, Body Array<Stmt&>&
+                 Value Expr?&) {
     Sp
     Alts
     Types
     Guard
-    Body       # null when the case gives a value
+    Body       # empty when the case gives a value (Value is not null)
     Value
 }
 
@@ -134,7 +135,7 @@ type Pattern enum {
 
 # a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
 # "x, y"), which have no type and no value. NameSps gives each name's span, Values one value per name or none
-type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef&, Values Array<Expr&>&
+type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty TypeRef?&, Values Array<Expr&>&
                     Infer Bool, Field Bool) {
     Names
     NameSps
@@ -146,7 +147,7 @@ type VarDecl struct(Names Array<source.NameId>&, NameSps Array<source.Span>&, Ty
 
 # an if: its condition and branches. The diagnostics a branch's parse met are held in its group (diag.Hold), said only
 # if the branch is compiled: an if the build decides compiles one (B9, S8b, DESIGN.md point 12)
-type If struct(Cond Expr&, Then Branch&, Else Stmt&) {
+type If struct(Cond Expr?&, Then Branch?&, Else Stmt?&) {
     Cond
     Then
     Else       # null, an If ("else if"), or an If with no condition: a plain else, its Branch holding its group
@@ -154,11 +155,11 @@ type If struct(Cond Expr&, Then Branch&, Else Stmt&) {
 
 type Branch struct(Sp source.Span, Body Array<Stmt&>&, Group I64) {
     Sp
-    Body       # null where it did not parse
+    Body       # empty where it did not parse
     Group
 }
 
-type For3 struct(Init Stmt&, Cond Expr&, Post Stmt&, Body Array<Stmt&>&) {
+type For3 struct(Init Stmt&, Cond Expr?&, Post Stmt&, Body Array<Stmt&>&) {
     Init
     Cond
     Post
@@ -195,7 +196,7 @@ type Stmt enum {
     Var(sp source.Span, v VarDecl&)
     Multi(sp source.Span, m Multi&)
     Assign(sp source.Span, op token.Tok, target Expr&, value Expr&)
-    TryStore(sp source.Span, s Stmt&, clauses Array<Catch&>&, isChecked Bool)   # try/checked x[i] = v, x++ (R21)
+    TryStore(sp source.Span, s Stmt&, clauses Array<Catch&>&, isChecked Bool)    # try/checked x[i] = v, x++ (R21)
     If(sp source.Span, i If&)
     Forever(sp source.Span, body Array<Stmt&>&)
     While(sp source.Span, cond Expr&, body Array<Stmt&>&)
@@ -204,9 +205,9 @@ type Stmt enum {
     DoFor(sp source.Span, body Array<Stmt&>&, cond Expr&)
     MatchS(sp source.Span, m Match&)
     Return(sp source.Span, values Array<Expr&>&)
-    Jump(sp source.Span, kind token.Tok, msg Expr&)    # break continue unreachable; an unreachable's message (S16d)
-    Assert(sp source.Span, cond Expr&, msg Expr&)
-    Raise(sp source.Span, word Path&)                  # error T.WORD
+    Jump(sp source.Span, kind token.Tok, msg Expr?&)    # break continue unreachable; an unreachable's message (S16d)
+    Assert(sp source.Span, cond Expr&, msg Expr?&)
+    Raise(sp source.Span, word Path?&)                  # error T.WORD
     Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
     Join(sp source.Span, j JoinS&)
     Defer(sp source.Span, s Stmt&)
@@ -215,16 +216,17 @@ type Stmt enum {
 
 # a function, method, lambda, extern or trait method: receiver (null for none; a trait method's "mut" is a receiver of
 # no name whose type is "mut" alone), name (0 for a lambda), signature, body (null for an extern, a trait method, and a
-# function whose body did not parse - declared by its signature alone), and the type variables its list after the name
-# introduces (G3, QW: "fn max<T>(...)"; null for none)
-type Func struct(Sp source.Span, Recv Param&, Name source.NameId, S Sig&, Body Array<Stmt&>&
-                 TypeParams Array<TypeParam&>& = null) {
+# function whose body did not parse - declared by its signature alone: Bodied false), and the type variables its list
+# after the name introduces (G3, QW: "fn max<T>(...)"; empty for none)
+type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body Array<Stmt&>&
+                 TypeParams Array<TypeParam&>& = Array<TypeParam&>(0), Bodied Bool = true) {
     Sp
     Recv
     Name
     S
     Body
     TypeParams
+    Bodied
 }
 
 # an enum case: name and payload
@@ -242,13 +244,13 @@ type TypeBody enum {
     Enum(cases Array<CaseDecl&>&)
     Trait(methods Array<Func&>&)
     # type T I32 / extends ...; a constructor over a primitive (T29d) when Ctor is not null
-    Over(base TypeRef&, ctor Func&)
+    Over(base TypeRef&, ctor Func?&)
 }
 
 # struct[<T, ...>](params) ? errors { body } [destruct { ... }] - the destructor's span DtorSp, its body null for none;
 # the constructor's own type variables (G10d) null for none
-type StructBody struct(Params Array<Param&>&, Errs Sig&, Body Array<Stmt&>&, DtorSp source.Span, Dtor Array<Stmt&>&
-                       TypeParams Array<TypeParam&>& = null) {
+type StructBody struct(Params Array<Param&>&, Errs Sig?&, Body Array<Stmt&>&, DtorSp source.Span, Dtor Array<Stmt&>&
+                       TypeParams Array<TypeParam&>& = Array<TypeParam&>(0)) {
     Params
     Errs
     Body
@@ -258,13 +260,13 @@ type StructBody struct(Params Array<Param&>&, Errs Sig&, Body Array<Stmt&>&, Dto
 }
 
 # a type parameter: its name and its constraint or constant type (null for neither)
-type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef&) {
+type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&) {
     Sp
     Name
     Ty
 }
 
-type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody&) {
+type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&) {
     Name
     Params
     Extends
@@ -272,7 +274,7 @@ type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool
 }
 
 # a top-level if (B9): each branch's declarations and the group holding its diagnostics, the else a TopIf or a branch
-type TopIf struct(Cond Expr&, Then TopBranch&, ElseIf TopIf&, Else TopBranch&) {
+type TopIf struct(Cond Expr?&, Then TopBranch?&, ElseIf TopIf?&, Else TopBranch?&) {
     Cond
     Then
     ElseIf
@@ -312,7 +314,7 @@ fn (e Expr&) Span() source.Span {
 fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _) => sp
-        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _), TypeRef.Perm(sp, _, _, _) => sp
+        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _) => sp
     }
 }
 

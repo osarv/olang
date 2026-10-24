@@ -90,7 +90,7 @@ fn copyOut(fill fn(buf mut Array<U8>&) I64) String& ? OsError {
 # being interpreted - then each argument, as given
 fn Args() Array<String&>& {
     n := __olang_arg_count()
-    args mut Array<String&>&return = Array<String&>(n)
+    args mut Array<String&>&return = Array<String&>(n, "")     # each written below
     for i in range n {
         text String&return = String(Array<U8>(__olang_arg(i, Array<U8>(0), 0)))
         __olang_arg(i, text, text.Len())
@@ -756,7 +756,7 @@ test "ReadDir, Rename and Remove" {
     assert full
     try Remove("build/os_files/d/z")
     try Remove("build/os_files/d/sub")
-    assert (try ReadDir("build/os_files/d") catch default Array<String&>(1)).Len() == 0
+    assert (try ReadDir("build/os_files/d") catch default Array<String&>(1, "x")).Len() == 0
     gone := false
     try ReadDir("build/os_files/nothing") catch OsError.NOT_FOUND { gone = true } catch { }
     assert gone

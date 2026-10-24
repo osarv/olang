@@ -1,8 +1,9 @@
 # S18a: a guaranteed check that fails says where it was written too - a slice out of range, an array length out of
-# range, an 'as' that does not hold - built and interpreted alike. Which
+# range, an 'as' that does not hold, a '!' on a null (E35) - built and interpreted alike. Which
 # one fails is chosen by the number of arguments, so nothing here is decided while compiling
 import "std/os"
 import "std/io"
+type Box struct(v I64) { v }
 type Shape enum {
     Dot
     Circle(r F64)
@@ -14,5 +15,7 @@ fn main() ? {
     if n == 2 { try io.Println($Array<I64>(n - 5).Len()) }
     sh Shape = Shape.Dot if n == 3 else Shape.Circle(1.0)
     if n == 3 { try io.Println($(sh as Shape.Circle)) }
+    b Box?& = Box(n) if n != 4 else null
+    try io.Println($b!.v)
     try io.Println($n)
 }

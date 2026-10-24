@@ -46,12 +46,12 @@ type List<T> struct() {
 
 # what a List holds - private, reached only through a List
 type listState<T> struct() {
-    chunks mut Array<mut Array<T>&>& = null          # the chunks made, in order, once there are two: chunk k holds
-                                                     # firstChunk << k elements
-    first mut Array<T>& = null                       # chunk 0, made by the first Push
+    chunks mut Array<mut Array<T>&>& = Array<mut Array<T>&>(0)    # the chunks made, in order, once there are two:
+                                                                  # chunk k holds firstChunk << k elements
+    first mut Array<T>& = Array<T>(0)                # chunk 0, made by the first Push - empty before it
     nChunks I64 = 0                                  # how many of them are in use - the last of those is the tail
     made I64 = 0                                     # how many are made: those past nChunks wait to be filled again
-    tail mut Array<T>& = null                        # the last chunk in use, which Push fills
+    tail mut Array<T>& = Array<T>(0)                 # the last chunk in use, which Push fills
     used I64 = 0                                     # how much of the tail is filled
     room I64 = 0                                     # the tail's length, 0 before the first chunk
     count I64 = 0
@@ -104,11 +104,10 @@ fn (s mut listState<T>&) grow(fill T) {
         s.tail = s.first
         s.made = 1
     } else {
-        if s.chunks is null {
-            s.chunks = Array<mut Array<T>&>(4)
-            s.chunks[0] = s.first
+        if s.chunks.Len() == 0 {
+            s.chunks = Array<mut Array<T>&>(4, s.first)     # every slot past made written before it is read
         } else if s.made == s.chunks.Len() {
-            more mut Array<mut Array<T>&>&s = Array<mut Array<T>&>(s.made * 2)
+            more mut Array<mut Array<T>&>&s = Array<mut Array<T>&>(s.made * 2, s.first)
             for k in range s.made { more[k] = s.chunks[k] }
             s.chunks = more
         }
@@ -359,7 +358,7 @@ fn (l List<T>&) Clone() List<T> {
 # code over Iterator<T> takes it.
 type ListIter<T> struct(of List<T>&) {
     list listState<T>&of = of.s
-    chunk mut Array<T>&of = null          # the chunk holding the next element; null before the first
+    chunk mut Array<T>&of = of.s.first    # the chunk holding the next element; the first before it is entered
     k I64 = 0                             # the next chunk's number
     i I64 = 0                             # the next element's place in chunk
     room I64 = 0                          # chunk's length

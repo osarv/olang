@@ -97,15 +97,15 @@ fn (w mut writer&) decl(d ast.Decl&) {
 
 fn (w mut writer&) topIf(i ast.TopIf&) {
     w.put("if ")
-    w.expr(i.Cond)
+    w.expr(i.Cond!)
     w.put(" ")
-    w.topBranch(i.Then)
+    w.topBranch(i.Then!)
     if i.ElseIf is not null {
         w.put(" else ")
-        w.topIf(i.ElseIf)
+        w.topIf(i.ElseIf!)
     } else if i.Else is not null {
         w.put(" else ")
-        w.topBranch(i.Else)
+        w.topBranch(i.Else!)
     }
 }
 
@@ -130,7 +130,7 @@ fn (w mut writer&) func(f ast.Func&) {
     w.put("fn ")
     if f.Recv is not null {
         w.put("(")
-        w.param(f.Recv)
+        w.param(f.Recv!)
         w.put(") ")
     }
     w.name(f.Name)
@@ -190,11 +190,11 @@ fn (w mut writer&) param(x ast.Param&) {
     if x.Name != source.NameId(0) { w.name(x.Name) }
     if x.Ty is not null {
         if x.Name != source.NameId(0) { w.put(" ") }
-        w.ty(x.Ty)
+        w.ty(x.Ty!)
     }
     if x.Dflt is not null {
         w.put(" = ")
-        w.expr(x.Dflt)
+        w.expr(x.Dflt!)
     }
 }
 
@@ -211,12 +211,12 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
     w.typeParams(t.Params)
     if t.Extends { w.put(" extends") }
     w.put(" ")
-    w.typeBody(t.Body)
+    w.typeBody(t.Body!)
 }
 
 # "<T, U Shape, N I64>": a type's, a function's or a constructor's type parameters (G1, G3, G10d)
 fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
-    if tps is null or tps.Len() == 0 { return }
+    if tps.Len() == 0 or tps.Len() == 0 { return }
     w.put("<")
     was := w.item
     w.item = true
@@ -225,7 +225,7 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
         w.name(x.Name)
         if x.Ty is not null {
             w.put(" ")
-            w.ty(x.Ty)
+            w.ty(x.Ty!)
         }
     }
     w.item = was
@@ -240,10 +240,10 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.put("(")
             w.params(s.Params)
             w.put(")")
-            w.errors(s.Errs)
+            w.errors(s.Errs!)
             w.put(" ")
             w.block(s.Body)
-            if s.Dtor is not null {
+            if s.DtorSp.End > 0 {
                 w.put(" destruct ")
                 w.block(s.Dtor)
             }
@@ -256,7 +256,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
                 w.name(c.Name)
                 if c.Whole {
                     w.put(" ")
-                    w.ty(c.Payload[0].Ty)
+                    w.ty(c.Payload[0].Ty!)
                 } else if c.Payload.Len() > 0 {
                     w.put("(")
                     w.params(c.Payload)
@@ -331,9 +331,9 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
             if wrap { w.put(")") }
         }
         case ast.TypeRef.Shape(_, body) { w.typeBody(body) }
-        case ast.TypeRef.Ref(_, of, scope) {
+        case ast.TypeRef.Ref(_, of, scope, nullable) {
             w.ty(of)
-            w.put("&")
+            w.put("?&" if nullable else "&")
             if scope != source.NameId(0) { w.name(scope) }
         }
         case ast.TypeRef.Perm(_, of, writable, owned) {
@@ -392,7 +392,7 @@ fn (w mut writer&) varDecl(v ast.VarDecl&) {
     if v.Infer {
         if v.Ty is not null {
             w.put(" ")
-            w.ty(v.Ty)
+            w.ty(v.Ty!)
         }
         w.put(" := ")
         w.exprs(v.Values)
@@ -400,7 +400,7 @@ fn (w mut writer&) varDecl(v ast.VarDecl&) {
     }
     if v.Ty is null { return }
     w.put(" ")
-    w.ty(v.Ty)
+    w.ty(v.Ty!)
     if v.Values.Len() > 0 {
         w.put(" = ")
         w.exprs(v.Values)
@@ -415,7 +415,7 @@ fn (w mut writer&) clauses(cl Array<ast.Catch&>&) {
             w.path(it)
         }
 
-        if c.Body is not null {
+        if c.Braced {
             w.put(" ")
             w.block(c.Body)
         }
@@ -461,7 +461,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.put("for ")
             w.stmt(f.Init)
             w.put(", ")
-            w.expr(f.Cond)
+            w.expr(f.Cond!)
             w.put(", ")
             w.stmt(f.Post)
             w.body(f.Body)
@@ -541,31 +541,31 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
 # an else whose block did not parse is an If with no condition
 fn (w mut writer&) ifStmt(i ast.If&) {
     if i.Cond is null {
-        w.branch(i.Then)
+        w.branch(i.Then!)
         return
     }
     w.put("if ")
-    w.expr(i.Cond)
-    w.branch(i.Then)
+    w.expr(i.Cond!)
+    w.branch(i.Then!)
     if i.Else is not null {
         w.put(" else")
         match i.Else {
             case ast.Stmt.If(_, e) {
                 if e.Cond is null {
-                    w.branch(e.Then)
+                    w.branch(e.Then!)
                     return
                 }
             }
             case _ { }
         }
         w.put(" ")
-        w.stmt(i.Else)
+        w.stmt(i.Else!)
     }
 }
 
 # a branch after its condition or "else": " " and its block, or ": " and its statement (S1b)
 fn (w mut writer&) branch(b ast.Branch&) {
-    if b.Body is null or w.diags.Holds(b.Group) {
+    if b.Body.Len() == 0 or w.diags.Holds(b.Group) {
         if w.text[I64(b.Sp.Start)] != ':' { w.put(" ") }
         w.span(b.Sp)
         w.held.Push(b.Sp)
@@ -592,14 +592,14 @@ fn (w mut writer&) match(m ast.Match&) {
         }
         if c.Guard is not null {
             w.put(" if ")
-            w.expr(c.Guard)
+            w.expr(c.Guard!)
         }
         w.caseBody(c)
     }
     if m.NoMatch is not null {
         w.nl()
         w.put("nomatch")
-        w.caseBody(m.NoMatch)
+        w.caseBody(m.NoMatch!)
     }
     w.ind--
     w.nl()
@@ -609,7 +609,7 @@ fn (w mut writer&) match(m ast.Match&) {
 fn (w mut writer&) caseBody(c ast.Case&) {
     if c.Value is not null {
         w.put(" => ")
-        w.expr(c.Value)
+        w.expr(c.Value!)
         return
     }
     w.put(" ")
@@ -760,7 +760,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.put("]")
         }
         case ast.Expr.ArrayLit(_, elem, items) {
-            w.ty(elem)
+            w.ty(elem!)
             w.put("[")
             w.items(items)
             w.put("]")
@@ -771,7 +771,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.put("]")
         }
         case ast.Expr.Compr(_, c) {
-            w.ty(c.Elem)
+            w.ty(c.Elem!)
             w.put("[")
             w.expr(c.Value)
             w.put(" for ")
@@ -784,7 +784,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.expr(c.Source)
             if c.Filter is not null {
                 w.put(" if ")
-                w.expr(c.Filter)
+                w.expr(c.Filter!)
             }
             w.put("]")
         }

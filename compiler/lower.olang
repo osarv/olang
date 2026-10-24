@@ -295,10 +295,10 @@ fn (ln mut lowering&) run() {
     }
     ln.F.NewBlock()
     root := b.Root
-    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, root.Id, b.Sp)
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, root!.Id, b.Sp)
     ln.emit(mir.Stmt.Open(b.Sp, frame))
-    ln.levels.Push(level(frame, root.Id, mir.ScopeKind.Frame))
-    for s in root.Stmts { ln.stmt(s) }
+    ln.levels.Push(level(frame, root!.Id, mir.ScopeKind.Frame))
+    for s in root!.Stmts { ln.stmt(s) }
     if ln.dead { return }
     # falling off the end
     ctor := match b.Of {
@@ -657,11 +657,12 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             code := mir.ErrorCode(ln.T, ln.T.Errors(ln.B.Ty), err, word)
             ln.raise(sp, mir.Operand.Const(mir.I32T, code))
         }
-        case typed.Stmt.Exit(sp, _, msg) {
+        case typed.Stmt.Exit(sp, kind, msg) {
             # S16d: the message is computed only here, where the unreachable is reached
             m := mir.Operand.None
             if msg is not null { m = ln.val(msg) }
-            if not ln.dead { ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, m)) }
+            k := mir.ExitKind.NullReached if kind == typed.ExitKind.NullReached else mir.ExitKind.Unreachable
+            if not ln.dead { ln.end(mir.Term.Exit(sp, k, m)) }
         }
         case typed.Stmt.Assert(sp, c, msg) { ln.assert(sp, c, msg) }
         case typed.Stmt.Block(_, bl) { ln.block(bl) }
@@ -698,7 +699,7 @@ fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
 }
 
 # the reference a read of what it names reads through, else null
-fn derefOf(x typed.Expr&) typed.Expr&x {
+fn derefOf(x typed.Expr&) typed.Expr?&x {
     return match x {
         case typed.Expr.Read(_, _, p, _) => match p {
             case typed.Place.Deref(_, _, r) => r
@@ -777,14 +778,14 @@ fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {
     ln.block(i.Then)
     ln.leaveOpen(ends)
     ln.start(no)
-    if i.Else is not null { ln.block(i.Else) }
+    if i.Else is not null { ln.block(i.Else!) }
     ln.leaveOpen(ends)
     ln.patch(ends)
 }
 
 # a loop (S9): its body a scope of its own each turn, entered at its head; a continue runs the post clause, then the
 # head again; a break leaves to after it
-fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block&) {
+fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block?&) {
     head := ln.F.NewBlock()
     ln.goto(head)
     ln.start(head)
@@ -814,7 +815,7 @@ fn (ln mut lowering&) jump(sp source.Span, kind typed.JumpKind, loop typed.Block
     ln.gap(sp, "a jump out of a loop not being lowered")
 }
 
-fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
+fn (ln mut lowering&) ret(sp source.Span, value typed.Expr?&) {
     if value is null {
         ln.leave(0)
         ln.end(mir.Term.Return(sp, mir.Operand.None))
@@ -851,7 +852,7 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
         if ln.valueArray(res) or t.KindOf(sr) != types.Kind.Tuple { return }
         sparts := t.Items(t.Parts(sr))
         sitems := tupleItems(value)
-        if sitems is null { return }
+        if sitems.Len() == 0 { return }
         for i in range sparts.Len() {
             if i >= sitems.Len() or not ln.valueArray(sparts[i]) or not ln.copiesArray(sitems[i], sparts[i]) or ownLocalRead(sitems[i]) { continue }
             at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
@@ -873,7 +874,7 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
     items := tupleItems(value)
     for i in range parts.Len() {
         if not ln.valueArray(parts[i]) { continue }
-        if items is not null and i < items.Len() and not ln.retCopies(items[i], parts[i]) { continue }
+        if items.Len() > 0 and i < items.Len() and not ln.retCopies(items[i], parts[i]) { continue }
         at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
         cp := ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp, ln.resultScope())
         ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
@@ -893,16 +894,16 @@ fn ownLocalRead(x typed.Expr&) Bool {
 
 # whether a returned array value is copied into the result scope: existing storage, but for a local living there - a
 # conditional, a match or a try's default by any value it may give (as stage 0's cgBuiltInResult)
-fn (ln mut lowering&) retCopies(x typed.Expr&, ty types.TypeId) Bool {
+fn (ln mut lowering&) retCopies(x typed.Expr?&, ty types.TypeId) Bool {
     if x is null { return false }
     if ln.valueArray(ty) {
         match x {
             case typed.Expr.Cond(_, _, c) { return ln.retCopies(c.A, ty) or ln.retCopies(c.B, ty) }
             case typed.Expr.Match(_, _, m) {
                 for a in m.Arms {
-                    if a is not null and ln.retCopies(a.Value, ty) { return true }
+                    if ln.retCopies(a.Value, ty) { return true }
                 }
-                return m.NoMatch is not null and ln.retCopies(m.NoMatch.Value, ty)
+                return m.NoMatch is not null and ln.retCopies(m.NoMatch!.Value, ty)
             }
             case typed.Expr.Try(_, _, t) {
                 if ln.retCopies(t.X, ty) { return true }
@@ -943,7 +944,7 @@ fn tupleItems(x typed.Expr&) Array<typed.Expr&>&x {
         }
         case _ { }
     }
-    return null
+    return Array<typed.Expr&>(0)
 }
 
 # the body failing with code, under its own list, once every scope is closed
@@ -961,7 +962,7 @@ fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
 }
 
 # an assert (S17, S18): the test, its message computed only on the failing path
-fn (ln mut lowering&) assert(sp source.Span, c typed.Expr&, msg typed.Expr&) {
+fn (ln mut lowering&) assert(sp source.Span, c typed.Expr&, msg typed.Expr?&) {
     if ln.L.AssertsTrue.Has(pair.Pair(I64(ln.B.Id), I64(sp.Start))) { return }     # decided true while compiling (S18c)
     x := ln.val(c)
     if ln.dead { return }
@@ -1003,7 +1004,7 @@ fn (ln mut lowering&) joinErrors(code typed.Block&) types.ListId {
     return ln.T.List(out.ToArray())
 }
 
-fn (ln mut lowering&) spawnErrors(bl typed.Block&, out mut List<types.TypeId>&) {
+fn (ln mut lowering&) spawnErrors(bl typed.Block?&, out mut List<types.TypeId>&) {
     if bl is null { return }
     for s in bl.Stmts { ln.stmtSpawnErrors(s, out) }
 }
@@ -1076,7 +1077,7 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
     banged := false
     match task {
         case typed.Expr.Try(_, _, tr) if tr.Ends {
-            task = tr.X
+            task = tr.X!
             banged = true
         }
         case _ { }
@@ -1135,7 +1136,7 @@ fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
 }
 
 # a place's base and projections, its references and indices computed before
-fn (ln mut lowering&) place(p typed.Place&) pl {
+fn (ln mut lowering&) place(p typed.Place?&) pl {
     if ln.dead { return pl(mir.Base.None) }
     if p is null {
         ln.gap(ln.B.Sp, "a place that is none")
@@ -1397,7 +1398,7 @@ fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.Loc
         cl := cls[ci]
         ln.start(tc.entries[ci])
         ln.F.Taken.Push(tc.entries[ci])
-        if cl.Code is not null { ln.block(cl.Code) }
+        if cl.Code is not null { ln.block(cl.Code!) }
         if not ln.dead and slot != mir.NoLocal and cl.Defaults.Len() > 0 {
             if cl.Defaults.Len() == 1 {
                 d := ln.val(cl.Defaults[0])
@@ -1415,7 +1416,7 @@ fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.Loc
 # ---- expressions ----
 
 # a value: computed by the statements emitted so far, held in a temporary (or a constant)
-fn (ln mut lowering&) val(x typed.Expr&) mir.Operand {
+fn (ln mut lowering&) val(x typed.Expr?&) mir.Operand {
     if ln.dead or x is null { return mir.Operand.None }
     t := ln.T
     ty := x.Type()
@@ -1447,7 +1448,7 @@ fn (ln mut lowering&) val(x typed.Expr&) mir.Operand {
 
 # a value fitted to where it goes: a fixed array where a run-time one of its element is wanted widened to it (T7c),
 # which check leaves implicit where a ":=" global or a local's array is given a literal
-fn (ln mut lowering&) fit(v mir.Operand, x typed.Expr&, to types.TypeId, sp source.Span) mir.Operand {
+fn (ln mut lowering&) fit(v mir.Operand, x typed.Expr?&, to types.TypeId, sp source.Span) mir.Operand {
     if ln.dead or x is null { return v }
     t := ln.T
     from := t.Repr(x.Type())
@@ -1592,7 +1593,7 @@ fn (ln mut lowering&) match(m typed.Match&, ty types.TypeId, sp source.Span) mir
         ln.patch(next)
     }
     if not ln.dead {
-        ln.arm(m.NoMatch, slot)
+        ln.arm(m.NoMatch!, slot)
         ln.leaveOpen(ends)
     }
     ln.patch(ends)
@@ -1609,16 +1610,16 @@ fn (ln mut lowering&) arm(a typed.Arm&, slot mir.LocalId) {
         }
         return
     }
-    if ln.levels.Len() > 0 and ln.top().Block == a.Code.Id {
-        for s in a.Code.Stmts { ln.stmt(s) }
+    if ln.levels.Len() > 0 and ln.top().Block == a.Code!.Id {
+        for s in a.Code!.Stmts { ln.stmt(s) }
         if a.Value is not null and slot != mir.NoLocal {
             v := ln.val(a.Value)
             ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
         }
         return
     }
-    ln.openBlock(a.Code, mir.ScopeKind.Block)
-    for s in a.Code.Stmts { ln.stmt(s) }
+    ln.openBlock(a.Code!, mir.ScopeKind.Block)
+    for s in a.Code!.Stmts { ln.stmt(s) }
     if a.Value is not null and slot != mir.NoLocal {
         v := ln.val(a.Value)
         ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
@@ -1830,7 +1831,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             # an element type's zero value made only for an array that has an element: Array<T>(0) needs none (D13c)
             v := ln.temp(el, sp)
             ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(fv)))
-            some := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[ln.asI64(n, m.Length.Type(), sp), ln.constI64(0)], sp)
+            some := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[ln.asI64(n, m.Length!.Type(), sp), ln.constI64(0)], sp)
             yes, after := ln.F.NewBlock(), ln.F.NewBlock()
             ln.end(mir.Term.Branch(some, yes, after))
             ln.start(yes)
@@ -1856,7 +1857,7 @@ fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
         ln.gap(sp, "a run-time array's fill with no length")
         return mir.Operand.None
     }
-    n64 := ln.asI64(n, m.Length.Type(), sp)
+    n64 := ln.asI64(n, m.Length!.Type(), sp)
     if m.Checked != typed.Check.None {
         ok := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[n64, ln.constI64(0)], sp)
         ln.check(ok, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
@@ -1885,7 +1886,7 @@ fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span)
     cap := ln.constI64(100)
     if c.Reserve is not null {
         r := ln.val(c.Reserve)
-        cap = ln.asI64(r, c.Reserve.Type(), sp)
+        cap = ln.asI64(r, c.Reserve!.Type(), sp)
         if c.Checked != typed.Check.None {
             ok := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[cap, ln.constI64(0)], sp)
             ln.check(ok, c.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
@@ -1958,7 +1959,7 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     # a fixed array a reference names, as a run-time-length array value: the pair naming that storage, not a copy of it
     # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a
     # declaration's or a body that writes it)
-    r typed.Expr&args = null
+    r typed.Expr?&args = null
     if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) { r = derefOf(args[0]) }
     if r is not null and ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 {
         v := ln.val(r)
@@ -2852,7 +2853,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.end(mir.Term.Switch(tag, ln.F.AddCases(cs), after))
         for k in range cases.Len() {
             ln.start(bs[k])
-            name := ln.T.Names.Text(caseNames[k]) if caseNames is not null and k < caseNames.Len() else $k
+            name := ln.T.Names.Text(caseNames[k]) if caseNames.Len() > 0 and k < caseNames.Len() else $k
             ln.word(b, $prefix $name, sp)
             if cases[k] != types.TypeId(0) {
                 fs := ln.items(t.Parts(cases[k]))

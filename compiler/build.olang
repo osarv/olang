@@ -345,14 +345,14 @@ fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags Li
 # where it could not be started), and what it wrote to its standard output and error, by the command's number. The
 # commands start in the order of their weights, heaviest first (where weights are given: a compile's, its IR's
 # size), so the longest is not the last to start, keeping every core busy to the end
-fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = null) Array<I32>, Array<String&> {
+fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I64>(0)) Array<I32>, Array<String&> {
     n := cmds.Len()
     status mut Array<I32>&return = Array<I32>(n)
-    said mut Array<String&>&return = Array<String&>(n)
+    said mut Array<String&>&return = Array<String&>(n, "")
     if n == 0 { return status, said }
     order := Array<I64>(n)
     for k in range n { order[k] = k }
-    if weights is not null { order.Sort(fn(a I64, b I64) Bool { return weights[a] > weights[b] }) }
+    if weights.Len() > 0 { order.Sort(fn(a I64, b I64) Bool { return weights[a] > weights[b] }) }
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
     for k in order { try chan.Send(queue, k) catch chan.ChanError { unreachable } }

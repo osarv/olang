@@ -101,7 +101,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     sps List<source.Span>
     decls List<ast.Decl&>
     salvage List<ast.Decl&>            # a function or type whose body did not parse, as the declaration it still is
-    typeParamsRead Array<ast.TypeParam&>& = null   # the type parameters of the type declaration being read
+    typeParamsRead Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0) # the type parameters of the type declaration being read
     # where angle brackets were read as type brackets, by token index (a split ">>" is there twice): a type-argument or
     # type-parameter list's "<" and its ">". The formatter (compiler/fmt.olang) spaces them; nothing in the compiler
     # reads them
@@ -291,7 +291,8 @@ fn (p mut Parser&) tooDeepAt(i I64) {
 # ---- lists, gathered on the parser's stacks ----
 
 fn gather<T>(stack mut List<T>&, from I64) Array<T>&stack {
-    a mut Array<T>&stack = Array<T>(stack.Len() - from)
+    if stack.Len() == from { return Array<T>(0) }
+    a mut Array<T>&stack = Array<T>(stack.Len() - from, stack[from])     # each written below
     for i in range a.Len() { a[i] = stack[from + i] }
     stack.Truncate(from)
     return a
@@ -512,10 +513,10 @@ fn (p mut Parser&) item() {
         if p.pos == start { p.advance() }
         return
     }
-    p.decls.Push(d)
+    p.decls.Push(d!)
 }
 
-fn (p mut Parser&) decl() ast.Decl&p ? Fail {
+fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
     at := p.here()
     match p.peek() {
         case token.Tok.Import {
@@ -541,7 +542,7 @@ fn (p mut Parser&) decl() ast.Decl&p ? Fail {
             s := try p.sig(false)
             sp := p.from(at)
             try p.endStmt()
-            return ast.Decl.Extern(ast.Func(sp, null, name, s, null))
+            return ast.Decl.Extern(ast.Func(sp, null, name, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
         }
         case token.Tok.Error {
             p.advance()
@@ -650,11 +651,11 @@ fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl&p ? Fail {
     return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body))
 }
 
-fn (p mut Parser&) typeBody() ast.TypeBody&p ? Fail {
+fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
     match p.peek() {
         case token.Tok.Struct {
             p.advance()
-            tps Array<ast.TypeParam&>&p = null
+            tps Array<ast.TypeParam&>&p = Array<ast.TypeParam&>(0)
             if p.sees(token.Tok.Lt) { tps = try p.typeParams() }      # G10d: "struct<T>(g Graph<T>&)" (QW)
             try p.want(token.Tok.LParen)
             params := try p.params(false)
@@ -662,7 +663,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody&p ? Fail {
             p.ctorBody = true
             body := try p.block()
             dsp := source.Span(0, 0)
-            dtor Array<ast.Stmt&>&p = null
+            dtor Array<ast.Stmt&>&p = Array<ast.Stmt&>(0)
             if p.sees(token.Tok.Destruct) {
                 dat := p.advance()
                 dtor = try p.block()
@@ -704,7 +705,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody&p ? Fail {
             for not p.sees(token.Tok.RBrace) {
                 mat := p.here()
                 # "mut" before the name: the receiver may be written through - a receiver of no name, typed "mut"
-                recv ast.Param&p = null
+                recv ast.Param?&p = null
                 if p.sees(token.Tok.Mut) {
                     mt := p.tk()
                     p.advance()
@@ -713,7 +714,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody&p ? Fail {
                 }
                 mn := try p.methodName()
                 s := try p.sig(false)
-                methods.Push(ast.Func(p.from(mat), recv, mn, s, null))
+                methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
                 try p.entryEnd()
             }
             p.advance()
@@ -738,7 +739,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody&p ? Fail {
 # "fn [(receiver)] Name sig block"
 fn (p mut Parser&) function() ast.Func&p ? Fail {
     at := try p.want(token.Tok.Fn)
-    recv ast.Param&p = null
+    recv ast.Param?&p = null
     name source.NameId = source.NameId(0)
     if p.accept(token.Tok.LParen) {
         recv = try p.param(false)
@@ -749,14 +750,14 @@ fn (p mut Parser&) function() ast.Func&p ? Fail {
     }
     # QW: "fn max<T>(...)" - the function's own type variables (G3); a method's receiver introduces its type's
     # variables bare ("fn (l List<T>&) Push(x T)"): names no type has, written as its type's arguments
-    tps Array<ast.TypeParam&>&p = null
+    tps Array<ast.TypeParam&>&p = Array<ast.TypeParam&>(0)
     if p.sees(token.Tok.Lt) { tps = try p.typeParams() }
-    if recv is not null and recv.Ty is not null { p.receiverVars(recv.Ty, false) }
+    if recv is not null and recv.Ty is not null { p.receiverVars(recv.Ty!, false) }
     p.scopeDecl()
     s := try p.sig(false)
     braced := p.sees(token.Tok.LBrace)
     body := try p.block() catch {
-        if braced { p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, null, tps))) }
+        if braced { p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, Array<ast.Stmt&>(0), tps, false))) }
         error Fail.SYNTAX
     }
     return ast.Func(p.from(at), recv, name, s, body, tps)
@@ -774,7 +775,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
             }
             for a in args { p.receiverVars(a, true) }
         }
-        case ast.TypeRef.Ref(_, of, _) { p.receiverVars(of, inArgs) }
+        case ast.TypeRef.Ref(_, of, _, _) { p.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) {
             if of is not null { p.receiverVars(of, inArgs) }
         }
@@ -799,7 +800,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
         pat := p.here()
         pn := try p.name()
         p.vars.Push(pn)
-        ty ast.TypeRef&p = null
+        ty ast.TypeRef?&p = null
         if not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() {
             wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
@@ -901,11 +902,11 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>&p ? Fail {
 fn (p mut Parser&) param(lambda Bool) ast.Param&p ? Fail {
     at := p.here()
     name := try p.name()
-    ty ast.TypeRef&p = null
+    ty ast.TypeRef?&p = null
     if not (lambda and (p.sees(token.Tok.Comma) or p.sees(token.Tok.RParen) or p.sees(token.Tok.StmtEnd))) {
         ty = try p.typeExpr()
     }
-    dflt ast.Expr&p = null
+    dflt ast.Expr?&p = null
     if p.accept(token.Tok.Assign) { dflt = try p.expr() }
     return ast.Param(p.from(at), name, ty, dflt)
 }
@@ -959,7 +960,7 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
         }
         case token.Tok.Enum, token.Tok.Struct, token.Tok.Trait {
             body := try p.typeBody()
-            return ast.TypeRef.Shape(p.from(at), body)
+            return ast.TypeRef.Shape(p.from(at), body!)
         }
         case token.Tok.Iden {
             from := p.ids.Len()
@@ -1029,7 +1030,9 @@ fn (p Parser&) grouped(t ast.TypeRef&) Bool {
 # report (T24)
 fn (p mut Parser&) markers(at I32, t ast.TypeRef&p) ast.TypeRef&p {
     r ast.TypeRef&p = t
-    for p.sees(token.Tok.Amp) and p.half == token.Tok.Eof {
+    for p.half == token.Tok.Eof and (p.sees(token.Tok.Amp) or p.nullMark()) {
+        nullable := p.sees(token.Tok.Question)
+        if nullable { p.advance() }
         p.advance()
         scope source.NameId = source.NameId(0)
         k := p.peek()
@@ -1038,9 +1041,15 @@ fn (p mut Parser&) markers(at I32, t ast.TypeRef&p) ast.TypeRef&p {
             p.advance()
             scope = p.names.Intern(p.text(nt))
         }
-        r = ast.TypeRef.Ref(p.from(at), r, scope)
+        r = ast.TypeRef.Ref(p.from(at), r, scope, nullable)
     }
     return r
+}
+
+# T2c: "?&", the "?" written directly before the "&" - never an error set's "?", which no "&" follows
+fn (p Parser&) nullMark() Bool {
+    if not p.sees(token.Tok.Question) or p.look(1) != token.Tok.Amp { return false }
+    return p.lookTok(0).End == p.lookTok(1).Start
 }
 
 fn (p Parser&) closesAngle() Bool {
@@ -1220,7 +1229,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             k := p.peek()
             p.advance()
             # S16d: "unreachable why" - a message, evaluated only where it is reached
-            msg ast.Expr&p = null
+            msg ast.Expr?&p = null
             if k == token.Tok.Unreachable and not p.atEnd() {
                 msg = try p.expr()
             }
@@ -1231,7 +1240,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         case token.Tok.Assert {
             p.advance()
             cond := try p.expr()
-            msg ast.Expr&p = null
+            msg ast.Expr?&p = null
             if p.accept(token.Tok.Comma) { msg = try p.expr() }
             sp := p.from(at)
             try p.endStmt()
@@ -1613,7 +1622,7 @@ fn (p mut Parser&) ifStmt() ast.Stmt&p ? Fail {
     at := try p.want(token.Tok.If)
     cond := try p.expr()
     then := try p.branch()
-    els ast.Stmt&p = null
+    els ast.Stmt?&p = null
     if p.accept(token.Tok.Else) {
         if p.sees(token.Tok.If) {
             els = try p.ifStmt()
@@ -1637,7 +1646,7 @@ fn (p mut Parser&) branch() ast.Branch&p ? Fail {
             p.diags.EndHold()
             if p.tooDeep or p.unclosed { error Fail.SYNTAX }
             p.syncFrom()
-            return ast.Branch(p.from(at), null, g)
+            return ast.Branch(p.from(at), Array<ast.Stmt&>(0), g)
         }
         p.diags.EndHold()
         return ast.Branch(p.from(at), body, g)
@@ -1653,7 +1662,7 @@ fn (p mut Parser&) branch() ast.Branch&p ? Fail {
         p.pos = I64(close)
         p.half = token.Tok.Eof
         p.advance()
-        return ast.Branch(p.from(at), null, g)
+        return ast.Branch(p.from(at), Array<ast.Stmt&>(0), g)
     }
     p.diags.EndHold()
     return ast.Branch(p.from(at), body, g)
@@ -1750,7 +1759,7 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             nt := p.tk()
             name := try p.name()
             names := p.one(name, source.Span(nt.Start, nt.End))
-            v ast.VarDecl&p = null
+            v ast.VarDecl?&p = null
             if p.accept(token.Tok.Define) {
                 x := try p.expr()
                 v = ast.VarDecl(names.Names, names.Sps, null, ast.Expr&[x], true, false)
@@ -1760,7 +1769,7 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
                 x := try p.expr()
                 v = ast.VarDecl(names.Names, names.Sps, ty, ast.Expr&[x], false, false)
             }
-            init := ast.Stmt.Var(p.from(iat), v)
+            init := ast.Stmt.Var(p.from(iat), v!)
             try p.want(token.Tok.Comma)
             cond := try p.expr()
             try p.want(token.Tok.Comma)
@@ -1818,7 +1827,7 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
     wasSkip := p.skip
     p.skip = false
     cases mut List<ast.Case&>&p = List<ast.Case&>()
-    noMatch ast.Case&p = null
+    noMatch ast.Case?&p = null
     for {
         p.skipEnds()
         if p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof) { break }
@@ -1852,7 +1861,7 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
         }
         alts := gather(p.pats, pfrom)
         types := gather(p.tys, tfrom)
-        guard ast.Expr&p = null
+        guard ast.Expr?&p = null
         if p.accept(token.Tok.If) { guard = try p.expr() }
         body, value := try p.caseBody()
         cases.Push(ast.Case(p.from(cat), alts, types, guard, body, value))
@@ -1870,10 +1879,10 @@ fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
 }
 
 # a case's block, or "=> value"
-fn (p mut Parser&) caseBody() Array<ast.Stmt&>&p, ast.Expr&p ? Fail {
+fn (p mut Parser&) caseBody() Array<ast.Stmt&>&p, ast.Expr?&p ? Fail {
     if p.accept(token.Tok.Arrow) {
         v := try p.expr()
-        return null, v
+        return Array<ast.Stmt&>(0), v
     }
     body := try p.block()
     return body, null
@@ -1944,18 +1953,19 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
                 if not p.accept(token.Tok.Comma) { break }
             }
         }
-        body Array<ast.Stmt&>&p = null
-        if p.sees(token.Tok.LBrace) { body = try p.block() }
+        body Array<ast.Stmt&>&p = Array<ast.Stmt&>(0)
+        braced := p.sees(token.Tok.LBrace)
+        if braced { body = try p.block() }
         if p.accept(token.Tok.Default) {
             for {
                 p.exprs.Push(try p.unary())
                 if not listOk or not p.accept(token.Tok.Comma) { break }
             }
-        } else if body is null {
+        } else if not braced {
             try p.fail(token.Tok.LBrace.Describe())
         }
         defaults := gather(p.exprs, from)
-        l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults))
+        l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults, braced))
     }
     return l.ToArray()
 }
@@ -2259,7 +2269,7 @@ fn (p mut Parser&) index(x ast.Expr&p) ast.Expr&p ? Fail {
         p.item = wasItem
     }
     if p.sees(token.Tok.Colon) or not p.sees(token.Tok.RBrack) {
-        lo ast.Expr&p = null
+        lo ast.Expr?&p = null
         if not p.sees(token.Tok.Colon) {
             lo = try p.elem()
             if p.comprehends() {
@@ -2268,13 +2278,13 @@ fn (p mut Parser&) index(x ast.Expr&p) ast.Expr&p ? Fail {
             }
         }
         if p.accept(token.Tok.Colon) {
-            hi ast.Expr&p = null
+            hi ast.Expr?&p = null
             if not p.sees(token.Tok.RBrack) { hi = try p.expr() }
             try p.want(token.Tok.RBrack)
             return ast.Expr.Slice(p.from(start), x, lo, hi)
         }
         from := p.exprs.Len()
-        p.exprs.Push(lo)
+        p.exprs.Push(lo!)
         for try p.sep(token.Tok.RBrack) { p.exprs.Push(try p.elem()) }
         if not p.sees(token.Tok.RBrack) {
             p.exprs.Truncate(from)
@@ -2416,6 +2426,15 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
                 targs := try p.typeArgs()
                 return ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
             }
+            if k2 == token.Tok.Question and p.look(2) == token.Tok.Amp and p.look(3) == token.Tok.LBrack {
+                # Name?&[...]: an element type that may be null (T2c), always a literal
+                p.advance()
+                if p.nullMark() {
+                    nt ast.TypeRef&p = ast.TypeRef.Named(p.from(at), Array<source.NameId>(1, name), Array<ast.TypeRef&>(0))
+                    return try p.arrayLit(at, p.markers(at, nt))
+                }
+                return ast.Expr.Name(p.from(at), name)
+            }
             if k2 == token.Tok.Amp {
                 # Name&[...]: a marked element type, always a literal; Name&x[...] is one where Name is a type
                 k3 := p.look(2)
@@ -2439,10 +2458,13 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
 
 # after a generic type in an expression: "[...]" makes a literal of that element type (a marker may stand between)
 fn (p mut Parser&) literalAfterType(at I32, x ast.Expr&p) ast.Expr&p ? Fail {
-    if not p.sees(token.Tok.Amp) and not p.sees(token.Tok.LBrack) { return x }
-    if p.sees(token.Tok.Amp) {
-        k2 := p.look(1)
-        if k2 != token.Tok.LBrack and not (k2 == token.Tok.Iden and p.look(2) == token.Tok.LBrack) { return x }
+    # List<N>?&[...]: an element type that may be null (T2c)
+    if not p.nullMark() or p.look(2) != token.Tok.LBrack {
+        if not p.sees(token.Tok.Amp) and not p.sees(token.Tok.LBrack) { return x }
+        if p.sees(token.Tok.Amp) {
+            k2 := p.look(1)
+            if k2 != token.Tok.LBrack and not (k2 == token.Tok.Iden and p.look(2) == token.Tok.LBrack) { return x }
+        }
     }
     match x {
         case ast.Expr.Generic(sp, base, targs) {
@@ -2528,7 +2550,7 @@ fn (p mut Parser&) comprehension(at I32, elem ast.TypeRef&p, value ast.Expr&p) a
         name = try p.name()
     }
     try p.want(token.Tok.In)
-    src ast.Expr&p = null
+    src ast.Expr?&p = null
     if p.sees(token.Tok.Range) {
         rat := p.advance()
         from := p.exprs.Len()
@@ -2540,10 +2562,10 @@ fn (p mut Parser&) comprehension(at I32, elem ast.TypeRef&p, value ast.Expr&p) a
     } else {
         src = try p.binary(1)
     }
-    filter ast.Expr&p = null
+    filter ast.Expr?&p = null
     if p.accept(token.Tok.If) { filter = try p.binary(1) }
     try p.want(token.Tok.RBrack)
-    return ast.Expr.Compr(p.from(at), ast.Compr(elem, value, key, name, src, filter))
+    return ast.Expr.Compr(p.from(at), ast.Compr(elem, value, key, name, src!, filter))
 }
 
 # ---- hints: a syntax error said in terms of what was probably meant (B11) ----
@@ -2923,7 +2945,7 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
         match d {
             case ast.Decl.Fn(f) {
                 b.Push("fn " $names.Text(f.Name) ":")
-                if f.Body is null {
+                if not f.Bodied {
                     b.Push(" -")
                 } else {
                     for s in f.Body { b.Push(" " $shapeStmt(s, names, src.Text)) }

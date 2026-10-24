@@ -1,0 +1,325 @@
+# null_migrate - nullable references (T2c, 2026-10-24): a reference marked "&" is never null, one marked "?&" may be. Code
+# written before, when every reference could be null, is made to compile under the new rule from the compiler's own
+# diagnostics:
+#   - where the compiler says null reaches a reference that is never null - "x N& = null", a constructor or a call given
+#     null, "return null", a declaration with no value, a "p is null" that could never be true - its note points at the
+#     "&" of the type where it is written, and a "?" is put before it ("N?&");
+#   - an array is never null - its zero value is the empty array: a "?&" on one becomes "&", a null it is given its
+#     empty array ("Array<I64>(0)", "\"\""), "x is null" "x.Len() == 0", and a "!" with nothing to unwrap comes
+#     off - before anything else;
+#   - only in a round with nothing of those kinds left: where a reference that may be null is read through, or given where
+#     one that never is null is wanted, a "!" is put after it ("p!.next"), ending the program there on a null, where the
+#     program used to trap at the read. Reads a test already guards need nothing (S8e).
+# Each file is compiled (test when it has tests, compile otherwise), the edits applied, and that repeats until nothing
+# more changes. Only files under the paths given are edited; a note about another file is left alone. A checks/cases
+# program that must fail keeps the failure it is about: nothing is applied from a diagnostic carrying its expected text.
+# Comments and string literals are never edited. Files are rewritten in place. What is left is printed for a look by
+# hand: a null given to a type variable's parameter, an element type to make nullable ("List<N?&>").
+#
+#     $OLANG build tools/null_migrate.olang && build/tools_null_migrate [--olang PATH] [-j N] FILE|DIR...
+#
+#   --olang  the compiler to run (default: $OLANG, else build/olang in the repository this tool is in)
+#   -j       how many compilations run at once (default 3)
+# For oann: build/tools_null_migrate --olang /home/user/olang/build/olang /home/user/oann
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+
+NoteNullable String& = "the type is written here - write '?&' for '&' where it may be null"
+
+# the expression a message is about: its text between the first quote and "' is a " - "" for none
+fn quoted(msg String&) String {
+    if msg.Len() == 0 or msg[0] != '\'' { return "" }
+    end := try msg.Find("' is a ") catch { return "" }
+    return $msg[1:end]
+}
+
+# what an array message says to write: the text between "write '" and the next "'"
+fn written(msg String&) String {
+    at := try msg.Find("write '") catch { return "" }
+    rest := msg[at + 7:]
+    end := try rest.Find("'") catch { return "" }
+    return $rest[:end]
+}
+
+# whether an expression's text is one postfix chain - names, members, indexes and calls with no space outside brackets
+fn postfixChain(t String&) Bool {
+    depth := 0
+    for ch in t {
+        if ch == '(' or ch == '[' { depth++ } else if ch == ')' or ch == ']' { depth-- } else if ch == ' ' and depth == 0 { return false }
+    }
+    return true
+}
+
+# whether a T2c error asks for a "!" on what it quotes: a read through, or a value given where one never null is wanted
+fn wantsBang(msg String&) Bool {
+    return msg.Contains(", which may be null") and quoted(msg).Len() > 0
+}
+
+# the edits the compiler's output asks for in the allowed paths - "nullable" ones at an "&" from notes, "bang" ones at an
+# expression from errors - and the T2c errors that ask for neither (as requests with an empty kind, the error's row in Why)
+fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Request>&
+             unanswered mut List<diagedit.Request>&) {
+    currentPath := ""
+    current := ""
+    currentRule := ""
+    answered := false
+    for row in output.Split("\n") {
+        path, line, col, isError, rule, msg := try diagedit.ParseRow(row) catch { continue }
+        full := diagedit.RealPathOf(path)
+        if isError {
+            if current.Len() > 0 and not answered and currentRule.Contains("T2c") and diagedit.Allowed(currentPath, allowed) {
+                unanswered.Push(diagedit.Request($currentPath, 0, 0, "", "", $current))
+            }
+            currentPath = $full
+            current = $row
+            currentRule = $rule
+            answered = false
+            # an array is never null (T2c): its "?&" made "&", a null it is given its empty array, a test for null a
+            # test for empty - each as the message writes it
+            # a '!' on what can neither fail nor be null - an array's, one a narrowing made redundant - comes off
+            if rule.Contains("E35") and msg.StartsWith("nothing here can fail") {
+                if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, "dropbang", "", $row)) }
+                answered = true
+                continue
+            }
+            if rule.Contains("T2c") and msg.StartsWith("an array is never null") {
+                kind := "dropq" if msg.Contains("not '?&'") else "empty" if msg.Contains(", or no value") else "isempty"
+                if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, kind, written(msg), $row)) }
+                answered = true
+                continue
+            }
+            if rule.Contains("T2c") and wantsBang(msg) {
+                if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, "bang", quoted(msg), $row)) }
+                answered = true
+            }
+            continue
+        }
+        if current.Len() > 0 and msg == NoteNullable {
+            if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, "nullable", "", $current)) }
+            answered = true
+        }
+    }
+    if current.Len() > 0 and not answered and currentRule.Contains("T2c") and diagedit.Allowed(currentPath, allowed) {
+        unanswered.Push(diagedit.Request($currentPath, 0, 0, "", "", $current))
+    }
+}
+
+# the edits of one kind applied to their files; how many were made
+fn apply(requests List<diagedit.Request>&, kind String&) I64 {
+    paths List<String&>
+    for r in requests {
+        if r.Kind == kind and not (r.Path in paths) { paths.Push($r.Path) }
+    }
+    made I64 = 0
+    for path in paths {
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("null_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        expect List<String&>
+        diagedit.ExpectedTexts(src, expect)
+        lines := src.Split("\n")
+        mine List<diagedit.Request>
+        for r in requests {
+            if r.Path == path and r.Kind == kind { mine.Push(r) }
+        }
+        # by line, and right to left within a line, so earlier columns stay put
+        mine.Sort(fn(a, b) {
+            if a.Line != b.Line { return a.Line < b.Line }
+            return a.Col > b.Col
+        })
+        seen List<String&>
+        shLine List<I64>
+        shAt List<I64>
+        shDelta List<I64>
+        for r in mine {
+            key := $r.Line ":" $r.Col
+            if diagedit.ContainsAny(r.Why, expect) or key in seen or r.Line - 1 >= lines.Len() { continue }
+            seen.Push($key)
+            idx := r.Line - 1
+            text := $lines[idx]
+            mask := srcmask.Mask(text, true)
+            at := r.Col - 1
+            if at < 0 or at >= text.Len() or mask[at] != 'c' { continue }
+            replaced := ""
+            if kind == "dropq" or kind == "empty" or kind == "isempty" or kind == "dropbang" {
+                delta := I64(0)
+                if kind == "dropbang" {
+                    if text[at] != '!' { continue }
+                    replaced = $text[:at] $text[at + 1:]
+                    delta = -1
+                } else if kind == "dropq" {
+                    if text[at] != '?' { continue }
+                    replaced = $text[:at] $text[at + 1:]
+                    delta = -1
+                } else if kind == "empty" {
+                    if not text[at:].StartsWith("null") { continue }
+                    replaced = $text[:at] $r.Arg $text[at + 4:]
+                    delta = r.Arg.Len() - 4
+                } else {
+                    # "X is null" / "X is not null", the error at "is", rewritten as the test the message writes
+                    neg := r.Arg.EndsWith("> 0")
+                    x := r.Arg[:r.Arg.Len() - (10 if neg else 11)]
+                    old := $x $(" is not null" if neg else " is null")
+                    from := at - x.Len() - 1
+                    if from < 0 or not text[from:].StartsWith(old) { continue }
+                    replaced = $text[:from] $r.Arg $text[from + old.Len():]
+                    delta = r.Arg.Len() - old.Len()
+                }
+                lines[idx] = $replaced
+                diagedit.Realign(lines, idx, delta, at)
+                shLine.Push(r.Line)
+                shAt.Push(at)
+                shDelta.Push(delta)
+                made++
+                continue
+            }
+            if kind == "nullable" {
+                # the "&" the note points at, not made nullable already
+                if text[at] != '&' or (at > 0 and text[at - 1] == '?') { continue }
+                replaced = $text[:at] "?" $text[at:]
+            } else {
+                # the expression quoted, written at the column, followed by no "!" already; one that is no postfix
+                # chain is parenthesized, since a "!" after it would bind to its last operand
+                e := at + r.Arg.Len()
+                if r.Arg.EndsWith("!") or e > text.Len() or text[at:e] != r.Arg or (e < text.Len() and text[e] == '!') {
+                    continue
+                }
+                if postfixChain(r.Arg) {
+                    replaced = $text[:e] "!" $text[e:]
+                    lines[idx] = $replaced
+                    diagedit.Realign(lines, idx, 1, e)
+                    shLine.Push(r.Line)
+                    shAt.Push(e)
+                    shDelta.Push(1)
+                } else {
+                    replaced = $text[:at] "(" $text[at:e] ")!" $text[e:]
+                    lines[idx] = $replaced
+                    diagedit.Realign(lines, idx, 3, e)
+                    shLine.Push(r.Line)
+                    shAt.Push(at)
+                    shDelta.Push(3)
+                }
+                made++
+                continue
+            }
+            lines[idx] = $replaced
+            diagedit.Realign(lines, idx, 1, at)
+            shLine.Push(r.Line)
+            shAt.Push(at)
+            shDelta.Push(1)
+            made++
+        }
+        diagedit.ShiftExpected(lines, shLine, shAt, shDelta)
+        try os.WriteFile(path, lines.Join("\n")) catch {
+            srcmask.SayErr("null_migrate: cannot write " $path)
+            os.Exit(1)
+        }
+    }
+    return made
+}
+
+fn main() ? {
+    olang := srcmask.Compiler()
+    jobs I64 = 3
+    paths List<String&>
+    args := os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        if args[i] == "--olang" or args[i] == "-j" {
+            if i + 1 >= args.Len() {
+                srcmask.SayErr("null_migrate: " $args[i] " needs a value")
+                os.Exit(1)
+            }
+            if args[i] == "--olang" {
+                olang = $args[i + 1]
+            } else {
+                jobs = try args[i + 1].ParseInt() catch {
+                    srcmask.SayErr("null_migrate: -j needs a number")
+                    os.Exit(1)
+                    unreachable
+                }
+            }
+            i += 2
+        } else {
+            paths.Push($args[i])
+            i++
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_null_migrate [--olang PATH] [-j N] FILE|DIR...")
+        os.Exit(2)
+    }
+    if jobs < 1 {
+        srcmask.SayErr("null_migrate: -j needs a positive number")
+        os.Exit(1)
+    }
+    olang = $diagedit.RealPathOf(olang)
+    files List<String&>
+    diagedit.OlangFiles(paths, files)
+    allowed List<String&>
+    for p in paths { allowed.Push(diagedit.RealPathOf(p)) }
+
+    tmp := try os.MkTemp("", "null_migrate") catch {
+        srcmask.SayErr("null_migrate: cannot make a temporary directory")
+        os.Exit(1)
+        unreachable
+    }
+    defer try os.RemoveAll(tmp) catch { }
+    work mut Array<String&>& = Array<String&>(jobs)
+    for k in range jobs {
+        work[k] = $tmp "/w" $k
+        try os.MkDirAll(work[k]) catch {
+            srcmask.SayErr("null_migrate: cannot make " $work[k])
+            os.Exit(1)
+        }
+    }
+    totalNullable I64 = 0
+    totalBang I64 = 0
+    unanswered List<diagedit.Request>
+    fileArray := files.ToArray()
+    for round in range 1, 25 {
+        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        requests List<diagedit.Request>
+        unanswered = List<diagedit.Request>()
+        for o in outputs { diagsFrom(o, allowed, requests, unanswered) }
+        arrays := apply(requests, "dropq") + apply(requests, "empty") + apply(requests, "isempty") + apply(requests, "dropbang")
+        nullable := apply(requests, "nullable") if arrays == 0 else 0
+        bangs I64 = 0
+        if nullable == 0 and arrays == 0 { bangs = apply(requests, "bang") }
+        srcmask.Say("round " $round ": " $arrays " arrays never null, " $nullable " types made nullable, " $bangs " '!' written")
+        totalNullable += nullable
+        totalBang += bangs
+        if arrays == 0 and nullable == 0 and bangs == 0 { break }
+    }
+    srcmask.Say("total: " $totalNullable " types made nullable, " $totalBang " '!' written")
+    seen List<String&>
+    for u in unanswered {
+        expect List<String&>
+        text := try srcmask.ReadText(u.Path) catch default ""
+        diagedit.ExpectedTexts(text, expect)
+        if not (u.Why in seen) and not diagedit.ContainsAny(u.Why, expect) {
+            seen.Push($u.Why)
+            srcmask.Say("by hand: " $u.Why)
+        }
+    }
+}
+
+test "a note's & is made nullable, a quoted read gets a !" {
+    assert quoted("'n.next' is a N?&, which may be null - read through it") == "n.next"
+    assert wantsBang("'d' is a N?&, which may be null, and N& never is - test it first") and not wantsBang("N& is never null")
+    edits List<diagedit.Request>
+    left List<diagedit.Request>
+    allowed List<String&>
+    allowed.Push("/a.olang")
+    out := ("/a.olang:3:9: error[T2c]: N& is never null - a reference that may be is written N?&\n"
+            "/a.olang:1:27: note: the type is written here - write '?&' for '&' where it may be null\n"
+            "/a.olang:5:10: error[T2c]: 'h' is a N?&, which may be null - read through it where a test says it is not\n")
+    diagsFrom(out, allowed, edits, left)
+    assert edits.Len() == 2 and edits[0].Kind == "nullable" and edits[0].Col == 27 and edits[1].Kind == "bang"
+    assert edits[1].Arg == "h" and left.Len() == 0
+    assert postfixChain("a.b[c d](e, f)") and not postfixChain("try f() catch default x")
+}

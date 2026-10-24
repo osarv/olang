@@ -50,14 +50,14 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     Prelude
     File I64 = -1
     Retires Bool = false               # its code calls "retire()" (M19d): under -sanitize its arrays get chunks of their own (B2f)
-    Src source.Source& = null
-    Toks scan.Tokens& = null
-    Decls Array<ast.Decl&>& = null
+    Src source.Source?& = null
+    Toks scan.Tokens?& = null
+    Decls Array<ast.Decl&>& = Array<ast.Decl&>(0)
     Types List<String&>                # declared type and error names, in every branch
     Generics List<String&>             # the generic functions it declares, in every branch (G12)
     Imports List<Import>
-    Oracle mut parse.Oracle& = null
-    parser mut parse.Parser& = null
+    Oracle mut parse.Oracle?& = null
+    parser mut parse.Parser?& = null
     # the top-level ifs: each chain's first condition (its key, an offset), the token index of every condition, the
     # branch it stands in, and what was decided
     chainAt List<I32>
@@ -69,9 +69,9 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     branchChain List<I64>
     branchIndex List<I64>
     globalsAt List<I64>                # the token index of every global's name outside every branch
-    Scope mut cond.Scope& = null           # the globals a condition reads, parsed when one is first evaluated
-    cparser mut parse.Parser& = null
-    cdiags mut diag.Diagnostics& = null
+    Scope mut cond.Scope?& = null          # the globals a condition reads, parsed when one is first evaluated
+    cparser mut parse.Parser?& = null
+    cdiags mut diag.Diagnostics?& = null
     publicDone Bool = false
     publicBusy Bool = false
     public List<I64>                   # M16, M17: the modules reached through its public aliases, itself first
@@ -188,9 +188,9 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool) I64 {
         try l.Mods.Pop() catch { }
         return -1
     }
-    m.File = l.Diags.AddFile(m.Path, m.Src.Text, m.Identity.StartsWith("std/"))
-    m.Toks = scan.Scan(m.Src.Text)
-    for d in m.Toks.Diags {
+    m.File = l.Diags.AddFile(m.Path, m.Src!.Text, m.Identity.StartsWith("std/"))
+    m.Toks = scan.Scan(m.Src!.Text)
+    for d in m.Toks!.Diags {
         line := d.Start
         l.Diags.Error(diag.Where.Span(m.File, I64(line), I64(d.End)), msgs.Msg(msgs.Diag.UnknownChar, d.Rule(), d.Message()))
     }
@@ -205,21 +205,21 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool) I64 {
 # ---- the pre-scan ----
 
 fn (l mut Loader&) prescan(m mut Module&) {
-    for t in typeNames(m.Src.Text, m.Toks) { m.Types.Push($t) }
-    for t in parse.GenericFnNames(m.Src.Text, m.Toks) { m.Generics.Push($t) }
-    l.region(m, 0, m.Toks.Toks.Len() - 1, -1)
+    for t in typeNames(m.Src!.Text, m.Toks!) { m.Types.Push($t) }
+    for t in parse.GenericFnNames(m.Src!.Text, m.Toks!) { m.Generics.Push($t) }
+    l.region(m, 0, m.Toks!.Toks.Len() - 1, -1)
 }
 
 # the declarations from token from to end at the top level of the file or of a branch (parent, -1 for none): imports,
 # top-level ifs and the globals outside every branch
 fn (l mut Loader&) region(m mut Module&, from I64, end I64, parent I64) {
-    toks := m.Toks.Toks
+    toks := m.Toks!.Toks
     i := from
     start := true
     for i < end {
         k := toks[i].Kind
         if k == token.Tok.LBrace {
-            close := I64(m.Toks.Match(I32(i)))
+            close := I64(m.Toks!.Match(I32(i)))
             if close < 0 { return }
             i = close + 1
             start = true
@@ -245,18 +245,18 @@ fn (l mut Loader&) region(m mut Module&, from I64, end I64, parent I64) {
 
 # import [Alias] "path": the alias derived from the path's last element when none is written (M4)
 fn (l mut Loader&) importAt(m mut Module&, i I64, parent I64) {
-    toks := m.Toks.Toks
+    toks := m.Toks!.Toks
     j := i + 1
     alias := ""
     aliasSp := source.Span(0, 0)
     if toks[j].Kind == token.Tok.Iden {
         aliasSp = source.Span(toks[j].Start, toks[j].End)
-        alias = $m.Src.Text[toks[j].Start:toks[j].End]
+        alias = $m.Src!.Text[toks[j].Start:toks[j].End]
         j++
     }
     if toks[j].Kind != token.Tok.StrLit { return }   # the parser reports it
     sp := source.Span(toks[j].Start, toks[j].End)
-    spec := m.Src.Text[sp.Start + 1:sp.End - 1]
+    spec := m.Src!.Text[sp.Start + 1:sp.End - 1]
     if alias == "" {
         alias = $DeriveAlias(spec)
         aliasSp = sp
@@ -283,7 +283,7 @@ fn AliasShape(a String&) Bool {
 
 # a top-level if at token i, its else-ifs and else: each branch recorded and pre-scanned. Where it ends
 fn (l mut Loader&) topIf(m mut Module&, from I64, end I64, parent I64) I64 {
-    toks := m.Toks.Toks
+    toks := m.Toks!.Toks
     c := m.chainAt.Len()
     m.chainAt.Push(toks[from + 1].Start)
     m.chainParent.Push(parent)
@@ -296,7 +296,7 @@ fn (l mut Loader&) topIf(m mut Module&, from I64, end I64, parent I64) I64 {
         brace := l.condEnd(m, i + 1, end)
         if brace < 0 { return i + 1 }
         m.conds.Push(i + 1)
-        close := I64(m.Toks.Match(I32(brace)))
+        close := I64(m.Toks!.Match(I32(brace)))
         if close < 0 { return end }
         b := l.branch(m, c, index)
         l.region(m, brace + 1, close, b)
@@ -308,7 +308,7 @@ fn (l mut Loader&) topIf(m mut Module&, from I64, end I64, parent I64) I64 {
             continue
         }
         if toks[i + 1].Kind != token.Tok.LBrace { return i + 1 }
-        close2 := I64(m.Toks.Match(I32(i + 1)))
+        close2 := I64(m.Toks!.Match(I32(i + 1)))
         if close2 < 0 { return end }
         m.chainElse[c] = true
         b2 := l.branch(m, c, index)
@@ -326,7 +326,7 @@ fn (l mut Loader&) branch(m mut Module&, c I64, index I64) I64 {
 # the "{" a condition from token i ends at - skipping what is bracketed and the body of a match, a lambda or a catch
 # clause inside it - or -1 where the line ends first (the parser reports it)
 fn (l Loader&) condEnd(m Module&, from I64, end I64) I64 {
-    toks := m.Toks.Toks
+    toks := m.Toks!.Toks
     depth I64 = 0
     bodyNext := false
     i := from
@@ -337,7 +337,7 @@ fn (l Loader&) condEnd(m Module&, from I64, end I64) I64 {
         if k == token.Tok.Match or k == token.Tok.Fn or k == token.Tok.Catch { bodyNext = true }
         if k == token.Tok.LBrace {
             if depth == 0 and not bodyNext { return i }
-            close := I64(m.Toks.Match(I32(i)))
+            close := I64(m.Toks!.Match(I32(i)))
             if close < 0 { return -1 }
             bodyNext = false
             i = close + 1
@@ -396,9 +396,9 @@ fn (l mut Loader&) decide(mi I64, c I64) {
 fn (l mut Loader&) evalCond(mi I64, i I64) cond.Outcome, Bool {
     m := l.Mods[mi]
     l.CondParser(m)
-    x := try m.cparser.ExprAt(i) catch { return cond.Outcome.Failed, false }   # the parser reports it
-    if m.Toks.Toks[m.cparser.Pos()].Kind != token.Tok.LBrace { return cond.Outcome.Deferred, false }
-    e mut cond.Eval&m = cond.Eval(m.Src.Text, l.Names, m.Scope, l.Consts)
+    x := try m.cparser!.ExprAt(i) catch { return cond.Outcome.Failed, false } # the parser reports it
+    if m.Toks!.Toks[m.cparser!.Pos()].Kind != token.Tok.LBrace { return cond.Outcome.Deferred, false }
+    e mut cond.Eval&m = cond.Eval(m.Src!.Text, l.Names, m.Scope!, l.Consts)
     outcome, value := e.Top(x)
     if outcome == cond.Outcome.Failed {
         at, msg := e.Error()
@@ -412,10 +412,10 @@ fn (l mut Loader&) evalCond(mi I64, i I64) cond.Outcome, Bool {
 fn (l mut Loader&) CondParser(m mut Module&) {
     if m.cparser is not null { return }
     m.cdiags = diag.Diagnostics(false)
-    file := m.cdiags.AddFile(m.Path, m.Src.Text)
-    m.cparser = parse.Parser(m.Src, m.Toks, l.Names, m.Oracle, m.cdiags, file)
+    file := m.cdiags!.AddFile(m.Path, m.Src!.Text)
+    m.cparser = parse.Parser(m.Src!, m.Toks!, l.Names, m.Oracle!, m.cdiags!, file)
     m.Scope = cond.Scope(m.Identity.StartsWith("std/"))
-    toks := m.Toks.Toks
+    toks := m.Toks!.Toks
     for at in m.globalsAt {
         j := at + 1
         mutable := false
@@ -440,15 +440,15 @@ fn (l mut Loader&) CondParser(m mut Module&) {
         if k != token.Tok.Assign and k != token.Tok.Define { continue }
         declared := ""
         if typeToks == 1 and toks[typeAt].Kind == token.Tok.Iden {
-            declared = $m.Src.Text[toks[typeAt].Start:toks[typeAt].End]
+            declared = $m.Src!.Text[toks[typeAt].Start:toks[typeAt].End]
         } else if typeToks > 0 {
             declared = "?"
         }
-        init := try m.cparser.ExprAt(j + 1) catch { continue }
-        after := toks[m.cparser.Pos()].Kind
+        init := try m.cparser!.ExprAt(j + 1) catch { continue }
+        after := toks[m.cparser!.Pos()].Kind
         whole := after == token.Tok.StmtEnd or after == token.Tok.Eof
         sp := source.Span(toks[at].Start, toks[at].End)
-        m.Scope.Add(cond.Global($m.Src.Text[sp.Start:sp.End], sp, mutable, $declared, init, whole))
+        m.Scope!.Add(cond.Global($m.Src!.Text[sp.Start:sp.End], sp, mutable, $declared, init, whole))
     }
 }
 
@@ -665,12 +665,12 @@ fn (l mut Loader&) checkReach() {
 
 # the oracle's names a module has before its imports are known: its own, the prelude's exported ones, and Array
 fn (l mut Loader&) ownNames(m mut Module&) {
-    for t in m.Types { m.Oracle.Add(l.Names, "", t) }
-    for t in m.Generics { m.Oracle.AddFn(l.Names, "", t) }
+    for t in m.Types { m.Oracle!.Add(l.Names, "", t) }
+    for t in m.Generics { m.Oracle!.AddFn(l.Names, "", t) }
     for t in l.preludeTypes {
-        if t[0].IsUpper() { m.Oracle.Add(l.Names, "", t) }
+        if t[0].IsUpper() { m.Oracle!.Add(l.Names, "", t) }
     }
-    m.Oracle.Add(l.Names, "", "Array")
+    m.Oracle!.Add(l.Names, "", "Array")
 }
 
 # its imports' names, through their alias chains (DESIGN.md point 1)
@@ -688,9 +688,9 @@ fn (l mut Loader&) chains(o mut parse.Oracle&, mi I64, prefix String&, depth I64
 # the module parsed - every branch, those not chosen with their diagnostics dropped
 fn (l mut Loader&) parse(mi I64) {
     m := l.Mods[mi]
-    l.chains(m.Oracle, mi, "", 0)
-    m.parser = parse.Parser(m.Src, m.Toks, l.Names, m.Oracle, l.Diags, m.File)
-    m.Decls = m.parser.File()
+    l.chains(m.Oracle!, mi, "", 0)
+    m.parser = parse.Parser(m.Src!, m.Toks!, l.Names, m.Oracle!, l.Diags, m.File)
+    m.Decls = m.parser!.File()
     l.groups(mi, m.Decls)
 }
 
@@ -699,7 +699,7 @@ fn (l mut Loader&) groups(mi I64, decls Array<ast.Decl&>&) {
     for d in decls {
         match d {
             case ast.Decl.If(_, ti) {
-                chosen := l.Chosen(mi, ti.Cond.Span().Start)
+                chosen := l.Chosen(mi, ti.Cond!.Span().Start)
                 l.chainGroups(mi, ti, chosen, 0)
             }
             nomatch { }
@@ -708,16 +708,16 @@ fn (l mut Loader&) groups(mi I64, decls Array<ast.Decl&>&) {
 }
 
 fn (l mut Loader&) chainGroups(mi I64, ti ast.TopIf&, chosen I64, index I64) {
-    l.branchGroup(mi, ti.Then, chosen, index)
-    if ti.ElseIf is not null { l.chainGroups(mi, ti.ElseIf, chosen, index + 1) }
-    if ti.Else is not null { l.branchGroup(mi, ti.Else, chosen, index + 1) }
+    l.branchGroup(mi, ti.Then!, chosen, index)
+    if ti.ElseIf is not null { l.chainGroups(mi, ti.ElseIf!, chosen, index + 1) }
+    if ti.Else is not null { l.branchGroup(mi, ti.Else!, chosen, index + 1) }
 }
 
 fn (l mut Loader&) branchGroup(mi I64, b ast.TopBranch&, chosen I64, index I64) {
     if chosen == Pending { return }
     if chosen == index {
         l.Diags.Choose(b.Group)
-        if b.Decls is not null { l.groups(mi, b.Decls) }
+        if b.Decls.Len() > 0 { l.groups(mi, b.Decls) }
     } else {
         l.Diags.Drop(b.Group)
     }

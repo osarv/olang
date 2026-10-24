@@ -1,0 +1,8 @@
+# check: fail error[T2c]: 'h.next' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'h.next!'
+# S8e, as S8d: only a local or a parameter is narrowed - a field may change under a call; test it through a local
+type N struct(v I64, next N?&) { v, next }
+fn second(h N&) I64 {
+    if h.next is null { return 0 }
+    return h.next.v
+}
+fn main() { assert second(N(1, N(2, null))) == 2 }

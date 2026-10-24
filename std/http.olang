@@ -71,7 +71,7 @@ fn Get(url String&, headers Array<Header>& = Array<Header>(0)) Response ? HttpEr
 
 # the response to a POST of body to url, as contentType ("application/json", say), with the header fields given
 fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>& = Array<Header>(0)) Response ? HttpError {
-    all := Array<Header>(headers.Len() + 1)
+    all := Array<Header>(headers.Len() + 1, Header("Content-Type", contentType))     # every field written below
     for i, h in headers { all[i] = h }
     all[headers.Len()] = Header("Content-Type", contentType)
     return try Send("POST", url, all, body)
@@ -160,7 +160,7 @@ fn response(dump String&, body String&) Response ? HttpError {
         if line.Trim().Len() == 0 { break }
         n++
     }
-    fields mut Array<Header>&return = Array<Header>(n)
+    fields mut Array<Header>&return = Array<Header>(n, Header("", ""))     # every field written below
     k I64 = 0
     for line in lines[start + 1:start + 1 + n] {
         colon := try line.FindByte(':') catch { continue }

@@ -1,0 +1,4 @@
+# check: fail error[T2c]: an array is never null - its zero value is the empty array: write '&', not '?&'
+# T2c: an array's absence is the empty array, so no array reference is nullable
+fn count(s String?&) I64 { return s.Len() }
+fn main() { assert count("ab") == 2 }

@@ -1,0 +1,6 @@
+# check: fail error[T2c]: 'm' is a N?&, which may be null, and N& never is - test it first ('if x is not null'), or write 'm!'
+# T2c: a reference that may be null does not flow into one that never is
+type N struct(v I64) { v }
+fn take(n N&) I64 { return n.v }
+fn give(m N?&) I64 { return take(m) }
+fn main() { assert give(N(1)) == 1 }

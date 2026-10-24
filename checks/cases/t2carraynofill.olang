@@ -1,0 +1,7 @@
+# check: fail error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
+# T2c, D13c: an array of references that are never null is made with a fill - "Array<N&>(n, x)" - or of "N?&"
+type N struct(v I64) { v }
+fn main() {
+    a := Array<N&>(3)
+    assert a.Len() == 3
+}

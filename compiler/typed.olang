@@ -273,7 +273,7 @@ type MakeKind enum {
                # type an Array<T, n> where n is a compile-time constant (QP1), else a run-time Array<T>
 }
 
-type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr&, Site SiteId, Checked Check) {
+type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr?&, Site SiteId, Checked Check) {
     Kind
     Tag
     Items
@@ -282,7 +282,7 @@ type Make struct(Kind MakeKind, Tag I64, Items Array<Expr&>&, Length Expr&, Site
     Checked    # Fill's length (D14b): Abort, Try under try (E15a); None for every other kind and a length known in range
 }
 
-type Collect struct(Reserve Expr&, Loop Block&, Site SiteId, Checked Check) {
+type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check) {
     Reserve    # how many it will hold at most, null where not known (E27)
     Loop
     Site
@@ -339,7 +339,7 @@ type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check) {
 }
 
 # a choice of two values; only the one chosen is evaluated
-type Cond struct(C Expr&, A Expr&, B Expr&) {
+type Cond struct(C Expr&, A Expr?&, B Expr&) {
     C
     A          # when C holds
     B
@@ -347,7 +347,7 @@ type Cond struct(C Expr&, A Expr&, B Expr&) {
 
 # statements run in the block the Seq stands in - their hidden locals are that block's - then X, the value: null, the
 # Seq's type Void, for none (R21's "try x[i] += v" as a statement)
-type Seq struct(Stmts Array<Stmt&>&, X Expr&) {
+type Seq struct(Stmts Array<Stmt&>&, X Expr?&) {
     Stmts
     X
 }
@@ -355,7 +355,7 @@ type Seq struct(Stmts Array<Stmt&>&, X Expr&) {
 # a match: Held runs first (the subject held once in a hidden local, which the tests read; empty where the subject is
 # a local, read again), then the arms in order. An arm's alternatives are tried in order; the first whose Test holds
 # fills its bindings, then the guard is read, and if it does not hold the next arm is tried
-type Match struct(Held Array<Stmt&>&, Arms Array<Arm&>&, NoMatch Arm&, IsValue Bool) {
+type Match struct(Held Array<Stmt&>&, Arms Array<Arm&>&, NoMatch Arm?&, IsValue Bool) {
     Held
     Arms
     # what runs when no arm matches, never null: the written nomatch; an empty arm where nothing happens (a statement
@@ -364,7 +364,7 @@ type Match struct(Held Array<Stmt&>&, Arms Array<Arm&>&, NoMatch Arm&, IsValue B
     IsValue
 }
 
-type Arm struct(Sp source.Span, Alts Array<Alt&>&, Guard Expr&, Code Block&, Value Expr&) {
+type Arm struct(Sp source.Span, Alts Array<Alt&>&, Guard Expr?&, Code Block?&, Value Expr?&) {
     Sp
     Alts
     Guard      # null for none
@@ -385,7 +385,7 @@ type Bind struct(To LocalId, From Expr&) {
 # a try: X is evaluated, and an error any call or checked operation in it fails with - none nested in an inner Try -
 # goes to the first clause naming it; one no clause names leaves the body, re-encoded under its own errors (R17).
 # Eval'd as a statement, a clause falls through to after it; in value position it leaves or gives its Defaults (R9b)
-type Try struct(X Expr&, Clauses Array<Clause&>&, Ends Bool = false, Passes Bool = false) {
+type Try struct(X Expr?&, Clauses Array<Clause&>&, Ends Bool = false, Passes Bool = false) {
     X
     Clauses
     Ends       # "x!" (E35): no clauses, and an error reaching it ends the program as a failed assert does
@@ -394,7 +394,7 @@ type Try struct(X Expr&, Clauses Array<Clause&>&, Ends Bool = false, Passes Bool
                # and a clause-less checked inside a try or a "!" (E15a, E35)
 }
 
-type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block&, Defaults Array<Expr&>&) {
+type Clause struct(Sp source.Span, Items Array<Item>&, All Bool, Code Block?&, Defaults Array<Expr&>&) {
     Sp
     Items
     All        # an item-less clause: every error left
@@ -448,13 +448,13 @@ type Stmt enum {
     If(sp source.Span, i If&)
     # a loop, its body run until a Jump leaves it; a continue runs Post, then the body again. "do ... for c" is a Post
     # of "if not c { break }"; S9e's one-shot loop a body ending in Jump(Break)
-    Loop(sp source.Span, body Block&, post Block&)
+    Loop(sp source.Span, body Block&, post Block?&)
     Jump(sp source.Span, kind JumpKind, loop BlockId)    # break or continue, of the loop whose body block is named
     # null for none; several results a Make of a tuple; an owner local returned is a Take of it (O36, O42)
-    Return(sp source.Span, value Expr&)
+    Return(sp source.Span, value Expr?&)
     Raise(sp source.Span, err types.TypeId, word I64)   # "error E.WORD" (R3)
-    Exit(sp source.Span, kind ExitKind, msg Expr&)  # msg: an unreachable's message (S16d), null for none
-    Assert(sp source.Span, cond Expr&, msg Expr&)   # msg null for none; read only when it fails (S17)
+    Exit(sp source.Span, kind ExitKind, msg Expr?&)  # msg: an unreachable's message (S16d), null for none
+    Assert(sp source.Span, cond Expr&, msg Expr?&)   # msg null for none; read only when it fails (S17)
     Block(sp source.Span, b Block&)
     Defer(sp source.Span, b Block&)                 # registered here, run on every way out of the enclosing block
     Join(sp source.Span, j Join&)
@@ -462,7 +462,7 @@ type Stmt enum {
     Yield(sp source.Span, x Expr&)                  # appended to the innermost Collect
 }
 
-type If struct(Test Expr&, Then Block&, Else Block&) {
+type If struct(Test Expr&, Then Block&, Else Block?&) {
     Test
     Then
     Else       # null for none
@@ -475,6 +475,7 @@ type JumpKind enum {
 
 type ExitKind enum {
     Unreachable    # S16d
+    NullReached    # T2c, E35: "x!" on a null reference
 }
 
 type Join struct(Code Block&, Tried Bool, Clauses Array<Clause&>&) {
@@ -486,14 +487,14 @@ type Join struct(Code Block&, Tried Bool, Clauses Array<Clause&>&) {
 # a task: Task, a call, run on a thread of its own; its results stored into Targets on that thread (P1g); an error it fails
 # with goes to the first of Clauses naming it, run on that thread (P4a), else to the join (P4b). At the spawn the
 # targets' places are evaluated first, left to right, then the task's arguments (P1g, S4)
-type Spawn struct(Targets Array<Place&>&, Task Expr&, Clauses Array<TaskClause&>&, Site SiteId) {
+type Spawn struct(Targets Array<Place?&>&, Task Expr&, Clauses Array<TaskClause&>&, Site SiteId) {
     Targets
     Task       # a Call - of a lambda's function value for "spawn fn() { ... }" (D16e)
     Clauses
     Site       # the task's environment, made in the join block
 }
 
-type TaskClause struct(Sp source.Span, Items Array<Item>&, All Bool, Handler Expr&) {
+type TaskClause struct(Sp source.Span, Items Array<Item>&, All Bool, Handler Expr?&) {
     Sp
     Items
     All
@@ -523,7 +524,7 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # section 8 reads (C2d, O20, O23a): a bare field lives with the instance, "&p" where the argument p lived - for an
     # instance's and a twin's constructor, their own
     Fields List<LocalId>
-    Root Block& = null      # null until checked; a payload's (Case) stays null
+    Root Block?& = null     # null until checked; a payload's (Case) stays null
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {
@@ -687,7 +688,7 @@ fn (s Stmt&) Span() source.Span {
 fn (b Body&) Print(t mut types.Table&) String {
     w mut printer&t = printer(t)
     w.line(0, "body " $b.Locals.Len() " locals " $b.Blocks.Len() " blocks " $b.Sites.Len() " sites")
-    if b.Root is not null { w.block(b.Root, 1) }
+    if b.Root is not null { w.block(b.Root!, 1) }
     return w.out.ToString()
 }
 
@@ -717,7 +718,7 @@ fn (w mut printer&) stmt(s Stmt&, d I64) {
             w.block(i.Then, d + 1)
             if i.Else is not null {
                 w.line(d, "else")
-                w.block(i.Else, d + 1)
+                w.block(i.Else!, d + 1)
             }
         }
         case Stmt.Loop(_, body, post) {
@@ -756,7 +757,7 @@ fn (w mut printer&) exprs(xs Array<Expr&>&) String {
     return b.ToString()
 }
 
-fn (w mut printer&) expr(x Expr&) String {
+fn (w mut printer&) expr(x Expr?&) String {
     if x is null { return "_" }
     ty := w.T.Canon(x.Type())
     return match x {
@@ -773,7 +774,7 @@ fn (w mut printer&) expr(x Expr&) String {
         case Expr.Slice(_, _, s) => "(slice " $w.place(s.Base) " " $w.expr(s.Lo) " " $w.expr(s.Hi) ")"
         case Expr.Cond(_, _, c) => "(cond " $w.expr(c.C) " " $w.expr(c.A) " " $w.expr(c.B) ")"
         case Expr.Seq(_, _, s) => "(seq " $s.Stmts.Len() " " $w.expr(s.X) ")"
-        case Expr.Match(_, _, m) => "(match " $m.Arms.Len() " arms, nomatch " $m.NoMatch.Code.Stmts.Len() ")"
+        case Expr.Match(_, _, m) => "(match " $m.Arms.Len() " arms, nomatch " $m.NoMatch!.Code!.Stmts.Len() ")"
         case Expr.Try(_, _, t) => "(try " $w.expr(t.X) " " $t.Clauses.Len() " clauses)"
         case Expr.Fn(_, _, f) => "(fn " $ty ")"
         case Expr.Text(_, _, t) => "(text " $t.Pieces.Len() " site " $t.Site ")"

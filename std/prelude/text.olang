@@ -141,7 +141,7 @@ fn (a String&) findFrom(sub String&, from I64) I64 ? TextError.NOT_FOUND {
 # plain loop over the bytes, which the optimizer turns into vector compares
 fn (t String&) Split(sep String&) mut Array<String&>&t {
     if sep.Len() == 0 {
-        bytes mut Array<String&>&t = Array<String&>(t.Len())
+        bytes mut Array<String&>&t = Array<String&>(t.Len(), t)     # every byte written before it is read
         for i in range t.Len() {
             bytes[i] = t[i:i + 1]
         }
@@ -153,7 +153,7 @@ fn (t String&) Split(sep String&) mut Array<String&>&t {
         for x in t {
             if x == c { n++ }
         }
-        pieces mut Array<String&>&t = Array<String&>(n)
+        pieces mut Array<String&>&t = Array<String&>(n, t)     # every piece written before it is read
         k I64 = 0
         start I64 = 0
         for i in range t.Len() {
@@ -173,7 +173,7 @@ fn (t String&) Split(sep String&) mut Array<String&>&t {
         n++
         from = at + sep.Len()
     }
-    pieces mut Array<String&>&t = Array<String&>(n)
+    pieces mut Array<String&>&t = Array<String&>(n, t)
     from = 0
     for i in range n - 1 {
         at := try t.findFrom(sep, from) catch { unreachable }
@@ -1050,8 +1050,8 @@ if TestBuild {
         c String& = b                # E10a: String declares Eq, so "==" compares what two texts say
         d String& = "hello"
         assert a == c and c == "hello" and "hello" == d and a != "hell"
-        n String& = null
-        assert n is null and n != a and a != n
+        n String& = ""
+        assert n.Len() == 0 and n != a and a != n
     }
 
     test "Compare orders bytewise, a prefix first" {

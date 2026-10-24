@@ -75,6 +75,7 @@ type Kind enum {
 ReadOnly I64 = 0
 Writable I64 = 1
 Owning I64 = 2
+Nullable I64 = 4    # "?&": a reference that may be null (T2c) - none is unless its type says so
 
 # a type's key: its kind and operands - what it is, and so what it is interned by
 type data struct(K Kind, A I64, B I64, C I64, D I64 = 0, E I64 = 0) {
@@ -369,7 +370,7 @@ fn (t mut Table&) Record(fields ListId) TypeId {
 # an anonymous enum: its cases' names and payloads (a Record, or 0 for none) - one type exactly when both agree (T27)
 # (fields: the payloads' field names, case after case - not part of its identity, kept from the first that gives them to
 # spell it, T27)
-fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Array<source.NameId>& = null) TypeId {
+fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Array<source.NameId>& = Array<source.NameId>(0)) TypeId {
     payloads := t.PlainList(cases)
     key := StringBuilder()
     for n in names { key.Push($I32(n) ",") }
@@ -385,7 +386,7 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Arr
         t.shapeFields.Push(Array<source.NameId>(0))
         t.shapeKeys.Put($k, s)
     }
-    if fields is not null and fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
+    if fields.Len() > 0 and fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
         fs mut Array<source.NameId>&t = Array<source.NameId>(fields.Len())
         for i in range fields.Len() { fs[i] = fields[i] }
         t.shapeFields[s] = fs
@@ -455,6 +456,19 @@ fn (t Table&) ShapeFields(id TypeId) Array<source.NameId>&t { return t.shapeFiel
 fn (t Table&) Depth(id TypeId) I64 { return I64(t.depthOf(id)) }
 
 fn (t Table&) IsRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref }
+
+# T2c: a reference that may be null ("?&"), and the same reference known not to be, or allowed to be
+fn (t Table&) IsNullable(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and (t.PermOf(id) & Nullable) != 0 }
+fn (t mut Table&) NonNull(id TypeId) TypeId {
+    if not t.IsNullable(id) { return id }
+    return t.Ref(t.Referent(id), t.PermOf(id) & ~Nullable)
+}
+fn (t mut Table&) OrNull(id TypeId) TypeId {
+    if t.KindOf(id) != Kind.Ref or t.IsNullable(id) or t.ArrayRef(id) { return id }
+    return t.Ref(t.Referent(id), t.PermOf(id) | Nullable)
+}
+# whether a reference names an array - never null: its zero value is the empty array (T2c)
+fn (t Table&) ArrayRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Repr(t.Referent(id))) == Kind.Array }
 fn (t Table&) IsNumber(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(14) }
 fn (t Table&) IsInt(id TypeId) Bool { return id >= TypeId(3) and id <= TypeId(10) }
 fn (t Table&) IsUnsigned(id TypeId) Bool { return id >= TypeId(7) and id <= TypeId(10) }
@@ -729,7 +743,7 @@ fn (t Table&) Base(id TypeId) TypeId { return t.bodyOf(id).Base }
 fn (t Table&) Destructs(id TypeId) Bool { return t.bodyOf(id).Destructs }
 
 # an enum's case names, in order
-fn (t Table&) CaseNames(id TypeId) Array<source.NameId>&t { return try t.caseNames.Get(id) catch default null }
+fn (t Table&) CaseNames(id TypeId) Array<source.NameId>&t { return try t.caseNames.Get(id) catch default Array<source.NameId>(0) }
 
 # whether an enum carries a payload in any case (T17): one that does not is its bare ordinal
 fn (t Table&) HasPayload(cases ListId) Bool {
@@ -1097,7 +1111,7 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             if (p & Owning) != 0 { b.Push("own ") }
             if (p & Writable) != 0 { b.Push("mut ") }
             t.canon(b, t.Referent(id))
-            b.PushChar('&')
+            b.Push("?&" if (p & Nullable) != 0 else "&")
         }
         case Kind.Func {
             b.Push("fn(")

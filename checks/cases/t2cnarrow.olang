@@ -1,0 +1,61 @@
+# check: run
+# S8e: the ways a local or a parameter holding a "T?&" is known not to be null, each read with no "!"; T2c: "T&" flows
+# into "T?&"; E35: "x!" unwraps; E10a: "==" through Eq with a null equals only a null
+type N struct(v I64, next N?&) { v, next }
+
+fn first(n N?&) I64 {
+    if n is null: return 0
+    return n.v
+}
+
+fn orElse(n N?&) I64 {
+    if n is null { return -1 } else { return n.v }
+}
+
+fn walk(h N?&) I64 {
+    t I64 = 0
+    for c := h, c is not null, c = c.next { t += c.v }
+    return t
+}
+
+fn guarded(n N?&) Bool { return n is not null and n.v > 1 }
+
+fn either(n N?&) Bool { return n is null or n.v > 1 }
+
+fn later(a Array<N?&>&) I64 {
+    p := a[0]
+    i I64 = 0
+    for p is null {
+        i++
+        p = a[i]
+    }
+    return p.v
+}
+
+fn assigned() I64 {
+    x N?& = null
+    x = N(5, null)
+    return x.v
+}
+
+fn asserted(n N?&) I64 {
+    assert n is not null
+    return n.v
+}
+
+type W struct(s String&) { s }
+fn (w W&) Eq(o W&) Bool { return w.s == o.s }
+fn (w W&) Hash() I64 { return w.s.Hash() }
+
+fn texts(a W?&, b W&) Bool { return a == b }
+
+fn main() {
+    l := N(1, N(2, null))
+    assert first(l) == 1 and first(null) == 0 and orElse(null) == -1 and orElse(l) == 1
+    assert walk(l) == 3 and walk(null) == 0 and guarded(l.next) and not guarded(null) and either(null)
+    assert later(N?&[null, null, N(7, null)]) == 7 and assigned() == 5 and asserted(l) == 1
+    assert l.next!.v == 2 and texts(W("a"), W("a")) and not texts(null, W("a"))
+    m N?& = null
+    r N& = N(9, null)
+    assert m is null and m != r and r != m
+}
