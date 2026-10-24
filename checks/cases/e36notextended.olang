@@ -1,0 +1,6 @@
+# check: fail error[E36]: Meters has no limit 'Max' - a declared type has its base's limits only where it extends it and declares no constructor
+# E36: a declared type that does not extend its base has none of its limits
+type Meters I32
+fn main() {
+    x := Meters.Max
+}

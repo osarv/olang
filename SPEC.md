@@ -3386,6 +3386,31 @@ unspecified sign and payload: it is a NaN, and which one is not specified. So `u
 every `u` except a signalling NaN's pattern, which may come back quiet; and the bits of a NaN computed from other
 values are some NaN's.
 
+### 5.19 A number type's limits
+
+**E36.** A numeric type's limits are read through its name: `I64.Max`, `U8.Min`, `F32.Inf`. Each is a **constant** of
+that type, known while compiling (it is baked and decides asserts there, §13), and a type variable bound to a numeric
+type reaches them as the type does: in an instance where `T` is `I32`, `T.Max` is `I32.Max`. This is the type's own
+namespace, the one compile-time reflection reads through. Every integer type has `Max` and `Min`, its largest and
+smallest values. Every float type has `Max`, its largest finite value; `Min`, which is `-Max`; `Inf`, positive infinity;
+`NaN`, the quiet NaN with a clear sign and a payload of zero; `Epsilon`, the difference between 1 and the next larger
+value (2^-52 for `F64`, 2^-23 for `F32`, 2^-10 for `F16`, 2^-7 for `BF16`); and `SmallestNormal`, its smallest
+positive normal value.
+
+```
+I32.Max                       # 2147483647
+U8.Min                        # 0
+F16.Max                       # 65504
+fn span<T Integer>(x T) T { return T.Max - T.Min }   # 255 at U8, -1 at I8 (wrapping, E6c)
+```
+
+A limit is a value of its type, not a literal: it does not adapt (T6), so `x I32 = I64.Max` is a compile-time error,
+while it flows as any value of its type does (T6b: `x I64 = I32.Max`). A declared type that extends a numeric type
+(T29f) and declares no constructor of its own (T29d) has its base's limits, as constants of the declared type - `Char`
+has `Char.Max`, 255. A declared type that does not extend, or whose constructor decides what its values are, has none.
+Any other name read through a numeric type, and a limit of a type that is not numeric, is a compile-time error naming
+the limits the type has.
+
 ### 5.18 `!`
 
 **E35 (`!`).** A postfix `!` - `f(x)!`, `a.F().G()!`, `(f(x) + g(y))!`, `x[i]!` on a type whose `At` can fail - handles

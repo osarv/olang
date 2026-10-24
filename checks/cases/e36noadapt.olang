@@ -1,0 +1,5 @@
+# check: fail error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+# E36: a limit is a value of its type, not a literal - it does not adapt to a narrower one
+fn main() {
+    x I32 = I64.Max
+}

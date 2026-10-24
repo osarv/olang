@@ -606,6 +606,8 @@ type Diag enum {
     GlobalReadsItself
     GlobalsCycle
     ModuleIdentityClash
+    NoLimit
+    BitOpNotInteger
 }
 
 # one function each, under the id it is known by
@@ -1755,6 +1757,12 @@ fn UnknownMethod(ty String&, tok String&) Msg { return Msg(Diag.UnknownMethod, "
 
 # ERR_METHOD_NOT_INHERITED
 fn MethodNotInherited(ty String&, tok String&) Msg { return Msg(Diag.MethodNotInherited, "T29f", $ty " declares no " $tok ", and does not extend its base, which has one - declare it with 'extends'") }
+
+# a name read through a number type that is none of its limits (E36), or a limit of a type that is no number
+fn NoLimit(ty String&, name String&, tail String&) Msg { return Msg(Diag.NoLimit, "E36", $ty " has no limit '" $name "'" $tail) }
+
+# a bit operation on what is no integer (E37)
+fn BitOpNotInteger(name String&, ty String&) Msg { return Msg(Diag.BitOpNotInteger, "E37", "'" $name "' is a method of the integer types, and " $ty " is none") }
 
 # ERR_ATOMIC_NOT_INTEGER
 fn AtomicNotInteger(ty String&) Msg { return Msg(Diag.AtomicNotInteger, "P9", "the atomic operations are methods of the integer types, and " $ty " is none") }

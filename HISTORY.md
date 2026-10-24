@@ -23120,3 +23120,20 @@ may implement.
 **Not built, as decided:** inline type lists (`<T (I32, F64)>`). G15 needed no change: a `match T` is already checked per
 instantiation, and only the listed types can instantiate a variable a closed trait constrains, so cases covering them
 make it complete; the rule now says so.
+
+## The decisions of 2026-10-24, round 6: the small items (2026-10-24)
+
+The user decided these on 2026-10-24 (docs/survey.md items 5, 9 and 10, the enum raw values, and my bitwise precedence);
+built in one round, each its own commits.
+
+**E36, a number type's limits.** `I64.Max`, `T.Max`, `F32.Inf` are read through the type's name - the member access on
+a type that so far gave an enum's cases. The checker makes each a `Lit` of the type (its value, a float's IEEE pattern),
+so the evaluator and the code generator needed nothing: a limit is a constant like any literal, only typed. A type
+variable reaches them as its binding does, since a generic's body is checked per instance. Decided (mine): floats get
+`Max` (the largest finite value - Rust's `f64::MAX`), `Min` (`-Max`), `Inf`, `NaN` (quiet, positive, payload zero),
+`Epsilon` and `SmallestNormal`; the brief's `MaxFinite` is `Max`, one name for one thing, which is also what makes
+`T.Max` mean the same in generic code over integers and floats. A declared type has its base's limits only where it
+extends it and declares no constructor - a constructor decides what its values are (T29d), and `Percent.Max` as
+`I32.Max` would bypass it. Limits do not adapt (they are typed values, T6): `x I32 = I64.Max` is T6b's error. Found
+while testing: the evaluator refuses reading the bits of a NaN whose payload is the default one (WhyNaNOp - it cannot
+tell `F16.NaN` from an operation's NaN), so the corpus reads `NaN.Bits()` at run time only.

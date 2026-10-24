@@ -1,0 +1,5 @@
+# check: fail error[E36]: Bool has no limit 'Max' - it is not a numeric type
+# E36: only a numeric type has limits
+fn main() {
+    x := Bool.Max
+}

@@ -10370,6 +10370,42 @@ test "E33a: a signalling NaN keeps its payload, quieted or not" {
     assert s16 != s16 and sb != sb and s32 != s32 and s64 != s64
 }
 
+# E36: a number type's limits read through its name - constants of the type, a type variable's binding reaching them
+# as the type does. Run while compiling (LimitsBaked, K2) and at run time.
+type LmChar extends U8
+fn lmLargest<T Integer>(xs Array<T>&) T {
+    best := T.Min
+    for x in xs {
+        if x > best { best = x }
+    }
+    return best
+}
+fn lmSpan<T>(x T) T { return T.Max - T.Min }
+fn limitsAll(one I64) Bool {
+    ints Bool = I8.Max == 127 and I8.Min == -128 and I16.Max == 32767 and I32.Min == -2147483648 and I64.Max == 9223372036854775807
+    ints2 Bool = U8.Max == 255 and U8.Min == 0 and U16.Max == 65535 and U32.Max == 4294967295 and U64.Max == U64(0) - 1
+    gen Bool = lmLargest(I32[-5, -9, -1 * I32(one)]) == -1 and lmLargest(U8[3, 7, 2]) == 7 and lmSpan(I8(one)) == -1
+    gen2 Bool = lmSpan(U16(one)) == 65535 and LmChar.Max == LmChar(255) and Char.Max == Char(255)
+    fs Bool = F64.Max == 1.7976931348623157e308 and F64.Min == -F64.Max and F32.Max == F32(3.4028234663852886e38)
+    fs2 Bool = F16.Max == 65504 and BF16.Max.Bits() == 0x7F7F and F64.Inf == 1.0 / F64(one - 1) and F64.NaN != F64.NaN
+    fs3 Bool = F64.Epsilon == 2.220446049250313e-16 and 1.0 + F64.Epsilon != 1.0 and 1.0 + F64.Epsilon / 2.0 == 1.0
+    fs4 Bool = F32.Epsilon.Bits() == 0x34000000 and F16.Epsilon == 0.0009765625 and BF16.Epsilon == 0.0078125
+    fs5 Bool = F64.SmallestNormal == 2.2250738585072014e-308 and F32.SmallestNormal.Bits() == 0x00800000 and F16.SmallestNormal.Bits() == 0x0400
+    fs6 Bool = BF16.SmallestNormal.Bits() == 0x0080 and F32.Inf.Bits() == 0x7F800000 and F16.NaN != F16.NaN and $F32.Min == "-3.4028235e+38"
+    wide I64 = I32.Max
+    flow Bool = wide + one == 2147483648 and I32.Max + I32(one) == I32.Min
+    return ints and ints2 and gen and gen2 and fs and fs2 and fs3 and fs4 and fs5 and fs6 and flow
+}
+LimitsBaked := limitsAll(1)
+
+test "E36: a number type's limits" {
+    assert limitsAll(I64(WdMutable / 2000000000))
+    assert LimitsBaked
+    # a NaN only moved keeps its bits (E33a) - read at run time only: the evaluator cannot tell this one from an
+    # operation's, whose payload is the same
+    assert F16.NaN.Bits() == 0x7E00 and F64.NaN.Bits() == 0x7FF8000000000000 and BF16.NaN.Bits() == 0x7FC0
+}
+
 # S19: deferred code runs on every way out of its block - falling off its end, a return (once the result is
 # computed), a break, a continue, an error leaving the function - last registered first, the innermost block's first,
 # reading variables as they are when it runs, never when the defer was reached; only a defer that was reached runs.

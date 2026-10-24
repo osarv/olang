@@ -1,0 +1,5 @@
+# check: fail error[E36]: U8 has no limit 'Inf' - its limits are Max and Min
+# E36: Inf, NaN, Epsilon and SmallestNormal are a float type's
+fn main() {
+    x := U8.Inf
+}
