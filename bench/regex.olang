@@ -1,0 +1,23 @@
+# regex: matches of a pattern counted in n MB of generated words - std/regex's Pike VM, with and without a literal
+# prefix to skip to
+import "std/io"
+import "std/os"
+import "std/regex"
+
+fn main() ? {
+    args := os.Args()
+    mb I64 = 4
+    if args.Len() > 1 { mb = try args[1].ParseInt() }
+    words := String&["sing", "sang", "running", "error", "code", "7", "42", "thing", "bring", "x"]
+    b := StringBuilder()
+    x U32 = 1
+    for b.Len() < mb * 1048576 {
+        x = x * 1664525 + 1013904223
+        b.Push(words[(x >> 16) % 10])
+        b.PushChar(' ' if (x >> 8) % 7 != 0 else '\n')
+    }
+    text := b.ToString()
+    ing := regex.Compile("[a-z]+ing")!
+    num := regex.Compile("error [0-9]+")!
+    try io.Println($ing.Count(text) " " $num.Count(text))
+}

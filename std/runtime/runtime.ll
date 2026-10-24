@@ -2336,8 +2336,11 @@ entry:
 }
 
 ; the class of the error the last failing call on this thread left in errno, as std/os's OsError numbers them -
-; ENOENT 2: 1 (NOT_FOUND), EEXIST 17: 2, EACCES 13 and EPERM 1: 3, ENOTDIR 20: 4, EISDIR 21: 5, ENOTEMPTY 39: 6, and 0
-; for any other. -i classifies by the same table (comptime.c, OsErrClasses), which is to be kept in step with this
+; ENOENT 2: 1 (NOT_FOUND), EEXIST 17: 2, EACCES 13 and EPERM 1: 3, ENOTDIR 20: 4, EISDIR 21: 5, ENOTEMPTY 39: 6 - and
+; for std/net's Error: ECONNREFUSED 111: 7, EADDRINUSE 98: 8, ETIMEDOUT 110 and EAGAIN 11 (a socket's timeout): 9,
+; ECONNRESET 104, ECONNABORTED 103, EPIPE 32 and ENOTCONN 107: 10, ENETUNREACH 101 and EHOSTUNREACH 113: 11,
+; EADDRNOTAVAIL 99 and EAFNOSUPPORT 97: 12, EINTR 4: 13 - and 0 for any other (Linux's numbers, the same on x86-64 and AArch64). Under
+; interpret the compiler's own runtime answers, so a class its build lacks reads as 0
 define i32 @__olang_err() {
 entry:
   %p = call ptr @__errno_location()
@@ -2357,7 +2360,33 @@ entry:
   %r6 = select i1 %is5, i32 5, i32 %r5
   %is6 = icmp eq i32 %e, 39
   %r7 = select i1 %is6, i32 6, i32 %r6
-  ret i32 %r7
+  %is7 = icmp eq i32 %e, 111
+  %r8 = select i1 %is7, i32 7, i32 %r7
+  %is8 = icmp eq i32 %e, 98
+  %r9 = select i1 %is8, i32 8, i32 %r8
+  %is9 = icmp eq i32 %e, 110
+  %r10 = select i1 %is9, i32 9, i32 %r9
+  %is10 = icmp eq i32 %e, 11
+  %r11 = select i1 %is10, i32 9, i32 %r10
+  %is11 = icmp eq i32 %e, 104
+  %r12 = select i1 %is11, i32 10, i32 %r11
+  %is12 = icmp eq i32 %e, 103
+  %r13 = select i1 %is12, i32 10, i32 %r12
+  %is13 = icmp eq i32 %e, 32
+  %r14 = select i1 %is13, i32 10, i32 %r13
+  %is14 = icmp eq i32 %e, 107
+  %r15 = select i1 %is14, i32 10, i32 %r14
+  %is15 = icmp eq i32 %e, 101
+  %r16 = select i1 %is15, i32 11, i32 %r15
+  %is16 = icmp eq i32 %e, 113
+  %r17 = select i1 %is16, i32 11, i32 %r16
+  %is17 = icmp eq i32 %e, 99
+  %r18 = select i1 %is17, i32 12, i32 %r17
+  %is18 = icmp eq i32 %e, 4
+  %r19 = select i1 %is18, i32 13, i32 %r18
+  %is19 = icmp eq i32 %e, 97
+  %r20 = select i1 %is19, i32 12, i32 %r19
+  ret i32 %r20
 }
 
 ; stat(path) into out: out[0] the kind (1 a file, 2 a directory, 0 anything else), out[1] the size in bytes,

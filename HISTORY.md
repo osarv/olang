@@ -22775,3 +22775,68 @@ Migration: `tools/equality_migrate.olang`, re-runnable for oann, rewrote 90 file
 identities (each listed; a dozen hand-checked in tests/shared.olang, std/json, std/linalg, std/filepath, the agree
 fixture, whose expected output changed for its now-content comparisons). The fuzz generators, which write programs as
 text the tool skips, were changed by hand.
+
+## std breadth: sync, time, net, collections, adapters, text encodings, flags, regex (2026-10-24)
+
+The survey's std items 7 and 8 (docs/survey.md), which the user approved ("Yes all of that"). Every name is mine,
+under the user's naming rule relayed the same day: a module named for its main type keeps the type's name (`set.Set`,
+`regex.Regex`), and every other name drops the module's (`net.Error`, `flags.Error`, `time.Error`); a module with two
+error types names them by subject (`regex.SyntaxError`, `regex.NotFound`).
+
+- **std/sync.** `Mutex<T>`: the value is reached only inside `m.With(fn(v mut T&) { ... })`, the lock held for the call,
+  so there is no unlock to forget, and the callback's parameter lives in a scope it cannot name (O4b) so nothing
+  inside escapes. A number cannot be handed out by reference (no primitive references, T24), so `Mutex<I64>` is used
+  through `Update(fn(v T) T)`, `Get` and `Set`; `With` exists for every instantiation and is an error only where called
+  on such a T (G11a). `RWLock<T>` (`Read` read-only, `Write`, `Update`, `Get`), `Once` (`Do`, `Done`: an atomic flag,
+  the mutex only on the first calls). Each is a handle (a copy is the same lock, which tasks need); glibc's initial
+  mutex and rwlock are all zero bytes, so the words need no init call (unlike chan's `Init`). The methods take the
+  handle `mut`, since they write what it reaches (T25c refused a read-only receiver). Under `-race` the tests are clean.
+- **std/time.** `type Duration extends I64` (arithmetic and comparison as integers), constructors `Nanos`..`Hours`,
+  readers `d.Millis()` etc. and `d.Seconds() F64`, `$d` in Go's form; `Sleep` over nanosleep, resuming after a signal;
+  `Elapsed(t)`. `Date` (calendar parts plus a fixed offset in minutes; Hinnant's civil-days algorithms), `DateOf`,
+  `d.Wall()`, `Weekday`, `YearDay`, RFC 3339 `Str`/`Format` (fraction trimmed as Go's RFC3339Nano) and a strict
+  `Parse` failing `time.Error.SYNTAX`/`RANGE`. Unit constants (`Second`) were dropped: D3a forbids a global named like
+  `Date`'s constructor parameters; the functions say the same. Not built: time zones by name (needs the zone database).
+- **std/net.** Blocking sockets over `extern fn`, one task per connection being the server shape (1:1 threads, P1e).
+  `Conn`, `Listener` and `UDP` have destructors that close the descriptor, so they are held by reference (C11), and a
+  `Close()` closes sooner. `Read` returns the front of the caller's buffer (io.Read's shape) and fails with `CLOSED` at
+  the end of the stream (errors are errors - io.Read returns an empty slice; a socket's end is an error here). `send`
+  is given MSG_NOSIGNAL so a vanished peer is `RESET`, never SIGPIPE. IPv4 and IPv6 parsing and RFC 5952 rendering.
+  **Runtime change**: X6's `__olang_err` gained classes 7-13 (refused, in use, timed out incl. EAGAIN, reset/broken,
+  unreachable, address not available incl. EAFNOSUPPORT, interrupted); std/os reads unknown classes as FAILED as before.
+  Under `interpret` the compiler's own runtime answers, so the new classes read as 0 until the compiler is rebuilt.
+  **Gap, recorded**: no DNS - getaddrinfo hands back a linked list of C structures, which X2 cannot receive; a runtime
+  function copying the addresses out (X6-style) would do, but needs the interpreter's runtimeFn too, so it is left.
+  The container has no IPv6: the loopback test skips `::1` when Listen fails with `ADDRESS` (EAFNOSUPPORT).
+- **Collections.** `set.Set<T>` over `Map<T, Bool>` (algebra, `x in s`, `$s` as `Set{1, 2}`); `deque.Deque<T>` a
+  doubling ring (both ends, `d[i]`, `Iter`); `heap.Heap<T>` a binary heap over a `Vec`, ordered by a `less` function
+  given at construction (`Drain` empties it in order). All handles, as List, Map and Vec are.
+- **Iterator adapters** in the prelude's iterator.olang, as trait defaults: `Take`, `Skip`, `Enumerate` (an
+  `Indexed<T>` with `Index`/`Value`), `Zip` (`Zipped<A, B>` with `First`/`Second` - Pair is std's, not the prelude's),
+  `Chain`, `Sum` (over `Number`), `Min`/`Max` by `<`, `MinBy`/`MaxBy` by a key - each failing with `Exhausted` on an
+  empty iterator. Each adapter holds a copy of the iterator it wraps, so the original stays where it stood; the
+  compile-time evaluator runs them (a baked global in the tests).
+- **Text encodings.** `std/utf8`: `Rune extends U32`, a strict `Decode` (overlong forms, surrogates and values past
+  U+10FFFF refused), `Encode`, `Valid`, `Count`, `ToRunes`/`FromRunes`, and `Runes` walking a text with each bad byte
+  as U+FFFD (Go's range, every browser's decoder) so a walk never fails. `std/base64` (standard with padding, URL-safe
+  without; strict decoding, leftover bits refused), `std/hex`, `std/sha256` (`Sum`, `Hex`, a streaming `Hasher` that
+  Sum leaves usable), `std/crc32` (IEEE, the table computed while compiling). Measured (bench `sha256`, 256 MB):
+  olang 1.37-1.45 s against a plain C SHA-256 1.24-1.29 s.
+- **std/flags.** A `Flags` handle; `p.Int("count", 'n', 10, "help")` and Bool/Float/Text give handles whose `Get()`
+  reads the value after `Parse(os.Args())`; long and short spellings, `=`, grouped short Bools, `--`; `-h`/`--help`
+  fail with `HELP` and `Help()` is the text; other failures say why in `Message()` (errors carry no data).
+- **std/regex.** RE2's syntax less Unicode's tables (classes, POSIX names, `\d\w\s\b`, anchors, groups named and not,
+  lazy and counted repetition to 1000, flags `i m s`), code points of UTF-8, leftmost-first. First built as a Pike VM
+  alone: 650 instructions a byte, 4x glibc's regexec on bench/regex (glibc's own per-call strlen was 17 s until
+  REG_STARTEND). Then a lazy DFA, as RE2: without captures a Pike step's state is its ordered thread list plus "a match
+  was seen", so those are DFA states, built as the text reaches them and cached for the call (never in the Regex,
+  which stays read-only for tasks); the forward DFA finds the leftmost-first match's end, the reversed program's DFA
+  (keeping the longest) its start - the leftmost start of any match ending there, which is the leftmost-first match's -
+  and the Pike VM runs only over the match, for its groups. Programs with assertions other than a leading `^`, short
+  texts and a DFA past 5,000 states fall back to the Pike VM. A test compares every match's spans by both paths on 40
+  generated texts and 17 patterns (it fails when the reverse DFA is broken). Measured (bench `regex`, 32 MB): olang
+  0.72-0.78 s, glibc 0.76-0.79 s.
+- **Language gaps met** (recorded, not changed): no `\x` escapes in text literals (tests build bytes from `U8[...]`);
+  `&` binds looser than `==` as in C (`(b & 0xC0) != 0x80` needs parentheses); error words are not values, so a helper
+  cannot take the word to raise (flags' `say` then `error`); a field named as its constructor's parameter is written as
+  a bare pun, and `destruct` follows the body's `}`; `Mutex<I64>` cannot lend `mut I64&`.
