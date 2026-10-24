@@ -724,3 +724,6 @@ errors and documentation - generic `+` already works).
   into `?Node&`; error sets keep `? E` after the result (no migration); `!` stays expression-only (`x!` on null, `f()!`
   on failure); reading through `?Node&` needs narrowing (`if x is not null`); `fn f() ?Node&` vs `fn f() ? E` told apart
   by the `&` (only references are nullable). Supersedes QAO's parking. Still open: `<T (I32, F64)>`, named type lists.
+- REVISED 2026-10-24 (the user: "Or we put it before the &?"): the nullable marker is `?&` - `Node?&`, `mut Node?&`,
+  `List<Node?&>`, `Point?&q` - on the reference marker it modifies; no ordering question with `mut`; told apart from an
+  error set by the `&` that follows. Rec yes; treated as decided unless the user objects.
