@@ -516,6 +516,8 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     if kind != build.Kind.Module { keep(l, cfg, keys, e.Made, objs, hashes) }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
+    prog.Links = l.Links()
+    if d.Errors() > 0 { error build.Failed.REPORTED }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
     if dyncall {
         prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad {

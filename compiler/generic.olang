@@ -177,6 +177,7 @@ fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
                 case ast.TypeBody.Enum(_, _) { kind = types.DeclKind.Enum }
                 case ast.TypeBody.Trait(_, _, _) { kind = types.DeclKind.Trait }
                 case ast.TypeBody.Over(_, _) { kind = types.DeclKind.Over }
+                case ast.TypeBody.Foreign { kind = types.DeclKind.Foreign }
             }
         }
         if td.Params.Len() > 0 { n = I32(td.Params.Len()) }
@@ -1299,7 +1300,7 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
             p.T.SetEnumBody(t, ns, p.T.List(ps))
         }
         case ast.TypeBody.Over(base, _) { p.T.SetOverBody(t, p.Resolve(c, base)) }
-        case ast.TypeBody.Trait(_, _, _) { p.T.SetEmptyBody(t) }
+        case ast.TypeBody.Trait(_, _, _), ast.TypeBody.Foreign { p.T.SetEmptyBody(t) }
     }
     return true
 }

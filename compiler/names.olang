@@ -715,6 +715,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             r.typeRef(base)
             if ctor is not null { r.func(ctor) }
         }
+        case ast.TypeBody.Foreign { }
     }
 }
 

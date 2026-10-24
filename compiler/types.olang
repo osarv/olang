@@ -115,6 +115,7 @@ type DeclKind enum {
     Error
     Trait
     Over        # a type declared over a number, an array or another such type (T29)
+    Foreign     # "extern type T" (X10): a C type, held only by reference, with no layout and nothing to read
 }
 
 # a declared type: its module (an index into the program's modules), its name, what it is, and its parameters: how
@@ -874,7 +875,7 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
                     if t.LayoutState(b) != LaidOut { return false }
                     size, align = t.Size(b), t.Align(b)
                 }
-                case DeclKind.Trait { return false }
+                case DeclKind.Trait, DeclKind.Foreign { return false }
             }
         }
         case _ { return false }

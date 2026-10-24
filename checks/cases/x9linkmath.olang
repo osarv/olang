@@ -1,0 +1,12 @@
+# check: run
+# X9: a library named by two links is linked once; "link" stays an ordinary name everywhere else
+link "m"
+link "m"
+extern fn cbrt(x F64) F64
+
+fn link(n I64) I64 { return n + 1 }
+
+fn main() ? {
+    assert cbrt(8.0) == 2.0
+    assert link(1) == 2
+}

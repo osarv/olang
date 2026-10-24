@@ -1429,11 +1429,11 @@ storage.
 
 ```
 top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
-           | extern-func-decl | top-if
+           | extern-func-decl | extern-type-decl | link-decl | top-if
 ```
 
 `import-decl` is specified in §4; `test-decl` in
-§10.4; `extern-func-decl` in §11; `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
+§10.4; `extern-func-decl`, `extern-type-decl` and `link-decl` in §11 (X1, X10, X9); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
 Declaration order within a module is not significant: any top-level declaration may refer to any
 other, declared earlier or later in the same file, and to any name reachable through an import
 (§4).
@@ -6636,6 +6636,23 @@ and with its prototype - every parameter and the result `F64`, or every one `F32
   (implementation-defined).
 
 A declaration naming one of these with any other prototype is an ordinary external function.
+
+**X9 (linking a library).** `link-decl ::= "link" STR_LIT STMNT_END` is a top-level declaration (D1) naming what the
+program's link reads besides its objects - the library or object file that defines what the module's `extern`
+declarations name. `link` is a word only there: followed by text, at a module's top level; anywhere else it is an
+ordinary name. The text is one of:
+
+- a **library's name** - letters, digits, `_`, `-`, `+` and `.`, the first a letter or a digit - linked as the C
+  compiler's `-lNAME` links it (`link "sqlite3"` reads `libsqlite3.so`, or `libsqlite3.a`, from the platform's library
+  path);
+- a **file's path** - text holding a `/`, or ending in `.a`, `.o` or `.so` (or `.so.` and a version) - resolved, when
+  it is relative, from the directory of the module declaring it (`link "vendor/libz.a"`).
+
+Anything else is a compile-time error. A module's `link`s count when it is part of a build (`build`, `test`, running a
+file, `-library`), in a chosen branch of a top-level `if` (B9) like any declaration, each once whatever number of
+modules name it, in the order the program's modules are loaded and after every object, so a static library finds the
+objects calling it. `compile` (B2), which links nothing, reads none. Changing one changes the link and so relinks the
+program (B3).
 
 ## 12. Generics
 

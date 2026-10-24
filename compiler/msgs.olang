@@ -219,6 +219,7 @@ type Diag enum {
     TypeVarNamesType
     TypeVarNotInferable
     ExternType
+    LinkName
     MutOnValueType
     MutOnValueParam
     MutOnValueField
@@ -1183,6 +1184,9 @@ fn TypeVarNotInferable(text String&) Msg { return Msg(Diag.TypeVarNotInferable, 
 
 # ERR_EXTERN_TYPE
 fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers") }
+
+# ERR_LINK_NAME
+fn LinkName(tok String&) Msg { return Msg(Diag.LinkName, "X9", $tok " names no library and no file - write a library's name, as 'link \"m\"', or a path to one, as 'link \"lib/libx.a\"'") }
 
 # ERR_MUT_ON_VALUE_TYPE
 fn MutOnValueType(ty String&) Msg { return Msg(Diag.MutOnValueType, "T25b", "'mut' makes a reference writable, and " $ty " is no reference") }

@@ -62,6 +62,7 @@ type Program struct() {
     Units List<Unit>
     Runtime String& = ""
     Dyncall String& = ""
+    Links List<String&>      # what its modules' "link" declarations name (X9): "-lNAME", or a file's path
 }
 
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
@@ -567,7 +568,7 @@ fn (c Config&) keep(obj String&) {
 # links objs into bin, unless bin is what linking them would give already: its stamp (bin.link) holds the hash of every
 # argument of the link and clang's version, with bin's size and time when it was linked. Fails, reporting nothing,
 # where clang cannot link them - what to say is the caller's (B3, B3a)
-fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool) ? Failed {
+fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool, links List<String&>&) ? Failed {
     args List<String&>
     args.Push($c.Clang)
     for f in c.ModeFlags() { args.Push($f) }
@@ -580,6 +581,7 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool) ? Failed
     args.Push("-o")
     args.Push($bin)
     for o in objs { args.Push($o) }
+    for x in links { args.Push($x) }      # X9: after the objects, so a static library's members are found
     args.Push("-lm")
     args.Push("-lpthread")
     args.Push("-ldl") # os.RunOnStack asks glibc's dlsym for the least stack a thread may have
@@ -680,7 +682,7 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
     Phase("compile")
     bin := $c.Output if c.Output != "" else $c.Dir "/" $Readable(prog.rootIdentity()) $c.modeSuffix()
-    try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
+    try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(bin))
         return finish(d)
     }
@@ -718,7 +720,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
     Phase("compile")
     bin := $c.Dir "/" $Readable(prog.rootIdentity()) "_test" $c.modeSuffix()
-    try c.Link(objs, bin, prog.Dyncall != "") catch Failed {
+    try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
         sayln(c.paint("31", $file ": native compilation failed"))
         return 1
     }
