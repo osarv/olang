@@ -666,3 +666,17 @@ errors and documentation - generic `+` already works).
   measure (rec defer; if built: `unit m`, `F64<m/s>`, literals unitless); 7 contracts (rec no syntax, leading asserts);
   8 doc tests (rec yes, `#` + four spaces); 9 method overloading (rec no); 10 constructor overloading (rec no, named
   functions); 11 fixed point (rec with FPGA); 12 QAO maybe/Option (rec drop, keep nullable). In effect: nothing changed.
+- AGENDA ANSWERED 2026-10-24 (the user, by number): 1 dev build YES, the name must say what is quick ("quickcomp is
+  maybe a bit too long ... Quick is kinda ambiguous") - ASKED: `-quickbuild` (rec) or `-draft`. 2 `is` binding a
+  pattern YES. 3 no bodyless form - "Can't you just write {x, y} on the same line? ... keep the general form": it
+  already compiles (`struct(A I64, B I64) { A, B }`); compiler/'s structs rewritten that way, no language change. 5 one
+  null test `x is null` YES; the user asked for precise identity/value definitions - given; ASKED 5a: `==` always value
+  equality, `is` always identity, a type reaching itself through references has no `==` unless it declares `Eq`
+  (rec yes; today struct/enum references compare identity unless Eq). 6 units DROPPED ("the type system supports
+  catching errors on type mismatch well enough"). 7 contracts: "take the inferred obligations and optionally put them
+  in the signature" - sketch given (`requires cond, b outlives a`, decided at calls, `checked` at run time, a tool
+  printing the inferred signature); ASKED: the word, `ensures`, scope relations in the clause. 8 doc tests - explained,
+  rec now: not until a doc generator exists. 9/10 overloading: the user: "can be solved with generics right?" -
+  explained (match T per type, defaults per count, named functions for the rest); rec no overloading; ASKED 9b
+  `<T Vec2 or I64>` constraint lists, 10b named constructors later. 11 fixed point DEFERRED to FPGA. 12 maybe/null -
+  explained (zero values decide it), rec keep nullable; awaiting the user.
