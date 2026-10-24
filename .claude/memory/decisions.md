@@ -788,3 +788,33 @@ errors and documentation - generic `+` already works).
   (the user: "not built-in remember" - CheckError per QAI); undecidable calls unchecked otherwise; DROP the
   test/-debug entry checks (instructions not written). Awaiting a yes; still open: functions with conditions as values
   (calls through them unchecked), no trait-method conditions, no `ensures`, a command printing inferred signatures.
+- CONTRACTS DECIDED 2026-10-24 (the user: "Yes thats good"): decided per condition while compiling where known (a
+  false one an error at a plain call), otherwise unchecked unless the caller writes `checked f(x)` (CheckError.CONTRACT);
+  no test/-debug entry checks. Still open (my recs stand): functions with conditions as values (calls through them
+  unchecked), no trait-method conditions, no `ensures`, a command printing inferred signatures.
+  The user asked whether `checked` on conversions confuses since conversions look like constructors: proposed (rec) a
+  conversion IS the built-in type's constructor with a contract `[x fits I32]` - constant arguments decided while
+  compiling (out of range an error at the call), `checked I32(x)` at run time with OVERFLOW/INVALID; `try` = declared
+  errors, `checked` = opted-in conditions, for every call alike.
+- DECIDED 2026-10-24 (mine, the user asked "Should unreachable also have a why?"): `unreachable "why"` - an optional
+  message, evaluated only when reached, printed `FILE:LINE: unreachable reached: why`; no comma (nothing precedes it).
+  Also confirmed to the user: assert stays a language statement (decided, message lazy, FILE:LINE, test-aware); abort,
+  done, fail are gone (2026-10-17). Into the next batch with today's decisions.
+- CONTRACTS 2026-10-24, DECIDED (the user): functions with value conditions may be values, calls through them
+  unchecked; obligations are implicit contracts - conditions on scopes, always decided at the call (a call that can't
+  meet one is an error), which is why a function with scope conditions can't be a value; `olang explain FILE NAME`
+  prints any top-level item (functions/methods with inferred errors, scope and value conditions; types with
+  constructor, fields, methods, traits met; globals with type and baked value). The user wants trait-method conditions
+  and result guarantees. Proposed: a call through a constraint is held to the trait's conditions AND, per instance, the
+  implementing method's (no implication proofs; `any Trait&` calls get the trait's only); guarantees in brackets after
+  the result type `fn sqrt(x F64) [x >= 0.0] F64 [result >= 0.0]`, checked where the evaluator runs the call (blaming
+  the callee) and after the call under `checked`; optional later: a caller condition literally matching a guarantee is
+  decided. ASKED: `result` as the name (keyword only in those brackets); single results only for now (rec) or
+  `result.0`.
+- CONTRACTS 2026-10-24, DECIDED (the user): result guarantees name the results that carry them - `fn sqrt(x F64)
+  [x >= 0.0] r F64 [r >= 0.0]`, `(q I64, r I64) [0 <= r < b]` - names usable only in those brackets (mine: no naked
+  returns); the guarantee comes before `? E` and holds only on a normal return (mine). DIRECTION (the user): "We are going
+  to do theorem proving" - the g(sqrt(x)) special case dropped. Rule fixed now (mine): the prover only moves conditions
+  out of "unchecked" (proved: no check even under checked; refuted: compile error; neither: unchecked unless checked),
+  so a better prover never changes a program's meaning. Prover design (logic: bit-vectors for wrapping integers;
+  own solver or an existing one) later. Trait-method conditions parked until run-time traits are discussed.

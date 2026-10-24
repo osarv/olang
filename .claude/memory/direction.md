@@ -103,3 +103,11 @@ to convert it in my head manually every time."
 **How to apply:** convert before writing to the user (Europe/Stockholm). Tools still speak UTC (send_later `at`,
 rate_limit_event `resetsAt`, cron fields - though create_trigger accepts `CRON_TZ=Europe/Stockholm`); convert at the
 boundary. Older entries in memory and CLAUDE.md written in UTC stay as they are.
+
+## Contracts and proving
+
+The user, 2026-10-24: "We are going to do theorem proving." Contracts (conditions in brackets after the parameters and
+after named results) are the language's statements of what a function requires and guarantees; scope obligations are
+contracts the compiler infers. A prover is to decide as many conditions as it can while compiling. Rule (mine,
+recorded with it): proving only moves conditions out of "unchecked" - proved ones need no check, refuted ones are
+errors, the rest stay opt-in through `checked` - so a program's meaning never depends on how clever the prover is.
