@@ -124,7 +124,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
 
 # a constant argument a fold could not compute: its expression, the module whose context reads it, its type, the
 # context's variables as they are bound there (an instance's own length, T7c), and its LengthKey
-type ConstAsk struct(Mi I64, Expr ast.Expr&, Want types.TypeId, Owner I64, Names Array<source.NameId>&, Vals Array<types.TypeId>&, Key String&) {
+type ConstAsk struct(Mi I64, Expr ast.Expr&, Want types.TypeId, Owner I64, Names Array<source.NameId>&, Vals Array<types.TypeId>&, Key String&
+                     Soft Bool = false) {
     Mi
     Expr
     Want
@@ -132,7 +133,11 @@ type ConstAsk struct(Mi I64, Expr ast.Expr&, Want types.TypeId, Owner I64, Names
     Names
     Vals
     Key
+    Soft       # an array's length (QP1, T7c): one the evaluator cannot compute is a length known only at run time, no error
 }
+
+# what Lengths holds for a soft ask the evaluator could not compute (QP1): a length known only at run time
+RunTimeLength I64 = -9223372036854775807 - 1
 
 # the owners of variables: a type declaration's, a function's
 fn DeclOwner(d types.DeclId) I64 { return I64(d) * 2 }
@@ -764,6 +769,95 @@ fn (p mut Program&) FoldKnown(c Context&, e ast.Expr&, want types.TypeId) types.
     return p.UnknownConst()
 }
 
+# QP1, T7c: the length Array<T>(n) gives where n is written - a Const where n folds (a literal, an immutable global's
+# value, arithmetic on these), a pattern where it reads a type variable not bound yet, the unknown constant while the
+# evaluator is asked for it (a call, a global a call computes), and 0 - a length known only at run time - where n reads
+# a local or a parameter, or the evaluator could not compute it. Never an error: a length that cannot be known while
+# compiling is a run-time one
+fn (p mut Program&) FoldLength(c Context&, e ast.Expr&) types.TypeId {
+    if e == null or p.readsLocal(c, e) { return types.TypeId(0) }
+    i64 := p.T.Prim("I64")
+    f := p.eval(c, e)
+    if f.St == Unfolded and (c.Owner < 0 or p.varsBound(c)) {
+        key String&p = p.LengthKey(c, e)
+        if p.Lengths.Has(key) {
+            v := try p.Lengths.Get(key) catch default RunTimeLength
+            return types.TypeId(0) if v == RunTimeLength else p.T.Const(i64, v)
+        }
+        seen := false
+        for a in p.ConstAsks {
+            if a.Key == key { seen = true }
+        }
+        if not seen {
+            ns mut Array<source.NameId>&p = Array<source.NameId>(c.Vars.Len())
+            vs mut Array<types.TypeId>&p = Array<types.TypeId>(c.Vars.Len())
+            k I64 = 0
+            for v in c.Vars {
+                ns[k], vs[k] = v.Key, v.Value
+                k++
+            }
+            p.ConstAsks.Push(ConstAsk(c.Mi, e, i64, c.Owner, ns, vs, key, true))
+        }
+        return p.UnknownConst()
+    }
+    # G21's typed fold: a value of a narrower integer type flows in (T6b); one that does not is no length known here
+    if f.St == Folded and p.T.IsInt(f.Ty) and f.Ty != i64 and not p.Flows(f.Ty, i64) and not litOnly(e) { return types.TypeId(0) }
+    if f.St == Folded and f.Ty != types.UnknownT and not p.T.IsInt(f.Ty) { return types.TypeId(0) }
+    return p.constOf(c, f, i64, e)
+}
+
+# whether an expression reads a local or a parameter of the item it is written in, or anything a fold cannot tell (a
+# lambda): its value is then the running program's (QP1)
+fn (p mut Program&) readsLocal(c Context&, e ast.Expr&) Bool {
+    if e == null { return false }
+    match e {
+        case ast.Expr.Name(sp, _) {
+            k := p.R.Use(p.file(c.Mi), sp.Start).Kind
+            return k == names.What.Local or k == names.What.None
+        }
+        nomatch { }
+    }
+    return match e {
+        case ast.Expr.Lit(_, _), ast.Expr.Default(_) => false
+        case ast.Expr.Paren(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _), ast.Expr.Generic(_, x, _) => p.readsLocal(c, x)
+        case ast.Expr.Binary(_, _, a, b) => p.readsLocal(c, a) or p.readsLocal(c, b)
+        case ast.Expr.Cond(_, a, k, b) => p.readsLocal(c, a) or p.readsLocal(c, k) or p.readsLocal(c, b)
+        case ast.Expr.Call(_, f, args) => p.readsLocal(c, f) or p.anyReadsLocal(c, args)
+        case ast.Expr.Index(_, x, items) => p.readsLocal(c, x) or p.anyReadsLocal(c, items)
+        case _ => true
+    }
+}
+
+fn (p mut Program&) anyReadsLocal(c Context&, xs Array<ast.Expr&>&) Bool {
+    if xs == null { return false }
+    for x in xs {
+        if p.readsLocal(c, x) { return true }
+    }
+    return false
+}
+
+# a typed global's type (T7d): its written type, an immutable one's taking a known length from its initializer
+fn (p mut Program&) GlobalStorage(gc Context&, v ast.VarDecl&, n source.NameId) types.TypeId {
+    t := p.Resolve(gc, v.Ty)
+    if mutableGlobal(v) { return t }
+    for k in range v.Names.Len() {
+        if v.Names[k] == n and k < v.Values.Len() { return p.StorageOf(gc, t, v.Values[k]) }
+    }
+    return t
+}
+
+# T7d: the storage a value array declared with a written type takes from its initializer - the written type where the
+# initializer's length is not known while compiling (as far as Infer tells, before the checker), or the written type
+# is no plain Array<T> value
+fn (p mut Program&) StorageOf(c Context&, written types.TypeId, init ast.Expr&) types.TypeId {
+    if init == null or p.T.KindOf(written) != types.Kind.Array or p.T.Length(written) != types.TypeId(0) { return written }
+    none Map<source.NameId, types.TypeId>
+    it := p.Infer(c, none, init)
+    if p.T.KindOf(it) != types.Kind.Array or p.T.Length(it) == types.TypeId(0) { return written }
+    if not p.T.Same(p.T.Elem(it), p.T.Elem(written)) { return written }
+    return it
+}
+
 # a fold's outcome: Folded, its value (in Ty's width, Ty Unknown for a literal's exact value, which adapts - T6, E4a);
 # Pending, it reads a variable not bound yet; Unfolded, it needs evaluating
 Folded I64 = 0
@@ -886,8 +980,50 @@ fn (p mut Program&) eval(c Context&, e ast.Expr&) folded {
         case ast.Expr.Unary(_, op, x) => p.evalUnary(c, op, x)
         case ast.Expr.Binary(_, op, a, b) => p.evalBinary(c, op, a, b)
         case ast.Expr.Cond(_, a, k, b) => p.evalCond(c, a, k, b)
-        case ast.Expr.Call(_, f, args) => p.evalConversion(c, f, args)
+        case ast.Expr.Call(_, f, args) => p.evalCall(c, f, args)
         case _ => unfolded()
+    }
+}
+
+# a call in a constant: a conversion to a number, or x.Len() of an array a parameter holds by value - its instance's
+# length (G29, G30)
+fn (p mut Program&) evalCall(c Context&, f ast.Expr&, args Array<ast.Expr&>&) folded {
+    k := p.LenKey(f, args)
+    if k != "" {
+        v := try c.Vars.Get(p.L.Names.Intern(k)) catch default types.TypeId(-1)
+        if v >= types.TypeId(0) {
+            if p.T.KindOf(v) == types.Kind.Const { return folded(Folded, p.T.ConstValue(v), p.T.ConstType(v)) }
+            return folded(Pending, 0, types.UnknownT)
+        }
+    }
+    return p.evalConversion(c, f, args)
+}
+
+# G29: the name of the variable x.Len() reads, where x is a parameter (or an element of one: "m[0].Len()") holding an
+# array by value - "" where the call is no such Len()
+fn (p mut Program&) LenKey(f ast.Expr&, args Array<ast.Expr&>&) String {
+    if args != null and args.Len() > 0 { return "" }
+    match f {
+        case ast.Expr.Member(_, y, n) {
+            if p.text(n) != "Len" { return "" }
+            k := p.lenPath(y, 0)
+            return "" if k == "" else $k ".Len()"
+        }
+        nomatch { return "" }
+    }
+}
+
+fn (p mut Program&) lenPath(y ast.Expr&, depth I64) String {
+    if depth > 8 { return "" }
+    match y {
+        case ast.Expr.Name(_, n) { return $p.text(n) }
+        case ast.Expr.Paren(_, z) { return p.lenPath(z, depth + 1) }
+        case ast.Expr.Index(_, z, items) {
+            if items == null or items.Len() != 1 { return "" }
+            k := p.lenPath(z, depth + 1)
+            return "" if k == "" else $k "[0]"
+        }
+        nomatch { return "" }
     }
 }
 
@@ -1291,7 +1427,8 @@ fn (p mut Program&) fields(c Context&, s ast.StructBody&) types.ListId {
                         x := v.Values[i] if i < v.Values.Len() else null
                         ft = p.Infer(c, known, x)
                     } else if v.Ty != null {
-                        ft = p.Resolve(c, v.Ty)
+                        # T7d, C2e: a value array field given a known length by its initializer is held in the instance
+                        ft = p.StorageOf(c, p.Resolve(c, v.Ty), v.Values[i] if i < v.Values.Len() else null)
                     } else {
                         ft = try known.Get(v.Names[i]) catch default types.UnknownT
                     }
@@ -1315,13 +1452,48 @@ fn (p mut Program&) Infer(c Context&, known Map<source.NameId, types.TypeId>&, x
         case ast.Expr.Unary(_, op, y) => p.unaryType(c, known, op, y)
         case ast.Expr.Join(_, _) => p.textType()
         case ast.Expr.Name(sp, n) => try known.Get(n) catch default p.nameType(c, sp, n)
-        case ast.Expr.ArrayLit(_, elem, _) => p.T.Array(p.Resolve(c, elem), types.TypeId(0))
-        case ast.Expr.Call(_, f, _) => p.callType(c, known, f)
+        case ast.Expr.ArrayLit(_, elem, items) => p.T.Array(p.Resolve(c, elem), p.T.Const(p.T.Prim("I64"), items.Len()))
+        case ast.Expr.Index(_, y, items) => p.literalOf(c, y, items)
+        case ast.Expr.Call(_, f, cargs) => p.madeType(c, known, f, cargs)
         case ast.Expr.Try(_, y, _, _) => p.Infer(c, known, y)
         case ast.Expr.As(_, _, t) => p.Resolve(c, t)
         case ast.Expr.Binary(_, op, a, b) => p.binaryType(c, known, op, a, b)
         case _ => types.UnknownT
     }
+}
+
+# T[a, b] where T names a type: an array literal, its length its items' count (T7c)
+fn (p mut Program&) literalOf(c Context&, y ast.Expr&, items Array<ast.Expr&>&) types.TypeId {
+    match y {
+        case ast.Expr.Name(sp, n) {
+            ref := p.R.Use(p.file(c.Mi), sp.Start)
+            if ref.Kind != names.What.Type and ref.Kind != names.What.Builtin and ref.Kind != names.What.TypeVar { return types.UnknownT }
+            el := p.Resolve(c, ast.TypeRef.Named(sp, Array<source.NameId>(1, n), Array<ast.TypeRef&>(0)))
+            if el == types.UnknownT { return types.UnknownT }
+            return p.T.Array(el, p.T.Const(p.T.Prim("I64"), items.Len()))
+        }
+        nomatch { return types.UnknownT }
+    }
+}
+
+# a call's type (callType), and Array<T>(n)'s length where n is known while compiling (QP1, T7c)
+fn (p mut Program&) madeType(c Context&, known Map<source.NameId, types.TypeId>&, f ast.Expr&, args Array<ast.Expr&>&) types.TypeId {
+    t := p.callType(c, known, f)
+    match f {
+        case ast.Expr.Generic(_, g, targs) {
+            match g {
+                case ast.Expr.Name(sp, n) {
+                    if p.R.Use(p.file(c.Mi), sp.Start).Kind == names.What.Builtin and p.text(n) == "Array" and targs.Len() == 1 and
+                       args != null and args.Len() >= 1 and p.T.KindOf(t) == types.Kind.Array {
+                        return p.T.Array(p.T.Elem(t), p.FoldLength(c, args[0]))
+                    }
+                }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    return t
 }
 
 # a name's type outside the declaration's own: a global's - its written type, or its initializer's (D15)
@@ -1331,7 +1503,7 @@ fn (p mut Program&) nameType(c Context&, sp source.Span, n source.NameId) types.
     v := p.anyGlobal(ref.Module, n)
     if v == null { return types.UnknownT }
     gc := Context(ref.Module, -1)
-    if v.Ty != null and not v.Infer { return p.Resolve(gc, v.Ty) }
+    if v.Ty != null and not v.Infer { return p.GlobalStorage(gc, v, n) }
     key := (ref.Module << 32) | I64(n)
     if try p.folding.Get(key) catch default false { return types.UnknownT }
     i := 0
@@ -1735,8 +1907,23 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
             if not ns.Has(tp.Name) { ns.Push(tp.Name) }
         }
     }
+    written := ns.Len()
+    for i in range written { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
+    # G29, D9a: each array level a parameter holds by value takes its length from the argument - a variable of the
+    # function's own, no name the program can write ("a.Len()" in a note), one instance per set of lengths
+    levels List<I64>
+    # (an extern's array parameters are pointers to the caller's elements, X3: no instances)
+    if not p.FnIsExtern(f) and row.F.Recv != null { p.lengthLevels(p.Resolve(c, row.F.Recv.Ty), true, row.F.Recv.Name, 0, ns, levels) }
+    for prm in row.F.S.Params {
+        if prm.Ty != null and not p.FnIsExtern(f) { p.lengthLevels(p.Resolve(c, prm.Ty), true, prm.Name, 0, ns, levels) }
+    }
     p.addVars(owner, ns.ToArray())
-    for i in range ns.Len() { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
+    i64 := p.T.Prim("I64")
+    base := try p.varsAt.Get(owner) catch default 0
+    for i in range written, ns.Len() {
+        p.vars[base + i] = varRow(owner, ns[i], i64, types.UnknownT)
+        c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly))
+    }
     if row.F.TypeParams != null {
         for tp in row.F.TypeParams { p.constraint(c, tp.Name, tp.Ty) }
     }
@@ -1747,8 +1934,61 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         recvName = row.F.Recv.Name
     }
     sig := p.sigType(c, row.F.S, recv, recvName)
+    if ns.Len() > written {
+        ps := p.T.Items(p.T.Params(sig))
+        out := Array<types.TypeId>(ps.Len())
+        k := written
+        for j in range ps.Len() {
+            out[j] = p.withLengths(ps[j], true, owner, k)
+            k += p.levelCount(ps[j], true)
+        }
+        sig = p.T.Func(p.T.List(out), p.T.Result(sig), p.T.Errors(sig), p.T.ScopesOf(sig))
+    }
     p.fnSig.Put(f, sig)
     return sig
+}
+
+# G29: the array levels a parameter's type holds by value - itself, where it is an Array<T> value, and the elements of
+# an array held in place (an Array<Array<T>>, under a reference too) - each a variable named for its parameter's
+# length ("a.Len()") or its elements' ("a[0].Len()"), pushed to ns
+fn (p mut Program&) lengthLevels(t types.TypeId, byValue Bool, n source.NameId, depth I64, ns mut List<source.NameId>&, out mut List<I64>&) {
+    if depth > 8 { return }
+    match p.T.KindOf(t) {
+        case types.Kind.Ref { p.lengthLevels(p.T.Referent(t), false, n, depth, ns, out) }
+        case types.Kind.Array {
+            if byValue and p.T.Length(t) == types.TypeId(0) {
+                b := StringBuilder()
+                b.Push(p.text(n))
+                for k in range depth { b.Push("[0]") }
+                b.Push(".Len()")
+                ns.Push(p.L.Names.Intern(b.ToString()))
+                out.Push(depth)
+            }
+            p.lengthLevels(p.T.Elem(t), true, n, depth + 1, ns, out)
+        }
+        nomatch { }
+    }
+}
+
+fn (p mut Program&) levelCount(t types.TypeId, byValue Bool) I64 {
+    return match p.T.KindOf(t) {
+        case types.Kind.Ref => p.levelCount(p.T.Referent(t), false)
+        case types.Kind.Array => (1 if byValue and p.T.Length(t) == types.TypeId(0) else 0) + p.levelCount(p.T.Elem(t), true)
+        case _ => 0
+    }
+}
+
+# t with its by-value array levels' lengths the function's variables from k on, in lengthLevels' order
+fn (p mut Program&) withLengths(t types.TypeId, byValue Bool, owner I64, k I64) types.TypeId {
+    match p.T.KindOf(t) {
+        case types.Kind.Ref { return p.T.Ref(p.withLengths(p.T.Referent(t), false, owner, k), p.T.PermOf(t)) }
+        case types.Kind.Array {
+            here := byValue and p.T.Length(t) == types.TypeId(0)
+            el := p.withLengths(p.T.Elem(t), true, owner, k + (1 if here else 0))
+            return p.T.Array(el, p.T.Var(owner, k, types.ReadOnly) if here else p.T.Length(t))
+        }
+        nomatch { return t }
+    }
 }
 
 # the variables a receiver's type arguments introduce (QW: "fn (l List<T>&) Push(x T)"), in order, each once - the
@@ -2148,6 +2388,13 @@ fn (p mut Program&) bind(b mut Binding&, i I64, actual types.TypeId, literal Boo
     }
     # a reference to what the variable holds by value: its value is read out (E12)
     if p.T.KindOf(v) == types.Kind.Ref and p.T.KindOf(cur) != types.Kind.Ref and p.T.Plain(p.T.Referent(v)) == cur { return true }
+    # G9a: arrays of one element type meet at the array whose length is known only at run time where their lengths
+    # differ, or one is not known while compiling (T6b's meeting, for lengths) - a reference's elements read out (E12)
+    va := p.T.Plain(p.T.Referent(v)) if p.T.KindOf(v) == types.Kind.Ref else v
+    if p.T.KindOf(cur) == types.Kind.Array and p.T.KindOf(va) == types.Kind.Array and p.T.Same(p.T.Elem(cur), p.T.Elem(va)) and not b.Fixed[i] {
+        if p.T.Length(cur) != types.TypeId(0) and p.T.Length(va) != p.T.Length(cur) { b.Vals[i] = p.T.Array(p.T.Elem(cur), types.TypeId(0)) }
+        return true
+    }
     if p.T.IsNumber(p.numberOf(cur)) and p.T.IsNumber(p.numberOf(v)) {
         if p.Flows(v, cur) { return true }
         if p.Flows(cur, v) and not b.Fixed[i] {

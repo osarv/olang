@@ -195,6 +195,8 @@ type Diag enum {
     ConstVarOnlyInExpr
     ConstVarMismatch
     ConstVarNotInType
+    ArrayByValueRunTime
+    ParamTooLarge
     ArrayLengthRange
     AsArrayShape
     AsArrayLength
@@ -1037,6 +1039,12 @@ fn ConstVarMismatch(text String&, n1 I64, n2 I64) Msg { return Msg(Diag.ConstVar
 
 # ERR_CONST_VAR_NOT_IN_TYPE
 fn ConstVarNotInType(ty String&) Msg { return Msg(Diag.ConstVarNotInType, "G24, E32b", $ty "'s length is known only at run time - view it with 'x as Array<T, N>&'") }
+
+# ERR_ARRAY_BY_VALUE_RUN_TIME
+fn ArrayByValueRunTime(param String&, ty String&) Msg { return Msg(Diag.ArrayByValueRunTime, "D9a", $param " takes its array by value, so its length must be known while compiling - this " $ty "'s is known only at run time: take it as '" $ty "&', or pass a slice of a known length ('x[0:4]')") }
+
+# ERR_PARAM_TOO_LARGE
+fn ParamTooLarge(param String&, n I64, ty String&) Msg { return Msg(Diag.ParamTooLarge, "D9c", "parameter " $param " holds " $n " bytes by value - a by-value parameter holds at most 128: take it as '" $ty "&'") }
 
 # ERR_ARRAY_LENGTH_RANGE
 fn ArrayLengthRange(n I64) Msg { return Msg(Diag.ArrayLengthRange, "T7c", "an array's length is from 0 to the largest whose bytes fit an I64, found " $n) }

@@ -9357,9 +9357,9 @@ test "Split's pieces live with the text, and the evaluator splits as the run tim
 # T29c: written text beside a String value in "==" is a String too - compared by content, since a String
 # value is a value (E10); decided at compile time (the global above) and at run time alike
 # T29a: "String(b)" names b's storage - a borrow of it is that storage, written where b may be and living as long as
-# b's does; a value declaration from it is a copy, and an inline field is lent as a slice of it
+# b's does; a value declaration from it is a copy - of fixed storage (a local, an inline field) as of any other (T7d)
 type CtConvBox struct() {
-    buf Array<Char, 3> = Array<Char>(3, 'q')
+    buf := Array<Char>(3, 'q')
 }
 type CtConvHolder struct() {
     s mut String& = null
@@ -9381,8 +9381,8 @@ CtConvBaked := ctConv(1)
 
 test "T29a: a conversion names its argument's storage, at run time and while compiling" {
     k I32 = ctRuntimeZero
-    assert ctConv(k + 1) == "ii ZA ZA qzq"
-    assert CtConvBaked == "ii ZA ZA qzq"
+    assert ctConv(k + 1) == "ii ZA ZA qqq"
+    assert CtConvBaked == "ii ZA ZA qqq"
 }
 
 test "written text compares with a String value" {
@@ -9775,8 +9775,10 @@ fn permOwn<K>(x K, y mut Array<I64>&) I64 {
     y[0] = 70
     return x[0]
 }
+# an array whose length is known only at run time (T7c): a copy of what a reference names
+fn runLen<T>(xs Array<T>&) Array<T> { return xs }
 fn permAlias(v I64) I64 {
-    a := I64[v, 2]
+    a := runLen(I64[v, 2])
     seen := permSee(a, a)
     a[0] = v
     return seen * 100 + permOwn(a, a)
@@ -10622,9 +10624,11 @@ test "a block inside a match value closes at its own brace" {
 
 # a struct too big to move as one LLVM value - here 328 bytes - is passed and returned through memory: a parameter is
 # a pointer to the callee's own copy, made before any later argument runs, and a result is written into the caller's
-# storage. Through every kind of call: direct, a method, a function value, a lambda, a fallible one, a task
+# storage. A by-value parameter written as one is over D9c's 128 bytes, so it reaches one as a bare type variable,
+# which D9c leaves alone (checks/cases/d9cstruct holds the limit). Through every kind of call: direct, a function
+# value, a lambda, a fallible one, a task
 type CgBig struct(seed I64) {
-    data Array<I64, 40>
+    data := Array<I64>(40)
     tag I64 = seed
 }
 fn cgBigMk(n I64) CgBig {
@@ -10632,12 +10636,12 @@ fn cgBigMk(n I64) CgBig {
     for i in range 40 { b.data[i] = n * 100 + i }
     return b
 }
-fn cgBigSum(b CgBig) I64 {
+fn cgBigSum<T>(b T) I64 {
     t I64 = 0
     for x in b.data { t = t + x }
     return t + b.tag
 }
-fn cgBigBump(b CgBig) I64 {
+fn cgBigBump<T>(b T) I64 {
     b.data[0] = 999
     return b.data[0]
 }
@@ -10645,9 +10649,9 @@ fn cgBigTouch(b mut CgBig&) I64 {
     b.tag = 77
     return 1
 }
-fn cgBigBoth(x CgBig, y I64) I64 { return x.tag * 1000 + y }
-fn (b CgBig) Doubled() CgBig {
-    c CgBig = b
+fn cgBigBoth<T>(x T, y I64) I64 { return x.tag * 1000 + y }
+fn cgBigDoubled<T>(b T) T {
+    c T = b
     c.tag = b.tag * 2
     return c
 }
@@ -10655,20 +10659,20 @@ fn cgBigTry(n I64) CgBig ? DfErr {
     if n < 0 { error DfErr.BAD }
     return cgBigMk(n)
 }
-fn cgBigWork(b CgBig) CgBig {
-    c CgBig = b
+fn cgBigWork<T>(b T) T {
+    c T = b
     c.tag = b.tag + 1
     return c
 }
-fn cgBigAll(n I64) I64 {
+fn cgBigAll<T>(n I64, z T) I64 {
     a := cgBigMk(n)
     s1 := cgBigSum(a)
     q := cgBigBump(a)
-    f fn(b CgBig) I64 = cgBigSum
-    m := fn(b CgBig) I64 { return b.tag + a.tag }
+    f fn(b T) I64 = fn(b T) I64 { return cgBigSum(b) }
+    m := fn(b T) I64 { return b.tag + a.tag }
     b := try cgBigTry(3) catch default cgBigMk(0)
     c := try cgBigTry(-1) catch default cgBigMk(9)
-    d := a.Doubled()
+    d := cgBigDoubled(a)
     h := cgBigMk(8)
     s2 := cgBigBoth(h, cgBigTouch(h))
     e CgBig = cgBigMk(1) if n > 0 else cgBigMk(2)
@@ -10676,12 +10680,12 @@ fn cgBigAll(n I64) I64 {
         case 2 => cgBigMk(4)
         nomatch => cgBigMk(5)
     }
-    return s1 + q + f(a) + m(cgBigMk(5)) + b.tag + c.tag + d.tag + s2 + a.data[0] + e.tag + g.tag
+    return s1 + q + f(a) + m(cgBigMk(5)) + b.tag + c.tag + d.tag + s2 + a.data[0] + e.tag + g.tag + z.tag
 }
-CgBigBaked I64 = cgBigAll(2)
+CgBigBaked I64 = cgBigAll(2, CgBig(0))
 test "a big struct is passed and returned through memory, with value semantics" {
     assert CgBigBaked == 26792
-    assert cgBigAll(I64(WdMutable / 1000000000)) == 26792
+    assert cgBigAll(I64(WdMutable / 1000000000), CgBig(0)) == 26792
     r CgBig = cgBigMk(0)
     join {
         spawn r = cgBigWork(cgBigMk(20))
@@ -14329,7 +14333,7 @@ fn rvSee<T>(k T, x T, w mut Array<I32>&) I32 {
     return x[0] + I32(x.Len()) * 1000
 }
 fn rvShared(v I32) I32 {
-    a := I32[v, 6]
+    a := runLen(I32[v, 6])
     r mut Array<I32>& = a
     viaRef := rvSee(a, r, r)
     a[0] = v
