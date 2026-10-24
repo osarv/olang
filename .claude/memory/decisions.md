@@ -752,3 +752,7 @@ errors and documentation - generic `+` already works).
   (Clarified to the user: error sets after `?` are built; `fn(x I64) I64 ? (A, B)` in function types is built today;
   named sets are decided not built, QAM, and QAM removes the parenthesized form. Rec now: keep it beside named sets as
   the grouping rule applied.)
+  The user: "When I removed the parenthesis form I didn't mean remove the grouping, just remove the parenthesis no?" -
+  explained the ambiguity inside a list of types (`Map<String&, fn(x I64) I64 ? A, B>`); rec: parentheses only where a
+  set sits inside a list (built today, same rule as `<T (I32, I64), U>`), a signature's own set stays bare. Reading
+  taken: QAM's removal reversed for that case; awaiting a yes.
