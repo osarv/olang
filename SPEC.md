@@ -2926,7 +2926,7 @@ its type: the value written the way it would be in source:
   not known where the `$` is written (`fn(a I32, b I32) I32`). A null function value is `null`.
 - a reference — `null` when it is null, otherwise its referent. References are followed at most **8**
   deep along any one path from the operand; the next one is rendered as `...`, which is what makes a cyclic
-  structure's rendering finite.
+  structure's rendering finite. An `any` (T33) is a reference and counts as one.
 
 - a call's several results (D8c) — `(r0, r1, ...)`, each rendered by these rules. This is the one place the
   results are taken together rather than destructured.

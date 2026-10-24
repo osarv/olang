@@ -330,3 +330,39 @@ test "T32a: arrays and conversions of them are copied into the box" {
     assert BakedLabels == "label lab0-0, label lab1-7"
     assert labels(Live - 1) == BakedLabels
 }
+
+# E11a, T33 (the any review, finding 3): an any is a reference to $, followed 8 deep and then "...", so a chain through
+# any fields renders as one through plain references does, and a node whose any holds itself stops
+type RNode struct(v I64) {
+    v
+    next any Named?& = null
+}
+fn (n RNode&) Name() String { return "node" }
+type RPlain struct(v I64) {
+    v
+    next RPlain?& = null
+}
+fn chains(n I64) String {
+    h := RNode(0)
+    p := RPlain(0)
+    for i in range 1, n {
+        a mut RNode&h = RNode(i)
+        a.next = h.next
+        h.next = a
+        q mut RPlain&p = RPlain(i)
+        q.next = p.next
+        p.next = q
+    }
+    self mut RNode& = RNode(7)
+    self.next = self
+    s any Named& = self
+    return $h "|" $p "|" $s
+}
+BakedChains String = chains(12)
+
+test "E11a: $ counts an any as a reference, 8 deep" {
+    want := "RNode(0, RNode(11, RNode(10, RNode(9, RNode(8, RNode(7, RNode(6, RNode(5, RNode(4, ...)))))))))|" "RPlain(0, RPlain(11, RPlain(10, RPlain(9, RPlain(8, RPlain(7, RPlain(6, RPlain(5, RPlain(4, ...)))))))))|" "RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, RNode(7, ...))))))))"
+    assert BakedChains == want
+    churn()
+    assert chains(Live + 9) == want
+}
