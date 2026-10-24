@@ -834,3 +834,113 @@ errors and documentation - generic `+` already works).
   `fits`; asked for more contract words - offered (rec 1-3 now, 4 with the prover): 1 `x fits T`; 2 `old e` in
   guarantees; 3 `a implies b`; 4 `every x in a: c` / `some x in a: c`. NEXT DISCUSSION (the user): enums together with
   `any Trait&` - map how they are alike and how not; trait-method conditions with it.
+- CONTRACTS 2026-10-24, DECIDED (the user): no `implies` ("normal logic"), no `every`/`some` ("expressible with for");
+  `x fits T` kept. ASKED: instead of `old` (the user: "taking up yet another name. Is it worth it?"), entry values named
+  by `:=` items in the condition brackets, usable in guarantees and later conditions - `fn (l mut List<T>&) Push(x T)
+  [n := l.Len()] [l.Len() == n + 1]` (rec). The user raised single statements without braces after control flow: rec
+  keep braces (no parentheses around conditions, so `{` ends the condition: `if a (b)` ambiguous; one-line blocks exist;
+  a leaving-keyword-only exception would be a second spelling).
+- CONTRACTS 2026-10-24, DECIDED (the user): no `old` (and no `:=` entry bindings, "clumsy"): a guarantee speaks only
+  about the named results; one bracket list after the parameters and one after the results, never two in a row
+  (normal listing). Contract design complete but trait-method conditions (with `any`) and the prover. Braces: the user
+  asked for the clash cases (listed: `(` after the condition, call args vs statement, `<` type arguments, a line break
+  after the condition, dangling else, else-if chains, name-starting statements needing lookahead; safe subset only
+  leaving keywords) - to be discussed later.
+- CONTRACTS 2026-10-24, DECIDED (the user: "looping in contracts should be done without return values ... for x in
+  List {a} where a is a condition"): a `for` item in contract brackets holds when its body's conditions (listing rule,
+  nested `for` allowed) hold for every element; "some" written `not for x in a { x != v }` (mine); decided like any
+  condition (evaluator where known, `checked` runs the loop); only inside contract brackets (mine).
+- CONTRACTS 2026-10-24: the user: "We might still wanna do old tho. Just not with the := syntax". Proposed: `old e`
+  prefix word (binds like `not`). Gap: a result-less function (Push, Clear) has nowhere to put guarantees. ASKED: A (rec)
+  one list with `then` dividing needs from promises - `fn sqrt(x F64) [x >= 0.0 then r >= 0.0] r F64`,
+  `fn (l mut List<T>&) Clear() [then l.Len() == 0]` - replacing the second list after named results; or B keep two
+  lists, `fn Clear() _ [l.Len() == 0]`.
+- BRACES 2026-10-24: the user refuted my clash list (greedy condition, `(` after an expression is a call, no redundant
+  parentheses, body on the same line, else binds nearest, `ok total` no expression) - conceded: one-token lookahead
+  suffices. PROPOSED (rec): a brace-less body for `if`/`else`/`for` is ONE simple statement on the condition's line
+  (return/break/continue/error/unreachable/assignment/call/increment - never if/for/match/block, so no dangling else);
+  `else` may begin the next line as `catch` does; the formatter never adds or removes braces. ASKED: take it in?
+- BRACES 2026-10-24: the user: "We could add : for the one line case?" - rec yes: `if x < 0: return 0`, `for x in xs:
+  total += x`, `else: count++` (may begin the next line); one simple statement, same line, never if/for/match; a block
+  keeps braces and no colon. Spends `:` (the deferred `lib:Name` module separator would need another spelling); no clash
+  with slices (inside [ ]). Awaiting a yes.
+- QAT ASKED 2026-10-24 (the user: "Add a question about module imports where / is replaced with ."): imports written
+  with `.` instead of `/` - `import std.io` (maybe without quotes) instead of `import "std/io"`, as Java/Python/Go-ish
+  dotted module names. To weigh when discussed: remote imports name hosts that contain dots (`github.com/owner/repo`),
+  relative imports (`../shared`, `geom/rect`), file names with dots, and the alias rule (M4: base name). In effect:
+  `/` paths in quotes. Not discussed yet.
+- 2026-10-24 (the user: "import dereferencing ... Should we use . as for structs or is there something better?"): rec
+  keep `.` (M20 reserves the alias so `io.` is always the module; one operator for "part X of Y" through modules,
+  types, cases - `lib.Dir.North`; Go/Python/Java/Zig/Swift); drop the deferred `lib:Name` idea (`:` would clash with the
+  proposed one-line bodies). Awaiting agreement.
+- DECIDED 2026-10-24 (the user: "name '/' imports are just fine and then we access with name ... partial imports ... the
+  extras are just lost at link-time either way"): QAT closed - imports stay quoted `/` paths, access by the alias with
+  `.`, no partial imports, the deferred `lib:Name` separator dropped. Nothing changes in code.
+- ASKED 2026-10-24 (the user: "Can we add import _ "std/io" to import io's namespace into ours?"): rec no (names stop
+  saying where they come from; a library adding an export breaks importers under D3a; two such imports collide; Go
+  advises tests only; the prelude already is the one unqualified namespace). If wanted: `import _ "std/io"`, clashes an
+  error at the import line. In effect: not built.
+  DECIDED (the user: "Ye. Don't use it then"): no unqualified imports. Imports settled.
+- DECIDED 2026-10-24 (the user): one-line bodies with `:` (`if x < 0: return 0`; my limits: one simple statement, same
+  line, never if/for/match, `else:` may begin the next line).
+- CONTRACTS REDESIGNED 2026-10-24 (the user's design; my precision, awaiting a yes): ONE block per function, after the
+  error set, right before the body (constructors too); conditions over receiver, parameters and named results; plain
+  names = value on entry, `return e` = value at return (binds like `not`), allowed only on what reads through a
+  reference (an error on a by-value parameter, and `return n` on a named result redundant/error); a condition mentioning
+  a result or `return` is a guarantee (checked after the call under `checked`), else a requirement (before); failure
+  under checked = CheckError.CONTRACT; `fits`, `for` items, `outlives` chains stay. `old`, `then` and the list after
+  the results go. Example: `fn (l mut List<T>&) Push(x T) [return l.Len() == l.Len() + 1] { }`.
+- CONTRACTS DECIDED 2026-10-24 (the user: "Yes you got it"): the redesign above. `for` items use the statement forms:
+  `for x in a: x < 4` (one condition), braces for several by the listing rule; everything in the block is Boolean - a
+  call must give a Bool ("These are only boolean statements"). Left: trait-method conditions (with `any`), the prover.
+- CONTRACTS 2026-10-24 (the user: "ifs work in there too producing implications"): `if a: b` / `if a { b, c }` in the
+  contract block is a implies b; with `else`, the else part holds when a is false (mine); `if` and `for` nest freely.
+- ENUMS AND `any` 2026-10-24 (the user wanted them mapped together before building `any`): map given (closed cases with
+  payloads in place vs open full types behind a reference + table; operations cheap vs kinds cheap; keep both separate,
+  share syntax). ASKED, numbered: 1 type tests on `any` by `match s { case Circle c { } ... nomatch { } }` (rec); 2 `any`
+  of a closed trait matched completely without nomatch (rec yes); 3 enums may meet traits (rec yes); 4 calls through
+  `any` held to the trait's conditions, an implementation's extra requirement checked only under checked after dispatch
+  (rec); 5 keep the word `any` (rec), structs/enums convert implicitly, numbers don't; `==` on two `any` values is
+  identity.
+- ANY 2026-10-24: DECIDED (the user): the word `any`; enums may meet traits (explained: the whole enum, methods with a
+  match inside; no case named). Clarified: `==` on references is identity, `is` only null (this morning's decision).
+  ASKED (rec yes each): 1 numbers and every value type convert into `any Trait&` by copying into the target scope (no
+  primitive reference type: an `any` is only used through methods); 2 type inspection (`match` by type) only on `any` of
+  a CLOSED trait, complete with no nomatch; `any` of an open trait methods only - mirroring compile-time generics (the
+  user: "my sense is that we just don't"; explained no whole program is needed - one identity compare per case;
+  any-to-any conversion stays out).
+- ENUMS 2026-10-24: the user asked whether cases should be `name Type` (`type Shape enum { Round Circle, Box Rect }`);
+  explained per-case behaviour goes through a struct payload (`Round(c Circle)`, `e.c` after narrowing meets traits).
+  ASKED: 1 keep field lists (rec; ~166 multi-field cases vs ~99 single in compiler/std would each need a struct);
+  2 `Name Type` only; 3 both forms. In effect: field lists.
+- ENUMS 2026-10-24 (the user: "Can't we do a mixing?"): PROPOSED (rec) one rule - a case carries one payload type,
+  named (`Round Circle`) or inline as a field list (`Box(w F64, h F64)`, an unnamed struct), or none (`Empty`);
+  `Shape.Round(c)` / `Shape.Box(2.0, 3.0)`; narrowing makes `e` its payload (`e.r`, `e.Area()`, `e.w`); `case
+  Shape.Round(c)` binds the Circle, `case Shape.Box(w, h)` the fields; `e as Shape.Round` is the Circle. Awaiting a yes.
+- DECIDED 2026-10-24 (the user: "Do it"): enum cases carry one payload type, named (`Round Circle`) or inline fields
+  (`Box(w F64, h F64)`), or none; narrowing makes the value its payload; `as` gives the payload. Still open: `any`
+  questions 1 (value types boxed into any) and 2 (type inspection only on any of a closed trait).
+- ANY 2026-10-24, DECIDED (the user: "make any literal copy. Works for structs and enums too right?"): into `any
+  Trait&`, a temporary (literal, constructor call, enum case, call result, expression) is built where the any lands; a
+  struct/enum variable is borrowed (E12c, scope-checked, changes seen); a number/Bool/Char is always copied, even from a
+  variable (mine: no references to numbers). Open: type inspection - closed traits only (rec), Go-style with nomatch on
+  open traits too, or none.
+- ANY 2026-10-24, DECIDED (the user: "b) Closed traits only" - read as closed only, the words over the letter; stated
+  to the user): `match` by type on an `any` value only for a closed trait, complete, no nomatch; an `any` of an open
+  trait is used only through its methods. With the earlier answers `any` is fully decided (word `any`; temporaries and
+  numbers copied in, struct/enum variables borrowed; enums meet traits; `==` identity; calls through `any` held to the
+  trait's conditions, an implementation's extra requirement checked only under checked). Build after the current batch.
+- ANY 2026-10-24: the word `any` stays (the user). Explained: values come out of an `any` through methods; for a CLOSED
+  trait also `match` (each case binds the instance itself) and, decided by me for symmetry with enums, `w as Button`
+  (fails WRONG_CASE under checked); for an OPEN trait never (no downcast - a missing method is the fix).
+- DECIDED 2026-10-24 (the user): the iterator/array helper `Any` renamed `Some` (beside `All`; JavaScript's pairing) -
+  migrate by tool. Confirmed: no type test of any kind on an open trait's `any` (`is` is null-only; match/as closed
+  only).
+- DECIDED 2026-10-24 (the user: "Nah switch that too"): `All` renamed `Every` (Some/Every), with `Any` -> `Some`.
+- ENUM TEXT CASES 2026-10-24 (the user: "is this a normal s String = "..." case or a special constant case ... is there
+  a way to stringify cases and fields at compile time?"): proposed raw values (Swift's): `type Op enum String { Plus =
+  "+" }`, `type Status enum U8 { Ok = 0 }` - a constant per case in a table, the value stays its tag; `op.Value`, `try
+  Op.From(x)` the reverse; values compile-time constants, distinct; integers default counting from 0/previous, text to
+  the case name; allowed with payloads. Stringifying: reflection (decided 2026-10-18, not built) - T.Name, T.Cases[].Name,
+  T.Fields[].Name/Type as compile-time constants; proposed `T.CaseOf(v).Name` for one value's case. ASKED: 1 raw values
+  with From; 2 text defaults to the name; 3 T.CaseOf(v).
