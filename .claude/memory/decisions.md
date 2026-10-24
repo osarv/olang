@@ -864,3 +864,8 @@ errors and documentation - generic `+` already works).
   total += x`, `else: count++` (may begin the next line); one simple statement, same line, never if/for/match; a block
   keeps braces and no colon. Spends `:` (the deferred `lib:Name` module separator would need another spelling); no clash
   with slices (inside [ ]). Awaiting a yes.
+- QAT ASKED 2026-10-24 (the user: "Add a question about module imports where / is replaced with ."): imports written
+  with `.` instead of `/` - `import std.io` (maybe without quotes) instead of `import "std/io"`, as Java/Python/Go-ish
+  dotted module names. To weigh when discussed: remote imports name hosts that contain dots (`github.com/owner/repo`),
+  relative imports (`../shared`, `geom/rect`), file names with dots, and the alias rule (M4: base name). In effect:
+  `/` paths in quotes. Not discussed yet.
