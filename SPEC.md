@@ -5932,6 +5932,9 @@ structures as the target's lays them out.
 (B10b) - so the target as resolved, its triple, CPU and extensions, is part of every object's name (B3). A build for one
 target never reuses an object built for another, and changing the target back finds the earlier objects current.
 `native` is resolved before the name is made, so a build directory taken to a machine with another CPU is rebuilt.
+What clang resolves a target to, and clang's version, are kept under `OLANG_CACHE` (`probe/`, beside M23a's checkouts),
+keyed by clang's own file (where it is, its size and its time), the question asked and this processor's model and
+extensions, so a build asks clang once rather than every time; `interpret` keeps nothing.
 
 **B12c (one result on every target).** The target changes how fast a program runs, never what it computes - except
 where the program itself asks, through the build constants. The generated code never fuses a multiplication and an
