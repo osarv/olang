@@ -1166,10 +1166,7 @@ fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "
 fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor, so it is held only by reference - write " $ty2 "&") }
 
 # ERR_TRAIT_NOT_A_TYPE
-fn TraitNotAType(ty String&) Msg {
-    r := $ty if ty.EndsWith("&") else $ty "&"
-    return Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $r "'")
-}
+fn TraitNotAType(ty String&) Msg { return Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty $("" if ty.EndsWith("&") else "&") "'") }
 
 # ERR_ANY_NOT_TRAIT
 fn AnyNotTrait(ty String&) Msg { return Msg(Diag.AnyNotTrait, "T32", "'any' takes a trait, and " $ty " is none") }

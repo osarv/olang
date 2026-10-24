@@ -910,6 +910,8 @@ fn (p Parser&) namedResult() Bool {
     if not p.sees(token.Tok.Iden) or p.anyHere() { return false }
     k := p.look(1)
     if k != token.Tok.Iden and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.LParen { return false }
+    # a type name followed by "(" is the next method of a trait written on one line, never a result's type
+    if k == token.Tok.Iden and p.look(2) == token.Tok.LParen { return false }
     return not p.lookTok(1).Has(token.LineBreak)
 }
 

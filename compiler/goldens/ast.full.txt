@@ -334,7 +334,7 @@
 | FIELD 4:29-4:30
 | TYPE 4:1-4:32
 | -- diagnostics
-| error  8:16
+| error  8:22
 === checks/cases/s1bblock.olang
 | -- diagnostics
 | error S1b 5:15

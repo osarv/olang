@@ -23394,6 +23394,7 @@ against 0.040-0.042 s.
 
 **Not built (mine, additive later).** A type case naming a generic instance (`case Box<I64> b`); an any of a closed
 trait holding numbers matched by a guard on the value (written through the binding); `Hash` on anys.
+
 ## The std naming pass (2026-10-24)
 
 The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name
