@@ -5069,7 +5069,7 @@ compiler/build:Program&	8 8	ptr	-	-
 compiler/build:Sha256	112 8	%"compiler/build:Sha256"	{ [8 x i32], [64 x i8], i64, i64 }	fields 0,32,96,104
 compiler/build:Unit	56 8	%"compiler/build:Unit"	{ { i64, ptr }, i32, { i64, ptr }, { i64, ptr } }	fields 0,16,24,40
 compiler/build:UnitKind	4 4	i32	-	-
-compiler/build:compiles	40 8	%"compiler/build:compiles"	{ %"std/prelude/list:List<Array<std/prelude/text:String&>&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<I64>" }	fields 0,8,16,24,32
+compiler/build:compiles	48 8	%"compiler/build:compiles"	{ %"std/prelude/list:List<Array<std/prelude/text:String&>&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<I64>" }	fields 0,8,16,24,32,40
 compiler/build:stubFrontend	16 8	%"compiler/build:stubFrontend"	{ i64, i64 }	fields 0,8
 compiler/cond:Bad	4 4	i32	-	-
 compiler/cond:Consts	56 8	%"compiler/cond:Consts"	{ %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<compiler/cond:Value>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<Bool>", %"std/prelude/list:List<std/prelude/text:String&>", %"std/prelude/list:List<std/prelude/text:String&>" }	fields 0,8,16,24,32,40,48

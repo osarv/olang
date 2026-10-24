@@ -374,6 +374,7 @@ type compiles struct() {
     temps List<String&>
     finals List<String&>
     irs List<String&>
+    irTemps List<String&>
     sizes List<I64>
 }
 
@@ -389,11 +390,16 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     irPath := $path[:path.Len() - 2] ".ll"
     readable := $c.Dir "/" $base $kindSuffix(k) $c.modeSuffix() ".ll"
     if not base.StartsWith("olang_") and readable not in j.irs { irPath = readable }
-    try os.WriteFile(irPath, ir) catch os.OsError {
+    # clang reads the IR from a file of this process's own, renamed to irPath once compiled: another build in the same
+    # directory, run beside this one, may write irPath at the same time - the same name with other IR, or the same IR
+    # truncated and written again under clang's feet
+    irTmp := $irPath[:irPath.Len() - 3] "." $getpid() ".tmp.ll"
+    try os.WriteFile(irTmp, ir) catch os.OsError {
         fileFatal(irPath, msgs.CannotOpen(), d)
         error Failed.REPORTED
     }
     if c.Clang == "" {
+        try os.Rename(irTmp, irPath) catch os.OsError { }
         d.Fatal(diag.Where.Nowhere, msgs.NoClang(irPath))
         error Failed.REPORTED
     }
@@ -404,11 +410,12 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     args.Push("-c")
     args.Push("-o")
     args.Push($tmp)
-    args.Push($irPath)
+    args.Push($irTmp)
     j.cmds.Push(args.ToArray())
     j.temps.Push($tmp)
     j.finals.Push($path)
     j.irs.Push($irPath)
+    j.irTemps.Push($irTmp)
     j.sizes.Push(ir.Len())
     return path
 }
@@ -434,6 +441,7 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&>
     c.Compiled += j.cmds.Len()
     failed := false
     for i in range status.Len() {
+        try os.Rename(j.irTemps[i], j.irs[i]) catch os.OsError { }
         if status[i] != 0 {
             sayErr(said[i])
             if not failed { d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(j.irs[i])) }

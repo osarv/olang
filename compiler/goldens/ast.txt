@@ -1299,7 +1299,7 @@ ad7367de57562da1 98ba40282a55ca2d checks/fixtures/vecalias/f3.olang
 2f33ad45e182bf64 4b8c7583b0d5e472 checks/fixtures/vechandle/handle.olang
 007370a44d8f74de 3731be913f85ffe3 checks/fixtures/vechandle/stale.olang
 8edc6cb0ea109099 44f551c494e2043c compiler/ast.olang
-d866476e56520588 a992f7cb55c27e04 compiler/build.olang
+cb4548623409ffd1 19489e3076d6bbe6 compiler/build.olang
 2e3a96e791bea824 ff07feefb9ad6c7d compiler/check.olang
 e54ef2d5ceb8a81f db14db0e6b9221e3 compiler/cond.olang
 34b00b29803b8a3a 5c0f347eced1601b compiler/diag.olang
