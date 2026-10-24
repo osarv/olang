@@ -996,3 +996,9 @@ errors and documentation - generic `+` already works).
   values as proposed - `enum String`/`enum U8`, `op.Value` (a compiler-supplied method), `try Op.From(x)` through the
   type's name (the reflection `T.` namespace), text defaults to the case name, integers count from 0, allowed with
   payloads, `$op` unchanged. Back into the lang24 batch as a later round.
+- 2026-10-24: enums "a go" (the user) - raw values confirmed. C INTEROP v2 laid out, ASKED (rec yes each): 1 `link
+  "name"` per module; 2 `extern type Db` opaque handles (held `Db&`/`Db?&`, never read, C may return them; out-params as
+  arrays of one handle); 3 plain-data structs by reference to C now, by value later; 4 callbacks = `export fn` named
+  functions only, user-data word, per-thread setup on first entry from a foreign thread; 5 `export fn` + `olang build
+  -library` (.so + generated C header), Python via ctypes, errors as codes; 6 `t.CString()`, `String.FromC(p, max)`;
+  7 `olang bindgen header.h` later (a tool over clang). extern stays an unchecked hole (X1a).
