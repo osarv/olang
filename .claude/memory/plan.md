@@ -280,3 +280,7 @@ on sight per rules.md, "Code rules".
   key; mid-checker edit 31.8 -> 21.7 s CPU (-quick 15.6 -> 2.7), new-instance edit 89.8 -> 29.9 s.
 - 2026-10-24: wt-lsp merged (b69abe4 + goldens, full verify on the merged tip passed): L4b doc comments, B14 `olang doc`
   (+ -html for std), B15 `olang lsp`, B16 `olang mcp`, editors/nvim plugin.
+- FOUND 2026-10-24 by the uafcc review (pre-existing leak, unfixed): an array literal of new text passed straight to a
+  call boxes each element in the PROGRAM scope (`len0(String&[$i])` in a function called 2M times: 34 MB growing);
+  through a local it stays flat. Reproducers /home/user/review/uafcc/repro/leak_*.olang. Fix agent after lang24 round 3
+  (scope.olang).
