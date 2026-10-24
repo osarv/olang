@@ -962,3 +962,11 @@ errors and documentation - generic `+` already works).
 - REVERSED 2026-10-24 (the user: "Don't decide on the enums yet. We are getting back to them eventually"): enum raw
   values NOT decided - open again (the proposal above stands as a proposal; the builder told not to build it). ASKED:
   does the payload form decided earlier today (`Round Circle` / `Box(w F64, h F64)`) also wait?
+- SURVEY 2026-10-24 (docs/survey.md, merged): shortlist to decide before announcing, recs in the doc: 1 platforms
+  (LLVM 19+, macOS arm64, Linux aarch64, a release with pinned clang); 2 C interop v2 (`extern type`, `link "lib"`,
+  `export fn`, callable from C/Python); 3 long-running memory growth (build early freeing/Destroy or state the limit);
+  4 errors carrying data (payload words without references) - before QAM is built; 5 text literals (`\x`, `\u{}`, raw
+  `"""` blocks); 6 stability 0.x + `olang fix`, a LICENCE (the user's call; none today); 7 std/sync, time.Sleep,
+  std/net; 8 std breadth (Set, regex, flags, Unicode, base64, sha256, iterator adapters, Deque, Heap); 9 `T.Max` limits,
+  bit operations; 10 one-line lambdas `fn(x): return ...`; 11 narrowing after a leaving null test; 12 doc comments +
+  a minimal LSP. Not asked yet - for the user when rested.
