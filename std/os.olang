@@ -15,6 +15,7 @@ extern fn lseek(fd I32, offset I64, whence I32) I64
 extern fn read(fd I32, buf Array<U8>, count I64) I64
 extern fn mkdir(path Array<U8>, mode U32) I32
 extern fn rename(from Array<U8>, to Array<U8>) I32
+extern fn link(from Array<U8>, to Array<U8>) I32
 extern fn remove(path Array<U8>) I32
 extern fn readlink(path Array<U8>, buf Array<U8>, cap I64) I64
 extern fn __olang_arg_count() I64
@@ -544,6 +545,12 @@ fn Rename(from String&, to String&) ? OsError {
     try check(rename($from "\0", $to "\0"))
 }
 
+# a second name, "to", for the file at "from" - a hard link: one file under two names, on one file system. Fails with
+# EXISTS where "to" is taken
+fn Link(from String&, to String&) ? OsError {
+    try check(link($from "\0", $to "\0"))
+}
+
 # what the symbolic link at "path" holds, as it was written - not resolved further
 fn ReadLink(path String&) String& ? OsError {
     p := $path "\0"
@@ -757,6 +764,21 @@ test "ReadDir, Rename and Remove" {
     assert not gone
 }
 
+test "Link gives a file a second name, and fails where the name is taken" {
+    assert Run("rm -rf build/os_files/h && mkdir -p build/os_files/h") == 0
+    try WriteFile("build/os_files/h/a", "one")
+    try Link("build/os_files/h/a", "build/os_files/h/b")
+    assert (try ReadFile("build/os_files/h/b") catch default "") == "one"
+    try Rename("build/os_files/h/a", "build/os_files/h/c")       # b is the file still, under its own name
+    assert (try ReadFile("build/os_files/h/b") catch default "") == "one"
+    taken := false
+    try Link("build/os_files/h/c", "build/os_files/h/b") catch OsError.EXISTS { taken = true } catch { }
+    assert taken
+    missing := false
+    try Link("build/os_files/h/none", "build/os_files/h/d") catch OsError.NOT_FOUND { missing = true } catch { }
+    assert missing
+}
+
 test "ReadLink, RealPath and Cwd" {
     assert Run("rm -rf build/os_files/l && mkdir -p build/os_files/l && ln -s target.txt build/os_files/l/link") == 0
     assert (try ReadLink("build/os_files/l/link") catch default "") == "target.txt"
@@ -798,13 +820,13 @@ test "what os gives back lives where it is put" {
     args := Args()
     path := try Env("PATH") catch default ""
     names := try ReadDir("build/os_files/c") catch default Array<String&>(0)
-    link := try ReadLink("build/os_files/c/ln") catch default ""
+    linked := try ReadLink("build/os_files/c/ln") catch default ""
     real := try RealPath("build/os_files/c/ln") catch default ""
     assert churn() > 0
     assert args[0].Contains("os_test")
     assert path.Len() > 0 and not path.Contains("-----")
     assert names.Len() == 3 and names[0] == "aa" and names[1] == "bb" and names[2] == "ln"
-    assert link == "bb"
+    assert linked == "bb"
     assert real.EndsWith("/build/os_files/c/bb")
 }
 

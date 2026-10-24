@@ -5751,6 +5751,18 @@ build whose module has the same inputs takes that IR as the module's and does no
 checked, as every module is, but nothing of it is lowered or emitted, and the instantiations its object names are made
 in the root's as before (B3d). What is built is the same program either way.
 
+**B3j.** An object is named by a hash of what it is made from (B3), so builds in different directories that make the
+same object make it under the same name. With the environment variable `OLANG_OBJECTS` naming a directory, `build`,
+`compile` and `test` take an object they need from that directory when it holds one of that name, instead of compiling
+it, and leave every object they compile there too, whole or not at all. The directory is a cache shared by builds, which
+may run side by side: what is built is the same either way.
+
+**B3k.** Builds may run side by side in one directory. An object one of them is compiling, another that needs it waits
+for rather than compiling again (the first claims it with `NAME.lock`, a directory holding its process number, removed
+once the compile ends; a claim whose process has ended, or older than half an hour, is taken over). The IR a compile
+reads is a file of its own build's, renamed to its readable name once compiled, so no build writes the IR another's
+compile is reading.
+
 ### 10.2 Program entry
 
 **B4.** In `build` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
