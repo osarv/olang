@@ -1,3 +1,4 @@
+
 # olang Language Specification
 
 This is the reference manual for olang: a precise, current-state description of the language.
@@ -20,7 +21,7 @@ only depends on concepts already introduced by earlier ones:
 | 9 Constructors and Destructors | Constructor-bearing struct types, bare-pun fields, destructors |
 | 10 Compilation Model | Compilation units, the `compile`/`build`/`test`/`interpret` modes, `main`, the command line, test blocks, process exit, targets |
 | 11 External Functions | `extern fn` declarations, linkage, the restricted C-ABI type boundary, and the runtime's own functions |
-| 12 Generics | Type and constant parameters on functions and struct types, inference, `match` over a type, monomorphization |
+| 12 Generics | Type parameters on functions and struct types, inference, `match` over a type, monomorphization, instances per array length |
 | 13 Compile-time evaluation | What the compiler computes while compiling, what it refuses, constant contexts |
 
 Each rule is named by a letter for its area and a number, `T7`, sometimes with a lowercase letter for a later rule
@@ -72,7 +73,12 @@ produces a run-time failure instead, it says so explicitly (e.g. "run-time panic
 
 This specification covers the full language, including the static scope checker and generics. It does not cover a
 general borrow checker or a standard library — neither exists in the language. A rule marked *(not yet implemented)*
-says what the C compiler does instead.
+says what the compiler does instead.
+
+The array rules - lengths known while compiling and fixed storage (§2.3 T7a-T7d, T8, T12, D15a), inferred result
+lengths (D8f), arrays by value and the 128-byte limit (D9a-D9c), asserts decided at a call (S18c, S18e), inline array
+fields (C2e) and instances per length (§12.7 G29-G31) - replace written fixed-length array types and constant
+parameters *(not yet implemented)*.
 
 ## 1. Lexical Structure
 
@@ -213,7 +219,7 @@ it there, unterminated, and that line's end then ends the statement as any other
 - an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\"`.
 
 A `STR_LIT` is text (T29c) whose length, `N`, the number of bytes after escape processing, is known while
-compiling (T7d). A `STR_LIT` is not implicitly nul-terminated; `N` reflects exactly its own content. An unterminated or
+compiling (T7c). A `STR_LIT` is not implicitly nul-terminated; `N` reflects exactly its own content. An unterminated or
 newline-containing `STR_LIT` is a compile-time error.
 
 **L15.** No other escape sequences exist. Using `\` followed by any character other than `n`, `t`, `r`, `0`,
@@ -380,13 +386,13 @@ makes the global assignable (D11); everywhere else it says nothing about a bindi
 `enum-body`, `struct-body`, `trait-body`, and `func-type` are anonymous type *shapes*,
 constructible inline anywhere a type expression is expected (§2.4, §2.5, §2.7, §2.11). `type-ref`
 (§2.9) names an existing primitive, or a previously declared struct, enum, error, or (in a constraint) trait,
-with an optional array suffix and reference marker. A type variable (§12.1 G1), introduced by a type parameter list or a
-method's receiver, is written as its bare name, a `type-ref` (G8b).
+with optional type arguments (G8) and a reference marker. A type variable (§12.1 G1), introduced by a type parameter list
+or a method's receiver, is written as its bare name, a `type-ref` (G8b).
 
 **T2a (`null`).** `null` is a literal denoting the **absent reference**. It has no type of its own: like a
 numeric literal (T6), it adapts to whatever type it is used against, and the types it may adapt to are
-exactly the **nullable** ones — a `&`/`&x`-marked struct, enum or compile-time-length array, a runtime-length
-array (`Array<T>`, always pointer-backed per T11), and a function type (T21, D16d). Used
+exactly the **nullable** ones — a `&`/`&x`-marked struct, enum or array, an array value (`Array<T>`, which `null`
+makes the empty array), and a function type (T21, D16d). Used
 against any other type it is a compile-time error. Calling through a null function value is a null dereference
 (T2b).
 
@@ -498,100 +504,117 @@ is an ordinary expression of its literals' own types, computed as it is written 
 
 ### 2.3 Array types
 
-**T7.** `Array<T>` is the array type: a sequence of `T` values whose length is decided when the array is
-built and fixed for that array thereafter. The length is **not part of the type** — `Array<I32>` is every
-array of `I32`, of any length — and is read with `....Len()` (§5.9). `Array<T, N>` is the array whose length is
-part of its type (T7c). `Array` is a built-in name, taking one type argument and optionally a length; declaring a
-type named `Array` is a compile-time error. The element type may
-carry a bare reference marker (`Array<Point&>`, an array of references to `Point`), which belongs to the
-array's own scope (§8 O5); a marker naming a variable on the element is a compile-time error, since an element
+**T7.** `Array<T>` is the array type: a sequence of `T` values whose length is decided when the array is built and
+fixed for that array thereafter. The length is **never part of the type** — `Array<I32>` is every array of `I32`, of
+any length — and is read with `....Len()` (§5.9). Where the program fixes a length while compiling, the compiler knows
+it and uses it (T7c), and storage may then be laid out with that length (T7d), but no type is ever written with one.
+`Array` is a built-in name taking exactly one type argument; declaring a type named `Array` is a compile-time error.
+The element type may carry a bare reference marker (`Array<Point&>`, an array of references to `Point`), which belongs
+to the array's own scope (§8 O5); a marker naming a variable on the element is a compile-time error, since an element
 never has a scope of its own.
 
-**T7a.** An `Array<T>` held **inside another value** — a struct field, an array's element, an enum's payload —
-must be a reference, `Array<T>&`. Its storage lives apart from the value naming it, so copying the containing
-value would share that storage while appearing to copy it. A fixed-length `Array<T, N>` (T7c) holds its elements
-in itself, so it is held by value anywhere a struct may be. There is no multi-dimensional array: an array of arrays
-is `Array<Array<T>&>`, each element an array of its own length; `Array<Array<T, C>, R>` is `R` rows of `C` laid
-out in place (T7c); and a rectangular block whose size is known only at run time is one array indexed
-`r * width + c`.
+**T7a.** An array held **inside another value** — a struct field, an array's element, an enum's payload — is held by
+reference, `Array<T>&`, unless its storage is laid out in that value with a length every such value shares (T7d): an
+inline field whose declaration gives its length, or the elements of an array made with a fill or a literal of one
+known length. Copying the containing value then copies the array with it. Any other array held by value inside a
+value is a compile-time error naming `Array<T>&`: its storage would live apart from the value naming it, so copying the
+value would share that storage while appearing to copy it. An enum's payload never lays one out (its parameters have
+no declaration to give a length). There is no multi-dimensional array: an array of arrays is `Array<Array<T>&>`, each
+element an array of its own length; `Array<Array<F32>>(4, Array<F32>(4))` is four rows of four laid out in place; and
+a rectangular block whose size is known only at run time is one array indexed `r * width + c`.
 
-**T7b (arrays are held by reference).** An array is held **by value only where its storage is created**: a declaration
-of a value array (a local, a global, a field, element or payload of fixed length, T7c) and a function's result, which
-is built where the call's result is put. Everywhere else an array is held through a reference - a parameter or
-receiver (D9a), a field, element or payload holding an `Array<T>` (T7a), a lambda's capture (D16c) - and handing a
-value array to one of those **borrows** it rather than copying it (E12c). So an array is never copied except where a
-new one is declared with a value written into it (`b Array<T> = a`), which is a copy because `b` is new storage; and a
-destructured result (S4b) is not copied at all - each declared local takes the array the call built for it. A function
-returning an array value that already lives somewhere - a local of its own, a parameter's array - builds its result
-from it: the elements are copied into the result scope (§8 O13) before the function's own scopes close, so the caller
-takes an array no one else holds, and nothing those scopes do as they close (a destructor allocating, say) can reach
-it. An `Array<T, N>` result is a value as a struct is, its elements returned in it.
+**T7b (arrays are held by reference).** An array is held **by value only where its storage is created** - a
+declaration of a value array (a local, a global, an inline field or element, T7d), a function's result, which is built
+where the call's result is put - and in a **by-value parameter** (D9a), which is the callee's own copy. Everywhere else
+an array is held through a reference - a reference parameter or receiver, a field, element or payload holding an
+`Array<T>&` (T7a), a lambda's capture (D16c) - and handing a value array to one of those **borrows** it rather than
+copying it (E12c). So an array is copied only where a new one is declared with a value written into it
+(`b Array<T> = a`), which is a copy because `b` is new storage, and where it is passed to a by-value parameter (D9a),
+which holds at most 128 bytes (D9c); and a destructured result (S4b) is not copied at all - each declared local takes
+the array the call built for it. A function returning an array value that already lives somewhere - a local of its own, a parameter's
+array - builds its result from it: the elements are copied into the result scope (§8 O13) before the function's own
+scopes close, so the caller takes an array no one else holds, and nothing those scopes do as they close (a destructor
+allocating, say) can reach it. A result whose length is known (D8f) is a value as a struct is, its elements returned in
+it.
 
-**T7c (fixed-length arrays).** `Array<T, N>` is an array of exactly `N` elements of `T` whose length is **part of its
-type**. `N` is a constant argument (§12.7 G21) of type `I64`, from `0` up to the largest length whose byte count fits
-an `I64` (D14b); one outside that is a compile-time error where the type is written, or, where a constant variable
-computes it, at the instantiation (G16b).
+**T7c (known lengths).** An array's length is **known** while compiling exactly where the program fixes it:
 
-It is a **value laid out in place**: its `N` elements are the value, wherever it is held - a local's own storage, a
-global's data, the struct holding it as a field, the array holding it as an element, a payload, a function's result
-- so copying it copies the elements, `==` compares them (E10), and a struct holding one is still plain data, laid out
-as C lays out `T x[N]` in a struct. Unlike an `Array<T>` (T7a) it is held by value inside another value:
-`Array<Array<F32, 4>, 4>` is sixteen `F32`s in place, four rows of four, read `m[r][c]` - an array of fixed arrays,
-which is all a fixed-size matrix needs. `Array<T, N>&` is a reference to one: a single pointer, the length its
-type's (T11a). As a parameter it is that reference (D9a), and a lambda borrows it as it borrows any value array
-(D16c). A local's storage - a fixed array's, or a struct's holding one - larger than a stack frame should hold (64KB) is
-taken from its block's arena instead, reclaimed when the block closes as the frame's would be (a constructor's from its
-own scope, closed as it returns, never its instance's - §9.1 C2g): a local of any size is declarable, and nothing else
-about it differs.
+- an array literal (E19): its item count; written text: its characters; a `$` rendering, or a join, the compiler
+  computes (K1) whole - a constant's rendering: the text it is;
+- `Array<T>(n)` and `Array<T>(n, v)` (E13a) where `n` can be evaluated at compile time (§13 K1) - a literal, a
+  literal-only expression (E4a), an immutable global or build constant, a call the evaluator can run, arithmetic on
+  these - computed as the program computes it, in its operands' types and wrapping where the program wraps (so with
+  `B U8 = 255`, `Array<I32>(B + 1)` has 0 elements); one that cannot be evaluated gives a length known only at run
+  time;
+- a slice (E16a) whose bounds give a known length: both bounds evaluable at compile time (an omitted `lo` is 0, an
+  omitted `hi` the base's length when that is known), or `hi` written `lo + k` (or `k + lo`) with `lo` the same name,
+  or the same chain of field reads, written twice and `k` evaluable at compile time - `raw[off:off + 784]` has length
+  784;
+- a comprehension (E27) with no `if`, over an array of known length or a `range` whose bounds are evaluable at
+  compile time;
+- a conditional (E28) or `match` value (S12b) all of whose values have one known length;
+- a conversion (`String(x)`, a declared array type, T29a) of an array of known length;
+- a read of **fixed storage** (T7d): a local, a global, an inline field, an element of an array of inline arrays;
+- a reference local (`Array<T>&`) every value given which has one known length, judged as T7d judges a value local;
+- a call whose result's length is inferred (D8f);
+- in an instance (G29), a by-value array parameter, and a value of a type variable bound to an array of known length.
 
-Everything an array does, an `Array<T, N>` does - indexing, slicing (to an `Array<T>&`, E16a), `for ... in`, `$`,
-`Len()`, the prelude's methods (M19d), `extern` marshalling (X3) - and what its type knows is used while compiling:
-`Len()` is the constant `N`, an index known while compiling is checked against `N` there (E16), and a loop over it
-has a known count. `Array<F32, 3>`, `Array<F32, 4>` and `Array<F32>` are three types (T12, G25). A declared array
-type may extend one: `type Vec3 extends Array<F32, 3>` (T29a, T29f).
+Nothing else knows a length: a function value's result (T21: a function type is written without lengths), a reference
+field, an element of an `Array<Array<T>&>`, a reference parameter outside an instance, a mutable exported global
+(T7d), and anything built with a length read from those, are arrays whose length is known only at run time. That is never an
+error, except where an array is passed by value (D9a). Where a length is known, `Len()` is that constant (E23), an index
+out of range is a compile-time error (E16), and a condition the length decides is decided (S8a; per instance, G30).
 
-**T7d (between `Array<T, N>` and `Array<T>`).** Nothing is lost moving a length from the type to the value, so that
-direction is implicit; the other is a claim about a length, checked once where it is made.
+**T7d (fixed storage).** Storage for an array value is **fixed** - laid out with a known length, its elements in
+place - exactly where every value it can hold has one known length:
 
-- An `Array<T, N>` fits wherever an `Array<T>` is wanted (E12): into an `Array<T>&` it is borrowed, or an
-  `Array<T, N>&` widened, the pointer kept and `N` set beside it; into an `Array<T>` value it is copied, as any
-  array value is (T7b).
-- An `Array<T>` - a value or a reference - copied into an `Array<T, N>` value (an initializer, an assignment, a
-  fixed-length field's initializer) is copied into that storage with its length checked against `N`, **once per
-  copy**: where both lengths are known while compiling a mismatch is a compile-time error, and otherwise a mismatch
-  aborts the program as an out-of-range slice bound does (E16b). A program wanting the mismatch as an error views the
-  array first: `checked (a as Array<T, N>&)` (E32b) fails with `BuiltinError.OUT_OF_BOUNDS`, and the view is then copied.
-- An `Array<T>` never becomes an `Array<T, N>&` by itself: `x as Array<T, N>&` (E32b) is the checked view, and so is a
-  conversion to a declared type over an `Array<T, N>` (`V3(x)`, T29a).
-- An array **literal** of `k` items (E20), and written text of `k` bytes (T29c), adapts to a length as a numeric
-  literal adapts to a type (T6): written against an `Array<T, N>` it is one when `k` is `N`, and a compile-time
-  error otherwise; given for a parameter's `Array<T, N>` it binds `N` to `k` (G24); anywhere else - a `:=`
-  (D15), a bare type variable (G9), an `Array<T>` - it is an `Array<T>`.
-- Beside an `Array<T>` in `==` or `!=`, an `Array<T, N>` meets it as an `Array<T>`, the lengths compared first
-  (E10).
-- Two fixed-length array types of different lengths never fit each other, and that is a compile-time error naming
-  both.
+- a **local**: when every value stored in it - its initializer or zero value (an empty array, D13), each assignment,
+  destructuring, parallel-assignment and `spawn` target naming it - has one known length. Otherwise it holds its
+  length beside its storage at run time, and a later store may give it any length (D15a). Which a local is never
+  changes what the program does: no store into a local is refused or checked for its length;
+- a **global**: an immutable one when its initializer's length is known; a mutable private one (M6) when every value
+  stored in it in its module has one known length; a mutable exported one never, since a module importing it may store
+  any length;
+- a **field**: when its declaration gives it a known length the same for every instance - an initializer that reads no
+  constructor parameter (`pos := Array<F32>(3)`, `m Array<F32> = Array<F32>(16)`, `lock := Array<I64>(MutexWords)`),
+  in a generic type one each instantiation computes. A value array field given none - no initializer, one reading a
+  parameter, a pun of a by-value array parameter - is T7a's error;
+- the **elements** of an array of arrays held by value (`Array<Array<T>>`): their length is given where the outer
+  array is made - by the fill (`Array<Array<F32>>(4, Array<F32>(4))`) or by a literal whose items all have one known
+  length - whatever the outer array's own length is. One made with no fill, or with items of different lengths, is
+  T7a's error.
+
+Fixed storage is laid out in place, wherever it is: a local's own storage, a global's data, the struct holding it, the
+array holding it as an element, a function's result - so copying it copies the elements, `==` compares them (E10), and
+a struct holding one is still plain data, laid out as C lays out `T x[N]` in a struct (X3a). A local's storage - a
+fixed array's, or a struct's holding one - larger than a stack frame should hold (64KB) is taken from its block's arena
+instead, reclaimed when the block closes as the frame's would be (a constructor's from its own scope, closed as it
+returns, never its instance's - §9.1 C2g): a local of any size is declarable, and nothing else about it differs.
+
+A value stored into **fixed field or element storage** must have its length known and equal to the storage's: one of
+another known length is a compile-time error naming both lengths, and one whose length is known only at run time is a
+compile-time error saying to copy it explicitly through a slice of that length, `s.m = v[0:16]`, whose bounds are
+checked once where it is evaluated (E16b; under `checked`, `OUT_OF_BOUNDS`, E16c). No store is ever checked for its length
+implicitly. An element length is part of its storage's layout, so a local whose stored values' element lengths
+disagree is a compile-time error, not a length kept at run time.
 
 **T8.** An array is built by `Array<T>(n)` — `n` elements, each `T`'s zero value (D13, D13c) — or `Array<T>(n, v)`,
-each element `v` (§5.4 E13a), or by an array literal (§5.7 E19). `n` is any integer expression; a negative
-`n` aborts the program (D14b). The fill is **one value copied into every element**: an element type whose value holds
-a reference - a `List` or `Map` (a handle to its storage, §11), a struct holding a `&` field - gives every element the
-same reference, so `Array<Map<K, V>>(n, Map<K, V>())` is `n` names for one map; elements meant to be separate are built
-one by one.
-An `Array<T, N>` is built by `Array<T, N>()` - `N` elements, each `T`'s zero value,
-as a declaration of one with no initializer is (D13) - by a literal, or by copying an array into one (T7d).
+each element `v` (§5.4 E13a), or by an array literal (§5.7 E19). `n` is any integer expression; a negative `n`
+aborts the program (D14b), and a negative `n` evaluable at compile time is a compile-time error. The fill is **one
+value copied into every element**: an element type whose value holds a reference - a `List` or `Map` (a handle to its
+storage, §11), a struct holding a `&` field - gives every element the same reference, so `Array<Map<K, V>>(n, Map<K,
+V>())` is `n` names for one map; elements meant to be separate are built one by one. Whether the array's length is known while
+compiling is T7c's: `Array<T>(3)` is fixed storage (T7d), `Array<T>(n)` with `n` a parameter is not.
 
 **T10.** Every array has a length, queryable at run time via `....Len()` (§5.9); where it is known while
-compiling (an `Array<T, N>`, a literal) `Len()` is a constant and an index out of range is a compile-time
-error.
+compiling (T7c) `Len()` is a constant and an index out of range is a compile-time error.
 
 **T11.** **Whether an array is reference-shaped is decided by its reference marker (T24) and by nothing
 else.** `Array<T>` is a value: `==` compares element-wise (E10) and assignment gives the target its own copy
 of the elements. `Array<T>&` is a reference: assignment repoints, and `==` compares the elements it names, as it
-does through any array (E10) - `a is b` asks whether two name the same storage (E10c). The same holds for
-`Array<T, N>` and `Array<T, N>&` (T7c). How an `Array<T>` is stored - a length paired with storage elsewhere, or,
-for a literal, the elements in place with their length known while compiling - is a difference in *representation*
-only and never in behaviour.
+does through any array (E10) - `a is b` asks whether two name the same storage (E10c). How an `Array<T>` is stored -
+a length paired with storage elsewhere, or fixed storage laid out in place with its length known while compiling
+(T7d) - is a difference in *representation* only and never in behaviour.
 
 **T11b (assigning a value in place).** Assigning to an array **value** that already holds one writes the new
 elements into the storage it has when the length is the same - whatever the new value is: another array, a literal,
@@ -601,11 +624,11 @@ its scope closes. A struct or enum value is assigned in place the same way, fiel
 its fields sees the new value.
 
 **T11a.** A reference to an `Array<T>` takes its length from the array it points to, every time it is assigned
-(D15a): the length is held beside the pointer. A reference to an `Array<T, N>` holds the pointer alone - its length
-is its type's - and only an array of that length is ever assigned to it.
+(D15a): the length is held beside the pointer, whatever is known about it while compiling.
 
-**T12.** Two array types are the same type (§2.10) exactly when their element types are the same, they
-agree on reference-shapedness (T25a), and either neither has a length in its type or both have the same one (T7c).
+**T12.** Two array types are the same type (§2.10) exactly when their element types are the same and they agree on
+reference-shapedness (T25a). A length is never part of an array's type, so two arrays of different lengths are of one
+type; where storage is fixed, T7d says what may be stored in it.
 
 ### 2.4 Struct types
 
@@ -620,7 +643,7 @@ member-wise, and `==`/`!=` compare structurally (see §5.2 E10), unless referenc
 (§2.9).
 
 **T16.** A struct or enum type can only embed itself, directly or through any chain of plain (non-reference)
-member or payload types - an `Array<T, N>` (T7c) included, since it holds its elements in the value - if that
+member or payload types - an inline array (T7d) included, since it holds its elements in the value - if that
 chain passes through a reference marker (§2.9) at least once; an unmarked, unbroken self-embedding cycle is a
 compile-time error, reported at the member that closes it. A generic type is judged per instantiation: `x N<T>` in
 `type N<T>` makes every `N<...>` hold itself, reported once each instantiation is made.
@@ -702,11 +725,11 @@ nowhere (O25g), and may be held wherever it outlives the holder. An enum may als
 holding it by value, reached by reference (`type Node struct(e Expr) { e }` beside a case `Add(a Node&, b Node&)`),
 in either declaration order.
 
-**G8a (composition).** A `type-arg` (G8) may be a **type variable**, so one generic can be written in terms
+**G8a (composition).** A type argument (G8) may be a **type variable**, so one generic can be written in terms
 of another — `Vec<T>` inside a declaration that has a `T`. This is what makes a generic type's own
 helpers and methods writable once rather than once per instantiation.
 
-**G8b (the introduction rule).** A generic's variable - a type variable, or a constant one (§12.7) - is
+**G8b (the introduction rule).** A generic's type variable is
 **introduced** by a type parameter list, or by a method's receiver, and written as its bare `IDEN` everywhere in its
 declaration:
 
@@ -717,7 +740,7 @@ declaration:
   for the whole declaration, receiver included, in any order, and for its body. A method on a generic type takes the
   type's variables from its receiver's type arguments (`fn (l List<T>&) Push(x T)`, G3b) and lists only variables of
   its own (`fn (l List<T>&) Map<U>(f fn(x T) U) List<U>&`). A list item carries the variable's constraint (`<T Shape>`,
-  G19) or a constant variable's type (`<N I64>`, G22).
+  G19).
 - A constructor's list after `struct` introduces the variables a plain type's constructor writes (G10d).
 - A function type (G3a) and a lambda (D16) introduce nothing: a variable written in one is the enclosing
   declaration's.
@@ -744,8 +767,9 @@ overloading by receiver type is unaffected.
 arguments always name distinct instantiations. A declared type argument is distinguished by its **owner
 and name** (T29), matching the identity rule the type itself has, so two modules each declaring a `Point`
 give two instantiations of `Vec<Point>` rather than one. An array argument is distinguished by its element
-type, its length, and whether it is reference-shaped — every part of what makes an array type distinct
-(T25a). A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
+type and whether it is reference-shaped — every part of what makes an array type distinct (T25a) - and, bound by
+inference to an array value of known length (D9b), by that length, which lays it out. An instance (G29) is
+distinguished the same way by the lengths it was compiled for. A function type argument is distinguished by its parameters (each one's `mut` included), result and errors,
 and where its references live (T22); a reference argument by its permission (T25b), so `List<Node&>` and
 `List<mut Node&>` are two; and a declared array type from the array it is declared over (T29a). No argument is too long to tell
 apart: there is no limit on how deeply type arguments nest short of G17's.
@@ -967,7 +991,7 @@ read-only copy, `x List<I64>& = G` a read-only borrow, and a copy of its own is 
 its parts. A fresh value - a call's result, a literal, an instance - is writable as always (save the call results
 below), and so is a copy of anything reached writably. A **mutable global's initializer** is stored where it can be
 written, so it is never a read-only copy (`Copy mut List<I32> = G` is an error; an immutable global may hold one). A
-**slice** or a **view** (`as Array<T, N>&`) of a read-only copy, and a loop's walk over one, read the copy: what they
+**slice** of a read-only copy, and a loop's walk over one, read the copy: what they
 give is read-only, as indexing it is. So does a walk over a reference a read-only copy holds (`for d in mods[i].deps`,
 `mods` read-only): the loop borrows it read-only, and a collection whose walk writes - a `mut` `At`, `Len`, `RunFrom` or
 `Iter` - is refused at that call.
@@ -1014,7 +1038,7 @@ pointer identity rather than structural content (see
 
 **T27.** Two types are the **same type** if and only if:
 - both are the same primitive (T4), or
-- both are array types and satisfy T12 (length-kind, lengths, and element type all agree), or
+- both are array types and satisfy T12 (element types and reference-shapedness agree), or
 - both are function types and satisfy T22, or
 - both are struct, enum, error types or traits declared with the same name in the same module,
   *and* agree on reference-shapedness (T25a) and, inside another type, on permission (T25b) — `Point` and `Point&` are different types, one an
@@ -1088,16 +1112,12 @@ Three rules govern getting values in and out, and they are deliberately asymmetr
 - **A value does not.** One that already has a type keeps it; `String(v)` is how it changes, and the
   conversion is admitted whenever `v` would fit the underlying type — so it covers E12's promotions, not
   merely identical shapes. It moves nothing. **A conversion names its argument's storage**: where `v` is a
-  variable, a field, an element, a slice or a reference a call gives (`String(v.View())`, of any length kind), `Name(v)`
+  variable, a field, an element, a slice or a reference a call gives (`String(v.View())`), `Name(v)`
   is that storage read as `Name` - it may be written exactly
   where `v` may (T25c), a reference made from it borrows `v`'s storage and is checked against how long that storage
   lives (E12c), and a value declaration from it copies as any value declaration does (T7b). It is not a place an
-  assignment may name. An `Array<T, N>` (T7c) is lent as a slice of it. A conversion to a declared type over an
-  `Array<T, N>` from an array whose length is known only at run time is that array **viewed** as one of `N` elements,
-  exactly as `v as Array<T, N>&` views it (E32b): the length checked once, where the conversion is evaluated - a
-  mismatch aborts as an out-of-range slice does, and under `checked` fails with `BuiltinError.OUT_OF_BOUNDS` - and the
-  result is a reference to that storage under the declared type's name, of any `v`, a temporary included. Only a
-  temporary `v` of another shape makes the conversion a value of its own - a conditional or a `match` of references
+  assignment may name. Fixed storage (T7d) is lent as a slice of it, and the conversion keeps a known length
+  (T7c). Only a temporary `v` makes the conversion a value of its own - a conditional or a `match` of references
   among them (E28, S12b), whose values keep their own types.
 - **A named type flows freely into its own underlying type**, with no conversion written: a `String` is
   usable wherever a `Array<U8>` is wanted. That direction discards a claim rather than making one, which is
@@ -1154,7 +1174,7 @@ where the first occurrence starts (`t.FindLast(sub)` the last), and fail with `T
 `ArrayError.NOT_FOUND` for no element `keep` holds for.
 
 **T29b.** An array satisfies a trait (§2.11 T31) on the same terms as any other type, whether it is a declared
-array type or a built-in one, of either length kind.
+array type or a built-in one, whatever is known of its length.
 
 **T28.** Nothing in this specification defines implicit conversion between types beyond T6. Where a
 context (assignment, argument passing, return, comparison) requires two operand types to match, it
@@ -1407,6 +1427,17 @@ including the scope its parameter gives it (§8 O18a: a result built in the inne
 the outer call's parameter says). The inner call may be a `try` (E24), though several defaults stay confined to
 destructuring and `return` (R9a). To pass some results, or others beside them, destructure first.
 
+**D8f (a result's length is inferred).** A declared function's array result - a value `Array<T>`, a reference to one,
+or one of several results - has a **known length** (T7c) when every `return` in its body gives one of the same known
+length; it is inferred from the body, never written, as a function's error set is read off its body. Calls are
+followed: a `return f(x)` gives what `f`'s result gives, and a set of functions calling each other settles together,
+a result that only such calls give before any other return has decided it counting for nothing, so a recursion
+ending in a fixed length has that length. A return of a length known only at run time, or two returns of different
+lengths, make the result's length a run-time one. A generic function's, and an instance's (G29), is its own. The
+caller then holds the result as fixed storage (T7d) where it keeps it, and a result of known length is returned in
+place, as a struct is (T7b). A function made a **value** (T21) has its written signature, which carries no length: a
+call through the value gives a result whose length is known only at run time, built where the call's result lands.
+
 `_` is not a name: it discards a value in a destructuring or `spawn` target list, and declaring a
 variable, parameter or global named `_` is a compile-time error.
 
@@ -1418,13 +1449,12 @@ and builds nothing with a destructor. It is checked in the declaring module, and
 computed is a compile-time error naming what stops it. A literal default for a parameter whose type is a type
 variable (`alpha T = 1`) has no type to fit there: it is fitted at each call against the instantiation's type, adapting
 as a literal argument does (G18), and a call whose instantiation it does not fit is the error. A default may read the
-constant (and type) variables its declaration introduced before it - a constructor's type's own (`struct(k I64 = N *
-10)`), a function's (`F(x I64 = N + 1)`, G22): it is then each instantiation's, computed with that instantiation's
-values (G23) and checked where a call omits it. A `null` default refers to nothing, so it fits whatever scope a call
+length of a by-value array parameter before it (`k I64 = a.Len() * 2`), which is a constant in each instance (G29): it
+is then each instance's, computed with that instance's length and checked where a call omits it. A `null` default refers to nothing, so it fits whatever scope a call
 binds its parameter to. At each call that omits it, a default is that call's argument as if written there: a temporary
 it builds is built where that call builds its argument (§8 O18a). Its names still mean what they mean at the
 declaration, whichever call it stands in: a name the declaration's module gives a meaning - a global, a type - is
-never one the calling code has in scope, so a caller's own constant variable of that name (G22) is not the default's.
+never one the calling code has in scope, so a caller's own local of that name is not the default's.
 A lambda in a default captures nothing (a default has no locals); the calls of one module (or of one instantiation,
 G16) share the one made for them, which is a function of that module's code wherever the default was declared.
 
@@ -1433,28 +1463,51 @@ parameter after it must too. A call may then omit any number of trailing argumen
 past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
 constructor's own `param-list` (§9.1 C1).
 
-**D9a.** A parameter whose type is an **array** must carry a reference marker (T24) on the array itself:
-a by-value array parameter is a compile-time error. Passing an array by value copies it, silently and in
-time proportional to its length, at every call — and the callee's writes to it would then land where the caller
-can never see them — the hazard the `&` marker exists to prevent, arising here from its absence
-rather than its presence. Requiring the marker also means one rule covers both length kinds: what
-makes a parameter alias the caller's array is `&`, never how the array's length happens to be known.
+**D9a (arrays by value).** A parameter whose type is an array may take it **by value** (`a Array<F32>`, a declared
+array type such as `s String` among them) or by reference (`a Array<F32>&`, T24). A by-value array parameter is the
+callee's own copy of the argument as it was at the call (D9), and it takes its **length** from the argument: the
+function is compiled once for each length its calls give it (G29), and in each it is fixed storage (T7d) whose
+`Len()` is a constant (T7c). So the argument's length must be **known** while compiling (T7c); one known only at run
+time is a compile-time error saying to take the parameter by reference (`a Array<F32>&`) or to copy the length wanted
+explicitly, with a slice of it (`r[0:3]`, checked once, E16b). The same holds for every array level held by value
+beneath the parameter - the elements of an `Array<Array<F64>>&` parameter, rows laid out in place, take their length
+from the argument too, though the reference level above them takes none. A reference level makes no instance: inside
+the function an array reached through a reference has a length known only at run time. No by-value parameter holds
+more than D9c's 128 bytes, so passing one copies at most that much.
 
-This applies to the array itself, not its elements: `Array<Handle&>` is an array of references passed by
-value and is rejected; `Array<Handle&>&` is a reference to it and is accepted. It applies to a fixed-length array
-as to any other: a parameter takes `Array<F32, 3>&`, never `Array<F32, 3>` (T7c). It does not apply to an `extern-param`
-(§11 X3), which marshals to a raw pointer and so never copies anything to begin with. Nor does it apply to a lambda's
-parameter whose type is not written (D16a): that type is the expected function type's parameter's - a generic's by-value
-parameter bound to an array, say (`a.Any(fn(x) { ... })` over an `Array<Array<I32, 2>>`) - and has D9b's meaning there.
-A lambda parameter written with an array type by value is the error, as any other parameter's.
+This applies to the array itself, not its elements: `Array<Handle&>` is an array of references passed by value, and
+`Array<Handle&>&` a reference to it. It does not apply to an `extern-param` (§11 X3), which marshals to a raw pointer
+and so never copies anything to begin with. A **function type** (T21) carries no length, so one whose parameter takes
+an array by value is a compile-time error naming `Array<T>&` - unless that parameter's type is a type variable an
+instantiation binds to an array of known length, which gives it one. A lambda (D16) is a value of a function type, so
+the same holds for its parameters; one whose type is not written (D16a) is the expected function type's - a generic's
+by-value parameter bound to an array, say (`a.Any(fn(x) { ... })` over an `Array<Array<I32>>` of rows laid out in
+place) - and has that type's meaning there.
 
-**D9b.** Nor does it apply to a generic's by-value parameter (`x T`) instantiated with an array: the declaration
-does not say array, and its meaning is the by-value parameter's, as for a struct - the callee's own (D9). The callee
+**D9b.** A generic's by-value parameter (`x T`) instantiated with an array is a by-value parameter as for a struct -
+the callee's own (D9). Bound to an array of known length (T7c), that length is part of the binding (G16), and the
+parameter is D9a's. Bound to an array whose length is known only at run time - two `String`s of different lengths given
+to `Pick<T>(a T, b T)`, say, which meet at the run-time length as two numbers meet at the wider (T6b) - it is one
+instantiation, and the callee
 gets its own copy of the elements exactly when its body may write the parameter: assigns it or one of its elements,
 or makes a writable reference to its storage (a slice of it, a borrow into a `mut` reference parameter). Otherwise it
 reads the caller's array itself - storage that outlives the call, so it may be borrowed like any value the callee
 holds (passed to a `T&` parameter, compared by `Eq`) - and sees a write another reference to that array makes during
 the call. The compile-time evaluator (K1) gives both the same meaning.
+
+**D9c (by-value parameters are small).** A by-value parameter whose **written** type is an **aggregate** - a struct,
+an enum, an array (D9a), an application of a generic struct or enum (`p Pair<A, B>`) - holds at most **128 bytes** as
+laid out, padding included (the size a C compiler gives the same layout). One larger is a compile-time error naming its
+size and saying to take it by reference (`p Big&`). This covers every by-value parameter so written: a function's, a
+method's receiver (M19), a constructor's (C1), a lambda's (D16), a function type's (T21, since a value of it is passed
+the same copy), a generic function's and a generic type's method's - checked for each instantiation (G16) and each
+instance (G29) its size depends on, reported at the parameter with a note at the call that asked for it (G16b). A
+parameter written as a **bare type variable** (`x T`) is not covered, whatever it is bound to: the program never wrote
+a copy of an aggregate there, and a container's own methods (`List<Big>.Push(x T)`, `Sort`'s `less fn(a T, b T)`)
+take what they hold that way - such a parameter is passed as any large value is, through memory. An `extern-param` (X3) passes a
+pointer and is not covered, nor is anything that is not a parameter - a result is built where the caller puts it
+(T7b), and a capture (D16c) is the closure's. So a by-value pass is always as cheap as the reader expects - a 4x4
+`F64` transform passes by value, a 784-element vector does not.
 
 **D9.** A parameter is the callee's own: a by-value parameter is its own copy, which it may assign and write
 without the caller seeing it, and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
@@ -1592,9 +1645,8 @@ of that kind is - a local, a global (`X, Y mut I32 = 0, 0`) - and as constructor
 also be puns (`x, y`) or inferred (`p, q := a, b`).
 
 **D13.** A declaration with no initializer is its declared type's **zero value**: `false` for `Bool`,
-`0`/`0.0` for numeric types, `null` (T2a) for anything nullable, an empty array for `Array<T>`, `N` elements each
-its element type's zero value for `Array<T, N>` (T7c), and the
-first-declared case for an enum — an enum and an error type have no other meaningful "zero", so this is the type's
+`0`/`0.0` for numeric types, `null` (T2a) for anything nullable, an empty array (0 elements, T7c) for `Array<T>`,
+and the first-declared case for an enum — an enum and an error type have no other meaningful "zero", so this is the type's
 first case by representation, not by any declared meaning. A type with a **constructor** - every struct (T13), and a
 declared number with one (T29d) - makes its own zero value (D13c). Nothing is ever uninitialized. For a **global**
 whose zero value is zero bits this is the loader's zeroed storage — real BSS, costing nothing at run time.
@@ -1614,13 +1666,12 @@ the elements would share it; such an array takes a fill or is built element by e
 the literal `0`, has no element and needs no zero value of `T`. The prelude's containers never ask for one: a `List`
 fills each new chunk with the element being pushed, and `ToArray`, an array's `Map` and `Filter` fill with an element,
 so a type with no zero value is an element of them as any other.
-The same holds for an `Array<T, N>` with no initializer and for `Array<T, N>()` (T7c), whose elements take a
-literal or a copy instead.
 
 **D14.** Storage for an array is set aside by building one: `Array<T>(n)` or `Array<T>(n, v)` (T8, E13a),
 written anywhere an expression may be. Like any value with no storage of its own it is built in the scope of
 whatever it lands in (§8 E12c): a local's block, a reference's tagged scope, the instance a constructor
-field belongs to (C2d). Every element is `T`'s zero value, or `v`. A global's initializer builds into the
+field belongs to (C2d). Every element is `T`'s zero value, or `v`. Where `n` can be evaluated while compiling the
+length is known (T7c), and a value it is stored as is fixed storage (T7d). A global's initializer builds into the
 program's own scope, which is never closed (§8 O1b).
 
 **D14b.** `n` must evaluate to a length in range: **non-negative**, and no larger than the largest whose byte
@@ -1646,10 +1697,10 @@ An expression of numeric literals alone (E4a), `x := 1 + 2`, is computed while c
 written as one literal would (T6a: `I64`, else `U64` for an integer; `F64` for a float) - so `x := 1 + 2` is the `I64` 3
 and `x := 9223372036854775807 + 1` the `U64` 9223372036854775808, exactly as `x := 9223372036854775808` is; one whose
 value no type holds is an error.
-Text declares a `String` (T29c). An array literal declares an
-`Array<T>` (T7) - as a conditional or a `match` all of whose values are array literals does: its length is not part of
-the type, and a later assignment may change it; a fixed length is written, `x Array<I32, 3> = I32[1, 2, 3]` (T7d), and
-an expression whose type is an `Array<T, N>` - `Array<U8, 4>()`, a variable, a call, a field - declares that type. A constant variable declares its parameter's type (`n := N`, §12.7 G23). A reference-shaped result writes
+Text declares a `String` (T29c). An array declares an `Array<T>` (T7) - from a literal, `Array<T>(n)`, a variable, a
+call, a field or a conditional of arrays alike: a length is never part of a type, so `x := Array<U8>(4)` and
+`x Array<U8> = Array<U8>(4)` declare the same local, and whether its storage is fixed is T7d's, decided by every value
+stored in it. A reference-shaped result writes
 no scope tag into the declaration: the local takes its
 initializer's exact scope (§8 O25a). A value of a type declaring a destructor, which is held only by reference
 (C11), declares that reference - what `x T& = expr` declares: the instance lives where the declaration does, and is
@@ -1658,9 +1709,11 @@ A global declared with `:=` has its initializer's type wherever it is read - abo
 allows, since the global is set after the globals its initializer reads; `:=` globals whose initializers read each
 other are B5a's cycle, reported as one.
 
-**D15a.** An `Array<T>` declared by either form holds its length beside its storage, so a later assignment may
-give it an array of any length: a value `Array<T>` gets its own copy of the new elements, a reference
-`Array<T>&` repoints. An `Array<T, N>` is given only arrays of length `N` (T7d).
+**D15a.** A later assignment may give an `Array<T>` local an array of any length: a value `Array<T>` gets its own
+copy of the new elements (T11b), a reference `Array<T>&` repoints. A local some store gives another length, or a
+length known only at run time, holds its length beside its storage (T7d); one every store gives one known length is
+fixed storage. Neither is ever visible to the program but as speed. Fixed field and element storage is given only
+arrays of its own length (T7d).
 
 ## 4. Modules
 
@@ -1813,8 +1866,8 @@ The receiver type may be:
 - a type variable constrained by a **trait**, declared in the trait's module - a default (M19e);
 - a **built-in** type: a numeric primitive, `Bool`, or an unnamed array. Its methods are declared by the
   **prelude** (M19d) and by no other module, and are visible everywhere. An array receiver
-  is identified by its **element type** alone — `Array<I32>&` and `Array<I32, 4>` are receivers of the same
-  method, the call's E12 conversions deciding whether a given array reaches it — and an element that is a type
+  is identified by its **element type** alone — `Array<I32>&` and `Array<I32>` are receivers of the same
+  method, the call's E12 conversions deciding whether a given array reaches it, whatever its length — and an element that is a type
   variable (`Array<T>&`) makes the method one of every array. A method over a specific element type is a
   different receiver from the generic one and takes precedence where both apply, as G8a's concrete
   application does.
@@ -2227,8 +2280,6 @@ primary  ::= literal | try-expr | call-expr | struct-literal
            | array-literal | comprehension | enum-value | lambda | match-expr | IDEN | "(" expr ")"
 ```
 
-An `IDEN` may be a generic's constant variable, read as a value (§12.7 G23).
-
 `match-expr` is a `match` used as a value (§6.4 S12b). `index ::= "[" expr { sep expr } [ line-sep ] "]"` (several
 indices only for a type's `At`/`SetAt`, E31), `member ::= "." IDEN [ "(" list(arg) ")" ]`. A `member` carrying an
 argument list is a **method call** on everything to its left (§4.4 M19b), not a member access.
@@ -2414,11 +2465,11 @@ the type, and a type may say it itself:
 - for a struct or array **value**: member-wise/element-wise structural equality, applying this same rule to every
   field or element - so a part whose type declares `Eq` is compared by it, however deep it sits. Arrays must agree
   on length first;
-- for a **reference to an array** (`Array<T>&`, `Array<T, N>&`, or a declared array type with no `Eq` of its own):
+- for a **reference to an array** (`Array<T>&`, or a declared array type with no `Eq` of its own):
   the arrays the two name, compared as values are - lengths first, then each element by this same rule - except
   that a null equals only a null. A null array reference is one with **no storage**, as an array value's zero value
   has none, whose bits it shares; an empty array that was built (`Array<T>(0)`) has storage and is not null, and so
-  does an `Array<T, 0>`, a place of no bytes - a reference to one, or a slice of one, is not null. Two
+  does fixed storage of no elements (T7d), a place of no bytes - a reference to one, or a slice of one, is not null. Two
   references to arrays are compared for what they hold however they were made, so `l.ToArray() == m.ToArray()` asks
   whether two lists hold the same elements; whether they are one array is `a is b` (E10c).
 - for any other **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly
@@ -2443,9 +2494,9 @@ the same instance as another null and nothing else); both may not, having no typ
 afresh by every `Array<T>(n)`, comprehension, rendering or join, copy and constructor call, an empty one (of no
 elements, no fields) included, so two of them are never the same; a slice is part of its base's storage (E16a); a
 static literal site is one instance (T25d). An array with no storage - an array value's zero value, whose bits a null
-array reference has too - is the same as any other with none. An `Array<T, N>&` and
-an `Array<T>&` meet as `Array<T>&`s, as beside `==` (T7d): one instance when they name the same storage over the same
-length. Any other operand - a value of any type, two references of different types - is a compile-time error: `==` is
+array reference has too - is the same as any other with none. Whether either side's length is known while compiling
+(T7c) changes nothing: two references are one instance when they name the same storage over the same length. Any other
+operand - a value of any type, two references of different types - is a compile-time error: `==` is
 what compares values.
 `a` is evaluated before `b`. This is the value form of the one operator `is` (E32 gives its type form):
 
@@ -2526,7 +2577,7 @@ its type: the value written the way it would be in source:
   written as itself.
 - any other array — its element type as an array literal writes it (E19), then its items: `I32[1, 2, 3]`,
   `Point&[Point(1, 2)]`, `I32[]` when empty. The element type is written whole - an array of arrays writes each
-  element as an array of its own, `Array<I64, 3>[I64[1, 2, 3], I64[4, 5, 6]]` (E21) - with every inner level's `mut`
+  element as an array of its own, `Array<I64>[I64[1, 2, 3], I64[4, 5, 6]]` (E21) - with every inner level's `mut`
   (T25b), `List<mut Node&>[...]`, but not the element's own, which a literal's elements take from where the literal
   goes: an `Array<mut Node&>` renders `Node&[...]`. An array of a declared type over `Char` is such an array:
   `Letter['a', 'b']`.
@@ -2626,26 +2677,22 @@ call's argument, §5.4; and a `return`ed value, §6.5) exactly when one of:
   reference flowing into a value target is **copied out** (the aggregate is loaded), which is how a callee
   takes its own copy of a `Array<T>&` parameter (D9a). Both apply only at the outermost level; nested levels
   differing in reference-shapedness are simply different types, with no conversion between them. See E12c
-  for the array case, which borrows rather than allocating;
-- the value is an array whose length is known while compiling (an `Array<T, N>`, or a literal - T7d) and `T` is
-  an `Array<T>` of the same element type — the value is copied into storage of the target's own;
-- the value is an `Array<T, N>` **lvalue** or an `Array<T, N>&`, and `T` is an `Array<T>&` of the same element
-  type — a **borrow** (E12c), or a widening of the reference: the target names the very same storage, with the
-  known length materialised beside the pointer. It never allocates;
-- `T` is an `Array<T, N>` value and the value an array of the same element type: copied in, with its length checked
-  against `N` once per copy (T7d);
-- the value is a literal of `k` items, or text of `k` bytes, and `T` is an `Array<T, k>` or a reference to one
-  (T7d).
+  for the array case, which borrows rather than allocating.
 
-An array whose length is known only at run time never fits an `Array<T, N>&`; that view is written
-`x as Array<T, N>&` (E32b).
+A length is no part of an array's type (T12), so arrays of every length fit one another by the rules above - a value
+copied into a value (into fixed storage laid out in place, or storage beside its length, T7d), a value borrowed by a
+reference (E12c), a reference copied out into a value. One more condition applies where the target is **fixed field or
+element storage** (T7d): the value's length must be known while compiling (T7c) and equal to the storage's - otherwise a
+compile-time error naming both lengths, or, for a length known only at run time, saying to copy it through a slice of
+that length (`s.m = v[0:16]`). The same holds for a by-value array parameter, whose argument's length must be known
+(D9a). A local's storage takes whatever length it is given (T7d).
 
 Any other pairing does not fit, and is a compile-time error.
 
-**E12b.** D9a and E12c together mean no ordinary call ever copies an array: a by-value array parameter
-cannot be declared, and an array argument passed to a `&` parameter is either already reference-shaped, or
-an lvalue that is borrowed, or a temporary with no storage to borrow. A callee that wants its own copy
-declares a local and assigns to it, where the copy is written down.
+**E12b.** An ordinary call copies an array only into a **by-value** parameter (D9a), which holds at most 128 bytes
+(D9c): an array argument passed to a `&` parameter is either already reference-shaped, or an lvalue that is borrowed,
+or a temporary with no storage to borrow. A callee that wants its own copy of a longer array declares a local and
+assigns to it, where the copy is written down.
 
 **E12a.** In a **call argument** position, an *lvalue* argument crossing into a reference-shaped
 (`&`-marked, T24) parameter is **borrowed** (E12c): the parameter names the very instance the caller
@@ -2707,8 +2754,9 @@ parentheses (`(-2.0).Abs()`).
 **E13a.** `Array<T>(n)` and `Array<T>(n, v)` build an array (T8): `n`, of any integer type, is its length,
 and every element is `T`'s zero value or `v`, which must fit `T`. It is a value with no storage of its own,
 built in the scope of whatever it lands in (§8 E12c, D14), and is the only expression that sets aside
-storage for an array of a length decided at run time. `Array<T, N>()` builds a fixed-length one of `N` zero values
-(T8); it takes no arguments - a fill is a copy into one (T7d). Nothing else may be called as `Array`.
+storage for an array of a length decided at run time. Where `n` can be evaluated while compiling the length is known
+(T7c) - `Array<F32>(16)` - and storage the array is kept in is fixed (T7d). `Array` takes exactly one type argument;
+nothing else may be called as `Array`.
 
 **E14.** Argument count must be at least the number of the target's parameters that declare no default
 (D8a) and at most its total parameter count; there are no variadic parameters. Arguments bind
@@ -2753,7 +2801,6 @@ does:
 | float narrowing `F32(f)`, `F16(f)`, `BF16(f)` | `OVERFLOW` when a finite value becomes infinite |
 | `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
 | `x as E.Case` | `WRONG_CASE` when `x` is another case (E32) |
-| `x as Array<T, N>&` | `OUT_OF_BOUNDS` for a length other than `N` (E32b) |
 | `Array<T>(n)` | `OUT_OF_BOUNDS` for an `n` out of range - negative, or too large (D14b) |
 
 `INVALID` means what IEEE 754 means by an invalid operation: a NaN made from operands that are not NaN, or a NaN or an
@@ -2775,12 +2822,11 @@ result type is `base`'s element type. **The index is not checked at run time.** 
 the same reading C gives it, and one of exactly two places in this language where a program can reach
 storage it does not own (the other is `extern fn`, §11 X1a).
 
-Where the index and the length are **both known at compile time** — a constant index into a
-compile-time-length array — an out-of-range index written without `checked` is a **compile-time error**. That check
-costs nothing at run time and is not affected by the above. Under `checked` (E16d) the index is the checked form,
-whose failure is defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a generic over the length
-(`fn third<N I64>(a Array<I32, N>&) I32 { return checked a[2] catch default -1 }`) one instantiation may have the element
-and another not.
+Where the index and the length are **both known at compile time** — a constant index into an array whose length is
+known (T7c) — an out-of-range index written without `checked` is a **compile-time error**. That check costs nothing at
+run time and is not affected by the above. Under `checked` (E16d) the index is the checked form, whose failure is
+defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a function over a by-value array (`fn third(a
+Array<I32>) I32 { return checked a[2] catch default -1 }`) one instance (G29) may have the element and another not.
 
 **E16d.** `checked base [ index ]` (E15a) **opts in to a bounds check**: the index is checked against
 `[0, base.Len())` and an out-of-range one produces `BuiltinError.OUT_OF_BOUNDS` (§7.6) rather than reading or
@@ -2796,21 +2842,23 @@ containment above all — is stated as holding for programs that do not index ou
 checked costs nothing or is asked for: a constant index is a compile-time error (E16), a slice is always
 checked (E16b), and `checked a[i]` (E16d) checks where the program asks it to.
 
-**E16a.** `base "[" [ lo ] ":" [ hi ] "]"` is a **slice**. `base` must be an array type of either length
-kind, marked or not; `lo` and `hi` must be integer types, and either may be omitted, defaulting to `0` and
+**E16a.** `base "[" [ lo ] ":" [ hi ] "]"` is a **slice**. `base` must be an array, value or reference, of any
+length; `lo` and `hi` must be integer types, and either may be omitted, defaulting to `0` and
 `base.Len()` (E23) respectively. The result is a **borrow** of `base`'s own storage with the pointer and
 length adjusted — never a copy and never an allocation — so its type is a runtime-length reference
 `Array<T>&` whose element type is `base`'s (keeping `base`'s declared type, T29a: a slice of a `String` is a
 `String&`, with every method a `String` has - those it inherits by `extends` included, T29f), tagged (§8) to the
 scope `base`'s storage belongs to: slicing a
 local yields a reference in that local's block, slicing an array reference yields one in its referent's scope. The result has
-length `hi - lo`, and writing through it writes `base`. Slicing a local borrows its storage as a reference to it does
-(E12c): a constructor's field kept a slice or a view of (E32b) is stored where the instance lands (C2d).
+length `hi - lo` - known while compiling where T7c says (constant bounds, or `lo` and `lo + k`), which is how a
+length known only at run time is made a known one, its bounds checked once (E16b) - and writing through it writes
+`base`. Slicing a local borrows its storage as a reference to it does (E12c): a constructor's field kept a slice of is
+stored where the instance lands (C2d).
 
 Slicing a value with no storage of its own - an inline array of a call's result held by value (`mk(n).a[0:2]`), of a
 constructor's instance, a literal, a new array (`Array<T>(n)[0:2]`), a payload read with `as` from an enum held by value
 (a copy, E32), the value a `try ... catch` gives (the element or what a clause gives, a copy either way, R9a:
-`(try a[0] catch default Array<I64, 2>())[0:2]`) - borrows the **temporary** that value is made as,
+`(try a[0] catch default Array<I64>(2))[0:2]`) - borrows the **temporary** that value is made as,
 which is made in the block the slice is written in: the slice lives in that block, and goes nowhere that outlives it
 (at a constructor's top level, in the constructor's own frame, which its instance outlives). Two values are not
 temporaries made there: a call's run-time-length array result, whose storage the call builds in its result scope, which
@@ -2862,19 +2910,19 @@ out inline — `Handle&[a, b, c]` builds three instances, each with its own allo
 tag. A primitive scalar type may never carry one (T24).
 
 An element type may itself be an **array**: an `Array<T>` as a reference (T7a) - `Array<I32>&[r0, r1]` has two
-elements, references to the arrays `r0` and `r1`, each with its own length - and an `Array<T, N>` as a value (T7c),
-`Array<F32, 2>[F32[1, 2], F32[3, 4]]` being two rows of two in place.
+elements, references to the arrays `r0` and `r1`, each with its own length - and an `Array<T>` as a value, whose items
+must then have one known length (T7d): `Array<F32>[F32[1, 2], F32[3, 4]]` is two rows of two in place.
 `arr-item ::= expr | "[" [ arr-item { "," arr-item } ] "]"` — a plain expression, or a nested
 bracketed group with no restated type, for a multi-dimensional literal.
 
 **E20.** A literal's length is the number of items written - zero items, zero - and is known while compiling,
-whatever the literal is checked against. Like a numeric literal it adapts (T7d): it is an `Array<T, k>` where one of
-its length `k` is wanted, binds a parameter's `<N>` to `k` (G24), and is an `Array<T>` anywhere else - a `:=`
-(D15), a bare type variable (G9), an `Array<T>` target (E12).
+whatever the literal is checked against (T7c). Its type is an `Array<T>` (T7) everywhere - a `:=` (D15), a bare type
+variable (G9), a parameter (an instance of its length, G29) - and storage it is kept in may be fixed with its length
+(T7d).
 
 **E21.** A literal's items are never themselves bracket groups: there are no nested literals, since there
 is no multi-dimensional array (T7a). An array of arrays is a literal of references, `Array<I32>&[r0, r1]`, or of
-fixed-length arrays, each item a literal of its own (`Array<F32, 2>[F32[1, 2], F32[3, 4]]`).
+arrays held in place, each item a literal of its own and all of one length (`Array<F32>[F32[1, 2], F32[3, 4]]`).
 
 ### 5.8 Enum values
 
@@ -3214,8 +3262,8 @@ the store and the element's addition as `checked x[i] += 1` does (R21).
 reference to one (T17d), read through - is, and give its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
 whatever its payload, and `x is not Shape.Circle` whether it is not; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
 received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no payload is an error
-(`is` is the question it asks). `as` on an array is E32b's. On anything else `is` and `as` are a compile-time
-error. What follows `is` or `as` is a
+(`is` is the question it asks). On anything else - an array included, whose known length a slice gives (T7c,
+E16a) - `is` and `as` are a compile-time error. What follows `is` or `as` is a
 `type-ref`, so an `&` touching it with a name after it is that type's reference marker (§2.9): `b as Box.Val & mask` is
 an `as` to the type `Box.Val&mask`, and a compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the
 result.
@@ -3224,18 +3272,11 @@ An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); und
 `BuiltinError.WRONG_CASE` instead. `is` never fails. A null reference to an enum is no case: `is` is false and `as`
 does not hold. The safe forms are `is` before `as`, and a `match` (S13).
 
-**E32b (`as` an array of a known length).** `x as Array<T, N>&`, for `x` an array of element type `T` (an `Array<T>`
-value or reference, a slice, a declared array type over one), is `x`'s own storage seen as an array whose length
-is `N` in its type: a borrow of it exactly as a slice of it is (E16a) - the same scope, the same permission, nothing
-copied or allocated. The length is checked once, where the `as` is evaluated: a length other than `N` aborts the
-program as an out-of-range slice does (E16b), and under `checked` (E15a) fails with `BuiltinError.OUT_OF_BOUNDS`
-instead; where the length is known while compiling a mismatch is a compile-time error. `as` to an `Array<T, N>`
-value is a compile-time error - a copy into one is a declaration or an assignment (T7d). A conversion `V(x)` to a declared
-type over an `Array<T, N>` (`type V3 extends Array<F32, 3>`) is this view, read under `V`'s name (T29a).
+A part of an array of a known length is a **slice** with known bounds (T7c, E16a), checked once where it is taken:
 
 ```
-w := raw[off:off + 784] as Array<F32, 784>&       # one check here; Dot below knows N
-s := Dot(w, x)
+w := raw[off:off + 784]       # one check here; w's length, 784, is known while compiling
+s := Dot(w[0:4], x)           # Dot at length 4 (G29), if it takes its arrays by value
 ```
 
 ### 5.17 A float's bits
@@ -3410,12 +3451,15 @@ value of its own - there is no tuple type - and exists only in this statement.
 (E7/E9/E10 all produce `Bool`; any other type is a compile-time error). An `else` clause is
 optional; chaining `else if` is exactly the recursive `"else" if-stmnt` alternative. Both branches are
 checked, except where the build decides the condition (S8b; for the top-level form, see B9), or, in an
-instantiation of a generic, a constant parameter does (§12.7 G26).
+instance (§12.7 G29), a by-value array parameter's length does (G30).
 
 **S8a.** A condition that is **fixed on every build** decides nothing, so one of its branches is dead code: a
 condition that can be evaluated at compile time (K1) — however it is computed, calls included, and reading only locals
-whose values are **fixed** (S8c) — and reads **no** build constant (B10) - a default for one (B10c) included - and no
-constant variable of a generic (§12.7 G26), directly or through anything it evaluates, is a compile-time error. (To check a fixed value, `assert` it; an
+whose values are **fixed** (S8c) and lengths known while compiling (T7c) — and reads **no** build constant (B10) - a
+default for one (B10c) included - and no length an instance gives a by-value array parameter (§12.7 G30), directly or
+through anything it evaluates, is a compile-time error. A local's length is read once its function's storage is settled
+(T7d): a condition a local's first, optimistic length would fix, and its settled run-time length does not, is no
+error. (To check a fixed value, `assert` it; an
 `assert` is not an `if`.)
 
 **S8c.** A local is **fixed** when it is a plain scalar (a numeric type, `Bool`, `U8`, or an enum without
@@ -3689,8 +3733,8 @@ With no guard, `case _` is selected by any value that reaches it, as `nomatch` i
 and a clause or `nomatch` after it is never reached, which is a compile-time error. A name at the top of a clause is
 always a value compared by `==` (S13) - never a binding, since the matched value is in hand already - so a lone name
 that is not declared is an error naming `case _ if ...`, and so is the matched local itself, which would compare a
-value with itself (true but for a NaN). A `match` over a constant variable (G26) takes `case _` too - the arm
-chosen when no earlier case's value is the instantiation's constant.
+value with itself (true but for a NaN). A `match` on a by-value array parameter's length in an instance (G30) takes
+`case _` too - the arm chosen when no earlier case's value is that instance's length.
 
 **S14.** A `match` may be used on a value of any type that supports `==` (E10) — numeric, `Bool`,
 enum, or any struct/array type (compared structurally or by reference identity per E10's own
@@ -3752,18 +3796,20 @@ deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unrea
   broken guarantee from an orderly `os.Exit` (B5b).
 
 **S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.9 E16b), an
-array length out of range (§3.5 D14b), an `as` that does not hold (E32), a copy into fixed storage of another length
-(T7d) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
+array length out of range (§3.5 D14b), an `as` that does not hold (E32) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
 error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
 `FILE:LINE: reached unreachable code` (S16d, and a value `match` no clause selects,
 S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
-value is not`, `FILE:LINE: array length does not match its fixed storage`. An assert's message (S17) follows, after
+value is not`. An assert's message (S17) follows, after
 `: `. A program run with `interpret` (B3e) prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
-values are fixed (S8c), is **checked while compiling**: a false one is a compile-time error at the assert, which
+values are fixed (S8c) and lengths known while compiling (T7c) - in an instance (G29), its by-value array parameters'
+lengths among them - is **checked while compiling**: a false one is a compile-time error at the assert, which
 carries its message (S17) when that can be computed while compiling too, as is one whose evaluation reaches what aborts
-the program (K1), and a true one needs, and gets, no run-time check. This holds wherever the assert is written, reached or
+the program (K1), and a true one needs, and gets, no run-time check. In an instance the error is reported at the call
+that asked for it - the program's own call, the outermost of G16b's chain - with a note at the assert, since a length
+the call gave is what made it false. This holds wherever the assert is written, reached or
 not, so a branch that must never run says so with `unreachable` (S16d) rather than `assert false`. An assert
 in a `test` block is judged only in a test build (B3a), the only build that runs it.
 
@@ -3780,6 +3826,22 @@ place - `raised here`, `try passed it on`, `a task failed, and its join passed i
 
 In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead. A program run
 with `interpret` (B3e) prints the trace as a debug build does.
+
+**S18e (asserts decided at the call).** A function's **leading asserts** - the `assert` statements its body begins
+with, before any other statement - are also evaluated at **every call** to it, with what that call knows of its
+arguments: the length of an array argument whose length is known (T7c), the value of an argument that can be evaluated
+at compile time (K1), and a field of a struct argument that is a local of the caller built by a constructor call,
+when the field is a bare pun of a constructor parameter (C4) whose argument can be evaluated, the caller's function
+never assigns the local or that field, nor captures the local, and every call it lends the local to writably (E12a)
+goes to a function whose body - and every body that one lends it on to - never assigns that field (read off the
+bodies, as O17 reads them). Anything else about an argument is **unknown**, and an assert that reads something unknown is undecided:
+nothing is reported, and it runs at run time as written. One decided false is a compile-time error at the call, with a
+note at the assert, carrying its message (S17) where that can be computed. A constructor's leading asserts are its
+body's, at each construction - bare pun fields (C4) may come before them, since they only name parameters. This is a check only: the asserts still run in the function's body (unless S18c removes
+them there), and what it knows of a struct argument's fields is used for nothing else - no condition is decided by it
+(S8a, S8b). So with `type Ring<T> struct(cap I64) { assert cap > 0 and (cap & (cap - 1)) == 0 ... }`, `Ring<I32>(6)` is a
+compile-time error at the call, and a matrix product beginning `assert a.Cols == b.Rows` is one at a call whose
+matrices were built from constants the caller never changes.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
 error leaving the test (S16) — runs the
@@ -4606,7 +4668,7 @@ slot's scope as O4 and O4a give it, bound at the relevant call (§8.6); a nested
 independent of its immediate container's.
 
 **O7.** An array's storage (T11) is always allocated this way, whether or not the array carries a marker:
-`Array<T>(n)` (§3 D14) is built in the scope of whatever it lands in, and only a literal or an `Array<T, N>` (T7c)
+`Array<T>(n)` (§3 D14) is built in the scope of whatever it lands in, and only fixed storage (T7d)
 is laid out in place - in the value holding it, or, for a local, in storage of the local's own, which an
 implementation may set aside in the local's block's scope (unobservably, since it lives exactly as long).
 
@@ -5162,8 +5224,8 @@ reference parameter (whose instance keeps it, which counts as handing the region
 where something can be stored through what the value holds (O25g, by its type), read-only or not: a reference to a value
 takes everything reached through it to live where the value does (O20), so building through `br.head.next` would build
 in the copy's block and hang the result off the source's node. The value itself is written through instead
-(`b.head.next = Node()` builds where `b`'s references live, O25h). Nor is such a value **sliced** (E16a) or **viewed**
-(`as Array<T, N>&`, E32b) where something can be stored through it: a slice is a reference to its storage, and is held,
+(`b.head.next = Node()` builds where `b`'s references live, O25h). Nor is such a value **sliced** (E16a) where
+something can be stored through it: a slice is a reference to its storage, and is held,
 returned and passed as any reference is, so it would carry the storage's scope away from where the references live -
 its elements are indexed in place instead (`b[i]`), or the whole value lent to a call. `for x in b.items` over such a value walks it through a
 reference of its own making, which it uses only to read the elements out and for its own calls (`At`, `Len`, `RunFrom`,
@@ -5416,13 +5478,13 @@ whose body is being checked when its call is (a call inside its own body) binds 
 (C2a), so what its body allocates at its top level is allocated where the instance lands (C2c), never in a scope that
 closes at its return: a field's referent, what a call through a field builds while the constructor runs (`items.Push(6)`
 growing a `List` the instance holds - a use-after-free once, the list's chunk left in the closing scope), and a field's
-own storage where a reference to it, a slice of it or a view of it (E16a, E32b) is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
+own storage where a reference to it or a slice of it (E16a) is taken. Its nested blocks keep scopes of their own (O2) for what is made in them,
 but a call through a field written in one - `for i in range n { left.Push(i) }` - builds where the field is, in the
 instance's scope, as at the top level. A constructor's **by-value parameters** are slots of its frame, which closes at
 its return: shorter-lived than the instance, they are read as storage of an inner block, so a reference field is not
 given a borrow of one (`keep P& = p`, or a result borrowed from `p`) - a field punning one, or copying one (`q := p`),
 is a copy into the instance, which a reference field may be given. Storage a stack frame would hold but for its size (§2
-T7c, over 64KB) is the frame's, not the instance's: it comes from the constructor's own scope, the instance copied out
+T7d, over 64KB) is the frame's, not the instance's: it comes from the constructor's own scope, the instance copied out
 before it closes - and so does a temporary made at its top level, so a field keeping a slice of one
 (`r Array<I64>& = Big(n).a[0:2]`) is a compile-time error (E16a).
 What a reference field written with a bare `&` is given, initialized or assigned, must live as long as the instance.
@@ -5437,11 +5499,14 @@ l Link& = Link(1, Link(2, null))                           # the inner Link is a
 type Cursor struct(of List&) { list List&of = of }        # a Cursor may be shorter-lived than its List
 ```
 
-**C2e (superseded by T7c).** An array stored in the instance itself is a field of a fixed-length array type,
-`m Array<F32, 16>` or `blob Array<I64, MutexWords>` - its length any constant argument (§12.7 G21), and in a
-generic type one its arguments compute (`Array<T, N * 2>`). Copying an array into one is T7d's checked copy. An
-`Array<T>` value field is T7a's error whatever initializes it - `m Array<F32> = Array<F32>(16)` is written
-`m Array<F32, 16>`.
+**C2e (inline array fields).** An array stored in the instance itself is a value array field whose declaration gives
+it a known length the same for every instance (T7d): `m := Array<F32>(16)`, `m Array<F32> = Array<F32>(16)`,
+`lock := Array<I64>(MutexWords)` - its length anything T7c knows that reads no constructor parameter (a constant, a
+call the evaluator can run, a literal), and in a generic type one each instantiation computes. A value array field
+given no such length - none at all, one reading a parameter (`Array<F32>(n)`), a pun of a by-value array parameter,
+whose length is each call's - is T7a's error: hold it by reference, `m Array<F32>& = Array<F32>(n)`, or give it its
+length. What is stored into one later must have that length (T7d); a value whose length is known only at run time is
+copied in through a slice of it, `m = v[0:16]`, checked once (E16b).
 
 **C2b.** A `return` statement is a compile-time error anywhere in a `ctor-body`. A constructor
 produces no value of its own to return: the instance is assembled by the language from the field
@@ -6040,7 +6105,7 @@ be got wrong, but does not close it.
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } [ "," ] ]`, where `extern-param ::= IDEN
 extern-type`, and `extern-ret-type ::= extern-scalar-type`. `extern-type` is exactly one of: a
 numeric primitive type (T4/T5 - this is also exactly `extern-scalar-type`), or an array type (T7,
-compile-time-length or runtime-length) whose element type is itself one. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
+of any length) whose element type is itself one. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
 return type is never valid (see X3 for why). No other type — `Bool`, a struct, an enum type, an
 error type, a function type, or an array of any type outside the numeric-primitive set —
 is valid in an `extern-param` or `extern-ret-type` position, with one exception: a parameter of one of the runtime's
@@ -6050,7 +6115,7 @@ itself, and only before it returns; no C function is ever handed one.
 
 **X3.** An array-typed `extern-param` (X2) is passed as a pointer to the array's own first element
 only — never its length (a runtime-length array's own `{ len, ptr }` representation, T11, is reduced to
-just the pointer half; a compile-time-length array's own embedded address is used directly). This pointer is
+just the pointer half; fixed storage's own address, T7d, is used directly). This pointer is
 never itself a nameable value or type anywhere in this language — it exists only at this one
 marshalling boundary. If the external function also requires the array's length, the declaration
 states it as a separate `extern-param` (X2) of an integer type, supplied explicitly by the caller
@@ -6066,8 +6131,9 @@ captured, or nothing for a named function - which the code takes as its one argu
 context pointer.
 
 **X3a (foreign opaque storage).** A foreign type with no olang spelling — a `pthread_mutex_t`, say — is held as an
-`Array<I64, N>` (or another fixed-length array, T7c) and handed over by X3's marshalling. Three things make that
-sound, and only the first is about `N`:
+array of `N` elements laid out in place - an inline field `lock := Array<I64>(MutexWords)` (C2e), or a local
+`Array<I64>(N)`, fixed storage either way (T7d) - and handed over by X3's marshalling. Three things make that sound,
+and only the first is about `N`:
 
 - **`N` is an upper bound, never an exact size.** Nothing embeds the blob by value; the foreign side only
   ever receives a pointer to it, so reserving more than it uses is harmless and reserving less corrupts.
@@ -6076,7 +6142,7 @@ sound, and only the first is about `N`:
   sizes for `pthread_mutex_t` depending on the machine.
 - **The element type supplies the alignment.** An array is aligned as its element type is, and an aggregate
   containing one is laid out by the same natural-alignment rule the platform's C compiler uses (§3.2) — so an
-  `Array<I64, 8>` is 8-aligned wherever it sits, inline in a struct (T7c) or in the arena, while an `Array<U8, 64>`
+  `Array<I64>(8)` is 8-aligned wherever it sits, inline in a struct (T7d) or in the arena, while an `Array<U8>(64)`
   has alignment **1** and may land at any offset in its container. A foreign type holding a pointer, or performing
   an atomic operation on itself, cannot tolerate that. Choose the element type for the alignment the foreign type
   needs and divide the reservation by its size; `U8` is the wrong choice for almost every foreign type, and is right
@@ -6167,8 +6233,10 @@ A declaration naming one of these with any other prototype is an ordinary extern
 
 ## 12. Generics
 
-A function or a struct type may be **generic**: parameterized over one or more types, and over constants (§12.7),
-with a separate copy compiled for each distinct set of arguments it is used with. Enum and error types can
+A function or a struct type may be **generic**: parameterized over one or more types, with a separate copy compiled
+for each distinct set of arguments it is used with. A type's parameters are types only: a length, a flag or any other
+value a declaration is compiled for is never written as a parameter - a function taking an array by value is compiled
+per length instead (§12.7), and a value known while compiling decides what it can there (T7c, K1). Enum and error types can
 never be generic — an error type references no other type (T19), and an enum's payloads name their types as written (T17a), so there is nothing to
 parameterize - and neither can a declared number or array type (T29); a type-parameter list on any of them is a
 compile-time error at its declaration. A trait may be (T35a).
@@ -6186,7 +6254,9 @@ type-param     ::= IDEN [ type-expr ]
 ```
 
 An `IDEN` alone, or followed by a trait, introduces a type variable (the trait its constraint, G19); followed by any
-other type it introduces a constant variable of that type (G22). The names of one list are distinct. `IDEN` must not
+other type it is a compile-time error saying a type parameter's constraint is a trait - there are no constant
+parameters (a length is the one thing a function is compiled for besides its types, and it comes from an array taken
+by value, §12.7). The names of one list are distinct. `IDEN` must not
 name a type the referencing module can name - one it declares or imports by bare name (D2), a prelude type, `Array` or
 a primitive; listing such a name (or declaring it as a generic type's parameter) is a compile-time error, reported once
 where it is written, since `<Point>` would otherwise read as parameterizing over something already concrete.
@@ -6199,8 +6269,7 @@ variable is bound to a concrete type by instantiation.
 
 **G3.** A function is generic exactly when it introduces a variable: by its `fn-type-params` after its name (D7), or by
 its receiver (G3b). Its variables are in scope, written bare, in its whole signature - receiver, parameters, results,
-error set, in any order - and in its body, and every `T` there is one and the same type. A constant variable (G22) is
-one of the function's parameters in the same way. Type arguments are never written at a call (G9).
+error set, in any order - and in its body, and every `T` there is one and the same type. Type arguments are never written at a call (G9).
 
 ```
 fn max<T>(a T, b T) T { ... }
@@ -6209,8 +6278,7 @@ fn pairUp<A, B>(a A, b B) A { ... }
 
 **G3b (a method's receiver).** A method whose receiver's type is an application of a generic type introduces, bare,
 every name written as one of that type's arguments, at any depth, that names no type and that its own list does not
-introduce - as Go's methods do: `fn (l List<T>&) Push(x T)`, `fn (m Map<K, V>&) Len() I64`, `fn (m Matrix<T, R, C>&)
-Rows() I64` (a constant variable, G22, by the type's parameter). Such a method is a method of every application of the
+introduce - as Go's methods do: `fn (l List<T>&) Push(x T)`, `fn (m Map<K, V>&) Len() I64`. Such a method is a method of every application of the
 type (G8a). Its own list introduces only what the receiver does not - a variable of its own (`fn (l List<T>&) Map<U>(f
 fn(x T) U) List<U>&`), or a receiver variable's constraint (`fn (c Cell<T>&) Show<T Shape>()`). A receiver that is a
 type variable itself - a trait's default (M19e) - is introduced by the method's list, with its constraint and the
@@ -6231,8 +6299,7 @@ parameters), and `less` is called inside the body as an ordinary function value.
 
 **G4.** Every type variable of a generic function must appear in at least one *parameter's* type. A
 variable appearing only in the return type or only in the error list is a compile-time error, since
-nothing at a call could determine it. A constant variable must appear as the **whole** argument of a constant
-parameter in at least one parameter's type (G24). Either is reported once, at the declaration, saying to introduce the
+nothing at a call could determine it. It is reported once, at the declaration, saying to introduce the
 variable in a parameter's type; the function's body is then not checked and its calls report nothing more, since no
 call could give it the variable's value.
 
@@ -6246,9 +6313,8 @@ is the same for every instantiation.
 `type-params ::= "<" list(type-param) ">"` and `type-param ::= IDEN [ type-expr ]` (G1). Each `IDEN`
 declares a parameter, unique within the list, in scope throughout the whole declaration - the list's own constraints,
 the constructor's `param-list` and error list (C1), every field, and the `destruct` block (C7) - written there as its
-bare `IDEN` (G8b). An `IDEN` alone, or followed by a
-trait, declares a **type parameter** (the trait its constraint, G19); followed by any other type it declares a
-**constant parameter** of that type (G20).
+bare `IDEN` (G8b). Every parameter is a **type parameter**: an `IDEN` alone, or followed by a trait, its constraint
+(G19). An `IDEN` followed by any other type is a compile-time error saying a type parameter's constraint is a trait.
 
 ```
 type Buf<T> struct(cap I64) {
@@ -6263,9 +6329,9 @@ what a type argument list (G8) supplies positionally; a function's list fixes no
 arguments are inferred (G9) and never written.
 
 **G8.** `type-ref` (T24) is extended to accept a **type argument list**:
-`type-args ::= "<" list(type-arg) ">"`, `type-arg ::= type-expr | const-arg`, written immediately after
-the name and before any reference marker. A type parameter takes a `type-expr`, a constant parameter a `const-arg`
-(G21). The count must equal the named type's own `type-params` count exactly. A generic
+`type-args ::= "<" list(type-expr) ">"`, written immediately after the name and before any reference marker. The
+count must equal the named type's own `type-params` count exactly - `Array`'s being one (T7), so `Array<I32, 3>` is
+that error. A generic
 type is never valid without one — a bare reference to a generic type name is a compile-time error.
 Within a `type-args` list a type variable is written as anywhere else (G8b) - bare, so a
 generic declaration may instantiate another generic with its own parameter (`Vec<T>` inside a declaration that
@@ -6310,6 +6376,11 @@ Parts of a lambda left unwritten are taken from the function type once its varia
 once the other arguments have bound its variables, as at any call - so `GemmAct(c, a, false, b, false, null, act)`,
 whose fifth parameter is a `Matrix<T>&`, is `GemmAct` at the element type `c` binds. A variable only `null` reaches
 cannot be inferred.
+
+An array argument binds a variable with what is known of its length: an array value of known length (T7c) binds it
+to an array of that length, one instantiation per length (D9b, G16a), and two arguments binding one variable to arrays
+of different lengths, or one of a length known only at run time, bind it to the array whose length is known only at
+run time, as two numbers meet at the wider (T6b).
 
 **G9b.** Matching runs left to right, the receiver of a method first. An argument whose parameter is a bare type
 variable already bound by an earlier argument takes no part in it: the argument is then checked against the
@@ -6404,7 +6475,6 @@ value and may be used wherever a function value is expected.
 type's parameter list having introduced it (G3) - with each `case` naming one or more
 `type-expr`s (S13c: `case I32, U32 { }`) instead of value expressions, and no guard (S13e). This form is resolved
 when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
-`match N` over a constant variable takes values in its cases instead, decided per instantiation (G26).
 
 ```
 fn writeVal<T>(fd I32, v T) I64 ? IoError {
@@ -6437,160 +6507,72 @@ structural comparison (E10).
 ever-growing set of further instantiations is a compile-time error, reported once. The depth at which this is
 reported is implementation-defined: an instantiation whose type arguments nest more than 48 types deep (an array its
 element, an instance its arguments, a function its parameters and result) is taken to be one, and so is an
-instantiation reached through a chain of more than 1,000 instantiations each of which required the next - which is
-how a constant argument that keeps changing shows (`f` at `N` calling `f` at `N + 1`, G26).
+instantiation reached through a chain of more than 1,000 instantiations or instances (G29) each of which required the
+next - which is how a length that keeps changing shows (`f` at 3 calling `f` at 4, G30).
 
 **G16b (where an instantiation was asked for).** A compile-time error found while checking an instantiation - in its
-body, its fields, a constraint (G19) or a value check (G27) - is reported where it is written, followed by a note
+body, its fields, a constraint (G19) or an assert (S18c) - is reported where it is written, followed by a note
 for the type or call that asked for that instantiation, with its arguments, and one for each instantiation that led
 there in turn: of a long chain the innermost few, and always the outermost - the program's own use that began it.
 An error about where something lives (§8) found at one place of a generic's body is the same error for every
 instantiation, and is reported once; what its notes suggest writing is spelled with the generic's own variables
 (`n mut Node<K, V>&c`), as the declaration writes them.
 
-### 12.7 Constant parameters
+### 12.7 Instances per array length
 
-A generic may be parameterized over **values** as well as types: a matrix over its dimensions, a buffer over its
-capacity, a kernel over a flag. Such a parameter is a constant - computed while compiling, the same in every use of one
-instantiation - so the code compiled for it knows it, and a mismatch between two of them is found while compiling.
+A length is never a parameter of a declaration (§12). A function compiled for a length gets it from an array it takes
+by value, and only there: one copy of the function is compiled for each length its calls give it, as a generic is
+compiled for each set of type arguments.
 
-**G20 (constant parameters).** A generic struct type or trait declares a **constant parameter** by following a name in
-its parameter list with the parameter's type (G6):
+**G29 (instances).** A function, method or constructor one of whose parameters holds an array **by value** at some
+level (D9a) - the parameter itself (`a Array<F32>`), or the elements of an array under a reference (`m
+Array<Array<F64>>&`) - is compiled once for each distinct set of **lengths** its calls give those levels, an
+**instance**; a generic one once for each instantiation and set of lengths. Each call gives the lengths its arguments
+have, which must be known while compiling (T7c, D9a). In an instance every such level is fixed storage of its length,
+so its `Len()` is a constant (T7c) and loops over it have a known count. Every rule of this specification applies to
+each instance as to a generic's instantiation (G16): each is checked against its lengths, errors found in one carry
+G16b's notes, a chain of instances each asking for the next is bounded by G17, D9c's 128 bytes are checked per
+instance, and an instance is named by its function and its lengths, told apart as G16a tells instantiations apart and
+defined only by the program's root object (§10 B3d), since a module's own object cannot know what lengths its callers
+give it. A function holding a by-value array level has no copy but its instances, so it is made a function value
+(T21) only where the function type gives the level a length (D9a) - that instance. A reference level makes no instance:
+an array reached through `a Array<F32>&` has a length known only at run time inside the function.
 
 ```
-type Matrix<T, R I64, C I64> struct() {
-    data Array<T, R * C>
+fn dot(a Array<F32>, b Array<F32>) F32 {
+    assert a.Len() == b.Len()               # decided in each instance (S18c): a mismatch is an error at the call
+    s F32 = 0.0
+    for i in range a.Len() { s = s + a[i] * b[i] }
+    return s
 }
-type Ring<T, N I64> struct() { ... }
-type Grid<T, L Layout> struct() { ... }      # Layout an enum whose cases carry no payload
+d := dot(F32[1.0, 2.0, 3.0], F32[4.0, 5.0, 6.0])   # dot at 3 and 3
 ```
 
-A constant parameter's type is an integer type (T5), `Bool`, a declared type over one of those (T29 - `Char` among
-them), or an enum none of whose cases carries a payload; and it declares no `Eq` (E10a), since two arguments are the
-same exactly when their values are. Any other type there - a float, an array or text, a struct, an enum with payloads,
-a reference, a function type, a type variable - is a compile-time error: a float's `==` is no identity (a NaN is
-unequal to itself, `-0.0` equal to `0.0`), and the rest have no value that is both compared and spelled while
-compiling. Which a parameter is, a type or a constant, is decided by what follows its name: nothing or a trait
-(G19) makes a type parameter, any other type a constant one.
-
-**G21 (constant arguments).** The argument for a constant parameter is a **constant argument**,
-`const-arg ::= expr`: an expression of the parameter's type that can be **evaluated at compile time** (§13 K1) - a
-literal, a literal-only expression (E4a), a constant variable (G22, written `N`), an immutable global or a build constant (B10),
-arithmetic on these, a call the evaluator can run. It fits the parameter's type as a value fits a target (E12): a
-literal adapts (T6) and a narrower integer flows (T6b), so `Array<F32, 3>`, `Array<F32, Width * 2>` and
-`Array<U8, pageSize()>` read as they are written. It is computed exactly as the program computes the same expression:
-in its operands' types - a literal adapting, two values meeting (T6b, E6d) - wrapping where the program wraps (E6c),
-a conditional computing only the value it chooses (E28) and `and`/`or` short-circuiting (E7). So with `B U8 = 255`,
-`Array<I32, B + 1>` has length 0, as `B + 1` is 0 in the program, and `K<18446744073709551615>` is a `U64` argument as
-the literal is a `U64` (L10). One that cannot be evaluated is a compile-time error naming the operation that stops it
-(K1a). It is evaluated once - in a generic declaration once per instantiation, after the constant variables it reads
-are bound.
-
-Whether an argument is a type or a value is decided by the parameter it is written for, so a name written alone for a
-constant parameter is a value - a global, a build constant (`Array<U8, BufSize>`) - and never a type. Inside a
-type-argument list the comparison and shift operators `<`, `<=`, `>`, `>=`, `<<` and `>>` are written only within
-parentheses, since a bare `>` there ends the list: `Array<U8, (1 << 12)>`, `Flag<(Width > 64)>`.
-
-**G22 (constant variables).** A generic's constant variable follows the introduction rule (G8b): it is
-**introduced** by a list, or by a method's receiver, and written bare everywhere. In a struct type or trait the
-parameter list introduces its constant parameters, and the whole declaration - fields, constructor, destructor, a trait's
-method signatures - writes each bare: `R`, `C`. In a function its list after the name introduces it (`N`, or `N I64`
-carrying its type), or a receiver does (`fn (m Matrix<T, R, C>&)`, G3b), and the signature and body write `N`. Its type
-is the one its list item writes, else that of the constant parameters it fills; a function's variable standing as no
-whole argument and carrying no type has none, and is G4's error anyway.
+**G30 (decided per instance).** In an instance, an `if` whose condition reads the length of a by-value array parameter
+(`a.Len()`, at any level G29 names) - or of a value of a type variable an instantiation binds to an array of known
+length (D9b) - and can then be evaluated at compile time (K1, reading no other parameter and no local), is **decided
+per instance**, and so is a conditional expression (E28) whose condition is such, and a `match` (S12) whose subject is
+such a length: only the branch, value or clause chosen is checked and compiled for that instance, and the others are
+not checked against it at all, as G14 says of a type match's other arms. Such a condition is configuration, as one
+reading a build constant is (S8b), never S8a's dead code; one that cannot be evaluated is an ordinary condition, both
+branches checked. Every branch is still parsed, the body being one for all instances; the chosen one behaves as a block
+in its place, an `if` none of whose branches is chosen is nothing, and a `match` used as a value (S12b) choosing
+nothing is a compile-time error at the instance. That is what lets one function do what only some of its lengths can,
+and what ends a recursion on a length:
 
 ```
-fn Dot<T, N>(a Array<T, N>&, b Array<T, N>&) T { ... }
-fn (a Matrix<T, M, K>&) Mul<N>(b Matrix<T, K, N>&) Matrix<T, M, N> { ... }
-fn Concat<T, N, M>(a Array<T, N>&, b Array<T, M>&) Array<T, N + M> { ... }
-fn Widen<N I64>(a Array<I32, N>&) Array<I32, twice(N)> { ... }
-```
-
-A name is a type variable or a constant variable, never both; every constant
-parameter one constant variable fills has its type, and the type written at an introduction is never a trait (G19
-constrains types; what values a constant may take is G27's). Each is a compile-time error at the declaration. A
-constant variable's name may not be that of a value the declaration can see - a global, a function, a build constant,
-a parameter or a local (D3a) - so a bare `N` means one thing
-wherever it is written.
-
-**G23 (a constant variable is a value).** A constant variable is also a **primary expression** (E1), written bare,
-wherever it is in scope - the declaration's body, its fields and constructor, its constant arguments; `<N>` there is
-G22's error. It is the instantiation's value of the parameter, of the parameter's type: a value, not a place, and not a
-literal - it adapts to no other type, flowing only as any value of its type does (T6b), so `I32(N)` narrows one. It is
-the same in every use within an instantiation, may be a method's receiver (`N.Hash()`), and a lambda (D16c) uses it
-without capturing anything.
-
-```
-for i in range N { s = s + a[i] * b[i] }
-cells I64 = R * C
-```
-
-A type variable is no value: reading one as a constant is a compile-time error (`match T`, G13, takes a type variable
-as its operand by a form of its own).
-
-**G24 (inference by value).** At a call, constant variables are bound by the same matching that binds type variables
-(G9): where a constant variable is the whole argument of a constant parameter in a parameter's type - `N` -
-the value the actual argument's type has there binds it. An `Array<F32, 3>` given for `Array<T, N>&` binds `T` to
-`F32` and `N` to 3; a `Matrix<F32, 32, 784>` and a `Matrix<F32, 784, 128>` given to `Mul` bind `M`, `K` and `N` to 32, 784 and 128.
-Two positions binding one variable to different values is a compile-time error at the call, naming both values - a
-`Matrix<F32, 32, 784>` times a `Matrix<F32, 10, 128>` is that error, with nothing run. An argument whose type does
-not hold the value - an `Array<T>`, whose length is known only at run time - binds nothing, and the call is a
-compile-time error saying to write `x as Array<T, N>&` (E32b). An array literal binds by its length (T7d).
-
-A constant argument that is an expression of constant variables (`N + M`) is never solved for: it is computed
-once its variables are bound, and the argument written at that position must then have exactly that type. A call
-writes no arguments for its callee's variables, so a constant no parameter carries - `fn Identity<T, N>() Matrix<T, N,
-N>` - is G4's error; a value of such a type comes from its constructor, whose type's arguments are written
-(`Matrix<F32, 3, 3>()`, G10a) or inferred from its own arguments as here (G10c).
-
-**G25 (identity).** Two applications of one generic are the same type exactly when every type argument is the same
-type and every constant argument has the same value (G10). Values are compared once evaluated, so `Matrix<F32, 2 + 1,
-4>` is `Matrix<F32, 3, 4>`, and `Array<U8, BufSize>` is `Array<U8, 4096>` when `BufSize` is 4096. Each distinct value
-is its own instantiation (G16), told apart by the parameter's type and the value (G16a): `Array<F32, 3>` and
-`Array<F32, 4>` are two types (T7c).
-
-**G26 (decided per instantiation).** In an instantiation every constant variable has its value, so a condition reading
-one is known while compiling. An `if` whose condition reads a constant variable - `N` written in it - and can be evaluated at compile
-time in the instantiation - by K1, reading no parameter and no local - is **decided per instantiation**, and so is a
-conditional expression (E28) whose condition is such, and a `match N` over a constant variable: only the branch,
-value or clause chosen is checked and compiled for that instantiation, and the others are not checked against it at
-all, as G14 says of a type match's other arms. Such a condition is configuration, as one reading a build constant is
-(S8b), never S8a's dead code; one that cannot be evaluated (it calls something that cannot be) is an ordinary condition,
-both branches checked. Every branch is still parsed, the body being one for all instantiations; the chosen one behaves
-as a block in its place, and an `if` none of whose branches is chosen is nothing. `match N` takes values in its cases
-(`case 0`, `case 1, 2`, `case Layout.RowMajor`) and no guard (S13e): the first case holding the constant's value is
-chosen, else the `nomatch`; a `match N` statement choosing nothing is nothing, and one
-used as a value (S12b) choosing nothing is a compile-time error at the instantiation.
-
-That is what lets one generic do what only some of its instantiations can, and what ends a recursion on a constant:
-
-```
-fn Total<N I64>(a Array<I64, N>&) I64 {
-    if N == 0 { return 0 } else { return a[0] + Total(a[1:] as Array<I64, N - 1>&) }
+fn total(a Array<I64>) I64 {
+    if a.Len() == 0 { return 0 } else { return a[0] + total(a[1:]) }   # a[1:] has a known length: one less (T7c)
 }
 ```
 
-`Total` at 0 checks only `return 0`; at 3 it checks the `else`, which asks for `Total` at 2.
+`total` at 0 checks only `return 0`; at 3 it checks the `else`, which asks for `total` at 2.
 
-**G27 (checking a constant's value).** A rule about the value a constant parameter may take is an `assert` (§6.7):
-one reading constant variables, and otherwise only what K1 can evaluate, is decided while compiling each
-instantiation (S18c), and a false one is a compile-time error at the assert, with G16b's note naming the type or call
-that asked for the instantiation. Written in a type's constructor body it is decided for every instantiation of the
-type, whether or not an instance is ever built, since the constructor is compiled with each (G10b); written in a
-function's body, for every instantiation of the function. There is no other syntax for it.
-
-```
-type Ring<T, N I64> struct() {
-    assert N > 0 and (N & (N - 1)) == 0       # Ring<I32, 6> is a compile-time error here
-    items Array<T, N>
-    head I64
-}
-```
-
-**G28 (traits and constants).** A trait may declare constant parameters too (G20), its applications told apart by them
-as a struct type's are (G25), and a constant variable introduced in a constraint's arguments (`<V Shaped<R, C>, R, C>`,
-each listed) is bound through the constrained type's methods, as G9c binds a type variable. No trait constrains a constant: what
-values a constant may take is G27's.
+**G31 (a function's asserts on lengths).** A rule about the lengths a function's by-value arrays may have is an
+`assert` (§6.7) in its body: one reading those lengths and otherwise only what K1 can evaluate is decided in each
+instance (S18c), a false one a compile-time error at the call that asked for the instance. A rule about a reference
+parameter's length, or about any argument, is an `assert` too, and the leading asserts of every function are decided
+at each call where what the call knows decides them (S18e). There is no other syntax for it.
 
 ## 13. Compile-time evaluation
 
@@ -6640,8 +6622,7 @@ atomic) runs out of the budget below and is refused; a lock or a channel is reac
 already.
 
 Reaching what **aborts the program** - `unreachable` (S16d), an `assert` whose condition is false, or a
-guaranteed check failing (a slice out of range, E16b; an array length out of range, D14b; an array copied into fixed
-storage of another length, C2e) - ends the evaluation there, as it ends the program. Only reaching one does: a
+guaranteed check failing (a slice out of range, E16b; an array length out of range, D14b) - ends the evaluation there, as it ends the program. Only reaching one does: a
 function holding one (a `catch { unreachable }` clause, say) is evaluated like any other until it does (K1a). Where a
 value is **required** - a global's initializer, which always runs (K2), or an `assert` checked while compiling (S18c) -
 reaching one is a compile-time error at the global or the assert, as a false assert is; where evaluation is only
@@ -6653,8 +6634,11 @@ the growth (the program's call, where the growth is made inside the prelude). At
 elements, which no program means, so where a value is required it is a compile-time error as reaching an abort is, and
 under `interpret` the program stops there.
 
-The length of an `Array<T, N>` (T7c) is `N` whatever holds it, so reading it - `a.Len()` on a parameter, say -
-reads nothing that varies and can always be evaluated; a constant variable (§12.7 G23) is its instantiation's value.
+A length known while compiling (T7c) is a constant whatever holds it, so reading it - `a.Len()` on a by-value
+parameter in an instance (G29), say - reads nothing that varies and can always be evaluated. At a call deciding a
+callee's leading asserts (S18e) evaluation runs with arguments **partly known** - an array by its length alone, a
+struct by some of its fields: reading a part that is not known makes that evaluation undecided, which is neither a
+value nor an error, and leaves the assert to the run time.
 
 Under `interpret` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused - tasks excepted, which `interpret` does not run yet (B3e).
