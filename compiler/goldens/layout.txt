@@ -5645,7 +5645,7 @@ compiler/generic:instance	56 8	%"compiler/generic:instance"	{ i64, i32, i32, { i
 compiler/generic:pattern	32 8	%"compiler/generic:pattern"	{ ptr, i64, i64, i32 }	fields 0,8,16,24
 compiler/generic:varRow	24 8	%"compiler/generic:varRow"	{ i64, i32, i32, i32 }	fields 0,8,12,16
 compiler/load:Import	64 8	%"compiler/load:Import"	{ %"compiler/source:Span", %"compiler/source:Span", { i64, ptr }, { i64, ptr }, i64, i64 }	fields 0,8,16,32,48,56
-compiler/load:Loader	104 8	%"compiler/load:Loader"	{ { i64, ptr }, ptr, ptr, ptr, ptr, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", i64, { i64, ptr }, { i64, ptr } }	fields 0,16,24,32,40,48,56,64,72,88
+compiler/load:Loader	112 8	%"compiler/load:Loader"	{ { i64, ptr }, ptr, ptr, ptr, ptr, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", { i64, ptr }, { i64, ptr } }	fields 0,16,24,32,40,48,56,64,72,80,96
 compiler/load:Loader&	8 8	ptr	-	-
 compiler/load:Module	256 8	%"compiler/load:Module"	{ { i64, ptr }, { i64, ptr }, { i64, ptr }, i1, i64, i1, ptr, ptr, { i64, ptr }, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", ptr, ptr, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", ptr, ptr, ptr, i1, i1, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,16,32,48,56,64,72,80,88,104,112,120,128,136,144,152,160,168,176,184,192,200,208,216,224,232,240,241,248
 compiler/load:Module&	8 8	ptr	-	-
@@ -11032,7 +11032,7 @@ std/prelude/map:mapState<compiler/types:DeclId, I64>&	8 8	ptr	-	-
 == compiler/olang.olang
 Array<compiler/emit:Object>&	16 8	{ i64, ptr }	-	-
 compiler/olang:Bad	4 4	i32	-	-
-compiler/olang:CommandLine	96 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", { i64, ptr }, i1, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", { i64, ptr }, { i64, ptr }, i1 }	fields 0,8,16,32,40,48,56,72,88
+compiler/olang:CommandLine	112 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", { i64, ptr }, i1, %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", { i64, ptr }, { i64, ptr }, i1, { i64, ptr } }	fields 0,8,16,32,40,48,56,72,88,96
 compiler/olang:CommandLine&	8 8	ptr	-	-
 compiler/olang:Passes	8 8	%"compiler/olang:Passes"	{ i64 }	fields 0
 fn() compiler/olang:CommandLine	16 8	{ ptr, ptr }	-	ret %"compiler/olang:CommandLine" pass 
