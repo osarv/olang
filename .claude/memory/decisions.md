@@ -770,3 +770,10 @@ errors and documentation - generic `+` already works).
   closed traits); constraints side by side = intersection (`<T Shape House>`); `trait A extends B, C`; NO inline type
   lists for now (additive later as `<T (I32, F64)>`); explicit type arguments `big<I64>`; no `:`. Run-time traits to
   be discussed before building.
+- CONTRACTS OPEN 2026-10-24 (asked, numbered): 1 conditions read parameters, constants, immutable globals, evaluable
+  calls (no mutable globals); 2 `checked f(x)` fails with BuiltinError.CONTRACT; 3 test and -debug builds check every
+  contract at entry (rec yes); 4 a function with conditions may be a value, calls through it unchecked; with a written
+  scope relation it may not (T22a); 5 no conditions on trait methods for now; 6 no `ensures` for now; 7 constructors
+  take conditions; 8 a command printing the inferred signature (`olang explain FILE NAME` or a `signature` mode).
+  Decided earlier today: brackets after the parameter list, comptime-evaluable conditions decided at known calls,
+  `checked` at run time, `outlives`, leading asserts no longer decided at calls.
