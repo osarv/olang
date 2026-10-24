@@ -22383,3 +22383,144 @@ A local that is moved is still judged against its new scope by the obligations i
 failing checks cases, captured with the compiler before and after the change, differ only in the two new
 `ctorlambdafield` cases. `o26aderived` runs the review's t17 in one module, by reference and by value, under
 `-debug -sanitize`. The cross-module t17 from the review also runs clean, and `interpret` agrees.
+
+## Port M9, round 8: compile speed (2026-10-24)
+
+The user: "Making compilation faster is going to matter a lot." Round 7 left a list in order of measured payoff, and
+this round worked down it. Every comparison below ran interleaved, the compiler before this round (e2be2cd's, built by
+itself) against the one after, on a machine with four cores. The machine was quieter than in round 7, so the same clean
+build that took 92 s there took 31 s here.
+
+**Where a leaf edit went before this round** (a function added to fmt.olang, 4.8-5.2 s): load 0.1 s, check 0.7, scope
+0.4, lower+emit 1.6, clang's compiles 0.5, the ThinLTO link 1.3. lower+emit was a third of it, lowering and writing again
+44 modules whose objects were already there. The process touched 1.16 GB, and a fifth of its time was system time:
+301,000 page faults, and 199,000 `mprotect` calls from glibc growing the arena of the thread the compiler runs on, one
+page at a time.
+
+What was changed, each committed alone. None of it changes what a program means.
+
+1. **A module whose inputs did not change is not lowered or emitted again (B3i).** B3d already said that a module's
+   object depends only on the module, its imports and the build's mode. So each module now gets a key: the SHA-256 of
+   its own text, identity and paths, those of every module its imports reach (the prelude's included), this compiler
+   (its path, size and time), the build's modes, target and build constants, and the directories it runs in. The IR one
+   emission wrote is kept under that key, in `build/rec/NAME.KEY`. The record holds the module's parts, their IR's
+   hashes, the IR the module's items took, whether its objects were cut, and the symbols of the instances its objects
+   name. The IR itself is kept as `NAME.KEY.pN.ll`. Every file is written under a temporary name and renamed into
+   place.
+   A later build that finds the key does not lower or write the module. It declares each of the module's functions
+   that another object names, and it makes the instances the record names in the root's object, as before. The module
+   is still checked, as every module is. The build takes the recorded IR, and its hash, as the module's.
+   Three things had to change underneath for the reused IR to be the IR a fresh emission writes:
+   - Two symbols carried a number from the program's tables. A helper for a type that differs from another only in
+     its function types' parameter names was `olang.KIND.CANON.123`; it now writes the names (`Table.CanonNamed`).
+     A G10d constructor's twin was `T.ctor.17`; it now writes its type arguments. Either could otherwise have meant
+     one thing in a reused object and another in a fresh one. With `linkonce_odr` that is a silent miscompile, not a
+     link error.
+   - Merging same-code functions (mergeSame) looked at every helper emitted. A reused module emits none, so which
+     member of a class was kept could change. The candidates are now what the objects holding the instances name.
+   - Under `-debug` every object's debug information names the program's compile unit, which is the root's file.
+     There the key holds the root as well.
+   `OLANG_CHECKREUSE` emits the program again with nothing reused and compares every object, the root's included, with
+   what the build used. It ends the build with 3 where one differs. It was run over every test file of the suite
+   (tests, std, compiler; 1,147 tests) at -O3 and over a set at `-debug`, twice each, and every object was the same.
+   The `-debug` run is what found the compile unit. `checks/` has the scenario `reuse`: an edit to the root, then to a
+   leaf whose importer must change too, then a second program in the directory reusing what the first left.
+   Decided (mine): the key is the inputs themselves, never a summary of what an import exports. Section 8's
+   obligations, the views pass and the evaluator's decisions all read callee bodies, so an "interface" would have
+   to carry all of them. A missed one would be a silent miscompile, and the edit it would help (a body that many
+   modules inline) is the link's cost anyway (below).
+   Decided (mine): whether objects are cut is measured on the program's own items only, its modules' and instances',
+   not the helpers copied into each object. A reused module contributes the size its record keeps. A record cut
+   otherwise than the program now is makes the build emit everything again.
+2. **A reused part carries its IR's hash**, so a build does not hash IR it did not make. An object is now named by the
+   hash of its IR's hash (with the flags and clang's version) rather than of the IR itself.
+3. **`allFns`** looked at every module on every method lookup (56,000 lookups). It now does so once all modules are in:
+   1.5% of the front end.
+4. **A test is named by its name, and the instances and a test build's tests have parts of their own (B3d).** A test
+   was `olang_test_ID`, ID its body's number. Adding any function before it renumbered every test, and since a part is
+   chosen by its symbol's hash, every part of the root's object changed. Now a test's symbol is the hash of its name,
+   with a count after it for tests of one name.
+   That was not all, though. tests/shared.olang's test build relinked in 6 s after an edit to one test, with 15 of its
+   35 ThinLTO modules optimized again. A ThinLTO backend is keyed by the hashes of the modules it imports from. The
+   root's parts each mixed tests, the root's own functions and the instances that every module imports, so any edit to
+   the root changed what all of them import from.
+   Where objects are cut (`-debug`, and a program of 8 MB of IR or more), the instances now have parts of their own,
+   as `-debug` had already. In a test build, the tests and the harness that names them have parts of their own too,
+   a quarter of the size. Nothing imports a test.
+   The root's parts were already a random cut of its code from the instances it calls. So this changes nothing about
+   what can be inlined before the link: the compiler built so runs its front end as fast (2.18-2.35 s against
+   2.18-2.36 s, six interleaved runs each).
+5. **What clang says is kept (B12b).** The `native` probe and `clang --version` each cost a process, 10-20 ms, on
+   every build. Both answers are now kept under `OLANG_CACHE/probe/`. The key is everything the answer depends on:
+   clang's real path, size and time, the arguments, the input, and this processor's model and flags. The file holds
+   its key, and is asked again when the key does not match. Only an answer with status 0 is kept, and `interpret` keeps
+   nothing. A no-op build of a small program went from 0.12 s to 0.04 s.
+6. **A `-debug` build trusts lowering, as an optimized one does.** Only test builds verify each function's MIR. The
+   verifier was a seventh of the `-debug` front end (2.9 of 19.7 G instructions). Decided (mine), extending round 7's
+   call: test builds are where the compiler is tested, and the suite runs there.
+
+**Numbers** (before = e2be2cd's compiler, after = this round's; interleaved, wall time, the self-build's CPU in
+parentheses):
+
+| | before | after |
+|---|---|---|
+| the -O3 self-build, clean | 31.3-31.4 s (112-113 s CPU) | 30.5-30.9 s (109-112 s CPU) |
+| a leaf edit (a function added to fmt.olang) | 4.8-5.2 s, 1.16 GB | 3.4-3.8 s, 614 MB |
+| an edit inlined everywhere (types.Repr) | 17.6-18.9 s | 17.4-18.0 s |
+| the -debug self-build, clean | 12.0 s | 11.3 s |
+| a -debug leaf edit | 5.1-5.2 s | 2.4-2.5 s |
+| a -debug edit to types.Repr | 5.1 s | 4.1 s |
+| tests/shared.olang's test build, clean | 11.8 s | 9.3 s |
+| an edit to one of its tests | 10.3-10.7 s | 4.1-4.2 s |
+| a hello world in an empty directory | 0.75 s | 0.69 s |
+| a second program there | 0.33 s | 0.24 s |
+| a no-op rebuild of it | 0.12 s | 0.04 s |
+
+A leaf edit is now load 0.1 s, check 0.75, scope 0.4, lower+emit 0.4 (the root and the instances, which are made
+again every build), compiles 0.4, link 1.25. The link is the edited module's ThinLTO backend; it takes 0.28 s with
+nothing to optimize. stage 2 == stage 3 (`make bootstrap`). The benchmarks' machine code (nbody, spectral, mandelbrot,
+fannkuch, binarytrees, knucleotide, matmul, sum, text, vec, parallel; objdump without addresses and symbols) is the
+same, instruction for instruction.
+
+**Measured and not taken:**
+- *The ThinLTO import limit* (item 2 of round 7's list). On the self-build's objects with a fresh cache, the link takes
+  73 s of CPU at the limit of 70, 73 at 50, 60 at 30, and 51 with no importing at all. The opt level makes no
+  difference: O2 is 73 s and O1 64. With jobs=4 nothing changes, and lld takes 72 s. The link is half IR passes and
+  half code generation. Since round 7 measured the compiler's front end 5-10% slower at 40, and 50 saves 4%, the limit
+  stays 70. A pre-link compile at -O1, with the link at -O3, made the link slower (104 s) and the binary 19% larger.
+  The link is at its floor for -O3 over this much IR. What would shrink it is less IR, or less inlined (the scope
+  close inlined at 12,000 sites, measured in round 7).
+- *Smaller parts* (512 KB rather than 2 MB). They made tests/shared.olang's build and test edits faster, but the
+  self-build's link slower (21.0 s against 18.9) and its leaf edit no faster. Only a test build's test parts are
+  smaller (item 4).
+- *Instance merging under -debug* (item 3 of round 7's list). The instance parts are 13 of the -debug build's 69 MB of
+  IR and 3.0 of its 27 s of compile CPU. Merging, at -O3's rate, would save about 1.6 s of CPU, 0.4 s of wall time,
+  and only on a clean build: an edit that leaves the instances as they were recompiles none of them. It would also
+  give a merged instance's debug information the type names of the instance it was merged into. Not built (decided,
+  mine).
+- *A shared allocation arena* (`MALLOC_ARENA_MAX=1`, which removes the `mprotect` calls): the system time fell from
+  1.6 to 1.2 s but the wall time did not move, since page faults are most of it.
+- *Caching the instances across builds.* The root's object holds them and makes them again on every build. That is
+  most of a leaf edit's lower+emit (0.3 of 0.4 s). Each instance's text names helpers, constants and types that its
+  emission makes, which would all have to be recorded too. Left.
+
+**A development build, measured, for the user's decision.** Each mode built the compiler: clean, after a leaf edit,
+and after an edit to types.Repr, then that compiler's own front end on the compiler. The front end was measured as user
+time in a fresh directory, three runs each:
+
+| mode | clean | leaf edit | Repr edit | the built compiler's front end |
+|---|---|---|---|---|
+| -O3, ThinLTO (the default) | 31.5 s | 3.5 s | 17.9 s | 2.25-2.49 s |
+| -O2, no LTO | 20.8 s | 2.6 s | 3.8 s | 2.72-2.96 s (+18%) |
+| -O1, no LTO | 19.9 s | 2.5-2.8 s | 4.0 s | 3.79-3.96 s (+60%) |
+| -O1, ThinLTO | 27.0 s | 3.1-3.2 s | 15.2 s | 3.28-3.39 s |
+| -debug | 12.1 s | 2.5-2.9 s | 4.9 s | 11.7-12.2 s (5x) |
+
+An edit that many modules inline costs 18 s at -O3, all of it the link re-optimizing every module that imported the
+edited function. At -O2 without LTO it costs 3.8 s, and the program runs about a fifth slower. That is the trade a
+development mode would make. Not built: an option, or another default, changes the command line, which is the
+user's call (proposed in the round's report).
+
+**Left:** the front end is now most of a leaf edit: check 0.75 s, scope 0.4 s and lower+emit 0.4 s, which go over every
+module and over the instances every build. Further gains there would need a persisted checker state or instance-level
+records. The ThinLTO link of an edit that many modules inline (14 s). The page faults of the front end's 0.6-1 GB.
