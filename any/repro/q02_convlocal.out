@@ -1,0 +1,12 @@
+== build -debug -sanitize
+Zello I64[1, 2, 3]
+Zello I64[1, 2, 3]
+status 0
+== build
+Zello I64[1, 2, 3]
+Zello I64[1, 2, 3]
+status 0
+== interpret
+Zello I64[1, 2, 3]
+Zello I64[1, 2, 3]
+status 0

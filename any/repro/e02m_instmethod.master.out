@@ -1,0 +1,29 @@
+== build -debug -sanitize
+e02m_instmethod.olang:13:38: error[E12]: expected Box<String&>&, found Box<I64>
+   13 | fn gen<S Shape>(s S) String { return s.Describe() }
+      |                                      ^
+e02m_instmethod.olang:17:9: note: instantiated here, with S = Box<I64>
+   17 |     say(gen(a))
+      |         ^~~
+e02m_instmethod.olang:16:9: error[E12]: expected Box<String&>&, found Box<I64>
+   16 |     say(a.Describe())
+      |         ^
+compilation failed with 2 errors
+== build
+e02m_instmethod.olang:13:38: error[E12]: expected Box<String&>&, found Box<I64>
+   13 | fn gen<S Shape>(s S) String { return s.Describe() }
+      |                                      ^
+e02m_instmethod.olang:17:9: note: instantiated here, with S = Box<I64>
+   17 |     say(gen(a))
+== interpret
+e02m_instmethod.olang:13:38: error[E12]: expected Box<String&>&, found Box<I64>
+   13 | fn gen<S Shape>(s S) String { return s.Describe() }
+      |                                      ^
+e02m_instmethod.olang:17:9: note: instantiated here, with S = Box<I64>
+   17 |     say(gen(a))
+      |         ^~~
+e02m_instmethod.olang:16:9: error[E12]: expected Box<String&>&, found Box<I64>
+   16 |     say(a.Describe())
+      |         ^
+compilation failed with 2 errors
+status 1

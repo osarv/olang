@@ -1,0 +1,12 @@
+== build -debug -sanitize
+Node(0, Node(11, Node(10, Node(9, Node(8, Node(7, Node(6, Node(5, Node(4, Node(3, Node(2, Node(1, null))))))))))))
+Pn(0, Pn(11, Pn(10, Pn(9, Pn(8, Pn(7, Pn(6, Pn(5, Pn(4, ...)))))))))
+status 0
+== build
+Node(0, Node(11, Node(10, Node(9, Node(8, Node(7, Node(6, Node(5, Node(4, Node(3, Node(2, Node(1, null))))))))))))
+Pn(0, Pn(11, Pn(10, Pn(9, Pn(8, Pn(7, Pn(6, Pn(5, Pn(4, ...)))))))))
+status 0
+== interpret
+Node(0, Node(11, Node(10, Node(9, Node(8, Node(7, Node(6, Node(5, Node(4, Node(3, Node(2, Node(1, null))))))))))))
+Pn(0, Pn(11, Pn(10, Pn(9, Pn(8, Pn(7, Pn(6, Pn(5, Pn(4, ...)))))))))
+status 0

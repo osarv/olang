@@ -1,0 +1,23 @@
+== build -debug -sanitize
+e05_genericone.olang:13:4: error[D10a]: the end can be reached without returning String - return on every path, or end it with 'unreachable'
+   13 | fn kind(s any Shape&) String {
+      |    ^~~~
+e05_genericone.olang:14:11: error[S13a]: case Box<I64> of any Shape& is not covered - add it, or 'nomatch { }'
+   14 |     match s {
+      |           ^
+compilation failed with 2 errors
+== build
+e05_genericone.olang:13:4: error[D10a]: the end can be reached without returning String - return on every path, or end it with 'unreachable'
+   13 | fn kind(s any Shape&) String {
+      |    ^~~~
+e05_genericone.olang:14:11: error[S13a]: case Box<I64> of any Shape& is not covered - add it, or 'nomatch { }'
+   14 |     match s {
+== interpret
+e05_genericone.olang:13:4: error[D10a]: the end can be reached without returning String - return on every path, or end it with 'unreachable'
+   13 | fn kind(s any Shape&) String {
+      |    ^~~~
+e05_genericone.olang:14:11: error[S13a]: case Box<I64> of any Shape& is not covered - add it, or 'nomatch { }'
+   14 |     match s {
+      |           ^
+compilation failed with 2 errors
+status 1
