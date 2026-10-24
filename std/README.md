@@ -21,6 +21,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`) and the IEEE CRC-32 |
 | `json.olang` | JSON parse into an immutable tree, and encode |
 | `csv.olang` | RFC 4180 records, read and written |
+| `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, `net.Error` |
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, cancellation tokens and deadlines |
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` |
