@@ -272,3 +272,6 @@ on sight per rules.md, "Code rules".
   (lazy DFA + Pike VM), iterator adapters; sha256 1.1x C, regex level with glibc. Gaps: no DNS (getaddrinfo list can't
   cross extern - C interop v2), no `\x` escapes (text literals talk), `&` binds looser than `==` (precedence - decide),
   error words not values (QAM), no `mut I64&` so no Mutex<I64> (primitive refs refused).
+- FOUND 2026-10-24 by wt-lsp (scope pass, unfixed): a use-after-free - a conditional passed as a constructor argument,
+  the instance returned (`e := E($t, mk(t) if at >= 0 else ""); return e`), fails under -debug -sanitize; reproducer
+  /home/user/review/uaf-condctor/repro.olang. Fix agent to start after the current verify.
