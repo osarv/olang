@@ -959,3 +959,6 @@ errors and documentation - generic `+` already works).
   Ok = 0 }`, compile-time constants, distinct; `op.Value`; `try Op.From(x)`; text defaults to the case name, integers
   count from 0 / the previous value; allowed with payloads; `$op` unchanged (source form); no T.CaseOf (reflection +
   `==`). Prover questions 1-6 still open. The user is tired; a survey of other languages' features was started.
+- REVERSED 2026-10-24 (the user: "Don't decide on the enums yet. We are getting back to them eventually"): enum raw
+  values NOT decided - open again (the proposal above stands as a proposal; the builder told not to build it). ASKED:
+  does the payload form decided earlier today (`Round Circle` / `Box(w F64, h F64)`) also wait?
