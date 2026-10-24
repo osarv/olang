@@ -267,3 +267,8 @@ on sight per rules.md, "Code rules".
 - QUEUED after lang24: `olang fix` (runs tools/*_migrate.olang in order, idempotent; oann's catch-up uses it).
 - QUEUED: C interop v2 batch (decided 2026-10-24, decisions.md) after lang24 + speed9; then platforms (LLVM 19/20,
   aarch64 via qemu, release with bundled clang).
+- 2026-10-24 ~17:00 CEST: wt-stdx merged (50cf64f; verify passed but tokdiff/astdiff goldens, recaptured after): time
+  (Duration, Sleep, RFC 3339), sync, set, deque, heap, utf8, base64, hex, sha256, crc32, net (TCP/UDP), flags, regex
+  (lazy DFA + Pike VM), iterator adapters; sha256 1.1x C, regex level with glibc. Gaps: no DNS (getaddrinfo list can't
+  cross extern - C interop v2), no `\x` escapes (text literals talk), `&` binds looser than `==` (precedence - decide),
+  error words not values (QAM), no `mut I64&` so no Mutex<I64> (primitive refs refused).
