@@ -835,8 +835,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.put("fn")
             w.sig(f.S)
             w.item = was
-            w.put(" ")
-            w.block(f.Body)
+            w.body(f.Body)   # S1b: a one-line body as written
         }
         case ast.Expr.MatchE(_, m) { w.match(m) }
         case ast.Expr.Range(_, args) {
