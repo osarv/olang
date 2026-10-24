@@ -45,6 +45,7 @@ fn table() Array<String&>& {
         "sum: Array.Iter().Fold|sum|sum|arrayfold 100000 8000"
         "parallel, 4 tasks|parallel|parallel|10000000 4"
         "text|text|text|5000000"
+        "sha256|sha256|sha256|64 4"
         "Vec: for x in v|vec|vec|walk vec 1000000 100"
         "Array: for x in a|vec|vec|walk array 1000000 100"
         "Vec: v[idx[i]]|vec|vec|gather vec 1000000 10"
