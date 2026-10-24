@@ -1,0 +1,26 @@
+# an array named through a conversion of a local (T29a) made a mut any and written: the local must not change
+type Bump trait {
+    mut Bump()
+}
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+type Nums extends Array<I64>
+fn (n mut Nums&) Bump() { n[0] = 99 }
+fn go(k I64) String {
+    s := "hello"
+    b mut any Bump& = Lab(s)
+    b.Bump()
+    a := I64[1, 2, k]
+    c mut any Bump& = Nums(a)
+    c.Bump()
+    l := List<mut any Bump&>()
+    l.Push(Nums(a))
+    l[0].Bump()
+    return $s " " $a
+}
+Baked String = go(3)
+Live mut I64 = 3
+fn main() {
+    say(Baked)
+    say(go(Live))
+}

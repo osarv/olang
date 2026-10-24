@@ -1,0 +1,5 @@
+type Shape trait for ma.Sq, mb.Sq {
+    Area() I64
+}
+import ma "ma"
+import mb "mb"

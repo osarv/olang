@@ -1,0 +1,27 @@
+# an any borrowing a by-value parameter's storage, pushed into a list the caller keeps; a reference likewise
+type Named trait {
+    Name() String
+}
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn (p Pt&) Name() String { return "pt " $p.x " " $p.y }
+fn put(p Pt, l mut List<any Named&>&) { l.Push(p) }
+fn putRef(p Pt, l mut List<Pt&>&) { l.Push(p) }
+fn deep(k I64) I64 {
+    a := Array<I64>(64, k)
+    if k > 0 { return deep(k - 1) + a[3] }
+    return a[0]
+}
+fn main() {
+    l := List<any Named&>()
+    r := List<Pt&>()
+    q := Pt(3, 4)
+    put(q, l)
+    putRef(q, r)
+    deep(20)
+    churn()
+    say(l[0].Name())
+    say($r[0].x)
+}

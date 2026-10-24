@@ -1,0 +1,1475 @@
+# fuzz seed 2002
+import "std/io"
+import "std/os"
+type S0_0 struct(f0 U32, f1 U64, f2 I16) {
+    f0
+    f1
+    f2
+}
+fn (a S0_0&) Eq(o S0_0&) Bool { return a.f0 == o.f0 }
+fn (a S0_0&) Hash() I64 { return I64(a.f0) }
+fn (a S0_0&) Str() String { return "<" $a.f0 ">" }
+type E0_0 enum {
+    C0(f0 F16, f1 Bool)
+    C1
+    C2(f0 F64, f1 U8)
+}
+error Err0 {
+    A
+    B
+    C
+}
+fn f0_0(x5 U64, x6 U64, x7 mut List<I32>&) BF16 ? Err0 {
+    x7.Push((-2))
+    if (false != (x5 > 2)) { error Err0.B }
+    return 1.1754943508222875e-38
+}
+fn h0_2(x8 I32) U64 {
+    x9 F16 = 0.00006103515625
+    x10 BF16 = 1.1754943508222875e-38
+    return 7
+}
+fn f0_3(x7 I64) F32 ? Err0 {
+    x8 BF16 = (match x7 { case 0 => BF16((-BF16(x7))) case _ if false => BF16(272.987) case 1 => BF16((-4.22028e-21)) nomatch => BF16(6.78739e-31) })
+    x9 Map<I64, BF16> = Map<I64, BF16>()
+    x8 = (checked (0.0 / (checked (x8 * (x8 * 207.310)) catch default (-1.1754943508222875e-38))) catch default 0.1)
+    if (false != (x7 > 9223372036854775807)) { error Err0.A }
+    return 2.6441e20
+}
+fn g0_0(x7 I64, x8 Array<F64>) F32 {
+    x9 S0_0 = S0_0(183, (match U16(x7) { case 0, 3 if (x8 != x8) => U64((U64(x7) + 2061390145847818080)) case 1 => U64(512803999441884535) case _ if true => U64((F64(F64(x7)).Bits() if F64(x7) == F64(x7) else 2685155719599775780)) case 2, 5 => U64((checked (U64(x7) + 14172267716178464579) catch default 0)) case _ => U64(3) }), (-2))
+    x10 Array<U64> = Array<U64>(2)
+    x11 U64 = x10[0]
+    if x8.Len() > 0 {
+        for x12, x13 in x10 {
+            x11 = x9.f0
+        }
+    } else {
+        x12 mut Array<Bool>& = Array<Bool>(1, true)
+        x13 Array<F64> = F64[50.113, 1.1754943508222875e-38]
+    }
+    return (-3.4e38)
+}
+fn h0_1(x5 U64) U64 {
+    for x6 in range (-2), 0, 3 {
+        x7 mut S0_0& = S0_0(255, ((x5 - 3) & h0_2((-2147483648))), (I16(x6) * 19099))
+    }
+    x6 F32 = (g0_0((-1), F64[178.556, 0.0, 984.74, 201.663, 0.0]) + (match U16(x5) { case 0 => F32((F32(4.85857e23) if false else F32((-7.73876e26)))) case 1, 4 => F32((try f0_3(2) catch default 0.0)) case _ if (not true) => F32(1.0) case 2, 5 => F32((U32(4294967295).F32FromBits())) nomatch => F32(386.225) }))
+    return (match U32(x5) { case 0 => U32(699050488) case 1 => U32((checked (10 % U32(x5)) catch default 0)) case _ => U32(3748690305) })
+}
+fn c0(x0 I8, x1 F16, x2 F16) I32 {
+    x3 U8 = 84
+    for x4 in range 2 {
+        x5 U8 = x3.AtomicCompareSwap((x3 - (x3 + x3)), 35)
+        x6 List<BF16> = List<BF16>()
+    }
+    x4 List<I32> = List<I32>()
+    for x5 in range 1, 8, 2 {
+        for x6 in range 0, 7, 2 {
+            x7 U64 = 2
+            x8 Map<I64, I32> = Map<I64, I32>()
+        }
+        x6 Array<U32> = Array<U32>(2)
+    }
+    try f0_0(4294967295, h0_1(8112700199844940578), x4) catch Err0.A {
+        x5 S0_0 = S0_0(1, 14510904223643833318, x3)
+    } catch {
+        x5 String = $(2)
+    }
+    x5 List<U64> = List<U64>()
+    x3 = 10
+    return I32(x0)
+}
+K0 I32 = c0((-128), 3.83209e-6, 1.184)
+v0_0 mut I8 = (-128)
+v0_1 mut F16 = 3.83209e-6
+v0_2 mut F16 = 1.184
+fn g1_0(x9 Array<F64>) F64 {
+    if x9.Len() == 0 { return (-0.1) } else { return x9[0] + g1_0(x9[1:]) }
+}
+fn h1_0(x6 U8, x7 U32) I8 {
+    x8 F64 = (checked (6.74414e220 * g1_0(Array<F64>(0))) catch default 0.0)
+    return 3
+}
+fn r1_1(x6 I32, x7 U8) U8 {
+    if x6 <= 0 { return x7 }
+    return r1_1(x6 - 1, (U8((try U64(18446744073709551615).Format(23).ParseInt(23) catch default (-4325408469106869677))) / ((x7 & 7) + 1)))
+}
+fn h1_3(x12 U8) F16 {
+    x13 I64 = (((-2) ^ (checked ((-2) % I64(x12)) catch default (-2765576922000422557))) & (checked ((-9091381515492684947) - (checked (I64(x12) + (-9223372036854775808)) catch default 5)) catch default 1))
+    return 1.0
+}
+fn h1_2(x7 U16, x8 I16, x9 BF16) Bool {
+    x10 I32 = (I8((I8(x8) & 127)) if (not (true if true else false)) else I8(79))
+    x11 F16 = h1_3(2)
+    return (5 > (18446744073709551615 / ((U64(x10) & 7) + 1)) >= (U64(x7) & 10578965082894383381))
+}
+error Err1 {
+    A
+    B
+    C
+}
+type G1<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G1<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G1<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G1<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn h1_5(x9 I32) Bool {
+    x10 Bool = true
+    x11 G1<I32> = G1<I32>(x9, 3)
+    return false
+}
+fn g1_1(x9 U8, x10 Array<BF16>) BF16 {
+    x11 Array<I16> = Array<I16>(4)
+    if x10.Len() > 1 {
+        x12 Bool = (x10 != x10)
+        x13 I8 = 3
+    } else {
+        x12 I32 = I32(I16(x10.Len()))
+        x13 G1<U8> = G1<U8>(1, 5)
+    }
+    return (-6.52324e-24)
+}
+fn f1_4(x7 U8, x8 mut Map<Bool, I8>&) BF16 ? Err1 {
+    x8.Put(true, 34)
+    if (true != (x7 > 255)) {
+        x9 String = $((checked I8(U32(x7)) catch default 127))
+    } else {
+        x9 List<I64> = List<I64>()
+    }
+    if (h1_5((-8)) != (x7 > 5)) { error Err1.B }
+    return ((checked (BF16(x7) + 0.0) catch default 1.30418e27) * g1_1(x7, BF16[(-5.71132e-15)]))
+}
+fn c1(x0 U32) U8 {
+    x1 U8 = 233
+    x1 = (x1 & 255)
+    x2 I16 = (checked U8(U64(x1)) catch default 0)
+    x3 BF16 = (checked BF16((checked ((checked (F64(x0) / 6.57763e292) catch default 5e-324) / (F64(x0) / 5.713e300)) catch default 395.228)) catch default 3.38e38)
+    x4 Map<Bool, I8> = Map<Bool, I8>()
+    x5 I8 = ((-4) & h1_0(r1_1(I32(I32(x0) & 7), x1), 2803199042))
+    x6 U64 = (match (I64(x1) - (-8)) { case 1, 4 => U64((match (0 - x0) { case 0 if true => U64((U64(x1) | 15530369099771538526)) case 1 => U64((match I32(x5) { case (-1), 2 if false => U64(14913494333313703639) case 0 => U64(2) case 1 => U64(18446744073709551615) case _ => U64(10401038415226534012) })) case 2 if false => U64(9) case _ if false => U64((checked (U64(x0) - 3) catch default 0)) case _ => U64((checked U64(65504.0) catch default 8)) })) case _ if (true if ((-0.0) <= F32(x1) >= 0.5) else (false or true)) => U64(819815529818642637) case 2 if true => U64(9) case 3 if h1_2(43288, x1, (try f1_4(255, x4) catch default 551.91)) => U64((U64(x2) & 14515498140321296531)) case _ => U64((0 ^ (F64(F64(x5)).Bits() if F64(x5) == F64(x5) else 5))) })
+    return x1
+}
+K1 U8 = c1(0)
+v1_0 mut U32 = 0
+type S2_0 struct(f0 F32) {
+    f0
+}
+type S2_1 struct(f0 I16) {
+    f0
+}
+fn g2_0(x4 Array<U8>) U8 {
+    if x4.Len() == 0 { return 1 } else { return x4[0] + g2_0(x4[1:]) }
+}
+fn c2(x0 I32, x1 I64) I16 {
+    if (false != (x1 > (-8310935262874256536))) {
+        x2 U16 = 65535
+        x3 U8 = (checked (g2_0(U8[7, 5]) >> x2) catch default 124)
+    } else {
+        x2 Array<Bool> = Bool[true, false]
+        x3 mut Array<Bool>&x2 = x2
+    }
+    x2 F16 = (-((F16(x0) / (-0.1)) + (F16(x0) + 0.0)))
+    x2 += 4.69309e-27
+    return 10
+}
+K2 I16 = c2(6, 9223372036854775807)
+v2_0 mut I32 = 6
+v2_1 mut I64 = 9223372036854775807
+type S3_0 struct(f0 F32, f1 F32, f2 Bool) {
+    f0
+    f1
+    f2
+}
+type S3_1 struct(p0 Array<F32>&) {
+    f0 := Array<F32>(4)
+    for i in range 4 { f0[i] = p0[i] }
+}
+error Err3 {
+    A
+    B
+    C
+}
+fn r3_1(x7 I32, x8 BF16) BF16 {
+    if x7 <= 0 { return x8 }
+    return r3_1(x7 - 1, (BF16((checked BF16(F64(x7)) catch default 0.5)) if true else BF16((-5.909e18))))
+}
+fn f3_0(x3 U8) BF16 ? Err3 {
+    x4 fn(x5 I8) F16 = fn(x5) { return (U16(25203).F16FromBits()) }
+    x5 S3_1& = S3_1(F32[(-694.560), (-1.0), 4.61753e-10, (-1.0)])
+    x6 Array<U32> = U32[8, U32((1 & U16(x3))), (checked ((1 + x3) % x3) catch default 255), ((U32(x3) * 165545590) & (checked (U32(x3) * 6) catch default 0))]
+    if ((false if false else true) != (x3 > 255)) { error Err3.C }
+    return r3_1(I32((9223372036854775807 & I64(x3)) & 7), 438.537)
+}
+fn c3(x0 I32) Bool {
+    x1 F32 = 553.892
+    x2 I16 = 82
+    x2 |= 4
+    return (not ((try f3_0(0) catch default 9.2e-41) != (try f3_0(0) catch default 9.2e-41)))
+}
+K3 Bool = c3((-747201397))
+v3_0 mut I32 = (-747201397)
+type S4_0 struct(f0 I16, p1 Array<U16>&, f2 U32) {
+    f0
+    f1 := Array<U16>(1)
+    for i in range 1 { f1[i] = p1[i] }
+    f2
+}
+type S4_1 struct(f0 U32, f1 F32, f2 U8) {
+    f0
+    f1
+    f2
+}
+type E4_0 enum {
+    C0(f0 U16, f1 BF16)
+    C1(f0 I64, f1 BF16)
+}
+type E4_1 enum {
+    C0(f0 Bool, f1 F32)
+    C1(f0 I32)
+    C2
+}
+type G4<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G4<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G4<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G4<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn r4_0(x7 I32, x8 U16) U16 {
+    if x7 <= 0 { return x8 }
+    return r4_0(x7 - 1, 1)
+}
+fn c4(x0 U8, x1 I16, x2 U16) String {
+    x3 I16 = (checked I16(I64(x1)) catch default (-29530))
+    x4 mut S4_0& = S4_0(I16((match x3 { case 0 => U32(4105720053) case _ => U32(8) })), U16[(x2 & 0)], 0)
+    x5 G4<U64> = G4<U64>((checked (x4.f2 << (x4.f0 >> (1774683905209352025 & 15))) catch default 409368764), 2)
+    x6 Map<I16, U32> = Map<I16, U32>()
+    return $(x4) " " $(E4_0.C0(r4_0(I32(x1 & 7), x0), 3.38e38)) " " $(BF16((-8.95227e12)).Fixed(6)) " " $(x2) " " $(x3) " " $(x4)
+}
+K4 String = c4(255, 32767, 63794)
+v4_0 mut U8 = 255
+v4_1 mut I16 = 32767
+v4_2 mut U16 = 63794
+type S5_0 struct(f0 I32) {
+    f0
+}
+type G5<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G5<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G5<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G5<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn h5_0(x5 I64) U64 {
+    x6 String = $(7) " " $(65504.0) " " $((-998.353))
+    x7 List<F64> = List<F64>()
+    return (U64(x5) << 40)
+}
+fn c5(x0 U8) String {
+    x1 F16 = 6e-08
+    x2 I32 = 4
+    x3 G5<F16> = G5<F16>((checked ((F16((-0.1)) if true else F16(3.9935e-20)) + (U16(65535).F16FromBits())) catch default 1.0), 5)
+    x4 Array<U64> = U64[h5_0((1 * I64(x2)))]
+    return $(x4.Replace(x4, x4)) " " $(x4.Repeat(0)) " " $(1.7976931348623157e308) " " $(x2)
+}
+K5 String = c5(7)
+v5_0 mut U8 = 7
+type S6_0 struct(f0 F16, f1 I16) {
+    f0
+    f1
+}
+type G6<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G6<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G6<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G6<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn c6(x0 I8) I32 {
+    x1 Array<U32> = Array<U32>(3)
+    x2 G6<U8> = G6<U8>(47, 2)
+    return 1
+}
+K6 I32 = c6((-40))
+v6_0 mut I8 = (-40)
+type S7_0 struct(p0 Array<U32>&) {
+    f0 := Array<U32>(3)
+    for i in range 3 { f0[i] = p0[i] }
+}
+type E7_0 enum {
+    C0(f0 Bool)
+    C1
+}
+error Err7 {
+    A
+    B
+    C
+}
+fn h7_1(x11 I32) F64 {
+    x12 List<Bool> = List<Bool>()
+    x13 Array<U8> = Array<U8>(3)
+    x14 U64 = (checked U64((F32((match U32(x11) { case 0 => F32(0.0) case 1 if true => F32((-6.88552e31)) case _ if true => F32(368.969) case 2, 5 => F32(0.0) nomatch => F32((-4.64424e31)) })) if false else F32((3.4e38 * F32(x11))))) catch default 2)
+    return 4.39304e195
+}
+fn f7_0(x6 I32) F16 ? Err7 {
+    x7 Array<F16> = Array<F16>(2)
+    for x8, x9 in x7 {
+        x10 F64 = (-h7_1(1))
+    }
+    if ((false == true) != (x6 > 8)) { error Err7.B }
+    return x7[(((match x6 { case 1 if false => I32(3) case _ => I32(x6) }) & 7) % 2)]
+}
+fn r7_2(x6 I32, x7 I64) I64 {
+    if x6 <= 0 { return x7 }
+    return r7_2(x6 - 1, (-1))
+}
+fn c7(x0 I8, x1 U8, x2 BF16) String {
+    x3 BF16 = (U16((U16((BF16(x2).Bits() if x2 == x2 else 65535)) if false else U16(0))).BF16FromBits())
+    x4 Array<I8> = Array<I8>(0)
+    x5 Array<F64> = F64[(try f7_0(2147483647) catch default 7.69353e-36), (3.4e38 * (-F64(x0))), (F64((F64((match U32(x0) { case 0, 3 => F64(1.7976931348623157e308) case 1 if true => F64(5e-324) case 2 => F64((-5e-324)) case _ => F64(0.5) })) if (not false) else F64((-F64(x0))))) if true else F64((-187.915)))]
+    return $(S7_0(U32[(4294967295 - U32(x0)), (U32(x1) * 9), 4])) " " $((9223372036854775807 - (I64(r7_2(I32(I16(x1) & 7), 1)) if false else I64(4814596671823123146)))) " " $(x5)
+}
+K7 String = c7(9, 0, (-3.38e38))
+v7_0 mut I8 = 9
+v7_1 mut U8 = 0
+v7_2 mut BF16 = (-3.38e38)
+type E8_0 enum {
+    C0
+    C1
+    C2
+}
+fn c8(x0 U8) String {
+    x1 I32 = (-(checked ((I32(x0) - 89461784) + (-1506691875)) catch default (-2147483648)))
+    x2 Array<I64> = Array<I64>(3)
+    x3 I16 = (((-20668) - (I16((-32768)) if false else I16((-17220)))) | 9557)
+    return $(0.0) " " $(((-(x2[(((x1 / ((x1 & 7) + 1)) & 7) % 3)] * x2[((x0 & 7) % 3)])) - (x2[0] << 55))) " " $(x0) " " $(x2)
+}
+K8 String = c8(255)
+v8_0 mut U8 = 255
+fn h9_0(x8 I32, x9 F32) I16 {
+    x10 Array<U32> = Array<U32>(0)
+    return (I8(x8) + 51)
+}
+fn c9(x0 U32, x1 I32) String {
+    x2 String = $(255) " " $((-1))
+    x3 I32 = (-2147483648)
+    x4 Array<F64> = Array<F64>(0, 4.54165e271)
+    x5 I64 = (-6)
+    x6 Array<F64> = F64[(-0.1), 1.20334e-1, 4.53975e85]
+    x7 I64 = (32767 * h9_0(87375727, (-F16(x5))))
+    x8 U64 = x6.Fold(U64(1), fn(x9, x10) { return U64(6894080530095893117) })
+    return $(x4.Filter(fn(x9) { return false })) " " $(x1) " " $(x2) " " $(x3) " " $(x6)
+}
+K9 String = c9(4294967295, (-2147483648))
+v9_0 mut U32 = 4294967295
+v9_1 mut I32 = (-2147483648)
+fn r10_0(x8 I32, x9 U64) U64 {
+    if x8 <= 0 { return x9 }
+    return r10_0(x8 - 1, x9)
+}
+error Err10 {
+    A
+    B
+    C
+}
+fn f10_2(x10 U32) U8 ? Err10 {
+    x11 List<I8> = List<I8>()
+    if (false != (x10 > 0)) { error Err10.B }
+    return 255
+}
+fn f10_1(x8 I32) U32 ? Err10 {
+    x9 Array<F32> = Array<F32>(2)
+    if ((65535 <= U16(x8) <= 11866) != (x8 > 1)) { error Err10.A }
+    return (try f10_2((U32(x8) * 1)) catch Err10.A, Err10.C default 1 catch default 5)
+}
+fn h10_4(x12 I64, x13 I8, x14 I8) Bool {
+    x15 F32 = (checked ((U32(504683523).F32FromBits()) - 767.420) catch default 3.4e38)
+    x16 List<U16> = List<U16>()
+    return false
+}
+fn f10_3(x8 I32, x9 I64) U32 ? Err10 {
+    x10 List<Bool> = List<Bool>()
+    x11 U64 = 3
+    if (((checked (F32(x11) / 320.504) catch default 1.4e-45) == 1.0) != (x8 > 1)) {
+        x12 F32 = F32((-I16(x8)))
+        x10.Push(false)
+        checked x10[(checked (U32(x9)).Pow(5) catch default 903081743)] = false catch { }
+    } else {
+        x12 List<I32> = List<I32>()
+    }
+    if (h10_4((-3), 3, 127) != (x9 > 1)) { error Err10.A }
+    return 6
+}
+fn f10_5(x8 U64, x9 F64, x10 U32) U8 ? Err10 {
+    x11 BF16 = 1.1754943508222875e-38
+    x12 U16 = (-(1 | U8(x10)))
+    x13 Array<U8> = U8[U8((match x12 { case 0, 1 => U32(4294967295) case _ => U32(4294967295) }))]
+    if (x13.Contains(x13) != (x9 > 225.914)) { error Err10.A }
+    return x13[((U8(x12) & 7) % 1)]
+}
+fn c10(x0 U32, x1 U16, x2 F32) U64 {
+    x3 I64 = 0
+    x4 List<I16> = List<I16>()
+    if x4.Len() > 0 { x4.RemoveAt(0 % x4.Len())! }
+    x5 String = $(F64(x0)) " " $(((-x1) ^ (x1 & 0))) " " $(U8[8 for x6 in range 1])
+    x6 Array<U16> = U16[4, 61937]
+    x7 U32 = (match r10_0(I32(U8(x3) & 7), (U64(x1) >> (255 & 63))) { case 0 => U32((try f10_1((I32(x1) >> 1)) catch default 7)) case 1 => U32((match (match I16(x3) { case (-2), 1 => U16(x1) case (-1), 2 => U16(8) case _ if false => U16(x1) case 0 => U16(x1) nomatch => U16(x6[((x0 & 7) % 2)]) }) { case 0, 2 if (x6 != x6) => U32((checked U32((-1.35450e11)) catch default 7)) case 1 => U32((try f10_3(1130645623, 1) catch default 4294967295)) nomatch => U32(x0) })) case 2 if (x5 == "e+") => U32(U32((try U8(13).Format(10).ParseInt(10) catch default 10))) case _ => U32((checked U32(0.5) catch default 2506486910)) })
+    try f10_5(18446744073709551615, (-1.0), x0) catch Err10.A {
+        x8 U64 = 0
+    } catch {
+        x8 U32 = x7.AtomicAdd(((checked (-x1) catch default 5) & (U8(x3) - 255)))
+    }
+    return (U64(9) if (not false) else U64(7))
+}
+K10 U64 = c10(3656621157, 60950, 0.0)
+v10_0 mut U32 = 3656621157
+v10_1 mut U16 = 60950
+v10_2 mut F32 = 0.0
+type E11_0 enum {
+    C0(f0 F32, f1 U32)
+    C1
+}
+error Err11 {
+    A
+    B
+    C
+}
+fn f11_0(x3 I64) U16 ? Err11 {
+    x4 I8 = 1
+    x5 Array<U32> = U32[9480, (U32(x3) >> (x3 & 31)), (-(9 / ((U32(x3) & 7) + 1))), (F32((118.319 * F32(x4))).Bits() if (118.319 * F32(x4)) == (118.319 * F32(x4)) else 2280630168)]
+    x6 Array<BF16> = Array<BF16>(0)
+    if ((I16(x4) > 1) != (x3 > (-965957850059798216))) { error Err11.C }
+    return x5.Fold(U16(0), fn(x7, x8) { return U16(((x7).Clamp(23957, x7) + x7)) })
+}
+type G11<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G11<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G11<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G11<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn r11_1(x4 I32, x5 F16) F16 {
+    if x4 <= 0 { return x5 }
+    return r11_1(x4 - 1, (match U32(x4) { case 0, 3 => F16((0.1 / x5)) case 1 => F16((x5 - 0.0)) case 2, 5 => F16(x5) nomatch => F16(1.13092e-7) }))
+}
+fn h11_2(x4 I32, x5 BF16, x6 Bool) U64 {
+    x7 I16 = 127
+    return 1
+}
+fn h11_3(x4 U16) I32 {
+    x5 I8 = (-1)
+    return ((checked I16((-399.656)) catch default 6013) * (-1))
+}
+fn f11_5(x7 I32) F32 ? Err11 {
+    x8 I8 = (checked ((checked (((-8) % ((I8(x7) & 7) + 1)) + (127 / ((I8(x7) & 7) + 1))) catch default 1) / I8(x7)) catch default (-10))
+    x9 Map<I8, F16> = Map<I8, F16>()
+    x10 U8 = 106
+    if (true != (x7 > 10)) { error Err11.A }
+    return 0.00006103515625
+}
+fn f11_4(x5 I64, x6 U32) I32 ? Err11 {
+    try f11_5((-1638373666))
+    x7 F16 = (-2.75307e-9)
+    x8 G11<I8> = G11<I8>(I8((try I64(x5).Format(12).ParseInt(12) catch default 9223372036854775807)), 2)
+    if ((true if true else false) != (x6 > 3968773460)) { error Err11.A }
+    return (-1623027139)
+}
+fn c11(x0 I32) String {
+    x1 F16 = 8.70913e-9
+    x2 Array<U32> = Array<U32>(2, (U32(x0) * 3491869071))
+    try f11_0((checked I16((-1.0)) catch default (-32768))) catch Err11.A {
+        x3 G11<F16> = G11<F16>(r11_1(I32((checked I8(x1) catch default (-46)) & 7), x1), 2)
+    } catch {
+        x3 G11<U64> = G11<U64>(h11_2(h11_3(9), 7.1765e-24, (x2[1] in x2)), 1)
+    }
+    x3 Array<BF16> = BF16[(match (x0 - x0) { case 0 => BF16((BF16(x0) + (-1.1754943508222875e-38))) case 1, 3 => BF16((U16(32714).BF16FromBits())) nomatch => BF16(1.1754943508222875e-38) }), BF16((match U64(x0) { case 0 => I32(x0) case 1 => I32(x0) case _ => I32(x0) })), (BF16(x0) - 0.0)]
+    x4 G11<F32> = G11<F32>(x1, 1)
+    try f11_4((checked (U16(x0) + 65535) catch default 27624), x2[(((checked (I8(x0) * 127) catch default 127) & 7) % 2)]) catch Err11.A {
+        x5 I32 = 1
+    } catch {
+        x4.put(2147483647, (U16((BF16(BF16(x0)).Bits() if BF16(x0) == BF16(x0) else 34247)).BF16FromBits()))
+    }
+    x1 *= (checked (x1 * 1.25877e-22) catch default (-492.119))
+    return $(3) " " $(x2)
+}
+K11 String = c11((-10))
+v11_0 mut I32 = (-10)
+type S12_0 struct(p0 Array<BF16>&, p1 Array<U64>&, f2 Bool) {
+    f0 := Array<BF16>(1)
+    for i in range 1 { f0[i] = p0[i] }
+    f1 := Array<U64>(4)
+    for i in range 4 { f1[i] = p1[i] }
+    f2
+}
+fn (a S12_0&) Str() String { return "<" $a.f0 ">" }
+type S12_1 struct(p0 Array<I16>&, p1 Array<I64>&, f2 I8) {
+    f0 := Array<I16>(4)
+    for i in range 4 { f0[i] = p0[i] }
+    f1 := Array<I64>(1)
+    for i in range 1 { f1[i] = p1[i] }
+    f2
+}
+type E12_0 enum {
+    C0(f0 I16)
+    C1(f0 F32, f1 F64)
+    C2(f0 I32, f1 U8)
+}
+fn c12(x0 U8, x1 I8) U8 {
+    x2 BF16 = (match I16(x0) { case 1 => BF16(1.0) case _ => BF16(6.50027e-24) })
+    x3 Map<U8, Bool> = Map<U8, Bool>()
+    x4 Array<BF16> = Array<BF16>(4)
+    x5 U8 = (checked U8(U32(x1)) catch default 255)
+    return 10
+}
+K12 U8 = c12(1, 1)
+v12_0 mut U8 = 1
+v12_1 mut I8 = 1
+type S13_0 struct(p0 Array<Bool>&, f1 BF16, f2 F64) {
+    f0 := Array<Bool>(1)
+    for i in range 1 { f0[i] = p0[i] }
+    f1
+    f2
+}
+error Err13 {
+    A
+    B
+    C
+}
+fn h13_1(x10 U32, x11 F64) F64 {
+    x12 U64 = (checked U64((-F16(x10))) catch default 0)
+    return ((1.7976931348623157e308 + x11)).Hypot(x11)
+}
+fn r13_2(x11 I32, x12 U16) U16 {
+    if x11 <= 0 { return x12 }
+    return r13_2(x11 - 1, x12)
+}
+fn f13_3(x11 U64) U32 ? Err13 {
+    x12 Array<I8> = I8[(-128), 1, I8((try I64((-1821013264655315407)).Format(9).ParseInt(9) catch default 1))]
+    if ((BF16(x11)).IsFinite() != (x11 > 1523367610491720512)) { error Err13.B }
+    return 1
+}
+fn f13_0(x6 I16, x7 I64, x8 F64) U32 ? Err13 {
+    x9 F64 = (checked (h13_1((U32(x7) | 4294967295), (-0.0)) / x8) catch default 5.71735e106)
+    x10 I32 = (-1679741364)
+    if (((-128) < I8(x6) < 101) != (x6 > 12220)) { error Err13.A }
+    return (match r13_2(I32(x6 & 7), 0) { case 0, 3 => U32((U32(x7) | 6)) case _ if (false != false) => U32((checked (1993221763 % U32(x6)) catch default 4)) case 1, 4 => U32((1 - U32(x7))) case 2, 5 => U32(4294967295) case _ if false => U32((try f13_3(0) catch Err13.B default 1031543246)) case _ => U32((U32(1) if true else U32(7))) })
+}
+fn c13(x0 I64, x1 F32, x2 I16, x3 F64) I16 {
+    x4 U32 = 1
+    x5 Map<U64, F16> = Map<U64, F16>()
+    x4.AtomicAdd(((try f13_0(30448, x4, 0.5) catch default 0) % (((2364662568 / ((x4 & 7) + 1)) & 7) + 1)))
+    x6 I16 = (I16((x2 + x2)) if true else I16((checked I16((-x1)) catch default 32767)))
+    defer { x6 &= x6 }
+    x7 BF16 = (-1.0)
+    return ((match (U64(x4)).Clamp(0, 11484342181534170636) { case 0 => I16((x2 ^ 1)) case _ => I16(I16((try I32(1).Format(5).ParseInt(5) catch default (-1)))) }) >> (((checked (3 % U8(x2)) catch default 5) << ((checked (-U64(x2)) catch default 14447886978096110839) & 7)) & 15))
+}
+K13 I16 = c13((-1670548593361224601), (-745.103), 1, 0.0)
+v13_0 mut I64 = (-1670548593361224601)
+v13_1 mut F32 = (-745.103)
+v13_2 mut I16 = 1
+v13_3 mut F64 = 0.0
+type S14_0 struct(f0 U64, p1 Array<U32>&) {
+    f0
+    f1 := Array<U32>(3)
+    for i in range 3 { f1[i] = p1[i] }
+}
+type S14_1 struct(f0 I64, f1 F16, f2 I64) {
+    f0
+    f1
+    f2
+}
+fn (a S14_1&) Str() String { return "<" $a.f0 ">" }
+type E14_0 enum {
+    C0(f0 I32)
+    C1(f0 F64, f1 U64)
+}
+type E14_1 enum {
+    C0(f0 U8)
+    C1
+    C2(f0 I32)
+    C3
+}
+error Err14 {
+    A
+    B
+    C
+}
+fn f14_0(x8 U32, x9 I8) I64 ? Err14 {
+    x10 Map<U32, I8> = Map<U32, I8>()
+    if (false != (x9 > 127)) { error Err14.C }
+    return 5
+}
+fn f14_1(x8 U32, x9 U16, x10 U64, x11 mut Map<U32, BF16>&) U32 ? Err14 {
+    for x12 in range 17 { x11.Put(U32(x12 * 5), 9.2e-41) }
+    if (false != (x10 > 9685105399188557793)) { error Err14.C }
+    return 5
+}
+fn g14_0(x9 Array<I8>) I8 {
+    if x9.Len() == 0 { return (-1) } else { return x9[0] * g14_0(x9[1:]) }
+}
+fn f14_3(x10 I32) I8 ? Err14 {
+    for x11 in range 5 {
+        x12 S14_1& = S14_1(x11, 0.0, x11)
+    }
+    if (true != (x10 > (-1937283215))) { error Err14.C }
+    return 127
+}
+fn h14_2(x8 U32) I8 {
+    match (checked (g14_0(I8[(-1), 0, 113, 53]) / I8(x8)) catch default (-5)) {
+        case 0 {
+            x9 E14_1 = E14_1.C0(118)
+        }
+        case 1 {
+            x9 Bool = false
+            x10 List<F32> = List<F32>()
+        }
+        case _ if false {
+            x9 F16 = 1.43137e-4
+            x10 List<U64> = List<U64>()
+        }
+        case 2 {
+            x9 U64 = (U64(x8) << (4169068979236170270 & 63))
+            x10 Array<I64> = Array<I64>(5)
+        }
+        case _ {
+            x9 U32 = x8
+            x9 -= (checked U32((-9.2e-41)) catch default 10)
+        }
+    }
+    x9 Array<Bool> = Array<Bool>(2)
+    match U16(x8) {
+        case 0 {
+            x10 Map<U16, I8> = Map<U16, I8>()
+            x9.Reverse()
+        }
+        case 1 {
+            x9.Reverse()
+            x10 U8 = 255
+        }
+        case 2 {
+            x10 I8 = 127
+        }
+        case _ {
+            x10 S14_0 = S14_0(8, U32[x8, 1, 1])
+        }
+    }
+    return ((8 - I8(x8)) * (try f14_3((-1)) catch default (-128)))
+}
+fn c14(x0 I64, x1 F32, x2 F64, x3 I8) I64 {
+    x4 fn(x5 F64) Bool = fn(x5) { return true }
+    x5 Map<I16, I32> = Map<I16, I32>()
+    x6 Map<U32, BF16> = Map<U32, BF16>()
+    x7 Array<I8> = Array<I8>(5)
+    x7.Sort(fn(x8, x9) { return ((F64((-0.5)) if true else F64(2.2250738585072014e-308)) != (F64((-0.5)) if true else F64(2.2250738585072014e-308))) })
+    return (try f14_0((try f14_1(61881, 3, U8(x0), x6) catch default 1321531677), h14_2((U32(x0) & 3617055112))) catch default 6658451679281456361)
+}
+K14 I64 = c14((-1), 534.493, 1.23089e19, (-64))
+v14_0 mut I64 = (-1)
+v14_1 mut F32 = 534.493
+v14_2 mut F64 = 1.23089e19
+v14_3 mut I8 = (-64)
+fn h15_0(x7 I8) U8 {
+    x8 U16 = (F16(F16(x7)).Bits() if F16(x7) == F16(x7) else 0)
+    x9 I32 = (-7)
+    x9 ^= I32(x8)
+    return 1
+}
+error Err15 {
+    A
+    B
+    C
+}
+fn f15_2(x10 U16, x11 U16) U8 ? Err15 {
+    x12 I8 = 37
+    x13 I32 = 8
+    x14 Array<F16> = Array<F16>(1)
+    if ((BF16(x13) != BF16(x13)) != (x11 > 19013)) { error Err15.B }
+    return (200 % ((U8(x12) & 7) + 1))
+}
+fn h15_1(x8 I8) Bool {
+    x9 Array<BF16> = BF16[(checked ((checked (BF16(x8) / 0.0) catch default 708.102) - (-1.1754943508222875e-38)) catch default (-9.2e-41)), 1.0, 7.51629e-16]
+    try f15_2(9156, 65535) catch Err15.A {
+        x10 I32 = (-1220861102)
+    } catch {
+        x10 F16 = (670.225 - ((1.74980e-33 / F16(x8))).Cos())
+    }
+    return false
+}
+fn h15_4(x13 U32, x14 U32, x15 mut Map<U64, U32>&) Bool {
+    x16 I32 = ((-2147483648) / ((I32(x14) & 7) + 1))
+    x17 List<BF16> = List<BF16>()
+    return (not true)
+}
+fn f15_3(x8 I64, x9 Bool, x10 BF16) F16 ? Err15 {
+    x11 Map<U64, U32> = Map<U64, U32>()
+    x12 Array<F64> = Array<F64>(0)
+    if (h15_4(3888823612, 4011068035, x11) != (x8 > 6555400788416673454)) { error Err15.A }
+    return ((-F16(x8)) * (checked (F16(x8) - 0.0) catch default 9.90979e-31))
+}
+fn r15_5(x7 I32, x8 I8) I8 {
+    if x7 <= 0 { return x8 }
+    return r15_5(x7 - 1, x8)
+}
+fn c15(x0 U16, x1 U64, x2 F16, x3 I32) I8 {
+    x4 Array<F32> = Array<F32>(0)
+    x5 U8 = (match x3 { case 0 => U8(((match I64(x0) { case 2, 3 => U8(3) nomatch => U8(201) }) - (U8(x1) >> ((-4383581968710239198) & 7)))) case 1 => U8(0) case 2 => U8((match (1 / ((U8(x1) & 7) + 1)) { case 0, 1 => U8(1) case _ => U8((164 + U8(x3))) })) case _ => U8(5) })
+    for x6 in range (-1), 0, 3 {
+        x5.AtomicCompareSwap(h15_0((I8(1) if false else I8((-1)))), x5)
+        x7 Bool = h15_1(((checked (I8(x0) - (-10)) catch default 57) * 127))
+    }
+    x6 U64 = 6
+    if (true != (x2 > (-6e-08))) {
+        x7 String = $(0) " " $((try f15_3(x3, true, ((-9.2e-41) / BF16(x5))) catch default 2.9727e-13))
+        defer { x5 *= (184 + (~x5)) }
+        x5.AtomicStore((match I8(x5) { case 0, 1 => U8(x5) case _ if true => U8(0) case _ => U8(x5) }))
+    }
+    return (match U32(x1) { case 0, 1 => I8((match (1 - I8(x6)) { case (-1) => I8((checked I8(1.7976931348623157e308) catch default 0)) case 0 if false => I8(r15_5(I32(x5 & 7), 8)) nomatch => I8((8 + I8(x1))) })) nomatch => I8((match (-x3) { case (-1) => I8((checked I8(1.0) catch default 3)) case 0 => I8((~I8(x6))) nomatch => I8((-4)) })) })
+}
+K15 I8 = c15(25302, 6941308114393323773, (-0.5), (-1))
+v15_0 mut U16 = 25302
+v15_1 mut U64 = 6941308114393323773
+v15_2 mut F16 = (-0.5)
+v15_3 mut I32 = (-1)
+type S16_0 struct(f0 I16, f1 I32) {
+    f0
+    f1
+}
+fn r16_0(x5 I32, x6 U32) U32 {
+    if x5 <= 0 { return x6 }
+    return r16_0(x5 - 1, 0)
+}
+error Err16 {
+    A
+    B
+    C
+}
+fn f16_2(x7 I32, x8 F32, x9 F32) I64 ? Err16 {
+    x10 mut S16_0& = S16_0((-1), x7)
+    if ((true if true else true) != (x8 > 72.369)) { error Err16.C }
+    return ((-9223372036854775808) % (((checked (-I64(x7)) catch default 224605730310166340) & 7) + 1))
+}
+fn h16_3(x7 U64, x8 U16) I16 {
+    x9 U16 = x8
+    x10 Array<U64> = U64[x7, (F64(F64(x9)).Bits() if F64(x9) == F64(x9) else 8747990342594754926), 33, 255, x7]
+    for x11 in x10 {
+        x12 Array<Bool> = Bool[false, (x10 != x10), x10.Contains(x10), (x10 == x10), ((U32(2032218668).F32FromBits()) != (U32(2032218668).F32FromBits()))]
+        x13 I16 = 2491
+    }
+    return (-(239 * U8(x7)))
+}
+fn h16_1(x5 U64) I64 {
+    x6 I16 = ((match (try f16_2(927288006, 0.5, 3.4e38) catch default (-2)) { case (-1) => I16(h16_3(223236930348029580, 105)) case 0, 2 => I16((I16(x5) + (-32768))) case _ if true => I16(19631) nomatch => I16((32767 + I16(x5))) }) * I8((match I8(x5) { case 0, 3 => U32(853278990) case 1 => U32(9) case 2 => U32(4294967295) nomatch => U32(4294967295) })))
+    return 9223372036854775807
+}
+type G16<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G16<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G16<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G16<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn r16_5(x13 I32, x14 U16) U16 {
+    if x13 <= 0 { return x14 }
+    return r16_5(x13 - 1, 6)
+}
+fn f16_4(x9 U16, x10 I32) Bool ? Err16 {
+    x11 U16 = 1
+    x12 F32 = 49.427
+    x13 U16 = x11.AtomicAdd((r16_5(I32(U32(x9) & 7), x11)).Pow(67))
+    if (false != (x10 > 1)) { error Err16.A }
+    return true
+}
+fn c16(x0 I64, x1 I8, x2 U64, x3 U64) String {
+    x4 U32 = 4294967295
+    x5 U32 = x4.AtomicCompareSwap(r16_0(I32(h16_1(18446744073709551615) & 7), 4), 65535)
+    x6 F16 = (checked ((6.53696e-40 / F16(x5)) / (-1.2804e-31)) catch default 305.82)
+    x7 G16<U32> = G16<U32>((65535 & (match I16(x1) { case (-2) => U32(1) case (-1) => U32(x5) case _ => U32(x4) })), 3)
+    x8 I32 = (I32((try U16((U16(x3) << 10)).Format(33).ParseInt(33) catch default 9223372036854775807)) + (-1))
+    try f16_4((checked (U8(x2)).Pow(3) catch default 255), (~x8)) catch Err16.A {
+        x9 Map<S16_0, I16> = Map<S16_0, I16>()
+    } catch {
+        defer { x5 |= (~x5) }
+    }
+    x9 String = $((-6))
+    return $(x5) " " $(x5) " " $(x6)
+}
+K16 String = c16(10, 1, 4794286611595214073, 18446744073709551615)
+v16_0 mut I64 = 10
+v16_1 mut I8 = 1
+v16_2 mut U64 = 4794286611595214073
+v16_3 mut U64 = 18446744073709551615
+type S17_0 struct(f0 U16, f1 U32) {
+    f0
+    f1
+}
+type S17_1 struct(p0 Array<U8>&, f1 U16) {
+    f0 := Array<U8>(2)
+    for i in range 2 { f0[i] = p0[i] }
+    f1
+}
+fn (a S17_1&) Str() String { return "<" $a.f0 ">" }
+type E17_0 enum {
+    C0
+    C1
+    C2(f0 I16, f1 I64)
+    C3(f0 I16, f1 I16)
+}
+fn c17(x0 I16, x1 F16, x2 U32) U64 {
+    x3 Array<BF16> = BF16[(-552.432) for x4 in range 4]
+    x4 U32 = (x2 * 1)
+    return 1
+}
+K17 U64 = c17(1, (-666.920), 0)
+v17_0 mut I16 = 1
+v17_1 mut F16 = (-666.920)
+v17_2 mut U32 = 0
+type S18_0 struct(f0 U64, f1 F64) {
+    f0
+    f1
+}
+error Err18 {
+    A
+    B
+    C
+}
+fn f18_0(x5 I8) F64 ? Err18 {
+    x6 Map<I32, I32> = Map<I32, I32>()
+    if (true != (x5 > (-62))) { error Err18.B }
+    return (679.189 * F64(x5))
+}
+fn h18_1(x9 U16, x10 U32, x11 I32) BF16 {
+    x12 Map<I64, I64> = Map<I64, I64>()
+    x13 I8 = (-7)
+    x13 = 1
+    return (-1.0)
+}
+fn c18(x0 I32, x1 I32, x2 I8) String {
+    x3 I32 = x0
+    x4 Array<F64> = F64[(-0.1), 0.5, (try f18_0((-x2)) catch Err18.A, Err18.C default (-1.0) catch default 0.1), (-0.5), (F64(x1) + (-0.0))]
+    x5 List<F16> = List<F16>()
+    x6 Array<I32> = I32[((checked (-x3) catch default (-1))).Max((x0 - 1)), 7, 255]
+    x7 fn(x8 BF16) BF16 = fn(x8) { return (checked (h18_1(30103, 462774967, (-7)) - (9.2e-41 / x8)) catch default 457.617) }
+    return $(x4[1:5]) " " $(x4[((U8(x2) & 7) % 5)]) " " $(x2) " " $(x7)
+}
+K18 String = c18((-2010776749), (-2076878039), 67)
+v18_0 mut I32 = (-2010776749)
+v18_1 mut I32 = (-2076878039)
+v18_2 mut I8 = 67
+type E19_0 enum {
+    C0(f0 U16, f1 I16)
+    C1(f0 Bool, f1 I16)
+    C2(f0 Bool)
+    C3
+}
+type E19_1 enum {
+    C0(f0 BF16, f1 I8)
+    C1(f0 I8)
+    C2
+}
+fn h19_0(x6 U32, x7 U8, x8 U32, x9 mut List<F16>&) Bool {
+    x9.Push((-F16(x7)))
+    x9.Push((checked ((-(checked x9[125] catch default 0.0)) - (checked x9[x7] catch default 1.0)) catch default 6e-08))
+    return false
+}
+fn r19_1(x7 I32, x8 BF16) BF16 {
+    if x7 <= 0 { return x8 }
+    return r19_1(x7 - 1, (checked (x8 * (-1.1754943508222875e-38)) catch default 3.38e38))
+}
+fn r19_2(x11 I32, x12 I8) I8 {
+    if x11 <= 0 { return x12 }
+    return r19_2(x11 - 1, x12)
+}
+fn c19(x0 U8, x1 I16, x2 F16, x3 F16) I32 {
+    x4 List<F16> = List<F16>()
+    x5 I32 = (((-2022529018) & (~I32(x1))) * (U8((checked U8(3.68805e11) catch default 10)) if h19_0(x0, x0, 1660017217, x4) else U8(5)))
+    x6 String = $(x4.Iter().Fold(I8(127), fn(x7, x8) { return I8((-128)) })) " " $((((-1.0) / BF16(x0)) + r19_1(I32(I8(x1) & 7), (-0.0))))
+    x7 String = $(F32[(-3.4e38) for x8 in range 1])
+    x8 F64 = (U64(11627511080692109747).F64FromBits())
+    x9 List<U16> = List<U16>()
+    x10 I64 = r19_2(I32(U32(x5) & 7), (I8(x0) >> ((-1) & 7)))
+    return x5
+}
+K19 I32 = c19(255, 20413, (-867.743), 9.80563e-17)
+v19_0 mut U8 = 255
+v19_1 mut I16 = 20413
+v19_2 mut F16 = (-867.743)
+v19_3 mut F16 = 9.80563e-17
+type G20<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G20<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G20<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G20<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn h20_0(x6 U8, x7 I32) U64 {
+    x8 Array<I32> = I32[x7]
+    return 6
+}
+fn c20(x0 I8, x1 I64, x2 U64, x3 Bool) G20<U16> {
+    x4 Array<U64> = U64[((U32(x1) - 4294967295) | ((checked U32(0.0) catch default 1) * (checked (-U32(x0)) catch default 9))), 65535]
+    for x5 in range (-2), 6, 3 {
+        x6 I16 = (-1)
+    }
+    x5 I32 = (checked (3108 * I32(h20_0(1, (-406714700)))) catch default (-71312893))
+    return G20<U16>(1, 0)
+}
+K20 G20<U16> = c20((-1), (-6006257536969132326), 6, true)
+v20_0 mut I8 = (-1)
+v20_1 mut I64 = (-6006257536969132326)
+v20_2 mut U64 = 6
+v20_3 mut Bool = true
+type E21_0 enum {
+    C0(f0 U16)
+    C1
+    C2(f0 BF16, f1 F64)
+}
+fn c21(x0 I64) I8 {
+    x1 I32 = 22351
+    defer x1 = (-5)
+    x2 Array<U8> = U8[(U8(3) if true else U8(7))]
+    return 27
+}
+K21 I8 = c21((-1))
+v21_0 mut I64 = (-1)
+type S22_0 struct(f0 I8, f1 U64) {
+    f0
+    f1
+}
+type E22_0 enum {
+    C0
+    C1(f0 F32)
+    C2(f0 F64, f1 U64)
+    C3
+}
+type E22_1 enum {
+    C0(f0 Bool, f1 I32)
+    C1
+    C2(f0 I8)
+}
+error Err22 {
+    A
+    B
+    C
+}
+fn f22_1(x7 U8, x8 U16) U64 ? Err22 {
+    x9 F16 = 460.130
+    if ((not false) != (x7 > 255)) { error Err22.B }
+    return 18446744073709551615
+}
+fn f22_0(x2 U32, x3 I16, x4 F16) I16 ? Err22 {
+    x5 F32 = 1.49414e-12
+    x6 String = $((checked (7.79117e27 * (BF16(x2) / 3.38e38)) catch default 0.0)) " " $(S22_0((-89), (try f22_1(3, 1) catch default 18446744073709551615))) " " $(E22_0.C0)
+    if ((U16(x2) != 65535) != (x3 > (-1))) { error Err22.C }
+    return I16((match U64(x3) { case 0 => U64(1) nomatch => U64(1056174073341980568) }))
+}
+fn r22_3(x8 I32, x9 F32) F32 {
+    if x8 <= 0 { return x9 }
+    return r22_3(x8 - 1, x9)
+}
+fn f22_2(x3 I16, x4 I64, x5 I32) U8 ? Err22 {
+    x6 fn(x7 U64) BF16 = fn(x7) { return 3.38e38 }
+    x7 String = $(r22_3(I32(x5 & 7), 3.4e38)) " " $((F32((-1.1754943508222875e-38)) if false else F32((U32(2804359118).F32FromBits())))) " " $((I16(32767) if true else I16((checked ((-1) - x3) catch default (-5)))))
+    if (true != (x5 > (-2))) { error Err22.B }
+    return 10
+}
+fn f22_5(x7 U64, x8 Bool) BF16 ? Err22 {
+    x9 List<F64> = List<F64>()
+    x10 U16 = ((match U8(x7) { case 0 => U16(0) case 1 => U16(7) case _ if x8 => U16(4) case 2, 5 if false => U16((checked U16(986.203) catch default 65535)) nomatch => U16((U16(65535) if x8 else U16(40584))) }) & 2358)
+    x11 Array<U8> = U8[131, (246 - U8(x7)), 255, 1, (255 * U8(x7))]
+    if (x8 != x8) { error Err22.B }
+    return 9.23365e-32
+}
+fn h22_4(x3 I8, x4 I64, x5 I64) I32 {
+    match x5 {
+        case 2 {
+            x6 BF16 = (try f22_5(7594898922215940901, false) catch default 9.2e-41)
+        }
+        nomatch {
+            x6 U64 = (17062845216132823571 | U64(x5))
+        }
+    }
+    x6 fn(x7 F16) U8 = fn(x7) { return 211 }
+    x7 Map<U64, I8> = Map<U64, I8>()
+    return (I16(31483) if (U64(x5) != 1) else I16(27369))
+}
+fn c22(x0 U16, x1 Bool) String {
+    match ((try f22_0(0, 32767, (-5.22167e-25)) catch default 32767) & 1) {
+        case 1 {
+            match (5 - (checked (I16(x0) - (-32768)) catch default 3)) {
+                case (-2) {
+                    x2 U8 = 1
+                    x3 I64 = 9223372036854775807
+                }
+                case (-1) {
+                    x2 I16 = ((I16((23384 / ((I16(x0) & 7) + 1))) if x1 else I16((-1))) ^ (-30359))
+                }
+                nomatch {
+                    x2 I16 = (-1)
+                    x3 Array<F32> = Array<F32>(2)
+                }
+            }
+            x2 Array<U32> = Array<U32>(4)
+        }
+        case _ {
+            x2 U8 = (try f22_2(9235, 391170936150910013, h22_4(((-113) + I8(x0)), (checked (I64(x0) * (-7)) catch default (-3786631740784262794)), 7554006131363130560)) catch default 4)
+        }
+    }
+    x2 Array<BF16> = BF16[((BF16(x0) + (-1.0)) + (BF16(x0) - (-9.2e-41)))]
+    return $(E22_0.C3) " " $(x2)
+}
+K22 String = c22(2, true)
+v22_0 mut U16 = 2
+v22_1 mut Bool = true
+type E23_0 enum {
+    C0
+    C1(f0 U32, f1 U32)
+    C2
+    C3
+}
+error Err23 {
+    A
+    B
+    C
+}
+fn f23_0(x3 U32, x4 F32, x5 I8) Bool ? Err23 {
+    x6 U16 = (match U64(x5) { case 0 => U16((checked U16(I64(x5)) catch default 0)) nomatch => U16(0) })
+    if ((x3 < x3) != (x5 > (-128))) { error Err23.B }
+    return true
+}
+fn r23_1(x3 I32, x4 U32) U32 {
+    if x3 <= 0 { return x4 }
+    return r23_1(x3 - 1, 6)
+}
+fn r23_2(x4 I32, x5 F16) F16 {
+    if x4 <= 0 { return x5 }
+    return r23_2(x4 - 1, x5)
+}
+fn c23(x0 I8, x1 F64, x2 I32) F32 {
+    try f23_0(r23_1(I32(I64(x0) & 7), 4294967295), 0.5, x0) catch Err23.A {
+        x3 F64 = (278.581 - ((U32(0).F32FromBits()) + 0.0))
+    } catch {
+        x3 Bool = (true if true else true)
+    }
+    x3 I16 = 4
+    return ((0.00006103515625 * (F16(x3)).Min(0.1)) / (197.340 * r23_2(I32(U8(x2) & 7), (-425.54))))
+}
+K23 F32 = c23((-62), 0.1, (-7))
+v23_0 mut I8 = (-62)
+v23_1 mut F64 = 0.1
+v23_2 mut I32 = (-7)
+type S24_0 struct(f0 F32, f1 U16) {
+    f0
+    f1
+}
+type S24_1 struct(f0 I8, f1 I8) {
+    f0
+    f1
+}
+type E24_0 enum {
+    C0(f0 I32, f1 U8)
+    C1
+    C2(f0 F32, f1 U32)
+    C3(f0 I32)
+}
+type E24_1 enum {
+    C0
+    C1
+}
+type G24<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G24<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G24<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G24<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn g24_0(x5 I64, x6 Array<U32>) U32 {
+    x7 U32 = 2
+    x8 Array<U16> = Array<U16>(0)
+    if x6.Len() > 0 {
+        x9 I16 = (~I16(x7))
+    } else {
+        x9 List<F32> = List<F32>()
+        x10 Array<U16> = Array<U16>(5)
+    }
+    return U32(x6.Len())
+}
+fn c24(x0 I32, x1 I8) F32 {
+    if (false != (x1 > (-7))) {
+        x2 Map<E24_1, F64> = Map<E24_1, F64>()
+        x3 U64 = (F64(F64(x0)).Bits() if F64(x0) == F64(x0) else 0)
+        x4 U8 = 4
+    }
+    x2 E24_0 = E24_0.C1
+    x3 U64 = 10
+    x4 G24<U64> = G24<U64>((checked (g24_0(x1, U32[1, 688811103, 1, 0, 6]) * (U32(x3) >> ((-6) & 31))) catch default 4294967295), 3)
+    x5 String = $(10)
+    return (1.4e-45 * (F32(0.0) if (x2 == E24_0.C1) else F32((-0.5))))
+}
+K24 F32 = c24(1, (-128))
+v24_0 mut I32 = 1
+v24_1 mut I8 = (-128)
+type S25_0 struct(f0 F16, p1 Array<F64>&) {
+    f0
+    f1 := Array<F64>(3)
+    for i in range 3 { f1[i] = p1[i] }
+}
+type S25_1 struct(f0 U8, f1 U16) {
+    f0
+    f1
+}
+fn (a S25_1&) Str() String { return "<" $a.f0 ">" }
+fn c25(x0 U32, x1 U64) String {
+    x2 Bool = ((not (F32(x1) != F32(x1))) if ((~I8(x1)) <= I8(x1) <= ((-1) * I8(x1))) else true)
+    x3 F64 = (-1.7976931348623157e308)
+    x3 = (-320.387)
+    return $(((match I16(x1) { case (-2), -1 => U16((checked (U16(x1) << U16(x1)) catch default 1)) nomatch => U16((match I64(x1) { case 1 => U16(39901) case _ => U16(42800) })) }) >> ((checked I32(41.697) catch default 2147483647) & 15))) " " $(1.4e-45) " " $(S25_1((match (~x0) { case 0, 2 => U8((7 - U8(x0))) case 1 => U8((U8(x0) << (248 & 7))) case _ => U8(7) }), 124)) " " $(x0) " " $(x3)
+}
+K25 String = c25(3, 6)
+v25_0 mut U32 = 3
+v25_1 mut U64 = 6
+type S26_0 struct(f0 F16) {
+    f0
+}
+type S26_1 struct(f0 I8, f1 F64) {
+    f0
+    f1
+}
+fn (a S26_1&) Str() String { return "<" $a.f0 ">" }
+fn c26(x0 U8, x1 U8, x2 F64, x3 I16) F16 {
+    x4 U8 = 169
+    x4 &= (checked U8((-1.4e-45)) catch default 255)
+    x5 I16 = x3
+    x6 Map<U8, U16> = Map<U8, U16>()
+    x6.Put(x0, ((U16(x3) - 34466) ^ (U16(2961) if false else U16(3))))
+    return (checked (F16((x5).Pow(42)) + (-65504.0)) catch default 6e-08)
+}
+K26 F16 = c26(1, 246, 2.2250738585072014e-308, 7)
+v26_0 mut U8 = 1
+v26_1 mut U8 = 246
+v26_2 mut F64 = 2.2250738585072014e-308
+v26_3 mut I16 = 7
+type S27_0 struct(f0 U32) {
+    f0
+}
+fn h27_0(x6 U32, x7 U8) I8 {
+    x8 Array<I64> = Array<I64>(4)
+    return (-2)
+}
+error Err27 {
+    A
+    B
+    C
+}
+fn f27_2(x9 U8, x10 U8, x11 U16) I16 ? Err27 {
+    x12 Array<U64> = Array<U64>(0)
+    x13 Map<U64, U16> = Map<U64, U16>()
+    x14 I32 = (-5)
+    if (true != (x11 > 65535)) { error Err27.C }
+    return 7
+}
+fn f27_3(x9 U64, x10 F16, x11 U32) U8 ? Err27 {
+    x12 Bool = (x9 < U64((9 / ((I16(x9) & 7) + 1))))
+    x13 BF16 = (U16((checked ((BF16(BF16(x9)).Bits() if BF16(x9) == BF16(x9) else 65535) + 17879) catch default 21267)).BF16FromBits())
+    if (true != (x10 > (-5.30727e-18))) { error Err27.A }
+    return (-(-U8(x11)))
+}
+fn g27_0(x9 U8, x10 Array<BF16>) U16 {
+    x11 U32 = 4294967295
+    x12 U8 = (match x10.Len() { case 0 => U8(x9) case 1 => U8(x9) case _ => U8((checked (-(checked U8(I8(x11)) catch default 255)) catch default 5)) })
+    if x10.Len() > 2 {
+        x13 U32 = 1
+        x11 <<= (I16(x12) & 31)
+    } else {
+        x13 List<U16> = List<U16>()
+    }
+    return x12
+}
+fn f27_1(x6 U16) U8 ? Err27 {
+    x7 Bool = false
+    x8 Array<I16> = I16[(-1), (-117), (match I16(x6) { case 1 => I16((I16(x6) | 1)) nomatch => I16((-32768)) }), 255, (try f27_2((try f27_3(18446744073709551615, 1.0, 4) catch Err27.A, Err27.C default 0 catch default 0), (-U8(x6)), g27_0(255, BF16[(-0.1), 6.84245e33, (-563.6), 6.27239e19])) catch Err27.A, Err27.C default (-5) catch default 26857)]
+    x9 I8 = (-1)
+    if ((I32(x9) < (-1212374623)) != (x6 > 0)) { error Err27.C }
+    return (U8((U8(x9) * 108)) if (I32(x6) == (-111497805)) else U8(255))
+}
+type G27<T> struct(v T, n I64) {
+    v
+    n
+    a := Array<T>(8)
+}
+fn (b mut G27<T>&) put(i I64, x T) {
+    if b.n > 0 { b.a[(i & 7) % b.n] = x }
+}
+fn (b G27<T>&) sum() T {
+    s T = b.v
+    for j in range b.n { s = s + b.a[j] }
+    return s
+}
+fn (b G27<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }
+fn c27(x0 I32, x1 I16, x2 I16, x3 I64) U32 {
+    x4 F64 = ((match (checked I64(U64(x3)) catch default (-2)) { case 2, 4 if true => F32((-F32(x1))) case _ if false => F32((F32((-1.4e-45)) if false else F32(1.0))) case 3 => F32(0.1) case _ => F32(0.1) }) + 495.646)
+    x5 I8 = h27_0(U32(x0), ((U8(x3) + 232)).Max((try f27_1(1) catch Err27.A, Err27.C default 10 catch default 1)))
+    x6 F16 = (U16((U16(x0) << (x5 & 15))).F16FromBits())
+    x7 Array<U16> = Array<U16>(3)
+    for x8 in x7 {
+        x9 Array<U8>& = Array<U8>(2, ((U8(x0) << 0) ^ (U8(x0) << 4)))
+        x10 G27<U16> = G27<U16>(1, 3)
+        x11 List<I32> = List<I32>()
+    }
+    return x7[1]
+}
+K27 U32 = c27(2147483647, 2, 4676, (-7553615102275379552))
+v27_0 mut I32 = 2147483647
+v27_1 mut I16 = 2
+v27_2 mut I16 = 4676
+v27_3 mut I64 = (-7553615102275379552)
+type E28_0 enum {
+    C0(f0 U16, f1 U64)
+    C1
+}
+fn c28(x0 U16, x1 U64, x2 U64, x3 U8) Array<Bool> {
+    x4 List<F64> = List<F64>()
+    x5 I64 = (((checked I64((checked x4[x4.Iter().Fold(I32(1), fn(x6, x7) { return I32(x6) })] catch default 2.2250738585072014e-308)) catch default 1) >> 46) / ((((checked (I64(x1) + 597300523682919339) catch default (-9223372036854775808)) % ((I64(x2) & 7) + 1)) & 7) + 1))
+    return Bool[(false or (false and true)), false, false]
+}
+K28 Array<Bool> = c28(0, 15059707958542309021, 10, 255)
+v28_0 mut U16 = 0
+v28_1 mut U64 = 15059707958542309021
+v28_2 mut U64 = 10
+v28_3 mut U8 = 255
+type S29_0 struct(f0 F32) {
+    f0
+}
+type S29_1 struct(f0 U64) {
+    f0
+}
+fn (a S29_1&) Eq(o S29_1&) Bool { return a.f0 == o.f0 }
+fn (a S29_1&) Hash() I64 { return I64(a.f0) }
+type E29_0 enum {
+    C0
+    C1(f0 Bool)
+    C2
+}
+fn h29_0(x7 I8, x8 U32) BF16 {
+    x9 U16 = (8 * U16(x8))
+    x10 S29_1& = S29_1(0)
+    return (-8.10849e-9)
+}
+fn r29_1(x7 I32, x8 U32) U32 {
+    if x7 <= 0 { return x8 }
+    return r29_1(x7 - 1, ((checked (x8 * x8) catch default 1) | 4294967295))
+}
+fn g29_0(x3 I32, x4 Array<I64>) BF16 {
+    x5 List<F32> = List<F32>()
+    x6 fn(x7 I64) F32 = fn(x7) { return 241.358 }
+    if x4.Len() > 3 {
+        for x7 in range 0 {
+            defer x5.Push(((-1.27061e-1) / (F32(x7) + (-1.0))))
+        }
+        x7 U8 = (((checked (U8(x3) >> U8(x3)) catch default 1)).Max(149) + ((U8(x3) + 1) * (255 / ((U8(x3) & 7) + 1))))
+    } else {
+        x7 Array<F64> = Array<F64>(3)
+    }
+    return h29_0((-6), r29_1(I32(I8(x3) & 7), 4294967295))
+}
+error Err29 {
+    A
+    B
+    C
+}
+fn f29_3(x6 U8) F32 ? Err29 {
+    x7 List<BF16> = List<BF16>()
+    if ((F16(x6) != F16(x6)) != (x6 > 1)) { error Err29.A }
+    return (576.482 / F32(x6))
+}
+fn r29_2(x4 I32, x5 F32) F32 {
+    if x4 <= 0 { return x5 }
+    return r29_2(x4 - 1, (x5 - (try f29_3(1) catch default 5.45043e7)))
+}
+fn r29_4(x8 I32, x9 U32) U32 {
+    if x8 <= 0 { return x9 }
+    return r29_4(x8 - 1, 4294967295)
+}
+fn c29(x0 U32, x1 BF16) Bool {
+    x2 Array<F32> = F32[3.4e38, g29_0((2147483647 * I32(x0)), I64[(-1), (-1), 65535, (-9), 84])]
+    x3 String = $(I8[(I8(x4)).Abs() for x4 in range 5]) " " $(S29_0(x2[((U16(x0) & 7) % 2)]))
+    x2[1] = r29_2(I32((match (~U64(x0)) { case 0 if true => I32(2) case _ => I32((checked (7 / I32(x0)) catch default (-2))) }) & 7), (-1.0))
+    x4 Array<F64> = Array<F64>(1)
+    x5 mut Array<F64>&x4 = x4
+    x6 S29_1& = S29_1((12590391022289724988 & (U64(x0) + 1)))
+    x7 U64 = x6.f0
+    return ((match I64(x0) { case (-1) if (true if true else false) => F64((x5[((I32(x0) & 7) % 1)] * (-609.225))) case 0 => F64((F64(x4[((r29_4(I32(x7 & 7), 4294967295) & 7) % 1)]) if true else F64(x5[0]))) case 1 => F64(x5[((U16(x7) & 7) % 1)]) nomatch => F64(8.6307e-37) }) in x5)
+}
+K29 Bool = c29(573603278, 0.1)
+v29_0 mut U32 = 573603278
+v29_1 mut BF16 = 0.1
+fn main() ? io.Error {
+    if os.Args().Len() > 1000 {
+        v0_0 = 0
+        v0_1 = 0
+        v0_2 = 0
+        v1_0 = 0
+        v2_0 = 0
+        v2_1 = 0
+        v3_0 = 0
+        v4_0 = 0
+        v4_1 = 0
+        v4_2 = 0
+        v5_0 = 0
+        v6_0 = 0
+        v7_0 = 0
+        v7_1 = 0
+        v7_2 = 0
+        v8_0 = 0
+        v9_0 = 0
+        v9_1 = 0
+        v10_0 = 0
+        v10_1 = 0
+        v10_2 = 0
+        v11_0 = 0
+        v12_0 = 0
+        v12_1 = 0
+        v13_0 = 0
+        v13_1 = 0
+        v13_2 = 0
+        v13_3 = 0
+        v14_0 = 0
+        v14_1 = 0
+        v14_2 = 0
+        v14_3 = 0
+        v15_0 = 0
+        v15_1 = 0
+        v15_2 = 0
+        v15_3 = 0
+        v16_0 = 0
+        v16_1 = 0
+        v16_2 = 0
+        v16_3 = 0
+        v17_0 = 0
+        v17_1 = 0
+        v17_2 = 0
+        v18_0 = 0
+        v18_1 = 0
+        v18_2 = 0
+        v19_0 = 0
+        v19_1 = 0
+        v19_2 = 0
+        v19_3 = 0
+        v20_0 = 0
+        v20_1 = 0
+        v20_2 = 0
+        v20_3 = false
+        v21_0 = 0
+        v22_0 = 0
+        v22_1 = false
+        v23_0 = 0
+        v23_1 = 0
+        v23_2 = 0
+        v24_0 = 0
+        v24_1 = 0
+        v25_0 = 0
+        v25_1 = 0
+        v26_0 = 0
+        v26_1 = 0
+        v26_2 = 0
+        v26_3 = 0
+        v27_0 = 0
+        v27_1 = 0
+        v27_2 = 0
+        v27_3 = 0
+        v28_0 = 0
+        v28_1 = 0
+        v28_2 = 0
+        v28_3 = 0
+        v29_0 = 0
+        v29_1 = 0
+    }
+    try io.Print("0: " $K0 " | " $c0(v0_0, v0_1, v0_2) "\n")
+    try io.Print("1: " $K1 " | " $c1(v1_0) "\n")
+    try io.Print("2: " $K2 " | " $c2(v2_0, v2_1) "\n")
+    try io.Print("3: " $K3 " | " $c3(v3_0) "\n")
+    try io.Print("4: " $K4 " | " $c4(v4_0, v4_1, v4_2) "\n")
+    try io.Print("5: " $K5 " | " $c5(v5_0) "\n")
+    try io.Print("6: " $K6 " | " $c6(v6_0) "\n")
+    try io.Print("7: " $K7 " | " $c7(v7_0, v7_1, v7_2) "\n")
+    try io.Print("8: " $K8 " | " $c8(v8_0) "\n")
+    try io.Print("9: " $K9 " | " $c9(v9_0, v9_1) "\n")
+    try io.Print("10: " $K10 " | " $c10(v10_0, v10_1, v10_2) "\n")
+    try io.Print("11: " $K11 " | " $c11(v11_0) "\n")
+    try io.Print("12: " $K12 " | " $c12(v12_0, v12_1) "\n")
+    try io.Print("13: " $K13 " | " $c13(v13_0, v13_1, v13_2, v13_3) "\n")
+    try io.Print("14: " $K14 " | " $c14(v14_0, v14_1, v14_2, v14_3) "\n")
+    try io.Print("15: " $K15 " | " $c15(v15_0, v15_1, v15_2, v15_3) "\n")
+    try io.Print("16: " $K16 " | " $c16(v16_0, v16_1, v16_2, v16_3) "\n")
+    try io.Print("17: " $K17 " | " $c17(v17_0, v17_1, v17_2) "\n")
+    try io.Print("18: " $K18 " | " $c18(v18_0, v18_1, v18_2) "\n")
+    try io.Print("19: " $K19 " | " $c19(v19_0, v19_1, v19_2, v19_3) "\n")
+    try io.Print("20: " $K20 " | " $c20(v20_0, v20_1, v20_2, v20_3) "\n")
+    try io.Print("21: " $K21 " | " $c21(v21_0) "\n")
+    try io.Print("22: " $K22 " | " $c22(v22_0, v22_1) "\n")
+    try io.Print("23: " $K23 " | " $c23(v23_0, v23_1, v23_2) "\n")
+    try io.Print("24: " $K24 " | " $c24(v24_0, v24_1) "\n")
+    try io.Print("25: " $K25 " | " $c25(v25_0, v25_1) "\n")
+    try io.Print("26: " $K26 " | " $c26(v26_0, v26_1, v26_2, v26_3) "\n")
+    try io.Print("27: " $K27 " | " $c27(v27_0, v27_1, v27_2, v27_3) "\n")
+    try io.Print("28: " $K28 " | " $c28(v28_0, v28_1, v28_2, v28_3) "\n")
+    try io.Print("29: " $K29 " | " $c29(v29_0, v29_1) "\n")
+}

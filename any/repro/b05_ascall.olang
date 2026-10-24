@@ -1,0 +1,20 @@
+# an "as" of a call's built any kept outside the loop: the call lands where the list lives
+type W trait for Btn, Sl {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Sl struct(at I64) { at }
+fn (s Sl&) Draw() String { return "<" $s.at ">" }
+fn pick(i I64) any W& {
+    if i % 2 == 0 { return Btn("p" $i "-" $(i * 9)) }
+    return Sl(i)
+}
+fn main() {
+    keep := List<Btn&>()
+    for i in range 6 {
+        if i % 2 == 0 { keep.Push(pick(i) as Btn) }
+    }
+    churn()
+    for b in keep { say(b.label) }
+}

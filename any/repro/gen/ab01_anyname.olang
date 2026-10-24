@@ -1,0 +1,30 @@
+import "std/io"
+# 'any' as an ordinary name: a parameter, a field, a local, a function
+type Hold struct(any I64) {
+    any
+}
+fn f(any I64) I64 { return any + 1 }
+fn any2(n I64) I64 { return n }
+fn main() {
+    any := 3
+    h := Hold(any)
+    say($f(any) " " $h.any " " $any2(any))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

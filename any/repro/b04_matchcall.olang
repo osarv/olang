@@ -1,0 +1,24 @@
+# a type case on a call's built any, its binding kept outside the loop; the same through "as"
+type W trait for Btn, Sl {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Sl struct(at I64) { at }
+fn (s Sl&) Draw() String { return "<" $s.at ">" }
+fn pick(i I64) any W& {
+    if i % 2 == 0 { return Btn("p" $i "-" $(i * 9)) }
+    return Sl(i)
+}
+fn main() {
+    keep := List<Btn&>()
+    for i in range 6 {
+        match pick(i) {
+            case Btn b { keep.Push(b) }
+            case Sl _ { }
+        }
+        if i % 2 == 0 { keep.Push(pick(i) as Btn) }
+    }
+    churn()
+    for b in keep { say(b.label) }
+}

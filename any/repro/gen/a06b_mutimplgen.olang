@@ -1,0 +1,34 @@
+import "std/io"
+# the a06 shape through generic code: a type whose Seen writes its receiver, called on a read-only reference
+type W trait {
+    Seen() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Seen() I64 {
+    t.at = 55
+    return t.at
+}
+G Tally& = Tally(1)
+fn g<S W>(s S&) I64 { return s.Seen() }
+fn main() {
+    say($g(G))
+    say($G.at)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

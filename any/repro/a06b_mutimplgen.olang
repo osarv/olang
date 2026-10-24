@@ -1,0 +1,15 @@
+# the a06 shape through generic code: a type whose Seen writes its receiver, called on a read-only reference
+type W trait {
+    Seen() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Seen() I64 {
+    t.at = 55
+    return t.at
+}
+G Tally& = Tally(1)
+fn g<S W>(s S&) I64 { return s.Seen() }
+fn main() {
+    say($g(G))
+    say($G.at)
+}

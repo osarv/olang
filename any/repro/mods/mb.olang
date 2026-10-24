@@ -1,0 +1,2 @@
+type Sq struct(K I64) { K }
+fn (q Sq&) Area() I64 { return q.K + 1000 }

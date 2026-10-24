@@ -1,0 +1,20 @@
+# an array of anys of loop-body temporaries, copied into an any kept outside the loop; rendered after the body closed
+type Sized trait {
+    Len() I64
+}
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 3 {
+        a := Array<any W&>(2, Btn("first"))
+        a[1] = Btn("b" $i "-" $(i * 7))
+        xs.Push(a)
+        xs.Push(a[0:2])
+    }
+    churn()
+    for x in xs { say($x) }
+}
