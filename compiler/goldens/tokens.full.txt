@@ -110,6 +110,74 @@
 | 9 ;
 | 10 }
 | error L13 7:10
+=== checks/cases/l13widechar.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 c
+| 4 :=
+| 4 '\u{E9}'
+| 4 ;
+| 5 }
+| error L13, L15 4:11
+=== checks/cases/l14araw.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 """first
+|         second
+|         """
+| 6 ;
+| 7 }
+| error L14a 4:13
+=== checks/cases/l14arawclose.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 """
+|         first
+|         second"""
+| 6 ;
+| 7 }
+| error L14a 6:15
+=== checks/cases/l14arawindent.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 """
+|         first
+|       second
+|         """
+| 7 ;
+| 8 }
+| error L14a 6:1
+=== checks/cases/l14arawunclosed.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 """first
+| }
+| 
+| 6 ;
+| error L14a 4:10
 === checks/cases/l14eof.olang
 | 3 fn
 | 3 main
@@ -151,6 +219,54 @@
 | 9 ;
 | 10 }
 | error L14 7:10
+=== checks/cases/l15hex.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 "a\x4g"
+| 4 ;
+| 5 }
+| error L15 4:12
+=== checks/cases/l15surrogate.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 "\u{D800}"
+| 4 ;
+| 5 }
+| error L15 4:11
+=== checks/cases/l15toobig.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 "\u{110000}"
+| 4 ;
+| 5 }
+| error L15 4:11
+=== checks/cases/l15unicode.olang
+| 3 fn
+| 3 main
+| 3 (
+| 3 )
+| 3 {
+| 4 s
+| 4 :=
+| 4 "a\u1F600"
+| 4 ;
+| 5 }
+| error L15 4:12
 === checks/cases/l16unknown.olang
 | 5 fn
 | 5 f

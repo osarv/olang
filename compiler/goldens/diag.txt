@@ -57,7 +57,7 @@ atomicreadonly.olang:4:19: error[P9]: this atomic operation writes its place, wh
       |                   ^
 compilation failed with 1 error
 === atomicredeclared.olang
-atomicredeclared.olang:4:13: error[E23, E33, P9]: the compiler supplies AtomicAdd for Hits - choose another name
+atomicredeclared.olang:4:13: error[E23, E33, E37, P9, T17e]: the compiler supplies AtomicAdd for Hits - choose another name
     4 | fn (h Hits) AtomicAdd(v Hits) Hits { return h }
       |             ^~~~~~~~~
 compilation failed with 1 error
@@ -1031,7 +1031,7 @@ e16constnotry.olang:9:12: error[E16]: index 5 is outside the array's 2 elements
       |            ^
 compilation failed with 1 error
 === e23lenclash.olang
-e23lenclash.olang:4:14: error[E23, E33, P9]: the compiler supplies Len for Nums& - choose another name
+e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Len for Nums& - choose another name
     4 | fn (n Nums&) Len() I64 { return 7 }
       |              ^~~
 compilation failed with 1 error
@@ -1387,7 +1387,7 @@ e33args.olang:4:17: error[E14]: 'Bits' takes no arguments
       |                 ^~~~
 compilation failed with 1 error
 === e33clash.olang
-e33clash.olang:4:13: error[E23, E33, P9]: the compiler supplies Bits for Temp - choose another name
+e33clash.olang:4:13: error[E23, E33, E37, P9, T17e]: the compiler supplies Bits for Temp - choose another name
     4 | fn (t Temp) Bits() U64 { return 7 }
       |             ^~~~
 compilation failed with 1 error
@@ -1420,6 +1420,56 @@ compilation failed with 1 error
 e35spawnbangnothing.olang:6:19: error[E35]: nothing here can fail - write it without '!'
     6 |         spawn g(1)!
       |                   ^
+compilation failed with 1 error
+=== e36intinf.olang
+e36intinf.olang:4:13: error[E36]: U8 has no limit 'Inf' - its limits are Max and Min
+    4 |     x := U8.Inf
+      |             ^~~
+compilation failed with 1 error
+=== e36noadapt.olang
+e36noadapt.olang:4:13: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+    4 |     x I32 = I64.Max
+      |             ^~~~~~~
+compilation failed with 1 error
+=== e36nolimit.olang
+e36nolimit.olang:4:14: error[E36]: I64 has no limit 'Biggest' - its limits are Max and Min
+    4 |     x := I64.Biggest
+      |              ^~~~~~~
+compilation failed with 1 error
+=== e36notextended.olang
+e36notextended.olang:5:17: error[E36]: Meters has no limit 'Max' - a declared type has its base's limits only where it extends it and declares no constructor
+    5 |     x := Meters.Max
+      |                 ^~~
+compilation failed with 1 error
+=== e36notnumber.olang
+e36notnumber.olang:4:15: error[E36]: Bool has no limit 'Max' - it is not a numeric type
+    4 |     x := Bool.Max
+      |               ^~~
+compilation failed with 1 error
+=== e37args.olang
+e37args.olang:5:10: error[E14]: expected 1 argument, found 0
+    5 |     y := x.RotateLeft()
+      |          ^~~~~~~~~~~~~~
+compilation failed with 1 error
+=== e37count.olang
+e37count.olang:5:24: error[E37]: a rotation's count is an integer, found F32
+    5 |     y := x.RotateRight(F32(1))
+      |                        ^~~~~~
+compilation failed with 1 error
+=== e37float.olang
+e37float.olang:5:12: error[E37]: 'PopCount' is a method of the integer types, and F64 is none
+    5 |     n := f.PopCount()
+      |            ^~~~~~~~
+compilation failed with 1 error
+=== e37notextended.olang
+e37notextended.olang:6:12: error[T29f]: Mask declares no 'ByteSwap', and does not extend its base, which has one - declare it with 'extends'
+    6 |     n := m.ByteSwap()
+      |            ^~~~~~~~
+compilation failed with 1 error
+=== e37redeclared.olang
+e37redeclared.olang:4:13: error[E23, E33, E37, P9, T17e]: the compiler supplies LeadingZeros for Bits - choose another name
+    4 | fn (b Bits) LeadingZeros() I64 { return 0 }
+      |             ^~~~~~~~~~~~
 compilation failed with 1 error
 === e4aexact.olang
 e4aexact.olang:5:24: error[E4a]: this literal expression's value does not fit I32
@@ -1950,6 +2000,32 @@ l13newline.olang:7:10: error[L13]: character literal not closed on its line
     7 |     a := 'q
       |          ^~
 compilation failed with 1 error
+=== l13widechar.olang
+l13widechar.olang:4:11: error[L13, L15]: a character literal holds one byte - \u{...} there is below 80; write the text in ""
+    4 |     c := '\u{E9}'
+      |           ^~~~~~
+compilation failed with 1 error
+=== l14araw.olang
+l14araw.olang:4:13: error[L14a]: raw text across lines begins on the line after its '"""' - move this to the next line
+    4 |     s := """first
+      |             ^~~~~
+compilation failed with 1 error
+=== l14arawclose.olang
+l14arawclose.olang:6:15: error[L14a]: the closing '"""' of raw text across lines stands on a line of its own
+    6 |         second"""
+      |               ^~~
+compilation failed with 1 error
+=== l14arawindent.olang
+l14arawindent.olang:6:1: error[L14a]: a line of raw text begins with the indentation of its closing '"""'
+    6 |       second
+      | ^~~~~~~~~~~~
+compilation failed with 1 error
+=== l14arawunclosed.olang
+l14arawunclosed.olang:4:10: error[L14a]: unterminated raw text - '"""' closes it
+    4 |     s := """first
+      |          ^~~
+l14arawunclosed.olang:6:1: error: expected '}', found end of file
+compilation failed with 2 errors
 === l14eof.olang
 l14eof.olang:4:10: error[L14]: unterminated string literal
     4 |     x := "abc
@@ -1962,6 +2038,26 @@ compilation failed with 2 errors
 l14newline.olang:7:10: error[L14]: string literal not closed on its line - write \n for a newline
     7 |     a := "abc
       |          ^~~~
+compilation failed with 1 error
+=== l15hex.olang
+l15hex.olang:4:12: error[L15]: '\x' needs two hexadecimal digits, as \x41
+    4 |     s := "a\x4g"
+      |            ^~
+compilation failed with 1 error
+=== l15surrogate.olang
+l15surrogate.olang:4:11: error[L15]: a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)
+    4 |     s := "\u{D800}"
+      |           ^~~~~~~~
+compilation failed with 1 error
+=== l15toobig.olang
+l15toobig.olang:4:11: error[L15]: a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)
+    4 |     s := "\u{110000}"
+      |           ^~~~~~~~~~
+compilation failed with 1 error
+=== l15unicode.olang
+l15unicode.olang:4:12: error[L15]: '\u' needs one to six hexadecimal digits in braces, as \u{1F600}
+    4 |     s := "a\u1F600"
+      |            ^~
 compilation failed with 1 error
 === l16unknown.olang
 l16unknown.olang:6:8: error[L16]: unexpected character '`'
@@ -3803,6 +3899,21 @@ s1bdecl.olang:4:23: error[S1b]: a one-line body is one simple statement, not a d
     4 |     for i in range 3: y := i
       |                       ^~~~~~
 compilation failed with 1 error
+=== s1blambdaif.olang
+s1blambdaif.olang:4:25: error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
+    4 |     f := fn(x I64) I64: if x > 0 { return 1 }
+      |                         ^~
+compilation failed with 1 error
+=== s1blambdaitem.olang
+s1blambdaitem.olang:8:10: error[E14]: expected 1 argument, found 2
+    8 |     n := give(fn(): return 1, 2)
+      |          ^~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== s1blambdaline.olang
+s1blambdaline.olang:4:23: error[S1b]: a one-line body stands on the line of its ':' - write a block, '{ ... }'
+    4 |     f := fn(x I64) I64:
+      |                       ^
+compilation failed with 1 error
 === s1bnested.olang
 s1bnested.olang:5:15: error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
     5 |     if x > 0: if x > 1 { x = 2 }
@@ -4534,6 +4645,66 @@ compilation failed with 1 error
 t17cparambinding.olang:21:23: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
    21 |         stash(Box.Has(inner), l)
       |                       ^~~~~
+compilation failed with 1 error
+=== t17eanonymous.olang
+t17eanonymous.olang:2:16: error[T17e]: only a declared enum has raw values - declare the enum with 'type'
+    2 | fn pick(x enum String { A, B }) I64 {
+      |                ^~~~~~
+compilation failed with 1 error
+=== t17efromcase.olang
+t17efromcase.olang:3:5: error[T17e]: a case of an enum with raw values may not be named 'From', which makes a case from its raw value
+    3 |     From
+      |     ^~~~
+compilation failed with 1 error
+=== t17efrompayload.olang
+t17efrompayload.olang:8:20: error[T17e]: 'From' makes a case from its raw value alone, and Shape's case 'Round' carries a payload
+    8 |     s := try Shape.From(0) catch default Shape.Dot
+      |                    ^~~~
+compilation failed with 1 error
+=== t17efromuntried.olang
+t17efromuntried.olang:7:13: error[E15]: this call can fail - write 'try', and catch or pass on its errors
+    7 |     o := Op.From("+")
+      |             ^~~~
+compilation failed with 1 error
+=== t17enofit.olang
+t17enofit.olang:4:5: error[T17e]: the raw value 256 does not fit U8
+    4 |     B
+      |     ^
+compilation failed with 1 error
+=== t17enotliteral.olang
+t17enotliteral.olang:5:9: error[T17e]: a raw value is a literal of the raw type U8
+    5 |     A = Base
+      |         ^~~~
+compilation failed with 1 error
+=== t17enovalues.olang
+t17enovalues.olang:9:16: error[T17e]: Dir declares no raw values, so it has no 'Value' - name a raw type after 'enum'
+    9 |     keep := $d.Value()
+      |                ^~~~~
+compilation failed with 1 error
+=== t17erawtype.olang
+t17erawtype.olang:2:15: error[T17e]: an enum's raw type is String or an integer type, found F64
+    2 | type Odd enum F64 {
+      |               ^~~
+compilation failed with 1 error
+=== t17erepeated.olang
+t17erepeated.olang:5:5: error[T17e]: 'C' has the raw value 1, which 'A' has already - raw values are distinct
+    5 |     C
+      |     ^
+compilation failed with 1 error
+=== t17erepeatedtext.olang
+t17erepeatedtext.olang:4:5: error[T17e]: 'B' has the raw value "B", which 'A' has already - raw values are distinct
+    4 |     B
+      |     ^
+compilation failed with 1 error
+=== t17evalueclash.olang
+t17evalueclash.olang:6:11: error[E23, E33, E37, P9, T17e]: the compiler supplies Value for Op - choose another name
+    6 | fn (o Op) Value() I64 {
+      |           ^~~~~
+compilation failed with 1 error
+=== t17ewithouttype.olang
+t17ewithouttype.olang:3:9: error[T17e]: a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'
+    3 |     A = 1
+      |         ^
 compilation failed with 1 error
 === t17payloadoutlived.olang
 t17payloadoutlived.olang:12:31: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept

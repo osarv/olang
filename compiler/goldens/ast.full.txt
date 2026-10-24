@@ -117,6 +117,30 @@
 | VAR 8:5-8:11
 | -- diagnostics
 | error L13 7:10
+=== checks/cases/l13widechar.olang
+| FN 3:1-5:2
+| VAR 4:5-4:18
+| -- diagnostics
+| error L13, L15 4:11
+=== checks/cases/l14araw.olang
+| FN 3:1-7:2
+| VAR 4:5-6:12
+| -- diagnostics
+| error L14a 4:13
+=== checks/cases/l14arawclose.olang
+| FN 3:1-7:2
+| VAR 4:5-6:18
+| -- diagnostics
+| error L14a 6:15
+=== checks/cases/l14arawindent.olang
+| FN 3:1-8:2
+| VAR 4:5-7:12
+| -- diagnostics
+| error L14a 6:1
+=== checks/cases/l14arawunclosed.olang
+| -- diagnostics
+| error  6:1
+| error L14a 4:10
 === checks/cases/l14eof.olang
 | -- diagnostics
 | error  4:14
@@ -129,6 +153,26 @@
 | VAR 8:5-8:11
 | -- diagnostics
 | error L14 7:10
+=== checks/cases/l15hex.olang
+| FN 3:1-5:2
+| VAR 4:5-4:17
+| -- diagnostics
+| error L15 4:12
+=== checks/cases/l15surrogate.olang
+| FN 3:1-5:2
+| VAR 4:5-4:20
+| -- diagnostics
+| error L15 4:11
+=== checks/cases/l15toobig.olang
+| FN 3:1-5:2
+| VAR 4:5-4:22
+| -- diagnostics
+| error L15 4:11
+=== checks/cases/l15unicode.olang
+| FN 3:1-5:2
+| VAR 4:5-4:20
+| -- diagnostics
+| error L15 4:12
 === checks/cases/l16unknown.olang
 | ASSERT 12:15-12:31
 | FN 12:1-12:33
@@ -281,6 +325,12 @@
 | -- diagnostics
 | error S1b 5:15
 === checks/cases/s1bdecl.olang
+| -- diagnostics
+| error S1b 4:23
+=== checks/cases/s1blambdaif.olang
+| -- diagnostics
+| error S1b 4:25
+=== checks/cases/s1blambdaline.olang
 | -- diagnostics
 | error S1b 4:23
 === checks/cases/s1bnested.olang
