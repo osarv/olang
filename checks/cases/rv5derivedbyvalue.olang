@@ -3,7 +3,7 @@
 import "std/io"
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Box struct() { head mut Node& = Node(1) }
 type Holder struct(p mut Box&) {
@@ -21,7 +21,7 @@ fn growv(b Box) { b.head.next = Node(44) }
 fn f(h Holder&) { growv(h.b) }
 fn rd(n Node&) I64 {
     if n.next is null { return 0 }
-    return n.next.v
+    return n.next!.v
 }
 fn main() ? {
     outer mut Box& = Box()

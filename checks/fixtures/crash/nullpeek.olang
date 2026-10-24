@@ -1,16 +1,16 @@
-# T2b: a read through a null reference traps - here one the optimizer can see after inlining (the peek of an empty
-# stack), which it used to treat as undefined and act on: the rest of main, its return included, was deleted and
-# control fell into the code after it, printing the first lines again forever
+# T2c, E35: "x!" on a null ends the program - here one the optimizer can see after inlining (the peek of an empty
+# stack). A read through null it once could see it treated as undefined and acted on: the rest of main, its return
+# included, was deleted and control fell into the code after it, printing the first lines again forever
 import "std/os"
 import "std/io"
 
-type Node struct(v I64, next Node&) {
+type Node struct(v I64, next Node?&) {
     v
     next
 }
 
 type Stack struct() {
-    top Node& = null
+    top Node?& = null
     n I64 = 0
 }
 
@@ -19,7 +19,7 @@ fn (s mut Stack&) Push(v I64) {
     s.n++
 }
 
-fn (s Stack&) Peek() I64 { return s.top.v }
+fn (s Stack&) Peek() I64 { return s.top!.v }
 
 fn main() ? {
     os.OnCrash("nullpeek crashed\n")

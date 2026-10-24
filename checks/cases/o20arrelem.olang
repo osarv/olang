@@ -2,7 +2,7 @@
 # an array element's text that dies before the array's container: must fail
 import "std/io"
 type B struct() {
-    data mut Array<String&>& = null
+    data mut Array<String&>& = Array<String&>(0)
 }
 fn fill(b mut B&) {
     b.data = Array<String&>(2)

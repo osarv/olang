@@ -131,7 +131,7 @@ fn main() ? E, io.IoError {
     try io.Println(counted())
     try io.Println($(try returned() catch E.NEG default 30) " " $broken() " " $nested())
     a, b String
-    p, q Node&
+    p, q Node?&
     l1, l2 List<I64>
     d1, d2, d3, d4 I64
     join {
@@ -145,7 +145,7 @@ fn main() ? E, io.IoError {
         spawn d3, d4 = try divmod(17, 0 * run) catch default -1, -2
     }
     churn()
-    try io.Println($a " " $b " " $p.v " " $q.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
+    try io.Println($a " " $b " " $p!.v " " $q!.v " " $l1 " " $l2.Len() " " $d1 " " $d2 " " $d3 " " $d4)
     #...and the earliest failure of a join no clause takes leaves main, reported as an unhandled error
     try join {
         spawn try sq(4 * run)

@@ -1,16 +1,16 @@
 # check: fail error[O17a]: this value's references live where its own storage does not, so it is not sliced or viewed
 # O17a: a slice of a known length of such a value is refused as any slice is
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Box struct() {
-    items := Array<mut Node&>(2)
+    items := Array<mut Node?&>(2)
 }
 type W struct(b Box) { b }
 fn f(src mut W&) {
     b := src.b
     v := b.items[0:2]
-    v[1].next = Node()
+    v[1]!.next = Node()
 }
 fn main() ? {
 }

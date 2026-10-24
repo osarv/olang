@@ -168,7 +168,7 @@ type migration struct(src String&, old Bool, path String&) {
     old
     path
     v List<VT>
-    m Array<I64>& = null
+    m Array<I64>& = Array<I64>(0)
     edits List<Edit>
     reps List<String&>
     report List<String&>

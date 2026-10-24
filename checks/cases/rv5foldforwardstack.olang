@@ -10,7 +10,7 @@ type R struct(n I64) {
     Dtors += n
 }
 type Holder struct() {
-    res mut R& = null
+    res mut R?& = null
 }
 fn pass(f fn()) fn() { return f }
 fn run() {

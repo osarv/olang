@@ -2,7 +2,7 @@
 # E11c/O12: Str builds a destructor-bearing value where its receiver lives, whose destructor stores a new node through
 # it when that scope closes
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -36,5 +36,5 @@ fn main() ? {
     for i in range 2000 { keep.Push(Junk(-7, -7)) }
     churn()
     try io.Println(s)
-    try io.Println($b.head.next.v)
+    try io.Println($b.head.next!.v)
 }

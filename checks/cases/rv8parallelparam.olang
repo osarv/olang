@@ -6,7 +6,7 @@
 # function's top level the field no longer points into the frame
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 fn set(a mut Node&, i I64) { a.next, a.v = Node(i), i }
 fn setBoth(a mut Node&, b mut Node&, i I64) { a.next, b.next, a.v = Node(i), Node(i + 1), i }
@@ -25,7 +25,7 @@ fn main() ? {
     for i in range 4 {
         if i >= 0 {
             set(a, i * 10)
-            kept.Push(a.next)
+            kept.Push(a.next!)
         }
         churn()
     }
@@ -37,6 +37,6 @@ fn main() ? {
     c.next, c.v = Node(9), 9
     d := c.next
     c.next, c.v = Node(10), 10
-    assert not (kept[0].v != 0 or kept[3].v != 30 or a.next.v != 5 or b.next.v != 6 or a.v != 5)
-    assert not (d.v != 9 or c.next.v != 10 or d == c.next)
+    assert not (kept[0].v != 0 or kept[3].v != 30 or a.next!.v != 5 or b.next!.v != 6 or a.v != 5)
+    assert not (d!.v != 9 or c.next!.v != 10 or d == c.next)
 }

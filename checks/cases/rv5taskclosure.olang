@@ -3,7 +3,7 @@
 # P2 (review of rv3fix, #2): a closure made in a task capturing a stand-in, kept past the join, allocates through it once folded
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 fn churn() I64 {
     t I64 = 0
@@ -16,7 +16,7 @@ fn churn() I64 {
 fn work(n mut Node&, fns mut List<fn() I64>&) {
     fns.Push(fn() I64 {
         n.next = Node(n.v + 41)
-        return n.next.v
+        return n.next!.v
     })
 }
 fn main() ? {
@@ -29,5 +29,5 @@ fn main() ? {
     f := fns[0]
     assert f() == 42
     churn()
-    assert n.next.v == 42
+    assert n.next!.v == 42
 }

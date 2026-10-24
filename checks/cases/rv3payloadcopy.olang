@@ -2,7 +2,7 @@
 # O25h/T17c: a reference handed to an enum case's payload is a copy of what it names - the case is held to it, as an
 # instance is (C2d)
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Box struct() {
     head mut Node& = Node()

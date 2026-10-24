@@ -3,7 +3,7 @@
 error E {
     BAD
 }
-type Node struct(v I64, next Node&) {
+type Node struct(v I64, next Node?&) {
     v
     next
 }
@@ -13,7 +13,7 @@ fn mk(n I64) Node& ? E {
 }
 fn main() ? {
     anchor Node& = Node(7, null)
-    r Node& = null
+    r Node?& = null
     join {
         spawn r = try mk(-1) catch default Node(-1, anchor)
     }

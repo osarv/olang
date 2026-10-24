@@ -4,7 +4,7 @@
 import "std/io"
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type View struct(ns Array<mut Node&>&) {
     at Array<mut Node&>&ns = ns
@@ -30,5 +30,5 @@ fn main() ? {
     b := Bag(Array<mut Node&>(1, Node(3)))
     try io.Println($b)
     t := churn(100)
-    try io.Println($b.ns[0].next.v " " $t)
+    try io.Println($b.ns[0].next!.v " " $t)
 }

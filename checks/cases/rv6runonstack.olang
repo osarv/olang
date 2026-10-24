@@ -6,7 +6,7 @@
 import "std/os"
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 fn mk(r Node&, i I64) Node&r { return Node(i) }
 fn relay(f fn(i I64) I64, k I64) I64 {

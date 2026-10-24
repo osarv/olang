@@ -6,7 +6,7 @@ type Rec struct(t String&) {
     t
 }
 type H struct() {
-    k mut Rec& = null
+    k mut Rec?& = null
 }
 fn mk(t String&) mut Rec& {
     r mut Rec& = Rec(t)
@@ -19,5 +19,5 @@ fn main() ? {
         x := $i
         keep(h, mk(x))
     }
-    try io.Println(h.k.t)
+    try io.Println(h.k!.t)
 }

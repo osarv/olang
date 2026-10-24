@@ -7,13 +7,13 @@ RelNext mut I64 = 0
 RelBad mut I64 = 0
 type Deep struct(v I64) {
     v
-    next mut Deep& = null
+    next mut Deep?& = null
 } destruct {
     if v != RelNext { RelBad++ }
     RelNext--
 }
 fn release() {
-    head mut Deep& = null
+    head mut Deep?& = null
     for i in range 300000 {
         n mut Deep&head = Deep(i)
         n.next = head

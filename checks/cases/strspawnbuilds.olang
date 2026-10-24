@@ -2,7 +2,7 @@
 # E11c/P2: a task whose call builds into the scope it is handed gets a stand-in for it, made in that scope - where the
 # receiver's node lives, so it is refused
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

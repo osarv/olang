@@ -5,5 +5,5 @@ fn main() ? {
     b := String(Array<U8>(5, 'x'))
     assert a == b
     c String& = "x"
-    assert c is null or missing == c
+    assert c.Len() == 0 or missing == c
 }

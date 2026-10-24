@@ -10,16 +10,16 @@ error Stop {
 }
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 fn find(n mut Node&) mut Node&n ? {
     if n.v >= 0 { error Stop.HERE }
     return n
 }
 fn setNext(n mut Node&, i I64) { n.next = n.next if i < 0 else Node(i) }
-fn orNew(n mut Node&, i I64) mut Node&n { return n.next if i < 0 else Node(i) }
+fn orNew(n mut Node&, i I64) mut Node&n { return n.next! if i < 0 else Node(i) }
 fn keep(a mut Node&, n mut Node&a) { a.next = n }
-fn two(a mut Node&, i I64) mut Node&a, I64 { return a.next if i < 0 else Node(i), i }
+fn two(a mut Node&, i I64) mut Node&a, I64 { return a.next! if i < 0 else Node(i), i }
 fn mk(i I64) Node { return Node(i) }
 fn rd(n Node&) I64 { return n.v }
 type Adder struct(n mut Node&) {
@@ -40,10 +40,10 @@ fn both(f fn(i I64), g fn(i I64)) {
     }
 }
 fn main() ? {
-    nodes := Array<mut Node&>(26)
+    nodes := Array<mut Node?&>(26)
     for k in range 26 { nodes[k] = Node(k) }
-    a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 := nodes[0], nodes[1], nodes[2], nodes[3], nodes[4], nodes[5], nodes[6], nodes[7], nodes[8], nodes[9]
-    b0, b1, b2, b3, b4, b5, b6, b7, b8, b9 := nodes[10], nodes[11], nodes[12], nodes[13], nodes[14], nodes[15], nodes[16], nodes[17], nodes[18], nodes[19]
+    a0, a1, a2, a3, a4, a5, a6, a7, a8, a9 := nodes[0]!, nodes[1]!, nodes[2]!, nodes[3]!, nodes[4]!, nodes[5]!, nodes[6]!, nodes[7]!, nodes[8]!, nodes[9]!
+    b0, b1, b2, b3, b4, b5, b6, b7, b8, b9 := nodes[10]!, nodes[11]!, nodes[12]!, nodes[13]!, nodes[14]!, nodes[15]!, nodes[16]!, nodes[17]!, nodes[18]!, nodes[19]!
     both(fn(i I64) { a0.next = a0.next if i < 0 else Node(i) }, fn(i I64) { b0.next = b0.next if i < 0 else Node(i) })
     both(fn(i I64) { a1.next = match i { case -1 => a1.next nomatch => Node(i) } }
          fn(i I64) { b1.next = match i { case -1 => b1.next nomatch => Node(i) } })
@@ -58,7 +58,7 @@ fn main() ? {
         x := b6.next if i < 0 else Node(i)
         b6.next = x
     })
-    both(fn(i I64) { keep(a7, a7.next if i < 0 else Node(i)) }, fn(i I64) { keep(b7, b7.next if i < 0 else Node(i)) })
+    both(fn(i I64) { keep(a7, a7.next! if i < 0 else Node(i)) }, fn(i I64) { keep(b7, b7.next! if i < 0 else Node(i)) })
     both(fn(i I64) {
         n, k := two(a8, i)
         a8.next = n
@@ -73,20 +73,20 @@ fn main() ? {
     # (tonight9's ICE: codegen resolved the captured scope only for reading there, and the prologue never asked for it)
     c0, c1, c2, d0, d1, d2 := nodes[20], nodes[21], nodes[22], nodes[23], nodes[24], nodes[25]
     both(fn(i I64) {
-        x := try find(c0) catch default Node(i)
-        c0.v = x.v
+        x := try find(c0!) catch default Node(i)
+        c0!.v = x.v
     }, fn(i I64) {
-        x := try find(d0) catch default Node(i)
-        d0.v = x.v
+        x := try find(d0!) catch default Node(i)
+        d0!.v = x.v
     })
-    both(fn(i I64) { c1.v = rd(try find(c1) catch default Node(i)) }, fn(i I64) { d1.v = rd(try find(d1) catch default Node(i)) })
-    both(fn(i I64) { if (try find(c2) catch default Node(i)).v == i { c2.v = i } }
-         fn(i I64) { if (try find(d2) catch default Node(i)).v == i { d2.v = i } })
+    both(fn(i I64) { c1!.v = rd(try find(c1!) catch default Node(i)) }, fn(i I64) { d1!.v = rd(try find(d1!) catch default Node(i)) })
+    both(fn(i I64) { if (try find(c2!) catch default Node(i)).v == i { c2!.v = i } }
+         fn(i I64) { if (try find(d2!) catch default Node(i)).v == i { d2!.v = i } })
     for k in range 20 {
-        assert not (nodes[k].next is null or nodes[k].next.v != N - 1)
+        assert not (nodes[k]!.next is null or nodes[k]!.next!.v != N - 1)
     }
     for k in range 20, 26 {
-        assert nodes[k].v == N - 1
+        assert nodes[k]!.v == N - 1
     }
     try io.Println("capscope: ok")
 }

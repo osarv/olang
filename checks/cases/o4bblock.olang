@@ -1,14 +1,14 @@
 # check: fail error[O10c]: the callee needs one argument's scope to outlive another's
 # O4b/O10c: a key stored into a map must outlive it, an obligation each caller discharges - and a key
 # built in an inner block does not outlive a map from the outer one, which the block depths decide
-type SSlot struct(key String&, val I32, next SSlot&) {
+type SSlot struct(key String&, val I32, next SSlot?&) {
     key
     val
     next
 }
-type SMap struct() { first mut SSlot& = null }
+type SMap struct() { first mut SSlot?& = null }
 fn (m mut SMap&) Put(key String&, val I32) {
-    for s mut SSlot& = m.first, s is not null, s = s.next {
+    for s mut SSlot?& = m.first, s is not null, s = s.next {
         if s.key.Eq(key) {
             s.val = val
             return
@@ -17,7 +17,7 @@ fn (m mut SMap&) Put(key String&, val I32) {
     m.first = SSlot(key, val, m.first)
 }
 fn (m SMap&) Get(key String&) I32 {
-    for s SSlot& = m.first, s is not null, s = s.next {
+    for s SSlot?& = m.first, s is not null, s = s.next {
         if s.key.Eq(key) { return s.val }
     }
     return -1

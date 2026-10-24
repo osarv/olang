@@ -4,7 +4,7 @@ import "std/io"
 error Stop {
     HERE
 }
-type Node struct(v I64, next Node&) {
+type Node struct(v I64, next Node?&) {
     v
     next
 }
@@ -12,7 +12,7 @@ type Bag struct(head Node&) {
     head
 }
 fn find(n Node&, k I64) Node&n ? {
-    for c := n, c is not null, c = c.next { if c.v == k { return c } }
+    for c Node?&n = n, c is not null, c = c.next { if c.v == k { return c } }
     error Stop.HERE
 }
 fn (b Bag&) Str() String {

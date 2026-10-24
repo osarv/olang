@@ -4,7 +4,7 @@
 # off src's (a use-after-free that printed garbage). Written through b itself it is built where b's references live
 import "std/io"
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type Box struct() {

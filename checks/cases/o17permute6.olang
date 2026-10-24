@@ -2,13 +2,13 @@
 # O17 (Vec phase 1): a callee lent a split value only permutes its elements - ...a by-value parameter holding writable references is a store from outside
 type N2 struct(v I64) {
     v
-    next mut N2& = null
+    next mut N2?& = null
 }
 type Rec struct(name String&, n I64) {
     name
     n
 }
-type RecN struct(nd mut N2&) {
+type RecN struct(nd mut N2?&) {
     nd
 }
 type H struct() {
@@ -22,7 +22,7 @@ fn each(a mut Array<RecN>&, g fn(x RecN)) {
 }
 fn run(h mut H&) {
     ns := h.ns
-    each(ns, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
+    each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
 }
 fn main() ? {
     h mut H& = H()

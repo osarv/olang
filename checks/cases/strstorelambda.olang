@@ -2,7 +2,7 @@
 # E11c/O12: a lambda Str makes, storing a new node through a read-only capture's writable field, stores where the
 # receiver reaches - which '$' gives no scope (it was built in a scope closed with the call, read back as -7)
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -27,5 +27,5 @@ fn main() ? {
     s := $b
     churn()
     try io.Println(s)
-    try io.Println($b.head.next.v)
+    try io.Println($b.head.next!.v)
 }

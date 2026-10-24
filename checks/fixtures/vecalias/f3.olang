@@ -11,7 +11,7 @@ fn churn() I64 {
     return t
 }
 fn grow(w mut Vec<I64>&) ? io.IoError {
-    d Array<I64>&w = null
+    d Array<I64>&w = Array<I64>(0)
     join {
         spawn d = mid.Vl.View2(w)
     }

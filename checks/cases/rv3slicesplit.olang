@@ -2,16 +2,16 @@
 # O17a: a copy of a value whose references live elsewhere is not sliced - the slice would be a reference to the copy's
 # storage, carrying it away from where its references are
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Box struct() {
-    items := Array<mut Node&>(2)
+    items := Array<mut Node?&>(2)
 }
 type W struct(b Box) { b }
 fn f(src mut W&) {
     b := src.b
     s := b.items[0:2]
-    s[0].next = Node()
+    s[0]!.next = Node()
 }
 fn main() ? {
 }

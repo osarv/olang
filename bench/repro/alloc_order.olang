@@ -7,7 +7,7 @@
 import "std/io"
 import "std/os"
 
-type Node struct(left mut Node&, right mut Node&) {
+type Node struct(left mut Node?&, right mut Node?&) {
     left
     right
 }
@@ -27,7 +27,7 @@ fn parentFirst(depth I64) Node& {
 
 fn check(n Node&) I64 {
     if n.left is null { return 1 }
-    return 1 + check(n.left) + check(n.right)
+    return 1 + check(n.left!) + check(n.right!)
 }
 
 # many trees, each built, walked once and dropped at the end of its iteration - binary-trees' inner loop

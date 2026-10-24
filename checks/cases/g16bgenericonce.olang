@@ -7,12 +7,12 @@ import "std/io"
 type Node<K, V> struct(key K, value V) {
     key
     value
-    prev mut Node<K, V>&
-    next mut Node<K, V>&
+    prev mut Node<K, V>?&
+    next mut Node<K, V>?&
 }
 type Lru<K Hashable<K>, V> struct() {
     nodes Map<K, mut Node<K, V>&>
-    head mut Node<K, V>&
+    head mut Node<K, V>?&
 }
 fn (c mut Lru<K, V>&) pushFront(n mut Node<K, V>&) {
     n.next = c.head

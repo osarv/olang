@@ -1,7 +1,7 @@
 # check: fail error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches
 # E11c/O12: the same with a spawned lambda capturing the node (D16e): refused
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

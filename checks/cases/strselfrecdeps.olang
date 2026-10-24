@@ -4,7 +4,7 @@
 import "std/io"
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Bag struct(head mut Node&) {
     head
@@ -28,5 +28,5 @@ fn main() ? {
     b := Bag(Node(1))
     try io.Println($b)
     t := churn(100)
-    try io.Println($b.head.next.v " " $t)
+    try io.Println($b.head.next!.v " " $t)
 }

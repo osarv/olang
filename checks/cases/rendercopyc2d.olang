@@ -2,7 +2,7 @@
 # C2d/E11a: a value built only to be rendered is checked where it is built, as any other - here its field's
 # destructor stores into a node outliving it
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -30,5 +30,5 @@ fn main() ? {
     k := f(n)
     churn()
     try io.Println($k)
-    try io.Println($n.next.v)
+    try io.Println($n.next!.v)
 }

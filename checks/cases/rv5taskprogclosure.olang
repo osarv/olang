@@ -3,7 +3,7 @@
 # P2/O1b (review of rv3fix, #2): a closure made in a task capturing the program's scope keeps null for it, the calling thread's view
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 G mut Node& = Node(1)
 Fns mut List<fn() I64> = List<fn() I64>()
@@ -19,7 +19,7 @@ fn work() {
     x := G
     Fns.Push(fn() I64 {
         x.next = Node(x.v + 41)
-        return x.next.v
+        return x.next!.v
     })
 }
 fn main() ? {
@@ -30,5 +30,5 @@ fn main() ? {
     f := Fns[0]
     assert f() == 42
     churn()
-    assert G.next.v == 42
+    assert G.next!.v == 42
 }

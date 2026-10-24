@@ -18,5 +18,5 @@ fn main() ? {
     h := olib.Holder()
     fill(h)
     churn()
-    try io.Println($h.N.V)
+    try io.Println($h.N!.V)
 }

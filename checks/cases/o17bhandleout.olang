@@ -3,7 +3,7 @@
 # reference - the node built through the borrowed result is built where the box's state lives, read back after a churn
 import "std/io"
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type Box struct() {
@@ -17,7 +17,7 @@ fn bump(src mut W&, v I64) {
     b := src.b
     h := b.headOf()
     h.next = Node()
-    h.next.v = v
+    h.next!.v = v
     src.b = b
 }
 fn churn() I64 {
@@ -34,6 +34,6 @@ fn main() ? {
     w := W(Box())
     bump(w, 41)
     churn()
-    assert w.b.head.next.v == 41
-    try io.Println($w.b.head.next.v)
+    assert w.b.head.next!.v == 41
+    try io.Println($w.b.head.next!.v)
 }

@@ -3,7 +3,7 @@
 # referent's are - so an instance built in this block from it would hold them past where they live (it built through them
 # here, in the callee's own block)
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type Box struct() {

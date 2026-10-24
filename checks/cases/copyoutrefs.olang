@@ -4,7 +4,7 @@
 # them (O25g); it was accepted, and a node built through the local then lived in its block
 import "std/io"
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type Box struct() {

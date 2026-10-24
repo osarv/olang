@@ -3,7 +3,7 @@
 # E11c/O12: a Str walks what its receiver reaches - a Map, a List, an iterator built over the receiver, a field read
 # through it - and builds what it needs in scopes of its own: nothing is built where the receiver lives, and nothing
 # read there outlives it (built under the scope sanitizer, after an arena churn)
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

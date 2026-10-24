@@ -4,7 +4,7 @@
 # settled, and zs, never revisited, let bump lend it a value whose references live elsewhere than its storage
 import "std/io"
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type Box struct() {
@@ -17,7 +17,7 @@ fn ys(b mut Box&, n I64) {
     if n > 200 { zs(b, n - 1) }
     if n == 0 {
         b.head.next = Node()
-        b.head.next.v = 42
+        b.head.next!.v = 42
     }
 }
 fn xs(b mut Box&, n I64) {
@@ -44,5 +44,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    try io.Println($w.b.head.next.v)
+    try io.Println($w.b.head.next!.v)
 }

@@ -4,9 +4,9 @@
 # (the new array, built with the instance) - both accepted, and read under the scope sanitizer
 import "std/io"
 
-type M struct(n I64, data mut Array<F64>& = null) {
+type M struct(n I64, data mut Array<F64>& = Array<F64>(0)) {
     n
-    Data mut Array<F64>& = (data[0:n] if data is not null else Array<F64>(n))
+    Data mut Array<F64>& = (data[0:n] if data.Len() > 0 else Array<F64>(n))
 }
 
 fn main() {

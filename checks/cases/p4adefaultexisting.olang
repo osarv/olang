@@ -12,7 +12,7 @@ fn mk(n I64) Node& ? E {
 }
 fn main() ? {
     fallback Node& = Node(0)
-    r Node& = null
+    r Node?& = null
     join {
         spawn r = try mk(-1) catch default fallback
     }

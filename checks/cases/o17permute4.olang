@@ -2,13 +2,13 @@
 # O17 (Vec phase 1): a callee lent a split value only permutes its elements - ...lent writably to a callee that stores into it is a store from outside
 type N2 struct(v I64) {
     v
-    next mut N2& = null
+    next mut N2?& = null
 }
 type Rec struct(name String&, n I64) {
     name
     n
 }
-type RecN struct(nd mut N2&) {
+type RecN struct(nd mut N2?&) {
     nd
 }
 type H struct() {

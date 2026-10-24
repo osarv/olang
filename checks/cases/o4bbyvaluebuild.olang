@@ -4,7 +4,7 @@
 # read through a '&p' field, whose scope is not known here
 type N struct(v I32) {
     v
-    next mut N& = null
+    next mut N?& = null
 }
 type Cur struct(of mut Array<mut N&>&) { at mut Array<mut N&>&of = of }
 fn growFirst<T>(k T, x T) { x[0].next = N(9) }

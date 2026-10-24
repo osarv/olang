@@ -34,7 +34,7 @@ fn main() ? {
     assert s == Shape.Box(_, 3) and s != Shape.Box(2, 4) and s != Shape.Dot
     e Expr& = Expr.Add(Expr.Lit(1), Expr.Add(Expr.Lit(2), Expr.Lit(3)))
     assert sum(e) == 6 and e == Expr.Add(Expr.Lit(1), _) and e != Expr.Add(Expr.Lit(2), _)
-    n Expr& = null
+    n Expr?& = null
     assert n != Expr.Lit and n is null
     assert Baked == 6 + 6 + 3
 }

@@ -5,7 +5,7 @@
 import "std/io"
 type Nd struct(v I64) {
     v
-    next mut Nd& = null
+    next mut Nd?& = null
 }
 fn main() ? {
     n mut Nd& = Nd(5)
@@ -13,5 +13,5 @@ fn main() ? {
         q mut Nd& = n if i == 1 else Nd(7)
         q.next = Nd(100 + i)
     }
-    try io.Println($n.next.v)
+    try io.Println($n.next!.v)
 }

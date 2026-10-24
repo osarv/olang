@@ -2,7 +2,7 @@
 # E11c/P2: a task handed a part of the receiver - its stand-in is made where the part lives, even for a call building
 # nothing there, so it is refused (no raw scope for a task, C2/C4)
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

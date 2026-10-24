@@ -2,6 +2,6 @@ type Node struct(V I64) {
     V
 }
 type Holder struct() {
-    N Node& = null
+    N Node?& = null
 }
 fn Stash(h mut Holder&, x Node&) { h.N = x }

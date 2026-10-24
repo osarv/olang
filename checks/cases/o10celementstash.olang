@@ -5,7 +5,7 @@
 import "std/io"
 type Elem struct() { n I64 = 0 }
 type G struct() { arr mut Array<Elem>& = Array<Elem>(3) }
-type Keeper struct() { e Elem& = null }
+type Keeper struct() { e Elem?& = null }
 fn stash(g G&, h mut Keeper&) { h.e = g.arr[0] }
 fn main() ? {
     h := Keeper()
@@ -14,5 +14,5 @@ fn main() ? {
         g.arr[0].n = i
         stash(g, h)
     }
-    try io.Println($h.e.n)
+    try io.Println($h.e!.n)
 }

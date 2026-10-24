@@ -16,7 +16,7 @@
 import "std/io"
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Box struct() { head mut Node& = Node(1) }
 type E enum {
@@ -36,7 +36,7 @@ fn grow(b mut Box&) { b.head.next = Node(43) }
 fn second(e E) I64 {
     b := e as E.A
     if b.head.next is null { return 0 }
-    return b.head.next.v
+    return b.head.next!.v
 }
 fn main() ? {
     e1 := E.A(Box())

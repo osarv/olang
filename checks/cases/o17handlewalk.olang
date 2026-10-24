@@ -4,11 +4,11 @@
 # the List as its reference, so nothing is kept or stored in b's own storage, and the lend is a plain one
 import "std/io"
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type St struct() {
-    first mut Array<mut Node&>& = Array<mut Node&>(2, null)
+    first mut Array<mut Node?&>& = Array<mut Node?&>(2, null)
 }
 type Hd struct() {
     st mut St& = St()

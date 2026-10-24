@@ -2,7 +2,7 @@
 # T22: the mismatch is said for what it is, and names the function type to write
 type N struct(v I64) {
     v
-    next mut N& = null
+    next mut N?& = null
 }
 fn link(a mut N&, b N&a) { a.v = b.v + 1 }
 fn main() {

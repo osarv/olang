@@ -2,7 +2,7 @@
 # O12: a value copied from a conditional whose values' references live in different scopes keeps them in one not known
 # here - nothing new is built into it
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Box struct() {
     head mut Node& = Node()

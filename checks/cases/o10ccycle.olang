@@ -6,7 +6,7 @@ type Item struct(v I64) {
     v
 }
 type Holder struct() {
-    item mut Item& = null
+    item mut Item?& = null
 }
 fn f(a mut Holder&, b mut Item&, n I64) {
     if n > 0 { g(a, b, n - 1) }

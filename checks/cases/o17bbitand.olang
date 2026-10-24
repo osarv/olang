@@ -6,12 +6,12 @@
 import "std/io"
 type Cell struct() {
     v I64 = 0
-    kept mut Box& = null
+    kept mut Box?& = null
 }
 type Box struct() { c mut Cell& = Cell() }
 fn (a mut Box&) BitAnd(b mut Box&) mut Box&b { return b }
 fn (h mut Box&) stash() {
-    h.c.kept = h.c.kept & h
+    h.c.kept = h.c.kept! & h
 }
 fn run(m mut Map<I64, Box>&) ? {
     for i in range 3 {
@@ -36,5 +36,5 @@ fn main() ? {
     try run(m)
     churn()
     b := try m.Get(1)
-    try io.Println($b.c.kept.c.v)
+    try io.Println($b.c.kept!.c.v)
 }

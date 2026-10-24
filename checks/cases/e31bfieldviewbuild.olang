@@ -3,7 +3,7 @@
 # through a reference of it - its hidden copy's references are where the collection's are, so it is O17's split lend, as
 # the whole element is
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -27,5 +27,5 @@ fn main() ? {
     l.Push(Layer(M(Node(1, null), 0), 0))
     for i in range 3 { g(l[0].w, i + 10) }
     try churn()
-    try io.Println($l[0].w.r.next.v)
+    try io.Println($l[0].w.r.next!.v)
 }

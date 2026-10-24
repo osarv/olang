@@ -4,7 +4,7 @@
 # its call binds, so four tasks building into their nodes' block never share an arena (C2)
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 fn ca(g fn(x mut Node&), n mut Node&, c I64) {
     if c > 0 { cb(n, c - 1) }
@@ -27,7 +27,7 @@ fn main() ? {
             spawn cc(c)
             spawn cc(d)
         }
-        total += a.next.v + b.next.v + c.next.v + d.next.v
+        total += a.next!.v + b.next!.v + c.next!.v + d.next!.v
     }
     assert total == 4200, $total
 }

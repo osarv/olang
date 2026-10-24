@@ -2,7 +2,7 @@
 # E11c/O12: a helper handed the receiver's node makes a conditional of it and a new node, built where the node lives (E28):
 # refused
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

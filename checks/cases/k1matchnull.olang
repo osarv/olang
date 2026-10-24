@@ -12,6 +12,6 @@ fn name(e E&) String {
         case E.B(v) { return "b" $v }
     }
 }
-N E& = null
-G String = name(N)
+N E?& = null
+G String = name(N!)
 fn main() ? { }

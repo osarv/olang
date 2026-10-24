@@ -1264,7 +1264,7 @@ test "a generic type's destructor is monomorphized per instantiation" {
 # it is passed to, however the storage was laid out (a promoted instance's slot is reserved before its arguments are
 # built, so the outermost sits first)
 OrderLog mut I64 = 0
-type OrderedRes struct(id I64, inner OrderedRes&) {
+type OrderedRes struct(id I64, inner OrderedRes?&) {
     id
     inner
 } destruct {
@@ -1273,7 +1273,7 @@ type OrderedRes struct(id I64, inner OrderedRes&) {
 fn orderedChain(k I64) I64 {
     o OrderedRes& = OrderedRes(k + 1, OrderedRes(k + 2, OrderedRes(k + 3, null)))
     p OrderedRes& = OrderedRes(k + 4, null)
-    return o.inner.inner.id + p.id
+    return o.inner!.inner!.id + p.id
 }
 
 test "O15: nested instances built into a reference destruct in reverse construction order" {
@@ -2041,9 +2041,9 @@ type RenderPair struct(label mut String&, n I32, c Char, on Bool) {
     on
 }
 
-type RenderLink struct(v I32, n mut RenderLink&) {
+type RenderLink struct(v I32, n mut RenderLink?&) {
     v
-    next mut RenderLink& = n
+    next mut RenderLink?& = n
 }
 
 type RenderMeters I32
@@ -2510,9 +2510,9 @@ type Held4 struct(v I32) {
 
 test "D15a: an array reference with no initializer is null, not garbage" {
     h Held4& = Held4(1)
-    assert h.fixed is null
+    assert h.fixed.Len() == 0
     local Array<I32>&
-    assert local is null
+    assert local.Len() == 0
 }
 
 # T11a: on a reference a size is never part of the type - in a declaration it is how much to allocate, a
@@ -2681,11 +2681,11 @@ test "G9a: a literal adapts to a type variable another argument bound" {
 
 # G9a: null binds nothing at all - it is checked against its parameter's type once another argument has bound the
 # variable - so a generic function with an optional reference parameter can be given null there
-fn CellOr<T>(c Cell<T>&, fallback Cell<T>&) T { return fallback.v if c is null else c.v }
+fn CellOr<T>(c Cell<T>?&, fallback Cell<T>&) T { return fallback.v if c is null else c.v }
 
 test "G9a: null takes no part in inferring a type variable" {
     d Cell<I64>& = Cell<I64>(8000000000)
-    assert CellOr(d, null) == 8000000000
+    assert CellOr(d, Cell<I64>(1)) == 8000000000
     assert CellOr(null, d) == 8000000000
 }
 
@@ -3056,8 +3056,8 @@ test "a value a task allocates into the caller's scope survives the join" {
         spawn produceInto(a, 11)
         spawn produceInto(b, 22)
     }
-    assert a.inner.held.v == 11
-    assert b.inner.held.v == 22
+    assert a.inner.held!.v == 11
+    assert b.inner.held!.v == 22
         # and the spawner's own arena still works after taking two sub-arenas back
     c Crate2& = Crate2(33)
     assert c.v == 33
@@ -4127,7 +4127,7 @@ fn twoScopeVars(n I32) Point& {
 # of a reference to plain data is one of the places a relation may still be "outlives" rather than "equal"
 # (O25c): Point holds no reference, so nothing written through the slot can be misplaced. (This used to be
 # shown by returning seed under a result-only scope; that is a borrowed result now, written Point&seed, O14.)
-type PointSlot struct() { p mut Point& = null }
+type PointSlot struct() { p mut Point?& = null }
 
 fn obligationRelate(slot mut PointSlot&, seed mut Point&) { slot.p = seed }
 
@@ -4136,7 +4136,7 @@ fn dischargesObligation(n I32) I32 {
     src mut Point& = Point(n, n)
     slot := PointSlot()
     obligationRelate(slot, src)
-    return slot.p.x
+    return slot.p!.x
 }
 
 test "a longer-lived scope satisfies a target asking for a shorter-lived one" {
@@ -4155,7 +4155,7 @@ test "a scope obligation recorded from a body is discharged at every call" {
     src mut Point& = Point(7, 7)
     slot := PointSlot()
     obligationRelate(slot, src)
-    assert slot.p.x == 7
+    assert slot.p!.x == 7
     assert dischargesObligation(8) == 8
 }
 
@@ -4224,7 +4224,7 @@ test "'T[N]' with no initializer zero-fills a global (real BSS)" {
 test "D15a: an uninitialized local is its own zero value" {
     n I32
     b Bool
-    p Crate2&
+    p Crate2?&
     assert n == 0
     assert not b
     assert p is null
@@ -4254,7 +4254,7 @@ test "D15c: a declared-size array fills from one element value" {
     assert h[0] == -1
     assert h[3] == -1
 
-    r := Array<Crate2&>(3, null)
+    r := Array<Crate2?&>(3, null)
     assert r[0] is null
     assert r[2] is null
 }
@@ -4755,9 +4755,9 @@ type Bin struct(cap I32) {
     raw mut Array<I32>& = Array<I32>(cap)        # D13a: uninitialized, like any declared-size array
     zeroed mut Array<I32>& = Array<I32>(cap, 0)        # D13b: filled, over the run-time length
     marked mut Array<I32>& = Array<I32>(cap, -1)
-    slots mut Array<Crate2&>& = Array<Crate2&>(cap, null)
+    slots mut Array<Crate2?&>& = Array<Crate2?&>(cap, null)
     used I32            # D13: no initializer - the zero value
-    head mut Crate2&        # D13: ...which for a reference is null
+    head mut Crate2?&       # D13: ...which for a reference is null
     fixed := Array<I32>(4)            # D13a again, at a compile-time size
     filled Array<I32> = Array<I32>(4, 9)
 }
@@ -4790,33 +4790,33 @@ test "C2a: every local-variable initialization rule applies to a constructor fie
 # O13 still rejects a bare "&" return type, null or not: the rule is about the TYPE a caller receives,
 # which needs a scope it can name, and "return null" does not change what the signature promises. Naming
 # the scope is what makes it returnable - and null then flows into it freely, having no scope of its own.
-fn firstOrNull(a Array<Crate2&>&, i I32) Crate2&a {
+fn firstOrNull(a Array<Crate2&>&, i I32) Crate2?&a {
     return null
 }
 
-fn isAbsent(c Crate2& = null) Bool {
+fn isAbsent(c Crate2?& = null) Bool {
     return c is null
 }
 
 test "T2a: null in every position a reference is written" {
-    p Crate2& = Crate2(3)
+    p Crate2?& = Crate2(3)
     assert p is not null
     p = null        # assignment
     assert p is null
 
-    q Crate2& = null        # declaration
+    q Crate2?& = null       # declaration
     assert q is null
     assert isAbsent(q)        # argument
     assert isAbsent()        # and as a declared default (D8b - null is a literal, E4)
     assert not isAbsent(Crate2(1))
 
-    r Array<Crate2&>& = null
+    r Array<Crate2&>& = Array<Crate2&>(0)
     assert firstOrNull(r, 0) is null        # return
 }
 
 test "T2a: null is all-zero bits, so the two-word shapes read as empty" {
-    a Array<I32>& = null
-    assert a is null
+    a Array<I32>& = Array<I32>(0)
+    assert a.Len() == 0
     assert a.Len() == 0
 }
 
@@ -4825,7 +4825,7 @@ test "T2a: a null field is an ordinary field" {
     assert h.held is null
     h.held = Crate2(9)
     assert h.held is not null
-    assert h.held.v == 9
+    assert h.held!.v == 9
 }
 
 # "x := null" is a compile error and so can only be named here: null is the one literal that writes no
@@ -5405,7 +5405,7 @@ type MtWrap enum {
     One(f MtShape)
     Two(a MtShape, b MtShape)
     Named(s String&, n I64)
-    Held(c Crate&)
+    Held(c Crate?&)
     Empty
 }
 
@@ -5419,7 +5419,7 @@ fn mtWk(w MtWrap) I32 {
         case MtWrap.Named(s, -1) { return -2 }
         case MtWrap.Named(s, n) if s.Len() == n { return 1 }
         case MtWrap.Held(null) { return -3 }
-        case MtWrap.Held(c) { return c.v }
+        case MtWrap.Held(c) { return c!.v }
         case MtWrap.One, MtWrap.Two, MtWrap.Named { return 0 }
         case MtWrap.Empty { return -4 }
     }
@@ -5568,7 +5568,7 @@ test "an enum holds itself through a struct, declared in either order" {
 type Ast enum {
     Num(v I64)
     Var(name String&)
-    Add(a Ast&, b Ast&)
+    Add(a Ast?&, b Ast&)
     Mul(a Ast&, b Ast&)
     Neg(e Ast&)
 }
@@ -5577,7 +5577,7 @@ fn astEval(e Ast&, x I64) I64 {
     return match e {
         case Ast.Num(v) => v
         case Ast.Var(_) => x
-        case Ast.Add(a, b) => astEval(a, x) + astEval(b, x)
+        case Ast.Add(a, b) => astEval(a!, x) + astEval(b, x)
         case Ast.Mul(a, b) => astEval(a, x) * astEval(b, x)
         case Ast.Neg(a) => -astEval(a, x)
     }
@@ -5589,7 +5589,8 @@ fn astSimplify(n Ast&) Ast&n {
     return match n {
         case Ast.Add(Ast.Num(a), Ast.Num(b)) => Ast.Num(a + b)
         case Ast.Mul(Ast.Num(a), Ast.Num(b)) => Ast.Num(a * b)
-        case Ast.Add(a, Ast.Num(0)), Ast.Add(Ast.Num(0), a), Ast.Mul(a, Ast.Num(1)), Ast.Mul(Ast.Num(1), a) => a
+        case Ast.Add(a, Ast.Num(0)) => a!
+        case Ast.Add(Ast.Num(0), a), Ast.Mul(a, Ast.Num(1)), Ast.Mul(Ast.Num(1), a) => a
         case Ast.Mul(_, Ast.Num(0)), Ast.Mul(Ast.Num(0), _) => Ast.Num(0)
         case Ast.Neg(Ast.Num(v)) => Ast.Num(-v)
         case Ast.Neg(Ast.Neg(a)) => a
@@ -5599,7 +5600,7 @@ fn astSimplify(n Ast&) Ast&n {
 
 fn astFold(e Ast&) Ast&e {
     return match e {
-        case Ast.Add(a, b) => astSimplify(Ast.Add(astFold(a), astFold(b)))
+        case Ast.Add(a, b) => astSimplify(Ast.Add(astFold(a!), astFold(b)))
         case Ast.Mul(a, b) => astSimplify(Ast.Mul(astFold(a), astFold(b)))
         case Ast.Neg(a) => astSimplify(Ast.Neg(astFold(a)))
         nomatch => e
@@ -5611,7 +5612,7 @@ fn astLeaves(e Ast&, out mut List<Ast&>&e) {
     match e {
         case Ast.Num(_), Ast.Var(_) { out.Push(e) }
         case Ast.Add(a, b), Ast.Mul(a, b) {
-            astLeaves(a, out)
+            astLeaves(a!, out)
             astLeaves(b, out)
         }
         case Ast.Neg(a) { astLeaves(a, out) }
@@ -5669,7 +5670,7 @@ test "T17d: a tree baked into a global, matched through its references" {
 }
 
 test "T17d: a null reference to an enum holds no case" {
-    none Ast& = null
+    none Ast?& = null
     assert not (none == Ast.Num) and none is null
     r I64 = match none {
         case Ast.Num(v) => v
@@ -5692,7 +5693,7 @@ test "T17d: a null reference to an enum holds no case" {
 # function's own scope instead, freed at its return
 fn astCopy(e Ast&) Ast& {
     return match e {
-        case Ast.Add(a, b) => Ast.Add(astCopy(a), astCopy(b))
+        case Ast.Add(a, b) => Ast.Add(astCopy(a!), astCopy(b))
         case Ast.Mul(a, b) => Ast.Mul(astCopy(a), astCopy(b))
         case Ast.Neg(a) => Ast.Neg(astCopy(a))
         case Ast.Num(v) => Ast.Num(v)
@@ -5726,11 +5727,11 @@ test "T17d: a copy built in the result scope, and trees across blocks" {
 
 # the zero value of a reference to an enum is null, and of an enum whose first case holds one, that case holding null
 type AstHole enum {
-    Gap(e Ast&)
+    Gap(e Ast?&)
     Filled
 }
 type AstSlot struct() {
-    tree mut Ast&
+    tree mut Ast?&
     hole AstHole
 }
 test "T17d: zero values hold null references" {
@@ -5739,7 +5740,7 @@ test "T17d: zero values hold null references" {
     assert match s.hole { case AstHole.Gap(null) => true  nomatch => false }
     s.tree = Ast.Num(3)                            # built where s lives
     s.hole = AstHole.Gap(s.tree)
-    assert astEval(s.hole as AstHole.Gap, 0) == 3
+    assert astEval((s.hole as AstHole.Gap)!, 0) == 3
 }
 
 # T17d with structs on both sides: a struct holding an enum by reference, an enum holding a struct by reference, and a
@@ -5760,7 +5761,7 @@ fn (s AstStmt&) Size() I64 {
 }
 fn astSize(e Ast&) I64 {
     return match e {
-        case Ast.Add(a, b), Ast.Mul(a, b) => 1 + astSize(a) + astSize(b)
+        case Ast.Add(a, b), Ast.Mul(a, b) => 1 + astSize(a!) + astSize(b)
         case Ast.Neg(a) => 1 + astSize(a)
         nomatch => 1
     }
@@ -6060,8 +6061,8 @@ test "branches that agree on a scope keep it" {
 # "&s" parameter while the container was tagged "&t" - nothing related s to t, so a caller could pass its
 # own local and have it stored somewhere that outlives the call. That was a real use-after-free: after the
 # call returned, churning the arena left the stored reference reading someone else's bytes.
-type Held3 struct(b mut Crate2&) {
-    held mut Crate2&b = b
+type Held3 struct(b mut Crate2?&) {
+    held mut Crate2?&b = b
 }
 type Box3 struct(x Held3) {
     inner Held3 = x
@@ -6076,7 +6077,7 @@ test "storing into a container of the same scope discharges the obligation" {
     o mut Box3& = Box3(Held3(seed))
     payload mut Crate2& = Crate2(42)
     stash3(o, payload)        # both own of this test: s and t agree
-    assert o.inner.held.v == 42
+    assert o.inner.held!.v == 42
 }
 
 # the caller that cannot discharge it is a compile error and so can only be named here:
@@ -6092,7 +6093,7 @@ test "storing into a container of the same scope discharges the obligation" {
 fn roundTrip(b mut Crate2&) I32 {
     h mut Held3& = Held3(b)    # binds Held3's own scope variable to b's
     h.held = b        # ...so writing b back in is the same scope, and must be allowed
-    return h.held.v
+    return h.held!.v
 }
 
 test "a value can be written back into a field of a container built from it" {
@@ -6122,7 +6123,7 @@ test "a field of a container parameter can be written, and the caller discharges
     h mut Held3& = Held3(seed)
     payload mut Crate2& = Crate2(55)
     putHeld(h, payload)        # both own of this test, so the obligation discharges
-    assert h.held.v == 55
+    assert h.held!.v == 55
 }
 
 # the alternative - forgetting the construction binding and falling back to the container's scope for
@@ -6150,7 +6151,7 @@ test "a field of a container parameter can be written, and the caller discharges
 # to outlive the container's construction scope, which outlives wherever the container now sits. And it
 # only works because O22 keeps the WRITE side precise - weakening both halves to the container's scope
 # costs per-field precision, weakening only the read costs nothing.
-fn innerOf(w Held3&) Crate2&w { return w.held }
+fn innerOf(w Held3&) Crate2&w { return w.held! }
 
 test "a field of a container parameter can be read out at the container's scope" {
     c mut Crate2& = Crate2(31)
@@ -6228,16 +6229,16 @@ test "escapes: \0 and \r decode to their bytes in strings and characters" {
 # unknown member. Every such field now points at the finished declaration, so a chain reads at any depth.
 type Link struct(x I32) {
     v I32 = x
-    next mut Link& = null
+    next mut Link?& = null
 }
 
 test "a self-referential struct reads through a chain of any length" {
     a mut Link& = Link(1)
     a.next = Link(2)
-    a.next.next = Link(3)
-    a.next.next.next = Link(4)
-    assert a.next.next.next.v == 4
-    assert a.next.next.next.next is null
+    a.next!.next = Link(3)
+    a.next!.next!.next = Link(4)
+    assert a.next!.next!.next!.v == 4
+    assert a.next!.next!.next!.next is null
 }
 
 # G8: a generic type may name ITSELF in a field - a generic linked node. It was rejected as "not generic"
@@ -6245,7 +6246,7 @@ test "a self-referential struct reads through a chain of any length" {
 # (an instantiation was registered only after its fields were substituted).
 type GLink<T> struct(x T) {
     v T = x
-    next mut GLink<T>& = null
+    next mut GLink<T>?& = null
 }
 
 # S9: the post clause is a simple statement, so a loop can advance by assignment - and a post that
@@ -6254,9 +6255,9 @@ type GLink<T> struct(x T) {
 test "a generic linked node, walked by a for loop that advances by assignment" {
     a mut GLink<I64>& = GLink<I64>(1)
     a.next = GLink<I64>(20)
-    a.next.next = GLink<I64>(300)
+    a.next!.next = GLink<I64>(300)
     sum I64 = 0
-    for c GLink<I64>& = a, c is not null, c = c.next {
+    for c GLink<I64>?& = a, c is not null, c = c.next {
         sum = sum + c.v
     }
     assert sum == 321
@@ -6298,7 +6299,7 @@ test "O25: a write through an adopted local lands in the referent's scope" {
     root mut Link& = Link(1)
     linkThrough(root)
     churnLinks()
-    assert root.next.v == 5
+    assert root.next!.v == 5
 }
 
 # the same hole one hop further: a FIELD read determined a callee's scope variable by the field's own bare
@@ -6309,10 +6310,10 @@ test "O25: a field read determines a callee's scope as its container's" {
     a mut Link& = Link(1)
     a.next = Link(2)
     if a.v == 1 {
-        growLink(a.next)
+        growLink(a.next!)
     }
     churnLinks()
-    assert a.next.next.v == 9
+    assert a.next!.next!.v == 9
 }
 
 # what exactness makes legal that the old blanket rule rejected: two locals of one block linking to each
@@ -6323,11 +6324,11 @@ test "O25: same-scope locals link, and an inner-block cursor writes into the out
     a.next = b
     if a.v == 1 {
         c Link&a = a        # exactly a's scope, not the if's
-        c.next.next = Link(3)
+        c.next!.next = Link(3)
     }
     churnLinks()
     sum I32 = 0
-    for c Link& = a, c is not null, c = c.next { sum = sum + c.v }
+    for c Link?& = a, c is not null, c = c.next { sum = sum + c.v }
     assert sum == 6
 }
 
@@ -6335,7 +6336,7 @@ test "O25: same-scope locals link, and an inner-block cursor writes into the out
 # allocated into it or stored through it
 fn sumLinks(p Link&) I32 {
     sum I32 = 0
-    for c Link&p = p, c is not null, c = c.next { sum = sum + c.v }
+    for c Link?&p = p, c is not null, c = c.next { sum = sum + c.v }
     return sum
 }
 
@@ -6363,7 +6364,7 @@ test "D15: := from a call" {
     l := freshLink(4)
     l.next = Link(5)
     churnLinks()
-    assert l.next.v == 5
+    assert l.next!.v == 5
 }
 
 # D8c: a function may return several values - "(T1, T2)" after its parameters, "return a, b" in its body.
@@ -6423,7 +6424,7 @@ test "D8c: with try, scopes, generics, methods and interfaces" {
     l, twice := linkAndDouble(21)
     l.next = Link(22)
     churnLinks()
-    assert l.next.v == 22
+    assert l.next!.v == 22
     assert twice == 42
     x, y := swapD(I64(5), 7)
     assert x == 7
@@ -6718,9 +6719,9 @@ test "R9a: a checked index and a slice take a default for out-of-range" {
     assert (checked a[three] catch default -1) == -1
     i I32 = -4
     assert (checked a[i] catch default 42) == 42
-    s := checked a[2:9] catch default null
+    s := checked a[2:9] catch default Array<I32>(0)
     assert s.Len() == 0
-    t := checked a[0:2] catch default null
+    t := checked a[0:2] catch default Array<I32>(0)
     assert t.Len() == 2
 }
 
@@ -7439,7 +7440,7 @@ test "E7: and/or skip their right side once the left decides" {
     assert calls[0] == 0
     assert (not f) and scBump(calls)
     assert calls[0] == 1
-    p Point& = null
+    p Point?& = null
     assert p is null or p.x == 0
 }
 
@@ -7646,7 +7647,7 @@ test "E27/T7: a comprehension or Array<T>(n) returned through a reference result
     assert m[1] == 5
 }
 
-# E27/T2a: a comprehension that keeps nothing still has storage of its own - an empty array, never a null one -
+# E27/T2c: a comprehension that keeps nothing is an empty array (an array is never null) -
 # whether its source's length is known up front (a range, an array) or not (an iterator); the run time, a baked global
 # (K2) and an assert decided while compiling (S18c) agree
 fn comprNothing(n I32) String {
@@ -7658,14 +7659,14 @@ fn comprNothing(n I32) String {
     re Array<U16>&e = e
     r Array<U16> = U16[2 for x in range n]
     rr Array<U16>&r = r
-    return $ra " " $(ra is null) " " $re " " $(re is null) " " $rr " " $(rr is null)
+    return $ra " " $(ra.Len() == 0) " " $re " " $(re.Len() == 0) " " $rr " " $(rr.Len() == 0)
 }
 
 ComprNothingBaked String = comprNothing(0)
 
-test "E27/T2a: a comprehension over an empty source is an empty array, not null" {
-    assert ComprNothingBaked == "U16[] false U16[] false U16[] false"
-    assert comprNothing(0) == "U16[] false U16[] false U16[] false"
+test "E27/T2c: a comprehension over an empty source is an empty array" {
+    assert ComprNothingBaked == "U16[] true U16[] true U16[] true"
+    assert comprNothing(0) == "U16[] true U16[] true U16[] true"
     n I32 = 0
     n++
     n--
@@ -7673,7 +7674,7 @@ test "E27/T2a: a comprehension over an empty source is an empty array, not null"
     l := List<I64>()
     empty := I64[x for x in l]
     er Array<I64>&empty = empty
-    assert empty.Len() == 0 and er is not null
+    assert empty.Len() == 0 and er.Len() == 0
 }
 
 # E28: "a if c else b" - only the chosen value is evaluated; both have one type, a literal adapting
@@ -8534,13 +8535,13 @@ test "E32: is and as on enum values" {
 # says. What follows "is" is a value when it names no type and no case of one (a local never shares a type's name,
 # D3a), and "is not" negates either form. IdBaked is computed while compiling (K2), so the evaluator agrees with the
 # run time on identity.
-type IdNode struct(v I32, next mut IdNode&) {
+type IdNode struct(v I32, next mut IdNode?&) {
     v
     next
 }
 
 # the same, equal by value: "==" consults its Eq, through references too (E10)
-type IdVal struct(v I32, next mut IdVal&) {
+type IdVal struct(v I32, next mut IdVal?&) {
     v
     next
 }
@@ -8557,14 +8558,14 @@ type IdExpr enum {
 
 fn idCount() I32 {
     t I32 = 0
-    a mut IdNode& = IdNode(1, null)
+    a mut IdNode?& = IdNode(1, null)
     b IdNode& = IdNode(1, null)
-    a.next = a
-    c IdNode& = a
+    a!.next = a
+    c IdNode?& = a
     if a == c { t += 1 }
     if a != b { t += 10 }                       # one value each, yet two instances: no Eq, so identity
-    if not (a == b) and a.v == b.v { t += 100 }  # one value, two instances
-    if a.next == a and a.next != b { t += 1000 }
+    if not (a == b) and a!.v == b.v { t += 100 } # one value, two instances
+    if a!.next == a and a!.next != b { t += 1000 }
     if b.next is null and not b.next is not null and a is not null { t += 10000 }
     f fn(x I32) I32 = idDouble
     g fn(x I32) I32 = f
@@ -8590,8 +8591,8 @@ test "E10, E10c: a reference compares by identity unless its type declares Eq, a
     r Array<I32>& = xs
     s Array<I32>& = xs
     ys := Array<I32>(3)
-    assert r == s and r is not null and r == ys     # arrays declare Eq: by contents
-    n IdExpr& = null
+    assert r == s and r.Len() > 0 and r == ys       # arrays declare Eq: by contents
+    n IdExpr?& = null
     assert n is null and n != IdExpr.Nil           # a null reference holds no case (E32)
 }
 
@@ -8751,11 +8752,11 @@ test "S9c: an iterable is walked through a fresh iterator each time, temporaries
 # the writing function's own scope, because codegen did not count a run-time-length array as a container -
 # the stored node dangled as the method returned, and a hash map built this way chained into its own reused
 # memory. Found by writing one.
-type PreNode struct(v I32, next mut PreNode&) {
+type PreNode struct(v I32, next mut PreNode?&) {
     v
     next
 }
-type PreBuckets struct() { a mut Array<mut PreNode&>& = Array<mut PreNode&>(2) }
+type PreBuckets struct() { a mut Array<mut PreNode?&>& = Array<mut PreNode?&>(2) }
 fn (b mut PreBuckets&) push(v I32) { b.a[0] = PreNode(v, b.a[0]) }
 
 test "a reference stored into an element of a reference-reached array lives in the array's scope" {
@@ -8766,21 +8767,21 @@ test "a reference stored into an element of a reference-reached array lives in t
     noise I32 = 0
     for i in range I32(20) { noise = noise + noisePoint(i) }   # reuses any chunk a returned call freed
     n I32 = 0
-    for p PreNode& = b.a[0], p is not null and n < 10, p = p.next { n++ }
-    assert n == 3 and b.a[0].v == 3 and b.a[0].next.next.v == 1
+    for p PreNode?& = b.a[0], p is not null and n < 10, p = p.next { n++ }
+    assert n == 3 and b.a[0]!.v == 3 and b.a[0]!.next!.next!.v == 1
 }
 
 # O4b: every reference parameter is passed with its scope, so a function may allocate into one and store
 # through it, and what it needs between two of them is an obligation its callers discharge. A map keyed by
 # text, written with no scope names at all: the key must outlive the map, which each caller shows.
-type O4bSlot struct(key String&, val I32, next mut O4bSlot&) {
+type O4bSlot struct(key String&, val I32, next mut O4bSlot?&) {
     key
     val
     next
 }
-type O4bMap struct() { first mut O4bSlot& = null }
+type O4bMap struct() { first mut O4bSlot?& = null }
 fn (m mut O4bMap&) Put(key String&, val I32) {
-    for s mut O4bSlot&m = m.first, s is not null, s = s.next {
+    for s mut O4bSlot?&m = m.first, s is not null, s = s.next {
         if s.key.Eq(key) {
             s.val = val
             return
@@ -8789,7 +8790,7 @@ fn (m mut O4bMap&) Put(key String&, val I32) {
     m.first = O4bSlot(key, val, m.first)
 }
 fn (m O4bMap&) Get(key String&) I32 {
-    for s O4bSlot&m = m.first, s is not null, s = s.next {
+    for s O4bSlot?&m = m.first, s is not null, s = s.next {
         if s.key.Eq(key) { return s.val }
     }
     return -1
@@ -8807,7 +8808,7 @@ test "O4b: a structure built through bare reference parameters, with no scope wr
 
 # O18a: a scope only the result names follows the result - it is bound to wherever the result lands, so a
 # builder calling builders needs no scope arguments. Each landing is checked by churning the arena.
-type LandE struct(v I32, l LandE&) {
+type LandE struct(v I32, l LandE?&) {
     v
     l
 }
@@ -8832,20 +8833,20 @@ test "O18a: nested builders land with their caller's result" {
     c LandE& = landChain(3)
     noise I32 = 0
     for i in range I32(30) { noise = noise + noisePoint(i) }
-    assert p.v == 3 and p.l.v == 4
-    assert c.v == 3 and c.l.l.l.v == 0
+    assert p.v == 3 and p.l!.v == 4
+    assert c.v == 3 and c.l!.l!.l!.v == 0
 }
 
 # O4a: "&x" says "lives where x lives" - a parameter naming an earlier one, a borrowed result naming the
 # parameter it is part of, and locals naming a parameter or a block-scoped local, from an inner block
-type OxN struct(v I32, nx mut OxN&) {
+type OxN struct(v I32, nx mut OxN?&) {
     v
-    next mut OxN& = nx
+    next mut OxN?& = nx
 }
 
 fn oxLink(a mut OxN&, b mut OxN&a) { a.next = b }
 
-fn (l OxN&) OxFirst() OxN&l { return l.next }
+fn (l OxN&) OxFirst() OxN&l { return l.next! }
 
 fn (l mut OxN&) OxGrow(v I32) {
     e mut OxN&l = OxN(v, null)
@@ -8869,7 +8870,7 @@ fn oxChurn() I32 {
     t I32 = 0
     for i in range 200 {
         y := OxN(I32(i), OxN(1, null))
-        t = t + y.next.v
+        t = t + y.next!.v
     }
     return t
 }
@@ -8888,12 +8889,12 @@ test "O4a: &x on parameters, results and locals" {
     oxLink(a, b)
     assert a.OxFirst().v == 2
     a.OxGrow(5)
-    assert a.next.v == 5
-    assert a.next.next.v == 2
+    assert a.next!.v == 5
+    assert a.next!.next!.v == 2
     oxChain(a)
     assert oxChurn() > 0
-    assert a.next.v == 10
-    assert a.next.next.v == 11
+    assert a.next!.v == 10
+    assert a.next!.next!.v == 11
 }
 
 test "O4a: &x naming a block-scoped local builds there, from an inner block" {
@@ -8905,8 +8906,8 @@ test "O4a: &x naming a block-scoped local builds there, from an inner block" {
         inner.next = called
     }
     assert oxChurn() > 0
-    assert outer.next.v == 7
-    assert outer.next.next.v == 8
+    assert outer.next!.v == 7
+    assert outer.next!.next!.v == 8
 }
 
 test "E25: f&x() builds the result where x lives" {
@@ -8916,21 +8917,21 @@ test "E25: f&x() builds the result where x lives" {
         outer.next = x
     }
     assert oxChurn() > 0
-    assert outer.next.v == 4
+    assert outer.next!.v == 4
     oxGraft(outer)
     assert oxChurn() > 0
-    assert outer.next.v == 5
-    assert outer.next.next.v == 6
+    assert outer.next!.v == 5
+    assert outer.next!.next!.v == 6
 }
 
 # O13/O26: a built result (bare "&", or by value holding references) is in the result scope, which follows
 # the call's result. A returned local lives there, so a body never names it; a helper flowing into one says
 # where it lives with "&left". A borrowed result names its parameter. Each is read back after the arena has
 # been churned, so a value built in a closed scope would read back as garbage.
-type OE struct(v I32, l mut OE&, r mut OE&) {
+type OE struct(v I32, l mut OE?&, r mut OE?&) {
     v
-    left mut OE& = l
-    right mut OE& = r
+    left mut OE?& = l
+    right mut OE?& = r
 }
 
 type OHolder struct(x mut OxN&) { n mut OxN& = x }
@@ -8954,19 +8955,19 @@ fn oBuild(v I32) OHolder {
 
 fn (l OxN&) oLast() OxN&l {
     c OxN&l = l
-    for c.next is not null { c = c.next }
+    for c.next is not null { c = c.next! }
     return c
 }
 
 fn oFresh() OxN& {
-    x mut OxN&return = null
+    x mut OxN?&return = null
     for i in range 3 { x = OxN(I32(i), x) }
-    return x
+    return x!
 }
 
 fn oPair() OxN&, OxN& { return OxN(1, null), OxN(2, null) }
 
-fn oSum(e OE&) I32 {
+fn oSum(e OE?&) I32 {
     if e is null { return 0 }
     return e.v + oSum(e.left) + oSum(e.right)
 }
@@ -8981,7 +8982,7 @@ test "O13/O26: built results and returned locals live where the result goes" {
     assert oxChurn() > 0
     assert oSum(outer) == 2 + 3 + 4 + 1
     assert hh.n.v == 7
-    assert hh.n.next.v == 8
+    assert hh.n.next!.v == 8
     a := OxN(1, OxN(2, OxN(3, null)))
     assert a.oLast().v == 3
     assert oFresh().v == 2
@@ -8997,7 +8998,7 @@ test "O18a: a by-value result is built where it lands - a loop body's own block,
     }
     assert oxChurn() > 0
     assert h.n.v == 9
-    assert h.n.next.v == 10
+    assert h.n.next!.v == 10
 }
 
 # C2d: a field written "&p" lives where its constructor argument does, so a cursor may be shorter-lived than
@@ -9009,7 +9010,7 @@ type OCursor struct(of mut OxN&) {
 }
 
 fn (c mut OCursor&) OAdvance() {
-    c.at = c.at.next
+    c.at = c.at.next!
     c.steps++
 }
 
@@ -9021,11 +9022,11 @@ test "C2d/E25: a cursor over a longer-lived list, and a constructor built where 
         assert c.at.v == 2
         c.at.next = OxN(9, null)
         made mut OxN&list = OxN&list(7, null)
-        list.next.next.next = made
+        list.next!.next!.next = made
     }
     assert oxChurn() > 0
-    assert list.next.next.v == 9
-    assert list.next.next.next.v == 7
+    assert list.next!.next!.v == 9
+    assert list.next!.next!.next!.v == 7
 }
 
 # O26/E25: "f&return()" builds a call's result in this function's result scope, and ":=" takes that scope, so
@@ -9037,7 +9038,7 @@ fn oChainRet(n I32) OxN& {
 }
 
 fn (l OxN&) oSecond() OxN&l {
-    c OxN&l = l.next
+    c OxN&l = l.next!
     return c
 }
 
@@ -9045,8 +9046,8 @@ test "O26/O25a: &return as a scope argument, := adopting it, and a typed local n
     out := OxN(0, null)
     for i in range 1 { out.next = oChainRet(5) }
     assert oxChurn() > 0
-    assert out.next.v == 5
-    assert out.next.next.v == 6
+    assert out.next!.v == 5
+    assert out.next!.next!.v == 6
     assert out.oSecond().v == 5
 }
 
@@ -9309,9 +9310,9 @@ type CtP struct(x I32, y I32) {
     x
     y
 }
-type CtN struct(v I32, nx mut CtN&) {
+type CtN struct(v I32, nx mut CtN?&) {
     v
-    next mut CtN& = nx
+    next mut CtN?& = nx
 }
 type CtShape enum {
     Circle(r I32)
@@ -9433,7 +9434,7 @@ type CtConvBox struct() {
     buf := Array<Char>(3, 'q')
 }
 type CtConvHolder struct() {
-    s mut String& = null
+    s mut String& = ""
 }
 fn ctConvWrite(s mut String&) { s[0] = 'Z' }
 fn ctConv(n I32) String& {
@@ -9626,7 +9627,7 @@ test "T21: a function value is one value in fields, elements and copies, and com
 
 # D16e: "spawn fn() { ... }" - a task running a lambda's body, each one handed its own copies of what it captured
 test "D16e: a spawned lambda captures its loop's variables per task" {
-    out mut Array<mut LamCounter&>& = Array<mut LamCounter&>(8)
+    out mut Array<mut LamCounter?&>& = Array<mut LamCounter?&>(8)
     for i in range 8 { out[i] = LamCounter() }
     sums mut Array<I64>& = Array<I64>(8)
     scale I32 = ctRuntimeZero + 3
@@ -9635,12 +9636,12 @@ test "D16e: a spawned lambda captures its loop's variables per task" {
             k I32 = I32(i) * scale
             spawn fn() {
                 c := churnArena()
-                out[i].n = k
+                out[i]!.n = k
                 sums[i] = I64(k) * 2
             }
         }
     }
-    assert out[7].n == 21 and sums[5] == 30
+    assert out[7]!.n == 21 and sums[5] == 30
 }
 
 # D16b/E13b: a lambda called where it is written has no expected type - its written signature says what the call takes
@@ -9729,7 +9730,7 @@ test "T7b: a captured array is borrowed, and a destructured array result is take
 }
 
 # T25b/T25c: permission is part of a reference's type - "mut T&" writable, "T&" read-only - at every level
-type PermNode struct(v I32, next mut PermNode&) {
+type PermNode struct(v I32, next mut PermNode?&) {
     v
     next
 }
@@ -9757,7 +9758,7 @@ test "T25b: writable and read-only references, by type" {
     assert r.v == 10
     r = permFirst(other)
     assert r.v == 1 and PermRO.v == 1
-    keep mut Array<PermNode&>& = Array<PermNode&>(2)
+    keep mut Array<PermNode&>& = Array<PermNode&>(2, r)
     keep[0] = r                        # an array of read-only references takes a read-only one
     keep[1] = n                        # ...and a writable one, giving up the permission
     assert permSum(keep) == 11
@@ -9912,9 +9913,9 @@ test "E10a: == consults a declared Eq at every depth, while compiling and at run
     r String& = "ab"
     assert s == r and s == "ab" and "ab" == s and s != "abc"
     assert eqWords(s) == 1 and eqWords(eqText(1)) == 0
-    n String& = null
-    m String& = null
-    assert n == m and n != s and s != n and n is null
+    n String& = ""
+    m String& = ""
+    assert n == m and n != s and s != n and n.Len() == 0
     p EqLabel& = EqLabel(s)
     q EqLabel& = EqLabel("zz")
     assert p == q and not (p != q)
@@ -9943,7 +9944,7 @@ test "E11c: $ renders through a declared Str, wherever the value sits" {
     o := StrOrder(7, StrMoney(199), StrMoney(5), StrMoney[StrMoney(1), StrMoney(StrCount)])
     assert $o == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $2.50])"
     assert StrBaked == "StrOrder(7, $1.99, $0.5, StrMoney[$0.1, $1.0])"
-    n StrMoney& = null
+    n StrMoney?& = null
     assert $n == "null"
     assert $StrCents(StrCount) == "250c"
 }
@@ -10045,7 +10046,7 @@ type CaExpr enum {
     Neg(e CaExpr&)
 }
 fn caWrap(a CaExpr&) CaExpr&a { return CaExpr.Neg(a) }
-fn caSimplify(e CaExpr&) CaExpr&e { return caWrap(e) if e is not null else CaExpr.Num(1.0) }
+fn caSimplify(e CaExpr?&) CaExpr&e { return caWrap(e) if e is not null else CaExpr.Num(1.0) }
 fn caSimplifyM(e CaExpr&, k I64) CaExpr&e {
     return match k {
         case 0 => caWrap(e)
@@ -10074,7 +10075,7 @@ test "E28/S12b: a conditional of literals takes its target's type; a value made 
     assert CaCondBaked == caCondLits(k == 0) and CaCondBakedNo == caCondLits(k != 0)
     t CaExpr& = CaExpr.Neg(CaExpr.Num(2.0))
     s := caSimplify(t)
-    n CaExpr& = null
+    n CaExpr?& = null
     one := caSimplify(n)
     m0 := caSimplifyM(t, I64(k))
     m3 := caSimplifyM(t, I64(k) + 3)
@@ -10085,9 +10086,9 @@ test "E28/S12b: a conditional of literals takes its target's type; a value made 
 # T7/E12c: a reference field or element given an array the expression makes itself - "Array<T>(n)", a comprehension,
 # a rendering - holds that very storage (it is built where the field lives), each one its own
 type AdoptHolder struct() {
-    a mut Array<I64>& = null
-    rows mut Array<mut Array<I64>&>& = null
-    s mut String& = null
+    a mut Array<I64>& = Array<I64>(0)
+    rows mut Array<mut Array<I64>&>& = Array<mut Array<I64>&>(0)
+    s mut String& = ""
 }
 fn adoptFresh(n I64) I64 {
     h := AdoptHolder()
@@ -10832,8 +10833,8 @@ test "O18b: a temporary pushed from a doubly nested block, and text pushed in a 
 
 # a method and a plain function declared after their caller, each storing its argument into its first parameter
 type ObBag struct() {
-    first mut ObNode& = null
-    second mut ObNode& = null
+    first mut ObNode?& = null
+    second mut ObNode?& = null
 }
 
 fn obFill(n I64) I64 {
@@ -10845,7 +10846,7 @@ fn obFill(n I64) I64 {
         scratch[0] = 5
     }
     obChurn()
-    return b.first.v + b.second.v
+    return b.first!.v + b.second!.v
 }
 
 fn (b mut ObBag&) obPut(n mut ObNode&) { b.first = n }
@@ -10906,7 +10907,7 @@ test "O23a: elements of one list pushed into another, through the iterator" {
 # a hand-written collection and iterator, not generic: Next borrows from the iterator ("ObNode&it"), and every return
 # reads the bag's own storage through the iterator's "&of" field - so a call's result is where the bag lives (O13c)
 type ObItems struct() {
-    items mut Array<ObNode&>& = Array<ObNode&>(8)
+    items mut Array<ObNode?&>& = Array<ObNode?&>(8)
     n I64 = 0
 }
 fn (b mut ObItems&) Add(x ObNode&) {
@@ -10921,7 +10922,7 @@ fn (it mut ObItemsIter&) Next() ObNode&it ? Exhausted {
     if it.i == it.bag.n { error Exhausted.END }
     v := it.bag.items[it.i]
     it.i++
-    return v
+    return v!
 }
 fn (b ObItems&) Iter() ObItemsIter { return ObItemsIter(b) }
 
@@ -10931,7 +10932,7 @@ test "O13c: a hand-written iterator's elements live where its collection does" {
     dst mut ObItems& = ObItems()
     for x in src { dst.Add(x) }
     obChurn()
-    assert dst.n == 3 and dst.items[0].v + dst.items[1].v + dst.items[2].v == 6
+    assert dst.n == 3 and dst.items[0]!.v + dst.items[1]!.v + dst.items[2]!.v == 6
 }
 
 # K2: a global computed while compiling through the same pushes - the evaluator and the run time agree
@@ -10960,10 +10961,10 @@ test "O18b/O23a: the same pushes computed while compiling and at run time" {
 type WlNode struct(v I64) {
     v
 }
-type WlBox struct(n WlNode&) {
+type WlBox struct(n WlNode?&) {
     n
 }
-type WlLink struct(v I64, next WlLink&) {
+type WlLink struct(v I64, next WlLink?&) {
     v
     next
 }
@@ -11016,8 +11017,8 @@ test "T7b: an array or text value returned from a local is built in the result s
     assert src[0] == 1 and c[0] == 9      # a value result is a copy, never the argument's own storage
 }
 
-WlGA mut WlNode& = null
-WlGS mut String& = null
+WlGA mut WlNode?& = null
+WlGS mut String& = ""
 WlGB mut WlBox = WlBox(null)
 WlGW mut Array<I64> = Array<I64>(2, 0)
 
@@ -11032,11 +11033,11 @@ fn wlSetGlobals(n I64) {
 fn wlSetGlobalCall(n I64) { WlGA = wlMkNode(n) }
 
 type WlCell struct() {
-    next mut WlNode& = null
+    next mut WlNode?& = null
 }
 WlGV mut WlCell = WlCell()
 WlGR mut WlCell& = WlCell()
-WlGE mut Array<mut WlNode&>& = Array<mut WlNode&>(2, null)
+WlGE mut Array<mut WlNode?&>& = Array<mut WlNode?&>(2, null)
 fn wlSetInside(n I64) {
     WlGV.next = WlNode(n)               # a field of a global value
     WlGR.next = wlMkNode(n + 1)         # a field of a global's referent, from a call
@@ -11046,11 +11047,11 @@ fn wlSetInside(n I64) {
 test "O1b: what a function assigns to a global, or into one, is built in the program's scope" {
     wlSetGlobals(wlRun)
     obChurn()
-    assert WlGA.v == 5 and WlGS == "v=5" and WlGB.n.v == 6 and WlGW.Len() == 4 and WlGW[3] == 5
+    assert WlGA!.v == 5 and WlGS == "v=5" and WlGB.n!.v == 6 and WlGW.Len() == 4 and WlGW[3] == 5
     wlSetGlobalCall(wlRun + 2)
     wlSetInside(wlRun)
     obChurn()
-    assert WlGA.v == 7 and WlGV.next.v == 5 and WlGR.next.v == 6 and WlGE[1].v == 7
+    assert WlGA!.v == 7 and WlGV.next!.v == 5 and WlGR.next!.v == 6 and WlGE[1]!.v == 7
 }
 
 WlG WlNode& = WlNode(5)
@@ -11074,19 +11075,19 @@ test "P2/O1b: tasks building into the program's scope at once each build into th
 }
 
 type WlHolder struct() {
-    item mut WlNode& = null
+    item mut WlNode?& = null
 }
 fn wlFill(h mut WlHolder&, v I64) { h.item = WlNode(v) }
 
 test "P2/P1g: what a task builds lives where its call bound it, not in the join block" {
-    r WlNode& = null
+    r WlNode?& = null
     h mut WlHolder& = WlHolder()
     join {
         spawn r = wlMkNode(wlRun)
         spawn wlFill(h, wlRun + 1)
     }
     obChurn()
-    assert r.v == 5 and h.item.v == 6
+    assert r!.v == 5 and h.item!.v == 6
 }
 
 error WlErr {
@@ -11099,15 +11100,15 @@ fn wlMaybe(x I64) WlNode& ? WlErr {
 fn wlWrap(x I64) WlNode& { return try wlMaybe(x) catch default WlNode(7) }
 
 test "R9a: a catch default is built where the call's result lives" {
-    a WlNode& = null
-    b WlNode& = null
+    a WlNode?& = null
+    b WlNode?& = null
     if wlRun > 0 {
         a = try wlMaybe(wlRun) catch default WlNode(6)
         b = try wlMaybe(0 - wlRun) catch default WlNode(7)
     }
     c := wlWrap(0 - wlRun)
     obChurn()
-    assert a.v == 5 and b.v == 7 and c.v == 7
+    assert a!.v == 5 and b!.v == 7 and c.v == 7
 }
 
 test "O18a: a value local's references live in its own block - a loop body's are reclaimed with the iteration" {
@@ -11115,7 +11116,7 @@ test "O18a: a value local's references live in its own block - a loop body's are
     for i in range wlRun {
         m := WlLink(i, WlLink(i + 2, null))
         obChurn()
-        t += m.next.v
+        t += m.next!.v
     }
     assert t == 2 + 3 + 4 + 5 + 6
 }
@@ -11420,12 +11421,12 @@ fn evIdentity(n I64) String {
     g Array<I32>& = arr[n - 1:3]
     x Array<I32>
     y Array<I32>
-    none Array<I32>& = null
+    none Array<I32>& = Array<I32>(0)
     return $(a == b) " " $(b == g) " " $(c == d) " " $(e == f) " " $(a == g) " " $(x[:] == y[:]) " " $(c == none)
 }
 EvIdentityBaked String = evIdentity(2)
-test "E10: arrays compare by what they hold - lengths, then elements - and a null only equals a null" {
-    assert EvIdentityBaked == "false false true true true true false"
+test "E10: arrays compare by what they hold - lengths, then elements - the empty array included (T2c)" {
+    assert EvIdentityBaked == "false false true true true true true"
     assert evIdentity(evRun + 1) == EvIdentityBaked
 }
 
@@ -11878,7 +11879,7 @@ fn (s fzShape&) Str() String {
         case fzShape.Bar(n) { return "bar" $n }
     }
 }
-fn fzShapeName(s fzShape&) String {
+fn fzShapeName(s fzShape?&) String {
     match s {
         case fzShape.Dot { return "Dot" }
         case fzShape.Bar(n) { return "Bar" $n }
@@ -11983,18 +11984,18 @@ test "R10: a try statement's clauses do not take an error raised by its call's a
     assert fzTryStmts(fzRun + 2) == 114
 }
 
-# E10/E11a: "$" on a reference to an array value's zero value - an array with no storage, a null reference's bits - is
-# "null" as at run time; the evaluator rendered the empty array it holds (fuzz/repro/nullarrayrender.olang)
+# E10/E11a/T2c: "$" on a reference to an array value's zero value - an array with no storage - is the empty array, as
+# every empty array is: an array is never null (fuzz/repro/nullarrayrender.olang)
 fn fzNullArr(n I64) String {
     d Array<U16>
     rd Array<U16>&d = d
     e Array<U16> = Array<U16>(n - n)
     re Array<U16>&e = e
-    return $rd " " $(rd is null) " " $re " " $(re is null)
+    return $rd " " $(rd.Len() == 0) " " $re " " $(re.Len() == 0)
 }
 FzNullArrBaked String = fzNullArr(3)
-test "E10: a reference to an array with no storage renders as null" {
-    assert FzNullArrBaked == "null true U16[] false" and fzNullArr(3) == FzNullArrBaked
+test "E10, T2c: a reference to an array with no storage renders as the empty array" {
+    assert FzNullArrBaked == "U16[] true U16[] true" and fzNullArr(3) == FzNullArrBaked
     assert fzNullArr(fzRun + 2) == FzNullArrBaked
 }
 
@@ -12259,7 +12260,7 @@ fn hashKeys() Bool {
     e := Map<hShape, I32>()
     e.Put(hShape.Rect(1, 2), 4)
     e.Put(hShape.Circle(1), 7)
-    n String& = null
+    n String& = ""
     pts Bool = try m.Get(hPt(1, 2)) catch default 0 == 5 and try m.Get(hPt(2, 1)) catch default 0 == 6
     tagged Bool = try t.Get(hTagged("ab", hPt(0, 0))) catch default 0 == 1 and hTagged(n, hPt(0, 0)).Hash() == hTagged(n, hPt(0, 0)).Hash()
     shapes Bool = try e.Get(hShape.Rect(1, 2)) catch default 0 == 4 and not (hShape.Rect(2, 1) in e) and not (hShape.Blank in e)
@@ -12326,7 +12327,7 @@ type C2Ent struct(k I64, v mut List<I64>&) {
     K I64 = k
     V mut List<I64>& = v
 }
-type C2Slot struct(k I64, v mut List<I64>&, next mut C2Slot&) {
+type C2Slot struct(k I64, v mut List<I64>&, next mut C2Slot?&) {
     e C2Ent = C2Ent(k, v)
     next
 }
@@ -12337,7 +12338,7 @@ test "C2d: a constructor field builds an entry from the constructor's parameters
     s = C2Slot(2, l, s)
     s.e.V.Push(7)
     obChurn()
-    assert s.e.K == 2 and s.next.e.K == 1 and l.Len() == 1 and s.next.e.V.Len() == 1
+    assert s.e.K == 2 and s.next!.e.K == 1 and l.Len() == 1 and s.next!.e.V.Len() == 1
 }
 
 # ---- the scope study, batch 2 (2026-10-09): what realistic programs wrote first, accepted ----
@@ -12397,7 +12398,7 @@ test "O25h: copies of records holding text are swapped, sorted, pushed outward a
 # still lands where its obligations say - the map's node, where the map lives
 type sbNode struct(v I64) {
     v
-    next mut sbNode& = null
+    next mut sbNode?& = null
 }
 type sbIndex struct() {
     nodes mut Map<I64, mut sbNode&>& = Map<I64, mut sbNode&>()
@@ -12416,7 +12417,7 @@ test "O18c: a call with a catch block lands as a call with no clause does" {
     assert (try c.bump(1) catch default -1) == 6
     sbChurn()
     n := try c.nodes.Get(1) catch { unreachable }
-    assert n.next.v == 60
+    assert n.next!.v == 60
     assert (try c.bump(2) catch default -1) == -1
 }
 
@@ -12471,13 +12472,13 @@ fn (it mut sbIt<T>&) Next() T ? Exhausted {
     return v
 }
 test "O13c: an iterator returning its element through a local" {
-    nodes := Array<mut sbNode&>(3)
+    nodes := Array<mut sbNode&>(3, sbNode(0))
     for i in range 3 { nodes[i] = sbNode(I64(i) + sbRun) }
     keep := List<mut sbNode&>()
     for n in sbIt<mut sbNode&>(nodes) { keep.Push(n) }
     keep[1].next = sbNode(70)
     sbChurn()
-    assert keep.Len() == 3 and keep[0].v == 1 and keep[2].v == 3 and nodes[1].next.v == 70
+    assert keep.Len() == 3 and keep[0].v == 1 and keep[2].v == 3 and nodes[1].next!.v == 70
 }
 
 # D16d: a lambda returned where it is made, capturing references from several scopes, is built in the result scope -
@@ -12636,7 +12637,7 @@ test "C2d: a Map of lists reuses a removed key's slot" {
 
 # O13c: a function's result built fresh in it carries what its body gave it, never what its arguments were bound to - a
 # new value made from a local's operands is returned (it used to be taken for the local's own storage, O26)
-type sbBox struct(n I64, from Array<I64>& = null) {
+type sbBox struct(n I64, from Array<I64>& = Array<I64>(0)) {
     Data mut Array<I64>& = Array<I64>(n)
 }
 fn sbCopyOf(b Array<I64>&) sbBox {
@@ -12648,7 +12649,7 @@ fn (b sbBox&) size() I64 { return b.Data.Len() }
 fn sbFill(d mut Array<I64>&, v I64) { for i in range d.Len() { d[i] = v } }
 # O17/O25h: a value built in the result scope is borrowed by a read-only method, and its field passed on, where it lives
 fn sbMade(n I64) sbBox {
-    id := sbBox(n, null)
+    id := sbBox(n, Array<I64>(0))
     sbFill(id.Data, 3)
     b := sbBox&return(n + id.size())
     sbFill(b.Data, 7)
@@ -12656,7 +12657,7 @@ fn sbMade(n I64) sbBox {
     return b
 }
 fn sbFresh(n I64) I64 {
-    id := sbBox(n, null)
+    id := sbBox(n, Array<I64>(0))
     sbFill(id.Data, 5)
     c := sbCopyOf(id.Data)
     m := sbMade(n)
@@ -12675,7 +12676,7 @@ test "O13c/O17: fresh results from a local's operands; a value built in the resu
 # references to be in one scope - an equality Push's callers show, as a JSON object's fields are built where it lives
 type sbJNode struct(v I64) {
     v
-    next mut sbJNode& = null
+    next mut sbJNode?& = null
 }
 fn sbFields(n I64) List<pair.Pair<String&, sbJNode&>>& {
     fields mut List<pair.Pair<String&, sbJNode&>>&return = List<pair.Pair<String&, sbJNode&>>()
@@ -13573,7 +13574,7 @@ test "T29f: a slice of a String has the array methods String inherits" {
 type c3Leaf struct(v I64) { v }
 type c3Node enum {
     One(s c3Leaf&)
-    Many(items Array<c3Node&>&)
+    Many(items Array<c3Node?&>&)
 }
 type c3Parser struct() {
     a c3Leaf& = c3Leaf(1)
@@ -13595,7 +13596,7 @@ fn (p mut c3Parser&) direct(c Bool) c3Node&p {
 }
 fn (p mut c3Parser&) maybe(c Bool) c3Node&p {
     x := p.node() if c else null
-    return c3Node.Many(c3Node&[x])
+    return c3Node.Many(c3Node&[x!])
 }
 fn (p mut c3Parser&) orNew(c Bool) c3Node&p {
     x := p.first() if c else c3Leaf(5)
@@ -13604,7 +13605,7 @@ fn (p mut c3Parser&) orNew(c Bool) c3Node&p {
 fn c3Leafs(n c3Node&) I64 {
     return match n {
         case c3Node.One(s) => s.v
-        case c3Node.Many(items) => items.Len() * 100 + (0 if items[0] is null else c3Leafs(items[0]))
+        case c3Node.Many(items) => items.Len() * 100 + (0 if items[0] is null else c3Leafs(items[0]!))
     }
 }
 test "E28: a conditional of references shares their scope, and is held and passed as one of them" {
@@ -13672,7 +13673,7 @@ type c3Mod struct() {
 type c3Modules struct() {
     mods List<mut c3Mod&>
 }
-fn (r c3Modules&) find(n String&) c3Sym&r {
+fn (r c3Modules&) find(n String&) c3Sym?&r {
     t := try r.mods[0].top.Get(n) catch default null
     return t
 }
@@ -13683,7 +13684,7 @@ test "O18c: a lookup chained through a list element whose type holds a map" {
     r.mods.Push(m)
     s := r.find("a")
     sbChurn()
-    assert s.name == "alpha" and r.find("b") is null
+    assert s!.name == "alpha" and r.find("b") is null
 }
 
 # D16d: a lambda made for a callee that keeps nothing of it is made in the caller's frame, once per call
@@ -13723,10 +13724,10 @@ fn s3ArrayRefEq() I64 {
     if a == b { s += 1 }
     if a == I64[1, 2, 3] { s += 2 }
     if a[:2] == b[:2] and a[1:3] != b[:2] { s += 4 }
-    n Array<I64>& = null
+    n Array<I64>& = Array<I64>(0)
     e Array<I64>& = Array<I64>(0)
     e2 Array<I64>& = Array<I64>(0)
-    if n != a and n is null and e != n and e is not null and e == e2 { s += 8 }
+    if n != a and n.Len() == 0 and e == n and e == e2 { s += 8 }
     if s3Holder(a) == s3Holder(b) { s += 16 }
     f Array<I64>& = I64[1, 2, 3]
     if f == a[0:3] { s += 32 }
@@ -13919,15 +13920,15 @@ fn (p mut sc3Parser&) expr(minPrec I64) sc3Expr& {
     return lhs
 }
 fn (p mut sc3Parser&) exprTyped(minPrec I64) sc3Expr& {
-    lhs mut sc3Expr& = null
+    lhs mut sc3Expr?& = null
     lhs = p.primary()
     for sc3Prec(p.peek().kind) >= minPrec {
         op := p.peek()
         p.at++
         rhs sc3Expr& = p.exprTyped(sc3Prec(op.kind) + 1)
-        lhs = sc3Expr.Bin(op.kind, lhs, rhs)
+        lhs = sc3Expr.Bin(op.kind, lhs!, rhs)
     }
-    return lhs
+    return lhs!
 }
 fn sc3Eval(e sc3Expr&) I64 {
     return match e {
@@ -14103,7 +14104,7 @@ test "T25d: static names kept by rooms in a returned game" {
     sbChurn()
     assert g.rooms.Len() == 2
     k := try g.rooms.Get("kitchen") catch default null
-    assert k.name == "kitchen"
+    assert k!.name == "kitchen"
 }
 
 # G9a/T22: a lambda's written types bind a generic's variables before a literal does, and a lambda whose parameter is
@@ -14322,12 +14323,12 @@ test "O26a: a returned value built from a local List's elements keeps them where
 # references taken by value (D9b) did the same through an element. Read back after the arena churns
 type rvN struct(v I64) {
     v
-    next mut rvN& = null
+    next mut rvN?& = null
 }
-type rvBox struct(n mut rvN&) { n }
-fn rvGrow(b rvBox) { b.n.next = rvN(9) }
+type rvBox struct(n mut rvN?&) { n }
+fn rvGrow(b rvBox) { b.n!.next = rvN(9) }
 fn rvGrowFirst<T>(x T) { x[0].next = rvN(8) }
-fn rvGrowVia<T>(k T, x T) { x.n.next = rvN(7) }
+fn rvGrowVia<T>(k T, x T) { x.n!.next = rvN(7) }
 test "O4b: a temporary stored through a by-value parameter's reference lives where that reference's referent does" {
     a mut rvN& = rvN(1)
     rvGrow(rvBox(a))
@@ -14339,7 +14340,7 @@ test "O4b: a temporary stored through a by-value parameter's reference lives whe
     d mut rvN& = rvN(4)
     rvGrowVia(rvBox(d), rvBox(d))
     sbChurn()
-    assert a.next.v == 9 and b.next.v == 9 and c.next.v == 8 and d.next.v == 7
+    assert a.next!.v == 9 and b.next!.v == 9 and c.next!.v == 8 and d.next!.v == 7
 }
 
 # E10: a struct value whose comparison comes round to its own type - through the arrays it holds references to - is
@@ -14404,7 +14405,7 @@ fn rvShared(v I32) I32 {
     f Array<I32> = I32[v, 6]
     fr mut Array<I32>& = f
     viaFixed := rvSee(a, fr, fr)
-    n Array<I32>& = null
+    n Array<I32>& = Array<I32>(0)
     viaNull := rvSee(a, n, a)
     return viaRef * 1000000 + viaSlice * 1000 + viaFixed + viaNull + 1
 }
@@ -14465,19 +14466,19 @@ test "E4a/E28: a conditional or match of literals adapts as a literal does, whil
 # one builds there (it built in the copy's block and hung the node off the source's); and a copy out of a reference
 # keeps its references where the referent is. Read back after the arena churns
 type rvHold struct() {
-    items := Array<mut rvN&>(2)
+    items := Array<mut rvN?&>(2)
     pairs := Array<rvBox>(2)
 }
 type rvHW struct(h rvHold) { h }
 fn rvWalkCopy(src mut rvHW&) {
     h := src.h
-    for x in h.items { x.next = rvN(x.v + 20) }
-    for p in h.pairs { p.n.next = rvN(p.n.v + 30) }
+    for x in h.items { x!.next = rvN(x!.v + 20) }
+    for p in h.pairs { p.n!.next = rvN(p.n!.v + 30) }
 }
 fn rvWalkParam(l List<mut rvN&>) { for x in l { x.next = rvN(x.v + 40) } }
 fn rvCopyOut(src mut rvHold&) {
     d rvHold = src
-    d.items[0].next.next = rvN(50)
+    d.items[0]!.next!.next = rvN(50)
 }
 fn rvSplitWalk(k I64, churn fn() I64) I64 {
     w := rvHW(rvHold())
@@ -14491,8 +14492,8 @@ fn rvSplitWalk(k I64, churn fn() I64) I64 {
     rvWalkParam(l)
     rvCopyOut(w.h)
     churn()
-    return w.h.items[0].next.v * 100000000 + w.h.items[1].next.v * 1000000 + w.h.pairs[0].n.next.v * 10000 +
-           w.h.pairs[1].n.next.v * 100 + l[0].next.v + w.h.items[0].next.next.v * 10000000000
+    return w.h.items[0]!.next!.v * 100000000 + w.h.items[1]!.next!.v * 1000000 + w.h.pairs[0].n!.next!.v * 10000 +
+           w.h.pairs[1].n!.next!.v * 100 + l[0].next!.v + w.h.items[0]!.next!.next!.v * 10000000000
 }
 RvSplitWalkBaked := rvSplitWalk(0, fn() I64 { return 0 })
 test "O17a: a for-in over a split value, and a copy out of a reference, build where the references live" {
@@ -14516,7 +14517,7 @@ fn s4dEval(e s4dE&) I64 {
     }
 }
 fn s4dWrap(e s4dE&) s4dE { return s4dE.Neg(e) }
-type s4dNode struct(v I64, next s4dNode&) {
+type s4dNode struct(v I64, next s4dNode?&) {
     v
     next
 }
@@ -14525,7 +14526,7 @@ type s4dHold struct() {
 }
 fn s4dDepth(n s4dNode&) I64 {
     d I64 = 0
-    for c := n, c is not null and d < 100, c = c.next { d++ }
+    for c s4dNode?&n = n, c is not null and d < 100, c = c.next { d++ }
     return d
 }
 fn s4dNegs(k I64) I64 {
@@ -14561,7 +14562,7 @@ test "S4d: an assignment's value borrowing the place it writes over takes the pl
     for i in range 3 + k { p, q = s4dE.Neg(q), s4dE.Neg(p) }
     sbChurn()
     assert s4dEval(x) == -5 and s4dEval(y) == 2
-    assert s4dDepth(n) == 5 and n.v == 5 and n.next.v == 4
+    assert s4dDepth(n) == 5 and n.v == 5 and n.next!.v == 4
     assert s4dEval(a[0]) == -7 and s4dEval(a[2]) == -7 and s4dEval(h.e) == 4 and s4dEval(hr.e) == -6
     assert s4dEval(p) == -6 and s4dEval(q) == -5
     assert S4dBaked == -5 and s4dNegs(3 + k) == S4dBaked and s4dNegs(3) == -5
@@ -14571,13 +14572,13 @@ test "S4d: an assignment's value borrowing the place it writes over takes the pl
 # gets the place's old value, whatever its body does with it - here it keeps nothing, but writes through the borrow, and
 # the write lands in the copy, so another name for the place still reads the old value while the value is built (the
 # body-based reading wrote the place itself, and read 9)
-type s4dT struct(w I64, a mut s4dT&, r s4dT&) {
+type s4dT struct(w I64, a mut s4dT?&, r s4dT?&) {
     s4dTPoke(a)
     v I64 = w + s4dTRead(r)
-    next s4dT& = null
+    next s4dT?& = null
 }
-fn s4dTPoke(a mut s4dT&) { if a is not null { a.v = 9 } }
-fn s4dTRead(r s4dT&) I64 { return r.v if r is not null else 0 }
+fn s4dTPoke(a mut s4dT?&) { if a is not null { a.v = 9 } }
+fn s4dTRead(r s4dT?&) I64 { return r.v if r is not null else 0 }
 fn s4dTRun(k I64) I64 {
     x s4dT = s4dT(1, null, null)
     r s4dT& = x
@@ -14674,14 +14675,14 @@ test "T22: a read-only reference parameter fits a function type whose parameter 
 # type says (a value of "fn(a mut t22sN&, b t22sN&)" was accepted, and stored b where a lives with nothing checked)
 type t22sN struct(v I64) {
     v
-    next t22sN& = null
+    next t22sN?& = null
 }
 fn t22sLink(a mut t22sN&, b t22sN&a) { a.next = b }
 fn t22sPut(f fn(a mut t22sN&, b t22sN&a), a mut t22sN&, i I64) { f(a, t22sN(i)) }
 fn t22sBuild() I64 {
     x mut t22sN& = t22sN(1)
     t22sPut(t22sLink, x, 6)
-    return x.v + x.next.v
+    return x.v + x.next!.v
 }
 T22sBuilt := t22sBuild()                            # baked: the evaluator calls through the value as the run time does
 test "T22: a function value whose parameters share a scope, through a type saying so" {
@@ -14691,15 +14692,15 @@ test "T22: a function value whose parameters share a scope, through a type sayin
         sbChurn()
     }
     sbChurn()
-    assert x.next.v == 42 and T22sBuilt == 7 and t22sBuild() == 7
+    assert x.next!.v == 42 and T22sBuilt == 7 and t22sBuild() == 7
 }
 
 # O17: what is read out of a lent value's region by following a reference brings in nothing new, so a callee storing
 # it there keeps nothing of its own - the split lend stays legal (storing the value's own storage is the error, see
 # checks/cases/o17selfstore)
 type o17rNode struct() {
-    next mut o17rNode& = null
-    view Array<I64>& = null
+    next mut o17rNode?& = null
+    view Array<I64>& = Array<I64>(0)
     data := Array<I64>(4)
     v I64 = 0
 }
@@ -15054,7 +15055,7 @@ test "T25c: a read-only copy is read, iterated and passed by value; a writable o
 # the callee's own block, reclaimed at its return. (A constructor or an enum case given the reference is held to it:
 # checks/cases/rv3ctorcopy.olang)
 type rv3Node struct() {
-    next mut rv3Node& = null
+    next mut rv3Node?& = null
     v I64 = 0
 }
 type rv3Box struct() {
@@ -15070,18 +15071,18 @@ fn rv3Pick(x mut rv3Box&) mut rv3Box&x { return x }
 fn rv3ViaCall(r mut rv3Box&) {
     d rv3Box = rv3Pick(r)
     d.head.next = rv3Node()
-    d.head.next.v = 41
+    d.head.next!.v = 41
 }
 fn rv3Build(b rv3Box) {
     b.head.next = rv3Node()
-    b.head.next.v = 42
+    b.head.next!.v = 42
 }
 fn rv3ViaParam(r mut rv3Box&) { rv3Build(r) }
 fn rv3ViaMatch(e rv3E) {
     match e {
         case rv3E.A(b) {
             b.head.next = rv3Node()
-            b.head.next.v = 44
+            b.head.next!.v = 44
         }
         case rv3E.Z { }
     }
@@ -15089,7 +15090,7 @@ fn rv3ViaMatch(e rv3E) {
 fn rv3ViaAs(e rv3E) {
     b := e as rv3E.A
     b.head.next = rv3Node()
-    b.head.next.v = 45
+    b.head.next!.v = 45
 }
 # an arena churn of n rounds - few while compiling, where nothing is reclaimed, and 300 at run time
 fn rv3Churn(n I64) I64 {
@@ -15112,7 +15113,7 @@ fn rv3CopiesOut(k I64, n I64) I64 {
     rv3ViaMatch(rv3E.A(w4.b))
     rv3ViaAs(rv3E.A(w5.b))
     rv3Churn(n)
-    return w1.b.head.next.v + w2.b.head.next.v + w4.b.head.next.v + w5.b.head.next.v + k
+    return w1.b.head.next!.v + w2.b.head.next!.v + w4.b.head.next!.v + w5.b.head.next!.v + k
 }
 Rv3CopiedBaked := rv3CopiesOut(0, 2)
 test "O25h: a copy out of a reference, by any expression, builds where the referent's references live" {
@@ -15388,7 +15389,7 @@ test "E11b: a join's operands are evaluated before any piece renders - while com
 
 # E11c/O12: a Str walks what its receiver reaches - a Map, a List, an iterator over the receiver - and builds only in
 # scopes of its own; what it renders reads back the same after the arena churned
-type strWalkNode struct(v I64, next mut strWalkNode&) {
+type strWalkNode struct(v I64, next mut strWalkNode?&) {
     v
     next
 }
@@ -15557,7 +15558,7 @@ test "C2g: a constructor's nested blocks build through its fields into the insta
 # callee given it by value, or a lambda through a reference read out of it, builds there and not in the clause's block
 type rv3PN struct(v I64) {
     v
-    next mut rv3PN& = null
+    next mut rv3PN?& = null
 }
 type rv3PBox struct() { head mut rv3PN& = rv3PN(1) }
 type rv3PE enum {
@@ -15568,7 +15569,7 @@ fn rv3PBuild(b rv3PBox) { b.head.next = rv3PN(42) }
 fn rv3PSecond(e rv3PE) I64 {
     b := e as rv3PE.A
     if b.head.next is null { return 0 }
-    return b.head.next.v
+    return b.head.next!.v
 }
 fn rv3PayloadCopies(n I64) I64 {
     e1 := rv3PE.A(rv3PBox())
@@ -15604,13 +15605,13 @@ test "O25h: copies of a local enum's payload build where the enum's references l
 # to their scopes once folded, so each is read back after a churn; one spawn's copy is the closure it copies ("is")
 type rv5N struct(v I64) {
     v
-    next mut rv5N& = null
+    next mut rv5N?& = null
 }
 fn rv5Id(f fn() I64) fn() I64 { return f }
 fn rv5Work(n mut rv5N&, fns mut List<fn() I64>&) {
     fns.Push(fn() I64 {
         n.next = rv5N(n.v + 41)
-        return n.next.v
+        return n.next!.v
     })
 }
 fn rv5Same(f fn() I64, g fn() I64) Bool { return f == g }
@@ -15618,7 +15619,7 @@ fn rv5Kept(k I64, churns I64) I64 {
     n mut rv5N& = rv5N(1 + k)
     g := fn() I64 {
         n.next = rv5N(n.v + 41)
-        return n.next.v
+        return n.next!.v
     }
     r fn() I64 = g
     same Bool = false
@@ -15656,10 +15657,10 @@ fn rv5CondPayload(c Bool, churns I64) I64 {
     {
         y := (e1 if c else rv5E.Z) as rv5E.A
         rv5Growv(y)
-        y.head.next.v = 44
+        y.head.next!.v = 44
     }
     rv3Churn(churns)
-    return k1.next.v
+    return k1.next!.v
 }
 Rv5CondBaked := rv5CondPayload(true, 2)
 test "O25h: a payload copied out of a conditional builds where the arms' references live" {
@@ -16233,8 +16234,8 @@ type Rv9Big struct(n I64) {
 }
 type Rv9Keep struct(k I64) {
     k
-    r Array<I64>& = null
-    t Array<Char>& = null
+    r Array<I64>& = Array<I64>(0)
+    t Array<Char>& = Array<Char>(0)
 }
 fn rv9Mk(n I64) Rv9Big { return Rv9Big(n) }
 fn rv9Arr(n I64) Array<I64> { return Array<I64>(4, n + 1) }
@@ -16269,7 +16270,7 @@ test "E16a: a slice of a temporary is used where it is made; a call's array resu
 rv9Log mut I64 = 0
 type Rv9Node struct(v I64) {
     v
-    next mut Rv9Node& = null
+    next mut Rv9Node?& = null
 }
 type Rv9Loud struct(id I64) {
     id
@@ -16280,7 +16281,7 @@ type Rv9Res struct(n mut Rv9Node&, k I64) {
     n
     k
 } destruct {
-    if n.next is not null { rv9Log = rv9Log * 10 + n.next.v }
+    if n.next is not null { rv9Log = rv9Log * 10 + n.next!.v }
     n.next = Rv9Node(k)
     l Rv9Loud& = Rv9Loud(k + 1)
     obChurn()
@@ -16314,13 +16315,13 @@ fn rv9EmptyText() String {
     x3 := Array<I16>(0)
     r Array<I16>& = x3
     e Array<I16>& = x3[0:0]
-    return $e " " $(e is null) " " $(r is null) " " $(e is null)
+    return $e " " $(e.Len() == 0) " " $(r.Len() == 0) " " $(e.Len() == 0)
 }
 Rv9EmptyBaked String = rv9EmptyText()
 rv9EmptyRun mut I64 = 0
 test "E10/K1: a slice of an empty fixed array is empty, not null, while compiling and at run time" {
-    assert rv9EmptyText() == "I16[] false false false"
-    assert Rv9EmptyBaked == "I16[] false false false" and Rv9EmptyBaked == rv9EmptyText()
+    assert rv9EmptyText() == "I16[] true true true"
+    assert Rv9EmptyBaked == "I16[] true true true" and Rv9EmptyBaked == rv9EmptyText()
 }
 
 # S4c: a parallel assignment's temporary for a reference field of a global is held where the global's referent lives -
@@ -16335,9 +16336,9 @@ test "S4c: a parallel assignment builds a global reference field's temporary whe
     k := rv9SetHead(5)
     obChurn()
     x := obChurn()
-    Rv9Head.next.next, x = Rv9Node(9), x + 1
+    Rv9Head.next!.next, x = Rv9Node(9), x + 1
     obChurn()
-    assert k == 5 and Rv9Head.next.v == 5 and Rv9Head.next.next.v == 9
+    assert k == 5 and Rv9Head.next!.v == 5 and Rv9Head.next!.next!.v == 9
 }
 
 # O26a: a copy of an element handed to a method keeps nothing of it in the result unless that method's result or its
@@ -16363,7 +16364,7 @@ fn (g c5Store&) picked(k I64) c5Wrap {
     return c5Wrap(g.pick(i))
 }
 type c5Holder struct() {
-    ref c5Info& = null
+    ref c5Info?& = null
 }
 fn (h mut c5Holder&) keep(i c5Info&) { h.ref = i }
 fn c5Build(x I64) c5Holder {
@@ -16388,7 +16389,7 @@ fn c5Views(n I64, churn fn() I64) I64 {
     a[n + 1] = 40
     v := c5Window(a, n)
     churn()
-    return t + w.r.Offset + w.r.Len + h.ref.Offset + h.ref.Len + v[0] + v.Len()
+    return t + w.r.Offset + w.r.Len + h.ref!.Offset + h.ref!.Len + v[0] + v.Len()
 }
 C5ViewsBaked I64 = c5Views(2, fn() I64 { return 0 })
 test "O26a: a copy handed to a method lives where the result goes only where the method can keep it" {
@@ -16404,7 +16405,7 @@ type c5V struct(Data mut Array<F64>&) {
 }
 type c5G struct(n I64) {
     mem mut Array<F64>& = Array<F64>(n)
-    kept mut Array<F64>& = null
+    kept mut Array<F64>& = Array<F64>(0)
 }
 fn (g c5G&) params() c5V { return c5V(g.mem) }
 fn (g c5G&) fresh(n I64) c5V { return c5V(Array<F64>(n, 2.5)) }
@@ -16558,7 +16559,7 @@ test "O4b: a Map whose values hold Maps of themselves" {
 # C2d/E25: a constructor given a scope argument and declared with ':=' is judged where that argument puts it - "local
 # := Env&c(c.env)" holds c.env, which lives exactly there (study 6's r07: refused, where 'local mut Env&c = Env(c.env)'
 # compiled)
-type c5Frame struct(parent mut c5Frame&) {
+type c5Frame struct(parent mut c5Frame?&) {
     n I64 = 0
     parent
 }
@@ -16577,7 +16578,7 @@ fn c5Call(f c5Callable&, k I64) I64 {
             frame mut c5Frame&c = c5Frame(c.env)
             frame.n = local.n
             c.env.parent = frame
-            return local.n + local.parent.n
+            return local.n + local.parent!.n
         }
         nomatch { return 0 }
     }
@@ -16588,7 +16589,7 @@ test "C2d/E25: a constructor with a scope argument, declared with ':='" {
     f c5Callable& = c5Callable.Fn(c5Clo(g))
     for k in range 3 { assert c5Call(f, k * sbRun) == k + 10 }
     sbChurn()
-    assert g.parent.n == 2 and g.parent.parent == g
+    assert g.parent!.n == 2 and g.parent!.parent == g
 }
 
 # P4: a spawned call may fail - "spawn try f(a)", with catch clauses of its own run on the task's thread (P4a); what they
@@ -16740,9 +16741,9 @@ fn peMany(n I64) List<I64> ? peErr {
 }
 test "P4a: defaults holding references outlive the join" {
     a, b String
-    p, q peNode&
+    p, q peNode?&
     l1, l2 List<I64>
-    z peNode& = peNode(5)
+    z peNode?& = peNode(5)
     join {
         spawn a = try peText(5 * sbRun) catch default "none"
         spawn b = try peText(-5 * sbRun) catch default "none"
@@ -16753,7 +16754,7 @@ test "P4a: defaults holding references outlive the join" {
         spawn z = try peMk(-sbRun) catch default null
     }
     sbChurn()
-    assert a == "n=5" and b == "none" and p.v == 40 and q.v == -1
+    assert a == "n=5" and b == "none" and p!.v == 40 and q!.v == -1
     assert l1.Len() == 3 and l1[2] == 2 and l2.Len() == 0 and z is null
 }
 
@@ -17153,7 +17154,7 @@ test "P4a/D16d: a task's default may hold a lambda capturing only values" {
 # arena churns while the block is open
 ChainNext mut I64 = 0
 ChainBad mut I64 = 0
-type ChainNode struct(v I64, next ChainNode&) {
+type ChainNode struct(v I64, next ChainNode?&) {
     v
     next
 } destruct {
@@ -17161,7 +17162,7 @@ type ChainNode struct(v I64, next ChainNode&) {
     ChainNext--
 }
 TreeLog mut I64 = 0
-type TreeNode struct(v I64, a TreeNode&, b TreeNode&) {
+type TreeNode struct(v I64, a TreeNode?&, b TreeNode?&) {
     v
     a
     b
@@ -17173,7 +17174,7 @@ fn treeBuilt() I64 {
     {
         t TreeNode& = TreeNode(1 * ChainRun(), TreeNode(2, TreeNode(3, null, null), null), TreeNode(4, TreeNode(5, null, null), null))
         sbChurn()
-        assert t.a.a.v == 3 and t.b.a.v == 5
+        assert t.a!.a!.v == 3 and t.b!.a!.v == 5
     }
     return TreeLog
 }
@@ -17181,10 +17182,10 @@ fn ChainRun() I64 { return I64(getpid() * 0) + 1 }   # a run-time 1, so nothing 
 test "O15/O16: a chain of 300,000 nodes in a block destructs once each, in reverse construction order, as the block closes" {
     ChainBad = 0
     {
-        head ChainNode& = null
+        head ChainNode?& = null
         for i in range 300000 { head = ChainNode(i * ChainRun(), head) }
         sbChurn()
-        assert head.v == 299999 and head.next.next.v == 299997
+        assert head!.v == 299999 and head!.next!.next!.v == 299997
         ChainNext = 299999
     }
     assert ChainNext == -1 and ChainBad == 0
@@ -17440,8 +17441,8 @@ test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole p
     }
     t := r2Tree(R2Run)
     assert r2Sum(t) == 10 and t == R2Tree.Pair(_, R2Tree.Leaf(4)) and t != R2Tree.Leaf
-    n R2Tree& = null
-    assert n != R2Tree.Leaf and n is null and t is not null
+    n R2Tree?& = null
+    assert n != R2Tree.Leaf and n is null
     assert R2Baked == 3.0 + 1.0 + 6.0 + 10.0 and R2Baked == r2Area(R2Shape.Round(R2Disk(1.0))) + 6.0 + F64(r2Sum(t))
     assert R2KindsBaked == "round box other"
     assert R2KindsBaked == ($r2Kinds(r) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0)))
@@ -17483,4 +17484,43 @@ test "E10, E10b: List and Map compare and hash by contents; references without E
     assert pr == pr and pr != qr and pr == R2Node(1) and p == q
     c2dChurn()
     assert a == c and m != k
+}
+
+# ---- T2c, S8e, E35: a reference is never null unless written "?&" ----
+
+type nlNode struct(v I64, next nlNode?&) { v, next }
+
+fn nlSum(h nlNode?&) I64 {
+    t I64 = 0
+    for c := h, c is not null, c = c.next { t += c.v }
+    return t
+}
+
+fn nlFirst(n nlNode?&) I64 {
+    if n is null: return -1
+    return n.v
+}
+
+fn nlLen(a Array<I64>&) I64 { return a.Len() }
+
+NlBaked := nlSum(nlNode(1, nlNode(2, nlNode(3, null))))
+NlNone := nlFirst(null)
+
+test "T2c, S8e: a nullable reference is read where a test narrows it - baked, decided while compiling, and run" {
+    assert NlBaked == 6 and NlNone == -1
+    assert nlFirst(null) == -1 and nlSum(nlNode(5, null)) == 5
+    l := nlNode(4, nlNode(6, null))
+    assert nlSum(l) == 10 and nlFirst(l) == 4 and l.next!.v == 6
+    m nlNode?& = null
+    assert nlFirst(m) == -1 and m is null
+    m = nlNode(7, null)
+    assert m.v == 7
+}
+
+test "T2c: an array is never null - its zero value is the empty array" {
+    z Array<I64>&
+    s String&
+    assert nlLen(z) == 0 and s.Len() == 0 and s == ""
+    z = I64[1, 2]
+    assert nlLen(z) == 2
 }

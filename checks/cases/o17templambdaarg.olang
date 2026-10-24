@@ -4,7 +4,7 @@
 # beyond the call - it never leaves the call, so a split value lent there is kept by no one; read back after a churn
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Box struct() {
     head mut Node& = Node(7)

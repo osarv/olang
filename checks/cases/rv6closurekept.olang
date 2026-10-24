@@ -11,7 +11,7 @@ type R struct(id I64) {
 Dtors mut I64 = 0
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 fn mk(r Node&, i I64) Node&r { return Node(i) }
 fn keepR(r Node&, i I64) R&r { return R(i) }

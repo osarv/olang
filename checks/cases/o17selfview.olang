@@ -3,7 +3,7 @@
 # out of its region - no reference is followed on the way to it
 import "std/io"
 type Node struct() {
-    view Array<I64>& = null
+    view Array<I64>& = Array<I64>(0)
 }
 type Box struct() {
     head mut Node& = Node()

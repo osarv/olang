@@ -5,7 +5,7 @@
 import "std/io"
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type E struct(h mut Node&, n I64) {
     head mut Node&h = h
@@ -29,5 +29,5 @@ fn main() ? {
         hang(s[k], 100 + k)
     }
     try churn()
-    try io.Println($s.head.next.v)
+    try io.Println($s.head.next!.v)
 }

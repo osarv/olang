@@ -4,7 +4,7 @@
 import "std/io"
 import "std/os"
 
-type Link struct(v I64, next Link&) {
+type Link struct(v I64, next Link?&) {
     v
     next
 }
@@ -13,7 +13,7 @@ fn work(n I64) I64 {
     t I64 = 0
     for i in range n {
         m := Link(i, Link(i + 2, null))
-        t = t + m.next.v
+        t = t + m.next!.v
     }
     return t
 }

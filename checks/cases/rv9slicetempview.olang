@@ -5,7 +5,7 @@
 import "std/io"
 type H struct(k I64) {
     k
-    r Array<I64>& = null
+    r Array<I64>& = Array<I64>(0)
 }
 fn set(h mut H&, n I64) {
     h.r = Array<I64>(4, n)[0:4]

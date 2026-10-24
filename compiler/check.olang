@@ -9243,7 +9243,7 @@ fn (c mut Checker&) unwrapNull(sp source.Span, x typed.Expr&c) typed.Expr&c {
         nomatch { }
     }
     from := c.stmts.Len()
-    id := c.local(source.NameId(0), sp, t, typed.LocalKind.Held, typed.Mark.None)   # holding x where it lives (O25a)
+    id := c.local(source.NameId(0), sp, t, typed.LocalKind.Var, typed.Mark.Infer)
     c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), x))
     isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, id), c.lit(sp, t, 0))
     efrom := c.stmts.Len()

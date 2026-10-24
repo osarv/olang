@@ -5,7 +5,7 @@
 # the node kept a reference into a closed block
 import "std/io"
 type Node struct() {
-    owner mut Box& = null
+    owner mut Box?& = null
     v I64 = 0
 }
 type Box struct() {
@@ -35,5 +35,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    try io.Println($w.b.head.owner.tag)
+    try io.Println($w.b.head.owner!.tag)
 }

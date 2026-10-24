@@ -2,7 +2,7 @@
 # O17/D16c: a reading lambda over a read-only capture is allowed; storing through one - directly, through a helper or a
 # nested lambda - is refused
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -52,8 +52,8 @@ fn main() ? {
     try io.Println($readIt(w))
     bump2(w)
     churn()
-    try io.Println($w.b.head.next.v)
+    try io.Println($w.b.head.next!.v)
     bump3(w)
     churn()
-    try io.Println($w.b.head.next.v)
+    try io.Println($w.b.head.next!.v)
 }

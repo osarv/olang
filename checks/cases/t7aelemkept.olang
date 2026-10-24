@@ -4,7 +4,7 @@
 type P struct(s String&, n I64) { s
  n }
 type SV<T> struct() {
-    data mut Array<T>& = null
+    data mut Array<T>& = Array<P>(0)
 }
 fn churn() I64 {
     t := 0

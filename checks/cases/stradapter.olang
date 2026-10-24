@@ -3,7 +3,7 @@
 # the part lives (no frame adapter: a callee keeping nothing of it may still hand it to a function value that keeps it,
 # C8), so it is refused though Call builds nothing there
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

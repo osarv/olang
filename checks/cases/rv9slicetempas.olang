@@ -11,7 +11,7 @@ type E enum {
 }
 type H struct(k I64) {
     k
-    r Array<I64>& = null
+    r Array<I64>& = Array<I64>(0)
 }
 fn mkE(n I64) E {
     q := Q()

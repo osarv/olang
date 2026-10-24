@@ -1,7 +1,7 @@
 # check: fail error[O20]: the container outlives what this refers to
 # T29a/E12c: a conversion of a local array names the local's storage, which dies at the return - not a temporary
 type Holder struct() {
-  s mut String& = null
+  s mut String& = ""
 }
 fn keep(h mut Holder&) {
   local Array<U8> = U8[104, 105, 106]

@@ -6,8 +6,8 @@ import "std/io"
 import "std/os"
 
 type Holder struct() {
-    a mut Array<I64>& = null
-    rows mut Array<mut Array<I64>&>& = null
+    a mut Array<I64>& = Array<I64>(0)
+    rows mut Array<mut Array<I64>&>& = Array<Array<I64>&>(0)
 }
 
 fn main() ? {

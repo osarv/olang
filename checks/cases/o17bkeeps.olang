@@ -3,7 +3,7 @@
 # handle's own storage into what it reaches (a back link), or handing it out, is judged as any split lend is
 type St struct() {
     x I64 = 0
-    back mut H& = null
+    back mut H?& = null
 }
 type H struct() { s mut St& = St() }
 fn (h mut H&) backlink() { h.s.back = h }

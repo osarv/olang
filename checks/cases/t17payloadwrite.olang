@@ -4,7 +4,7 @@
 # node from an outer block held in an inner block's value would end up pointing into the inner block's storage
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Slot enum {
     Empty

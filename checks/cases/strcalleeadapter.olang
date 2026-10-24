@@ -2,7 +2,7 @@
 # E11c/E31: a helper handed a part of the receiver passes it, adapted through its Call, to a callee - the adapter is made
 # where the part lives, which Str may not build in, so it is refused (no frame adapter, C8)
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

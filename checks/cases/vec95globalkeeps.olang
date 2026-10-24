@@ -5,7 +5,7 @@ type Lexer struct(n I64) {
     n
     toks Vec<I64> = Vec<I64>()
 }
-G mut Array<I64>& = null
+G mut Array<I64>& = Array<I64>(0)
 fn main() ? {
     l := Lexer(3)
     for i in range 3 { l.toks.Push(i) }

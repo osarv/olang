@@ -5,7 +5,7 @@ import "std/io"
 error Stop {
     HERE
 }
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

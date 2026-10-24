@@ -3,7 +3,7 @@
 # still lives in its block, which the parameter's referent outlives
 import "std/io"
 type Holder struct() {
-    name mut String& = null
+    name mut String& = ""
 }
 fn put(p mut Holder&) {
     a := "alpha" $3

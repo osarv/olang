@@ -3,7 +3,7 @@
 # lend taken on trust holds, and the program runs
 type Cell struct() {
     v I64 = 0
-    kept mut Box& = null
+    kept mut Box?& = null
 }
 type Box struct() { c mut Cell& = Cell() }
 fn g(h mut Box&, m mut Map<I64, Box>&, n I64) ? {

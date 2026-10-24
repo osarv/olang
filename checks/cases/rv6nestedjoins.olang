@@ -4,7 +4,7 @@
 # the scope it captured, while each also builds into the stand-ins it was handed and the main thread builds into both
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 fn mk(r Node&, i I64) Node&r { return Node(i) }
 fn inner(n Node&, f fn(i I64) I64) I64 {

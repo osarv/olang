@@ -3,7 +3,7 @@
 # fold after each destructor; a header in every frame would cost another 48 bytes a level)
 import "std/os"
 import "std/io"
-type L struct(v I64, next L&) {
+type L struct(v I64, next L?&) {
     v
     next
 }

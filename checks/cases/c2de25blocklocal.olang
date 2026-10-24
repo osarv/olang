@@ -2,7 +2,7 @@
 # C2d/E25: an instance built where a scope argument says ('Env&c(...)') is judged there - holding a block's local,
 # which can be stored through, it is refused (study 6's r07 relaxed the same call holding c.env)
 import "std/io"
-type Env struct(parent mut Env&) {
+type Env struct(parent mut Env?&) {
     n I64 = 0
     parent
 }

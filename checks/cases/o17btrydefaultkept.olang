@@ -8,12 +8,12 @@ fn churn() ? io.IoError {
         if a[0] == 3 { try io.Println("x") }
     }
 }
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
 type BagState struct() {
-    head mut Node& = null
+    head mut Node?& = null
 }
 type Bag struct() {
     s mut BagState& = BagState()
@@ -30,6 +30,6 @@ fn main() ? {
     }
     try churn()
     t := 0
-    for st in kept { if st.head is not null { t = t * 10 + st.head.v } }
+    for st in kept { if st.head is not null { t = t * 10 + st.head!.v } }
     assert kept.Len() == 3 and t == 1, $kept.Len() " " $t
 }

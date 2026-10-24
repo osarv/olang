@@ -14,5 +14,5 @@ fn main() ? {
     h := olib.Holder()
     n olib.Node& = olib.Node(7)
     olib.Stash(h, n)
-    try io.Println($s " " $f(v) " " $h.N.V)
+    try io.Println($s " " $f(v) " " $h.N!.V)
 }

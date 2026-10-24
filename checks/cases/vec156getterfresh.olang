@@ -6,7 +6,7 @@ type Lexer struct() {
     toks Vec<String&> = Vec<String&>()
 }
 type Parser struct() {
-    lx mut Lexer& = null
+    lx mut Lexer?& = null
 }
 fn fresh(n I64) mut Lexer& {
     l mut Lexer& = Lexer()
@@ -25,7 +25,7 @@ fn main() ? {
     d := Parser()
     d.lx = Lexer()
     q := fresh(3)
-    d.lx.toks = q.toks.Clone()
+    d.lx!.toks = q.toks.Clone()
     churn()
-    assert d.lx.toks.Len() == 3 and d.lx.toks[1] == "1-fresh" and q.toks.Len() == 3
+    assert d.lx!.toks.Len() == 3 and d.lx!.toks[1] == "1-fresh" and q.toks.Len() == 3
 }

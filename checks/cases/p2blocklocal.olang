@@ -6,9 +6,9 @@ type Node struct(n I64) {
     name String& = "node" $n
 }
 type Holder struct() {
-    cur mut Node&
+    cur mut Node?&
 }
-fn look(h Holder&) { try io.Println(h.cur.name) catch io.IoError { } }
+fn look(h Holder&) { try io.Println(h.cur!.name) catch io.IoError { } }
 fn main() ? {
     join {
         {

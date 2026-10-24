@@ -3,7 +3,7 @@
 # different blocks
 type Node struct(v I64) {
     v
-    next mut Node& = null
+    next mut Node?& = null
 }
 type Link enum {
     Two(a mut Node&, b mut Node&)

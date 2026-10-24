@@ -10,7 +10,7 @@ type Box struct() {
 }
 type Cursor struct(of Box&) {
     box Box&of = of
-    cur mut Node&of = null
+    cur mut Node?&of = null
 }
 fn (c mut Cursor&) Set(n mut Node&c) { c.cur = n }
 fn main() ? {

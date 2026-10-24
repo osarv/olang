@@ -3,7 +3,7 @@
 import "std/io"
 import "std/os"
 
-type Node struct(left Node&, right Node&) {
+type Node struct(left Node?&, right Node?&) {
     left
     right
 }
@@ -17,7 +17,7 @@ fn tree(depth I64) Node& {
 # how many nodes it has
 fn check(n Node&) I64 {
     if n.left is null { return 1 }
-    return 1 + check(n.left) + check(n.right)
+    return 1 + check(n.left!) + check(n.right!)
 }
 
 # a tree built, checked and dropped as this function returns

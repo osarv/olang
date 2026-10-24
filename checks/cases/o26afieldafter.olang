@@ -4,7 +4,7 @@
 # accepted with the text in the dying block, then refused with O20); read back after the arena has been churned
 import "std/io"
 type Holder struct() {
-    name mut String& = null
+    name mut String& = ""
 }
 fn make() Holder {
     a := "alpha" $3

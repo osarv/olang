@@ -3,7 +3,7 @@
 # as a direct call is
 type N struct(v I64) {
     v
-    next N& = null
+    next N?& = null
 }
 fn link(a mut N&, b N&a) { a.next = b }
 fn put(f fn(a mut N&, b N&a), a mut N&) {

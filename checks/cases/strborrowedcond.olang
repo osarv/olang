@@ -2,7 +2,7 @@
 # flags: -sanitize
 # E11c/T25d: a Str whose result borrows from its receiver gives a conditional of the receiver's text and a literal - the
 # literal is the constant itself, built nowhere, so nothing is built where the receiver lives
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

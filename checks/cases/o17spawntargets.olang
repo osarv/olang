@@ -3,7 +3,7 @@
 # store into the lent value's region, as the single-target form and a destructuring are
 import "std/io"
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type Box struct() {
@@ -39,5 +39,5 @@ fn main() ? {
     w := W(Box())
     bump(w)
     churn()
-    try io.Println($w.b.head.next.v)
+    try io.Println($w.b.head.next!.v)
 }

@@ -10,12 +10,12 @@ fn churn() ? io.IoError {
         if a[0] == 3 { try io.Println("x") }
     }
 }
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
 type BagState struct() {
-    head mut Node& = null
+    head mut Node?& = null
 }
 type Bag struct() {
     s mut BagState& = BagState()

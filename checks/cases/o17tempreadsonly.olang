@@ -9,7 +9,7 @@ fn churn() ? io.IoError {
         if a[0] == 3 { try io.Println("x") }
     }
 }
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -20,7 +20,7 @@ type Box struct() {
 fn idBox(seed mut Box&) Box { return seed }
 fn sum(b Box&) I64 {
     t I64 = 0
-    for n := b.head, n is not null, n = n.next { t = t * 10 + n.v }
+    for n Node?&b = b.head, n is not null, n = n.next { t = t * 10 + n.v }
     return t
 }
 fn bumpHead(b Box&) { b.head.v = b.head.v + 1 }

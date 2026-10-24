@@ -1,7 +1,7 @@
 # check: fail error[E11c, O12]
 # E11c/O12: the same through a spawned lambda
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -25,5 +25,5 @@ fn main() ? {
     s := $b
     churn()
     try io.Println(s)
-    try io.Println($b.head.next.v)
+    try io.Println($b.head.next!.v)
 }

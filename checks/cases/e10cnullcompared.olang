@@ -2,6 +2,6 @@
 # E10c: a null test is "is null", never "== null"
 type P struct(v I32) { v }
 fn main() {
-    p P& = null
+    p P?& = null
     assert p == null
 }

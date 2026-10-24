@@ -3,7 +3,7 @@
 # stored through it - storing a longer-lived node there would make a node built through c.cur below, which is built
 # where the binding says, hang from storage that outlives it
 type N struct() {
-    next mut N& = null
+    next mut N?& = null
     v I64 = 0
 }
 type C struct(of mut N&) {

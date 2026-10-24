@@ -6,8 +6,8 @@ type P struct(v I64) {
     v
 }
 type Hold struct() {
-    f P& = null
-    arr mut Array<P&>& = Array<P&>(2, null)
+    f P?& = null
+    arr mut Array<P?&>& = Array<P?&>(2, null)
 }
 fn put(h mut Hold&, n P&) { h.f = n }
 fn churn() I64 {
@@ -28,30 +28,30 @@ fn main() ? {
         }
     }
     churn()
-    try io.Println($h.f.v)
+    try io.Println($h.f!.v)
     for i in range 1 {
         local P& = P(43)
         h.arr[0] = local if i == 0 else P(7)
     }
     churn()
-    try io.Println($h.arr[0].v)
+    try io.Println($h.arr[0]!.v)
     for i in range 1 {
         local P& = P(44)
         put(h, local if i == 0 else P(7))
     }
     churn()
-    try io.Println($h.f.v)
+    try io.Println($h.f!.v)
     for i in range 1 {
         local P& = P(45)
         x := local if i == 0 else P(7)
         h.f = x
     }
     churn()
-    try io.Println($h.f.v)
+    try io.Println($h.f!.v)
     for i in range 1 {
         local P& = P(46)
         h.f = (local if i == 0 else P(7)) if i < 5 else P(8)
     }
     churn()
-    try io.Println($h.f.v)
+    try io.Println($h.f!.v)
 }

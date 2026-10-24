@@ -4,10 +4,10 @@
 import "std/io"
 type Node struct(t String&) { t }
 type H struct() {
-    kid mut Node& = null
+    kid mut Node?& = null
 }
 type W struct(h mut H&) {
-    inner mut Node& = h.kid
+    inner mut Node& = h.kid!
 }
 fn main() ? {
     h0 := H()

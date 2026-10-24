@@ -11,10 +11,10 @@ fn (st Store&) get(i I64) Outer { return st.items[i] }
 fn main() ? {
     st := Store()
     st.items.Push(Outer(Inner("t")))
-    held Inner& = null
+    held Inner?& = null
     for i in range 3 {
         x := st.get(0).inner
         held = x
     }
-    try io.Println(held.s)
+    try io.Println(held!.s)
 }

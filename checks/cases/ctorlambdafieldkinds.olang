@@ -8,7 +8,7 @@ import "std/io"
 
 type Box struct(v I64) {
     v
-    head mut Box& = null
+    head mut Box?& = null
 }
 type W struct(h Box) { h }
 type M struct(w W) {

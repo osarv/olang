@@ -63,8 +63,8 @@ fn vtokens(src String&) List<VT> {
 type migration struct(src String&) {
     src
     v List<VT>
-    m Array<I64>& = null      # each bracket's partner, -1 for none
-    enc Array<I64>& = null    # the innermost bracket open around each token, -1 for none
+    m Array<I64>& = Array<I64>(0) # each bracket's partner, -1 for none
+    enc Array<I64>& = Array<I64>(0) # the innermost bracket open around each token, -1 for none
     paramsClose Map<I64, Bool> # the ")" closing a signature's parameters, by index
     edits List<Edit>
     reps List<String&>

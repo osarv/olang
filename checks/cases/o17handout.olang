@@ -5,7 +5,7 @@
 # holding only its head would be a handle, lent as its reference - O17b, checks/cases/o17bhandleout.olang.)
 import "std/io"
 type Node struct() {
-    next mut Node& = null
+    next mut Node?& = null
     v I64 = 0
 }
 type Box struct() {
@@ -25,5 +25,5 @@ fn bump(src mut W&) {
 fn main() ? {
     w := W(Box())
     bump(w)
-    try io.Println($w.b.head.next.v)
+    try io.Println($w.b.head.next!.v)
 }

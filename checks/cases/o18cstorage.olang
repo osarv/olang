@@ -3,7 +3,7 @@
 # or stored as the map's - but the entry itself is a local of the loop body, and handing out a reference to it is
 # handing out that body's storage, which the map's scope outlives
 
-fn keep(m Map<String&, I64>&) MapEntry<String&, I64>&m {
+fn keep(m Map<String&, I64>&) MapEntry<String&, I64>?&m {
     for e in m { return e }
     return null
 }

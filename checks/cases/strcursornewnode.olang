@@ -2,7 +2,7 @@
 # E11c/O25a: a cursor starting at the receiver's node lives where the receiver does, so a new node given to it would be
 # built there: refused, as designed
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }

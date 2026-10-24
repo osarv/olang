@@ -11,7 +11,7 @@ type Big struct(n I64) {
 }
 type H struct(k I64) {
     k
-    r Array<I64>& = null
+    r Array<I64>& = Array<I64>(0)
 }
 fn mk(n I64) Big { return Big(n) }
 fn set(h mut H&, n I64) {

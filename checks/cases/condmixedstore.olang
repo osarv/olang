@@ -6,7 +6,7 @@ type Node struct(v I64) {
     v
 }
 type Hold struct() {
-    f Node& = null
+    f Node?& = null
 }
 fn churn() I64 {
     t I64 = 0
@@ -23,5 +23,5 @@ fn main() ? {
         h.f = local if i == 0 else Node(7)
     }
     churn()
-    try io.Println($h.f.v)
+    try io.Println($h.f!.v)
 }

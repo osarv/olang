@@ -3,7 +3,7 @@
 # reference parameter whose callee builds through it in a loop - a split value: its copy is the block's, its references
 # seed's; the node was built in the loop body and hung off seed
 import "std/io"
-type Node struct(v I64, next mut Node&) {
+type Node struct(v I64, next mut Node?&) {
     v
     next
 }
@@ -27,6 +27,6 @@ fn main() ? {
     }
     try churn()
     n := 0
-    for x := seed.head, x is not null, x = x.next { n = n * 10 + x.v }
+    for x Node?&seed = seed.head, x is not null, x = x.next { n = n * 10 + x.v }
     try io.Println("chain " $n)
 }
