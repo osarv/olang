@@ -349,7 +349,7 @@ fn (e Emitter&) aliased(i I64) Bool {
 }
 
 # a merged instance in another group than the one it stands for (aliased): its own definition, calling that one in its
-# place - its signature that one's, which merging made the same, so the call is a tail call that leaves no frame
+# place - its signature that one's, which merging made the same, so the call is a tail call
 fn (e Emitter&) wrapper(i I64, into I64) String {
     text := e.itemText[into]
     nl := try text.Find("\n") catch default text.Len()
@@ -364,9 +364,9 @@ fn (e Emitter&) wrapper(i I64, into I64) String {
     b := StringBuilder()
     b.Push($head "@" $e.itemSym[i] "(" $params ") #0 {\nentry:\n")
     if ret == "void" {
-        b.Push($"  musttail call void @" $e.itemSym[into] "(" $params ")\n  ret void\n}\n\n")
+        b.Push($"  tail call void @" $e.itemSym[into] "(" $params ")\n  ret void\n}\n\n")
     } else {
-        b.Push($"  %r = musttail call " $ret " @" $e.itemSym[into] "(" $params ")\n  ret " $ret " %r\n}\n\n")
+        b.Push($"  %r = tail call " $ret " @" $e.itemSym[into] "(" $params ")\n  ret " $ret " %r\n}\n\n")
     }
     return b.ToString()
 }
@@ -424,8 +424,10 @@ fn (e Emitter&) groupOf(i I64) I64 {
     return 1 if sym.StartsWith("olang_test_") or sym == "main" else 0
 }
 
-# the IR of one part an object is cut into, at most (Objects)
-PartSize I64 = 2 << 20
+# the IR of one part an object is cut into, at most (Objects): measured (round 9) against 2 MB, the compiler's own build
+# at -quick 46 -> 24 s clean and an edit in the middle of check.olang 6.7 -> 4.1 s, at -O3 that edit 16.5 -> 9.7 s, the
+# -O3 clean build and the test build of tests/shared.olang as fast; 256 KB made the -O3 build 8% more work
+PartSize I64 = 512 << 10
 
 # the part of n item i is in: its symbol's hash, so where an item goes depends on its symbol alone - but every global
 # in one, since a baked global may point into the private blobs beside another (K2b), which no other object can name
