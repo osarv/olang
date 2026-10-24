@@ -1,0 +1,5 @@
+# check: fail error[L15]: a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)
+# L15: Unicode ends at 10FFFF
+fn main() {
+    s := "\u{110000}"
+}

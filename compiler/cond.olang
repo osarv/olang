@@ -474,26 +474,9 @@ fn (e mut Eval&) literal(sp source.Span, k token.Tok) Value {
             if f - f != 0.0 { return e.defer(sp) }   # infinite: the checker reports it (L12b)
             return Value(ValueKind.Float, 0, f, 0, 0, false)
         }
-        case token.Tok.StrLit { return Value(ValueKind.Text, 0, 0.0, e.addText(decode(t)), 0, false) }
+        case token.Tok.StrLit { return Value(ValueKind.Text, 0, 0.0, e.addText(scan.LiteralText(t)), 0, false) }
         nomatch { return e.defer(sp) }
     }
-}
-
-# a string literal's text, escapes decoded
-fn decode(t String&) String {
-    b := StringBuilder()
-    i I64 = 1
-    for i < t.Len() - 1 {
-        ch := t[i]
-        if ch == '\\' and i + 1 < t.Len() - 1 {
-            i++
-            esc := t[i]
-            ch = '\n' if esc == 'n' else '\t' if esc == 't' else '\r' if esc == 'r' else '\0' if esc == '0' else esc
-        }
-        b.PushChar(ch)
-        i++
-    }
-    return b.ToString()
 }
 
 fn (e Eval&) isFixed(n source.NameId) Bool {

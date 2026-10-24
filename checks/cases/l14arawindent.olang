@@ -1,0 +1,8 @@
+# check: fail error[L14a]: a line of raw text begins with the indentation of its closing '"""'
+# L14a: a line indented less than the closing """ has no indentation to remove
+fn main() {
+    s := """
+        first
+      second
+        """
+}

@@ -23,8 +23,11 @@ syn match olangNumber "\<\d[0-9_]*\(\.\d[0-9_]*\)\=\([eE][+-]\=\d\+\)\=\>"
 syn match olangNumber "\<0[xX][0-9A-Fa-f_]\+\>"
 syn match olangNumber "\<0[bB][01_]\+\>"
 syn match olangEscape "\\[nrt0\\'\"]" contained
-syn region olangString start=+"+ skip=+\\\\\|\\"+ end=+"+ oneline contains=olangEscape
-syn match olangChar "'\(\\.\|[^\\']\)'" contains=olangEscape
+syn match olangEscape "\\x\x\x" contained
+syn match olangEscape "\\u{\x\{1,6}}" contained
+syn region olangRawString start=+"""+ end=+"""+
+syn region olangString start=+"\(""\)\@!+ skip=+\\\\\|\\"+ end=+"+ oneline contains=olangEscape
+syn match olangChar "'\(\\x\x\x\|\\u{\x\{1,6}}\|\\.\|[^\\']\)'" contains=olangEscape
 syn match olangRender "\$" 
 
 syn match olangRule "\<[A-Z]\{1,2}\d\+[a-z]\=\>" contained
@@ -45,6 +48,7 @@ hi def link olangTypeName Type
 hi def link olangFunction Function
 hi def link olangNumber Number
 hi def link olangString String
+hi def link olangRawString String
 hi def link olangChar Character
 hi def link olangEscape SpecialChar
 hi def link olangRender Special

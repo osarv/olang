@@ -262,7 +262,7 @@ fn (l mut Loader&) importAt(m mut Module&, i I64, parent I64) {
     }
     if toks[j].Kind != token.Tok.StrLit { return }   # the parser reports it
     sp := source.Span(toks[j].Start, toks[j].End)
-    spec := m.Src!.Text[sp.Start + 1:sp.End - 1]
+    spec := scan.LiteralText(m.Src!.Text[sp.Start:sp.End])
     if alias == "" {
         alias = $DeriveAlias(spec)
         aliasSp = sp

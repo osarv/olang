@@ -1,0 +1,7 @@
+# check: fail error[L14a]: the closing '"""' of raw text across lines stands on a line of its own
+# L14a: across lines, the closing """ stands alone - its indentation is the one removed
+fn main() {
+    s := """
+        first
+        second"""
+}

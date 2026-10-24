@@ -1,0 +1,7 @@
+# check: fail error[L14a]: raw text across lines begins on the line after its '"""' - move this to the next line
+# L14a: across lines, the opening """ ends its line
+fn main() {
+    s := """first
+        second
+        """
+}

@@ -1,0 +1,5 @@
+# check: fail error[L13, L15]: a character literal holds one byte - \u{...} there is below 80; write the text in ""
+# L13, L15: a character literal holds one byte, so \u{} there only below 0x80
+fn main() {
+    c := '\u{E9}'
+}

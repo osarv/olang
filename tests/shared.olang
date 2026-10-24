@@ -10475,6 +10475,34 @@ test "E37: an integer's bit operations" {
     assert BitOpsBaked
 }
 
+# L13-L15, L14a: \x and \u{} escapes, and raw text - on one line, and across lines with the closing line's
+# indentation removed. Decoded while compiling, so the constants agree wherever they are read; checked baked (K2) and
+# at run time
+TxRaw := """
+    olang build FILE
+        builds FILE
+
+    done
+    """
+fn textsAll(one I64) Bool {
+    hex Bool = "\x41\x62\x63" == "Abc" and "\xff".Len() == 1 and U8("\xFF"[0]) == 255 and '\x41' == 'A' and '\x00' == '\0'
+    uni Bool = "\u{41}" == "A" and "\u{E9}".Len() == 2 and U8("\u{E9}"[0]) == 0xC3 and U8("\u{E9}"[1]) == 0xA9
+    uni2 Bool = "\u{20AC}".Len() == 3 and "\u{1F600}".Len() == 4 and U8("\u{1F600}"[0]) == 0xF0 and U8("\u{10FFFF}"[3]) == 0xBF
+    ch Bool = '\u{7A}' == 'z' and '\u{0}' == '\0'
+    raw Bool = """C:\dir\n""".Len() == 8 and """a"b""" == "a" $Char(34) "b" and """""" == ""
+    lines Bool = TxRaw == "olang build FILE\n    builds FILE\n\ndone" and TxRaw.Len() == 38
+    e := """
+        """
+    joined := """x""" $one """y"""
+    return hex and uni and uni2 and ch and raw and lines and e == "" and joined == "x1y"
+}
+TextsBaked := textsAll(1)
+
+test "L13-L15, L14a: escapes by number, and raw text" {
+    assert textsAll(I64(WdMutable / 2000000000))
+    assert TextsBaked
+}
+
 # S19: deferred code runs on every way out of its block - falling off its end, a return (once the result is
 # computed), a break, a continue, an error leaving the function - last registered first, the innermost block's first,
 # reading variables as they are when it runs, never when the defer was reached; only a defer that was reached runs.

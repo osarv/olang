@@ -190,6 +190,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Numeric literals (L10-L12b).** `_` only between digits (L10b); a decimal above `I64`'s max is `U64`, beyond 64
   bits an error (L10); a hex/binary pattern adapting to an unsigned type is its bits (L10a); a float literal beyond
   its target's range is an error (L12b). Escapes include `\0` and `\r`; a literal never crosses its line (L13).
+- **Text literals by number, and raw text (L13-L15, L14a, the user's decision 2026-10-24: "add all if they are
+  standard").** `\x41` (a byte, two hex digits), `\u{1F600}` (a code point, 1-6 hex digits, written as UTF-8; a
+  surrogate or above 10FFFF an error; in a character literal only below 0x80). `"""` is the one raw form: no escapes,
+  one line or several; across lines the opening `"""` ends its line, the closing one stands alone and its indentation
+  is removed from every line (a line indented less, or text after the opening, is an error - mine: Swift's rules); a
+  blank line is empty. One token, a `STR_LIT` otherwise; decoded once (`scan.LiteralBytes`) for the checker, build
+  conditions and import paths; the formatter keeps a raw token as written.
 - **Text joins by adjacency; `$x` renders any value (E11a/E11b, the user's design).** A piece is a literal or a `$`
   rendering, so a missing comma never joins silently. Values render as source writes them (`Point(1, -2)`, `I64[1,
   2]`, `List<I64>[1]`, `Map<K, V>{k: v}`); floats shortest round-trip (Schubfach); a `Char` (and a type over one) as a

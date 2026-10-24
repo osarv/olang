@@ -23159,3 +23159,18 @@ values - and one returning several is wrapped whole, `give((fn(): return 1, 2))`
 results is in a list. The formatter's "body colon" test counted only a `:` whose innermost bracket was a `{`; a `:`
 directly inside `(` is a lambda's (nothing else stands there), so it is spaced too; one inside `[` stays a slice's.
 Nothing past the parser changed: a line body is a block of one statement.
+
+**Text literals (L13-L15, L14a).** `\xHH`, `\u{H...}` and `"""` raw text, as the user decided ("add all if they are
+standard") - the forms Rust, Swift and Python write. The scanner checks each escape as it reads it (`escape`) and scans
+raw text whole (`raw`), so a raw literal across lines is one token and inserts no statement end; decoding was in three
+places that disagreed in small ways (the checker's `strBytes` and `charValue`, cond's `decode`, and import paths sliced
+between their quotes in load, names and the formatter's loader), and is one function now, `scan.LiteralBytes`, so a
+`-define` condition, an import and a program's text read a literal alike. Decided (mine): across lines, Swift's rules -
+the opening `"""` ends its line (spaces after it allowed), the closing one stands on a line of its own and its
+indentation is what is removed, a non-blank line not beginning with it is an error, a blank line is empty whatever
+whitespace it holds; on one line the text runs to the first `"""`, so `""""""` is empty and text holding `"""` is an
+ordinary literal; `\x` takes exactly two digits, `\u` one to six in braces; in a character literal `\u{}` only below
+0x80, while `\x` may name any byte (a `Char` is a byte, T29h). The formatter writes a raw token as it stands - its lines
+are not re-indented with the code around it, which would change its text only if the closing line moved with them; the
+editor syntax (editors/nvim) knows both forms. Found on the way: the session's tooling turns a backslash-u followed by
+four hex digits into the character in commands, which wrote a check case wrong - written through Python's chr(92).

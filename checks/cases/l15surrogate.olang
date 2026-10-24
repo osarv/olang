@@ -1,0 +1,5 @@
+# check: fail error[L15]: a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)
+# L15: a surrogate is no code point UTF-8 can write
+fn main() {
+    s := "\u{D800}"
+}

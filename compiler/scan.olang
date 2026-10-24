@@ -28,6 +28,14 @@ type LexError enum {
     EmptyChar
     LongChar
     BadEscape
+    BadHexEscape
+    BadUnicodeEscape
+    BadCodePoint
+    WideCharEscape
+    RawUnclosed
+    RawAfterOpen
+    RawCloseNotAlone
+    RawIndent
     HexNoDigits
     BinNoDigits
     HexDigit
@@ -56,7 +64,9 @@ fn (d Diag) Rule() String& {
         case LexError.UnclosedComment => "L4a"
         case LexError.UnclosedString, LexError.StringNewline => "L14"
         case LexError.UnclosedChar, LexError.CharNewline, LexError.EmptyChar, LexError.LongChar => "L13"
-        case LexError.BadEscape => "L15"
+        case LexError.BadEscape, LexError.BadHexEscape, LexError.BadUnicodeEscape, LexError.BadCodePoint => "L15"
+        case LexError.WideCharEscape => "L13, L15"
+        case LexError.RawUnclosed, LexError.RawAfterOpen, LexError.RawCloseNotAlone, LexError.RawIndent => "L14a"
         case LexError.HexNoDigits, LexError.HexDigit => "L10a"
         case LexError.BinNoDigits, LexError.BinDigit => "L10c"
         case LexError.DigitSeparator => "L10b"
@@ -81,7 +91,15 @@ fn (d Diag) Message() String {
         case LexError.CharNewline => "character literal not closed on its line"
         case LexError.EmptyChar => "empty character literal"
         case LexError.LongChar => "character literal holds more than one character - text is written in \"\""
-        case LexError.BadEscape => "unknown escape '\\" $b "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\""
+        case LexError.BadEscape => "unknown escape '\\" $b "' - the escapes are \\n \\t \\r \\0 \\\\ \\' \\\" \\xHH \\u{H}"
+        case LexError.BadHexEscape => "'\\x' needs two hexadecimal digits, as \\x41"
+        case LexError.BadUnicodeEscape => "'\\u' needs one to six hexadecimal digits in braces, as \\u{1F600}"
+        case LexError.BadCodePoint => "a Unicode code point is at most 10FFFF and no surrogate (D800-DFFF)"
+        case LexError.WideCharEscape => "a character literal holds one byte - \\u{...} there is below 80; write the text in \"\""
+        case LexError.RawUnclosed => "unterminated raw text - '\"\"\"' closes it"
+        case LexError.RawAfterOpen => "raw text across lines begins on the line after its '\"\"\"' - move this to the next line"
+        case LexError.RawCloseNotAlone => "the closing '\"\"\"' of raw text across lines stands on a line of its own"
+        case LexError.RawIndent => "a line of raw text begins with the indentation of its closing '\"\"\"'"
         case LexError.HexNoDigits => "'0x' needs hexadecimal digits"
         case LexError.BinNoDigits => "'0b' needs binary digits"
         case LexError.HexDigit => "'" $b "' is not a hexadecimal digit"
@@ -514,9 +532,41 @@ fn (s mut scanner&) number(i I64) token.Tok, I64 {
     return k, end
 }
 
-# whether e may follow a '\' in a literal quoted by q (L13-L15)
+# whether e may follow a '\' in a literal quoted by q (L13-L15): the one-character escapes
 fn escapeOk(e Char, q Char) Bool {
     return e == 'n' or e == 't' or e == 'r' or e == '0' or e == '\\' or e == q
+}
+
+fn hexDigit(c Char) I64 {
+    if c >= '0' and c <= '9' { return I64(c - '0') }
+    if c >= 'a' and c <= 'f' { return I64(c - 'a') + 10 }
+    if c >= 'A' and c <= 'F' { return I64(c - 'A') + 10 }
+    return -1
+}
+
+# the escape at j (its '\'), in a literal quoted by q (L15): where it ends, its errors said; a '\u{...}' in a character
+# literal (q '\'') only below 0x80
+fn (s mut scanner&) escape(j I64, q Char) I64 {
+    t := s.text
+    n := t.Len()
+    e := t[j + 1]
+    if e == 'x' {
+        if j + 3 < n and hexDigit(t[j + 2]) >= 0 and hexDigit(t[j + 3]) >= 0 { return j + 4 }
+        s.diag(LexError.BadHexEscape, j, j + 2)
+        return j + 2
+    }
+    if e == 'u' {
+        v, end, ok := unicodeEscape(t, j)
+        if not ok {
+            s.diag(LexError.BadUnicodeEscape, j, j + 2)
+            return j + 2
+        }
+        if v > 0x10FFFF or (v >= 0xD800 and v <= 0xDFFF) { s.diag(LexError.BadCodePoint, j, end) }
+        if q == '\'' and v >= 0x80 { s.diag(LexError.WideCharEscape, j, end) }
+        return end
+    }
+    if not escapeOk(e, q) { s.diag(LexError.BadEscape, j, j + 2, e) }
+    return j + 2
 }
 
 # the string literal at i (L14, L15): where it ends. A literal never crosses a line: one a line's end stops ends before
@@ -524,6 +574,7 @@ fn escapeOk(e Char, q Char) Bool {
 fn (s mut scanner&) str(i I64) I64 {
     t := s.text
     n := t.Len()
+    if i + 2 < n and t[i + 1] == '"' and t[i + 2] == '"' { return s.raw(i) }
     j I64 = i + 1
     for {
         if j >= n {
@@ -546,8 +597,7 @@ fn (s mut scanner&) str(i I64) I64 {
                 s.diag(LexError.StringNewline, i, j + 1)
                 return j + 1
             }
-            if not escapeOk(e, '"') { s.diag(LexError.BadEscape, j, j + 2, e) }
-            j += 2
+            j = s.escape(j, '"')
         } else {
             j++
         }
@@ -582,8 +632,7 @@ fn (s mut scanner&) char(i I64) I64 {
             s.diag(LexError.CharNewline, i, j + 1)
             return j + 1
         }
-        if not escapeOk(e, '\'') { s.diag(LexError.BadEscape, j, j + 2, e) }
-        j += 2
+        j = s.escape(j, '\'')
     } else {
         j++
     }
@@ -603,6 +652,153 @@ fn (s mut scanner&) char(i I64) I64 {
     s.diag(LexError.LongChar, i, end)
     return end
 }
+
+# raw text at i, its opening '"""' (L14a): where it ends - after its closing '"""', or at the file's end
+fn (s mut scanner&) raw(i I64) I64 {
+    t := s.text
+    n := t.Len()
+    j I64 = i + 3
+    for j + 2 < n and not (t[j] == '"' and t[j + 1] == '"' and t[j + 2] == '"') { j++ }
+    if j + 2 >= n {
+        s.diag(LexError.RawUnclosed, i, i + 3)
+        return n
+    }
+    end := j + 3
+    first := i + 3
+    for k in range first, j {
+        if t[k] != '\n' { continue }
+        # across lines: nothing after the opening on its line, the closing alone on its own, every line indented
+        if not blankLine(t, first, k) { s.diag(LexError.RawAfterOpen, first, k) }
+        ls := lastLineStart(t, j)
+        for x in range ls, j {
+            if t[x] != ' ' and t[x] != '\t' {
+                s.diag(LexError.RawCloseNotAlone, j, end)
+                return end
+            }
+        }
+        line := k + 1
+        for line < ls {
+            e := line
+            for t[e] != '\n' { e++ }
+            if not blankLine(t, line, e) and not hasPrefix(t, line, e, ls, j) { s.diag(LexError.RawIndent, line, e) }
+            line = e + 1
+        }
+        return end
+    }
+    return end
+}
+
+# where the line holding position j starts
+fn lastLineStart(t String&, j I64) I64 {
+    k := j
+    for k > 0 and t[k - 1] != '\n' { k-- }
+    return k
+}
+
+# whether t[a:b] is only spaces and tabs
+fn blankLine(t String&, a I64, b I64) Bool {
+    for x in range a, b {
+        if t[x] != ' ' and t[x] != '\t' { return false }
+    }
+    return true
+}
+
+# whether the line t[a:b] begins with the indentation t[p:q]
+fn hasPrefix(t String&, a I64, b I64, p I64, q I64) Bool {
+    if b - a < q - p { return false }
+    for x in range q - p {
+        if t[a + x] != t[p + x] { return false }
+    }
+    return true
+}
+
+# '\u{H...}' at j (its '\'): its code point, where it ends, and whether it is one to six hexadecimal digits in braces
+fn unicodeEscape(t String&, j I64) I64, I64, Bool {
+    n := t.Len()
+    if j + 2 >= n or t[j + 2] != '{' { return 0, j + 2, false }
+    v I64 = 0
+    k := j + 3
+    for k < n and hexDigit(t[k]) >= 0 and k < j + 9 {
+        v = v * 16 + hexDigit(t[k])
+        k++
+    }
+    if k == j + 3 or k >= n or t[k] != '}' { return 0, j + 2, false }
+    return v, k + 1, true
+}
+
+# a text or character literal's bytes as its source writes them (L13-L15, L14a): its escapes decoded, raw text's lines
+# without their indentation. What the scanner refused decodes to something; it is never read
+fn LiteralBytes(t String&) Array<U8> {
+    b := List<U8>()
+    if t.Len() >= 6 and t[0] == '"' and t[1] == '"' and t[2] == '"' {
+        body := t[3:t.Len() - 3]
+        nl := try body.FindByte('\n') catch default -1
+        if nl < 0 {
+            for ch in body { b.Push(U8(ch)) }
+            return b.ToArray()
+        }
+        # across lines: the closing line's indentation, then every line between, without it
+        ls := lastLineStart(body, body.Len())
+        ind := body.Len() - ls
+        line := nl + 1
+        firstLine := true
+        for line < ls {
+            e := line
+            for body[e] != '\n' { e++ }
+            if not firstLine { b.Push(10) }
+            firstLine = false
+            if not blankLine(body, line, e) {
+                for x in range line + ind, e { b.Push(U8(body[x])) }
+            }
+            line = e + 1
+        }
+        return b.ToArray()
+    }
+    i I64 = 1
+    for i < t.Len() - 1 {
+        ch := t[i]
+        if ch != '\\' or i + 1 >= t.Len() - 1 {
+            b.Push(U8(ch))
+            i++
+            continue
+        }
+        e := t[i + 1]
+        if e == 'x' and i + 3 < t.Len() {
+            b.Push(U8(hexDigit(t[i + 2]) * 16 + hexDigit(t[i + 3])))
+            i += 4
+        } else if e == 'u' {
+            v, end, ok := unicodeEscape(t, i)
+            if ok { pushUtf8(b, v) }
+            i = end
+        } else {
+            b.Push(10 if e == 'n' else 9 if e == 't' else 13 if e == 'r' else 0 if e == '0' else U8(e))
+            i += 2
+        }
+    }
+    return b.ToArray()
+}
+
+# a code point's UTF-8 bytes
+fn pushUtf8(b mut List<U8>&, v I64) {
+    if v < 0x80 {
+        b.Push(U8(v))
+    } else if v < 0x800 {
+        b.Push(U8(0xC0 | (v >> 6)))
+        b.Push(U8(0x80 | (v & 0x3F)))
+    } else if v < 0x10000 {
+        b.Push(U8(0xE0 | (v >> 12)))
+        b.Push(U8(0x80 | ((v >> 6) & 0x3F)))
+        b.Push(U8(0x80 | (v & 0x3F)))
+    } else {
+        b.Push(U8(0xF0 | ((v >> 18) & 0x7)))
+        b.Push(U8(0x80 | ((v >> 12) & 0x3F)))
+        b.Push(U8(0x80 | ((v >> 6) & 0x3F)))
+        b.Push(U8(0x80 | (v & 0x3F)))
+    }
+}
+
+# a literal's text, decoded (LiteralBytes) - an import's path, a build condition's text
+fn LiteralText(t String&) String { return String(LiteralBytes(t)) }
 
 # fills the brace table: the index of every '{' token, in order, and of the '}' matching each - by braces alone (B9)
 fn matchBraces(toks Array<token.Token>&, opens mut Array<I32>&, closes mut Array<I32>&) {

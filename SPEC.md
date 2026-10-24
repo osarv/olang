@@ -221,22 +221,50 @@ zero or a subnormal, and is valid.
 
 **L13.** `CHAR_LIT ::= "'" char-content "'"`, where `char-content` is exactly one of:
 - any single byte other than `'`, `\`, or newline (including `"`, which needs no escaping here), or
-- an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\'`.
+- an escape sequence (L15): `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, `\'`, `\xHH`, or `\u{H}` for a code point below
+  `0x80` - a character literal holds one byte.
 
 A `CHAR_LIT` is of type `Char` (T29h). An empty (`''`), unterminated, or newline-containing `CHAR_LIT` is
 a compile-time error. A character or string literal never extends past its line: a newline - after a `\` too - stops
 it there, unterminated, and that line's end then ends the statement as any other does (L18).
 
-**L14.** `STR_LIT ::= '"' { str-content } '"'`, where each `str-content` element is:
+**L14.** `STR_LIT ::= '"' { str-content } '"' | RAW_LIT`, where each `str-content` element is:
 - any single byte other than `"`, `\`, or newline (including `'`, which needs no escaping here), or
-- an escape sequence: `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, or `\"`.
+- an escape sequence (L15): `\n`, `\t`, `\r`, `\0` (a zero byte), `\\`, `\"`, `\xHH`, or `\u{H...}`.
 
 A `STR_LIT` is text (T29c) whose length, `N`, the number of bytes after escape processing, is known while
 compiling (T7c). A `STR_LIT` is not implicitly nul-terminated; `N` reflects exactly its own content. An unterminated or
 newline-containing `STR_LIT` is a compile-time error.
 
-**L15.** No other escape sequences exist. Using `\` followed by any character other than `n`, `t`, `r`, `0`,
-`\`, `'` (in a `CHAR_LIT`), or `"` (in a `STR_LIT`) is a compile-time error.
+**L14a (raw text).** `RAW_LIT ::= '"""' { byte } '"""'` is text written as it stands: no escapes - a `\` is a `\` - and
+it ends at the first `"""` after its opening one (text holding `"""` is written as an ordinary `STR_LIT`). On one line,
+`"""C:\dir\"""` is the bytes between the quotes. Across lines, the opening `"""` ends its line and the closing `"""`
+stands on a line of its own, after nothing but spaces and tabs - its **indentation**. The text is the lines between,
+each with that indentation removed, joined by line breaks: the line break after the opening `"""` and the one before
+the closing `"""` are not part of it. A line between that is not blank must begin with the closing line's indentation,
+exactly; one indented less, a character after the opening `"""` on its line, or a closing `"""` with anything before it
+on its line, is a compile-time error. A blank line holds nothing (its whitespace is not part of the text).
+
+```
+usage := """
+    olang build FILE
+        builds FILE
+    """                         # "olang build FILE\n    builds FILE"
+```
+
+A `RAW_LIT` is one token, a `STR_LIT` in every other respect: it joins with other pieces (E11b), and a line break inside
+it ends no statement (L18).
+
+**L15.** The escapes are `\n`, `\t`, `\r`, `\0`, `\\`, `\'` (in a `CHAR_LIT`), `\"` (in a `STR_LIT`), and two that
+name a byte or a character by number:
+- `\xHH` - the byte of the two hexadecimal digits `HH` (`\x41` is `A`, `\xFF` the byte 255);
+- `\u{H...}` - the Unicode code point of one to six hexadecimal digits, written as its UTF-8 bytes (`\u{1F600}` is four
+  bytes, `\u{E9}` two); a surrogate (`D800`-`DFFF`) or a value above `10FFFF` is a compile-time error. In a `CHAR_LIT`
+  only a code point below `0x80` - one byte - may be written.
+
+Hexadecimal digits are `0-9`, `a-f` and `A-F`. No other escape sequences exist: `\` followed by anything else, `\x`
+not followed by two hexadecimal digits, and `\u` not followed by `{`, one to six hexadecimal digits and `}`, are
+compile-time errors.
 
 ### 1.6 Operators and punctuation
 

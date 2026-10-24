@@ -1,0 +1,5 @@
+# check: fail error[L15]: '\u' needs one to six hexadecimal digits in braces, as \u{1F600}
+# L15: \u takes its digits in braces
+fn main() {
+    s := "a\u1F600"
+}

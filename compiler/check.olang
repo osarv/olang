@@ -21,6 +21,7 @@ import "std/pair"
 import "std/os"
 import "source"
 import "token"
+import "scan"
 import "ast"
 import "diag"
 import "msgs"
@@ -4115,47 +4116,14 @@ fn (c mut Checker&) litFits(v litv, t types.TypeId) Bool {
     return intFits(c.P.T, v, u)
 }
 
-# a character literal's byte (L13)
+# a character literal's byte (L13, L15)
 fn (c mut Checker&) charValue(sp source.Span) I64 {
-    t := c.src(sp)
-    if t.Len() < 3 { return 0 }
-    if t[1] != '\\' { return I64(U8(t[1])) }
-    return I64(unescape(t[2]))
+    b := scan.LiteralBytes(c.src(sp))
+    return I64(b[0]) if b.Len() > 0 else 0
 }
 
-fn unescape(ch Char) U8 {
-    if ch == 'n' { return 10 }
-    if ch == 't' { return 9 }
-    if ch == 'r' { return 13 }
-    if ch == '0' { return 0 }
-    return U8(ch)
-}
-
-# a text literal's bytes, its escapes decoded (L14)
-fn (c mut Checker&) strBytes(sp source.Span) Array<U8>&c {
-    t := c.src(sp)
-    n I64 = 0
-    i I64 = 1
-    for i < t.Len() - 1 {
-        if t[i] == '\\' { i++ }
-        i++
-        n++
-    }
-    out mut Array<U8>&c = Array<U8>(n)
-    i = 1
-    k I64 = 0
-    for i < t.Len() - 1 and k < n {
-        if t[i] == '\\' {
-            i++
-            out[k] = unescape(t[i])
-        } else {
-            out[k] = U8(t[i])
-        }
-        i++
-        k++
-    }
-    return out
-}
+# a text literal's bytes, its escapes decoded (L14, L15), raw text as it stands (L14a)
+fn (c mut Checker&) strBytes(sp source.Span) Array<U8>&c { return scan.LiteralBytes(c.src(sp)) }
 
 # text written in the program: constant data, a read-only String reference (T25d, T29c)
 fn (c mut Checker&) textLit(sp source.Span) typed.Expr&c {

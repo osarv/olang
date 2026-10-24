@@ -762,7 +762,7 @@ fn (l mut loader&) load(path String&) I64 {
                 j++
             }
             if j < n and toks[j].Kind == token.Tok.StrLit {
-                ip := src.Text[toks[j].Start + 1:toks[j].End - 1]
+                ip := scan.LiteralText(src.Text[toks[j].Start:toks[j].End])
                 if alias == "" { alias = $filepath.Base(ip) }
                 aliases.Push($alias)
                 paths.Push($ip)

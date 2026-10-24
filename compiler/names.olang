@@ -15,6 +15,7 @@ import "std/pair"
 import "std/os"
 import "source"
 import "token"
+import "scan"
 import "ast"
 import "diag"
 import "msgs"
@@ -267,7 +268,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             case ast.Decl.Import(_, alias, path) {
                 name := alias
                 if name == source.NameId(0) {
-                    spec := r.L.Mods[mi].Src!.Text[path.Start + 1:path.End - 1]
+                    spec := scan.LiteralText(r.L.Mods[mi].Src!.Text[path.Start:path.End])
                     name = r.L.Names.Intern(load.DeriveAlias(spec))
                 }
                 t.waiting.Put(name, true)

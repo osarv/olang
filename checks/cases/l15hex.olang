@@ -1,0 +1,5 @@
+# check: fail error[L15]: '\x' needs two hexadecimal digits, as \x41
+# L15: \x takes exactly two hexadecimal digits
+fn main() {
+    s := "a\x4g"
+}

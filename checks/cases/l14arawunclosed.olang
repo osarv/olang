@@ -1,0 +1,5 @@
+# check: fail error[L14a]: unterminated raw text - '"""' closes it
+# L14a: raw text runs to its closing """
+fn main() {
+    s := """first
+}
