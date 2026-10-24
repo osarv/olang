@@ -78,8 +78,7 @@ says what the compiler does instead.
 The array rules - lengths known while compiling and fixed storage (§2.3 T7a-T7d, T8, T12, D15a), arrays by value and
 the 128-byte limit (D9a-D9c), inline array fields (C2e) and instances per length (§12.7 G29-G31) - are implemented
 but for these, each marked where it is stated: a result's inferred length (D8f; a declared function's array result
-has a length known only at run time); a function's leading asserts decided at every call (S18e; they are decided in
-an instance, S18c and G31, and otherwise at run time); a constructor taking an array by value (G29; a constructor's
+has a length known only at run time); a constructor taking an array by value (G29; a constructor's
 array parameter is taken by reference, D9a); and three sources of a known length (T7c) - a reference local, a mutable
 private global, and a comprehension, all of whose lengths are known only at run time.
 
@@ -163,6 +162,9 @@ as a pun, and is reached only after `.` (`s.break`, `s.break++`) - a word after 
 ending in one ends its statement there. In its constructor's body such a field is no name: it is set by its initializer,
 and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
 C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
+
+**L9b (words of a contract).** `fits` and `outlives` are words only inside a contract's brackets (D17): `x fits T`
+and `a outlives b` there, ordinary names everywhere else. In a contract `return` is also a prefix operator (D17b).
 
 ### 1.5 Literals
 
@@ -981,7 +983,8 @@ result is no value of a type building one. A result written as a type variable (
 **T22a.** A function whose signature carries a **scope obligation** (§8 O10b) - a relation between its
 parameters' scopes that every caller must establish - cannot be used as a function value: a call through a
 value of function type checks nothing of the kind, so the obligation would go unchecked. Using such a function
-as a value is a compile-time error naming the obligation. A relation the signature writes - a parameter living where
+as a value is a compile-time error naming the obligation - an inferred one, or one its contract writes (D17d). A
+relation the signature writes - a parameter living where
 another does (`b N&a`) - is one a function type can write too, so such a function is a value of a type saying the same,
 and a call through it is held to that as a direct call is (T22). The exception is a function type whose result is written as
 a **type variable** bound to a reference, or to a value holding references (a callback's `fn(acc U, x T) U`):
@@ -1191,7 +1194,7 @@ spelled in terms of a type not yet declared, and it is a compile-time error at t
 array (`type Nest struct(kids Array<Nest&>&)`) is how a value holds others of its own type.
 
 **T29d (a constructor for a declared primitive type).** A type declared over a primitive may declare a
-constructor, written after the type on the same line: `type Percent I32(v I32) [? errors] { ... }`.
+constructor, written after the type on the same line: `type Percent I32(v I32) [? errors] [contract] { ... }` (D17).
 It takes exactly **one** parameter, of the primitive it is declared over: the value being constructed. The
 body is an ordinary block that may check it (failing through its own error list, so the call is then written
 with `try`) or change it, and the parameter's final value is the result; `return` is rejected in it, as in any
@@ -1487,7 +1490,8 @@ through a reference marker at some point in the chain (T16, T17d). An error type
 
 ### 3.4 Function declarations
 
-**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig block`, with `receiver ::= "(" param ")"`.
+**D7.** `func-decl ::= "fn" [ receiver ] IDEN [ fn-type-params ] func-sig [ contract ] block`, with
+`receiver ::= "(" param ")"`. `contract` is specified in §3.4.1 (D17).
 The declared name enters the module's `vars` set (D2). `block` is specified in §6.1. `fn-type-params` lists the
 function's own type variables (§12.2 G3).
 
@@ -1501,7 +1505,8 @@ a method, whatever its first parameter's type.
 ```
 param-list      ::= list(param)                         (L18a)
 param           ::= IDEN type-expr [ "=" expr ]
-ret-type        ::= type-expr { "," type-expr }          (on one line; several results, D8c)
+ret-type        ::= result { "," result }                (on one line; several results, D8c)
+result          ::= [ IDEN ] type-expr                  (a declaration's results all named or none, D17)
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
 error-list-item ::= alias-chain IDEN [ "." IDEN ]
 ```
@@ -1602,6 +1607,93 @@ G16) share the one made for them, which is a function of that module's code wher
 parameter after it must too. A call may then omit any number of trailing arguments (E14), and may reach
 past a defaulted parameter with the `default` keyword (E14a). The same rules apply unchanged to a
 constructor's own `param-list` (§9.1 C1).
+
+### 3.4.1 Contracts
+
+**D17 (contracts).** A function, a method or a constructor may state what it **requires** of its callers and what it
+**guarantees** them in one bracketed block, its **contract**, written after its signature - after the error set, or the
+results, or the parameters - and right before its body, on the signature's line or the next:
+
+```
+contract       ::= "[" list(contract-item) "]"                    (L18a)
+contract-item  ::= expr | outlives | contract-for | contract-if
+contract-for   ::= "for" IDEN [ "," IDEN ] "in" expr item-body
+contract-if    ::= "if" expr item-body [ "else" ( contract-if | item-body ) ]
+item-body      ::= ":" contract-item | "{" list(contract-item) "}"
+outlives       ::= scope-name "outlives" scope-name { "outlives" scope-name }
+scope-name     ::= IDEN | "return"
+```
+
+```
+fn percent(part I64, whole I64) p I64 [whole > 0, 0 <= part <= whole, 0 <= p <= 100] { return part * 100 / whole }
+fn divmod(a I64, b I64) q I64, r I64 [b > 0, 0 <= r < b] { return a / b, a % b }
+fn (l mut List<T>&) Push(x T) [return l.Len() == l.Len() + 1] { ... }
+fn link(a mut Node&, b Node&) [b outlives a] { a.next = b }
+type Ring struct(cap I64) [cap > 0] { cap }
+```
+
+A declaration's results may be **named** for its contract - every one or none, each name before its type (`q I64, r
+I64`). A result's name means nothing outside the contract: the body returns its results with `return` as any body
+does. Items follow the listing rule (L18a): `,` between items on one line, a line's end between lines. A `for` or an
+`if` item takes one item after `:`, or several in braces. `fits` and `outlives` are words of a contract only (L9b).
+
+**D17a (conditions).** Every item but an `outlives` one is a **condition**, a `Bool`: an expression of type `Bool` - a
+call in one must give one - `x fits T`, a `for` item, or an `if` item. It reads the receiver, the parameters, a
+guarantee's named results, and anything a function body reads at its top level (globals, constants, functions); it
+writes nothing - the parameters are read-only in it, and a call in it is checked as any call is.
+- `x fits T`, for a number `x` and a number type `T`, holds when `T(x)` keeps `x`'s value - exactly when `checked
+  T(x)` would not fail (E15a). It binds as a comparison does.
+- `for x in a: c` holds when its item holds for every element, walked as a `for` walks it (S9a); `for i, x in a`
+  names the position too. "Some element" is `not for x in a: x != v`.
+- `if a: b` holds when `a` is false or `b` holds - `a` implies `b`; `else: c` holds `c` when `a` is false. Items nest
+  freely.
+
+**D17b (entry and return values).** In a contract a name means its value **when the call begins**. `return e` - a
+prefix binding as tightly as unary `-` - means `e`'s value **when the call returns**: `[return l.Len() == l.Len() + 1]`
+compares the length after the call with the length before it plus one. `return` is written only before what is read
+through a reference parameter (or a parameter holding references), which is all a call can change: `return x` of a
+by-value parameter is a compile-time error naming the fix, and so is `return r` of a named result, which has no other
+value. A part of a guarantee read through a reference, mentioning no result, no `return` and no name a `for` item
+binds, is kept as it was when the call began; a part whose value holds references is read when the call returns
+instead, and is a compile-time error where what it reaches is what the call may write.
+
+**D17c (requirements and guarantees).** A condition mentioning a named result or `return` is a **guarantee**, which the
+function promises its callers; every other condition is a **requirement**, which its callers promise it. A guarantee
+holds when the function returns normally - an error or a function that never returns promises nothing.
+
+**D17d (scope relations).** `a outlives b` says the scope argument `a`'s storage lives in outlives `b`'s, `return`
+standing for the result scope; a chain `a outlives b outlives c` is each pair in turn, and so `a outlives c` too. Each
+name is a parameter that is a reference or holds references, the receiver included, or `return`; another is a
+compile-time error. It is an **obligation** (§8 O10b) as an inferred one is: every call is held to it where the call is
+checked (O10c), and a function writing one is no function value (T22a). An `outlives` item stands at the top of the
+contract, never in a `for` or an `if`.
+
+**D17e (deciding a contract).** A condition is decided **while compiling** wherever the compile-time evaluator can
+decide it (K1), and is otherwise not checked unless the caller asks for it:
+- A **requirement** is decided at every call whose arguments are all values the evaluator computes - literals,
+  constants, immutable globals, calls of such - and no local: false is a compile-time error at the call naming the
+  condition, with a note at it; true, or not decidable (K1 refuses it), says nothing.
+- A **guarantee** is checked wherever the evaluator runs a call - in a global it bakes (K2), an assert it decides
+  (S18c), a value it computes: false is a compile-time error at the guarantee, blaming the function, with a note at
+  the call.
+- Everywhere else a condition is **unchecked**: the call runs as written, whatever its arguments, and nothing is
+  checked at run time. `checked f(x)` asks for the checks there - `f(x)` anywhere in what a `checked` covers (E15a):
+  its arguments are evaluated and held, each requirement is checked, the entry values its guarantees read are kept,
+  the call is made, then each guarantee is checked. A false one fails with `CheckError.CONTRACT` (R20). This is the
+  one run-time cost of a contract, and it is written where it is paid.
+A contract is a statement of fact about every call: a call breaking a requirement no check finds is a call the program
+should not have made, as an out-of-range index is (E16e), and a guarantee that does not hold is a defect in the
+function. Deciding more conditions while compiling only ever turns an unchecked condition into a decided one, so what a
+program means never depends on how many are decided.
+
+**D17f (contracts and function values).** A function with conditions may be made a function value (T21): a call through
+the value checks nothing of its contract, even under `checked`. One writing a scope relation may not (D17d, T22a).
+Lambdas, trait methods, `extern fn`s and destructors take no contract.
+
+**D17g (conversions).** A conversion to a number type `T(x)` (E26) behaves as a function with the requirement `[x fits
+T]`: where the evaluator computes `x` - a constant, an immutable global, a call of such - a value that does not fit is a
+compile-time error at the conversion; elsewhere it is unchecked, wrapping or undefined as E26 and E26a say. `checked
+T(x)` checks it at run time, failing with `OVERFLOW` or `INVALID` as E15a's table says (not `CONTRACT`).
 
 **D9a (arrays by value).** A parameter whose type is an array may take it **by value** (`a Array<F32>`, a declared
 array type such as `s String` among them) or by reference (`a Array<F32>&`, T24). A by-value array parameter is the
@@ -1825,7 +1917,7 @@ program's own scope, which is never closed (§8 O1b).
 **D14b.** `n` must evaluate to a length in range: **non-negative**, and no larger than the largest whose byte
 count (`n` times the element's size) fits an `I64`. One out of range aborts the program, the same hard abort an
 out-of-range slice bound produces (§5.9 E16b), with the message `array length out of range`; under `checked` (R20) it
-fails with `BuiltinError.OUT_OF_BOUNDS` instead. A length of `0` is valid and produces a genuinely empty array.
+fails with `CheckError.OUT_OF_BOUNDS` instead. A length of `0` is valid and produces a genuinely empty array.
 
 The check is cheap for the same reason E16b's is and E16's was not: it is paid **once per allocation**,
 never per element access. A negative length multiplies out to a negative byte count, which the allocator's
@@ -2066,7 +2158,7 @@ clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a 
 staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
 `hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
 U32)`, `x` to the `n`th power, wrapping as `*` does (E6c), whose checked form `CheckedPow` (E31a) fails with
-`BuiltinError.OVERFLOW` where the true power does not fit - so `checked x.Pow(n)` checks it; and `Sqrt()`, the integer
+`CheckError.OVERFLOW` where the true power does not fit - so `checked x.Pow(n)` checks it; and `Sqrt()`, the integer
 square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
 exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
 error type the prelude declares) for a negative value, so it is written with `try`.
@@ -2920,7 +3012,7 @@ call's arguments included - other than in the called function's body (which has 
 lambda, or a `match` used as a value
 (S12b), whose clauses are statements' bodies. An operation a type declares (E31) is checked by calling its checked
 form (E31a), whose own errors the expression then can produce too; with no checked form it calls the plain method, as
-`try` would. Each check fails with a word of `BuiltinError` (§7.6) instead of doing what the unchecked operation
+`try` would. Each check fails with a word of `CheckError` (§7.6) instead of doing what the unchecked operation
 does:
 
 | operation | fails with |
@@ -2937,6 +3029,7 @@ does:
 | `a[i]`, `a[lo:hi]` | `OUT_OF_BOUNDS` (E16d, E16c) |
 | `x as E.Case` | `WRONG_CASE` when `x` is another case (E32) |
 | `Array<T>(n)` | `OUT_OF_BOUNDS` for an `n` out of range - negative, or too large (D14b) |
+| a call `f(x)` of a function with a contract | `CONTRACT` when a requirement is false before the call, or a guarantee after it (D17e) |
 
 `INVALID` means what IEEE 754 means by an invalid operation: a NaN made from operands that are not NaN, or a NaN or an
 infinity converted to an integer. `DIVIDE_BY_ZERO` is IEEE's division by zero for a float and an integer `/` or `%` by
@@ -2964,7 +3057,7 @@ defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a functi
 Array<I32>) I32 { return checked a[2] catch default -1 }`) one instance (G29) may have the element and another not.
 
 **E16d.** `checked base [ index ]` (E15a) **opts in to a bounds check**: the index is checked against
-`[0, base.Len())` and an out-of-range one produces `BuiltinError.OUT_OF_BOUNDS` (§7.6) rather than reading or
+`[0, base.Len())` and an out-of-range one produces `CheckError.OUT_OF_BOUNDS` (§7.6) rather than reading or
 writing storage the array does not own, propagating like any other `try` so the enclosing signature must
 cover it. This is the mirror of E16c, which opts a *slice* out of its abort — in both, `checked` means "give me
 the failure as an error I handle". An index written without `checked` is unchecked and costs nothing.
@@ -3014,7 +3107,7 @@ cheap exactly where a per-index check is not, since a slice is taken once and re
 paid per slice expression, never per element access.
 
 **E16c.** Writing the slice as `checked base [ lo : hi ]` (E15a) makes it **fallible** instead: an
-out-of-range bound produces `BuiltinError.OUT_OF_BOUNDS` (§7.6) rather than aborting, and the expression
+out-of-range bound produces `CheckError.OUT_OF_BOUNDS` (§7.6) rather than aborting, and the expression
 propagates it like any other `try`, so the enclosing signature must cover it.
 
 The two forms divide the two cases cleanly. Bounds that come from the program itself (`a[:]`, `a[0:a.Len()]`,
@@ -3127,10 +3220,11 @@ An integer converted to a float type is **rounded once**, from its exact value, 
 (ties to even) - an infinity where it is beyond the type's range - never through a wider float first, which would
 round twice; an integer literal adapting to a float type (T6) is rounded the same way.
 Unlike an ordinary function, `TypeName(x)` is never fallible and needs no `try`/`catch` - a numeric
-conversion cannot itself produce an error (a narrowing conversion outside its target type's
-representable range - e.g. `U8(300)` - silently wraps, the same well-defined, unchecked behavior
-this language already accepts at every other point a value can silently lose information, such as
-E16's own unchecked array indexing).
+conversion cannot itself produce an error. Its requirement is that `x` fits (D17g): a value the evaluator computes that
+does not - `U8(300)`, `I32(G)` with `G` an immutable global beyond `I32` - is a compile-time error; one computed at run
+time that does not is unchecked, an integer narrowing wrapping (T6), the same well-defined, unchecked behavior this
+language accepts at every other point a value can silently lose information, such as E16's own unchecked array
+indexing.
 
 **E26a.** A **float-to-integer** conversion of a value the target cannot represent — outside its range,
 NaN, or an infinity — is **undefined behaviour**. Nothing is checked at run time.
@@ -3342,7 +3436,7 @@ possibly more: one whose errors do not include each of the plain form's is a com
 naming the error to add. Where a type declares no checked form:
 
 - `CheckedAt` is **derived** from a one-index `At` and `Len`: the position is checked against `[0, x.Len())`, failing
-  with `BuiltinError.OUT_OF_BOUNDS` (R20), and `At` is called - so `checked x[i]` on such a type checks exactly as it
+  with `CheckError.OUT_OF_BOUNDS` (R20), and `At` is called - so `checked x[i]` on such a type checks exactly as it
   does on an array. `CheckedSlice` is derived from `Slice` and `Len` the same way (`0 <= lo <= hi <= x.Len()`), and
   `CheckedSetAt` from `SetAt` and `Len`. A type with neither the checked form nor `Len` cannot be indexed, sliced or
   stored into under `checked` - a compile-time error - and neither can one indexed by several indices (`checked m[i,
@@ -3414,7 +3508,7 @@ after it is that type's reference marker (§2.9): `b as Box.Val & mask` is an `a
 compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the result.
 
 An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `checked` (E15a) it fails with
-`BuiltinError.WRONG_CASE` instead. A case test never fails. A null reference to an enum is no case: a test is false and
+`CheckError.WRONG_CASE` instead. A case test never fails. A null reference to an enum is no case: a test is false and
 `as` does not hold. The safe forms are a test that narrows (S8d), and a `match` (S13).
 
 A part of an array of a known length is a **slice** with known bounds (T7c, E16a), checked once where it is taken:
@@ -3532,7 +3626,7 @@ and elsewhere evaluation stops there.
 A `checked` with no clauses written in what `!` or a `try` covers (E15a) hands what it checks to them: `(checked a[i])!`
 is the bounds-checked index that ends the program when `i` is out of range, and `try (checked a[i]) + 1` propagates
 its `OUT_OF_BOUNDS` with whatever else the `try` covers - the inner `checked` neither propagates on its own nor needs
-the enclosing function to name `BuiltinError` for it. A `checked` with clauses handles its errors itself, as a nested
+the enclosing function to name `CheckError` for it. A `checked` with clauses handles its errors itself, as a nested
 `try` does. On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
 call fails, as a failed `assert` there does (P6); no error reaches the join.
 
@@ -4071,23 +4165,6 @@ place - `raised here`, `try passed it on`, `a task failed, and its join passed i
 
 In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead. A program run
 with `interpret` (B3e) prints the trace as a debug build does.
-
-**S18e (asserts decided at the call).** *(not yet implemented: leading asserts are decided in an instance, S18c and G31,
-and otherwise run at run time.)* A function's **leading asserts** - the `assert` statements its body begins
-with, before any other statement - are also evaluated at **every call** to it, with what that call knows of its
-arguments: the length of an array argument whose length is known (T7c), the value of an argument that can be evaluated
-at compile time (K1), and a field of a struct argument that is a local of the caller built by a constructor call,
-when the field is a bare pun of a constructor parameter (C4) whose argument can be evaluated, the caller's function
-never assigns the local or that field, nor captures the local, and every call it lends the local to writably (E12a)
-goes to a function whose body - and every body that one lends it on to - never assigns that field (read off the
-bodies, as O17 reads them). Anything else about an argument is **unknown**, and an assert that reads something unknown is undecided:
-nothing is reported, and it runs at run time as written. One decided false is a compile-time error at the call, with a
-note at the assert, carrying its message (S17) where that can be computed. A constructor's leading asserts are its
-body's, at each construction - bare pun fields (C4) may come before them, since they only name parameters. This is a check only: the asserts still run in the function's body (unless S18c removes
-them there), and what it knows of a struct argument's fields is used for nothing else - no condition is decided by it
-(S8a, S8b). So with `type Ring<T> struct(cap I64) { assert cap > 0 and (cap & (cap - 1)) == 0 ... }`, `Ring<I32>(6)` is a
-compile-time error at the call, and a matrix product beginning `assert a.Cols == b.Rows` is one at a call whose
-matrices were built from constants the caller never changes.
 
 **S18b.** Leaving a test early — by a failed assert, a failed runtime check, `unreachable`, a `!` or an
 error leaving the test (S16) — runs the
@@ -4683,7 +4760,7 @@ written would be kept by neither; `checked x[i].f = v` (R21) is a checked store.
   references are where the result's are, and what is later put into it lands there too. A default naming existing
   storage, or built from it, is a compile-time error: its references would have to agree with every scope the
   result's live in.
-- A checked index `checked a[i]` and a slice `checked a[lo:hi]` can fail only with `BuiltinError.OUT_OF_BOUNDS`
+- A checked index `checked a[i]` and a slice `checked a[lo:hi]` can fail only with `CheckError.OUT_OF_BOUNDS`
   (§7.6), which a clause names or takes with an item-less `catch`: `checked a[i] catch default -1`. The
   expression is then a value, never an lvalue.
 
@@ -4738,7 +4815,7 @@ callee happens to only ever produce a subset of them internally. A callee writte
 `catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
 type it does not name is (R13).
 
-### 7.6 Built-in errors
+### 7.6 Check errors
 
 **R21 (tried and checked statements).** `try-store-stmnt ::= ( "try" | "checked" ) ( lvalue assign-op expr |
 increment ) { catch-clause } STMNT_END`, where `increment` is one of `x++`, `x--`, `++x`, `--x`. With `try` the
@@ -4750,24 +4827,25 @@ adds through `CheckedPlus` when declared, or the built-in checked addition; `x++
 a declared type calls `CheckedInc`, else `CheckedPlus`, else the plain forms). Its clauses are a statement's (R10): one
 that takes an error runs its block and control continues after the statement; an error no clause names propagates.
 
-**R20.** The checks the language itself makes report **`BuiltinError`**, an error type declared in the prelude:
+**R20.** The checks the language itself makes report **`CheckError`**, an error type declared in the prelude:
 
 ```
-error BuiltinError {
+error CheckError {
     OVERFLOW
     DIVIDE_BY_ZERO
     OUT_OF_BOUNDS
     INVALID
     WRONG_CASE
+    CONTRACT
 }
 ```
 
 A check runs only where it is asked for, with `checked` (E15a); an operation written without it behaves as §5 says,
-and `try` asks for none. Only these checks raise `BuiltinError`; no function raises it with `error`, only lets through
+and `try` asks for none. Only these checks raise `CheckError`; no function raises it with `error`, only lets through
 one a `checked` in it produced. It is an ordinary error type in every other respect: a function letting one through
 names it in its `?` (or infers it, R1a), and a `catch` names it, or one of its words. A check names exactly the words
 it can produce, and catching those is complete (R13): a checked index or slice produces only `OUT_OF_BOUNDS`, a
-checked `as` only `WRONG_CASE`.
+checked `as` only `WRONG_CASE`, a checked call of a function with a contract only `CONTRACT` (D17e).
 
 **R22.** Every failure a program can handle is an error of a declared type with a word (R3) - there is no error
 without a type. What the language guarantees instead of an error - a failed `assert`, `unreachable`, a
@@ -5630,11 +5708,11 @@ compiler-recognized blocks a struct type can declare; its methods are ordinary f
 **C1.** A constructor-bearing struct is declared:
 
 ```
-type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] "{" ctor-body "}" [ destruct-block ]
+type IDEN [ type-params ] "struct" [ fn-type-params ] "(" param-list ")" [ "?" error-list ] [ contract ] "{" ctor-body "}" [ destruct-block ]
 ```
 
-`param-list` and `error-list` are as in a function signature
-(§3 D8), the error set carrying the same leading `?` it does there —
+`param-list`, `error-list` and `contract` are as in a function declaration
+(§3 D8, D17), the error set carrying the same leading `?` it does there —
 a constructor has no `ret-type` slot for the marker to disambiguate against, but it is written all the
 same, so that one spelling of an error set holds everywhere in the language.
 
@@ -6328,11 +6406,12 @@ error.
 **B11b.** `explain FILE NAME` prints one top-level item of `FILE` as the compiler sees it, once the program `FILE` is the
 root of has checked: nothing is built, and a program with errors reports them instead. `NAME` is a function, a type, an
 error type, a global, or `Type.Method`. A function is printed with its whole signature - its receiver, parameters with
-their scope markers, results, and its error set, an inferred one (`?` alone, R1a) written out - and then its scope
+their scope markers, results, and its error set, an inferred one (`?` alone, R1a) written out - then its contract's
+conditions (D17), each a line `[cond]` as written, after a comment naming its results where they are named, and its scope
 obligations (O10b), each a line `[a outlives b]`, `return` standing for its result scope; a generic one is printed as
 declared, then each instance the program made with its own errors and obligations. A struct is printed with its
 constructor's signature, its fields, its methods and the traits with no type parameters it meets; an enum with its
-cases, an error type with its words, a trait with its methods. A global is printed with its type and, where it is baked
+cases, an error type with its words, a trait with its methods; a constructor's contract follows its signature. A global is printed with its type and, where it is baked
 (K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
 tells the two forms apart: `explain` with a word ending in `.olang` and a name is this, a rule is B11a.
 
@@ -6893,9 +6972,9 @@ fn total(a Array<I64>) I64 {
 
 **G31 (a function's asserts on lengths).** A rule about the lengths a function's by-value arrays may have is an
 `assert` (§6.7) in its body: one reading those lengths and otherwise only what K1 can evaluate is decided in each
-instance (S18c), a false one a compile-time error at the call that asked for the instance. A rule about a reference
-parameter's length, or about any argument, is an `assert` too, and the leading asserts of every function are decided
-at each call where what the call knows decides them (S18e). There is no other syntax for it.
+instance (S18c), a false one a compile-time error at the call that asked for the instance. A rule a function's callers
+are held to, about any argument, is a requirement of its contract (D17), decided at each call whose arguments the
+evaluator computes (D17e).
 
 ## 13. Compile-time evaluation
 
@@ -6904,7 +6983,7 @@ without a running program. No declaration marks a function as evaluable: any fun
 call, when what that call actually does is evaluable. Evaluation follows this specification's own
 meaning for every operation - integer widths wrap exactly as generated code does, a reference names the very
 value it was taken from, a function value names the function, a slice shares its base's elements, text renders exactly as the generated code
-writes it, a checked operation (E15a) fails with the same `BuiltinError` word, and a `try`'s clauses handle an
+writes it, a checked operation (E15a) fails with the same `CheckError` word, and a `try`'s clauses handle an
 error as they would at run time. It is **not** possible when evaluation would:
 
 - read a mutable global, whose value is the running program's, or write any global or what one holds (its
@@ -6958,10 +7037,9 @@ elements, which no program means, so where a value is required it is a compile-t
 under `interpret` the program stops there.
 
 A length known while compiling (T7c) is a constant whatever holds it, so reading it - `a.Len()` on a by-value
-parameter in an instance (G29), say - reads nothing that varies and can always be evaluated. At a call deciding a
-callee's leading asserts (S18e) evaluation runs with arguments **partly known** - an array by its length alone, a
-struct by some of its fields: reading a part that is not known makes that evaluation undecided, which is neither a
-value nor an error, and leaves the assert to the run time.
+parameter in an instance (G29), say - reads nothing that varies and can always be evaluated. A contract's conditions
+are evaluated as a function's body is (D17e): a requirement at a call whose arguments are computed, a guarantee at
+every call the evaluator runs.
 
 Under `interpret` (B3e) the same evaluation runs a whole program, and the effects above are performed rather than
 refused - tasks excepted, which `interpret` does not run yet (B3e).

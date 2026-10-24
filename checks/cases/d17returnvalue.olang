@@ -1,0 +1,8 @@
+# check: fail 'return' reads a value at return through a reference, and 'x' reads none the call can change - write it without 'return'
+# D17b: "return e" only of what is read through a reference parameter
+fn f(x I64) r I64 [return x > 0, r > 0] { return x }
+
+fn main() {
+    n := f(3)
+    n++
+}

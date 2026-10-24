@@ -1,0 +1,15 @@
+# check: fail O10c
+# D17d: a written relation is an obligation every call is held to, as an inferred one is
+type Node struct(v I64) {
+    v
+}
+
+fn keep(a mut Node&, b Node&) [b outlives a] { }
+
+fn main() {
+    a := Node(1)
+    for i in range 2 {
+        b := Node(i)
+        keep(a, b)
+    }
+}

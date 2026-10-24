@@ -32,12 +32,34 @@ type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&)
 
 # a signature: parameters, results (none, one or several), and the error set - HasErrors with no names is an inferred
 # set ("?" alone, R1a); NoReturn for "noreturn" where a result would stand (D8e)
-type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false) {
+# a declaration's results may be named, every one or none (D17): ResultNames one per result, empty for unnamed; a
+# declaration's contract, null for none (D17)
+type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false
+                ResultNames Array<source.NameId>& = Array<source.NameId>(0), ResultSps Array<source.Span>& = Array<source.Span>(0)
+                Contract ContractBlock?& = null) {
     Params
     Results
     HasErrors
     Errors
     NoReturn
+    ResultNames
+    ResultSps
+    Contract
+}
+
+# a contract (D17): its bracketed block's span, its conditions as statements - a condition an Assert with no message,
+# a "for" item a ForIn, an "if" item an If, each branch's and loop's body the items in it - and its "outlives" chains
+type ContractBlock struct(Sp source.Span, Items Array<Stmt&>&, Chains Array<Outlives&>&) {
+    Sp
+    Items
+    Chains
+}
+
+# "a outlives b outlives c": the names in order, 0 for "return" (the result scope), and where each is written
+type Outlives struct(Sp source.Span, Names Array<source.NameId>&, Sps Array<source.Span>&) {
+    Sp
+    Names
+    Sps
 }
 
 # a dotted name: alias.Type.word - an error set's or a catch clause's item, an error statement's word
@@ -78,6 +100,7 @@ type Expr enum {
     MatchE(sp source.Span, m Match&)
     Range(sp source.Span, args Array<Expr&>&)          # range [start,] end [, step] (S9b), only after a for's "in"
     Default(sp source.Span)                            # "default" as an argument (E14a)
+    Fits(sp source.Span, x Expr&, t TypeRef&)          # x fits T, only in a contract (D17a)
 }
 
 type Chain struct(Ops Array<token.Tok>&, Xs Array<Expr&>&) {
@@ -312,7 +335,7 @@ fn (e Expr&) Span() source.Span {
         case Expr.ScopeCall(sp, _, _, _), Expr.Generic(sp, _, _), Expr.Member(sp, _, _), Expr.Index(sp, _, _) => sp
         case Expr.Slice(sp, _, _, _), Expr.ArrayLit(sp, _, _), Expr.Row(sp, _), Expr.Compr(sp, _) => sp
         case Expr.Join(sp, _), Expr.Try(sp, _, _, _), Expr.Lambda(sp, _), Expr.MatchE(sp, _), Expr.Range(sp, _) => sp
-        case Expr.Default(sp) => sp
+        case Expr.Default(sp), Expr.Fits(sp, _, _) => sp
     }
 }
 

@@ -1,0 +1,11 @@
+# check: fail half's guarantee 'h * 2 == x' does not hold for a call evaluated while compiling
+# also: note: the call evaluated here
+# D17e: a guarantee is checked where the evaluator runs the call - here a global it bakes - blaming the function
+fn half(x I64) h I64 [h * 2 == x] { return x / 2 }
+
+Odd I64 = half(7)
+
+fn main() {
+    n := Odd
+    n++
+}

@@ -326,7 +326,7 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
         }
     }
     prev := try t.values.Get(n) catch default -1
-    if prev >= 0 and not (isFunc and t.Entries[prev].Kind == What.Func) {
+    if prev >= 0 {
         r.L.Diags.Error(r.at(mi, sp), msgs.NameInUse(r.tok(n)))
         return
     }
@@ -558,7 +558,23 @@ fn (r mut Resolver&) topConds(ti ast.TopIf&) {
 fn (r mut Resolver&) func(f ast.Func&) {
     m := r.mark()
     r.sig(f, true)
+    r.contract(f.S)
     if f.Body.Len() > 0 { r.block(f.Body) }
+    r.popTo(m)
+}
+
+# a contract's names (D17), its parameters already declared: the named results, read only here, and each item's -
+# a "for" item's names new, as a for-in's are (D3a); an "outlives" chain names parameters or "return"
+fn (r mut Resolver&) contract(s ast.Sig&) {
+    if s.Contract is null { return }
+    m := r.mark()
+    for i in range s.ResultNames.Len() { r.declare(s.ResultNames[i], s.ResultSps[i]) }
+    r.block(s.Contract!.Items)
+    for ch in s.Contract!.Chains {
+        for i in range ch.Names.Len() {
+            if ch.Names[i] != source.NameId(0) { r.name(ch.Sps[i], ch.Names[i]) }
+        }
+    }
     r.popTo(m)
 }
 
@@ -666,6 +682,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
                 if p.Dflt is not null { r.expr(p.Dflt) }
                 r.param(p, true)
             }
+            if s.Errs is not null { r.contract(s.Errs!) }
             if s.Body.Len() > 0 { r.block(s.Body) }
             r.popTo(m)
             r.popTo(m0)
@@ -985,7 +1002,7 @@ fn (r mut Resolver&) expr(x ast.Expr?&) {
             r.expr(c)
             r.expr(b)
         }
-        case ast.Expr.IsType(_, a, t, _), ast.Expr.As(_, a, t) {
+        case ast.Expr.IsType(_, a, t, _), ast.Expr.As(_, a, t), ast.Expr.Fits(_, a, t) {
             r.expr(a)
             r.typeRef(t)
         }

@@ -1,0 +1,7 @@
+# check: fail Bool
+# D17a: a condition is a Bool
+fn f(x I64) [x + 1] { }
+
+fn main() {
+    f(3)
+}

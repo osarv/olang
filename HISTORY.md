@@ -23227,3 +23227,81 @@ under `-debug -sanitize` (nothing read after its scope closed); `lowerdump` give
 calls), though what consumes it (T11b's assignment, T7b's return) copies again where the value goes. It needs the
 conversion's storage placed by the scope pass, so a site the checker gives it, or the converted value made a view the
 consumers copy from where they do and adopt nowhere - left for the plan.
+
+## Contracts, and BuiltinError renamed CheckError (D17-D17g, R20, 2026-10-24)
+
+The user decided contracts in the day's design talk (`.claude/memory/decisions.md`, "CONTRACTS ..."): one bracketed block
+per function after the error set and right before the body, constructors too; conditions over the receiver, the
+parameters and the named results; a plain name is a value at entry and `return e` one at return; a condition mentioning
+a result or `return` is a guarantee, any other a requirement; items are Boolean expressions, `x fits T`, `for` items,
+`if` items (implication) and `a outlives b outlives c` chains. What is decided now is what the compile-time evaluator
+can decide; the rest is unchecked unless the caller writes `checked f(x)`, which fails with `CheckError.CONTRACT` (the
+user, "not built-in remember": QAI's rename of `BuiltinError`). A conversion behaves as having `[x fits T]`. S18e - a
+function's leading asserts decided at every call, never built - is superseded. `docs/prover.md` section 1 is the
+longer-term half: the prover only moves conditions out of "unchecked".
+
+**The rename first.** `tools/checkerror_rename.olang` renames the whole word `BuiltinError` and the path
+`std/prelude/builtin` in `.olang`, `.md`, `.txt` and `.want` files, and is idempotent - it writes its own old names in two
+pieces so that running it over itself changes nothing (its first run did rename its own literals, and the restored file
+was rewritten so). The type is declared in `std/prelude/check.olang` with the new word `CONTRACT`. The seed's compiler
+names `BuiltinError` in its own source, so `std/prelude/builtin.olang` stayed until the seed was written again; HISTORY
+and the memory files keep the old name where they tell what happened.
+
+**Parsing (compiler/parse.olang).** A declaration's results may be named, every one or none (`name type` on one line;
+mixing is an error). The block is read after the error set, on the signature's line or the next. Items follow the listing
+rule; a `for` or `if` item takes `:` and one item or braces and several, with `else` as an `if` statement has it;
+`a outlives b` is recognized by the word after the first name, and is refused inside a `for` or `if`. Inside the
+brackets `return` is a prefix operator and `fits` an operator at comparison precedence; both words mean nothing outside
+them (L9b), so no identifier changed meaning. **`return e` binds as tightly as unary `-`, not as `not` (decided, mine):**
+the user's own example, `[return l.Len() == l.Len() + 1]`, means the length after the call against the length before
+plus one, and binding like `not` would read it as `return (l.Len() == l.Len() + 1)`. The resolver declares the result
+names for the contract alone (no naked returns: the user's earlier call), the formatter keeps a space before a
+contract's `[` and after an item's `:` (the parser hands it those tokens as it hands it grouping parentheses).
+
+**Checking (compiler/check.olang, "---- contracts (D17) ----").** Each item becomes a body of its own
+(`typed.BodyOf.Contract(function, kind, index)`): a requirement `fn(the parameters) Bool`, a guarantee `fn(the
+parameters, the results, the entry values) Bool`, an entry value `fn(the parameters) T`. A condition is lowered in its
+body to `if not c { return false }`, a `for` and an `if` item to the statements they are, and the body ends in `return
+true`, so every check, the evaluator and the scope pass treat a contract as code they already know. Parameters are
+read-only in these bodies (a condition writes nothing). **Entry values (mine):** a guarantee's largest part mentioning no
+result, no `return` and no name its `for` items bind, and read through a reference parameter, is an entry value: called
+before the call and passed in, the guarantee's body reading the kept value where that part is written (by span). A part
+reading only by-value parameters needs none - the caller's argument is the entry value - and one whose type holds
+references cannot be kept: it is read at return, and is an error where what it reaches is what the call may write.
+`return e` is refused on a by-value parameter and on a named result, each with the fix named. Contracts are built when a
+call or the function's own check asks for them, and built again by the function's check if a held-back probe forgot
+their errors.
+
+**Deciding.** At a call, a requirement is asked of the evaluator when every argument is a closed expression - literals,
+data, globals, calls of closed arguments, never a local: the arguments are copied into a body of their own calling the
+requirement (`askBody`), which `interp.DecideAsserts` evaluates beside the asserts; false is an error at the call naming
+the condition, with a note at it. A body only the evaluator runs (an assert's condition, S18c) asks nothing - its fixed
+locals read as their values would otherwise turn `x := 300; assert U8(x) == 44` into a contract error while a plain
+`y := U8(x)` would not be one. A **guarantee** is checked by the evaluator's own lowering: an `interp.Exec` sets
+`Lowerer.Ensures` to the program's contracts, and every call it lowers to a function with guarantees holds its
+arguments, calls the entry bodies, makes the call, calls each guarantee and exits with `ExitKind.Guarantee` where one is
+false - the exit's text naming the guarantee among the lowering's `Guarantees`. DecideAsserts, DecideValues and Bake say
+it at the guarantee, blaming the function, with a note at the call. A build's lowering has no `Ensures`, so nothing of
+this reaches a program. `checked f(x)` is elaborated by the checker into what the program runs: the arguments held in
+`Held` locals, `Holds(Req(...))` for each requirement, the entry values held, the call (marked `Checked`, so the
+evaluator does not check it twice), `Holds(Ens(...))` for each guarantee; `PrimOp.Holds` lowers to a check failing with
+`CONTRACT`. A conversion of a closed value to a number type is asked as `x fits T` is (`conversionAt`).
+
+**Scope relations.** Each `outlives` pair is recorded on the function's body as indexes into its scope variables
+(`Body.Written`) and seeded into the scope pass's summary as an obligation before any body is judged, so calls are held to
+it (O10c, with the contract as the statement that requires it) and `fnValues` refuses the function as a value (T22a)
+with no code of its own. `olang explain` prints a contract's items as written, after a comment naming the results.
+
+**What the corpus needed.** Constant conversions that wrapped on purpose: `KtWrapped U8 = U8(300)` became a call of a
+function converting its parameter (the evaluator still bakes the wrap, which is what the test is about),
+`U8(I8(-1))` and std/ffi's `U64(-42)`/`U64(-5)` read locals. The differential fuzzer's generator wrote conversions of
+literals out of range; a literal there is now a literal of the target type (`conv`).
+
+**Found on the way.** The port's resolver accepted two functions of one name in one module - deliberately, by its
+condition `not (isFunc and prev is a function)`, from M4 - and the checker took the first: the corpus already had two
+`ctNarrow`s (one in the checked-errors section and one the new contract tests added), and the second was silently a call
+of the first. D2 says two such names are an error, and now they are.
+
+**Not built, as decided:** run-time checks anywhere `checked` is not written (no test or `-debug` entry checks); a
+prover; conditions on trait methods, lambdas, externs and destructors. **Mine, left for later:** a requirement whose
+arguments read a fixed local (S8c) is not asked at the call - only closed expressions are.

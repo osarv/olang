@@ -97,7 +97,7 @@ fn (v mut Vec<T>&) Reserve(n I64) {
 }
 
 # the element at position i - "v[i]" (E31). Unchecked, as an array index is (E16): "checked v[i]" checks i against Len()
-# first and fails with BuiltinError.OUT_OF_BOUNDS (E31a, derived from this and Len)
+# first and fails with CheckError.OUT_OF_BOUNDS (E31a, derived from this and Len)
 fn (v Vec<T>&) At(i I64) T { return v.s.data[i] }
 
 # replaces the element at position i - "v[i] = x" (E31), unchecked as At is; "checked v[i] = x" checks it

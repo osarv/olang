@@ -15,7 +15,7 @@
 #   over it, the unwinding to the try's depth, a jump to the clause; what no clause takes is re-encoded under the body's
 #   own list and raised once every scope is closed;
 # - checks (E15a, E16b, D14b, E32): a test and a branch - to an Exit for a guaranteed check, to the try's dispatch with
-#   BuiltinError's code for a checked one.
+#   CheckError's code for a checked one.
 #
 # Placement is the plan's (typed.Plan, M6): the scope pass's (compiler/scope.olang) where Plans holds one per body, else
 # the stand-in DESIGN.md 1.6.1 allows - every site built in the program's scope, every local in its frame, every scope
@@ -67,21 +67,33 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     wanted Map<mir.FnKey, Bool>
     ctorOf Map<types.TypeId, I64>   # a type's constructor's body (twin 0), once looked up
     strOf Map<types.TypeId, I64>    # a type's Str's body, -1 for none, once looked up
+    # D17e: while compiling, the contracts whose guarantees a call the evaluator runs is held to, by the callee's body
+    # (check's Contracts); none for a build. Each guarantee such a call checks is one of Guarantees, which its exit's
+    # message names by position
+    Ensures Map<I64, typed.ContractInfo>
+    Guarantees List<GuaranteeAt>
     indexed Bool = false
     builtinT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
     textT types.TypeId = types.TypeId(-1)
 }
 
-# BuiltinError's words (R20, std/prelude/builtin.olang), in its declared order
+# a guarantee a call evaluated while compiling is held to (D17e): the callee's contract and which guarantee
+type GuaranteeAt struct(Callee I64, Index I64) {
+    Callee
+    Index
+}
+
+# CheckError's words (R20, std/prelude/check.olang), in its declared order
 OutOfBounds I64 = 0
 DivideByZero I64 = 1
 Overflow I64 = 2
 Invalid I64 = 3
 WrongCase I64 = 4
+Contract I64 = 5
 
 fn (lw mut Lowerer&) builtin() types.TypeId {
-    if lw.builtinT < types.TypeId(0) { lw.builtinT = lw.P.PreludeType("std/prelude/builtin", "BuiltinError") }
+    if lw.builtinT < types.TypeId(0) { lw.builtinT = lw.P.PreludeType("std/prelude/check", "CheckError") }
     return lw.builtinT
 }
 
@@ -1209,7 +1221,7 @@ fn (ln mut lowering&) bounds(i mir.Operand, n mir.Operand, incl Bool, chk typed.
     ln.check(hi, chk, kind, OutOfBounds, sp)
 }
 
-# a check: on where ok holds; where it does not, an Exit for a guaranteed one (Abort), or BuiltinError's word to the
+# a check: on where ok holds; where it does not, an Exit for a guaranteed one (Abort), or CheckError's word to the
 # innermost try for a checked one (Try)
 fn (ln mut lowering&) check(ok mir.Operand, chk typed.Check, kind mir.ExitKind, word I64, sp source.Span) {
     if ln.dead or chk == typed.Check.None { return }
@@ -1709,6 +1721,28 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     if ln.dead { return mir.Operand.None }
     args := ln.args(c, callee, fty)
     if ln.dead { return mir.Operand.None }
+    # D17e: a call the evaluator runs is held to its callee's guarantees - its arguments held, the entry values read
+    gid I64 = -1
+    held List<mir.Operand>
+    entries List<mir.Operand>
+    if ln.L.Ensures.Len() > 0 and not c.Checked {
+        match c.Target {
+            case typed.Callee.Body(id) {
+                if ln.guarantees(I64(id)) > 0 { gid = I64(id) }
+            }
+            case _ { }
+        }
+    }
+    if gid >= 0 {
+        ens := try ln.L.Ensures.Get(gid) catch { unreachable }
+        ps := t.Items(t.Params(fty))
+        for i in range I64(args.N) {
+            v := ln.F.Ops[I64(args.At) + i]
+            held.Push(mir.Operand.Copy(mir.L(ln.local(v, ps[i] if i < ps.Len() else t.Plain(types.UnknownT), sp))))
+        }
+        args = ln.F.Args(held.ToArray())
+        for e in ens.Entries { entries.Push(ln.plainCall(e, held, List<mir.Operand>(), sp)) }
+    }
     res := t.Result(fty)
     scopes := ln.passed(mir.PassedCount(t, callee, fty), c.Site)
     ok := ln.F.NewBlock()
@@ -1733,7 +1767,54 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
         return mir.Operand.None
     }
+    if gid >= 0 {
+        ens := try ln.L.Ensures.Get(gid) catch { unreachable }
+        outs List<mir.Operand>
+        if dest != mir.NoLocal {
+            if t.KindOf(res) == types.Kind.Tuple {
+                for k2 in range t.Items(t.Parts(res)).Len() {
+                    outs.Push(mir.Operand.Copy(ln.mk(ln.with(pl(mir.Base.Local(dest)), mir.Proj.Field(k2)))))
+                }
+            } else {
+                outs.Push(mir.Operand.Copy(mir.L(dest)))
+            }
+        }
+        for e in entries { outs.Push(e) }
+        for i in range ens.Ens.Len() {
+            v := ln.plainCall(ens.Ens[i], held, outs, sp)
+            good, bad := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(v, good, bad))
+            ln.start(bad)
+            at := ln.L.Guarantees.Len()
+            ln.L.Guarantees.Push(GuaranteeAt(gid, i))
+            ln.end(mir.Term.Exit(sp, mir.ExitKind.Guarantee, ln.textData($at, sp)))
+            ln.start(good)
+        }
+    }
     if dest == mir.NoLocal { return mir.Operand.None }
+    return mir.Operand.Copy(mir.L(dest))
+}
+
+# how many guarantees a call to body id is held to while compiling (D17e)
+fn (ln mut lowering&) guarantees(id I64) I64 {
+    ens := try ln.L.Ensures.Get(id) catch { return 0 }
+    return ens.Ens.Len()
+}
+
+# a call of a contract's body on operands (D17e): what it gives
+fn (ln mut lowering&) plainCall(body I64, args List<mir.Operand>&, extra List<mir.Operand>&, sp source.Span) mir.Operand {
+    t := ln.T
+    fty := ln.L.Bodies[body].Ty
+    ops List<mir.Operand>
+    for a in args { ops.Push(a) }
+    for a in extra { ops.Push(a) }
+    callee := mir.Callee.Fn(mir.FnKey.Body(typed.BodyId(I32(body))), fty)
+    scopes := ln.passed(mir.PassedCount(t, callee, fty))
+    dest := ln.temp(t.Result(fty), sp)
+    ok := ln.F.NewBlock()
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(ops.ToArray()), scopes, mir.L(dest), true, ok, mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
     return mir.Operand.Copy(mir.L(dest))
 }
 
@@ -1974,6 +2055,13 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         ln.check(a, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.SliceBounds, OutOfBounds, sp)
         b := ln.prim(typed.PrimOp.Le if op == typed.PrimOp.InRangeIncl else typed.PrimOp.Lt, types.BoolT, mir.Operand[v, hi], sp)
         ln.check(b, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+        return v
+    }
+    if op == typed.PrimOp.Holds {
+        # D17e: a contract's condition under checked - true, or CheckError.CONTRACT to the innermost try
+        v := ln.val(args[0])
+        if ln.dead { return mir.Operand.None }
+        ln.check(v, chk if chk != typed.Check.None else typed.Check.Try, mir.ExitKind.Assert, Contract, sp)
         return v
     }
     # a fixed array a reference names, as a run-time-length array value: the pair naming that storage, not a copy of it

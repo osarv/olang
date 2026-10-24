@@ -1,0 +1,13 @@
+# check: fail 'q' is no parameter of this function - an 'outlives' item names its parameters and 'return'
+# D17d: an outlives chain names parameters and "return"
+type Node struct(v I64) {
+    v
+    next Node?& = null
+}
+
+fn link(a mut Node&, b Node&) [b outlives q] { }
+
+fn main() {
+    n := Node(1)
+    link(n, n)
+}

@@ -70,7 +70,8 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     text
     toks
     argOpen mut Array<I64>& = Array<I64>(toks.Len())
-    group mut Array<Bool>& = Array<Bool>(toks.Len())     # a "(" grouping a function type in a list (L18c)
+    # a "(" grouping a function type in a list (L18c), a contract's "[" and an item's ":" (D17): spaced as written below
+    group mut Array<Bool>& = Array<Bool>(toks.Len())
     closes mut Array<I64>& = Array<I64>(toks.Len())
     bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S1b)
     # the tokens with text, by index into toks, and beside each whether a statement end stands before it
@@ -521,7 +522,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     }
     if ka == token.Tok.Dot or kb == token.Tok.Dot { return "" }
     if kb == token.Tok.Bang { return "" }    # "!" is postfix only (E35)
-    if ka == token.Tok.Colon and f.bodyColon[a] { return " " }
+    if ka == token.Tok.Colon and (f.bodyColon[a] or f.group[a]) { return " " }
     if ka == token.Tok.Colon or kb == token.Tok.Colon { return "" }
     if f.prefix(a, rb - 1) {
         # "- -x" stays apart, or it would read as "--"
@@ -552,6 +553,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
         return " "
     }
     if kb == token.Tok.LBrack {
+        if f.group[b] { return " " }      # a contract (D17)
         if ka == token.Tok.RBrace { return f.asWritten(b) }
         if f.operandEnd(a) and ka != token.Tok.Inc and ka != token.Tok.Dec and ka != token.Tok.IntLit and
            ka != token.Tok.FloatLit {

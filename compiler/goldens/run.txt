@@ -459,7 +459,7 @@
 | ok - T29: a type over a declared number does not take its constructor
 | ok - D15: a cursor declared with := from a field read
 | ok - E6c: integer arithmetic wraps
-| ok - BuiltinError.OUT_OF_BOUNDS from a checked index, caught by name and propagated
+| ok - CheckError.OUT_OF_BOUNDS from a checked index, caught by name and propagated
 | ok - R20: try (...) checks arithmetic, shifts, conversions and lengths
 | ok - E15a: checked operations follow IEEE's exceptions
 | ok - T6b/R20: a tried value widened where it lands keeps its checks

@@ -92,7 +92,19 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     nulls List<nullNarrow>   # S8e: the paths known not to be null, each held by a block, and dead once assigned
     rest Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
     restAt I64 = 0
+    # D17: a contract item's body - CtReq, CtEns or CtEntry; in a guarantee's, its results' names, and the entry values
+    # it reads by where each is written (ctKey), each one of its parameters
+    Contract I64 = 0
+    ctResults Map<source.NameId, Bool>
+    ctSubst Map<I64, I64>
+    ctFrom I64 = 0          # where its statements start on the statement stack
 }
+
+CtReq I64 = 1
+CtEns I64 = 2
+CtEntry I64 = 3
+
+fn ctKey(sp source.Span) I64 { return (I64(sp.Start) << 32) | I64(sp.End) }
 
 # S8d: a local narrowed to one case of its enum - the case, the enum, where its payload fields' copies start in the
 # frame's narrowFields, and the block it holds for
@@ -219,6 +231,13 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # T29d, D13c: the literals entering a declared number through its constructor, and the zero values a constructor
     # makes, each with a body giving that value for the evaluator to decide while compiling
     ValueAsks List<ValueAsk>
+    # D17: each function's or constructor's body's contract, its items made bodies of their own, by body - made the
+    # first time it is asked for (ctDone says it was, Contracts holds it where there is one); the calls whose
+    # requirements the evaluator decides, each a body of its own; the conversions likewise (D17g)
+    Contracts Map<I64, typed.ContractInfo>
+    ctDone Map<I64, Bool>
+    ContractAsks List<ContractAsk>
+    GuaranteesSaid Map<pair.Pair<I64, I64>, Bool>  # D17e: the false guarantees said, by the call and the guarantee
     asking Bool = false         # a ValueAsk's body is being built: what it makes asks nothing again
     # G30: an assert's condition is being made a body of its own - a constant variable the instance it is checked for
     # binds is read as its value (a condition's is not: one parse of a local if serves every instance, S8b)
@@ -266,6 +285,24 @@ type AssertAsk struct(Body I64, File I64, Sp source.Span, At source.Span, Cond I
     # the note naming it ("instantiated here, with a.Len() = 6"); "" for none
     Ctx
     CtxText
+}
+
+# a call's requirement the evaluator decides while compiling (D17e), or a conversion's (D17g): the body giving the
+# condition's value (BodyOf.Cond), where the call is (its file and span), where the condition is written (its file and
+# span; the argument's for a conversion), the function diagnostics name ("" for a conversion), the condition as written
+# (the argument for a conversion), the instance it was asked in (G16b), and for a conversion the type
+type ContractAsk struct(Body I64, File I64, At source.Span, CondFile I64, CondSp source.Span, Name String&, Text String&
+    Ctx diag.Where, CtxText String&, Ty String& = "") {
+    Body
+    File
+    At
+    CondFile
+    CondSp
+    Name
+    Text
+    Ctx
+    CtxText
+    Ty
 }
 
 # a value the evaluator decides while compiling (T29d, D13c): what it is, where it is needed (its file and span), its
@@ -432,6 +469,10 @@ fn (c mut Checker&) reset() {
     c.Asks = List<Ask>()
     c.AssertAsks = List<AssertAsk>()
     c.ValueAsks = List<ValueAsk>()
+    c.Contracts = Map<I64, typed.ContractInfo>()
+    c.ctDone = Map<I64, Bool>()
+    c.ContractAsks = List<ContractAsk>()
+    c.GuaranteesSaid = Map<pair.Pair<I64, I64>, Bool>()
     c.Faulty = Map<I64, Bool>()
     c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
     c.writes = Map<pair.Pair<I64, I64>, Bool>()
@@ -2328,6 +2369,11 @@ fn (c mut Checker&) check(id I64) {
         nomatch { }
     }
     c.state[id] = 2
+    # D17: its contract checked with it, so what is wrong in it is said whether a call asks for it or not
+    match c.Bodies[id].Of {
+        case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _) { c.contractChecked(id) }
+        nomatch { }
+    }
     if c.instanceBody(id) { c.roSettleResults(id) }   # T25c: what its calls' results copy, before a caller asks
 }
 
@@ -2906,6 +2952,897 @@ fn storedExpr(x ast.Expr?&, out mut Map<source.NameId, Bool>&) {
         }
         nomatch { }
     }
+}
+
+# ---- contracts (D17) ----
+
+# where body b's contract is written - its function's or constructor's declaration: the contract, the receiver and
+# parameters it reads, the results' names, the module, the context its types are read in, the name diagnostics call
+# it by
+type ctSource struct(K ast.ContractBlock&, Recv ast.Param?&, Params Array<ast.Param&>&, Results Array<source.NameId>&
+    Mi I64, Name String&) {
+    K
+    Recv
+    Params
+    Results
+    Mi
+    Name
+}
+
+# the context a contract is checked in: its function's instance's, its constructor's
+fn (c mut Checker&) ctContext(b I64) generic.Context {
+    match c.Bodies[b].Of {
+        case typed.BodyOf.Fn(inst) { return c.P.FnContext(c.P.InstanceFn(inst), c.P.InstanceArgs(inst)) }
+        case typed.BodyOf.Ctor(t, twin) { return c.P.CtorContext(t, twin) }
+        nomatch { return generic.Context(c.fr().Mi, -1) }
+    }
+}
+
+fn (c mut Checker&) ctSourceOf(b I64) ctSource?&c {
+    match c.Bodies[b].Of {
+        case typed.BodyOf.Fn(inst) {
+            f := c.P.InstanceFn(inst)
+            fd := c.P.FnDecl(f)
+            if fd.S.Contract is null { return null }
+            return ctSource(fd.S.Contract!, fd.Recv, fd.S.Params, fd.S.ResultNames, c.P.FnModule(f), $c.text(fd.Name))
+        }
+        case typed.BodyOf.Ctor(t, twin) {
+            d := c.P.T.DeclOf(t)
+            td := c.P.TypeDecl(d)
+            if td is null or td.Body is null { return null }
+            mi := c.P.T.DeclModule(d)
+            nm := $c.text(td.Name)
+            match td.Body {
+                case ast.TypeBody.Struct(sb) {
+                    if sb.Errs is null or sb.Errs!.Contract is null { return null }
+                    return ctSource(sb.Errs!.Contract!, null, sb.Params, Array<source.NameId>(0), mi, nm)
+                }
+                case ast.TypeBody.Over(_, ctor) {
+                    if ctor is null or ctor.S.Contract is null { return null }
+                    return ctSource(ctor.S.Contract!, null, ctor.S.Params, Array<source.NameId>(0), mi, nm)
+                }
+                nomatch { return null }
+            }
+        }
+        nomatch { return null }
+    }
+}
+
+# whether body b has a contract with conditions, its items checked and made bodies of their own the first time it is
+# asked for (Contracts holds them, ctDone says it was asked) - its "outlives" chains recorded on it then too (D17d)
+fn (c mut Checker&) hasContract(b I64) Bool {
+    if b < 0 or b >= c.Bodies.Len() { return false }
+    if c.ctDone.Has(b) { return c.Contracts.Has(b) }
+    c.ctDone.Put(b, true)
+    src := c.ctSourceOf(b)
+    if src is null { return false }
+    sr := src
+    k := sr.K
+    sig := c.Bodies[b].Ty
+    c.written(b, sig, sr, k)
+    if k.Items.Len() == 0 { return false }
+    results Map<source.NameId, Bool>
+    for n in sr.Results { results.Put(n, true) }
+    # the parameters reading through which sees what the call may change: what an entry value is kept of (D17b)
+    refs Map<source.NameId, Bool>
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    j I64 = 0
+    if sr.Recv is not null {
+        if j < ps.Len() and c.P.T.HoldsRefs(ps[j]) { refs.Put(sr.Recv!.Name, true) }
+        j = 1
+    }
+    for prm in sr.Params {
+        if j < ps.Len() and c.P.T.HoldsRefs(ps[j]) { refs.Put(prm.Name, true) }
+        j++
+    }
+    reqs mut List<ast.Stmt&>&c = List<ast.Stmt&>()
+    ens mut List<ast.Stmt&>&c = List<ast.Stmt&>()
+    for it in k.Items {
+        if itemMentions(it, results) { ens.Push(it) } else { reqs.Push(it) }
+    }
+    info mut typed.ContractInfo&c = typed.ContractInfo(sr.Name, c.P.L.Mods[sr.Mi].File)
+    c.Contracts.Put(b, info)
+    for i in range reqs.Len() {
+        it := reqs[i]
+        id := c.ctBody(b, typed.ContractKind.Req, i, sig, Array<types.TypeId>(0), Array<source.NameId>(0), it.Span())
+        c.ctItems(it)
+        c.ctFinish(id, types.BoolT)
+        info.Reqs.Push(id)
+        info.ReqSps.Push(it.Span())
+        info.ReqTexts.Push($c.P.L.Mods[sr.Mi].Src!.Text[I64(it.Span().Start):I64(it.Span().End)])
+    }
+    if ens.Len() == 0 { return true }
+    # D17b: what a guarantee reads at entry through a reference - each largest part of it mentioning no result, no
+    # "return" and no name a "for" item binds, kept as it was when the call began
+    keys List<I64>
+    bound Map<source.NameId, Bool>
+    for it in ens { entryParts(it, results, refs, bound, keys) }
+    partTys List<types.TypeId>
+    partKeys List<I64>
+    for key in keys {
+        found ast.Expr?&k = null
+        for it in k.Items {
+            if found is null { found = findIn(it, key) }
+        }
+        if found is null { continue }
+        x := found
+        id := c.ctBody(b, typed.ContractKind.Entry, info.Entries.Len(), sig, Array<types.TypeId>(0)
+                       Array<source.NameId>(0), x.Span())
+        v := c.value(c.expr(x, types.UnknownT), x.Span())
+        t := typeOf(v)
+        if t == types.UnknownT or t == types.VoidT or c.P.T.HoldsRefs(t) {
+            # a part holding references names what it names at return too - read then, where nothing it reaches is
+            # what the call may write
+            if t != types.UnknownT and c.P.T.HoldsRefs(t) and c.reachesWritable(x) {
+                c.err(x.Span(), msgs.ContractEntryWritable(c.src(x.Span())))
+            }
+            c.ctFinish(id, types.UnknownT)
+            c.Bodies[id].Root = null
+            continue
+        }
+        c.stmts.Push(typed.Stmt.Return(x.Span(), v))
+        c.ctFinish(id, t)
+        info.Entries.Push(id)
+        partTys.Push(t)
+        partKeys.Push(ctKey(x.Span()))
+    }
+    rs := c.P.T.Results(sig)
+    extra List<types.TypeId>
+    xnames List<source.NameId>
+    for i in range rs.Len() {
+        extra.Push(rs[i])
+        xnames.Push(sr.Results[i] if i < sr.Results.Len() else source.NameId(0))
+    }
+    for t in partTys {
+        extra.Push(t)
+        xnames.Push(source.NameId(0))
+    }
+    for i in range ens.Len() {
+        it := ens[i]
+        id := c.ctBody(b, typed.ContractKind.Ensures, i, sig, extra.ToArray(), xnames.ToArray(), it.Span())
+        fr := c.fr()
+        for n in sr.Results { fr.ctResults.Put(n, true) }
+        base := c.cur().Params.Len() - partTys.Len()
+        for q in range partKeys.Len() { fr.ctSubst.Put(partKeys[q], I64(c.cur().Params[base + q])) }
+        c.ctItems(it)
+        c.ctFinish(id, types.BoolT)
+        info.Ens.Push(id)
+        info.EnsSps.Push(it.Span())
+        info.EnsTexts.Push($c.P.L.Mods[sr.Mi].Src!.Text[I64(it.Span().Start):I64(it.Span().End)])
+    }
+    return true
+}
+
+# a function's own check asks for its contract (checkFn, ctorChecked) - one made first where its errors were forgotten
+# (a probe asking for it held its diagnostics back) made again, so they are said
+fn (c mut Checker&) contractChecked(b I64) {
+    if not c.ctDone.Has(b) {
+        c.hasContract(b)
+        return
+    }
+    info := try c.Contracts.Get(b) catch { return }
+    faulty := false
+    for id in info.Reqs { faulty = faulty or c.Faulty.Has(id) }
+    for id in info.Ens { faulty = faulty or c.Faulty.Has(id) }
+    for id in info.Entries { faulty = faulty or c.Faulty.Has(id) }
+    if not faulty { return }
+    src := c.ctSourceOf(b)
+    if src is null { return }
+    sp := src.K.Sp
+    if c.P.L.Diags.ErrorWithin(info.File, I64(sp.Start), I64(sp.End), 0) { return }
+    c.ctDone.Remove(b)
+    c.Contracts.Remove(b)
+    c.Bodies[b].Written.Clear()
+    c.hasContract(b)
+}
+
+# a contract item's body begun (D17): its function's parameters - read-only, a condition writing nothing - then the
+# extra ones (a guarantee's results and entry values, names their names, 0 for none), and the frame checking it pushed
+fn (c mut Checker&) ctBody(b I64, kind typed.ContractKind, index I64, sig types.TypeId, extra Array<types.TypeId>&
+    xnames Array<source.NameId>&, sp source.Span) I64 {
+    sr := c.ctSourceOf(b)!
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    tys List<types.TypeId>
+    shares List<I64>
+    for i in range ps.Len() {
+        p := ps[i]
+        if c.isRef(p) { p = c.P.T.Ref(c.P.T.Referent(p), c.P.T.PermOf(p) & ~types.Writable) }
+        tys.Push(p)
+        shares.Push(c.P.T.ShareOf(sig, i))
+    }
+    for x in extra {
+        tys.Push(x)
+        shares.Push(types.OwnScope)
+    }
+    result := types.BoolT if kind != typed.ContractKind.Entry else types.UnknownT
+    ty := c.P.T.Func(c.P.T.List(tys.ToArray()), result, types.ListId(0), c.P.T.Scopes(types.RoleFn, shares.ToArray(), I64[types.OwnScope]))
+    id := c.newBody(typed.BodyOf.Contract(typed.BodyId(I32(b)), kind, index), ty, sr.Mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, sr.Mi, result, types.ListId(0))
+    fr.Ctx = c.ctContext(b)
+    fr.Contract = CtReq if kind == typed.ContractKind.Req else (CtEns if kind == typed.ContractKind.Ensures else CtEntry)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    k I64 = 0
+    if sr.Recv is not null {
+        if k < ps.Len() { c.param(sr.Recv!.Name, sr.Recv!.Sp, tys[0], 0, sr.Recv!.Ty) }
+        k = 1
+    }
+    for prm in sr.Params {
+        if k < ps.Len() { c.param(prm.Name, prm.Sp, tys[k], k, prm.Ty) }
+        k++
+    }
+    for i in range extra.Len() { c.param(xnames[i], sp, extra[i], ps.Len() + i) }
+    c.cur().SetVars(c.P.ScopeVarsOf(ty))
+    fr.ctFrom = c.stmts.Len()
+    return id
+}
+
+# a contract item's statements (D17a): a condition false returns false - an item "if not c { return false }", its "for"
+# and "if" items holding theirs - and true at the end
+fn (c mut Checker&) ctItems(it ast.Stmt&) {
+    c.stmt(it)
+    c.stmts.Push(typed.Stmt.Return(it.Span(), c.lit(it.Span(), types.BoolT, 1)))
+}
+
+# a contract item's body finished, its result t (an entry value's, known once it is checked)
+fn (c mut Checker&) ctFinish(id I64, t types.TypeId) {
+    if t != types.BoolT and t != types.UnknownT {
+        b := c.Bodies[id]
+        b.Ty = c.P.T.Func(c.P.T.Params(b.Ty), t, types.ListId(0), c.P.T.ScopesOf(b.Ty))
+    }
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, c.fr().ctFrom))
+    c.pop()
+    c.state[id] = 2
+}
+
+# a condition of a contract (D17a): "if not c { return false }"
+fn (c mut Checker&) ctCond(sp source.Span, k ast.Expr&) {
+    x := c.cond1(k)
+    from := c.stmts.Len()
+    id, outer, mark := c.open(typed.BlockKind.Plain, sp)
+    c.stmts.Push(typed.Stmt.Return(sp, c.lit(sp, types.BoolT, 0)))
+    blk := c.close(id, outer, mark, from)
+    c.emit(typed.Stmt.If(sp, typed.If(c.negate(sp, x), blk, null)))
+}
+
+# "return e" in a guarantee (D17b): e's value when the call returns, read as the guarantee's body runs - only of what is
+# read through a reference, and never of a result, which has no other value
+fn (c mut Checker&) atReturn(sp source.Span, y ast.Expr&, want types.TypeId) typed.Expr&c {
+    fr := c.fr()
+    rsp := source.Span(sp.Start, sp.Start + 6)
+    match y {
+        case ast.Expr.Name(_, n) {
+            if fr.ctResults.Has(n) {
+                c.err(rsp, msgs.ContractReturnOnResult(c.tok(n)))
+                return c.expr(y, want)
+            }
+        }
+        nomatch { }
+    }
+    if fr.Contract != CtEns or not c.readsReference(y) { c.err(rsp, msgs.ContractReturnOnValue("'" $c.src(y.Span()) "'")) }
+    return c.expr(y, want)
+}
+
+# whether an expression in a contract reads a parameter that is a reference or holds one - what a call can change
+fn (c mut Checker&) readsReference(x ast.Expr&) Bool {
+    ns List<source.NameId>
+    namesIn(x, ns)
+    for n in ns {
+        l := c.localNamed(n)
+        if l < 0 or c.cur().Locals[l].Kind != typed.LocalKind.Param or c.fr().ctResults.Has(n) { continue }
+        if c.P.T.HoldsRefs(c.localType(l)) { return true }
+    }
+    return false
+}
+
+# whether an entry value just checked (its body's frame still open) reads through a parameter the call may write: one
+# its function's type gives as a writable reference, or as holding one
+fn (c mut Checker&) reachesWritable(x ast.Expr&) Bool {
+    ns List<source.NameId>
+    namesIn(x, ns)
+    callee I64 = -1
+    match c.cur().Of {
+        case typed.BodyOf.Contract(cb, _, _) { callee = I64(cb) }
+        nomatch { }
+    }
+    if callee < 0 { return false }
+    ps := c.P.T.Items(c.P.T.Params(c.Bodies[callee].Ty))
+    for n in ns {
+        l := c.localNamed(n)
+        if l < 0 { continue }
+        for i in range c.cur().Params.Len().Min(ps.Len()) {
+            if I64(c.cur().Params[i]) == l and (c.writable(ps[i]) or c.holdsWritable(ps[i])) { return true }
+        }
+    }
+    return false
+}
+
+# x fits T (D17a): whether T(x) keeps x's value - what "checked T(x)" checks (E15a), its failure false
+fn (c mut Checker&) fits(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.Expr&c {
+    t := c.resolve(tr)
+    if t == types.UnknownT { return c.unknown(sp) }
+    if not c.isNumber(t) {
+        c.err(tr.Span(), msgs.ContractFitsNotNumber(c.ty(t)))
+        return c.unknown(sp)
+    }
+    x := c.value(c.expr(a, types.UnknownT), a.Span())
+    xt := typeOf(x)
+    if xt == types.UnknownT { return c.unknown(sp) }
+    if not c.isNumber(xt) {
+        c.err(a.Span(), msgs.ContractFitsNotNumber(c.ty(xt)))
+        return c.unknown(sp)
+    }
+    return c.fitsTest(sp, x, t)
+}
+
+# whether a number fits a number type, as a Bool: its conversion checked (E15a), a failure false (D17a, D17g)
+fn (c mut Checker&) fitsTest(sp source.Span, x typed.Expr&c, t types.TypeId) typed.Expr&c {
+    xt := typeOf(x)
+    if c.under(xt) == c.under(t) or c.convWords(xt, t) == 0 { return c.lit(sp, types.BoolT, 1) }
+    from := c.exprs.Len()
+    c.exprs.Push(x)
+    conv := typed.Expr.Prim(sp, t, typed.PrimOp.Convert, typed.Check.Try, gather(c.exprs, from))
+    sfrom := c.stmts.Len()
+    c.stmts.Push(typed.Stmt.Eval(sp, conv))
+    seq := typed.Expr.Seq(sp, types.BoolT, typed.Seq(gather(c.stmts, sfrom), c.lit(sp, types.BoolT, 1)))
+    dfrom := c.exprs.Len()
+    c.exprs.Push(c.lit(sp, types.BoolT, 0))
+    cl := typed.Clause(sp, Array<typed.Item>(0), true, null, gather(c.exprs, dfrom))
+    return typed.Expr.Try(sp, types.BoolT, typed.Try(seq, typed.Clause&[cl], false, false))
+}
+
+# the scope relations body b's contract writes (D17d): each "a outlives b" of a chain, a and b its parameters' scope
+# variables or "return" the result scope, recorded on the body for section 8 - which holds every call to them, so such
+# a function is no value (T22a)
+fn (c mut Checker&) written(b I64, sig types.TypeId, sr ctSource, k ast.ContractBlock&) {
+    if k.Chains.Len() == 0 { return }
+    vars := c.P.T.ScopeVarsOf(sig)
+    for ch in k.Chains {
+        prev I64 = -1
+        for i in range ch.Names.Len() {
+            v := c.scopeVarOf(sig, vars, sr, ch.Names[i], ch.Sps[i])
+            if v >= 0 and prev >= 0 { c.Bodies[b].Written.Push(typed.ScopeRel(prev, v, ch.Sps[i])) }
+            prev = v
+        }
+    }
+}
+
+# the index among vars of the scope variable a name of an "outlives" item stands for; -1 (reported) for none
+fn (c mut Checker&) scopeVarOf(sig types.TypeId, vars Array<I64>&, sr ctSource, n source.NameId, sp source.Span) I64 {
+    want I64 = -3
+    if n == source.NameId(0) {
+        want = types.ResultVar
+    } else {
+        k I64 = 0
+        if sr.Recv is not null {
+            if sr.Recv!.Name == n { want = 0 }
+            k = 1
+        }
+        for prm in sr.Params {
+            if prm.Name == n { want = k }
+            k++
+        }
+        if want == -3 {
+            c.ctErr(sr.Mi, sp, msgs.ContractOutlivesNotParam(c.tok(n)))
+            return -1
+        }
+        # a parameter sharing an earlier one's scope ("&x", O4b) names that one's
+        for i in range 64 {
+            sh := c.P.T.ShareOf(sig, want)
+            if sh < 0 { break }
+            want = sh
+        }
+    }
+    for i in range vars.Len() {
+        if vars[i] == want { return i }
+    }
+    c.ctErr(sr.Mi, sp, msgs.ContractOutlivesNoScope("'return'" if n == source.NameId(0) else c.tok(n)))
+    return -1
+}
+
+# an error said in a contract, in the module it is written in whatever frame asked for the contract
+fn (c mut Checker&) ctErr(mi I64, sp source.Span, m msgs.Msg) I64 {
+    return c.P.L.Diags.Error(diag.Where.Span(c.P.L.Mods[mi].File, I64(sp.Start), I64(sp.End)), m)
+}
+
+# whether a contract item mentions one of its function's results or "return": a guarantee's (D17c)
+fn itemMentions(it ast.Stmt&, results Map<source.NameId, Bool>&) Bool {
+    match it {
+        case ast.Stmt.Assert(_, x, _) { return mentions(x, results) }
+        case ast.Stmt.ForIn(_, f) {
+            if mentions(f.Source, results) { return true }
+            for s in f.Body {
+                if itemMentions(s, results) { return true }
+            }
+            return false
+        }
+        case ast.Stmt.If(_, i) {
+            if i.Cond is not null and mentions(i.Cond!, results) { return true }
+            if i.Then is not null {
+                for s in i.Then!.Body {
+                    if itemMentions(s, results) { return true }
+                }
+            }
+            if i.Else is not null { return itemMentions(i.Else!, results) }
+            return false
+        }
+        nomatch { return false }
+    }
+}
+
+# whether an expression reads one of the names or holds "return e"
+fn mentions(x ast.Expr&, ns Map<source.NameId, Bool>&) Bool {
+    match x {
+        case ast.Expr.Name(_, n) { return ns.Has(n) }
+        case ast.Expr.Unary(_, op, _) {
+            if op == token.Tok.Return { return true }
+        }
+        nomatch { }
+    }
+    kids List<ast.Expr&>
+    children(x, kids)
+    for y in kids {
+        if mentions(y, ns) { return true }
+    }
+    return false
+}
+
+# the expressions an expression is made of, in order (those a contract's conditions are made of, D17)
+fn children(x ast.Expr&, out mut List<ast.Expr&>&) {
+    match x {
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _) { out.Push(a) }
+        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _), ast.Expr.Fits(_, a, _) { out.Push(a) }
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
+            out.Push(a)
+            out.Push(b)
+        }
+        case ast.Expr.Cond(_, a, k, b) {
+            out.Push(a)
+            out.Push(k)
+            out.Push(b)
+        }
+        case ast.Expr.Chain(_, ch) {
+            for e in ch.Xs { out.Push(e) }
+        }
+        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args) {
+            out.Push(f)
+            for e in args { out.Push(e) }
+        }
+        case ast.Expr.Index(_, a, items) {
+            out.Push(a)
+            for e in items { out.Push(e) }
+        }
+        case ast.Expr.Slice(_, a, lo, hi) {
+            out.Push(a)
+            if lo is not null { out.Push(lo) }
+            if hi is not null { out.Push(hi) }
+        }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+            for e in items { out.Push(e) }
+        }
+        case ast.Expr.Compr(_, k) {
+            out.Push(k.Value)
+            out.Push(k.Source)
+            if k.Filter is not null { out.Push(k.Filter!) }
+        }
+        case ast.Expr.Try(_, a, _, _) { out.Push(a) }
+        nomatch { }
+    }
+}
+
+# the names an expression reads
+fn namesIn(x ast.Expr&, out mut List<source.NameId>&) {
+    match x {
+        case ast.Expr.Name(_, n) {
+            out.Push(n)
+            return
+        }
+        nomatch { }
+    }
+    kids List<ast.Expr&>
+    children(x, kids)
+    for y in kids { namesIn(y, out) }
+}
+
+# D17b: the largest parts of a guarantee's items read at entry through a reference parameter (refs) - mentioning no
+# result, no "return" and no name a "for" item binds - each a value the guarantee's body is given as it was when the
+# call began, by where it is written (ctKey). A part reading no reference is the same at either end: the guarantee
+# reads it as it is
+fn entryParts(it ast.Stmt&, results Map<source.NameId, Bool>&, refs Map<source.NameId, Bool>&
+    bound mut Map<source.NameId, Bool>&, out mut List<I64>&) {
+    match it {
+        case ast.Stmt.Assert(_, x, _) { entryOf(x, results, refs, bound, out) }
+        case ast.Stmt.ForIn(_, f) {
+            entryOf(f.Source, results, refs, bound, out)
+            if f.Key != source.NameId(0) { bound.Put(f.Key, true) }
+            bound.Put(f.Name, true)
+            for s in f.Body { entryParts(s, results, refs, bound, out) }
+        }
+        case ast.Stmt.If(_, i) {
+            if i.Cond is not null { entryOf(i.Cond!, results, refs, bound, out) }
+            if i.Then is not null {
+                for s in i.Then!.Body { entryParts(s, results, refs, bound, out) }
+            }
+            if i.Else is not null { entryParts(i.Else!, results, refs, bound, out) }
+        }
+        nomatch { }
+    }
+}
+
+fn entryOf(x ast.Expr&, results Map<source.NameId, Bool>&, refs Map<source.NameId, Bool>&
+    bound Map<source.NameId, Bool>&, out mut List<I64>&) {
+    match x {
+        case ast.Expr.Lit(_, _), ast.Expr.Lambda(_, _), ast.Expr.MatchE(_, _) { return }
+        case ast.Expr.Unary(_, op, _) {
+            if op == token.Tok.Return { return }
+        }
+        nomatch { }
+    }
+    if not mentions(x, results) and not mentions(x, bound) {
+        if mentions(x, refs) { out.Push(ctKey(x.Span())) }
+        return
+    }
+    kids List<ast.Expr&>
+    children(x, kids)
+    for y in kids { entryOf(y, results, refs, bound, out) }
+}
+
+# the expression an item holds written at key (ctKey), null for none
+fn findIn(st ast.Stmt&, key I64) ast.Expr?&st {
+    match st {
+        case ast.Stmt.Assert(_, x, _) { return findX(x, key) }
+        case ast.Stmt.ForIn(_, f) {
+            r := findX(f.Source, key)
+            if r is not null { return r }
+            for i in range f.Body.Len() {
+                q := findIn(f.Body[i], key)
+                if q is not null { return q }
+            }
+        }
+        case ast.Stmt.If(_, i) {
+            if i.Cond is not null {
+                r := findX(i.Cond!, key)
+                if r is not null { return r }
+            }
+            if i.Then is not null {
+                for j in range i.Then!.Body.Len() {
+                    q := findIn(i.Then!.Body[j], key)
+                    if q is not null { return q }
+                }
+            }
+            if i.Else is not null { return findIn(i.Else!, key) }
+        }
+        nomatch { }
+    }
+    return null
+}
+
+fn findX(x ast.Expr&, key I64) ast.Expr?&x {
+    if ctKey(x.Span()) == key { return x }
+    match x {
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a), ast.Expr.Member(_, a, _) { return findX(a, key) }
+        case ast.Expr.IsType(_, a, _, _), ast.Expr.As(_, a, _), ast.Expr.Generic(_, a, _), ast.Expr.Fits(_, a, _) { return findX(a, key) }
+        case ast.Expr.Try(_, a, _, _) { return findX(a, key) }
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
+            r := findX(a, key)
+            return r if r is not null else findX(b, key)
+        }
+        case ast.Expr.Cond(_, a, k, b) {
+            r := findX(a, key)
+            if r is not null { return r }
+            q := findX(k, key)
+            return q if q is not null else findX(b, key)
+        }
+        case ast.Expr.Chain(_, ch) { return findAll(ch.Xs, key) }
+        case ast.Expr.Call(_, f, args), ast.Expr.ScopeCall(_, f, _, args) {
+            r := findX(f, key)
+            return r if r is not null else findAll(args, key)
+        }
+        case ast.Expr.Index(_, a, items) {
+            r := findX(a, key)
+            return r if r is not null else findAll(items, key)
+        }
+        case ast.Expr.Slice(_, a, lo, hi) {
+            r := findX(a, key)
+            if r is not null { return r }
+            if lo is not null {
+                q := findX(lo, key)
+                if q is not null { return q }
+            }
+            if hi is not null { return findX(hi, key) }
+        }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+            return findAll(items, key)
+        }
+        nomatch { }
+    }
+    return null
+}
+
+fn findAll(xs Array<ast.Expr&>&, key I64) ast.Expr?&xs {
+    for i in range xs.Len() {
+        r := findX(xs[i], key)
+        if r is not null { return r }
+    }
+    return null
+}
+
+# ---- contracts at calls (D17e, D17g) ----
+
+# a call to a function with a contract: under checked, its conditions checked by the program (checkedCall); otherwise
+# each requirement asked of the evaluator where every argument is one it can compute
+fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, call typed.Expr&c, target typed.Callee&c
+    args Array<typed.Expr&>&c, site typed.SiteId, cb I64) typed.Expr&c {
+    info := try c.Contracts.Get(cb) catch { return call }
+    if c.fr().Checks > 0 { return c.checkedCall(sp, r, target, args, site, info) }
+    # a body only the evaluator runs (an assert's condition, S18c) asks nothing: its call is asked where it is written
+    if info.Reqs.Len() == 0 or c.fr().Body < 0 or c.evalOnly() { return call }
+    for a in args {
+        if not closedExpr(a) { return call }
+    }
+    fr := c.fr()
+    mi, file := fr.Mi, fr.File
+    old := fr.Body
+    cw, ct := c.P.L.Diags.TopContext()
+    for i in range info.Reqs.Len() {
+        ask := c.askBody(mi, sp, old, info.Reqs[i], args)
+        c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, $ct))
+    }
+    return call
+}
+
+# a body giving the value of condition body body called on args - copies of the arguments of a call in body old, which
+# read nothing of it (closedExpr) - for the evaluator (BodyOf.Cond)
+fn (c mut Checker&) askBody(mi I64, sp source.Span, old I64, body I64, args Array<typed.Expr&>&c) I64 {
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), types.BoolT, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, mi, types.BoolT, types.ListId(0))
+    fr.Ctx = generic.Context(mi, -1)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    efrom := c.exprs.Len()
+    for a in args { c.exprs.Push(c.copyExpr(a, old)) }
+    call mut typed.Expr&c = typed.Expr.Call(sp, types.BoolT, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), gather(c.exprs, efrom)
+                                                                       typed.Mark.None, c.site(typed.SiteKind.Call, sp)))
+    c.stmts.Push(typed.Stmt.Return(sp, call))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    return id
+}
+
+# whether a typed expression reads nothing of the body it is in - no local, no hidden value - so a copy of it in another
+# body computes the same (copyExpr)
+fn closedExpr(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) => true
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) => closedPlace(p)
+        case typed.Expr.Promote(_, _, pr) => closedExpr(pr.X)
+        case typed.Expr.Call(_, _, cl) => closedCall(cl)
+        case typed.Expr.Make(_, _, m) => closedAll(m.Items) and (m.Length is null or closedExpr(m.Length!))
+        case typed.Expr.Prim(_, _, _, _, args) => closedAll(args)
+        case typed.Expr.Slice(_, _, s) => closedPlace(s.Base) and closedExpr(s.Lo) and closedExpr(s.Hi)
+        case typed.Expr.Cond(_, _, k) => closedExpr(k.C) and (k.A is null or closedExpr(k.A!)) and closedExpr(k.B)
+        case typed.Expr.Away(_, _, y) => closedExpr(y)
+        case typed.Expr.Fn(_, _, f) => closedFn(f)
+        case _ => false
+    }
+}
+
+fn closedFn(f typed.FnVal&) Bool {
+    return match f {
+        case typed.FnVal.Named(_) => true
+        case _ => false
+    }
+}
+
+fn closedAll(xs Array<typed.Expr&>&) Bool {
+    for y in xs {
+        if not closedExpr(y) { return false }
+    }
+    return true
+}
+
+fn closedCall(cl typed.Call&) Bool {
+    if cl.Zero or cl.Scoped != typed.Mark.None { return false }
+    match cl.Target {
+        case typed.Callee.Body(_), typed.Callee.Helper(_, _) { return closedAll(cl.Args) }
+        nomatch { return false }
+    }
+}
+
+fn closedPlace(p typed.Place&) Bool {
+    return match p {
+        case typed.Place.Global(_, _, _, _) => true
+        case typed.Place.Deref(_, _, r) => closedExpr(r)
+        case typed.Place.Field(_, _, b, _) => closedPlace(b)
+        case typed.Place.Elem(_, _, e) => closedPlace(e.Base) and closedExpr(e.Index)
+        case typed.Place.Payload(_, _, py) => closedPlace(py.Base)
+        case typed.Place.Temp(_, _, v, _) => closedExpr(v)
+        case _ => false
+    }
+}
+
+# a copy of a closed expression (closedExpr) of body old, for the body being checked - its sites that body's
+fn (c mut Checker&) copyExpr(x typed.Expr&, old I64) typed.Expr&c {
+    match x {
+        case typed.Expr.Lit(sp, ty, bits) { return typed.Expr.Lit(sp, ty, bits) }
+        case typed.Expr.Data(sp, ty, file, k) { return typed.Expr.Data(sp, ty, file, k) }
+        case typed.Expr.Read(sp, ty, p, site) { return typed.Expr.Read(sp, ty, c.copyPlace(p, old), c.reSite(site, old)) }
+        case typed.Expr.Borrow(sp, ty, p) { return typed.Expr.Borrow(sp, ty, c.copyPlace(p, old)) }
+        case typed.Expr.Promote(sp, ty, pr) { return typed.Expr.Promote(sp, ty, typed.Promote(c.copyExpr(pr.X, old), c.reSite(pr.Site, old))) }
+        case typed.Expr.Call(sp, ty, cl) {
+            return typed.Expr.Call(sp, ty, typed.Call(cl.Target, c.copyAll(cl.Args, old), cl.Scoped, c.reSite(cl.Site, old), cl.Zero))
+        }
+        case typed.Expr.Make(sp, ty, m) {
+            items := c.copyAll(m.Items, old)
+            n typed.Expr?&c = null
+            if m.Length is not null { n = c.copyExpr(m.Length!, old) }
+            return typed.Expr.Make(sp, ty, typed.Make(m.Kind, m.Tag, items, n, c.reSite(m.Site, old), m.Checked))
+        }
+        case typed.Expr.Prim(sp, ty, op, chk, args) { return typed.Expr.Prim(sp, ty, op, chk, c.copyAll(args, old)) }
+        case typed.Expr.Slice(sp, ty, s) {
+            return typed.Expr.Slice(sp, ty, typed.Slice(c.copyPlace(s.Base, old), c.copyExpr(s.Lo, old), c.copyExpr(s.Hi, old), s.Checked))
+        }
+        case typed.Expr.Cond(sp, ty, k) {
+            a typed.Expr?&c = null
+            if k.A is not null { a = c.copyExpr(k.A!, old) }
+            return typed.Expr.Cond(sp, ty, typed.Cond(c.copyExpr(k.C, old), a, c.copyExpr(k.B, old)))
+        }
+        case typed.Expr.Away(sp, file, y) { return typed.Expr.Away(sp, file, c.copyExpr(y, old)) }
+        case typed.Expr.Fn(sp, ty, f) {
+            match f {
+                case typed.FnVal.Named(b) { return typed.Expr.Fn(sp, ty, typed.FnVal.Named(b)) }
+                nomatch { }
+            }
+        }
+        nomatch { }
+    }
+    return c.unknown(x.Span())
+}
+
+fn (c mut Checker&) copyAll(xs Array<typed.Expr&>&, old I64) Array<typed.Expr&>&c {
+    from := c.exprs.Len()
+    for y in xs { c.exprs.Push(c.copyExpr(y, old)) }
+    return gather(c.exprs, from)
+}
+
+fn (c mut Checker&) copyPlace(p typed.Place&, old I64) typed.Place&c {
+    match p {
+        case typed.Place.Global(sp, ty, m, n) { return typed.Place.Global(sp, ty, m, n) }
+        case typed.Place.Deref(sp, ty, r) { return typed.Place.Deref(sp, ty, c.copyExpr(r, old)) }
+        case typed.Place.Field(sp, ty, b, i) { return typed.Place.Field(sp, ty, c.copyPlace(b, old), i) }
+        case typed.Place.Elem(sp, ty, e) {
+            return typed.Place.Elem(sp, ty, typed.Elem(c.copyPlace(e.Base, old), c.copyExpr(e.Index, old), e.Checked))
+        }
+        case typed.Place.Payload(sp, ty, py) { return typed.Place.Payload(sp, ty, typed.Payload(c.copyPlace(py.Base, old), py.Tag, py.Checked)) }
+        case typed.Place.Temp(sp, ty, v, site) { return typed.Place.Temp(sp, ty, c.copyExpr(v, old), c.reSite(site, old)) }
+        case typed.Place.Local(sp, ty, l) { return typed.Place.Local(sp, ty, l) }
+        case typed.Place.Target(sp, ty) { return typed.Place.Target(sp, ty) }
+    }
+}
+
+# a site of body old made again in the body being checked, as what it was
+fn (c mut Checker&) reSite(s typed.SiteId, old I64) typed.SiteId {
+    if s < typed.SiteId(0) { return s }
+    si := c.Bodies[old].Sites[I64(s)]
+    return c.site(si.Kind, si.Sp)
+}
+
+ContractWord U64 = 32
+
+# whether the body being checked is one only the evaluator runs - a condition's or an assert's (BodyOf.Cond)
+fn (c mut Checker&) evalOnly() Bool {
+    return match c.cur().Of {
+        case typed.BodyOf.Cond(_, _) => true
+        case _ => false
+    }
+}
+
+# "checked f(x)" of a function with a contract (D17e): its arguments held, each requirement checked, the entry values
+# its guarantees read kept, the call made, then each guarantee checked - a false one failing with CheckError.CONTRACT
+fn (c mut Checker&) checkedCall(sp source.Span, r types.TypeId, target typed.Callee&c, args Array<typed.Expr&>&c
+    site typed.SiteId, info typed.ContractInfo) typed.Expr&c {
+    c.checkOp(typed.Check.None, ContractWord)
+    sfrom := c.stmts.Len()
+    # each argument held where it is not a literal - read again for each condition
+    held List<I64>
+    for a in args {
+        match a {
+            case typed.Expr.Lit(_, _, _) { held.Push(-1) }
+            nomatch {
+                h := c.local(source.NameId(0), a.Span(), typeOf(a), typed.LocalKind.Held, typed.Mark.None)
+                c.emit(typed.Stmt.Let(a.Span(), typed.LocalId(I32(h)), a))
+                held.Push(h)
+            }
+        }
+    }
+    for q in info.Reqs { c.emit(typed.Stmt.Eval(sp, c.holds(sp, q, args, held, List<I64>()))) }
+    extra List<I64>
+    for e in info.Entries {
+        et := c.P.T.Result(c.Bodies[e].Ty)
+        h := c.local(source.NameId(0), sp, et, typed.LocalKind.Held, typed.Mark.None)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), c.bodyCall(sp, e, et, args, held, List<I64>())))
+        extra.Push(h)
+    }
+    efrom := c.exprs.Len()
+    for i in range args.Len() { c.exprs.Push(c.heldArg(args, held, i)) }
+    inner mut typed.Expr&c = typed.Expr.Call(sp, r, typed.Call(target, gather(c.exprs, efrom), typed.Mark.None, site, false, true))
+    res typed.Expr?&c = null
+    outs List<I64>
+    if r == types.VoidT or r == types.NoreturnT {
+        c.emit(typed.Stmt.Eval(sp, inner))
+    } else {
+        h := c.local(source.NameId(0), sp, r, typed.LocalKind.Held, typed.Mark.None)
+        c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(h)), inner))
+        res = c.readLocal(sp, h)
+        if c.P.T.KindOf(r) == types.Kind.Tuple {
+            # several results: each one a guarantee reads, held
+            ps := c.P.T.Items(c.P.T.Parts(r))
+            for k in range ps.Len() {
+                whole mut typed.Place&c = typed.Place.Local(sp, r, typed.LocalId(I32(h)))
+                part := c.local(source.NameId(0), sp, ps[k], typed.LocalKind.Held, typed.Mark.None)
+                c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(part)), typed.Expr.Read(sp, ps[k], typed.Place.Field(sp, ps[k], whole, k), typed.SiteId(-1))))
+                outs.Push(part)
+            }
+        } else {
+            outs.Push(h)
+        }
+    }
+    for x in extra { outs.Push(x) }
+    for q in info.Ens { c.emit(typed.Stmt.Eval(sp, c.holds(sp, q, args, held, outs))) }
+    return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), res))
+}
+
+# argument i of a checked call: its literal, or a read of the local holding it
+fn (c mut Checker&) heldArg(args Array<typed.Expr&>&c, held List<I64>&, i I64) typed.Expr&c {
+    if held[i] < 0 { return args[i] }
+    return c.readLocal(args[i].Span(), held[i])
+}
+
+fn (c mut Checker&) readLocal(sp source.Span, l I64) typed.Expr&c {
+    t := c.localType(l)
+    return typed.Expr.Read(sp, t, typed.Place.Local(sp, t, typed.LocalId(I32(l))), typed.SiteId(-1))
+}
+
+# a contract body called on a checked call's arguments then extra, held to be true under checked (PrimOp.Holds,
+# CheckError.CONTRACT)
+fn (c mut Checker&) holds(sp source.Span, body I64, args Array<typed.Expr&>&c, held List<I64>&, extra List<I64>&) typed.Expr&c {
+    v := c.bodyCall(sp, body, types.BoolT, args, held, extra)
+    from := c.exprs.Len()
+    c.exprs.Push(v)
+    return typed.Expr.Prim(sp, types.BoolT, typed.PrimOp.Holds, typed.Check.Try, gather(c.exprs, from))
+}
+
+fn (c mut Checker&) bodyCall(sp source.Span, body I64, ty types.TypeId, args Array<typed.Expr&>&c, held List<I64>&
+    extra List<I64>&) typed.Expr&c {
+    from := c.exprs.Len()
+    for i in range args.Len() { c.exprs.Push(c.heldArg(args, held, i)) }
+    for l in extra { c.exprs.Push(c.readLocal(sp, l)) }
+    return typed.Expr.Call(sp, ty, typed.Call(typed.Callee.Body(typed.BodyId(I32(body))), gather(c.exprs, from), typed.Mark.None
+                                              c.site(typed.SiteKind.Call, sp)))
+}
+
+# D17g: a conversion to a number type has the requirement "x fits T" - asked of the evaluator where x is a value it
+# computes, so a constant out of range is an error at the conversion
+fn (c mut Checker&) conversionAt(sp source.Span, argSp source.Span, x typed.Expr&c, t types.TypeId) {
+    fr := c.fr()
+    if fr.Contract != 0 or fr.Body < 0 or c.evalOnly() or not closedExpr(x) { return }
+    mi, file := fr.Mi, fr.File
+    old := fr.Body
+    text mut String&c = $c.src(argSp)
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), types.BoolT, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    nf := c.push(id, mi, types.BoolT, types.ListId(0))
+    nf.Ctx = generic.Context(mi, -1)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    c.stmts.Push(typed.Stmt.Return(sp, c.fitsTest(sp, c.copyExpr(x, old), t)))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    cw, ct := c.P.L.Diags.TopContext()
+    c.ContractAsks.Push(ContractAsk(id, file, sp, file, argSp, "", text, cw, $ct, $c.ty(t)))
 }
 
 # ---- frames, blocks and locals ----
@@ -3734,7 +4671,7 @@ fn (c mut Checker&) readLocal(sp source.Span, id I64) typed.Expr&c {
     return c.read(sp, typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id))))
 }
 
-# BuiltinError's words (R20), as bits of an error set's entry (R1c): what each check can fail with
+# CheckError's words (R20), as bits of an error set's entry (R1c): what each check can fail with
 Bounds U64 = 1
 DivideByZero U64 = 2
 Overflow U64 = 4
@@ -3749,7 +4686,7 @@ fn (c mut Checker&) checkOp(off typed.Check, words U64 = Bounds) typed.Check {
     if words == 0 { return off }
     if fr.Checks > 0 {
         fr.Fallible++
-        c.leaks1(c.P.T.ErrWords(c.P.PreludeType("std/prelude/builtin", "BuiltinError"), words))
+        c.leaks1(c.P.T.ErrWords(c.P.PreludeType("std/prelude/check", "CheckError"), words))
         return typed.Check.Try
     }
     if fr.Tries > 0 { fr.Checkable++ }
@@ -4746,10 +5683,17 @@ fn bangOf(t String&) String {
 # adapts to (T6) and a lambda takes its types from (D16a) - never a requirement: exprTo makes it fit
 fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr&c {
     if x is null { return c.unknown(source.Span(0, 0)) }
+    if c.fr().Contract == CtEns and c.fr().ctSubst.Len() > 0 {
+        # D17b: a part of a guarantee read at entry - the value kept of it when the call began
+        l := try c.fr().ctSubst.Get(ctKey(x.Span())) catch default -1
+        if l >= 0 { return c.readLocal(x.Span(), l) }
+    }
     v := c.fold(x)
     if v.Ok { return c.litOf(x, v, want) }
     match x {
         case ast.Expr.Lit(sp, kind) { return c.literal(sp, kind, want) }
+        case ast.Expr.Unary(sp, op, y) if op == token.Tok.Return { return c.atReturn(sp, y, want) }
+        case ast.Expr.Fits(sp, y, t) { return c.fits(sp, y, t) }
         case ast.Expr.Name(sp, n) { return c.name(sp, n)! }
         case ast.Expr.Paren(_, y) { return c.expr(y, want) }
         case ast.Expr.Unary(sp, op, y) { return c.unary(sp, op, y, want)! }
@@ -5881,7 +6825,7 @@ fn isNullLit(x ast.Expr&) Bool {
 }
 
 # x as E.Case (E32): the payload of the case x holds - its one field, or its fields as several results; aborts where x
-# holds another case, fails with BuiltinError.INVALID under try
+# holds another case, fails with CheckError.INVALID under try
 fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.Expr&c {
     x := c.expr(a, types.UnknownT)
     xt := typeOf(x)
@@ -6102,7 +7046,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr?&, hi ast.Exp
             h = c.value(c.exprTo(hi, c.i64()), hi.Span())
         }
         if derived {
-            # E31a's derived CheckedSlice: 0 <= lo <= hi <= Len(), failing with BuiltinError.OUT_OF_BOUNDS before Slice is
+            # E31a's derived CheckedSlice: 0 <= lo <= hi <= Len(), failing with CheckError.OUT_OF_BOUNDS before Slice is
             # called - both bounds held once, in order
             hl := c.hidden(sp, c.i64())
             c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(hl)), l))
@@ -7856,6 +8800,8 @@ fn (c mut Checker&) conversion(sp source.Span, t types.TypeId, args Array<ast.Ex
         c.exprs.Push(x)
         return typed.Expr.Prim(sp, t, typed.PrimOp.Convert, k, gather(c.exprs, from))
     }
+    # D17g: its requirement "x fits T", decided where the evaluator computes x
+    if c.convWords(xt, t) != 0 { c.conversionAt(sp, args[0].Span(), x, t) }
     return c.convert(sp, x, t)
 }
 
@@ -8424,7 +9370,12 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         if changed { r = c.P.T.Tuple(c.P.T.List(nps.ToArray())) }
     }
     c.roCheckCallee(target, r)
-    call := typed.Expr.Call(sp, r, typed.Call(target, gather(c.exprs, from), typed.Mark.None, c.site(typed.SiteKind.Call, sp)))
+    targs := gather(c.exprs, from)
+    site := c.site(typed.SiteKind.Call, sp)
+    call := typed.Expr.Call(sp, r, typed.Call(target, targs, typed.Mark.None, site))
+    # D17e: its callee's contract, decided by the evaluator where it can be, or checked under checked
+    cb := c.bodyOfCallee(target)
+    if cb >= 0 and c.fr().Contract == 0 and c.hasContract(cb) { call = c.contractAt(sp, nsp, r, call, target, targs, site, cb) }
     if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return call
 }
@@ -9332,7 +10283,7 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
 }
 
 # under checked, x[i] on a type with At and Len but no CheckedAt (E31a): the index checked against Len() before At is called,
-# failing with BuiltinError.OUT_OF_BOUNDS - the At call's checked arguments; null where no such check is derived
+# failing with CheckError.OUT_OF_BOUNDS - the At call's checked arguments; null where no such check is derived
 fn (c mut Checker&) derivedCheckedAt(sp source.Span, base typed.Place&c, t types.TypeId, items Array<ast.Expr&>&) Array<typed.Expr&>&c {
     if c.roleMethod(t, "CheckedAt", items.Len()) >= 0 { return Array<typed.Expr&>(0) }
     if c.fr().Checks == 0 {
@@ -9354,7 +10305,7 @@ fn (c mut Checker&) derivedCheckedAt(sp source.Span, base typed.Place&c, t types
 }
 
 # an index checked against what Len() gives (E31a's derived forms): the one checked argument
-# a checked bounds prim over [v, lo, hi] (InRange, InRangeIncl): v once in range, else BuiltinError.OUT_OF_BOUNDS
+# a checked bounds prim over [v, lo, hi] (InRange, InRangeIncl): v once in range, else CheckError.OUT_OF_BOUNDS
 fn (c mut Checker&) prim3(sp source.Span, op typed.PrimOp, v typed.Expr&c, lo typed.Expr&c, hi typed.Expr&c) typed.Expr&c {
     from := c.exprs.Len()
     c.exprs.Push(v)
@@ -10149,6 +11100,7 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Return(sp, values) { c.returnStmt(sp, values) }
         case ast.Stmt.MatchS(sp, m) { c.matchStmt(sp, m) }
         case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
+        case ast.Stmt.Assert(sp, k, msg) if c.fr().Contract != 0 { c.ctCond(sp, k) }
         case ast.Stmt.Assert(sp, k, msg) {
             x := c.cond1(k)
             m := c.message(msg, false)
@@ -13989,7 +14941,7 @@ test "errors: inferred sets across a cycle, checked, words, noreturn and ! (R1a,
     l := testLoad(dir, ("error E {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
                        "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n"
                        "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n"
-                       "fn half(a I32, b I32) I32 ? E.B { return checked (a / b) catch BuiltinError default 0 }\n"
+                       "fn half(a I32, b I32) I32 ? E.B { return checked (a / b) catch CheckError default 0 }\n"
                        "fn never() ? { }\n"
                        "fn pick(n I64) I64 {\n    if n > 0 { return n }\n    die()\n}\n"
                        "fn main() {\n    never()\n    x := try even(4) catch E.A default false\n"

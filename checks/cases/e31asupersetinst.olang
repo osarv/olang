@@ -18,7 +18,7 @@ type Box<T> struct(v T) {
 fn (a Box<T>) Plus(b Box<T>) Box<T> ? {
     return Box(try (a.v + b.v))
 }
-fn (a Box<T>) CheckedPlus(b Box<T>) Box<T> ? BuiltinError {
+fn (a Box<T>) CheckedPlus(b Box<T>) Box<T> ? CheckError {
     return Box(checked (a.v + b.v) catch VErr default a.v)
 }
 Neg mut I64 = -1
