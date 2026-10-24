@@ -96,6 +96,7 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     patterns Map<I64, pattern>         # by the pattern's index in T
     fns List<fnRow>
     fnsOf Map<I64, Bool>               # the modules fns holds
+    fnsAll I64 = -1                    # how many modules there were when allFns last added every one's
     fnSig Map<I64, types.TypeId>       # by function: its signature, receiver first
     fnByName Map<pair.Pair<I64, I64>, I64>  # (module, name): a plain function
     methods Map<pair.Pair<I64, I64>, I64>   # (receiver key, name): the method
@@ -1565,7 +1566,11 @@ fn (p mut Program&) fnsIn(mi I64) {
 }
 
 fn (p mut Program&) allFns() {
-    for mi in range p.L.Mods.Len() { p.fnsIn(mi) }
+    # asked on every method lookup: once every module's are in, there is nothing to look at until another is loaded
+    n := p.L.Mods.Len()
+    if p.fnsAll == n { return }
+    for mi in range n { p.fnsIn(mi) }
+    p.fnsAll = n
 }
 
 fn (p mut Program&) addFns(mi I64, ds Array<ast.Decl&>&) {
