@@ -325,7 +325,7 @@ fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable B
         }
     }
     prev := try t.values.Get(n) catch default -1
-    if prev >= 0 and not (isFunc and t.Entries[prev].Kind == What.Func) {
+    if prev >= 0 {
         r.L.Diags.Error(r.at(mi, sp), msgs.NameInUse(r.tok(n)))
         return
     }
