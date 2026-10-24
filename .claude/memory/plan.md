@@ -242,3 +242,10 @@ on sight per rules.md, "Code rules".
   ~5-minute tier for agents, `make verify` stays the merge gate but skips unchanged work) and wt-arrays2 (the arrays
   batch, port only, re-applying wt-arrays' phase-1 doc and SPEC onto today's master; PROGRESS.md hand-off). 2-hourly
   check-in re-enabled. QAS (dev build -O2 no LTO) and QAR (verbosity: `is` binding, bodyless constructors) asked.
+- 2026-10-24 ~11:50 CEST: arrays batch merged (wt-arrays2 a57c487, verified; QP1-QP4 in the port, seed regenerated
+  between its two stages). Not built (docs/arrays.md section 7): D8f inferred result lengths, G29 for constructors, T7c
+  for comprehensions/reference locals, T7d for mutable private globals; S18e (leading asserts decided at every call) is
+  superseded by today's contracts decision (conditions in brackets). Today's design decisions to build next, in one
+  batch after fastverify: `-quick`; `==` as stored-value equality with case tests (`e == Shape.Circle`, `_`, narrowing)
+  and `is` only for null; nullable `Node?&`; closed traits `for`, side-by-side constraints, `trait A extends B, C`,
+  `big<I64>`; contracts (once their 8 open items are answered). Constructors written on one line in compiler/.
