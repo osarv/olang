@@ -503,8 +503,11 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
     mods := l.Mods
     n := mods.Len()
     keys mut Array<String&>&cfg = Array<String&>(n)
-    inputs := buildInputs(cfg, tests)
-    if inputs == "" { return keys }
+    # under -debug every object's debug information names the program's compile unit, which is the root's file (B2e):
+    # there a module's object is the root's program's as well as its own
+    base := buildInputs(cfg, tests)
+    if base == "" { return keys }
+    inputs := $base $("\nroot " $mods[l.Root].Identity " " $mods[l.Root].Path if cfg.Debug else "")
     hashOf := Array<String&>(n)
     for m in range n {
         md := mods[m]
