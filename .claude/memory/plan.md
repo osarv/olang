@@ -249,3 +249,7 @@ on sight per rules.md, "Code rules".
   batch after fastverify: `-quick`; `==` as stored-value equality with case tests (`e == Shape.Circle`, `_`, narrowing)
   and `is` only for null; nullable `Node?&`; closed traits `for`, side-by-side constraints, `trait A extends B, C`,
   `big<I64>`; contracts (once their 8 open items are answered). Constructors written on one line in compiler/.
+- 2026-10-24 ~13:00 CEST: wt-fastverify merged (dd54032): `make verify` 11.8 -> ~6 min (parallel test targets, two
+  memory lanes for the >1 GB builds, a cached bootstrap in .bootcache/ keyed on all inputs, BOOT_FRESH=1 forces one,
+  shared object store OLANG_OBJECTS, B3j/B3k), `make quick` ~2 min (no clean build/bootstrap/fixed point). Peak 5.4 GB per
+  verify: keep /home/user/vlock at ONE slot. Agents: `make quick` while developing, one full verify at the end.
