@@ -749,3 +749,6 @@ errors and documentation - generic `+` already works).
   should become general listing / tuples: rec grouping only ("a parenthesized list is one item of the list around
   it" - results in function types, constraint sets), no tuple values (D8c). ASKED: under that rule, bring back
   `fn(I64) ? (A, B)` for a function type's error set (removed earlier for named sets)?
+  (Clarified to the user: error sets after `?` are built; `fn(x I64) I64 ? (A, B)` in function types is built today;
+  named sets are decided not built, QAM, and QAM removes the parenthesized form. Rec now: keep it beside named sets as
+  the grouping rule applied.)
