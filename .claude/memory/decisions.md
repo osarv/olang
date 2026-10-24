@@ -936,3 +936,4 @@ errors and documentation - generic `+` already works).
 - DECIDED 2026-10-24 (the user): the iterator/array helper `Any` renamed `Some` (beside `All`; JavaScript's pairing) -
   migrate by tool. Confirmed: no type test of any kind on an open trait's `any` (`is` is null-only; match/as closed
   only).
+- DECIDED 2026-10-24 (the user: "Nah switch that too"): `All` renamed `Every` (Some/Every), with `Any` -> `Some`.
