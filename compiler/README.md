@@ -95,5 +95,6 @@ make emitdiff      # the corpus and std's tests built through emit, run, and eac
 make evaldiff      # the corpus, std's tests and the checks' run cases run by the evaluator, compared with stage 0's runs
 ```
 
-The `*diff` targets build `build/compiler_tools_dump` first. `make verify` runs tokdiff, astdiff, namesdiff, layoutdiff,
-fmtdiff and drvdiff, with the compiler `make bootstrap` installs (`OLANG ?= build/olang`).
+The `*diff` targets build `build/compiler_tools_dump` first. `make verify` and `make quick` run tokdiff, astdiff,
+namesdiff, layoutdiff, fmtdiff and drvdiff beside the tests, with the compiler `make bootstrap` installs
+(`OLANG ?= build/olang`).

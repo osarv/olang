@@ -1,3 +1,4 @@
 build
 usertest.olang
 *.log
+.bootcache

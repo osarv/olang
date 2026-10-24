@@ -37,11 +37,13 @@ naming, `-i` against `-b`, the scope sanitizer, the fuzzer on fixed seeds.
 ```
 make test                              # runs it with the rest of the suite
 build/olang test checks/checks.olang       # only this
+CHECKS_TIMES=t.txt build/olang test checks/checks.olang   # and write how long each check took, longest first
 ```
 
 Every check works in its own directory under `build/checks/`, so nothing touches the tree. It uses the compiler in
 `$OLANG`, else `build/olang`. The run needs several GB of memory (the largest scenario, `agree`, about 3.5 GB).
 
-Part of `make verify`. The messages the cases expect are produced by `compiler/msgs.olang`;
+Part of `make verify` and `make quick`, where it is the longest part: it starts first and finishes last. The scenarios are
+queued longest first, as `CHECKS_TIMES` measured them. The messages the cases expect are produced by `compiler/msgs.olang`;
 `compiler/goldens/diag.txt` is captured from the `fail` cases, and `compiler/goldens/run.txt` holds what each `run`
 case printed under stage 0 (`make rungold` captures it again; a case it does not hold is held to its status alone).
