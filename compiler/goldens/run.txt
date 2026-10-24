@@ -2,6 +2,23 @@
 | status 0
 === test tests/Lib.olang
 | status 0
+=== test tests/any.olang
+| status 0
+| ok - T32a: an any holds a struct borrowed, temporaries built where it lands, numbers, enums and text copied
+| ok - T32b: a mut method through a mut any writes the instance itself
+| ok - T32c: an any of another module's trait, its default through the table, generic code over it
+| ok - T33: == is the same instance; an any renders its instance
+| ok - T34: type cases bind the instance itself; as gives it, or fails under checked
+| ok - D17f: a trait's contract and the instance's own, checked through an any
+| ok - T32b: an any Iterator walked by for-in and its defaults
+| ok - K2: anys evaluated while compiling agree with the run time
+| ok - T32a: arrays and conversions of them are copied into the box
+| ok - E11a: $ counts an any as a reference, 8 deep
+| ok - T32a: an any Iterator whose element type some defaults do not fit
+| ok - T34: type cases naming a generic's instances
+| ok - D8a: a trait's defaults through an any
+| ok - E19: an array literal of anys, rendered as written
+| ok - M21: a method of one instance is not another's
 === test tests/runner.olang
 | status 0
 | ok - calling back across the cycle from runner
@@ -415,6 +432,7 @@
 | ok - E30: ordering comparisons chain, each operand evaluated once; == does not chain
 | ok - E29: membership - Has for an element, Contains for a run of the collection's own type
 | ok - E28/E29/E30: evaluated while compiling, as at run time
+| ok - E30: literals in chains adapt; indexes of any integer type; arrays of two lengths compared
 | ok - E28: written texts and array literals of different lengths, and an enum case as a receiver
 | ok - S4c/D12b: parallel assignment swaps; several names share one type
 | ok - L4a: a block comment is whitespace, and a line break where it spans one
@@ -472,6 +490,7 @@
 | ok - the evaluator models function values and interfaces, and bakes enums carrying payloads
 | ok - D16: lambdas take their types from where they are passed, and from their bodies
 | ok - a signature renders as it is written, its scopes included
+| ok - D16, S1b: a lambda's one-line body
 | ok - D16c: a lambda captures values by copy and references by reference
 | ok - T21: a function value is one value in fields, elements and copies, and compares by code and captures
 | ok - D16e: a spawned lambda captures its loop's variables per task
@@ -498,6 +517,11 @@
 | ok - M19e: an override of a generic trait's default runs from generic code
 | ok - E33: a float's bits, and a float from bits
 | ok - E33a: a signalling NaN keeps its payload, quieted or not
+| ok - E36: a number type's limits
+| ok - E37: an integer's bit operations
+| ok - L13-L15, L14a: escapes by number, and raw text
+| ok - E5: the bitwise operators bind tighter than the comparisons
+| ok - T17e: raw values
 | ok - S19: deferred code runs on every way out of its block, while compiling and at run time
 | ok - S19a: deferred code runs before its block's scope closes
 | ok - a block inside a catch clause closes at its own brace
@@ -756,6 +780,11 @@
 | ok - T2c: an array is never null - its zero value is the empty array
 | ok - C2d/E28: a conditional or match passed to a constructor lands with the instance
 | ok - T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run
+| ok - D17e: requirements and guarantees hold where the evaluator computes the calls - baked and run
+| ok - D17e: checked f(x) checks a requirement before the call and a guarantee after it, with CheckError.CONTRACT
+| ok - D17a: for and if items, fits, a constructor's contract - checked where asked for
+| ok - D17d, D17f: written scope relations are obligations; a function with value conditions is a value, unchecked
+| ok - D17g: a conversion checked at run time keeps its own words
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -846,7 +875,7 @@
 === test std/http.olang
 | status 0
 | ok - the response is the last of what curl received
-| ok - curl's exit status names the HttpError
+| ok - curl's exit status names the Error
 | ok - what cannot be sent as given is refused before anything runs
 | ok - requests against a local server
 === test std/io.olang
@@ -1616,6 +1645,15 @@
 | status 0
 === run t2cnarrow.olang
 | status 0
+=== run t32anyconvcopy.olang
+| status 0
+| lab0
+| I64[0, 7]
+| lab1
+| I64[1, 7]
+| lab2
+| I64[2, 7]
+| hello Zello
 === run t6adefine.olang
 | status 0
 === run t7aelemkept.olang
