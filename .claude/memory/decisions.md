@@ -783,3 +783,8 @@ errors and documentation - generic `+` already works).
   writes `checked f(x)`. Still open (renumbered): 1 the failing `checked` error `BuiltinError.CONTRACT`; 2 test/-debug
   builds check every contract on entry (rec yes); 3 functions with conditions may be values, calls through them
   unchecked; 4 no conditions on trait methods now; 5 no `ensures` now; 6 a command printing the inferred signature.
+- CONTRACTS 2026-10-24: the user, torn on run-time checks ("it will allow extra instructions to be added"): rec run-time
+  checking only where `checked f(x)` is written (the same opt-in as `checked a[i]`), failing with `CheckError.CONTRACT`
+  (the user: "not built-in remember" - CheckError per QAI); undecidable calls unchecked otherwise; DROP the
+  test/-debug entry checks (instructions not written). Awaiting a yes; still open: functions with conditions as values
+  (calls through them unchecked), no trait-method conditions, no `ensures`, a command printing inferred signatures.
