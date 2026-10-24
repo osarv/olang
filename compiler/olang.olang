@@ -774,6 +774,12 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     interp.DecideAsserts(c, asserts)
     if clean { interp.Bake(c) }
     if d.Errors() > 0 { error build.Failed.REPORTED }
+    # X9: the libraries the program links, loaded into this process for its externs to be found (B3e)
+    for ln in l.Links() {
+        why := interp.LoadLibrary(ln)
+        if why != "" { d.Error(diag.Where.Nowhere, msgs.InterpLink($ln[2:] if ln.StartsWith("-l") else $ln, why)) }
+    }
+    if d.Errors() > 0 { error build.Failed.REPORTED }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)

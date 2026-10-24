@@ -6098,7 +6098,11 @@ stops the interpreter, saying so and naming the task, since nothing else runs to
 and no task in sight waits that time out, as the built program would with nothing to wake it.) Values whose type
 declares a destructor are **not yet interpreted** - except directly in a global's own initializer, whose instance
 lands in the program's scope and is never destructed (K2c); reaching one stops the same way, as does an `extern`
-function with an `F16` or `BF16` parameter or result (an array of either is passed, X3). Whenever the interpreter
+function with an `F16` or `BF16` parameter or result (an array of either is passed, X3), or with a struct or an extern
+type's reference for one (X10, X11). The libraries the program links (X9) are loaded into the interpreting process before
+`main` runs, a library's name as its shared library (`libNAME.so`), so its functions are found as the built program
+finds them; one that cannot be loaded - a static library, an object, a library not there - is an error naming it and
+why. Whenever the interpreter
 stops a program on something it does not run, the blocks it is in are still left as the built program, which would
 go on, leaves them: their deferred code (§6.9) runs, innermost first, before the stop is reported. Where the built
 program itself ends - `os.Exit`, a check failing - deferred code runs only where the built program's

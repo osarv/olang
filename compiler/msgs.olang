@@ -230,6 +230,7 @@ type Diag enum {
     ForeignBuilt
     ForeignByValue
     LinkName
+    InterpLink
     MutOnValueType
     MutOnValueParam
     MutOnValueField
@@ -1227,6 +1228,9 @@ fn CallbackNotExport() Msg { return Msg(Diag.CallbackNotExport, "X13", "a C func
 
 # ERR_LINK_NAME
 fn LinkName(tok String&) Msg { return Msg(Diag.LinkName, "X9", $tok " names no library and no file - write a library's name, as 'link \"m\"', or a path to one, as 'link \"lib/libx.a\"'") }
+
+# ERR_INTERP_LINK
+fn InterpLink(text String&, why String&) Msg { return Msg(Diag.InterpLink, "B3e", "the library '" $text "' a link names cannot be loaded into interpret: " $why " - build the program instead") }
 
 # ERR_MUT_ON_VALUE_TYPE
 fn MutOnValueType(ty String&) Msg { return Msg(Diag.MutOnValueType, "T25b", "'mut' makes a reference writable, and " $ty " is no reference") }

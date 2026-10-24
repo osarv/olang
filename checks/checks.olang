@@ -1497,6 +1497,10 @@ fn cinterop(r mut report&) ? Failed {
     if os.Exists("/usr/include/zlib.h") {
         try r.expect(sh(dir, "\"$OLANG\" bindgen /usr/include/zlib.h -output zlib.olang > out.txt 2>&1 && cat zlib.olang zdemo.part > zdemo.olang") == 0, "bindgen of zlib.h", dir)
         try r.expect(sh(dir, "\"$OLANG\" build zdemo.olang > out.txt 2>&1 && ./build/zdemo > zdemo.txt && grep -q 'back: hello hello' zdemo.txt") == 0, "zdemo", dir)
+        # B3e: interpret loads the libraries a program links, and says which it cannot
+        try r.expect(sh(dir, "\"$OLANG\" zinterp.olang > zb.txt 2>&1 && \"$OLANG\" interpret zinterp.olang > zi.txt 2>&1 && cmp -s zb.txt zi.txt && grep -q 'crc 3610a686' zi.txt") == 0, "zinterp", dir)
+        try r.expect(sh(dir, "sed 's/link \"z\"/link \"nosuchlib\"/' zinterp.olang > zbad.olang && \"$OLANG\" interpret zbad.olang > out.txt 2>&1") != 0 and
+                     outOf(dir).Contains("error[B3e]: the library 'nosuchlib' a link names cannot be loaded"), "interpret's missing library", dir)
     }
     if sh(dir, "command -v python3 > /dev/null 2>&1") != 0 { return }
     try os.WriteFile($dir "/use_ctypes.py", CtypesScript) catch os.Error { try r.failed("use_ctypes.py", dir) }
