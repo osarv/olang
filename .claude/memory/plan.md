@@ -290,9 +290,3 @@ on sight per rules.md, "Code rules".
   items (limits/bit ops, one-line lambdas, raw values, text literals, bitwise precedence) and the array-literal leak.
 - 2026-10-24: lang24 round 4 merged (9171148, verified): T30a `type A trait extends B, C`, T31a closed traits
   `type Float trait for F16, BF16, F32, F64 { }` (prelude number traits now closed), G19 intersections `<T Shape House>`.
-- FOUND 2026-10-24 by wt-small (the array-literal leak's fix, not fixed): a fixed array that lives in a place (a fixed
-  local, `x := I64[i, 3]`) made a run-time-length array VALUE - `v = x`, `return x` from a function returning
-  `Array<I64>` - takes the conversion's copy in the PROGRAM scope (emit's convert fallback), ~16 bytes an element an
-  evaluation; the consumers copy again where the value goes. Fix: give the conversion's storage a site (the checker),
-  placed by the scope pass, or make the converted value a view no consumer adopts. A literal or fill converted is fixed
-  (lower: made at its own site).
