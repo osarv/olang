@@ -22600,3 +22600,72 @@ no declaration to give a length. With no store checked for its length, the guara
 match its fixed storage" can no longer fire from a program (the assertloc fixture lost that case); its lowering stays
 for an undecided length. Dead code went with the spellings: `typed.Slice`'s view flag and a declaration's constant
 parameters in the type table.
+
+## The edit-test loop: `make quick`, and a faster `make verify` (2026-10-24)
+
+Development felt slow because the one way to test a change was `make verify`, which took 13.5 minutes on c50fc15 and
+11.8 on today's master (its new seed shortened the bootstrap). Measured part by part, on a machine otherwise quiet:
+
+| part | c50fc15 | master 7e4c24a |
+|---|---|---|
+| the seed's 43 objects, one clang at a time | 111 s | - |
+| stage 1 (the seed's compiler building the source) | 141 s | - |
+| stage 2 and 3 | 38 s | - |
+| the test files, one after another | 450 s, of it checks/checks.olang 138 s | - |
+| the runner, checkir, the six diffs | 68 s | - |
+| total | 810 s, 2.7 GB at most | 709 s, 2.35 GB |
+
+Everything after the bootstrap ran one process at a time on a four-core machine, though each test file is a process
+of its own already (B3a). **What was built** (decided, mine):
+
+- **The suite runs side by side** (`make suite`, `PARALLEL` at a time, default the core count): every test file a make
+  target of its own (`test@FILE`), checks/checks.olang first and the longest compiler modules after it, the runner and
+  the diffs among them, make's `-Otarget` printing each file's output whole, a failing part named in `build/failed.txt`
+  and the others going on. The test builds over a gigabyte (scope, views, olang, emit; lower, check, shared, interp) run
+  in two lanes, one after another in each (order-only prerequisites), which took the peak from 6.4-8.1 GB to 5.4-5.7.
+- **Builds side by side in one directory had to become safe and cheap (B3k)**, and that was a real bug, not just a
+  cost: a build wrote a unit's IR to its readable name and had clang read it there, so a second build writing the same
+  name truncated the file under the first one's clang (and, for two programs with different IR under one name, could
+  have compiled one program's code into the other's object). clang now reads a file of its own process
+  (`NAME.PID.tmp.ll`), renamed to the readable name once compiled. And four compiler test builds started together each
+  compiled the same imported objects: 76 duplicate compiles, 236 s of clang, in one clean suite. A build now claims an
+  object (`NAME.lock`, a directory holding its process number) and the others wait for it; a claim whose process has
+  gone, or older than half an hour, is taken over. A checks scenario (`sidebyside`) builds three programs sharing a
+  module side by side through a clang that writes down every object it is asked for, and none is asked for twice.
+- **The checks' builds share their objects (B3j, `OLANG_OBJECTS`)**: every case built in a fresh directory, so the
+  prelude's objects were copied in and everything else - std/io for 306 cases, std/os, the runtime for every mode - was
+  compiled again: 1,059 of 3,467 s of the suite's clang time was an object made again that another directory had
+  already made. An object's name is a hash of its IR, flags and clang, so a store keyed by that name is exact; the cases
+  and strheld's programs take objects from `build/checks/objects` (hard links, `os.Link`, new) and leave theirs there,
+  across runs too. The scenarios that check how builds reuse objects keep theirs to themselves.
+- **checks/checks.olang ends sooner**: `CHECKS_TIMES` writes each check's time; it showed `strheld`, 29 programs each
+  built three ways and interpreted one after another in one scenario, at 77-129 s - the last check to finish. Its
+  programs are checks of their own now (`strheld/NAME`, reported under the one test), the scenarios are queued longest
+  first as measured, and the fuzzer's two seeds run two at a time.
+- **The seed's objects compile side by side** (`make bootstrap` runs `make -j` for them): 111 -> about 30 s.
+- **A bootstrap is reused only for exactly its inputs** (`boot`, `.bootcache/`, kept across `make clean`): the seed,
+  compiler/, all of std/, the makefile, clang's and ld's versions, the processor (the build is for the machine it runs
+  on) and the checkout's path (the compiler holds its absolute std paths). An entry is written only after stage 2 and
+  stage 3 compared equal; `BOOT_FRESH=1` bootstraps regardless. A bootstrap is a function of those inputs - stage 2 ==
+  stage 3 is the evidence that it is deterministic - so reusing one loses nothing. `build/olang` no longer depends on
+  the seed's objects, only on the sources it is built from (it is the third build, the same whichever seed started).
+- **`make quick`**, the edit-test loop: the suite on the compiler already built, which is rebuilt once by itself when a
+  source of it is newer (the objects and `build/rec` it left reused), bootstrapped only when there is none. It leaves
+  out exactly what only `make verify` checks: a clean `build/`, the bootstrap from the seed, and the compiler rebuilding
+  itself identically - so a change to the code generator reaches the compiler's own code first in `make verify`.
+
+**Measured** (master 7e4c24a merged, four cores; the load of other agents moved every run, by up to twice):
+
+| | before | after |
+|---|---|---|
+| `make verify`, bootstrapping | 709 s (11.8 min), 2.35 GB | 360 s (6.0 min), 5.4 GB |
+| `make verify`, bootstrap reused | - | 343 s (5.7 min), 5.4 GB |
+| `make quick`, nothing changed | - | 127 s, 3.4 GB |
+| `make quick` after an edit to compiler/scope.olang | - | 137 s, 4.5 GB |
+
+With the suite side by side, the four cores are saturated (3.7 of 4 on average), so what is left is work, not waiting:
+checks/checks.olang alone is 245 s of the clean suite's 295 and two thirds of `make quick`'s CPU. **Weighed and not
+done**: caching a diff's or a test file's outcome by its inputs - a test reads files and runs the compiler while it
+runs, so its inputs cannot be listed exactly, and the diffs' inputs include the compiler binary, which nearly every edit
+changes; building tests without -O3 and LTO (QAS, the user's question); starting the suite on stage 2 before stage 3
+(4 s). Two verifies side by side now need about 11 GB, against 4.7 before.

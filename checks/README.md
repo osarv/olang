@@ -38,9 +38,13 @@ naming, `-i` against `-b`, the scope sanitizer, the fuzzer on fixed seeds.
 make test                              # runs it with the rest of the suite
 build/olang test checks/checks.olang       # only this
 CHECKS_TIMES=t.txt build/olang test checks/checks.olang   # and write how long each check took, longest first
+CHECKS_WORKERS=8 build/olang test checks/checks.olang      # eight checks at a time (four by default)
 ```
 
-Every check works in its own directory under `build/checks/`, so nothing touches the tree. It uses the compiler in
+Every check works in its own directory under `build/checks/`, so nothing touches the tree. The cases' builds, and the
+programs of the `strheld` scenario (each a check of its own), share one store of objects, `build/checks/objects`
+(`OLANG_OBJECTS`, SPEC B3j): an object one of them compiled the others take, and so does the next run while its IR is
+the same. The other scenarios, which check how builds reuse objects, keep theirs to themselves. It uses the compiler in
 `$OLANG`, else `build/olang`. The run needs several GB of memory (the largest scenario, `agree`, about 3.5 GB).
 
 Part of `make verify` and `make quick`, where it is the longest part: it starts first and finishes last. The scenarios are
