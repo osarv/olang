@@ -4771,11 +4771,11 @@ compiler/ast:TopBranch	32 8	%"compiler/ast:TopBranch"	{ %"compiler/source:Span",
 compiler/ast:TopBranch&	8 8	ptr	-	-
 compiler/ast:TopIf	32 8	%"compiler/ast:TopIf"	{ ptr, ptr, ptr, ptr }	fields 0,8,16,24
 compiler/ast:TopIf&	8 8	ptr	-	-
-compiler/ast:TypeBody	24 8	{ i64, [2 x i64] }	-	cases 0;0;0;0,8
+compiler/ast:TypeBody	56 8	{ i64, [6 x i64] }	-	cases 0;0;0,16,32;0,8
 compiler/ast:TypeBody&	8 8	ptr	-	-
 compiler/ast:TypeDecl	40 8	%"compiler/ast:TypeDecl"	{ i32, { i64, ptr }, i1, ptr }	fields 0,8,24,32
 compiler/ast:TypeDecl&	8 8	ptr	-	-
-compiler/ast:TypeParam	24 8	%"compiler/ast:TypeParam"	{ %"compiler/source:Span", i32, ptr }	fields 0,8,16
+compiler/ast:TypeParam	40 8	%"compiler/ast:TypeParam"	{ %"compiler/source:Span", i32, ptr, { i64, ptr } }	fields 0,8,16,24
 compiler/ast:TypeParam&	8 8	ptr	-	-
 compiler/ast:TypeRef	48 8	{ i64, [5 x i64] }	-	cases 0,8,24;0,8;0,8;0,8,16,20;0,8,16,17
 compiler/ast:TypeRef&	8 8	ptr	-	-
@@ -5636,7 +5636,7 @@ compiler/generic:Origin	24 8	%"compiler/generic:Origin"	{ i64, %"compiler/source
 compiler/generic:Program	552 8	%"compiler/generic:Program"	{ ptr, ptr, %"compiler/types:Table", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", i64, %"compiler/generic:Origin", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/map:Map.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b", %"std/prelude/list:List.6ce2052386e1f5dfc75915f9e44d8f1b" }	fields 0,8,16,272,280,288,296,304,312,320,328,336,344,352,360,368,376,384,392,400,408,416,424,432,440,448,456,464,472,480,488,512,520,528,536,544
 compiler/generic:Program&	8 8	ptr	-	-
 compiler/generic:Undeclared	4 4	i32	-	-
-compiler/generic:Unmet	24 8	%"compiler/generic:Unmet"	{ i64, i32, i32, i1, i1 }	fields 0,8,12,16,17
+compiler/generic:Unmet	24 8	%"compiler/generic:Unmet"	{ i64, i32, i32, i1, i1, i1 }	fields 0,8,12,16,17,18
 compiler/generic:cursor	24 8	%"compiler/generic:cursor"	{ { i64, ptr }, i64 }	fields 0,16
 compiler/generic:cursor&	8 8	ptr	-	-
 compiler/generic:fnRow	24 8	%"compiler/generic:fnRow"	{ i64, ptr, i1 }	fields 0,8,16

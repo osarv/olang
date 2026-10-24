@@ -755,6 +755,7 @@
 | ok - S8e: a break or continue in a null test's block narrows the rest of the turn - baked and run
 | ok - T2c: an array is never null - its zero value is the empty array
 | ok - C2d/E28: a conditional or match passed to a constructor lands with the instance
+| ok - T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range

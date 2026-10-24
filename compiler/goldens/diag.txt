@@ -1577,7 +1577,7 @@ g11named.olang:6:32: error[G11]: a type argument's reference marker is bare, as 
 g11named.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 3 errors
 === g12explicitbound.olang
-g12explicitbound.olang:5:10: error[G19, T31]: Bool does not satisfy the constraint Number on T: Number is sealed - only the types its own module gives 'numberType' satisfy it
+g12explicitbound.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
     5 |     b := sum<Bool>(true)
       |          ^~~~~~~~~
 compilation failed with 1 error
@@ -1698,6 +1698,16 @@ compilation failed with 1 error
 g19arrayspell.olang:4:12: error[G19, E10b]: Array<F64> does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
     4 |   m := Map<Array<F64>, I32>()
       |            ^~~~~~~~~~
+compilation failed with 1 error
+=== g19intersectionnottrait.olang
+g19intersectionnottrait.olang:7:21: error[G6, G19]: iaBox is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)
+    7 | fn iaKeep<T iaShape iaBox>(x T) T { return x }
+      |                     ^~~~~
+compilation failed with 1 error
+=== g19intersectionunmet.olang
+g19intersectionunmet.olang:13:10: error[G19]: iaSq does not satisfy the constraint iaHouse on T: it has no method Rooms that fits
+   13 |     b := iaBoth(iaSq(2))
+      |          ^~~~~~
 compilation failed with 1 error
 === g19methodbody.olang
 g19methodbody.olang:8:14: error[G19, E10b]: K does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
@@ -2315,27 +2325,27 @@ nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - 
       |            ^~~~~
 compilation failed with 1 error
 === numtraitbool.olang
-numtraitbool.olang:5:10: error[G19, T31]: Bool does not satisfy the constraint Number on T: Number is sealed - only the types its own module gives 'numberType' satisfy it
+numtraitbool.olang:5:10: error[G19, T31a]: Bool does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
     5 |     r := nbTwice(true)
       |          ^~~~~~~
 compilation failed with 1 error
 === numtraitchar.olang
-numtraitchar.olang:5:10: error[G19, T31]: Char does not satisfy the constraint Integer on T: Integer is sealed - only the types its own module gives 'integerType' satisfy it
+numtraitchar.olang:5:10: error[G19, T31a]: Char does not satisfy the constraint Integer on T: Integer is closed, met by I8, I16, I32, I64, U8, U16, U32, U64 alone
     5 |     c := ncNext('a')
       |          ^~~~~~
 compilation failed with 1 error
 === numtraitclaim.olang
-numtraitclaim.olang:9:10: error[G19, T31]: nfFake does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
-    9 |     h := nfHalf(nfFake(1.0))
+numtraitclaim.olang:7:10: error[G19, T31a]: nfFake does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
+    7 |     h := nfHalf(nfFake(1.0))
       |          ^~~~~~
 compilation failed with 1 error
 === numtraitextends.olang
-numtraitextends.olang:7:10: error[G19, T31]: ntDist does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+numtraitextends.olang:7:10: error[G19, T31a]: ntDist does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
     7 |     h := ntHalf(ntDist(4.0))
       |          ^~~~~~
 compilation failed with 1 error
 === numtraitsqrtint.olang
-numtraitsqrtint.olang:7:10: error[G19, T31]: I64 does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
+numtraitsqrtint.olang:7:10: error[G19, T31a]: I64 does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
     7 |     r := nsRoot(n)
       |          ^~~~~~
 compilation failed with 1 error
@@ -4985,10 +4995,43 @@ t2creadmaybenull.olang:4:28: error[T2c]: 'm' is a N?&, which may be null - read 
     4 | fn get(m N?&) I64 { return m.v }
       |                            ^
 compilation failed with 1 error
+=== t30aextendedmethod.olang
+t30aextendedmethod.olang:14:10: error[G19]: eaSq does not satisfy the constraint eaDwelling on T: it has no method Rooms (eaHouse's) that fits
+   14 |     a := eaArea(eaSq(2))
+      |          ^~~~~~
+compilation failed with 1 error
+=== t30aextendsitself.olang
+t30aextendsitself.olang:3:26: error[T30a]: 'eaOne' extends itself through the traits it extends
+    3 | type eaOne trait extends eaTwo { }
+      |                          ^~~~~
+t30aextendsitself.olang:4:26: error[T30a]: 'eaTwo' extends itself through the traits it extends
+    4 | type eaTwo trait extends eaOne { }
+      |                          ^~~~~
+compilation failed with 2 errors
+=== t30aextendsnottrait.olang
+t30aextendsnottrait.olang:4:26: error[T30a]: eaBox is not a trait, so a trait cannot extend it - a type takes a trait's methods by declaring them
+    4 | type eaBad trait extends eaBox { }
+      |                          ^~~~~
+compilation failed with 1 error
 === t30sep.olang
 t30sep.olang:3:28: error: expected '}', found 'Perim'
     3 | type Sh trait { Area() I32 Perim() I32 }
       |                            ^~~~~
+compilation failed with 1 error
+=== t31aclosedunmet.olang
+t31aclosedunmet.olang:6:10: error[G19, T31a]: I32 does not satisfy the constraint caSmall on T: caSmall is closed, met by I8, I16 alone
+    6 |     k := caKeep(I32(3))
+      |          ^~~~~~
+compilation failed with 1 error
+=== t31amembermissing.olang
+t31amembermissing.olang:5:31: error[T31a]: I64 is listed by 'caSized' but has no method 'Area' that fits - declare it, or leave I64 out
+    5 | type caSized trait for caBox, I64 {
+      |                               ^~~
+compilation failed with 1 error
+=== t31amemberopen.olang
+t31amemberopen.olang:6:22: error[T31a]: caShape is an open trait, so it lists no types to take in - list types, or closed traits
+    6 | type caBad trait for caShape, I8 { }
+      |                      ^~~~~~~
 compilation failed with 1 error
 === t31noreturnmeets.olang
 t31noreturnmeets.olang:12:10: error[G19]: Q does not satisfy the constraint Quitter on T: it has no method Quit that fits
