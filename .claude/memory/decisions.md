@@ -917,3 +917,6 @@ errors and documentation - generic `+` already works).
   named (`Round Circle`) or inline as a field list (`Box(w F64, h F64)`, an unnamed struct), or none (`Empty`);
   `Shape.Round(c)` / `Shape.Box(2.0, 3.0)`; narrowing makes `e` its payload (`e.r`, `e.Area()`, `e.w`); `case
   Shape.Round(c)` binds the Circle, `case Shape.Box(w, h)` the fields; `e as Shape.Round` is the Circle. Awaiting a yes.
+- DECIDED 2026-10-24 (the user: "Do it"): enum cases carry one payload type, named (`Round Circle`) or inline fields
+  (`Box(w F64, h F64)`), or none; narrowing makes the value its payload; `as` gives the payload. Still open: `any`
+  questions 1 (value types boxed into any) and 2 (type inspection only on any of a closed trait).
