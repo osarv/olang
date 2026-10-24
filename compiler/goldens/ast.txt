@@ -1241,6 +1241,7 @@ ccb7cb649949d79a 7f6820d277334bef checks/fixtures/chunkpool/budget.olang
 4004cc3e6401a2c0 b4c3e8cd7862f0be checks/fixtures/crash/foreign.olang
 89c0b2728108ae05 f390155e8e7339f7 checks/fixtures/crash/nullpeek.olang
 035a16c4dd36381a 6a5a379ffc5c1487 checks/fixtures/enumwords/enumwords.olang
+4731ba94752fd8cc 6a538ecb3e598e9a checks/fixtures/fix/old.olang
 0ec5c7693ee93eb1 82be6c27738a0459 checks/fixtures/format/broken.olang
 1c4e2d6fdb5b630a d0ae4b9741377609 checks/fixtures/format/ugly.olang
 78178d02de755613 0f306444977c5cec checks/fixtures/frameenv/envcheck.olang
@@ -1396,6 +1397,7 @@ c620f4a2d429496f 42f4ff42a9eedbe6 compiler/emit.olang
 a0317a7782891ba9 b19de5e3b8169bfc compiler/eval.olang
 2b221e89b74fdf56 904888ab08af2e41 compiler/explain.olang
 352150b83e1a2c29 bd81c5aa73e7ac84 compiler/fetch.olang
+2556407fd49bcda6 61f6efcd8dac6fd2 compiler/fix.olang
 1618602a8a57baac d4f22f3e1fa9fe7c compiler/fmt.olang
 0f48f85eaa12928e 700b1a91b090a9a7 compiler/generic.olang
 3710a68a794a358f e4b4a4c64d8aeafd compiler/interp.olang
