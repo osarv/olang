@@ -10,7 +10,7 @@ fn two(i I64) mut Node&, mut Node& {
     n := Node(i)
     return n, n
 }
-fn main() ? io.IoError {
+fn main() ? io.Error {
     a mut Node?& = null
     for i in range 2 {
         b mut Node?& = null

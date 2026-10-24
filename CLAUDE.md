@@ -867,6 +867,18 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reaches a writable parameter; contract bodies see parameters read-only; one body per item (typed.BodyOf.Contract);
   the evaluator's guarantee checks are a compile-only lowering (`Lowerer.Ensures`), never in a build. Found on the way:
   the port's resolver accepted two functions of one name in a module (D2) - an error now.
+- **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that
+  modules have namespaces"; refined: "chan.Chan can stay no?").** `io.IoError` is `io.Error`, and likewise `os.Error`,
+  `json.Error`, `csv.Error`, `stats.Error`, `rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` and
+  `filepath.Error` (was `PathError`); `net`, `base64`, `hex`, `deque`, `heap`, `flags`, `time`, `utf8` already were. A module named for its main
+  type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `rand.Rand`, as Go's `list.List`); a module with
+  several error types names the others by subject (`linalg.ShapeError`, `http.HeaderError`, `regex.SyntaxError`). The
+  prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `CheckError`,
+  `CaseError`) and must never declare a plain `Error` - a rule in std/README.md. An error escaping `main` now prints
+  its bare type name (`unhandled error: Error.FAILED`, B5 - the type's own name, as ever). `tools/stutter_rename.olang`
+  renames the old names (idempotent; a qualified use anywhere, the bare name only in the module's own std file) and
+  `olang fix` runs it. Migrated: std, compiler, tests, checks, fuzz, bench, docs, SPEC; goldens recaptured (diag.txt
+  by `make diaggold`, tokens/ast/layout by their targets).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

@@ -10,7 +10,7 @@ fn two( ) I64 , I64 { return 1,-2 }   # aligned with the one above
 
 
 fn opt( p Pair2 ?& )Pair2?&p{return p}
-fn main()?io.IoError{
+fn main()?io.Error{
   xs:=I64[1,2,3]
   l := List<List<I64>>( )
   n:=xs.Len()+ xs[0]*-xs[1]

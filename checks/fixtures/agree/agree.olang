@@ -112,7 +112,7 @@ fn adapters(k I32) String {
 extern fn memcpy(d Array<BF16>, s Array<BF16>, n I64) I64
 extern fn memset(p Array<F16>, c I32, n I64) I64
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     z := neg(F64(run - 1))
     try io.Print($z " " $F32(z) " " $F16(z) " " $BF16(z) "\n")
     try io.Print($f32Bits(1152921573326323712 + run) " " $bf16Bits(1157425104234217472 + run) "\n")

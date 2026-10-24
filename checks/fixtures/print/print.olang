@@ -1,6 +1,6 @@
-# M19f: std/io's words for writing text - fallible with IoError, written with try; built and interpreted alike
+# M19f: std/io's words for writing text - fallible with io.Error, written with try; built and interpreted alike
 import "std/io"
-fn main() ? io.IoError {
+fn main() ? io.Error {
     n := 42
     try io.Print("n is ")
     try io.Println($n)

@@ -2522,7 +2522,7 @@ noextendsop.olang:6:18: error[T29f]: Meters does not extend its base, so it take
       |                  ^
 compilation failed with 1 error
 === nomainhidden.olang
-nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? IoError'
+nomainhidden.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? io.Error'
     3 | fn main() ?error {
       |            ^~~~~
 compilation failed with 1 error
@@ -3443,7 +3443,7 @@ protoprivshape.olang:7:10: note: 'str' is Str's private spelling with Str's para
       |          ^~~
 compilation failed with 2 errors
 === qerror.olang
-qerror.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? IoError'
+qerror.olang:3:12: error[R1a]: '?' alone is what the body can fail with - write '?', or name the types: '? io.Error'
     3 | fn main() ?error {
       |            ^~~~~
 compilation failed with 1 error
@@ -3471,7 +3471,7 @@ r1apromise.olang:14:5: error[R9]: B can escape here, and this function does not 
       |     ^~~
 compilation failed with 1 error
 === r1bfunctype.olang
-r1bfunctype.olang:3:12: error[R1b]: a function type writes its error set - '? IoError' - since no body says what it is
+r1bfunctype.olang:3:12: error[R1b]: a function type writes its error set - '? io.Error' - since no body says what it is
     3 | fn apply(f fn(x I64) I64 ?, x I64) I64 ? { return try f(x) }
       |            ^~
 r1bfunctype.olang:3:51: error[R8]: nothing here can fail - write it without 'try'
@@ -3479,7 +3479,7 @@ r1bfunctype.olang:3:51: error[R8]: nothing here can fail - write it without 'try
       |                                                   ^~~
 compilation failed with 2 errors
 === r1btrait.olang
-r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? IoError' - since no body says what it is
+r1btrait.olang:4:5: error[R1b]: a trait's method writes its error set - '? io.Error' - since no body says what it is
     4 |     Read() I64 ?
       |     ^~~~
 compilation failed with 1 error
@@ -4442,8 +4442,8 @@ strcalleespawnlambda.olang:26:13: error[E11c, O12]: '$' does not say where a val
    26 |     return $peek(b.head)
       |             ^~~~
 strcalleespawnlambda.olang:22:18: note: built here, where the receiver's part it was handed lives
-   22 |     join { spawn fn() { try io.Println($n.v) catch io.IoError { } } }
-      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   22 |     join { spawn fn() { try io.Println($n.v) catch io.Error { } } }
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === strcatchnode.olang
 strcatchnode.olang:19:44: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here

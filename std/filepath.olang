@@ -141,7 +141,7 @@ fn Join(a String&, b String&, c String& = "", d String& = "", e String& = "", f 
 }
 
 # what Rel fails with: no relative path can be known from the text alone
-error PathError {
+error Error {
     UNRELATED
 }
 
@@ -149,12 +149,12 @@ error PathError {
 # lexical processing alone, as Clean is: Rel("/a", "/a/b/c") is "b/c", Rel("/a/b", "/a/c") is "../c", Rel("a", "a") is
 # ".". Fails with UNRELATED where no such path can be known without asking the file system: one path is absolute and
 # the other is not, or "base" climbs out of where "target" is through ".." ("../x" from "a")
-fn Rel(base String&, target String&) String ? PathError {
+fn Rel(base String&, target String&) String ? Error {
     b := Clean(base)
     t := Clean(target)
     if t == b { return "." }
     if b == "." { b = b[:0] }
-    if IsAbs(b) != IsAbs(t) { error PathError.UNRELATED }
+    if IsAbs(b) != IsAbs(t) { error Error.UNRELATED }
     bl := b.Len()
     tl := t.Len()
     b0 I64 = 0
@@ -170,7 +170,7 @@ fn Rel(base String&, target String&) String ? PathError {
         b0 = bi
         t0 = ti
     }
-    if b[b0:bi] == ".." { error PathError.UNRELATED }
+    if b[b0:bi] == ".." { error Error.UNRELATED }
     if b0 == bl { return t[t0:] }
     ups I64 = 1                                  # one ".." for each element of base left
     for i in range b0, bl {

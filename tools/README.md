@@ -18,8 +18,8 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `perm_mut.olang` | T25b: `mut` speaks only about what a reference reaches | `build/tools_perm_mut [--olang PATH] [-j N] FILE\|DIR...` |
 | `int_literal_i64.olang` | T6a: an integer literal's own type is `I64` | `build/tools_int_literal_i64 [--olang PATH] [-j N] FILE\|DIR...` |
 | `io_print.olang` | M19f: the prelude's `print` words became `io.Print` and friends | `build/tools_io_print [--dry] PATH...` |
-| `io_try.olang` | puts `try` before `io.Print`-family calls (they fail with `IoError`) | `build/tools_io_try PATH...` |
-| `io_fix.olang` | after `io_try`: adds `?`/`io.IoError`, `try` and `catch` from the compiler's errors | `build/tools_io_fix OLANG FILE...` |
+| `io_try.olang` | puts `try` before `io.Print`-family calls (they fail with `io.Error`) | `build/tools_io_try PATH...` |
+| `io_fix.olang` | after `io_try`: adds `?`/`io.Error`, `try` and `catch` from the compiler's errors | `build/tools_io_fix OLANG FILE...` |
 | `errors_migrate.olang` | the errors batch: Try forms renamed Checked, `try` that only checked made `checked`, `try` on calls that now fail | `build/tools_errors_migrate OLANG FILE\|DIR...` |
 | `donefail_migrate.olang` | S16: `done`, `fail` and `abort` removed - `!`, `try`, `assert`, `return`, `unreachable` | `build/tools_donefail_migrate FILE\|DIR...` |
 | `cli_words.olang` | B1: the command line in words (`-b` -> `build`, `-d` -> `-debug`, ...), in commands and `# flags:` | `build/tools_cli_words FILE...` |

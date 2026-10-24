@@ -19,7 +19,7 @@ fn churn() I64 {
 type Bag struct(head mut Node&) {
     head
 }
-fn show(n Node&) { try io.Println($n.v) catch io.IoError { } }
+fn show(n Node&) { try io.Println($n.v) catch io.Error { } }
 fn peek(n Node&) I64 {
     join { spawn show(n) }
     return n.v

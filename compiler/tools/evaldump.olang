@@ -29,7 +29,7 @@ import "../target"
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PrintErrln("usage: evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]") catch io.IoError { }
+        try io.PrintErrln("usage: evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]") catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { os.Exit(run(args)) })
@@ -55,7 +55,7 @@ fn run(args Array<String&>&) I32 {
     consts := cond.Consts()
     # B12: for this machine, as interpret is (the target constants of what clang would build, without clang if none)
     tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
-        try io.PrintErr(d.Render()) catch io.IoError { }
+        try io.PrintErr(d.Render()) catch io.Error { }
         return 1
     }
     consts.Builtins(tg.Os, tg.Arch, tg.Cpu, tg.VectorBits, 1 if tg.Fma else 0, false, false, testBuild)
@@ -69,7 +69,7 @@ fn run(args Array<String&>&) I32 {
     # the asserts the evaluator decides while compiling (S18c): a true one is not tested at run time
     asserts Map<pair.Pair<I64, I64>, Bool>
     interp.DecideAsserts(c, asserts)
-    if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
+    if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.Error { } }
     x := interp.Exec(p, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
     x.Place()
@@ -81,7 +81,7 @@ fn run(args Array<String&>&) I32 {
         for i in range k, args.Len() { x.M.Args.Push(args[i]) }
     }
     status := x.RunTests(d) if testBuild else x.RunMain(d)
-    for key in x.Unlowered { try io.PrintErrln("unlowered " $key) catch io.IoError { } }
-    for g in x.Lw.Gaps { try io.PrintErrln("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.IoError { } }
+    for key in x.Unlowered { try io.PrintErrln("unlowered " $key) catch io.Error { } }
+    for g in x.Lw.Gaps { try io.PrintErrln("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.Error { } }
     return status
 }

@@ -7,14 +7,14 @@
 #     if r.Status != 200 { ... }
 #     doc := try json.Parse(r.Body)
 #
-# A response is a response whatever its status: a 404 or a 500 is an ordinary Response with that Status. HttpError is
+# A response is a response whatever its status: a 404 or a 500 is an ordinary Response with that Status. Error is
 # for what kept a response from arriving at all - the transport, as curl's exit status reports it. Redirects are
 # followed (ten at most), and only http and https URLs are fetched, redirected to or not.
 
 import "os"
 
 # why no response arrived
-error HttpError {
+error Error {
     NO_CURL             # the curl program is not installed (not on PATH), or cannot be run
     BAD_URL             # the URL is malformed, or names a scheme other than http and https
     INVALID             # a method, a header or a URL that cannot be sent as given - a line break or a zero byte in
@@ -65,12 +65,12 @@ fn sameName(a String&, b String&) Bool {
 }
 
 # the response to a GET of url, sending the header fields given
-fn Get(url String&, headers Array<Header>& = Array<Header>(0)) Response ? HttpError {
+fn Get(url String&, headers Array<Header>& = Array<Header>(0)) Response ? Error {
     return try Send("GET", url, headers, "")
 }
 
 # the response to a POST of body to url, as contentType ("application/json", say), with the header fields given
-fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>& = Array<Header>(0)) Response ? HttpError {
+fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>& = Array<Header>(0)) Response ? Error {
     all := Array<Header>(headers.Len() + 1, Header("Content-Type", contentType))     # every field written below
     for i, h in headers { all[i] = h }
     all[headers.Len()] = Header("Content-Type", contentType)
@@ -80,8 +80,8 @@ fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>
 # the response to a request of any method - "PUT", "DELETE", "PATCH", "HEAD" ... - with the header fields given and,
 # for any method but GET and HEAD, body as the request's body, sent with exactly the header fields given (none that
 # curl would add for a body of its own). timeoutMs, when above 0, bounds the whole request in milliseconds.
-fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? HttpError {
-    if method.Len() == 0 or not method.Every(fn(c Char) Bool { return c.IsLetter() }) { error HttpError.INVALID }
+fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? Error {
+    if method.Len() == 0 or not method.Every(fn(c Char) Bool { return c.IsLetter() }) { error Error.INVALID }
     args := List<String&>()
     for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
         "--max-redirs", "10", "-D", "/dev/stderr"] { args.Push(a) }
@@ -97,9 +97,9 @@ fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, ti
     typed := false
     for h in headers {
         if h.Name.Len() == 0 or not h.Name.Every(fn(c Char) Bool { return c > ' ' and c != ':' and c < 0x7F }) {
-            error HttpError.INVALID
+            error Error.INVALID
         }
-        if h.Value.Some(fn(c Char) Bool { return c == '\r' or c == '\n' or c == 0 }) { error HttpError.INVALID }
+        if h.Value.Some(fn(c Char) Bool { return c == '\r' or c == '\n' or c == 0 }) { error Error.INVALID }
         typed = typed or sameName(h.Name, "Content-Type")
         args.Push("-H")
         args.Push($h.Name ": " $h.Value)
@@ -119,42 +119,42 @@ fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, ti
     }
     args.Push("--url")
     args.Push(url)
-    if url.Has(0) { error HttpError.INVALID }      # no command line can carry a zero byte
+    if url.Has(0) { error Error.INVALID }      # no command line can carry a zero byte
     run os.Output&return = try os.Exec(args.ToArray(), body if sending else "")
-        catch os.OsError.NOT_FOUND, os.OsError.DENIED { error HttpError.NO_CURL }
-        catch os.OsError { error HttpError.FAILED }
+        catch os.Error.NOT_FOUND, os.Error.DENIED { error Error.NO_CURL }
+        catch os.Error { error Error.FAILED }
     if run.Status != 0 { try transportError(run.Status) }
     return try response(run.Stderr, run.Stdout)
 }
 
-# the HttpError curl's exit status names
-fn transportError(status I32) ? HttpError {
+# the Error curl's exit status names
+fn transportError(status I32) ? Error {
     match status {
-        case 1, 3 { error HttpError.BAD_URL }
-        case 5, 6 { error HttpError.RESOLVE }
-        case 7 { error HttpError.CONNECT }
-        case 28 { error HttpError.TIMEOUT }
-        case 35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91 { error HttpError.TLS }
-        case 47 { error HttpError.REDIRECTS }
-        case 8, 16, 18, 52, 55, 56, 92 { error HttpError.TRANSFER }
-        case 127 { error HttpError.NO_CURL }
-        nomatch { error HttpError.FAILED }
+        case 1, 3 { error Error.BAD_URL }
+        case 5, 6 { error Error.RESOLVE }
+        case 7 { error Error.CONNECT }
+        case 28 { error Error.TIMEOUT }
+        case 35, 51, 53, 54, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91 { error Error.TLS }
+        case 47 { error Error.REDIRECTS }
+        case 8, 16, 18, 52, 55, 56, 92 { error Error.TRANSFER }
+        case 127 { error Error.NO_CURL }
+        nomatch { error Error.FAILED }
     }
 }
 
 # the response whose header fields curl wrote as "dump" - every response it received, each a status line, its fields
 # and an empty line, the last the one answered with - and whose body is "body"
-fn response(dump String&, body String&) Response ? HttpError {
+fn response(dump String&, body String&) Response ? Error {
     # the last block: from after the last empty line that has a status line after it
     lines := dump.Split("\n")
     start I64 = -1
     for i, line in lines {
         if line.StartsWith("HTTP/") { start = i }
     }
-    if start < 0 { error HttpError.TRANSFER }
+    if start < 0 { error Error.TRANSFER }
     status := lines[start].Trim()
-    space := try status.FindByte(' ') catch { error HttpError.TRANSFER }
-    code := try status[space + 1:].Trim().Split(" ")[0].ParseInt() catch { error HttpError.TRANSFER }
+    space := try status.FindByte(' ') catch { error Error.TRANSFER }
+    code := try status[space + 1:].Trim().Split(" ")[0].ParseInt() catch { error Error.TRANSFER }
     n I64 = 0
     for line in lines[start + 1:] {
         if line.Trim().Len() == 0 { break }
@@ -177,22 +177,22 @@ if TestBuild {
 
     # the word Send fails with, or "ok"
     fn failure(method String&, url String&, headers Array<Header>&, timeoutMs I64) String& {
-        try Send(method, url, headers, "", timeoutMs) catch HttpError.NO_CURL { return "NO_CURL" }
-            catch HttpError.BAD_URL { return "BAD_URL" } catch HttpError.INVALID { return "INVALID" }
-            catch HttpError.RESOLVE { return "RESOLVE" } catch HttpError.CONNECT { return "CONNECT" }
-            catch HttpError.TIMEOUT { return "TIMEOUT" } catch HttpError.TLS { return "TLS" }
-            catch HttpError.REDIRECTS { return "REDIRECTS" } catch HttpError.TRANSFER { return "TRANSFER" }
-            catch HttpError { return "FAILED" }
+        try Send(method, url, headers, "", timeoutMs) catch Error.NO_CURL { return "NO_CURL" }
+            catch Error.BAD_URL { return "BAD_URL" } catch Error.INVALID { return "INVALID" }
+            catch Error.RESOLVE { return "RESOLVE" } catch Error.CONNECT { return "CONNECT" }
+            catch Error.TIMEOUT { return "TIMEOUT" } catch Error.TLS { return "TLS" }
+            catch Error.REDIRECTS { return "REDIRECTS" } catch Error.TRANSFER { return "TRANSFER" }
+            catch Error { return "FAILED" }
         return "ok"
     }
 
     # the word curl's exit status maps to
     fn mapped(status I32) String& {
-        try transportError(status) catch HttpError.BAD_URL { return "BAD_URL" } catch HttpError.RESOLVE { return "RESOLVE" }
-            catch HttpError.CONNECT { return "CONNECT" } catch HttpError.TIMEOUT { return "TIMEOUT" }
-            catch HttpError.TLS { return "TLS" } catch HttpError.REDIRECTS { return "REDIRECTS" }
-            catch HttpError.TRANSFER { return "TRANSFER" } catch HttpError.NO_CURL { return "NO_CURL" }
-            catch HttpError { return "FAILED" }
+        try transportError(status) catch Error.BAD_URL { return "BAD_URL" } catch Error.RESOLVE { return "RESOLVE" }
+            catch Error.CONNECT { return "CONNECT" } catch Error.TIMEOUT { return "TIMEOUT" }
+            catch Error.TLS { return "TLS" } catch Error.REDIRECTS { return "REDIRECTS" }
+            catch Error.TRANSFER { return "TRANSFER" } catch Error.NO_CURL { return "NO_CURL" }
+            catch Error { return "FAILED" }
         return "none"
     }
 
@@ -210,11 +210,11 @@ if TestBuild {
         assert last.Status == 404 and last.Headers.Len() == 3 and (try last.Header("Set-Cookie") catch default "") == "a=1"
         assert last.Headers[2].Value == "b=2" and "Location" != last.Headers[0].Name
         bad := false
-        try response("", "") catch HttpError.TRANSFER { bad = true } catch { }
+        try response("", "") catch Error.TRANSFER { bad = true } catch { }
         assert bad
     }
 
-    test "curl's exit status names the HttpError" {
+    test "curl's exit status names the Error" {
         assert mapped(0) == "FAILED" and mapped(3) == "BAD_URL" and mapped(1) == "BAD_URL" and mapped(6) == "RESOLVE"
         assert mapped(7) == "CONNECT" and mapped(28) == "TIMEOUT" and mapped(60) == "TLS" and mapped(47) == "REDIRECTS"
         assert mapped(56) == "TRANSFER" and mapped(52) == "TRANSFER" and mapped(127) == "NO_CURL" and mapped(99) == "FAILED"
@@ -248,7 +248,7 @@ if TestBuild {
     }
 
     # one request of each kind against the test server - skipped, as passed, where curl is missing
-    fn live(port I64) ? HttpError {
+    fn live(port I64) ? Error {
         base := "http://127.0.0.1:" $port
         hello := try Get($base "/hello")
         assert hello.Status == 200 and hello.Body == "hello" and (try hello.Header("x-test") catch default "") == "a"
@@ -270,7 +270,7 @@ if TestBuild {
         moved := try Get($base "/redirect")
         assert moved.Status == 200 and moved.Body == "hello"
         data := try Get($base "/json")
-        doc := try json.Parse(data.Body) catch json.JsonError { error HttpError.FAILED }
+        doc := try json.Parse(data.Body) catch json.Error { error Error.FAILED }
         assert (try (doc["a"][1] as json.Json.Num) catch default 0.0) == 2.5
         assert failure("GET", $base "/slow", Array<Header>(0), 300) == "TIMEOUT"
         assert failure("GET", "ftp://127.0.0.1:" $port "/", Array<Header>(0), 0) == "BAD_URL"

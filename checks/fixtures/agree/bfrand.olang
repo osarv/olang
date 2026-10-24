@@ -6,7 +6,7 @@ fn next() I64 {
     seed = seed ^ (seed << 17)
     return seed
 }
-fn main() ? io.IoError {
+fn main() ? io.Error {
     b := StringBuilder()
     for i in range 3000 {
         x := next()

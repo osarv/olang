@@ -364,7 +364,7 @@ x := (small
 lambda, with several results or several error items - the item is written in parentheses, whole:
 
 ```
-m Map<String&, (fn(x I64) I64, I64 ? IoError, ParseError)>
+m Map<String&, (fn(x I64) I64, I64 ? io.Error, ParseError)>
 fn apply(f (fn(x I64) I64, I64), n I64) I64
 total := apply((fn(x I64) I64, I64 { return x, x + 1 }), 3)
 fn adder() (fn(x I64) I64, I64)                         # one result, a function of two
@@ -1523,7 +1523,7 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
 See §7 for what a `error-list`'s combined set means. A function type or a lambda (T2, D16) written as an item of a
 list takes one result and one error item, and a function type of several is parenthesized whole there (L18c):
-`f (fn(I64) I64 ? ParseError, IoError)` as a parameter, `g fn(I64) I64 ? ParseError, IoError` as a field or a local.
+`f (fn(I64) I64 ? ParseError, io.Error)` as a parameter, `g fn(I64) I64 ? ParseError, io.Error` as a field or a local.
 
 **D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
 noreturn`) **never returns to its caller**: no path through its body may reach a `return` or fall off its end. Its body is
@@ -2363,16 +2363,16 @@ Every float type has `x.Fixed(n)`: `x` as text with `n` digits after the point (
 **M19f (writing text).** Writing text is `std/io`'s, with no words of the prelude's or of the compiler's own:
 
 ```
-fn Print(t String&) ? IoError            # t, to the standard output
-fn Println(t String& = "") ? IoError     # t and a line end, to the standard output
-fn PrintErr(t String&) ? IoError         # t, to the standard error
-fn PrintErrln(t String& = "") ? IoError  # t and a line end, to the standard error
+fn Print(t String&) ? io.Error            # t, to the standard output
+fn Println(t String& = "") ? io.Error     # t and a line end, to the standard output
+fn PrintErr(t String&) ? io.Error         # t, to the standard error
+fn PrintErrln(t String& = "") ? io.Error  # t and a line end, to the standard error
 ```
 
 Each takes one text: a value is made text where it is written, by `$` and joins (E11a, E11b) - `try io.Println("n is " $n)`.
 `Println` and `PrintErrln` write the text and its line end as one write. Each call writes at once, with nothing held
 back - a buffered writer for much output is `std/io`'s `Writer`. A write the system does not complete fails with
-`IoError`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
+`io.Error`, as `io.Write` does, and is written with `try` like any other fallible call. A write is an effect, so a call
 of one is never evaluated while compiling (K1) and is performed under `interpret` (B3e).
 
 A method may not share a name with a **field** of its receiver type; such a call is a compile-time error, so
@@ -3611,7 +3611,7 @@ what can fail in the postfix expression before it **as written**, exactly what a
 fallible call and operator in it, arguments and every link of a chain included), by **ending the program**: an error
 reaching it ends it as a failed `assert` does (S18) - while a test runs it fails that test, and otherwise the program
 writes `FILE:LINE: ` and the error - its type, named as the program writes it, an imported module's by the base name
-of its path (`io.IoError.FAILED`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
+of its path (`io.Error.FAILED`), and its word - to standard error and aborts. Its trace follows (S18d). Its value is the expression's on
 success. It never turns a check on (built-in arithmetic, indexing and conversions under it stay unchecked; `checked`
 asks for checks, E15a), and nothing leaves the function through it, so the enclosing function needs no `?` for it:
 `fn main() { io.Println("Hello World!")! }` is a program. On a value of a nullable reference type (T2c), `x!` is that
@@ -4626,7 +4626,7 @@ union** — the complete set of errors it may produce, to `try` callers (§7.4) 
 naming it (R9).
 
 **R1c (words in an error set).** An `error-list-item` may name one **word** of an error type - `? ListError.EMPTY`,
-`? ListError.EMPTY, IoError`, `? TextError.NOT_FOUND, TextError.BAD_BASE` - and the set then holds that word of the
+`? ListError.EMPTY, io.Error`, `? TextError.NOT_FOUND, TextError.BAD_BASE` - and the set then holds that word of the
 type and no other, so a function promises exactly the words it raises: `fn (l mut List<T>&) Pop() T ?
 ListError.EMPTY` fails only with `EMPTY`, and `catch ListError.EMPTY` on it is complete (R14). Several words of one
 type are one entry of the set, holding each; a type named whole holds every word, whatever words of it are named
@@ -4648,7 +4648,7 @@ canonical: by the module each type is declared in (its identity, M22), then by n
 set (each module's own, §10) gives it the same codes. A module's importers infer a function's set from its source, as
 they derive its scope obligations (§8 O10b); nothing is written down for them.
 
-**R1b.** A **function type** always writes its error set (`fn(x I64) I64 ? IoError`), and so does a trait's method
+**R1b.** A **function type** always writes its error set (`fn(x I64) I64 ? io.Error`), and so does a trait's method
 signature (T30): no body says what it is, and a value or a constrained call is held to what is written. `?` alone in
 one is a compile-time error. A named function used as a value fits a function type whose set holds every error the
 function can fail with, in any order (T22) - its codes are re-encoded for the type's list where the two differ - and a
@@ -6876,7 +6876,7 @@ type's parameter list having introduced it (G3) - with each `case` naming one or
 when the enclosing generic is instantiated, not at run time. Used as a value (S12b), it is the selected arm's value.
 
 ```
-fn writeVal<T>(fd I32, v T) I64 ? IoError {
+fn writeVal<T>(fd I32, v T) I64 ? io.Error {
     match T {
         case I32  { return write(fd, i32Bytes(v)) }
         case Array<U8> { return write(fd, v) }

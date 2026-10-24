@@ -23305,3 +23305,31 @@ of the first. D2 says two such names are an error, and now they are.
 **Not built, as decided:** run-time checks anywhere `checked` is not written (no test or `-debug` entry checks); a
 prover; conditions on trait methods, lambdas, externs and destructors. **Mine, left for later:** a requirement whose
 arguments read a fixed local (S8c) is not asked at the call - only closed expressions are.
+
+## The std naming pass (2026-10-24)
+
+The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name
+that repeats its module's says what the dot already said. Refined after the first reading ("chan.Chan can stay no?"): a
+module named for its main type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, as Go's `list.List`), so
+`json.Json` and `chan.Chan` were not renamed; only the other names drop the prefix.
+
+**Renamed (every one an error type):** `io.IoError`, `os.OsError`, `json.JsonError`, `csv.CsvError`, `stats.StatsError`,
+`rand.RandError`, `http.HttpError`, `chan.ChanError`, `ffi.FfiError` and `filepath.PathError` (the last repeats only a
+part of its module's name, `path`; renamed with the rest because the module's one error is `Error` in every module that
+has one). Left: `linalg.ShapeError`, `ActivationError`, `SolveError` (several error types, named by subject),
+`http.HeaderError`, `regex.SyntaxError`/`NotFound`, `cancel.Stopped`, and every prelude name (`ListError`, `MapError`,
+`TextError`, `CheckError`, `CaseError`: bare everywhere, so no plain `Error` there, or it would collide with each
+module's own).
+
+**The tool** (`tools/stutter_rename.olang`, re-runnable, idempotent): a qualified use of an old name (after a `.`) is
+renamed anywhere it is written - code, comments, strings, Markdown - and the bare name only inside the module's own
+file in std/, since anywhere else a bare `IoError` can only be a type of the program's own. Run over std, compiler,
+tests, checks, fuzz, bench, editors, docs, tools and SPEC.md (the records HISTORY.md, CLAUDE.md and the memory keep
+the old names, as a record does). Bare mentions in comments and messages were changed by hand (`'? io.Error'` in the
+compiler's R1a/R1b messages, SPEC's `Print` signatures). `tools/io_fix` reads a diagnostic that now begins `Error can
+escape here`. **A visible cost, decided:** an error escaping `main` prints its type's own name alone (B5), so what was
+`unhandled error: IoError.FAILED` is `unhandled error: Error.FAILED`; two checks expect it.
+
+**Goldens:** `make diaggold` changed two rows (one case's source line); tokens, ast and layout were recaptured, and layout's
+rows that stage 0 had and the self-hosted table cannot lay out were renamed in place.
+

@@ -3,7 +3,7 @@
 import "std/io"
 type Res struct(k I64) {
     k
-} destruct { try io.Println("Res destructed " $k) catch io.IoError { } }
+} destruct { try io.Println("Res destructed " $k) catch io.Error { } }
 type Bag struct(n I64) {
     n
 }
@@ -22,13 +22,13 @@ test "failing inside a List element's Str" {
     l.Push(Bag(7))
     l.Push(Bag(3))
     s := $l
-    try io.Println("not reached " $s) catch io.IoError { }
+    try io.Println("not reached " $s) catch io.Error { }
 }
 test "failing inside a field's Str" {
     o := Outer(Bag(2), Bag(7))
     s := "x" $o "y"
-    try io.Println("not reached " $s) catch io.IoError { }
+    try io.Println("not reached " $s) catch io.Error { }
 }
 test "after" {
-    try io.Println("third test runs") catch io.IoError { }
+    try io.Println("third test runs") catch io.Error { }
 }

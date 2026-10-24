@@ -3,7 +3,7 @@
 import "std/io"
 type Res struct(k I64) {
     k
-} destruct { try io.Println("d") catch io.IoError { } }
+} destruct { try io.Println("d") catch io.Error { } }
 type Box<T> struct(x T) {
     x
 }

@@ -18,11 +18,11 @@
 import "std/os"
 import "std/io"
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     args := os.Args()
     for k in range 1, args.Len() {
         path := args[k]
-        text := try os.ReadFile(path) catch os.OsError {
+        text := try os.ReadFile(path) catch os.Error {
             try io.PrintErrln("cli_words: " $path ": cannot be read")
             continue
         }
@@ -37,7 +37,7 @@ fn main() ? io.IoError {
         }
         out := b.ToString()
         if out != text {
-            try os.WriteFile(path, out) catch os.OsError { try io.PrintErrln("cli_words: " $path ": cannot be written") }
+            try os.WriteFile(path, out) catch os.Error { try io.PrintErrln("cli_words: " $path ": cannot be written") }
             try io.Println(path)
         }
     }

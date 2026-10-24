@@ -872,7 +872,7 @@ fn TrailingComma(tok String&) Msg { return Msg(Diag.TrailingComma, "L18a", "a co
 fn VarListCount(n1 I64, n2 I64) Msg { return Msg(Diag.VarListCount, "D12b", $n1 " names need as many values, found " $n2) }
 
 # ERR_ERROR_AFTER_QUESTION
-fn ErrorAfterQuestion() Msg { return Msg(Diag.ErrorAfterQuestion, "R1a", "'?' alone is what the body can fail with - write '?', or name the types: '? IoError'") }
+fn ErrorAfterQuestion() Msg { return Msg(Diag.ErrorAfterQuestion, "R1a", "'?' alone is what the body can fail with - write '?', or name the types: '? io.Error'") }
 
 # ERR_VALUE_AFTER_EQ
 fn ValueAfterEq(text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.ValueAfterEq, "D12", "a declaration's value follows '=' - write '" $text1 " = " $text2 "', or '" $text3 " := " $text4 "'") }
@@ -977,10 +977,10 @@ fn UnknownFunctionMeant(tok String&, text String&) Msg { return Msg(Diag.Unknown
 fn UnknownErrorType(tok String&) Msg { return Msg(Diag.UnknownErrorType, "R1", "unknown error type " $tok) }
 
 # ERR_FUNC_TYPE_ERRS_UNWRITTEN
-fn FuncTypeErrsUnwritten() Msg { return Msg(Diag.FuncTypeErrsUnwritten, "R1b", "a function type writes its error set - '? IoError' - since no body says what it is") }
+fn FuncTypeErrsUnwritten() Msg { return Msg(Diag.FuncTypeErrsUnwritten, "R1b", "a function type writes its error set - '? io.Error' - since no body says what it is") }
 
 # ERR_TRAIT_ERRS_UNWRITTEN
-fn TraitErrsUnwritten() Msg { return Msg(Diag.TraitErrsUnwritten, "R1b", "a trait's method writes its error set - '? IoError' - since no body says what it is") }
+fn TraitErrsUnwritten() Msg { return Msg(Diag.TraitErrsUnwritten, "R1b", "a trait's method writes its error set - '? io.Error' - since no body says what it is") }
 
 # ERR_TYPE_IS_PRIVATE
 fn TypeIsPrivate(tok String&) Msg { return Msg(Diag.TypeIsPrivate, "M6", "type " $tok " is private to its module") }

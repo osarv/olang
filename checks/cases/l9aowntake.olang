@@ -8,7 +8,7 @@ type Pile struct(n I64) {
     own I64 = 3
 }
 fn take(own I64) I64 { return own + 1 }
-fn main() ? io.IoError {
+fn main() ? io.Error {
     p := Pile(2)
     r := take(p.own)
     if r != 4 or p.n != 2 { os.Exit(1) }

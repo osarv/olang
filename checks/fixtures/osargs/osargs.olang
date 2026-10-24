@@ -32,7 +32,7 @@ fn main() ? Bad {
         try say("in work/a: " $name)
     }
     try say("read back: " $(try os.ReadFile("work/a/g.txt") catch default "?"))
-    try os.Remove("work/a") catch os.OsError.NOT_EMPTY { try say("work/a is not empty") } catch { }
-    try os.Stat("work/none") catch os.OsError.NOT_FOUND { try say("work/none is not found") } catch { }
+    try os.Remove("work/a") catch os.Error.NOT_EMPTY { try say("work/a is not empty") } catch { }
+    try os.Stat("work/none") catch os.Error.NOT_FOUND { try say("work/none is not found") } catch { }
     try say("real ends right: " $(try os.RealPath("work/a/../a/g.txt") catch default "").EndsWith("/work/a/g.txt"))
 }

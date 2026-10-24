@@ -123,7 +123,7 @@ fn nested() I64 {
     } catch E.NEG { return 5 } catch E { return 4 }
     return 6
 }
-fn main() ? E, io.IoError {
+fn main() ? E, io.Error {
     try io.Println($earliest())
     try io.Println($classify(7, 1) " " $classify(1, -1) " " $classify(7, -1) " " $classify(1, 2000))
     try io.Println($(try sumSq(I64[1, 2, 3]) catch default -9) " " $(try sumSq(I64[1, -2, 3000]) catch E.NEG default -1 catch default -2))

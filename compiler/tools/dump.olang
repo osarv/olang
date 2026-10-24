@@ -63,20 +63,20 @@ fn main() ? {
         try io.PrintErrln("usage: dump tokens|speed|ast|parse|roundtrip|modules|names|layout FILE...")
         os.Exit(2)
     }
-    os.RunOnStack(1 << 30, fn() { try run(mode, args) catch io.IoError { } })
+    os.RunOnStack(1 << 30, fn() { try run(mode, args) catch io.Error { } })
 }
 
-fn run(mode String&, args Array<String&>&) ? io.IoError {
+fn run(mode String&, args Array<String&>&) ? io.Error {
     out := io.Writer(1)
     std := try os.Env("OLANG_STD") catch default "std"
     if mode == "layout" {
         try layout(out, std, args[2])
-        try out.Flush() catch io.IoError { os.Exit(1) }
+        try out.Flush() catch io.Error { os.Exit(1) }
         return
     }
     if mode == "modules" or mode == "names" {
         program(out, mode, std, args)
-        try out.Flush() catch io.IoError { os.Exit(1) }
+        try out.Flush() catch io.Error { os.Exit(1) }
         return
     }
     prelude := preludeTypes(std)
@@ -95,7 +95,7 @@ fn run(mode String&, args Array<String&>&) ? io.IoError {
             nomatch { parseSpeed(out, src, std, prelude) }
         }
     }
-    try out.Flush() catch io.IoError { os.Exit(1) }
+    try out.Flush() catch io.Error { os.Exit(1) }
 }
 
 # each file the root of a program, loaded - and its names resolved - as "dump modules" and "dump names" print them
@@ -135,8 +135,8 @@ fn program(out mut io.Writer&, mode String&, std String&, args Array<String&>&) 
 # ---- layouts ----
 
 # every group of a golden file of layouts, its program loaded and each type read back and laid out
-fn layout(out mut io.Writer&, std String&, golden String&) ? io.IoError {
-    text := try os.ReadFile(golden) catch os.OsError {
+fn layout(out mut io.Writer&, std String&, golden String&) ? io.Error {
+    text := try os.ReadFile(golden) catch os.Error {
         try io.PrintErrln("dump: cannot read " $golden)
         os.Exit(2)
         unreachable
@@ -288,7 +288,7 @@ fn (l mut loader&) prelude() String {
     b := StringBuilder()
     b.PushChar(' ')
     dir := filepath.Join(l.std, "prelude")
-    names := try os.ReadDir(dir) catch os.OsError { return " " }
+    names := try os.ReadDir(dir) catch os.Error { return " " }
     for n in names {
         if not n.EndsWith(".olang") { continue }
         m := l.load(filepath.Join(dir, n))
@@ -309,11 +309,11 @@ fn (l loader&) target(importer String&, ipath String&) String {
 
 # the module at path, loaded once, its imports with it; -1 where there is no such file
 fn (l mut loader&) load(path String&) I64 {
-    real := try os.RealPath(path) catch os.OsError { return -1 }
+    real := try os.RealPath(path) catch os.Error { return -1 }
     for i in range l.paths.Len() {
         if l.paths[i] == real { return i }
     }
-    src := try source.Read(real) catch os.OsError { return -1 }
+    src := try source.Read(real) catch os.Error { return -1 }
     ts := scan.Scan(src.Text)
     m := l.paths.Len()
     l.paths.Push($real)

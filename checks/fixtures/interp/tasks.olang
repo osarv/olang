@@ -18,7 +18,7 @@ fn consume(c mut chan.Chan<I32>&, total mut Array<I64>&) {
 fn square(n I64) I64 { return n * n }
 
 fn main() ? {
-    defer try io.Println("cleanup ran") catch io.IoError { }
+    defer try io.Println("cleanup ran") catch io.Error { }
     out := Array<I64>(4)
     join {
         for i in range 4 { spawn out[i] = square(i + 1) }

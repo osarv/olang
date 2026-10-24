@@ -17,7 +17,7 @@ fn va(v Vec<I64>&, n I64) Array<I64>&v {
     return v.View()
 }
 fn vb(v Vec<I64>&, n I64) Array<I64>&v { return va(v, n) }
-fn use(c mut CB&) ? io.IoError {
+fn use(c mut CB&) ? io.Error {
     t := b(c, 2)
     u := b(c, 0)
     try io.Println($t $u)

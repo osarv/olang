@@ -104,7 +104,7 @@ fn (s mut Server&) send(body String&) { session.WriteFramed(1, body) }
 
 # one message from the editor
 fn (s mut Server&) handle(body String&) {
-    msg := try json.Parse(body) catch json.JsonError {
+    msg := try json.Parse(body) catch json.Error {
         s.send(errorReply("null", -32700, "the message is not JSON"))
         return
     }
@@ -128,21 +128,21 @@ fn (s mut Server&) handle(body String&) {
         return
     }
     if method == "textDocument/didOpen" {
-        td := try msg["params"]["textDocument"] catch json.JsonError { return }
+        td := try msg["params"]["textDocument"] catch json.Error { return }
         s.opened(str(td, "uri"), str(td, "text"))
         return
     }
     if method == "textDocument/didChange" {
-        p := try msg["params"] catch json.JsonError { return }
-        uri := str(try p["textDocument"] catch json.JsonError { return }, "uri")
-        changes := try p["contentChanges"].AsArr() catch json.JsonError { return }
+        p := try msg["params"] catch json.Error { return }
+        uri := str(try p["textDocument"] catch json.Error { return }, "uri")
+        changes := try p["contentChanges"].AsArr() catch json.Error { return }
         if changes.Len() == 0 { return }
         # full sync: the last change is the whole text
         s.changed(uri, str(changes[changes.Len() - 1], "text"))
         return
     }
     if method == "textDocument/didClose" {
-        td := try msg["params"]["textDocument"] catch json.JsonError { return }
+        td := try msg["params"]["textDocument"] catch json.Error { return }
         s.closed(str(td, "uri"))
         return
     }
@@ -159,10 +159,10 @@ Requests := String&["textDocument/hover", "textDocument/definition", "textDocume
                     "textDocument/completion", "textDocument/formatting"]
 
 fn (s mut Server&) initialize(msg json.Json&, id String&) {
-    encs := try msg["params"]["capabilities"]["general"]["positionEncodings"].AsArr() catch json.JsonError default Array<json.Json&>(0)
+    encs := try msg["params"]["capabilities"]["general"]["positionEncodings"].AsArr() catch json.Error default Array<json.Json&>(0)
     if encs.Len() > 0 {
         for e in encs {
-            if (try e.AsStr() catch json.JsonError default "") == "utf-8" { s.Utf8 = true }
+            if (try e.AsStr() catch json.Error default "") == "utf-8" { s.Utf8 = true }
         }
     }
     caps := $"{\"positionEncoding\":\"" $("utf-8" if s.Utf8 else "utf-16") "\",\"textDocumentSync\":{\"openClose\":true," $
@@ -360,7 +360,7 @@ fn (s mut Server&) fromWorker() {
         }
         if body.StartsWith("{\"jsonrpc\":\"2.0\",\"id\":") {
             # an answer: no longer waited for
-            msg := try json.Parse(body) catch json.JsonError { continue }
+            msg := try json.Parse(body) catch json.Error { continue }
             n := try idOf(msg).ParseInt() catch default -1
             s.Waiting.Remove(n)
         }
@@ -370,17 +370,17 @@ fn (s mut Server&) fromWorker() {
 
 # the worker's note on a file it checked: {"olang":"checked","slot":k,"deps":[...],"foreign":[...]}
 fn (s mut Server&) note(body String&) {
-    msg := try json.Parse(body) catch json.JsonError { return }
-    k := try msg["slot"].AsInt() catch json.JsonError default -1
+    msg := try json.Parse(body) catch json.Error { return }
+    k := try msg["slot"].AsInt() catch json.Error default -1
     if k < 0 or k >= s.Docs.Len() { return }
     s.Pending.Remove(k)
     d := s.Docs[k]
     d.Deps.Clear()
-    deps := try msg["deps"].AsArr() catch json.JsonError { return }
-    for x in deps { d.Deps.Push(try x.AsInt() catch json.JsonError default -1) }
+    deps := try msg["deps"].AsArr() catch json.Error { return }
+    for x in deps { d.Deps.Push(try x.AsInt() catch json.Error default -1) }
     d.Foreign.Clear()
-    foreign := try msg["foreign"].AsArr() catch json.JsonError { return }
-    for x in foreign { d.Foreign.Push($(try x.AsStr() catch json.JsonError default "")) }
+    foreign := try msg["foreign"].AsArr() catch json.Error { return }
+    for x in foreign { d.Foreign.Push($(try x.AsStr() catch json.Error default "")) }
 }
 
 # everything asked answered and everything pending checked, before a shutdown or the end: at most StuckNs
@@ -591,14 +591,14 @@ fn (w worker&) rangeOf(b mut StringBuilder&, p session.Positions&, it diag.Item&
 
 # a request answered
 fn (w mut worker&) answer(body String&) {
-    msg := try json.Parse(body) catch json.JsonError { return }
+    msg := try json.Parse(body) catch json.Error { return }
     id := idOf(msg)
     method := str(msg, "method")
-    p := try msg["params"] catch json.JsonError {
+    p := try msg["params"] catch json.Error {
         w.send(reply(id, "null"))
         return
     }
-    uri := str(try p["textDocument"] catch json.JsonError { return }, "uri")
+    uri := str(try p["textDocument"] catch json.Error { return }, "uri")
     k := w.s.slotOf(uri)
     if k < 0 {
         w.send(reply(id, "null"))
@@ -607,8 +607,8 @@ fn (w mut worker&) answer(body String&) {
     doc := w.s.Docs[k]
     text := try w.overlay.Get(doc.Real) catch default ""
     pos := session.Positions(text, w.s.Utf8)
-    line := try p["position"]["line"].AsInt() catch json.JsonError default 0
-    ch := try p["position"]["character"].AsInt() catch json.JsonError default 0
+    line := try p["position"]["line"].AsInt() catch json.Error default 0
+    ch := try p["position"]["character"].AsInt() catch json.Error default 0
     at := pos.Offset(line, ch)
     cfg := w.Cfg
     d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
@@ -703,12 +703,12 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
 
 # a member of an object as text, "" for none or another kind
 fn str(j json.Json&, key String&) String&j {
-    return try j[key].AsStr() catch json.JsonError default ""
+    return try j[key].AsStr() catch json.Error default ""
 }
 
 # a message's id as JSON writes it, "" for none (a notification)
 fn idOf(msg json.Json&) String {
-    v := try msg["id"] catch json.JsonError { return "" }
+    v := try msg["id"] catch json.Error { return "" }
     return json.Encode(v)
 }
 
@@ -807,10 +807,10 @@ SessionSrc String& = ("import \"std/io\"\n\n# a point on a plane\ntype Point str
                       "fn main() {\n    q := Point(1, 2)\n    io.Println($sum(q))!\n    bad I32 = \"x\"\n}\n")
 
 test "olang lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.OsError { }
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
     path := $dir "/p.olang"
-    try os.WriteFile(path, SessionSrc) catch os.OsError { unreachable "no file" }
+    try os.WriteFile(path, SessionSrc) catch os.Error { unreachable "no file" }
     uri := UriOf(path)
     td := $"{\"uri\":\"" $uri "\"}"
     b := StringBuilder()
@@ -835,12 +835,12 @@ test "olang lsp answers a scripted session: diagnostics, hover, definition, symb
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"textDocument/noSuchThing\",\"params\":{}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.OsError { unreachable "olang lsp did not run" }
+    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, "olang lsp ended with " $out.Status ": " $out.Stderr
     got := Map<String&, String&>()
     diags := ""
     for m in frames(out.Stdout) {
-        msg := try json.Parse(m) catch json.JsonError { unreachable "a message that is no JSON: " $m }
+        msg := try json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " $m }
         if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
         id := idOf(msg)
         if id != "" { got.Put($id, $m) }
@@ -868,7 +868,7 @@ test "a file that does not parse gets its diagnostics, and requests on it answer
                   uri "\"},\"position\":{\"line\":0,\"character\":4}}}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
     b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
-    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.OsError { unreachable "olang lsp did not run" }
+    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.Error { unreachable "olang lsp did not run" }
     assert out.Status == 0, out.Stderr
     assert out.Stdout.Contains("textDocument/publishDiagnostics") and out.Stdout.Contains("\"severity\":1")
     assert out.Stdout.Contains("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":null}"), out.Stdout

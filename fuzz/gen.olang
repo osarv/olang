@@ -2580,7 +2580,7 @@ fn Program(seed U64, ncase I64, only I64, atomics Bool, expect Array<String&>&, 
             prints.Push("    try io.Print(\"" $ci ": \" $K" $ci " \" | \" $c" $ci "(" $g.vars ") \"\\n\")\n")
         }
     }
-    b.Push("fn main() ? io.IoError {\n    if os.Args().Len() > 1000 {\n")
+    b.Push("fn main() ? io.Error {\n    if os.Args().Len() > 1000 {\n")
     b.Push(resets.ToString())
     b.Push("    }\n")
     b.Push(prints.ToString())

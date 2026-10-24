@@ -3152,7 +3152,7 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
         }
     }
     rk := U8(0) if res == types.VoidT else ffi.Code(m.ffiKind(res))
-    out := try ffi.Call(name, kinds, words, rk) catch ffi.FfiError.NOT_FOUND {
+    out := try ffi.Call(name, kinds, words, rk) catch ffi.Error.NOT_FOUND {
         m.refuse(WhyFfiFind)
         return false
     } catch {

@@ -644,7 +644,7 @@ fn Files(mode String&, files Array<String&>&, std String&) I32 {
     prelude := PreludeTypes(std)
     status I32 = 0
     for path in files {
-        src := try source.Read(path) catch os.OsError {
+        src := try source.Read(path) catch os.Error {
             errs.Write("olang: " $path ": cannot be read\n")
             status = 1
             continue
@@ -657,7 +657,7 @@ fn Files(mode String&, files Array<String&>&, std String&) I32 {
         }
         if mode == "-f" {
             if text != src.Text {
-                try os.WriteFile(path, text) catch os.OsError {
+                try os.WriteFile(path, text) catch os.Error {
                     errs.Write("olang: " $path ": cannot be written\n")
                     status = 1
                 }
@@ -669,8 +669,8 @@ fn Files(mode String&, files Array<String&>&, std String&) I32 {
             status = 1
         }
     }
-    try out.Flush() catch io.IoError { return 1 }
-    try errs.Flush() catch io.IoError { return 1 }
+    try out.Flush() catch io.Error { return 1 }
+    try errs.Flush() catch io.Error { return 1 }
     return status
 }
 
@@ -708,7 +708,7 @@ fn (l mut loader&) prelude() String {
     b := StringBuilder()
     b.PushChar(' ')
     dir := filepath.Join(l.std, "prelude")
-    names := try os.ReadDir(dir) catch os.OsError { return " " }
+    names := try os.ReadDir(dir) catch os.Error { return " " }
     for n in names {
         if not n.EndsWith(".olang") { continue }
         m := l.load(filepath.Join(dir, n))
@@ -729,11 +729,11 @@ fn (l loader&) target(importer String&, ipath String&) String {
 
 # the module at path, loaded once, its imports with it; -1 where there is no such file
 fn (l mut loader&) load(path String&) I64 {
-    real := try os.RealPath(path) catch os.OsError { return -1 }
+    real := try os.RealPath(path) catch os.Error { return -1 }
     for i in range l.paths.Len() {
         if l.paths[i] == real { return i }
     }
-    src := try source.Read(real) catch os.OsError { return -1 }
+    src := try source.Read(real) catch os.Error { return -1 }
     ts := scan.Scan(src.Text)
     m := l.paths.Len()
     l.paths.Push($real)

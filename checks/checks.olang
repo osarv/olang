@@ -127,7 +127,7 @@ fn writeTimes(took Array<I64>&) {
         name := Checks[k] if k < Checks.Len() else $"cases/" $Cases[k - Checks.Len()]
         b.Push($(took[k] / 1000000) " " $name "\n")
     }
-    try os.WriteFile(path, b.ToString()) catch os.OsError { }
+    try os.WriteFile(path, b.ToString()) catch os.Error { }
 }
 
 # check number k: a scenario, or a case after them
@@ -155,7 +155,7 @@ fn passed(name String&) Bool {
 # whether an outcome is a pass, printing it when it is not
 fn reported(outcome String&) Bool {
     if outcome.Len() == 0 { return true }
-    try io.PrintErr(outcome) catch io.IoError { }
+    try io.PrintErr(outcome) catch io.Error { }
     return false
 }
 
@@ -269,7 +269,7 @@ fn runCase(name String&) String& {
                 body.Push($line "\n")
             }
         }
-        try os.WriteFile($dir "/" $name, body.ToString()) catch os.OsError { return failure($name ": not copied", dir) }
+        try os.WriteFile($dir "/" $name, body.ToString()) catch os.Error { return failure($name ": not copied", dir) }
         if sh(dir, $store() " \"$OLANG\" doc " $flags " " $name " " $check[3:].Trim() " > out.txt 2>&1") != 0 {
             return failure($name ": olang doc failed", dir)
         }
@@ -713,7 +713,7 @@ fn manymods(r mut report&) ? Failed {
         try os.WriteFile($dir "/" $name ".olang", "fn F() I32 { return " $i " }\n") catch { try r.failed("writing " $name, dir) }
         app.Push("import m" $i " \"" $name "\"\n")
     }
-    app.Push("fn main() ? io.IoError {\n    s := 0\n")
+    app.Push("fn main() ? io.Error {\n    s := 0\n")
     for i in range 40 { app.Push("    s = s + m" $i ".F()\n") }
     app.Push("    try io.Print($s \"\\n\")\n}\n")
     try os.WriteFile($dir "/app.olang", app.ToString()) catch { try r.failed("writing app.olang", dir) }
@@ -891,8 +891,8 @@ fn osexit(r mut report&) ? Failed {
 }
 
 # M19f: io.Print, Println, PrintErr and PrintErrln write to the standard output and error, built and interpreted alike -
-# and a write that fails is an IoError like any other
-test "io.Print and io.Println write, and fail with IoError when the write fails" { assert passed("print") }
+# and a write that fails is an io.Error like any other
+test "io.Print and io.Println write, and fail with io.Error when the write fails" { assert passed("print") }
 
 fn printing(r mut report&) ? Failed {
     dir := fresh("print")
@@ -906,7 +906,7 @@ fn printing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" interpret print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
     try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
     try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 1, "print to a closed output fails", dir)
-    try r.expect(outOf(dir).StartsWith("unhandled error: IoError.FAILED\n"), "print to a closed output: the error", dir)
+    try r.expect(outOf(dir).StartsWith("unhandled error: Error.FAILED\n"), "print to a closed output: the error", dir)
 }
 
 # S18a: a failed assert or unreachable says where it is - and an assert the message written after it - built,
@@ -1538,7 +1538,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
         name := line.Trim()
         if name.Len() == 0 { continue }
         if name in cases {
-            try io.PrintErr("check FAIL: msgs.olang's Diag names " $name " twice\n") catch io.IoError { }
+            try io.PrintErr("check FAIL: msgs.olang's Diag names " $name " twice\n") catch io.Error { }
             bad++
         }
         cases.Put(name, false)
@@ -1559,15 +1559,15 @@ test "every message of compiler/msgs.olang names rules the specification states,
         kindEnd I64 = kindAt + (try rest[kindAt:].FindByte(',') catch default 0)
         kind := rest[kindAt:kindEnd]
         if kind != name {
-            try io.PrintErr("check FAIL: msgs.olang's " $name " gives Diag." $kind "\n") catch io.IoError { }
+            try io.PrintErr("check FAIL: msgs.olang's " $name " gives Diag." $kind "\n") catch io.Error { }
             bad++
         }
         seen := try cases.Get(name) catch default false
         if name not in cases {
-            try io.PrintErr("check FAIL: msgs.olang's " $name " is no case of Diag\n") catch io.IoError { }
+            try io.PrintErr("check FAIL: msgs.olang's " $name " is no case of Diag\n") catch io.Error { }
             bad++
         } else if seen {
-            try io.PrintErr("check FAIL: msgs.olang has two functions " $name "\n") catch io.IoError { }
+            try io.PrintErr("check FAIL: msgs.olang has two functions " $name "\n") catch io.Error { }
             bad++
         } else {
             cases.Put(name, true)
@@ -1576,14 +1576,14 @@ test "every message of compiler/msgs.olang names rules the specification states,
         rules := rest[rs:re]
         for r in rules.Split(", ") {
             if r.Len() > 0 and not spec.Contains("**" $r ".**") and not spec.Contains("**" $r " (") {
-                try io.PrintErr("check FAIL: msgs.olang's " $name " names rule " $r ", which SPEC.md does not state\n") catch io.IoError { }
+                try io.PrintErr("check FAIL: msgs.olang's " $name " names rule " $r ", which SPEC.md does not state\n") catch io.Error { }
                 bad++
             }
         }
     }
     for e in cases.Iter() {
         if not e.Value {
-            try io.PrintErr("check FAIL: msgs.olang's Diag." $e.Key " has no function\n") catch io.IoError { }
+            try io.PrintErr("check FAIL: msgs.olang's Diag." $e.Key " has no function\n") catch io.Error { }
             bad++
         }
     }
@@ -1702,10 +1702,10 @@ fn crashes(r mut report&) ? Failed {
     ni := crashRun(dir, $os.Quote(compiler) " interpret nullpeek.olang")
     try r.expect(ni.Status == 134 and ni.Stdout == "start\nafter a push: 4\n" and ni.Stderr.StartsWith("nullpeek.olang:22: null reached")
                  "nullpeek -i: status " $ni.Status ", " $ni.Stderr, dir)
-    # std/chan: a Send on a closed channel fails with ChanError.CLOSED, here escaping main
+    # std/chan: a Send on a closed channel fails with chan.Error.CLOSED, here escaping main
     try r.expect(sh(dir, "\"$OLANG\" build chanclosed.olang > out.txt 2>&1") == 0, "chanclosed did not build", dir)
     cc := crashRun(dir, "./build/chanclosed")
-    try r.expect(cc.Status == 1 and cc.Stdout == "got 1\n" and cc.Stderr.Contains("unhandled error: ChanError.CLOSED")
+    try r.expect(cc.Status == 1 and cc.Stdout == "got 1\n" and cc.Stderr.Contains("unhandled error: Error.CLOSED")
                  "chanclosed: status " $cc.Status ", " $cc.Stdout $cc.Stderr, dir)
     # P7: under -r the crash handler is not instrumented (it can run while ThreadSanitizer holds its own locks); -c,
     # so no sanitizer runtime is needed to check it

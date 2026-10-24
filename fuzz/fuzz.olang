@@ -97,7 +97,7 @@ fn main() ? {
 }
 
 # this run's own directory under build/fz, so nothing another run writes - a leftover one included - is read here
-fn newRun() ? io.IoError {
+fn newRun() ? io.Error {
     os.Run("mkdir -p " $os.Quote($Root "/build/fz"))
     Run = try os.MkTemp($Root "/build/fz", "run") catch {
         try io.PrintErr("fuzz: cannot make a run directory under build/fz\n")
@@ -115,7 +115,7 @@ fn endRun() String& {
     return " (in " $Run ")"
 }
 
-fn usage() ? io.IoError {
+fn usage() ? io.Error {
     try io.PrintErr(("usage: fuzz run START COUNT [JOBS [CASES]] | fuzz show SEED [CASES [ONLY]]"
                      " | fuzz scope START COUNT [JOBS [SCENARIOS [avoid]]] | fuzz scopeshow SEED [SCENARIOS [ONLY [avoid]]]\n"))
     os.Exit(1)
@@ -125,7 +125,7 @@ fn worker(queue mut chan.Chan<I64>&, w I64) {
     dir String& = $Run "/w" $w
     os.Run("mkdir -p " $os.Quote(dir))
     for seed in queue {
-        try runSeed(seed, dir) catch io.IoError { }
+        try runSeed(seed, dir) catch io.Error { }
         Ran.AtomicAdd(1)
     }
 }
@@ -140,7 +140,7 @@ fn read(dir String&, name String&) String& {
 }
 
 # what seed's program finds, in dir
-fn runSeed(seed I64, dir String&) ? io.IoError {
+fn runSeed(seed I64, dir String&) ? io.Error {
     expect Array<String&> = Array<String&>(Cases, "")
     has Array<Bool> = Array<Bool>(Cases)
     if not try write(dir, seed, expect, has) { return }
@@ -195,7 +195,7 @@ fn runSeed(seed I64, dir String&) ? io.IoError {
 }
 
 # writes seed's program into dir, asserting expect[i] where has[i]
-fn write(dir String&, seed I64, expect Array<String&>&, has Array<Bool>&) Bool ? io.IoError {
+fn write(dir String&, seed I64, expect Array<String&>&, has Array<Bool>&) Bool ? io.Error {
     src := gen.Program(U64(seed), Cases, -1, true, expect, has)
     try os.WriteFile($dir "/p.olang", src) catch {
         try finding(dir, seed, -1, "cannot write the program", "")
@@ -221,7 +221,7 @@ fn falseAsserts(diag String&) List<I64>& {
 }
 
 # every line of got must be want's: a case whose line differs, or is missing, is a finding
-fn compare(dir String&, seed I64, want String&, got String&, mode String&) ? io.IoError {
+fn compare(dir String&, seed I64, want String&, got String&, mode String&) ? io.Error {
     w := want.Split("\n")
     g := got.Split("\n")
     for i, line in w {
@@ -236,7 +236,7 @@ fn compare(dir String&, seed I64, want String&, got String&, mode String&) ? io.
 }
 
 # records a finding: the program and what was found in RUN/found/<seed>, case ci's own program beside it
-fn finding(dir String&, seed I64, ci I64, what String&, detail String&) ? io.IoError {
+fn finding(dir String&, seed I64, ci I64, what String&, detail String&) ? io.Error {
     Found.AtomicAdd(1)
     to String& = $Run "/found/" $seed
     os.Run("mkdir -p " $os.Quote(to) " && cp " $os.Quote(dir) "/p.olang " $os.Quote(dir) "/*.txt " $os.Quote(to) " 2> /dev/null")
@@ -254,7 +254,7 @@ fn finding(dir String&, seed I64, ci I64, what String&, detail String&) ? io.IoE
 
 # ---- the scope fuzzer ----
 
-fn scopeMain(args Array<String&>&) ? io.IoError {
+fn scopeMain(args Array<String&>&) ? io.Error {
     start := try args[2].ParseInt() catch default 1
     count := try args[3].ParseInt() catch default 1
     jobs I64 = 2
@@ -279,13 +279,13 @@ fn scopeWorker(queue mut chan.Chan<I64>&, w I64) {
     dir String& = $Run "/sw" $w
     os.Run("mkdir -p " $os.Quote(dir))
     for seed in queue {
-        try scopeSeed(seed, dir) catch io.IoError { }
+        try scopeSeed(seed, dir) catch io.Error { }
         Ran.AtomicAdd(1)
     }
 }
 
 # seed's scope program, built -d -s and interpreted, in dir
-fn scopeSeed(seed I64, dir String&) ? io.IoError {
+fn scopeSeed(seed I64, dir String&) ? io.Error {
     keep mut Array<Bool>& = Array<Bool>(Scenarios, true)
     built := false
     for attempt in range 6 {
@@ -388,7 +388,7 @@ fn dropRefused(src String&, diag String&, keep mut Array<Bool>&) I64 {
 }
 
 # records a scope finding: the program in RUN/scope/<seed>, scenario k's own program beside it
-fn scopeFinding(dir String&, seed I64, k I64, what String&, detail String&) ? io.IoError {
+fn scopeFinding(dir String&, seed I64, k I64, what String&, detail String&) ? io.Error {
     Found.AtomicAdd(1)
     to String& = $Run "/scope/" $seed
     os.Run("mkdir -p " $os.Quote(to) " && cp " $os.Quote(dir) "/p.olang " $os.Quote(dir) "/*.txt " $os.Quote(to) " 2> /dev/null")

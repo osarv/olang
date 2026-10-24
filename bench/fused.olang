@@ -17,7 +17,7 @@ import "std/io"
 reps mut I64 = 15
 
 # the median of each variant's times over reps runs, the variants run one after another each time round
-fn compare(title String&, names Array<String&>&, a fn(), b fn(), c fn() = null, d fn() = null) ? io.IoError {
+fn compare(title String&, names Array<String&>&, a fn(), b fn(), c fn() = null, d fn() = null) ? io.Error {
     n I64 = 2
     if c is not null { n = 3 }
     if d is not null { n = 4 }
@@ -44,7 +44,7 @@ fn compare(title String&, names Array<String&>&, a fn(), b fn(), c fn() = null, 
     try io.Println()
 }
 
-fn attention(T I64, threads I64) ? io.IoError, linalg.ShapeError {
+fn attention(T I64, threads I64) ? io.Error, linalg.ShapeError {
     r := rand.Rand(1)
     B I64 = 16
     D I64 = 128
@@ -103,7 +103,7 @@ fn attention(T I64, threads I64) ? io.IoError, linalg.ShapeError {
     })
 }
 
-fn epilogue(rows I64, inner I64, outer I64, act linalg.Activation) ? io.IoError, linalg.ShapeError {
+fn epilogue(rows I64, inner I64, outer I64, act linalg.Activation) ? io.Error, linalg.ShapeError {
     r := rand.Rand(2)
     x mut linalg.Matrix<F32>& = linalg.Matrix<F32>(rows, inner)
     w mut linalg.Matrix<F32>& = linalg.Matrix<F32>(outer, inner)
@@ -170,7 +170,7 @@ fn oannIm2col(x Array<F32>&, n I64, C I64, H I64, W I64, K I64, S I64, P I64, co
     }
 }
 
-fn conv(C I64, H I64, W I64, K I64, outC I64) ? io.IoError, linalg.ShapeError {
+fn conv(C I64, H I64, W I64, K I64, outC I64) ? io.Error, linalg.ShapeError {
     r := rand.Rand(3)
     n I64 = 128
     x mut linalg.Matrix<F32>& = linalg.Matrix<F32>(n, H * W * C)

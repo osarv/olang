@@ -339,7 +339,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
 # explain RULE: the rule's text, from the specification beside the compiler (B11a)
 fn explainRule(rule String&, d mut diag.Diagnostics&) String ? Bad {
     path := diag.SpecPath()
-    spec := try os.ReadFile(path) catch os.OsError {
+    spec := try os.ReadFile(path) catch os.Error {
         d.Error(diag.Where.Nowhere, msgs.NoSpec(path))
         error Bad.USAGE
     }
@@ -374,7 +374,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Format { return format(cl) }
     if cl.Mode == Doc { return session.DocMode(cl.Files.ToArray(), cl.Word, cl.Html, c) }
     if cl.Mode == Lsp { return lsp.Serve(c) }
-    if cl.Mode == Mcp { return mcp.Serve(c, try os.ReadLink("/proc/self/exe") catch os.OsError default $args[0]) }
+    if cl.Mode == Mcp { return mcp.Serve(c, try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]) }
     files := cl.Files.ToArray()
     if cl.Mode == Compile { return build.Compile(fe, c, files[0], d) }
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }
@@ -387,13 +387,13 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         return build.Interpret(fe, c, files[0], pargs.ToArray(), d)
     }
     if files.Len() == 1 { return build.TestFile(fe, c, files[0], d) }
-    exe := try os.ReadLink("/proc/self/exe") catch os.OsError default $args[0]
+    exe := try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]
     return build.TestFiles(c, exe, cl.Passed.ToArray(), files)
 }
 
 # text written to the standard output; 0, or 1 where it could not be
 fn write(text String&) I32 {
-    try io.Print(text) catch io.IoError { return 1 }
+    try io.Print(text) catch io.Error { return 1 }
     return 0
 }
 
@@ -477,7 +477,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             r := e.Reuse[o.From]
             base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
             for k, id in r.Parts {
-                pir String&prog = try os.ReadFile($base ".p" $k ".ll") catch os.OsError {
+                pir String&prog = try os.ReadFile($base ".p" $k ".ll") catch os.Error {
                     build.Unbuildable($"its record " $base " was lost while it was read")
                     error build.Failed.UNBUILT
                 }
@@ -551,7 +551,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
 # it was made), the build's modes, target and constants, where it runs and where the standard library is
 fn buildInputs(cfg build.Config&, tests Bool) String {
     exe := try os.RealPath("/proc/self/exe") catch default ""
-    info := try os.Stat(exe) catch os.OsError { return "" }
+    info := try os.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
     return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $tests "\n" $
@@ -618,7 +618,7 @@ fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Lis
     for m in range keys.Len() {
         if keys[m] == "" { continue }
         base := recordPath(cfg, l.Mods[m].Identity, keys[m])
-        text := try os.ReadFile(base) catch os.OsError { continue }
+        text := try os.ReadFile(base) catch os.Error { continue }
         r := emit.Reused(m)
         whole := false
         for line in text.Lines() {
@@ -649,7 +649,7 @@ fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Lis
 fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made List<emit.Reused>&
     objs List<emit.Object>&, hashes List<String&>&) {
     if made.Len() == 0 { return }
-    try os.MkDirAll($cfg.Dir "/rec") catch os.OsError { return }
+    try os.MkDirAll($cfg.Dir "/rec") catch os.Error { return }
     pid := build.Pid()
     for r in made {
         if r.Module >= keys.Len() or keys[r.Module] == "" { continue }
@@ -676,9 +676,9 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made Li
 # text written at path by way of a temporary renamed into place: whether it is there
 fn putFile(path String&, text String&, pid I32) Bool {
     tmp := $path "." $pid ".tmp"
-    try os.WriteFile(tmp, text) catch os.OsError { return false }
-    try os.Rename(tmp, path) catch os.OsError {
-        try os.Remove(tmp) catch os.OsError { }
+    try os.WriteFile(tmp, text) catch os.Error { return false }
+    try os.Rename(tmp, path) catch os.Error {
+        try os.Remove(tmp) catch os.Error { }
         return false
     }
     return true
@@ -695,15 +695,15 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
         if i >= prog.Units.Len() { break }
         u := prog.Units[i]
         if fresh[i].Identity != u.Identity or fresh[i].Ir != u.Ir {
-            try io.PrintErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.IoError { }
+            try io.PrintErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.Error { }
             bad = true
         }
     }
     if bad {
-        try io.PrintErr($"olang: reuse check: " $prog.Units.Len() " objects, " $fresh.Len() " written afresh\n") catch io.IoError { }
+        try io.PrintErr($"olang: reuse check: " $prog.Units.Len() " objects, " $fresh.Len() " written afresh\n") catch io.Error { }
         os.Exit(3)
     }
-    try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.IoError { }
+    try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.Error { }
 }
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
@@ -911,10 +911,10 @@ explainedSrc String& = ("error MathError { ZERO }\n"
 
 # what explain FILE NAME prints of name in the program above, or its diagnostics
 fn explained(name String&) String {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     file := $dir "/m.olang"
-    try os.WriteFile(file, explainedSrc) catch os.OsError { unreachable }
+    try os.WriteFile(file, explainedSrc) catch os.Error { unreachable }
     d := diag.Diagnostics(false)
     c := build.Config()
     c.Consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)

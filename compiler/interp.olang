@@ -998,7 +998,7 @@ fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
     return b.ToString()
 }
 
-# an error's name as a program writes it outside its module ("io.IoError.FULL"): code under the error list of
+# an error's name as a program writes it outside its module ("io.Error.FULL"): code under the error list of
 # function type ty (R6)
 fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     errs := x.P.T.Items(x.P.T.Errors(ty))
@@ -1013,5 +1013,5 @@ fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
     return $name "." $word   # B5: the type's own name, wherever it is declared
 }
 
-fn say(t String&) { try io.Print(t) catch io.IoError { } }
-fn sayErr(t String&) { try io.PrintErr(t) catch io.IoError { } }
+fn say(t String&) { try io.Print(t) catch io.Error { } }
+fn sayErr(t String&) { try io.PrintErr(t) catch io.Error { } }

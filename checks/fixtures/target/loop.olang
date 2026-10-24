@@ -12,7 +12,7 @@ fn fused(a Array<F32>&, b Array<F32>&, c mut Array<F32>&) {
     for i in range a.Len() { c[i] = a[i].Fma(b[i], c[i]) }
 }
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     n I64 = 1000
     a := Array<F32>(n)
     b := Array<F32>(n)

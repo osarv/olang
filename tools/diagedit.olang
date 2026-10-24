@@ -227,7 +227,7 @@ fn compileOne(olang String&, file String&, dir String&, testLines Bool) String {
     src := try srcmask.ReadText(file) catch { return "" }
     mode := "compile"
     if src.Contains("TestBuild") or (testLines and hasTestLine(src)) { mode = "test" }
-    out := try srcmask.Capture(String&[olang, mode, file], dir, 900000) catch os.OsError {
+    out := try srcmask.Capture(String&[olang, mode, file], dir, 900000) catch os.Error {
         srcmask.SayErr("could not run " $olang)
         os.Exit(1)
         unreachable

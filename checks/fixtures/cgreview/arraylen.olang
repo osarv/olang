@@ -2,7 +2,7 @@
 import "std/io"
 import "std/os"
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     n I64 = 2305843009213693952 + os.Args().Len()
     a := Array<I64>(n)
     a[3] = 77
