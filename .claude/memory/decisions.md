@@ -971,3 +971,10 @@ errors and documentation - generic `+` already works).
   bit operations; 10 one-line lambdas `fn(x): return ...`; 11 narrowing after a leaving null test; 12 doc comments +
   a minimal LSP. Not asked yet - for the user when rested.
   The user: "No, build the enum part I agreed on" - the payload form stays decided and is built; only raw values wait.
+- SURVEY ANSWERED 2026-10-24 (the user): 1 platforms YES (LLVM 19/20 installable here, qemu for aarch64; after speed9;
+  macOS needs a real Mac or CI); 3 build early freeing/Destroy (docs/memory.md rounds 4-7) - YES, after lang24; 7 YES
+  std/sync, time.Sleep, std/net; 8 YES Set, regex, flags, Unicode, base64/hex, sha256, iterator adapters, Deque, Heap,
+  time formatting; 9 YES T.Max limits + bit operations; 10 YES one-line lambdas; 11 explained (narrowing after
+  `if n is null: return`) - the round-3 agent told; 12 YES doc comments + LSP ("both for MCP and neovim"). TO DISCUSS:
+  2 C interop v2, 4 errors carrying data (explained: plain-data payloads on words, rec), 5 text literals, 6 `olang fix`
+  (explained: one command applying every migration since a file's version).
