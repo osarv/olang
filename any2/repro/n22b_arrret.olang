@@ -1,0 +1,22 @@
+# n22 with only the returned any: an array of loop-built text copied into an any that lands in: a function's result, a parameter's field, a global
+type Sized trait {
+    Len() I64
+}
+type Hold struct() {
+    s any Sized?& = null
+}
+GS mut any Sized?& = null
+fn mk(i I64) any Sized& {
+    a := Array<String&>(2, "x")
+    a[0] = "e" $i
+    return a
+}
+fn main() {
+    xs := List<any Sized&>()
+    h := Hold()
+    for i in range 3 {
+        xs.Push(mk(i))
+    }
+    churn()
+    for x in xs { say($x) }
+}

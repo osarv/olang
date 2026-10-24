@@ -1,0 +1,23 @@
+== build -debug -sanitize
+n06c_fixedinner.olang:13:39: error: expected a type, found '2'
+   13 | type Fx extends Array<Array<String&>, 2>
+      |                                       ^
+n06c_fixedinner.olang:20:36: error: expected a type, found '2'
+   20 |         f := Array<Array<String&>, 2>(1)
+      |                                    ^
+compilation failed with 2 errors
+== build
+n06c_fixedinner.olang:13:39: error: expected a type, found '2'
+   13 | type Fx extends Array<Array<String&>, 2>
+      |                                       ^
+n06c_fixedinner.olang:20:36: error: expected a type, found '2'
+   20 |         f := Array<Array<String&>, 2>(1)
+== interpret
+n06c_fixedinner.olang:13:39: error: expected a type, found '2'
+   13 | type Fx extends Array<Array<String&>, 2>
+      |                                       ^
+n06c_fixedinner.olang:20:36: error: expected a type, found '2'
+   20 |         f := Array<Array<String&>, 2>(1)
+      |                                    ^
+compilation failed with 2 errors
+status 1

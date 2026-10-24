@@ -1,0 +1,35 @@
+import "std/io"
+# E10: arrays of different known lengths compared through references, text, structs holding arrays - baked and at run time
+type S struct(a Array<I64>&) { a }
+fn eqs(k I64) String {
+    r Array<I64>& = I64[1, 2, k]
+    v := I64[1, 2]
+    s1 := S(I64[1, 2])
+    s2 := S(I64[1, 2, k])
+    t := "ab"
+    return $(r == I64[1, 2]) " " $(r == I64[1, 2, 3]) " " $(v == r) " " $(s1 == s2) " " $(t == "abc") " " $("ab" == "abc") " " $(I64[] == I64[0])
+}
+G String = eqs(3)
+L mut I64 = 3
+fn main() {
+    say(G)
+    say(eqs(L))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

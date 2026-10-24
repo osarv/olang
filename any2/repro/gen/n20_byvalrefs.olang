@@ -1,0 +1,46 @@
+import "std/io"
+# O14 for a by-value parameter that holds a reference (so it has a scope variable): its own storage returned as borrowed
+type Pt struct(x I64) { x }
+type HR struct(r Pt&, x I64) {
+    r
+    x
+}
+type Two struct(a HR, b HR) {
+    a
+    b
+}
+type Named trait {
+    Name() String
+}
+fn (h HR&) Name() String { return "hr " $h.x }
+fn g1(h HR) HR&h { return h }
+fn g2(t Two) HR&t { return t.b }
+fn g3(h HR) any Named&h { return h }
+fn g4(h HR) Pt&h { return h.r }
+fn main() {
+    p := Pt(9)
+    r1 := g1(HR(p, 1))
+    r2 := g2(Two(HR(p, 2), HR(p, 3)))
+    r3 := g3(HR(p, 4))
+    r4 := g4(HR(p, 5))
+    churn()
+    say($r1.x " " $r2.x " " $r3.Name() " " $r4.x)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

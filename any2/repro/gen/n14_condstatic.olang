@@ -1,0 +1,47 @@
+import "std/io"
+# an array whose elements are constant text (so T32a's element check passes) reaching the box through a conditional, a
+# match and a catch default, converted and plain: is the array's own storage copied?
+type W trait {
+    Show() String
+}
+type Rows extends Array<String&>
+fn (r Rows&) Show() String { return "rows " $r.Len() " " $r[0] " " $r[1] }
+error Oops {
+    BAD
+}
+fn bad(k I64) Rows ? Oops {
+    if k < 10 { error Oops.BAD }
+    return Rows(String&["n", "n"])
+}
+fn main() {
+    xs := List<any W&>()
+    for i in range 3 {
+        a := Array<String&>(2, "x")
+        a[1] = "y" if i == 1 else "z"
+        xs.Push(Rows(a if i >= 0 else a))
+        b := Array<String&>(2, "m")
+        xs.Push(Rows(match i { case 99 => b case _ => b }))
+        d := Rows(Array<String&>(2, "d"))
+        xs.Push(try bad(i) catch default d)
+    }
+    churn()
+    for x in xs { say(x.Show()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}
