@@ -121,6 +121,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
 type Reused struct(Module I64) {
     Module
     Parts List<String&>
+    Hashes List<String&>    # each part's IR's SHA-256, as its record keeps it (the caller's)
     Size I64 = 0
     Split Bool = false
     Inst List<String&>

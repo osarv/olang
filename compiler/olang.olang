@@ -412,12 +412,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         error build.Failed.UNBUILT
     }
     if d.Errors() > 0 { error build.Failed.REPORTED }
-    if kind != build.Kind.Module { keep(l, cfg, keys, e.Made, objs) }
     t := cfg.Target
     dyncall := false
+    hashes List<String&>       # each object's IR's hash, where it is a module's (kept in its record), else ""
     for o in objs {
         if o.From >= 0 {
-            # B3i: a reused module's parts, as its record keeps them
+            # B3i: a reused module's parts, as its record keeps them, each with its IR's hash
             r := e.Reuse[o.From]
             base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
             for k, id in r.Parts {
@@ -426,8 +426,11 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
                     error build.Failed.UNBUILT
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
-                prog.Units.Push(build.Unit($id, build.UnitKind.Module, pir))
+                u mut build.Unit&prog = build.Unit($id, build.UnitKind.Module, pir)
+                u.Hash = $r.Hashes[k]
+                prog.Units.Push(u)
             }
+            hashes.Push("")
             continue
         }
         ir String&prog = o.Ir
@@ -438,8 +441,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             case emit.ObjectKind.Tests => build.UnitKind.Tests
             case emit.ObjectKind.Instances => build.UnitKind.Instances
         }
-        prog.Units.Push(build.Unit($o.Identity, holds, ir))
+        u mut build.Unit&prog = build.Unit($o.Identity, holds, ir)
+        if kind != build.Kind.Module and o.Kind == emit.ObjectKind.Module { u.Hash = build.IrHash(ir) }
+        hashes.Push($u.Hash)
+        prog.Units.Push(u)
     }
+    if kind != build.Kind.Module { keep(l, cfg, keys, e.Made, objs, hashes) }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
     if dyncall {
@@ -473,8 +480,8 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
 # A module's object depends on what it is made from: its own text, the text of every module it reaches through its
 # imports (and the prelude's), this compiler, and the build's modes, target and constants - nothing the rest of the
 # program holds (DESIGN.md 3.2). So a module is keyed by a hash of those, and the IR one emission wrote for it is kept
-# under that key (DIR/rec/NAME.KEY: a record of its parts, the IR its items took, whether they were cut, and the
-# instances its objects name; NAME.KEY.pN.ll each part's IR). A later build finding its key gives that IR to the build
+# under that key (DIR/rec/NAME.KEY: a record of its parts and their IR's hashes, the IR its items took, whether they were
+# cut, and the instances its objects name; NAME.KEY.pN.ll each part's IR). A later build finding its key gives that IR to the build
 # as the module's, and the emitter neither lowers nor writes the module - it declares what of it other objects name,
 # and makes the instances the record names. OLANG_CHECKREUSE set: every reused module, and the root's object, written
 # afresh too and compared with what was reused, a difference said on the standard error and the build ending with 3
@@ -560,8 +567,10 @@ fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Lis
             } else if line.StartsWith("inst ") {
                 r.Inst.Push($line[5:])
             } else if line.StartsWith("part ") {
-                if not os.Exists($base ".p" $r.Parts.Len() ".ll") { break }
-                r.Parts.Push($line[5:])
+                # "part HASH IDENTITY": the part's IR's SHA-256, then its name
+                if line.Len() < 71 or line[69] != ' ' or not os.Exists($base ".p" $r.Parts.Len() ".ll") { break }
+                r.Hashes.Push($line[5:69])
+                r.Parts.Push($line[70:])
             }
         }
         if whole and r.Parts.Len() > 0 { out.Push(r) }
@@ -573,7 +582,7 @@ fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Lis
 # name and renamed into place, so a record that is there is whole and so is every file it names, whatever build ran
 # beside this one
 fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made List<emit.Reused>&
-    objs List<emit.Object>&) {
+    objs List<emit.Object>&, hashes List<String&>&) {
     if made.Len() == 0 { return }
     try os.MkDirAll($cfg.Dir "/rec") catch os.OsError { return }
     pid := build.Pid()
@@ -591,7 +600,7 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made Li
         ok := true
         for k in range r.Parts.Len() {
             if not putFile($base ".p" $k ".ll", objs[r.From + k].Ir, pid) { ok = false }
-            b.Push($"part " $r.Parts[k] "\n")
+            b.Push($"part " $hashes[r.From + k] " " $r.Parts[k] "\n")
         }
         if not ok { continue }
         b.Push("end\n")
