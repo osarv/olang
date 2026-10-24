@@ -647,3 +647,12 @@ errors and documentation - generic `+` already works).
   not on every compiler change; (2) bootstrap/ stays until the port passes the whole suite on its own and the
   stage-0 comparisons are replaced by stored goldens; then tag `stage0-final` and remove it (QAL's condition, made
   precise).
+- QAR ASKED 2026-10-24 (from the port verbosity audit, /home/user/review/verbosity/README.md): the compiler's 58k lines
+  are about C's density in lines but repetitive in specific places. Three language changes would cut ~2,000-3,000 lines:
+  (1) `is` binding a pattern (`if e is Expr.Call(f, args) { ... }`, and an else-leaving form) - 264 one-case matches,
+  ~790 lines; reuses `is` and the pattern grammar. Recommended yes. (2) a constructor with no body means its parameters
+  are the fields (`type Span struct(Start I64, End I64)`) - 74 structs, ~510 lines; partly reverses T13 (no field-list
+  structs). Recommended yes, as a shorthand that is still a constructor. (3) string-valued enum cases (`Plus = "+"`) -
+  token/msgs tables, ~700 lines. Recommended later. Also, decided by me (no language change): msgs.olang's echo comments
+  and blank lines dropped (~1,090 lines); redundant integer casts cleaned up; a child-walk for enum trees comes with
+  reflection (build list item 5). In effect: nothing built.
