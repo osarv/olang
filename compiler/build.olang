@@ -37,6 +37,7 @@ type UnitKind enum {
     Main
     Tests
     Instances
+    Locations   # B3l: the places a module's or the root's other objects name - plain data, compiled without LTO
 }
 
 # one object's IR: the module it is for (its identity, M22a), what it holds, and its text - and the text's SHA-256,
@@ -185,6 +186,16 @@ fn (c Config&) CompileFlags(ir String&) List<String&> {
     return out
 }
 
+# the flags a Locations object (B3l) is compiled with: the mode's without link-time optimization - it is data alone, which
+# no link optimizes and none imports, so a program linking by ThinLTO redoes no module's code when only it changed
+fn (c Config&) DataFlags() List<String&> {
+    out List<String&>
+    for f in c.ModeFlags() {
+        if f != "-flto" and f != "-flto=thin" { out.Push($f) }
+    }
+    return out
+}
+
 # clang's own version, which every object's name holds: another clang may compile the same IR to another object
 fn (c mut Config&) clangVersion() String&c {
     if c.version == "" {
@@ -324,6 +335,7 @@ fn kindSuffix(k UnitKind) String {
         case UnitKind.Main => ".main"
         case UnitKind.Tests => ".test"
         case UnitKind.Instances => ".inst"
+        case UnitKind.Locations => ".loc"
     }
 }
 
@@ -393,7 +405,7 @@ type compiles struct() {
 # the object made from ir: its path, and - when no such object is there yet - its compile queued in j, its IR written
 fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d mut diag.Diagnostics&
     hash String& = "", unit I64 = -1) String ? Failed {
-    flags := c.CompileFlags(ir)
+    flags := c.DataFlags() if k == UnitKind.Locations else c.CompileFlags(ir)
     path := c.ObjectPath(base, k, hash if hash != "" else IrHash(ir), flags)
     if os.Exists(path) or path in j.finals { return path }
     # B3j: an object's name says what it is made from, so one another build left in the store is this one

@@ -5864,7 +5864,9 @@ of the compilation's **root** module only — `build`'s and `test`'s root, or `c
 shared name per B3b; every other object refers to them. An ordinary module's object therefore depends on
 nothing but its own module and its imports, and is correctly reused by any program that imports it. The
 root transitively imports every module of the program, the prelude included, so its own staleness (B3) already
-covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time.
+covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time. In
+`build` and `test` the root's instantiations may be held in several objects, each holding those that one module, the
+first to name them in the program's order of modules (the root's own last), names; what is built is the same either way.
 
 **B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
 compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is
@@ -5884,6 +5886,13 @@ for rather than compiling again (the first claims it with `NAME.lock`, a directo
 once the compile ends; a claim whose process has ended, or older than half an hour, is taken over). The IR a compile
 reads is a file of its own build's, renamed to its readable name once compiled, so no build writes the IR another's
 compile is reading.
+
+**B3l.** The text a failed check prints - its `FILE:LINE:` and what failed (S18a), an error's trace entry (S18d), a `!`'s
+report (E35) - is not part of the code naming it. In `build` and `test`, each such text is a constant named by the
+function holding the check and how many such texts that function named before it, and defined in an object of its own
+for the module (or the root's code, or the instances) that holds only those texts and is compiled without link-time
+optimization (`NAME.HASH.loc.o`). A line added or removed above a function therefore changes no object holding code,
+only the text objects. What is printed is the same either way. `compile`, which makes one object, keeps the texts in it.
 
 ### 10.2 Program entry
 
