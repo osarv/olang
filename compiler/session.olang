@@ -10,6 +10,7 @@ import "std/os"
 import "std/io"
 import "std/pair"
 import "std/filepath"
+import "std/time"
 import "source"
 import "token"
 import "scan"
@@ -49,13 +50,15 @@ fn RealOf(path String&) String {
 }
 
 # the program root is the root of, checked as "olang test" checks it (its tests too) - with each file of overlay (by
-# real path) read from there instead of from disk
-fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg, overlay Map<String&, String&>&) mut Analysis&cfg {
+# real path) read from there instead of from disk - and, where held is true, held to section 8 (Hold)
+fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg, overlay Map<String&, String&>&, held Bool = true) mut Analysis&cfg {
     f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
     nm mut source.Names&cfg = source.Names()
     l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
     for e in overlay { l.Overlay.Put($e.Key, $e.Value) }
+    t0 := time.Now()
     l.Load(root)
+    Log($"loaded " $root " (" $l.Mods.Len() " modules) in " $(time.Since(t0) / 1000000) " ms")
     a mut Analysis&cfg = Analysis(l)
     if l.Root < 0 or d.HasFatal() { return a }
     c mut typecheck.Checker&cfg = interp.Analyze(l, true)
@@ -65,16 +68,25 @@ fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg, over
     if clean { interp.DecideValues(c) }
     interp.DecideAsserts(c, asserts)
     if clean { interp.Bake(c) }
-    if d.HasFatal() { return a }
+    Log($"checked in " $(time.Since(t0) / 1000000) " ms")
+    if held { Hold(a, cfg) }
+    return a
+}
+
+# a checked analysis held to section 8 - its scope errors reported - and made evaluable (explain's values)
+fn Hold(a mut Analysis&, cfg mut build.Config&) {
+    if a.C is null or a.Sc is not null or a.L.Diags.HasFatal() { return }
+    t0 := time.Now()
+    c := a.C
     sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Run()
+    Log($"held to section 8 in " $(time.Since(t0) / 1000000) " ms")
     a.Sc = sc
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     a.X = x
-    return a
 }
 
 # the module read from the file at real path, -1 for none

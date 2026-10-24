@@ -444,8 +444,42 @@ fn (w mut worker&) check(k I64) {
     doc := w.s.Docs[k]
     cfg := w.Cfg
     d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
-    w.lastSlot = -1
-    a := w.analysis(k, d)
+    # what the checker says is published as soon as it is said; section 8's errors, which take a while longer on a large
+    # program, follow if there are any
+    a := session.Analyze(doc.Path, cfg, d, w.overlay, false)
+    said := d.Errors()
+    foreign := w.publishAll(k, a, d, doc.Foreign)
+    session.Hold(a, cfg)
+    if d.Errors() != said { foreign = w.publishAll(k, a, d, foreign) }
+    w.last = a
+    w.lastSlot = k
+    # the note: which open files this one's program reaches
+    nb := StringBuilder()
+    nb.Push($"{\"olang\":\"checked\",\"slot\":" $k ",\"deps\":[")
+    first := true
+    for m in a.L.Mods {
+        for i in range w.s.Docs.Len() {
+            if i != k and w.s.Docs[i].Open and w.s.Docs[i].Real == m.Real {
+                if not first { nb.PushChar(',') }
+                first = false
+                nb.Push($i)
+            }
+        }
+    }
+    nb.Push("],\"foreign\":[")
+    for i in range foreign.Len() {
+        if i > 0 { nb.PushChar(',') }
+        session.JsonStr(nb, foreign[i])
+    }
+    nb.Push("]}")
+    w.send(nb.ToString())
+}
+
+# the analysis's diagnostics published - for the open file in slot k, empty to clear what was said before, and for every
+# other file it reaches that is not checked as a root of its own here - and an empty list for each file in before (the
+# other files published to the last time) not published to now: the other files published to
+fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics&, before List<String&>&) List<String&> {
+    doc := w.s.Docs[k]
     # each file's diagnostics, by real path, as LSP's Diagnostic objects
     files List<String&>
     lists List<StringBuilder>
@@ -481,29 +515,10 @@ fn (w mut worker&) check(k I64) {
         w.send(publish(uri, $"[" $lists[j].ToString() "]"))
         foreign.Push($uri)
     }
-    for f in doc.Foreign {
+    for f in before {
         if f not in foreign { w.send(publish(f, "[]")) }
     }
-    # the note: which open files this one's program reaches
-    nb := StringBuilder()
-    nb.Push($"{\"olang\":\"checked\",\"slot\":" $k ",\"deps\":[")
-    first := true
-    for m in a.L.Mods {
-        for i in range w.s.Docs.Len() {
-            if i != k and w.s.Docs[i].Open and w.s.Docs[i].Real == m.Real {
-                if not first { nb.PushChar(',') }
-                first = false
-                nb.Push($i)
-            }
-        }
-    }
-    nb.Push("],\"foreign\":[")
-    for i in range foreign.Len() {
-        if i > 0 { nb.PushChar(',') }
-        session.JsonStr(nb, foreign[i])
-    }
-    nb.Push("]}")
-    w.send(nb.ToString())
+    return foreign
 }
 
 # whether a file is itself one of the open files to be checked here, as a root
