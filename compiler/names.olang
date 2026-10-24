@@ -159,6 +159,11 @@ fn (r Resolver&) Member(file I64, end I32) Ref {
     return try r.members.Get(key(file, end)) catch default Ref(What.None, -1, -1)
 }
 
+# where the parameter, local or type variable a Ref of kind Local or TypeVar names is declared - its Index (B15)
+fn (r Resolver&) LocalSpan(i I64) source.Span {
+    return r.locals[i].Sp if i >= 0 and i < r.locals.Len() else source.Span(0, 0)
+}
+
 fn key(file I64, at I32) I64 { return (file << 32) | I64(at) }
 
 fn (r mut Resolver&) text(n source.NameId) String&r { return r.L.Names.Text(n) }

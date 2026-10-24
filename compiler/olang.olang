@@ -29,6 +29,7 @@ import rt "runtime"
 import "eval"
 import "interp"
 import "explain"
+import "session"
 import typecheck "check"
 import "std/pair"
 
@@ -55,7 +56,8 @@ fn roomFor(bytes I64) Bool {
 # ---- the command line ----
 
 # the modes, by number: running a file (no word - a file ending in .olang written first, B3g), then each mode's word
-ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", "format", "explain", "help"]
+ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", "format", "explain", "help", "doc", "lsp"
+    "mcp"]
 Run I64 = 0
 Build I64 = 1
 Compile I64 = 2
@@ -64,6 +66,9 @@ Interp I64 = 4
 Format I64 = 5
 Explain I64 = 6
 Help I64 = 7
+Doc I64 = 8
+Lsp I64 = 9
+Mcp I64 = 10
 
 # what each mode is, for help
 ModeUsage Array<String&> = String&[
@@ -75,6 +80,9 @@ ModeUsage Array<String&> = String&[
     "olang format [OPTION...] FILE.olang..."
     "olang explain RULE | FILE.olang NAME"
     "olang help [MODE]"
+    "olang doc [OPTION...] FILE.olang [NAME] | -html DIR [FILE.olang...]"
+    "olang lsp [OPTION...]"
+    "olang mcp [OPTION...]"
 ]
 ModeWhat Array<String&> = String&[
     "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
@@ -85,14 +93,17 @@ ModeWhat Array<String&> = String&[
     "rewrites each file in olang's one layout (B13)"
     "prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)"
     "lists the modes, or a mode's options"
+    "prints a module's documentation (B14), or writes a library's as HTML"
+    "serves the Language Server Protocol on the standard input and output, for editors (B15)"
+    "serves the Model Context Protocol on the standard input and output, for agents (B16)"
 ]
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", ""]
-OptModes Array<I64> = I64[6, 15, 15, 15, 95, 95, 95, 32, 15]
+    "-quick", "-html"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR"]
+OptModes Array<I64> = I64[6, 15, 15, 15, 1887, 1887, 1887, 32, 15, 256]
 OptWhat Array<String&> = String&[
     "writes the executable or the object to PATH (B3h)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -103,6 +114,7 @@ OptWhat Array<String&> = String&[
     "moves the remote repositories the build reaches to their refs' current commits (M23c)"
     "rewrites nothing: lists each file not in the layout (B13)"
     "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
+    "writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -143,6 +155,7 @@ type CommandLine struct() {
     Spec String& = "native"
     Output String& = ""
     Check Bool = false
+    Html String& = ""
 }
 
 # a mistake in the command line: reported to the diagnostics already
@@ -196,8 +209,16 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 6 { c.Update = true }
             if o == 7 { cl.Check = true }
             if o == 8 { c.Quick = true }
+            if o == 9 { cl.Html = $v }
             # B2g: -quick is a level of optimization, as -debug and -race set theirs
             if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
+            continue
+        }
+        if cl.Mode == Doc and cl.Html == "" and cl.Files.Len() == 1 and not endsWithOlang(a) {
+            # B14: a file, then the name of one of its items
+            if cl.HasWord { try usage(d, msgs.DocOneName(cl.Files[0])) }
+            cl.Word = $a
+            cl.HasWord = true
             continue
         }
         if cl.Mode == Explain or cl.Mode == Help {
@@ -262,7 +283,13 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
             return cl
         }
     }
-    if cl.Files.Len() == 0 { try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode))) }
+    if (cl.Mode == Lsp or cl.Mode == Mcp) and cl.Files.Len() > 0 { try usage(d, msgs.ModeNoFiles(modeName(cl.Mode))) }
+    if cl.Mode == Doc and cl.Html == "" and cl.Files.Len() != 1 {
+        try usage(d, msgs.ModeOneFile(modeName(cl.Mode)) if cl.Files.Len() > 1 else msgs.ModeNeedsFile(modeName(cl.Mode)))
+    }
+    if cl.Files.Len() == 0 and cl.Mode != Lsp and cl.Mode != Mcp and cl.Mode != Doc {
+        try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode)))
+    }
     if (cl.Mode == Build or cl.Mode == Compile) and cl.Files.Len() != 1 {
         try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
     }
@@ -271,10 +298,13 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     c.Output = $cl.Output
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
-    c.Target = try target.Resolve(cl.Spec, c.Clang, cl.Mode == Interp, d) catch target.Bad { error Bad.USAGE }
+    # the tools that only analyze need no clang, as interpret does not (B12)
+    tool := cl.Mode == Interp or cl.Mode == Doc or cl.Mode == Lsp or cl.Mode == Mcp
+    c.Target = try target.Resolve(cl.Spec, c.Clang, tool and c.Clang == "", d) catch target.Bad { error Bad.USAGE }
     if c.Target.Foreign and cl.Mode != Compile { try usage(d, msgs.TargetForeignMode(modeName(cl.Mode), cl.Spec)) }
     c.Tests = cl.Mode == Test
-    try builtins(c, c.Tests, d)
+    # an editor's and an agent's files are checked as "olang test" checks them, their tests included (B15, B16)
+    try builtins(c, c.Tests or cl.Mode == Lsp or cl.Mode == Mcp, d)
     return cl
 }
 
@@ -338,6 +368,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         return write(text)
     }
     if cl.Mode == Format { return format(cl) }
+    if cl.Mode == Doc { return session.DocMode(cl.Files.ToArray(), cl.Word, cl.Html, c) }
     files := cl.Files.ToArray()
     if cl.Mode == Compile { return build.Compile(fe, c, files[0], d) }
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }

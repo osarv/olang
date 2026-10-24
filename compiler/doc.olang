@@ -1,0 +1,584 @@
+# doc - documentation: the doc comments written above declarations (L4b), and a module's documentation as `olang doc`
+# prints it (B14) - as text, or as static HTML for a whole library.
+#
+# A doc comment is read from the text alone: the comment lines directly above the line a declaration starts on, or, for a
+# member or a global with none, the line comment ending its own line. Nothing in the scanner or the parser changes: a
+# declaration's span is all that finds it, so the compiler's passes, the formatter and the diffs see comments as they
+# always have. A signature is what `explain FILE NAME` gives (B11b), so the documentation shows each item as the
+# compiler sees it - inferred error sets written out, scope obligations included.
+
+import "std/filepath"
+import "source"
+import "ast"
+import "types"
+import "generic"
+import "names"
+import "scope"
+import "interp"
+import "explain"
+import typecheck "check"
+
+# ---- doc comments (L4b) ----
+
+# where the line holding offset at begins
+fn lineStart(t String&, at I64) I64 {
+    i := at
+    for i > 0 and t[i - 1] != '\n' { i-- }
+    return i
+}
+
+# where the line beginning at from ends: its newline, or the text's end
+fn lineEnd(t String&, from I64) I64 {
+    i := from
+    for i < t.Len() and t[i] != '\n' { i++ }
+    return i
+}
+
+# the column (from 0) of the '#' opening a line comment in line, outside text and character literals - -1 for none,
+# and -1 where a block comment opens on the line and does not close on it (what follows is no line comment)
+fn commentColumn(line String&) I64 {
+    i I64 = 0
+    for i < line.Len() {
+        ch := line[i]
+        if ch == '"' or ch == '\'' {
+            i++
+            for i < line.Len() and line[i] != ch {
+                if line[i] == '\\' { i++ }
+                i++
+            }
+            i++
+            continue
+        }
+        if ch == '#' {
+            if i + 1 < line.Len() and line[i + 1] == '#' {
+                close := try line[i + 2:].Find("##") catch default -1
+                if close < 0 { return -1 }
+                i = i + 2 + close + 2
+                continue
+            }
+            return i
+        }
+        i++
+    }
+    return -1
+}
+
+# whether line holds a line comment and nothing else; a block comment's "##" is no line comment
+fn commentOnly(line String&) Bool {
+    t := line.TrimStart()
+    return t.StartsWith("#") and not t.StartsWith("##")
+}
+
+# a comment line's text: past its '#' and one space
+fn commentText(line String&) String {
+    t := line.TrimStart()[1:]
+    if t.StartsWith(" ") { return $t[1:].TrimEnd() }
+    return $t.TrimEnd()
+}
+
+# the doc comment above whatever starts on the line holding offset at (L4b): the comment-only lines directly above that
+# line, less the leading ones continuing a line comment that ends the line above them
+fn Above(t String&, at I64) String {
+    starts List<I64>
+    pos := lineStart(t, at)
+    for pos > 0 {
+        from := lineStart(t, pos - 1)
+        line := t[from:pos - 1]
+        if not commentOnly(line) { break }
+        if from == 0 and line.StartsWith("#!") { break }
+        starts.Push(from)
+        pos = from
+    }
+    if starts.Len() == 0 { return "" }
+    # the lines run bottom to top in starts; pos is the topmost's start
+    k := starts.Len() - 1
+    if pos > 0 {
+        before := t[lineStart(t, pos - 1):pos - 1]
+        col := commentColumn(before)
+        if col >= 0 and before[:col].Trim().Len() > 0 {
+            for k >= 0 {
+                line := t[starts[k]:lineEnd(t, starts[k])]
+                if line.Len() - line.TrimStart().Len() != col { break }
+                k--
+            }
+        }
+    }
+    b := StringBuilder()
+    for i := k, i >= 0, i-- {
+        if i < k { b.PushChar('\n') }
+        b.Push(commentText(t[starts[i]:lineEnd(t, starts[i])]))
+    }
+    return b.ToString()
+}
+
+# the line comment ending the line holding offset at, with the comment-only lines below it whose '#' stands in its column
+# (L4b's continuation) - "" for none
+fn Trailing(t String&, at I64) String {
+    from := lineStart(t, at)
+    end := lineEnd(t, from)
+    line := t[from:end]
+    col := commentColumn(line)
+    if col < 0 or line[:col].Trim().Len() == 0 { return "" }
+    b := StringBuilder()
+    b.Push(commentText(line[col:]))
+    next := end + 1
+    for next < t.Len() {
+        e := lineEnd(t, next)
+        l := t[next:e]
+        if not commentOnly(l) or l.Len() - l.TrimStart().Len() != col { break }
+        b.PushChar('\n')
+        b.Push(commentText(l))
+        next = e + 1
+    }
+    return b.ToString()
+}
+
+# the documentation of what starts at offset at: its comment above, else - for a member or a global - its trailing one
+fn Comment(t String&, at I64, member Bool) String {
+    above := Above(t, at)
+    if above != "" or not member { return above }
+    return Trailing(t, at)
+}
+
+# a module's own documentation (L4b): the comment lines its file begins with - after a "#!" line - unless they are a
+# declaration's, the line after them neither blank nor an import
+fn ModuleDoc(t String&) String {
+    pos I64 = 0
+    if t.StartsWith("#!") { pos = lineEnd(t, 0) + 1 }
+    first := pos
+    for pos < t.Len() {
+        e := lineEnd(t, pos)
+        if not commentOnly(t[pos:e]) { break }
+        pos = e + 1
+    }
+    if pos == first { return "" }
+    if pos < t.Len() {
+        next := t[pos:lineEnd(t, pos)].Trim()
+        if next != "" and not next.StartsWith("import ") and not next.StartsWith("import\"") { return "" }
+    }
+    b := StringBuilder()
+    p := first
+    for p < pos {
+        e := lineEnd(t, p)
+        if p > first { b.PushChar('\n') }
+        b.Push(commentText(t[p:e]))
+        p = e + 1
+    }
+    return b.ToString()
+}
+
+# ---- a module's documentation (B14) ----
+
+# one documented thing: a top-level item or one of its members - the line the compiler gives it, its doc comment, and
+# where it is declared (a file of the program's diagnostics and an offset in it)
+type Entry struct(Line String&, Doc String&, Name String&) {
+    Line
+    Doc
+    Name
+    File I64 = -1
+    At I64 = -1
+    Members List<Entry>
+}
+
+# a module: its identity, its path, its own documentation and its items
+type Module struct(Identity String&, Path String&, Doc String&) {
+    Identity
+    Path
+    Doc
+    Items List<Entry>
+}
+
+# a name exported from its module (M6, M6a)
+fn Exported(name String&) Bool { return name.Len() > 0 and name[0].IsUpper() }
+
+# module mi of a checked program: its documentation and its items in the order the file declares them - only the
+# exported ones where all is false, every one where it is true
+fn Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, all Bool) Module {
+    m := c.P.L.Mods[mi]
+    text := m.Src.Text
+    md := Module($m.Identity, $m.Path, ModuleDoc(text))
+    nm := c.P.L.Names
+    tab := c.P.R.Tables[mi]
+    order List<I64>
+    for ei in range tab.Entries.Len() { order.Push(ei) }
+    order.Sort(fn(a I64, b I64) Bool { return tab.Entries[a].Sp.Start < tab.Entries[b].Sp.Start })
+    for ei in order {
+        e := tab.Entries[ei]
+        name := $nm.Text(e.Name)
+        if not all and not Exported(name) { continue }
+        if e.Kind == names.What.Func {
+            f := c.P.FnNamed(mi, e.Name)
+            if f < 0 or c.P.FnDecl(f).Recv is not null { continue }
+        } else if e.Kind != names.What.Global and e.Kind != names.What.Type {
+            continue
+        }
+        it := try item(c, sc, x, mi, name, all) catch explain.Missing { continue }
+        md.Items.Push(it)
+    }
+    # methods of types declared elsewhere - a built-in type's, in the prelude (M19d): each an item of its own
+    c.P.AllFns()
+    for f in range c.P.FnCount() {
+        decl := c.P.FnDecl(f)
+        if c.P.FnModule(f) != mi or decl.Recv is null { continue }
+        name := $nm.Text(decl.Name)
+        if not all and not Exported(name) { continue }
+        if receiverModule(c, f) == mi { continue }
+        line := firstLines(explain.FnText(c, sc, f))
+        md.Items.Push(Entry(line, Above(text, I64(decl.Sp.Start)), name))
+        last := md.Items[md.Items.Len() - 1]
+        last.File = m.File
+        last.At = I64(decl.Sp.Start)
+    }
+    return md
+}
+
+# the module declaring a method's receiver type, -1 for a built-in one
+fn receiverModule(c mut typecheck.Checker&, f I64) I64 {
+    recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
+    if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
+    if c.P.T.KindOf(recv) != types.Kind.Named { return -1 }
+    return c.P.DeclModule(c.P.T.DeclOf(recv))
+}
+
+# what explain says of an item, less its instances: its first line and the obligation lines that follow it
+fn firstLines(text String&) String {
+    b := StringBuilder()
+    for line in text.Lines() {
+        if line.StartsWith("    instance ") or line.StartsWith("        ") { break }
+        if b.Len() > 0 and not line.StartsWith("    [") { break }
+        if b.Len() > 0 { b.PushChar('\n') }
+        b.Push(line)
+    }
+    return b.ToString()
+}
+
+# the item name of module mi (a top-level name, or "Type.Method"), documented: what explain gives it, each member with
+# its doc comment - every member where all is true, else the exported ones
+fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&, all Bool) Entry ? explain.Missing {
+    m := c.P.L.Mods[mi]
+    text := m.Src.Text
+    nm := c.P.L.Names
+    full := try explain.Item(c, sc, x, mi, name)
+    lines := full.TrimEnd().Split("\n")
+    at := declAt(c, mi, name)
+    isFn := lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ")
+    e := Entry(firstLines(full) if isFn else $lines[0], "", $name)
+    if at >= 0 { e.Doc = Comment(text, at, true) }
+    e.File = m.File
+    e.At = at
+    if lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ") or lines.Len() == 1 { return e }
+    d := typeDecl(c, mi, name)
+    for k in range 1, lines.Len() {
+        line := lines[k].TrimStart()
+        if line.StartsWith("meets ") {
+            e.Members.Push(Entry($line, "", ""))
+            continue
+        }
+        if line.StartsWith("fn ") {
+            mname := methodName(line)
+            if not all and not Exported(mname) { continue }
+            me := Entry($line, "", mname)
+            if d >= types.DeclId(0) {
+                f := c.P.MethodOf(c.P.SelfType(d), nm.Intern(mname))
+                if f >= 0 {
+                    ft := c.P.L.Mods[c.P.FnModule(f)]
+                    me.Doc = Above(ft.Src.Text, I64(c.P.FnDecl(f).Sp.Start))
+                    me.File = ft.File
+                    me.At = I64(c.P.FnDecl(f).Sp.Start)
+                }
+            }
+            e.Members.Push(me)
+            continue
+        }
+        mname := memberName(line)
+        if not all and not Exported(mname) { continue }
+        me := Entry($line, "", mname)
+        mat := memberAt(c, mi, d, mname)
+        if mat >= 0 {
+            me.Doc = Comment(text, mat, true)
+            me.File = m.File
+            me.At = mat
+        }
+        e.Members.Push(me)
+    }
+    return e
+}
+
+# a method's name in its line, "fn (r R&) Name<...>(...)"
+fn methodName(line String&) String {
+    close := try line.Find(") ") catch default -1
+    rest := line[close + 2:] if close >= 0 else line[3:]
+    i I64 = 0
+    for i < rest.Len() and (rest[i].IsLetter() or rest[i].IsDigit() or rest[i] == '_') { i++ }
+    return $rest[:i]
+}
+
+# a field's, case's, word's or trait method's name: the line's first word
+fn memberName(line String&) String {
+    i I64 = 0
+    for i < line.Len() and (line[i].IsLetter() or line[i].IsDigit() or line[i] == '_') { i++ }
+    return $line[:i]
+}
+
+# the type declaration a top-level name of module mi names, -1 for none
+fn typeDecl(c mut typecheck.Checker&, mi I64, name String&) types.DeclId {
+    ei := c.P.TypeEntry(mi, c.P.L.Names.Intern(name))
+    return types.DeclId(-1) if ei < 0 else c.P.DeclFor(mi, ei)
+}
+
+# where the item name of module mi is declared in its file: the offset its name is written at - -1 where it is none of
+# the module's top-level items
+fn declAt(c mut typecheck.Checker&, mi I64, name String&) I64 {
+    dot := try name.Find(".") catch default -1
+    if dot > 0 {
+        d := typeDecl(c, mi, name[:dot])
+        if d < types.DeclId(0) { return -1 }
+        f := c.P.MethodOf(c.P.SelfType(d), c.P.L.Names.Intern(name[dot + 1:]))
+        return -1 if f < 0 else I64(c.P.FnDecl(f).Sp.Start)
+    }
+    id := c.P.L.Names.Intern(name)
+    for e in c.P.R.Tables[mi].Entries {
+        if e.Name == id { return I64(e.Sp.Start) }
+    }
+    return -1
+}
+
+# where a member of the type d (of module mi) is written: a field's name, a case, an error word, a trait method
+fn memberAt(c mut typecheck.Checker&, mi I64, d types.DeclId, name String&) I64 {
+    if d < types.DeclId(0) { return -1 }
+    nm := c.P.L.Names
+    id := nm.Intern(name)
+    text := c.P.L.Mods[mi].Src.Text
+    if c.P.T.DeclKindOf(d) == types.DeclKind.Error {
+        # an error type's words have no spans of their own: the first word so spelled after the declaration's name
+        from := declAt(c, mi, $nm.Text(c.P.T.DeclName(d)))
+        if from < 0 { return -1 }
+        open := try text[from:].Find("{") catch default -1
+        if open < 0 { return -1 }
+        return WordIn(text, from + open, name)
+    }
+    td := c.P.TypeDecl(d)
+    if td is null or td.Body is null { return -1 }
+    match td.Body {
+        case ast.TypeBody.Enum(cases) {
+            for cd in cases {
+                if cd is not null and cd.Name == id { return I64(cd.Sp.Start) }
+            }
+        }
+        case ast.TypeBody.Trait(ms) {
+            for f in ms {
+                if f.Name == id { return I64(f.Sp.Start) }
+            }
+        }
+        case ast.TypeBody.Struct(sb) {
+            if sb.Body is null { return -1 }
+            for s in sb.Body {
+                match s {
+                    case ast.Stmt.Var(_, v) {
+                        for k in range v.Names.Len() {
+                            if v.Names[k] == id { return I64(v.NameSps[k].Start) }
+                        }
+                    }
+                    case _ { }
+                }
+            }
+        }
+        case _ { }
+    }
+    return -1
+}
+
+# the offset of the first word spelled name in t after from, a whole word, before the next '}' (-1 for none)
+fn WordIn(t String&, from I64, name String&) I64 {
+    i := from
+    for i < t.Len() and t[i] != '}' {
+        if t[i] == '#' {
+            for i < t.Len() and t[i] != '\n' { i++ }
+            continue
+        }
+        if t[i:].StartsWith(name) and (i == 0 or not wordChar(t[i - 1])) and
+           (i + name.Len() >= t.Len() or not wordChar(t[i + name.Len()])) {
+            return i
+        }
+        i++
+    }
+    return -1
+}
+
+fn wordChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' }
+
+# the item name of module mi as `doc FILE NAME` prints it
+fn ItemText(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&) String ? explain.Missing {
+    e := try item(c, sc, x, mi, name, true)
+    b := StringBuilder()
+    entryText(b, e, "")
+    return b.ToString()
+}
+
+# ---- text ----
+
+# a module's documentation as text: "module IDENTITY", its own documentation, then each item, a blank line between
+fn (md Module&) Text() String {
+    b := StringBuilder()
+    b.Push($"module " $md.Identity "\n")
+    if md.Doc != "" {
+        b.PushChar('\n')
+        indented(b, md.Doc, "")
+    }
+    for e in md.Items {
+        b.PushChar('\n')
+        entryText(b, e, "")
+    }
+    return b.ToString()
+}
+
+fn entryText(b mut StringBuilder&, e Entry&, indent String&) {
+    for line in e.Line.Lines() { b.Push($indent $line "\n") }
+    if e.Doc != "" { indented(b, e.Doc, $indent "    ") }
+    for m in e.Members { entryText(b, m, $indent "    ") }
+}
+
+# text written with each line indented, a paragraph break an empty line
+fn indented(b mut StringBuilder&, text String&, indent String&) {
+    for line in text.Lines() {
+        if line == "" { b.PushChar('\n') } else { b.Push($indent $line "\n") }
+    }
+}
+
+# ---- HTML ----
+
+# text as HTML writes it
+fn Escape(t String&) String {
+    b := StringBuilder()
+    for ch in t {
+        if ch == '<' { b.Push("&lt;") } else if ch == '>' { b.Push("&gt;") } else if ch == '&' { b.Push("&amp;") }
+        else if ch == '"' { b.Push("&quot;") } else { b.PushChar(ch) }
+    }
+    return b.ToString()
+}
+
+# the file a module's page is written to: its identity, '/' written '.'
+fn PageName(identity String&) String {
+    b := StringBuilder()
+    for ch in identity { b.PushChar('.' if ch == '/' else ch) }
+    b.Push(".html")
+    return b.ToString()
+}
+
+Style String& = ("body{font-family:system-ui,sans-serif;max-width:52rem;margin:2rem auto;padding:0 1rem;line-height:1.5;" $
+                 "color:#1d1d1f;background:#fff}pre{background:#f5f5f7;padding:.5rem .75rem;border-radius:4px;" $
+                 "overflow-x:auto;margin:.25rem 0}code,pre{font-family:ui-monospace,Menlo,monospace;font-size:.9em}" $
+                 ".doc{margin:.25rem 0 1rem 1rem}.member{margin-left:1.5rem}h2{border-bottom:1px solid #ddd;" $
+                 "padding-bottom:.25rem;margin-top:2rem}a{color:#0b57d0}@media(prefers-color-scheme:dark){body{" $
+                 "color:#e8e8ea;background:#18181b}pre{background:#26262b}a{color:#8ab4f8}h2{border-color:#333}}")
+
+fn page(title String&, body String&) String {
+    return $"<!doctype html>\n<html lang=\"en\"><head><meta charset=\"utf-8\">" $
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" $
+        "<title>" $Escape(title) "</title><style>" $Style "</style></head><body>\n" $body "</body></html>\n"
+}
+
+# a doc comment as HTML: each paragraph a <p>, a paragraph of lines indented by four spaces or more a <pre>
+fn docHtml(b mut StringBuilder&, doc String&) {
+    if doc == "" { return }
+    b.Push("<div class=\"doc\">")
+    para := StringBuilder()
+    pre := false
+    flush := fn(p mut StringBuilder&, out mut StringBuilder&, asPre Bool) {
+        if p.Len() == 0 { return }
+        text := p.ToString()
+        if asPre { out.Push($"<pre>" $Escape(text) "</pre>") } else { out.Push($"<p>" $Escape(text) "</p>") }
+        p.Clear()
+    }
+    for line in doc.Lines() {
+        if line == "" {
+            flush(para, b, pre)
+            continue
+        }
+        indentedLine := line.StartsWith("    ")
+        if para.Len() > 0 and indentedLine != pre { flush(para, b, pre) }
+        pre = indentedLine
+        if para.Len() > 0 { para.PushChar('\n') }
+        para.Push(line[4:] if pre else line)
+    }
+    flush(para, b, pre)
+    b.Push("</div>\n")
+}
+
+fn entryHtml(b mut StringBuilder&, e Entry&, member Bool) {
+    if member { b.Push("<div class=\"member\">") }
+    id := e.Name
+    b.Push($"<pre id=\"" $Escape(id) "\">" $Escape(e.Line) "</pre>\n")
+    docHtml(b, e.Doc)
+    for m in e.Members { entryHtml(b, m, true) }
+    if member { b.Push("</div>\n") }
+}
+
+# a module's page
+fn (md Module&) Html() String {
+    b := StringBuilder()
+    b.Push($"<p><a href=\"index.html\">index</a></p>\n<h1>" $Escape(md.Identity) "</h1>\n")
+    b.Push($"<pre>import \"" $Escape(md.Identity) "\"</pre>\n")
+    docHtml(b, md.Doc)
+    if md.Items.Len() > 0 {
+        b.Push("<h2>Index</h2>\n<ul>\n")
+        for e in md.Items { b.Push($"<li><a href=\"#" $Escape(e.Name) "\"><code>" $Escape(e.Name) "</code></a></li>\n") }
+        b.Push("</ul>\n<h2>Items</h2>\n")
+    }
+    for e in md.Items { entryHtml(b, e, false) }
+    return page(md.Identity, b.ToString())
+}
+
+# the index of the modules written: each a link to its page and its documentation's first sentence
+fn IndexHtml(title String&, mods Array<Module>&) String {
+    b := StringBuilder()
+    b.Push($"<h1>" $Escape(title) "</h1>\n<ul>\n")
+    for md in mods {
+        b.Push($"<li><a href=\"" $PageName(md.Identity) "\"><code>" $Escape(md.Identity) "</code></a>")
+        s := firstSentence(md.Doc)
+        if s != "" { b.Push($" - " $Escape(s)) }
+        b.Push("</li>\n")
+    }
+    b.Push("</ul>\n")
+    return page(title, b.ToString())
+}
+
+# a documentation's first sentence: up to its first ". " or blank line, on one line
+fn firstSentence(doc String&) String {
+    b := StringBuilder()
+    for line in doc.Lines() {
+        if line == "" { break }
+        if b.Len() > 0 { b.PushChar(' ') }
+        b.Push(line.Trim())
+    }
+    t := b.ToString()
+    end := try t.Find(". ") catch default -1
+    return $t[:end + 1] if end >= 0 else t
+}
+
+# ---- tests ----
+
+test "a doc comment is the comment lines directly above a declaration (L4b)" {
+    t := "# one\n#\n# two\nfn f() { }\n\n# not mine\n\nfn g() { }\nx := 1   # trailing\n         # more\nfn h() { }\n"
+    assert Above(t, t.Find("fn f")!) == "one\n\ntwo"
+    assert Above(t, t.Find("fn g")!) == ""
+    assert Comment(t, t.Find("x :=")!, true) == "trailing\nmore"
+    # the continuation of x's trailing comment is no doc comment of h
+    assert Above(t, t.Find("fn h")!) == ""
+}
+
+test "a member's trailing comment, a block comment, a shebang and the module's own comment" {
+    t := "#!/usr/bin/env olang\n# the module\n\nimport \"std/io\"\n## block ##\nfn f() { }\ns := \"#\"   # after\n"
+    assert ModuleDoc(t) == "the module"
+    assert Above(t, t.Find("fn f")!) == ""
+    assert Trailing(t, t.Find("s :=")!) == "after"
+    u := "# f's\nfn f() { }\n"
+    assert ModuleDoc(u) == ""
+    assert Above("#!/bin/x\nfn f() { }\n", 9) == ""
+}
+
+test "pages and their names" {
+    assert PageName("std/json") == "std.json.html"
+    assert Escape("a<b & \"c\">") == "a&lt;b &amp; &quot;c&quot;&gt;"
+    assert firstSentence("Reads JSON. Writes it.\nmore") == "Reads JSON."
+}

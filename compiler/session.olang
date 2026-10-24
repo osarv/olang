@@ -1,0 +1,1310 @@
+# session - the compiler's front end held for a tool (B15, B16): one program loaded, checked, its values and asserts
+# decided and held to section 8, as a build would before code generation - with the text an editor holds standing in
+# for its files - and the questions an editor or an agent asks of it: the diagnostics, what a name at an offset is and
+# where it is declared, a file's symbols, what may follow a ".", a file formatted.
+#
+# Nothing is reclaimed but by scopes, so an Analysis lives as long as the scope it is built into: lsp builds each one in
+# a process of its own (a fork of the server), which also keeps a crash of the compiler from ending the server.
+
+import "std/os"
+import "std/io"
+import "std/pair"
+import "std/filepath"
+import "source"
+import "token"
+import "scan"
+import "ast"
+import "diag"
+import "msgs"
+import "load"
+import "fetch"
+import "names"
+import "types"
+import "generic"
+import "typed"
+import "scope"
+import "eval"
+import "interp"
+import "explain"
+import "build"
+import "fmt"
+import "doc"
+import typecheck "check"
+
+# ---- the analysis ----
+
+# a program as the front end leaves it: loaded (L), checked (C, null where it did not load), held to section 8 (Sc) and
+# evaluable (X) - each null where an earlier pass stopped it
+type Analysis struct(L mut load.Loader&) {
+    L
+    C mut typecheck.Checker& = null
+    Sc mut scope.Scoper& = null
+    X mut interp.Exec& = null
+}
+
+# the real path of a file, as the loader keys modules: its path where it has none (a file not on disk)
+fn RealOf(path String&) String {
+    r := try os.RealPath(path) catch default ""
+    return $r if r != "" else $path
+}
+
+# the program root is the root of, checked as "olang test" checks it (its tests too) - with each file of overlay (by
+# real path) read from there instead of from disk
+fn Analyze(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg, overlay Map<String&, String&>&) mut Analysis&cfg {
+    f mut fetch.Fetcher&cfg = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), cfg.Update, true)
+    nm mut source.Names&cfg = source.Names()
+    l mut load.Loader&cfg = load.Loader(load.StdDir(), cfg.Consts, f, nm, d)
+    for e in overlay { l.Overlay.Put($e.Key, $e.Value) }
+    l.Load(root)
+    a mut Analysis&cfg = Analysis(l)
+    if l.Root < 0 or d.HasFatal() { return a }
+    c mut typecheck.Checker&cfg = interp.Analyze(l, true)
+    a.C = c
+    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    clean := d.Errors() == 0
+    if clean { interp.DecideValues(c) }
+    interp.DecideAsserts(c, asserts)
+    if clean { interp.Bake(c) }
+    if d.HasFatal() { return a }
+    sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
+    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
+    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
+    sc.Run()
+    a.Sc = sc
+    x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
+    a.X = x
+    return a
+}
+
+# the module read from the file at real path, -1 for none
+fn (a Analysis&) ModuleOf(real String&) I64 {
+    for i in range a.L.Mods.Len() {
+        if a.L.Mods[i].Real == real { return i }
+    }
+    return -1
+}
+
+# a module's file text
+fn (a Analysis&) TextOf(mi I64) String&a { return a.L.Mods[mi].Src.Text }
+
+# the real path of the file a diagnostics file number names, "" for none
+fn (a Analysis&) RealOfFile(file I64) String {
+    for m in a.L.Mods {
+        if m.File == file { return $m.Real }
+    }
+    return ""
+}
+
+# ---- what is written at an offset ----
+
+# nothing to say: no name there, or nothing known of it
+error Nothing { HERE }
+
+# the identifier at or just before offset at of t: its span, empty where none is there
+fn WordAt(t String&, at I64) source.Span {
+    s := at
+    if s > t.Len() { s = t.Len() }
+    for s > 0 and wordChar(t[s - 1]) { s-- }
+    e := at
+    if e < s { e = s }
+    for e < t.Len() and wordChar(t[e]) { e++ }
+    if e == s or t[s].IsDigit() { return source.Span(I32(at), I32(at)) }
+    return source.Span(I32(s), I32(e))
+}
+
+fn wordChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' or U8(ch) >= 128 }
+
+# what a name refers to: a top-level item (Module, Name), a member of a type (Type, Name), a local of a body, or nothing
+type Target enum {
+    None
+    Item(module I64, name String&)
+    Method(f I64)
+    Field(t types.TypeId, index I64)
+    Local(body I64, id typed.LocalId)
+    Decl(module I64, at I64, doc String&, line String&)   # a name declared there, said by line
+    Module(module I64)
+}
+
+# a hover's text and where the thing is declared - a real path and an offset in it ("" for none)
+type Found struct(Text String&, Real String&, At I64) {
+    Text
+    Real
+    At
+}
+
+# what the name at offset at of the file at real path is: its text for a hover (its signature as explain gives it and
+# its doc comment) and where it is declared
+fn (a Analysis&) Lookup(real String&, at I64) Found ? Nothing {
+    mi := a.ModuleOf(real)
+    if mi < 0 or a.C is null { error Nothing.HERE }
+    text := a.TextOf(mi)
+    w := WordAt(text, at)
+    if w.Start == w.End { error Nothing.HERE }
+    tg := a.target(mi, w)
+    return try a.describe(tg)
+}
+
+fn (a Analysis&) target(mi I64, w source.Span) Target {
+    c := a.C
+    r := c.P.R
+    file := a.L.Mods[mi].File
+    name := $a.TextOf(mi)[I64(w.Start):I64(w.End)]
+    # a name the resolver read: a top-level item of this module or another, an import, a local
+    ref := r.Use(file, w.Start)
+    if ref.Kind == names.What.None { ref = r.Member(file, w.End) }
+    match ref.Kind {
+        case names.What.Func, names.What.Global, names.What.Type {
+            return Target.Item(ref.Module, $c.P.L.Names.Text(r.Tables[ref.Module].Entries[ref.Index].Name))
+        }
+        case names.What.Import { return Target.Module(ref.Module) }
+        case names.What.Local, names.What.TypeVar {
+            sp := r.LocalSpan(ref.Index)
+            tl := a.localAt(file, I64(sp.Start))
+            if tl.First >= 0 { return Target.Local(tl.First, tl.Second) }
+            return Target.Decl(mi, I64(sp.Start), "", $name)
+        }
+        case _ { }
+    }
+    # a declaration's own name: a top-level item, a local or parameter
+    for e in r.Tables[mi].Entries {
+        if e.Sp.Start == w.Start and e.Kind != names.What.Import {
+            f := c.P.FnNamed(mi, e.Name)
+            if e.Kind == names.What.Func and f >= 0 and c.P.FnDecl(f).Recv is not null { break }
+            return Target.Item(mi, $name)
+        }
+    }
+    tl := a.localAt(file, I64(w.Start))
+    if tl.First >= 0 { return Target.Local(tl.First, tl.Second) }
+    # a method's name where it is declared
+    c.P.AllFns()
+    for f in range c.P.FnCount() {
+        if c.P.FnModule(f) != mi { continue }
+        decl := c.P.FnDecl(f)
+        if decl.Recv is null or c.P.L.Names.Text(decl.Name) != name { continue }
+        if I64(decl.Sp.Start) <= I64(w.Start) and I64(w.Start) < I64(decl.Sp.End) and
+           (decl.Body is null or decl.Body.Len() == 0 or I64(w.Start) < I64(decl.Body[0].Span().Start)) {
+            return Target.Method(f)
+        }
+    }
+    # what the checked bodies say of the name: a field read, a method called, a global
+    f := finder(I64(w.Start), I64(w.End), name, c)
+    for b in c.Bodies {
+        if b.File != file or b.Root is null { continue }
+        if I64(b.Sp.End) < I64(w.Start) or I64(b.Sp.Start) > I64(w.End) { continue }
+        f.body = I64(b.Id)
+        f.block(b.Root)
+    }
+    return f.best
+}
+
+# the body and local declared at offset at of a file - (-1, 0) for none
+fn (a Analysis&) localAt(file I64, at I64) pair.Pair<I64, typed.LocalId> {
+    for b in a.C.Bodies {
+        if b.File != file { continue }
+        for k in range b.Locals.Len() {
+            l := b.Locals[k]
+            if l.Name != source.NameId(0) and I64(l.Sp.Start) == at { return pair.Pair(I64(b.Id), typed.LocalId(I32(k))) }
+        }
+    }
+    return pair.Pair(I64(-1), typed.LocalId(0))
+}
+
+# a target's hover text and declaration
+fn (a Analysis&) describe(tg Target) Found ? Nothing {
+    c := a.C
+    match tg {
+        case Target.Item(mi, name) {
+            line := try explain.Item(c, a.Sc, a.X, mi, name) catch explain.Missing { error Nothing.HERE }
+            at := declOf(c, mi, name)
+            return Found(hover(line, doc.Comment(a.TextOf(mi), at, true) if at >= 0 else ""), $a.L.Mods[mi].Real, at)
+        }
+        case Target.Method(f) {
+            mi := c.P.FnModule(f)
+            at := I64(c.P.FnDecl(f).Sp.Start)
+            return Found(hover(explain.FnText(c, a.Sc, f), doc.Above(a.TextOf(mi), at)), $a.L.Mods[mi].Real, at)
+        }
+        case Target.Field(t, index) {
+            fd := try a.field(t, index)
+            return Found(hover($fd.Name " " $c.Ty(fd.Ty), fd.Doc), fd.Real, fd.At)
+        }
+        case Target.Local(bi, id) {
+            b := c.Bodies[bi]
+            l := b.Locals[I64(id)]
+            mi := a.moduleOfFile(b.File)
+            kind := "parameter " if l.Kind == typed.LocalKind.Param else ""
+            text := hover($kind $c.P.L.Names.Text(l.Name) " " $c.Ty(l.Ty), "")
+            return Found(text, $a.L.Mods[mi].Real if mi >= 0 else "", I64(l.Sp.Start))
+        }
+        case Target.Decl(mi, at, docText, line) { return Found(hover(line, docText), $a.L.Mods[mi].Real, at) }
+        case Target.Module(mi) {
+            m := a.L.Mods[mi]
+            return Found(hover($"import \"" $m.Identity "\"", doc.ModuleDoc(m.Src.Text)), $m.Real, 0)
+        }
+        case Target.None { error Nothing.HERE }
+    }
+}
+
+fn (a Analysis&) moduleOfFile(file I64) I64 {
+    for i in range a.L.Mods.Len() {
+        if a.L.Mods[i].File == file { return i }
+    }
+    return -1
+}
+
+# a hover: the signature as olang code, then the doc comment
+fn hover(sig String&, docText String&) String {
+    b := StringBuilder()
+    b.Push($"```olang\n" $sig.TrimEnd() "\n```")
+    if docText != "" { b.Push($"\n\n" $docText) }
+    return b.ToString()
+}
+
+# where a top-level item of module mi is declared: the offset of its name, -1 for none ("Type.Method" too)
+fn declOf(c mut typecheck.Checker&, mi I64, name String&) I64 {
+    dot := try name.Find(".") catch default -1
+    id := c.P.L.Names.Intern(name if dot < 0 else name[:dot])
+    for e in c.P.R.Tables[mi].Entries {
+        if e.Name == id { return I64(e.Sp.Start) }
+    }
+    return -1
+}
+
+# a field of a struct type: its name, type, doc comment and where it is declared
+type FieldInfo struct(Name String&, Ty types.TypeId, Doc String&, Real String&, At I64) {
+    Name
+    Ty
+    Doc
+    Real
+    At
+}
+
+fn (a Analysis&) field(t types.TypeId, index I64) FieldInfo ? Nothing {
+    c := a.C
+    tt := c.P.T.Referent(t) if c.P.T.KindOf(t) == types.Kind.Ref else t
+    if c.P.T.KindOf(tt) != types.Kind.Named { error Nothing.HERE }
+    decl := c.P.T.DeclOf(tt)
+    for body in c.Bodies {
+        match body.Of {
+            case typed.BodyOf.Ctor(bt, _) {
+                if c.P.T.KindOf(bt) != types.Kind.Named or c.P.T.DeclOf(bt) != decl or index >= body.Fields.Len() { continue }
+                l := body.Locals[I64(body.Fields[index])]
+                mi := a.moduleOfFile(body.File)
+                if mi < 0 { error Nothing.HERE }
+                text := a.TextOf(mi)
+                name := $text[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0) else $c.P.L.Names.Text(l.Name)
+                tys := c.P.T.Items(c.P.T.Fields(tt))
+                ty := tys[index] if index < tys.Len() else l.Ty
+                return FieldInfo(name, ty, doc.Comment(text, I64(l.Sp.Start), true), $a.L.Mods[mi].Real, I64(l.Sp.Start))
+            }
+            case _ { }
+        }
+    }
+    error Nothing.HERE
+}
+
+# the checked bodies' nodes naming the identifier [s, e): the innermost field read, method or function called, global
+type finder struct(s I64, e I64, name String&, c mut typecheck.Checker&) {
+    s
+    e
+    name
+    c
+    body I64 = -1
+    best Target = Target.None
+    width I64 = 9223372036854775807
+}
+
+fn (f mut finder&) take(sp source.Span, tg Target) {
+    w := I64(sp.End) - I64(sp.Start)
+    if I64(sp.Start) <= f.s and f.e <= I64(sp.End) and w < f.width {
+        f.width = w
+        f.best = tg
+    }
+}
+
+fn (f mut finder&) block(b typed.Block&) {
+    if b is null { return }
+    for s in b.Stmts { f.stmt(s) }
+}
+
+fn (f mut finder&) stmt(s typed.Stmt&) {
+    if s is null { return }
+    match s {
+        case typed.Stmt.Let(_, _, init) { f.expr(init) }
+        case typed.Stmt.Assign(_, p, v) {
+            f.place(p)
+            f.expr(v)
+        }
+        case typed.Stmt.Eval(_, x) { f.expr(x) }
+        case typed.Stmt.If(_, i) {
+            f.expr(i.Test)
+            f.block(i.Then)
+            f.block(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            f.block(body)
+            f.block(post)
+        }
+        case typed.Stmt.Return(_, v) { f.expr(v) }
+        case typed.Stmt.Exit(_, _, m) { f.expr(m) }
+        case typed.Stmt.Assert(_, cond, m) {
+            f.expr(cond)
+            f.expr(m)
+        }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { f.block(b) }
+        case typed.Stmt.Join(_, j) { f.block(j.Code) }
+        case typed.Stmt.Spawn(_, sp) {
+            for t in sp.Targets { f.place(t) }
+            f.expr(sp.Task)
+        }
+        case typed.Stmt.Yield(_, x) { f.expr(x) }
+        case _ { }
+    }
+}
+
+fn (f mut finder&) place(p typed.Place&) {
+    if p is null { return }
+    match p {
+        case typed.Place.Global(sp, _, mi, n) {
+            if I64(sp.End) == f.e and f.c.P.L.Names.Text(n) == f.name { f.take(sp, Target.Item(mi, $f.name)) }
+        }
+        case typed.Place.Deref(_, _, r) { f.expr(r) }
+        case typed.Place.Field(sp, _, base, index) {
+            if I64(sp.End) == f.e { f.take(sp, Target.Field(base.Type(), index)) }
+            f.place(base)
+        }
+        case typed.Place.Elem(_, _, el) {
+            f.place(el.Base)
+            f.expr(el.Index)
+        }
+        case typed.Place.Payload(_, _, pl) { f.place(pl.Base) }
+        case typed.Place.Temp(_, _, v, _) { f.expr(v) }
+        case _ { }
+    }
+}
+
+fn (f mut finder&) expr(x typed.Expr&) {
+    if x is null { return }
+    match x {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { f.place(p) }
+        case typed.Expr.Promote(_, _, pr) { f.expr(pr.X) }
+        case typed.Expr.Call(sp, _, cl) {
+            f.callee(sp, cl.Target)
+            for arg in cl.Args { f.expr(arg) }
+        }
+        case typed.Expr.Make(_, _, m) {
+            for it in m.Items { f.expr(it) }
+            f.expr(m.Length)
+        }
+        case typed.Expr.Collect(_, _, cl) {
+            f.expr(cl.Reserve)
+            f.block(cl.Loop)
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for arg in args { f.expr(arg) }
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            f.place(sl.Base)
+            f.expr(sl.Lo)
+            f.expr(sl.Hi)
+        }
+        case typed.Expr.Cond(_, _, cd) {
+            f.expr(cd.C)
+            f.expr(cd.A)
+            f.expr(cd.B)
+        }
+        case typed.Expr.Seq(_, _, sq) {
+            for s in sq.Stmts { f.stmt(s) }
+            f.expr(sq.X)
+        }
+        case typed.Expr.Match(_, _, m) {
+            for s in m.Held { f.stmt(s) }
+            for arm in m.Arms {
+                for alt in arm.Alts { f.expr(alt.Test) }
+                f.expr(arm.Guard)
+                f.block(arm.Code)
+                f.expr(arm.Value)
+            }
+            if m.NoMatch is not null {
+                f.block(m.NoMatch.Code)
+                f.expr(m.NoMatch.Value)
+            }
+        }
+        case typed.Expr.Try(_, _, t) {
+            f.expr(t.X)
+            for cl in t.Clauses {
+                f.block(cl.Code)
+                for dv in cl.Defaults { f.expr(dv) }
+            }
+        }
+        case typed.Expr.Fn(sp, _, fv) {
+            match fv {
+                case typed.FnVal.Named(bid) { f.callee(sp, typed.Callee.Body(bid)) }
+                case typed.FnVal.Lambda(bid, caps, _) {
+                    for cp in caps { f.expr(cp.Outer) }
+                    lb := f.c.Bodies[I64(bid)]
+                    if lb.Root is not null { f.block(lb.Root) }
+                }
+                case typed.FnVal.Adapter(_, recv, _) { f.expr(recv) }
+            }
+        }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(rx) { f.expr(rx) }
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { }
+        case _ { }
+    }
+}
+
+# a call's or a function value's target, where the identifier is its callee's name, written inside the call
+fn (f mut finder&) callee(sp source.Span, cl typed.Callee&) {
+    if I64(sp.Start) > f.s or f.e > I64(sp.End) { return }
+    match cl {
+        case typed.Callee.Body(bid) {
+            b := f.c.Bodies[I64(bid)]
+            match b.Of {
+                case typed.BodyOf.Fn(inst) {
+                    fi := f.c.P.InstanceFn(inst)
+                    if f.c.P.L.Names.Text(f.c.P.FnDecl(fi).Name) == f.name {
+                        if f.c.P.FnDecl(fi).Recv is not null { f.take(sp, Target.Method(fi)) } else {
+                            f.take(sp, Target.Item(f.c.P.FnModule(fi), $f.name))
+                        }
+                    }
+                }
+                case typed.BodyOf.Ctor(ct, _) {
+                    tt := ct
+                    if f.c.P.T.KindOf(tt) == types.Kind.Named {
+                        d := f.c.P.T.DeclOf(tt)
+                        if f.c.P.L.Names.Text(f.c.P.T.DeclName(d)) == f.name {
+                            f.take(sp, Target.Item(f.c.P.DeclModule(d), $f.name))
+                        }
+                    }
+                }
+                case _ { }
+            }
+        }
+        case typed.Callee.Value(v) { f.expr(v) }
+        case _ { }
+    }
+}
+
+# ---- JSON and positions ----
+
+# s as a JSON string, quotes included
+fn JsonStr(b mut StringBuilder&, s String&) {
+    b.PushChar('"')
+    for ch in s {
+        if ch == '"' {
+            b.Push("\\\"")
+        } else if ch == '\\' {
+            b.Push("\\\\")
+        } else if ch == '\n' {
+            b.Push("\\n")
+        } else if ch == '\r' {
+            b.Push("\\r")
+        } else if ch == '\t' {
+            b.Push("\\t")
+        } else if U8(ch) < 32 {
+            b.Push("\\u00")
+            b.PushChar("0123456789abcdef"[I64(U8(ch) >> 4)])
+            b.PushChar("0123456789abcdef"[I64(U8(ch) & 15)])
+        } else {
+            b.PushChar(ch)
+        }
+    }
+    b.PushChar('"')
+}
+
+# a text's positions as an editor counts them (LSP): lines from 0, characters from 0 in UTF-8 bytes or UTF-16 units
+type Positions struct(Text String&, Utf8 Bool) {
+    Text
+    Utf8
+    starts Array<I32>& = source.LineStarts(Text)
+}
+
+# the line and character of an offset
+fn (p Positions&) Pos(off I64) I64, I64 {
+    o := off
+    if o > p.Text.Len() { o = p.Text.Len() }
+    if o < 0 { o = 0 }
+    lo I64 = 0
+    hi I64 = p.starts.Len() - 1
+    for lo < hi {
+        mid := (lo + hi + 1) / 2
+        if I64(p.starts[mid]) <= o { lo = mid } else { hi = mid - 1 }
+    }
+    start := I64(p.starts[lo])
+    if p.Utf8 { return lo, o - start }
+    return lo, utf16Units(p.Text, start, o)
+}
+
+# the offset of a line and character - the line's end where the character is past it, the text's end past its last line
+fn (p Positions&) Offset(line I64, ch I64) I64 {
+    if line < 0 { return 0 }
+    if line >= p.starts.Len() { return p.Text.Len() }
+    start := I64(p.starts[line])
+    end := I64(p.starts[line + 1]) - 1 if line + 1 < p.starts.Len() else p.Text.Len()
+    if p.Utf8 { return start + ch if start + ch <= end else end }
+    i := start
+    units I64 = 0
+    for i < end and units < ch {
+        b := U8(p.Text[i])
+        n := 1 if b < 0xC0 else 2 if b < 0xE0 else 3 if b < 0xF0 else 4
+        units += 2 if n == 4 else 1
+        i += n
+    }
+    return i if i <= end else end
+}
+
+# UTF-16 units in t[from:to]
+fn utf16Units(t String&, from I64, to I64) I64 {
+    units I64 = 0
+    i := from
+    for i < to {
+        b := U8(t[i])
+        n := 1 if b < 0xC0 else 2 if b < 0xE0 else 3 if b < 0xF0 else 4
+        units += 2 if n == 4 else 1
+        i += n
+    }
+    return units
+}
+
+# an LSP range, {"start": {...}, "end": {...}}
+fn (p Positions&) Range(b mut StringBuilder&, from I64, to I64) {
+    l1, c1 := p.Pos(from)
+    l2, c2 := p.Pos(to)
+    b.Push($"{\"start\":{\"line\":" $l1 ",\"character\":" $c1 "},\"end\":{\"line\":" $l2 ",\"character\":" $c2 "}}")
+}
+
+# ---- symbols ----
+
+# LSP's SymbolKind
+KindMethod I64 = 6
+KindField I64 = 8
+KindEnum I64 = 10
+KindInterface I64 = 11
+KindFunction I64 = 12
+KindVariable I64 = 13
+KindEnumMember I64 = 22
+KindStruct I64 = 23
+KindClass I64 = 5
+
+# the declarations of a parsed file as LSP's DocumentSymbol array, written to b; nm holds the names its tree interns
+fn Symbols(b mut StringBuilder&, p Positions&, decls Array<ast.Decl&>&, nm source.Names&) {
+    b.PushChar('[')
+    w := symWriter(p)
+    if decls is not null {
+        for d in decls { w.decl(b, d, nm) }
+    }
+    b.PushChar(']')
+}
+
+type symWriter struct(p Positions&) {
+    p
+    n I64 = 0
+}
+
+# one DocumentSymbol, its children to follow: the caller closes it with end
+fn (w mut symWriter&) open(b mut StringBuilder&, name String&, kind I64, from I64, to I64, nameAt I64, nameEnd I64, detail String&) {
+    if w.n > 0 { b.PushChar(',') }
+    w.n++
+    b.Push("{\"name\":")
+    JsonStr(b, name if name != "" else "?")
+    b.Push($",\"kind\":" $kind ",\"range\":")
+    w.p.Range(b, from, to)
+    b.Push(",\"selectionRange\":")
+    w.p.Range(b, nameAt, nameEnd)
+    if detail != "" {
+        b.Push(",\"detail\":")
+        JsonStr(b, detail)
+    }
+    b.Push(",\"children\":[")
+}
+
+fn (w mut symWriter&) leaf(b mut StringBuilder&, name String&, kind I64, from I64, to I64, nameAt I64, nameEnd I64, detail String&) {
+    w.open(b, name, kind, from, to, nameAt, nameEnd, detail)
+    b.Push("]}")
+}
+
+fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) {
+    t := w.p.Text
+    match d {
+        case ast.Decl.Fn(f), ast.Decl.Extern(f) {
+            name := nm.Text(f.Name)
+            s := nameIn(t, I64(f.Sp.Start), name)
+            detail := ""
+            if f.Recv is not null and f.Recv.Ty is not null { detail = $t[I64(f.Recv.Ty.Span().Start):I64(f.Recv.Ty.Span().End)] }
+            w.leaf(b, name, KindMethod if f.Recv is not null else KindFunction, I64(f.Sp.Start), I64(f.Sp.End), s, s + name.Len(), detail)
+        }
+        case ast.Decl.Type(sp, td) {
+            name := nm.Text(td.Name)
+            s := nameIn(t, I64(sp.Start), name)
+            kind := KindClass
+            if td.Body is not null {
+                kind = match td.Body {
+                    case ast.TypeBody.Struct(_) => KindStruct
+                    case ast.TypeBody.Enum(_) => KindEnum
+                    case ast.TypeBody.Trait(_) => KindInterface
+                    case _ => KindClass
+                }
+            }
+            w.open(b, name, kind, I64(sp.Start), I64(sp.End), s, s + name.Len(), "")
+            inner := symWriter(w.p)
+            if td.Body is not null { inner.members(b, td.Body, nm) }
+            b.Push("]}")
+        }
+        case ast.Decl.Global(sp, v) {
+            for k in range v.Names.Len() {
+                ns := v.NameSps[k]
+                w.leaf(b, nm.Text(v.Names[k]), KindVariable, I64(sp.Start), I64(sp.End), I64(ns.Start), I64(ns.End), "")
+            }
+        }
+        case ast.Decl.Errors(sp, n, words) {
+            name := nm.Text(n)
+            s := nameIn(t, I64(sp.Start), name)
+            w.open(b, name, KindEnum, I64(sp.Start), I64(sp.End), s, s + name.Len(), "error")
+            inner := symWriter(w.p)
+            for wd in words {
+                wname := nm.Text(wd)
+                at := doc.WordIn(t, s + name.Len(), wname)
+                if at >= 0 { inner.leaf(b, wname, KindEnumMember, at, at + wname.Len(), at, at + wname.Len(), "") }
+            }
+            b.Push("]}")
+        }
+        case ast.Decl.Test(sp, nsp, _) {
+            w.leaf(b, $"test " $t[I64(nsp.Start):I64(nsp.End)], KindFunction, I64(sp.Start), I64(sp.End), I64(nsp.Start), I64(nsp.End), "")
+        }
+        case ast.Decl.If(_, ti) { w.topIf(b, ti, nm) }
+        case _ { }
+    }
+}
+
+fn (w mut symWriter&) members(b mut StringBuilder&, body ast.TypeBody&, nm source.Names&) {
+    t := w.p.Text
+    match body {
+        case ast.TypeBody.Struct(sb) {
+            if sb.Body is null { return }
+            for st in sb.Body {
+                match st {
+                    case ast.Stmt.Var(vsp, v) {
+                        for k in range v.Names.Len() {
+                            ns := v.NameSps[k]
+                            w.leaf(b, nm.Text(v.Names[k]), KindField, I64(vsp.Start), I64(vsp.End), I64(ns.Start), I64(ns.End), "")
+                        }
+                    }
+                    case _ { }
+                }
+            }
+        }
+        case ast.TypeBody.Enum(cases) {
+            for cd in cases {
+                if cd is null { continue }
+                cname := nm.Text(cd.Name)
+                w.leaf(b, cname, KindEnumMember, I64(cd.Sp.Start), I64(cd.Sp.End), I64(cd.Sp.Start), I64(cd.Sp.Start) + cname.Len(), "")
+            }
+        }
+        case ast.TypeBody.Trait(ms) {
+            for m in ms {
+                mname := nm.Text(m.Name)
+                s := nameIn(t, I64(m.Sp.Start), mname)
+                w.leaf(b, mname, KindMethod, I64(m.Sp.Start), I64(m.Sp.End), s, s + mname.Len(), "")
+            }
+        }
+        case _ { }
+    }
+}
+
+fn (w mut symWriter&) topIf(b mut StringBuilder&, ti ast.TopIf&, nm source.Names&) {
+    if ti is null { return }
+    if ti.Then is not null and ti.Then.Decls is not null {
+        for d in ti.Then.Decls { w.decl(b, d, nm) }
+    }
+    w.topIf(b, ti.ElseIf, nm)
+    if ti.Else is not null and ti.Else.Decls is not null {
+        for d in ti.Else.Decls { w.decl(b, d, nm) }
+    }
+}
+
+# where name is first written as a whole word in t from offset from - from itself where it is not
+fn nameIn(t String&, from I64, name String&) I64 {
+    at := doc.WordIn(t, from, name)
+    return from if at < 0 else at
+}
+
+# ---- completion ----
+
+# LSP's CompletionItemKind
+CompMethod I64 = 2
+CompFunction I64 = 3
+CompField I64 = 5
+CompVariable I64 = 6
+CompModule I64 = 9
+CompKeyword I64 = 14
+CompConstant I64 = 21
+CompStruct I64 = 22
+
+# completion items written as a JSON array's elements
+type Items struct() {
+    B StringBuilder
+    n I64 = 0
+    seen List<String&>
+}
+
+fn (it mut Items&) Add(label String&, kind I64, detail String&) {
+    for s in it.seen {
+        if s == label { return }
+    }
+    it.seen.Push($label)
+    if it.n > 0 { it.B.PushChar(',') }
+    it.n++
+    it.B.Push("{\"label\":")
+    JsonStr(it.B, label)
+    it.B.Push($",\"kind\":" $kind)
+    if detail != "" {
+        it.B.Push(",\"detail\":")
+        JsonStr(it.B, detail)
+    }
+    it.B.PushChar('}')
+}
+
+# what may follow "x." where offset dot of the file at real path is just past x: an import's exported names, else the
+# fields and methods of x's type
+fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
+    mi := a.ModuleOf(real)
+    if mi < 0 or a.C is null { return }
+    c := a.C
+    text := a.TextOf(mi)
+    file := a.L.Mods[mi].File
+    w := WordAt(text, dot)
+    if w.Start < w.End and I64(w.End) == dot {
+        ref := c.P.R.Use(file, w.Start)
+        if ref.Kind == names.What.None { ref = c.P.R.Member(file, w.End) }
+        if ref.Kind == names.What.Import {
+            a.moduleNames(it, ref.Module, false)
+            return
+        }
+    }
+    t := a.typeEndingAt(file, dot)
+    if t == types.UnknownT { return }
+    a.typeMembers(it, t)
+}
+
+# the names a module offers: every one where own is true (the module itself), else its exported ones
+fn (a Analysis&) moduleNames(it mut Items&, mi I64, own Bool) {
+    c := a.C
+    nm := c.P.L.Names
+    for e in c.P.R.Tables[mi].Entries {
+        name := nm.Text(e.Name)
+        if not own and not doc.Exported(name) { continue }
+        if e.Kind == names.What.Func {
+            f := c.P.FnNamed(mi, e.Name)
+            if f < 0 or c.P.FnDecl(f).Recv is not null { continue }
+            it.Add(name, CompFunction, c.Ty(c.P.Sig(f)))
+        } else if e.Kind == names.What.Type {
+            it.Add(name, CompStruct, "")
+        } else if e.Kind == names.What.Global {
+            it.Add(name, CompVariable if e.Mut else CompConstant, "")
+        } else if e.Kind == names.What.Import {
+            it.Add(name, CompModule, "")
+        }
+    }
+}
+
+# the type of the widest checked expression whose span ends at offset end of a file, UnknownT for none - else of a
+# local or parameter whose name ends there
+fn (a Analysis&) typeEndingAt(file I64, end I64) types.TypeId {
+    tf := typeFinder(end)
+    for b in a.C.Bodies {
+        if b.File != file or b.Root is null { continue }
+        tf.block(b.Root)
+    }
+    if tf.found != types.UnknownT { return tf.found }
+    text := a.L.Diags.TextOf(file)
+    w := WordAt(text, end)
+    if w.Start == w.End { return types.UnknownT }
+    word := text[I64(w.Start):I64(w.End)]
+    for b in a.C.Bodies {
+        if b.File != file or I64(b.Sp.Start) > end or end > I64(b.Sp.End) { continue }
+        for l in b.Locals {
+            if l.Name != source.NameId(0) and a.C.P.L.Names.Text(l.Name) == word and I64(l.Sp.Start) < end { return l.Ty }
+        }
+    }
+    return types.UnknownT
+}
+
+# the fields and methods of a type - through a reference, of what it refers to
+fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId) {
+    c := a.C
+    tt := c.P.T.Referent(t) if c.P.T.KindOf(t) == types.Kind.Ref else t
+    if c.P.T.KindOf(tt) == types.Kind.Named {
+        d := c.P.T.DeclOf(tt)
+        for body in c.Bodies {
+            match body.Of {
+                case typed.BodyOf.Ctor(bt, _) {
+                    if c.P.T.KindOf(bt) != types.Kind.Named or c.P.T.DeclOf(bt) != d { continue }
+                    tys := c.P.T.Items(c.P.T.Fields(tt))
+                    for i in range body.Fields.Len() {
+                        l := body.Locals[I64(body.Fields[i])]
+                        if l.Name == source.NameId(0) { continue }
+                        it.Add(c.P.L.Names.Text(l.Name), CompField, c.Ty(tys[i] if i < tys.Len() else l.Ty))
+                    }
+                    break
+                }
+                case _ { }
+            }
+        }
+    }
+    # methods: every function with a receiver whose type is t's - of its declaration, or of its kind for a built-in one
+    c.P.AllFns()
+    for f in range c.P.FnCount() {
+        decl := c.P.FnDecl(f)
+        if decl.Recv is null { continue }
+        recv := c.P.T.Items(c.P.T.Params(c.P.Sig(f)))[0]
+        if c.P.T.KindOf(recv) == types.Kind.Ref { recv = c.P.T.Referent(recv) }
+        if not sameShape(c, recv, tt) { continue }
+        name := c.P.L.Names.Text(decl.Name)
+        if not doc.Exported(name) and c.P.FnModule(f) != a.L.Root { continue }
+        it.Add(name, CompMethod, firstLine(explain.FnText(c, a.Sc, f)))
+    }
+}
+
+fn firstLine(t String&) String {
+    nl := try t.Find("\n") catch default t.Len()
+    return $t[:nl]
+}
+
+# whether a method's receiver type r takes a value of type t: the same declaration, or the same built-in kind
+fn sameShape(c mut typecheck.Checker&, r types.TypeId, t types.TypeId) Bool {
+    kr := c.P.T.KindOf(r)
+    kt := c.P.T.KindOf(t)
+    if kr == types.Kind.Named and kt == types.Kind.Named { return c.P.T.DeclOf(r) == c.P.T.DeclOf(t) }
+    if kr == types.Kind.Var { return false }
+    return kr == kt
+}
+
+type typeFinder struct(end I64) {
+    end
+    found types.TypeId = types.UnknownT
+    width I64 = -1
+}
+
+fn (f mut typeFinder&) take(sp source.Span, t types.TypeId) {
+    if I64(sp.End) != f.end or t == types.UnknownT { return }
+    w := I64(sp.End) - I64(sp.Start)
+    # the widest expression ending there is the whole receiver: "a.b" rather than "b"
+    if w > f.width {
+        f.width = w
+        f.found = t
+    }
+}
+
+fn (f mut typeFinder&) block(b typed.Block&) {
+    if b is null { return }
+    for s in b.Stmts { f.stmt(s) }
+}
+
+fn (f mut typeFinder&) stmt(s typed.Stmt&) {
+    if s is null { return }
+    match s {
+        case typed.Stmt.Let(_, _, init) { f.expr(init) }
+        case typed.Stmt.Assign(_, p, v) {
+            f.place(p)
+            f.expr(v)
+        }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x) { f.expr(x) }
+        case typed.Stmt.If(_, i) {
+            f.expr(i.Test)
+            f.block(i.Then)
+            f.block(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            f.block(body)
+            f.block(post)
+        }
+        case typed.Stmt.Assert(_, cond, m) {
+            f.expr(cond)
+            f.expr(m)
+        }
+        case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { f.block(b) }
+        case typed.Stmt.Join(_, j) { f.block(j.Code) }
+        case typed.Stmt.Spawn(_, sp) { f.expr(sp.Task) }
+        case _ { }
+    }
+}
+
+fn (f mut typeFinder&) place(p typed.Place&) {
+    if p is null { return }
+    f.take(p.Span(), p.Type())
+    match p {
+        case typed.Place.Deref(_, _, r) { f.expr(r) }
+        case typed.Place.Field(_, _, base, _) { f.place(base) }
+        case typed.Place.Elem(_, _, el) {
+            f.place(el.Base)
+            f.expr(el.Index)
+        }
+        case typed.Place.Payload(_, _, pl) { f.place(pl.Base) }
+        case typed.Place.Temp(_, _, v, _) { f.expr(v) }
+        case _ { }
+    }
+}
+
+fn (f mut typeFinder&) expr(x typed.Expr&) {
+    if x is null { return }
+    f.take(x.Span(), x.Type())
+    match x {
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { f.place(p) }
+        case typed.Expr.Promote(_, _, pr) { f.expr(pr.X) }
+        case typed.Expr.Call(_, _, cl) {
+            for arg in cl.Args { f.expr(arg) }
+        }
+        case typed.Expr.Make(_, _, m) {
+            for e in m.Items { f.expr(e) }
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for arg in args { f.expr(arg) }
+        }
+        case typed.Expr.Slice(_, _, sl) { f.place(sl.Base) }
+        case typed.Expr.Cond(_, _, cd) {
+            f.expr(cd.C)
+            f.expr(cd.A)
+            f.expr(cd.B)
+        }
+        case typed.Expr.Seq(_, _, sq) {
+            for s in sq.Stmts { f.stmt(s) }
+            f.expr(sq.X)
+        }
+        case typed.Expr.Try(_, _, t) { f.expr(t.X) }
+        case typed.Expr.Text(_, _, t) {
+            for pc in t.Pieces {
+                match pc {
+                    case typed.Piece.Render(rx) { f.expr(rx) }
+                    case _ { }
+                }
+            }
+        }
+        case _ { }
+    }
+}
+
+# the names that may stand where nothing qualifies them in the file at real path: its module's own items, its
+# imports, the prelude's exported names, and the keywords
+fn (a Analysis&) Names(it mut Items&, real String&) {
+    mi := a.ModuleOf(real)
+    if mi < 0 or a.C is null { return }
+    a.moduleNames(it, mi, true)
+    for m in a.L.Mods[mi].Imports { it.Add(m.Alias, CompModule, m.Spec) }
+    for k in range a.L.Mods.Len() {
+        if a.L.Mods[k].Prelude { a.moduleNames(it, k, false) }
+    }
+    for w in Keywords { it.Add(w, CompKeyword, "") }
+}
+
+Keywords Array<String&> = String&["fn", "type", "struct", "enum", "trait", "extends", "import", "test", "extern", "if"
+    "else", "for", "in", "range", "match", "case", "nomatch", "return", "break", "continue", "error", "try", "catch"
+    "checked", "default", "join", "spawn", "defer", "assert", "unreachable", "noreturn", "mut", "and", "or", "not"
+    "xor", "is", "as", "null", "true", "false", "destruct"]
+
+# ---- formatting ----
+
+# the text of the file at path in olang's one layout (B13), its diagnostics rendered where it does not parse
+fn Format(path String&, text String&) String ? fmt.Unparsable {
+    said := StringBuilder()
+    std := load.StdDir()
+    return try fmt.FileLayout(source.Source($path, text), std, fmt.PreludeTypes(std), false, said)
+}
+
+# ---- doc (B14) ----
+
+# "olang doc": the documentation of file - of its item word where it is not "" - on the standard output; or, html not
+# "", each of files (std's modules where it is empty) written as a page into the directory html, with an index. The
+# status: 0, or 1 where something did not check or could not be written
+fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Config&) I32 {
+    if html == "" {
+        d mut diag.Diagnostics&cfg = diag.Diagnostics(diag.ColorWanted())
+        a := Analyze(files[0], cfg, d, Map<String&, String&>())
+        if d.Errors() > 0 or a.C is null or a.Sc is null {
+            say(d.Render())
+            say(d.Summary())
+            return 1
+        }
+        if word != "" {
+            text := try doc.ItemText(a.C, a.Sc, a.X, a.L.Root, word) catch explain.Missing {
+                d.Error(diag.Where.Nowhere, msgs.DocNoItem(word, files[0]))
+                say(d.Render())
+                return 1
+            }
+            say(text)
+            return 0
+        }
+        say(doc.Of(a.C, a.Sc, a.X, a.L.Root, false).Text())
+        return 0
+    }
+    roots List<String&>
+    for f in files { roots.Push($f) }
+    if roots.Len() == 0 { stdModules(roots) }
+    try os.MkDirAll(html) catch os.OsError {
+        say($"olang: " $html ": cannot be made\n")
+        return 1
+    }
+    status I32 = 0
+    mods List<doc.Module>
+    for root in roots {
+        # each module checked as a program of its own, in a process of its own, so what one analysis builds is gone
+        # before the next begins
+        if InChild(fn() I32 { return docPage(root, cfg, html) }) != 0 {
+            status = 1
+            continue
+        }
+        text := try os.ReadFile(root) catch os.OsError { continue }
+        mods.Push(doc.Module(IdentityOf(root), $root, doc.ModuleDoc(text)))
+    }
+    mods.Sort(fn(x doc.Module, y doc.Module) Bool { return x.Identity < y.Identity })
+    index := filepath.Join(html, "index.html")
+    try os.WriteFile(index, doc.IndexHtml("olang standard library" if files.Len() == 0 else "olang", mods.ToArray())) catch os.OsError {
+        say($"olang: " $index ": cannot be written\n")
+        return 1
+    }
+    return status
+}
+
+# the page of the module root is, written into the directory html: 0, or 1 where it did not check or could not be
+# written (its diagnostics said)
+fn docPage(root String&, cfg mut build.Config&, html String&) I32 {
+    d mut diag.Diagnostics&cfg = diag.Diagnostics(diag.ColorWanted())
+    a := Analyze(root, cfg, d, Map<String&, String&>())
+    if d.Errors() > 0 or a.C is null or a.Sc is null {
+        say(d.Render())
+        return 1
+    }
+    md := doc.Of(a.C, a.Sc, a.X, a.L.Root, false)
+    path := filepath.Join(html, doc.PageName(md.Identity))
+    try os.WriteFile(path, md.Html()) catch os.OsError {
+        say($"olang: " $path ": cannot be written\n")
+        return 1
+    }
+    return 0
+}
+
+# a root module's identity, as the loader gives it (M22a): its path from std or the working directory, else its name
+fn IdentityOf(path String&) String {
+    real := RealOf(path)
+    std := RealOf(load.StdDir())
+    cwd := try os.Cwd() catch default "."
+    under := ""
+    prefix := ""
+    if real.StartsWith($std "/") {
+        under = $real[std.Len() + 1:]
+        prefix = "std/"
+    } else if real.StartsWith($cwd "/") {
+        under = $real[cwd.Len() + 1:]
+    }
+    id := $prefix $under if under != "" else $filepath.Base(real)
+    return $id[:id.Len() - 6] if id.EndsWith(".olang") else id
+}
+
+# ---- processes and messages ----
+
+extern fn fork() I32
+extern fn _exit(status I32) noreturn
+extern fn waitpid(pid I32, status Array<I32>, options I32) I32
+extern fn pipe(fds Array<I32>) I32
+extern fn close(fd I32) I32
+extern fn read(fd I32, buf Array<U8>, count I64) I64
+extern fn dup2(from I32, to I32) I32
+extern fn kill(pid I32, sig I32) I32
+extern fn poll(fds Array<I32>, n U64, timeout I32) I32
+extern fn signal(sig I32, handler I64) I64
+
+# a new process, a copy of this one: 0 in the child, the child's id in the parent, -1 where none can be made
+fn Fork() I32 { return fork() }
+
+# this process ended at once - nothing flushed, no deferred code - as a forked child ends
+fn Exit(status I32) noreturn { _exit(status) }
+
+# a pipe: its reading end and its writing end, -1 and -1 where none can be made
+fn Pipe() I32, I32 {
+    fds := Array<I32>(2)
+    if pipe(fds) != 0 { return -1, -1 }
+    return fds[0], fds[1]
+}
+
+fn CloseFd(fd I32) { if fd >= 0: close(fd) }
+
+# fd made a second name of to: the writing end of a child's own output, say
+fn Dup2(from I32, to I32) { dup2(from, to) }
+
+# the process pid ended (SIGKILL) and waited for
+fn KillAndReap(pid I32) {
+    if pid <= 0 { return }
+    kill(pid, 9)
+    Reap(pid)
+}
+
+# the process pid waited for: the status it ended with (ExitStatus's), -1 where it cannot be
+fn Reap(pid I32) I32 {
+    st := Array<I32>(1)
+    if waitpid(pid, st, 0) < 0 { return -1 }
+    return ExitStatus(st[0])
+}
+
+# a writer to a pipe whose reader is gone gets an error, not SIGPIPE
+fn IgnoreBrokenPipes() { signal(13, 1) }
+
+# which of the descriptors fds can be read from - or have been closed at the other end - waiting at most timeout
+# milliseconds (-1 for as long as it takes): a Bool per descriptor
+fn Readable(fds Array<I32>&, timeout I32) Array<Bool> {
+    n := fds.Len()
+    raw := Array<I32>(2 * n)
+    for i in range n {
+        raw[2 * i] = fds[i]
+        raw[2 * i + 1] = 1        # POLLIN; the result's revents are this word's high half
+    }
+    out := Array<Bool>(n)
+    if poll(raw, U64(n), timeout) <= 0 { return out }
+    for i in range n { out[i] = ((raw[2 * i + 1] >> 16) & 0x19) != 0 }   # POLLIN, POLLERR, POLLHUP
+    return out
+}
+
+# the messages read from a descriptor: LSP's ("Content-Length: N" headers, a blank line, N bytes), or lines (MCP's)
+type Reader struct(Fd I32) {
+    Fd
+    buf Vec<U8>
+    Eof Bool = false
+}
+
+# what the descriptor has, read once into the buffer (it may block): false at its end or on an error
+fn (r mut Reader&) Fill() Bool {
+    chunk := Array<U8>(65536)
+    n := read(r.Fd, chunk, I64(chunk.Len()))
+    if n <= 0 {
+        r.Eof = true
+        return false
+    }
+    r.buf.PushAll(chunk[:n])
+    return true
+}
+
+# no whole message is buffered yet
+error Incomplete { MORE }
+
+# the next whole framed message's body, taken out of the buffer
+fn (r mut Reader&) Next() String ? Incomplete {
+    v := r.buf.View()
+    n := v.Len()
+    i I64 = 0
+    for i + 3 < n and not (v[i] == 13 and v[i + 1] == 10 and v[i + 2] == 13 and v[i + 3] == 10) { i++ }
+    if i + 3 >= n { error Incomplete.MORE }
+    headers := String(v[:i])
+    length I64 = -1
+    for h in headers.Lines() {
+        line := h.Trim()
+        if line.ToLower().StartsWith("content-length:") {
+            length = try line[15:].Trim().ParseInt() catch default -1
+        }
+    }
+    start := i + 4
+    if length < 0 {
+        r.drop(start)            # no length: the header block is dropped, the stream read on
+        error Incomplete.MORE
+    }
+    if n < start + length { error Incomplete.MORE }
+    body := $String(v[start:start + length])
+    r.drop(start + length)
+    return body
+}
+
+# the next whole line, its line break taken off
+fn (r mut Reader&) NextLine() String ? Incomplete {
+    v := r.buf.View()
+    n := v.Len()
+    i I64 = 0
+    for i < n and v[i] != 10 { i++ }
+    if i >= n { error Incomplete.MORE }
+    end := i - 1 if i > 0 and v[i - 1] == 13 else i
+    line := $String(v[:end])
+    r.drop(i + 1)
+    return line
+}
+
+# the buffer's first k bytes gone, what follows moved to its front
+fn (r mut Reader&) drop(k I64) {
+    n := r.buf.Len()
+    for i in range k, n { r.buf[i - k] = r.buf[i] }
+    r.buf.Truncate(n - k)
+}
+
+# body written to fd as one framed message (LSP's)
+fn WriteFramed(fd I32, body String&) {
+    try io.Write(fd, $"Content-Length: " $body.Len() "\r\n\r\n" $body) catch io.IoError { }
+}
+
+# what work writes, run in a child process: the text, and the child's status (ExitStatus's); where no child can be
+# made, work runs here
+fn ChildOutput(work fn() String) String, I32 {
+    rd, wr := Pipe()
+    if rd < 0 { return work(), 0 }
+    pid := fork()
+    if pid < 0 {
+        CloseFd(rd)
+        CloseFd(wr)
+        return work(), 0
+    }
+    if pid == 0 {
+        CloseFd(rd)
+        Dup2(2, 1)
+        try io.Write(wr, work()) catch io.IoError { }
+        _exit(0)
+    }
+    CloseFd(wr)
+    r := Reader(rd)
+    for r.Fill() { }
+    CloseFd(rd)
+    status := Reap(pid)
+    return $String(r.buf.View()), status
+}
+
+# work run in a child process - a copy of this one - and waited for: the status it ends with, 128 and its signal where
+# one ends it. Where no process can be made, work runs here
+fn InChild(work fn() I32) I32 {
+    pid := fork()
+    if pid < 0 { return work() }
+    if pid == 0 { _exit(work()) }
+    st := Array<I32>(1)
+    if waitpid(pid, st, 0) < 0 { return 1 }
+    return ExitStatus(st[0])
+}
+
+# a wait status as a shell gives it: the exit code, or 128 and the signal
+fn ExitStatus(raw I32) I32 {
+    sig := raw & 127
+    return (raw >> 8) & 255 if sig == 0 else 128 + sig
+}
+
+# every module of the standard library: std's files, then the prelude's
+fn stdModules(out mut List<String&>&) {
+    std := load.StdDir()
+    for dir in String&["", "prelude"] {
+        at := filepath.Join(std, dir) if dir != "" else $std
+        found := try os.ReadDir(at) catch os.OsError { continue }
+        for n in found {
+            if n.EndsWith(".olang") { out.Push(filepath.Join(at, n)) }
+        }
+    }
+}
+
+fn say(text String&) { try io.Print(text) catch io.IoError { } }
+
+# ---- tests ----
+
+test "the identifier at an offset" {
+    t := "abc + de_f9"
+    assert WordAt(t, 1) == source.Span(0, 3)
+    assert WordAt(t, 3) == source.Span(0, 3)
+    assert WordAt(t, 4).Start == WordAt(t, 4).End
+    assert WordAt(t, 11) == source.Span(6, 11)
+}
