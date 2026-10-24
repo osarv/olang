@@ -1,0 +1,59 @@
+# check: doc
+# also: module b14doc
+# also: shapes, and what they cover
+# also: type Shape enum
+# also:         a circle, by its radius
+# also: fn Area(s Shape) F64
+# also:     the area a shape covers - in square units
+# also:     a second paragraph
+# also: Limit I64 = 10
+# also:     how many shapes at most
+# also:     continues the trailing comment
+# also: error ShapeError
+# also:     no shape at all
+# never:         no shape at all
+# also: type Box struct(W F64, H F64)
+# also:         its width
+# also:     fn (b Box) Volume(d F64) F64
+# also:         how much it holds, d deep
+# never: helper
+# never: private
+# never: block comments are not
+# shapes, and what they cover
+
+# a shape
+type Shape enum {
+    # a circle, by its radius
+    Round(r F64)
+    Square(side F64)       # a square, by its side
+}
+
+# the area a shape covers - in square units
+#
+# a second paragraph
+fn Area(s Shape) F64 {
+    return match s {
+        case Shape.Round(r) => 3.0 * r * r
+        case Shape.Square(side) => side * side
+    }
+}
+
+## block comments are not documentation ##
+fn helper() I64 { return 1 }
+
+Limit I64 = 10     # how many shapes at most
+                   # continues the trailing comment
+
+error ShapeError { NONE }   # no shape at all
+
+# a box
+type Box struct(W F64, H F64) {
+    W    # its width
+    H
+    depth F64 = 0.0    # private
+}
+
+# how much it holds, d deep
+fn (b Box) Volume(d F64) F64 { return b.W * b.H * d }
+
+fn main() { }

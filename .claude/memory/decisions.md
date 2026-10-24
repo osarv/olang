@@ -944,3 +944,82 @@ errors and documentation - generic `+` already works).
   the case name; allowed with payloads. Stringifying: reflection (decided 2026-10-18, not built) - T.Name, T.Cases[].Name,
   T.Fields[].Name/Type as compile-time constants; proposed `T.CaseOf(v).Name` for one value's case. ASKED: 1 raw values
   with From; 2 text defaults to the name; 3 T.CaseOf(v).
+- PROVER NOTE 2026-10-24 (docs/prover.md, merged): ASKED, the note's numbering: 1 a call with a false requirement
+  nothing checks runs as written (rec; not UB); 2 compile errors only for must-fail requirements/asserts/unreachable
+  and for a guarantee with one evaluator-confirmed counterexample (rec; not Dafny's "unproved is an error"); 3 loop
+  invariants as `assert`s at the top of the body (rec); 4 our own solver in olang (CDCL SAT + bit-blasting, LRAT-checked;
+  Z3/cvc5/Bitwuzla only as test oracles) (rec); 5 a strict mode failing on "neither" later, as an `olang prove` option;
+  6 order P0 contracts, then compile speed, then P1-P3 (rec).
+- ENUM RAW VALUES 2026-10-24: the user proposed `$` giving the name and the value giving the raw text, then "kinda
+  redundant". Rec: `$op` stays the source form (`Op.Plus`); `op.Value` the raw value, explicit (no implicit conversion);
+  `T.CaseOf` dropped - an unrolled `for c in T.Cases: if v == c: return c.Name` covers generic code (reflection +
+  case test). Still ASKED: raw values (`enum String { Plus = "+" }`, `.Value`, `T.From`) and defaults (text = name,
+  integers from 0).
+- DECIDED 2026-10-24 (the user: "Ye"): enum raw values - `type Op enum String { Plus = "+" }`, `type Status enum U8 {
+  Ok = 0 }`, compile-time constants, distinct; `op.Value`; `try Op.From(x)`; text defaults to the case name, integers
+  count from 0 / the previous value; allowed with payloads; `$op` unchanged (source form); no T.CaseOf (reflection +
+  `==`). Prover questions 1-6 still open. The user is tired; a survey of other languages' features was started.
+- REVERSED 2026-10-24 (the user: "Don't decide on the enums yet. We are getting back to them eventually"): enum raw
+  values NOT decided - open again (the proposal above stands as a proposal; the builder told not to build it). ASKED:
+  does the payload form decided earlier today (`Round Circle` / `Box(w F64, h F64)`) also wait?
+- SURVEY 2026-10-24 (docs/survey.md, merged): shortlist to decide before announcing, recs in the doc: 1 platforms
+  (LLVM 19+, macOS arm64, Linux aarch64, a release with pinned clang); 2 C interop v2 (`extern type`, `link "lib"`,
+  `export fn`, callable from C/Python); 3 long-running memory growth (build early freeing/Destroy or state the limit);
+  4 errors carrying data (payload words without references) - before QAM is built; 5 text literals (`\x`, `\u{}`, raw
+  `"""` blocks); 6 stability 0.x + `olang fix`, a LICENCE (the user's call; none today); 7 std/sync, time.Sleep,
+  std/net; 8 std breadth (Set, regex, flags, Unicode, base64, sha256, iterator adapters, Deque, Heap); 9 `T.Max` limits,
+  bit operations; 10 one-line lambdas `fn(x): return ...`; 11 narrowing after a leaving null test; 12 doc comments +
+  a minimal LSP. Not asked yet - for the user when rested.
+  The user: "No, build the enum part I agreed on" - the payload form stays decided and is built; only raw values wait.
+- SURVEY ANSWERED 2026-10-24 (the user): 1 platforms YES (LLVM 19/20 installable here, qemu for aarch64; after speed9;
+  macOS needs a real Mac or CI); 3 build early freeing/Destroy (docs/memory.md rounds 4-7) - YES, after lang24; 7 YES
+  std/sync, time.Sleep, std/net; 8 YES Set, regex, flags, Unicode, base64/hex, sha256, iterator adapters, Deque, Heap,
+  time formatting; 9 YES T.Max limits + bit operations; 10 YES one-line lambdas; 11 explained (narrowing after
+  `if n is null: return`) - the round-3 agent told; 12 YES doc comments + LSP ("both for MCP and neovim"). TO DISCUSS:
+  2 C interop v2, 4 errors carrying data (explained: plain-data payloads on words, rec), 5 text literals, 6 `olang fix`
+  (explained: one command applying every migration since a file's version).
+- DECIDED 2026-10-24 (the user: "we don't integrate the knowledge that modules have namespaces, so the IO error is
+  actually called IOError instead of just Error"): std names never repeat their module's name - io.Error, os.Error,
+  json.Error (json.Json -> json.Value), chan.Error (chan.Chan -> chan.Channel), csv/stats/rand/http/net.Error; several
+  error types are named by subject (linalg ShapeError, ActivationError); the prelude is the exception (bare names:
+  ListError, MapError, TextError stay) and must never declare a plain `Error`. New modules follow it now (stdx told);
+  existing types renamed in one pass, with a tool (oann too), after lang24 and stdx merge. A rule in std/README.md.
+- 2026-10-24 (the user): 4 errors carrying data DEFERRED; 6 `olang fix` YES (runs every idempotent migration tool in
+  order; no version marker; after lang24); 11 yes; 12 neovim: a plugin dir (filetype, syntax, format on save,
+  errorformat, LSP config) plus `olang lsp`, and `olang mcp` (MCP tools: check, explain, doc, format, test) - the user:
+  "do it. Please explain" (explained). On 3 the user thought `.Destroy()` was rejected: told it was decided FOR (proven
+  safe only, 2026-10-18); stays unless they say drop it.
+  REFINED (the user: "chan.Chan can stay no?"): a module named for its main type keeps that type's name (chan.Chan,
+  json.Json, set.Set, as Go's list.List); only other names drop the prefix (io.Error, json.Error, os.Error ...).
+  `Destroy` stays as decided (the user: "It's a good implementation").
+- DECIDED 2026-10-24 (the user, on `Op.From`: "Keep it"; read as raw values decided, stated to the user): enum raw
+  values as proposed - `enum String`/`enum U8`, `op.Value` (a compiler-supplied method), `try Op.From(x)` through the
+  type's name (the reflection `T.` namespace), text defaults to the case name, integers count from 0, allowed with
+  payloads, `$op` unchanged. Back into the lang24 batch as a later round.
+- 2026-10-24: enums "a go" (the user) - raw values confirmed. C INTEROP v2 laid out, ASKED (rec yes each): 1 `link
+  "name"` per module; 2 `extern type Db` opaque handles (held `Db&`/`Db?&`, never read, C may return them; out-params as
+  arrays of one handle); 3 plain-data structs by reference to C now, by value later; 4 callbacks = `export fn` named
+  functions only, user-data word, per-thread setup on first entry from a foreign thread; 5 `export fn` + `olang build
+  -library` (.so + generated C header), Python via ctypes, errors as codes; 6 `t.CString()`, `String.FromC(p, max)`;
+  7 `olang bindgen header.h` later (a tool over clang). extern stays an unchecked hole (X1a).
+- C INTEROP v2 DECIDED 2026-10-24 (the user: 1 yes, 2 yes, 3 "add this too", 4/5 yes + how - explained, 6 "FromC and
+  ToC", 7 explained): `link "name"`; `extern type` opaque handles (C may return them); plain-data structs by reference
+  AND by value (the x86-64/AArch64 C ABI classification in emit, tested against clang); callbacks = `export fn` only,
+  context through the user-data argument as a reference (scope-checked to outlive the call; stored callbacks need
+  program-scope context - stated unchecked like X1a), a thread-local flag sets up olang state on foreign threads, no
+  errors leave an export fn; `olang build -library` -> libx.so + x.h (numbers, handles, plain structs, arrays as
+  pointer+length; `? E` export fns return an I32 code with the result through a pointer, codes in the header; arrays/
+  text out through caller buffers; globals initialized on load); Python via ctypes; `t.ToC()` and `String.FromC(p, max)`
+  in the prelude text module with a prelude `CStr` opaque type; `olang bindgen header.h` (C -> olang declarations).
+  Queued as one batch after lang24 and speed9.
+- DECIDED 2026-10-24 (mine, found by stdx): bitwise `& | ^ << >>` bind tighter than comparisons (Go/Rust; C's mistake
+  fixed); migration first parenthesizes every expression mixing them, keeping today's meaning, then the precedence
+  changes - into lang24 as a later round. `Mutex<I64>` impossible (no number references): atomics or a Mutex of a
+  struct, said in std/sync's README.
+- TEXT LITERALS 2026-10-24: the user asked what \x and \u{} are (explained) and "also do the raw bytes string" (read as
+  yes to raw strings). PROPOSED (rec): `\x41` (one byte, hex) and `\u{1F600}` (a code point, written as UTF-8) in normal
+  strings and character literals; `"""` the one raw form - no escapes, one line or several; across lines the first and
+  last line breaks are dropped and the closing line's indentation is removed from every line (Swift/Java); text holding
+  `"""` uses a normal string. Awaiting a yes on the escapes. LICENCE: "that's the last thing we do" - deferred to last.
+- DECIDED 2026-10-24 (the user: "Yes, add all if they are standard"): `\x41`, `\u{1F600}` escapes and the `"""` raw
+  form as proposed - into lang24 as a later round. Confirmed to the user: `$(expr)` renders any expression (checked).

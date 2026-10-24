@@ -1,0 +1,18 @@
+# check: fail this instance holds a reference to an argument it would outlive
+# C2d, E28: a constructor argument given a conditional of new text and an inner block's text - the instance holds the
+# inner text through it, so kept outside that block it must be refused, the new value notwithstanding
+type E struct(A String&, B String&) {
+    A
+    B
+}
+
+fn mk(s String&) String { return $s "-made" }
+
+fn main() {
+    e := E("a", "b")
+    for i in range 2 {
+        t := $i "-inner"
+        e = E("a", mk(t) if i > 5 else t)
+    }
+    assert e.B.Len() > 0
+}

@@ -1,0 +1,103 @@
+# check: run
+# flags: -debug -sanitize
+# C2d, E28, S12b: siblings of c2dcondarg - a match value, a match whose values are all new, a constructor nested in
+# another and one held by value, a conditional of a new instance and null, a local initialized by the conditional then
+# given to the constructor returned, a method keeping its argument in its receiver, and instances pushed in a loop -
+# each read after a churn under the scope sanitizer
+import "std/io"
+
+type E struct(A String&, B String&) {
+    A
+    B
+}
+type W struct(X E&) {
+    X
+}
+type V struct(Q E, N I64) {
+    Q
+    N
+}
+type K enum {
+    One
+    Two
+}
+type H struct(N I64) {
+    N
+    L List<String&>
+}
+
+fn (h mut H&) Keep(s String&) { h.L.Push(s) }
+fn mk(s String&) String { return $s "-made" }
+
+fn byMatch(t String&, k K) E {
+    e := E($t, match k {
+        case K.One => mk(t)
+        case K.Two => ""
+    })
+    return e
+}
+
+fn allNew(t String&, k K) E {
+    return E($t, match k {
+        case K.One => mk(t)
+        case K.Two => $t "-two"
+    })
+}
+
+fn nested(t String&, at I64) W {
+    w := W(E($t, mk(t) if at >= 0 else ""))
+    return w
+}
+
+fn byValue(t String&, at I64) V {
+    v := V(E($t, mk(t) if at >= 0 else ""), at)
+    return v
+}
+
+fn orNull(t String&, at I64) W {
+    w := W(E($t, $t) if at >= 0 else null)
+    return w
+}
+
+fn local(t String&, at I64) E {
+    b := mk(t) if at >= 0 else ""
+    return E($t, b)
+}
+
+fn keep(h mut H&, t String&, at I64) { h.Keep(mk(t) if at >= 0 else "") }
+
+fn loop(t String&) List<E> {
+    l := List<E>()
+    for i in range 4 {
+        l.Push(E($t, mk(t) if i >= 0 else ""))
+        churn()
+    }
+    return l
+}
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn main() {
+    n I64 = 0
+    h := H(0)
+    for i in range 300 {
+        a := byMatch("a", K.One)
+        b := allNew("b", K.Two)
+        c := nested("c", i)
+        d := byValue("d", i)
+        e := orNull("e", i)
+        f := local("f", i)
+        keep(h, "g", i)
+        l := loop("l")
+        churn()
+        if a.B == "a-made" and b.B == "b-two" and c.X.B == "c-made" and d.Q.B == "d-made" and d.N == i and e.X.B == "e" {
+            if f.B == "f-made" and h.L[i] == "g-made" and l[3].B == "l-made" { n += 1 }
+        }
+    }
+    io.Println($n " " $h.L.Len())!
+}

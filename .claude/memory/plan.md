@@ -259,3 +259,28 @@ on sight per rules.md, "Code rules".
   /home/user/wt/lang24-r2. Queued after the batch: `any Trait&` (fully decided today), with a soundness review.
 - 2026-10-24 ~14:40 CEST (weekly 0.12): started wt-speed9 (compile speed round 9: measure, cut the largest share; emit/
   build/lower, not check) and wt-prover (docs/prover.md design note for the user, no code). lang24 round 2 running.
+- 2026-10-24: lang24 round 2 merged (20806ad, full verify on the merged tip passed): E10 stored-value equality (List/Map
+  declare Eq/Hash), `is` null-only, E32 case tests by `==` with `_`, S8d narrowing, T17a payload form, Some/Every;
+  tools/equality_migrate.olang and helper_rename.olang for oann. Round 3 (nullable) running.
+- QUEUED after lang24 + stdx merge: the std naming pass (no module stutter: io.Error, json.Value, chan.Channel ...),
+  with tools/stutter_rename.olang for oann.
+- QUEUED after lang24: `olang fix` (runs tools/*_migrate.olang in order, idempotent; oann's catch-up uses it).
+- QUEUED: C interop v2 batch (decided 2026-10-24, decisions.md) after lang24 + speed9; then platforms (LLVM 19/20,
+  aarch64 via qemu, release with bundled clang).
+- 2026-10-24 ~17:00 CEST: wt-stdx merged (50cf64f; verify passed but tokdiff/astdiff goldens, recaptured after): time
+  (Duration, Sleep, RFC 3339), sync, set, deque, heap, utf8, base64, hex, sha256, crc32, net (TCP/UDP), flags, regex
+  (lazy DFA + Pike VM), iterator adapters; sha256 1.1x C, regex level with glibc. Gaps: no DNS (getaddrinfo list can't
+  cross extern - C interop v2), no `\x` escapes (text literals talk), `&` binds looser than `==` (precedence - decide),
+  error words not values (QAM), no `mut I64&` so no Mutex<I64> (primitive refs refused).
+- FOUND 2026-10-24 by wt-lsp (scope pass, unfixed): a use-after-free - a conditional passed as a constructor argument,
+  the instance returned (`e := E($t, mk(t) if at >= 0 else ""); return e`), fails under -debug -sanitize; reproducer
+  /home/user/review/uaf-condctor/repro.olang. Fix agent to start after the current verify.
+- 2026-10-24: wt-speed9 merged (7535fc1 + goldens, full verify on the merged tip passed): FILE:LINE texts out of the code
+  (B3l), views pass skipped when unused, instance groups per first-reaching module, smaller parts, -quick in the record
+  key; mid-checker edit 31.8 -> 21.7 s CPU (-quick 15.6 -> 2.7), new-instance edit 89.8 -> 29.9 s.
+- 2026-10-24: wt-lsp merged (b69abe4 + goldens, full verify on the merged tip passed): L4b doc comments, B14 `olang doc`
+  (+ -html for std), B15 `olang lsp`, B16 `olang mcp`, editors/nvim plugin.
+- FOUND 2026-10-24 by the uafcc review (pre-existing leak, unfixed): an array literal of new text passed straight to a
+  call boxes each element in the PROGRAM scope (`len0(String&[$i])` in a function called 2M times: 34 MB growing);
+  through a local it stays flat. Reproducers /home/user/review/uafcc/repro/leak_*.olang. Fix agent after lang24 round 3
+  (scope.olang).

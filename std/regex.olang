@@ -1,0 +1,1580 @@
+# regex - regular expressions in RE2's style: matched in time linear in the text, whatever the pattern - no
+# backtracking, so no pattern can take exponential time. The pattern is compiled to a small program; a lazy DFA built
+# from it finds where each match is (see "the DFA" below), and a Pike VM - every thread advancing through the text
+# together, one step per code point - gives a match's groups. Matching is on code points of UTF-8 (a byte that is not
+# UTF-8 matches as U+FFFD); positions are byte offsets. Leftmost-first, as Perl and RE2: of the matches starting
+# leftmost, the one the pattern prefers - alternatives in order, greedy repetition longest.
+#
+#     re := regex.Compile("(\\w+)@(\\w+)\\.com")!
+#     re.Matches("mail bob@example.com")                 # true
+#     m := try re.Find(text) catch regex.NotFound { ... }
+#     m.Text() ... m.Group(1)! ... m.Start ... m.End
+#     for m in re.FindAll(text) { ... }
+#     re.Replace(text, "$2: $1") ... re.Split(text)
+#
+# Syntax (RE2's, less what needs Unicode's tables):
+#   x       a code point; \. \\ \* and the like escape a metacharacter; \n \t \r \f \v \0; \xHH and \x{HHHH}
+#   .       any code point but \n ((?s): any)
+#   [abc] [^a-z0-9] [\d_]    a class, negated by ^; ranges; \d \w \s and the escapes inside; [[:alpha:]] and the other
+#           POSIX names (alnum alpha ascii blank cntrl digit graph lower print punct space upper word xdigit)
+#   \d \D \w \W \s \S        digits, word characters [0-9A-Za-z_], white space [\t\n\f\r ] (\v too), and their negations
+#   ^ $     the start and end of the text ((?m): of a line as well); \A \z the start and end of the text always
+#   \b \B   a word boundary (ASCII word characters), and not one
+#   xy x|y  one then the other; either, the left preferred
+#   x* x+ x? x{n} x{n,} x{n,m}   repetition, greedy; x*? x+? x?? x{n,m}? take as few as they can; counts at most 1000
+#   (x)  (?P<name>x)  (?<name>x)  (?:x)   a capture group, a named one, a group that captures nothing
+#   (?flags)  (?flags:x)  flags i (ASCII case ignored), m (^ $ at lines), s (. takes \n) - set to the group's end,
+#           or within x; (?-i) and the like clear one
+# Imported with `import "std/regex"`; the type is regex.Regex.
+
+import "utf8"
+
+# why a pattern does not compile: a group or class not closed, an escape that is not one, a repetition with nothing
+# to repeat or a count past 1000 or inverted, a class range written backwards, a group name repeated or not a name, a
+# flag that is not one, or a program too large (over 100,000 instructions once counted repetitions are written out)
+error SyntaxError {
+    UNCLOSED_GROUP
+    UNMATCHED_PAREN
+    UNCLOSED_CLASS
+    BAD_ESCAPE
+    BAD_REPEAT
+    BAD_RANGE
+    BAD_NAME
+    BAD_FLAG
+    TOO_BIG
+}
+
+# what Find fails with when the pattern matches nowhere, and Group when a group took part in no match
+error NotFound {
+    NOT_FOUND
+}
+
+# ---- the program ----
+
+# instructions
+opChar I64 = 0           # x: the code point
+opClass I64 = 1          # x: the class's first range, y: how many ranges, then negated when z is 1
+opAny I64 = 2            # y: 1 when \n matches
+opSplit I64 = 3          # x: the preferred next pc, y: the other
+opJmp I64 = 4            # x: the next pc
+opSave I64 = 5           # x: the capture slot
+opAssert I64 = 6         # x: the assertion
+opMatch I64 = 7
+
+# assertions
+atTextStart I64 = 0
+atTextEnd I64 = 1
+atLineStart I64 = 2
+atLineEnd I64 = 3
+atWord I64 = 4
+atNotWord I64 = 5
+
+maxRepeat I64 = 1000
+maxProgram I64 = 100000
+
+# a compiled pattern. Read-only once compiled, so one Regex may be used by any number of tasks at once; each match
+# allocates its own working lists. A Regex value is a handle: a copy names the same compiled program
+type Regex struct(of mut prog&) {
+    s mut prog& = of
+}
+
+type prog struct(pattern String&) {
+    pattern
+    op Vec<I64> = Vec<I64>()
+    x Vec<I64> = Vec<I64>()
+    y Vec<I64> = Vec<I64>()
+    z Vec<I64> = Vec<I64>()
+    ranges Vec<U32> = Vec<U32>()            # [lo, hi] pairs, the classes' code point ranges
+    names Vec<String&> = Vec<String&>()       # each group's name, "" for none; [0] the whole match
+    prefix mut String& = ""                  # literal text every match starts with, when the pattern begins with one
+    anchored Bool = false                    # whether every match starts at the start of the text
+    code mut Array<I64>& = Array<I64>(0)     # the instructions as matching reads them: op, x, y, z for each
+    rcode mut Array<I64>& = Array<I64>(0)    # the reversed program, as code, for finding where a match starts
+    rng mut Array<U32>& = Array<U32>(0)      # the ranges, likewise
+    dfaOK Bool = false                       # whether the DFA may stand for the program (no assertion but a leading ^)
+}
+
+fn (p mut prog&) emit(op I64, x I64, y I64, z I64) I64 {
+    p.op.Push(op)
+    p.x.Push(x)
+    p.y.Push(y)
+    p.z.Push(z)
+    return p.op.Len() - 1
+}
+
+# ---- parsing ----
+
+# a node of the parsed pattern, held in an array of them and naming its children by position
+nEmpty I64 = 0
+nLit I64 = 1             # a: the code point, fold: ignoring ASCII case
+nClass I64 = 2           # a: first range, b: count, neg
+nAny I64 = 3             # neg: \n included
+nCat I64 = 4             # a: the first child in the parser's kids, b: how many
+nAlt I64 = 5             # a, b: as nCat
+nRepeat I64 = 6          # a: the child, min, max (-1 none), greedy
+nGroup I64 = 7           # a: the child, b: the capture index (-1 none)
+nAssert I64 = 8          # a: the assertion
+
+type node struct(kind I64) {
+    kind
+    a I64 = 0
+    b I64 = 0
+    min I64 = 0
+    max I64 = 0
+    fold Bool = false
+    neg Bool = false
+    greedy Bool = true
+}
+
+type parser struct(text String&) {
+    t String&text = text
+    p mut prog& = prog(text)
+    at I64 = 0
+    nodes Vec<node> = Vec<node>()
+    kids Vec<I64> = Vec<I64>()                # the children of every nCat and nAlt, each node's together
+    fold Bool = false
+    multi Bool = false
+    dotAll Bool = false
+    groups I64 = 1
+    reverse Bool = false                      # emitting the reversed program: concatenations backwards, no saves
+}
+
+fn (q mut parser&) add(n node) I64 {
+    q.nodes.Push(n)
+    return q.nodes.Len() - 1
+}
+
+# a node of "kind" whose children are "kids"
+fn (q mut parser&) parent(kind I64, kids Vec<I64>&) I64 {
+    n := node(kind)
+    n.a = q.kids.Len()
+    n.b = kids.Len()
+    q.kids.PushAll(kids.View())
+    return q.add(n)
+}
+
+fn (q parser&) more() Bool { return q.at < q.t.Len() }
+fn (q parser&) peek() Char { return q.t[q.at] }
+
+# the code point at the parser's position, taken
+fn (q mut parser&) rune() U32 {
+    if q.t[q.at] < 0x80 {
+        q.at++
+        return U32(q.t[q.at - 1])
+    }
+    r, n := try utf8.Decode(q.t, q.at) catch utf8.Error {
+        q.at++
+        return 0xFFFD
+    }
+    q.at += n
+    return U32(r)
+}
+
+fn (q mut parser&) addRange(lo U32, hi U32) { q.p.ranges.PushAll(U32[lo, hi]) }
+
+# a class node over the ranges added since "from"
+fn (q mut parser&) classNode(from I64, neg Bool) I64 {
+    n := node(nClass)
+    n.a = from
+    n.b = (q.p.ranges.Len() - from) / 2
+    n.neg = neg
+    return q.add(n)
+}
+
+fn (q mut parser&) perlClass(c Char) Bool {
+    match c {
+        case 'd' { q.addRange('0', '9') }
+        case 'w' {
+            q.addRange('0', '9')
+            q.addRange('A', 'Z')
+            q.addRange('_', '_')
+            q.addRange('a', 'z')
+        }
+        case 's' {
+            q.addRange('\t', '\n')
+            q.addRange(11, '\r')
+            q.addRange(' ', ' ')
+        }
+        case _ { return false }
+    }
+    return true
+}
+
+# the ranges \D, \W or \S stand for: everything but the class's
+fn (q mut parser&) negatedPerl(c Char) {
+    from := q.p.ranges.Len()
+    q.perlClass(c.ToLower())
+    lo U32 = 0
+    k := from
+    out := Vec<U32>()
+    for k < q.p.ranges.Len() {
+        if q.p.ranges[k] > lo: out.PushAll(U32[lo, q.p.ranges[k] - 1])
+        lo = q.p.ranges[k + 1] + 1
+        k += 2
+    }
+    out.PushAll(U32[lo, 0x10FFFF])
+    q.p.ranges.Truncate(from)
+    q.p.ranges.PushAll(out.View())
+}
+
+fn hexValue(c Char) I64 {
+    if c.IsDigit() { return I64(c - '0') }
+    if c >= 'a' and c <= 'f' { return I64(c - 'a') + 10 }
+    if c >= 'A' and c <= 'F' { return I64(c - 'A') + 10 }
+    return -1
+}
+
+# the code point an escape after '\' stands for - the escape's letter already taken as c
+fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BAD_ESCAPE {
+    match c {
+        case 'n' { return '\n' }
+        case 't' { return '\t' }
+        case 'r' { return '\r' }
+        case 'f' { return 12 }
+        case 'v' { return 11 }
+        case '0' { return 0 }
+        case 'x' {
+            v I64 = 0
+            if q.more() and q.peek() == '{' {
+                q.at++
+                start := q.at
+                for q.more() and hexValue(q.peek()) >= 0 and q.at - start < 6 {
+                    v = v * 16 + hexValue(q.peek())
+                    q.at++
+                }
+                if q.at == start or not q.more() or q.peek() != '}' or v > 0x10FFFF { error SyntaxError.BAD_ESCAPE }
+                q.at++
+                return U32(v)
+            }
+            for i in range 2 {
+                if not q.more() or hexValue(q.peek()) < 0 { error SyntaxError.BAD_ESCAPE }
+                v = v * 16 + hexValue(q.peek())
+                q.at++
+            }
+            return U32(v)
+        }
+        case _ {
+            # any punctuation escapes itself; a letter or digit with no meaning is an error, as in RE2
+            if c.IsLetter() or c.IsDigit() or c >= 0x80 { error SyntaxError.BAD_ESCAPE }
+            return U32(c)
+        }
+    }
+}
+
+# the ranges of [:name:], at the parser just after "[:"
+fn (q mut parser&) posixClass() ? SyntaxError.UNCLOSED_CLASS, SyntaxError.BAD_RANGE {
+    end := try q.t[q.at:].Find(":]") catch TextError { error SyntaxError.UNCLOSED_CLASS }
+    name := q.t[q.at:q.at + end]
+    q.at += end + 2
+    match name {
+        case "alnum" {
+            q.addRange('0', '9')
+            q.addRange('A', 'Z')
+            q.addRange('a', 'z')
+        }
+        case "alpha" {
+            q.addRange('A', 'Z')
+            q.addRange('a', 'z')
+        }
+        case "ascii" { q.addRange(0, 127) }
+        case "blank" {
+            q.addRange('\t', '\t')
+            q.addRange(' ', ' ')
+        }
+        case "cntrl" {
+            q.addRange(0, 31)
+            q.addRange(127, 127)
+        }
+        case "digit" { q.addRange('0', '9') }
+        case "graph" { q.addRange('!', '~') }
+        case "lower" { q.addRange('a', 'z') }
+        case "print" { q.addRange(' ', '~') }
+        case "punct" {
+            q.addRange('!', '/')
+            q.addRange(':', '@')
+            q.addRange('[', '`')
+            q.addRange('{', '~')
+        }
+        case "space" {
+            q.addRange('\t', '\r')
+            q.addRange(' ', ' ')
+        }
+        case "upper" { q.addRange('A', 'Z') }
+        case "word" { q.perlClass('w') }
+        case "xdigit" {
+            q.addRange('0', '9')
+            q.addRange('A', 'F')
+            q.addRange('a', 'f')
+        }
+        case _ { error SyntaxError.BAD_RANGE }
+    }
+}
+
+# a class, the parser just after its '['
+fn (q mut parser&) class() I64 ? SyntaxError {
+    neg := false
+    if q.more() and q.peek() == '^' {
+        neg = true
+        q.at++
+    }
+    from := q.p.ranges.Len()
+    first := true
+    for {
+        if not q.more() { error SyntaxError.UNCLOSED_CLASS }
+        c := q.peek()
+        if c == ']' and not first {
+            q.at++
+            break
+        }
+        first = false
+        if c == '[' and q.at + 1 < q.t.Len() and q.t[q.at + 1] == ':' {
+            q.at += 2
+            try q.posixClass()
+            continue
+        }
+        lo U32 = 0
+        if c == '\\' {
+            q.at++
+            if not q.more() { error SyntaxError.BAD_ESCAPE }
+            e := q.peek()
+            q.at++
+            if q.perlClass(e) { continue }
+            if e == 'D' or e == 'W' or e == 'S' {
+                q.negatedPerl(e)
+                continue
+            }
+            lo = try q.escapedRune(e)
+        } else {
+            lo = q.rune()
+        }
+        hi := lo
+        if q.at + 1 < q.t.Len() and q.peek() == '-' and q.t[q.at + 1] != ']' {
+            q.at++
+            if q.peek() == '\\' {
+                q.at++
+                if not q.more() { error SyntaxError.BAD_ESCAPE }
+                e := q.peek()
+                q.at++
+                hi = try q.escapedRune(e)
+            } else {
+                hi = q.rune()
+            }
+            if hi < lo { error SyntaxError.BAD_RANGE }
+        }
+        q.addRange(lo, hi)
+    }
+    if q.fold { q.foldRanges(from) }
+    return q.classNode(from, neg)
+}
+
+# the other case of every ASCII letter in the ranges from "from" added to them
+fn (q mut parser&) foldRanges(from I64) {
+    end := q.p.ranges.Len()
+    for k := from, k < end, k += 2 {
+        lo := q.p.ranges[k]
+        hi := q.p.ranges[k + 1]
+        a := lo if lo > U32('a') else U32('a')
+        b := hi if hi < U32('z') else U32('z')
+        if a <= b: q.addRange(a - 32, b - 32)
+        a = lo if lo > U32('A') else U32('A')
+        b = hi if hi < U32('Z') else U32('Z')
+        if a <= b: q.addRange(a + 32, b + 32)
+    }
+}
+
+# an atom: a code point, a class, a group, an assertion
+fn (q mut parser&) atom() I64 ? SyntaxError {
+    c := q.peek()
+    if c == '(' {
+        q.at++
+        return try q.group()
+    }
+    if c == '[' {
+        q.at++
+        return try q.class()
+    }
+    if c == '.' {
+        q.at++
+        n := node(nAny)
+        n.neg = q.dotAll
+        return q.add(n)
+    }
+    if c == '^' or c == '$' {
+        q.at++
+        n := node(nAssert)
+        if c == '^' { n.a = atLineStart if q.multi else atTextStart } else { n.a = atLineEnd if q.multi else atTextEnd }
+        return q.add(n)
+    }
+    if c == '*' or c == '+' or c == '?' { error SyntaxError.BAD_REPEAT }
+    if c == '\\' {
+        q.at++
+        if not q.more() { error SyntaxError.BAD_ESCAPE }
+        e := q.peek()
+        q.at++
+        if e == 'b' or e == 'B' or e == 'A' or e == 'z' {
+            n := node(nAssert)
+            n.a = atWord if e == 'b' else atNotWord if e == 'B' else atTextStart if e == 'A' else atTextEnd
+            return q.add(n)
+        }
+        from := q.p.ranges.Len()
+        if q.perlClass(e) { return q.classNode(from, false) }
+        if e == 'D' or e == 'W' or e == 'S' {
+            q.negatedPerl(e)
+            return q.classNode(from, false)
+        }
+        r := try q.escapedRune(e)
+        return q.literal(r)
+    }
+    return q.literal(q.rune())
+}
+
+fn (q mut parser&) literal(r U32) I64 {
+    n := node(nLit)
+    n.a = I64(r)
+    n.fold = q.fold and ((r >= 'a' and r <= 'z') or (r >= 'A' and r <= 'Z'))
+    return q.add(n)
+}
+
+# a decimal count in a repetition, or -1 when there is none
+fn (q mut parser&) count() I64 {
+    start := q.at
+    v I64 = 0
+    for q.more() and q.peek().IsDigit() and q.at - start < 5 {
+        v = v * 10 + I64(q.peek() - '0')
+        q.at++
+    }
+    return -1 if q.at == start else v
+}
+
+# an atom and any repetition after it
+fn (q mut parser&) repeated() I64 ? SyntaxError {
+    a := try q.atom()
+    for q.more() {
+        c := q.peek()
+        min I64 = 0
+        max I64 = -1
+        if c == '*' {
+            q.at++
+        } else if c == '+' {
+            min = 1
+            q.at++
+        } else if c == '?' {
+            max = 1
+            q.at++
+        } else if c == '{' {
+            save := q.at
+            q.at++
+            lo := q.count()
+            if lo < 0 {
+                q.at = save                          # a '{' starting no count is itself
+                break
+            }
+            min = lo
+            max = lo
+            if q.more() and q.peek() == ',' {
+                q.at++
+                hi := q.count()
+                max = hi
+            }
+            if not q.more() or q.peek() != '}' {
+                q.at = save
+                break
+            }
+            q.at++
+            if min > maxRepeat or max > maxRepeat or (max >= 0 and max < min) { error SyntaxError.BAD_REPEAT }
+        } else {
+            break
+        }
+        n := node(nRepeat)
+        n.a = a
+        n.min = min
+        n.max = max
+        if q.more() and q.peek() == '?' {
+            n.greedy = false
+            q.at++
+        }
+        if q.nodes[a].kind == nRepeat or q.nodes[a].kind == nEmpty { error SyntaxError.BAD_REPEAT }
+        a = q.add(n)
+    }
+    return a
+}
+
+# a sequence, up to a '|' or ')' or the end
+fn (q mut parser&) sequence() I64 ? SyntaxError {
+    cat := Vec<I64>()
+    for q.more() {
+        c := q.peek()
+        if c == '|' or c == ')' { break }
+        if c == '(' and q.at + 2 < q.t.Len() and q.t[q.at + 1] == '?' {
+            if try q.flags() { continue }
+        }
+        cat.Push(try q.repeated())
+    }
+    if cat.Len() == 0 { return q.add(node(nEmpty)) }
+    if cat.Len() == 1 { return cat[0] }
+    return q.parent(nCat, cat)
+}
+
+# alternatives, up to a ')' or the end
+fn (q mut parser&) alternation() I64 ? SyntaxError {
+    first := try q.sequence()
+    if not q.more() or q.peek() != '|' { return first }
+    alt := Vec<I64>()
+    alt.Push(first)
+    for q.more() and q.peek() == '|' {
+        q.at++
+        alt.Push(try q.sequence())
+    }
+    return q.parent(nAlt, alt)
+}
+
+# "(?flags)" standing alone, the parser at its '(' - taken, and true; or false, the parser where it was, for any other
+# "(?" group
+fn (q mut parser&) flags() Bool ? SyntaxError.BAD_FLAG {
+    save := q.at
+    q.at += 2
+    on := true
+    fold := q.fold
+    multi := q.multi
+    dotAll := q.dotAll
+    for q.more() {
+        c := q.peek()
+        if c == ')' {
+            q.at++
+            q.fold = fold
+            q.multi = multi
+            q.dotAll = dotAll
+            return true
+        }
+        if c == ':' {
+            q.at = save
+            return false
+        }
+        if c == '-' {
+            on = false
+        } else if c == 'i' {
+            fold = on
+        } else if c == 'm' {
+            multi = on
+        } else if c == 's' {
+            dotAll = on
+        } else {
+            q.at = save
+            if c == 'P' or c == '<' { return false }
+            error SyntaxError.BAD_FLAG
+        }
+        q.at++
+    }
+    error SyntaxError.BAD_FLAG
+}
+
+# a group, the parser just after its '('
+fn (q mut parser&) group() I64 ? SyntaxError {
+    fold := q.fold
+    multi := q.multi
+    dotAll := q.dotAll
+    capture I64 = -1
+    if q.more() and q.peek() == '?' {
+        q.at++
+        if q.more() and (q.peek() == 'P' or q.peek() == '<') {
+            if q.peek() == 'P' { q.at++ }
+            if not q.more() or q.peek() != '<' { error SyntaxError.BAD_NAME }
+            q.at++
+            end := try q.t[q.at:].FindByte('>') catch TextError { error SyntaxError.BAD_NAME }
+            name := q.t[q.at:q.at + end]
+            q.at += end + 1
+            if name.Len() == 0 or name[0].IsDigit() { error SyntaxError.BAD_NAME }
+            for c in name {
+                if not (c.IsLetter() or c.IsDigit() or c == '_') { error SyntaxError.BAD_NAME }
+            }
+            for other in q.p.names.View() {
+                if other == name { error SyntaxError.BAD_NAME }
+            }
+            capture = q.groups
+            q.groups++
+            q.p.names.Push($name)
+        } else {
+            on := true
+            for {
+                if not q.more() { error SyntaxError.UNCLOSED_GROUP }
+                c := q.peek()
+                q.at++
+                if c == ':' { break }
+                if c == '-' {
+                    on = false
+                } else if c == 'i' {
+                    q.fold = on
+                } else if c == 'm' {
+                    q.multi = on
+                } else if c == 's' {
+                    q.dotAll = on
+                } else {
+                    error SyntaxError.BAD_FLAG
+                }
+            }
+        }
+    } else {
+        capture = q.groups
+        q.groups++
+        q.p.names.Push("")
+    }
+    body := try q.alternation()
+    if not q.more() or q.peek() != ')' { error SyntaxError.UNCLOSED_GROUP }
+    q.at++
+    q.fold = fold
+    q.multi = multi
+    q.dotAll = dotAll
+    n := node(nGroup)
+    n.a = body
+    n.b = capture
+    return q.add(n)
+}
+
+# ---- compiling ----
+
+fn (q mut parser&) emitNode(i I64) ? SyntaxError.TOO_BIG {
+    p := q.p
+    if p.op.Len() > maxProgram { error SyntaxError.TOO_BIG }
+    n := q.nodes[i]
+    match n.kind {
+        case nEmpty { }
+        case nLit {
+            if n.fold {
+                from := p.ranges.Len()
+                lower := n.a | 32
+                p.ranges.PushAll(U32[U32(lower - 32), U32(lower - 32), U32(lower), U32(lower)])
+                p.emit(opClass, from, 2, 0)
+            } else {
+                p.emit(opChar, n.a, 0, 0)
+            }
+        }
+        case nClass { p.emit(opClass, n.a, n.b, 1 if n.neg else 0) }
+        case nAny { p.emit(opAny, 0, 1 if n.neg else 0, 0) }
+        case nCat {
+            for j in range n.b { try q.emitNode(q.kids[n.a + (n.b - 1 - j if q.reverse else j)]) }
+        }
+        case nAlt {
+            jumps := Vec<I64>()
+            for j in range n.b {
+                if j < n.b - 1 {
+                    split := p.emit(opSplit, p.op.Len() + 1, 0, 0)
+                    try q.emitNode(q.kids[n.a + j])
+                    jumps.Push(p.emit(opJmp, 0, 0, 0))
+                    p.y[split] = p.op.Len()
+                } else {
+                    try q.emitNode(q.kids[n.a + j])
+                }
+            }
+            for jmp in jumps.View() { p.x[jmp] = p.op.Len() }
+        }
+        case nGroup {
+            if n.b >= 0 and not q.reverse: p.emit(opSave, 2 * n.b, 0, 0)
+            try q.emitNode(n.a)
+            if n.b >= 0 and not q.reverse: p.emit(opSave, 2 * n.b + 1, 0, 0)
+        }
+        case nAssert {
+            if not q.reverse: p.emit(opAssert, n.a, 0, 0)
+        }
+        case nRepeat {
+            for k in range n.min - 1 if n.max < 0 and n.min > 0 else n.min { try q.emitNode(n.a) }
+            if n.max < 0 {
+                if n.min > 0 {
+                    # x+ : the body, then back to it or on
+                    top := p.op.Len()
+                    try q.emitNode(n.a)
+                    if n.greedy { p.emit(opSplit, top, p.op.Len() + 1, 0) } else { p.emit(opSplit, p.op.Len() + 1, top, 0) }
+                } else {
+                    # x* : a choice of the body or on, the body jumping back to the choice
+                    split := p.emit(opSplit, 0, 0, 0)
+                    try q.emitNode(n.a)
+                    p.emit(opJmp, split, 0, 0)
+                    body := split + 1
+                    out := p.op.Len()
+                    p.x[split] = body if n.greedy else out
+                    p.y[split] = out if n.greedy else body
+                }
+            } else {
+                splits := Vec<I64>()
+                for k in range n.max - n.min {
+                    split := p.emit(opSplit, 0, 0, 0)
+                    splits.Push(split)
+                    try q.emitNode(n.a)
+                    if p.op.Len() > maxProgram { error SyntaxError.TOO_BIG }
+                }
+                out := p.op.Len()
+                for split in splits.View() {
+                    p.x[split] = split + 1 if n.greedy else out
+                    p.y[split] = out if n.greedy else split + 1
+                }
+            }
+        }
+        case _ { }
+    }
+}
+
+# the literal text the pattern must start with, from the program's first instructions: code points until anything else
+fn (p mut prog&) findPrefix() {
+    b := StringBuilder()
+    pc I64 = 1                                       # after the whole match's SAVE 0
+    for pc < p.op.Len() and p.op[pc] == opChar {
+        b.Push(try utf8.Encode(utf8.Rune(U32(p.x[pc]))) catch utf8.Error default "")
+        pc++
+    }
+    p.prefix = b.ToString()
+    p.anchored = pc < p.op.Len() and p.op[pc] == opAssert and p.x[pc] == atTextStart
+}
+
+# the instructions emitted, as matching reads them
+fn (p prog&) pack() mut Array<I64>&p {
+    c mut Array<I64>&p = Array<I64>(4 * p.op.Len())
+    for pc in range p.op.Len() {
+        c[4 * pc] = p.op[pc]
+        c[4 * pc + 1] = p.x[pc]
+        c[4 * pc + 2] = p.y[pc]
+        c[4 * pc + 3] = p.z[pc]
+    }
+    return c
+}
+
+# the pattern compiled - failing with the SyntaxError naming what is wrong with it
+fn Compile(pattern String&) Regex ? SyntaxError {
+    q := parser(pattern)
+    q.p.names.Push("")
+    root := try q.alternation()
+    if q.more() { error SyntaxError.UNMATCHED_PAREN }        # only a ')' stops the top level early
+    p := q.p
+    p.emit(opSave, 0, 0, 0)
+    try q.emitNode(root)
+    p.emit(opSave, 1, 0, 0)
+    p.emit(opMatch, 0, 0, 0)
+    p.findPrefix()
+    p.code = p.pack()
+    p.dfaOK = true
+    for pc in range p.op.Len() {
+        if p.op[pc] == opAssert and not (pc == 1 and p.x[pc] == atTextStart): p.dfaOK = false
+    }
+    p.op.Clear()
+    p.x.Clear()
+    p.y.Clear()
+    p.z.Clear()
+    q.reverse = true
+    try q.emitNode(root)
+    p.emit(opMatch, 0, 0, 0)
+    p.rcode = p.pack()
+    p.rng = p.ranges.ToArray()
+    return Regex(p)
+}
+
+# the pattern it was compiled from
+fn (re Regex&) Str() String { return $re.s.pattern }
+
+# how many capture groups the pattern has, the whole match not counted
+fn (re Regex&) Groups() I64 { return re.s.names.Len() - 1 }
+
+# ---- matching ----
+
+# the threads of one step: a sparse set of program counters, and each one's capture slots
+type threads struct(size I64, ncap I64) {
+    dense mut Array<I64>& = Array<I64>(size)
+    sparse mut Array<I64>& = Array<I64>(size)
+    caps mut Array<I64>& = Array<I64>(size * ncap)
+    n I64 = 0
+}
+
+fn (l threads&) has(pc I64) Bool {
+    i := l.sparse[pc]
+    return i < l.n and l.dense[i] == pc
+}
+
+fn isWord(c I64) Bool {
+    return (c >= 'a' and c <= 'z') or (c >= 'A' and c <= 'Z') or (c >= '0' and c <= '9') or c == '_'
+}
+
+# the code point at byte i of t and its length - U+FFFD for one byte that is not UTF-8
+fn runeAt(t String&, i I64) I64, I64 {
+    c := t[i]
+    if c < 0x80 { return I64(c), 1 }
+    r, n := try utf8.Decode(t, i) catch utf8.Error default utf8.Replacement, 1
+    return I64(r), n
+}
+
+fn (p prog&) inClass(pc I64, r I64) Bool {
+    code := p.code
+    rng := p.rng
+    from := code[4 * pc + 1]
+    hit := false
+    for k in range code[4 * pc + 2] {
+        if I64(rng[from + 2 * k]) <= r and r <= I64(rng[from + 2 * k + 1]) {
+            hit = true
+            break
+        }
+    }
+    return hit != (code[4 * pc + 3] == 1)
+}
+
+# the state of one search
+type machine struct(of prog&, text String&, ncap I64) {
+    p prog&of = of
+    t String&text = text
+    ncap
+    clist mut threads& = threads(of.code.Len() / 4, ncap)
+    nlist mut threads& = threads(of.code.Len() / 4, ncap)
+    work mut Array<I64>& = Array<I64>(ncap)   # the captures of the thread being added
+    stack mut Array<I64>& = Array<I64>(3 * of.code.Len() / 4 + 4)   # pending pcs, and captures to restore (-2 - slot, then the old value)
+    found Bool = false
+    best mut Array<I64>& = Array<I64>(ncap)   # the captures of the match found
+    only I64 = -1                             # where threads may start, when the DFA has found where; -1 anywhere
+}
+
+# whether assertion a holds at byte i
+fn (m machine&) holds(a I64, i I64) Bool {
+    t := m.t
+    match a {
+        case atTextStart { return i == 0 }
+        case atTextEnd { return i == t.Len() }
+        case atLineStart { return i == 0 or t[i - 1] == '\n' }
+        case atLineEnd { return i == t.Len() or t[i] == '\n' }
+        case _ {
+            before := i > 0 and isWord(I64(t[i - 1]))
+            next := i < t.Len() and isWord(I64(t[i]))
+            return (before != next) == (a == atWord)
+        }
+    }
+}
+
+# the thread at pc, with the captures in work, added to l at byte i - following jumps, splits (the preferred side
+# first), saves and assertions there and then, so a list holds only threads waiting on a code point or a match
+fn (m mut machine&) add(l mut threads&, pc0 I64, i I64) {
+    p := m.p
+    code := p.code
+    st := m.stack
+    sp I64 = 1
+    st[0] = pc0
+    for sp > 0 {
+        sp--
+        pc := st[sp]
+        if pc < -1 {
+            sp--
+            m.work[-2 - pc] = st[sp]
+            continue
+        }
+        for {
+            if l.has(pc) { break }
+            l.sparse[pc] = l.n
+            l.dense[l.n] = pc
+            l.n++
+            op := code[4 * pc]
+            if op == opJmp {
+                pc = code[4 * pc + 1]
+            } else if op == opSplit {
+                st[sp] = code[4 * pc + 2]
+                sp++
+                pc = code[4 * pc + 1]
+            } else if op == opSave {
+                slot := code[4 * pc + 1]
+                if slot < m.ncap {
+                    st[sp] = m.work[slot]
+                    st[sp + 1] = -2 - slot
+                    sp += 2
+                    m.work[slot] = i
+                }
+                pc++
+            } else if op == opAssert {
+                if not m.holds(code[4 * pc + 1], i) { break }
+                pc++
+            } else {
+                at := (l.n - 1) * m.ncap
+                for k in range m.ncap { l.caps[at + k] = m.work[k] }
+                break
+            }
+        }
+    }
+}
+
+# the leftmost-first match starting at or after byte from, its captures in m.best; whether there is one.
+# With "any", the first sign of a match is enough (ncap may be 0)
+fn (m mut machine&) run(from I64, any Bool) Bool {
+    p := m.p
+    code := p.code
+    t := m.t
+    i := from
+    m.clist.n = 0
+    for {
+        if not m.found and m.clist.n == 0 {
+            if (p.anchored and i > 0) or (m.only >= 0 and i > m.only) { break }
+            if p.prefix.Len() > 0 and m.only < 0 {
+                at := try t[i:].Find(p.prefix) catch TextError default -1
+                if at < 0 { break }
+                i += at
+            }
+        }
+        if not m.found and (m.only < 0 or i == m.only) {
+            for k in range m.ncap { m.work[k] = -1 }
+            m.add(m.clist, 0, i)
+        }
+        if m.clist.n == 0 { break }
+        r I64 = -1
+        w I64 = 0
+        if i < t.Len() {
+            r, w = runeAt(t, i)
+        }
+        m.nlist.n = 0
+        for j in range m.clist.n {
+            pc := m.clist.dense[j]
+            op := code[4 * pc]
+            if op == opMatch {
+                m.found = true
+                for k in range m.ncap { m.best[k] = m.clist.caps[j * m.ncap + k] }
+                if any { return true }
+                break                                # lower-priority threads lose to this match
+            }
+            if r < 0 { continue }
+            ok := false
+            if op == opChar {
+                ok = code[4 * pc + 1] == r
+            } else if op == opClass {
+                ok = p.inClass(pc, r)
+            } else if op == opAny {
+                ok = r != '\n' or code[4 * pc + 2] == 1
+            }
+            if ok {
+                for k in range m.ncap { m.work[k] = m.clist.caps[j * m.ncap + k] }
+                m.add(m.nlist, pc + 1, i + w)
+            }
+        }
+        if r < 0 { break }
+        swap := m.clist
+        m.clist = m.nlist
+        m.nlist = swap
+        i += w
+    }
+    return m.found
+}
+
+
+# ---- the DFA ----
+#
+# Without captures, all a Pike VM step carries is the ordered list of threads waiting on a code point - so that list
+# (and whether a match has been seen, after which no thread starts) is a state of a deterministic automaton, built
+# lazily as the text reaches it and cached for the rest of the search: one table lookup a byte where states repeat,
+# as RE2's DFA. The forward DFA finds where the leftmost-first match ends; the reversed program, run backwards from
+# that end keeping the longest match, finds where it starts (the leftmost start, which is the leftmost-first match's);
+# the Pike VM then runs only over the match, for its groups. A program with assertions (but a leading ^) is matched
+# by the Pike VM alone, and so is a text too short to repay building states. A DFA is built for one call, never kept
+# in the Regex, so a Regex stays read-only and usable from every task at once.
+
+dfaMinText I64 = 64
+dfaMaxStates I64 = 5000
+
+type dfa struct(of prog&, code Array<I64>&, longest Bool) {
+    p prog&of = of
+    c Array<I64>&code = code
+    longest
+    size I64 = code.Len() / 4
+    pcs Vec<I64> = Vec<I64>()                 # every state's threads, one list after another
+    from Vec<I64> = Vec<I64>()                # where each state's list starts in pcs
+    count Vec<I64> = Vec<I64>()               # and how long it is
+    flags Vec<I64> = Vec<I64>()               # bit 0: no thread may start (a match was seen); bit 1: holds a match
+    trans Vec<I64> = Vec<I64>()               # 128 entries a state: the state an ASCII code point leads to, -1 unknown
+    wide Map<I64, I64> = Map<I64, I64>()      # the same for the others, keyed by state * 0x110000 + code point
+    byHash Map<I64, I64> = Map<I64, I64>()    # a list's hash to the first state holding a list of that hash
+    nextSame Vec<I64> = Vec<I64>()            # the next state of the same hash
+    mark mut Array<I64>& = Array<I64>(code.Len() / 4)
+    gen I64 = 0
+    work Vec<I64> = Vec<I64>()                # the list being built
+    stack mut Array<I64>& = Array<I64>(code.Len() + 4)
+    full Bool = false                         # too many states: the caller goes on with the Pike VM
+}
+
+# the threads waiting on a code point that following pc reaches, appended to work - jumps, splits (preferred first),
+# saves, the leading ^ followed; each pc once per list (gen marks them)
+fn (d mut dfa&) closure(pc0 I64) {
+    c := d.c
+    st := d.stack
+    sp I64 = 1
+    st[0] = pc0
+    for sp > 0 {
+        sp--
+        pc := st[sp]
+        for {
+            if d.mark[pc] == d.gen { break }
+            d.mark[pc] = d.gen
+            op := c[4 * pc]
+            if op == opJmp {
+                pc = c[4 * pc + 1]
+            } else if op == opSplit {
+                st[sp] = c[4 * pc + 2]
+                sp++
+                pc = c[4 * pc + 1]
+            } else if op == opSave or op == opAssert {
+                pc++
+            } else {
+                d.work.Push(pc)
+                break
+            }
+        }
+    }
+}
+
+# the state whose list is work and whose flags are f - found among those made, or made now
+fn (d mut dfa&) intern(f I64) I64 {
+    w := d.work
+    h I64 = f * 1099511628211
+    for i in range w.Len() { h = (h ^ w[i]) * 1099511628211 }
+    k := try d.byHash.Get(h) catch MapError default -1
+    first := k
+    for k >= 0 {
+        if d.flags[k] == f and d.count[k] == w.Len() {
+            same := true
+            base := d.from[k]
+            for i in range w.Len() {
+                if d.pcs[base + i] != w[i] {
+                    same = false
+                    break
+                }
+            }
+            if same { return k }
+        }
+        k = d.nextSame[k]
+    }
+    id := d.from.Len()
+    if id >= dfaMaxStates: d.full = true
+    d.from.Push(d.pcs.Len())
+    d.count.Push(w.Len())
+    d.pcs.PushAll(w.View())
+    d.flags.Push(f)
+    for i in range 128 { d.trans.Push(-1) }
+    d.nextSame.Push(first)
+    d.byHash.Put(h, id)
+    return id
+}
+
+# the state a search starts in: the start's threads, or none (a ^ program at a position past 0)
+fn (d mut dfa&) initial(none Bool) I64 {
+    d.gen++
+    d.work.Clear()
+    if not none: d.closure(0)
+    f I64 = 1 if none or d.longest else 0
+    for pc in d.work.View() {
+        if d.c[4 * pc] == opMatch { f = f | 2 }
+    }
+    return d.intern(f)
+}
+
+fn (d dfa&) takes(pc I64, r I64) Bool {
+    c := d.c
+    op := c[4 * pc]
+    if op == opChar { return c[4 * pc + 1] == r }
+    if op == opAny { return r != '\n' or c[4 * pc + 2] == 1 }
+    if op != opClass { return false }
+    rng := d.p.rng
+    base := c[4 * pc + 1]
+    hit := false
+    for k in range c[4 * pc + 2] {
+        if I64(rng[base + 2 * k]) <= r and r <= I64(rng[base + 2 * k + 1]) {
+            hit = true
+            break
+        }
+    }
+    return hit != (c[4 * pc + 3] == 1)
+}
+
+# the state state s goes to on code point r - its threads before a match (all of them, when longest) each taking r,
+# then, while no match has been seen and the program is not anchored, the start's threads after them
+fn (d mut dfa&) step(s I64, r I64) I64 {
+    if r < 128 {
+        t := d.trans[128 * s + r]
+        if t >= 0 { return t }
+    } else {
+        t := try d.wide.Get(s * 0x110000 + r) catch MapError default -1
+        if t >= 0 { return t }
+    }
+    d.gen++
+    d.work.Clear()
+    f := d.flags[s]
+    base := d.from[s]
+    n := d.count[s]
+    for i in range n {
+        pc := d.pcs[base + i]
+        if d.c[4 * pc] == opMatch {
+            if not d.longest {
+                f = f | 1
+                break
+            }
+            continue
+        }
+        if d.takes(pc, r): d.closure(pc + 1)
+    }
+    if (f & 1) == 0 and not d.p.anchored: d.closure(0)
+    f = f & 1
+    for pc in d.work.View() {
+        if d.c[4 * pc] == opMatch { f = f | 2 }
+    }
+    t := d.intern(f)
+    if r < 128 { d.trans[128 * s + r] = t } else { d.wide.Put(s * 0x110000 + r, t) }
+    return t
+}
+
+fn (d dfa&) dead(s I64) Bool { return d.count[s] == 0 }
+
+# the code point ending at byte i of t, and where it starts - one byte that is not UTF-8 being U+FFFD on its own, as
+# runeAt reads it forwards
+fn runeBefore(t String&, i I64) I64, I64 {
+    c := t[i - 1]
+    if c < 0x80 { return I64(c), i - 1 }
+    j := i - 1
+    for j > 0 and i - j < 4 and (t[j] & 0xC0) == 0x80 { j-- }
+    r, n := try utf8.Decode(t, j) catch utf8.Error default utf8.Replacement, 0
+    if n == i - j { return I64(r), j }
+    return I64(utf8.Replacement), i - 1
+}
+
+# where the leftmost-first match at or after byte from ends, by the forward DFA: -1 for none, -2 when the DFA grew too
+# large (the Pike VM is to be used). With "any", the first match seen is enough
+fn (d mut dfa&) end(t String&, from I64, any Bool) I64 {
+    start := d.initial(d.p.anchored and from > 0)
+    s := start
+    i := from
+    last I64 = -1
+    prefix := d.p.prefix
+    for {
+        if s == start and prefix.Len() > 0 and last < 0 {
+            at := try t[i:].Find(prefix) catch TextError default -1
+            if at < 0 { return -1 }
+            i += at
+        }
+        if (d.flags[s] & 2) != 0 {
+            last = i
+            if any { return i }
+        }
+        if d.dead(s) or i >= t.Len() { break }
+        c := t[i]
+        if c < 0x80 {
+            s = d.step(s, I64(c))
+            i++
+        } else {
+            r, w := runeAt(t, i)
+            s = d.step(s, r)
+            i += w
+        }
+        if d.full { return -2 }
+    }
+    return last
+}
+
+# where the match ending at byte e starts - the leftmost start at or after "from" of any match ending there, by the
+# reversed program's DFA keeping the longest
+fn (d mut dfa&) begin(t String&, from I64, e I64) I64 {
+    s := d.initial(false)
+    i := e
+    first I64 = -1
+    for {
+        if (d.flags[s] & 2) != 0: first = i
+        if d.dead(s) or i <= from { break }
+        r, j := runeBefore(t, i)
+        s = d.step(s, r)
+        i = j
+        if d.full { return -2 }
+    }
+    return first
+}
+
+# the start and end of the leftmost-first match at or after from: -1, -1 for none; -2 where the DFAs gave up
+fn locate(fw mut dfa&, bw mut dfa&, t String&, from I64) I64, I64 {
+    e := fw.end(t, from, false)
+    if e < 0 { return e, e }
+    s := bw.begin(t, from, e)
+    return s, e
+}
+
+# whether the pattern matches anywhere in t
+fn (re Regex&) Matches(t String&) Bool {
+    p := re.s
+    if p.dfaOK and t.Len() >= dfaMinText {
+        d := dfa(p, p.code, false)
+        e := d.end(t, 0, true)
+        if e != -2 { return e >= 0 }
+    }
+    m := machine(p, t, 0)
+    return m.run(0, true)
+}
+
+# a match: where it is in the text, and where each capture group took part
+type Match struct(text String&, slots Array<I64>&) {
+    t String&text = text
+    caps mut Array<I64>& = copyOf(slots)
+    Start I64 = slots[0]
+    End I64 = slots[1]
+}
+
+fn copyOf(a Array<I64>&) mut Array<I64>& {
+    out mut Array<I64>&return = Array<I64>(a.Len())
+    for i in range a.Len() { out[i] = a[i] }
+    return out
+}
+
+# the text matched
+fn (m Match&) Text() String&m { return m.t[m.Start:m.End] }
+
+# the text capture group i matched (0 the whole match) - failing with NOT_FOUND when there is no group i or it took
+# part in no match ("(a)|b" matching "b")
+fn (m Match&) Group(i I64) String&m ? NotFound.NOT_FOUND {
+    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound.NOT_FOUND }
+    return m.t[m.caps[2 * i]:m.caps[2 * i + 1]]
+}
+
+# where capture group i matched, start and end - failing as Group does
+fn (m Match&) Span(i I64) I64, I64 ? NotFound.NOT_FOUND {
+    if i < 0 or 2 * i + 1 >= m.caps.Len() or m.caps[2 * i] < 0 { error NotFound.NOT_FOUND }
+    return m.caps[2 * i], m.caps[2 * i + 1]
+}
+
+# the number of the group named "name", for Match's Group - failing with NOT_FOUND when the pattern names none so
+fn (re Regex&) GroupNamed(name String&) I64 ? NotFound.NOT_FOUND {
+    names := re.s.names
+    for i in range names.Len() {
+        if names[i] == name and name.Len() > 0 { return i }
+    }
+    error NotFound.NOT_FOUND
+}
+
+# the leftmost-first match in t at or after byte "from" - failing with NOT_FOUND where there is none
+# a search of one text, match after match: the DFAs where they serve, the Pike VM for the groups
+type searcher struct(of prog&, text String&, ncap I64) {
+    t String&text = text
+    m mut machine& = machine(of, text, ncap)
+    fw mut dfa& = dfa(of, of.code, false)
+    bw mut dfa& = dfa(of, of.rcode, true)
+    useDfa Bool = of.dfaOK and text.Len() >= dfaMinText
+}
+
+# the leftmost-first match at or after byte from, in m.best; whether there is one
+fn (s mut searcher&) next(from I64) Bool {
+    m := s.m
+    m.found = false
+    m.only = -1
+    if s.useDfa {
+        b, e := locate(s.fw, s.bw, s.t, from)
+        if b == -1 { return false }
+        if b >= 0 {
+            if m.ncap == 2 {
+                m.best[0] = b
+                m.best[1] = e
+                return true
+            }
+            m.only = b
+            return m.run(b, false)
+        }
+        s.useDfa = false                          # the DFA grew too large: the Pike VM from here on
+    }
+    return m.run(from, false)
+}
+
+fn (re Regex&) FindFrom(t String&, from I64) Match ? NotFound.NOT_FOUND {
+    if from < 0 or from > t.Len() { error NotFound.NOT_FOUND }
+    sr := searcher(re.s, t, 2 * re.s.names.Len())
+    if not sr.next(from) { error NotFound.NOT_FOUND }
+    return Match(t, sr.m.best)
+}
+
+fn (re Regex&) Find(t String&) Match ? NotFound.NOT_FOUND { return try re.FindFrom(t, 0) }
+
+# where the next match is looked for after one from "start" to "end": its end, or one code point on for an empty match
+fn onFrom(t String&, start I64, end I64) I64 {
+    if end > start or end >= t.Len() { return end + (1 if end == start else 0) }
+    r, w := runeAt(t, end)
+    return end + w
+}
+
+# every match in t, left to right, none overlapping; an empty match is not taken where the one before ended
+fn (re Regex&) FindAll(t String&) Vec<Match> {
+    out := Vec<Match>()
+    sr := searcher(re.s, t, 2 * re.s.names.Len())
+    best := sr.m.best
+    from I64 = 0
+    lastEnd I64 = -1
+    for from <= t.Len() {
+        if not sr.next(from) { break }
+        if best[0] == best[1] and best[0] == lastEnd {
+            from = onFrom(t, best[0], best[1])
+            continue
+        }
+        out.Push(Match(t, best))
+        lastEnd = best[1]
+        from = onFrom(t, best[0], best[1])
+    }
+    return out
+}
+
+# how many matches FindAll would give
+fn (re Regex&) Count(t String&) I64 {
+    sr := searcher(re.s, t, 2)
+    best := sr.m.best
+    n I64 = 0
+    from I64 = 0
+    lastEnd I64 = -1
+    for from <= t.Len() {
+        if not sr.next(from) { break }
+        if best[0] != best[1] or best[0] != lastEnd: n++
+        lastEnd = best[1]
+        from = onFrom(t, best[0], best[1])
+    }
+    return n
+}
+
+# t with every match replaced by repl, in which "$1" or "${1}" stands for what group 1 matched, "${name}" for what a
+# named group matched, "$0" for the whole match, and "$$" for a '$'; a group that took part in no match, or one the
+# pattern does not have, stands for nothing
+fn (re Regex&) Replace(t String&, repl String&) String {
+    b := StringBuilder()
+    last I64 = 0
+    for m in re.FindAll(t) {
+        b.Push(t[last:m.Start])
+        expand(b, re, m, repl)
+        last = m.End
+    }
+    b.Push(t[last:])
+    return b.ToString()
+}
+
+# t with every match replaced by what f gives for it
+fn (re Regex&) ReplaceFunc(t String&, f fn(m Match) String) String {
+    b := StringBuilder()
+    last I64 = 0
+    for m in re.FindAll(t) {
+        b.Push(t[last:m.Start])
+        b.Push(f(m))
+        last = m.End
+    }
+    b.Push(t[last:])
+    return b.ToString()
+}
+
+fn expand(b mut StringBuilder&, re Regex&, m Match&, repl String&) {
+    i I64 = 0
+    for i < repl.Len() {
+        c := repl[i]
+        if c != '$' or i + 1 >= repl.Len() {
+            b.PushChar(c)
+            i++
+            continue
+        }
+        d := repl[i + 1]
+        if d == '$' {
+            b.PushChar('$')
+            i += 2
+            continue
+        }
+        name String&repl = ""
+        if d == '{' {
+            close := try repl[i + 2:].FindByte('}') catch TextError default -1
+            if close < 0 {
+                b.PushChar(c)
+                i++
+                continue
+            }
+            name = repl[i + 2:i + 2 + close]
+            i += close + 3
+        } else if d.IsDigit() {
+            j := i + 1
+            for j < repl.Len() and repl[j].IsDigit() { j++ }
+            name = repl[i + 1:j]
+            i = j
+        } else {
+            b.PushChar(c)
+            i++
+            continue
+        }
+        if name.Len() > 0 and name[0].IsDigit() {
+            g := try name.ParseInt() catch ParseError default -1
+            b.Push(try m.Group(g) catch NotFound default "")
+        } else {
+            g := try re.GroupNamed(name) catch NotFound default -1
+            b.Push(try m.Group(g) catch NotFound default "")
+        }
+    }
+}
+
+# the text between the matches, in order - borrows of t; text with no match is one piece, and a match at either end
+# gives an empty piece there
+fn (re Regex&) Split(t String&) mut Array<String&>&t {
+    all := re.FindAll(t)
+    pieces mut Array<String&>&t = Array<String&>(all.Len() + 1)
+    last I64 = 0
+    for i, m in all {
+        pieces[i] = t[last:m.Start]
+        last = m.End
+    }
+    pieces[all.Len()] = t[last:]
+    return pieces
+}
+
+if TestBuild {
+
+# the first match of pattern in text as "start-end:text", "-" for none, or "error" when it does not compile
+fn firstOf(pattern String&, text String&) String {
+    re := try Compile(pattern) catch SyntaxError { return "error" }
+    m := try re.Find(text) catch NotFound { return "-" }
+    return $m.Start "-" $m.End ":" $m.Text()
+}
+
+# every group of the first match, "(a)(b)" -> "a|b", a group taking no part written "?"
+fn groupsOf(pattern String&, text String&) String {
+    re := Compile(pattern)!
+    m := re.Find(text)!
+    b := StringBuilder()
+    for i in range 1, re.Groups() + 1 {
+        if i > 1: b.PushChar('|')
+        b.Push(try m.Group(i) catch NotFound default "?")
+    }
+    return b.ToString()
+}
+
+test "literals, classes, repetition and alternation" {
+    cases := String&[
+        "abc", "xxabcxx", "2-5:abc"
+        "abc", "ab", "-"
+        "a.c", "a\nc abc", "4-7:abc"
+        "(?s)a.c", "a\nc", "0-3:a\nc"
+        "a*", "bbb", "0-0:"
+        "a+", "baaab", "1-4:aaa"
+        "a+?", "baaab", "1-2:a"
+        "a{2,3}", "aaaa", "0-3:aaa"
+        "a{2}", "a aa", "2-4:aa"
+        "a{2,}", "aaaaa", "0-5:aaaaa"
+        "ab|cd", "xcdab", "1-3:cd"
+        "a|ab", "ab", "0-1:a"
+        "(a|ab)(c|bcd)", "abcd", "0-4:abcd"
+        "[a-c]+", "xxbacz", "2-5:bac"
+        "[^a-c]+", "abxyc", "2-4:xy"
+        "[]a]+", "x]a]", "1-4:]a]"
+        "[a-]+", "z-a-", "1-4:-a-"
+        "\\d+", "ab 1234 c", "3-7:1234"
+        "\\w+", "  foo_1 ", "2-7:foo_1"
+        "\\s+", "a \t b", "1-4: \t "
+        "[\\d\\s]+", "x1 2y", "1-4:1 2"
+        "\\D+", "12ab3", "2-4:ab"
+        "[[:alpha:]]+", "12ab3", "2-4:ab"
+        "[[:xdigit:]]+", "xyBEEF", "2-6:BEEF"
+        "^abc", "abcabc", "0-3:abc"
+        "^b", "ab", "-"
+        "c$", "abcc", "3-4:c"
+        "(?m)^b$", "a\nb\nc", "2-3:b"
+        "\\bfoo\\b", "afoo foo", "5-8:foo"
+        "\\Bfoo", "afoo", "1-4:foo"
+        "(?i)hello", "say HeLLo", "4-9:HeLLo"
+        "(?i)[a-c]+", "xABCd", "1-4:ABC"
+        "a(?i:b)c", "aBc abC", "0-3:aBc"
+        "\\.\\*", "a.*b", "1-3:.*"
+        "\\x41\\x{42}", "zAB", "1-3:AB"
+        "é+", "caféé!", "3-7:éé"
+        "c.f", "café", "0-3:caf"
+        "f.", "café", "2-5:fé"
+        "x*", "", "0-0:"
+        "(a*)*", "b", "0-0:"
+        "(a*)+", "aab", "0-2:aa"
+        "a{0}b", "ab", "1-2:b"
+    ]
+    for k := 0, k < cases.Len(), k += 3 {
+        got := firstOf(cases[k], cases[k + 1])
+        assert got == cases[k + 2], ($cases[k] " on " $cases[k + 1] ": " $got)
+    }
+}
+
+test "capture groups" {
+    assert groupsOf("(\\w+)@(\\w+)\\.com", "mail bob@example.com now") == "bob|example"
+    assert groupsOf("(a)|b", "b") == "?"
+    assert groupsOf("(a*)(b?)", "aac") == "aa|"
+    assert groupsOf("(?:x(y))+", "xyxy") == "y"
+    assert groupsOf("(a+)(a+)", "aaaa") == "aaa|a"
+    assert groupsOf("(a+?)(a+)", "aaaa") == "a|aaa"
+    re := Compile("(?P<year>\\d{4})-(?<month>\\d\\d)")!
+    assert re.Groups() == 2 and re.GroupNamed("month")! == 2
+    m := re.Find("on 2026-10-24")!
+    assert m.Group(re.GroupNamed("year")!)! == "2026" and m.Group(0)! == "2026-10"
+    s, e := m.Span(2)!
+    assert s == 8 and e == 10
+    assert (try m.Group(3) catch NotFound default "none") == "none"
+}
+
+test "FindAll, Replace and Split" {
+    re := Compile("\\d+")!
+    all := re.FindAll("a1 b22 c333")
+    assert all.Len() == 3 and all[2].Text() == "333" and re.Count("x") == 0
+    assert Compile("a*")!.Count("baaac") == 3                   # "" before b, "aaa", "" after c - as Go and RE2
+    assert re.Replace("a1 b22", "<$0>") == "a<1> b<22>"
+    d := Compile("(\\w+)=(\\w+)")!
+    assert d.Replace("x=1, y=2", "$2:$1") == "1:x, 2:y" and d.Replace("k=v", "$$ ${1}") == "$ k"
+    n := Compile("(?P<k>\\w+)=(?P<v>\\w+)")!
+    assert n.Replace("a=b", "${v}${k}") == "ba"
+    assert re.ReplaceFunc("a1b22", fn(m Match) String { return $m.Text().Len() }) == "a1b2"
+    parts := Compile(",\\s*")!.Split("a, b,c,  d")
+    assert parts.Len() == 4 and parts[1] == "b" and parts[3] == "d"
+    assert Compile("x")!.Split("axbx").Len() == 3
+    assert Compile("")!.Replace("ab", "-") == "-a-b-"
+}
+
+test "what does not compile" {
+    for bad in String&["(", "(a", "a)", "[a", "[z-a]", "*a", "a**", "a{1001}", "a{3,2}", "\\q", "(?P<1>a)"
+        "(?P<a>x)(?P<a>y)", "(?z)a", "[[:nope:]]", "\\x{110000}"] {
+        assert firstOf(bad, "") == "error", $bad
+    }
+    try Compile("(a{1000}){1000}") catch SyntaxError.TOO_BIG { } catch SyntaxError { unreachable }
+}
+
+test "matching takes linear time where backtracking takes exponential" {
+    # (a?){n}a{n} against a^n: a backtracking matcher tries 2^n ways
+    p := StringBuilder()
+    for i in range 30 { p.Push("a?") }
+    for i in range 30 { p.PushChar('a') }
+    text := "a".Repeat(30)
+    assert Compile(p.ToString())!.Matches(text)
+    assert Compile("(x+x+)+y")!.Matches("x".Repeat(5000)) == false
+}
+
+# every match's groups' spans, by the DFAs and the Pike VM or by the Pike VM alone - the two must agree
+fn spans(re Regex&, t String&, dfaToo Bool) String {
+    sr := searcher(re.s, t, 2 * re.s.names.Len())
+    sr.useDfa = dfaToo and re.s.dfaOK
+    b := StringBuilder()
+    from I64 = 0
+    lastEnd I64 = -1
+    best := sr.m.best
+    for from <= t.Len() {
+        if not sr.next(from) { break }
+        if not (best[0] == best[1] and best[0] == lastEnd) {
+            for v in best { b.Push($v ",") }
+            b.PushChar(';')
+            lastEnd = best[1]
+        }
+        from = onFrom(t, best[0], best[1])
+    }
+    return b.ToString()
+}
+
+test "the DFAs find the matches the Pike VM finds" {
+    patterns := String&["a+b", "(a|ab)(c|bcd)", "[ab]*c", "a*", "(a+)(b*)", "x|y|", "(?i)AB+", "^ab", "(ab|a)(bc|c)?"
+        "a{2,4}?b", "[^a]+", "é.", "(a*)+b", ".", "b(a|b)*?a", "(?:ab){2}", "c$"]
+    texts := Vec<String&>()
+    x U32 = 7
+    for k in range 40 {
+        t := StringBuilder()
+        for i in range 70 + k * 5 {
+            x = x * 1664525 + 1013904223
+            t.Push(String&["a", "b", "c", "ab", "é", "\n", "A", "x"][(x >> 16) % 8])
+        }
+        texts.Push(t.ToString())
+    }
+    for pat in patterns {
+        re := Compile(pat)!
+        for t in texts { assert spans(re, t, true) == spans(re, t, false), ($pat " on " $t) }
+    }
+}
+
+Baked String = firstOf("(\\d+)-(\\d+)", "tel 555-1234")
+
+test "a match is computed while compiling as at run time" {
+    assert Baked == "4-12:555-1234"
+}
+
+}

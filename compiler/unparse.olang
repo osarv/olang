@@ -216,7 +216,7 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
 
 # "<T, U Shape, N I64>": a type's, a function's or a constructor's type parameters (G1, G3, G10d)
 fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
-    if tps.Len() == 0 or tps.Len() == 0 { return }
+    if tps.Len() == 0 { return }
     w.put("<")
     was := w.item
     w.item = true

@@ -666,7 +666,7 @@ fn (p mut Program&) anonEnum(c Context&, cases Array<ast.CaseDecl&>&) types.Type
 
 # an enum case's payload: a record of its fields, none (0) for a case carrying none
 fn (p mut Program&) payload(c Context&, cd ast.CaseDecl&) types.TypeId {
-    if cd.Payload.Len() == 0 or cd.Payload.Len() == 0 { return types.TypeId(0) }
+    if cd.Payload.Len() == 0 { return types.TypeId(0) }
     return p.T.Record(p.paramTypes(c, cd.Payload))
 }
 
@@ -929,7 +929,7 @@ fn (p mut Program&) evalCall(c Context&, f ast.Expr&, args Array<ast.Expr&>&) fo
 # G29: the name of the variable x.Len() reads, where x is a parameter (or an element of one: "m[0].Len()") holding an
 # array by value - "" where the call is no such Len()
 fn (p mut Program&) LenKey(f ast.Expr&, args Array<ast.Expr&>&) String {
-    if args.Len() > 0 and args.Len() > 0 { return "" }
+    if args.Len() > 0 { return "" }
     match f {
         case ast.Expr.Member(_, y, n) {
             if p.text(n) != "Len" { return "" }
@@ -2077,7 +2077,7 @@ fn (p mut Program&) CtorVars(d types.DeclId) I64 {
     ns List<source.NameId>
     td := p.typeDecl(d)
     tps Array<ast.TypeParam&>&td = Array<ast.TypeParam&>(0)
-    if td is not null and td.Body is not null and (td.Params.Len() == 0 or td.Params.Len() == 0) {
+    if td is not null and td.Body is not null and (td.Params.Len() == 0) {
         match td.Body {
             case ast.TypeBody.Struct(s) { tps = s.TypeParams }
             nomatch { }

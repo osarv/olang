@@ -110,6 +110,16 @@ termination).
 whitespace, and as a newline for L18 exactly when it spans one - so `x := 1 ## note ## + 2` is one statement. A block
 comment never closed is a compile-time error. Within a line comment, `##` is only text.
 
+**L4b.** A **doc comment** is documentation, and means nothing to the program: the line comments on the lines
+directly above a declaration, each line holding only its comment and no blank line between them and the declaration -
+a top-level declaration, a struct's field, an enum's case, an error type's word or a trait's method. A field, a case, a
+word or a global with no comment above it takes the line comment that ends its own line instead. A comment line whose
+`#` stands in the column of a line comment ending the line above it continues that comment, and is no doc comment of
+what follows. A module's documentation is the comment lines that begin its file - after a first line beginning `#!` -
+when they are no declaration's. The text is each line with its `#` and one space after it removed; a line holding `#`
+alone is a paragraph break. A block comment (L4a) is never documentation. `doc` prints it (B14) and `lsp` shows it
+(B15).
+
 **L5.** A newline (`'\n'`) is otherwise insignificant except for L18.
 
 ### 1.3 Identifiers
@@ -3089,7 +3099,11 @@ error: the call would write the copy and the place would never see it. A field o
 conditional is the same, and so is a `match` giving values (S12b). Make the call on the place itself (`if k > 0 {
 bump(l[0]) } else { bump(l[1]) }`), or hold the values by reference. A conditional of references lives where the values it can give share a scope (§8 O25a) -
 `null` fits any, and a new value is built there (text written in place being constant data or a copy made there) - so
-`x := p.one() if c else p.two()` lives where both do and `x := p.leaf() if b else null` where `p.leaf()` does. Values
+`x := p.one() if c else p.two()` lives where both do and `x := p.leaf() if b else null` where `p.leaf()` does. One
+none of whose values is existing storage - new values and constants (text written in place, `null`) - is a temporary
+like any of them: passed as an argument its new value is built where the parameter's scope variable is bound (§8 O18a,
+O18b) - for a constructor, where the instance lands (C2d) - so `E($t, mk(t) if at >= 0 else "")` returned holds text
+that lives with the instance. Values
 that already live in different scopes share none: where such a conditional lives is **not known here** (§8 O12) - it is
 no temporary, so nothing is built for it and it is shown to outlive nothing. Declared - with `:=` or a bare `&` - it is
 held where it is declared, as a reference's block is (every value it can give is visible there, so outlives it), and read
@@ -5695,14 +5709,15 @@ other entry point; or it names a file, which is built and run (B3g):
 
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
-mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help"
+mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
-            | "-define" NAME "=" VALUE | "-update" | "-check"
+            | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
-`explain` (B11a, B11b) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
+`explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
+(B14), `lsp` (B15) and `mcp` (B16). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
@@ -5711,11 +5726,13 @@ beginning with `-` that is no option is an error:
 |---|---|---|
 | `-output PATH` | build, compile | B3h |
 | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
-| `-target NAME` | running a file, build, compile, test, interpret, explain | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain | B10, §4 M23c |
+| `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
 | `-check` | format | B13 |
+| `-html DIR` | doc | B14 |
 
-`build` and `compile` take exactly one file, `test` and `format` one or more; for running a file and for `interpret`
+`build` and `compile` take exactly one file, `test` and `format` one or more, `doc` one and a name or (with
+`-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
 
@@ -5902,7 +5919,9 @@ of the compilation's **root** module only — `build`'s and `test`'s root, or `c
 shared name per B3b; every other object refers to them. An ordinary module's object therefore depends on
 nothing but its own module and its imports, and is correctly reused by any program that imports it. The
 root transitively imports every module of the program, the prelude included, so its own staleness (B3) already
-covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time.
+covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time. In
+`build` and `test` the root's instantiations may be held in several objects, each holding those that one module, the
+first to name them in the program's order of modules (the root's own last), names; what is built is the same either way.
 
 **B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
 compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is
@@ -5922,6 +5941,13 @@ for rather than compiling again (the first claims it with `NAME.lock`, a directo
 once the compile ends; a claim whose process has ended, or older than half an hour, is taken over). The IR a compile
 reads is a file of its own build's, renamed to its readable name once compiled, so no build writes the IR another's
 compile is reading.
+
+**B3l.** The text a failed check prints - its `FILE:LINE:` and what failed (S18a), an error's trace entry (S18d), a `!`'s
+report (E35) - is not part of the code naming it. In `build` and `test`, each such text is a constant named by the
+function holding the check and how many such texts that function named before it, and defined in an object of its own
+for the module (or the root's code, or the instances) that holds only those texts and is compiled without link-time
+optimization (`NAME.HASH.loc.o`). A line added or removed above a function therefore changes no object holding code,
+only the text objects. What is printed is the same either way. `compile`, which makes one object, keeps the texts in it.
 
 ### 10.2 Program entry
 
@@ -6197,6 +6223,29 @@ does not parse (B9) - one that may be right for another build - is left as writt
 formatter is an olang program shipped beside the compiler; the first `format` after the compiler or its sources change
 builds it, once.
 
+### 10.9 Documentation and editors
+
+**B14.** `doc FILE [NAME]` prints the documentation of the module `FILE` (L4b): the module's own, then each of its
+exported top-level items - a function, a type, an error type, a global - in the order the file declares them, each with
+its signature as `explain FILE NAME` gives it (B11b) and its doc comment beneath, indented; a type's fields, cases,
+words and methods each with their own. With `NAME` (a top-level item or `Type.Method`, exported or not) it prints that
+item alone. The program `FILE` is the root of is checked first; one with errors reports them instead. `doc -html DIR
+[FILE...]` writes the documentation of each `FILE` - of every module of the standard library when none is named - as
+static HTML into the directory `DIR`, one page per module and an index; a module that does not check is left out, its
+errors reported, and the status is then 1.
+
+**B15.** `lsp` serves the Language Server Protocol on the standard input and output (JSON-RPC 2.0 with
+`Content-Length` framing), for the files an editor has open, their text as the editor holds it: diagnostics as the
+compiler reports them (B11), a hover giving the item's signature and doc comment (B11b, L4b), the definition of a name,
+a document's symbols, completion of a module's members and of fields and methods after `.`, and formatting (B13). Each
+open file is checked as the root of its program, again after every edit and in every open file importing it. A file
+that does not parse has its diagnostics and answers nothing else; no request ends the server but `shutdown` and
+`exit`.
+
+**B16.** `mcp` serves the Model Context Protocol on the standard input and output (JSON-RPC 2.0, one message a line)
+with the tools `check` (a file's diagnostics, each its file, line, column, rule and message), `explain` (B11b),
+`doc` (B14), `format` (B13, the formatted text, the file unchanged) and `test` (B3a, each test's outcome).
+
 ## 11. External Functions
 
 **X1.** `extern-func-decl ::= "extern" "fn" IDEN "(" extern-param-list ")" [ extern-ret-type | "noreturn" ]
@@ -6307,7 +6356,7 @@ must state exactly the prototype below (X1a).
 | `__olang_arg_count() I64` | the number of entries in the command line (B4a), the program's own name included |
 | `__olang_arg(i I64, buf Array<U8>, cap I64) I64` | copies up to `cap` bytes of entry `i` into `buf` and returns its whole length — `-1` when there is no entry `i` |
 | `__olang_env(name Array<U8>, buf Array<U8>, cap I64) I64` | the same for the value of the environment variable `name` — `-1` when it is not set |
-| `__olang_err() I32` | the class of the error the last failing call on this thread left in `errno`: `1` nothing is there, `2` something already is, `3` permission denied, `4` not a directory, `5` a directory, `6` a directory not empty, `0` any other. Meaningful only immediately after a call that reported failure, before anything else that may set `errno` |
+| `__olang_err() I32` | the class of the error the last failing call on this thread left in `errno`: `1` nothing is there, `2` something already is, `3` permission denied, `4` not a directory, `5` a directory, `6` a directory not empty, `7` connection refused, `8` address in use, `9` timed out (a socket's timeout, `EAGAIN`, included), `10` connection reset or broken (`ECONNRESET`, `ECONNABORTED`, `EPIPE`, `ENOTCONN`), `11` network or host unreachable, `12` address not available or its family not supported, `13` interrupted by a signal, `0` any other. Meaningful only immediately after a call that reported failure, before anything else that may set `errno` |
 | `__olang_stat(path Array<U8>, out Array<I64>) I32` | what is at `path`, a symbolic link followed: `out[0]` its kind (`1` a regular file, `2` a directory, `0` anything else), `out[1]` its size in bytes, `out[2]` its modification time in nanoseconds since the Unix epoch, to the resolution the file system keeps; returns `0`, or `-1` when it fails (`__olang_err` says why) |
 | `__olang_dir(path Array<U8>, buf Array<U8>, cap I64) I64` | the names of the entries of the directory `path`, `.` and `..` left out, each followed by a zero byte, in the order the directory gives them: copies as many whole names as fit in `cap` bytes into `buf` and returns the bytes all of them take — `-1` when the directory cannot be read |
 | `__olang_realpath(path Array<U8>, buf Array<U8>, cap I64) I64` | `path` made absolute with every symbolic link, `.` and `..` resolved, as `__olang_arg` gives an entry — `-1` when that fails |

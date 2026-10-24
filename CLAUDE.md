@@ -89,7 +89,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `catch` does. Not for the forever `for` or a `do` loop. `:` inside brackets stays a slice's. The formatter keeps
   either form and spaces `: ` (and no longer writes `f() !`).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
-  compile test interpret format explain help`; options `-output -debug -race -sanitize -target -define -update -check`,
+  compile test interpret format explain help doc lsp mcp`; options `-output -debug -race -sanitize -target -define -update
+  -check -quick -html`,
   each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
 - **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
   link-time optimization, objects apart (`.quick`); an error beside `-debug` or `-race`, which set their own levels.
@@ -101,6 +102,21 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   enum's cases, an error type's words, a trait's methods; a global's type and its baked value (`$` of it, through the
   evaluator), else `# set at startup`. `Type.Method` names a method. `-target`, `-define` and `-update` apply.
   compiler/explain.olang.
+- **Doc comments (L4b) and `olang doc` (B14).** Go's rule, no new syntax: the `#` lines directly above a declaration,
+  member or global are its documentation (a member or global with none takes its line's trailing comment; an aligned
+  continuation of a trailing comment is no doc comment; a block comment never is); a module's is the comment lines its
+  file begins with. Read from the text by the declaration's span (`compiler/doc.olang`) - scanner and parser unchanged.
+  `olang doc FILE [NAME]` prints them with explain's signatures; `doc -html DIR [FILE...]` writes static HTML (all of
+  std when no file is named). Exported items only in a listing (mine).
+- **`olang lsp` (B15) and `olang mcp` (B16), 2026-10-24 (the user: "we need this, both for MCP and neovim
+  integration").** LSP over stdio - diagnostics, hover, definition, symbols, completion, formatting; MCP over stdio -
+  `check`, `explain`, `doc`, `format`, `test`. Each analysis runs in a forked process (mine): a compiler crash never
+  ends the server and an analysis's memory goes with its process (the compiler reclaims nothing before a scope closes);
+  the language server forks a worker once the open files have settled for 40 ms, checks the changed files and the open
+  files importing them, publishes the checker's diagnostics before section 8's, then answers requests from that
+  analysis. Not incremental per module - the checker is whole-program; measured 70-100 ms from an edit to diagnostics
+  on a small program, 0.7-1.4 s on one of the compiler's modules. `compiler/session.olang` holds what both share; the
+  Neovim plugin and editor notes are `editors/`.
 - **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs in the
   compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program
@@ -467,7 +483,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   flows into what it returns, lives in the result scope - Go's escape analysis, static. The flow is read as SPEC states
   it, every callee by its checked body and a `try` changing nothing (2026-10-23: the two cautious readings the port
   copied from stage 0 for parity reverted, HISTORY.md "Port: the parity readings reverted"). A constructor field
-  given a conditional or a match is the instance's slot, each value judged as stored there alone (C2d, E28).
+  given a conditional or a match is the instance's slot, each value judged as stored there alone (C2d, E28); a choice
+  of new values and constants passed as an argument is a temporary, built where the parameter's scope is bound - for a
+  constructor, with the instance (2026-10-24, uafcc).
 - **Lending (O17, O17a, O17b).** A value whose references live elsewhere than its storage is lent only to callees that
   keep nothing in it, read off their bodies; a handle (a struct of one reference) is lent as its reference.
 - **Derived and unknown scopes (O12, O23, O23a).** A `&p` field of a parameter reads at a derived scope resolved per
@@ -635,6 +653,20 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `std/linalg` (`Matrix<T>` views, Goto GEMM with per-target tiles,
   batched causal products, fused epilogues, convolutions - the base for all numeric work, the user's call: a 2-D
   Matrix, not a tensor), `std/rand`, `std/time`, `std/filepath`, `std/cancel`, `std/chan`, `std/ffi` (libffi).
+- **std breadth (docs/survey.md items 7-8, the user: "Yes all of that", 2026-10-24; names mine, the user's naming rule:
+  a module's other names drop its prefix - `net.Error`, `regex.SyntaxError`).** `std/sync`: `Mutex<T>` reached only
+  in `m.With(fn(v mut T&) { })` - no lock/unlock pair - or `Update(fn(v T) T)` for a number (no primitive references),
+  `RWLock<T>` (`Read`/`Write`), `Once`; each a handle over pthread words that start zeroed, `-race` clean. `std/time`:
+  `Duration extends I64` (`Millis(5)`, `d.Seconds()`, `$d` as Go's `1h2m3.5s`), `Sleep`, `Date` with RFC 3339
+  `Format`/`Parse` (fixed offsets only - no zone database). `std/net`: blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`
+  with `Read` failing `CLOSED` at the end of the stream, `Write`, `SetTimeout`) and UDP, IPv4/IPv6 (`ParseIP`, RFC
+  5952 text), destructors closing descriptors; no DNS (getaddrinfo's list cannot cross `extern fn`, X2) - X6's
+  `__olang_err` gained socket classes 7-13. `std/set`, `std/deque`, `std/heap` (a `less` function), handles all.
+  Prelude iterator adapters `Take Skip Enumerate Zip Chain Sum Min Max MinBy MaxBy` (empty: `Exhausted`). `std/utf8`
+  (`Rune extends U32`, strict `Decode`, `Runes` walking bad bytes as U+FFFD as Go does), `std/base64`, `std/hex`,
+  `std/sha256` (1.1x a plain C SHA-256), `std/crc32`, `std/flags` (handles per flag, `--help` text, `flags.Error`),
+  `std/regex` (RE2's syntax, linear time: a lazy forward DFA finds a match's end, a reversed one its start, the Pike
+  VM gives groups; level with glibc's regexec on bench/regex). Language gaps found are in HISTORY.md.
 - **`a.Chunks(size)` (M19d, P8b, 2026-10-17).** Every array cut into consecutive writable slices of at most `size`,
   held in an array living where the receiver does (Split's shape: an iterator's pieces would live where the iterator
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
@@ -724,7 +756,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   lowered nor emitted again, its IR reused from `build/rec` (B3i, `OLANG_CHECKREUSE` compares with a fresh emission), a
   test named by its name and the instances and a test build's tests in parts of their own, what clang says of the target
   kept (B12b), MIR verified only in test builds (round 8: a leaf edit of the compiler 5.0 -> 3.5 s and 1.16 GB -> 614 MB,
-  a -debug leaf edit 5.1 -> 2.4 s, an edit to a test of tests/shared.olang 10.5 -> 4.1 s); `make emitdiff`; HISTORY.md
+  a -debug leaf edit 5.1 -> 2.4 s, an edit to a test of tests/shared.olang 10.5 -> 4.1 s); a failed check's `FILE:LINE:` text in a `.loc` object of its
+  own per home, compiled without LTO (B3l), the root's instances grouped by the first module reaching them with
+  same-code functions merged across groups by tail-calling wrappers, parts of 1 MB (-O3) and 512 KB (-quick, -debug),
+  the views pass skipped where no body takes a Vec's view (round 9: a line added in a shared.olang test 14.7 -> 4.0 s,
+  an edit making a new instance 89.8 -> 29.9 s of CPU, a -quick mid-module edit 15.6 -> 2.7 s); `make emitdiff`; HISTORY.md
   "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).

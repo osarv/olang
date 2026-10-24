@@ -166,8 +166,12 @@ fn apply(requests List<diagedit.Request>&, kind String&) I64 {
                     old := $x $(" is not null" if neg else " is null")
                     from := at - x.Len() - 1
                     if from < 0 or not text[from:].StartsWith(old) { continue }
-                    replaced = $text[:from] $r.Arg $text[from + old.Len():]
-                    delta = r.Arg.Len() - old.Len()
+                    # "x is null or x.Len() == 0", written for an array that was nullable, is the length test once
+                    rest := text[from + old.Len():]
+                    dup := $(" and " if neg else " or ") $r.Arg
+                    if rest.StartsWith(dup) { rest = rest[dup.Len():] }
+                    replaced = $text[:from] $r.Arg $rest
+                    delta = replaced.Len() - text.Len()
                 }
                 lines[idx] = $replaced
                 diagedit.Realign(lines, idx, delta, at)

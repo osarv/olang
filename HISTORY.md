@@ -22823,3 +22823,253 @@ migrated source.
 **Found on the way.** A generic constructor's literal arguments, deferred until the other arguments bind (G9a), were
 pushed as null into the argument list and then fitted as "nothing" - they now hold the checker's hole marker; a
 parameter written `msg ast.Expr& = null` was accepted though its default can never fit.
+
+## std breadth: sync, time, net, collections, adapters, text encodings, flags, regex (2026-10-24)
+
+The survey's std items 7 and 8 (docs/survey.md), which the user approved ("Yes all of that"). Every name is mine,
+under the user's naming rule relayed the same day: a module named for its main type keeps the type's name (`set.Set`,
+`regex.Regex`), and every other name drops the module's (`net.Error`, `flags.Error`, `time.Error`); a module with two
+error types names them by subject (`regex.SyntaxError`, `regex.NotFound`).
+
+- **std/sync.** `Mutex<T>`: the value is reached only inside `m.With(fn(v mut T&) { ... })`, the lock held for the call,
+  so there is no unlock to forget, and the callback's parameter lives in a scope it cannot name (O4b) so nothing
+  inside escapes. A number cannot be handed out by reference (no primitive references, T24), so `Mutex<I64>` is used
+  through `Update(fn(v T) T)`, `Get` and `Set`; `With` exists for every instantiation and is an error only where called
+  on such a T (G11a). `RWLock<T>` (`Read` read-only, `Write`, `Update`, `Get`), `Once` (`Do`, `Done`: an atomic flag,
+  the mutex only on the first calls). Each is a handle (a copy is the same lock, which tasks need); glibc's initial
+  mutex and rwlock are all zero bytes, so the words need no init call (unlike chan's `Init`). The methods take the
+  handle `mut`, since they write what it reaches (T25c refused a read-only receiver). Under `-race` the tests are clean.
+- **std/time.** `type Duration extends I64` (arithmetic and comparison as integers), constructors `Nanos`..`Hours`,
+  readers `d.Millis()` etc. and `d.Seconds() F64`, `$d` in Go's form; `Sleep` over nanosleep, resuming after a signal;
+  `Elapsed(t)`. `Date` (calendar parts plus a fixed offset in minutes; Hinnant's civil-days algorithms), `DateOf`,
+  `d.Wall()`, `Weekday`, `YearDay`, RFC 3339 `Str`/`Format` (fraction trimmed as Go's RFC3339Nano) and a strict
+  `Parse` failing `time.Error.SYNTAX`/`RANGE`. Unit constants (`Second`) were dropped: D3a forbids a global named like
+  `Date`'s constructor parameters; the functions say the same. Not built: time zones by name (needs the zone database).
+- **std/net.** Blocking sockets over `extern fn`, one task per connection being the server shape (1:1 threads, P1e).
+  `Conn`, `Listener` and `UDP` have destructors that close the descriptor, so they are held by reference (C11), and a
+  `Close()` closes sooner. `Read` returns the front of the caller's buffer (io.Read's shape) and fails with `CLOSED` at
+  the end of the stream (errors are errors - io.Read returns an empty slice; a socket's end is an error here). `send`
+  is given MSG_NOSIGNAL so a vanished peer is `RESET`, never SIGPIPE. IPv4 and IPv6 parsing and RFC 5952 rendering.
+  **Runtime change**: X6's `__olang_err` gained classes 7-13 (refused, in use, timed out incl. EAGAIN, reset/broken,
+  unreachable, address not available incl. EAFNOSUPPORT, interrupted); std/os reads unknown classes as FAILED as before.
+  Under `interpret` the compiler's own runtime answers, so the new classes read as 0 until the compiler is rebuilt.
+  **Gap, recorded**: no DNS - getaddrinfo hands back a linked list of C structures, which X2 cannot receive; a runtime
+  function copying the addresses out (X6-style) would do, but needs the interpreter's runtimeFn too, so it is left.
+  The container has no IPv6: the loopback test skips `::1` when Listen fails with `ADDRESS` (EAFNOSUPPORT).
+- **Collections.** `set.Set<T>` over `Map<T, Bool>` (algebra, `x in s`, `$s` as `Set{1, 2}`); `deque.Deque<T>` a
+  doubling ring (both ends, `d[i]`, `Iter`); `heap.Heap<T>` a binary heap over a `Vec`, ordered by a `less` function
+  given at construction (`Drain` empties it in order). All handles, as List, Map and Vec are.
+- **Iterator adapters** in the prelude's iterator.olang, as trait defaults: `Take`, `Skip`, `Enumerate` (an
+  `Indexed<T>` with `Index`/`Value`), `Zip` (`Zipped<A, B>` with `First`/`Second` - Pair is std's, not the prelude's),
+  `Chain`, `Sum` (over `Number`), `Min`/`Max` by `<`, `MinBy`/`MaxBy` by a key - each failing with `Exhausted` on an
+  empty iterator. Each adapter holds a copy of the iterator it wraps, so the original stays where it stood; the
+  compile-time evaluator runs them (a baked global in the tests).
+- **Text encodings.** `std/utf8`: `Rune extends U32`, a strict `Decode` (overlong forms, surrogates and values past
+  U+10FFFF refused), `Encode`, `Valid`, `Count`, `ToRunes`/`FromRunes`, and `Runes` walking a text with each bad byte
+  as U+FFFD (Go's range, every browser's decoder) so a walk never fails. `std/base64` (standard with padding, URL-safe
+  without; strict decoding, leftover bits refused), `std/hex`, `std/sha256` (`Sum`, `Hex`, a streaming `Hasher` that
+  Sum leaves usable), `std/crc32` (IEEE, the table computed while compiling). Measured (bench `sha256`, 256 MB):
+  olang 1.37-1.45 s against a plain C SHA-256 1.24-1.29 s.
+- **std/flags.** A `Flags` handle; `p.Int("count", 'n', 10, "help")` and Bool/Float/Text give handles whose `Get()`
+  reads the value after `Parse(os.Args())`; long and short spellings, `=`, grouped short Bools, `--`; `-h`/`--help`
+  fail with `HELP` and `Help()` is the text; other failures say why in `Message()` (errors carry no data).
+- **std/regex.** RE2's syntax less Unicode's tables (classes, POSIX names, `\d\w\s\b`, anchors, groups named and not,
+  lazy and counted repetition to 1000, flags `i m s`), code points of UTF-8, leftmost-first. First built as a Pike VM
+  alone: 650 instructions a byte, 4x glibc's regexec on bench/regex (glibc's own per-call strlen was 17 s until
+  REG_STARTEND). Then a lazy DFA, as RE2: without captures a Pike step's state is its ordered thread list plus "a match
+  was seen", so those are DFA states, built as the text reaches them and cached for the call (never in the Regex,
+  which stays read-only for tasks); the forward DFA finds the leftmost-first match's end, the reversed program's DFA
+  (keeping the longest) its start - the leftmost start of any match ending there, which is the leftmost-first match's -
+  and the Pike VM runs only over the match, for its groups. Programs with assertions other than a leading `^`, short
+  texts and a DFA past 5,000 states fall back to the Pike VM. A test compares every match's spans by both paths on 40
+  generated texts and 17 patterns (it fails when the reverse DFA is broken). Measured (bench `regex`, 32 MB): olang
+  0.72-0.78 s, glibc 0.76-0.79 s.
+- **Language gaps met** (recorded, not changed): no `\x` escapes in text literals (tests build bytes from `U8[...]`);
+  `&` binds looser than `==` as in C (`(b & 0xC0) != 0x80` needs parentheses); error words are not values, so a helper
+  cannot take the word to raise (flags' `say` then `error`); a field named as its constructor's parameter is written as
+  a bare pun, and `destruct` follows the body's `}`; `Mutex<I64>` cannot lend `mut I64&`.
+
+## Port M9, round 9: compile speed (2026-10-24)
+
+The user: "Making compilation faster is going to matter a lot." Round 8 left the clean `-O3` self-build at the
+ThinLTO link's floor, so this round measured what an *edit* costs and cut where an edit recompiles code it did not
+change. Comparisons ran interleaved, the compiler before this round (master dc36e70, built by itself) against the one
+after, on four cores shared with other agents' suites - CPU time is the figure to read, wall time moved by up to twice.
+
+**Where it went before** (`OLANG_TIMES` and callgrind):
+- An edit adding one line inside a test of tests/shared.olang: 14.7 s, every part of the test build compiled again.
+  The cause was the text a failed check prints: `FILE:LINE:` sat in every function's code as a constant, so a line
+  added above a function changed that function's object.
+- An edit adding a function that makes one new instance (a `List` of a new struct, in compiler/names.olang): 38 of the
+  ~55 ThinLTO backends ran again, 94 s of CPU. The root's instances were one object cut into parts by symbol hash, and
+  a new instance changed which part held which function, and so most parts' import hashes.
+- An edit in the middle of compiler/check.olang: 31.6 s of CPU; under `-quick` 15.6 s - the line numbers of every later
+  function of the module.
+- The front end of a build that changes nothing: 6.93 G instructions, of it the M19g views pass 21% (it runs over
+  every body although only code taking views of a `Vec` can fail it).
+
+**What was changed**, each committed alone; none of it changes what a program means:
+
+1. **A failed check's place lives apart from the code (B3l).** Each text a failed check, an error's trace entry or a
+   `!` prints is a constant named by the function holding it and how many such texts that function named before it (a
+   lambda by its top item and its offset in it, since lambdas are numbered by the order bodies are checked), defined
+   in an object of its own per home (`NAME.HASH.loc.o`) compiled without LTO - it holds only data. A line added above
+   a function now changes only `.loc` objects. One function naming one text twice uses one constant, so failing sites
+   of one line still share one block (without it, a benchmark's cold path gained blocks). `compile`, which makes one
+   object, keeps the texts in it. Measured: the shared.olang test edit 14.7 -> 4.0 s.
+2. **The views pass is skipped where nothing can fail it (M19g).** Before its walk, the pass asks whether any body
+   outside std/prelude/vec calls a Vec function giving an array (`View`, `ViewMut`, `ToArray`); none, no walk. The
+   no-op front end 6.93 -> 5.58 G instructions, a no-op build 2.03 -> 1.60 s.
+3. **The root's instances are grouped by the first module reaching them (B3d).** Modules in the program's order, the
+   root last: each module's items are walked through what they name, and every instance not yet placed goes to that
+   module's group; each group is objects of its own, named by the root and the module. A new instance then lands in
+   the group of the module that made it, and the other groups' objects are unchanged. Merging same-code functions
+   (round 7) crosses groups: a class's kept function is in the earliest group, and a member in another group is a small
+   wrapper calling it by `tail call` (`musttail` failed in the `-O2` backend), so no group's text depends on a later
+   group's. Measured: the new-instance edit 38 -> 9-11 backends run again, 89.8 -> 29.9 s of CPU, 28.2 -> 11.3 s.
+4. **Parts of 1 MB in a ThinLTO build, 512 KB under `-quick` and `-debug` (B3d).** Round 6's 2 MB parts made a
+   one-function edit recompile 2 MB of IR. Measured over the edits above: 512 KB costs `-O3` +0.9% instructions in the
+   compiler binary and more link work (ThinLTO imports across more parts), 1 MB +0.42%, so `-O3` takes 1 MB and the
+   development modes, which inline less, 512 KB; 256 KB was +8% work and not taken. `-quick` is now in a module's
+   record key (B3i): its parts differ.
+
+**Measured after** (base dc36e70 against the final compiler, the same interleaved run; wall, then user CPU):
+
+| `-O3` (the default) | before | after |
+|---|---|---|
+| clean self-build | 45.2 s, 119.2 s | 39.3 s, 119.7 s |
+| no-op | 2.03 s, 1.56 s | 1.60 s, 1.24 s |
+| leaf edit (fmt.olang) | 4.00 s, 3.41 s | 3.46 s, 2.97 s |
+| a function added mid check.olang | 12.0 s, 31.8 s | 9.1 s, 21.7 s |
+| a function making a new instance | 28.2 s, 89.8 s | 11.3 s, 29.9 s |
+| a line added in a shared.olang test | 14.7 s | 4.0 s |
+
+| `-quick` | before | after |
+|---|---|---|
+| no-op | 2.14 s, 1.52 s | 1.84 s, 1.28 s |
+| leaf edit | 2.96 s, 2.31 s | 2.85 s, 2.11 s |
+| a function added mid check.olang | 13.6 s, 15.6 s | 3.8 s, 2.7 s |
+| a function making a new instance | 8.7 s, 11.3 s | 5.2 s, 4.0 s |
+
+The clean builds cost the same CPU (their wall times in this run are the machine's). `-debug` is unchanged: its DWARF
+carries every line, so a line shift changes the code's objects anyway. Hello world unchanged. **Machine code**: the
+benchmarks (nbody, spectral-norm, mandelbrot, fannkuch, binary-trees, k-nucleotide, matmul, sum, text, vec, parallel)
+compare function by function identical before and after; the compiler binary is +0.42% instructions from the 1 MB
+parts and 560 KB larger from the `.loc` constants' symbols. `OLANG_CHECKREUSE` (B3i) is clean.
+
+**Measured and not taken.** Merging same-code functions only within a group: +28% instance IR before the wrappers.
+Parts of 256 KB (+8% work) and 512 KB at `-O3`. Optimizing the slot-folding text pass: measured at ~7.5 ns a byte (10.4
+MB of unfolded check.olang bodies in 78 ms), about 0.3 s of a clean build's front end - not worth a rewrite yet. The
+largest single self-costs of a full emission remain `Emitter.function`'s text passes (`foldSlots`, `refsIn`) and the
+MIR walk (`fnEm.run`); a no-op build is now mostly loading and checking.
+
+## Doc comments, `olang doc`, the language server and the MCP server (L4b, B14-B16, 2026-10-24)
+
+The user: doc comments and a language server - "we need this, both for MCP and neovim integration"; then (through the
+coordinator) a Neovim plugin in the repository, its naive parts working without the server, and an MCP server built
+rather than only documented.
+
+- **L4b, doc comments - Go's rule, no new syntax.** The line comments directly above a declaration (a top-level one, a
+  struct's field, an enum's case, an error type's word, a trait's method) are its documentation; a field, case, word or
+  global with none above takes the comment ending its own line. Decided (mine): a comment line whose `#` stands in the
+  column of a trailing comment on the line above continues that comment - the layout this repository writes everywhere
+  (`Body       # null until checked` followed by an aligned second line) would otherwise make every continuation the
+  next field's doc; a member written on its declaration's own line (`error E { NONE }   # ...`) has the declaration's
+  comment, none of its own; a block comment is never documentation; a module's documentation is the comment lines its
+  file begins with when the line after them is blank or an import (else they are the first declaration's). **The
+  scanner and the parser are unchanged**: a doc comment is read from the text by the declaration's span
+  (`compiler/doc.olang`), so no golden moved, the formatter and the diffs see comments as before, and the one rule lives
+  in one place. The task's brief asked that the scanner and the parser keep comments attached; reading them by span
+  gives the same answer without touching two files other branches were changing.
+- **B14, `olang doc FILE [NAME]`, `olang doc -html DIR [FILE...]`.** The module's documentation and each exported item's
+  signature as `explain` gives it (B11b: inferred error sets written out, scope obligations), members indented with
+  their own comments; a name prints that item, exported or not; `-html` writes a page per module and an index, all of
+  std when no file is named. Decided (mine): exported items only in a module's listing; a generic's instances, which
+  explain lists, left out of documentation; each module of `-html` checked in a process of its own (a fork), since the
+  compiler reclaims nothing but by scopes and an analysis's memory would otherwise stay for the run. All of std, 27
+  pages, in about a second.
+- **B15, `olang lsp`.** Diagnostics (the rule as the code, notes as related information), hover (explain's signature
+  and the doc comment; a local's type; a field's; an import's module documentation), definition, document symbols,
+  completion (a module's names after `alias.`, a value's fields and methods after `x.`, else the locals, the module's
+  and the prelude's names and the keywords), formatting. **The design**: the server process speaks the protocol and
+  holds the open files; every analysis runs in a worker forked from it once the files have been unchanged for 40 ms,
+  which checks the changed files and the open files importing them (the imports reported back by the worker after each
+  check), publishes, then answers requests from that analysis until the files change again. Decided (mine) for three
+  reasons: a crash of the compiler (an internal error, an assert in a pass) ends a worker and never the server; the
+  compiler frees nothing before its scope closes, so a long-lived server holding analyses would only grow (QF) - a
+  worker's memory goes with it; and a worker inherits the server's documents by the fork, with nothing serialized.
+  Completion after `x.` checks the text with the `.` and the word at the cursor taken out, so the line parses as it
+  did before they were typed. Positions are UTF-8 where the client offers it (Neovim does), else UTF-16.
+  **Incremental checking, measured rather than built**: the checker is whole-program (`interp.Analyze` resolves and
+  checks every module again), and making it incremental per module is the checker's change, not a hook beside it. What
+  was built instead: the checker's diagnostics are published as soon as they are known, section 8's after them (on the
+  compiler's own check.olang, 0.7 s to the first publish against 1.1 s for both, with `-quick`'s compiler); a request
+  on the file just checked is answered from that analysis (a few ms); the parse of an unchanged file is not reused
+  across workers (load is 70-110 ms of a large program's second). Measured: a small program's edit to its diagnostics
+  70-100 ms, 40 of them the settling delay; the compiler's own modules 0.7-1.4 s.
+- **B16, `olang mcp`.** MCP over stdio, one message a line: `check` (diagnostics as structured data and as the
+  compiler renders them; `text` to check unsaved code), `explain` (an item, or a rule), `doc`, `format` (the text
+  returned, the file untouched) and `test` (each test's outcome, read from `olang test`'s lines). Each call runs in a
+  process of its own - a fork for the first four, the compiler itself for `test` - for the worker's reasons. Decided
+  (mine): an MCP server rather than only documenting an LSP-to-MCP bridge - an agent asks a question and gets the
+  answer, with no documents to keep open and in step, and the structured diagnostics are what an agent wants.
+- **`editors/`**: a Neovim plugin (filetype detection, a Vim syntax file, `:compiler olang` with an `errorformat` for
+  the one-row diagnostics, `K` on a rule through `olang explain`, format on save - through the server when it runs,
+  else `olang format` on a copy beside the buffer - and the server started by `vim.lsp.start`), and editors/README.md
+  (Helix, MCP clients). The syntax file and the errorformat were checked in Vim; no Neovim was at hand for the Lua.
+- **Found on the way, fixed**: a call of a name an imported module does not declare (`io.Nope(3)`) was reported as
+  nothing at all - the checker took it for "a call through an import of this kind" not built yet, and the build
+  stopped later with "the self-hosted compiler cannot build this yet" and no location. It is now `module std/io
+  declares no 'Nope'` at the name (check.olang's call of a member, a few lines). **Found, not fixed (the scope pass's,
+  another branch's)**: a constructor argument that is a conditional of a call's text result and a literal (`E($t, mk(t)
+  if c else "")`) leaves the field reading freed memory - `-sanitize` stops it with "use after scope closed"; the
+  reproducer is in the hand-off note, and doc.olang computes the value into a local first.
+
+## A conditional or a match given to a constructor (C2d, E28, 2026-10-24)
+
+Found by the lsp agent (wt-lsp, `compiler/doc.olang`'s `e := Entry(firstLines(full) if isFn else $lines[0], "", $name)`),
+reduced in `/home/user/review/uaf-condctor`: **a constructor argument given a conditional of a new value and a constant
+read freed text once the instance was returned.**
+
+```
+type E struct(A String&, B String&) { A  B }
+fn mk(s String&) String { return $s "-made" }
+fn f(t String&, at I64) E { e := E($t, mk(t) if at >= 0 else ""); return e }
+```
+
+`f("x", 0).B` was stale under `-debug -sanitize` (and `interpret` said the storage was used after its scope closed).
+The reviewer's reproducer read `e.B.Len()`, which is the length word held in the instance and touches no freed memory,
+so it ran clean; reading the text itself (`e.B == "x-made"`) shows it.
+
+*The cause.* In the scope pass a call's argument is judged one of two ways: a **temporary** (`isFresh`) is built where
+its parameter's scope variable is bound - for a constructor, where the instance lands (C2d) - and anything else is
+judged as existing storage, built where the call stands. `isFresh` took a conditional as a temporary only when both its
+values were, so `mk(t) if c else ""` - a new text and a constant - was not one; it took a value `match` as never one.
+Such a choice therefore went the existing-storage path: `choiceDest` found no existing value to share a scope with,
+the new value was built in the calling function's own block (`%s0` in the IR, then copied into the same block for the
+reference parameter), and its value came back `Fresh` - which on that path binds no scope variable, so nothing tied
+the instance to it. O26a moved `e` to the result scope as the return asked, but the text it held stayed in the block
+that closes at the return. The constructor-field form (`c2dcondfield`, fixed 2026-10-23) was the same rule on the
+other side of the call.
+
+*The fix.* A conditional, or a value match, none of whose values is existing storage - each a new value or a constant
+(text data, `null`, a static literal) and at least one new - is a temporary like its values (`newOrConst`,
+`matchFresh`). It then takes the argument's ordinary path: built where the scope variable is bound, a constant arm
+living anywhere a new value would. No rule changed - SPEC E28 already said a new value is built where the conditional
+lands; it now says so for an argument in words (E28).
+
+*Siblings found, all the same cause, each a use after free before the fix:* a match value as the argument, both values
+new in a match, the constant arm first, nested in another constructor, a constructor held by value in another, a
+conditional of a new instance and `null`, instances pushed in a loop and returned, and - not a constructor - a method
+keeping its argument in its receiver (`h.Keep(mk(t) if c else "")`). `l.Push(...)` of the same shape happened to be
+right (List's obligations bind the variable). One over-rejection went too: `b := mk(t) if c else ""; return E($t, b)`
+was O26's error and is now moved to the result scope like any temporary local (O26a). A catch default
+(`try fails(t) catch default ""`) was already right. A conditional of a new value and an inner block's text, kept
+outside the block, is still refused (C2d).
+
+*Tests.* `tests/shared.olang`'s "C2d/E28: a conditional or match passed to a constructor lands with the instance", read
+after an arena churn, with an assert the evaluator decides; `checks/cases/c2dcondarg` (the review's shapes) and
+`c2dcondargkinds` (the siblings) run under `-debug -sanitize`; `c2dcondargshort` must fail with C2d. The scope fuzzer
+writes the shape (`ctorChoiceArgOp`, `ctorScopeOp` kinds 10-13: through a local, a match returned directly, nested by
+value, the constant first): over seeds 1-600 the compiler before the fix gives 21 findings, every one in a program with
+the shape, and the fixed one none, with the same 2,777 scenarios run and 4,423 refused.

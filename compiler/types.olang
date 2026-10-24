@@ -386,7 +386,7 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Arr
         t.shapeFields.Push(Array<source.NameId>(0))
         t.shapeKeys.Put($k, s)
     }
-    if fields.Len() > 0 and fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
+    if fields.Len() > 0 and t.shapeFields[s].Len() == 0 {
         fs mut Array<source.NameId>&t = Array<source.NameId>(fields.Len())
         for i in range fields.Len() { fs[i] = fields[i] }
         t.shapeFields[s] = fs

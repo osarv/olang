@@ -39,6 +39,10 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
 | `explain.olang` | `olang explain FILE NAME` (B11b): one top-level item as the compiler sees it - signature, inferred errors, obligations, a type's members, a global's baked value |
+| `doc.olang` | doc comments (L4b), read from the text by a declaration's span; `olang doc` (B14): a module's documentation as text or HTML |
+| `session.olang` | the front end held for a tool: an analysis with an editor's unsaved text standing in for files, what a name at an offset is, symbols, completion, the processes and message framing the servers share |
+| `lsp.olang` | `olang lsp` (B15): the Language Server Protocol, each analysis in a forked worker |
+| `mcp.olang` | `olang mcp` (B16): the Model Context Protocol - check, explain, doc, format, test as tools |
 | `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress) |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |

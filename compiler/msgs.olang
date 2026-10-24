@@ -74,6 +74,9 @@ type Diag enum {
     ExplainNeedsRule
     ExplainNeedsName
     ExplainNoItem
+    ModeNoFiles
+    DocOneName
+    DocNoItem
     LineBodyOnLine
     LineBodyNotSimple
     NoSpec
@@ -606,7 +609,7 @@ type Diag enum {
 fn Usage() Msg { return Msg(Diag.Usage, "B1", "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
 
 # ERR_NOT_A_MODE
-fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run") }
+fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp and mcp, and a file ending in .olang is built and run") }
 
 # ERR_MODE_ONE_FILE
 fn ModeOneFile(text String&) Msg { return Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
@@ -682,6 +685,12 @@ fn ExplainNeedsName(file String&) Msg { return Msg(Diag.ExplainNeedsName, "B11b"
 fn LineBodyOnLine() Msg { return Msg(Diag.LineBodyOnLine, "S1b", "a one-line body stands on the line of its ':' - write a block, '{ ... }'") }
 
 fn LineBodyNotSimple(what String&) Msg { return Msg(Diag.LineBodyNotSimple, "S1b", $"a one-line body is one simple statement, not " $what " - write a block, '{ ... }'") }
+
+fn ModeNoFiles(mode String&) Msg { return Msg(Diag.ModeNoFiles, "B1", $mode " takes no files - its client names them as it goes") }
+
+fn DocOneName(file String&) Msg { return Msg(Diag.DocOneName, "B14", $"doc " $file " takes at most the name of one of its items, as 'olang doc " $file " main'") }
+
+fn DocNoItem(name String&, file String&) Msg { return Msg(Diag.DocNoItem, "B14", $"'" $name "' is no item of " $file " - 'olang doc " $file "' lists them") }
 
 fn ExplainNoItem(name String&, file String&) Msg { return Msg(Diag.ExplainNoItem, "B11b", $"'" $name "' is no top-level item of " $file) }
 

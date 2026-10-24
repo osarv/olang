@@ -48,6 +48,9 @@ fn typeNamed(c mut typecheck.Checker&, mi I64, name String&) types.DeclId {
 
 # ---- functions ----
 
+# a function or method as explain prints it, by its index in the program's functions (doc's methods of built-in types)
+fn FnText(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String { return fnItem(c, sc, f) }
+
 fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
     b := StringBuilder()
     owner := generic.FnOwner(f)

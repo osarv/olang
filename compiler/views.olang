@@ -226,6 +226,7 @@ fn (v mut Viewer&) Run() {
         v.sums[i].Known = v.walkable(i)
     }
     v.components()
+    if not v.viewsHeld() { return }
     for k in range v.compFrom.Len() {
         end := v.compFrom[k + 1] if k + 1 < v.compFrom.Len() else v.compNodes.Len()
         cyclic := end - v.compFrom[k] > 1 or v.callsItself(v.compNodes[v.compFrom[k]])
@@ -236,6 +237,25 @@ fn (v mut Viewer&) Run() {
         }
         for i in range v.compFrom[k], end { v.walk(v.compNodes[i], true) }
     }
+}
+
+# whether any body may hold a view, which is all M19g speaks of. A view is made only in the prelude's Vec module - a
+# slice of a Vec's buffer, its private record's - and leaves the module only as an array one of its functions gives
+# (View, ViewMut, ToArray): where no body outside the module calls one, no view is held outside it, the module's own
+# bodies are walked for their summaries alone, and there is nothing to judge. The compiler's own build is such a
+# program: the pass was a fifth of its front end
+fn (v mut Viewer&) viewsHeld() Bool {
+    for b in range v.Bodies.Len() {
+        if v.Bodies[b].File == v.vecFile { continue }
+        for k in range v.edgeFrom[b], v.edgeFrom[b + 1] {
+            w := v.edgeTo[k]
+            if w < 0 or w >= v.Bodies.Len() or v.Bodies[w].File != v.vecFile { continue }
+            for r in v.P.T.Results(v.Bodies[w].Ty) {
+                if v.arrayish(r) { return true }
+            }
+        }
+    }
+    return false
 }
 
 # whether body b is walked: it has code, it is no condition the build decides, and it holds no unknown type
@@ -937,7 +957,7 @@ fn (v mut Viewer&) loop(body typed.Block&, post typed.Block?&, st mut state&) {
 
 # a try's or a join's clauses: each from the state after what was tried, merged with the state none is taken in
 fn (v mut Viewer&) clauses(cs Array<typed.Clause&>&, st mut state&, out mut List<view>&) {
-    if cs.Len() == 0 or cs.Len() == 0 { return }
+    if cs.Len() == 0 { return }
     after := st.copy()
     for c in cs {
         s := st.copy()

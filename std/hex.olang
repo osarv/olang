@@ -1,0 +1,49 @@
+# hex - bytes as hexadecimal text, two digits a byte: Encode writes lowercase ("48656c6c6f"), Decode reads either case
+# and fails with Error.INVALID for an odd length or a character that is no hex digit. Imported with `import "std/hex"`.
+
+error Error {
+    INVALID
+}
+
+digits String = "0123456789abcdef"
+
+fn Encode(data Array<U8>&) String {
+    out := String(Array<Char>(data.Len() * 2))
+    for i in range data.Len() {
+        out[2 * i] = digits[data[i] >> 4]
+        out[2 * i + 1] = digits[data[i] & 15]
+    }
+    return out
+}
+
+fn digit(c Char) U8 ? Error.INVALID {
+    if c >= '0' and c <= '9' { return U8(c - '0') }
+    if c >= 'a' and c <= 'f' { return U8(c - 'a') + 10 }
+    if c >= 'A' and c <= 'F' { return U8(c - 'A') + 10 }
+    error Error.INVALID
+}
+
+fn Decode(t String&) Array<U8> ? Error.INVALID {
+    if t.Len() % 2 != 0 { error Error.INVALID }
+    out := Array<U8>(t.Len() / 2)
+    for i in range out.Len() { out[i] = ((try digit(t[2 * i])) << 4) | (try digit(t[2 * i + 1])) }
+    return out
+}
+
+if TestBuild {
+
+HelloHex String = Encode("Hello")
+
+test "bytes are written as hex and read back" {
+    assert HelloHex == "48656c6c6f" and Encode("") == ""
+    assert String(Decode("48656C6c6F")!) == "Hello"
+    all := Array<U8>(256)
+    for i in range 256 { all[i] = U8(i) }
+    assert Decode(Encode(all))! == all
+    for bad in String&["4", "4g", "zz", "123"] {
+        try Decode(bad) catch Error.INVALID { continue }
+        unreachable
+    }
+}
+
+}

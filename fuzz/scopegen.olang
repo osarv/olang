@@ -712,7 +712,7 @@ fn (g mut SG&) cellOp(b String&, ind String&) String& {
 
 # a statement storing into what t declares: 0 a node x, 1 a box (the scenario's w.b), anything else the target's own
 fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
-    if t == 0 and g.chance(6) { return g.ctorScopeOp(a, ind, g.r(10)) }
+    if t == 0 and g.chance(6) { return g.ctorScopeOp(a, ind, g.r(14)) }
     if t == 0 { return g.nodeOp(a, ind, d) }
     if t == 1 {
         if g.chance(60) { return g.boxOp(a, ind, d) }
@@ -745,6 +745,7 @@ fn (g mut SG&) leaf(t I64, a String&, ind String&, d I64) String& {
 # with the instance (8, accepted): either way the closure lives where what it captured does, never in the
 # constructor's frame
 fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
+    if k >= 10 { return g.ctorChoiceArgOp(a, ind, k) }
     v := g.val()
     ty := g.name("cs")
     mkt := g.name("cst")
@@ -773,6 +774,38 @@ fn (g mut SG&) ctorScopeOp(a String&, ind String&, k I64) String& {
     }
     return ($ind "{\n" $ind $hh " := " $ty "(\"outer\", " $v ")\n" $ind "for i in range 2 {\n" $ind "    " $tt " := $i \"-inner-text\"\n"
             $ind "    " $hh " = " $make "\n" $ind "}\n" $ind "churn()\n" $use $ind "}\n")
+}
+
+# uafcc (C2d, E28): a constructor ARGUMENT given a conditional or a match of new text and a constant, the instance then
+# returned from a helper - through a local (10), directly as a match (11), nested in another constructor by value (12),
+# the constant arm first (13). The new text lands with the instance, in the helper's result scope; it was built in the
+# helper's own block, read after a churn as freed storage. Every one is legal, so only a wrong run tells
+fn (g mut SG&) ctorChoiceArgOp(a String&, ind String&, k I64) String& {
+    v := g.val()
+    ty := g.name("cc")
+    wt := g.name("cw")
+    mk := g.name("ccm")
+    mkh := g.name("cch")
+    hh := g.name("hh")
+    tt := g.name("tt")
+    choice := $mk "(t, n) if n != -77777 else \"\""
+    if k == 11 { choice = "match n == -77777 {\n        case true => \"\"\n        case false => " $mk "(t, n)\n    }" }
+    if k == 13 { choice = "\"\" if n == -77777 else " $mk "(t, n)" }
+    body := "    e := " $ty "(" $choice ", n)\n    return e\n"
+    if k == 11 { body = "    return " $ty "(" $choice ", n)\n" }
+    rt := ty
+    if k == 12 {
+        rt = wt
+        body = "    e := " $wt "(" $ty "(" $choice ", n), n)\n    return e\n"
+    }
+    g.addHelper(("fn " $mk "(t String&, n I64) String { return $t \"-\" $n }\ntype " $ty " struct(p String&, n I64) {\n    p\n    n\n}\n"
+                "type " $wt " struct(q " $ty ", n I64) {\n    q\n    n\n}\n"
+                "fn " $mkh "(t String&, n I64) " $rt " {\n" $body "}\n"))
+    pp := $hh ".q.p" if k == 12 else $hh ".p"
+    init := $wt "(" $ty "(\"outer\", 0), 0)" if k == 12 else $ty "(\"outer\", 0)"
+    return ($ind "{\n" $ind $hh " := " $init "\n" $ind "for i in range 2 {\n" $ind "    " $tt " := $i \"-inner-text\"\n"
+            $ind "    " $hh " = " $mkh "(" $tt ", " $v " + i)\n" $ind "}\n" $ind "churn()\n"
+            $ind $a ".next = Node(" $pp ".Len() + I64(" $pp "[0]))\n" $ind "}\n")
 }
 
 # a statement of a Str's body over its receiver r: what Str may do (three times in five) - read and walk what the

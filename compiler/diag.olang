@@ -522,6 +522,42 @@ fn (d mut Diagnostics&) AllSaid() List<Said> {
     return l
 }
 
+# a diagnostic as a tool reads it - an editor, an agent (B15, B16): an error, or a note on the error before it; its rule
+# ("" for a note); the file AddFile numbered (-1 for none); its span's offsets in that file's text (-1 for none), or
+# the line it is about (0 for none); and its text
+type Item struct(Error Bool, Rule String&, File I64, Start I64, End I64, Line I64, Text String&) {
+    Error
+    Rule
+    File
+    Start
+    End
+    Line
+    Text
+}
+
+fn item(isError Bool, rule String&, at Where, text String&) Item {
+    return match at {
+        case Where.Span(f, s, e) => Item(isError, $rule, f, s, e, 0, $text)
+        case Where.Line(f, l) => Item(isError, $rule, f, -1, -1, l, $text)
+        case Where.File(f) => Item(isError, $rule, f, -1, -1, 0, $text)
+        case Where.Nowhere => Item(isError, $rule, -1, -1, -1, 0, $text)
+    }
+}
+
+# every diagnostic Render writes, in its order: each error, its notes after it, then the fatal one
+fn (d mut Diagnostics&) Items() List<Item> {
+    l List<Item>
+    for r in d.written() {
+        rec := d.records[r]
+        l.Push(item(true, rec.rule, rec.at, rec.text))
+        for nt in d.notes {
+            if nt.rec == r { l.Push(item(false, "", nt.at, nt.text)) }
+        }
+    }
+    if d.fatal { l.Push(item(true, d.fatalRule, d.fatalAt, d.fatalText)) }
+    return l
+}
+
 # the number of errors Render writes
 fn (d mut Diagnostics&) Errors() I64 { return d.written().Len() + (1 if d.fatal else 0) }
 

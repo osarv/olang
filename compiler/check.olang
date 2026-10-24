@@ -368,7 +368,7 @@ fn (c mut Checker&) CheckMain() {
     }
     fd := c.P.FnDecl(f)
     sig := c.P.Sig(f)
-    if fd.Recv is not null or fd.S.Params.Len() > 0 or (fd.S.Results.Len() > 0 and fd.S.Results.Len() > 0) or fd.S.NoReturn or c.P.T.Result(sig) != types.VoidT {
+    if fd.Recv is not null or fd.S.Params.Len() > 0 or (fd.S.Results.Len() > 0) or fd.S.NoReturn or c.P.T.Result(sig) != types.VoidT {
         c.P.L.Diags.Error(diag.Where.File(file), msgs.MainSignature())
     }
 }
@@ -531,7 +531,7 @@ fn (c mut Checker&) onlyFixed(x ast.Expr?&, out mut Map<source.NameId, I64>&) Bo
         case ast.Expr.Index(_, a, items) => c.onlyFixed(a, out) and c.allFixed(items, out)
         case ast.Expr.Slice(_, a, lo, hi) => c.onlyFixed(a, out) and c.onlyFixed(lo, out) and c.onlyFixed(hi, out)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.allFixed(items, out)
-        case ast.Expr.Try(_, a, clauses, _) => c.onlyFixed(a, out) and (clauses.Len() == 0 or clauses.Len() == 0)
+        case ast.Expr.Try(_, a, clauses, _) => c.onlyFixed(a, out) and (clauses.Len() == 0)
         nomatch => false
     }
 }
@@ -669,7 +669,7 @@ fn (c mut Checker&) fnTypeParams(f I64) {
             row := c.P.VarAt(owner, i)
             at := c.writtenAt(fd, row.Name)
             # said at the result it is written in
-            if fd.S.Results.Len() > 0 and fd.S.Results.Len() > 0 { at = source.Span(fd.S.Results[0].Span().Start, at.End) }
+            if fd.S.Results.Len() > 0 { at = source.Span(fd.S.Results[0].Span().Start, at.End) }
             c.err(at, msgs.TypeVarNotInferable(c.text(row.Name)))
             c.unfillable.Put(f, true)
             break
@@ -1046,7 +1046,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
             if tp.Ty is not null and not c.traitRef(mi, tp.Ty!) { c.err(tp.Ty!.Span(), msgs.ConstraintNotTrait(c.src(tp.Ty!.Span()))) }
         }
     }
-    if td.Params.Len() > 0 and td.Params.Len() > 0 {
+    if td.Params.Len() > 0 {
         # G6: only a struct or a trait takes type parameters
         match td.Body {
             case ast.TypeBody.Enum(_), ast.TypeBody.Over(_, _) { c.err(td.Params[0].Sp, msgs.GenericNotStruct()) }
@@ -1233,8 +1233,8 @@ fn fieldSpans(sb ast.StructBody&) List<source.Span> {
 
 # G10d: a constructor's own type variables - only a type with no parameters has them, and no field's type names one
 fn (c mut Checker&) ctorVarRules(td ast.TypeDecl&, sb ast.StructBody&) {
-    if sb.TypeParams.Len() == 0 or sb.TypeParams.Len() == 0 { return }
-    if td.Params.Len() > 0 and td.Params.Len() > 0 {
+    if sb.TypeParams.Len() == 0 { return }
+    if td.Params.Len() > 0 {
         tp := sb.TypeParams[0]
         c.err(source.Span(tp.Sp.Start, tp.Sp.Start + I32(c.text(tp.Name).Len())), msgs.CtorVarOfGeneric(c.text(tp.Name), c.text(td.Name), c.text(tp.Name)))
         return
@@ -1343,13 +1343,13 @@ fn (c mut Checker&) partHashes(t types.TypeId, depth I64) {
 # a type's constructor checked whether or not a call asks for it (C2, T29d): a struct's, or a declared number's that
 # declares one - neither a generic's (checked per instance, G16) nor one whose parameters introduce variables (G10d)
 fn (c mut Checker&) declaredCtor(mi I64, td ast.TypeDecl?&) {
-    if td is null or td.Body is null or (td.Params.Len() > 0 and td.Params.Len() > 0) { return }
+    if td is null or td.Body is null or (td.Params.Len() > 0) { return }
     match td.Body {
         case ast.TypeBody.Struct(s) {
-            if s.TypeParams.Len() > 0 and s.TypeParams.Len() > 0 { return }
+            if s.TypeParams.Len() > 0 { return }
         }
         case ast.TypeBody.Over(_, ctor) {
-            if ctor is null or (ctor.TypeParams.Len() > 0 and ctor.TypeParams.Len() > 0) { return }
+            if ctor is null or (ctor.TypeParams.Len() > 0) { return }
         }
         nomatch { return }
     }
@@ -1725,7 +1725,7 @@ fn (c mut Checker&) declaresNames(x ast.Expr?&) Bool {
         case ast.Expr.Index(_, a, items) => c.declaresNames(a) or c.anyDeclaresNames(items)
         case ast.Expr.Slice(_, a, lo, hi) => c.declaresNames(a) or c.declaresNames(lo) or c.declaresNames(hi)
         case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) => c.anyDeclaresNames(items)
-        case ast.Expr.Try(_, a, clauses, _) => c.declaresNames(a) or (clauses.Len() > 0 and clauses.Len() > 0)
+        case ast.Expr.Try(_, a, clauses, _) => c.declaresNames(a) or (clauses.Len() > 0)
         nomatch => true
     }
 }
@@ -7575,7 +7575,16 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             et := c.typeNamed(x)
             if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
             if ref.Kind == names.What.None and c.importPath(x) {
-                c.gap(nsp, "a call through an import of this kind")
+                # a name the imported module does not declare (or does not export: the resolver said so already)
+                at := match x {
+                    case ast.Expr.Name(xsp, _) => c.P.R.Use(c.fr().File, xsp.Start).Module
+                    case ast.Expr.Member(xsp, _, _) => c.P.R.Member(c.fr().File, xsp.End).Module
+                    case _ => -1
+                }
+                if at >= 0 and not c.declaresName(at, n) {
+                    c.err(nsp, msgs.NotInModule($"module " $c.P.L.Mods[at].Identity, c.tok(n)))
+                }
+                c.dropArgs(args)
                 return c.unknown(sp)
             }
             return c.methodCall(sp, x, n, nsp, args)
@@ -8629,6 +8638,14 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&c, 
 }
 
 # whether a path is an import's alias, or reaches through one (M4)
+# whether module mi declares a name, exported or not
+fn (c mut Checker&) declaresName(mi I64, n source.NameId) Bool {
+    for e in c.P.R.Tables[mi].Entries {
+        if e.Name == n { return true }
+    }
+    return false
+}
+
 fn (c mut Checker&) importPath(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Name(sp, _) { return c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Import }
@@ -9129,7 +9146,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
     if fr.Fallible == before and typeOf(x) != types.UnknownT and not c.inGeneric() {
         c.nothingFails(sp, isChecked, fr.Checkable > checkable or checkableAst(y))
         # the operand stands as written, so what follows from it is still judged (E31b's copy, section 8)
-        return x if clauses.Len() == 0 or clauses.Len() == 0 else c.unknown(sp)
+        return x if clauses.Len() == 0 else c.unknown(sp)
     }
     end := fr.leaks.Len()
     c.produced(clauses, mark, end)
@@ -9310,7 +9327,7 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool = false) ty
         body := cl.Body
         # R11: in value position a block's last value is not the clause's - its default is
         n := body.Len()
-        if value and (cl.Defaults.Len() == 0 or cl.Defaults.Len() == 0) and n > 0 {
+        if value and (cl.Defaults.Len() == 0) and n > 0 {
             match body[n - 1] {
                 case ast.Stmt.ExprS(_, x) {
                     if not stmtLike(x) {
@@ -9340,7 +9357,7 @@ fn (c mut Checker&) clause(cl ast.Catch&, t types.TypeId, value Bool = false) ty
             c.exprs.Push(c.exprTo(cl.Defaults[i], pt))
         }
     }
-    all := cl.Items.Len() == 0 or cl.Items.Len() == 0
+    all := cl.Items.Len() == 0
     defaults := gather(c.exprs, from)
     return typed.Clause(cl.Sp, items.ToArray(), all, code, defaults)
 }
@@ -9442,7 +9459,7 @@ fn (c mut Checker&) clauseRules(clauses Array<ast.Catch&>&, cls List<typed.Claus
                 return true
             }
         }
-        hasDef := cl.Defaults.Len() > 0 and cl.Defaults.Len() > 0
+        hasDef := cl.Defaults.Len() > 0
         if not value {
             if hasDef {
                 c.err(c.defaultSpan(cl), msgs.DefaultInStatement())
@@ -9463,7 +9480,7 @@ fn (c mut Checker&) clauseRules(clauses Array<ast.Catch&>&, cls List<typed.Claus
             return true
         }
         if not goes and not hasDef {
-            if cl.Body.Len() > 0 and cl.Body.Len() > 0 and lastIsValue(cl.Body) { continue }
+            if cl.Body.Len() > 0 and lastIsValue(cl.Body) { continue }
             c.err(c.catchSpan(cl), msgs.CatchMustLeave())
             return true
         }
@@ -9877,7 +9894,7 @@ fn (c mut Checker&) joinStmt(sp source.Span, j ast.JoinS&) {
     }
     fr.joinErrs.Truncate(em)
     cls mut List<typed.Clause&>&c = List<typed.Clause&>()
-    if j.Clauses.Len() > 0 and j.Clauses.Len() > 0 and not j.Tried {
+    if j.Clauses.Len() > 0 and not j.Tried {
         if errs.Len() == 0 { c.err(c.catchSpan(j.Clauses[0]), msgs.JoinCatchNeedsTry()) }
     }
     if j.Tried {
@@ -9987,7 +10004,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
             if cl.Items.Len() > 0 {
                 for p in cl.Items { c.catchItem(p, items) }
             }
-            all := cl.Items.Len() == 0 or cl.Items.Len() == 0
+            all := cl.Items.Len() == 0
             tcs.Push(typed.TaskClause(cl.Sp, items.ToArray(), all, c.clauseHandler(cl, crt, places.Len())))
             taken.Push(typed.Clause(cl.Sp, items.ToArray(), all, null, Array<typed.Expr&>(0)))
         }
@@ -10041,7 +10058,7 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
 # of them for several; null for "catch E { }". Its captures are a spawned lambda's (D16c, D16e)
 fn (c mut Checker&) clauseHandler(cl ast.Catch&, rt types.TypeId, nt I64) typed.Expr?&c {
     hasBody := cl.Braced and cl.Body.Len() > 0
-    hasDef := cl.Defaults.Len() > 0 and cl.Defaults.Len() > 0
+    hasDef := cl.Defaults.Len() > 0
     if not hasBody and not hasDef and nt == 0 { return null }
     if hasDef and nt == 0 {
         c.err(c.defaultSpan(cl), msgs.TaskDefaultInStatement())
@@ -11388,7 +11405,7 @@ fn (c mut Checker&) lambda(sp source.Span, f ast.Func&, want types.TypeId) typed
     }
     infer := false
     result := types.VoidT
-    if f.S.Results.Len() > 0 and f.S.Results.Len() > 0 {
+    if f.S.Results.Len() > 0 {
         rs := Array<types.TypeId>(f.S.Results.Len())
         for i in range rs.Len() { rs[i] = c.resolve(f.S.Results[i]) }
         result = rs[0] if rs.Len() == 1 else c.P.T.Tuple(c.P.T.List(rs))
@@ -11895,7 +11912,7 @@ fn (c mut Checker&) calledAt(x typed.Expr&) diag.Where {
                         case typed.BodyOf.Fn(inst) {
                             f := c.P.InstanceFn(inst)
                             rs := c.P.FnDecl(f).S.Results
-                            if rs.Len() == 0 or rs.Len() == 0 { return diag.Where.Nowhere }
+                            if rs.Len() == 0 { return diag.Where.Nowhere }
                             return c.markAt(c.P.FnModule(f), rs[0])
                         }
                         nomatch { }
@@ -12046,7 +12063,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
 fn (c mut Checker&) inferReturn(sp source.Span, values Array<ast.Expr&>&) {
     fr := c.fr()
     fr.InferResult = false
-    if values.Len() == 0 or values.Len() == 0 {
+    if values.Len() == 0 {
         fr.Result = types.VoidT
         c.emit(typed.Stmt.Return(sp, null))
         return

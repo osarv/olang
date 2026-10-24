@@ -48,6 +48,8 @@ so one differing bit in any result fails the check.
 | `sum` | a `List` built by `Push`, then summed with `for x in`, and with `Iter().Fold(...)` and a lambda, over the List and over an Array; C pushes onto a realloc'd array and loops |
 | `parallel` | longest Collatz chain, four tasks: `join`/`spawn` against pthreads |
 | `text` | `$n` renderings into a `StringBuilder`, `Split`, `ParseInt` against snprintf and strtoll |
+| `sha256` | `std/sha256` over 64 MB, 4 times: U32 arithmetic in the compression loop, against a plain portable C SHA-256 (olang 1.37-1.45 s, C 1.24-1.29 s, 2026-10-24) |
+| `regex` | `std/regex` counting two patterns' matches in generated words, against glibc's POSIX `regexec` with `REG_STARTEND` (32 MB: olang 0.72-0.78 s, C 0.76-0.79 s, 2026-10-24) |
 
 ## Results
 

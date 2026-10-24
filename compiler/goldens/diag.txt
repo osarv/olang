@@ -341,6 +341,11 @@ c2dbuildlocal.olang:10:16: error[C2d]: this builds through a '&p' field whose sc
    10 |     x := cs[0].at
       |                ^~
 compilation failed with 1 error
+=== c2dcondargshort.olang
+c2dcondargshort.olang:15:26: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   15 |         e = E("a", mk(t) if i > 5 else t)
+      |                          ^~
+compilation failed with 1 error
 === c2dcondfield.olang
 c2dcondfield.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
    16 |         ms.Push(M(2, d))

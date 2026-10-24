@@ -513,7 +513,7 @@ fn (w mut walker&) stmt(s ast.Stmt?&) {
             kind String& = "EXPR"
             match x {
                 case ast.Expr.Try(_, _, cl, _) {
-                    if cl.Len() > 0 and cl.Len() > 0 { kind = "TRY" }
+                    if cl.Len() > 0 { kind = "TRY" }
                 }
                 nomatch { }
             }

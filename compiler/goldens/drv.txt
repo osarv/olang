@@ -221,12 +221,12 @@
 | status 1
 === olang bogus
 | stdout:
-| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run
+| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp and mcp, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang main.txt
 | stdout:
-| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run
+| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp and mcp, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang -debug main.txt
@@ -252,6 +252,9 @@
 |   format      rewrites each file in olang's one layout (B13)
 |   explain     prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)
 |   help        lists the modes, or a mode's options
+|   doc         prints a module's documentation (B14), or writes a library's as HTML
+|   lsp         serves the Language Server Protocol on the standard input and output, for editors (B15)
+|   mcp         serves the Model Context Protocol on the standard input and output, for agents (B16)
 | 
 | 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
 | stderr:
@@ -355,9 +358,43 @@
 | lists the modes, or a mode's options
 | stderr:
 | status 0
+=== olang help doc
+| stdout:
+| usage: olang doc [OPTION...] FILE.olang [NAME] | -html DIR [FILE.olang...]
+| prints a module's documentation (B14), or writes a library's as HTML
+| 
+| options:
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -html DIR          writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)
+| stderr:
+| status 0
+=== olang help lsp
+| stdout:
+| usage: olang lsp [OPTION...]
+| serves the Language Server Protocol on the standard input and output, for editors (B15)
+| 
+| options:
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+| stderr:
+| status 0
+=== olang help mcp
+| stdout:
+| usage: olang mcp [OPTION...]
+| serves the Model Context Protocol on the standard input and output, for agents (B16)
+| 
+| options:
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+| stderr:
+| status 0
 === olang help nope
 | stdout:
-| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain and help, and a file ending in .olang is built and run
+| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp and mcp, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang help build test
@@ -385,14 +422,15 @@
 | 
 | ```
 | command   ::= "olang" [ mode-word ] { option } { argument }
-| mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help"
+| mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
-|             | "-define" NAME "=" VALUE | "-update" | "-check"
+|             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 | an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
-| `explain` (B11a, B11b) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
+| `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
+| (B14), `lsp` (B15) and `mcp` (B16). An
 | **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 | the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 | beginning with `-` that is no option is an error:
@@ -401,11 +439,13 @@
 | |---|---|---|
 | | `-output PATH` | build, compile | B3h |
 | | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
-| | `-target NAME` | running a file, build, compile, test, interpret, explain | B12 |
-| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain | B10, §4 M23c |
+| | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
+| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
 | | `-check` | format | B13 |
+| | `-html DIR` | doc | B14 |
 | 
-| `build` and `compile` take exactly one file, `test` and `format` one or more; for running a file and for `interpret`
+| `build` and `compile` take exactly one file, `test` and `format` one or more, `doc` one and a name or (with
+| `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
 | every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 | spellings: a flag of one character is an unknown option.
 | stderr:
@@ -435,6 +475,42 @@
 === olang explain Zz9
 | stdout:
 | olang: error[B11a]: the specification has no rule Zz9
+| stderr:
+| status 1
+=== olang doc
+| stdout:
+| olang: error[B1]: doc needs a file
+| stderr:
+| status 1
+=== olang doc a.olang b.olang
+| stdout:
+| olang: error[B1]: doc takes exactly one file
+| stderr:
+| status 1
+=== olang doc W/none.olang
+| stdout:
+| W/none.olang: error: cannot open this file
+| compilation failed with 1 error
+| stderr:
+| status 1
+=== olang doc main.olang Main Extra
+| stdout:
+| olang: error[B14]: doc main.olang takes at most the name of one of its items, as 'olang doc main.olang main'
+| stderr:
+| status 1
+=== olang lsp main.olang
+| stdout:
+| olang: error[B1]: lsp takes no files - its client names them as it goes
+| stderr:
+| status 1
+=== olang mcp -debug
+| stdout:
+| olang: error[B1]: -debug applies to running a file, build, compile and test, not to mcp
+| stderr:
+| status 1
+=== olang doc -check main.olang
+| stdout:
+| olang: error[B1]: -check applies to format, not to doc
 | stderr:
 | status 1
 === olang test W/none.olang
