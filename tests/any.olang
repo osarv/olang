@@ -1,0 +1,288 @@
+# T32-T34: run-time trait values - "any Trait&", a reference to an instance of any type satisfying the trait and a
+# table of the functions its type meets the trait with. Every test reads what it holds back after the arena has been
+# churned, so a value built in the wrong scope would read someone else's bytes; the module's globals are computed
+# through tables while compiling (K2) and compared with the same computation at run time.
+
+import sh "shared"
+
+type Named trait {
+    Name() String
+}
+
+type Cat struct(n String&) {
+    n
+}
+fn (c Cat&) Name() String { return "cat " $c.n }
+
+type Lev enum {
+    Low
+    High
+}
+fn (l Lev) Name() String { return "low" if l == Lev.Low else "high" }
+
+type Count extends I64
+fn (c Count) Name() String { return "count " $I64(c) }
+
+type Label extends String
+fn (l Label&) Name() String { return "label " $String(l) }
+
+# the arena worked hard enough that a dangling reference reads what came after it
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        c := Cat("junk " $i)
+        t += c.n.Len()
+    }
+    return t
+}
+
+fn names(xs List<any Named&>&) String {
+    b := StringBuilder()
+    for x in xs {
+        if b.Len() > 0 { b.Push(", ") }
+        b.Push(x.Name())
+    }
+    return b.ToString()
+}
+
+fn kept() List<any Named&> {
+    xs := List<any Named&>()
+    for i in range 3 { xs.Push(Cat("c" $i)) }
+    xs.Push(Count(7))
+    xs.Push(Lev.Low)
+    return xs
+}
+
+test "T32a: an any holds a struct borrowed, temporaries built where it lands, numbers, enums and text copied" {
+    xs := List<any Named&>()
+    c := Cat("tom")
+    xs.Push(c)
+    xs.Push(Cat("kit"))
+    xs.Push(Lev.High)
+    n := Count(5)
+    xs.Push(n)
+    lab := Label("hi")
+    xs.Push(lab)
+    n = Count(9)
+    lab = Label("no")
+    c.n = "tim"
+    assert churn() > 0
+    assert names(xs) == "cat tim, cat kit, high, count 5, label hi"
+    k := kept()
+    assert churn() > 0
+    assert names(k) == "cat c0, cat c1, cat c2, count 7, low"
+}
+
+# T32: the instance borrowed is the very instance - its changes seen, a mut method writing it
+type Counter trait {
+    mut Bump() I64
+    Seen() I64
+}
+type Tally struct(at I64) {
+    at
+}
+fn (t mut Tally&) Bump() I64 {
+    t.at += 1
+    return t.at
+}
+fn (t Tally&) Seen() I64 { return t.at }
+
+fn bumpAll(xs mut List<mut any Counter&>&) I64 {
+    s I64 = 0
+    for x in xs { s += x.Bump() }
+    return s
+}
+
+test "T32b: a mut method through a mut any writes the instance itself" {
+    a := Tally(1)
+    b := Tally(10)
+    xs := List<mut any Counter&>()
+    xs.Push(a)
+    xs.Push(b)
+    xs.Push(Tally(100))
+    assert bumpAll(xs) == 2 + 11 + 101
+    assert a.at == 2 and b.at == 11
+    assert churn() > 0
+    assert xs[2].Seen() == 101
+    r any Counter& = a
+    assert r.Seen() == 2
+}
+
+# T32b, T32c: another module's trait, its default dispatched, a by-value receiver and a type over a number in one list;
+# generic code taking the any as its type argument
+fn areas(xs Array<any sh.Shape&>&) I32 {
+    t I32 = 0
+    for x in xs { t += x.Area() }
+    return t
+}
+fn describeAll<S sh.Shape>(xs List<S>&) I32 {
+    t I32 = 0
+    for x in xs { t += x.Describe() }
+    return t
+}
+
+test "T32c: an any of another module's trait, its default through the table, generic code over it" {
+    q := sh.Square(3)
+    xs := List<any sh.Shape&>()
+    xs.Push(q)
+    xs.Push(sh.Tri(4, 3))
+    xs.Push(sh.Dot(1))
+    xs.Push(sh.Ring(5))
+    assert churn() > 0
+    a := xs.ToArray()
+    assert areas(a) == 9 + 6 + 0 + 5
+    assert xs[0].Describe() == 13 and xs[3].Describe() == 5
+    assert describeAll(xs) == 13 + 9 + 1 + 5
+    assert xs[0].Sides() == 4
+}
+
+# T33: identity, null, $
+test "T33: == is the same instance; an any renders its instance" {
+    c := Cat("tom")
+    x any Named& = c
+    y any Named& = c
+    z any Named& = Cat("tom")
+    assert x == y and x != z
+    m any Named?& = null
+    assert m is null
+    m = c
+    assert m == x
+    assert $x == "Cat(\"tom\")"
+    w any Named& = Lev.High
+    assert $w == "Lev.High"
+    v any Named& = Count(4)
+    assert $v == "4"
+    xs := List<any Named&>()
+    xs.Push(Lev.Low)
+    assert $xs == "List<any Named&>[Lev.Low]"
+}
+
+# T34: a closed trait's any matched by type, and "as"
+type Widget trait for Button, Slider, Level {
+    Draw() String
+}
+type Button struct(label String&) {
+    label
+}
+fn (b Button&) Draw() String { return "[" $b.label "]" }
+type Slider struct(at I64) {
+    at
+}
+fn (s Slider&) Draw() String { return "<" $s.at ">" }
+type Level extends I64
+fn (l Level) Draw() String { return "L" $I64(l) }
+
+fn kind(w any Widget&) String {
+    match w {
+        case Button b { return "button " $b.label }
+        case Slider s if s.at > 50 { return "slider far" }
+        case Slider s { return "slider " $s.at }
+        case Level n { return "level " $I64(n) }
+    }
+}
+
+fn slide(w mut any Widget&) {
+    match w {
+        case Slider s { s.at += 1 }
+        case Button _, Level _ { }
+    }
+}
+
+fn labelLen(w any Widget&) I64 {
+    b := checked (w as Button) catch CheckError.WRONG_CASE default Button("none")
+    return b.label.Len()
+}
+
+test "T34: type cases bind the instance itself; as gives it, or fails under checked" {
+    sl := Slider(3)
+    ws := List<mut any Widget&>()
+    ws.Push(Button("ok"))
+    ws.Push(sl)
+    ws.Push(Level(9))
+    ws.Push(Slider(70))
+    assert churn() > 0
+    assert kind(ws[0]) == "button ok" and kind(ws[1]) == "slider 3"
+    assert kind(ws[2]) == "level 9" and kind(ws[3]) == "slider far"
+    slide(ws[1])
+    assert sl.at == 4
+    assert (ws[1] as Slider).at == 4
+    assert (ws[2] as Level) == Level(9)
+    assert labelLen(ws[0]) == 2 and labelLen(ws[1]) == 4
+    t := 0
+    for w in ws { t += w.Draw().Len() }
+    assert t == 4 + 3 + 2 + 4
+}
+
+# D17f: a trait's contract held to every call through an any; the instance's own checked after dispatch under checked
+type Account trait {
+    mut Withdraw(n I64) left I64 [n > 0, left >= 0]
+}
+type Wallet struct(cash I64) {
+    cash
+}
+fn (w mut Wallet&) Withdraw(n I64) I64 [n <= 100] {
+    w.cash -= n
+    return w.cash
+}
+fn draw(a mut any Account&, n I64) I64 { return checked a.Withdraw(n) catch CheckError.CONTRACT default -1 }
+
+test "D17f: a trait's contract and the instance's own, checked through an any" {
+    w := Wallet(500)
+    assert draw(w, 10) == 490
+    assert draw(w, 0) == -1          # the trait's requirement
+    assert draw(w, 200) == -1        # the wallet's own, after dispatch
+    assert w.cash == 490
+    v := Wallet(50)
+    assert draw(v, 60) == -1         # the trait's guarantee, the call made
+    assert v.cash == -10
+}
+
+# T32b: iterators through an any - for-in, the trait's defaults, a generic one (Fold) instantiated for the any
+fn sumIt(it mut any Iterator<I64>&) I64 {
+    t I64 = 0
+    for x in it { t += x }
+    return t
+}
+
+test "T32b: an any Iterator walked by for-in and its defaults" {
+    l := List<I64>()
+    for i in range 5 { l.Push(i) }
+    assert sumIt(l.Iter()) == 10
+    a := I64[1, 2, 3]
+    assert sumIt(a.Iter()) == 6
+    it mut any Iterator<I64>& = a.Iter()
+    assert it.Count(fn(x I64) Bool { return x > 1 }) == 2
+    jt mut any Iterator<I64>& = l.Iter()
+    assert jt.Fold(0, fn(s I64, x I64) I64 { return s + x }) == 10
+}
+
+# K1, K2: the evaluator calls through tables as the program does - globals baked from calls through anys, compared
+# with the same calls made at run time on inputs it cannot know
+fn mix(n I64) String {
+    xs := List<any Named&>()
+    xs.Push(Count(n))
+    xs.Push(Lev.High if n > 2 else Lev.Low)
+    xs.Push(Cat("n" $n))
+    return names(xs)
+}
+fn widgets(n I64) I64 {
+    ws := List<mut any Widget&>()
+    ws.Push(Slider(n))
+    ws.Push(Level(n))
+    for w in ws { slide(w) }
+    return (ws[0] as Slider).at + I64(ws[1] as Level)
+}
+BakedMix String = mix(3)
+BakedWidgets I64 = widgets(5)
+Live mut I64 = 3
+
+test "K2: anys evaluated while compiling agree with the run time" {
+    assert BakedMix == "count 3, high, cat n3"
+    assert BakedMix == mix(Live)
+    assert BakedWidgets == 11
+    assert BakedWidgets == widgets(Live + 2)
+    assert mix(1) == "count 1, low, cat n1"
+}

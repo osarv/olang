@@ -3215,8 +3215,9 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, gro
     }
     if k == types.Kind.Ref {
         m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
-        return $m $ln.spell(t.Referent(ty), true, item) "&"
+        return $m $ln.spell(t.Referent(ty), true, item) $("?&" if (t.PermOf(ty) & types.Nullable) != 0 else "&")
     }
+    if k == types.Kind.Any { return "any " $ln.spell(t.AnyTrait(ty), true, item) }
     if k == types.Kind.Array {
         return "Array<" $ln.spell(t.Elem(ty), true, true) ">"
     }

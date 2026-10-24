@@ -2824,6 +2824,13 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
     return kept
 }
 
+# the tables and slot contracts an attempt of the checker made, gone with its bodies (R1a)
+fn (p mut Program&) ResetAny() {
+    p.AnyTables = List<AnyTable>()
+    p.anyTableOf = Map<pair.Pair<I64, I64>, I64>()
+    p.SlotContracts = Map<I64, I64>()
+}
+
 # the key of trait r's slot k (k under checked too) among SlotContracts
 fn (p mut Program&) SlotKey(r types.TypeId, k I64) I64 { return I64(r) * 65536 + k % p.AnySlots(r).Len() }
 

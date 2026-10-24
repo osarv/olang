@@ -426,6 +426,8 @@ fn (c mut Checker&) CheckMain() {
 fn (c mut Checker&) reset() {
     c.Bodies = List<mut typed.Body&>()
     c.Gaps = List<Gap>()
+    c.anyBad = Map<I64, Bool>()
+    c.P.ResetAny()      # T32: tables name bodies of this attempt
     c.frames = List<mut frame&>()
     c.queue = List<I64>()
     c.queued = 0
@@ -8388,8 +8390,9 @@ fn (c mut Checker&) refWritten(t ast.TypeRef&) Bool {
 fn (c mut Checker&) traitWritten(tr ast.TypeRef&, whole ast.TypeRef&) Bool {
     match tr {
         case ast.TypeRef.Named(nsp, path, _) {
+            # a type's path is recorded at its start, an alias-qualified one too (names.typePath)
             ref := c.P.R.Use(c.fr().File, nsp.Start)
-            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if path.Len() > 1 and ref.Kind == names.What.None { ref = c.P.R.Member(c.fr().File, nsp.End) }
             if ref.Kind != names.What.Type or ref.Index < 0 { return false }
             if c.P.T.DeclKindOf(c.P.DeclFor(ref.Module, ref.Index)) != types.DeclKind.Trait { return false }
             c.err(nsp, msgs.TraitNotAType(c.src(whole.Span())))
@@ -8403,8 +8406,9 @@ fn (c mut Checker&) traitWritten(tr ast.TypeRef&, whole ast.TypeRef&) Bool {
 fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
     match tr {
         case ast.TypeRef.Named(nsp, path, args) {
+            # a type's path is recorded at its start, an alias-qualified one too (names.typePath)
             ref := c.P.R.Use(c.fr().File, nsp.Start)
-            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if path.Len() > 1 and ref.Kind == names.What.None { ref = c.P.R.Member(c.fr().File, nsp.End) }
             if ref.Kind == names.What.None and path.Len() == 1 {
                 c.unknownType(nsp, path[0])
                 return false
@@ -8435,8 +8439,9 @@ fn (c mut Checker&) errorTypeHeld(tr ast.TypeRef?&) Bool {
     if tr is null { return false }
     match tr {
         case ast.TypeRef.Named(nsp, path, _) {
+            # a type's path is recorded at its start, an alias-qualified one too (names.typePath)
             ref := c.P.R.Use(c.fr().File, nsp.Start)
-            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if path.Len() > 1 and ref.Kind == names.What.None { ref = c.P.R.Member(c.fr().File, nsp.End) }
             if ref.Kind != names.What.Type or ref.Index < 0 { return false }
             if c.P.T.DeclKindOf(c.P.DeclFor(ref.Module, ref.Index)) != types.DeclKind.Error { return false }
             n := c.text(path[path.Len() - 1])
@@ -9194,6 +9199,8 @@ fn (c mut Checker&) boundParam(ps Array<types.TypeId>&, k I64, b generic.Binding
     if c.isRef(t) {
         r := c.P.T.Referent(t)
         if c.isNamed(r) and c.P.Body(r) and c.P.T.Destructs(r) { return t }
+        # T32a: an "any" is wanted as itself - each value of a conditional made one
+        if c.P.T.IsAny(t) { return t }
     }
     return c.deref(t)
 }
@@ -14953,13 +14960,14 @@ fn breaks(b typed.Block?&, loop typed.BlockId) Bool {
 fn (c mut Checker&) toAny(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
     have := typeOf(x)
     r := c.P.T.AnyTrait(want)
+
     if c.P.T.IsAny(have) {
         c.err(sp, msgs.AnyNotConverted(c.ty(have), c.ty(want)))
         return c.unknown(sp)
     }
     inst := c.deref(have)
     if inst == types.UnknownT or r == types.UnknownT { return x }
-    if c.P.T.KindOf(inst) == types.Kind.Func or inst == types.VoidT or inst == types.NoreturnT or c.P.T.KindOf(inst) == types.Kind.Tuple {
+    if c.P.T.KindOf(inst) == types.Kind.Any or c.P.T.KindOf(inst) == types.Kind.Func or inst == types.VoidT or inst == types.NoreturnT or c.P.T.KindOf(inst) == types.Kind.Tuple {
         c.err(sp, msgs.TypeMismatch(c.ty(want), c.tyOf(x)))
         return x
     }
