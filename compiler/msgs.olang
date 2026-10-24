@@ -1074,7 +1074,7 @@ fn ArrayTooManyArgs(n I64) Msg { return Msg(Diag.ArrayTooManyArgs, "T7", "Array 
 fn NamedScopeOnElement() Msg { return Msg(Diag.NamedScopeOnElement, "T24", "a nested reference lives in its container's scope - write a bare '&' here") }
 
 # ERR_ARRAY_NESTED_BY_VALUE
-fn ArrayNestedByValue(ty String&) Msg { return Msg(Diag.ArrayNestedByValue, "T7a, T7c", "an array inside an array or a struct is held by reference - write " $ty "&, or a length, Array<T, N>, to hold it in place") }
+fn ArrayNestedByValue(ty String&) Msg { return Msg(Diag.ArrayNestedByValue, "T7a, T7d", "an array inside an array or a struct is held by reference - write " $ty "&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place") }
 
 # ERR_LAMBDA_RESULT_HELD
 fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Diag.LambdaResultHeld, "T7a", "this result binds " $text " to " $ty1 ", which the call holds in an array, where an array is held by reference - write the result as " $ty2 "&") }
@@ -1272,7 +1272,7 @@ fn OwnCannotOutlive() Msg { return Msg(Diag.OwnCannotOutlive, "O10d", "this valu
 fn OwnFromBareRefParam() Msg { return Msg(Diag.OwnFromBareRefParam, "O10d", "this value lives in this function's own scope, so it cannot satisfy anything longer-lived") }
 
 # ERR_ARRAY_SIZE_MISMATCH
-fn ArraySizeMismatch(ty1 String&, ty2 String&) Msg { return Msg(Diag.ArraySizeMismatch, "T7d", $ty1 " does not fit " $ty2 " - a fixed length is part of the type") }
+fn ArraySizeMismatch(n1 I64, n2 I64) Msg { return Msg(Diag.ArraySizeMismatch, "T7d", "an array of " $n1 " elements stored where " $n2 " are laid out - fixed storage takes an array of its own length") }
 
 # ERR_LITERAL_RANGE
 fn LiteralRange(tok String&, ty String&) Msg { return Msg(Diag.LiteralRange, "T6", $tok " does not fit " $ty) }

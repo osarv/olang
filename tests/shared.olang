@@ -15632,7 +15632,7 @@ fn renChars(c Char) String {
 }
 RenCharsBaked String = renChars('a')
 test "E11a: a declared type over Char renders as a character, extends or not, alone and inside another value" {
-    assert RenCharsBaked == "a a a RenLetter['a', 'a'] RenHolder('a', Array<I64, 3>[I64[1, 2, 3]])"
+    assert RenCharsBaked == "a a a RenLetter['a', 'a'] RenHolder('a', Array<I64>[I64[1, 2, 3]])"
     assert renChars(RenRunChar) == RenCharsBaked
     u U8 = 97
     assert $u == "97" and $U8[u] == "U8[97]" and $RenRunChar == "a"
@@ -15648,8 +15648,8 @@ fn renRows(n I64) String {
 }
 RenRowsBaked String = renRows(1)
 test "E11a/E21: an array of arrays writes each element as an array of its own, its element type whole" {
-    assert RenRowsBaked == ("Array<I64, 3>[I64[1, 2, 3], I64[4, 5, 6]] Array<I64, 3>[I64[1, 2, 3]] "
-        "Array<I32>&[I32[1], I32[]] Array<Char, 2>[\"ab\", \"cd\"] Array<I64, 2>[]")
+    assert RenRowsBaked == ("Array<I64>[I64[1, 2, 3], I64[4, 5, 6]] Array<I64>[I64[1, 2, 3]] "
+        "Array<I32>&[I32[1], I32[]] Array<Char>[\"ab\", \"cd\"] Array<I64>[]")
     assert renRows(RenRunN) == RenRowsBaked
 }
 

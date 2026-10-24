@@ -2918,7 +2918,7 @@ fn (ln mut lowering&) readOnly(ty types.TypeId) types.TypeId {
 }
 
 # a type as source writes it (E11a, E21): primitives and declared types by name, their arguments in angle brackets,
-# references with their permission, arrays as Array<T> or Array<T, N>; a function type as a signature, after "fn"
+# references with their permission, arrays as Array<T> whatever their storage (T7c); a function type as a signature, after "fn"
 # where fnWord says
 fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
     t := ln.T
@@ -2942,10 +2942,6 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         return $m $ln.spell(t.Referent(ty), true) "&"
     }
     if k == types.Kind.Array {
-        n := t.Length(ty)
-        if n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const {
-            return "Array<" $ln.spell(t.Elem(ty), true) ", " $t.ConstValue(n) ">"
-        }
         return "Array<" $ln.spell(t.Elem(ty), true) ">"
     }
     if k == types.Kind.Const { return $t.ConstValue(ty) }

@@ -1,4 +1,5 @@
 # check: fail T7a
-# an array of arrays holds its rows by reference
-fn f(m Array<Array<I32>>&) I32 { return 0 }
-test "never runs" { }
+# an array of arrays held in a field holds its rows by reference: a field's array of arrays is made elsewhere, so no
+# row of it can be laid out in place (a parameter's may - each length it is called with is an instance, G29)
+type M struct() { m Array<Array<I32>>& = null }
+test "never runs" { x := M() }

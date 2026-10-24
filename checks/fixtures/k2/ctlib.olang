@@ -3,4 +3,5 @@
 # declarations of what this module defines
 Tile I64 = 12
 Tiles Array<I64> = I64[1, 2]
+Rows Array<I64>& = I64[3, 4]
 Counter mut I64 = 5

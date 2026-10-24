@@ -888,7 +888,9 @@ fn k2(r mut report&) ? Failed {
     tile String& = " = constant (i64 12|<\\{ \\[8 x i8\\] \\}> <\\{ \\[8 x i8\\] c\"\\\\0C(\\\\00){7}\" \\}>, align 8)$"
     try r.expect(irHas(dir, "build/ctlib.ll", "^" $gsym("ctlib", "Tile") $tile), "ctlib_Tile", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Tile") " = available_externally" $tile[2:]), "ctlib_Tile imported", dir)
-    try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Tiles") " = external (global \\{ i64, ptr \\}|constant <\\{ \\[8 x i8\\], ptr \\}>)$"), "ctlib_Tiles imported", dir)
+    # T7d: an immutable global given a literal holds it in fixed storage, plain data; a reference global's storage is its own
+    try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Tiles") " = available_externally constant <\\{ \\[16 x i8\\] \\}>"), "ctlib_Tiles imported", dir)
+    try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Rows") " = external (global \\{ i64, ptr \\}|constant <\\{ \\[8 x i8\\], ptr \\}>)$"), "ctlib_Rows imported", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Counter") " = external global i64$"), "ctlib_Counter imported", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ct", "seed") " = global i32 zeroinitializer$"), "ct_seed", dir)
     # K2b: a referent only a read-only reference reaches is constant; an instance holding itself is written as itself

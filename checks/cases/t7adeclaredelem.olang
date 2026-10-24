@@ -1,4 +1,4 @@
-# check: fail error[T7a, T7c]: an array inside an array or a struct is held by reference - write String&, or a length, Array<T, N>, to hold it in place
+# check: fail error[T7a, T7d]: an array inside an array or a struct is held by reference - write String&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
 # also: instantiated here, with T = String
 # T7a: a String as an array's element, and as a generic struct's field bound by its type argument - held by reference
 # (review port1 r07, r11)

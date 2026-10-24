@@ -3325,11 +3325,8 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         }
         case types.Kind.Array {
             b.Push("Array<")
+            # T7c: a length is never part of a type as written - fixed storage is spelled as any array
             c.spell(b, c.P.T.Elem(t), false)
-            if c.P.T.Length(t) != types.TypeId(0) {
-                b.Push(", ")
-                c.spell(b, c.P.T.Length(t), false)
-            }
             b.PushChar('>')
         }
         case types.Kind.Ref {
@@ -4286,20 +4283,20 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
     }
     # T7d: two fixed arrays of one element type and two lengths
     if hk == types.Kind.Array and wk == types.Kind.Array and c.P.T.Same(c.P.T.Elem(have), c.P.T.Elem(want)) and c.P.T.KindOf(c.P.T.Length(have)) == types.Kind.Const and c.P.T.KindOf(c.P.T.Length(want)) == types.Kind.Const {
-        c.err(sp, msgs.ArraySizeMismatch(c.ty(have), c.ty(want)))
+        c.err(sp, msgs.ArraySizeMismatch(c.P.T.ConstValue(c.P.T.Length(have)), c.P.T.ConstValue(c.P.T.Length(want))))
         return x
     }
     c.err(sp, msgs.TypeMismatch(c.ty(want), c.tyOf(x)))
     return x
 }
 
-# a value's type as a message spells it: written text as the literal it is, "Array<Char, N>" (E12, as stage 0 says)
+# a value's type as a message spells it: written text as a String (E12, T29c)
 fn (c mut Checker&) tyOf(x typed.Expr&) String {
     match x {
         case typed.Expr.Data(_, dt, _, k) {
             match k {
                 case typed.Const.Bytes(b) {
-                    if c.isRef(dt) and c.P.T.Referent(dt) == c.textType() { return "Array<Char, " $b.Len() ">" }
+                    if c.isRef(dt) and c.P.T.Referent(dt) == c.textType() { return "String" }
                 }
                 case _ { }
             }
@@ -5847,6 +5844,9 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
             rt = tb
         } else if c.isRef(ta) and c.isRef(tb) and c.P.T.Same(c.deref(ta), c.deref(tb)) {
             rt = c.P.T.Ref(c.deref(ta), c.P.T.PermOf(ta) & c.P.T.PermOf(tb))
+        } else if c.isRef(ta) and c.isRef(tb) and c.P.T.Same(c.deref(c.runLength(ta)), c.deref(c.runLength(tb))) {
+            # G9a/E28: references to arrays of one element type and different lengths meet at the run-time length
+            rt = c.P.T.Ref(c.deref(c.runLength(ta)), c.P.T.PermOf(ta) & c.P.T.PermOf(tb))
         } else if c.P.T.KindOf(ta) == types.Kind.Array and c.P.T.KindOf(tb) == types.Kind.Array and c.P.T.Same(c.P.T.Elem(ta), c.P.T.Elem(tb)) {
             rt = c.P.T.Array(c.P.T.Elem(ta), types.TypeId(0))
         } else {
@@ -11727,6 +11727,9 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
                     if c.P.T.KindOf(rt) == types.Kind.Array and c.P.T.Length(rt) != types.TypeId(0) and c.litArray(cs.Value) {
                         rt = c.P.T.Array(c.P.T.Elem(rt), types.TypeId(0))
                     }
+                    # a reference to an array of a known length gives the run-time length, so another case's array of
+                    # another length meets it (S12b, G9a)
+                    if c.isRef(rt) { rt = c.runLength(rt) }
                 }
                 ok := false
                 v, ok = c.fitQuiet(v, rt, cs.Value.Span())
