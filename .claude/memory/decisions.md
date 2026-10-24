@@ -920,3 +920,8 @@ errors and documentation - generic `+` already works).
 - DECIDED 2026-10-24 (the user: "Do it"): enum cases carry one payload type, named (`Round Circle`) or inline fields
   (`Box(w F64, h F64)`), or none; narrowing makes the value its payload; `as` gives the payload. Still open: `any`
   questions 1 (value types boxed into any) and 2 (type inspection only on any of a closed trait).
+- ANY 2026-10-24, DECIDED (the user: "make any literal copy. Works for structs and enums too right?"): into `any
+  Trait&`, a temporary (literal, constructor call, enum case, call result, expression) is built where the any lands; a
+  struct/enum variable is borrowed (E12c, scope-checked, changes seen); a number/Bool/Char is always copied, even from a
+  variable (mine: no references to numbers). Open: type inspection - closed traits only (rec), Go-style with nomatch on
+  open traits too, or none.
