@@ -164,6 +164,12 @@ c0e9f8fb09f6744e 6d223cc9f031366e checks/cases/constraintarg.olang
 3bd51ca5f3868016 c075e7fefde02c8d checks/cases/constraintcall.olang
 75a980e1cb075b9a 85f8a8d2c4a456d5 checks/cases/constraintnotiface.olang
 75f8b7299896813b e6e6dd6a561d3eb4 checks/cases/copyoutrefs.olang
+5a8b9cf511f00fff 3813060f986e2be1 checks/cases/ctorlambdafield.olang
+f5126c920273f17f ad983b5ccaf2562e checks/cases/ctorlambdafield2.olang
+fd0d9a8a875a1cab 0d9eef9c5ef52d26 checks/cases/ctorlambdafieldkinds.olang
+83d280fc7ac2a1e7 5cf4cd0ef06b2405 checks/cases/ctorlambdafieldloop.olang
+c33b47c89e42f478 387dd8fe76026fa6 checks/cases/ctorlambdafieldout.olang
+db03044d84bcbd3d faef910c4fd1a90d checks/cases/ctorlambdafieldval.olang
 bba1377c31a3123c ecfd053ce2c7f87e checks/cases/ctortempdestruct.olang
 014fd16c9a7b1a47 15bfab689dcbefee checks/cases/d10adroppedbranch.olang
 933080ce2e3d1df8 b7404aa3756d0b48 checks/cases/d10aforbreak.olang
@@ -601,6 +607,7 @@ c385af11748be396 192d55a90c8b6b30 checks/cases/o25scopeargborrow.olang
 34d7cccf94dd1a5e c0277007aeed060c checks/cases/o26acyclemethod.olang
 53c16260e4ec479d a4ecfd5078ba93b2 checks/cases/o26acycleplain.olang
 496ed6c78718abd9 fd0f8a0aeb81ecda checks/cases/o26acyclereceiver.olang
+5a898dada9b683fe 93b1299dd90ce970 checks/cases/o26aderived.olang
 006d185f64b7bd20 89df8066935d5ce7 checks/cases/o26afieldafter.olang
 fdaa2b081e9aab3f 5bede9e0d32fdd53 checks/cases/o26ainlinearray.olang
 0373d0a22919b9fb 473773bf72a99df4 checks/cases/o26alatermodule.olang
@@ -1289,7 +1296,7 @@ ad7367de57562da1 9a6c43de42c37da3 checks/fixtures/vecalias/f3.olang
 007370a44d8f74de e0d8c45607b95cda checks/fixtures/vechandle/stale.olang
 8edc6cb0ea109099 41da8907a6dddc3c compiler/ast.olang
 64349a76431afaac 03801515d7c3e61c compiler/build.olang
-df26ee559fd13722 054c221717217a74 compiler/check.olang
+2e3a96e791bea824 3960646f25025706 compiler/check.olang
 12af31fc7f832527 c046e16c5f4e3c62 compiler/cond.olang
 34b00b29803b8a3a 0b5b4525034fe79d compiler/diag.olang
 bbede1e83dfc10e1 5edf91711dba9f76 compiler/emit.olang
@@ -1307,7 +1314,7 @@ f4a00eaad6bbd836 033b7f58784464f2 compiler/olang.olang
 4670264aff7b2b79 6b9f507f0c637563 compiler/parse.olang
 ccc000d5f2aa68e5 62b82c76b0b65e77 compiler/runtime.olang
 54d8b0747fd20c3d 65b4634831f63fdb compiler/scan.olang
-0442dd8d6f006966 18ae2cef4001d527 compiler/scope.olang
+36dc8346599663dd f6ceb7ef7f18ffb6 compiler/scope.olang
 2fcf14bf51027aaf e739c0b2ca9489d3 compiler/source.olang
 2f117e004f83056f 95a2b4c76526191b compiler/target.olang
 6a532120b548d9b9 1f959f62979af9eb compiler/testdata/lex/brackets.olang
@@ -1373,7 +1380,7 @@ f8eb9903e0fd1405 2f351680a962dbc6 fuzz/repro/bf16fastisel.olang
 7f0ccc6c8abe7127 a83f600723bcb54e fuzz/repro/scopepayloadcopy.olang
 cc965165e6e229ae f831f156f55a8d9b fuzz/repro/trygenericindex.olang
 bcaca9898b51c76c 4cccee54556e71ed fuzz/repro/trystmtarg.olang
-72b8f83c09245781 5557f73662b15e5e fuzz/scopegen.olang
+1e505b58b8a9377d 6ee658d66c6231f4 fuzz/scopegen.olang
 e35ad78253a0233f fc339a29aeecea0a std/cancel.olang
 65739b3a2d0cd066 4f56eee50530ab83 std/chan.olang
 5c772f20fa8ceeda 7dcf69d6c39c7c5f std/csv.olang

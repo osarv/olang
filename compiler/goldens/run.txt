@@ -1122,6 +1122,15 @@
 | status 0
 === run condvaluesame.olang
 | status 0
+=== run ctorlambdafield.olang
+| status 0
+| 7
+=== run ctorlambdafield2.olang
+| status 0
+| 15
+=== run ctorlambdafieldkinds.olang
+| status 0
+| 5 10 4 4 11 4 4
 === run ctortempdestruct.olang
 | status 0
 === run d13crunlength.olang
@@ -1299,6 +1308,9 @@
 | status 0
 === run o26acyclereceiver.olang
 | status 0
+=== run o26aderived.olang
+| status 0
+| 63 5
 === run o26afieldafter.olang
 | status 0
 | alpha3
