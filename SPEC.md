@@ -75,10 +75,13 @@ This specification covers the full language, including the static scope checker 
 general borrow checker or a standard library — neither exists in the language. A rule marked *(not yet implemented)*
 says what the compiler does instead.
 
-The array rules - lengths known while compiling and fixed storage (§2.3 T7a-T7d, T8, T12, D15a), inferred result
-lengths (D8f), arrays by value and the 128-byte limit (D9a-D9c), asserts decided at a call (S18c, S18e), inline array
-fields (C2e) and instances per length (§12.7 G29-G31) - replace written fixed-length array types and constant
-parameters *(not yet implemented)*.
+The array rules - lengths known while compiling and fixed storage (§2.3 T7a-T7d, T8, T12, D15a), arrays by value and
+the 128-byte limit (D9a-D9c), inline array fields (C2e) and instances per length (§12.7 G29-G31) - are implemented
+but for these, each marked where it is stated: a result's inferred length (D8f; a declared function's array result
+has a length known only at run time); a function's leading asserts decided at every call (S18e; they are decided in
+an instance, S18c and G31, and otherwise at run time); a constructor taking an array by value (G29; a constructor's
+array parameter is taken by reference, D9a); and three sources of a known length (T7c) - a reference local, a mutable
+private global, and a comprehension, all of whose lengths are known only at run time.
 
 ## 1. Lexical Structure
 
@@ -550,12 +553,12 @@ it.
   omitted `hi` the base's length when that is known), or `hi` written `lo + k` (or `k + lo`) with `lo` the same name,
   or the same chain of field reads, written twice and `k` evaluable at compile time - `raw[off:off + 784]` has length
   784;
-- a comprehension (E27) with no `if`, over an array of known length or a `range` whose bounds are evaluable at
+- *(not yet implemented)* a comprehension (E27) with no `if`, over an array of known length or a `range` whose bounds are evaluable at
   compile time;
 - a conditional (E28) or `match` value (S12b) all of whose values have one known length;
 - a conversion (`String(x)`, a declared array type, T29a) of an array of known length;
 - a read of **fixed storage** (T7d): a local, a global, an inline field, an element of an array of inline arrays;
-- a reference local (`Array<T>&`) every value given which has one known length, judged as T7d judges a value local;
+- *(not yet implemented)* a reference local (`Array<T>&`) every value given which has one known length, judged as T7d judges a value local;
 - a call whose result's length is inferred (D8f);
 - in an instance (G29), a by-value array parameter, and a value of a type variable bound to an array of known length.
 
@@ -572,7 +575,7 @@ place - exactly where every value it can hold has one known length:
   destructuring, parallel-assignment and `spawn` target naming it - has one known length. Otherwise it holds its
   length beside its storage at run time, and a later store may give it any length (D15a). Which a local is never
   changes what the program does: no store into a local is refused or checked for its length;
-- a **global**: an immutable one when its initializer's length is known; a mutable private one (M6) when every value
+- a **global**: an immutable one when its initializer's length is known; *(not yet implemented)* a mutable private one (M6) when every value
   stored in it in its module has one known length; a mutable exported one never, since a module importing it may store
   any length;
 - a **field**: when its declaration gives it a known length the same for every instance - an initializer that reads no
@@ -1427,7 +1430,8 @@ including the scope its parameter gives it (§8 O18a: a result built in the inne
 the outer call's parameter says). The inner call may be a `try` (E24), though several defaults stay confined to
 destructuring and `return` (R9a). To pass some results, or others beside them, destructure first.
 
-**D8f (a result's length is inferred).** A declared function's array result - a value `Array<T>`, a reference to one,
+**D8f (a result's length is inferred).** *(not yet implemented: a declared function's array result has a length known
+only at run time.)* A declared function's array result - a value `Array<T>`, a reference to one,
 or one of several results - has a **known length** (T7c) when every `return` in its body gives one of the same known
 length; it is inferred from the body, never written, as a function's error set is read off its body. Calls are
 followed: a `return f(x)` gives what `f`'s result gives, and a set of functions calling each other settles together,
@@ -1507,7 +1511,9 @@ a copy of an aggregate there, and a container's own methods (`List<Big>.Push(x T
 take what they hold that way - such a parameter is passed as any large value is, through memory. An `extern-param` (X3) passes a
 pointer and is not covered, nor is anything that is not a parameter - a result is built where the caller puts it
 (T7b), and a capture (D16c) is the closure's. So a by-value pass is always as cheap as the reader expects - a 4x4
-`F64` transform passes by value, a 784-element vector does not.
+`F64` transform passes by value, a 784-element vector does not. A parameter is reported once, by the first instance
+over the bound, and that instance's body is not checked: a length growing by value (`f` at 16 elements calling `f` at
+17) stops there, long before G17's chain would.
 
 **D9.** A parameter is the callee's own: a by-value parameter is its own copy, which it may assign and write
 without the caller seeing it, and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
@@ -3827,7 +3833,8 @@ place - `raised here`, `try passed it on`, `a task failed, and its join passed i
 In a build that keeps no trace the last two print `(build with -debug to see where it came from)` instead. A program run
 with `interpret` (B3e) prints the trace as a debug build does.
 
-**S18e (asserts decided at the call).** A function's **leading asserts** - the `assert` statements its body begins
+**S18e (asserts decided at the call).** *(not yet implemented: leading asserts are decided in an instance, S18c and G31,
+and otherwise run at run time.)* A function's **leading asserts** - the `assert` statements its body begins
 with, before any other statement - are also evaluated at **every call** to it, with what that call knows of its
 arguments: the length of an array argument whose length is known (T7c), the value of an argument that can be evaluated
 at compile time (K1), and a field of a struct argument that is a local of the caller built by a constructor call,
@@ -6508,7 +6515,8 @@ ever-growing set of further instantiations is a compile-time error, reported onc
 reported is implementation-defined: an instantiation whose type arguments nest more than 48 types deep (an array its
 element, an instance its arguments, a function its parameters and result) is taken to be one, and so is an
 instantiation reached through a chain of more than 1,000 instantiations or instances (G29) each of which required the
-next - which is how a length that keeps changing shows (`f` at 3 calling `f` at 4, G30).
+next - which is how a length that keeps changing would show (`f` at 3 calling `f` at 4, G30), though D9c's bound on a
+by-value array stops such a chain first.
 
 **G16b (where an instantiation was asked for).** A compile-time error found while checking an instantiation - in its
 body, its fields, a constraint (G19) or an assert (S18c) - is reported where it is written, followed by a note
@@ -6524,7 +6532,8 @@ A length is never a parameter of a declaration (§12). A function compiled for a
 by value, and only there: one copy of the function is compiled for each length its calls give it, as a generic is
 compiled for each set of type arguments.
 
-**G29 (instances).** A function, method or constructor one of whose parameters holds an array **by value** at some
+**G29 (instances).** A function, method or constructor *(a constructor: not yet implemented - its array parameter is
+taken by reference, D9a)* one of whose parameters holds an array **by value** at some
 level (D9a) - the parameter itself (`a Array<F32>`), or the elements of an array under a reference (`m
 Array<Array<F64>>&`) - is compiled once for each distinct set of **lengths** its calls give those levels, an
 **instance**; a generic one once for each instantiation and set of lengths. Each call gives the lengths its arguments

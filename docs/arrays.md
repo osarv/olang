@@ -348,121 +348,57 @@ rewritten, not dropped), each with its baked global (K2) and decided assert (S18
 
 ### 5.3 checks/cases
 
-- **Removed with their rules** (G20-G28, E32b, T7c/T7d spellings): g20eqafter, g20eqbefore, g20float, g21kind,
-  g21paren, g21typeargs, g22again*, g22asttype, g22before, g22constrained, g22twotypes, g22typeandconst, g22typed,
-  g23typevar, g24mismatch, g24runtime, g27assert, g4constexpr, g4constgenericbody, e32blength, t7dsize, t8fill (25
-  files). g22global/g22local/g22param/g22preludeword* test D3a/M19f through a constant variable: kept, rewritten over
-  a type variable where that still says something.
-- **Kept with a new reason**: g21divzero, g21effect, g21mutable -> QP1's `n` (a constant that divides by zero is an
-  error; one with an effect or reading a mutable global is a run-time length, so those two become `run` cases);
-  g17constchain -> G17 over G29's instance chain; t7cnegative -> D14b's constant `n`; d9abarevariable,
-  d9alambdawritten -> D9a's new errors.
-- **Migrated in spelling only** (about 30: o17permute*, o39inplace*, rv3*, rv5*, rv9*, vec118/119/159, t16inline*,
-  s12btypes, s13dliteral, e16constnotry, g16boutermost, e31bview*, o26ainlinearray, constraintnotiface, t25bvalue,
-  t25ekind, t7anested): an inline field or local made by `Array<T>(n)`, a slice for a view; their expected texts where
-  they spell `Array<T, N>`.
-- **New**: a run-time-length array by value (D9a); an element held by value under a reference given two lengths
-  (two instances, a `run` case); the cap for a struct, a fixed array, a receiver, a constructor parameter, a lambda and
-  a function type (D9c); a value array field without a length, and one punning a by-value parameter (T7a); a store of
-  another length into an inline field (T7d), and its slice fix as a `run` case; element lengths disagreeing (T7d); a
-  payload array by value (T7a); `Array<T, 3>` (G8's count); a type parameter with a non-trait type (G6); S18e at a
-  call and in an instance; a never-ending instance chain (G17); a local demoted silently (`run`); a function type with
-  a by-value array parameter (D9a).
+As built (phase 2): 20 cases went with their rules - e32blength, g20eqafter, g20eqbefore, g20float, g21kind,
+g21paren, g21typeargs, g22asttype, g22constrained, g22global, g22twotypes, g22typeandconst, g22typed, g23typevar,
+g24mismatch, g24runtime, g27assert, g4constexpr, g4constgenericbody, t8fill; g17constchain became d9cgrowing (a
+by-value chain meets D9c's cap long before G17); 54 were rewritten or respelled - g21divzero, g21effect and
+g21mutable over QP1's `n`, g22local and g22param over a type variable's name (D3a), t7aelem over a field, the views
+(`as Array<T, N>&`) as slices, rv9slicetempas's payload through a struct, and the rest in spelling. Their entries in
+`compiler/goldens/diag.txt` were spliced from the port's output; the file's other entries are still stage 0's text.
 
 ### 5.4 The port (compiler/)
 
-The port's stage-1 compiler implements the current rules, so it moves with stage 0:
+Stage 0 was gone by phase 2, so the port alone was changed, in two stages since it builds itself from a seed that
+accepted only the old spellings:
 
-- `parse.olang`: `type-args` are types only - `ast.TypeRef.Const` and the constant-argument cover grammar (G21's
-  parenthesized operators, DESIGN.md decision 9) go;
-- `names.olang`: G22's constant variables (`local.Const`, `ConstVarShadowed`, the introduction of `<N I64>`) go;
-- `types.olang`: `Kind.Array` keeps its length slot (a `Const` length, or 0 for a run-time one), now filled by
-  inference only; `Kind.ConstExpr` and constant type arguments go; `Canon` keeps spelling an internal length for
-  instance names;
-- `generic.olang`: G21's fold of type arguments becomes QP1's fold of `n`; G24 inference by value goes; G29's instances
-  and D8f's inferred results come in;
-- `msgs.olang`: the G2x messages go, the new ones come (matching stage 0's table, for `diaggold`);
-- `wt-check`'s checker (M5b/M5c) has G21/G24 code in `check.olang` - its agent must be told before phase 2 starts;
-- `wt-drv`'s `build.olang` uses five fixed locals: `Array<U32>(64)` and the like;
-- `compiler/DESIGN.md`: the `bootstrap/CHAIN` example ("the next uses Array<T, N> in compiler/") and decisions 9 and
-  the G21 entries are rewritten;
-- the diff tests: tokdiff is unaffected; astdiff and namesdiff change on both sides together; layoutdiff should be
-  unchanged (inline fields keep their layout) and `goldens/layout.deferred`'s ten "array length a call computes (G21)"
-  entries become QP1's `n`; diaggold is regenerated.
+- **Stage A** added the rules beside the old forms - `generic.FoldLength` (QP1's `n`, soft asks to the evaluator),
+  `StorageOf`/`GlobalStorage`/`LengthsOnly` (fixed fields, globals, rows), the `storedIn` pre-scan for fixed locals,
+  G29's hidden constant variables per by-value array level (`a.Len()`, `m[0].Len()`) bound by the old inference by
+  value, `paramLen` and G30's decided conditions, `sliceLength`, D9a's and D9c's checks - and the seed was written
+  again by it.
+- **Stage B** removed `ast.TypeRef.Const` and the constant-argument grammar (type arguments are types only),
+  names' constant variables, constant type parameters (a declaration's constant flags in the type table too),
+  `generic.constArg`, G26's `match N`, E32b's views (`typed.Slice`'s flag), T29a's fixed-base view, `Array<T, N>()`
+  and twenty messages. `types.olang` keeps the internal length slot (`Const`, `ConstExpr` for a length an instance
+  computes) and `Canon`'s internal spelling of it, for instance names.
+- `compiler/build.olang`'s SHA-256 state moved to `Array<U32>(64)` and the like; compiler/'s own by-value parameters
+  over 128 bytes take references (D9c); the generic.olang tests that used constant parameters were rewritten over
+  inline fields; the token, tree, layout and diagnostics goldens were captured again from the port.
 
-## 6. Implementation plan (phase 2)
+## 6. How phase 2 built it
 
-The arrays batch follows the errors batch (both rewrite semantic.c), and starts when nothing else edits semantic.c or
-the port's checker. Its main idea keeps it smaller than it looks: **the checker keeps its internal fixed-length array
-type** (`BASETYPE_CONST` lengths, everything T7c built: layout, in-place results, constant `Len()`, codegen and the
-evaluator's handling), and phase 2 removes its spelling and adds inference that produces it.
+Phase 1's plan (stage 0 and the port moving together, in `syntax.c`, `semantic.c`, `comptime.c` and `codegen.c`) was
+overtaken when stage 0 was removed; phase 2 built the same design in the port, as section 5.4 says. Its main idea
+held: **the checker keeps its internal fixed-length array type** - the layout, in-place results, constant `Len()`, the
+emitter's and the evaluator's handling were all there for `Array<T, N>` - and phase 2 removed its spelling and added
+the inference that produces it. Decided on the way (recorded in `CLAUDE.md` and `HISTORY.md`): a local's storage by a
+syntactic pre-scan rather than phase 1's re-check and demotion; checked slices keep a run-time length; a conversion of
+fixed storage to a declared array type names its storage as a run-time one would; a run-time array into fixed field
+storage is an error naming a slice, never a checked copy; D9c reported once, the instance over it not checked further;
+a pun of a parameter D9a reported adds no T7a error. The evaluator agrees through the same lowering - each test of the
+new rules in `tests/shared.olang` sits beside a global it bakes and an assert it decides - and one evaluator bug was
+fixed on the way (an array copied out of a reference parameter was aliased while compiling).
 
-1. **Parser (`syntax.c`).** `type-args` take only types: drop the constant-argument parsing, `(...)` inside type
-   argument lists, `<N I64>` introductions and `Array<T, N>()`. `Array<I32, 3>` then fails as a count (G8). Keep the
-   `<<`/`>>` splitting (it is for nested generics).
-2. **Remove constant generics (`semantic.c`).** G20 (constant parameters), G22-G24 (constant variables, inference by
-   value), G26 (decided per instantiation - its machinery is reused by G30), G27 (nothing to remove: asserts), G28,
-   E32b, T29a's view, `Array<T, N>` written, declared types over fixed arrays. `BASETYPE_TYPEVAR`'s `isConstVar` goes;
-   `BASETYPE_CONST` stays as an internal length only. Keep G21's typed fold for QP1's `n`, and the re-check loop.
-3. **QP1 (`Array<T>(n)`)**: a constant `n` gives the internal fixed type; a run-time one `Array<T>`. Literals, text and
-   the other sources of T7c item 1, including slices with known bounds (`lo + k`) and comprehensions.
-4. **Fixed storage (T7d)**: locals by the optimistic check and demotion (item 8) - a pre-scan marks locals with any
-   whole store after their declaration, so only those can need a second check; held-back diagnostics (the B9c stream);
-   globals (item 9); fields from their declaration and T7a's error (item 10); stores into fixed field and element
-   storage (item 11); element lengths (item 12); payloads (item 13).
-5. **Inferred results (D8f)**: a per-function fact settled over the call graph from the bottom ("no return seen"),
-   sharing the errors batch's machinery for inferred error sets; in-place return ABI for a known length (exists for
-   `Array<T, N>`); a named function's value adapter widening a fixed result.
-6. **Instances (G29-G30, D9a)**: by-value array levels of parameters (and of elements under references) bind lengths
-   at each call; instance key, registration and naming beside generic instantiations; root-object emission; QP3-A's
-   error; function types and lambdas (item 18); G30 reusing G26's decided-branch path, triggered by `p.Len()` of a
-   by-value parameter; G17's chain bound; G16b's notes.
-7. **The cap (D9c)**: sizes from `TypeGetSize` at declarations and per instance/instantiation; receivers, constructor
-   parameters, lambdas, function types, tasks; the codegen path for parameters over 128 bytes stays for whatever
-   question 2 leaves.
-8. **S18e (`comptime.c`)**: a partial-knowledge mode - an argument known by length only, a struct by some fields, an
-   unknown part making the evaluation undecided; leading asserts evaluated at every call; the false-assert error at the
-   call. Separable: it can land last without blocking the rest.
-9. **Codegen (`codegen.c`)**: by-value fixed array parameters (an aggregate copied at the call, at most 128 bytes,
-   in registers where it fits); instances emitted by the root object; the adapter of item 18. Most of the rest exists for
-   `Array<T, N>`.
-10. **Diagnostics (`errmsg.h`)**: the G2x, E32b and T7d entries go or are reworded; new entries for D9a, D9c, T7a
-    (field, element, payload), T7d (stores), S18e; `checks.olang`'s table checks hold every message to its rule.
-11. **Migration**: a script, `tools/arrays_migrate.py`, for the mechanical part - a fixed local or field with no
-    initializer `x Array<T, N>` -> `x := Array<T>(N)`, `Array<T, N>()` -> `Array<T>(N)`, `Array<T, N>&` -> `Array<T>&`
-    (with a leading assert where it was a parameter), `x as Array<T, N>&` -> `x[0:N]`; re-runnable for oann. The
-    constant-generic tests by hand (§5.2). The corpus's `CgBig` test (§5).
-12. **The port** (§5.4), after stage 0 lands, by the port's agents or a follow-up agent, with the diff goldens.
-13. **Records**: CLAUDE.md's array, generics and evaluation entries; HISTORY.md (the full story: QP1-QP4, why
-    inference, what C2e and T7c were); the ledger (the coordinator's).
+## 7. Not yet implemented
 
-**Tests the evaluator runs** (the checklist's step 3), beside each run-time test: a global baked from a by-value
-instance and from an inferred result; an assert decided in an instance (true) and S18e's at a call; a global holding an
-inline-field struct; a recursion on `a.Len()` evaluated while compiling (`TotalBaked := total(I64[1, 2, 3])`); a
-demoted local's value; a slice with `lo + k` bounds read back.
+Marked *(not yet implemented)* in `SPEC.md`, for a later round:
 
-**Risks.**
+- **D8f**: a declared function's array result has a length known only at run time, even where every return gives
+  one length.
+- **S18e**: a function's leading asserts are decided per instance (S18c) but not yet at every call whose arguments are
+  partly known (the evaluator's partial-knowledge mode).
+- **G29 for constructors**: a constructor's array parameter is by reference; by value it is D9a's error.
+- **T7c**: a comprehension's length is not yet known where its source's is; a reference local (`Array<T>&`) is not yet
+  judged fixed as a value local is.
+- **T7d**: a mutable private global keeps a run-time length even where every store in its module gives one length.
 
-- **Instance growth.** One instance per length: text literals reaching a type variable, or a by-value `String`
-  parameter, make one per literal length. Bounded by the cap (128 bytes), G17, and lengths meeting at run-time length
-  when one variable gets two (item 17). Measure the corpus's instance count before and after.
-- **Inference across modules.** A result's length and a field's inline length are read from the callee's or type's
-  source; two objects must agree on the ABI they imply. B3's staleness (an object rebuilds when any source it was
-  compiled against is newer) already covers it, and the instance lives in the root object.
-- **Demotion cost.** A second check of functions with disagreeing locals; the pre-scan keeps it to those.
-- **S8a surfacing.** Inferred lengths turning conditions into dead branches in existing code (item 4); the corpus will
-  say how many, and each is a genuinely dead branch.
-- **The E32b exact check is gone.** A slice takes a prefix where `as` insisted on the exact length; code that relied on
-  it asserts the length.
-- **Merge order.** The errors batch (semantic.c), the port's checker agent (G21/G24 in `check.olang`), wt-drv
-  (`build.olang`): stage 0 and the port's sources change in one step, so the diff tests stay green.
-- **linalg performance.** Inline fields keep their layout; the acceptance is identical IR for linalg's kernels and
-  re-measured GEMM.
-
-**Size.** Stage 0: about 1,500-2,000 lines removed (the constant-generic machinery in semantic.c, syntax.c and the
-messages) and 1,500-2,500 added (inference, storage settling, instances, the cap, S18e); the migration about 500 lines
-of olang across std, the corpus, checks and fuzz, with ~25 checks cases removed, ~30 respelled and ~25 added; the port
-500-1,000 lines. Three to four agent rounds at high effort: (a) the parser, removal, QP1, fixed storage and the
-migration; (b) results, instances, D9a and the cap; (c) S18e and the evaluator's partial mode; (d) the port - each
-with its own full verify, and a soundness review of the storage and instance rules before merging (they touch §8's
-inputs: where storage lives and what a parameter is).
