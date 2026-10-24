@@ -108,9 +108,9 @@ ModeWhat Array<String&> = String&[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR"]
-OptModes Array<I64> = I64[6, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256]
+    "-quick", "-html", "-library"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", ""]
+OptModes Array<I64> = I64[6, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2]
 OptWhat Array<String&> = String&[
     "writes the executable or the object to PATH (B3h)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -122,6 +122,7 @@ OptWhat Array<String&> = String&[
     "rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17)"
     "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
     "writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)"
+    "builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -217,6 +218,7 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 7 { cl.Check = true }
             if o == 8 { c.Quick = true }
             if o == 9 { cl.Html = $v }
+            if o == 10 { c.Library = true }
             # B2g: -quick is a level of optimization, as -debug and -race set theirs
             if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
             continue
@@ -436,7 +438,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     build.Phase("load")
     c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
     build.Phase("check")
-    if kind == build.Kind.Program { c.CheckMain() }
+    if kind == build.Kind.Program and not cfg.Library { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: on a program that checked cleanly, the values evaluation decides - a literal's constructor, a
     # zero value, a global baked (one that aborts the program an error)
@@ -491,6 +493,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
                     error build.Failed.UNBUILT
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
+                if e.Library { pir = libraryIr(pir) }
                 u mut build.Unit&prog = build.Unit($id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
                 u.Hash = $r.Hashes[k]
                 prog.Units.Push(u)
@@ -500,6 +503,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         }
         ir String&prog = o.Ir
         if ir.Contains("@__olang_dyncall") { dyncall = true }
+        if e.Library { ir = libraryIr(ir) }
         holds := match o.Kind {
             case emit.ObjectKind.Module => build.UnitKind.Module
             case emit.ObjectKind.Main => build.UnitKind.Main
@@ -518,13 +522,23 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
     prog.Links = l.Links()
     if d.Errors() > 0 { error build.Failed.REPORTED }
+    if e.Library {
+        for x in e.ExportNames() { prog.Exports.Push($x) }
+        prog.Header = e.Header(build.LibName(root), root)
+    }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
+    if e.Library { prog.Runtime = libraryIr(prog.Runtime) }
     if dyncall {
         prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad {
             error build.Failed.REPORTED
         }
+        if e.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
     }
 }
+
+# X14: an object's IR for a shared library, which dlopen loads as often as a link does - its thread-locals reached as
+# any library's are, never at the fixed offsets an executable's take
+fn libraryIr(ir String&) String { return ir.Replace("thread_local(initialexec)", "thread_local") }
 
 # the emission of a checked and placed program, for this build's modes and target
 fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnostics&, cfg mut build.Config&
@@ -541,6 +555,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Debug = cfg.Debug
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
+    e.Library = cfg.Library and kind == build.Kind.Program
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
     if cfg.Quick or cfg.Debug { e.PartLimit = emit.PartSizeDev }
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
@@ -565,7 +580,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $tests "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 

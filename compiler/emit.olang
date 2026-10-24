@@ -42,6 +42,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     T
     Tests Bool = false              # a test build: the harness runs the root's tests
     Debug Bool = false              # a -debug build: the error return trace kept (S18d), as in a test build
+    Library Bool = false            # a shared library (X14): its globals set as it loads, no main
     # each function's MIR verified before it is written (mir.Fn.Verify), one not well formed stubbed and reported:
     # in test builds, where the compiler is tested; any other build trusts lowering, the verifier's walk having been a
     # sixth of the front end's work on the compiler's own build at -O3, and a seventh of it at -debug
@@ -528,6 +529,8 @@ fn (e mut Emitter&) emitAll() {
         # one module compiled alone: no entry, the program's main is built from its root's object
     } else if e.Tests {
         e.harness(tests)
+    } else if e.Library {
+        e.libInit(inits)
     } else if mainBody >= 0 {
         e.entry(inits, mainBody)
     }
@@ -5037,6 +5040,211 @@ fn (e mut Emitter&) exportEntry(i I64) {
     b.Push(fe.code.ToString())
     b.Push("}\n\n")
     e.item(name, p.L.Root, b.ToString())
+}
+
+# X14: a library's start - run as it is loaded, before its loader goes on: the loading thread made known, each
+# module's globals initialized (B5a) as main would
+fn (e mut Emitter&) libInit(inits List<I64>) {
+    e.runtime("__olang_thread_init")
+    b := StringBuilder()
+    b.Push("define internal void @__olang_lib_init() #0 {\nentry:\n  call void @__olang_thread_init()\n")
+    e.sanInit(b)
+    for i in e.globalOrder(inits) {
+        if not e.Baked.Has(i) { b.Push("  call void @" $e.sym(mir.FnKey.Body(typed.BodyId(I32(i)))) "()\n") }
+    }
+    b.Push("  ret void\n}\n\n")
+    b.Push("@llvm.global_ctors = appending global [1 x { i32, ptr, ptr }] [{ i32, ptr, ptr } { i32 65535, ptr @__olang_lib_init, ptr null }]\n\n")
+    e.item("__olang_lib_init", e.P.L.Root, b.ToString())
+}
+
+# X14: the C names a library shows - its export fns' entries
+fn (e mut Emitter&) ExportNames() List<String&> {
+    out List<String&>
+    for i in e.exportBodies() {
+        match e.Lw.Bodies[i].Of {
+            case typed.BodyOf.Fn(inst) { out.Push($e.text(e.P.FnDecl(e.P.InstanceFn(inst)).Name)) }
+            case _ { }
+        }
+    }
+    return out
+}
+
+# ---- a library's C header (X14) ----
+
+# what a header has seen so far: its extern types and its structs (each defined once, what it holds before it), in
+# order
+type cDecls struct() {
+    Foreign List<String&>
+    Structs List<String&>
+    seen Map<String&, Bool>
+}
+
+# the C header of a library named lib built from file: its extern types declared, the plain structs its entries take
+# defined, its error codes named, and each export fn's entry declared as X12 says it is called
+fn (e mut Emitter&) Header(lib String&, file String&) String {
+    t := e.T
+    up := lib.ToUpper()
+    ds := cDecls()
+    fns StringBuilder
+    for i in e.exportBodies() {
+        f := -1
+        match e.Lw.Bodies[i].Of {
+            case typed.BodyOf.Fn(inst) { f = e.P.InstanceFn(inst) }
+            case _ { continue }
+        }
+        fns.Push(e.cEntryDecl(f, e.Lw.Bodies[i].Ty, ds))
+    }
+    b := StringBuilder()
+    b.Push($"/* " $lib ".h - the C interface of lib" $lib ".so, written by \"olang build -library " $file "\". */\n")
+    b.Push($"#ifndef " $up "_H\n#define " $up "_H\n\n#include <stdbool.h>\n#include <stdint.h>\n\n")
+    b.Push("#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n")
+    if ds.Foreign.Len() > 0 {
+        for x in ds.Foreign { b.Push($"typedef struct " $x " " $x ";\n") }
+        b.Push("\n")
+    }
+    for x in ds.Structs { b.Push(x) }
+    errs := e.ExportErrors()
+    if errs.Len() > 0 {
+        b.Push("/* what an entry declaring errors returns: 0, or one of these */\n")
+        for k, et in errs {
+            if et == types.DefaultErrT {
+                b.Push($"#define " $up "_ERROR ((int32_t)" $((k + 1) << 16) ")\n")
+                continue
+            }
+            ws := e.P.ErrorWords(t.DeclOf(et))
+            for j in range ws.Len() {
+                b.Push($"#define " $up "_" $e.text(t.DeclName(t.DeclOf(et))).ToUpper() "_" $e.text(ws[j]).ToUpper() " ((int32_t)" $(((k + 1) << 16) | j) ")\n")
+            }
+        }
+        b.Push("\n")
+    }
+    b.Push(fns.ToString())
+    b.Push("\n#ifdef __cplusplus\n}\n#endif\n\n#endif\n")
+    return b.ToString()
+}
+
+# an export fn's entry declared in C (X12): "RESULT NAME(PARAMS);", with the olang signature above it
+fn (e mut Emitter&) cEntryDecl(f I64, ty types.TypeId, ds mut cDecls&) String {
+    t := e.T
+    fd := e.P.FnDecl(f)
+    name := $e.text(fd.Name)
+    ps := List<String&>()
+    pts := t.Items(t.Params(ty))
+    for j in range pts.Len() {
+        pn := $e.text(fd.S.Params[j].Name) if j < fd.S.Params.Len() else $"a" $j
+        pt := pts[j]
+        rp := t.Repr(pt)
+        if t.IsRef(rp) {
+            x := t.Repr(t.Referent(rp))
+            ro := (t.PermOf(rp) & types.Writable) == 0
+            if t.KindOf(x) == types.Kind.Array {
+                ps.Push($("const " if ro else "") $e.cType(t.Elem(x), ds) " *" $pn)
+                if t.Length(x) == types.TypeId(0) { ps.Push($"int64_t " $pn "_len") }
+                continue
+            }
+            if t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Foreign {
+                ps.Push($e.cType(pt, ds) " " $pn)
+                continue
+            }
+            ps.Push($("const " if ro else "") $e.cType(x, ds) " *" $pn)
+            continue
+        }
+        ps.Push($e.cType(pt, ds) " " $pn)
+    }
+    res := t.Result(ty)
+    hasRes := res != types.VoidT and res != types.NoreturnT
+    errs := t.Items(t.Errors(ty)).Len() > 0
+    ret := "void"
+    if hasRes and e.exportArrayResult(res) {
+        el := t.Elem(e.arrayOfE(res))
+        ps.Push($e.cType(el, ds) " *buf")
+        ps.Push("int64_t cap")
+        if errs { ps.Push("int64_t *len") }
+        ret = "int32_t" if errs else "int64_t"
+    } else if errs {
+        if hasRes { ps.Push($e.cType(res, ds) " *result") }
+        ret = "int32_t"
+    } else if hasRes {
+        ret = e.cType(res, ds)
+    }
+    b := StringBuilder()
+    b.Push($"/* " $e.signatureText(f) " */\n")
+    b.Push($ret " " $name "(")
+    if ps.Len() == 0 { b.Push("void") }
+    for k, x in ps {
+        if k > 0 { b.Push(", ") }
+        b.Push(x)
+    }
+    b.Push(");\n")
+    return b.ToString()
+}
+
+# a function's signature as its declaration writes it, for a header's comment
+fn (e mut Emitter&) signatureText(f I64) String {
+    m := e.P.FnModule(f)
+    src := e.P.L.Mods[m].Src
+    fd := e.P.FnDecl(f)
+    if src is null { return $"fn " $e.text(fd.Name) }
+    text := src.Text[I64(fd.Sp.Start):I64(fd.Sp.End)]
+    at := try text.FindByte('{') catch default text.Len()
+    return $text[:at].Trim().Replace("*/", "* /")
+}
+
+# the C type of a value of type ty in a header (X2): a number's stdint type, bool, a 16-bit float's _Float16 or __bf16,
+# a char for a Char, an extern type's reference a pointer to its opaque struct, a plain struct by its name - defined
+fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
+    t := e.T
+    if t.KindOf(ty) == types.Kind.Named and t.DeclKindOf(t.DeclOf(ty)) == types.DeclKind.Over {
+        if e.text(t.DeclName(t.DeclOf(ty))) == "Char" { return "char" }
+        return e.cType(t.Base(ty), ds)
+    }
+    r := t.Repr(ty)
+    if r == types.BoolT { return "bool" }
+    if t.IsNumber(r) {
+        return match t.KindOf(r) {
+            case types.Kind.I8 => "int8_t"
+            case types.Kind.I16 => "int16_t"
+            case types.Kind.I32 => "int32_t"
+            case types.Kind.I64 => "int64_t"
+            case types.Kind.U8 => "uint8_t"
+            case types.Kind.U16 => "uint16_t"
+            case types.Kind.U32 => "uint32_t"
+            case types.Kind.U64 => "uint64_t"
+            case types.Kind.F16 => "_Float16"
+            case types.Kind.BF16 => "__bf16"
+            case types.Kind.F32 => "float"
+            case _ => "double"
+        }
+    }
+    if t.IsRef(r) {
+        x := t.Referent(r)
+        n := $e.text(t.DeclName(t.DeclOf(x)))
+        if not ds.seen.Has($"f " $n) {
+            ds.seen.Put($"f " $n, true)
+            ds.Foreign.Push($n)
+        }
+        return $n " *"
+    }
+    if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
+        n := $e.text(t.DeclName(t.DeclOf(r)))
+        if ds.seen.Has($"s " $n) { return n }
+        ds.seen.Put($"s " $n, true)
+        e.P.Layout(r)
+        fs := t.Items(t.Fields(r))
+        names := e.fieldNames(r, fs.Len())
+        b := StringBuilder()
+        for k in range fs.Len() {
+            ft := t.Repr(fs[k])
+            if t.KindOf(ft) == types.Kind.Array {
+                b.Push($"    " $e.cType(t.Elem(ft), ds) " " $names[k] "[" $t.ConstValue(t.Length(ft)) "];\n")
+            } else {
+                b.Push($"    " $e.cType(fs[k], ds) " " $names[k] ";\n")
+            }
+        }
+        ds.Structs.Push($"typedef struct " $n " {\n" $b.ToString() "} " $n ";\n\n")
+        return n
+    }
+    return "void"
 }
 
 # whether an export fn's result is an array copied out into C's buffer (X12)

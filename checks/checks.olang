@@ -45,7 +45,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "land
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside"]
+                     "nestparse", "words", "diag", "sidebyside", "cinterop"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -404,6 +404,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "linalg" { try linalg(r) }
         case "bench" { try benchmarks(r) }
         case "chunkpool" { try chunkpool(r) }
+        case "cinterop" { try cinterop(r) }
         case "target" { try target(r) }
         case "lazytype" { try lazytype(r) }
         case "updir" { try updir(r) }
@@ -1445,6 +1446,54 @@ fn chunkpool(r mut report&) ? Failed {
     try r.expect(sh(dir, "clang -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
     try r.expect(sh(dir, "\"$OLANG\" build budget.olang > out.txt 2>&1") == 0, "budget.olang did not build", dir)
     try r.expect(sh(dir, "LD_PRELOAD=./sysconf.so ./build/budget > out.txt 2>&1") == 0, "budget", dir)
+}
+
+# X2, X9-X14: olang and C, both ways - a program calling C compiled by clang (structs by value and by pointer as the
+# platform's C passes them, every number width, an opaque handle, callbacks on a thread C made), the same under -debug
+# -sanitize, and a library built with -library called from a C program through its generated header and from Python's
+# ctypes where python3 is there
+test "olang calls C and C calls olang, as clang's code does" { assert passed("cinterop") }
+
+# the Python side, written where the scenario runs (no Python is kept in the repository): the library's entries
+# declared by hand for ctypes, as a caller with only the .so would
+CtypesScript := ("import ctypes, sys\n" $
+    "lib = ctypes.CDLL(sys.argv[1])\n" $
+    "lib.add.argtypes = [ctypes.c_int32, ctypes.c_int32]; lib.add.restype = ctypes.c_int32\n" $
+    "print('add', lib.add(2, 3))\n" $
+    "xs = (ctypes.c_int64 * 4)(1, 2, 3, 4)\n" $
+    "lib.sum.argtypes = [ctypes.POINTER(ctypes.c_int64), ctypes.c_int64]; lib.sum.restype = ctypes.c_int64\n" $
+    "print('sum', lib.sum(xs, 4))\n" $
+    "buf = ctypes.create_string_buffer(64)\n" $
+    "lib.greet.argtypes = [ctypes.c_char_p, ctypes.c_int64, ctypes.c_char_p, ctypes.c_int64]; lib.greet.restype = ctypes.c_int64\n" $
+    "n = lib.greet(b'python', 6, buf, 64)\n" $
+    "print('greet', buf.raw[:n].decode())\n" $
+    "r = ctypes.c_int64()\n" $
+    "lib.check.argtypes = [ctypes.c_int64, ctypes.POINTER(ctypes.c_int64)]; lib.check.restype = ctypes.c_int32\n" $
+    "print('check', lib.check(21, ctypes.byref(r)), r.value, lib.check(500, ctypes.byref(r)))\n" $
+    "class Point(ctypes.Structure): _fields_ = [('x', ctypes.c_double), ('y', ctypes.c_double)]\n" $
+    "lib.mid.argtypes = [Point, Point]; lib.mid.restype = Point\n" $
+    "m = lib.mid(Point(1, 2), Point(3, 4))\n" $
+    "print('mid', m.x, m.y)\n")
+
+fn cinterop(r mut report&) ? Failed {
+    dir := fresh("cinterop")
+    os.Run("cp checks/fixtures/cinterop/* " $os.Quote(dir))
+    try r.expect(sh(dir, "clang -c -O2 abi.c -o abi.o > out.txt 2>&1") == 0, "abi.c did not compile", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build abi.olang > out.txt 2>&1 && ./build/abi > abi.txt") == 0, "abi.olang", dir)
+    try r.expect(sh(dir, "cmp -s abi.txt abi.out") == 0, "abi printed otherwise than abi.out says", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize -output abi.ds abi.olang > out.txt 2>&1 && ./abi.ds > abi.ds.txt") == 0, "abi -debug -sanitize", dir)
+    try r.expect(sh(dir, "cmp -s abi.ds.txt abi.out") == 0, "abi under -debug -sanitize printed otherwise", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -library mylib.olang > out.txt 2>&1") == 0, "mylib.olang did not build as a library", dir)
+    try r.expect(sh(dir, "test -f build/libmylib.so && test -f build/mylib.h") == 0, "no libmylib.so and mylib.h", dir)
+    # only the export fns' entries are shown
+    try r.expect(sh(dir, "nm -D --defined-only build/libmylib.so | grep -v ' [TWV] \\(add\\|sum\\|seen\\|greet\\|parse\\|check\\|norm2\\|scale\\|mid\\|pidKnown\\|squares\\)$' | grep -q ' [TDBRW] '") != 0, "the library shows more than its entries", dir)
+    try r.expect(sh(dir, "clang -O1 -Wall -Werror use.c -o use -Lbuild -lmylib -lpthread > out.txt 2>&1") == 0, "use.c did not compile against mylib.h", dir)
+    try r.expect(sh(dir, "LD_LIBRARY_PATH=build ./use > use.txt && cmp -s use.txt use.out") == 0, "use printed otherwise than use.out says", dir)
+    if sh(dir, "command -v python3 > /dev/null 2>&1") != 0 { return }
+    try os.WriteFile($dir "/use_ctypes.py", CtypesScript) catch os.Error { try r.failed("use_ctypes.py", dir) }
+    try r.expect(sh(dir, "python3 -I use_ctypes.py build/libmylib.so > py.txt 2>&1") == 0, "ctypes", dir)
+    py := try os.ReadFile($dir "/py.txt") catch default ""
+    try r.expect(py == "add 5\nsum 10\ngreet hello, python!\ncheck 0 42 131073\nmid 2.0 3.0\n", "ctypes printed " $py, dir)
 }
 
 # B12: a build is for this machine unless -a names another target - its vectors and FMA where it has them, none of

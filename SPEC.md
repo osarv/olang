@@ -5934,7 +5934,7 @@ other entry point; or it names a file, which is built and run (B3g):
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
-            | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR
+            | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -5953,6 +5953,7 @@ beginning with `-` that is no option is an error:
 | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
+| `-library` | build | §11 X14 |
 
 `build` and `compile` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
@@ -6725,6 +6726,25 @@ struct (X11) - `each(n, add, ctx)` with `ctx mut Ctx&` - which lives, as every a
 duration. A C function keeping the callback, or the context, beyond that call and calling it later is relying on the
 context still being there: a context in the program's scope (a global's, or one built there) is, and anything else is
 the program's word, unchecked, as an extern's prototype is (X1a).
+
+**X14 (libraries).** `olang build -library FILE` builds the program FILE is the root of as a **shared library** for C
+(and anything calling C: Python's `ctypes`, say) rather than an executable: `libNAME.so`, `NAME` the file's base name
+(each character that is no letter, digit or `_` made `_`), in the build directory - or at `-output`'s path - with its C
+header `NAME.h` beside it. FILE needs no `main` (one it has is an ordinary function). The library shows the C entries
+of the program's export fns (X12) and no other symbol, and its globals are initialized as it is loaded - in the order
+B5a gives, on the thread loading it - before any entry can be called. Its code is position-independent and reaches its
+thread-local storage as a library does, so it loads wherever it is put, by the program's link or by `dlopen`.
+
+The header declares, for C: the extern types (X10) the entries name, as opaque structs (`typedef struct Db Db;`);
+the plain-data structs (X11) they name, defined with the same fields in the same order (an inline array as `T name[N]`);
+the error codes the entries return (X12) as constants, `NAME_TYPE_WORD` for each word of each error type their error
+lists name and `NAME_ERROR` for the default error (R1a), all in capitals - an error type's code is its position from 1
+among the error types the library's entries name, in the order their declarations first name them, shifted left 16,
+with the word's position from 0 in its declaration added, so a library gives one code for an error whichever entry
+returns it; and each entry, with the olang signature it is in a comment above it. Each type crosses as X2 says: a
+number as its `<stdint.h>` type (`int8_t` ... `uint64_t`), `float`, `double`, `_Float16`, `__bf16`, a `Bool` as `bool`,
+a `Char` as `char`, an extern type's reference and a plain struct's as pointers (`const` where olang's is read-only), an
+array as a pointer and its `int64_t` length (`const char *t, int64_t t_len` for a `String&`).
 
 **X15 (text and C).** C's string - a `char *` naming bytes ended by a NUL - has two forms here. Text goes to C as
 `t.ToC()`, a method every `String` has (§4 M19d, the prelude): a new `Array<U8>` holding the text's bytes and a NUL

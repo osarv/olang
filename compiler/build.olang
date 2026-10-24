@@ -17,6 +17,7 @@ import "cond"
 import "target"
 import "std/io"
 import "std/time"
+import "std/filepath"
 
 extern fn getpid() I32
 extern fn sysconf(name I32) I64
@@ -63,6 +64,8 @@ type Program struct() {
     Runtime String& = ""
     Dyncall String& = ""
     Links List<String&>      # what its modules' "link" declarations name (X9): "-lNAME", or a file's path
+    Exports List<String&>    # a library's (X14): the C entries its export fns have, the only symbols it shows
+    Header String& = ""      # and its C header's text
 }
 
 # why a front end gave no program: what it found is reported in the diagnostics, or it cannot do what is asked yet
@@ -94,6 +97,7 @@ type Config struct() {
     Quick Bool = false  # -quick: -O2 without link-time optimization (B2g)
     Race Bool = false
     San Bool = false
+    Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
     Update Bool = false
     Tests Bool = false
     Jobs I64 = 0
@@ -145,7 +149,7 @@ fn (c Config&) paint(code String&, text String&) String {
 # ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
 # anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "") $(".lib" if c.Library else "")
 }
 
 # the flags of the build's mode, shared by every compile and the link so the two never disagree (B2c, B2d, P7, B12): the
@@ -155,6 +159,7 @@ fn (c Config&) ModeFlags() List<String&> {
     out List<String&>
     if c.Target.Foreign { out.Push($"--target=" $c.Target.Triple) }
     if c.Target.CpuFlag != "" { out.Push($c.Target.CpuFlag) }
+    if c.Library { out.Push("-fPIC") }      # X14: code a shared library holds, wherever it is loaded
     if c.Debug {
         out.Push("-O0")
         out.Push("-g")
@@ -568,7 +573,7 @@ fn (c Config&) keep(obj String&) {
 # links objs into bin, unless bin is what linking them would give already: its stamp (bin.link) holds the hash of every
 # argument of the link and clang's version, with bin's size and time when it was linked. Fails, reporting nothing,
 # where clang cannot link them - what to say is the caller's (B3, B3a)
-fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool, links List<String&>&) ? Failed {
+fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool, links List<String&>&, exports List<String&>?& = null) ? Failed {
     args List<String&>
     args.Push($c.Clang)
     for f in c.ModeFlags() { args.Push($f) }
@@ -577,6 +582,18 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool, links Li
     if c.Thin {
         args.Push($"-Wl,-plugin-opt,cache-dir=" $c.Dir "/thinlto")
         args.Push($"-Wl,-plugin-opt,-import-instr-limit=" $ImportLimit)
+    }
+    if exports is not null {
+        # X14: a shared library showing its export fns' entries and nothing else
+        args.Push("-shared")
+        vs := $bin ".map"
+        b := StringBuilder()
+        b.Push("{\n  global:\n")
+        for x in exports { b.Push($"    " $x ";\n") }
+        b.Push("  local: *;\n};\n")
+        try os.WriteFile(vs, b.ToString()) catch os.Error { error Failed.REPORTED }
+        args.Push($"-Wl,--version-script=" $vs)
+        args.Push($"-Wl,-soname," $filepath.Base(bin))
     }
     args.Push("-o")
     args.Push($bin)
@@ -681,6 +698,7 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
     try c.ensureDir(d) catch Failed { return finish(d) }
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
     Phase("compile")
+    if c.Library { return c.library(prog, objs, file, d) }
     bin := $c.Output if c.Output != "" else $c.Dir "/" $Readable(prog.rootIdentity()) $c.modeSuffix()
     try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
         d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(bin))
@@ -690,6 +708,35 @@ fn BuildProgram<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.D
     c.Built = $bin
     if not c.Quiet { sayln(c.paint("32", $"built " $(bin if c.Output != "" else Shown(bin)))) }
     return 0
+}
+
+# build -library FILE (X14): the objects linked as libNAME.so - NAME the file's base name - showing only the export
+# fns' C entries, and NAME.h beside it, its C header
+fn (c mut Config&) library(prog Program&, objs List<String&>&, file String&, d mut diag.Diagnostics&) I32 {
+    name := LibName(file)
+    lib := $c.Output if c.Output != "" else $c.Dir "/lib" $name $c.modeSuffix().Replace(".lib", "") ".so"
+    hdr := filepath.Join(filepath.Dir(lib), $name ".h")
+    try c.Link(objs, lib, prog.Dyncall != "", prog.Links, prog.Exports) catch Failed {
+        d.Fatal(diag.Where.Nowhere, msgs.LinkFailed(lib))
+        return finish(d)
+    }
+    Phase("link")
+    try os.WriteFile(hdr, prog.Header) catch os.Error {
+        fileFatal(hdr, msgs.OutputCannotWrite(), d)
+        return finish(d)
+    }
+    c.Built = $lib
+    if not c.Quiet { sayln(c.paint("32", $"built " $Shown(lib) " and " $Shown(hdr))) }
+    return 0
+}
+
+# X14: a library's name - its root file's base name, each character that is no letter, digit or "_" made one
+fn LibName(file String&) String {
+    base := filepath.Base(file)
+    if base.EndsWith(".olang") { base = base[:base.Len() - 6] }
+    b := StringBuilder()
+    for ch in base { b.PushChar(ch if ch.IsLetter() or ch.IsDigit() or ch == '_' else '_') }
+    return b.ToString()
 }
 
 # FILE.olang ARGS: the program built, saying nothing when it is, then run in this process's place with FILE (as
