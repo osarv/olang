@@ -4,7 +4,7 @@
 # frame storage, gone when it returns, which over 64KB was its own scope (a use after scope closed, and a wrong value)
 import "std/io"
 type Big struct(n I64) {
-    a Array<I64, 20000>
+    a := Array<I64>(20000)
     a[0] = n
     a[1] = n + 1
 }

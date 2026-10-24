@@ -7,7 +7,7 @@ type Node struct() {
 }
 type Box struct() {
     head mut Node& = Node()
-    data Array<I64, 4>
+    data := Array<I64>(4)
 }
 type W struct(b Box) { b }
 fn tie(b mut Box&) {

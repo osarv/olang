@@ -1,0 +1,248 @@
+# Migrates olang sources off written array lengths (QP1-QP4, 2026-10-24): `Array<T, N>` and constant type parameters
+# are gone - a length is never written in a type, and storage is fixed wherever the length is known where it is made.
+#
+#     $OLANG build tools/arrays_migrate.olang && build/tools_arrays_migrate [--dry] PATH...
+#
+# Each PATH is an .olang file or a directory searched for them. In code (never inside a string, a character literal or
+# a comment):
+#   - `Array<T, N>()` becomes `Array<T>(N)`;
+#   - a declaration with no value, `x Array<T, N>` (a local, a field, a global), becomes `x := Array<T>(N)`, and a
+#     mutable global's `X mut Array<T, N>` becomes `X mut Array<T> = Array<T>(N)`;
+#   - every other `Array<T, N>` - a parameter's, a result's, a declaration's with a value, a literal's element type -
+#     becomes `Array<T>`, the length then inferred where the array is made.
+# Listed at the end for a person, since what to write depends on the code: an `Array<T, N>` that is a type argument
+# (`List<Array<I64, 3>>` - an array held by value inside another value is written `Array<T>&` unless its storage is
+# made where it is declared, T7a), `x as Array<T, N>&` (a slice `x[0:N]` views it), and constant type parameters
+# (`<N I64>`), which are gone (G20-G28): a length becomes an ordinary parameter or the array's own `Len()`.
+# Running it again changes nothing.
+#
+# Called with no PATH it prints the usage line and exits 2.
+
+import "std/os"
+import "srcmask"
+
+# whether text has s at position i
+fn hasAt(text String&, i I64, s String&) Bool {
+    return i + s.Len() <= text.Len() and text[i:i + s.Len()] == s
+}
+
+# the line, counting from 1, that position at is on
+fn lineOf(text String&, at I64) I64 {
+    n I64 = 1
+    for i in range at {
+        if text[i] == '\n' { n++ }
+    }
+    return n
+}
+
+# the index just past the '>' closing the '<' at start, counting only code's brackets of every kind - or -1
+fn angleClose(text String&, mask String&, start I64) I64 {
+    depth I64 = 0
+    for i in range start, text.Len() {
+        if mask[i] != 'c' { continue }
+        c := text[i]
+        if c == '<' or c == '(' or c == '[' or c == '{' {
+            depth++
+        } else if c == '>' or c == ')' or c == ']' or c == '}' {
+            depth--
+            if depth == 0 { return i + 1 }
+        }
+    }
+    return -1
+}
+
+# the parts of a type-argument list's inside, split at its own commas
+fn splitArgs(t String&, mask String&) List<String&> {
+    out := List<String&>()
+    depth I64 = 0
+    start I64 = 0
+    for i in range t.Len() {
+        if mask[i] != 'c' { continue }
+        c := t[i]
+        if c == '<' or c == '(' or c == '[' or c == '{' {
+            depth++
+        } else if c == '>' or c == ')' or c == ']' or c == '}' {
+            depth--
+        } else if c == ',' and depth == 0 {
+            out.Push($srcmask.Strip(t[start:i]))
+            start = i + 1
+        }
+    }
+    out.Push($srcmask.Strip(t[start:]))
+    return out
+}
+
+# a declaration written before at, on its line, with no value after the type: the start of its name and whether it
+# is "mut" - (-1, false) for none
+fn bareDecl(text String&, at I64, end I64) (I64, Bool) {
+    j := end
+    for j < text.Len() and (text[j] == ' ' or text[j] == '\t') { j++ }
+    if j < text.Len() and not (text[j] == '\n' or text[j] == '#' or text[j] == '}') { return -1, false }
+    i := at
+    for i > 0 and text[i - 1] == ' ' { i-- }
+    isMut := false
+    if i >= 4 and text[i - 3:i] == "mut" and not srcmask.IsWord(text[i - 4]) {
+        isMut = true
+        i -= 3
+        for i > 0 and text[i - 1] == ' ' { i-- }
+    }
+    e := i
+    for i > 0 and srcmask.IsWord(text[i - 1]) { i-- }
+    if i == e or not srcmask.IsIdStart(text[i]) { return -1, false }
+    k := i
+    for k > 0 and (text[k - 1] == ' ' or text[k - 1] == '\t') { k-- }
+    if k > 0 and not (text[k - 1] == '\n' or text[k - 1] == '{') { return -1, false }
+    return i, isMut
+}
+
+# text with its written array lengths migrated; what a person must look at goes in notes, as "path:line: what"
+fn migrate(text String&, path String&, notes mut List<String&>&) String {
+    mask := srcmask.Mask(text, false)
+    out := StringBuilder()
+    i I64 = 0
+    done I64 = 0    # text before this is in out
+    for i < text.Len() {
+        if mask[i] != 'c' {
+            i++
+            continue
+        }
+        # a constant type parameter, "<N I64>" or ", N I64>": noted, never changed
+        if (text[i] == '<' or text[i] == ',') and i + 1 < text.Len() {
+            j := i + 1
+            for j < text.Len() and text[j] == ' ' { j++ }
+            k := j
+            for k < text.Len() and srcmask.IsWord(text[k]) { k++ }
+            if k > j and k < text.Len() and text[k] == ' ' {
+                w := k + 1
+                for w < text.Len() and srcmask.IsWord(text[w]) { w++ }
+                word := text[k + 1:w]
+                if w < text.Len() and (text[w] == '>' or (text[w] == ',' and text[i] == '<')) and (word == "I64" or word == "I32" or word == "U8"
+                        or word == "U64" or word == "Bool" or word == "Char" or word == "I16" or word == "U16"
+                        or word == "U32" or word == "I8") {
+                    notes.Push($path ":" $lineOf(text, i) ": a constant type parameter '" $text[j:w] "' (G20-G28 are gone)")
+                }
+            }
+        }
+        if not hasAt(text, i, "Array<") or (i > 0 and (srcmask.IsWord(text[i - 1]) or text[i - 1] == '.')) {
+            i++
+            continue
+        }
+        e := angleClose(text, mask, i + 5)
+        if e < 0 {
+            i++
+            continue
+        }
+        parts := splitArgs(text[i + 6:e - 1], mask[i + 6:e - 1])
+        if parts.Len() != 2 {
+            i += 6
+            continue
+        }
+        elem := parts[0]
+        n := parts[1]
+        line := lineOf(text, i)
+        # "x as Array<T, N>&": a view, which is a slice now
+        b := i
+        for b > 0 and text[b - 1] == ' ' { b-- }
+        if b >= 2 and text[b - 2:b] == "as" {
+            notes.Push($path ":" $line ": 'as Array<" $elem ", " $n ">&' - a view is a slice now, 'x[0:" $n "]'")
+            i = e
+            continue
+        }
+        # inside another type's argument list: whether it is held by reference is the person's call (T7a)
+        if b > 0 and (text[b - 1] == '<' or text[b - 1] == ',') {
+            notes.Push($path ":" $line ": 'Array<" $elem ", " $n ">' as a type argument - 'Array<" $elem ">&' unless its storage is made where it is declared (T7a)")
+        }
+        if hasAt(text, e, "()") {
+            out.Push(text[done:i])
+            out.Push($"Array<" $elem ">(" $n ")")
+            i = e + 2
+            done = i
+            continue
+        }
+        at, isMut := bareDecl(text, i, e)
+        if at >= 0 {
+            name := text[at:b - (3 if isMut else 0)]
+            out.Push(text[done:at])
+            if isMut {
+                out.Push($srcmask.StripEnd(name) " mut Array<" $elem "> = Array<" $elem ">(" $n ")")
+            } else {
+                out.Push($srcmask.StripEnd(name) " := Array<" $elem ">(" $n ")")
+            }
+            i = e
+            done = i
+            continue
+        }
+        out.Push(text[done:i])
+        out.Push($"Array<" $elem ">")
+        i = e
+        done = i
+    }
+    out.Push(text[done:])
+    return out.ToString()
+}
+
+fn migrateFile(path String&, dry Bool, notes mut List<String&>&) Bool {
+    text := try srcmask.ReadText(path) catch {
+        srcmask.SayErr("arrays_migrate: cannot read " $path)
+        return false
+    }
+    after := migrate(text, path, notes)
+    if after == text { return false }
+    if not dry {
+        try os.WriteFile(path, after) catch {
+            srcmask.SayErr("arrays_migrate: cannot write " $path)
+            return false
+        }
+    }
+    srcmask.Say($("would migrate " if dry else "migrated ") $path)
+    return true
+}
+
+fn main() ? {
+    args := os.Args()
+    dry := false
+    files := List<String&>()
+    for k in range 1, args.Len() {
+        p := args[k]
+        if p == "--dry" {
+            dry = true
+            continue
+        }
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    if files.Len() == 0 {
+        srcmask.Say("Migrates olang sources off written array lengths (QP1-QP4, 2026-10-24).\n\n    build/tools_arrays_migrate [--dry] PATH...\n\nsee the header of tools/arrays_migrate.olang")
+        os.Exit(2)
+    }
+    notes := List<String&>()
+    changed := 0
+    for f in files {
+        if migrateFile(f, dry, notes) { changed++ }
+    }
+    srcmask.Say($changed " files " $("would change" if dry else "changed"))
+    if notes.Len() > 0 {
+        srcmask.Say("for a person:")
+        for n in notes { srcmask.Say("  " $n) }
+    }
+}
+
+test "a declaration with no value is made by Array<T>(n), any other spelling loses its length" {
+    notes := List<String&>()
+    assert migrate("    w Array<U32, 64>\n", "f", notes) == "    w := Array<U32>(64)\n"
+    assert migrate("X mut Array<I64, 2>\n", "f", notes) == "X mut Array<I64> = Array<I64>(2)\n"
+    assert migrate("type S struct() { a Array<I64, 4> }\n", "f", notes) == "type S struct() { a := Array<I64>(4) }\n"
+    assert migrate("fn f(ts mut Array<I64, 2>&) Array<U64, K + 1> {\n", "f", notes) == "fn f(ts mut Array<I64>&) Array<U64> {\n"
+    assert migrate("    h Array<U32, 8> = U32[1, 2]\n", "f", notes) == "    h Array<U32> = U32[1, 2]\n"
+    assert migrate("    x := Array<F32, 3>()\n", "f", notes) == "    x := Array<F32>(3)\n"
+    assert migrate("    s := \"Array<I64, 3>\" # Array<I64, 3>\n", "f", notes) == "    s := \"Array<I64, 3>\" # Array<I64, 3>\n"
+    assert migrate("    a Array<I64> = Array<I64>(3)\n", "f", notes) == "    a Array<I64> = Array<I64>(3)\n"
+    assert notes.Len() == 0
+}
+
+test "a type argument, a view and a constant type parameter are left for a person" {
+    notes := List<String&>()
+    assert migrate("    l := List<Array<I64, 3>>()\n", "f", notes) == "    l := List<Array<I64>>()\n"
+    assert migrate("    v := x as Array<I64, 3>&\n", "f", notes) == "    v := x as Array<I64, 3>&\n"
+    assert migrate("type B<N I64> struct() { }\n", "f", notes) == "type B<N I64> struct() { }\n"
+    assert notes.Len() == 3
+}

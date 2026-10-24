@@ -24,6 +24,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `donefail_migrate.olang` | S16: `done`, `fail` and `abort` removed - `!`, `try`, `assert`, `return`, `unreachable` | `build/tools_donefail_migrate FILE\|DIR...` |
 | `cli_words.olang` | B1: the command line in words (`-b` -> `build`, `-d` -> `-debug`, ...), in commands and `# flags:` | `build/tools_cli_words FILE...` |
 | `syntax_migrate.olang` | QY/QW: lists by commas on a line and line breaks between lines, `+` gone from error sets and catch items, type parameter lists (`fn f<T>(a T)`, `fn (l List<T>&)`) | `build/tools_syntax_migrate [--old] [--check] [-v] FILE\|DIR...` |
+| `arrays_migrate.olang` | QP1-QP2: `Array<T, N>` and constant parameters removed - `x Array<T, N>` with no value becomes `x := Array<T>(N)`, `Array<T, N>()` becomes `Array<T>(N)`, any other `Array<T, N>` loses its length | `build/tools_arrays_migrate [--dry] PATH...` |
 | `math_methods.olang` | M19d: std/math removed - its functions are the numbers' methods (`math.Sqrt(x)` -> `x.Sqrt()`), its constants the prelude's (`Pi`, `Euler`, `Inf`, `NaN`) | `build/tools_math_methods [--dry] PATH...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
@@ -41,6 +42,9 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
   run on this repository, or restore them after it.
 - `math_methods` works on the text alone and lists the literal receivers whose type a person should write (`math.Pow(2.0,
   x)` with an F32 `x` wants `F32(2.0).Pow(x)`); code inside strings and comments is searched for `math.` by hand.
+- `arrays_migrate` works on the text alone and lists for a person what depends on the code: an `Array<T, N>` as a type
+  argument (`Array<T>&` unless its storage is made where it is declared, T7a), `as` views (now slices) and constant
+  type parameters.
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and

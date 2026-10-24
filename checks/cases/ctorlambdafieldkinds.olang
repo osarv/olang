@@ -15,7 +15,7 @@ type M struct(w W) {
     F fn() I64 = fn() I64 { return w.h.v }
 }
 type A struct(n I64) {
-    arr Array<I64, 3> = I64[n, n + 1, n + 2]
+    arr Array<I64> = I64[n, n + 1, n + 2]
     G fn() I64 = fn() I64 { return arr[1] }
 }
 type C struct(d Array<I64>&) {

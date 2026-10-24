@@ -1,12 +1,7 @@
-# check: fail error[G21]: a constant argument must be computable while compiling: it divides by zero
-# also: note: instantiated here, with N = 0
-# also: compilation failed with 1 error
-# G21/G16b: a constant argument that cannot be computed for an instantiation is reported once, at that instantiation
+# check: fail error[E6a]: division by zero
+# QP1: a length is computed as the program computes it - a literal-only one dividing by zero is an error where written
 import "std/io"
-type Box<N I64> struct() {
-    a Array<I32, 10 / N>
-}
 fn main() ? {
-    b := Box<0>()
-    try io.Println($b.a.Len())
+    a := Array<I32>(10 / 0)
+    try io.Println($a.Len())
 }

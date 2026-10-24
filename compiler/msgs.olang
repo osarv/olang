@@ -179,29 +179,11 @@ type Diag enum {
     MissingTypeArgs
     TypeArgCount
     TypeArgsOnNonGeneric
-    ConstParamType
-    ConstParamEq
-    ConstArgIsType
-    TypeArgIsValue
-    ConstArgNotComputable
-    ConstArgRange
-    ConstArgKind
-    ConstVarUnknown
-    ConstVarTypeAndConst
-    ConstVarTwoTypes
-    ConstVarConstrained
-    ConstVarAsType
     TypeVarAsValue
-    ConstVarOnlyInExpr
-    ConstVarMismatch
-    ConstVarNotInType
+    ArrayByValueRunTime
+    ParamTooLarge
     ArrayLengthRange
-    AsArrayShape
-    AsArrayLength
-    ConstVarShadowed
-    ConstArgParen
     TypeMatchValueCase
-    FixedArrayCall
     ArrayTooManyArgs
     NamedScopeOnElement
     ArrayNestedByValue
@@ -271,6 +253,7 @@ type Diag enum {
     OwnCannotOutlive
     OwnFromBareRefParam
     ArraySizeMismatch
+    ArrayRunTimeIntoFixed
     LiteralRange
     ElemRefShape
     TypeMismatch
@@ -483,6 +466,7 @@ type Diag enum {
     UnknownTypeVar
     TypeMatchGuard
     TypeMatchUncovered
+    MatchValueNone
     MatchValueTypes
     MatchNotExhaustive
     MatchValueNeedsNomatch
@@ -991,88 +975,74 @@ fn TypeArgCount(text String&, n1 I64, n2 I64) Msg { return Msg(Diag.TypeArgCount
 fn TypeArgsOnNonGeneric(text String&) Msg { return Msg(Diag.TypeArgsOnNonGeneric, "G7", $text " is not generic, so it takes no type arguments") }
 
 # ERR_CONST_PARAM_TYPE
-fn ConstParamType(ty String&) Msg { return Msg(Diag.ConstParamType, "G20", "a constant parameter is an integer, a Bool or an enum without payloads, found " $ty) }
 
 # ERR_CONST_PARAM_EQ
-fn ConstParamEq(ty String&) Msg { return Msg(Diag.ConstParamEq, "G20", $ty " declares Eq - a constant parameter's type compares by its value alone") }
 
 # ERR_CONST_ARG_IS_TYPE
-fn ConstArgIsType(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.ConstArgIsType, "G21", $text1 "'s parameter " $text2 " is a constant - write a value, as '" $text3 "<..., 3>'") }
 
 # ERR_TYPE_ARG_IS_VALUE
-fn TypeArgIsValue(text1 String&, text2 String&) Msg { return Msg(Diag.TypeArgIsValue, "G21", $text1 "'s parameter " $text2 " is a type, and this is a value") }
 
 # ERR_CONST_ARG_NOT_COMPUTABLE
-fn ConstArgNotComputable(text String&) Msg { return Msg(Diag.ConstArgNotComputable, "G21", "a constant argument must be computable while compiling: " $text) }
 
 # ERR_CONST_ARG_RANGE
-fn ConstArgRange(text String&, ty String&) Msg { return Msg(Diag.ConstArgRange, "G21", $text " does not fit " $ty) }
 
 # ERR_CONST_ARG_KIND
-fn ConstArgKind(ty String&) Msg { return Msg(Diag.ConstArgKind, "G21", "this constant argument is not a value of " $ty) }
 
 # ERR_CONST_VAR_UNKNOWN
-fn ConstVarUnknown(text String&) Msg { return Msg(Diag.ConstVarUnknown, "G22", $text " is no constant variable of this declaration") }
 
 # ERR_CONST_VAR_TYPE_AND_CONST
-fn ConstVarTypeAndConst(text String&) Msg { return Msg(Diag.ConstVarTypeAndConst, "G22", $text " is a type in one place and a constant in another") }
 
 # ERR_CONST_VAR_TWO_TYPES
-fn ConstVarTwoTypes(text String&, ty1 String&, ty2 String&) Msg { return Msg(Diag.ConstVarTwoTypes, "G22", $text " fills constant parameters of two types, " $ty1 " and " $ty2) }
 
 # ERR_CONST_VAR_CONSTRAINED
-fn ConstVarConstrained(text String&) Msg { return Msg(Diag.ConstVarConstrained, "G22", "a constant variable takes no constraint - " $text "'s type is its parameter's, or one written '<N I64>' where it is introduced") }
 
 # ERR_CONST_VAR_AS_TYPE
-fn ConstVarAsType(text String&) Msg { return Msg(Diag.ConstVarAsType, "G22", $text " is a constant, not a type") }
 
 # ERR_TYPE_VAR_AS_VALUE
-fn TypeVarAsValue(text String&) Msg { return Msg(Diag.TypeVarAsValue, "G23", $text " is a type variable, not a value") }
+fn TypeVarAsValue(text String&) Msg { return Msg(Diag.TypeVarAsValue, "G8b", $text " is a type variable, not a value") }
 
 # ERR_CONST_VAR_ONLY_IN_EXPR
-fn ConstVarOnlyInExpr(text String&) Msg { return Msg(Diag.ConstVarOnlyInExpr, "G4, G24", "constant variable " $text " appears in no parameter's type as a whole argument, so no call can give it a value - introduce it in a parameter's type, or use a run-time length") }
 
 # ERR_CONST_VAR_MISMATCH
-fn ConstVarMismatch(text String&, n1 I64, n2 I64) Msg { return Msg(Diag.ConstVarMismatch, "G24", $text " is " $n1 " by one argument and " $n2 " by another") }
 
 # ERR_CONST_VAR_NOT_IN_TYPE
-fn ConstVarNotInType(ty String&) Msg { return Msg(Diag.ConstVarNotInType, "G24, E32b", $ty "'s length is known only at run time - view it with 'x as Array<T, N>&'") }
+
+# ERR_ARRAY_BY_VALUE_RUN_TIME
+fn ArrayByValueRunTime(param String&, ty String&) Msg { return Msg(Diag.ArrayByValueRunTime, "D9a", $param " takes its array by value, so its length must be known while compiling - this " $ty "'s is known only at run time: take it as '" $ty "&', or pass a slice of a known length ('x[0:4]')") }
+
+# ERR_PARAM_TOO_LARGE
+fn ParamTooLarge(param String&, n I64, ty String&) Msg { return Msg(Diag.ParamTooLarge, "D9c", "parameter " $param " holds " $n " bytes by value - a by-value parameter holds at most 128: take it as '" $ty "&'") }
 
 # ERR_ARRAY_LENGTH_RANGE
 fn ArrayLengthRange(n I64) Msg { return Msg(Diag.ArrayLengthRange, "T7c", "an array's length is from 0 to the largest whose bytes fit an I64, found " $n) }
 
 # ERR_AS_ARRAY_SHAPE
-fn AsArrayShape(ty1 String&, ty2 String&) Msg { return Msg(Diag.AsArrayShape, "E32b", "an array is viewed with 'as' only as a reference to one of a known length and the same element type - " $ty1 " is not " $ty2) }
 
 # ERR_AS_ARRAY_LENGTH
-fn AsArrayLength(n1 I64, n2 I64) Msg { return Msg(Diag.AsArrayLength, "E32b", "this array's length is " $n1 ", not " $n2) }
 
 # ERR_CONST_VAR_SHADOWED
-fn ConstVarShadowed(tok String&) Msg { return Msg(Diag.ConstVarShadowed, "G22, D3a", $tok " is a constant variable of this declaration - a name means one thing, so name this apart") }
 
 # ERR_CONST_ARG_PAREN
-fn ConstArgParen(tok String&) Msg { return Msg(Diag.ConstArgParen, "G21", $tok " in a type argument is written in parentheses, as '(1 << 12)' - a bare '<' or '>' there reads as the list's own") }
 
 # ERR_TYPE_MATCH_VALUE_CASE
 fn TypeMatchValueCase(text String&) Msg { return Msg(Diag.TypeMatchValueCase, "G13", $text " is a type variable, so its cases are types") }
 
 # ERR_FIXED_ARRAY_CALL
-fn FixedArrayCall() Msg { return Msg(Diag.FixedArrayCall, "T8", "Array<T, N>() takes no arguments - a filled one is a copy, as 'a Array<T, N> = Array<T>(N, v)'") }
 
 # ERR_ARRAY_TOO_MANY_ARGS
-fn ArrayTooManyArgs(n I64) Msg { return Msg(Diag.ArrayTooManyArgs, "T7", "Array takes an element type and at most a length, found " $n " arguments") }
+fn ArrayTooManyArgs(n I64) Msg { return Msg(Diag.ArrayTooManyArgs, "G8, T7", "Array takes one type argument, its element type, found " $n " - a length is never written in a type: 'Array<T>(n)' makes n elements") }
 
 # ERR_NAMED_SCOPE_ON_ELEMENT
 fn NamedScopeOnElement() Msg { return Msg(Diag.NamedScopeOnElement, "T24", "a nested reference lives in its container's scope - write a bare '&' here") }
 
 # ERR_ARRAY_NESTED_BY_VALUE
-fn ArrayNestedByValue(ty String&) Msg { return Msg(Diag.ArrayNestedByValue, "T7a, T7c", "an array inside an array or a struct is held by reference - write " $ty "&, or a length, Array<T, N>, to hold it in place") }
+fn ArrayNestedByValue(ty String&) Msg { return Msg(Diag.ArrayNestedByValue, "T7a, T7d", "an array inside an array or a struct is held by reference - write " $ty "&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place") }
 
 # ERR_LAMBDA_RESULT_HELD
 fn LambdaResultHeld(text String&, ty1 String&, ty2 String&) Msg { return Msg(Diag.LambdaResultHeld, "T7a", "this result binds " $text " to " $ty1 ", which the call holds in an array, where an array is held by reference - write the result as " $ty2 "&") }
 
 # ERR_CONSTRAINT_NOT_TRAIT
-fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G19", $ty " is not a trait, so it cannot constrain a type variable") }
+fn ConstraintNotTrait(ty String&) Msg { return Msg(Diag.ConstraintNotTrait, "G6, G19", $ty " is not a trait, so it cannot constrain a type variable - a type parameter's constraint is a trait, and a length is no parameter (T7)") }
 
 # ERR_TYPE_ARG_NAMED_SCOPE
 fn TypeArgNamedScope() Msg { return Msg(Diag.TypeArgNamedScope, "G11", "a type argument's reference marker is bare, as 'List<String&>' - its references live in the container") }
@@ -1264,7 +1234,8 @@ fn OwnCannotOutlive() Msg { return Msg(Diag.OwnCannotOutlive, "O10d", "this valu
 fn OwnFromBareRefParam() Msg { return Msg(Diag.OwnFromBareRefParam, "O10d", "this value lives in this function's own scope, so it cannot satisfy anything longer-lived") }
 
 # ERR_ARRAY_SIZE_MISMATCH
-fn ArraySizeMismatch(ty1 String&, ty2 String&) Msg { return Msg(Diag.ArraySizeMismatch, "T7d", $ty1 " does not fit " $ty2 " - a fixed length is part of the type") }
+fn ArrayRunTimeIntoFixed(n I64) Msg { return Msg(Diag.ArrayRunTimeIntoFixed, "T7d", "this array's length is known only at run time, stored where " $n " elements are laid out - copy them through a slice of that length, 'v[0:" $n "]'") }
+fn ArraySizeMismatch(n1 I64, n2 I64) Msg { return Msg(Diag.ArraySizeMismatch, "T7d", "an array of " $n1 " elements stored where " $n2 " are laid out - fixed storage takes an array of its own length") }
 
 # ERR_LITERAL_RANGE
 fn LiteralRange(tok String&, ty String&) Msg { return Msg(Diag.LiteralRange, "T6", $tok " does not fit " $ty) }
@@ -1900,6 +1871,7 @@ fn UnknownTypeVar(text String&) Msg { return Msg(Diag.UnknownTypeVar, "", "unkno
 fn TypeMatchGuard() Msg { return Msg(Diag.TypeMatchGuard, "S13e", "a type match chooses its case while compiling, so it takes no guard - test the value inside the case") }
 
 # ERR_TYPE_MATCH_UNCOVERED
+fn MatchValueNone() Msg { return Msg(Diag.MatchValueNone, "G30", "no clause of this match gives a value at this instance's length - add one, or 'nomatch'") }
 fn TypeMatchUncovered(ty String&) Msg { return Msg(Diag.TypeMatchUncovered, "G15", "no case covers " $ty ", which this generic is instantiated with - add one, or 'nomatch'") }
 
 # ERR_MATCH_VALUE_TYPES

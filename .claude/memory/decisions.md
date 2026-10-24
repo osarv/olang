@@ -660,3 +660,131 @@ errors and documentation - generic `+` already works).
   compiler itself: clean 31.5 -> 20.8 s, an edit to widely inlined code 17.9 -> 3.8 s, the built program ~18% slower.
   Asked: add it, and what to call it (a mode, `-fast`, ...)? Recommended yes, as an option (`-quick`?) - the default
   stays -O3 + LTO (B2c). In effect: not built.
+- AGENDA ASKED 2026-10-24 (the user: "Today we are going to settle design questions as well"), numbered as asked:
+  1 QAS dev build (rec yes, `-quick`); 2 QAR1 `is` binding a pattern (rec yes); 3 QAR2 bodyless constructor = fields
+  (rec yes); 4 QAR3 text-valued enum cases (rec later); 5 QAP one null test `x is null` (rec yes, migrate); 6 units of
+  measure (rec defer; if built: `unit m`, `F64<m/s>`, literals unitless); 7 contracts (rec no syntax, leading asserts);
+  8 doc tests (rec yes, `#` + four spaces); 9 method overloading (rec no); 10 constructor overloading (rec no, named
+  functions); 11 fixed point (rec with FPGA); 12 QAO maybe/Option (rec drop, keep nullable). In effect: nothing changed.
+- AGENDA ANSWERED 2026-10-24 (the user, by number): 1 dev build YES, the name must say what is quick ("quickcomp is
+  maybe a bit too long ... Quick is kinda ambiguous") - ASKED: `-quickbuild` (rec) or `-draft`. 2 `is` binding a
+  pattern YES. 3 no bodyless form - "Can't you just write {x, y} on the same line? ... keep the general form": it
+  already compiles (`struct(A I64, B I64) { A, B }`); compiler/'s structs rewritten that way, no language change. 5 one
+  null test `x is null` YES; the user asked for precise identity/value definitions - given; ASKED 5a: `==` always value
+  equality, `is` always identity, a type reaching itself through references has no `==` unless it declares `Eq`
+  (rec yes; today struct/enum references compare identity unless Eq). 6 units DROPPED ("the type system supports
+  catching errors on type mismatch well enough"). 7 contracts: "take the inferred obligations and optionally put them
+  in the signature" - sketch given (`requires cond, b outlives a`, decided at calls, `checked` at run time, a tool
+  printing the inferred signature); ASKED: the word, `ensures`, scope relations in the clause. 8 doc tests - explained,
+  rec now: not until a doc generator exists. 9/10 overloading: the user: "can be solved with generics right?" -
+  explained (match T per type, defaults per count, named functions for the rest); rec no overloading; ASKED 9b
+  `<T Vec2 or I64>` constraint lists, 10b named constructors later. 11 fixed point DEFERRED to FPGA. 12 maybe/null -
+  explained (zero values decide it), rec keep nullable; awaiting the user.
+- AGENDA ROUND 2 2026-10-24: 8 doc tests DEFERRED until a doc generator. 12 nullable references KEPT (QAO dropped); the
+  user: "Maybe revert the Result work as well? ... free up ?" - recommended: drop QAN (Result, postfix `?` keep-outcome;
+  a generic enum covers it later), KEEP QAM (errors as values: catch bindings, `error e`, `type X error {}`, named sets);
+  postfix `?` free. 5: the user proposed removing `is` (== identity on references) or a non-nesting == with case tests
+  as ==; recommended instead: `==` = contents (following references, Eq overriding, 5a: self-reaching types need Eq),
+  `is` = same instance / null / case with bindings. 7: the user's brackets `fn f(x I32) [x > 0] F64 ? E` - recommended
+  as the contract syntax (parameters and constants only, decided at known calls, `checked f(x)` at run time, replacing
+  call-site leading asserts, no ensures); scope relations `[b outlives a]`. 9/10: recommended overloading by parameter
+  COUNT only, extra constructors as functions named for the type ending in a call to the main one (D2 exception);
+  overloading by type stays generics + match T, 9b `<T Vec2 or I64>`. ASKED, numbered: 1 dev build name `-quickbuild`
+  or `-draft`; 2 the ==/is plan with 5a; 3 `outlives`; 4 overloading by count + named-for-type constructors; 5 9b.
+- AGENDA ROUND 3 2026-10-24: DECIDED dev build flag `-quick` (build, compile, test, run; the user leaned to it). Asked,
+  numbered: 1 narrowing instead of pattern names (`if e is Expr.Call { e.f }`, locals/params not assigned in the block,
+  also after a leaving `if e is not C`) - the user: "without the args we can just access them as e.f"; rec yes.
+  2 the user's equality: "Don't follow references but compare them ... equal in memory" - made precise: `==` = stored
+  values, references by identity unless the type declares Eq (then Eq at any depth), prelude Array/String/List/Map/Vec
+  declare Eq by contents; `is` = null/case only (`a is b` removed; `x == null` an error); rec yes. 3 scope relation
+  `a outlives b` only (equality is `b Node&a`); contract conditions any comptime-evaluable expression (the user). 4
+  overloading: (a) generics+defaults, (b) Java-style full overloading without defaults, (c) defaults+by-count - rec (c);
+  constructors listed one per line under `type Color` each declaring the same fields (the user wanted them in the decl).
+  5 nullable references `?Node&` PREFIX (suffix clashes with `fn f() Node&?`), the user now wants `?` nullable;
+  `x!` unwraps, narrowing by `is not null`; rec yes. 6 traits: type lists `trait Float { F16, BF16, F32, F64 }` (also 9b),
+  `and` constraints, `trait A extends B`, explicit type args `big<I64>` (G12 today: a generic is no value) - rec all four.
+- AGENDA ROUND 4 2026-10-24, DECIDED (the user): enum case tests by `==` ("I want == always. It generalizes better into
+  the payload case"): `e == Shape.Circle` tests the case, with a payload compares it, `_` matches a part; narrowing after
+  `if e == C` (the user's e.f idea); `is` only `x is null`/`is not null`; equality = stored values, references by
+  identity unless Eq (prelude collections declare Eq by contents); contracts in brackets after the parameter list,
+  any comptime-evaluable condition, scope relation `a outlives b` only (word kept, nothing shorter found); NO
+  overloading and no extra constructors ("only generics with defaults ... monomorphism of generics ... the only way to
+  achieve polymorphism") - the user's skip-by-type default idea declined by me (overloading in disguise; `default`
+  covers it); explicit type arguments `big<I64>`; `trait A extends B`; traits open (methods), parameter type lists
+  closed (the user's split). RUNTIME TRAITS (`any Trait&`): the user wants to discuss them before anything is built.
+  ASKED: 1 nullable prefix `?Node&` (rec) or suffix `Node&?` with error sets marked `!`; 2 type lists spelled
+  `<T (I32, F64)>`; 3 Float/Integer/Number as named type lists `type Float (F16, BF16, F32, F64)` (rec) or sealed traits.
+- AGENDA ROUND 5 2026-10-24: the user: "?Node& and Node&! do basically two versions of the same thing and yet they
+  declare the ? and ! in different places. That just reads ugly". Proposed (rec): both suffixes - `Node&?` nullable,
+  error sets marked `!` after the result (`fn f() Node& ! E`, bare `!` inferred, `Iterator<T ! E>`), `x!`/`f()!` unwrap
+  at the use site; every signature's `?` migrated by a tool. Awaiting a yes; still open: type lists `<T (I32, F64)>`,
+  named type lists replacing the sealed number traits.
+- DECIDED 2026-10-24 (the user: "?Node& is a type marker and ! is for expressions ... We can keep the ? as a prefix"):
+  nullable references written `?Node&` (prefix, part of the type, anywhere a type goes); `Node&` never null and flows
+  into `?Node&`; error sets keep `? E` after the result (no migration); `!` stays expression-only (`x!` on null, `f()!`
+  on failure); reading through `?Node&` needs narrowing (`if x is not null`); `fn f() ?Node&` vs `fn f() ? E` told apart
+  by the `&` (only references are nullable). Supersedes QAO's parking. Still open: `<T (I32, F64)>`, named type lists.
+- REVISED 2026-10-24 (the user: "Or we put it before the &?"): the nullable marker is `?&` - `Node?&`, `mut Node?&`,
+  `List<Node?&>`, `Point?&q` - on the reference marker it modifies; no ordering question with `mut`; told apart from an
+  error set by the `&` that follows. Rec yes; treated as decided unless the user objects.
+- TRAITS PROPOSED 2026-10-24 (the user: "Do you have a grand solution to trait mixing ... traits that name a restricted
+  set of types ... and a way to open up so that a type that knows the trait may implement it"): one `trait`, two forms -
+  parentheses list types (CLOSED: nothing else joins, `match T` complete without nomatch, built-in ops usable; sets list
+  sets, flattened), braces list methods (OPEN: implicit satisfaction as today, `extends` between traits); both together
+  = closed with every member checked for the methods; inline `<T (I32, F64)>`; `and` combines; the bridge: a generic over
+  an open trait may `match T` known types with a `nomatch` arm using the methods. No declared `satisfies` (possible later
+  as a check only). Float/Integer/Number become closed sets (sealed private-method trick removed). Awaiting the user.
+- TRAITS REVISED 2026-10-24 (the user: no parentheses, no explicit implements, "isn't a closed trait also dependant on
+  declaring functions, just restricting who is in"): a closed trait is an ordinary trait plus a member list after
+  `for`: `trait Float for F16, BF16, F32, F64 { Sqrt() T }`; members checked at the declaration to have the methods
+  (the trait module's defaults count); `match T` complete; a member may be a closed trait (flattened); a pure set needs
+  no methods (`trait Number for Integer, Float`); no `for` = open as today; no inline sets; `and`, trait `extends`, the
+  match-with-nomatch bridge. Proposed; awaiting the user.
+- TRAITS 2026-10-24: the user LIKES the `for` syntax (decided: `trait Float for F16, BF16, F32, F64 { ... }`), and asked
+  for unnamed sets in declarations "as with errors and return values". Proposed: inline members joined by `or` (commas
+  separate type parameters): `fn mix<T for I32 or F64>(a T, b T)`, `<T Shape for Circle or Square>` (closed and must
+  have Shape's methods); named traits keep commas. Rec; awaiting a yes.
+- DECIDED 2026-10-24 (the user: "let's do parenthesis as <T (I32, I64), U>"): an inline closed set is parenthesized in
+  the type parameter list, `<T Shape (Circle, Square)>` adding Shape's methods. The user asked whether parentheses
+  should become general listing / tuples: rec grouping only ("a parenthesized list is one item of the list around
+  it" - results in function types, constraint sets), no tuple values (D8c). ASKED: under that rule, bring back
+  `fn(I64) ? (A, B)` for a function type's error set (removed earlier for named sets)?
+  (Clarified to the user: error sets after `?` are built; `fn(x I64) I64 ? (A, B)` in function types is built today;
+  named sets are decided not built, QAM, and QAM removes the parenthesized form. Rec now: keep it beside named sets as
+  the grouping rule applied.)
+  The user: "When I removed the parenthesis form I didn't mean remove the grouping, just remove the parenthesis no?" -
+  explained the ambiguity inside a list of types (`Map<String&, fn(x I64) I64 ? A, B>`); rec: parentheses only where a
+  set sits inside a list (built today, same rule as `<T (I32, I64), U>`), a signature's own set stays bare. Reading
+  taken: QAM's removal reversed for that case; awaiting a yes.
+  The user asked whether `<T I32, F64>` may be bare when T is the only parameter: rec no - parentheses always (comma
+  means next parameter there, `<T Shape>` trait vs one-member set, one spelling).
+- CONSTRAINT ALGEBRA PROPOSED 2026-10-24 (the user: "isn't listing several traits narrowing ... <T Shape House>"):
+  side by side = intersection (`<T Shape House>`, `<T Shape (Circle, Square)>`), parentheses = union of member types,
+  comma = next type parameter; named: `trait Number for Integer, Float` (union), `trait Dwelling extends Shape, House`
+  (intersection). Rec juxtaposition over `and`. Supersedes the earlier `and` proposal; awaiting a yes.
+  The user asked whether `<T: ...>` would clear things up: rec no - the comma still ends the constraint, so a union
+  still needs parentheses; `name Type` everywhere else; `:` kept free (deferred `lib:Name`).
+- DECIDED 2026-10-24 (the user: "Keep it as it is then ... The alternative is not listing valid types, which I would
+  also be okay with ... What do you say?" - I recommended dropping inline sets): traits: open (methods) or closed
+  (`trait Float for F16, BF16, F32, F64 { ... }`, members checked for the methods, `match T` complete, members may be
+  closed traits); constraints side by side = intersection (`<T Shape House>`); `trait A extends B, C`; NO inline type
+  lists for now (additive later as `<T (I32, F64)>`); explicit type arguments `big<I64>`; no `:`. Run-time traits to
+  be discussed before building.
+- CONTRACTS OPEN 2026-10-24 (asked, numbered): 1 conditions read parameters, constants, immutable globals, evaluable
+  calls (no mutable globals); 2 `checked f(x)` fails with BuiltinError.CONTRACT; 3 test and -debug builds check every
+  contract at entry (rec yes); 4 a function with conditions may be a value, calls through it unchecked; with a written
+  scope relation it may not (T22a); 5 no conditions on trait methods for now; 6 no `ensures` for now; 7 constructors
+  take conditions; 8 a command printing the inferred signature (`olang explain FILE NAME` or a `signature` mode).
+  Decided earlier today: brackets after the parameter list, comptime-evaluable conditions decided at known calls,
+  `checked` at run time, `outlives`, leading asserts no longer decided at calls.
+- CONTRACTS 2026-10-24, DECIDED (the user): chains `[a outlives b outlives c]` allowed and transitive; a condition may
+  read anything known at that point in compiling, as Array<T>(n) decides its length; constructors take conditions.
+  Explained: decided while compiling where known (false = error at the call), otherwise unchecked unless the caller
+  writes `checked f(x)`. Still open (renumbered): 1 the failing `checked` error `BuiltinError.CONTRACT`; 2 test/-debug
+  builds check every contract on entry (rec yes); 3 functions with conditions may be values, calls through them
+  unchecked; 4 no conditions on trait methods now; 5 no `ensures` now; 6 a command printing the inferred signature.
+- CONTRACTS 2026-10-24: the user, torn on run-time checks ("it will allow extra instructions to be added"): rec run-time
+  checking only where `checked f(x)` is written (the same opt-in as `checked a[i]`), failing with `CheckError.CONTRACT`
+  (the user: "not built-in remember" - CheckError per QAI); undecidable calls unchecked otherwise; DROP the
+  test/-debug entry checks (instructions not written). Awaiting a yes; still open: functions with conditions as values
+  (calls through them unchecked), no trait-method conditions, no `ensures`, a command printing inferred signatures.

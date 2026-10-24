@@ -896,12 +896,12 @@ fn assertloc(r mut report&) ? Failed {
                  outOf(dir).StartsWith("located.olang:8: assertion failed: n is 1\n"), "-i: an assert's location and message", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret located.olang a b > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "-i: an unreachable's location", dir)
-    # and a check the language guarantees - a slice, an array length, an 'as', a copy into fixed storage
+    # and a check the language guarantees - a slice, an array length, an 'as' (a copy into fixed storage is never
+    # checked: its length is known while compiling, T7d)
     try r.expect(sh(dir, "\"$OLANG\" build guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
     wants := String&["guaranteed.olang:13: slice bounds out of range\n", "guaranteed.olang:14: array length out of range\n"
-                     "guaranteed.olang:16: 'as' named what the value is not\n"
-                     "guaranteed.olang:18: array length does not match its fixed storage\n"]
-    args := String&["", " a", " a b", " a b c"]
+                     "guaranteed.olang:16: 'as' named what the value is not\n"]
+    args := String&["", " a", " a b"]
     for i, w in wants {
         try r.expect(sh(dir, "./build/guaranteed" $args[i] " > out.txt 2>&1") == 134 and outOf(dir).StartsWith(w), w, dir)
         try r.expect(sh(dir, "\"$OLANG\" interpret guaranteed.olang" $args[i] " > out.txt 2>&1") == 134 and
@@ -974,7 +974,9 @@ fn k2(r mut report&) ? Failed {
     tile String& = " = constant (i64 12|<\\{ \\[8 x i8\\] \\}> <\\{ \\[8 x i8\\] c\"\\\\0C(\\\\00){7}\" \\}>, align 8)$"
     try r.expect(irHas(dir, "build/ctlib.ll", "^" $gsym("ctlib", "Tile") $tile), "ctlib_Tile", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Tile") " = available_externally" $tile[2:]), "ctlib_Tile imported", dir)
-    try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Tiles") " = external (global \\{ i64, ptr \\}|constant <\\{ \\[8 x i8\\], ptr \\}>)$"), "ctlib_Tiles imported", dir)
+    # T7d: an immutable global given a literal holds it in fixed storage, plain data; a reference global's storage is its own
+    try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Tiles") " = available_externally constant <\\{ \\[16 x i8\\] \\}>"), "ctlib_Tiles imported", dir)
+    try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Rows") " = external (global \\{ i64, ptr \\}|constant <\\{ \\[8 x i8\\], ptr \\}>)$"), "ctlib_Rows imported", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ctlib", "Counter") " = external global i64$"), "ctlib_Counter imported", dir)
     try r.expect(irHas(dir, ll, "^" $gsym("ct", "seed") " = global i32 zeroinitializer$"), "ct_seed", dir)
     # K2b: a referent only a read-only reference reaches is constant; an instance holding itself is written as itself

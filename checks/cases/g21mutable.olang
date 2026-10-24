@@ -1,6 +1,8 @@
-# check: fail error[G21]: a constant argument must be computable while compiling: it reads a mutable global
-# G21: a constant argument is computed while compiling, and a mutable global's value is the running program's
+# check: run
+# QP1: a mutable global's value is the running program's, so a length read from one is known only at run time
 Size mut I64 = 4
 fn main() ? {
-    a Array<U8, Size>
+    a := Array<U8>(Size)
+    Size = 5
+    assert a.Len() == 4
 }

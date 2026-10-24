@@ -267,7 +267,7 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   - **Names reports the rules about declarations and imports only**: D2, D3 (declared twice), D3a (shadowing a
     global, a function, a build constant, a type; a for-in name, E29), D8c (`_`), M10 (an unknown
     alias, naming the std module where one exists), M14, M20, B10/B10c (an unknown or redeclared build
-    constant, a `mut` default) and G22's constant names. **An unknown name is recorded as `None` and left to the
+    constant, a `mut` default). **An unknown name is recorded as `None` and left to the
     checker** (M5), which knows a type's members and reports one error per name with its suggestion - two passes
     reporting it would say it twice, and only the checker can tell `x.f` on a value from `alias.f`.
   - **A name a pending top-level branch declares waits** (`Table.waiting`): it is no unknown name and no clash until
@@ -284,7 +284,7 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   1.7). Layout (size, alignment, LLVM spelling) is computed once per `TypeId`. This replaces `TypeIsSame` and its deep
   comparisons.
 - **Checking is demand-driven, per declaration.** Each request is memoized with an in-progress mark, and a cycle is
-  a diagnostic: a type that embeds itself (T16), a condition (B9c), a computed constant argument (G21). The
+  a diagnostic: a type that embeds itself (T16), a condition (B9c), an array length a call computes (T7c). The
   requests are:
   - a signature;
   - a type's layout;
@@ -293,7 +293,7 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   - an instance body;
   - a constant value.
 
-  This replaces the C checker's three passes and the loops that check the program again: B9c's, the one C2e and G21
+  This replaces the C checker's three passes and the loops that check the program again: B9c's, the one C2e and the computed lengths
   inherited, S8b's attempts, and O10c's late discharge. Zig's lazy semantic analysis, Swift's request evaluator and
   rustc's queries take the same approach. There is no persistence across builds.
 - **Generics.**
@@ -338,14 +338,14 @@ import each other relatively (M22a). The root is `compiler/olang.olang`.
   inverse over a program's types - which is what lets the layout oracle compare type by type rather than program by
   program.
 - **`generic.Program`** makes declared types' bodies on request (an instance's by substituting its generic's), resolves
-  written types in a module's context, folds constant arguments, infers type variables (`Unify`/`bind`: G9a-G9d), checks
+  written types in a module's context, folds array lengths (T7c), infers type variables (`Unify`/`bind`: G9a-G9d), checks
   constraints where a variable is bound (`Satisfies`, `BoundMet`: G19), finds methods by receiver key (M19, M21, T29e),
   makes functions' signatures (over the variables their receiver's type arguments introduce, then their list's: G3,
   QW) and names their instances (G16a).
 - **G17** has both of its bounds: a type nesting more than 48 deep is refused where it is interned, and a chain of more
   than 1,000 instances' layouts each asking for the next where the layouts are requested (a constant that keeps
   changing). Each is said once per declaration.
-- **G21's fold computes what the program would**: every value typed, operators where their operands meet (T6b, E6d),
+- **A length's fold (T7c) computes what the program would**: every value typed, operators where their operands meet (T6b, E6d),
   results wrapped (E6c) - the evaluator would give the same, so only what needs a call (a function computing a length)
   is left to it, as a pattern (M8). So is a type only a top-level `if` the evaluator decides declares (B9c).
 - **Revised after the contract's review (2026-10-12).** A function type carries its scopes (`types.Scopes`, filled
@@ -370,7 +370,7 @@ and a generic's body is checked once per instance. Each body has:
   `Case(t, tag)` - parameters and their marks and no code, the home of a payload's marks (T17c); a destructor, whose
   `Params[0]` is the instance (`mut T&`, in the closing scope, C9a); a lambda; a test; one global's initializer,
   `Global(module, name)`. A global has a body of its own because K2 bakes and refuses globals one by one, and a `:=`
-  global's type, G21's lengths, B9c's conditions and S18c's asserts each ask for one global on demand; B5a's order of a
+  global's type, T7c's lengths, B9c's conditions and S18c's asserts each ask for one global on demand; B5a's order of a
   module's globals is a summary, computed once their bodies are checked.
 - `Ty`, its function type, the receiver first, with its scopes (below): a constructor's and a payload's role is
   `RoleCtor`, a destructor's `RoleDtor`.
@@ -466,7 +466,7 @@ beside `Value`, for `any Trait&` (planned, PRINCIPLES.md 5).
 | `for`, `for ... in`, `do ... for` (S9-S9f) | `Loop`, `Jump`, hidden locals, a `Try` taking `Exhausted` |
 | a comprehension (E27) | `Collect` and `Yield` |
 | `match` (S12, S13) | `Match`: the subject held once, each alternative a test and its bindings, `NoMatch` always filled |
-| `match T`, an `if` on a constant (G26), an `if` the build decides (S8b) | the chosen branch alone |
+| `match T`, an `if` on a by-value array's length in an instance (G30), an `if` the build decides (S8b) | the chosen branch alone |
 | a lambda (D16) | a body of its own, and `Fn` with its captures |
 | a numeric widening (T6b), a literal adapting (T6, E4a) | `Prim(Convert)`, a `Lit` of the target type |
 | a zero value (D13c) | a `Lit` of zero bits where no constructor makes it; else the constructor's `Call`, marked `Zero` |
@@ -1016,7 +1016,9 @@ repository (25.7k lines of corpus and std). "study2 uses" counts how often study
    - `$x ("y")` remains a call (E13b), and its diagnostic says to write `$(...)`.
 
    study2 uses: 2,994. Sites: 319 joins.
-9. **Mixed type and constant arguments: (a), a cover grammar, decided by the resolver.** An argument is read
+9. **Mixed type and constant arguments: (a), a cover grammar, decided by the resolver.** *(Superseded 2026-10-24 by
+   the arrays batch, QP2: constant parameters are gone and type arguments are types only; the record below is how it
+   was.)* An argument is read
    according to how it begins:
    - `mut`, `fn`, `enum`, `struct` or `trait` begins a type;
    - a literal, `(`, `-`, `~` or `not` begins a constant expression;
@@ -1249,11 +1251,11 @@ with the installed one; `make bootstrap` is section 5.
    - `dump.olang layout` reads each type back from its canonical text in the program it came from (`ParseCanon`), lays
      it out, and prints it the same way; `compiler/tools/layoutdiff.olang` (`make layoutdiff`, part of `make verify`,
      about 3 s) requires every line to be stage 0's. A type may be left unlaid only where
-     `compiler/goldens/layout.deferred` lists it, with why: 11 - ten an array length a call computes (G21) and one a
+     `compiler/goldens/layout.deferred` lists it, with why: 11 - ten an array length a call computes (T7c) and one a
      type only a top-level `if` a call decides declares (B9c), both the evaluator's (M8). All 9,291 others are
      identical.
    - Unit tests in `generic.olang`: layouts of declared types and instances, canonical texts read back, T16, both of
-     G17's bounds, G21's fold, inference (G9a, G9b, G9d), function instances' names, G19, and function types' scopes -
+     G17's bounds, T7c's fold, inference (G9a, G9b, G9d), function instances' names, G19, and function types' scopes -
      the markers read, `ScopeVarsOf`, plain instance arguments, and where instances were first asked for; in
      `types.olang`, scopes outside identity; in `typed.olang`, marks and scope variables read off a body's type.
 6. **Typed tree and MIR.** These are not compared with C; their representations differ by design.

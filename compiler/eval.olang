@@ -427,7 +427,7 @@ fn NewMachine(t mut types.Table&, mode Mode) Machine {
 # ---- defining the program ----
 
 # a MIR function, by its key
-fn (m mut Machine&) Define(f mir.Fn) {
+fn (m mut Machine&) Define(f mut mir.Fn&) {
     i := m.fns.Len()
     m.fnOf.Put(f.Of, i)
     m.fns.Push(f)
@@ -488,7 +488,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
 }
 
 # statement k of f in a flat form, where it has one of the shapes cfn.Fast holds
-fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt, c mut cfn&, k I64) {
+fn (m mut Machine&) flatten(f mir.Fn&, st mir.Stmt&, c mut cfn&, k I64) {
     match st {
         case mir.Stmt.Assign(sp, p, rv) {
             c.Sps[k] = sp
@@ -693,7 +693,7 @@ fn rangeNamesGlobal(f mir.Fn&, r mir.Range) Bool {
 }
 
 # whether a statement's place or operands name a global: what globalsReady reads
-fn stmtNamesGlobal(f mir.Fn&, st mir.Stmt) Bool {
+fn stmtNamesGlobal(f mir.Fn&, st mir.Stmt&) Bool {
     return match st {
         case mir.Stmt.Assign(_, p, rv) => placeNamesGlobal(p) or match rv {
             case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _) => opNamesGlobal(x)
@@ -2091,7 +2091,7 @@ fn (m mut Machine&) slice(fi I64, dst Ptr, q mir.Place, lo mir.Operand, hi mir.O
     }
     es := m.size(m.elemOf(st))
     at := Ptr(data.Id, data.Off + a * es) if b > a or data.Id != 0 else NullPtr
-    # a view as a fixed array (E32b): one pointer, its length its type's
+    # a slice of a known length (T7c): one pointer, its length its type's
     r := m.T.Repr(ty)
     if m.T.KindOf(r) == types.Kind.Ref and m.T.Length(m.T.Repr(m.T.Referent(r))) != types.TypeId(0) {
         m.wrPtr(dst, at)
@@ -4798,7 +4798,7 @@ test "loops and recursion: a loop's scope every turn, calls to depth, a loop tha
 # an error type E of the module, and the list naming it alone
 fn terr(t mut types.Table&, names mut source.Names&, name String&) types.TypeId {
     mod := t.AddModule("eval_test_" $name)
-    return t.Named(t.AddDecl(mod, names.Intern(name), types.DeclKind.Error, 0, 0), types.ListId(0))
+    return t.Named(t.AddDecl(mod, names.Intern(name), types.DeclKind.Error, 0), types.ListId(0))
 }
 
 # "fn g(x I64) I64 ? E { if x < 0 { error E.word2 }; return x }", keyed Body(id)
@@ -5004,7 +5004,7 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
 
 fn tdecl(t mut types.Table&, names mut source.Names&, kind types.DeclKind, name String&) types.TypeId {
     mod := t.AddModule("eval_test_" $name)
-    return t.Named(t.AddDecl(mod, names.Intern(name), kind, 0, 0), types.ListId(0))
+    return t.Named(t.AddDecl(mod, names.Intern(name), kind, 0), types.ListId(0))
 }
 
 test "aggregates, enums, arrays and references: laid out as the target lays them out, read and written in place" {

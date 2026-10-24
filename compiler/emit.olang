@@ -1205,7 +1205,7 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
     }
 }
 
-fn stmtSpan(s mir.Stmt) source.Span {
+fn stmtSpan(s mir.Stmt&) source.Span {
     return match s {
         case mir.Stmt.Assign(sp, _, _), mir.Stmt.Live(sp, _), mir.Stmt.Dead(sp, _), mir.Stmt.Open(sp, _) => sp
         case mir.Stmt.Close(sp, _), mir.Stmt.Give(sp, _), mir.Stmt.RegisterDtor(sp, _, _, _) => sp
@@ -1748,7 +1748,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     if e.Debug { fe.subprogram() }
     fe.run()
     if e.badType {
-        # a type the program's layouts do not settle (a length a call computes, G21, is the evaluator's, M8)
+        # a type the program's layouts do not settle (a length a call computes, T7c, is the evaluator's, M8)
         e.runtime("__olang_check_failed")
         e.fnItem(k, f.Ty, symbol, passed, env, $hdr $e.stub("not emitted", symbol))
         return
@@ -2700,7 +2700,7 @@ fn (fe mut fnEm&) alloc(r mir.ScopeRef, size String&, align I64, stack String& =
 
 # ---- statements ----
 
-fn (fe mut fnEm&) stmt(s mir.Stmt) {
+fn (fe mut fnEm&) stmt(s mir.Stmt&) {
     t := fe.E.T
     if fe.dbgSp >= 0 { fe.locate(stmtSpan(s)) }
     match s {
@@ -2891,7 +2891,7 @@ fn (fe mut fnEm&) useRef(r mir.ScopeRef, used mut Array<Bool>&) Bool {
     }
 }
 
-fn (fe mut fnEm&) plainWrite(st mir.Stmt, sc I64) Bool {
+fn (fe mut fnEm&) plainWrite(st mir.Stmt&, sc I64) Bool {
     return match st {
         case mir.Stmt.Write(_, b, how, _) => fe.refIs(b, sc) and match how {
             case mir.WriteKind.Bytes, mir.WriteKind.Char, mir.WriteKind.Int, mir.WriteKind.Uint, mir.WriteKind.Bool => true

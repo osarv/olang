@@ -1,5 +1,5 @@
 # types - every type the compiler meets, interned, and each one's layout (compiler/DESIGN.md 1.6; T1-T36, G16a, G17,
-# G20-G28, D8c, R15).
+# G29, D8c, R15).
 #
 # A type is a TypeId: an index into one hash-consed table, so two types are the same type exactly when their ids are
 # equal. What a type is - its kind and up to three operands, other ids among them - is its key: a type is interned by
@@ -65,9 +65,9 @@ type Kind enum {
     Tuple       # several results (D8c): A its elements
     Record      # an anonymous struct - an enum case's payload: A its fields
     AnonEnum    # an anonymous enum (T27): A its shape (cases and payloads)
-    Var         # a type variable or a constant variable (G1, G20): A its owner, B its index, C its permission (T2)
-    Const       # a constant argument's value (G20, G21): A its type, B its value (a U64's bits)
-    ConstExpr   # a constant argument still to be computed from variables (G21): A its pattern
+    Var         # a type variable or a constant variable (G1, G29): A its owner, B its index, C its permission (T2)
+    Const       # a constant argument's value (G29, T7c): A its type, B its value (a U64's bits)
+    ConstExpr   # a constant argument still to be computed from variables (T7c): A its pattern
     ErrWords    # an error set's entry holding some words of an error type (R1c): A the type, B the words (bit i word i)
 }
 
@@ -117,13 +117,12 @@ type DeclKind enum {
 }
 
 # a declared type: its module (an index into the program's modules), its name, what it is, and its parameters: how
-# many, and which are constants (G20)
-type decl struct(Module I64, Name source.NameId, K DeclKind, Params I32, Consts I64) {
+# many
+type decl struct(Module I64, Name source.NameId, K DeclKind, Params I32) {
     Module
     Name
     K
     Params
-    Consts
 }
 
 # what a declared type holds, per Named type (a declaration, or one instance of a generic one): a struct's fields, an
@@ -398,10 +397,10 @@ fn (t mut Table&) AnonEnum(names Array<source.NameId>&, cases ListId, fields Arr
 # variables, and the permission "mut T" gives it where it is bound to a reference (T2)
 fn (t mut Table&) Var(owner I64, index I64, perm I64) TypeId { return t.intern(data(Kind.Var, owner, index, perm), 1) }
 
-# a constant: its type and its value (G20, G21)
+# a constant: its type and its value (G29, T7c)
 fn (t mut Table&) Const(ty TypeId, value I64) TypeId { return t.intern(data(Kind.Const, I64(ty), value, 0), 1) }
 
-# a constant still to be computed: its pattern, by a key naming its owner and its expression (G21)
+# a constant still to be computed: its pattern, by a key naming its owner and its expression (T7c)
 fn (t mut Table&) ConstExpr(key String&) TypeId {
     p := try t.patternKeys.Get(key) catch default -1
     if p < 0 {
@@ -684,9 +683,9 @@ fn (t mut Table&) AddModule(identity String&) I64 {
 }
 
 # registers a declared type of module m; its id
-fn (t mut Table&) AddDecl(m I64, name source.NameId, kind DeclKind, params I32, consts I64) DeclId {
+fn (t mut Table&) AddDecl(m I64, name source.NameId, kind DeclKind, params I32) DeclId {
     id := DeclId(I32(t.decls.Len()))
-    t.decls.Push(decl(m, name, kind, params, consts))
+    t.decls.Push(decl(m, name, kind, params))
     t.declKeys.Put($t.Modules[m] ":" $t.Names.Text(name), id)
     return id
 }
@@ -695,9 +694,6 @@ fn (t Table&) DeclModule(d DeclId) I64 { return t.decls[I64(d)].Module }
 fn (t Table&) DeclName(d DeclId) source.NameId { return t.decls[I64(d)].Name }
 fn (t Table&) DeclKindOf(d DeclId) DeclKind { return t.decls[I64(d)].K }
 fn (t Table&) DeclParams(d DeclId) I64 { return I64(t.decls[I64(d)].Params) }
-
-# whether a declared type's i-th parameter is a constant (G20)
-fn (t Table&) ParamIsConst(d DeclId, i I64) Bool { return ((t.decls[I64(d)].Consts >> i) & 1) == 1 }
 
 # a declared type by its module's identity and its name, as Canon writes it ("std/prelude/list:List")
 fn (t Table&) FindDecl(qualified String&) DeclId ? {
@@ -1259,7 +1255,7 @@ test "canonical texts name every kind of type" {
     names := source.Names()
     t := NewTable(names)
     m := t.AddModule("std/prelude/list")
-    list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1, 0)
+    list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1)
     i64 := t.Prim("I64")
     li := t.Named(list, t.List1(i64))
     assert t.Canon(li) == "std/prelude/list:List<I64>"
@@ -1279,20 +1275,20 @@ test "layouts follow C's: fields at their alignment, enums a tag word and their 
     names := source.Names()
     t := NewTable(names)
     m := t.AddModule("t")
-    p := t.Named(t.AddDecl(m, names.Intern("P"), DeclKind.Struct, 0, 0), ListId(0))
+    p := t.Named(t.AddDecl(m, names.Intern("P"), DeclKind.Struct, 0), ListId(0))
     i32, i64, u8 := t.Prim("I32"), t.Prim("I64"), t.Prim("U8")
     t.SetStructBody(p, t.List(TypeId[i32, i64, u8]), false)
     for x in TypeId[i32, i64, u8] { assert t.ComputeLayout(x) }
     assert t.ComputeLayout(p)
     assert t.Size(p) == 24 and t.Align(p) == 8 and t.Offsets(p) == I64[0, 8, 16]
     assert t.Llvm(p) == "%\"t:P\"" and t.StructBody(p) == "{ i32, i64, i8 }"
-    e := t.Named(t.AddDecl(m, names.Intern("E"), DeclKind.Enum, 0, 0), ListId(0))
+    e := t.Named(t.AddDecl(m, names.Intern("E"), DeclKind.Enum, 0), ListId(0))
     rec := t.Record(t.List(TypeId[i64, u8]))
     assert t.ComputeLayout(rec) and t.Size(rec) == 16 and t.Offsets(rec) == I64[0, 8]
     t.SetEnumBody(e, source.NameId[names.Intern("A"), names.Intern("B")], t.List(TypeId[rec, TypeId(0)]))
     assert t.ComputeLayout(e)
     assert t.Size(e) == 24 and t.Align(e) == 8 and t.Llvm(e) == "{ i64, [2 x i64] }"
-    plain := t.Named(t.AddDecl(m, names.Intern("D"), DeclKind.Enum, 0, 0), ListId(0))
+    plain := t.Named(t.AddDecl(m, names.Intern("D"), DeclKind.Enum, 0), ListId(0))
     t.SetEnumBody(plain, source.NameId[names.Intern("N")], t.List1(TypeId(0)))
     assert t.ComputeLayout(plain) and t.Size(plain) == 4 and t.Llvm(plain) == "i32"
 }
@@ -1316,7 +1312,7 @@ test "function types carry their scopes; identity leaves them out; a call's scop
     names := source.Names()
     t := NewTable(names)
     m := t.AddModule("t")
-    n := t.Named(t.AddDecl(m, names.Intern("N"), DeclKind.Struct, 0, 0), ListId(0))
+    n := t.Named(t.AddDecl(m, names.Intern("N"), DeclKind.Struct, 0), ListId(0))
     i64 := t.Prim("I64")
     t.SetStructBody(n, t.List1(i64), false)
     mutN, roN := t.Ref(n, Writable), t.Ref(n, ReadOnly)
@@ -1343,7 +1339,7 @@ test "function types carry their scopes; identity leaves them out; a call's scop
     # plain, so it is one instance whatever scopes its arguments were written with
     arr := t.Array(shared, TypeId(0))
     assert arr != t.Array(plain, TypeId(0)) and t.Plain(arr) == t.Array(plain, TypeId(0))
-    list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1, 0)
+    list := t.AddDecl(m, names.Intern("List"), DeclKind.Struct, 1)
     assert t.Named(list, t.List1(shared)) == t.Named(list, t.List1(plain))
     assert not t.HoldsRefs(i64) and not t.HoldsRefs(n) and t.HoldsRefs(roN) and t.HoldsRefs(plain)
     assert t.HoldsRefs(t.Tuple(t.List(TypeId[i64, roN]))) and not t.HoldsRefs(t.Array(i64, TypeId(0)))

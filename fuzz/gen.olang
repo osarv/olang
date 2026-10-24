@@ -18,16 +18,16 @@
 # by run (S9f) and Map Update/Remove/Keys/Values, keyed by numbers, structs (a supplied or declared Hash, E10b) or enums;
 # array and struct references, writable or read-only by their written type (T25b), borrowed, aliased and repointed
 # only to what lives exactly where they do (O25), compared by contents with == and by identity with is (E10, E10c);
-# fixed-length arrays held in place in locals, fields and payloads (T7c), viewed with as (E32b) and through
-# fixed-length references; functions generic over a constant N whose if, conditional and match on N are decided per
-# instantiation (G26), and a generic struct G<i><T, N I64>; structs declaring Eq/Hash/Str (E10a, E11c); case _ (S13f);
+# fixed storage held in place in locals and fields (T7d), viewed with slices (E16a) and through references to it;
+# functions taking an array by value, whose if, conditional and match on its length are decided per instance (G29,
+# G30), and a generic struct G<i><T> holding fixed storage; structs declaring Eq/Hash/Str (E10a, E11c); case _ (S13f);
 # the numbers' methods (M19d; the floats' through libm while compiling, X8); n.Format(base) read back by ParseInt/ParseUint, and x.Fixed(n).
 # A case's result may be a struct, an enum, an array or a G<i> value, so such globals are baked (K2b) too.
 
 # the primitive types by code: 0-7 the integers, 8-11 the floats, 12 Bool, 13 String. A case's own struct types are
 # 100 + k, its enum types 200 + k, Array<T> of a primitive T is 300 + T, the case's k-th function type (a lambda's)
-# 400 + k, List<T> of a primitive T 500 + T, Map<K, V> 1000 + 16K + V (K an integer or Bool), Array<T, N> 2000 + 16T + N
-# (N 15: a generic's own N, not known), Array<T>& 3000 + T and mut Array<T>& 3100 + T, mut S& of the case's struct k
+# 400 + k, List<T> of a primitive T 500 + T, Map<K, V> 1000 + 16K + V (K an integer or Bool), fixed storage of N elements
+# 2000 + 16T + N (N 15: an array taken by value, its instance's length), Array<T>& 3000 + T and mut Array<T>& 3100 + T, mut S& of the case's struct k
 # 4000 + k and S& 4100 + k
 Prims := String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "String"]
 Widths := I32[8, 16, 32, 64, 8, 16, 32, 64, 16, 16, 32, 64, 1, 0]
@@ -50,7 +50,7 @@ fn isFixed(t I32) Bool { return 2000 <= t < 2300 }
 fn isARef(t I32) Bool { return 3000 <= t < 3200 }
 fn isSRef(t I32) Bool { return 4000 <= t < 4200 }
 # an array of any kind: a value, a fixed-length value, a reference
-# Array<T, N>& 2300 + 16T + N and mut Array<T, N>& 2600 + 16T + N: a fixed-length reference (T7d, E32b)
+# a reference to N elements 2300 + 16T + N and mut 2600 + 16T + N: a borrow of fixed storage or a slice (T7d, E16a)
 fn isFRef(t I32) Bool { return 2300 <= t < 2900 }
 fn frefN(t I32) I64 { return I64((t - 2300) % 300 % 16) }
 # an array reference of either kind
@@ -75,7 +75,7 @@ fn mapV(t I32) I32 {
     if t >= 1300 { return (t - 1300) % 16 }
     return (t - 1000) % 16
 }
-# the case's generic struct G<i><T, N> over a number type T and a length N (6000 + 16T + N)
+# the case's generic struct G<i><T> over a number type T, holding fixed storage of 8 and a count N used (6000 + 16T + N)
 fn isGen(t I32) Bool { return 6000 <= t < 6200 }
 fn fixN(t I32) I64 { return I64((t - 2000) % 16) }
 # the struct k of a struct value or reference
@@ -130,16 +130,16 @@ type Gen struct(seed U64) {
     # whether a case may use an atomic method on a local (K1 performs them while compiling)
     atomics Bool = true
     # the variables in scope, from base to nv: a variable k is named x<k>
-    vt Array<I32, 4096>
-    vlen Array<I64, 4096>              # an array's length, -1 when it is not known
-    vmut Array<Bool, 4096>            # whether it may be assigned
-    vdep Array<Bool, 4096>            # whether it depends on a parameter (S8a)
-    vwalk Array<Bool, 4096>           # a List or Map a loop is walking, by its group: changing it is left out
-    vgrp Array<I64, 4096>             # a List's or Map's group: the variable whose collection it names (a copy of a
+    vt := Array<I32>(4096)
+    vlen := Array<I64>(4096)              # an array's length, -1 when it is not known
+    vmut := Array<Bool>(4096)            # whether it may be assigned
+    vdep := Array<Bool>(4096)            # whether it depends on a parameter (S8a)
+    vwalk := Array<Bool>(4096)           # a List or Map a loop is walking, by its group: changing it is left out
+    vgrp := Array<I64>(4096)             # a List's or Map's group: the variable whose collection it names (a copy of a
                                       # List or Map value is the same collection)
-    vblk Array<I64, 4096>             # the block a variable is declared in
-    vref Array<Bool, 4096>            # a List or Map parameter: a reference to the caller's collection
-    vhome Array<I64, 4096>            # a reference's: the block its referent lives in (O25 - a local reference's scope
+    vblk := Array<I64>(4096)             # the block a variable is declared in
+    vref := Array<Bool>(4096)            # a List or Map parameter: a reference to the caller's collection
+    vhome := Array<I64>(4096)            # a reference's: the block its referent lives in (O25 - a local reference's scope
                                       # is exact, so it is repointed only to what lives there too)
     curBlock I64 = 0
     nblock I64 = 0
@@ -152,22 +152,22 @@ type Gen struct(seed U64) {
     hdepth I64 = 0                                  # helpers being made inside each other
     # this case's struct types: a field count and up to 4 field types each
     ns I64 = 0
-    sn Array<I32, 4>
-    sf Array<I32, 16>
-    shash Array<Bool, 4>                            # whether struct k has a Hash, declared or supplied (E10b)
-    ehash Array<Bool, 4>                            # whether enum k has a supplied Hash (no float in a payload)
+    sn := Array<I32>(4)
+    sf := Array<I32>(16)
+    shash := Array<Bool>(4)                            # whether struct k has a Hash, declared or supplied (E10b)
+    ehash := Array<Bool>(4)                            # whether enum k has a supplied Hash (no float in a payload)
     hasG Bool = false                               # this case's generic struct G<i><T, N I64> is declared
     srcT I32 = 0                                    # what source() found: its element type
     srcV I64 = -1                                   # and its variable
     # this case's enum types: a case count (up to 4), a payload count per case (up to 2) and the payloads' types
     ne I64 = 0
-    en Array<I32, 4>
-    epn Array<I32, 16>
-    ept Array<I32, 32>
+    en := Array<I32>(4)
+    epn := Array<I32>(16)
+    ept := Array<I32>(32)
     # this case's function types: a parameter type and a result type each
     nl I64 = 0
-    lp Array<I32, 64>
-    lr Array<I32, 64>
+    lp := Array<I32>(64)
+    lr := Array<I32>(64)
     errs Bool = false                               # this case has declared its error type, Err<i>
     fallible Bool = false                           # the function being made declares it (so a try may pass it on)
     inLambda Bool = false                           # a lambda's body is being made: a List, holding references, is not
@@ -200,14 +200,12 @@ fn (g Gen&) tn(t I32) String& {
     if t < 500 { return "fn(p " $Prims[g.lp[t - 400]] ") " $Prims[g.lr[t - 400]] }
     if t < 600 { return "List<" $Prims[t - 500] ">" }
     if isMap(t) { return "Map<" $g.tn(mapK(t)) ", " $Prims[mapV(t)] ">" }
-    if isGen(t) { return "G" $g.ci "<" $Prims[(t - 6000) / 16] ", " $((t - 6000) % 16) ">" }
-    if isFixed(t) {
-        if fixN(t) == 15 { return "Array<" $Prims[elemOf(t)] ", N>" }
-        return "Array<" $Prims[elemOf(t)] ", " $fixN(t) ">"
-    }
+    if isGen(t) { return "G" $g.ci "<" $Prims[(t - 6000) / 16] ">" }
+    # a length is never written in a type (T7): fixed storage is inferred where it is made
+    if isFixed(t) { return "Array<" $Prims[elemOf(t)] ">" }
     if isFRef(t) {
         m String& = "mut " if t >= 2600 else ""
-        return $m "Array<" $Prims[elemOf(t)] ", " $frefN(t) ">&"
+        return $m "Array<" $Prims[elemOf(t)] ">&"
     }
     if t >= 3100 and t < 3200 { return "mut Array<" $Prims[t - 3100] ">&" }
     if isARef(t) { return "Array<" $Prims[t - 3000] ">&" }
@@ -1845,7 +1843,9 @@ fn (g mut Gen&) assignStmt(ind String&) String& {
     p := g.r(4)
     if p == 0 {
         a := g.pick(0, 26)
-        if a >= 0 and not isARef(g.vt[a]) {
+        # a fixed local assigned as a whole would hold its length at run time (T7d), so it is not - an array taken by
+        # value (G29) is given one
+        if a >= 0 and not isARef(g.vt[a]) and not isFixed(g.vt[a]) {
             t := g.vt[a]
             for k in range g.base, g.nv {
                 b := g.vt[k]
@@ -1880,7 +1880,7 @@ fn (g mut Gen&) assignStmt(ind String&) String& {
 }
 
 # a fixed-length reference local: a borrow of a fixed-length array, or a view of a run-time one whose length is known
-# (E32b) - writable where its source is, so writes through it are the source's
+# (a slice of its length, E16a) - writable where its source is, so writes through it are the source's
 fn (g mut Gen&) frefDecl(ind String&) String& {
     src I64 = -1
     for k in range g.base, g.nv {
@@ -1895,14 +1895,14 @@ fn (g mut Gen&) frefDecl(ind String&) String& {
     t I32 = I32(2600 + et * 16 + n) if w else I32(2300 + et * 16 + n)
     x := g.use(src)
     init String& = x
-    if not isFixed(s) { init = $x " as Array<" $Prims[et] ", " $n ">&" }
+    if not isFixed(s) { init = $x "[0:" $n "]" }
     k := g.reserve()
     g.declare(k, t, n, true)
     g.vhome[k] = g.vhome[src] if isRefArr(s) else g.vblk[src]
     return $ind "x" $k " " $g.tn(t) $x " = " $init "\n"
 }
 
-# ---- fixed-length arrays (T7c/T7d) and functions generic over a constant (G20-G28) ----
+# ---- fixed storage (T7c/T7d) and functions taking an array by value (G29, G30) ----
 
 # a value of fixed-length array type t: a variable of it, its zero value or a literal of its length (T7d: it adapts)
 fn (g mut Gen&) fixedVal(t I32, d I64) String& {
@@ -1910,7 +1910,7 @@ fn (g mut Gen&) fixedVal(t I32, d I64) String& {
     if k >= 0 and g.chance(50) { return g.use(k) }
     et := elemOf(t)
     n := fixN(t)
-    if n == 0 or g.chance(15) { return $g.tn(t) "()" }
+    if n == 0 or g.chance(15) { return "Array<" $Prims[et] ">(" $n ")" }
     b := StringBuilder()
     b.Push($Prims[et] "[")
     for i in range n {
@@ -1932,15 +1932,13 @@ fn (g mut Gen&) fixedDecl(ind String&) String& {
     init String& = ""
     if p == 0 and src >= 0 and 0 <= g.vlen[src] < 15 {
         n = g.vlen[src]
-        init = " = " $g.use(src)
+        init = " = " $g.use(src) "[0:" $n "]"                  # a slice of its length, copied (T7c, E16a)
     }
     t I32 = I32(2000 + et * 16 + n)
-    if p == 1 {
-        init = " = " $g.tn(t) "()"
+    if p == 1 or (p == 3 and g.chance(50)) {
+        init = " = Array<" $Prims[et] ">(" $n ")"
     } else if p == 2 {
         init = " = " $g.fixedVal(t, 3)
-    } else if p == 3 and g.chance(50) {
-        init = ""
     } else if init.Len() == 0 {
         init = " = " $g.fixedVal(t, 3)
     }
@@ -1948,8 +1946,8 @@ fn (g mut Gen&) fixedDecl(ind String&) String& {
     return $ind "x" $k " " $g.tn(t) $init "\n"
 }
 
-# an element of a run-time array viewed as a fixed-length one (E32b): checked under try, the default where the length
-# is not N
+# an element of a run-time array viewed through a slice of a known length (E16a): checked under checked, the default
+# where the slice or the index is out of range
 fn (g mut Gen&) viewElement(t I32, d I64) String& {
     a := g.pick(t, 24)
     if a < 0 or g.chance(40) {
@@ -1960,7 +1958,7 @@ fn (g mut Gen&) viewElement(t I32, d I64) String& {
     if a < 0 { return g.leaf(t) }
     n I64 = 1 + g.r(5)
     if g.vlen[a] > 0 and g.chance(50) { n = g.vlen[a] }
-    v String& = "(" $g.use(a) " as Array<" $Prims[t] ", " $n ">&)"
+    v String& = "(" $g.use(a) "[0:" $n "])"
     if n == g.vlen[a] and g.chance(60) { return $v "[" $g.r(n) "]" }
     return "(checked (" $v "[" $g.solid(g.idxT(), d - 1) "]) catch default " $g.lit(t) ")"
 }
@@ -1971,9 +1969,9 @@ fn convertible(s I32, t I32) Bool {
     return not (isFloat(s) and isInt(t))
 }
 
-# a call of a new function generic over a constant N - its array parameter's length - whose body decides an if, a
-# conditional and a match on N per instantiation, the branch not chosen never checked (G26): it may index past N. Or a
-# recursion on N, ended by such an if
+# a call of a new function taking an array by value - an instance per its length (G29) - whose body decides an if, a
+# conditional and a match on that length per instance, the branch not chosen never checked (G30): it may index past the
+# length. Or a recursion on the length, ended by such an if
 fn (g mut Gen&) constCall(t I32, d I64) String& {
     if g.hdepth >= 2 or g.ng >= 3 or g.constN or t == TStr or t == TBool { return g.leaf(t) }
     et := g.numT()
@@ -1999,13 +1997,13 @@ fn (g mut Gen&) constCall(t I32, d I64) String& {
         g.np = 0
         ops := String&["+", "-", "*", "^", "&", "|"]
         op := ops[g.r(6) if isInt(et) else g.r(3)]
-        b.Push("fn " $name "<N>(x" $a " Array<" $Prims[et] ", N>&) " $Prims[t] " {\n")
-        b.Push("    if N == 0 { return " $g.lit(t) " } else { return x" $a "[0] " $op " " $name "(x" $a "[1:] as Array<" $Prims[et] ", N - 1>&) }\n}\n")
+        b.Push("fn " $name "(x" $a " Array<" $Prims[et] ">) " $Prims[t] " {\n")
+        b.Push("    if x" $a ".Len() == 0 { return " $g.lit(t) " } else { return x" $a "[0] " $op " " $name "(x" $a "[1:]) }\n}\n")
     } else {
         p := g.push(pt, -1, false, true)
         a := g.push(I32(2000 + et * 16 + 15), -1, false, true)
         g.np = 1
-        b.Push("fn " $name "<N>(x" $p " " $Prims[pt] ", x" $a " Array<" $Prims[et] ", N>&) " $Prims[t] " {\n")
+        b.Push("fn " $name "(x" $p " " $Prims[pt] ", x" $a " Array<" $Prims[et] ">) " $Prims[t] " {\n")
         g.hdepth += 1
         b.Push(g.stmts(1 + g.r(3), 1, "    "))
         b.Push(g.constIf(a, 1, "    "))
@@ -2033,8 +2031,8 @@ fn (g mut Gen&) constCall(t I32, d I64) String& {
     return $name "(" $g.fit(pt, d - 1) ", " $arg ")"
 }
 
-# an if on N: in the branch where N > c the array a is known to hold c + 1 elements at least, which an instantiation
-# whose N is not above c never checks
+# an if on a's length: in the branch where it is above c the array a is known to hold c + 1 elements at least, which an
+# instance whose length is not above c never checks
 fn (g mut Gen&) constIf(a I64, d I64, ind String&) String& {
     c I64 = g.r(4)
     in2 := $ind "    "
@@ -2042,11 +2040,11 @@ fn (g mut Gen&) constIf(a I64, d I64, ind String&) String& {
     t := g.block(1 + g.r(2), d, in2)
     g.vlen[a] = -1
     e := g.block(1 + g.r(2), d, in2)
-    return $ind "if N > " $c " {\n" $t $ind "} else {\n" $e $ind "}\n"
+    return $ind "if " $g.use(a) ".Len() > " $c " {\n" $t $ind "} else {\n" $e $ind "}\n"
 }
 
-# a value of type t in a function generic over N: N itself, a conditional on N reading an element only where N says
-# there is one, or a match on N
+# a value of type t in a function taking an array by value: its length, a conditional on the length reading an element
+# only where the length says there is one, or a match on the length
 fn (g mut Gen&) constVal(t I32, d I64) String& {
     a I64 = -1
     for k in range g.base, g.nv {
@@ -2055,13 +2053,13 @@ fn (g mut Gen&) constVal(t I32, d I64) String& {
     if a < 0 { return g.leaf(t) }
     et := elemOf(g.vt[a])
     p := g.r(3)
-    if p == 0 and isInt(t) { return $Prims[t] "(N)" }
+    if p == 0 and isInt(t) { return $Prims[t] "(" $g.use(a) ".Len())" }
     if p == 1 and convertible(et, t) {
         c I64 = g.r(4)
-        return "(" $Prims[t] "(" $g.use(a) "[" $c "]) if N > " $c " else " $Prims[t] "(" $g.ex(t, d - 1) "))"
+        return "(" $Prims[t] "(" $g.use(a) "[" $c "]) if " $g.use(a) ".Len() > " $c " else " $Prims[t] "(" $g.ex(t, d - 1) "))"
     }
     b := StringBuilder()
-    b.Push("(match N { ")
+    b.Push("(match " $g.use(a) ".Len() { ")
     n I64 = 1 + g.r(3)
     for c in range n {
         b.Push("case " $c " => ")
@@ -2075,21 +2073,21 @@ fn (g mut Gen&) constVal(t I32, d I64) String& {
     return b.ToString()
 }
 
-# ---- a generic struct over a type and a constant (G20-G26), per case ----
+# ---- a generic struct over a type holding fixed storage, per case ----
 
 fn (g mut Gen&) gDecl() {
     if g.hasG { return }
     g.hasG = true
     n String& = "G" $g.ci
     b := StringBuilder()
-    b.Push("type " $n "<T, N I64> struct(v T) {\n    v\n    a Array<T, N>\n}\n")
-    b.Push("fn (b mut " $n "<T, N>&) put(i I64, x T) {\n    if N > 0 { b.a[(i & 7) % N] = x }\n}\n")
-    b.Push("fn (b " $n "<T, N>&) sum() T {\n    s T = b.v\n    for x in b.a { s = s + x }\n    return s\n}\n")
-    b.Push("fn (b " $n "<T, N>&) at(i I64) T { return b.a[(i & 7) % N] if N > 0 else b.v }\n")
+    b.Push("type " $n "<T> struct(v T, n I64) {\n    v\n    n\n    a := Array<T>(8)\n}\n")
+    b.Push("fn (b mut " $n "<T>&) put(i I64, x T) {\n    if b.n > 0 { b.a[(i & 7) % b.n] = x }\n}\n")
+    b.Push("fn (b " $n "<T>&) sum() T {\n    s T = b.v\n    for j in range b.n { s = s + b.a[j] }\n    return s\n}\n")
+    b.Push("fn (b " $n "<T>&) at(i I64) T { return b.a[(i & 7) % b.n] if b.n > 0 else b.v }\n")
     g.decls = $g.decls $b.ToString()
 }
 
-# a statement making a G<i><T, N> value, copying one (its array is copied with it, T7c), or putting into one
+# a statement making a G<i><T> value, copying one (its array is copied with it, T7d), or putting into one
 fn (g mut Gen&) genStmt(ind String&) String& {
     k I64 = -1
     for v in range g.base, g.nv {
@@ -2110,7 +2108,7 @@ fn (g mut Gen&) genStmt(ind String&) String& {
     x := g.reserve()
     e := g.fit(et, 2)
     g.declare(x, t, -1, true)
-    return $ind "x" $x " " $g.tn(t) " = " $g.tn(t) "(" $e ")\n"
+    return $ind "x" $x " " $g.tn(t) " = " $g.tn(t) "(" $e ", " $((t - 6000) % 16) ")\n"
 }
 
 # ---- the numbers' methods, Format and ParseInt, Fixed ----
@@ -2376,7 +2374,7 @@ fn (g mut Gen&) retVal(rt I32) String& {
         b.Push("]")
         return b.ToString()
     }
-    if isGen(rt) { return $g.tn(rt) "(" $g.fit((rt - 6000) / 16, 2) ")" }
+    if isGen(rt) { return $g.tn(rt) "(" $g.fit((rt - 6000) / 16, 2) ", " $((rt - 6000) % 16) ")" }
     return g.ex(rt, 3)
 }
 
@@ -2423,7 +2421,9 @@ fn (g mut Gen&) newStruct() String& {
     for f in range n {
         t := g.sf[k * 4 + f]
         if isFixed(t) {
-            b.Push("    f" $f " " $g.tn(t) " = p" $f "\n")
+            # fixed storage made where it is declared, its length known (T7d), the argument's elements copied in
+            b.Push("    f" $f " := Array<" $Prims[elemOf(t)] ">(" $fixN(t) ")\n")
+            b.Push("    for i in range " $fixN(t) " { f" $f "[i] = p" $f "[i] }\n")
         } else {
             b.Push("    f" $f "\n")
         }
@@ -2465,7 +2465,6 @@ fn (g mut Gen&) newEnum() String& {
             b.Push("(")
             for f in range np {
                 t := g.primT()
-                if g.chance(12) { t = I32(2000 + g.primT() * 16 + 1 + g.r(3)) }      # held in the payload (T7c)
                 g.ept[(k * 4 + c) * 2 + f] = t
                 if isFloat(t) or (isFixed(t) and isFloat(elemOf(t))) { hashes = false }
                 if f > 0 { b.Push(", ") }

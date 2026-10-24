@@ -3,6 +3,6 @@
 # expected function type gives is not (see the corpus)
 import "std/io"
 fn main() ? {
-    a := Array<Array<I32, 2>>(3)
-    try io.Println($a.Any(fn(x Array<I32, 2>) Bool { return x[0] == 5 }))
+    a := Array<Array<I32>>(3, Array<I32>(2))
+    try io.Println($a.Any(fn(x Array<I32>) Bool { return x[0] == 5 }))
 }

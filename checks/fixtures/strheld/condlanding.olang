@@ -5,7 +5,7 @@ Made mut I64 = 0
 Gone mut I64 = 0
 type Res struct(k I64) {
     k
-    pad Array<I64, 16>
+    pad := Array<I64>(16)
     Made++
 } destruct {
     Gone++
