@@ -3468,3 +3468,16 @@ done:
 !50 = !{!"chunkhdr", !20, i64 0}
 !59 = !{!49, !49, i64 0}
 !60 = !{!50, !50, i64 0}
+
+; X12: an export fn entered on a thread olang did not start - one C made: what a worker sets up as it starts (a number
+; of its own, a part of the program's scope) done before anything of olang runs there. The entry asks first, one load
+; and a compare: @__olang_self is null on such a thread alone
+define void @__olang_thread_enter() noinline {
+entry:
+  call void @__olang_thread_init()
+  %prog = call ptr @malloc(i64 48)
+  call void @__olang_alloc_check(ptr %prog)
+  store %olang.scope { ptr null, ptr null, ptr null, ptr @__olang_global_scope, ptr null, ptr null }, ptr %prog
+  store ptr %prog, ptr @__olang_prog_scope
+  ret void
+}

@@ -599,6 +599,7 @@ fn (c mut Checker&) allFixed(xs Array<ast.Expr&>&, out mut Map<source.NameId, I6
 fn (c mut Checker&) attempt() {
     for f in range c.P.FnCount() {
         if c.P.FnIsExtern(f) and not (c.RootOnly and c.P.FnModule(f) != c.P.L.Root) { c.externRules(f) }
+        if not c.P.FnIsExtern(f) and c.P.FnDecl(f).Export and not (c.RootOnly and c.P.FnModule(f) != c.P.L.Root) { c.exportRules(f) }
         if c.P.FnIsExtern(f) or not c.P.FnDecl(f).Bodied { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
@@ -651,6 +652,7 @@ fn (c mut Checker&) externRules(f I64) {
         if i >= ps.Len() { break }
         t := ps[i]
         if t == types.UnknownT or c.externParam(t) { continue }
+        if not runtime and c.callbackType(t) { continue }   # X13: an export fn, by its C name
         if runtime and c.P.T.KindOf(t) == types.Kind.Func and c.P.T.Items(c.P.T.Params(t)).Len() == 0 and c.P.T.Result(t) == types.VoidT and c.P.T.Items(c.P.T.Errors(t)).Len() == 0 { continue }
         sp := fd.S.Params[i].Sp
         c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), msgs.ExternType(c.ty(t)))
@@ -659,6 +661,102 @@ fn (c mut Checker&) externRules(f I64) {
     if r == types.UnknownT or r == types.VoidT or r == types.NoreturnT or fd.S.Results.Len() == 0 { return }
     if fd.S.Results.Len() > 1 or not c.externValue(r) {
         c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), msgs.ExternResult(c.ty(r)))
+    }
+}
+
+# X13: a function type a C function is given an export fn of: its parameters and its result an export fn's (X12),
+# none an array, and no errors
+fn (c mut Checker&) callbackType(t types.TypeId) Bool {
+    if c.P.T.KindOf(t) != types.Kind.Func or c.P.T.Items(c.P.T.Errors(t)).Len() > 0 { return false }
+    for p in c.P.T.Items(c.P.T.Params(t)) {
+        if not (c.externValue(p) or (c.isRef(p) and c.plainStruct(c.P.T.Referent(p), 0))) { return false }
+    }
+    r := c.P.T.Result(t)
+    return r == types.VoidT or c.externValue(r)
+}
+
+# X12: an export fn - a function C calls by its name: no receiver, not generic, a name that is not the program's own,
+# parameters and a result C has counterparts for (an array by reference, a result array copied out)
+fn (c mut Checker&) exportRules(f I64) {
+    fd := c.P.FnDecl(f)
+    mi := c.P.FnModule(f)
+    file := c.P.L.Mods[mi].File
+    name := c.text(fd.Name)
+    at := diag.Where.Span(file, I64(fd.Sp.Start), I64(fd.Sp.Start) + 6)
+    if fd.Recv is not null {
+        c.P.L.Diags.Error(at, msgs.ExportMethod())
+        return
+    }
+    if fd.TypeParams.Len() > 0 or c.P.VarCount(generic.FnOwner(f)) > 0 {
+        c.P.L.Diags.Error(at, msgs.ExportGeneric())
+        return
+    }
+    if name == "main" or name.StartsWith("__olang_") {
+        c.P.L.Diags.Error(at, msgs.ExportName(msgs.Tok(name)))
+        return
+    }
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    for i in range fd.S.Params.Len() {
+        if i >= ps.Len() { break }
+        t := ps[i]
+        if t == types.UnknownT or c.exportParam(t) { continue }
+        sp := fd.S.Params[i].Sp
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), msgs.ExportType(c.ty(t)))
+    }
+    r := c.P.T.Result(sig)
+    if r == types.UnknownT or r == types.VoidT or fd.S.Results.Len() == 0 { return }
+    if fd.S.Results.Len() > 1 or not (c.externValue(r) or c.exportArray(r)) {
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), msgs.ExportResult(c.ty(r)))
+    }
+}
+
+# X12: an export fn's parameter type: an extern's value (X2), a plain struct by reference, or an array by reference of
+# an extern's values - C's pointer and length
+fn (c mut Checker&) exportParam(t types.TypeId) Bool {
+    if c.externValue(t) { return true }
+    if not c.isRef(t) { return false }
+    x := c.P.T.Referent(t)
+    if c.plainStruct(x, 0) { return true }
+    u := c.under(x)
+    return c.P.T.KindOf(u) == types.Kind.Array and c.externValue(c.P.T.Elem(u))
+}
+
+# X12: an array an export fn may give: by value, its elements an extern's values - copied into the caller's buffer
+fn (c mut Checker&) exportArray(t types.TypeId) Bool {
+    if c.isRef(t) { return false }
+    u := c.under(t)
+    return c.P.T.KindOf(u) == types.Kind.Array and c.externValue(c.P.T.Elem(u))
+}
+
+# X13: what a C function is given for a parameter of a function type: an export fn, named - its C entry, which C may
+# call on any thread (X12) - and nothing else, no lambda and no function value held, which C could not call
+fn (c mut Checker&) callbackArg(x typed.Expr&, sp source.Span) {
+    match x {
+        case typed.Expr.Fn(_, _, fv) {
+            match fv {
+                case typed.FnVal.Named(body) {
+                    match c.Bodies[I64(body)].Of {
+                        case typed.BodyOf.Fn(inst) {
+                            if c.P.FnDecl(c.P.InstanceFn(inst)).Export { return }
+                        }
+                        case _ { }
+                    }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    if typeOf(x) == types.UnknownT { return }
+    c.err(sp, msgs.CallbackNotExport())
+}
+
+# whether a call reaches a C function (X13's callbacks): an extern, not one of the runtime's own (X6)
+fn (c mut Checker&) cCallback(target typed.Callee&, f I64) Bool {
+    match target {
+        case typed.Callee.Extern(_) { return f >= 0 and not c.text(c.P.FnDecl(f).Name).StartsWith("__olang_") }
+        case _ { return false }
     }
 }
 
@@ -9407,6 +9505,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     c.nullDecl = c.paramAt(target, f, k)
                     e = ex if ex is not null else c.fit(e!, ps[k], c.argSpan(args[i]))
                     c.nullDecl = wasNull
+                    if c.cCallback(target, f) and c.P.T.KindOf(ps[k]) == types.Kind.Func { c.callbackArg(e!, c.argSpan(args[i])) }
                 }
             }
         } else {

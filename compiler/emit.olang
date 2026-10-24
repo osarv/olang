@@ -504,6 +504,8 @@ fn (e mut Emitter&) emitAll() {
         }
     }
     for k in instKeys { e.want(k) }
+    # X12: each export fn's C entry, in the root's object (X14's error numbering is the whole program's)
+    for i in e.exportBodies() { e.exportEntry(i) }
     if e.Module {
         # its own bodies only, wanted above
     } else if e.Tests {
@@ -4511,7 +4513,7 @@ fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
     if e.has(name) { return name }
     b := StringBuilder()
     b.Push($e.cHeader(ty) " @" $name "(")
-    b.Push(e.cParamList(ty))
+    b.Push(e.cParamList(ty, name.StartsWith("__olang_")))
     b.Push(")")
     # X8: any other C math function as C's default -fmath-errno declares it (it may write errno), and nobuiltin, so LLVM
     # never rewrites a call of it - the program calls exactly the function the evaluator called
@@ -4594,7 +4596,7 @@ fn (e mut Emitter&) cHeader(ty types.TypeId) String {
 }
 
 # a C function's parameters as its declaration spells them (X2, X3, X11)
-fn (e mut Emitter&) cParamList(ty types.TypeId) String {
+fn (e mut Emitter&) cParamList(ty types.TypeId, runtime Bool) String {
     t := e.T
     b := StringBuilder()
     first := true
@@ -4608,18 +4610,22 @@ fn (e mut Emitter&) cParamList(ty types.TypeId) String {
     for p in t.Items(t.Params(ty)) {
         if not first { b.Push(", ") }
         first = false
-        b.Push(e.cParamSpelled(p, regs))
+        b.Push(e.cParamSpelled(p, regs, runtime))
     }
     return b.ToString()
 }
 
 # one C parameter spelled for a declaration
-fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&) String {
+fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&, runtime Bool) String {
     t := e.T
     rp := t.Repr(p)
-    if t.KindOf(rp) == types.Kind.Func {
+    if t.KindOf(rp) == types.Kind.Func and runtime {
         regs.Int -= 2
         return "ptr, ptr"
+    }
+    if t.KindOf(rp) == types.Kind.Func {
+        regs.Int--      # X13: a C function pointer - an export fn's entry
+        return "ptr"
     }
     x := t.Referent(rp) if t.IsRef(rp) else rp
     if t.IsRef(rp) or t.KindOf(t.Repr(x)) == types.Kind.Array {
@@ -4662,9 +4668,15 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId) {
         x := fe.arg(c.Args, i)
         p := ps[i]
         rp := t.Repr(p)
-        if t.KindOf(rp) == types.Kind.Func {
+        if t.KindOf(rp) == types.Kind.Func and target.StartsWith("@__olang_") {
             regs.Int -= 2
             args.Push(fe.externArg(fe.val(x, p), p))
+            continue
+        }
+        if t.KindOf(rp) == types.Kind.Func {
+            # X13: the export fn named, by its C entry
+            regs.Int--
+            args.Push($"ptr @" $fe.exportNamed(x))
             continue
         }
         xr := t.Referent(rp) if t.IsRef(rp) else rp
@@ -4731,6 +4743,321 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId) {
         }
     }
     fe.w("br label %" $blockName(c.Ok))
+}
+
+# ---- export fns: the C entries (X12) ----
+
+# the C name of the export fn a function value operand was made of (X13): check allows only one, named at the call -
+# lowering makes it a local assigned the closure once, here found
+fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
+    l := mir.LocalId(-1)
+    match x {
+        case mir.Operand.Copy(pl) {
+            match pl.B {
+                case mir.Base.Local(k) { l = k }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    for bb in fe.F.Blocks {
+        for st in bb.Stmts {
+            match st {
+                case mir.Stmt.Assign(_, pl, rv) {
+                    if pl.Path.N != I32(0) or not fe.baseIs(pl, l) { continue }
+                    match rv {
+                        case mir.Rvalue.Closure(code, _, _, _, _) {
+                            match code {
+                                case mir.FnKey.Body(id) {
+                                    match fe.E.Lw.Bodies[I64(id)].Of {
+                                        case typed.BodyOf.Fn(inst) { return $fe.E.text(fe.E.P.FnDecl(fe.E.P.InstanceFn(inst)).Name) }
+                                        case _ { }
+                                    }
+                                }
+                                case _ { }
+                            }
+                        }
+                        case _ { }
+                    }
+                }
+                case _ { }
+            }
+        }
+    }
+    fe.gap("a C callback that is no export fn named at the call")
+    return "null"
+}
+
+
+# the export fns this build writes - each body that is one, in the order the bodies are - and the error types their
+# lists name, in order of first appearance: a library's error codes number them (X14), every entry of the program the
+# same way, so they are written in the root's object
+fn (e mut Emitter&) exportBodies() List<I64> {
+    out List<I64>
+    p := e.P
+    for i in range e.Lw.Bodies.Len() {
+        match e.Lw.Bodies[i].Of {
+            case typed.BodyOf.Fn(inst) {
+                f := p.InstanceFn(inst)
+                if p.FnDecl(f).Export and e.Lw.Bodies[i].Root is not null and (not e.Module or p.FnModule(f) == p.L.Root) { out.Push(i) }
+            }
+            case _ { }
+        }
+    }
+    return out
+}
+
+# the error types the export fns' lists name, in order of first appearance - the default error among them where one
+# has it (R1a): a library's codes are (position << 16) | word, as R6 encodes one function's (X14)
+fn (e mut Emitter&) ExportErrors() List<types.TypeId> {
+    t := e.T
+    out List<types.TypeId>
+    for i in e.exportBodies() {
+        for x in t.Items(t.Errors(e.Lw.Bodies[i].Ty)) {
+            et := t.ErrOf(x) if x != types.DefaultErrT else x
+            seen := false
+            for y in out {
+                if t.Same(y, et) { seen = true }
+            }
+            if not seen { out.Push(et) }
+        }
+    }
+    return out
+}
+
+# export fn body i's C entry (X12): C's arguments made the function's, on a thread set up for olang if C made it, in a
+# scope opened for the call and closed before it returns - the result copied out first; an error's code re-encoded
+# under the library's numbering (X14), the result then through the pointer C gives
+fn (e mut Emitter&) exportEntry(i I64) {
+    t := e.T
+    p := e.P
+    body := e.Lw.Bodies[i]
+    f := -1
+    match body.Of {
+        case typed.BodyOf.Fn(inst) { f = p.InstanceFn(inst) }
+        case _ { return }
+    }
+    name := $e.text(p.FnDecl(f).Name)
+    ty := body.Ty
+    k := mir.FnKey.Body(typed.BodyId(I32(i)))
+    e.want(k)
+    fe mut fnEm&e = fnEm(e, mir.Fn(k, ty, 0, source.Span(0, 0)), k)
+    res := t.Result(ty)
+    hasRes := res != types.VoidT and res != types.NoreturnT
+    if hasRes { p.Layout(res) }
+    errs := t.Items(t.Errors(ty)).Len() > 0
+    arr := hasRes and e.exportArrayResult(res)
+    rw := cabi.Way(cabi.Pass.Direct, List<String&>(), List<I64>(), List<I64>(), "")
+    if hasRes and not errs and not arr { rw = cabi.Result(t, e.Arch, res) }
+    cps List<String&>          # C's parameters
+    regs := cabi.Regs(6, 8)
+    if rw.Kind == cabi.Pass.Sret {
+        cps.Push($"ptr sret(" $e.ty(res) ") align " $t.Align(res) " %sret")
+        regs.Int--
+    }
+    olang List<String&>        # the function's arguments, after its hidden ones
+    ps := t.Items(t.Params(ty))
+    pass := t.Passing(ty)
+    for j in range ps.Len() {
+        pt := ps[j]
+        p.Layout(pt)
+        rp := t.Repr(pt)
+        v := $"%p" $j
+        if t.IsRef(rp) {
+            x := t.Repr(t.Referent(rp))
+            if t.KindOf(x) == types.Kind.Array and t.Length(x) == types.TypeId(0) {
+                cps.Push($"ptr " $v)
+                cps.Push($"i64 " $v "n")
+                regs.Int -= 2
+                a := fe.let($"insertvalue { i64, ptr } undef, i64 " $v "n, 0")
+                olang.Push($"{ i64, ptr } " $fe.let($"insertvalue { i64, ptr } " $a ", ptr " $v ", 1"))
+            } else {
+                cps.Push($"ptr " $v)
+                regs.Int--
+                olang.Push($"ptr " $v)
+            }
+            continue
+        }
+        w := cabi.Param(t, e.Arch, pt, regs)
+        match w.Kind {
+            case cabi.Pass.Direct {
+                cps.Push($e.ty(pt) $(" " $w.Attr if w.Attr != "" else "") " " $v)
+                olang.Push($e.ty(pt) " " $v)
+                continue
+            }
+            case cabi.Pass.Parts {
+                tmp := fe.alloca($"[" $cabi.Span(t, w, pt) " x i8]", 8)
+                for q in range w.Parts.Len() {
+                    cps.Push($w.Parts[q] " " $v "_" $q)
+                    at := tmp if w.Offs[q] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $w.Offs[q])
+                    fe.store(w.Parts[q].Replace(" alignstack(8)", ""), $v "_" $q, at)
+                }
+                v = tmp
+            }
+            case cabi.Pass.Byval { cps.Push($"ptr byval(" $e.ty(pt) ") align " $(t.Align(pt).Max(8)) " " $v) }
+            case _ { cps.Push($"ptr " $v) }
+        }
+        # the struct is at v: the function's own copy where it takes one through memory, else its value
+        if pass[j] == 'm' {
+            mine := fe.slot(pt)
+            fe.memmove(mine, v, t.Size(pt))
+            olang.Push($"ptr " $mine)
+        } else {
+            olang.Push($e.ty(pt) " " $fe.load(e.ty(pt), v))
+        }
+    }
+    # where the result goes: an array's elements into C's buffer, its whole length given back; a value through C's
+    # pointer where the entry gives a code
+    el := types.UnknownT
+    if arr {
+        el = t.Elem(t.Repr(e.arrayOfE(res)))
+        p.Layout(el)
+        cps.Push("ptr %buf")
+        cps.Push("i64 %cap")
+        if errs { cps.Push("ptr %len") }
+    } else if errs and hasRes {
+        cps.Push("ptr %res")
+    }
+    # a thread C made gets olang's own state first (X12): one load and a compare on every entry
+    e.define("__olang_self", "@__olang_self = external thread_local(initialexec) global ptr")
+    e.runtime("__olang_thread_enter")
+    e.runtime("__olang_scope_close")
+    me := fe.let("load ptr, ptr @__olang_self")
+    fresh := fe.let($"icmp eq ptr " $me ", null")
+    fe.w($"br i1 " $fresh ", label %enter, label %go")
+    fe.code.Push("enter:\n")
+    fe.w("call void @__olang_thread_enter()")
+    fe.w("br label %go")
+    fe.code.Push("go:\n")
+    sc := fe.alloca("%olang.scope", 8)
+    fe.store("%olang.scope", "zeroinitializer", sc)
+    args List<String&>
+    out := ""
+    if hasRes and t.ViaMemory(res) {
+        out = fe.slot(res)
+        args.Push($"ptr " $out)
+    }
+    for q in range mir.PassedCount(t, mir.Callee.Fn(k, ty), ty) { args.Push($"ptr " $sc) }
+    for a in olang { args.Push(a) }
+    rt := t.RetLlvm(ty)
+    r := ""
+    al := StringBuilder()
+    for q, a in args {
+        if q > 0 { al.Push(", ") }
+        al.Push(a)
+    }
+    if rt == "void" {
+        fe.w($"call void @" $e.sym(k) "(" $al.ToString() ")")
+    } else {
+        r = fe.let($"call " $rt " @" $e.sym(k) "(" $al.ToString() ")")
+    }
+    # the code, and the value where there is one
+    code := ""
+    val := ""
+    if errs {
+        code = r if (out != "" or not hasRes) else fe.let($"extractvalue " $rt " " $r ", 0")
+        if hasRes and out == "" { val = fe.let($"extractvalue " $rt " " $r ", 1") }
+    } else if hasRes and out == "" {
+        val = r
+    }
+    if hasRes and out != "" { val = fe.load(e.ty(res), out) }
+    ret := ""
+    if errs {
+        bad := fe.let($"icmp ne i32 " $code ", 0")
+        fe.w($"br i1 " $bad ", label %failed, label %done")
+        fe.code.Push("failed:\n")
+        fe.w($"call void @__olang_scope_close(ptr " $sc ")")
+        lib := t.List(e.ExportErrors().ToArray())
+        fe.w($"ret i32 " $fe.recode(code, t.Errors(ty), lib))
+        fe.code.Push("done:\n")
+    }
+    if arr {
+        n := fe.let($"extractvalue { i64, ptr } " $val ", 0")
+        data := fe.let($"extractvalue { i64, ptr } " $val ", 1")
+        small := fe.let($"icmp slt i64 %cap, " $n)
+        m := fe.let($"select i1 " $small ", i64 %cap, i64 " $n)
+        pos := fe.let($"icmp sgt i64 " $m ", 0")
+        m = fe.let($"select i1 " $pos ", i64 " $m ", i64 0")
+        bytes := fe.let($"mul i64 " $m ", " $t.Size(el))
+        e.declare("llvm.memmove.p0.p0.i64", "void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)")
+        fe.w($"call void @llvm.memmove.p0.p0.i64(ptr %buf, ptr " $data ", i64 " $bytes ", i1 false)")
+        if errs {
+            fe.store("i64", n, "%len")
+            ret = "i32 0"
+        } else {
+            ret = $"i64 " $n
+        }
+    } else if errs {
+        if hasRes { fe.store(e.ty(res), val, "%res") }
+        ret = "i32 0"
+    } else if hasRes {
+        match rw.Kind {
+            case cabi.Pass.Direct { ret = $e.ty(res) " " $val }
+            case cabi.Pass.Parts {
+                tmp := fe.alloca($"[" $cabi.Span(t, rw, res) " x i8]", 8)
+                fe.store(e.ty(res), val, tmp)
+                whole := cabi.PartsType(rw)
+                if rw.Parts.Len() == 1 {
+                    ret = $whole " " $fe.load(whole, tmp)
+                } else {
+                    agg := "undef"
+                    for q in range rw.Parts.Len() {
+                        at := tmp if rw.Offs[q] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $rw.Offs[q])
+                        agg = fe.let($"insertvalue " $whole " " $agg ", " $rw.Parts[q] " " $fe.load(rw.Parts[q], at) ", " $q)
+                    }
+                    ret = $whole " " $agg
+                }
+            }
+            case _ { fe.store(e.ty(res), val, "%sret") }
+        }
+    }
+    fe.w($"call void @__olang_scope_close(ptr " $sc ")")
+    fe.w($"ret " $(ret if ret != "" else "void"))
+    # the header: C's convention for the result
+    head := "void"
+    if errs {
+        head = "i32"
+    } else if arr {
+        head = "i64"
+    } else if hasRes {
+        head = match rw.Kind {
+            case cabi.Pass.Direct => $($rw.Attr " " if rw.Attr != "" else "") $e.ty(res)
+            case cabi.Pass.Parts => cabi.PartsType(rw)
+            case _ => "void"
+        }
+    }
+    b := StringBuilder()
+    b.Push($"define " $head " @" $name "(")
+    for q, c in cps {
+        if q > 0 { b.Push(", ") }
+        b.Push(c)
+    }
+    b.Push(") #0 {\nentry:\n")
+    b.Push(fe.head.ToString())
+    b.Push(fe.code.ToString())
+    b.Push("}\n\n")
+    e.item(name, p.L.Root, b.ToString())
+}
+
+# whether an export fn's result is an array copied out into C's buffer (X12)
+fn (e mut Emitter&) exportArrayResult(r types.TypeId) Bool {
+    t := e.T
+    return not t.IsRef(t.Repr(r)) and e.arrayOfE(r) != types.UnknownT
+}
+
+# the array type a type is or is declared over (String's Array<Char>), Unknown for none
+fn (e mut Emitter&) arrayOfE(r types.TypeId) types.TypeId {
+    t := e.T
+    x := t.Repr(r)
+    for depth in range 8 {
+        if t.KindOf(x) == types.Kind.Array { return x }
+        if t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Over {
+            x = t.Repr(t.Base(x))
+            continue
+        }
+        return types.UnknownT
+    }
+    return types.UnknownT
 }
 
 # ---- the runtime ----

@@ -317,6 +317,25 @@ fn (s mut Scoper&) Run() {
         s.component(comp)
     }
     s.fnValues()
+    s.exports()
+}
+
+# X12: an export fn is called by C, which no obligation of its body can be held to (O10b) - it requires nothing of its
+# arguments' scopes, each of them the scope its C entry opens for the call
+fn (s mut Scoper&) exports() {
+    for b in range s.Bodies.Len() {
+        match s.Bodies[b].Of {
+            case typed.BodyOf.Fn(inst) {
+                f := s.P.InstanceFn(inst)
+                if not s.P.FnDecl(f).Export or s.sums[b].Rels.Len() == 0 { continue }
+                fd := s.P.FnDecl(f)
+                file := s.P.L.Mods[s.P.FnModule(f)].File
+                ob := s.Obligations(b, s.P.L.Names)
+                s.P.L.Diags.Error(diag.Where.Span(file, I64(fd.Sp.Start), I64(fd.Sp.Start) + 6), msgs.ExportObligation(ob[0] if ob.Len() > 0 else ""))
+            }
+            case _ { }
+        }
+    }
 }
 
 # the function instance whose body b is, or is a lambda inside; -1 for none

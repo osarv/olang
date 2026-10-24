@@ -1,0 +1,18 @@
+# check: run
+# X13: the C library's qsort calls an export fn back, with pointers to the program's own elements (X11, X3)
+type Item struct(key I32, tag U8) {
+    key
+    tag
+}
+
+extern fn qsort(base mut Array<Item>&, n I64, size I64, cmp fn(a Item&, b Item&) I32)
+
+export fn byKey(a Item&, b Item&) I32 { return a.key - b.key }
+
+fn main() ? {
+    xs := Item[Item(5, 'e'), Item(2, 'b'), Item(9, 'i'), Item(1, 'a')]
+    qsort(xs, xs.Len(), 8, byKey)
+    assert xs[0].key == 1 and xs[1].tag == 'b' and xs[3].key == 9
+    # an export fn is an ordinary function in olang too
+    assert byKey(xs[3], xs[0]) == 8
+}

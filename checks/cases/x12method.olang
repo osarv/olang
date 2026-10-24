@@ -1,0 +1,7 @@
+# check: fail error[X12]: an export fn is one C calls by its name, and a method has no C name
+# X12: C calls an export fn by its name; a method is reached through its receiver, which C has no way to say
+type P struct(x I64) { x }
+
+export fn (p P&) X() I64 { return p.x }
+
+fn main() ? { }

@@ -1429,11 +1429,11 @@ storage.
 
 ```
 top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
-           | extern-func-decl | extern-type-decl | link-decl | top-if
+           | extern-func-decl | extern-type-decl | link-decl | export-func-decl | top-if
 ```
 
 `import-decl` is specified in §4; `test-decl` in
-§10.4; `extern-func-decl`, `extern-type-decl` and `link-decl` in §11 (X1, X10, X9); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
+§10.4; `extern-func-decl`, `extern-type-decl`, `link-decl` and `export-func-decl` in §11 (X1, X10, X9, X12); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
 Declaration order within a module is not significant: any top-level declaration may refer to any
 other, declared earlier or later in the same file, and to any name reachable through an import
 (§4).
@@ -6692,6 +6692,39 @@ and the program's declaration is taken at its word as any prototype is (X1a). It
 - as a C function taking or returning `struct S` by value takes it (X2's platform rules) - and by reference, a
 `Point&` crossing as a `struct Point *` naming the program's own instance, which the foreign function may write; an
 array of them crosses as a pointer to the first (X3).
+
+**X12 (export fns).** `export-func-decl ::= "export" func-decl`, `export` a word only there (followed by `fn`, at a
+module's top level), declares an ordinary function (D7) that C may call too: besides being called from olang as any
+function is, it has a **C entry**, a symbol of exactly its name following the platform's C convention (X2). Such a
+function has no receiver (a method has no C name), is not generic, and is not named `main` or with the runtime's
+prefix `__olang_` - each a compile-time error. Its parameters are of the extern vocabulary (X2) - but an array, which
+crosses as C's pointer to its first element and an `int64_t` count of its elements, two C parameters, only by
+reference (`a Array<I32>&`, `t String&`) - and its result is an `extern-value-type`, nothing, or an array value
+(`Array<T>` or `String` by value, its element of the vocabulary), which C receives through a buffer it gives: two
+more C parameters after the rest, a pointer to `cap` elements and `cap`, into which the entry copies as many of the
+result's elements as fit, returning the result's whole length (`int64_t`) - so a caller learns how large a buffer to
+give again. A function declaring errors (R1) has an entry returning an `int32_t`: 0 when it returns, else the code of
+the error it fails with (X14 numbers them); its result, where it has one, is then written through a pointer C gives
+as a last parameter (`T *`), or for an array result its length through a pointer after the buffer's two. A failure of
+any other kind - a failed check, `fail`, `unreachable` - ends the process as it does anywhere.
+
+The entry runs the function in a scope opened for the call and closed as it returns (§8), the result copied out of it
+first: nothing an entry is given outlives the call as far as olang is concerned, and a body requiring anything of its
+parameters' scopes - an obligation (O10b), which no C caller can be held to - is a compile-time error. On a thread
+olang did not start (one C made), the entry first sets up what olang keeps for a thread - its number, its own part of
+the program's scope (P2) - which it asks for with one load and a compare on every entry. That part, and the chunks
+the thread's allocations took, stay with the process after such a thread ends.
+
+**X13 (callbacks).** An extern's parameter may be of a function type (T21) whose parameters are of an export fn's
+vocabulary but arrays (X12), whose result is an `extern-value-type` or nothing, and which declares no errors: a C
+function pointer. What a call passes for it is an export fn, named (`qsort(xs, n, 4, byValue)`), and nothing else -
+not a lambda, not a function held in a variable, not an ordinary function - since C calls its C entry (X12), which
+holds nothing a closure would need. C may call it from any thread, before or after the call returns. What the
+callback works on reaches it through C's usual context argument, passed beside it as a reference to a plain-data
+struct (X11) - `each(n, add, ctx)` with `ctx mut Ctx&` - which lives, as every argument does, for the call's
+duration. A C function keeping the callback, or the context, beyond that call and calling it later is relying on the
+context still being there: a context in the program's scope (a global's, or one built there) is, and anything else is
+the program's word, unchecked, as an extern's prototype is (X1a).
 
 **X15 (text and C).** C's string - a `char *` naming bytes ended by a NUL - has two forms here. Text goes to C as
 `t.ToC()`, a method every `String` has (§4 M19d, the prelude): a new `Array<U8>` holding the text's bytes and a NUL
