@@ -777,3 +777,9 @@ errors and documentation - generic `+` already works).
   take conditions; 8 a command printing the inferred signature (`olang explain FILE NAME` or a `signature` mode).
   Decided earlier today: brackets after the parameter list, comptime-evaluable conditions decided at known calls,
   `checked` at run time, `outlives`, leading asserts no longer decided at calls.
+- CONTRACTS 2026-10-24, DECIDED (the user): chains `[a outlives b outlives c]` allowed and transitive; a condition may
+  read anything known at that point in compiling, as Array<T>(n) decides its length; constructors take conditions.
+  Explained: decided while compiling where known (false = error at the call), otherwise unchecked unless the caller
+  writes `checked f(x)`. Still open (renumbered): 1 the failing `checked` error `BuiltinError.CONTRACT`; 2 test/-debug
+  builds check every contract on entry (rec yes); 3 functions with conditions may be values, calls through them
+  unchecked; 4 no conditions on trait methods now; 5 no `ensures` now; 6 a command printing the inferred signature.
