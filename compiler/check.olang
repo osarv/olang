@@ -1258,7 +1258,7 @@ fn (c mut Checker&) ctorVarRules(td ast.TypeDecl&, sb ast.StructBody&) {
                     }
                     if ty is null { continue }
                     for tp in sb.TypeParams {
-                        if c.wordIn(ty!.Span(), c.text(tp.Name)).Start >= 0 {
+                        if c.wordIn(ty.Span(), c.text(tp.Name)).Start >= 0 {
                             c.err(vd.NameSps[i], msgs.CtorFieldNamesVar(c.tok(vd.Names[i]), c.text(tp.Name), c.text(td.Name), c.text(tp.Name)))
                             return
                         }

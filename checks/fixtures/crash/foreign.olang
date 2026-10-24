@@ -2,10 +2,9 @@
 import "std/os"
 import "std/io"
 
-extern fn strlen(s Array<U8>) I64
+extern fn raise(sig I32) I32
 
 fn main() ? {
     os.OnCrash("foreign.olang crashed\n")
-    none Array<U8>& = Array<U8>(0)
-    try io.Println($strlen(none))
+    try io.Println($raise(11))   # SIGSEGV, raised inside the foreign function
 }

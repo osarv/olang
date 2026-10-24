@@ -1709,7 +1709,7 @@ fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) List<I64>
         td := p.typeDecl(types.DeclId(I32(p.defaultTraits[i])))
         if td is null or td.Body is null { continue }
         ok := false
-        match td!.Body {
+        match td.Body {
             case ast.TypeBody.Trait(methods) {
                 ok = true
                 for m in methods {

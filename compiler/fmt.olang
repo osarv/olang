@@ -507,10 +507,11 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     if f.closes[b] > 0 { return "" }
     if f.argOpen[a] > 0 { return "" }
     # a reference marker, and the scope name after it (T24, E25): as the file had them
+    if ka == token.Tok.Amp and kb == token.Tok.LBrace { return " " }    # a body after a reference result
     if ka == token.Tok.Amp and not f.toks[a].Has(token.Space) { return f.asWritten(b) }
     if kb == token.Tok.Amp { return f.asWritten(b) }
     # a nullable marker "?&" (T2c) belongs to the type before it, as "&" does - never an error set's "?"
-    if kb == token.Tok.Question and rb + 1 < f.real.Len() and f.kind(f.real[rb + 1]) == token.Tok.Amp and not f.toks[b].Has(token.Space) {
+    if kb == token.Tok.Question and rb + 1 < f.real.Len() and f.kind(f.real[rb + 1]) == token.Tok.Amp {
         return ""
     }
     if (ka == token.Tok.Iden or ka == token.Tok.Return) and rb >= 2 and not f.toks[a].Has(token.Space) {

@@ -837,9 +837,9 @@ fn collectStmt(st typed.Stmt?&, out mut walked&) {
         case typed.Stmt.Spawn(_, sp) {
             for p in sp.Targets {
                 if p is null: continue
-                if wholeLocal(p!) >= 0 { out.Assigned.Push(wholeLocal(p!)) }
-                if not flThroughRef(p!) and flRoot(p!) >= 0 { out.Written.Push(flRoot(p!)) }
-                collectField(p!, out)
+                if wholeLocal(p) >= 0 { out.Assigned.Push(wholeLocal(p)) }
+                if not flThroughRef(p) and flRoot(p) >= 0 { out.Written.Push(flRoot(p)) }
+                collectField(p, out)
                 collectPlace(p, out)
             }
             collectExpr(sp.Task, out)
@@ -2406,7 +2406,7 @@ fn (s mut Scoper&) rlStmt(st typed.Stmt?&, pass I64) {
             if pass == 1 {
                 for p in sw.Targets {
                     if p is null: continue
-                    if not flThroughRef(p!) { s.rlDrop(flRoot(p!)) }
+                    if not flThroughRef(p) { s.rlDrop(flRoot(p)) }
                 }
             }
             s.rlExpr(sw.Task, pass)
@@ -2565,10 +2565,10 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt?&) {
         case typed.Stmt.Spawn(_, sw) {
             for p in sw.Targets {
                 if p is null: continue
-                s.kwPlace(p!)
+                s.kwPlace(p)
                 # a task's result stored into a parameter's region (P1g)
-                r := s.regionOf(p!)
-                if r >= 0 and s.holds(p!.Type()) { s.storeParam(r, true) }
+                r := s.regionOf(p)
+                if r >= 0 and s.holds(p.Type()) { s.storeParam(r, true) }
             }
             s.kwExpr(sw.Task, false)
             for c in sw.Clauses { s.kwExpr(c.Handler, false) }
@@ -3112,7 +3112,7 @@ fn (s mut Scoper&) ueStmt(b typed.Body&, st typed.Stmt?&, l I64, mode I64) Bool 
             if flHas(xs, l) { return false }
             for p in sw.Targets {
                 if p is null: continue
-                if not s.uePlace(b, p!, l, mode) { return false }
+                if not s.uePlace(b, p, l, mode) { return false }
             }
             if not s.ueExpr(b, sw.Task, l, mode) { return false }
             for c in sw.Clauses {
@@ -3497,7 +3497,7 @@ fn (s mut Scoper&) ocStmt(st typed.Stmt?&, l I64, passOn Bool) Bool {
             }
             for p in sw.Targets {
                 if p is null: continue
-                if not s.ocPlace(p!, l, passOn) { return false }
+                if not s.ocPlace(p, l, passOn) { return false }
             }
             if not s.ocExpr(sw.Task, l, passOn) { return false }
             for c in sw.Clauses {
@@ -4732,11 +4732,11 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     if s.joins.Len() > 0 { j = Term.Block(s.joins[s.joins.Len() - 1]) }
     for p in sw.Targets {
         if p is null: continue
-        s.placeOperands(p!)
+        s.placeOperands(p)
         # a local a task's result is given has no record a read could trust (O23a)
-        if s.lateGather and wholeLocal(p!) >= 0 { s.lateNone.Put(wholeLocal(p!), true) }
+        if s.lateGather and wholeLocal(p) >= 0 { s.lateNone.Put(wholeLocal(p), true) }
         # a target is stored into when the task's call returns: it lasts until the join (P1g)
-        if not s.lastsUntil(s.peekPlace(p!, false), j) and s.report { s.err(p!.Span(), msgs.SpawnResultTooShort()) }
+        if not s.lastsUntil(s.peekPlace(p, false), j) and s.report { s.err(p.Span(), msgs.SpawnResultTooShort()) }
     }
     # where the task's result is built: where its targets keep it - an array value takes the result's storage (T11b,
     # P1g), so that is where the target's own storage is. Several targets share one result scope, so it is built where
@@ -4748,15 +4748,15 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     for k in range sw.Targets.Len() {
         p := sw.Targets[k]
         if p is null { continue }
-        t := p!.Type()
+        t := p.Type()
         d := Term.None
         if s.holds(t) {
-            slot, _, _ := s.slotOf(p!)
+            slot, _, _ := s.slotOf(p)
             d = slot
             # a slot no run-time scope stands for (a derived scope, one of several): nothing new is built there (C2d, O12)
             if not d.Runs() and d != Term.None and unknownAt < 0 { unknownAt = k }
         } else if s.arenaValue(t) {
-            d = s.peekPlace(p!, false)
+            d = s.peekPlace(p, false)
         }
         if not d.Runs() { continue }
         if first == Term.None {
@@ -4806,10 +4806,10 @@ fn (s mut Scoper&) spawn(sp source.Span, sw typed.Spawn&) {
     if v.K == ValKind.Existing {
         for p in sw.Targets {
             if p is null or not s.holds(p.Type()) { continue }
-            slot, exact, kind := s.slotOf(p!)
-            if s.bindingUnknown(p!, slot) {
+            slot, exact, kind := s.slotOf(p)
+            if s.bindingUnknown(p, slot) {
                 # existing storage stored into a "&p" field of an instance whose binding is not known here (O23, O11)
-                if s.report { s.err(s.eqAfter(p!.Span()), msgs.FieldBindingUnknown()) }
+                if s.report { s.err(s.eqAfter(p.Span()), msgs.FieldBindingUnknown()) }
                 continue
             }
             savedAt, savedSp := s.fitAt, s.fitSp
@@ -6545,7 +6545,7 @@ fn (s mut Scoper&) shownLocal(l I64, depth I64) I64 {
                 x = s.unAway(x)
                 c := s.callOf(x)
                 if c is null or c.Args.Len() == 0 or not (s.isMethodCall(c) or s.indexCall(c)) { break }
-                x = c!.Args[0]
+                x = c.Args[0]
             }
             return s.shownLocal(flRootExpr(x), depth + 1)
         }

@@ -110,7 +110,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     for t in tops {
         ti := findIf(l.Mods[t.First].Decls, t.Second)
         if ti is null { continue }
-        chosen, ok, why, at := chain(x, c, t.First, ti!)
+        chosen, ok, why, at := chain(x, c, t.First, ti)
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
         if not ok and why == "" and condSaid(l.Diags, at) { continue }
         if not ok {

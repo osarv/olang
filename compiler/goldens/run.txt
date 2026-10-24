@@ -410,7 +410,7 @@
 | ok - E27: comprehensions over arrays, ranges and text, with and without a filter
 | ok - E27: a comprehension is evaluated while compiling, and agrees with the run time
 | ok - E27/T7: a comprehension or Array<T>(n) returned through a reference result is built in the result's scope
-| ok - E27/T2a: a comprehension over an empty source is an empty array, not null
+| ok - E27/T2c: a comprehension over an empty source is an empty array
 | ok - E28: a conditional expression evaluates only the value its condition chooses
 | ok - E30: ordering comparisons chain, each operand evaluated once; == does not chain
 | ok - E29: membership - Has for an element, Contains for a run of the collection's own type
@@ -540,7 +540,7 @@
 | ok - O18a/T25d: the same results computed while compiling and at run time
 | ok - E11a: a negative zero renders as -0 in every float type, while compiling and at run time
 | ok - T4: an integer rounds once to a float, while compiling and at run time
-| ok - E10: arrays compare by what they hold - lengths, then elements - and a null only equals a null
+| ok - E10: arrays compare by what they hold - lengths, then elements - the empty array included (T2c)
 | ok - E12: a value result read out of a reference is a copy, compared by value while compiling and at run time
 | ok - S12b: text a match gives as its value is built where the value lands
 | ok - T7d: a copy into fixed storage of its length, while compiling and at run time
@@ -567,7 +567,7 @@
 | ok - K1/P9: atomic operations are evaluated while compiling, and agree with the run time
 | ok - K1/P1: a join's tasks are evaluated while compiling, in sequence, and agree with the run time
 | ok - R10: a try statement's clauses do not take an error raised by its call's arguments
-| ok - E10: a reference to an array with no storage renders as null
+| ok - E10, T2c: a reference to an array with no storage renders as the empty array
 | ok - G8a: a field after a generic self-reference is reached through the instantiation's elements
 | ok - G10c: a generic constructor takes its expected type's arguments
 | ok - S13a: patterns cover a case together, a Bool's values cover it, evaluated while compiling as at run time
@@ -751,6 +751,9 @@
 | ok - E27, D9b: a grown comprehension and a written by-value String, read back after a churn
 | ok - E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling
 | ok - E10, E10b: List and Map compare and hash by contents; references without Eq by identity
+| ok - T2c, S8e: a nullable reference is read where a test narrows it - baked, decided while compiling, and run
+| ok - S8e: a break or continue in a null test's block narrows the rest of the turn - baked and run
+| ok - T2c: an array is never null - its zero value is the empty array
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -1530,6 +1533,8 @@
 === run t29dradixcall.olang
 | status 0
 === run t29etrait.olang
+| status 0
+=== run t2cnarrow.olang
 | status 0
 === run t6adefine.olang
 | status 0

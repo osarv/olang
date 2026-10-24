@@ -315,9 +315,9 @@ c2dblock.olang:9:17: error[C2d]: this instance holds a reference to an argument 
 c2dblock.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
 === c2dbuildarg.olang
-c2dbuildarg.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N& = nx
-      |                   ^~
+c2dbuildarg.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    5 |     next mut N?& = nx
+      |                    ^~
 c2dbuildarg.olang:7:40: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     7 | type Cur struct(of N&) { at mut N&of = of }
       |                                        ^~
@@ -326,9 +326,9 @@ c2dbuildarg.olang:9:30: error[C2d]: this builds through a '&p' field whose scope
       |                              ^~
 compilation failed with 3 errors
 === c2dbuildassign.olang
-c2dbuildassign.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N& = nx
-      |                   ^~
+c2dbuildassign.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    5 |     next mut N?& = nx
+      |                    ^~
 c2dbuildassign.olang:7:40: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     7 | type Cur struct(of N&) { at mut N&of = of }
       |                                        ^~
@@ -553,9 +553,6 @@ compilation failed with 1 error
 condmixedstore.olang:23:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
    23 |         h.f = local if i == 0 else Node(7)
       |             ^
-condmixedstore.olang:23:15: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-   23 |         h.f = local if i == 0 else Node(7)
-      |               ^~~~~
 compilation failed with 1 error
 === condmut.olang
 condmut.olang:4:4: error[B9a]: 'Level' is mutable, so a top-level condition cannot read it
@@ -644,31 +641,19 @@ d11amutvaluelocal.olang:4:7: error[D11a]: a local is always writable - 'mut' is 
       |       ^~~
 compilation failed with 1 error
 === d13czeroref.olang
-d13czeroref.olang:18:20: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
-   18 |     c := chan.Chan<Ticket>(4)
-      |                    ^~~~~~
-$ROOT/std/chan.olang:58:26: note: in the standard library's code, here
-   58 |     data mut Array<T>& = Array<T>(1 if cap == 0 else cap)
-      |                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-d13czeroref.olang:13:5: note: here
-   13 |     Counter++
-      |     ^~~~~~~~~
-d13czeroref.olang:18:20: note: 'Chan<Ticket&>' holds it by reference, whose zero value is null
-   18 |     c := chan.Chan<Ticket>(4)
-      |                    ^~~~~~
-d13czeroref.olang:20:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
-   20 |     b := a.Repeat(2)
+d13czeroref.olang:18:12: error[D13c]: Ticket has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written
+   18 |     b := a.Repeat(2)
       |            ^~~~~~
 $ROOT/std/prelude/array.olang:175:12: note: in the standard library's code, here
   175 |     out := Array<T>(a.Len() * k)
       |            ^~~~~~~~~~~~~~~~~~~~~
-d13czeroref.olang:13:5: note: here
-   13 |     Counter++
+d13czeroref.olang:11:5: note: here
+   11 |     Counter++
       |     ^~~~~~~~~
-d13czeroref.olang:20:12: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
-   20 |     b := a.Repeat(2)
+d13czeroref.olang:18:12: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
+   18 |     b := a.Repeat(2)
       |            ^~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === d15forwardcycle.olang
 d15forwardcycle.olang:4:1: error[B5a]: these globals' initializers read each other, so none can be set first: A -> B -> C -> A
     4 | A := B + 1
@@ -680,7 +665,7 @@ d15forwardself.olang:4:1: error[B5a]: A's initializer reads A, which is not set 
       | ^
 compilation failed with 1 error
 === d15null.olang
-d15null.olang:8:10: error[D15]: ':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'
+d15null.olang:8:10: error[D15]: ':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'
     8 |     x := null
       |          ^~~~
 d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
@@ -922,8 +907,8 @@ compilation failed with 2 errors
 derivedhelpercount.olang:12:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
-$ROOT/std/prelude/list.olang:450:21: note: in the standard library's code, here
-  450 |             if keep(x) { c++ }
+$ROOT/std/prelude/list.olang:449:21: note: in the standard library's code, here
+  449 |             if keep(x) { c++ }
       |                     ^
 derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
@@ -1475,9 +1460,9 @@ compilation failed with 1 error
 equndeclared.olang:6:12: error: unknown name 'a'
     6 |     assert a == b
       |            ^
-equndeclared.olang:8:25: error: unknown name 'missing'
-    8 |     assert c is null or missing == c
-      |                         ^~~~~~~
+equndeclared.olang:8:28: error: unknown name 'missing'
+    8 |     assert c.Len() == 0 or missing == c
+      |                            ^~~~~~~
 compilation failed with 2 errors
 === eqwrites.olang
 eqwrites.olang:6:16: error[E10a, E11c]: Eq takes what it is given read-only - neither its receiver nor a parameter may be 'mut'
@@ -2388,15 +2373,15 @@ o10cloopcopy.olang:27:9: note: 'p' is the loop's copy of an element, made in the
       |         ^
 compilation failed with 1 error
 === o10cnote.olang
-o10cnote.olang:10:50: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   10 |     for s mut SSlot& = m.first, s is not null, s = s.next {
-      |                                                  ^
-o10cnote.olang:10:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   10 |     for s mut SSlot& = m.first, s is not null, s = s.next {
-      |                          ^~~~~
-o10cnote.olang:19:22: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   19 |     for s SSlot& = m.first, s is not null, s = s.next {
-      |                      ^~~~~
+o10cnote.olang:10:51: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   10 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
+      |                                                   ^
+o10cnote.olang:10:27: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   10 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
+      |                           ^~~~~
+o10cnote.olang:19:23: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   19 |     for s SSlot?& = m.first, s is not null, s = s.next {
+      |                       ^~~~~
 o10cnote.olang:28:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    28 |         m.Put(k, 1)
       |           ^~~
@@ -2488,8 +2473,8 @@ compilation failed with 1 error
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
-$ROOT/std/prelude/list.olang:470:5: note: the callee requires it because of this statement
-  470 |     return acc
+$ROOT/std/prelude/list.olang:469:5: note: the callee requires it because of this statement
+  469 |     return acc
       |     ^~~~~~
 compilation failed with 1 error
 === o14btypevar.olang
@@ -2593,10 +2578,10 @@ o17permute5.olang:25:16: error[T22a]: this lambda relates its arguments' scopes,
 compilation failed with 2 errors
 === o17permute6.olang
 o17permute6.olang:25:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
-   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
-      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 o17permute6.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
-   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
+   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
       |          ^~
 compilation failed with 2 errors
 === o17permute6b.olang
@@ -2604,8 +2589,8 @@ o17permute6b.olang:25:10: error[O17]: this value's references live where its own
    25 |     each(ns, g)
       |          ^~
 o17permute6b.olang:29:12: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
-   29 |     run(h, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
-      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   29 |     run(h, fn(x RecN) { if x.nd is not null { x.nd!.next = N2(5) } })
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === o17readonlycapture.olang
 o17readonlycapture.olang:21:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2711,9 +2696,9 @@ o1bglobalarg.olang:8:39: note: the callee requires it because of this statement
       |                                       ^
 compilation failed with 1 error
 === o1bglobalshort.olang
-o1bglobalshort.olang:11:10: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+o1bglobalshort.olang:11:8: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
    11 |     GA = x
-      |          ^
+      |        ^
 compilation failed with 1 error
 === o1blambdaglobal.olang
 o1blambdaglobal.olang:14:32: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
@@ -2897,9 +2882,9 @@ o26own.olang:8:12: error[O10d]: this value lives in this function's own scope, w
       |            ^
 compilation failed with 1 error
 === o26param.olang
-o26param.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N& = nx
-      |                   ^~
+o26param.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    5 |     next mut N?& = nx
+      |                    ^~
 o26param.olang:8:7: error[O26]: '&return' names the result scope, and this function has none
     8 |     x mut N&return = N(1, null)
       |       ^~~~~~~~~~~~
@@ -2908,9 +2893,9 @@ o26param.olang:9:12: error[O25]: a reference never narrows - keep its scope: nam
       |            ^
 compilation failed with 3 errors
 === o26two.olang
-o26two.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-    5 |     next mut N& = nx
-      |                   ^~
+o26two.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+    5 |     next mut N?& = nx
+      |                    ^~
 o26two.olang:8:7: error[O26]: '&return' names the result scope, and this function has none
     8 |     x N&return = N(1, null)
       |       ^~~~~~~~
@@ -2929,15 +2914,15 @@ o3noname.olang:4:10: error[O4a]: 's' names no variable visible here - a marker n
       |          ^
 compilation failed with 1 error
 === o4bblock.olang
-o4bblock.olang:11:50: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   11 |     for s mut SSlot& = m.first, s is not null, s = s.next {
-      |                                                  ^
-o4bblock.olang:11:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   11 |     for s mut SSlot& = m.first, s is not null, s = s.next {
-      |                          ^~~~~
-o4bblock.olang:20:22: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   20 |     for s SSlot& = m.first, s is not null, s = s.next {
-      |                      ^~~~~
+o4bblock.olang:11:51: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   11 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
+      |                                                   ^
+o4bblock.olang:11:27: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   11 |     for s mut SSlot?& = m.first, s is not null, s = s.next {
+      |                           ^~~~~
+o4bblock.olang:20:23: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   20 |     for s SSlot?& = m.first, s is not null, s = s.next {
+      |                       ^~~~~
 o4bblock.olang:29:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    29 |         m.Put(k, 1)
       |           ^~~
@@ -3471,8 +3456,8 @@ compilation failed with 2 errors
 rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written, and this List<List<I64>> is read-only - pass a writable one
     6 |     c := ro.Clone()
       |          ^~
-$ROOT/std/prelude/list.olang:345:5: note: 'l' is declared here
-  345 | fn (l List<T>&) Clone() List<T> {
+$ROOT/std/prelude/list.olang:344:5: note: 'l' is declared here
+  344 | fn (l List<T>&) Clone() List<T> {
       |     ^~~~~~~~~~
 compilation failed with 1 error
 === rv3rofilter.olang
@@ -3503,9 +3488,9 @@ rv3roget.olang:5:5: error[O17]: this value's references live where its own stora
       |     ^
 compilation failed with 2 errors
 === rv3roslice.olang
-rv3roslice.olang:19:10: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
-   19 |     s[0].v += 1
-      |          ^
+rv3roslice.olang:19:11: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
+   19 |     s[0]!.v += 1
+      |           ^
 rv3roslice.olang:17:5: note: 'x' copies a place reached read-only, so it is read-only
    17 |     x := G
       |     ^
@@ -3914,8 +3899,8 @@ compilation failed with 1 error
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
       |                     ^
-$ROOT/std/prelude/list.olang:171:9: note: the callee requires it because of this statement
-  171 |         l.s.first[i] = x
+$ROOT/std/prelude/list.olang:170:9: note: the callee requires it because of this statement
+  170 |         l.s.first[i] = x
       |         ^
 s5handlenote.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
     9 |         t := $k "-loop-text-of-moderate-length"
@@ -4040,8 +4025,8 @@ compilation failed with 1 error
 s6handlestore.olang:12:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         names[i][0] = t
       |                     ^
-$ROOT/std/prelude/list.olang:171:9: note: the callee requires it because of this statement
-  171 |         l.s.first[i] = x
+$ROOT/std/prelude/list.olang:170:9: note: the callee requires it because of this statement
+  170 |         l.s.first[i] = x
       |         ^
 s6handlestore.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'names' lives: 't mut String&names = ...'
    11 |         t := $i "-loop-text"
@@ -4326,16 +4311,19 @@ strmovedlocalkept.olang:24:10: note: built here, where the receiver's part it wa
       |          ^~~~~
 compilation failed with 1 error
 === strnotecopies.olang
-strnotecopies.olang:14:52: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |     for n := b.head, n is not null, n = n.next { l.Push(n) }
-      |                                                    ^~~~
+strnotecopies.olang:14:64: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   14 |     for n Node?&b = b.head, n is not null, n = n.next { l.Push(n) }
+      |                                                                ^
+strnotecopies.olang:14:59: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |     for n Node?&b = b.head, n is not null, n = n.next { l.Push(n) }
+      |                                                           ^~~~
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
 strnotecopies.olang:13:5: note: 'l' cannot be made where 'n' lives: a Str builds nothing where its receiver does - keep copies of what it reads instead of references
    13 |     l := List<mut Node&>()
       |     ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === stro17captures.olang
 stro17captures.olang:36:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    36 |     b.grow2()
@@ -4348,15 +4336,9 @@ compilation failed with 2 errors
 stro20condstore.olang:25:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
    25 |         h.f = match i {
       |             ^
-stro20condstore.olang:26:23: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-   26 |             case 0 => local
-      |                       ^~~~~
 stro20condstore.olang:34:18: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
    34 |         h.arr[0] = local if i == 0 else P(7)
       |                  ^
-stro20condstore.olang:34:20: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-   34 |         h.arr[0] = local if i == 0 else P(7)
-      |                    ^~~~~
 stro20condstore.olang:40:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    40 |         put(h, local if i == 0 else P(7))
       |         ^~~
@@ -4923,6 +4905,80 @@ compilation failed with 1 error
 t29overstruct.olang:5:8: error[T29]: a type is declared over a number or an array, not over P - hold it in a struct's field instead
     5 | type Q P
       |        ^
+compilation failed with 1 error
+=== t2carrayisnull.olang
+t2carrayisnull.olang:3:41: error[T2c]: an array is never null - test whether it is empty: write 'a.Len() == 0'
+    3 | fn empty(a Array<I64>&) Bool { return a is null }
+      |                                         ^~
+compilation failed with 1 error
+=== t2carraynofill.olang
+t2carraynofill.olang:5:10: error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
+    5 |     a := Array<N&>(3)
+      |          ^~~~~~~~~~~~
+compilation failed with 1 error
+=== t2carraynullable.olang
+t2carraynullable.olang:3:18: error[T2c]: an array is never null - its zero value is the empty array: write '&', not '?&'
+    3 | fn count(s String?&) I64 { return s.Len() }
+      |                  ^
+compilation failed with 1 error
+=== t2cbreakloop.olang
+t2cbreakloop.olang:12:12: error[T2c]: 'p' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
+   12 |     return p.v
+      |            ^
+compilation failed with 1 error
+=== t2cdefaultnull.olang
+t2cdefaultnull.olang:4:13: error[T2c]: N& is never null - a reference that may be is written N?&
+    4 | fn f(n N& = null) I64 { return n.v }
+      |             ^~~~
+compilation failed with 1 error
+=== t2cfieldnarrow.olang
+t2cfieldnarrow.olang:6:12: error[T2c]: 'h.next' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'h.next!'
+    6 |     return h.next.v
+      |            ^~~~~~
+compilation failed with 1 error
+=== t2cmaybenull.olang
+t2cmaybenull.olang:5:34: error[T2c]: 'm' is a N?&, which may be null, and N& never is - test it first ('if x is not null'), or write 'm!'
+    5 | fn give(m N?&) I64 { return take(m) }
+      |                                  ^
+compilation failed with 1 error
+=== t2cnarrowkill.olang
+t2cnarrowkill.olang:8:12: error[T2c]: 'p' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'p!'
+    8 |     return p.v
+      |            ^
+compilation failed with 1 error
+=== t2cnevernull.olang
+t2cnevernull.olang:5:10: error[T2c]: 'n' is a N&, never null, so this is always false
+    5 |     if n is null { return 0 }
+      |          ^~
+t2cnevernull.olang:4:11: note: the type is written here - write '?&' for '&' where it may be null
+    4 | fn get(n N&) I64 {
+      |           ^
+compilation failed with 1 error
+=== t2cnozero.olang
+t2cnozero.olang:5:5: error[T2c]: N& is never null, so it has no zero value - give it a value, or write N?&
+    5 |     n N&
+      |     ^
+t2cnozero.olang:5:8: note: the type is written here - write '?&' for '&' where it may be null
+    5 |     n N&
+      |        ^
+compilation failed with 1 error
+=== t2cnulltoarray.olang
+t2cnulltoarray.olang:4:17: error[T2c]: an array is never null - its zero value is the empty array: write '""', or no value, for an empty String
+    4 |     s String& = null
+      |                 ^~~~
+compilation failed with 1 error
+=== t2cnulltononnull.olang
+t2cnulltononnull.olang:6:12: error[T2c]: N& is never null - a reference that may be is written N?&
+    6 |     n N& = null
+      |            ^~~~
+t2cnulltononnull.olang:6:8: note: the type is written here - write '?&' for '&' where it may be null
+    6 |     n N& = null
+      |        ^
+compilation failed with 1 error
+=== t2creadmaybenull.olang
+t2creadmaybenull.olang:4:28: error[T2c]: 'm' is a N?&, which may be null - read through it where a test says it is not ('if x is not null'), or write 'm!'
+    4 | fn get(m N?&) I64 { return m.v }
+      |                            ^
 compilation failed with 1 error
 === t30sep.olang
 t30sep.olang:3:28: error: expected '}', found 'Perim'
