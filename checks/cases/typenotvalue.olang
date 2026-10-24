@@ -1,9 +1,5 @@
-# check: fail error: 'Res' is a type, not a value
-# never: did you mean 'Res'
-# a type's name where a value is wanted is said to be one - not an unknown name whose nearest match is itself
-type Res struct(n I64) {
-    n
-}
-fn main() ? {
-    r := Res&(3)
+# check: fail error: 'I64' is a type, not a value
+# a built-in type read as a value is an error - it was taken for an unknown value, and a comparison of it for false
+fn main() {
+    e := I64 > 3
 }

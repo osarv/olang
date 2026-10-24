@@ -732,6 +732,11 @@ fn (l mut loader&) load(path String&) I64 {
             b.Push(src.Text[toks[i + 1].Start:toks[i + 1].End])
             b.PushChar(' ')
         }
+        # a generic function, "fn:name": "name<" lists type arguments (G12)
+        if k == token.Tok.Fn and named and i + 2 < n and toks[i + 2].Kind == token.Tok.Lt {
+            b.Push($"fn:" $src.Text[toks[i + 1].Start:toks[i + 1].End])
+            b.PushChar(' ')
+        }
         if k == token.Tok.Import {
             j := i + 1
             alias String& = ""
@@ -772,7 +777,11 @@ fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelu
 
 fn (l loader&) addNames(o mut parse.Oracle&, names mut source.Names&, alias String&, list String&) {
     for t in list.Split(" ") {
-        if t != "" { o.Add(names, alias, t) }
+        if t.StartsWith("fn:") {
+            o.AddFn(names, alias, t[3:])
+        } else if t != "" {
+            o.Add(names, alias, t)
+        }
     }
 }
 

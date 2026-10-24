@@ -26,6 +26,8 @@ MaxNesting I64 = 20000
 type Oracle struct() {
     bare Map<source.NameId, Bool>
     qualified Map<String&, Bool>      # "alias.Name", "a.b.Name"
+    fns Map<source.NameId, Bool>      # the generic functions, where "name<" lists type arguments (G12)
+    fnsQualified Map<String&, Bool>
 }
 
 fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
@@ -34,6 +36,27 @@ fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
     } else {
         o.qualified.Put($alias "." $name, true)
     }
+}
+
+# a generic function's name: "name<I64>" names its instance (G12)
+fn (o mut Oracle&) AddFn(names mut source.Names&, alias String&, name String&) {
+    if alias == "" {
+        o.fns.Put(names.Intern(name), true)
+    } else {
+        o.fnsQualified.Put($alias "." $name, true)
+    }
+}
+
+# the generic functions a file declares: "fn name<", by name
+fn GenericFnNames(text String&, ts scan.Tokens&) List<String&>&text {
+    out mut List<String&>&text = List<String&>()
+    toks := ts.Toks
+    for i in range toks.Len() - 2 {
+        if toks[i].Kind == token.Tok.Fn and toks[i + 1].Kind == token.Tok.Iden and toks[i + 2].Kind == token.Tok.Lt {
+            out.Push(text[toks[i + 1].Start:toks[i + 1].End])
+        }
+    }
+    return out
 }
 
 type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&, oracle Oracle&, diags mut diag.Diagnostics&
@@ -2076,6 +2099,10 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                     targs := try p.typeArgs()
                     x = ast.Expr.Generic(p.from(start), x, targs)
                     x = try p.literalAfterType(start, x)
+                } else if p.sees(token.Tok.Lt) and isPath(x) and p.oracle.fnsQualified.Has(p.src.TextOf(x.Span())) {
+                    # alias.big<I64>: a generic function's instance through an import (G12)
+                    targs := try p.typeArgs()
+                    x = ast.Expr.Generic(p.from(start), x, targs)
                 }
             }
             case token.Tok.LParen {
@@ -2292,6 +2319,12 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
                 targs := try p.typeArgs()
                 x := ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
                 return try p.literalAfterType(at, x)
+            }
+            if k2 == token.Tok.Lt and p.oracle.fns.Has(name) {
+                # a generic function's instance: big<I64>(x), f := big<I64> (G12)
+                p.advance()
+                targs := try p.typeArgs()
+                return ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
             }
             if k2 == token.Tok.Amp {
                 # Name&[...]: a marked element type, always a literal; Name&x[...] is one where Name is a type

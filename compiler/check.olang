@@ -4539,6 +4539,12 @@ fn (c mut Checker&) expr(x ast.Expr&, want types.TypeId) typed.Expr&c {
         case ast.Expr.MatchE(sp, m) { return c.matchValue(sp, m, want) }
         case ast.Expr.Compr(sp, cm) { return c.comprehension(sp, cm) }
         case ast.Expr.Lambda(sp, f) { return c.lambda(sp, f, want) }
+        case ast.Expr.Generic(sp, g, targs) if c.genericFn(g) >= 0 {
+            # G12: "big<I64>" names one instance, a function value
+            ex := c.explicitArgs(c.genericFn(g), targs, sp)
+            if ex == null { return c.unknown(sp) }
+            return c.fnValue(sp, c.genericFn(g), ex)
+        }
         nomatch {
             c.gap(x.Span(), exprKindName(x))
             return c.unknown(x.Span())
@@ -4603,6 +4609,11 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
         }
         return c.unknown(sp)
     }
+    if ref.Kind == names.What.Builtin {
+        # a built-in type is no value (it was read as an unknown one, a comparison of it taken for false)
+        c.err(sp, msgs.TypeNotAValue(c.tok(n)))
+        return c.unknown(sp)
+    }
     if ref.Kind == names.What.Type {
         # an enum's name is where its cases are read; a generic's, refused at its declaration, says nothing more
         t := c.typeNamed(ast.Expr.Name(sp, n))
@@ -4622,18 +4633,76 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     return c.unknown(sp)
 }
 
-# a function named as a value (T21): its instance's body, no environment
-fn (c mut Checker&) fnValue(sp source.Span, f I64) typed.Expr&c {
+# the generic function an expression names, as "big" or "lib.big" in "big<I64>" (G12): its index, -1 for none
+fn (c mut Checker&) genericFn(g ast.Expr&) I64 {
+    match g {
+        case ast.Expr.Name(nsp, n) {
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if ref.Kind == names.What.Func { return c.P.FnNamed(ref.Module, n) }
+        }
+        case ast.Expr.Member(msp, _, n) {
+            ref := c.P.R.Member(c.fr().File, msp.End)
+            if ref.Kind == names.What.Func { return c.P.FnNamed(ref.Module, n) }
+        }
+        nomatch { }
+    }
+    return -1
+}
+
+# G12, G7: the types written after a generic function's name, one per variable its list introduces (G3), each checked
+# against its constraint (G19); null where they are not, said
+fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Span) Array<types.TypeId>&c {
+    if f < 0 { return null }
+    d := c.P.FnDecl(f)
+    tn := c.text(d.Name)
+    np := d.TypeParams.Len() if d.TypeParams != null else 0
+    if np == 0 {
+        c.err(targs[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
+        return null
+    }
+    if np != targs.Len() {
+        c.err(targs[0].Span(), msgs.TypeArgCount(tn, np, targs.Len()))
+        return null
+    }
+    out mut Array<types.TypeId>&c = Array<types.TypeId>(np)
+    for i in range np {
+        out[i] = c.resolve(targs[i])
+        if out[i] == types.UnknownT { return null }
+    }
+    return out
+}
+
+# a function named as a value (T21): its instance's body, no environment; a generic one only as an instance its type
+# arguments name, written (G12)
+fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>& = null) typed.Expr&c {
+    args := types.ListId(0)
     if f >= 0 and not c.P.FnIsExtern(f) and c.P.VarCount(generic.FnOwner(f)) > 0 {
-        c.err(sp, msgs.GenericNotAValue(c.tok(c.P.FnDecl(f).Name)))
-        return c.unknown(sp)
+        owner := generic.FnOwner(f)
+        d := c.P.FnDecl(f)
+        written := d.TypeParams.Len() if d.TypeParams != null else 0
+        # a variable no type argument names - a length an array taken by value gives (G29) - leaves it no value
+        if c.P.VarCount(owner) > written {
+            c.err(sp, msgs.LengthsNotAValue(c.text(d.Name)))
+            return c.unknown(sp)
+        }
+        if explicit == null or c.P.VarCount(owner) != explicit.Len() {
+            c.err(sp, msgs.GenericNotAValue(c.text(d.Name)))
+            return c.unknown(sp)
+        }
+        args = c.P.T.List(explicit)
+        if not c.bound(owner, args, sp) { return c.unknown(sp) }
+        if c.P.FnTooDeep(f, args, c.fnNameAt(f)) { return c.unknown(sp) }   # G17
     }
     if f < 0 or c.P.FnIsExtern(f) {
         c.gap(sp, "an extern function as a value (T21)")
         return c.unknown(sp)
     }
     c.P.Sig(f)
-    inst := c.P.FnInstance(f, types.ListId(0))
+    asking := c.P.Asking
+    c.P.Asking = generic.Origin(c.fr().File, sp, c.curInst())   # G16b: where the instance is asked for
+    inst := c.P.FnInstance(f, args)
+    c.P.Asking = asking
+    if args != types.ListId(0) and not c.instancesMet(c.P.InstanceSig(inst), sp) { return c.unknown(sp) }
     id := c.fnBody(inst)
     sig := c.P.InstanceSig(inst)
     # an inferred set is what the value fails with (R1a)
@@ -7419,6 +7488,25 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 if t == types.UnknownT { return c.unknown(sp) }
                 return c.construct(sp, nsp, t, args)
             }
+            if ref.Kind == names.What.Func {
+                # G12: big<I64>(x) - the instance its type arguments name, called
+                f := c.P.FnNamed(ref.Module, n)
+                ex := c.explicitArgs(f, targs, gsp)
+                if ex == null {
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                return c.invoke(sp, nsp, f, null, args, null, ex)
+            }
+        }
+        case ast.Expr.Member(msp, _, n) if c.genericFn(g) >= 0 {
+            f := c.genericFn(g)
+            ex := c.explicitArgs(f, targs, gsp)
+            if ex == null {
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
+            return c.invoke(sp, memberSpan(msp, c.text(n).Len()), f, null, args, null, ex)
         }
         case ast.Expr.Member(msp, _, _) {
             # alias.Name<args>(...): a type another module declares (M10)
@@ -7610,7 +7698,8 @@ fn (c mut Checker&) badOver(t types.TypeId) Bool {
 
 # a call of a function or method f by name (recv its receiver, checked; pre its arguments checked, where args are not):
 # its instance, inferred from the arguments where it is generic (G9)
-fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Expr&c, args Array<ast.Expr&>&, pre Array<typed.Expr&>&c) typed.Expr&c {
+fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Expr&c, args Array<ast.Expr&>&, pre Array<typed.Expr&>&c
+                          explicit Array<types.TypeId>& = null) typed.Expr&c {
     if f < 0 {
         c.gap(nsp, "a function the checker cannot find")
         return c.unknown(sp)
@@ -7628,6 +7717,10 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     # G9: each argument's type unified with its parameter's, its value checked first
     ps := c.P.T.Items(c.P.T.Params(sig))
     b := generic.Binding(owner, nv)
+    # G12: the variables written type arguments name are theirs, whatever the arguments are
+    if explicit != null {
+        for i in range explicit.Len() { b.Vals[i] = explicit[i] }
+    }
     k I64 = 0
     if recv != null {
         if ps.Len() > 0 { c.unify(ps[0], typeOf(recv), b, false, true) }
@@ -7660,6 +7753,12 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         }
         vals.Push(e)
         k++
+    }
+    if explicit != null {
+        for i in range explicit.Len() {
+            b.Vals[i] = explicit[i]
+            b.LiteralOnly[i] = false
+        }
     }
     if pre == null { c.literalBinding(owner, b, ps, k0w, args) }
     c.P.InferThroughBounds(b)

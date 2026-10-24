@@ -427,6 +427,7 @@ type Diag enum {
     DefaultAmbiguous
     MethodIsPrivate
     GenericNotAValue
+    LengthsNotAValue
     ArrayLengthNotInt
     AssignListCount
     DestructNotName
@@ -1756,8 +1757,11 @@ fn DefaultAmbiguous(ty String&, tok String&) Msg { return Msg(Diag.DefaultAmbigu
 # ERR_METHOD_IS_PRIVATE
 fn MethodIsPrivate(tok String&) Msg { return Msg(Diag.MethodIsPrivate, "M6", "method " $tok " is private to its module") }
 
+# ERR_LENGTHS_NOT_A_VALUE
+fn LengthsNotAValue(text String&) Msg { return Msg(Diag.LengthsNotAValue, "G12", "'" $text "' takes an array by value, an instance per length (G29), so it is no value - pass a lambda calling it") }
+
 # ERR_GENERIC_NOT_A_VALUE
-fn GenericNotAValue(tok String&) Msg { return Msg(Diag.GenericNotAValue, "G12", "generic function " $tok " is not a value - call it") }
+fn GenericNotAValue(text String&) Msg { return Msg(Diag.GenericNotAValue, "G12", "generic function '" $text "' is not a value - call it, or name an instance by its type arguments, as '" $text "<I64>'") }
 
 # ERR_ARRAY_LENGTH_NOT_INT
 fn ArrayLengthNotInt(ty String&) Msg { return Msg(Diag.ArrayLengthNotInt, "E13a", "an array's length is an integer, found " $ty) }

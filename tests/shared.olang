@@ -3109,6 +3109,29 @@ test "destructors registered on a task thread run when the spawner's scope close
 # the same file, and for one in an imported module whose bodies are checked after the caller's. Either way
 # the copy got an empty body and codegen emitted a function returning a zero value, with no diagnostic
 # anywhere. Recorded in the signature pass now, which runs for every module before any body is checked.
+# G12: a generic function's instance named by its type arguments - called with no inference, or a function value
+fn g12Big<T>(a T, b T) T { return a if a > b else b }
+fn g12Sum<T Number>(xs Array<T>&) T {
+    s T = 0
+    for x in xs { s += x }
+    return s
+}
+fn g12Apply(f fn(a I64, b I64) I64, x I64) I64 { return f(x, 3) }
+G12Baked I64 = g12Big<I64>(4, 9)               # K2: evaluated while compiling
+G12At mut I64 = 2                               # read at run time
+test "G12: big<I64> names one instance, called or as a value" {
+    assert G12Baked == 9
+    assert g12Big<I64>(G12At, 7) == 7
+    assert g12Big<F32>(1.5, 0.5) == 1.5         # the literals adapt to the instance's parameters
+    assert g12Sum<I32>(I32[1, 2, 3]) == 6
+    f := g12Big<F32>
+    assert f(F32(G12At), 0.5) == 2.0
+    g fn(a I64, b I64) I64 = g12Big<I64>
+    assert g(8, G12At) == 8 and g12Apply(g12Big<I64>, G12At) == 3
+    assert $f == "fn(a F32, b F32) F32"
+    assert g12Big<I64> == g                     # one instance, one value (T21)
+}
+
 fn IdentityLater<T>(x T) T { return x }
 
 test "a generic used before its own declaration still gets its body" {

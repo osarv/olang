@@ -54,6 +54,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     Toks scan.Tokens& = null
     Decls Array<ast.Decl&>& = null
     Types List<String&>                # declared type and error names, in every branch
+    Generics List<String&>             # the generic functions it declares, in every branch (G12)
     Imports List<Import>
     Oracle mut parse.Oracle& = null
     parser mut parse.Parser& = null
@@ -205,6 +206,7 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool) I64 {
 
 fn (l mut Loader&) prescan(m mut Module&) {
     for t in typeNames(m.Src.Text, m.Toks) { m.Types.Push($t) }
+    for t in parse.GenericFnNames(m.Src.Text, m.Toks) { m.Generics.Push($t) }
     l.region(m, 0, m.Toks.Toks.Len() - 1, -1)
 }
 
@@ -664,6 +666,7 @@ fn (l mut Loader&) checkReach() {
 # the oracle's names a module has before its imports are known: its own, the prelude's exported ones, and Array
 fn (l mut Loader&) ownNames(m mut Module&) {
     for t in m.Types { m.Oracle.Add(l.Names, "", t) }
+    for t in m.Generics { m.Oracle.AddFn(l.Names, "", t) }
     for t in l.preludeTypes {
         if t[0].IsUpper() { m.Oracle.Add(l.Names, "", t) }
     }
@@ -677,6 +680,7 @@ fn (l mut Loader&) chains(o mut parse.Oracle&, mi I64, prefix String&, depth I64
         if imp.Target < 0 { continue }
         chain := $prefix $imp.Alias
         for t in l.Mods[imp.Target].Types { o.Add(l.Names, chain, t) }
+        for t in l.Mods[imp.Target].Generics { o.AddFn(l.Names, chain, t) }
         l.chains(o, imp.Target, $chain ".", depth + 1)
     }
 }

@@ -2327,7 +2327,9 @@ chain; if it resolves as one, ordinary member resolution does not apply to that 
 where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
 `arg ::= expr | "default"` (E14a) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
-type, where it names the instantiation whose constructor is being called (G10a).
+type, where it names the instantiation whose constructor is being called (G10a), or a generic function, where it names
+the instance being called (G12). Where `IDEN <` begins type arguments rather than a comparison is decided by the name:
+a type, or a generic function, the module declares or reaches through its imports' aliases.
 
 **E4.** `literal ::= BOOL_LIT | NULL_LIT | INT_LIT | FLOAT_LIT | CHAR_LIT | STR_LIT`. An expression `op` is a
 **literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.7) exactly
@@ -6517,7 +6519,15 @@ are two types.
 
 **G12.** An uninstantiated generic name is not a value: a generic function may be called or
 instantiated but never read as a `func-type` value (T2). A fully instantiated one is an ordinary
-value and may be used wherever a function value is expected.
+value and may be used wherever a function value is expected. A generic function's **instance** is named by type
+arguments written after its name (`type-args`, G8), one for each variable its list introduces (G3), in that order -
+`big<I64>`, `lib.big<I64>` - and is a function value (T21), or is called: `big<I64>(3, 7)`. Called so, its variables
+are what the type arguments say and nothing the arguments are (G9 binds none of them): each argument fits the
+instance's parameter as any argument does (E12), a literal adapting. Each type argument meets its variable's
+constraint (G19), and the count is G7's. A function whose instance needs a variable no type argument can name - a
+length an array taken by value gives (G29) - is a value in no instance; called, such variables are inferred from its
+arguments as always. A method's type arguments are inferred only. Only a function's own variables are written: a
+non-generic function takes none (G7).
 
 ### 12.5 Dispatching on a type parameter
 

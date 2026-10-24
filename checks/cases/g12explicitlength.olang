@@ -1,0 +1,6 @@
+# check: fail error[G12]: 'first' takes an array by value, an instance per length (G29), so it is no value
+# G12: a length an array taken by value gives (G29) has no type argument to name it, so such a function is no value
+fn first<T>(a Array<T>) T { return a[0] }
+fn main() {
+    f := first<I64>
+}
