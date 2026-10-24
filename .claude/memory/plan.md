@@ -278,3 +278,5 @@ on sight per rules.md, "Code rules".
 - 2026-10-24: wt-speed9 merged (7535fc1 + goldens, full verify on the merged tip passed): FILE:LINE texts out of the code
   (B3l), views pass skipped when unused, instance groups per first-reaching module, smaller parts, -quick in the record
   key; mid-checker edit 31.8 -> 21.7 s CPU (-quick 15.6 -> 2.7), new-instance edit 89.8 -> 29.9 s.
+- 2026-10-24: wt-lsp merged (b69abe4 + goldens, full verify on the merged tip passed): L4b doc comments, B14 `olang doc`
+  (+ -html for std), B15 `olang lsp`, B16 `olang mcp`, editors/nvim plugin.
