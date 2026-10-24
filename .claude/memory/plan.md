@@ -303,3 +303,8 @@ on sight per rules.md, "Code rules".
 - 2026-10-24 ~22:15 CEST (weekly 0.27): started wt-any (any Trait&, soundness review before merge) and wt-naming (std
   stutter renames + `olang fix`). Next after them: C interop v2, platforms, early freeing (memory rounds 4-7) + the fixed
   local array copy leak, then error-set generics, errors as values, generators, reflection.
+- 2026-10-24: wt-naming merged (5b78cc4, verified): io.Error, os.Error, json.Error, csv/stats/rand/http/chan/ffi.Error,
+  filepath.PathError -> filepath.Error (tools/stutter_rename.olang); `olang fix` (B17, compiler/fix.olang: 15 tools in
+  order, two phases, -check; io_print/io_try/io_fix/precedence_migrate left out - not idempotent on current code).
+  Follow-up asked: errors print module-qualified (`unhandled error: io.Error.FAILED`, `$e` likewise). Build list item 14's
+  `Result<T, E Error>` trait is moot (Result dropped 2026-10-24), so no prelude `Error` is needed.
