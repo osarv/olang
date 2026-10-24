@@ -902,3 +902,10 @@ errors and documentation - generic `+` already works).
   `any` held to the trait's conditions, an implementation's extra requirement checked only under checked after dispatch
   (rec); 5 keep the word `any` (rec), structs/enums convert implicitly, numbers don't; `==` on two `any` values is
   identity.
+- ANY 2026-10-24: DECIDED (the user): the word `any`; enums may meet traits (explained: the whole enum, methods with a
+  match inside; no case named). Clarified: `==` on references is identity, `is` only null (this morning's decision).
+  ASKED (rec yes each): 1 numbers and every value type convert into `any Trait&` by copying into the target scope (no
+  primitive reference type: an `any` is only used through methods); 2 type inspection (`match` by type) only on `any` of
+  a CLOSED trait, complete with no nomatch; `any` of an open trait methods only - mirroring compile-time generics (the
+  user: "my sense is that we just don't"; explained no whole program is needed - one identity compare per case;
+  any-to-any conversion stays out).
