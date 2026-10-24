@@ -19,6 +19,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `csv.olang` | RFC 4180 records, read and written |
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, cancellation tokens and deadlines |
+| `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` |
 | `ffi.olang` | a C function called by a name chosen at run time (for `-i`) |
 
 ## Subfolders
