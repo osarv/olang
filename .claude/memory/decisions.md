@@ -937,3 +937,10 @@ errors and documentation - generic `+` already works).
   migrate by tool. Confirmed: no type test of any kind on an open trait's `any` (`is` is null-only; match/as closed
   only).
 - DECIDED 2026-10-24 (the user: "Nah switch that too"): `All` renamed `Every` (Some/Every), with `Any` -> `Some`.
+- ENUM TEXT CASES 2026-10-24 (the user: "is this a normal s String = "..." case or a special constant case ... is there
+  a way to stringify cases and fields at compile time?"): proposed raw values (Swift's): `type Op enum String { Plus =
+  "+" }`, `type Status enum U8 { Ok = 0 }` - a constant per case in a table, the value stays its tag; `op.Value`, `try
+  Op.From(x)` the reverse; values compile-time constants, distinct; integers default counting from 0/previous, text to
+  the case name; allowed with payloads. Stringifying: reflection (decided 2026-10-18, not built) - T.Name, T.Cases[].Name,
+  T.Fields[].Name/Type as compile-time constants; proposed `T.CaseOf(v).Name` for one value's case. ASKED: 1 raw values
+  with From; 2 text defaults to the name; 3 T.CaseOf(v).
