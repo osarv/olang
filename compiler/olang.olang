@@ -469,7 +469,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Arch = cfg.Target.Arch
     e.San = cfg.San
     e.Debug = cfg.Debug
-    e.VerifyMir = tests or cfg.Debug
+    e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
     return e

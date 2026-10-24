@@ -42,8 +42,8 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Tests Bool = false              # a test build: the harness runs the root's tests
     Debug Bool = false              # a -debug build: the error return trace kept (S18d), as in a test build
     # each function's MIR verified before it is written (mir.Fn.Verify), one not well formed stubbed and reported:
-    # in test and -debug builds, where the compiler is tested; an optimized build trusts lowering, the verifier's walk
-    # having been a sixth of the front end's work on the compiler's own build
+    # in test builds, where the compiler is tested; any other build trusts lowering, the verifier's walk having been a
+    # sixth of the front end's work on the compiler's own build at -O3, and a seventh of it at -debug
     VerifyMir Bool = true
     Attrs String& = ""              # what every function carries for the target (B12: CPU, features, vector width)
     Gaps List<String&>              # what emission met and does not emit yet, a line each
