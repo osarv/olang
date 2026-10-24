@@ -754,6 +754,7 @@
 | ok - T2c, S8e: a nullable reference is read where a test narrows it - baked, decided while compiling, and run
 | ok - S8e: a break or continue in a null test's block narrows the rest of the turn - baked and run
 | ok - T2c: an array is never null - its zero value is the empty array
+| ok - C2d/E28: a conditional or match passed to a constructor lands with the instance
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -772,6 +773,11 @@
 | ok - D8a: another module's default reads its own global, never a caller's type variable of that name
 | ok - D8a/D16: a lambda default from another module
 | ok - G12: sh.PickSecond<I64> names an instance, called or as a value
+=== test std/base64.olang
+| status 0
+| ok - the RFC 4648 test vectors
+| ok - every byte round-trips, in both alphabets
+| ok - decoding is strict
 === test std/cancel.olang
 | status 0
 | ok - a token fires on Cancel, and not before
@@ -791,6 +797,9 @@
 | ok - for v in c receives until the channel is closed and drained
 | ok - Close wakes every task waiting to receive, and RecvUntil sees it before its deadline
 | ok - a channel's capacity is an I64
+=== test std/crc32.olang
+| status 0
+| ok - the CRC-32 check value, and pieces
 === test std/csv.olang
 | status 0
 | ok - Rows reads fields, separators and line breaks
@@ -799,6 +808,11 @@
 | ok - fields borrow the text unless a doubled quote must be made one
 | ok - Record quotes what must be, and Rows reads it back
 | ok - Rows read while compiling as at run time
+=== test std/deque.olang
+| status 0
+| ok - a Deque is pushed and popped at both ends
+| ok - a Deque used as a ring wraps and grows in order
+| ok - a Deque of text
 === test std/ffi.olang
 | status 0
 | ok - Has finds the C library's functions, and the math library's
@@ -815,6 +829,19 @@
 | ok - Join makes one clean path of its parts, leaving empty ones out
 | ok - Rel makes one path relative to another, Go's table case for case
 | ok - what filepath gives lives where it is put, evaluated at run time
+=== test std/flags.olang
+| status 0
+| ok - flags are read in every spelling, the rest are arguments
+| ok - what the declarations do not allow fails, with a message
+| ok - the help text lists every flag
+=== test std/heap.olang
+| status 0
+| ok - a Heap gives its elements least first
+| ok - a Heap ordered the other way gives the largest first
+| ok - a Heap sorts many numbers
+=== test std/hex.olang
+| status 0
+| ok - bytes are written as hex and read back
 === test std/http.olang
 | status 0
 | ok - the response is the last of what curl received
@@ -891,6 +918,13 @@
 | ok - GemmAct is Gemm, the bias row and the activation, in one pass
 | ok - patches: Im2col is their definition, and the products read them from the images
 | ok - a small causal product is decided while compiling, and the run time agrees
+=== test std/net.olang
+| status 0
+| ok - addresses are read and written as text
+| ok - a TCP connection over loopback carries bytes both ways
+| ok - dialing where nothing listens is refused, and a taken address is in use
+| ok - a read times out
+| ok - UDP datagrams travel over loopback
 === test std/os.olang
 | status 1
 | ok - Run gives a command's exit status
@@ -940,6 +974,24 @@
 | ok - Float lies in [0, 1) with the mean of a uniform
 | ok - Normal has mean 0 and standard deviation 1
 | ok - Shuffle permutes, and one seed gives one order
+=== test std/regex.olang
+| status 0
+| ok - literals, classes, repetition and alternation
+| ok - capture groups
+| ok - FindAll, Replace and Split
+| ok - what does not compile
+| ok - matching takes linear time where backtracking takes exponential
+| ok - the DFAs find the matches the Pike VM finds
+| ok - a match is computed while compiling as at run time
+=== test std/set.olang
+| status 0
+| ok - a Set holds each value once
+| ok - Set algebra
+| ok - a Set of text
+=== test std/sha256.olang
+| status 0
+| ok - the FIPS 180-4 test vectors
+| ok - a Hasher fed in pieces gives the digest of the whole
 === test std/stats.olang
 | status 0
 | ok - Sum, Mean, Variance and StdDev
@@ -947,10 +999,25 @@
 | ok - Median and Percentile interpolate between the closest ranks, as numpy does
 | ok - Min, Max and Histogram
 | ok - the statistics computed while compiling equal the run time's
+=== test std/sync.olang
+| status 0
+| ok - a Mutex keeps every task's increments
+| ok - With hands the guarded struct over by reference
+| ok - a Mutex guards a collection, and a copy of it is the same lock
+| ok - an RWLock lets readers share it and a writer have it alone
+| ok - Once runs its callback once, whoever asks first
 === test std/time.olang
 | status 0
 | ok - the monotonic clock never goes back, and measures what passes
 | ok - the wall clock is a date after this was written
+| ok - durations are made, read back, compared and rendered
+| ok - Sleep waits at least what it is given
+| ok - dates are written as RFC 3339 and read back
+| ok - Parse refuses what is not a date
+=== test std/utf8.olang
+| status 0
+| ok - code points are written and read back
+| ok - what is not UTF-8 is refused, and walked as replacement characters
 === test std/prelude/tests/array.olang
 | status 0
 | ok - CountOf counts runs from the start, without overlapping
@@ -966,6 +1033,12 @@
 === test std/prelude/tests/float.olang
 | status 0
 | ok - Fixed rounds to n digits as %.*f does, while compiling as at run time
+=== test std/prelude/tests/iterator.olang
+| status 0
+| ok - Take and Skip walk part of an iterator
+| ok - Enumerate, Zip and Chain
+| ok - Sum, Min, Max and their keyed forms
+| ok - an adapter is evaluated while compiling
 === test std/prelude/tests/list.olang
 | status 0
 | ok - Pop, First and Last, on both sides of every chunk boundary
@@ -1109,6 +1182,12 @@
 | status 0
 === run b9scanbranch.olang
 | status 0
+=== run c2dcondarg.olang
+| status 0
+| 1000 0
+=== run c2dcondargkinds.olang
+| status 0
+| 300 300
 === run c2dcondfieldok.olang
 | status 0
 | 3 3 0

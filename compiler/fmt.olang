@@ -514,7 +514,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     if kb == token.Tok.Question and rb + 1 < f.real.Len() and f.kind(f.real[rb + 1]) == token.Tok.Amp {
         return ""
     }
-    if (ka == token.Tok.Iden or ka == token.Tok.Return) and rb >= 2 and not f.toks[a].Has(token.Space) {
+    if (ka == token.Tok.Iden or ka == token.Tok.Return) and rb >= 2 and not f.toks[a].Has(token.Space) and kb != token.Tok.LBrace {
         pa := f.real[rb - 2]
         if f.kind(pa) == token.Tok.Amp and not f.toks[pa].Has(token.Space) { return f.asWritten(b) }
     }

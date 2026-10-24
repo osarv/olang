@@ -22824,6 +22824,21 @@ migrated source.
 pushed as null into the argument list and then fitted as "nothing" - they now hold the checker's hole marker; a
 parameter written `msg ast.Expr& = null` was accepted though its default can never fit.
 
+**Found while migrating the suite, fixed.** An unwrap `x!` was lowered through a hidden local, which lost what the
+place read was rooted in - so a read-only reference's copy unwrapped into a writable one (a store through `n!` in a
+walk of an immutable global's elements was accepted): a pure place (a local, a global, a field chain through them) is
+now unwrapped in place, its test and its read one sequence, and anything else through a read-only local. A literal
+default of a non-generic parameter is fitted where it is written (D8a), so `msg ast.Expr& = null` is an error at the
+declaration. An enum whose first case's payload holds a never-null reference has no zero value (D13c), since its zero
+bits would be that case with a null in it. A spawned call whose single target is a nullable reference of its result's
+referent takes a `catch default null` (P4). The formatter put a space before `?&` and none between a reference result
+and its body (`Node?&{`). A null or case test whose block ends in `break` or `continue` did not narrow the rest of the
+loop's turn (S8e, S8d) - D10a's leaving was the only kind counted, so every walk `for k in range n { if c is null {
+break } ... c.v }` needed `c!`; the block now counts when a `break` or `continue` takes it out of the loop around it,
+and the compiler's 24 unwraps that became redundant were dropped. Not changed, recorded: a `catch default` holding a
+`T?&` value (not the literal `null`) beside a call giving `T&` is an error, where a conditional of the two gives `T?&`
+- the try's type is settled before its defaults are typed.
+
 ## std breadth: sync, time, net, collections, adapters, text encodings, flags, regex (2026-10-24)
 
 The survey's std items 7 and 8 (docs/survey.md), which the user approved ("Yes all of that"). Every name is mine,

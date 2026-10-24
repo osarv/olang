@@ -9,7 +9,7 @@ fn two( ) I64 , I64 { return 1,-2 }   # aligned with the one above
 
 
 
-fn opt( p Pair2 ?& )Pair2?&{return p}
+fn opt( p Pair2 ?& )Pair2?&p{return p}
 fn main()?io.IoError{
   xs:=I64[1,2,3]
   l := List<List<I64>>( )
