@@ -2,7 +2,7 @@
 # E25/O10c: destructured results land in the block the statement stands in; without a scope argument ("mk2&rows(k)")
 # the list is the loop's, and cannot be pushed outward
 import "std/io"
-fn mk2(n I64) (List<String&>, I64) {
+fn mk2(n I64) List<String&>, I64 {
     l := List<String&>()
     for i in range n { l.Push($i) }
     return l, n + 1

@@ -4287,7 +4287,7 @@ FitOwn I64 = 7    # a reference or function value returned, living in this funct
 FitElem I64 = 8   # an array literal's element or an array's fill (O25c)
 
 # a place's slot: its term, whether a value put there must be exactly in it, and its kind
-fn (s mut Scoper&) slotOf(p typed.Place&) (Term, Bool, I64) {
+fn (s mut Scoper&) slotOf(p typed.Place&) Term, Bool, I64 {
     t := p.Type()
     isRef := s.isRef(t)
     match p {
@@ -6359,7 +6359,7 @@ fn (s mut Scoper&) isCtor() Bool {
     }
 }
 
-fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) (Term, Bool, Bool) {
+fn (s mut Scoper&) agreeStep(bt Term, bx Bool, t Term, ex Bool) Term, Bool, Bool {
     if bt == Term.None { return t, ex, true }
     if t == bt { return bt, bx, true }
     if ex != bx {

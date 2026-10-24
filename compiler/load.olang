@@ -391,7 +391,7 @@ fn (l mut Loader&) decide(mi I64, c I64) {
 }
 
 # a top-level condition at token index i, evaluated by B9a: a mistake is reported and Failed
-fn (l mut Loader&) evalCond(mi I64, i I64) (cond.Outcome, Bool) {
+fn (l mut Loader&) evalCond(mi I64, i I64) cond.Outcome, Bool {
     m := l.Mods[mi]
     l.CondParser(m)
     x := try m.cparser.ExprAt(i) catch { return cond.Outcome.Failed, false }   # the parser reports it
@@ -486,7 +486,7 @@ error unresolved {
 }
 
 # where an import's file is, and the identity of its module (M23, M22a); what is wrong is reported
-fn (l mut Loader&) resolve(mi I64, imp Import) (String, String) ? {
+fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
     m := l.Mods[mi]
     at := l.at(m, imp.Sp)
     spec := imp.Spec

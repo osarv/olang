@@ -698,7 +698,7 @@ type packedA struct() { }
 type rowsA struct() { }
 
 # the steps between the elements of one step's rows, and between one step's and the next's
-fn aSteps<A, L>(z A, lay L, ld I64) (I64, I64) {
+fn aSteps<A, L>(z A, lay L, ld I64) I64, I64 {
     match L {
         case packedA { return 1, tileRows(z) }
         case rowsA { return ld, 1 }
@@ -993,7 +993,7 @@ fn coverage(m I64, n I64, mr I64, nr I64) F64 {
 # - exchanging the operands, C^T = op(b)^T op(a)^T - where that covers it by 25% more still (a 16 x 9 gradient of a
 # convolution's weights, a batch of 64 against ten classes). Exchanging changes no element's sum, only where it is
 # computed
-fn tileChoice(m I64, n I64, mr I64, wideCols I64, thinCols I64, mayExchange Bool) (Bool, Bool) {
+fn tileChoice(m I64, n I64, mr I64, wideCols I64, thinCols I64, mayExchange Bool) Bool, Bool {
     w := coverage(m, n, mr, wideCols)
     t := coverage(m, n, mr, thinCols)
     thin Bool = t > 1.15 * w
@@ -1188,7 +1188,7 @@ fn epilogueAs<T, A, K>(c mut Array<T>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64,
 
 # the part of this block's depth (0 .. depth, from p0) that rows ti .. ti + tr of a triangular left operand read: of a
 # lower-triangular x[r, s], zero for s > r + diag, p <= i + diag - or p >= i - diag where it is transposed (ta)
-fn triangleDepth(lower Bool, ta Bool, ti I64, tr I64, p0 I64, depth I64, diag I64) (I64, I64) {
+fn triangleDepth(lower Bool, ta Bool, ti I64, tr I64, p0 I64, depth I64, diag I64) I64, I64 {
     if not lower { return 0, depth }
     if ta { return clampI(ti - diag - p0, 0, depth), depth }
     return 0, clampI(ti + tr + diag - p0, 0, depth)
@@ -3217,7 +3217,7 @@ if TestBuild {
 
     # the largest errors of FastExp (relative, where e^x is a normal number), FastTanh and FastSigmoid (absolute) against
     # the C library's, at n points spread over [-100, 100]
-    fn fastErrors<T>(like T, n I64) (F64, F64, F64) {
+    fn fastErrors<T>(like T, n I64) F64, F64, F64 {
         tiny F64 = match T {
             case F32 => 1.1754943508222875e-38
             case F64 => 2.2250738585072014e-308

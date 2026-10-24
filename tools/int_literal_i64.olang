@@ -137,7 +137,7 @@ fn diagsFrom(output String&, allowed List<String&>&, edits mut List<diagedit.Req
 
 # the span (start, end) of the end argument of the range whose note points at column at: the one argument of "range e", the
 # second of "range s, e[, step]" - or noFix.HERE
-fn rangeEnd(text String&, at I64, mask String&) (I64, I64) ? {
+fn rangeEnd(text String&, at I64, mask String&) I64, I64 ? {
     n := text.Len()
     k := (at + 1 if at + 1 < n else n) - 5
     for k >= 0 and not (text[k:].StartsWith("range") and mask[k] == 'c' and (k == 0 or not srcmask.IsWord(text[k - 1]))) { k-- }
@@ -196,7 +196,7 @@ fn startsWithConversion(text String&) Bool {
 }
 
 # the edits applied to their files; how many locals and how many ranges were typed
-fn apply(requests List<diagedit.Request>&) (I64, I64) {
+fn apply(requests List<diagedit.Request>&) I64, I64 {
     paths List<String&>
     for r in requests {
         if not (r.Path in paths) { paths.Push($r.Path) }

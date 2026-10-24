@@ -2782,7 +2782,7 @@ fn (c mut Checker&) blockOf(body Array<ast.Stmt&>&, kind typed.BlockKind, sp sou
 }
 
 # a new block entered: its id, the block it is in, and the undo mark to leave it by (close)
-fn (c mut Checker&) open(kind typed.BlockKind, sp source.Span) (I64, I64, I64) {
+fn (c mut Checker&) open(kind typed.BlockKind, sp source.Span) I64, I64, I64 {
     fr := c.fr()
     outer := fr.Block
     id := I64(c.cur().AddBlock(typed.BlockId(I32(outer)), kind, sp))
@@ -3288,6 +3288,14 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
     }
 }
 
+# whether a type is written as a function type
+fn isFuncTypeRef(t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Func(_, _) => true
+        case _ => false
+    }
+}
+
 fn (c mut Checker&) spellList(b mut StringBuilder&, l types.ListId, open String&, end String&) {
     xs := c.P.T.Items(l)
     if xs.Len() == 0 and open == "<" { return }
@@ -3750,7 +3758,7 @@ fn (c mut Checker&) foldPart(x ast.Expr&) litv {
 }
 
 # an integer literal value's sign and magnitude: exact for every value T6a gives a literal, I64's and U64's
-fn magOf(v litv) (Bool, U64) {
+fn magOf(v litv) Bool, U64 {
     if v.Big { return false, U64(v.I) }
     if v.I < 0 { return true, U64(0) - U64(v.I) }
     return false, U64(v.I)
@@ -4194,7 +4202,7 @@ fn (c mut Checker&) externArray(target typed.Callee&, x typed.Expr&c, want types
 
 # a value made to fit a type, as fit does, with nothing said: the value, and whether it fits - for a caller saying
 # what is wrong in its own words (S12b, S13, E28)
-fn (c mut Checker&) fitQuiet(x typed.Expr&c, want types.TypeId, sp source.Span) (typed.Expr&c, Bool) {
+fn (c mut Checker&) fitQuiet(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c, Bool {
     n := c.P.L.Diags.Count()
     g := c.P.L.Diags.Hold()
     y := c.fit(x, want, sp)
@@ -7158,7 +7166,16 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
                     return false
                 }
                 if np > 0 and args.Len() > 0 and np != args.Len() {
-                    c.err(args[0].Span(), msgs.TypeArgCount(tn, np, args.Len()))
+                    rec := c.err(args[0].Span(), msgs.TypeArgCount(tn, np, args.Len()))
+                    # L18c: a function type of several results, unparenthesized, took the arguments after it as its own
+                    if np < args.Len() {
+                        for i in range args.Len() - 1 {
+                            if isFuncTypeRef(args[i]) {
+                                c.P.L.Diags.Note(rec, c.at(args[i].Span()), msgs.NoteGroupFunctionType())
+                                break
+                            }
+                        }
+                    }
                     return false
                 }
             }
@@ -9176,7 +9193,7 @@ fn (c mut Checker&) catchItem(p ast.Path&, items mut List<typed.Item>&) {
 }
 
 # a path naming an error type and one of its words: the word's position and the type; -1 for none
-fn (c mut Checker&) errorWord(p ast.Path&) (I64, types.TypeId) {
+fn (c mut Checker&) errorWord(p ast.Path&) I64, types.TypeId {
     n := p.Parts.Len()
     if n < 2 { return -1, types.UnknownT }
     head := ast.Path(p.Sp, p.Parts[:n - 1])

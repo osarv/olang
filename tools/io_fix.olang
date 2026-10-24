@@ -65,7 +65,7 @@ error notDiag {
 }
 
 # a compiler error row "PATH:LINE:COL: error[RULE]: MESSAGE" as its parts, or notDiag.ROW for any other row
-fn parseDiag(row String&) (String, I64, I64, String, String) ? {
+fn parseDiag(row String&) String, I64, I64, String, String ? {
     n := row.Len()
     for k in range 1, n {
         if srcmask.IsPySpace(row[k - 1]) { break }

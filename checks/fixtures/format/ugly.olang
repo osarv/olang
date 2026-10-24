@@ -5,7 +5,7 @@ type Pair2 struct(a I64,b I64){
      b
 }
 fn ( p Pair2& ) Sum( ) I64{return p.a+p.b}     # a trailing comment
-fn two( ) ( I64 , I64 ) { return 1,-2 }   # aligned with the one above
+fn two( ) I64 , I64 { return 1,-2 }   # aligned with the one above
 
 
 

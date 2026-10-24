@@ -52,7 +52,7 @@ error noPun {
 
 # the end of the names and of the "mut" after them, when a pun's names start at q: [ \t]*NAMES[ \t]+mut followed only by
 # spaces and a "}", a "#" or the end of the line - NAMES being NAME(\s*,\s*NAME)*. Fails when there is none
-fn punAt(src String&, q I64) (I64, I64) ? {
+fn punAt(src String&, q I64) I64, I64 ? {
     n := src.Len()
     p := q
     for p < n and (src[p] == ' ' or src[p] == '\t') { p++ }
@@ -86,7 +86,7 @@ fn punAt(src String&, q I64) (I64, I64) ? {
 }
 
 # src with the "mut" of every pun removed, and how many
-fn dropPunMut(src String&) (String, I64) {
+fn dropPunMut(src String&) String, I64 {
     mask := srcmask.Mask(src, true)
     n := src.Len()
     out := StringBuilder()
@@ -176,7 +176,7 @@ fn editsFrom(output String&, allowed List<String&>&, out mut List<diagedit.Reque
 }
 
 # the edits applied to their files; how many "mut" were removed and added
-fn apply(requests List<diagedit.Request>&) (I64, I64) {
+fn apply(requests List<diagedit.Request>&) I64, I64 {
     paths List<String&>
     for r in requests {
         if not (r.Path in paths) { paths.Push($r.Path) }

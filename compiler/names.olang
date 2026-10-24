@@ -896,7 +896,7 @@ fn (r mut Resolver&) branch(b ast.Branch&) {
 }
 
 # S8b: what the build decides of a local condition - Decided where it reads a build constant and no local
-fn (r mut Resolver&) decideLocal(c ast.Expr&) (cond.Outcome, Bool) {
+fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Outcome, Bool {
     m := r.L.Mods[r.mi]
     r.L.CondParser(m)
     m.Scope.Locals.Clear()
@@ -1307,7 +1307,7 @@ fn testRules(files Array<String&>&, defines Array<String&>&) String {
     return b.ToString()
 }
 
-fn lineCol(text String&, at I64) (I64, I64) {
+fn lineCol(text String&, at I64) I64, I64 {
     line, col I64 = 1, 1
     for i in range at {
         if text[i] == '\n' {

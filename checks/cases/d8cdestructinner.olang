@@ -5,7 +5,7 @@
 type Node struct(v I32) {
     v
 }
-fn two(k I64) (mut Node&, mut Node&) {
+fn two(k I64) mut Node&, mut Node& {
     return Node(I32(k) + 40), Node(2)
 }
 fn main() ? {

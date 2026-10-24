@@ -616,7 +616,7 @@ fn toF64(man U64, exp10 I64, trunc Bool, neg Bool, text String&) F64 ? ParseErro
 }
 
 # the low and high 64 bits of a * b
-fn mul128(a U64, b U64) (U64, U64) {
+fn mul128(a U64, b U64) U64, U64 {
     a0 U64 = a & 0xFFFFFFFF
     a1 U64 = a >> 32
     b0 U64 = b & 0xFFFFFFFF
@@ -909,7 +909,7 @@ mask63 U64 = 0x7FFFFFFFFFFFFFFF
 # Schubfach (Giulietti), as Java's Double.toString has it, with its 126-bit powers of ten made from pow10Mant (a power's
 # top 126 bits rounded down, plus one); and where Java keeps two digits for the smallest numbers, one here when one
 # reads back, as for every other number - so the digits are those of Python's repr and JavaScript's toString
-fn shortest(v F64) (U64, I64) {
+fn shortest(v F64) U64, I64 {
     b := v.Bits()
     t U64 = b & 0xFFFFFFFFFFFFF
     bq I64 = I64((b >> 52) & 0x7FF)
@@ -937,7 +937,7 @@ fn rop(g1 U64, g0 U64, cp U64) U64 {
 }
 
 # the shortest decimal in the rounding interval of c * 2^q, c a whole number: its digits and power of ten
-fn schubfach(q I64, c U64, dk I64) (U64, I64) {
+fn schubfach(q I64, c U64, dk I64) U64, I64 {
     out U64 = c & 1
     cb U64 = c << 2
     cbr U64 = cb + 2
@@ -987,7 +987,7 @@ fn schubfach(q I64, c U64, dk I64) (U64, I64) {
 # negative zero). Fails with NOT_FINITE for a NaN or an infinity, which no digits write. The digits are those of
 # Python's repr and JavaScript's toString, and those "$x" writes (E11a: the runtime and the evaluator compute them by the
 # same algorithm, in IR and in C) - worked out exactly (Schubfach), so this runs while compiling (K1) as at run time
-fn (x F64) ShortestDecimal() (U64, I64) ? TextError.NOT_FINITE {
+fn (x F64) ShortestDecimal() U64, I64 ? TextError.NOT_FINITE {
     b := x.Bits()
     if ((b >> 52) & 0x7FF) == 0x7FF { error TextError.NOT_FINITE }
     if b << 1 == 0 { return 0, 0 }

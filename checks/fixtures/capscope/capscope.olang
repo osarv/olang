@@ -19,7 +19,7 @@ fn find(n mut Node&) mut Node&n ? {
 fn setNext(n mut Node&, i I64) { n.next = n.next if i < 0 else Node(i) }
 fn orNew(n mut Node&, i I64) mut Node&n { return n.next if i < 0 else Node(i) }
 fn keep(a mut Node&, n mut Node&a) { a.next = n }
-fn two(a mut Node&, i I64) (mut Node&a, I64) { return a.next if i < 0 else Node(i), i }
+fn two(a mut Node&, i I64) mut Node&a, I64 { return a.next if i < 0 else Node(i), i }
 fn mk(i I64) Node { return Node(i) }
 fn rd(n Node&) I64 { return n.v }
 type Adder struct(n mut Node&) {

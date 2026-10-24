@@ -38,7 +38,7 @@ fn hasAt(text String&, i I64, s String&) Bool {
 
 # the alias "text" (read from "path") imports std/math by, and the line holding the import (its start and the start of
 # the line after it) - or "" when it imports no std/math. In a file of std a relative "math" is std/math too
-fn mathImport(text String&, path String&) (String, I64, I64) {
+fn mathImport(text String&, path String&) String, I64, I64 {
     n := text.Len()
     dir := filepath.Dir(srcmask.AbsPath(path))
     at I64 = 0

@@ -312,7 +312,7 @@ fn lineEnd(t String&, from I64) I64 {
 
 # the end of a block comment whose text starts at i - just past its closing "##" - and whether it spans a line's
 # end; -1 when it is never closed (L4a)
-fn blockComment(t String&, from I64) (I64, Bool) {
+fn blockComment(t String&, from I64) I64, Bool {
     i I64 = from
     n := t.Len()
     spans Bool = false
@@ -343,7 +343,7 @@ fn junkEnd(t String&, from I64) I64 {
 }
 
 # the operator or punctuation at i, the longest that matches (L16), and where it ends; Eof when none starts there
-fn operator(t String&, i I64) (token.Tok, I64) {
+fn operator(t String&, i I64) token.Tok, I64 {
     n := t.Len()
     c := t[i]
     d := t[i + 1] if i + 1 < n else '\0'
@@ -437,7 +437,7 @@ fn digitOf(c Char, radix I64) Bool {
 # a run of digits of one radix from i, with '_' separators between them (L10b): where it ends and how many digits it
 # has. A '_' stands between two digits of the run - one before it and one after - or it is reported, once for a run
 # of them
-fn (s mut scanner&) digits(from I64, radix I64) (I64, I64) {
+fn (s mut scanner&) digits(from I64, radix I64) I64, I64 {
     t := s.text
     n := t.Len()
     i I64 = from
@@ -477,7 +477,7 @@ fn fractionAt(t String&, i I64) Bool {
 }
 
 # the number literal at i (L10-L12a): its kind and where it ends
-fn (s mut scanner&) number(i I64) (token.Tok, I64) {
+fn (s mut scanner&) number(i I64) token.Tok, I64 {
     t := s.text
     n := t.Len()
     if t[i] == '0' and i + 1 < n {

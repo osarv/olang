@@ -1083,7 +1083,7 @@ fn (m mut Machine&) retire(fi I64, p Ptr, ty types.TypeId) {
 }
 
 # M19g: where the program grew the collection whose retired array the last stale use stopped on (WhyStale)
-fn (m Machine&) StaleGrewAt() (I64, source.Span) {
+fn (m Machine&) StaleGrewAt() I64, source.Span {
     if m.StaleAt < 0 or m.StaleAt >= m.retiredAt.Len() { return -1, source.Span(0, 0) }
     e := m.retiredAt[m.StaleAt]
     return e.First, e.Second
@@ -1633,7 +1633,7 @@ fn (m mut Machine&) ownParams(nf I64, fi I64) {
 # ---- places ----
 
 # a place's storage and its type, in frame fi
-fn (m mut Machine&) place(fi I64, p mir.Place) (Ptr, types.TypeId) {
+fn (m mut Machine&) place(fi I64, p mir.Place) Ptr, types.TypeId {
     k := m.fs[fi].Fn
     t := m.T
     ptr := NullPtr
@@ -1683,7 +1683,7 @@ fn (m mut Machine&) place(fi I64, p mir.Place) (Ptr, types.TypeId) {
 }
 
 # element i of the array at p
-fn (m mut Machine&) element(p Ptr, ty types.TypeId, i I64) (Ptr, types.TypeId) {
+fn (m mut Machine&) element(p Ptr, ty types.TypeId, i I64) Ptr, types.TypeId {
     e := m.elemOf(ty)
     data, n := m.arrayView(p, ty)
     if m.halted { return NullPtr, e }
@@ -1696,7 +1696,7 @@ fn (m mut Machine&) element(p Ptr, ty types.TypeId, i I64) (Ptr, types.TypeId) {
 
 # an array's elements and how many, from storage at p holding a value of type ty: a fixed array in place, a run-time
 # one or a reference to either through what it holds
-fn (m mut Machine&) arrayView(p Ptr, ty types.TypeId) (Ptr, I64) {
+fn (m mut Machine&) arrayView(p Ptr, ty types.TypeId) Ptr, I64 {
     t := m.T
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Ref {
@@ -1813,7 +1813,7 @@ fn (m mut Machine&) intValue(bits I64, ty types.TypeId) I64 {
 
 # read-only storage of a constant, one instance per written position and type, made the first time it is asked for;
 # its elements, and how many
-fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp source.Span) (Ptr, I64) {
+fn (m mut Machine&) dataFor(f mir.Fn&, ty types.TypeId, c I32, file I64, sp source.Span) Ptr, I64 {
     # what lowering synthesizes (a helper's words) is written nowhere: its instance is its function's
     maker I64 = m.codeIndex(f.Of) if sp.Start == I32(0) and sp.End == I32(0) else -1
     key := dkey(file, sp.Start, sp.End, ty, c, maker)
@@ -2145,7 +2145,7 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
 
 # types laid out one after another, each at its own alignment, as a record is: their offsets and the whole size
 # rounded to 8
-fn (m mut Machine&) pack(tys Array<types.TypeId>&) (Array<I64>, I64) {
+fn (m mut Machine&) pack(tys Array<types.TypeId>&) Array<I64>, I64 {
     offs := Array<I64>(tys.Len())
     off I64 = 0
     for i in range tys.Len() {
@@ -2945,7 +2945,7 @@ fn (m mut Machine&) startGlobal(g I64) {
 
 # ---- calls ----
 
-fn (m mut Machine&) callee(fi I64, c mir.Callee) (I64, Ptr, Bool, I64) {
+fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, Bool, I64 {
     # the function called (its index in fns, -1 for none), its environment, whether it is an extern and which
     match c {
         case mir.Callee.Fn(key, _) {
@@ -3601,13 +3601,13 @@ fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
 
 # the trace's places, oldest first: each one's file, offset and what it did (tRaised, tCall, tJoin)
 fn (m Machine&) TraceLen() I64 { return m.trace.Len() / 3 }
-fn (m Machine&) TraceAt(i I64) (I64, I64, I64) { return m.trace[3 * i], m.trace[3 * i + 1], m.trace[3 * i + 2] }
+fn (m Machine&) TraceAt(i I64) I64, I64, I64 { return m.trace[3 * i], m.trace[3 * i + 1], m.trace[3 * i + 2] }
 
 # ---- tasks (P1, P4, run in sequence at their join as K1 says) ----
 
 # a task's buffer: its call's arguments, then its targets' addresses, then its clauses' handlers, then the scopes it is
 # handed, then its function value where it calls through one - offsets in that order
-fn (m mut Machine&) taskLayout(f mir.Fn&, k mir.Task, fi I64) (Array<I64>, I64) {
+fn (m mut Machine&) taskLayout(f mir.Fn&, k mir.Task, fi I64) Array<I64>, I64 {
     tys := Array<types.TypeId>(I64(k.Args.N))
     for i in range k.Args.N { tys[i] = m.opType(fi, f.Ops[I64(k.Args.At) + i]) }
     offs, total := m.pack(tys)
@@ -4289,7 +4289,7 @@ fn (m Machine&) ScopeSlots() I64 { return m.scopes.Len() }
 
 # the first operation in a function, or in a function it calls by name, that K1 excludes while compiling, with where
 # it is written: "" for none. A call through a function value is decided when it is reached (K1)
-fn (m mut Machine&) Why(k mir.FnKey) (String, I64, source.Span) {
+fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     seen := Map<I64, Bool>()
     work List<I64>
     start := try m.fnOf.Get(k) catch { return $WhyNoBody, 0, source.Span(0, 0) }

@@ -148,7 +148,7 @@ type CondErr struct(At diag.Where, M msgs.Msg) {
 # them, load.NoBranch for none - and whether every condition read decided, or for the first that cannot, why: "" where it
 # does not check in its module, else what stopped its evaluation and where (stage 0's ERR_COND_UNDECIDABLE), and where
 # the condition is
-fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) (I64, Bool, String, diag.Where) {
+fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool, String, diag.Where {
     d := c.P.L.Diags
     file := c.P.L.Mods[mi].File
     k I64 = 0
@@ -314,7 +314,7 @@ fn noteWhy(d mut diag.Diagnostics&, rec I64, file I64, sp source.Span, whyFile I
 
 # where in the program's use the type named ty is written as a type argument - "Chan<Ticket>" - and the generic
 # spelled with it held by reference ("Chan<Ticket&>"); the use itself and "" where it is not written there
-fn zeroUseArg(d mut diag.Diagnostics&, use diag.Where, ty String&) (diag.Where, String) {
+fn zeroUseArg(d mut diag.Diagnostics&, use diag.Where, ty String&) diag.Where, String {
     match use {
         case diag.Where.Span(f, from, to) {
             text := d.TextOf(f)
@@ -347,7 +347,7 @@ fn zeroUseArg(d mut diag.Diagnostics&, use diag.Where, ty String&) (diag.Where, 
 # why an evaluation giving a value decided while compiling gave none, and where: "" for a value. The constructor's
 # error edge - where the call itself, at sp, is decided not to fail - is the error no clause handles (stage 0 judges it
 # without the clause standing in for a failure at run time)
-fn valueWhy(s eval.Stop, at source.Span) (String, I64, source.Span) {
+fn valueWhy(s eval.Stop, at source.Span) String, I64, source.Span {
     match s {
         case eval.Stop.None { return "", -1, at }
         case eval.Stop.Refused(why, f, sp) { return $why, f, sp }
@@ -480,7 +480,7 @@ fn globalModule(b typed.Body&) I64 {
 }
 
 # a global initializer's global: its module and name
-fn globalName(b typed.Body&) (I64, source.NameId) {
+fn globalName(b typed.Body&) I64, source.NameId {
     match b.Of {
         case typed.BodyOf.Global(m, n) { return m, n }
         case _ { return -1, source.NameId(0) }
@@ -510,7 +510,7 @@ fn AbortWhy(k mir.ExitKind) String& {
 }
 
 # a text body's value evaluated while compiling (an assert's message, S18c): the text, and whether it has one
-fn (x mut Exec&) Text(body I64) (String, Bool) {
+fn (x mut Exec&) Text(body I64) String, Bool {
     if body < 0 { return "", false }
     k := mir.FnKey.Body(typed.BodyId(I32(body)))
     x.Need(k)
@@ -520,7 +520,7 @@ fn (x mut Exec&) Text(body I64) (String, Bool) {
 }
 
 # a condition's body evaluated while compiling (K1): its value, and whether it has one
-fn (x mut Exec&) Cond(body I64) (Bool, Bool) {
+fn (x mut Exec&) Cond(body I64) Bool, Bool {
     k := mir.FnKey.Body(typed.BodyId(I32(body)))
     x.Need(k)
     s := x.M.Eval(k, Array<I64>(0))
@@ -529,7 +529,7 @@ fn (x mut Exec&) Cond(body I64) (Bool, Bool) {
 }
 
 # the same, with what stopped an evaluation that gave no value
-fn (x mut Exec&) CondStop(body I64) (Bool, eval.Stop) {
+fn (x mut Exec&) CondStop(body I64) Bool, eval.Stop {
     k := mir.FnKey.Body(typed.BodyId(I32(body)))
     x.Need(k)
     s := x.M.Eval(k, Array<I64>(0))
@@ -538,7 +538,7 @@ fn (x mut Exec&) CondStop(body I64) (Bool, eval.Stop) {
 }
 
 # a body giving an integer evaluated (a length computed while compiling, T7c): its value, and whether evaluation reached one
-fn (x mut Exec&) Int(body I64, ty types.TypeId) (I64, Bool) {
+fn (x mut Exec&) Int(body I64, ty types.TypeId) I64, Bool {
     k := mir.FnKey.Body(typed.BodyId(I32(body)))
     x.Need(k)
     s := x.M.Eval(k, Array<I64>(0))
@@ -729,7 +729,7 @@ fn (x mut Exec&) callee(c mir.Callee, work mut List<mir.FnKey>&) {
 # ---- what a program has ----
 
 # the root module's test bodies, in order, and its main's body (-1 for none)
-fn (x mut Exec&) Entries() (List<I64>, I64) {
+fn (x mut Exec&) Entries() List<I64>, I64 {
     tests List<I64>
     main I64 = -1
     p := x.P

@@ -99,7 +99,7 @@ fn (d mut Diagnostics&) AddFile(path String&, text String&, library Bool = false
 }
 
 # the line (from 1) offset at lies on in file, and the offset that line starts at
-fn (d mut Diagnostics&) lineOf(file I64, at I64) (I64, I64) {
+fn (d mut Diagnostics&) lineOf(file I64, at I64) I64, I64 {
     if d.startsFrom[file] < 0 {
         d.startsFrom[file] = d.starts.Len()
         made := source.LineStarts(d.texts[file])
@@ -297,7 +297,7 @@ fn (d Diagnostics&) UseOf(at Where) Where {
 }
 
 # the innermost context open now - where and its note - and "" for none
-fn (d Diagnostics&) TopContext() (Where, String) {
+fn (d Diagnostics&) TopContext() Where, String {
     i := d.contexts.Len() - 1
     for i >= d.ctxFrom {
         if d.contexts[i].text.Len() > 0 { return d.contexts[i].at, $d.contexts[i].text }

@@ -320,6 +320,27 @@ x := (small
       if n < 10 else big)     # inside parentheses a line may begin with "if"
 ```
 
+**L18c (grouping an item).** Where an item of a list would hold a comma at its own top level - a function type, or a
+lambda, with several results or several error items - the item is written in parentheses, whole:
+
+```
+m Map<String&, (fn(x I64) I64, I64 ? IoError, ParseError)>
+fn apply(f (fn(x I64) I64, I64), n I64) I64
+total := apply((fn(x I64) I64, I64 { return x, x + 1 }), 3)
+fn adder() (fn(x I64) I64, I64)                         # one result, a function of two
+```
+
+Written as an item without them, a function type or a lambda takes one result and one error item, and a `,` after
+it separates the list it stands in: `Map<K, fn(x I64) I64, I64>` is three type arguments. The lists are those of L18a;
+a function type or a lambda anywhere else - a field's, a local's or a global's type, a lambda written as a statement's
+value - takes its results and error items as a declaration does, comma by comma (`g fn(x I64) I64, I64 ? A, B = h`).
+A type is parenthesized nowhere else: parentheses around a type that is no function type holding such a comma are a
+compile-time error, with one exception - a function type with no error set of its own, written as a declaration's or a
+function type's result before that signature's `?`, is parenthesized so the `?` is not read as its own: `fn f()
+(fn() I64) ? E` returns an infallible function and may fail with `E`, where `fn f() fn() I64 ? E` returns a function
+failing with `E`. Inside the parentheses the item is no item of the list: its commas are its own. A parenthesized
+expression (E1) groups as it always does, so a lambda is grouped by one.
+
 **L19.** Consequently, outside a parenthesized expression (L18a), an operator or continuation that is meant to extend
 an expression onto the next line must appear at the *end* of the first line, not the start of the next - in a list as
 in a statement:
@@ -1367,7 +1388,7 @@ a method, whatever its first parameter's type.
 ```
 param-list      ::= list(param)                         (L18a)
 param           ::= IDEN type-expr [ "=" expr ]
-ret-type        ::= type-expr | "(" type-expr sep type-expr { sep type-expr } [ line-sep ] ")"
+ret-type        ::= type-expr { "," type-expr }          (on one line; several results, D8c)
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
 error-list-item ::= alias-chain IDEN [ "." IDEN ]
 ```
@@ -1382,10 +1403,9 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
 `error-list-item` must name a declared error type (§2.6), or one of its words (`ListError.EMPTY`, R1c). `?` with
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
-See §7 for what a `error-list`'s combined set means. A function type's and a lambda's error set (T2, D16) is one
-`error-list-item` or a parenthesized list, `"?" ( error-list-item | "(" list(error-list-item) ")" )`: written inside
-another list, as a parameter's type or an argument, a bare comma would be read as that list's separator
-(`f fn(I64) ? (ParseError, IoError)`).
+See §7 for what a `error-list`'s combined set means. A function type or a lambda (T2, D16) written as an item of a
+list takes one result and one error item, and a function type of several is parenthesized whole there (L18c):
+`f (fn(I64) I64 ? ParseError, IoError)` as a parameter, `g fn(I64) I64 ? ParseError, IoError` as a field or a local.
 
 **D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
 noreturn`) **never returns to its caller**: no path through its body may reach a `return` or fall off its end. Its body is
@@ -1406,8 +1426,10 @@ may be `noreturn`, and so may a trait's method signature (T31); a constructor, a
 lambda (`fn() noreturn { ... }` is a compile-time error - a lambda's type is inferred, D16b, and a function type
 expected of one says no more than its parameters and result) and `main` may not.
 
-**D8c (several results).** A `ret-type` written as a parenthesized list of two or more types declares that
-the function returns **several values**, one per type, in that order. They are not one value: there is no
+**D8c (several results).** A `ret-type` of two or more types, written bare - `fn divmod(a I64, b I64) I64, I64` -
+declares that the function returns **several values**, one per type, in that order. Each result is an item of the
+results' list (L18a), so a result that is itself a function type of several results or error items is parenthesized
+whole (L18c): `fn adder() (fn(x I64) I64, I64), I64`. They are not one value: there is no
 tuple type, and a call returning several values may appear only
 
 - as the right-hand side of a **destructuring** statement (S4b),
@@ -1528,8 +1550,7 @@ name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then li
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```
-lambda       ::= "fn" "(" list(lambda-param) ")" [ ret-type ] [ "?" [ fn-error-set ] ] block
-fn-error-set ::= error-list-item | "(" list(error-list-item) ")"           (D8)
+lambda       ::= "fn" "(" list(lambda-param) ")" [ ret-type ] [ "?" [ error-list ] ] block
 lambda-param ::= IDEN [ type-expr ]
 ```
 
@@ -2076,7 +2097,7 @@ to the even one) - an optional `-` or `+`, digits with an optional `.` (`.5` and
 optional exponent, `e` or `E` with an optional sign and digits; or `inf`, `infinity` or `nan` in any case with an
 optional sign, so the text `$x` writes reads back as `x`. Nothing else is accepted: no surrounding space, no `_`, no
 hexadecimal. It fails with `EMPTY` for no text, `INVALID` for text that is not a number and `OVERFLOW` for a number
-beyond `F64`'s range; one below the smallest is a zero of its sign. Every `F64` has `x.ShortestDecimal() (U64, I64) ?`:
+beyond `F64`'s range; one below the smallest is a zero of its sign. Every `F64` has `x.ShortestDecimal() U64, I64 ?`:
 the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no zero at `d`'s end that read back as
 `x` - of those, the closest to it - `0, 0` for a zero, failing with `TextError.NOT_FINITE` for a NaN or an infinity. Both
 are ordinary computation in the prelude, evaluated while compiling (K1) as at run time.

@@ -85,7 +85,7 @@ fn (s Source&) Line(at I32) I32 {
 }
 
 # the line and the column (both from 1, the column in bytes) an offset is at
-fn (s Source&) LineCol(at I32) (I32, I32) {
+fn (s Source&) LineCol(at I32) I32, I32 {
     line := s.Line(at)
     return line, at - s.lines[line - 1] + 1
 }

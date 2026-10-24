@@ -4,7 +4,7 @@ import "std/io"
 import "std/os"
 
 # the checksum and the most flips any permutation took
-fn fannkuch(n I64) (I64, I32) {
+fn fannkuch(n I64) I64, I32 {
     perm := Array<I32>(n)
     perm1 := Array<I32>(n)
     count := Array<I32>(n)

@@ -83,6 +83,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # reads them
     ArgAngles List<I64>
     CloseAngles List<I64>
+    TypeGroups List<I64>               # each "(" grouping a function type in a list (L18c), by token index, for the formatter
 }
 
 # ---- reading tokens ----
@@ -780,23 +781,8 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false) ast.Sig&p ? Fail {
     try p.want(token.Tok.LParen)
     params := try p.params(lambda)
     results Array<ast.TypeRef&>&p = Array<ast.TypeRef&>(0)
-    k := p.peek()
     noReturn := p.accept(token.Tok.Noreturn)      # D8e: where a result would stand
-    if noReturn {
-    } else if k == token.Tok.LParen and p.look(1) != token.Tok.Fn {
-        # the old spelling, "(I64, I64)", read until the migration is done
-        p.advance()
-        from := p.tys.Len()
-        wasSkip := p.skip
-        p.skip = false
-        for {
-            p.tys.Push(try p.typeExpr())
-            if not try p.sep(token.Tok.RParen) { break }
-        }
-        p.skip = wasSkip
-        try p.want(token.Tok.RParen)
-        results = gather(p.tys, from)
-    } else if p.startsResult() {
+    if not noReturn and p.startsResult() {
         from := p.tys.Len()
         wasItem := p.item
         p.item = true
@@ -812,7 +798,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false) ast.Sig&p ? Fail {
         p.item = wasItem
         results = gather(p.tys, from)
     }
-    errs := try p.errorSet(value, one)
+    errs := try p.errorSet(one)
     return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn)
 }
 
@@ -825,23 +811,12 @@ fn (p Parser&) startsResult() Bool {
 
 # "[? [A, B.c]]" - a list on one line; one item where the function type or lambda it ends is an item of a list (one),
 # so that a "," after it separates the list it stands in (L18c)
-fn (p mut Parser&) errorSet(value Bool = false, one Bool = false) ast.Sig&p ? Fail {
+fn (p mut Parser&) errorSet(one Bool = false) ast.Sig&p ? Fail {
     if not p.accept(token.Tok.Question) {
         return ast.Sig(Array<ast.Param&>(0), Array<ast.TypeRef&>(0), false, Array<ast.Path&>(0))
     }
     l mut List<ast.Path&>&p = List<ast.Path&>()
-    if value and p.sees(token.Tok.LParen) {
-        # the old spelling, "? (A, B)", read until the migration is done
-        p.advance()
-        wasSkip := p.skip
-        p.skip = false
-        for {
-            l.Push(try p.path())
-            if not try p.sep(token.Tok.RParen) { break }
-        }
-        p.skip = wasSkip
-        try p.want(token.Tok.RParen)
-    } else if p.sees(token.Tok.Iden) {
+    if p.sees(token.Tok.Iden) {
         for {
             l.Push(try p.path())
             if one or not p.accept(token.Tok.Comma) { break }
@@ -957,6 +932,7 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
         }
         # L18c: a function type an item of a list, parenthesized whole where it holds a comma of its own
         case token.Tok.LParen {
+            p.TypeGroups.Push(p.skipFrom(p.pos))
             p.advance()
             wasItem, wasSkip := p.item, p.skip
             p.item = false
@@ -968,6 +944,11 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
             }
             p.item = wasItem
             p.skip = wasSkip
+            if not p.sees(token.Tok.RParen) and not isFuncType(t) {
+                # "(I64, I64)": types bare, as several results are written (D8c)
+                p.report(at, p.prevEnd, msgs.NeedlessGroup())
+                error Fail.SYNTAX
+            }
             try p.want(token.Tok.RParen)
             if not p.grouped(t) {
                 p.report(at, p.prevEnd, msgs.NeedlessGroup())
@@ -980,6 +961,13 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
         nomatch { try p.fail("a type") }
     }
     unreachable
+}
+
+fn isFuncType(t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Func(_, _) => true
+        case _ => false
+    }
 }
 
 # L18c: whether a parenthesized type is grouped as it may be - a function type holding a comma of its own (several
@@ -1769,7 +1757,7 @@ fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
 }
 
 # a case's block, or "=> value"
-fn (p mut Parser&) caseBody() (Array<ast.Stmt&>&p, ast.Expr&p) ? Fail {
+fn (p mut Parser&) caseBody() Array<ast.Stmt&>&p, ast.Expr&p ? Fail {
     if p.accept(token.Tok.Arrow) {
         v := try p.expr()
         return null, v

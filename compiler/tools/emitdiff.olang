@@ -212,7 +212,7 @@ fn outcomes(rows List<String&>&) Map<String&, String&> {
     return m
 }
 
-fn counts(m Map<String&, String&>&) (I64, I64) {
+fn counts(m Map<String&, String&>&) I64, I64 {
     ok, bad I64 = 0, 0
     for v in m.Values() {
         if v == "ok" { ok++ } else { bad++ }

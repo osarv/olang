@@ -250,7 +250,7 @@ fn (g migration&) oldResults(j I64) Bool {
 
 # a function type's or a lambda's signature, its parameters' "(" at p: the index past its results and error set, the
 # old results' "(" (-1 where none) and the old error set's "(" (-1 where none)
-fn (g migration&) sigEnd(p I64) (I64, I64, I64) {
+fn (g migration&) sigEnd(p I64) I64, I64, I64 {
     n := g.v.Len()
     close := g.m[p]
     if close < 0 { return p + 1, -1, -1 }

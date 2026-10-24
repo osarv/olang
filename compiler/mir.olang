@@ -1035,7 +1035,7 @@ fn (v mut verifier&) arrayOf(ty types.TypeId) types.TypeId {
 }
 
 # the fields of a struct, a tuple or a record, in order; none (with ok false) for any other
-fn (v mut verifier&) fieldsOf(ty types.TypeId) (types.ListId, Bool) {
+fn (v mut verifier&) fieldsOf(ty types.TypeId) types.ListId, Bool {
     t := v.T
     r := t.Repr(ty)
     k := t.KindOf(r)
@@ -1047,7 +1047,7 @@ fn (v mut verifier&) fieldsOf(ty types.TypeId) (types.ListId, Bool) {
 }
 
 # an enum's cases' payloads (a Record, or 0 for none), in order; none (with ok false) for any other type
-fn (v mut verifier&) casesOf(ty types.TypeId) (types.ListId, Bool) {
+fn (v mut verifier&) casesOf(ty types.TypeId) types.ListId, Bool {
     t := v.T
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.AnonEnum { return t.ShapeCases(r), true }

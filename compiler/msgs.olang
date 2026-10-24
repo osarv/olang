@@ -275,6 +275,7 @@ type Diag enum {
     ReadOnlyCopyWrite
     ReadOnlyCopyRef
     ReadOnlyFuncValue
+    NoteGroupFunctionType
     NoteReadOnlyCopy
     NoteReadOnlyCopyOf
     TypeNotInferable
@@ -794,7 +795,7 @@ fn DestructInBody() Msg { return Msg(Diag.DestructInBody, "C7", "'destruct' foll
 fn JoinPiece(text String&) Msg { return Msg(Diag.JoinPiece, "E11b", "a join piece is a text literal or a '$' rendering - write '$" $text "'") }
 
 # ERR_NEEDLESS_GROUP
-fn NeedlessGroup() Msg { return Msg(Diag.NeedlessGroup, "L18c", "parentheses group a function type of several results or error items written in a list - write this type without them") }
+fn NeedlessGroup() Msg { return Msg(Diag.NeedlessGroup, "L18c", "parentheses group only a function type holding a comma of its own, as an item of a list - write this without them") }
 
 # ERR_TRAILING_COMMA
 fn TrailingComma(tok String&) Msg { return Msg(Diag.TrailingComma, "L18a", "a comma before " $tok " separates nothing - remove it") }
@@ -1301,6 +1302,9 @@ fn ReadOnlyCopyRef() Msg { return Msg(Diag.ReadOnlyCopyRef, "T25c", "a reference
 
 # ERR_READ_ONLY_FUNC_VALUE
 fn ReadOnlyFuncValue(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.ReadOnlyFuncValue, "T25c", $text1 " writes through or keeps its by-value parameter '" $text2 "', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made " $text3) }
+
+# NOTE_GROUP_FUNCTION_TYPE
+fn NoteGroupFunctionType() Msg { return Msg(Diag.NoteGroupFunctionType, "", "a function type of several results or error items is parenthesized whole in a list: '(fn(x I64) I64, I64)'") }
 
 # NOTE_READ_ONLY_COPY
 fn NoteReadOnlyCopy(text String&) Msg { return Msg(Diag.NoteReadOnlyCopy, "", "'" $text "' copies a place reached read-only, so it is read-only") }
