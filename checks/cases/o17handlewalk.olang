@@ -13,7 +13,7 @@ type St struct() {
 type Hd struct() {
     st mut St& = St()
 }
-fn (h Hd&) view() Array<mut Node&>&h {
+fn (h Hd&) view() Array<mut Node?&>&h {
     s := h.st
     return s.first[0:1]
 }

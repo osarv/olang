@@ -96,7 +96,7 @@ Prelude := (
     "Run mut I64 = 1          # read by every condition, so none is decided while compiling\n"
     "type Node struct(v I64) {\n"
     "    v\n"
-    "    next mut Node& = null\n"
+    "    next mut Node?& = null\n"
     "}\n"
     "type Box struct() {\n"
     "    head mut Node& = Node(1)\n"
@@ -126,7 +126,7 @@ Prelude := (
     "}\n"
     "fn gridPush(b mut Bag&, v I64) { b.grid[0][0].S.Push(Node(v)) }\n"
     "type Two struct() {\n"
-    "    items := Array<mut Node&>(2)\n"
+    "    items := Array<mut Node&>(2, Node(0))\n"
     "}\n"
     "# allocates and gives back: whatever reuses a closed scope's storage writes -7 and text over it\n"
     "fn churn() I64 {\n"
@@ -140,7 +140,7 @@ Prelude := (
     "    return t + I64(getpid() * 0)\n"
     "}\n"
     "# a chain's values, 40 nodes at most\n"
-    "fn chain(n Node&) I64 {\n"
+    "fn chain(n Node?&) I64 {\n"
     "    t I64 = 0\n"
     "    c := n\n"
     "    for k in range 40 {\n"
@@ -200,7 +200,7 @@ Prelude := (
     "    b := e as E.A\n"
     "    b.head.next = Node(43)\n"
     "}\n"
-    "fn link(a mut Node&, b mut Node&a) { a.next = b }\n"
+    "fn link(a mut Node&, b mut Node?&a) { a.next = b }\n"
     "fn grow(a mut Node&, v I64) { a.next = Node(v) }\n"
     "fn growDeep(a mut Node&, v I64) {\n"
     "    if v > 0 {\n"
@@ -275,7 +275,7 @@ Decls := String&[
     "w := W(Box())"
     "l := List<mut Node&>()\n    l.Push(Node(1))"
     "m := Map<I64, mut Node&>()"
-    "a := Array<mut Node&>(4)\n    a[0] = Node(1)"
+    "a := Array<mut Node&>(4, Node(1))\n    a[0] = Node(1)"
     "bag := Bag()\n    bag.boxes.Push(Box())\n    bag.cells.Push(Cell())\n    bag.grid.Push(List<Cell>())\n    bag.grid[0].Push(Cell())"
     "e := E.A(Box())"
     "l := mkList2(1)"
@@ -382,7 +382,7 @@ fn (g mut SG&) nodeOp(a String&, ind String&, d I64) String& {
         h := g.name("h")
         return $ind $h " := pickNode(" $a ")\n" $ind $h ".next = " $g.newNode() "\n"
     }
-    if k == 10 { return $ind $a ".next = " $g.newNode() "\n" $ind $a ".next.next = " $g.newNode() "\n" }
+    if k == 10 { return $ind $a ".next = " $g.newNode() "\n" $ind $a ".next!.next = " $g.newNode() "\n" }
     if k == 11 {    # a box made here, holding the node
         b := g.name("b")
         return $ind $b " := Box()\n" $ind $b ".head = " $a "\n" $ind $b ".head.next = " $g.newNode() "\n"
@@ -433,11 +433,11 @@ fn (g mut SG&) failOp(a String&, ind String&) String& {
     if k == 0 { return $ind "join { spawn try growF(" $a ", " $v ") catch { } }\n" }
     if k == 1 { return $ind "try join { spawn try failF(" $a ", " $v ") } catch { }\n" }
     if k == 2 {    # a default where the task's result lands
-        return ($ind $t " mut Node& = null\n" $ind "join { spawn " $t " = try mkFail(" $v ") catch default Node(" $g.val() ") }\n"
+        return ($ind $t " mut Node?& = null\n" $ind "join { spawn " $t " = try mkFail(" $v ") catch default Node(" $g.val() ") }\n"
                 $ind $a ".next = " $t "\n")
     }
     if k == 3 {    # ...declared in a block of its own and stored outward
-        return ($ind "{\n" $ind "    " $t " mut Node& = null\n" $ind "    join { spawn " $t " = try mkF(" $v ") catch default Node("
+        return ($ind "{\n" $ind "    " $t " mut Node?& = null\n" $ind "    join { spawn " $t " = try mkF(" $v ") catch default Node("
                 $g.val() ") }\n" $ind "    " $a ".next = " $t "\n" $ind "}\n")
     }
     return $ind "try join { spawn try growF(" $a ", " $v ") } catch { }\n"
@@ -650,7 +650,7 @@ fn (g mut SG&) arrOp(a String&, ind String&, d I64) String& {
     }
     if k == 5 {    # building through the elements a walk hands out
         n := g.name("n")
-        return $ind "for " $n " in " $a " { if " $n " is not null { " $n ".next = " $g.newNode() " } }\n"
+        return $ind "for " $n " in " $a " { " $n ".next = " $g.newNode() " }\n"
     }
     if k == 6 { return g.nodeOp($a "[0]", ind, d) }
     return $ind $a "[" $at "] = " $g.newNode() "\n"
@@ -804,13 +804,13 @@ fn (g mut SG&) strOp(ind String&) String& {
         if k == 8 { return $ind $q " := $r.n.v \"x\" $chain(r.n)\n" $ind "acc += " $q ".Len()\n" }
         if k == 9 { return $ind "acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)\n" }
         if k == 10 {    # a conditional of references, read
-            return $ind $q " := r.n if Run > 0 else r.l[0]\n" $ind "if " $q " is not null { acc += " $q ".v }\n"
+            return $ind $q " := r.n if Run > 0 else r.l[0]\n" $ind "acc += " $q ".v\n"
         }
         if k == 11 {    # a catch default that is existing storage, read
             return $ind $q " := try r.m.Get(Run * 9) catch default r.n\n" $ind "acc += " $q ".v\n"
         }
         if k == 12 { return $ind $q " := checked r.a[Run * 9] catch default r.n\n" $ind "acc += " $q ".v\n" }
-        if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n.next\n" $ind "if " $q " is not null { acc += " $q ".v }\n" }
+        if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n\n" $ind "acc += " $q ".v\n" }
         if k == 14 {    # walks
             y := g.name("y")
             e := g.name("e")
@@ -875,7 +875,7 @@ fn (g mut SG&) strScenario(k I64) String& {
     return ("type " $t " struct(n mut Node&, l List<mut Node&>, m Map<I64, mut Node&>, a Array<mut Node&>&) {\n    n\n    l\n    m\n"
             "    a\n}\n" "fn (r " $t "&) Str() String {\n    acc I64 = 0\n" $body "    return \"r\" $acc \":\" $chain(r.n)\n}\n"
             "fn s" $k "() I64 {\n    x := Node(1)\n    x.next = Node(2)\n    l := List<mut Node&>()\n    l.Push(Node(3))\n"
-            "    m := Map<I64, mut Node&>()\n    m.Put(3, Node(4))\n    a := Array<mut Node&>(4)\n    a[0] = Node(5)\n"
+            "    m := Map<I64, mut Node&>()\n    m.Put(3, Node(4))\n    a := Array<mut Node&>(4, Node(5))\n    a[0] = Node(5)\n"
             "    r := " $t "(x, l, m, a)\n    h I64 = 0\n    for i in range 3 {\n        s := " $rd "\n"
             "        h = h * 31 + s.Hash()\n        churn()\n    }\n    churn()\n"
             "    return h * 7 + chain(x) * 5 + sumList(l) * 3 + sumMap(m) + sumArr(a)\n}\n")

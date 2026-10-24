@@ -1345,7 +1345,7 @@ fn NoteReadOnlyCopyOf(text1 String&, text2 String&, text3 String&, text4 String&
 fn TypeNotInferable() Msg { return Msg(Diag.TypeNotInferable, "D15", "':=' takes its type from the initializer, and a call returning nothing has none") }
 
 # ERR_DECL_FROM_NULL
-fn DeclFromNull() Msg { return Msg(Diag.DeclFromNull, "D15", "':=' takes its type from the initializer, and null has none - write the type: 'x T& = null'") }
+fn DeclFromNull() Msg { return Msg(Diag.DeclFromNull, "D15", "':=' takes its type from the initializer, and null has none - write the type: 'x T?& = null'") }
 
 # ERR_SCOPE_ARG_PROGRAM
 fn ScopeArgProgram(tok String&) Msg { return Msg(Diag.ScopeArgProgram, "E25, O1b", $tok " lives in the program's scope, which a result reaches by being stored there, not by a scope argument") }

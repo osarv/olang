@@ -3526,7 +3526,7 @@ a reference to one, and the condition that one comparison with a case written (E
 to hold that case: `e.r` reads the payload field `r`. Where the case's payload is one type written whole (T17a,
 `Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The same holds in the
 `else` block of `if e != Shape.Circle { } else { }`, and after `if e != Shape.Circle { ... }` with no `else` whose block
-always leaves (D10a) - from there to the end of the block the `if` stands in. It holds only where `e` is assigned nowhere
+never reaches what follows it (it leaves, D10a, or a `break` or `continue` takes it out of a loop) - from there to the end of the block the `if` stands in. It holds only where `e` is assigned nowhere
 in that region (an assignment, a compound one, an increment, a target), and not inside a lambda written there. The
 payload's fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they
 are read there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a
@@ -3535,7 +3535,8 @@ case the local is not known to hold is no member of an enum, and a compile-time 
 
 **S8e (null narrowing).** A local or a parameter holding a `T?&` is known not to be null (T2c), and reads as a `T&`:
 - in the block of `if p is not null { }`, and in the `else` of `if p is null { } else { }`;
-- after `if p is null { ... }` with no `else` whose block always leaves (D10a: `if n is null: return 0`), to the end of
+- after `if p is null { ... }` with no `else` whose block never reaches what follows it - it leaves (D10a:
+  `if n is null: return 0`), or a `break` or `continue` takes it out of a loop around it - to the end of
   the block the `if` stands in, and after `assert p is not null`;
 - in the right operand of `p is not null and ...`, and of `p is null or ...` - so in a condition built of them, and in the
   block of an `if` or the body of a loop whose condition is `p is not null and ...`;

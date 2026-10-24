@@ -6,12 +6,12 @@ type E enum {
     A
     B(v I64)
 }
-fn name(e E&) String {
+fn name(e E?&) String {
     match e {
         case E.A { return "a" }
         case E.B(v) { return "b" $v }
     }
 }
 N E?& = null
-G String = name(N!)
+G String = name(N)
 fn main() ? { }

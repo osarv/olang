@@ -2967,12 +2967,12 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
                 } else {
                     c.noteWritable(c.err(sp, msgs.ReadOnlyRefWrite()), ref)
                 }
-            } else if c.isRef(rt) and c.roRoot(readPlace(ref)) >= 0 {
+            } else if c.isRef(rt) and c.roRoot(readPlace(unwrapped(ref))) >= 0 {
                 # T25c: a read-only copy writes nothing through the writable references it shares
                 rec := c.err(sp, msgs.ReadOnlyCopyWrite())
-                c.noteRo(rec, readPlace(ref))
+                c.noteRo(rec, readPlace(unwrapped(ref)))
             } else if c.isRef(rt) {
-                c.roNeed(readPlace(ref))
+                c.roNeed(readPlace(unwrapped(ref)))
             }
         }
         case typed.Place.Field(fsp, _, base, _) {
@@ -3023,7 +3023,7 @@ fn (c mut Checker&) placeWritable(p typed.Place&) Bool {
 
 # whether a reference is a lambda's borrow of a captured array value (T7b, D16c) - read-only as every capture is
 fn (c mut Checker&) capturedValue(ref typed.Expr&) Bool {
-    p := readPlace(ref)
+    p := readPlace(unwrapped(ref))
     if p is null { return false }
     match p {
         case typed.Place.Local(_, _, id) {
@@ -6402,8 +6402,14 @@ fn (c mut Checker&) rootIn(p typed.Place?&, depth I64) I64 {
         case typed.Place.Field(_, _, base, _) { return c.rootIn(base, depth + 1) }
         case typed.Place.Elem(_, _, e) { return c.rootIn(e.Base, depth + 1) }
         case typed.Place.Payload(_, _, pl) { return c.rootIn(pl.Base, depth + 1) }
+        # "x!" on a place, held as a temporary to be read through: what it names is what x names (E35)
+        case typed.Place.Temp(_, _, v, _) {
+            u := unwrapped(v)
+            if u == v { return -1 }
+            return c.rootIn(readPlace(u), depth + 1)
+        }
         case typed.Place.Deref(_, _, ref) {
-            q := readPlace(ref)
+            q := readPlace(unwrapped(ref))
             match q {
                 case typed.Place.Local(_, _, id) {
                     o := try c.roFrom.Get(c.roKey(I64(id))) catch default roOrigin(null, false)
@@ -6492,7 +6498,7 @@ fn (c mut Checker&) roFix(n source.NameId, t types.TypeId) String {
 # the note at the read-only copy a place is part of
 # B11: a write through a local or parameter whose written type is read-only - the note at it naming the type to write
 fn (c mut Checker&) noteWritable(rec I64, ref typed.Expr&) {
-    p := readPlace(ref)
+    p := readPlace(unwrapped(ref))
     if p is null { return }
     match p {
         case typed.Place.Local(_, _, id) {
@@ -9205,6 +9211,17 @@ fn (c mut Checker&) bang(sp source.Span, y ast.Expr&, want types.TypeId) typed.E
     return c.unwrapNull(sp, r) if nullable else r
 }
 
+# what "x!" (E35) on a place reads: the read after its test - for following a reference to where it was read from
+fn unwrapped(x typed.Expr&) typed.Expr&x {
+    match x {
+        case typed.Expr.Seq(_, _, q) {
+            if q.X is not null and pureRead(q.X!) { return q.X! }
+        }
+        nomatch { }
+    }
+    return x
+}
+
 # whether reading place p twice reads the same thing and runs nothing: a local, a global, a field of one, or what a
 # reference read from such a place names
 fn purePlace(p typed.Place&) Bool {
@@ -9244,6 +9261,7 @@ fn (c mut Checker&) unwrapNull(sp source.Span, x typed.Expr&c) typed.Expr&c {
     }
     from := c.stmts.Len()
     id := c.local(source.NameId(0), sp, t, typed.LocalKind.Var, typed.Mark.Infer)
+    c.roLet(id, x)   # T25c: what is reached through it is reached from where x was read
     c.stmts.Push(typed.Stmt.Let(sp, typed.LocalId(I32(id)), x))
     isNull := c.prim(sp, types.BoolT, typed.PrimOp.Same, c.readLocal(sp, id), c.lit(sp, t, 0))
     efrom := c.stmts.Len()
@@ -10895,7 +10913,7 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) {
     if i.Cond is not null and i.Else is null {
         match st {
             case typed.Stmt.If(_, ti) {
-                if leavesBlock(ti.Then) { c.pushNulls(i.Cond!, false, c.fr().Block) }
+                if skipsRest(ti.Then) { c.pushNulls(i.Cond!, false, c.fr().Block) }
             }
             nomatch { }
         }
@@ -10907,7 +10925,7 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) {
     if id < 0 { return }
     match st {
         case typed.Stmt.If(_, ti) {
-            if not leavesBlock(ti.Then) { return }
+            if not skipsRest(ti.Then) { return }
         }
         nomatch { return }
     }
@@ -13272,6 +13290,22 @@ fn pathOf(x ast.Expr&) Array<source.NameId>&x {
 
 # whether a block's statements provably leave: a return, raise or exit; an if whose two branches leave; a block that
 # does; "for { }" with no break of its own (S9)
+# S8d, S8e: whether a block never reaches the statement after it - it leaves the function (D10a), or a break or continue
+# takes it out of a loop around it
+fn skipsRest(b typed.Block?&) Bool {
+    if b is null { return false }
+    for s in b.Stmts {
+        if leaves(s) { return true }
+        match s {
+            case typed.Stmt.Jump(_, _, _) { return true }
+            case typed.Stmt.Block(_, ib) { if skipsRest(ib): return true }
+            case typed.Stmt.If(_, i) { if i.Else is not null and skipsRest(i.Then) and skipsRest(i.Else): return true }
+            nomatch { }
+        }
+    }
+    return false
+}
+
 fn leavesBlock(b typed.Block?&) Bool {
     if b is null { return false }
     for s in b.Stmts {

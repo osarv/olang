@@ -17517,6 +17517,36 @@ test "T2c, S8e: a nullable reference is read where a test narrows it - baked, de
     assert m.v == 7
 }
 
+# S8e: after a null test whose block leaves the loop by break or continue, the rest of the turn reads the local narrowed
+fn nlUpTo(h nlNode?&, stop I64) I64 {
+    t I64 = 0
+    c := h
+    for k in range 100 {
+        if c is null { break }
+        if c.v == stop { break }
+        t += c.v
+        c = c.next
+    }
+    return t
+}
+
+fn nlSkipOdd(h nlNode?&) I64 {
+    t I64 = 0
+    for c := h, c is not null, c = c.next {
+        n := c.next
+        if n is null { continue }
+        t += n.v
+    }
+    return t
+}
+
+NlUpTo := nlUpTo(nlNode(1, nlNode(2, nlNode(3, null))), 3)
+
+test "S8e: a break or continue in a null test's block narrows the rest of the turn - baked and run" {
+    assert NlUpTo == 3 and nlUpTo(nlNode(1, nlNode(2, nlNode(3, null))), 9) == 6
+    assert nlSkipOdd(nlNode(1, nlNode(2, nlNode(3, null)))) == 5 and nlSkipOdd(null) == 0
+}
+
 test "T2c: an array is never null - its zero value is the empty array" {
     z Array<I64>&
     s String&
