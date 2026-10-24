@@ -909,3 +909,7 @@ errors and documentation - generic `+` already works).
   a CLOSED trait, complete with no nomatch; `any` of an open trait methods only - mirroring compile-time generics (the
   user: "my sense is that we just don't"; explained no whole program is needed - one identity compare per case;
   any-to-any conversion stays out).
+- ENUMS 2026-10-24: the user asked whether cases should be `name Type` (`type Shape enum { Round Circle, Box Rect }`);
+  explained per-case behaviour goes through a struct payload (`Round(c Circle)`, `e.c` after narrowing meets traits).
+  ASKED: 1 keep field lists (rec; ~166 multi-field cases vs ~99 single in compiler/std would each need a struct);
+  2 `Name Type` only; 3 both forms. In effect: field lists.
