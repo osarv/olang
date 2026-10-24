@@ -511,7 +511,10 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         op String& = "-" if g.chance(50) else "~"
         return "(" $op $g.solid(t, d - 1) ")"
     }
-    if k == 9 { return g.conv(t, g.ex(g.intT(), d - 1)) }
+    if k == 9 {
+        s := g.intT()
+        return g.conv(t, s, g.ex(s, d - 1))
+    }
     if k == 10 { return "(checked " $Prims[t] "(" $g.ex(g.floatT(), d - 1) ") catch default " $g.lit(t) ")" }
     if k == 11 or k == 12 { return g.checkedInt(t, d) }
     if k == 13 { return g.helper(t, d) }
@@ -602,8 +605,14 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
         return g.bin(t, d, ops[k])
     }
     if k == 4 { return "(-" $g.solid(t, d - 1) ")" }
-    if k == 5 { return g.conv(t, g.ex(g.intT(), d - 1)) }
-    if k == 6 { return g.conv(t, g.ex(g.floatT(), d - 1)) }
+    if k == 5 {
+        s := g.intT()
+        return g.conv(t, s, g.ex(s, d - 1))
+    }
+    if k == 6 {
+        s := g.floatT()
+        return g.conv(t, s, g.ex(s, d - 1))
+    }
     if k == 7 or k == 8 {
         ops := String&["+", "-", "*", "/"]
         b := g.ex(t, d - 1)
@@ -1964,9 +1973,42 @@ fn (g mut Gen&) viewElement(t I32, d I64) String& {
 }
 
 # a conversion to t of x - of a literal, which a conversion requires fits (D17g), a literal of t in its place
-fn (g mut Gen&) conv(t I32, x String&) String& {
+fn (g mut Gen&) conv(t I32, s I32, x String&) String& {
     if constOnly(x) { return g.lit(t) }
-    return $Prims[t] "(" $x ")"
+    if lossless(s, t) { return $Prims[t] "(" $x ")" }
+    # a conversion that may not hold its value is a contract (D17g): decided while compiling where the value is - an
+    # error where it does not fit - so only a value read from a variable (x0, x1 ...), not a fixed array's length, is
+    # converted plainly, wrapping at run time; anything else is checked
+    if readsVar(x) and not x.Contains(".Len()") { return $Prims[t] "(" $x ")" }
+    return "(checked " $Prims[t] "(" $x ") catch default " $g.lit(t) ")"
+}
+
+# whether every value of number type s is one of t's: no conversion from s to t can fail under checked (R20)
+fn lossless(s I32, t I32) Bool {
+    if s == t { return true }
+    if isInt(s) and isInt(t) {
+        if isSigned(s) == isSigned(t) { return Widths[t] >= Widths[s] }
+        return not isSigned(s) and Widths[t] > Widths[s]
+    }
+    if isInt(s) and isFloat(t) { return Prims[t] != "F16" or Widths[s] < 16 or (Widths[s] == 16 and isSigned(s)) }
+    if isFloat(s) and isFloat(t) {
+        if Prims[t] == "F64" or Prims[s] == "F16" { return true }
+        if Prims[t] == "F32" { return Prims[s] != "F64" }
+        if Prims[t] == "BF16" { return Prims[s] == "BF16" }
+        return false
+    }
+    return false
+}
+
+# whether an expression the generator wrote reads a variable or a parameter - "x" and digits, a word of its own
+fn readsVar(x String&) Bool {
+    for i in range x.Len() - 1 {
+        if x[i] != 'x' or not x[i + 1].IsDigit() { continue }
+        if i == 0 { return true }
+        p := x[i - 1]
+        if not (p.IsLetter() or p.IsDigit() or p == '_') { return true }
+    }
+    return false
 }
 
 # whether an expression the generator wrote is a literal: digits, a sign, a point, an exponent, parentheses
