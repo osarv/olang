@@ -1473,7 +1473,16 @@ in the table (T35): it is reached as T32c says.
 table holds for `M`: one indirect call, its arguments, result and error set those of `R`'s signature, its receiver the
 instance. A `mut` method is called only through a `mut any R&` (T31). A default of `R` (M19e) is called the same way,
 through the table, so the instance's type's own method of that name is the one that runs. Nothing else is reached
-through an `any`: no field, no method `R` does not declare, no operator but `==` (T33), no `Len()` or `[i]`.
+through an `any`: no field, no method `R` does not declare, no operator but `==` (T33), no `Len()` or `[i]`. A task
+calls a function or a function value (P1), never through a table: `spawn s.M()` is a compile-time error naming
+`spawn fn() { s.M() }`.
+
+A call through an `any` is held to the **contract `R` writes on the method** (D17f), as a call of a function is held
+to its own (D17e): its requirements decided while compiling where the arguments are values the evaluator computes, its
+guarantees wherever the evaluator runs the call, and both checked at run time under `checked`. The contract of the
+method the instance's type supplies - its own, or a default's - binds the call too, and is checked only under
+`checked`, after dispatch: a `checked s.M(x)` reaches a second function the table holds for `M`, which calls the
+instance's method as `checked` calls it, failing with `CheckError.CONTRACT` where that contract does not hold.
 
 **T32c (an `any` satisfies its trait).** The type `any R&` satisfies `R`, and every trait `R` extends (T30a), and
 nothing else, whatever its instance's type does: a type variable constrained by such a trait may be bound to it (G19),
@@ -1487,7 +1496,8 @@ the instance's type declares (E10's "any other reference"); `s is null` asks whe
 has no `Hash` (E10b): it is no `Map` key.
 
 **T34 (closed traits: `match` and `as`).** The instance's type of an `any` of a **closed** trait (T31a) may be asked
-for. A `match` on one takes **type cases**, `case-alt ::= type-ref ( IDEN | "_" )`:
+for. A `match` on one takes **type cases**, `case-alt ::= path ( IDEN | "_" )` - a member's name, with no type
+arguments written, then the name it binds:
 
 ```
 match w {
@@ -1497,9 +1507,10 @@ match w {
 ```
 
 `case T b` is selected when the instance's type is `T`, a member of the trait, and binds `b` to the instance itself -
-a reference to it with the `any`'s permission (`Button&`, `mut Button&` from a `mut any`), or, for a number, a `Bool`
-or a `Char`, a copy of its value - visible to the clause's guard (S13e) and body; `_` binds nothing. A type case is its
-clause's only alternative. The type cases must cover every member of the trait, or the match carries a `nomatch` or a
+a reference to it with the `any`'s permission (`Button&`, `mut Button&` from a `mut any`; for an array its storage in
+the `any`), or, for a number, a `Bool` or a `Char`, a copy of its value - visible to the clause's guard (S13e) and
+body; `_` binds nothing. A type case binding a name is its clause's only alternative; type cases binding `_` may share
+one (`case Button _, Slider _`). The type cases must cover every member of the trait, or the match carries a `nomatch` or a
 `case _` (S13a's rule, S13f); a type that is not a member, or one named in two unguarded clauses, is a compile-time
 error. A null `any` matches no type case (S13: it aborts where nothing else takes it). `w as Button` gives the instance
 as a binding would, and **aborts** when the instance is of another type (E32's rule), under `checked` failing with
@@ -1775,7 +1786,11 @@ program means never depends on how many are decided.
 
 **D17f (contracts and function values).** A function with conditions may be made a function value (T21): a call through
 the value checks nothing of its contract, even under `checked`. One writing a scope relation may not (D17d, T22a).
-Lambdas, trait methods, `extern fn`s and destructors take no contract.
+Lambdas, `extern fn`s and destructors take no contract. A trait's method may take one, written after its signature as
+a function's is (`mut Withdraw(n I64) left I64 [n > 0, left >= 0]`), its results named for it and its receiver
+unnamed - it reads the parameters and results alone, and states no `outlives` (D17d): it is the contract of every call
+through an `any` of the trait (T32b). A call through generic code (G19) is held to the contract of the method the type
+argument supplies, as a direct call is.
 
 **D17g (conversions).** A conversion to a number type `T(x)` (E26) behaves as a function with the requirement `[x fits
 T]`: where the evaluator computes `x` - a constant, an immutable global, a call of such - a value that does not fit is a

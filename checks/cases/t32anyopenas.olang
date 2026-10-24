@@ -1,0 +1,10 @@
+# check: fail any aShape&'s trait aShape is open, so its instance's type is never asked for - use its methods, or add the method it lacks
+# T34: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+fn f(x any aShape&) I64 { return (x as aSq).s }
+fn main() { }

@@ -1,0 +1,17 @@
+# check: fail aKnob cannot be an 'any aWidget&': aWidget is closed, met by aButton, aSlider alone
+# T32a, T31a: run-time trait values
+type aWidget trait for aButton, aSlider {
+    Draw() I64
+}
+type aButton struct(n I64) { n }
+fn (b aButton&) Draw() I64 { return b.n }
+type aSlider struct(at I64) { at }
+fn (s aSlider&) Draw() I64 { return s.at }
+
+type aKnob struct(k I64) { k }
+fn (k aKnob&) Draw() I64 { return k.k }
+fn f(x any aWidget&) { }
+fn main() {
+    k := aKnob(1)
+    f(k)
+}

@@ -1,0 +1,13 @@
+# check: fail the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+# O10c: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+fn keep(xs mut List<any aShape&>&) {
+    q := aSq(2)
+    xs.Push(q)
+}
+fn main() { }

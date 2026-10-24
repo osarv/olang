@@ -1,0 +1,14 @@
+# check: fail a global holds only what lives as long as the program - store something built here, or another global's
+# O1b: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+G mut any aShape?& = null
+fn f() {
+    q := aSq(1)
+    G = q
+}
+fn main() { }

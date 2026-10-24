@@ -1077,6 +1077,7 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 c.declaredCtor(mi, td)
                 c.traitSets(mi, td)
                 c.traitHeader(mi, td)
+                c.traitContracts(mi, td)
             }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
             nomatch { }
@@ -3031,7 +3032,16 @@ fn (c mut Checker&) hasContract(b I64) Bool {
     sr := src
     k := sr.K
     sig := c.Bodies[b].Ty
-    c.written(b, sig, sr, k)
+    slotOwner := match c.Bodies[b].Of {
+        case typed.BodyOf.Slot(_, _) => true
+        case _ => false
+    }
+    if slotOwner and k.Chains.Len() > 0 {
+        # D17f: a call through an "any" discharges no obligation (T22a)
+        c.ctErr(sr.Mi, k.Chains[0].Sp, msgs.TraitContractOutlives())
+    } else {
+        c.written(b, sig, sr, k)
+    }
     if k.Items.Len() == 0 { return false }
     results Map<source.NameId, Bool>
     for n in sr.Results { results.Put(n, true) }
@@ -4346,6 +4356,10 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             if c.spellQualified { b.Push(c.qualifierFor(c.P.T.DeclModule(c.P.T.DeclOf(t)))) }
             b.Push(c.text(c.P.T.DeclName(c.P.T.DeclOf(t))))
             c.spellList(b, c.P.T.Args(t), "<", ">")
+        }
+        case types.Kind.Any {
+            b.Push("any ")
+            c.spell(b, c.P.T.AnyTrait(t), false)
         }
         case types.Kind.Array {
             b.Push("Array<")
@@ -11395,6 +11409,10 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     if tried and task is not null { c.produced(clauses, lm, fr.leaks.Len()) }
     fr.leaks.Truncate(lm)
     if task is null { return }
+    if dispatched(task) {
+        c.err(inner.Span(), msgs.AnySpawned(c.src(inner.Span())))
+        return
+    }
     errs := c.P.T.Items(c.lastErrs)
     if banged { errs = Array<types.TypeId>(0) }
     if errs.Len() > 0 and not tried {
@@ -12666,6 +12684,18 @@ fn (c mut Checker&) walk(sp source.Span, f ast.ForIn&, cm ast.Compr?&, ce types.
         return c.readLocal(sp, n)
     }
     dt := c.deref(st)
+    if c.P.T.KindOf(dt) == types.Kind.Any {
+        # T32b: an "any" of an iterator trait walked through its table's Next
+        slots := c.P.AnySlots(c.P.T.AnyTrait(dt))
+        for k in range slots.Len() {
+            if c.text(slots[k].Name) == "Next" and c.P.T.Items(c.P.T.Params(slots[k].Sig)).Len() == 1 {
+                c.walkIter(sp, f, src, -2 - k, cm, ce)
+                return null
+            }
+        }
+        c.err(f.Source.Span(), msgs.NotIterable(c.ty(st)))
+        return null
+    }
     runs := c.roleUse(dt, "RunFrom", 1, sp, "'for'")
     next := c.roleUse(dt, "Next", 0, sp, "'for'")
     if next >= 0 and not c.iterShaped(next) { next = -1 }   # S9a: an iterator's Next is "mut Next() T ? Exhausted"
@@ -12949,7 +12979,15 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Arra
     mark := fr.leaks.Len()
     fr.Tries++
     c.lastErrs = types.ListId(0)
-    x := c.invoke(sp, sp, f, recv, Array<ast.Expr&>(0), args)
+    x typed.Expr?&c = null
+    if f < -1 {
+        # an "any"'s Next (T32b): its slot -2 - f, called through the table
+        r := c.P.T.AnyTrait(typeOf(recv))
+        sl := c.P.AnySlots(r)[-2 - f]
+        x = c.callBody(sp, sp, sl.Sig, typed.Callee.Dispatch(r, -2 - f, sl.Sig), -1, recv, Array<ast.Expr&>(0), args)
+    } else {
+        x = c.invoke(sp, sp, f, recv, Array<ast.Expr&>(0), args)
+    }
     fr.Tries--
     for e in c.P.T.Items(c.lastErrs) {
         if c.P.T.ErrOf(e) != ex { fr.LoopFails++ }
@@ -12961,7 +12999,7 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Arra
     }
     fr.leaks.Truncate(mark)
     for e in keep { fr.leaks.Push(e) }
-    return x
+    return x!
 }
 
 # an iterator (S9a): the loop's own copy of it, Next() called each iteration, Exhausted ending the loop
@@ -13865,6 +13903,15 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
             if k >= 0 {
                 cn := c.P.T.CaseNames(et)
                 c.err(ssp, msgs.MatchNotExhaustive(c.text(cn[k]) if cn.Len() > 0 and k < cn.Len() else "?", c.ty(et)))
+            }
+        } else if not exhaustive and covered.Len() > 0 and c.P.T.KindOf(et) == types.Kind.Any {
+            # T34: a closed trait's members covered by unguarded type cases, or a nomatch
+            ms := c.P.Members(c.P.T.AnyTrait(et))
+            for k in range covered.Len() {
+                if not covered[k] and k < ms.Len() {
+                    c.err(ssp, msgs.MatchNotExhaustive(c.ty(ms[k]), c.ty(st)))
+                    break
+                }
             }
         } else if isValue and not exhaustive and st != types.UnknownT {
             c.err(source.Span(m.Sp.Start, m.Sp.Start + 5), msgs.MatchValueNeedsNomatch(c.ty(st)))
@@ -14908,7 +14955,7 @@ fn (c mut Checker&) toAny(x typed.Expr&c, want types.TypeId, sp source.Span) typ
     r := c.P.T.AnyTrait(want)
     if c.P.T.IsAny(have) {
         c.err(sp, msgs.AnyNotConverted(c.ty(have), c.ty(want)))
-        return x
+        return c.unknown(sp)
     }
     inst := c.deref(have)
     if inst == types.UnknownT or r == types.UnknownT { return x }
@@ -15133,6 +15180,42 @@ fn (c mut Checker&) checkedSlot(sig types.TypeId) types.TypeId {
     for i in range es.Len() { all[i] = es[i] }
     all[es.Len()] = c.P.T.ErrWords(c.P.PreludeType("std/prelude/check", "CheckError"), ContractWord)
     return c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), c.P.T.List(all), c.P.T.ScopesOf(sig))
+}
+
+# D17f: a non-generic trait's methods' contracts checked with the trait, whether a call asks for them or not
+fn (c mut Checker&) traitContracts(mi I64, td ast.TypeDecl?&) {
+    if td is null or td.Body is null or td.Params.Len() > 0 { return }
+    match td.Body {
+        case ast.TypeBody.Trait(ms, _, _) {
+            has := false
+            for m in ms { has = has or m.S.Contract is not null }
+            if not has { return }
+            ei := c.P.TypeEntry(mi, td.Name)
+            if ei < 0 { return }
+            self := c.P.SelfType(c.P.DeclFor(mi, ei))
+            slots := c.P.AnySlots(self)
+            for k in range slots.Len() {
+                if slots[k].Method < 0 or c.P.T.DeclOf(slots[k].Trait) != c.P.T.DeclOf(self) { continue }
+                b := c.slotContract(typed.Callee.Dispatch(self, k, slots[k].Sig))
+                if b >= 0 { c.hasContract(b) }
+            }
+        }
+        nomatch { }
+    }
+}
+
+# whether a task's call is through an "any"'s table (T32b)
+fn dispatched(x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Call(_, _, cl) {
+            match cl.Target {
+                case typed.Callee.Dispatch(_, _, _) { return true }
+                nomatch { return false }
+            }
+        }
+        case typed.Expr.Seq(_, _, q) { return q.X is not null and dispatched(q.X!) }
+        nomatch { return false }
+    }
 }
 
 # the method a trait declares for a slot - null for a default (T32b)

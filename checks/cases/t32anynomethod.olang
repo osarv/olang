@@ -1,0 +1,11 @@
+# check: fail any aShape& has no method 'Side' - an 'any' is used through its trait's methods alone
+# T32b: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+fn (q aSq&) Side() I64 { return q.s }
+fn f(x any aShape&) I64 { return x.Side() }
+fn main() { }

@@ -1,0 +1,16 @@
+# check: fail a type case binding a name is its clause's only alternative - bind '_' to share a clause
+# T34: run-time trait values
+type aWidget trait for aButton, aSlider {
+    Draw() I64
+}
+type aButton struct(n I64) { n }
+fn (b aButton&) Draw() I64 { return b.n }
+type aSlider struct(at I64) { at }
+fn (s aSlider&) Draw() I64 { return s.at }
+
+fn f(x any aWidget&) I64 {
+    match x {
+        case aButton b, aSlider s { return 1 }
+    }
+}
+fn main() { }

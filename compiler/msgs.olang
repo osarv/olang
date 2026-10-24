@@ -222,6 +222,8 @@ type Diag enum {
     AnyCaseTwice
     AnyCaseAlone
     AnyCaseNotAny
+    AnySpawned
+    TraitContractOutlives
     NoteAnyMethod
     EnumCaseInUse
     DeclaredTwice
@@ -1164,7 +1166,10 @@ fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "
 fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor, so it is held only by reference - write " $ty2 "&") }
 
 # ERR_TRAIT_NOT_A_TYPE
-fn TraitNotAType(ty String&) Msg { return Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty "&'") }
+fn TraitNotAType(ty String&) Msg {
+    r := $ty if ty.EndsWith("&") else $ty "&"
+    return Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $r "'")
+}
 
 # ERR_ANY_NOT_TRAIT
 fn AnyNotTrait(ty String&) Msg { return Msg(Diag.AnyNotTrait, "T32", "'any' takes a trait, and " $ty " is none") }
@@ -1173,7 +1178,7 @@ fn AnyNotTrait(ty String&) Msg { return Msg(Diag.AnyNotTrait, "T32", "'any' take
 fn AnyNeedsMarker(ty String&) Msg { return Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }
 
 # ERR_ANY_NOT_CONVERTED
-fn AnyNotConverted(ty1 String&, ty2 String&) Msg { return Msg(Diag.AnyNotConverted, "T32a", "an " $ty1 " is never made an " $ty2 " - an 'any' is made from its instance's own type, once") }
+fn AnyNotConverted(ty1 String&, ty2 String&) Msg { return Msg(Diag.AnyNotConverted, "T32a", "an '" $ty1 "' is never made an '" $ty2 "' - an 'any' is made from its instance's own type, once") }
 
 # ERR_ANY_UNMET
 fn AnyUnmet(ty String&, tr String&) Msg { return Msg(Diag.AnyUnmet, "T32a", $ty " cannot be an 'any " $tr "&': it does not satisfy " $tr) }
@@ -1206,6 +1211,12 @@ fn AnyCaseTwice(ty String&) Msg { return Msg(Diag.AnyCaseTwice, "T34", $ty " is 
 fn AnyCaseAlone() Msg { return Msg(Diag.AnyCaseAlone, "T34", "a type case binding a name is its clause's only alternative - bind '_' to share a clause") }
 
 # ERR_ANY_CASE_NOT_ANY
+# ERR_ANY_SPAWNED
+fn AnySpawned(text String&) Msg { return Msg(Diag.AnySpawned, "T32b, P1", "a task calls a function or a function value, never through an 'any''s table - write 'spawn fn() { " $text " }'") }
+
+# ERR_TRAIT_CONTRACT_OUTLIVES
+fn TraitContractOutlives() Msg { return Msg(Diag.TraitContractOutlives, "D17f, D17d", "a trait's method states no 'outlives' - a call through an 'any' cannot check one; write it on the type's method") }
+
 fn AnyCaseNotAny(ty String&) Msg { return Msg(Diag.AnyCaseNotAny, "T34", "a type case matches an 'any' of a closed trait, and this is " $ty) }
 
 # NOTE_ANY_METHOD

@@ -1,0 +1,15 @@
+# check: fail aBag's 'Put' relates its arguments' scopes, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
+# T32a, T22a: run-time trait values
+type aNode struct(v I64) { v }
+type aSink trait {
+    mut Put(n aNode&)
+}
+type aBag struct() {
+    last aNode?& = null
+}
+fn (b mut aBag&) Put(n aNode&) { b.last = n }
+fn f(x mut any aSink&) { }
+fn main() {
+    b := aBag()
+    f(b)
+}

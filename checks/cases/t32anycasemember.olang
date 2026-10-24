@@ -1,0 +1,18 @@
+# check: fail aKnob is not one of the types aWidget lists
+# T34: run-time trait values
+type aWidget trait for aButton, aSlider {
+    Draw() I64
+}
+type aButton struct(n I64) { n }
+fn (b aButton&) Draw() I64 { return b.n }
+type aSlider struct(at I64) { at }
+fn (s aSlider&) Draw() I64 { return s.at }
+
+type aKnob struct(k I64) { k }
+fn f(x any aWidget&) I64 {
+    match x {
+        case aKnob k { return k.k }
+        nomatch { return 0 }
+    }
+}
+fn main() { }

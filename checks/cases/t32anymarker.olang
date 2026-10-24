@@ -1,0 +1,10 @@
+# check: fail an 'any' is always a reference - write 'any aShape&'
+# T32: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+fn f(x any aShape) { }
+fn main() { }

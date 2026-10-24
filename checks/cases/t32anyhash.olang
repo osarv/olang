@@ -1,0 +1,12 @@
+# check: fail any aShape& does not satisfy the constraint Hashable on K
+# G19: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+fn f() {
+    m := Map<any aShape&, I64>()
+}
+fn main() { }

@@ -1,0 +1,14 @@
+# check: fail a task calls a function or a function value, never through an 'any''s table - write 'spawn fn() { x.Area() }'
+# T32b, P1: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+fn f(x any aShape&) {
+    join {
+        spawn x.Area()
+    }
+}
+fn main() { }

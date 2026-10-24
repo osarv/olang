@@ -1,0 +1,14 @@
+# check: fail aRound cannot be an 'any aShape&': it has no method 'Area' that fits
+# T32a, T31: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+type aRound struct(r I64) { r }
+fn f(x any aShape&) { }
+fn main() {
+    r := aRound(1)
+    f(r)
+}

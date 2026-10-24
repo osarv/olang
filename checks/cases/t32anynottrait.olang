@@ -1,0 +1,4 @@
+# check: fail 'any' takes a trait, and I64 is none
+# T32: run-time trait values
+fn f(x any I64&) { }
+fn main() { }

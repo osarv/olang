@@ -1,0 +1,13 @@
+# check: fail aBox's 'Get' says where its references live as aHas's signature does not - it cannot be called through an 'any aHas&'
+# T32a, T22: run-time trait values
+type aItem struct(v I64) { v }
+type aHas trait {
+    Get() aItem&
+}
+type aBox struct(it aItem&) { it }
+fn (b aBox&) Get() aItem&b { return b.it }
+fn f(x any aHas&) { }
+fn main() {
+    b := aBox(aItem(1))
+    f(b)
+}

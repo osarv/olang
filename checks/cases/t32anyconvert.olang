@@ -1,0 +1,13 @@
+# check: fail an 'any aShape&' is never made an 'any aBig&' - an 'any' is made from its instance's own type, once
+# T32a: run-time trait values
+type aShape trait {
+    Area() I64
+}
+type aSq struct(s I64) { s }
+fn (q aSq&) Area() I64 { return q.s * q.s }
+
+type aBig trait {
+    Area() I64
+}
+fn f(x any aShape&) any aBig& { return x }
+fn main() { }

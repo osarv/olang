@@ -1,0 +1,7 @@
+# check: fail a trait's method states no 'outlives' - a call through an 'any' cannot check one; write it on the type's method
+# D17f, D17d: run-time trait values
+type aNode struct(v I64) { v }
+type aLink trait {
+    mut Set(n aNode&) [n outlives return]
+}
+fn main() { }
