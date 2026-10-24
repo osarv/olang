@@ -822,3 +822,9 @@ errors and documentation - generic `+` already works).
   want that no?" - proposed (rec): several results bare in a declaration (`fn divmod(a I64, b I64) q I64, r I64 [..] ?
   E {`), parenthesized only in a function type inside a list (`List<fn(x I64) (I64, I64)>`), the grouping rule;
   reverses D8c's parenthesized form for declarations; a tool migrates. ASKED: include in today's batch?
+- 2026-10-24 (the user: "it is unnecessary syntax, the same should go for parenthesis around something that doesn't
+  need them in general ... make the listing one group the entire object ... for function types in lists"): DECIDED
+  several results bare in declarations, in today's batch. PROPOSED (rec, examples given): an item of a list with a
+  top-level comma of its own is parenthesized whole - `Map<String&, (fn(x I64) I64, I64 ? IoError, ParseError)>`,
+  `fn apply(f (fn(x I64) I64, I64), n I64)` - replacing the inner `(I64, I64)` and `? (A, B)`; a function type outside
+  a list (a field, a lambda, a declaration) never wrapped. One migration tool for both. Awaiting "gold".
