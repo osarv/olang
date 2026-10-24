@@ -17,10 +17,6 @@ fn mix64(x U64) U64 {
 
 golden U64 = 11400714819323198485        # 2^64 / the golden ratio, splitmix64's increment
 
-fn rotl(x U64, k U64) U64 {
-    return (x << k) | (x >> (64 - k))
-}
-
 # a generator whose sequence is decided by "seed" alone: the first four outputs of splitmix64 from it
 type Rand struct(seed U64) {
     s0 U64 = mix64(seed + golden)
@@ -31,14 +27,14 @@ type Rand struct(seed U64) {
 
 # the next 64 random bits
 fn (r mut Rand&) Next() U64 {
-    out U64 = rotl(r.s1 * 5, 7) * 9
+    out U64 = (r.s1 * 5).RotateLeft(7) * 9
     t U64 = r.s1 << 17
     r.s2 = r.s2 ^ r.s0
     r.s3 = r.s3 ^ r.s1
     r.s1 = r.s1 ^ r.s2
     r.s0 = r.s0 ^ r.s3
     r.s2 = r.s2 ^ t
-    r.s3 = rotl(r.s3, 45)
+    r.s3 = r.s3.RotateLeft(45)
     return out
 }
 
