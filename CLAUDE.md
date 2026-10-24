@@ -154,8 +154,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   positions, `case _` (alone, last); `match` as a value with `case P => v` (S12b); exhaustiveness over the patterns
   (S13a, Maranget). Binding alternatives bind the same names and types. `match T` dispatches on a type variable (G15).
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
-  `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x is T`/`x is E.Case` and `x as T`
-  (fails with `WRONG_CASE` under `checked`, else aborts). `a is b`/`a is not b` is identity (E10c; `same` removed).
+  `Has`/`Contains`; comparison chains for `< <= > >=` only, each operand once; `x as E.Case` gives the payload
+  (fails with `WRONG_CASE` under `checked`, else aborts). `is` tests for null and nothing else: `x is null`, `x is not
+  null` (E10c, the user's decision 2026-10-24); `x == null`, `a is b` and `x is E.Case` are errors naming the form.
+- **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
+  the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload too, `_`
+  matches any part, nested cases test through references (a null holds no case). After `if e == C { }` - and in the else
+  of `if e != C`, and after an `if e != C { leave }` - a local or parameter nothing assigns in the block is narrowed to C,
+  so `e.r` reads the payload field (mine: only locals and parameters, never fields - a field may change under a call);
+  a field read where nothing narrows is S8d's error.
 - **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
   front from a known length, else 100 and doubling (the user's numbers).
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
@@ -179,7 +186,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (2026-10-01, T13 - a plain struct is a special case of a constructor struct); `T[]`/`T[N]`/`T[expr]` arrays and 2-D
   arrays (2026-10-01, `Array<T>`); `len(a)` (2026-10-01, `a.Len()`); scope names `&s` and scope declarations
   (2026-10-05); UFCS method calls (M19); `same(a, b)` and the `atomicLoad`-style builtins (2026-10-09); `compif` (B9);
-  `while` (S9); a `size()` builtin (2026-09-30, serialization is future work); an `Iterable` interface (T35b:
+  `while` (S9); `a is b` identity, `x is E.Case` and `x == null` (2026-10-24: `==` tests cases, `is` only null); the
+  helpers `Any`/`All` (2026-10-24, `Some`/`Every`); a `size()` builtin (2026-09-30, serialization is future work); an `Iterable` interface (T35b:
   `xs.Iter()`); labeled break (2026-10-08); interface switch dispatch (dropped by the user, "it gains very little and
   causes a lot of problems"); Str purity (E11c, decision 49); `done`, `fail`, `abort` (2026-10-17, QU: a test ends by
   returning, a program by `os.Exit`); `own` and `take` (2026-10-18, `docs/memory.md` round 3: freeing early is the
@@ -236,9 +244,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
   `a[lo:hi]` is a borrow tagged with the base's scope and permission; `checked a[i]` checks; an out-of-range index, a
   wrong `extern` prototype and a data race are the three unchecked holes, stated (E16e, X1a, P8b).
-- **Equality (E10, E10a, E10b).** `==` on values is structural; on an array reference it compares contents; on a
-  struct or enum reference it is identity unless the type declares `Eq` (then `==` calls it at every depth, the user's
-  call). The compiler supplies `Hash` for plain data; a type declaring `Eq` must declare `Hash`.
+- **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
+  reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
+  depth (the user's call). The prelude declares `Eq` (and `Hash`) by contents on every array, `String`, `List`, `Map`
+  and `Vec`, so those compare by what they hold however held. A reference compared with a value of its referent's type
+  compares the value it names (mine: a value has no storage to be the same as). The compiler supplies `Hash` for plain
+  data; a type declaring `Eq` must declare `Hash`; hashing follows equality. Identity of two arrays or Lists is no longer
+  written (a capability removed with `a is b`).
 - **Structs are built only by their constructor (T13, C2d, the user's call).** No struct literals, no field-list
   structs. A constructor body is a block whose top-level locals are the fields (C2a); a bare name is a pun of a
   parameter; `return` is rejected. Defaults are compile-time expressions (D8a). `destruct { }` makes a type
@@ -250,8 +262,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   primitive may have a constructor, which a literal runs while compiling (T29d, the user's design). Over a struct,
   enum or generic instance it is an error. `Char` extends `U8`, `String` extends `Array<Char>` (T29h/T29c, the user's
   design); text written in the program is a `String`.
-- **Enums carry payloads and may be recursive through `&` (T17, T17c, T17d).** A payload lives where its value does;
-  an enum reference's zero is null; a null matches no case pattern.
+- **Enums carry payloads and may be recursive through `&` (T17, T17a, T17c, T17d).** A payload lives where its value
+  does; an enum reference's zero is null; a null matches no case pattern. A case may carry one type written whole,
+  `Round Circle` (the coordinator's decision 2026-10-24): `Shape.Round(c)` builds it, a narrowed value is that type
+  (`e.r`, `e.Area()`), `case Shape.Round(c)` and `e as Shape.Round` give it; so `{ North South }` on one line is one case
+  carrying a `South`.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
 - **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should
@@ -584,7 +599,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   E4a covers literal-only expressions, not names. `tools/math_methods.olang` migrates (oann later).
 - **Collections in the prelude:** `List<T>` (chunked, never moves, a handle - a copy is a second name, `Clone()`
   copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Update`, ordered walks by
-  insertion of slot), `Vec<T>` (below), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators have `Any All Count Fold Map Filter
+  insertion of slot), `Vec<T>` (below), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators (and arrays) have `Some Every` (renamed from `Any All`, the user's call 2026-10-24) `Count Fold Map Filter
   ToList`.
 - **`Vec<T>` is the default growable array, and a handle (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
   QAB, approved in advance).** Its record (buffer and count) is made where it is constructed; a copy is a second name,

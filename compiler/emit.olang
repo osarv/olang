@@ -313,7 +313,7 @@ fn (e mut Emitter&) emitAll() {
     for i in range e.Lw.Bodies.Len() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Test(_) {
-                if e.Tests and e.Lw.Bodies[i].Root != null { tests.Push(i) }
+                if e.Tests and e.Lw.Bodies[i].Root is not null { tests.Push(i) }
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
@@ -330,7 +330,7 @@ fn (e mut Emitter&) emitAll() {
         k := mir.FnKey.Body(typed.BodyId(I32(i)))
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
-                if e.Lw.Bodies[i].Root == null { continue }
+                if e.Lw.Bodies[i].Root is null { continue }
                 h := e.homeOf(k)
                 if e.ReusedAt.Has(h) {
                     # a reused module's: declared, for the objects that name it (the entry calls a global's
@@ -652,7 +652,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 # homed in another object (another part of this one's home included)
                 declared.Put(j, true)
                 decls.Push(e.itemDecl[j])
-                if h == HomeInst and inst != null { inst.Push($e.itemSym[j]) }
+                if h == HomeInst and inst is not null { inst.Push($e.itemSym[j]) }
             }
         }
     }
@@ -1018,7 +1018,7 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         es StringBuilder
         for i in range cs.Len() {
             m := e.dbgNew()
-            name := e.text(cn[i]) if cn != null and i < cn.Len() else $i
+            name := e.text(cn[i]) if cn is not null and i < cn.Len() else $i
             e.dbgShared(m, $"!DIEnumerator(name: \"" $escape(name) "\", value: " $i ")")
             if i > 0 { es.Push(", ") }
             es.Push($"!" $m)
@@ -1095,10 +1095,10 @@ fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
     for i in range n { out[i] = $i }
     if e.T.KindOf(r) != types.Kind.Named { return out }
     td := e.P.TypeDecl(e.T.DeclOf(r))
-    if td == null or td.Body == null { return out }
+    if td is null or td.Body is null { return out }
     match td.Body {
         case ast.TypeBody.Struct(sb) {
-            if sb.Body == null { return out }
+            if sb.Body is null { return out }
             k I64 = 0
             for st in sb.Body {
                 match st {
@@ -1280,7 +1280,7 @@ fn (e mut Emitter&) item(symbol String&, home I64, text String&, decl String& = 
 
 # item i's references, found once
 fn (e mut Emitter&) refs(i I64) Array<I64>&e {
-    if e.itemRefs[i] == null { e.itemRefs[i] = refsIn(e.itemText[i]).ToArray() }
+    if e.itemRefs[i] is null { e.itemRefs[i] = refsIn(e.itemText[i]).ToArray() }
     return e.itemRefs[i]
 }
 
@@ -4555,7 +4555,7 @@ fn (e mut Emitter&) testName(id I64) String {
 }
 
 fn (e mut Emitter&) findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
-    if ds == null { return source.Span(0, 0) }
+    if ds is null { return source.Span(0, 0) }
     for d in ds {
         match d {
             case ast.Decl.Test(dsp, name, _) {
@@ -4572,12 +4572,12 @@ fn (e mut Emitter&) findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
 }
 
 fn (e mut Emitter&) findTestIf(ti ast.TopIf&, sp source.Span) source.Span {
-    if ti == null { return source.Span(0, 0) }
-    if ti.Then != null {
+    if ti is null { return source.Span(0, 0) }
+    if ti.Then is not null {
         f := e.findTest(ti.Then.Decls, sp)
         if f.End > I32(0) { return f }
     }
-    if ti.Else != null {
+    if ti.Else is not null {
         f := e.findTest(ti.Else.Decls, sp)
         if f.End > I32(0) { return f }
     }

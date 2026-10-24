@@ -679,8 +679,18 @@ fn (p mut Parser&) typeBody() ast.TypeBody&p ? Fail {
                 cat := p.here()
                 cn := try p.name()
                 payload Array<ast.Param&>&p = Array<ast.Param&>(0)
-                if p.accept(token.Tok.LParen) { payload = try p.params(false) }
-                cases.Push(ast.CaseDecl(p.from(cat), cn, payload))
+                whole := false
+                if p.accept(token.Tok.LParen) {
+                    payload = try p.params(false)
+                } else if not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and
+                          not p.sees(token.Tok.Eof) {
+                    # T17: a payload of one type written whole, "Round Circle"
+                    tat := p.here()
+                    ty := try p.typeExpr()
+                    payload = ast.Param&[ast.Param(p.from(tat), cn, ty, null)]
+                    whole = true
+                }
+                cases.Push(ast.CaseDecl(p.from(cat), cn, payload, whole))
                 try p.entryEnd()
             }
             p.advance()
@@ -741,7 +751,7 @@ fn (p mut Parser&) function() ast.Func&p ? Fail {
     # variables bare ("fn (l List<T>&) Push(x T)"): names no type has, written as its type's arguments
     tps Array<ast.TypeParam&>&p = null
     if p.sees(token.Tok.Lt) { tps = try p.typeParams() }
-    if recv != null and recv.Ty != null { p.receiverVars(recv.Ty, false) }
+    if recv is not null and recv.Ty is not null { p.receiverVars(recv.Ty, false) }
     p.scopeDecl()
     s := try p.sig(false)
     braced := p.sees(token.Tok.LBrace)
@@ -766,7 +776,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
         }
         case ast.TypeRef.Ref(_, of, _) { p.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) {
-            if of != null { p.receiverVars(of, inArgs) }
+            if of is not null { p.receiverVars(of, inArgs) }
         }
         nomatch { }
     }
@@ -1941,7 +1951,7 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>&p ? Fail {
                 p.exprs.Push(try p.unary())
                 if not listOk or not p.accept(token.Tok.Comma) { break }
             }
-        } else if body == null {
+        } else if body is null {
             try p.fail(token.Tok.LBrace.Describe())
         }
         defaults := gather(p.exprs, from)
@@ -2913,7 +2923,7 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
         match d {
             case ast.Decl.Fn(f) {
                 b.Push("fn " $names.Text(f.Name) ":")
-                if f.Body == null {
+                if f.Body is null {
                     b.Push(" -")
                 } else {
                     for s in f.Body { b.Push(" " $shapeStmt(s, names, src.Text)) }
@@ -2923,7 +2933,7 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
                 b.Push("type " $names.Text(t.Name))
                 match t.Body {
                     case ast.TypeBody.Trait(ms) {
-                        for m in ms { b.Push(" " $("mut " if m.Recv != null else "") $names.Text(m.Name)) }
+                        for m in ms { b.Push(" " $("mut " if m.Recv is not null else "") $names.Text(m.Name)) }
                     }
                     nomatch { }
                 }
@@ -2939,9 +2949,9 @@ fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
     return match s {
         case ast.Stmt.ExprS(_, x) => shapeExpr(x, names, text)
         case ast.Stmt.Return(_, vs) => "return" $(" " $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
-        case ast.Stmt.Var(_, v) => "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty != null else "")
+        case ast.Stmt.Var(_, v) => "var" $v.Names.Len() $(" :=" if v.Infer else "") $(" typed" if v.Ty is not null else "")
         case ast.Stmt.Multi(_, m) => "multi" $m.Targets.Len() $(":=" if m.Define else "=") $m.Values.Len()
-        case ast.Stmt.If(_, i) => "if" $(" else" if i.Else != null else "")
+        case ast.Stmt.If(_, i) => "if" $(" else" if i.Else is not null else "")
         nomatch => "stmt"
     }
 }

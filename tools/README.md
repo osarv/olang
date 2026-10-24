@@ -27,6 +27,8 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `arrays_migrate.olang` | QP1-QP2: `Array<T, N>` and constant parameters removed - `x Array<T, N>` with no value becomes `x := Array<T>(N)`, `Array<T, N>()` becomes `Array<T>(N)`, any other `Array<T, N>` loses its length | `build/tools_arrays_migrate [--dry] PATH...` |
 | `results_migrate.olang` | D8c/L18c: results and error sets written bare (`fn f() I64, I64 ? A, B`), a function type in a list grouped whole (`Map<K, (fn(x I64) I64, I64)>`) | `build/tools_results_migrate [--check] [-v] FILE\|DIR...` |
 | `math_methods.olang` | M19d: std/math removed - its functions are the numbers' methods (`math.Sqrt(x)` -> `x.Sqrt()`), its constants the prelude's (`Pi`, `Euler`, `Inf`, `NaN`) | `build/tools_math_methods [--dry] PATH...` |
+| `equality_migrate.olang` | E10/E10c/E32: `x == null` -> `x is null`, `x is E.Case` -> `x == E.Case`, identity `a is b` -> `a == b` (listed, for a person to check where the type declares `Eq`) | `build/tools_equality_migrate [--check] [-v] FILE\|DIR...` |
+| `helper_rename.olang` | the helpers `Any`/`All` renamed `Some`/`Every`, calls and declarations | `build/tools_helper_rename [--check] [-v] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
   `--check` writes nothing and the exit status says whether anything would change.

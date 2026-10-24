@@ -11,7 +11,7 @@ type Bag struct(head mut Node&) {
 }
 fn (b Bag&) Str() String {
     l := List<mut Node&>()
-    for n := b.head, n != null, n = n.next { l.Push(n) }
+    for n := b.head, n is not null, n = n.next { l.Push(n) }
     return $l.Len() " " $l[0].v
 }
 fn main() ? {

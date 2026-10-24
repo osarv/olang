@@ -200,7 +200,7 @@
 | ok - taking a reference to an array borrows its storage rather than copying it
 | ok - borrowing an array from a scope that outlives the reference is fine in the safe direction
 | ok - reference into value copies out rather than aliasing the reference
-| ok - a marked runtime-length array is a reference: assignment repoints, 'is' is identity
+| ok - a marked runtime-length array is a reference: assignment repoints, '==' compares what it holds
 | ok - a marked compile-time-length array is a reference too - same rule, other length kind
 | ok - an array of references keeps its elements' reference-shapedness as part of its own type
 | ok - a value promotes into a reference target, and a reference copies out into a value target
@@ -432,7 +432,7 @@
 | ok - E31/S9e: try calls the Try forms or derives them from Len; try on a store or an increment; for x in try c
 | ok - E29/S9e: try reaches a fallible Has, and a comprehension's own calls
 | ok - E32: is and as on enum values
-| ok - E10c: 'a is b' is identity and 'is not' its negation, while compiling and at run time
+| ok - E10, E10c: a reference compares by identity unless its type declares Eq, and 'is null' asks for none, while compiling and at run time
 | ok - M19d: a prelude generic type is named bare with its arguments written, as an expression too
 | ok - T35a: Iterator<T> is built in, and a type satisfying it is walked by for-in
 | ok - E11b: a returned join survives later allocations
@@ -540,11 +540,11 @@
 | ok - O18a/T25d: the same results computed while compiling and at run time
 | ok - E11a: a negative zero renders as -0 in every float type, while compiling and at run time
 | ok - T4: an integer rounds once to a float, while compiling and at run time
-| ok - E10: an array reference is the same as another with the same storage and the same length
+| ok - E10: arrays compare by what they hold - lengths, then elements - and a null only equals a null
 | ok - E12: a value result read out of a reference is a copy, compared by value while compiling and at run time
 | ok - S12b: text a match gives as its value is built where the value lands
 | ok - T7d: a copy into fixed storage of its length, while compiling and at run time
-| ok - T25d/E10: a static literal site is one instance however often it is reached, and two sites are two
+| ok - T25d/E10: static literals compare by what they hold, wherever they were written
 | ok - a function-typed global holds a function value, read, called and assigned as one
 | ok - B5a: a global is set after the globals its initializer reads, directly or through a call
 | ok - B5a: through a function value, and declaration order among globals with no dependency between them
@@ -749,6 +749,8 @@
 | ok - T35c: Float, Integer and Number - decided while compiling, and the same at run time
 | ok - G9a: a literal reaching a constrained variable - decided while compiling, and the same at run time
 | ok - E27, D9b: a grown comprehension and a written by-value String, read back after a churn
+| ok - E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling
+| ok - E10, E10b: List and Map compare and hash by contents; references without Eq by identity
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -1484,6 +1486,8 @@
 === run s8belseif.olang
 | status 0
 === run s8blocalnames.olang
+| status 0
+=== run s8dnarrow.olang
 | status 0
 === run s9erangeundertry.olang
 | status 0

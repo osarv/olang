@@ -1,0 +1,38 @@
+# check: run
+# S8d, E32: case tests with "==", "_" parts, nested tests through references, and narrowing - in the block, the else,
+# after a leaving if, and to a payload written whole
+type Circle struct(r I64) { r }
+fn (c Circle&) Twice() I64 { return 2 * c.r }
+type Shape enum {
+    Round Circle
+    Box(w I64, h I64)
+    Dot
+}
+type Expr enum {
+    Lit(v I64)
+    Add(a Expr&, b Expr&)
+}
+fn area(s Shape) I64 {
+    if s == Shape.Round { return s.Twice() + s.r }
+    if s != Shape.Box { return 0 }
+    return s.w * s.h
+}
+fn sum(e Expr&) I64 {
+    if e != Expr.Add {
+        if e == Expr.Lit { return e.v }
+        return 0
+    } else {
+        return sum(e.a) + sum(e.b)
+    }
+}
+Baked I64 = area(Shape.Round(Circle(2))) + area(Shape.Box(2, 3)) + sum(Expr.Add(Expr.Lit(1), Expr.Lit(2)))
+fn main() ? {
+    s := Shape.Box(2, 3)
+    assert area(s) == 6 and area(Shape.Round(Circle(1))) == 3 and area(Shape.Dot) == 0
+    assert s == Shape.Box(_, 3) and s != Shape.Box(2, 4) and s != Shape.Dot
+    e Expr& = Expr.Add(Expr.Lit(1), Expr.Add(Expr.Lit(2), Expr.Lit(3)))
+    assert sum(e) == 6 and e == Expr.Add(Expr.Lit(1), _) and e != Expr.Add(Expr.Lit(2), _)
+    n Expr& = null
+    assert n != Expr.Lit and n is null
+    assert Baked == 6 + 6 + 3
+}

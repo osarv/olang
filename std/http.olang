@@ -81,7 +81,7 @@ fn Post(url String&, contentType String&, body Array<U8>&, headers Array<Header>
 # for any method but GET and HEAD, body as the request's body, sent with exactly the header fields given (none that
 # curl would add for a body of its own). timeoutMs, when above 0, bounds the whole request in milliseconds.
 fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, timeoutMs I64 = 0) Response ? HttpError {
-    if method.Len() == 0 or not method.All(fn(c Char) Bool { return c.IsLetter() }) { error HttpError.INVALID }
+    if method.Len() == 0 or not method.Every(fn(c Char) Bool { return c.IsLetter() }) { error HttpError.INVALID }
     args := List<String&>()
     for a in String&["curl", "-q", "-s", "--proto", "=http,https", "--proto-redir", "=http,https", "-L"
         "--max-redirs", "10", "-D", "/dev/stderr"] { args.Push(a) }
@@ -96,10 +96,10 @@ fn Send(method String&, url String&, headers Array<Header>&, body Array<U8>&, ti
     }
     typed := false
     for h in headers {
-        if h.Name.Len() == 0 or not h.Name.All(fn(c Char) Bool { return c > ' ' and c != ':' and c < 0x7F }) {
+        if h.Name.Len() == 0 or not h.Name.Every(fn(c Char) Bool { return c > ' ' and c != ':' and c < 0x7F }) {
             error HttpError.INVALID
         }
-        if h.Value.Any(fn(c Char) Bool { return c == '\r' or c == '\n' or c == 0 }) { error HttpError.INVALID }
+        if h.Value.Some(fn(c Char) Bool { return c == '\r' or c == '\n' or c == 0 }) { error HttpError.INVALID }
         typed = typed or sameName(h.Name, "Content-Type")
         args.Push("-H")
         args.Push($h.Name ": " $h.Value)

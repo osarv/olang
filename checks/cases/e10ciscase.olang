@@ -1,0 +1,7 @@
+# check: fail error[E10c, E32]: a case is tested with '==': 's == Shape.Dot'
+# E32: a case is tested with "==", never "is"
+type Shape enum { Dot, Ring(r I64) }
+fn main() {
+    s := Shape.Ring(2)
+    assert not (s is Shape.Dot)
+}

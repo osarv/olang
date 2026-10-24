@@ -291,7 +291,7 @@ test "Keys and Values, one part of every entry" {
     total I64 = 0
     for v in m.Values() { total += v }
     assert total == 5 + 3 + 4 + 4
-    assert m.Keys().Count(fn(k) { return k.Len() == 4 }) == 2 and m.Values().All(fn(v) { return v >= 3 })
+    assert m.Keys().Count(fn(k) { return k.Len() == 4 }) == 2 and m.Values().Every(fn(v) { return v >= 3 })
     vs := m.Values().ToList()
     vs.Sort(fn(a, b) { return a < b })
     assert vs[0] == 3 and vs[3] == 5

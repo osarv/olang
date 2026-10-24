@@ -8,7 +8,7 @@ type L struct(v I64, next L&) {
     next
 }
 fn (l L&) Str() String {
-    if l.next == null { return $l.v }
+    if l.next is null { return $l.v }
     return $l.v "," $l.next
 }
 fn depthOf() I64 {

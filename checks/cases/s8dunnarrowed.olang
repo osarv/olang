@@ -1,0 +1,7 @@
+# check: fail error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows
+# S8d: a payload field is read only where the local is known to hold its case
+type Shape enum { Dot, Ring(r I64) }
+fn radius(s Shape) I64 { return s.r }
+fn main() {
+    assert radius(Shape.Ring(2)) == 2
+}

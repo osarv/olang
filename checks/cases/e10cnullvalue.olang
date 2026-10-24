@@ -1,0 +1,6 @@
+# check: fail error[E10c]: only a reference or a function value can be null, and this is I64
+# E10c: a number is never null
+fn main() {
+    x I64 = 3
+    assert x is not null
+}

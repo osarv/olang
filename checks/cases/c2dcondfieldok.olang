@@ -6,7 +6,7 @@ import "std/io"
 
 type M struct(n I64, data mut Array<F64>& = null) {
     n
-    Data mut Array<F64>& = (data[0:n] if data != null else Array<F64>(n))
+    Data mut Array<F64>& = (data[0:n] if data is not null else Array<F64>(n))
 }
 
 fn main() {

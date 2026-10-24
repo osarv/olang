@@ -17,7 +17,7 @@ fn kind(j Json&) String {
     }
 }
 fn nested(j json.Json&) Bool {
-    if j is Json.Arr or j is Json.Obj { return true }
+    if j == Json.Arr or j == Json.Obj { return true }
     return false
 }
 fn main() ? {

@@ -1,5 +1,5 @@
-# check: fail error[E32]: 'is' and 'as' ask which case an enum value is, and this is I64
-# E32: is on a plain value
+# check: fail error[E10c]: 'is' tests for null and nothing else - compare with '=='
+# E10c: is with a type
 fn main() ? {
     x := 5
     if x is I32 { }

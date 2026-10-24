@@ -1,0 +1,10 @@
+# check: fail error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows
+# S8d: a local assigned in the block is not narrowed there
+type Shape enum { Dot, Ring(r I64) }
+fn main() {
+    s := Shape.Ring(2)
+    if s == Shape.Ring {
+        t := s.r
+        s = Shape.Dot
+    }
+}
