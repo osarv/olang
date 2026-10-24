@@ -1,0 +1,35 @@
+# destructor-bearing temporaries made anys in a catch default, a match value, an argument and a loop: each destructed once
+type W trait {
+    Id() I64
+}
+Closed mut I64 = 0
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed = Closed + 1
+}
+fn (r Res&) Id() I64 { return r.id }
+error Er {
+    X
+}
+fn find(k I64) Res& ? Er {
+    if k > 1 { error Er.X }
+    return Res(k)
+}
+fn use(w any W&) I64 { return w.Id() }
+fn sub(k I64) I64 {
+    t I64 = 0
+    for i in range k {
+        a any W& = try find(i) catch default Res(100)
+        b any W& = match i {
+            case 0 => Res(10)
+            case _ => Res(11)
+        }
+        t += a.Id() + b.Id() + use(Res(1000))
+    }
+    return t
+}
+fn main() {
+    say($sub(4))
+    say("closed " $Closed)
+}

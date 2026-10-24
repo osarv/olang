@@ -1,0 +1,40 @@
+import "std/io"
+# for-in over a read-only any Iterator: the loop's copy of it must not make its mut Next callable
+type Cnt struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (c mut Cnt&) Next() I64 ? Exhausted {
+    if c.at >= c.n { error Exhausted.END }
+    c.at += 1
+    return c.at
+}
+G Cnt& = Cnt(3)
+fn walk(it any Iterator<I64>&) I64 {
+    t I64 = 0
+    for x in it { t += x }
+    return t
+}
+fn main() {
+    r any Iterator<I64>& = G
+    say($walk(r))
+    say($G.at)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

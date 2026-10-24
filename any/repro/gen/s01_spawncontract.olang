@@ -1,0 +1,42 @@
+import "std/io"
+# a task calling through an any's table: a method with a trait contract, a result target, a checked call
+type Acct trait {
+    mut Take(n I64) left I64 [n > 0]
+    Peek() I64
+}
+type Wal struct(c I64) { c }
+fn (w mut Wal&) Take(n I64) I64 {
+    w.c -= n
+    return w.c
+}
+fn (w Wal&) Peek() I64 { return w.c }
+fn main() {
+    w := Wal(100)
+    a mut any Acct& = w
+    r I64 = 0
+    join {
+        spawn a.Take(3)
+    }
+    join {
+        spawn r = a.Peek()
+    }
+    say($w.c " " $r)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

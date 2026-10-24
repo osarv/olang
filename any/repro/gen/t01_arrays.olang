@@ -1,0 +1,37 @@
+import "std/io"
+# arrays of anys: a fill and a literal from loop-local instances, kept outside the loop
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    keep := List<Array<any W&>&>()
+    for i in range 3 {
+        b := Btn("b" $i)
+        keep.Push(Array<any W&>(2, b))
+        keep.Push(Array<any W&>(2, Btn("f" $i)))
+    }
+    churn()
+    for a in keep {
+        for w in a { say(w.Draw()) }
+    }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

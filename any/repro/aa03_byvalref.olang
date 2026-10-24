@@ -1,0 +1,18 @@
+# the same as aa02 with a plain reference: a by-value parameter's storage returned as borrowed from it
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn bor(p Pt) Pt&p { return p }
+fn deep(k I64) I64 {
+    a := Array<I64>(64, k)
+    if k > 0 { return deep(k - 1) + a[3] }
+    return a[0]
+}
+fn main() {
+    q := Pt(3, 4)
+    w := bor(q)
+    deep(20)
+    churn()
+    say($w.x " " $w.y)
+}

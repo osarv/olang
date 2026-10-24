@@ -1,0 +1,29 @@
+# $ of a chain of 12 nodes linked through any fields, and the same chain through plain references
+type Named trait {
+    Name() String
+}
+type Node struct(v I64) {
+    v
+    next any Named?& = null
+}
+fn (n Node&) Name() String { return "node" }
+type Pn struct(v I64) {
+    v
+    next Pn?& = null
+}
+fn main() {
+    h := Node(0)
+    for i in range 1, 12 {
+        n mut Node&h = Node(i)
+        n.next = h.next
+        h.next = n
+    }
+    say($h)
+    p := Pn(0)
+    for i in range 1, 12 {
+        n mut Pn&p = Pn(i)
+        n.next = p.next
+        p.next = n
+    }
+    say($p)
+}

@@ -1,0 +1,25 @@
+# mut defaults (one generic in its own variable) called through a writable any
+type Ctr trait {
+    mut Bump()
+    Seen() I64
+}
+fn (s mut S&) Twice<S Ctr>() {
+    s.Bump()
+    s.Bump()
+}
+fn (s mut S&) Times<S Ctr, U>(u U, n I64) U {
+    for i in range n { s.Bump() }
+    return u
+}
+type T struct(at I64) { at }
+fn (t mut T&) Bump() { t.at += 1 }
+fn (t T&) Seen() I64 { return t.at }
+G mut T& = T(1)
+fn ro(c mut any Ctr&) {
+    c.Twice()
+    c.Times("x", 3)
+}
+fn main() {
+    ro(G)
+    say($G.at)
+}

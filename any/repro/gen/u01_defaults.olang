@@ -1,0 +1,31 @@
+import "std/io"
+# a trait method with a parameter default, called through an any with the argument left off; the impl's own default differs
+type W trait {
+    Draw(scale I64 = 2) I64
+}
+type Btn struct(n I64) { n }
+fn (b Btn&) Draw(scale I64 = 5) I64 { return b.n * scale }
+fn gen<S W>(s S) I64 { return s.Draw() }
+fn main() {
+    b := Btn(10)
+    w any W& = b
+    say($w.Draw() " " $b.Draw() " " $gen(b) " " $gen(w))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

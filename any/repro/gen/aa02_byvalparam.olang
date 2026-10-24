@@ -1,0 +1,44 @@
+import "std/io"
+# an any borrowing a by-value parameter's own storage, returned as borrowed from it: the parameter's copy is the callee's
+type Named trait {
+    Name() String
+}
+type Pt struct(x I64, y I64) {
+    x
+    y
+}
+fn (p Pt&) Name() String { return "pt " $p.x " " $p.y }
+fn bor(p Pt) any Named&p { return p }
+fn deep(k I64) I64 {
+    a := Array<I64>(64, k)
+    if k > 0 { return deep(k - 1) + a[3] }
+    return a[0]
+}
+fn main() {
+    q := Pt(3, 4)
+    w := bor(q)
+    deep(20)
+    churn()
+    say(w.Name())
+    v := bor(Pt(5, 6))
+    deep(20)
+    say(v.Name())
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

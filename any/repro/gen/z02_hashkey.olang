@@ -1,0 +1,42 @@
+import "std/io"
+# a struct holding an any as a Map key: its supplied Hash and == (identity of the any)
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type K struct(w any W&, n I64) {
+    w
+    n
+}
+fn go(k I64) String {
+    b := Btn("x")
+    m := Map<K, I64>()
+    m.Put(K(b, k), 5)
+    v := try m.Get(K(b, k)) catch default -1
+    return $v
+}
+Baked String = go(1)
+Live mut I64 = 1
+fn main() {
+    say(Baked)
+    say(go(Live))
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

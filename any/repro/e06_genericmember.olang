@@ -1,0 +1,17 @@
+# a closed trait listing a generic without its arguments
+type Shape trait for Box {
+    Area() I64
+}
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+fn main() {
+    x any Shape& = Box<I64>(5, 2)
+    y any Shape& = Box<String&>("s", 3)
+    match x {
+        case Box b { say("box " $b.n) }
+    }
+    say($y.Area())
+}

@@ -1,0 +1,28 @@
+# anys of a field of a call's value result, of an element of a returned array, of a slice, from a loop body into an outer list
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type H struct(b Btn&, k I64) {
+    b
+    k
+}
+type HV struct(k I64) {
+    k
+    b Btn = Btn("hv")
+}
+fn mkH(i I64) H { return H(Btn("h" $i), i) }
+fn mkHV(i I64) HV { return HV(i) }
+fn mkA(i I64) Array<Btn> { return Array<Btn>(2, Btn("a" $i)) }
+fn retB(b Btn&) any W& { return b }
+fn main() {
+    xs := List<any W&>()
+    for i in range 3 {
+        xs.Push(mkH(i).b)
+        xs.Push(mkHV(i).b)
+        xs.Push(mkA(i)[1])
+    }
+    churn()
+    for x in xs { say(x.Draw()) }
+}
