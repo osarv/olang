@@ -1,0 +1,10 @@
+import "std/io"
+type LocalId extends I32
+fn main() ? {
+    a := Array<I64>(4, 7)
+    id := LocalId(2)
+    x := a[id]
+    y I64 = id
+    z := a[I64(id)]
+    try io.Println($x $y $z)
+}
