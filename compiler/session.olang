@@ -105,15 +105,16 @@ error Nothing { HERE }
 fn WordAt(t String&, at I64) source.Span {
     s := at
     if s > t.Len() { s = t.Len() }
-    for s > 0 and wordChar(t[s - 1]) { s-- }
+    for s > 0 and WordChar(t[s - 1]) { s-- }
     e := at
     if e < s { e = s }
-    for e < t.Len() and wordChar(t[e]) { e++ }
+    for e < t.Len() and WordChar(t[e]) { e++ }
     if e == s or t[s].IsDigit() { return source.Span(I32(at), I32(at)) }
     return source.Span(I32(s), I32(e))
 }
 
-fn wordChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' or U8(ch) >= 128 }
+# a character a name may hold
+fn WordChar(ch Char) Bool { return ch.IsLetter() or ch.IsDigit() or ch == '_' or U8(ch) >= 128 }
 
 # what a name refers to: a top-level item (Module, Name), a member of a type (Type, Name), a local of a body, or nothing
 type Target enum {
@@ -790,6 +791,7 @@ fn (a Analysis&) Members(it mut Items&, real String&, dot I64) {
         }
     }
     t := a.typeEndingAt(file, dot)
+    Log($"completion after a '.' at " $dot ": " $(c.Ty(t) if t != types.UnknownT else "no type"))
     if t == types.UnknownT { return }
     a.typeMembers(it, t)
 }
@@ -850,8 +852,10 @@ fn (a Analysis&) typeMembers(it mut Items&, t types.TypeId) {
                     tys := c.P.T.Items(c.P.T.Fields(tt))
                     for i in range body.Fields.Len() {
                         l := body.Locals[I64(body.Fields[i])]
-                        if l.Name == source.NameId(0) { continue }
-                        it.Add(c.P.L.Names.Text(l.Name), CompField, c.Ty(tys[i] if i < tys.Len() else l.Ty))
+                        # a bare field (C2a) is named where it is written
+                        name := (a.L.Diags.TextOf(body.File)[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0)
+                                 else c.P.L.Names.Text(l.Name))
+                        it.Add(name, CompField, c.Ty(tys[i] if i < tys.Len() else l.Ty))
                     }
                     break
                 }
@@ -993,9 +997,20 @@ fn (f mut typeFinder&) expr(x typed.Expr&) {
 
 # the names that may stand where nothing qualifies them in the file at real path: its module's own items, its
 # imports, the prelude's exported names, and the keywords
-fn (a Analysis&) Names(it mut Items&, real String&) {
+fn (a Analysis&) Names(it mut Items&, real String&, at I64) {
     mi := a.ModuleOf(real)
     if mi < 0 or a.C is null { return }
+    # the parameters and locals declared before at, in the bodies around it
+    file := a.L.Mods[mi].File
+    for b in a.C.Bodies {
+        if b.File != file or I64(b.Sp.Start) > at or at > I64(b.Sp.End) { continue }
+        for l in b.Locals {
+            if l.Name == source.NameId(0) or I64(l.Sp.Start) >= at { continue }
+            if l.Kind == typed.LocalKind.Param or l.Kind == typed.LocalKind.Var or l.Kind == typed.LocalKind.Binding {
+                it.Add(a.C.P.L.Names.Text(l.Name), CompVariable, a.C.Ty(l.Ty))
+            }
+        }
+    }
     a.moduleNames(it, mi, true)
     for m in a.L.Mods[mi].Imports { it.Add(m.Alias, CompModule, m.Spec) }
     for k in range a.L.Mods.Len() {
@@ -1108,6 +1123,12 @@ fn IdentityOf(path String&) String {
 }
 
 # ---- processes and messages ----
+
+# a line for whoever reads the tool's standard error, where OLANG_TOOL_LOG is set (B15, B16): what it is doing, timed
+fn Log(text String&) {
+    if (try os.Env("OLANG_TOOL_LOG") catch default "") == "" { return }
+    try io.PrintErr($"olang: " $text "\n") catch io.IoError { }
+}
 
 extern fn fork() I32
 extern fn _exit(status I32) noreturn

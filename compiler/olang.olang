@@ -30,6 +30,7 @@ import "eval"
 import "interp"
 import "explain"
 import "session"
+import "lsp"
 import typecheck "check"
 import "std/pair"
 
@@ -369,6 +370,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     }
     if cl.Mode == Format { return format(cl) }
     if cl.Mode == Doc { return session.DocMode(cl.Files.ToArray(), cl.Word, cl.Html, c) }
+    if cl.Mode == Lsp { return lsp.Serve(c) }
     files := cl.Files.ToArray()
     if cl.Mode == Compile { return build.Compile(fe, c, files[0], d) }
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }

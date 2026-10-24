@@ -7388,7 +7388,16 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             et := c.typeNamed(x)
             if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
             if ref.Kind == names.What.None and c.importPath(x) {
-                c.gap(nsp, "a call through an import of this kind")
+                # a name the imported module does not declare (or does not export: the resolver said so already)
+                at := match x {
+                    case ast.Expr.Name(xsp, _) => c.P.R.Use(c.fr().File, xsp.Start).Module
+                    case ast.Expr.Member(xsp, _, _) => c.P.R.Member(c.fr().File, xsp.End).Module
+                    case _ => -1
+                }
+                if at >= 0 and not c.declaresName(at, n) {
+                    c.err(nsp, msgs.NotInModule($"module " $c.P.L.Mods[at].Identity, c.tok(n)))
+                }
+                c.dropArgs(args)
                 return c.unknown(sp)
             }
             return c.methodCall(sp, x, n, nsp, args)
@@ -8351,6 +8360,14 @@ fn (c mut Checker&) callValue(sp source.Span, fsp source.Span, fv typed.Expr&c, 
 }
 
 # whether a path is an import's alias, or reaches through one (M4)
+# whether module mi declares a name, exported or not
+fn (c mut Checker&) declaresName(mi I64, n source.NameId) Bool {
+    for e in c.P.R.Tables[mi].Entries {
+        if e.Name == n { return true }
+    }
+    return false
+}
+
 fn (c mut Checker&) importPath(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Name(sp, _) { return c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Import }

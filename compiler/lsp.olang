@@ -1,0 +1,758 @@
+# lsp - "olang lsp" (B15): a Language Server Protocol server on the standard input and output, for editors.
+#
+# Two processes. The server - this one - speaks the protocol and holds the open files, their text as the editor has
+# them; it never runs the compiler's passes itself. Each piece of analysis runs in a WORKER, a fork of the server made
+# when the files have stopped changing for a moment: it inherits the files as they are then, checks the ones that
+# changed and every open file importing one (each as the root of its program, as "olang test" checks it), publishes
+# their diagnostics, and then answers requests - hover, definition, symbols, completion, formatting - until the files
+# change again and it is ended for a new one. So a crash of the compiler on a broken file ends a worker, never the
+# server, and since the compiler reclaims nothing but by scopes, every analysis's memory goes with the worker that made
+# it. Requests a worker could not answer get null.
+#
+# Positions are UTF-8 bytes where the editor offers that encoding, else UTF-16 units, as the protocol's default.
+
+import "std/os"
+import "std/io"
+import "std/json"
+import "std/time"
+import "std/filepath"
+import "source"
+import "ast"
+import "diag"
+import "build"
+import "session"
+
+# ---- the server ----
+
+# an open file: its URI, its path and real path, its text as the editor holds it, and what the last analysis said of
+# it - the open files its program imports (Deps, by slot), the other files it published diagnostics to (Foreign)
+type Doc struct(Uri String&, Path String&, Real String&) {
+    Uri
+    Path
+    Real
+    Text StringBuilder
+    Open Bool = true
+    Deps Vec<I64>
+    Foreign List<String&>
+}
+
+# the worker of the moment: its process, the pipe ends the server talks to it through, and what it was asked
+type Worker struct() {
+    Pid I32 = -1
+    To I32 = -1
+    From mut session.Reader& = null
+    Started I64 = 0
+}
+
+type Server struct(Cfg mut build.Config&) {
+    Cfg
+    Docs List<mut Doc&>
+    Utf8 Bool = false
+    W Worker = Worker()
+    Pending Vec<I64>             # the slots still to be checked: changed, or importing one that changed
+    Waiting Vec<I64>             # the requests the worker has not answered, by id (numbers; -1 for one that is not)
+    DueAt I64 = 0                # when the files are settled enough to check: 0 for nothing due
+    ShutDown Bool = false
+    Done Bool = false
+}
+
+# how long the files must stay unchanged before a worker checks them: typing coalesces into one check
+SettleNs I64 = 40000000
+# how long a worker may take over what it was asked before it is ended as stuck
+StuckNs I64 = 60000000000
+
+# serves the protocol until "exit" or the end of the input: the status to end with (0 after a shutdown)
+fn Serve(cfg mut build.Config&) I32 {
+    session.IgnoreBrokenPipes()
+    s mut Server&cfg = Server(cfg)
+    input mut session.Reader&cfg = session.Reader(0)
+    for not s.Done {
+        fds := Array<I32>(2, -1)
+        fds[0] = 0
+        n := 1
+        if s.W.Pid > 0 {
+            fds[1] = s.W.From.Fd
+            n = 2
+        }
+        timeout I32 = -1
+        now := time.Now()
+        if s.DueAt > 0 { timeout = I32(I64(0).Max((s.DueAt - now) / 1000000) + 1) }
+        if s.W.Pid > 0 and (s.Waiting.Len() > 0 or s.Pending.Len() > 0) and timeout < 0 { timeout = 1000 }
+        ready := session.Readable(fds[:n], timeout)
+        if n == 2 and ready[1] { s.fromWorker() }
+        if ready[0] {
+            if not input.Fill() {
+                # the editor went away: what is asked is answered, then the server ends
+                s.drain()
+                return 0 if s.ShutDown else 1
+            }
+            for not s.Done {
+                body := try input.Next() catch session.Incomplete { break }
+                s.handle(body)
+            }
+        }
+        if s.DueAt > 0 and time.Now() >= s.DueAt { s.startWorker() }
+        if s.W.Pid > 0 and s.W.Started > 0 and time.Now() - s.W.Started > StuckNs and (s.Waiting.Len() > 0 or s.Pending.Len() > 0) {
+            s.workerLost("checking took more than a minute - it was stopped")
+        }
+    }
+    s.stopWorker()
+    return 0 if s.ShutDown else 1
+}
+
+fn (s mut Server&) send(body String&) { session.WriteFramed(1, body) }
+
+# one message from the editor
+fn (s mut Server&) handle(body String&) {
+    msg := try json.Parse(body) catch json.JsonError {
+        s.send(errorReply("null", -32700, "the message is not JSON"))
+        return
+    }
+    method := str(msg, "method")
+    id := idOf(msg)
+    if method == "initialize" {
+        s.initialize(msg, id)
+        return
+    }
+    if method == "initialized" or method == "$/cancelRequest" or method == "$/setTrace" or method == "textDocument/didSave" {
+        return
+    }
+    if method == "shutdown" {
+        s.drain()
+        s.ShutDown = true
+        s.send(reply(id, "null"))
+        return
+    }
+    if method == "exit" {
+        s.Done = true
+        return
+    }
+    if method == "textDocument/didOpen" {
+        td := try msg["params"]["textDocument"] catch json.JsonError { return }
+        s.opened(str(td, "uri"), str(td, "text"))
+        return
+    }
+    if method == "textDocument/didChange" {
+        p := try msg["params"] catch json.JsonError { return }
+        uri := str(try p["textDocument"] catch json.JsonError { return }, "uri")
+        changes := try p["contentChanges"].AsArr() catch json.JsonError { return }
+        if changes.Len() == 0 { return }
+        # full sync: the last change is the whole text
+        s.changed(uri, str(changes[changes.Len() - 1], "text"))
+        return
+    }
+    if method == "textDocument/didClose" {
+        td := try msg["params"]["textDocument"] catch json.JsonError { return }
+        s.closed(str(td, "uri"))
+        return
+    }
+    if id == "" { return }             # a notification nobody here knows
+    if method in Requests {
+        s.ask(body, id)
+        return
+    }
+    s.send(errorReply(id, -32601, $"olang lsp has no " $method))
+}
+
+# the requests a worker answers
+Requests := String&["textDocument/hover", "textDocument/definition", "textDocument/documentSymbol"
+                    "textDocument/completion", "textDocument/formatting"]
+
+fn (s mut Server&) initialize(msg json.Json&, id String&) {
+    encs := try msg["params"]["capabilities"]["general"]["positionEncodings"].AsArr() catch json.JsonError default null
+    if encs is not null {
+        for e in encs {
+            if (try e.AsStr() catch json.JsonError default "") == "utf-8" { s.Utf8 = true }
+        }
+    }
+    caps := $"{\"positionEncoding\":\"" $("utf-8" if s.Utf8 else "utf-16") "\",\"textDocumentSync\":{\"openClose\":true," $
+        "\"change\":1},\"hoverProvider\":true,\"definitionProvider\":true,\"documentSymbolProvider\":true," $
+        "\"completionProvider\":{\"triggerCharacters\":[\".\"]},\"documentFormattingProvider\":true}"
+    s.send(reply(id, $"{\"capabilities\":" $caps ",\"serverInfo\":{\"name\":\"olang\"}}"))
+}
+
+# ---- the files ----
+
+fn (s Server&) slotOf(uri String&) I64 {
+    for i in range s.Docs.Len() {
+        if s.Docs[i].Open and s.Docs[i].Uri == uri { return i }
+    }
+    return -1
+}
+
+fn (s mut Server&) opened(uri String&, text String&) {
+    k := s.slotOf(uri)
+    if k < 0 {
+        path := PathOf(uri)
+        # a closed file's slot is used again, so the slots stay as many as the files open at once
+        for i in range s.Docs.Len() {
+            if not s.Docs[i].Open {
+                k = i
+                break
+            }
+        }
+        if k < 0 {
+            d mut Doc&s = Doc($uri, $path, session.RealOf(path))
+            s.Docs.Push(d)
+            k = s.Docs.Len() - 1
+        } else {
+            d := s.Docs[k]
+            d.Uri = $uri
+            d.Path = $path
+            d.Real = session.RealOf(path)
+            d.Open = true
+            d.Deps.Clear()
+            d.Foreign.Clear()
+        }
+    }
+    s.setText(k, text)
+}
+
+fn (s mut Server&) changed(uri String&, text String&) {
+    k := s.slotOf(uri)
+    if k < 0 {
+        s.opened(uri, text)
+        return
+    }
+    s.setText(k, text)
+}
+
+fn (s mut Server&) setText(k I64, text String&) {
+    d := s.Docs[k]
+    d.Text.Clear()
+    d.Text.Push(text)
+    s.due(k)
+}
+
+fn (s mut Server&) closed(uri String&) {
+    k := s.slotOf(uri)
+    if k < 0 { return }
+    d := s.Docs[k]
+    d.Open = false
+    d.Text.Clear()
+    # what was said of a closed file goes with it, as editors expect
+    s.send(publish(d.Uri, "[]"))
+    for f in d.Foreign { s.send(publish(f, "[]")) }
+    s.stopWorker()
+    s.Pending.Remove(k)
+    s.DueAt = time.Now() + SettleNs if s.Pending.Len() > 0 else 0
+}
+
+# file k changed: it and every open file importing it are to be checked once the files settle; the worker of the
+# moment knows the old text, so it goes
+fn (s mut Server&) due(k I64) {
+    s.stopWorker()
+    s.addPending(k)
+    for i in range s.Docs.Len() {
+        if i != k and s.Docs[i].Open and k in s.Docs[i].Deps { s.addPending(i) }
+    }
+    s.DueAt = time.Now() + SettleNs
+}
+
+fn (s mut Server&) addPending(k I64) {
+    s.Pending.Remove(k)
+    # the file just changed first: the one being typed in is checked first
+    try s.Pending.Insert(0, k) catch { s.Pending.Push(k) }
+}
+
+# ---- the worker ----
+
+# a worker for the files as they are now, to check what is pending
+fn (s mut Server&) startWorker() {
+    s.DueAt = 0
+    if s.W.Pid > 0 { return }
+    toR, toW := session.Pipe()
+    fromR, fromW := session.Pipe()
+    if toR < 0 or fromR < 0 {
+        session.CloseFd(toR)
+        session.CloseFd(toW)
+        session.CloseFd(fromR)
+        session.CloseFd(fromW)
+        return
+    }
+    pid := session.Fork()
+    if pid < 0 { return }
+    if pid == 0 {
+        session.CloseFd(toW)
+        session.CloseFd(fromR)
+        session.Dup2(2, 1)      # nothing the compiler writes reaches the editor but through the protocol
+        work mut worker&s = worker(s, s.Cfg, toR, fromW)
+        work.Run()
+        session.Exit(0)
+    }
+    session.CloseFd(toR)
+    session.CloseFd(fromW)
+    s.W.Pid = pid
+    s.W.To = toW
+    s.W.From = session.Reader(fromR)
+    s.W.Started = time.Now()
+}
+
+# the worker of the moment ended, and its fds closed; what it was asked and had not answered gets null
+fn (s mut Server&) stopWorker() {
+    if s.W.Pid <= 0 { return }
+    session.KillAndReap(s.W.Pid)
+    s.closeWorker()
+    for id in s.Waiting { s.send(errorReply($id, -32801, "the files changed")) }
+    s.Waiting.Clear()
+}
+
+fn (s mut Server&) closeWorker() {
+    session.CloseFd(s.W.To)
+    session.CloseFd(s.W.From.Fd)
+    s.W.Pid = -1
+    s.W.To = -1
+}
+
+# the worker ended by itself, or was stopped as stuck: why, said on each file it was still to check, and null for each
+# request it had not answered
+fn (s mut Server&) workerLost(why String&) {
+    if s.W.Pid > 0 {
+        session.KillAndReap(s.W.Pid)
+        s.closeWorker()
+    }
+    for k in s.Pending {
+        if k < s.Docs.Len() and s.Docs[k].Open { s.send(publish(s.Docs[k].Uri, lostDiagnostic(why))) }
+    }
+    s.Pending.Clear()
+    for id in s.Waiting { s.send(reply($id, "null")) }
+    s.Waiting.Clear()
+}
+
+fn lostDiagnostic(why String&) String {
+    b := StringBuilder()
+    b.Push("[{\"range\":{\"start\":{\"line\":0,\"character\":0},\"end\":{\"line\":0,\"character\":0}},\"severity\":1," $
+           "\"source\":\"olang\",\"message\":")
+    session.JsonStr(b, $"olang: " $why " - a bug in the compiler, not in the program")
+    b.Push("}]")
+    return b.ToString()
+}
+
+# a request handed to a worker - one made now if none is running
+fn (s mut Server&) ask(body String&, id String&) {
+    if s.W.Pid <= 0 { s.startWorker() }
+    if s.W.Pid <= 0 {
+        s.send(reply(id, "null"))
+        return
+    }
+    s.Waiting.Push(try id.ParseInt() catch default -1)
+    session.WriteFramed(s.W.To, body)
+}
+
+# what the worker wrote: messages for the editor, passed on whole, and its own notes on what it did
+fn (s mut Server&) fromWorker() {
+    if not s.W.From.Fill() {
+        status := session.Reap(s.W.Pid)
+        s.closeWorker()
+        if s.Pending.Len() > 0 or s.Waiting.Len() > 0 {
+            s.W.Pid = -1
+            why := "the compiler ended while checking this file"
+            if status > 128 { why = $"the compiler ended (" $build.SignalName(status - 128) ") while checking this file" }
+            s.workerLost(why)
+        }
+        return
+    }
+    for {
+        body := try s.W.From.Next() catch session.Incomplete { break }
+        if body.StartsWith("{\"olang\":") {
+            s.note(body)
+            continue
+        }
+        if body.StartsWith("{\"jsonrpc\":\"2.0\",\"id\":") {
+            # an answer: no longer waited for
+            msg := try json.Parse(body) catch json.JsonError { continue }
+            n := try idOf(msg).ParseInt() catch default -1
+            s.Waiting.Remove(n)
+        }
+        s.send(body)
+    }
+}
+
+# the worker's note on a file it checked: {"olang":"checked","slot":k,"deps":[...],"foreign":[...]}
+fn (s mut Server&) note(body String&) {
+    msg := try json.Parse(body) catch json.JsonError { return }
+    k := try msg["slot"].AsInt() catch json.JsonError default -1
+    if k < 0 or k >= s.Docs.Len() { return }
+    s.Pending.Remove(k)
+    d := s.Docs[k]
+    d.Deps.Clear()
+    deps := try msg["deps"].AsArr() catch json.JsonError { return }
+    for x in deps { d.Deps.Push(try x.AsInt() catch json.JsonError default -1) }
+    d.Foreign.Clear()
+    foreign := try msg["foreign"].AsArr() catch json.JsonError { return }
+    for x in foreign { d.Foreign.Push($(try x.AsStr() catch json.JsonError default "")) }
+}
+
+# everything asked answered and everything pending checked, before a shutdown or the end: at most StuckNs
+fn (s mut Server&) drain() {
+    if s.Pending.Len() > 0 and s.W.Pid <= 0 { s.startWorker() }
+    from := time.Now()
+    for s.W.Pid > 0 and (s.Pending.Len() > 0 or s.Waiting.Len() > 0) {
+        if time.Now() - from > StuckNs {
+            s.workerLost("checking took more than a minute - it was stopped")
+            return
+        }
+        fds := Array<I32>(1, s.W.From.Fd)
+        ready := session.Readable(fds, 1000)
+        if ready[0] { s.fromWorker() }
+    }
+}
+
+# ---- in the worker ----
+
+type worker struct(s Server&, Cfg mut build.Config&, In I32, Out I32) {
+    s
+    Cfg
+    In
+    Out
+    overlay Map<String&, String&>
+    # the last analysis made of the open files as they are, and the slot of the file it is rooted at: a request on
+    # that file is answered from it
+    last mut session.Analysis& = null
+    lastSlot I64 = -1
+}
+
+# the analysis of the open file in slot k as the files are now: the last one where it is that file's
+fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis&w {
+    if k == w.lastSlot and w.last is not null { return w.last }
+    a := session.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay)
+    w.last = a
+    w.lastSlot = k
+    return a
+}
+
+# checks what is pending, then answers requests until the server closes the pipe
+fn (w mut worker&) Run() {
+    for d in w.s.Docs {
+        if d.Open { w.overlay.Put($d.Real, d.Text.ToString()) }
+    }
+    for k in w.s.Pending { w.check(k) }
+    r := session.Reader(w.In)
+    for r.Fill() {
+        for {
+            body := try r.Next() catch session.Incomplete { break }
+            w.answer(body)
+        }
+    }
+}
+
+fn (w mut worker&) send(body String&) { session.WriteFramed(w.Out, body) }
+
+# the open file in slot k checked as the root of its program: its diagnostics, and those of the other files the program
+# reaches, published; then the server's note of what it reaches
+fn (w mut worker&) check(k I64) {
+    doc := w.s.Docs[k]
+    cfg := w.Cfg
+    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    w.lastSlot = -1
+    a := w.analysis(k, d)
+    # each file's diagnostics, by real path, as LSP's Diagnostic objects
+    files List<String&>
+    lists List<StringBuilder>
+    items := d.Items()
+    for i in range items.Len() {
+        it := items[i]
+        if not it.Error { continue }
+        real := a.RealOfFile(it.File) if it.File >= 0 else $doc.Real
+        if real == "" { real = $doc.Real }
+        at := -1
+        for j in range files.Len() {
+            if files[j] == real { at = j }
+        }
+        if at < 0 {
+            files.Push($real)
+            lists.Push(StringBuilder())
+            at = files.Len() - 1
+        }
+        b := lists[at]
+        if b.Len() > 0 { b.PushChar(',') }
+        w.diagnostic(b, a, d, items, i, real)
+    }
+    # this file's - empty to clear what was said before - and every other file's not checked as a root of its own here
+    mine := StringBuilder()
+    foreign List<String&>
+    for j in range files.Len() {
+        if files[j] == doc.Real { mine = lists[j] }
+    }
+    w.send(publish(doc.Uri, $"[" $mine.ToString() "]"))
+    for j in range files.Len() {
+        if files[j] == doc.Real or w.slotPending(files[j]) { continue }
+        uri := w.uriOf(files[j])
+        w.send(publish(uri, $"[" $lists[j].ToString() "]"))
+        foreign.Push($uri)
+    }
+    for f in doc.Foreign {
+        if f not in foreign { w.send(publish(f, "[]")) }
+    }
+    # the note: which open files this one's program reaches
+    nb := StringBuilder()
+    nb.Push($"{\"olang\":\"checked\",\"slot\":" $k ",\"deps\":[")
+    first := true
+    for m in a.L.Mods {
+        for i in range w.s.Docs.Len() {
+            if i != k and w.s.Docs[i].Open and w.s.Docs[i].Real == m.Real {
+                if not first { nb.PushChar(',') }
+                first = false
+                nb.Push($i)
+            }
+        }
+    }
+    nb.Push("],\"foreign\":[")
+    for i in range foreign.Len() {
+        if i > 0 { nb.PushChar(',') }
+        session.JsonStr(nb, foreign[i])
+    }
+    nb.Push("]}")
+    w.send(nb.ToString())
+}
+
+# whether a file is itself one of the open files to be checked here, as a root
+fn (w worker&) slotPending(real String&) Bool {
+    for k in w.s.Pending {
+        if w.s.Docs[k].Real == real { return true }
+    }
+    return false
+}
+
+# a file's URI: an open file's as the editor named it, else made from its real path
+fn (w worker&) uriOf(real String&) String {
+    for d in w.s.Docs {
+        if d.Open and d.Real == real { return $d.Uri }
+    }
+    return UriOf(real)
+}
+
+# the text a file has here: an open file's as the editor holds it, else the analysis's
+fn (w worker&) textOf(a session.Analysis&, real String&) String {
+    t := try w.overlay.Get(real) catch default ""
+    if t != "" { return $t }
+    mi := a.ModuleOf(real)
+    return $a.TextOf(mi) if mi >= 0 else ""
+}
+
+# items[i], an error, as an LSP Diagnostic: its range in its file, its rule as its code, and its notes as related
+# information
+fn (w mut worker&) diagnostic(b mut StringBuilder&, a session.Analysis&, d mut diag.Diagnostics&, items List<diag.Item>&
+    i I64, real String&) {
+    it := items[i]
+    p := session.Positions(w.textOf(a, real), w.s.Utf8)
+    b.Push("{\"range\":")
+    w.rangeOf(b, p, it)
+    b.Push(",\"severity\":1,\"source\":\"olang\"")
+    if it.Rule != "" {
+        b.Push(",\"code\":")
+        session.JsonStr(b, it.Rule)
+    }
+    b.Push(",\"message\":")
+    session.JsonStr(b, it.Text)
+    rel := StringBuilder()
+    for j in range i + 1, items.Len() {
+        nt := items[j]
+        if nt.Error { break }
+        if rel.Len() > 0 { rel.PushChar(',') }
+        nreal := a.RealOfFile(nt.File) if nt.File >= 0 else $real
+        np := session.Positions(w.textOf(a, nreal), w.s.Utf8)
+        rel.Push("{\"location\":{\"uri\":")
+        session.JsonStr(rel, w.uriOf(nreal))
+        rel.Push(",\"range\":")
+        w.rangeOf(rel, np, nt)
+        rel.Push("},\"message\":")
+        session.JsonStr(rel, nt.Text)
+        rel.PushChar('}')
+    }
+    if rel.Len() > 0 { b.Push($",\"relatedInformation\":[" $rel.ToString() "]") }
+    b.PushChar('}')
+}
+
+# a diagnostic's range: its span, or the line it is about, or the file's start
+fn (w worker&) rangeOf(b mut StringBuilder&, p session.Positions&, it diag.Item&) {
+    if it.Start >= 0 {
+        p.Range(b, it.Start, it.End if it.End > it.Start else it.Start)
+        return
+    }
+    line := it.Line - 1 if it.Line > 0 else 0
+    b.Push($"{\"start\":{\"line\":" $line ",\"character\":0},\"end\":{\"line\":" $line ",\"character\":0}}")
+}
+
+# a request answered
+fn (w mut worker&) answer(body String&) {
+    msg := try json.Parse(body) catch json.JsonError { return }
+    id := idOf(msg)
+    method := str(msg, "method")
+    p := try msg["params"] catch json.JsonError {
+        w.send(reply(id, "null"))
+        return
+    }
+    uri := str(try p["textDocument"] catch json.JsonError { return }, "uri")
+    k := w.s.slotOf(uri)
+    if k < 0 {
+        w.send(reply(id, "null"))
+        return
+    }
+    doc := w.s.Docs[k]
+    text := try w.overlay.Get(doc.Real) catch default ""
+    pos := session.Positions(text, w.s.Utf8)
+    line := try p["position"]["line"].AsInt() catch json.JsonError default 0
+    ch := try p["position"]["character"].AsInt() catch json.JsonError default 0
+    at := pos.Offset(line, ch)
+    cfg := w.Cfg
+    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    if method == "textDocument/formatting" {
+        formatted := try session.Format(doc.Path, text) catch {
+            w.send(reply(id, "null"))
+            return
+        }
+        if formatted == text {
+            w.send(reply(id, "[]"))
+            return
+        }
+        b := StringBuilder()
+        b.Push("[{\"range\":")
+        pos.Range(b, 0, text.Len())
+        b.Push(",\"newText\":")
+        session.JsonStr(b, formatted)
+        b.Push("}]")
+        w.send(reply(id, b.ToString()))
+        return
+    }
+    if method == "textDocument/completion" {
+        w.complete(id, doc, text, at, cfg, d)
+        return
+    }
+    a := w.analysis(k, d)
+    if method == "textDocument/documentSymbol" {
+        mi := a.ModuleOf(doc.Real)
+        if mi < 0 or a.L.Mods[mi].Decls is null {
+            w.send(reply(id, "[]"))
+            return
+        }
+        b := StringBuilder()
+        session.Symbols(b, pos, a.L.Mods[mi].Decls, a.L.Names)
+        w.send(reply(id, b.ToString()))
+        return
+    }
+    found := try a.Lookup(doc.Real, at) catch session.Nothing {
+        w.send(reply(id, "null"))
+        return
+    }
+    if method == "textDocument/hover" {
+        b := StringBuilder()
+        b.Push("{\"contents\":{\"kind\":\"markdown\",\"value\":")
+        session.JsonStr(b, found.Text)
+        b.Push("}}")
+        w.send(reply(id, b.ToString()))
+        return
+    }
+    # definition
+    if found.Real == "" or found.At < 0 {
+        w.send(reply(id, "null"))
+        return
+    }
+    target := w.textOf(a, found.Real)
+    tp := session.Positions(target, w.s.Utf8)
+    word := session.WordAt(target, found.At)
+    b := StringBuilder()
+    b.Push("{\"uri\":")
+    session.JsonStr(b, w.uriOf(found.Real))
+    b.Push(",\"range\":")
+    tp.Range(b, I64(word.Start), I64(word.End))
+    b.PushChar('}')
+    w.send(reply(id, b.ToString()))
+}
+
+# completion at offset at of an open file: after "x." x's members - checked with the "." and what follows it up to at
+# taken out, so the line is what it was before they were typed - else the names that may stand there
+fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut build.Config&, d mut diag.Diagnostics&cfg) {
+    start := at
+    for start > 0 and session.WordChar(text[start - 1]) { start-- }
+    it := session.Items()
+    if start > 0 and text[start - 1] == '.' {
+        dot := start - 1
+        cut := $text[:dot] $text[at:]
+        overlay := Map<String&, String&>()
+        for e in w.overlay { overlay.Put($e.Key, $e.Value) }
+        overlay.Put($doc.Real, cut)
+        a := session.Analyze(doc.Path, cfg, d, overlay)
+        a.Members(it, doc.Real, dot)
+    } else {
+        a := session.Analyze(doc.Path, cfg, d, w.overlay)
+        a.Names(it, doc.Real, at)
+    }
+    w.send(reply(id, $"{\"isIncomplete\":false,\"items\":[" $it.B.ToString() "]}"))
+}
+
+# ---- messages ----
+
+# a member of an object as text, "" for none or another kind
+fn str(j json.Json&, key String&) String&j {
+    return try j[key].AsStr() catch json.JsonError default ""
+}
+
+# a message's id as JSON writes it, "" for none (a notification)
+fn idOf(msg json.Json&) String {
+    v := try msg["id"] catch json.JsonError { return "" }
+    return json.Encode(v)
+}
+
+fn reply(id String&, result String&) String { return $"{\"jsonrpc\":\"2.0\",\"id\":" $id ",\"result\":" $result "}" }
+
+fn errorReply(id String&, code I64, message String&) String {
+    b := StringBuilder()
+    b.Push($"{\"jsonrpc\":\"2.0\",\"id\":" $id ",\"error\":{\"code\":" $code ",\"message\":")
+    session.JsonStr(b, message)
+    b.Push("}}")
+    return b.ToString()
+}
+
+fn publish(uri String&, diagnostics String&) String {
+    b := StringBuilder()
+    b.Push("{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/publishDiagnostics\",\"params\":{\"uri\":")
+    session.JsonStr(b, uri)
+    b.Push($",\"diagnostics\":" $diagnostics "}}")
+    return b.ToString()
+}
+
+# ---- URIs ----
+
+# a file URI's path: "file://" taken off, %XX decoded; a URI of another scheme as it is
+fn PathOf(uri String&) String {
+    if not uri.StartsWith("file://") { return $uri }
+    t := uri[7:]
+    b := StringBuilder()
+    i I64 = 0
+    for i < t.Len() {
+        if t[i] == '%' and i + 2 < t.Len() {
+            v := try t[i + 1:i + 3].ParseInt(16) catch default -1
+            if v >= 0 {
+                b.PushChar(Char(v))
+                i += 3
+                continue
+            }
+        }
+        b.PushChar(t[i])
+        i++
+    }
+    return b.ToString()
+}
+
+# a path's file URI, every byte but letters, digits and "/-._~" written %XX
+fn UriOf(path String&) String {
+    b := StringBuilder()
+    b.Push("file://")
+    for ch in path {
+        if ch.IsLetter() or ch.IsDigit() or ch == '/' or ch == '-' or ch == '.' or ch == '_' or ch == '~' {
+            b.PushChar(ch)
+        } else {
+            b.Push($"%" $(U8(ch).Format(16).ToUpper().PadStart(2, '0')))
+        }
+    }
+    return b.ToString()
+}
+
+# ---- tests ----
+
+test "a file URI and its path" {
+    assert PathOf("file:///home/a%20b/x.olang") == "/home/a b/x.olang"
+    assert UriOf("/home/a b/x.olang") == "file:///home/a%20b/x.olang"
+    assert PathOf(UriOf("/tmp/ä#1.olang")) == "/tmp/ä#1.olang"
+}
