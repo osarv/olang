@@ -719,3 +719,8 @@ errors and documentation - generic `+` already works).
   error sets marked `!` after the result (`fn f() Node& ! E`, bare `!` inferred, `Iterator<T ! E>`), `x!`/`f()!` unwrap
   at the use site; every signature's `?` migrated by a tool. Awaiting a yes; still open: type lists `<T (I32, F64)>`,
   named type lists replacing the sealed number traits.
+- DECIDED 2026-10-24 (the user: "?Node& is a type marker and ! is for expressions ... We can keep the ? as a prefix"):
+  nullable references written `?Node&` (prefix, part of the type, anywhere a type goes); `Node&` never null and flows
+  into `?Node&`; error sets keep `? E` after the result (no migration); `!` stays expression-only (`x!` on null, `f()!`
+  on failure); reading through `?Node&` needs narrowing (`if x is not null`); `fn f() ?Node&` vs `fn f() ? E` told apart
+  by the `&` (only references are nullable). Supersedes QAO's parking. Still open: `<T (I32, F64)>`, named type lists.
