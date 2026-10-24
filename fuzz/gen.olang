@@ -693,7 +693,7 @@ fn (g mut Gen&) exBool(d I64) String& {
         e := g.pick(0, 4)
         if e >= 0 {
             et I32 = g.vt[e] - 200
-            op String& = " is " if g.chance(60) else " is not "
+            op String& = " == " if g.chance(60) else " != "
             return "(" $g.use(e) $op "E" $g.ci "_" $et ".C" $g.r(I64(g.en[et])) ")"
         }
     }
@@ -2239,21 +2239,21 @@ fn (g mut Gen&) collBool(d I64) String& {
         l := g.pick(0, 16)
         a := g.pick(0, 5)
         if l >= 0 and (a < 0 or g.chance(50)) {
-            f String& = "Any" if g.chance(50) else "All"
+            f String& = "Some" if g.chance(50) else "Every"
             return $g.use(l) ".Iter()." $f "(" $g.lambda(g.vt[l] - 500, -1, TBool, 2) ")"
         }
         if a >= 0 {
-            f String& = "Any" if g.chance(50) else "All"
+            f String& = "Some" if g.chance(50) else "Every"
             return $g.use(a) "." $f "(" $g.lambda(elemOf(g.vt[a]), -1, TBool, 2) ")"
         }
     }
-    if p == 2 or p == 3 {                           # identity (E10c)
+    if p == 2 or p == 3 {                           # stored-value equality (E10)
         a := g.pick(0, 22)
         if a < 0 or g.chance(50) { a = g.pick(0, 23) }
         if a >= 0 {
             b := g.kin(a)
             if b >= 0 {
-                op String& = " is " if g.chance(60) else " is not "
+                op String& = " == " if g.chance(60) else " != "
                 return "(" $g.use(a) $op $g.use(b) ")"
             }
         }

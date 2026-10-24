@@ -16,7 +16,7 @@ fn tree(depth I64) Node& {
 
 # how many nodes it has
 fn check(n Node&) I64 {
-    if n.left == null { return 1 }
+    if n.left is null { return 1 }
     return 1 + check(n.left) + check(n.right)
 }
 

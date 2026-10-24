@@ -381,8 +381,15 @@ type Diag enum {
     JoinPieceCalled
     UnhandledFallibleCall
     OperatorCallFails
-    IsNotReferences
-    IsNotOneType
+    IsOnlyNull
+    IsCaseWritten
+    IsNullOfValue
+    IsNullOfNull
+    CaseTestNotEnum
+    CaseTestOther
+    NullCompared
+    FieldOfEnum
+    NarrowedWrite
     AsNeedsCase
     PatternType
     CaseIsPrivate
@@ -1623,13 +1630,24 @@ fn UnhandledFallibleCall() Msg { return Msg(Diag.UnhandledFallibleCall, "E15", "
 fn OperatorCallFails(text String&) Msg { return Msg(Diag.OperatorCallFails, "E31", "this operator calls " $text ", which can fail - write 'try' before the expression") }
 
 # ERR_IS_NOT_REFERENCES
-fn IsNotReferences(ty1 String&, ty2 String&) Msg { return Msg(Diag.IsNotReferences, "E10c", "'a is b' asks whether two references name one instance, and " $ty1 " and " $ty2 " are not both references") }
+fn IsOnlyNull(op String&) Msg { return Msg(Diag.IsOnlyNull, "E10c", $"'is' tests for null and nothing else - compare with '" $op "'") }
 
-# ERR_IS_NOT_ONE_TYPE
-fn IsNotOneType(ty1 String&, ty2 String&) Msg { return Msg(Diag.IsNotOneType, "E10c", $ty1 " and " $ty2 " are different types, so they never name one instance") }
+fn IsCaseWritten(op String&, x String&, y String&) Msg { return Msg(Diag.IsCaseWritten, "E10c, E32", $"a case is tested with '" $op "': '" $x " " $op " " $y "'") }
+
+fn CaseTestNotEnum(text String&, ty String&) Msg { return Msg(Diag.CaseTestNotEnum, "E32", $text " is a case of an enum, and this is " $ty) }
+fn CaseTestOther(text String&, ty String&) Msg { return Msg(Diag.CaseTestOther, "E32", $text " is no case of " $ty ", the type this tests") }
+fn IsNullOfNull() Msg { return Msg(Diag.IsNullOfNull, "E10c", "'null is null' tests nothing - 'is null' follows a reference or a function value") }
+fn IsNullOfValue(ty String&) Msg { return Msg(Diag.IsNullOfValue, "E10c", $"only a reference or a function value can be null, and this is " $ty) }
+
+fn NarrowedWrite() Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)") }
+fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', assigned nowhere there") }
+
+fn NullCompared(x String&, form String&) Msg { return Msg(Diag.NullCompared, "E10c", $"null is tested with 'is', never compared - write '" $x " " $form "'") }
+
+
 
 # ERR_AS_NEEDS_CASE
-fn AsNeedsCase(ty String&, text String&) Msg { return Msg(Diag.AsNeedsCase, "E32", "after 'is' or 'as' comes a case of " $ty ", found " $text) }
+fn AsNeedsCase(ty String&, text String&) Msg { return Msg(Diag.AsNeedsCase, "E32", "after 'as' comes a case of " $ty ", found " $text) }
 
 # ERR_PATTERN_TYPE
 fn PatternType(ty String&, text String&) Msg { return Msg(Diag.PatternType, "S13b", "a pattern here names a case of " $ty ", found " $text) }
@@ -1641,10 +1659,10 @@ fn CaseIsPrivate(tok String&) Msg { return Msg(Diag.CaseIsPrivate, "M6a", "case 
 fn IsAsMarker(text1 String&, text2 String&, text3 String&) Msg { return Msg(Diag.IsAsMarker, "E32", "'&" $text1 "' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x " $text2 " T) & " $text3 "'") }
 
 # ERR_AS_NOTHING
-fn AsNothing(text String&) Msg { return Msg(Diag.AsNothing, "E32", "case " $text " carries nothing for 'as' to give - ask with 'is'") }
+fn AsNothing(text String&) Msg { return Msg(Diag.AsNothing, "E32", "case " $text " carries nothing for 'as' to give - test for it with '=='") }
 
 # ERR_IS_AS_NOT_ENUM
-fn IsAsNotEnum(ty String&) Msg { return Msg(Diag.IsAsNotEnum, "E32", "'is' and 'as' ask which case an enum value is, and this is " $ty) }
+fn IsAsNotEnum(ty String&) Msg { return Msg(Diag.IsAsNotEnum, "E32", "'as' asks for an enum value's payload, and this is " $ty) }
 
 # ERR_TRY_INDEX_NEEDS_LEN
 fn TryIndexNeedsLen(ty String&) Msg { return Msg(Diag.TryIndexNeedsLen, "E31a", "'checked c[i]' checks against Len, and " $ty " has neither CheckedAt nor Len") }

@@ -1219,7 +1219,7 @@ fn typereview(r mut report&) ? Failed {
     os.Run("cp -r checks/fixtures/cases/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "14 1 3 true 4\n", "good output", dir)
-    try oneError(r, dir, "isother", "after 'is' or 'as' comes a case of")
+    try oneError(r, dir, "isother", "error[E32]: lib.Other.Dir.North is no case of Dir")
     try oneError(r, dir, "matchother", "a pattern here names a case of")
     try oneError(r, dir, "isprivate", "error[M6a]: case")
     try oneError(r, dir, "matchprivate", "error[M6a]: case")

@@ -1,4 +1,5 @@
-# check: fail expected '}', found 'South'
-# T17: an enum's cases end at their line's end, as an error type's words do - "{ North South }" is not two cases
+# check: fail error: unknown type 'South'
+# T17, T17a: "{ North South }" is not two cases - a case followed by a type on its line carries that type whole, and
+# no type South is known
 type Dir enum { North South }
 fn main() ? { }

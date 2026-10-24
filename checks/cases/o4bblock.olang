@@ -8,7 +8,7 @@ type SSlot struct(key String&, val I32, next SSlot&) {
 }
 type SMap struct() { first mut SSlot& = null }
 fn (m mut SMap&) Put(key String&, val I32) {
-    for s mut SSlot& = m.first, s != null, s = s.next {
+    for s mut SSlot& = m.first, s is not null, s = s.next {
         if s.key.Eq(key) {
             s.val = val
             return
@@ -17,14 +17,14 @@ fn (m mut SMap&) Put(key String&, val I32) {
     m.first = SSlot(key, val, m.first)
 }
 fn (m SMap&) Get(key String&) I32 {
-    for s SSlot& = m.first, s != null, s = s.next {
+    for s SSlot& = m.first, s is not null, s = s.next {
         if s.key.Eq(key) { return s.val }
     }
     return -1
 }
 test "inner key" {
     m mut SMap& = SMap()
-    if m.first == null {
+    if m.first is null {
         k String& = $1
         m.Put(k, 1)
     }

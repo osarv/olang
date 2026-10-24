@@ -10,11 +10,11 @@ arraytypeself.olang:7:6: error[T29]: Nest holds itself through the array it is d
 compilation failed with 1 error
 === asenumcase.olang
 asenumcase.olang:7:32: error[T17]: T has no case 'C' - did you mean 'A'?
-    7 | fn f(t T) Bool { return t is T.C }
+    7 | fn f(t T) Bool { return t == T.C }
       |                                ^
 compilation failed with 1 error
 === asnothing.olang
-asnothing.olang:8:12: error[E32]: case B carries nothing for 'as' to give - ask with 'is'
+asnothing.olang:8:12: error[E32]: case B carries nothing for 'as' to give - test for it with '=='
     8 |     x := t as T.B
       |            ^~
 compilation failed with 1 error
@@ -372,7 +372,7 @@ c2dexactobliged.olang:24:11: error[O10c]: the callee needs one argument's scope 
    24 |         m.set(1, l)
       |           ^~~
 c2dexactobliged.olang:17:25: note: the callee requires it because of this statement
-   17 |     if m.slot == null { m.slot = MS<K, V>(key, value) }
+   17 |     if m.slot is null { m.slot = MS<K, V>(key, value) }
       |                         ^
 c2dexactobliged.olang:23:9: note: 'l' is declared here, in a block that closes first - declare it where 'm' lives: 'l mut List<I32>&m = ...'
    23 |         l mut List<I32>& = List<I32>()
@@ -866,9 +866,9 @@ d9abarevariable.olang:4:17: error[D9a]: array parameter 'taps' is passed by refe
       |                 ^~~~
 compilation failed with 1 error
 === d9alambdawritten.olang
-d9alambdawritten.olang:7:30: error[D9a]: array parameter 'x' is passed by reference - write Array<I32>&
-    7 |     try io.Println($a.Any(fn(x Array<I32>) Bool { return x[0] == 5 }))
-      |                              ^
+d9alambdawritten.olang:7:31: error[D9a]: array parameter 'x' is passed by reference - write Array<I32>&
+    7 |     try io.Println($a.Some(fn(x Array<I32>) Bool { return x[0] == 5 }))
+      |                               ^
 compilation failed with 1 error
 === d9apayloadstring.olang
 d9apayloadstring.olang:7:7: error[D9a]: array parameter 's' is passed by reference - write String&
@@ -947,6 +947,21 @@ e10bhashshape.olang:11:14: error[G19, E10b]: K does not satisfy the constraint H
 e10bhashshape.olang:8:11: note: 'Hash' is declared here, with another signature
     8 | fn (k K&) Hash(seed I64) I64 { return k.a + seed }
       |           ^~~~
+compilation failed with 1 error
+=== e10ciscase.olang
+e10ciscase.olang:6:19: error[E10c, E32]: a case is tested with '==': 's == Shape.Dot'
+    6 |     assert not (s is Shape.Dot)
+      |                   ^~
+compilation failed with 1 error
+=== e10cnullcompared.olang
+e10cnullcompared.olang:6:14: error[E10c]: null is tested with 'is', never compared - write 'p is null'
+    6 |     assert p == null
+      |              ^~
+compilation failed with 1 error
+=== e10cnullvalue.olang
+e10cnullvalue.olang:5:14: error[E10c]: only a reference or a function value can be null, and this is I64
+    5 |     assert x is not null
+      |              ^~
 compilation failed with 1 error
 === e11bafterrendering.olang
 e11bafterrendering.olang:7:28: error[E11b]: a join piece is a text literal or a '$' rendering - write '$mark'
@@ -1461,7 +1476,7 @@ equndeclared.olang:6:12: error: unknown name 'a'
     6 |     assert a == b
       |            ^
 equndeclared.olang:8:25: error: unknown name 'missing'
-    8 |     assert c == null or missing == c
+    8 |     assert c is null or missing == c
       |                         ^~~~~~~
 compilation failed with 2 errors
 === eqwrites.olang
@@ -1859,17 +1874,17 @@ inttoolarge.olang:5:13: error[L10]: '99999999999999999999999' is beyond 64 bits 
       |             ^~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === isasoperand.olang
-isasoperand.olang:5:10: error[E32]: 'is' and 'as' ask which case an enum value is, and this is I64
+isasoperand.olang:5:10: error[E10c]: 'is' tests for null and nothing else - compare with '=='
     5 |     if x is I32 { }
       |          ^~
 compilation failed with 1 error
 === isnulls.olang
-isnulls.olang:4:17: error[E10c]: 'a is b' asks whether two references name one instance, and null and null are not both references
+isnulls.olang:4:17: error[E10c]: 'null is null' tests nothing - 'is null' follows a reference or a function value
     4 |     assert null is null
       |                 ^~
 compilation failed with 1 error
 === istwotypes.olang
-istwotypes.olang:8:14: error[E10c]: P& and Q& are different types, so they never name one instance
+istwotypes.olang:8:14: error[E10c]: 'is' tests for null and nothing else - compare with '!='
     8 |     assert p is not q
       |              ^~
 compilation failed with 1 error
@@ -2373,14 +2388,14 @@ o10cloopcopy.olang:27:9: note: 'p' is the loop's copy of an element, made in the
       |         ^
 compilation failed with 1 error
 === o10cnote.olang
-o10cnote.olang:10:46: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   10 |     for s mut SSlot& = m.first, s != null, s = s.next {
-      |                                              ^
+o10cnote.olang:10:50: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   10 |     for s mut SSlot& = m.first, s is not null, s = s.next {
+      |                                                  ^
 o10cnote.olang:10:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   10 |     for s mut SSlot& = m.first, s != null, s = s.next {
+   10 |     for s mut SSlot& = m.first, s is not null, s = s.next {
       |                          ^~~~~
 o10cnote.olang:19:22: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   19 |     for s SSlot& = m.first, s != null, s = s.next {
+   19 |     for s SSlot& = m.first, s is not null, s = s.next {
       |                      ^~~~~
 o10cnote.olang:28:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    28 |         m.Put(k, 1)
@@ -2578,10 +2593,10 @@ o17permute5.olang:25:16: error[T22a]: this lambda relates its arguments' scopes,
 compilation failed with 2 errors
 === o17permute6.olang
 o17permute6.olang:25:14: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
-   25 |     each(ns, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
-      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 o17permute6.olang:25:10: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
-   25 |     each(ns, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
+   25 |     each(ns, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
       |          ^~
 compilation failed with 2 errors
 === o17permute6b.olang
@@ -2589,8 +2604,8 @@ o17permute6b.olang:25:10: error[O17]: this value's references live where its own
    25 |     each(ns, g)
       |          ^~
 o17permute6b.olang:29:12: error[T25c]: this lambda writes through or keeps its by-value parameter 'x', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
-   29 |     run(h, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
-      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   29 |     run(h, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
+      |            ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === o17readonlycapture.olang
 o17readonlycapture.olang:21:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2914,14 +2929,14 @@ o3noname.olang:4:10: error[O4a]: 's' names no variable visible here - a marker n
       |          ^
 compilation failed with 1 error
 === o4bblock.olang
-o4bblock.olang:11:46: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
-   11 |     for s mut SSlot& = m.first, s != null, s = s.next {
-      |                                              ^
+o4bblock.olang:11:50: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
+   11 |     for s mut SSlot& = m.first, s is not null, s = s.next {
+      |                                                  ^
 o4bblock.olang:11:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   11 |     for s mut SSlot& = m.first, s != null, s = s.next {
+   11 |     for s mut SSlot& = m.first, s is not null, s = s.next {
       |                          ^~~~~
 o4bblock.olang:20:22: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   20 |     for s SSlot& = m.first, s != null, s = s.next {
+   20 |     for s SSlot& = m.first, s is not null, s = s.next {
       |                      ^~~~~
 o4bblock.olang:29:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    29 |         m.Put(k, 1)
@@ -4070,8 +4085,23 @@ s8bother.olang:9:13: error: unknown function or type 'onlyOnSmallBuilds'
     9 |         x = onlyOnSmallBuilds()
       |             ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
+=== s8dassigned.olang
+s8dassigned.olang:7:16: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', assigned nowhere there
+    7 |         t := s.r
+      |                ^
+compilation failed with 1 error
+=== s8dnarrowwrite.olang
+s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)
+    9 |     if s == Shape.Ring { s.c.r = 5 }
+      |                              ^
+compilation failed with 1 error
+=== s8dunnarrowed.olang
+s8dunnarrowed.olang:4:35: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', assigned nowhere there
+    4 | fn radius(s Shape) I64 { return s.r }
+      |                                   ^
+compilation failed with 1 error
 === samevalue.olang
-samevalue.olang:6:14: error[E10c]: 'a is b' asks whether two references name one instance, and I32 and I32 are not both references
+samevalue.olang:6:14: error[E10c]: 'is' tests for null and nothing else - compare with '=='
     6 |     assert a is b
       |              ^~
 compilation failed with 1 error
@@ -4296,9 +4326,9 @@ strmovedlocalkept.olang:24:10: note: built here, where the receiver's part it wa
       |          ^~~~~
 compilation failed with 1 error
 === strnotecopies.olang
-strnotecopies.olang:14:48: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   14 |     for n := b.head, n != null, n = n.next { l.Push(n) }
-      |                                                ^~~~
+strnotecopies.olang:14:52: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |     for n := b.head, n is not null, n = n.next { l.Push(n) }
+      |                                                    ^~~~
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
@@ -4524,8 +4554,8 @@ t17payloadwrite.olang:16:29: error[T17c]: this value's payload refers to storage
       |                             ^~~~~
 compilation failed with 1 error
 === t17sep.olang
-t17sep.olang:3:23: error: expected '}', found 'South'
-    3 | type Dir enum { North South }
+t17sep.olang:4:23: error: unknown type 'South'
+    4 | type Dir enum { North South }
       |                       ^~~~~
 compilation failed with 1 error
 === t20errorparam.olang

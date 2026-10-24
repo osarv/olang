@@ -228,10 +228,12 @@ type Func struct(Sp source.Span, Recv Param&, Name source.NameId, S Sig&, Body A
 }
 
 # an enum case: name and payload
-type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&) {
+# Whole for a case whose payload is one type written whole, "Round Circle": then Payload is one Param, named as the case
+type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&, Whole Bool = false) {
     Sp
     Name
     Payload
+    Whole
 }
 
 # the body of a type declaration

@@ -42,7 +42,7 @@ fn (a Array<T>&) Contains(sub Array<T>&) Bool {
 }
 
 # true when keep holds for at least one element
-fn (a Array<T>&) Any(keep fn(x T) Bool) Bool {
+fn (a Array<T>&) Some(keep fn(x T) Bool) Bool {
     for x in a {
         if keep(x) { return true }
     }
@@ -50,7 +50,7 @@ fn (a Array<T>&) Any(keep fn(x T) Bool) Bool {
 }
 
 # true when keep holds for every element - so for none, of an empty array
-fn (a Array<T>&) All(keep fn(x T) Bool) Bool {
+fn (a Array<T>&) Every(keep fn(x T) Bool) Bool {
     for x in a {
         if not keep(x) { return false }
     }
@@ -64,7 +64,7 @@ error ArrayError {
 }
 
 # the index of the first element keep holds for - failing with NOT_FOUND when keep holds for none, so a miss is never
-# read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Any(f)" only asks
+# read as a position: "try a.FindIndex(f) catch default -1" gives a fallback, "a.Some(f)" only asks
 fn (a Array<T>&) FindIndex(keep fn(x T) Bool) I64 ? ArrayError {
     for i, x in a {
         if keep(x) { return i }
@@ -503,8 +503,8 @@ if TestBuild {
 
     test "the array methods take what to do as a lambda" {
         a := I32[5, 3, 8, 1, 9, 2]
-        assert a.Any(fn(x) { return x > 8 }) and not a.Any(fn(x) { return x > 9 })
-        assert a.All(fn(x) { return x > 0 }) and not a.All(fn(x) { return x > 1 })
+        assert a.Some(fn(x) { return x > 8 }) and not a.Some(fn(x) { return x > 9 })
+        assert a.Every(fn(x) { return x > 0 }) and not a.Every(fn(x) { return x > 1 })
         assert (try a.FindIndex(fn(x) { return x == 8 }) catch default -1) == 2
         assert (try a.FindIndex(fn(x) { return x == 7 }) catch default -1) == -1
         assert a.Count(fn(x) { return x % 2 == 1 }) == 4
@@ -524,7 +524,7 @@ if TestBuild {
         big := Array<I32>(1000)
         for i in range 1000 { big[i] = I32((i * 7919) % 1000) }
         big.Sort(fn(x, y) { return x < y })
-        assert big.All(fn(x) { return x >= 0 }) and big[0] == 0 and big[999] == 999
+        assert big.Every(fn(x) { return x >= 0 }) and big[0] == 0 and big[999] == 999
         ok Bool = true
         for i in range 1, 1000 {
             if big[i - 1] > big[i] { ok = false }

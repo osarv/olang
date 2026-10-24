@@ -104,7 +104,7 @@ fn (s mut listState<T>&) grow(fill T) {
         s.tail = s.first
         s.made = 1
     } else {
-        if s.chunks == null {
+        if s.chunks is null {
             s.chunks = Array<mut Array<T>&>(4)
             s.chunks[0] = s.first
         } else if s.made == s.chunks.Len() {
@@ -401,11 +401,11 @@ fn (it ListIter<T>&) runEnd() I64 {
 fn (l List<T>&) Iter() ListIter<T> { return ListIter<T>(l) }
 
 # the iterator helpers (Iterator, M19e), each walking the rest of the list run by run - a counted loop over a slice of
-# each chunk, as "for x in l" is (S9f) - and leaving the iterator where Next would have: just past the element Any or All
+# each chunk, as "for x in l" is (S9f) - and leaving the iterator where Next would have: just past the element Some or Every
 # stopped at, or at the end
 
 # true when keep holds for at least one remaining element
-fn (it mut ListIter<T>&) Any(keep fn(x T) Bool) Bool {
+fn (it mut ListIter<T>&) Some(keep fn(x T) Bool) Bool {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -423,7 +423,7 @@ fn (it mut ListIter<T>&) Any(keep fn(x T) Bool) Bool {
 }
 
 # true when keep holds for every remaining element - so for none, when there are none
-fn (it mut ListIter<T>&) All(keep fn(x T) Bool) Bool {
+fn (it mut ListIter<T>&) Every(keep fn(x T) Bool) Bool {
     for {
         try it.enter() catch Exhausted { break }
         run := it.chunk[it.i:it.runEnd()]
@@ -596,6 +596,22 @@ fn (l mut List<T>&) SwapTake(i I64) T ? ListError.OUT_OF_RANGE {
     s.dropLast()
     if i < s.count { l.SetAt(i, s.tail[s.used]) }             # the last element, just dropped, into the gap
     return x
+}
+
+# whether two Lists hold equal elements in the same order - "==" (E10a), each pair by its own "==", as two arrays compare
+fn (l List<T>&) Eq(o List<T>&) Bool {
+    if l.Len() != o.Len() { return false }
+    for i in range l.Len() {
+        if l[i] != o[i] { return false }
+    }
+    return true
+}
+
+# the elements' hashes combined in order, as an array's (HashElements) - so equal Lists hash alike (E10b)
+fn (l List<T>&) Hash() I64 {
+    h I64 = 0
+    for y in l { h = h * 1099511628211 + y.Hash() }
+    return h
 }
 
 # how "$" renders a List (E11c): as an array of its elements renders, with the List named in front - "List<I64>[1, 2, 3]",
@@ -777,7 +793,7 @@ if TestBuild {
         l mut List<I32>& = List<I32>()
         for i in range 20 { l.Push(I32(i)) }
         limit I32 = 15
-        assert l.Iter().Any(fn(x) { return x > limit }) and not l.Iter().All(fn(x) { return x > limit })
+        assert l.Iter().Some(fn(x) { return x > limit }) and not l.Iter().Every(fn(x) { return x > limit })
         assert l.Iter().Count(fn(x) { return x % 5 == 0 }) == 4
         assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 190
         big := l.Iter().Filter(fn(x) { return x >= limit })
@@ -997,22 +1013,22 @@ if TestBuild {
         for x in List<I32>() { unreachable }
     }
 
-    # the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Any or
-    # All stopped at - so Next goes on from there - or at the end
+    # the iterator helpers walk a List's iterator chunk by chunk, and leave it where Next would: just past the element Some or
+    # Every stopped at - so Next goes on from there - or at the end
     test "S9f: ListIter's helpers walk run by run and leave the iterator where Next would" {
         l := List<I64>()
         for i in range 50 { l.Push(i) }
         it := l.Iter()
         assert (try it.Next() catch default -1) == 0
-        assert it.Any(fn(x) { return x == 30 })
+        assert it.Some(fn(x) { return x == 30 })
         assert (try it.Next() catch default -1) == 31
-        assert not it.All(fn(x) { return x < 40 })
+        assert not it.Every(fn(x) { return x < 40 })
         assert (try it.Next() catch default -1) == 41
         assert it.Count(fn(x) { return x % 2 == 0 }) == 4        # 42 44 46 48
         assert (try it.Next() catch default -1) == -1
         assert l.Iter().Fold(I64(0), fn(acc, x) { return acc + x }) == 1225
         assert l.Iter().Map(fn(x) { return x * 2 }).Len() == 50 and l.Iter().Filter(fn(x) { return x >= 45 }).Len() == 5
-        assert l.Iter().All(fn(x) { return x < 50 }) and not l.Iter().Any(fn(x) { return x > 49 })
+        assert l.Iter().Every(fn(x) { return x < 50 }) and not l.Iter().Some(fn(x) { return x > 49 })
         l.Push(50)                                               # an exhausted iterator sees what is pushed after
         assert (try it.Next() catch default -1) == 50
     }

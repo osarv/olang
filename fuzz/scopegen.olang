@@ -144,7 +144,7 @@ Prelude := (
     "    t I64 = 0\n"
     "    c := n\n"
     "    for k in range 40 {\n"
-    "        if c == null { break }\n"
+    "        if c is null { break }\n"
     "        t = t * 31 + c.v\n"
     "        c = c.next\n"
     "    }\n"
@@ -174,11 +174,11 @@ Prelude := (
     "    return t\n"
     "}\n"
     "fn sumE(e E&) I64 {\n"
-    "    if e is E.A {\n"
+    "    if e == E.A {\n"
     "        b := e as E.A\n"
     "        return chain(b.head)\n"
     "    }\n"
-    "    if e is E.N { return chain(e as E.N) }\n"
+    "    if e == E.N { return chain(e as E.N) }\n"
     "    return 0\n"
     "}\n"
     "fn mkNode(v I64) mut Node& { return Node(v) }\n"
@@ -624,7 +624,7 @@ fn (g mut SG&) mapOp(m String&, ind String&) String& {
     }
     if k == 5 {    # a node a lookup hands back, built through
         n := g.name("n")
-        return ($ind $n " := try " $m ".Get(" $key ") catch default null\n" $ind "if " $n " != null { " $n
+        return ($ind $n " := try " $m ".Get(" $key ") catch default null\n" $ind "if " $n " is not null { " $n
                 ".next = " $g.newNode() " }\n")
     }
     return $ind $m ".Put(" $key ", " $g.newNode() ")\n"
@@ -650,7 +650,7 @@ fn (g mut SG&) arrOp(a String&, ind String&, d I64) String& {
     }
     if k == 5 {    # building through the elements a walk hands out
         n := g.name("n")
-        return $ind "for " $n " in " $a " { if " $n " != null { " $n ".next = " $g.newNode() " } }\n"
+        return $ind "for " $n " in " $a " { if " $n " is not null { " $n ".next = " $g.newNode() " } }\n"
     }
     if k == 6 { return g.nodeOp($a "[0]", ind, d) }
     return $ind $a "[" $at "] = " $g.newNode() "\n"
@@ -804,13 +804,13 @@ fn (g mut SG&) strOp(ind String&) String& {
         if k == 8 { return $ind $q " := $r.n.v \"x\" $chain(r.n)\n" $ind "acc += " $q ".Len()\n" }
         if k == 9 { return $ind "acc += sumList(r.l) + sumMap(r.m) + sumArr(r.a)\n" }
         if k == 10 {    # a conditional of references, read
-            return $ind $q " := r.n if Run > 0 else r.l[0]\n" $ind "if " $q " != null { acc += " $q ".v }\n"
+            return $ind $q " := r.n if Run > 0 else r.l[0]\n" $ind "if " $q " is not null { acc += " $q ".v }\n"
         }
         if k == 11 {    # a catch default that is existing storage, read
             return $ind $q " := try r.m.Get(Run * 9) catch default r.n\n" $ind "acc += " $q ".v\n"
         }
         if k == 12 { return $ind $q " := checked r.a[Run * 9] catch default r.n\n" $ind "acc += " $q ".v\n" }
-        if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n.next\n" $ind "if " $q " != null { acc += " $q ".v }\n" }
+        if k == 13 { return $ind $q " := try borrowF(r.n) catch default r.n.next\n" $ind "if " $q " is not null { acc += " $q ".v }\n" }
         if k == 14 {    # walks
             y := g.name("y")
             e := g.name("e")

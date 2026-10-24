@@ -425,9 +425,9 @@ pointer; for the two-word shapes it is each word zeroed, so a null `Array<T>` is
 it is `0` and it reads as genuinely empty.
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
-scope without a containment check. `==`/`!=` against it are the ordinary reference comparisons (E10: a null
-reference equals only a null), so `p == null` needs no operator of its own - for an array reference too, which is
-null only when it has no storage, and so differs from an empty array that has.
+scope without a containment check. Whether a reference holds none is asked with `p is null` (E10c) - for an array
+reference too, which is null only when it has no storage, and so differs from an empty array that has. A null equals
+only a null (E10).
 
 **T2b (memory safety).** Every reference is nullable; there is no separate non-nullable reference type.
 Reading or writing a field or element through a null reference, or calling through a null function value,
@@ -636,7 +636,7 @@ compiling (T7c) `Len()` is a constant and an index out of range is a compile-tim
 **T11.** **Whether an array is reference-shaped is decided by its reference marker (T24) and by nothing
 else.** `Array<T>` is a value: `==` compares element-wise (E10) and assignment gives the target its own copy
 of the elements. `Array<T>&` is a reference: assignment repoints, and `==` compares the elements it names, as it
-does through any array (E10) - `a is b` asks whether two name the same storage (E10c). How an `Array<T>` is stored -
+does through any array (E10), arrays declaring `Eq` by contents. How an `Array<T>` is stored -
 a length paired with storage elsewhere, or fixed storage laid out in place with its length known while compiling
 (T7d) - is a difference in *representation* only and never in behaviour.
 
@@ -682,12 +682,16 @@ representation available to a program: it supports only equality (`==`/`!=`) and
 Cases follow the listing rule (L18a), as every list does: on one line they are separated by `,` (`enum { North, South
 }`), on different lines by the line break, and two on one line with nothing between them are a compile-time error.
 
-**T17a.** A case may carry a **payload**, written as a parameter list after its name:
+**T17a.** A case may carry a **payload**, written as a parameter list after its name, or as one type written whole:
 
 ```
 enum-body ::= "enum" "{" list(case-decl) "}"
-case-decl   ::= IDEN [ "(" param-list ")" ]
+case-decl   ::= IDEN [ "(" param-list ")" | type-ref ]
 ```
+
+`Round Circle` carries one value of the type `Circle`, which is the payload: it is built as `Shape.Round(c)`, bound
+whole by `case Shape.Round(c)`, given whole by `s as Shape.Round`, and where a test narrows a local to that case (S8d)
+the local is that value - `s.r`, `s.Area()`. `Round(c Circle)` is a parameter list of one field, as any is.
 
 A case with no parameter list is a bare tag — what every case was before payloads existed. A value of the
 type holds exactly one case, so its size is the largest payload plus a tag, not the sum of all of them. A
@@ -743,7 +747,7 @@ e Expr& = Expr.Add(Expr.Lit(1), Expr.Neg(Expr.Lit(2)))
 An enum value becomes a reference as a struct value does (E12): a temporary is built where the reference lands
 (E12c) - `e` above, with every node of its tree (T17c) - and an lvalue is borrowed. A reference to an enum is read
 through wherever its value is asked for: by a pattern (S13b - a null reference holds no case, so no pattern matches
-it), by `is` and `as` (E32), and by a copy into a value (E12). Nothing is ever written through one: a payload is
+it), by a case test and `as` (E32), and by a copy into a value (E12). Nothing is ever written through one: a payload is
 never assigned, so a reference to an enum whose payloads hold only read-only references can be stored through
 nowhere (O25g), and may be held wherever it outlives the holder. An enum may also hold itself through a struct
 holding it by value, reached by reference (`type Node struct(e Expr) { e }` beside a case `Add(a Node&, b Node&)`),
@@ -773,7 +777,7 @@ declaration:
 type's name, as always, so a misspelled type stays an unknown type rather than becoming a variable - except in a
 receiver's type arguments, where a name no type has is the variable it introduces (G3b). A type variable is written
 bare wherever a type's name is: in a type, as a type argument (`Cell<T>`, `Pair<K, V>`), as an array literal's element
-type (`T[a, b]`, E19), after `is` and `as` (E32), and as a type `match`'s operand (`match T`, G13). The closing `>>` of
+type (`T[a, b]`, E19), after `as` (E32), and as a type `match`'s operand (`match T`, G13). The closing `>>` of
 a nested type-argument list lexes as the shift token and is split where a type-argument list is being parsed, and only
 there, so `x >> 1` is unaffected. A type parameter or type argument list follows the listing rule (L18a).
 
@@ -1049,13 +1053,13 @@ conditional's or a match's value whose type is a read-only reference, E28/S12b) 
 plain data an immutable global holds is read-only data the same way. Any other target - a value, which is
 storage of its own, or a writable reference - gets a copy of its own. Which happens is not observable except as speed, and as identity:
 each **site** - a literal as written once in the source - is one instance however often it is reached, so the same
-site reached twice is the same storage (E10), and two sites are two instances even when they hold the same data. An
+site reached twice is the same storage, and two sites are two instances even when they hold the same data. An
 element of a static literal is static data too: walked by `for ... in` (`for nm in String&["ann", "bob"]`), it lives
 in the program's scope (§8 O1b) and may be stored anywhere.
 
 **T26.** A reference-shaped struct, enum or array is heap-indirect: the value held by a variable, field,
 or parameter of that type is a pointer, not the aggregate itself, and `==`/`!=` on it compare
-pointer identity rather than structural content (see
+pointer identity rather than structural content, unless its type declares `Eq` - as every array does (see
 §5.2 E10). An unmarked struct or array is a plain value.
 
 ### 2.10 Type identity
@@ -1191,7 +1195,7 @@ Like a literal (T29a) it is a temporary with no type worth defending, so it stil
 bytes it is written against - an `Array<U8>`, or a declared type over one. Any other bytes become a `String`
 only by `String(bytes)`, which copies nothing. A slice of a `String` is a `String` (E16a), and a `String`
 goes wherever an `Array<U8>` is wanted. A `String` is bytes: no encoding is checked. `String` declares `Eq`
-(E10a), so `==` compares what two texts say, through a reference too; `a is b` asks whether they are one (E10c).
+(E10a), so `==` compares what two texts say, through a reference too.
 A search that finds nothing fails rather than giving a position that is not one: `t.Find(sub)` and `t.FindByte(c)` give
 where the first occurrence starts (`t.FindLast(sub)` the last), and fail with `TextError.NOT_FOUND` when there is none -
 `try t.Find(sub) catch default -1` writes a fallback - as an array's `FindIndex(keep)` fails with
@@ -1276,7 +1280,7 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 `Iterator<T>` - so code written over `Iterator<T>` takes an array as it takes any other collection
 (`total(a.Iter())`). There is no `Iterable` trait: a function wanting "anything that can be walked" takes
 `it mut I&` with `I Iterator<T>` in its list and its caller writes `.Iter()` (G9c infers `T`). The prelude's defaults for
-`Iterator<T>` (M19e) are `Any`, `All`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
+`Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
 left - `m.Keys().ToList()`.
 
 **T35c (the numeric traits).** The prelude declares three sealed traits (T31) naming the built-in numbers (T4):
@@ -1335,7 +1339,7 @@ itself:
 Declaring two entries with the same name in the same set, within the same module, is a compile-time
 error. So is a type sharing its name with a function, an external function or a global of the same module, or with
 the prelude's types (§4 M19d) or a built-in one (a primitive, `Bool`, `Array`): within a module a name means one
-thing, which is what lets what follows `is` be read as a type exactly when it names one (E10c). An import alias's
+thing, which is what lets a case written be told from a value exactly when its name names a type (E32). An import alias's
 name is reserved apart (§4.6 M20).
 
 **D3.** A local variable (a parameter, or a variable declared inside a function or test body, §3.5)
@@ -1349,7 +1353,7 @@ constant (B10), a constant of the prelude (`Pi`, `Euler`, `Inf`, `NaN`, §4 M19d
 one its module declares, one of the prelude's (§4 M19d), or a built-in one (a primitive, `Bool`, `Array`); each is a
 compile-time error. A module is what keeps a namespace small enough to manage,
 so within one a name means one thing everywhere — which is also what lets a condition be read before its
-scopes are known (S8b), and what follows `is` be told apart as a type or a value (E10c). Names another module declares are reached only through an import alias, so they
+scopes are known (S8b), and a case written be told apart from a value (E32). Names another module declares are reached only through an import alias, so they
 never collide with a local.
 
 ### 3.3 Type and error declarations
@@ -1507,7 +1511,7 @@ and so never copies anything to begin with. A **function type** (T21) carries no
 an array by value is a compile-time error naming `Array<T>&` - unless that parameter's type is a type variable an
 instantiation binds to an array of known length, which gives it one. A lambda (D16) is a value of a function type, so
 the same holds for its parameters; one whose type is not written (D16a) is the expected function type's - a generic's
-by-value parameter bound to an array, say (`a.Any(fn(x) { ... })` over an `Array<Array<I32>>` of rows laid out in
+by-value parameter bound to an array, say (`a.Some(fn(x) { ... })` over an `Array<Array<I32>>` of rows laid out in
 place) - and has that type's meaning there.
 
 **D9b.** A generic's by-value parameter (`x T`) instantiated with an array is a by-value parameter as for a struct -
@@ -1965,7 +1969,7 @@ the length: storage is a run of chunks, each twice the size of the last, so a po
 rather than by a search, and nothing stored is moved by a later `Push`. `RunFrom(at)` gives the elements stored next
 to each other from position `at` - a read-only slice of the chunk holding it, to that chunk's end or the list's - and
 fails with `Exhausted` at `Len()`, so `for x in l` walks a `List` run by run (S9f), not through `At`. `Iter()` hands
-out a fresh position (S9c), a `ListIter<T>` whose iterator helpers (`Any`, `All`, `Count`, `Fold`, `Map`, `Filter` -
+out a fresh position (S9c), a `ListIter<T>` whose iterator helpers (`Some`, `Every`, `Count`, `Fold`, `Map`, `Filter` -
 M19e overrides) walk the rest of the list run by run too, leaving it where `Next()` would.
 `First()`, `Last()` and `Pop()` (which removes the last) give an element, failing with `ListError.EMPTY` when
 there is none; `Clear()` removes every element, and `Truncate(n)` all but the first `n` (nothing when the list holds
@@ -2228,7 +2232,7 @@ to M6/M6a — a private type is unreachable, and a private word is unnameable ev
 with no payload written as a chain is a value like any other, so it may be a method call's receiver
 (`Color.Red.Hash()`, `lib.Dir.North.Hash()`, M19).
 A private word's *value* still crosses the boundary normally; only its name does not. The same holds wherever a case
-is named - after `is` or `as` (E32) and in a pattern (S13b): the chain is resolved, and the type it reaches must be
+is named - in a case test or after `as` (E32) and in a pattern (S13b): the chain is resolved, and the type it reaches must be
 the very enum of the value (its module and name), so another module's same-named enum is a different one.
 
 **M13.** Within one module, resolving *any* multi-hop alias chain (M8) requires that every
@@ -2388,7 +2392,7 @@ operators groups left-to-right):
 | 5 | `^` |
 | 6 | `&` |
 | 7 | `==` `!=` |
-| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30), `is` `is not` (E10c, E32) |
+| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30), `is null` `is not null` (E10c) |
 | 9 | `<<` `>>` |
 | 10 | `+` `-` |
 | 11 (tightest) | `*` `/` `%` `@` (`@` only as a type declares it, E31) |
@@ -2443,7 +2447,7 @@ its pieces side by side (E11b). `+` with two array operands is a compile-time er
 **E7.** `and or xor` require both operands to be `Bool` and produce `Bool`. `and` and `or`
 **short-circuit**: the left operand is evaluated first, and the right one only when the left has not
 already decided the result — `and` stops at a false left operand, `or` at a true one. So
-`p != null and p.x > 0` never reads through a null `p`. `xor` always evaluates both operands, since its
+`p is not null and p.x > 0` never reads through a null `p`. `xor` always evaluates both operands, since its
 result depends on both.
 
 **E7a.** `not-expr ::= "not" binary` (its operand at the precedence of `|` and tighter). `not` requires a
@@ -2484,62 +2488,42 @@ integer type is adapted to (a declared type is entered through its constructor, 
 adaptation and T6b's meeting at the wider) and produce `Bool`; there is no ordering on any non-numeric type.
 
 **E10.** `== !=` accept operands of any single type `T27`-matching pair (subject to T6's own
-numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)`. What `==` compares is fixed by
-the type, and a type may say it itself:
-- a type that **declares `Eq`** (E10a) is compared by it: `a == b` is `a.Eq(b)`. Through a **reference** to such a
-  type it is the same comparison of the two referents, except that a null reference is equal to another null and to
-  nothing else - `Eq` is never called with a null.
-- otherwise, for a primitive or enum value: ordinary value equality - an enum's case first, then its payload's
-  fields by this same rule;
-- for a struct or array **value**: member-wise/element-wise structural equality, applying this same rule to every
-  field or element - so a part whose type declares `Eq` is compared by it, however deep it sits. Arrays must agree
-  on length first;
-- for a **reference to an array** (`Array<T>&`, or a declared array type with no `Eq` of its own):
-  the arrays the two name, compared as values are - lengths first, then each element by this same rule - except
-  that a null equals only a null. A null array reference is one with **no storage**, as an array value's zero value
-  has none, whose bits it shares; an empty array that was built (`Array<T>(0)`) has storage and is not null, and so
-  does fixed storage of no elements (T7d), a place of no bytes - a reference to one, or a slice of one, is not null. Two
-  references to arrays are compared for what they hold however they were made, so `l.ToArray() == m.ToArray()` asks
-  whether two lists hold the same elements; whether they are one array is `a is b` (E10c).
-- for any other **reference** whose referent's type declares no `Eq`: identity - two references are equal exactly
-  when they name the same storage. Storage is made afresh by every constructor call and every reference built, so two
-  of them are never the same.
+numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)`. They compare what the operands
+**store** - values, never following a reference - except where a type says what it is equal by:
+- a type that **declares `Eq`** (E10a) is compared by it wherever it stands - as a value, as a part of one, or behind a
+  reference: `a == b` is `a.Eq(b)`. Through references a null equals another null and nothing else - `Eq` is never
+  called with a null. The prelude declares `Eq`, by contents, for every array (`Array<T>`, a declared array type with no
+  `Eq` of its own, `String` - lengths first, then each element by this same rule), `List` (the same elements in the
+  same order), `Map` (the same keys, each with an equal value, whatever order they were put in) and `Vec`;
+- otherwise, a primitive by value; an enum value by its case first, then its payload's fields by this same rule; a
+  struct value field by field by this same rule;
+- any other **reference**: identity - two references are equal exactly when they name the same storage, or are both
+  null. Storage is made afresh by every constructor call and every reference built, so two of them are never the same;
 - a function value: identity (T21).
 
-Identity is always available, whatever `Eq` says: `a is b` (E10c).
+A reference compared with a value of its referent's type (`r == N(1)`) compares the value it names with that value, by
+the rules above - a value has no storage of its own to be the same as (E12's copy out). A case written as an operand
+(`e == Shape.Circle`) is a test of the case, not a value (E32). The `null` literal is no
+operand: a null test is written `x is null` (E10c).
 
 The comparison takes no shortcut through identity, and it walks only what these rules say: a value whose parts reach
-values of its own type - a struct holding an array of references to its own type, `type S struct(xs Array<S>&)` - is
-compared level by level, to whatever depth the data has. Data that holds **itself** that way (an element naming the
-array it is in) is compared without end, as any unbounded recursion runs, until the stack is exhausted; a comparison
-evaluated while compiling (K1), or under `interpret`, stops with a message instead, each level it descends counting as a call
-does against the evaluator's depth limit. A struct or enum reference (identity, above) ends any such walk.
+values of its own type through what declares `Eq` - a struct holding an array of its own type, `type S struct(xs
+Array<S>&)` - is compared level by level, to whatever depth the data has. Data that holds **itself** that way (an element
+naming the array it is in) is compared without end, as any unbounded recursion runs, until the stack is exhausted; a
+comparison evaluated while compiling (K1), or under `interpret`, stops with a message instead, each level it descends
+counting as a call does against the evaluator's depth limit. A struct or enum reference with no `Eq` (identity) ends any
+such walk.
 
-**E10c (`is`, identity).** `a is b` is true exactly when two references (or two function values) of one type name the
-same instance - for a reference to an array, whose value is a length paired with a pointer, the same storage from the
-same element and the same length, so `a[1:3]` is not `a[1:2]` - whatever `Eq` says, or `==` on arrays, and
-`a is not b` is `not (a is b)`. Either side may be `null`, which adapts to the other's type as beside `==` (a null is
-the same instance as another null and nothing else); both may not, having no type between them. Storage is made
-afresh by every `Array<T>(n)`, comprehension, rendering or join, copy and constructor call, an empty one (of no
-elements, no fields) included, so two of them are never the same; a slice is part of its base's storage (E16a); a
-static literal site is one instance (T25d). An array with no storage - an array value's zero value, whose bits a null
-array reference has too - is the same as any other with none. Whether either side's length is known while compiling
-(T7c) changes nothing: two references are one instance when they name the same storage over the same length. Any other
-operand - a value of any type, two references of different types - is a compile-time error: `==` is
-what compares values.
-`a` is evaluated before `b`. This is the value form of the one operator `is` (E32 gives its type form):
+**E10c (`is null`).** `x is null` is whether a reference, or a function value, holds none; `x is not null` is its
+negation, and `not x is null` the same question (E7a).
 
 ```
-is-expr ::= operand "is" [ "not" ] ( type-ref | binary )
+is-expr ::= operand "is" [ "not" ] "null"
 ```
 
-What follows `is` (and `not`) is read as a `type-ref` when it is one that names a type - a name declared as a type
-in this module or the one an alias chain reaches, the prelude's, a primitive, `Bool` or `Array`, or a name whose
-last-but-one word names one (a case, `Shape.Circle`), a variable of the generic it is written in (`T`, G8b), or a
-type that is no plain name (a function type, `mut T`). Anything else is a value: an expression at the ordering comparisons' precedence and tighter, so
-`a is b + c` is `a is (b + c)` and `a is b == c` is `(a is b) == c`. Since no local, parameter, function or global
-shares a type's name (D2, D3a), a name is never both. `not a is b`, `a is not b` and `not (a is b)` are one
-question (E7a).
+`is` asks nothing else: `a is b` for any `b` but `null`, a case or a type after it, `null is null`, and `x is null` for an
+`x` that cannot be null (a number, a struct value) are compile-time errors - a value and a case are compared with `==`
+(E10, E32). Comparing with the `null` literal, `x == null` or `x != null`, is an error naming `x is null`.
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
 `==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
@@ -2547,7 +2531,8 @@ receiver's own type in either shape (`T` or `T&`), result `Bool`, no errors, and
 `mut`. Any other method named `Eq` or `eq` taking one parameter is a compile-time error; one taking another number is an
 ordinary method (E31), and `==` on the type is the language's.
 `Eq` must behave as an equality - reflexive, symmetric, transitive - which nothing checks. Everything that compares
-values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys. A
+values goes through `==`, and so through `Eq`: `match` on a value (S13), `x in c` (E29), and a `Map`'s keys - but a case
+written as an operand is a test of the case (E32), and `Eq` is not called for it. A
 built-in type declares none; its `==` is the language's.
 
 **E10b (`Hash`).** A value hashes in agreement with `==`: values that compare equal hash equally. A type may declare
@@ -2555,7 +2540,8 @@ built-in type declares none; its `==` is the language's.
 compiler supplies one for a **struct, enum or array value** whose type declares neither (in either spelling) and every
 part of which has a hash: the parts' hashes
 combined in order (an enum's case first, then the payload of the case it holds; an array's elements through the
-prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer type and `String`; a float has none,
+prelude's `HashElements`). The prelude declares `Hash` for `Bool`, every integer type, `String`, and - agreeing with their `Eq` - `List`, `Map`
+(its entries' hashes summed, so the order they were put in does not count) and `Vec`; a float has none,
 so neither does a value holding one. A **reference** has a hash exactly where `==` compares what it names: one to an
 array whose elements have one (its elements' hashes, as an array value's), or one whose type declares `Eq` and `Hash`;
 one compared by identity has none. `Hash` never sees a null: `x.Hash()` on a null reference is `0`. A supplied `Hash`
@@ -3285,21 +3271,27 @@ the store and the element's addition as `checked x[i] += 1` does (R21).
 
 ### 5.16 `is` and `as`
 
-**E32.** `is-expr ::= operand "is" [ "not" ] type-ref` (at the comparisons' precedence; E10c says when what follows
-`is` is a `type-ref`) and `as-expr ::= postfix "as" type-ref`
-(binding as tightly as a postfix, so `-x as T` is `-(x as T)`) ask which case an **enum value** (T17) - or a
-reference to one (T17d), read through - is, and give its payload: `type-ref` names one of its cases, `Shape.Circle`. `x is Shape.Circle` is whether that case is live,
-whatever its payload, and `x is not Shape.Circle` whether it is not; `x as Shape.Circle` is the payload - its one field, or, for several, as many results as it has,
-received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no payload is an error
-(`is` is the question it asks). On anything else - an array included, whose known length a slice gives (T7c,
-E16a) - `is` and `as` are a compile-time error. What follows `is` or `as` is a
-`type-ref`, so an `&` touching it with a name after it is that type's reference marker (§2.9): `b as Box.Val & mask` is
-an `as` to the type `Box.Val&mask`, and a compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the
-result.
+**E32.** A **case written** as an operand of `==` or `!=` - `Type.Case`, or `Type.Case(...)` with a part for each of its
+payload's fields - is a **test** of the case the other operand holds, an enum value or a reference to one, read through
+(a null holds no case, so the test is false): `e == Shape.Circle` is whether `e` holds that case, whatever its payload;
+`e == Shape.Rect(_, 2.0)` is whether it holds `Rect` with a second field equal to `2.0`. In the parts, `_` matches
+anything, a case written is a nested test of that field (`e == Expr.Add(Expr.Lit(1), _)`), and any other expression is
+compared with the field by `==` - so the test is what `match e { case P => true, case _ => false }` asks, its parts
+values rather than names to bind. A case written so is never a value of the type, and an `Eq` the enum declares is not
+called for it. A case of another enum, or one the type does not have, is a compile-time error.
+
+`as-expr ::= postfix "as" type-ref` (binding as tightly as a postfix, so `-x as T` is `-(x as T)`) gives the payload of
+an **enum value** (T17) - or of what a reference to one names (T17d): `type-ref` names one of its cases, `Shape.Circle`,
+and `x as Shape.Circle` is its payload - its one field, the payload written whole (T17a), or, for several fields, as many
+results as it has, received as a call's several results are (`w, h := s as Shape.Rect`, D8c). `as` on a case with no
+payload is an error (`==` is the question it asks). On anything else - an array included, whose known length a slice
+gives (T7c, E16a) - `as` is a compile-time error. What follows `as` is a `type-ref`, so an `&` touching it with a name
+after it is that type's reference marker (§2.9): `b as Box.Val & mask` is an `as` to the type `Box.Val&mask`, and a
+compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the result.
 
 An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `checked` (E15a) it fails with
-`BuiltinError.WRONG_CASE` instead. `is` never fails. A null reference to an enum is no case: `is` is false and `as`
-does not hold. The safe forms are `is` before `as`, and a `match` (S13).
+`BuiltinError.WRONG_CASE` instead. A case test never fails. A null reference to an enum is no case: a test is false and
+`as` does not hold. The safe forms are a test that narrows (S8d), and a `match` (S13).
 
 A part of an array of a known length is a **slice** with known bounds (T7c, E16a), checked once where it is taken:
 
@@ -3506,6 +3498,18 @@ error. (To check a fixed value, `assert` it; an
 payloads) declared with an initializer, and nothing anywhere in its function writes it afterwards — no
 assignment, `++`/`--`, atomic operation or spawn target names it. Such a local holds its initializer's value
 wherever it can be read, so a condition reading it reads that value. A parameter is never fixed.
+
+**S8d (narrowing).** In the block of `if e == Shape.Circle { }` - `e` a local or a parameter holding an enum value or
+a reference to one, and the condition that one comparison with a case written (E32), `e` on either side - `e` is known
+to hold that case: `e.r` reads the payload field `r`. Where the case's payload is one type written whole (T17a,
+`Round Circle`), `e` is that payload there: `e.r`, `e.Area()`, and `e` passed on is the `Circle`. The same holds in the
+`else` block of `if e != Shape.Circle { } else { }`, and after `if e != Shape.Circle { ... }` with no `else` whose block
+always leaves (D10a) - from there to the end of the block the `if` stands in. It holds only where `e` is assigned nowhere
+in that region (an assignment, a compound one, an increment, a target), and not inside a lambda written there. The
+payload's fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they
+are read there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a
+compile-time error naming the whole-value assignment. A field of a
+case the local is not known to hold is no member of an enum, and a compile-time error.
 
 **S8b.** A condition the **build decides** — one S8a describes, except that it does read a build constant —
 makes the `if` conditional compilation, exactly as at the top level (B9): only the branch it chooses is

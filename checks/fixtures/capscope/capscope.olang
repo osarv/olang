@@ -83,7 +83,7 @@ fn main() ? {
     both(fn(i I64) { if (try find(c2) catch default Node(i)).v == i { c2.v = i } }
          fn(i I64) { if (try find(d2) catch default Node(i)).v == i { d2.v = i } })
     for k in range 20 {
-        assert not (nodes[k].next == null or nodes[k].next.v != N - 1)
+        assert not (nodes[k].next is null or nodes[k].next.v != N - 1)
     }
     for k in range 20, 26 {
         assert nodes[k].v == N - 1

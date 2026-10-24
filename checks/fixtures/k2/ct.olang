@@ -27,7 +27,7 @@ Ring Node& = ring()
 fn looped() Bool {
     r := ring()
     c Node& = Node(1, Node(2, null))
-    return r.next is r and c.next is not c and c.next.next is null
+    return r.next == r and c.next != c and c.next.next is null
 }
 Looped Bool = looped()                  # E10c: identity, while compiling
 closed mut I32 = 0
@@ -55,7 +55,7 @@ Later I32 = seed * 2
 fn main() ? E {
     assert Deferred == 7
     assert Fib == 610 and Table[3] == 233 and P.a == 8 and P.b == 0.5 and Later == 6
-    assert Chain.next.v == 2 and Chain.next.next == null and Ring.next == Ring and Looped
+    assert Chain.next.v == 2 and Chain.next.next is null and Ring.next == Ring and Looped
     assert Kept.id == 7 and Dropped == 1 and closed == 1
     ctlib.Counter = ctlib.Counter + 1
     assert ctlib.Tile == 12 and ctlib.Tiles[1] == 2 and ctlib.Rows[1] == 4 and ctlib.Counter == 6

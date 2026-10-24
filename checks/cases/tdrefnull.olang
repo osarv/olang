@@ -6,4 +6,4 @@ type P struct(v I32) { v }
 fn ref(p P&) P&p ? E { return p }
 fn main() ? E { }
 fn refnull(p P&) Bool { r := try ref(p) catch default null
-    return r == null }
+    return r is null }

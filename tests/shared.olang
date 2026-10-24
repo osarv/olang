@@ -2510,9 +2510,9 @@ type Held4 struct(v I32) {
 
 test "D15a: an array reference with no initializer is null, not garbage" {
     h Held4& = Held4(1)
-    assert h.fixed == null
+    assert h.fixed is null
     local Array<I32>&
-    assert local == null
+    assert local is null
 }
 
 # T11a: on a reference a size is never part of the type - in a declaration it is how much to allocate, a
@@ -2681,7 +2681,7 @@ test "G9a: a literal adapts to a type variable another argument bound" {
 
 # G9a: null binds nothing at all - it is checked against its parameter's type once another argument has bound the
 # variable - so a generic function with an optional reference parameter can be given null there
-fn CellOr<T>(c Cell<T>&, fallback Cell<T>&) T { return fallback.v if c == null else c.v }
+fn CellOr<T>(c Cell<T>&, fallback Cell<T>&) T { return fallback.v if c is null else c.v }
 
 test "G9a: null takes no part in inferring a type variable" {
     d Cell<I64>& = Cell<I64>(8000000000)
@@ -3445,15 +3445,14 @@ test "reference into value copies out rather than aliasing the reference" {
     assert r[0] == 0
 }
 
-# E10/E10c: "==" through an array reference compares the elements it names, as through an array value; whether two
-# references name one array is "is"
-test "a marked runtime-length array is a reference: assignment repoints, 'is' is identity" {
+# E10: "==" through an array reference compares the elements it names, as through an array value - arrays declare Eq
+test "a marked runtime-length array is a reference: assignment repoints, '==' compares what it holds" {
     n I32 = 3
     a mut Array<I32>& = Array<I32>(n)
     b mut Array<I32>& = Array<I32>(n)
-    assert a is not b and a == b              # two arrays, holding the same elements
+    assert a == b                         # two arrays, holding the same elements
     b = a
-    assert b is a
+    assert b == a
     b[0] = 9
     assert a[0] == 9
 }
@@ -3463,9 +3462,9 @@ test "a marked compile-time-length array is a reference too - same rule, other l
     qv := I32[1, 2, 3]
     p Array<I32>& = pv
     q Array<I32>& = qv
-    assert p is not q and p == q
+    assert p == q
     r Array<I32>& = p
-    assert r is p
+    assert r == p
     qv[0] = 7
     assert p != q
 }
@@ -4228,7 +4227,7 @@ test "D15a: an uninitialized local is its own zero value" {
     p Crate2&
     assert n == 0
     assert not b
-    assert p == null
+    assert p is null
 }
 
 # D15b: a declared-size array local is left as its storage comes - no memset, which is the whole reason to
@@ -4256,8 +4255,8 @@ test "D15c: a declared-size array fills from one element value" {
     assert h[3] == -1
 
     r := Array<Crate2&>(3, null)
-    assert r[0] == null
-    assert r[2] == null
+    assert r[0] is null
+    assert r[2] is null
 }
 
 # "T[expr]", expr not a compile-time constant - arena-allocated (own by default), like C's alloca but tied
@@ -4771,10 +4770,10 @@ test "C2a: every local-variable initialization rule applies to a constructor fie
 
     assert b.zeroed[0] == 0 and b.zeroed[2] == 0
     assert b.marked[0] == -1 and b.marked[2] == -1
-    assert b.slots[0] == null and b.slots[2] == null
+    assert b.slots[0] is null and b.slots[2] is null
 
     assert b.used == 0
-    assert b.head == null
+    assert b.head is null
 
     b.fixed[1] = 8
     assert b.fixed[1] == 8
@@ -4796,36 +4795,36 @@ fn firstOrNull(a Array<Crate2&>&, i I32) Crate2&a {
 }
 
 fn isAbsent(c Crate2& = null) Bool {
-    return c == null
+    return c is null
 }
 
 test "T2a: null in every position a reference is written" {
     p Crate2& = Crate2(3)
-    assert p != null
+    assert p is not null
     p = null        # assignment
-    assert p == null
+    assert p is null
 
     q Crate2& = null        # declaration
-    assert q == null
+    assert q is null
     assert isAbsent(q)        # argument
     assert isAbsent()        # and as a declared default (D8b - null is a literal, E4)
     assert not isAbsent(Crate2(1))
 
     r Array<Crate2&>& = null
-    assert firstOrNull(r, 0) == null        # return
+    assert firstOrNull(r, 0) is null        # return
 }
 
 test "T2a: null is all-zero bits, so the two-word shapes read as empty" {
     a Array<I32>& = null
-    assert a == null
+    assert a is null
     assert a.Len() == 0
 }
 
 test "T2a: a null field is an ordinary field" {
     h mut Held3& = Held3(null)
-    assert h.held == null
+    assert h.held is null
     h.held = Crate2(9)
-    assert h.held != null
+    assert h.held is not null
     assert h.held.v == 9
 }
 
@@ -5540,7 +5539,7 @@ type MtNode2 struct(e MtExpr2) { e }
 fn mtEval(e MtExpr) I64 {
     match e {
         case MtExpr.Lit(v) { return v }
-        case MtExpr.Add(a, b) if a.e is MtExpr.Lit and b.e is MtExpr.Lit { return (a.e as MtExpr.Lit) + (b.e as MtExpr.Lit) }
+        case MtExpr.Add(a, b) if a.e == MtExpr.Lit and b.e == MtExpr.Lit { return (a.e as MtExpr.Lit) + (b.e as MtExpr.Lit) }
         case MtExpr.Add(a, b) { return mtEval(a.e) + mtEval(b.e) }
     }
 }
@@ -5649,7 +5648,7 @@ test "T17d: an expression tree of enums held by reference, folded with nested pa
     astLeaves(f, leaves)
     assert leaves.Len() == 4
     n I64 = 0
-    for l in leaves { if l is Ast.Num { n += l as Ast.Num } }
+    for l in leaves { if l == Ast.Num { n += l as Ast.Num } }
     assert n == 9
     c := astChurn()                               # the arena reuses what the loop's blocks gave back...
     assert c == 3000 * 2999 / 2 - 7 * 3000
@@ -5671,7 +5670,7 @@ test "T17d: a tree baked into a global, matched through its references" {
 
 test "T17d: a null reference to an enum holds no case" {
     none Ast& = null
-    assert not (none is Ast.Num) and none == null
+    assert not (none == Ast.Num) and none is null
     r I64 = match none {
         case Ast.Num(v) => v
         case null => -1
@@ -5736,7 +5735,7 @@ type AstSlot struct() {
 }
 test "T17d: zero values hold null references" {
     s := AstSlot()
-    assert s.tree == null and s.hole is AstHole.Gap
+    assert s.tree is null and s.hole == AstHole.Gap
     assert match s.hole { case AstHole.Gap(null) => true  nomatch => false }
     s.tree = Ast.Num(3)                            # built where s lives
     s.hole = AstHole.Gap(s.tree)
@@ -5772,7 +5771,7 @@ test "T17d: structs and enums holding each other by reference" {
     total I64 = 0
     for st in prog { total += st.Size() }
     assert total == 3 + 2
-    assert prog[0] is AstStmt.Let and (prog[0] as AstStmt.Let).name == "y"
+    assert prog[0] == AstStmt.Let and (prog[0] as AstStmt.Let).name == "y"
 }
 
 # S12b: a match used as a value - "case P => v" gives the value; the clause forms are the statement's (several values,
@@ -6238,7 +6237,7 @@ test "a self-referential struct reads through a chain of any length" {
     a.next.next = Link(3)
     a.next.next.next = Link(4)
     assert a.next.next.next.v == 4
-    assert a.next.next.next.next == null
+    assert a.next.next.next.next is null
 }
 
 # G8: a generic type may name ITSELF in a field - a generic linked node. It was rejected as "not generic"
@@ -6257,7 +6256,7 @@ test "a generic linked node, walked by a for loop that advances by assignment" {
     a.next = GLink<I64>(20)
     a.next.next = GLink<I64>(300)
     sum I64 = 0
-    for c GLink<I64>& = a, c != null, c = c.next {
+    for c GLink<I64>& = a, c is not null, c = c.next {
         sum = sum + c.v
     }
     assert sum == 321
@@ -6328,7 +6327,7 @@ test "O25: same-scope locals link, and an inner-block cursor writes into the out
     }
     churnLinks()
     sum I32 = 0
-    for c Link& = a, c != null, c = c.next { sum = sum + c.v }
+    for c Link& = a, c is not null, c = c.next { sum = sum + c.v }
     assert sum == 6
 }
 
@@ -6336,7 +6335,7 @@ test "O25: same-scope locals link, and an inner-block cursor writes into the out
 # allocated into it or stored through it
 fn sumLinks(p Link&) I32 {
     sum I32 = 0
-    for c Link&p = p, c != null, c = c.next { sum = sum + c.v }
+    for c Link&p = p, c is not null, c = c.next { sum = sum + c.v }
     return sum
 }
 
@@ -6754,7 +6753,7 @@ test "R9a: a reference default lives in exactly the result's scope, or is built 
     k := try tdPick(a, true) catch default b
     assert k == a
     n := try tdPick(a, false) catch default null
-    assert n == null
+    assert n is null
     t := try tdPick(a, false) catch default TdBox(9)
     assert t.v == 9
     assert tdOther(a, b) == b
@@ -7441,7 +7440,7 @@ test "E7: and/or skip their right side once the left decides" {
     assert (not f) and scBump(calls)
     assert calls[0] == 1
     p Point& = null
-    assert p == null or p.x == 0
+    assert p is null or p.x == 0
 }
 
 # D15a: a reference to a run-time-length array carries its length beside its pointer, and reassigning it
@@ -7659,7 +7658,7 @@ fn comprNothing(n I32) String {
     re Array<U16>&e = e
     r Array<U16> = U16[2 for x in range n]
     rr Array<U16>&r = r
-    return $ra " " $(ra == null) " " $re " " $(re == null) " " $rr " " $(rr == null)
+    return $ra " " $(ra is null) " " $re " " $(re is null) " " $rr " " $(rr is null)
 }
 
 ComprNothingBaked String = comprNothing(0)
@@ -7674,7 +7673,7 @@ test "E27/T2a: a comprehension over an empty source is an empty array, not null"
     l := List<I64>()
     empty := I64[x for x in l]
     er Array<I64>&empty = empty
-    assert empty.Len() == 0 and er != null
+    assert empty.Len() == 0 and er is not null
 }
 
 # E28: "a if c else b" - only the chosen value is evaluated; both have one type, a literal adapting
@@ -8205,7 +8204,7 @@ test "M19e: defaults reach satisfying types; a type's own method wins" {
     assert ifmWhisper(p) == 100 # from generic code the type's own version runs too
     m := IfmQ(5)
     assert m.Whisper() == 4 and m.Shout() == 10 and ifmWhisper(m) == 4
-    assert I32[1, 2, 3].Iter().Any(fn(x) { return x == 3 })
+    assert I32[1, 2, 3].Iter().Some(fn(x) { return x == 3 })
     assert IfmCountBaked == 2
 }
 
@@ -8514,10 +8513,10 @@ fn icToks() I64 {
     t := 0
     x := IcTok.Num(5)
     y := IcTok.Pair(2, 40)
-    if x is IcTok.Num { t += 1 }
-    if y is IcTok.Num { t += 100 }
+    if x == IcTok.Num { t += 1 }
+    if y == IcTok.Num { t += 100 }
     e := IcTok.End
-    if e is IcTok.End { t += 1000 }
+    if e == IcTok.End { t += 1000 }
     v := x as IcTok.Num
     a, b := y as IcTok.Pair
     w := checked (y as IcTok.Num) catch default -1
@@ -8539,8 +8538,14 @@ type IdNode struct(v I32, next mut IdNode&) {
     v
     next
 }
-fn (a IdNode&) Eq(b IdNode&) Bool { return a.v == b.v }        # equal by value - "is" never consults it
-fn (n IdNode&) Hash() I64 { return I64(n.v) }
+
+# the same, equal by value: "==" consults its Eq, through references too (E10)
+type IdVal struct(v I32, next mut IdVal&) {
+    v
+    next
+}
+fn (a IdVal&) Eq(b IdVal&) Bool { return a.v == b.v }
+fn (n IdVal&) Hash() I64 { return I64(n.v) }
 
 fn idDouble(x I32) I32 { return x * 2 }
 
@@ -8556,34 +8561,38 @@ fn idCount() I32 {
     b IdNode& = IdNode(1, null)
     a.next = a
     c IdNode& = a
-    if a is c { t += 1 }
-    if a is not b { t += 10 }                       # equal by Eq, yet two instances
-    if a == b and not (a is b) { t += 100 }
-    if a.next is a and a.next is not b { t += 1000 }
-    if b.next is null and null is b.next and a is not null { t += 10000 }
+    if a == c { t += 1 }
+    if a != b { t += 10 }                       # one value each, yet two instances: no Eq, so identity
+    if not (a == b) and a.v == b.v { t += 100 }  # one value, two instances
+    if a.next == a and a.next != b { t += 1000 }
+    if b.next is null and not b.next is not null and a is not null { t += 10000 }
     f fn(x I32) I32 = idDouble
     g fn(x I32) I32 = f
-    if f is g { t += 100000 }
+    if f == g { t += 100000 }
     e IdExpr& = IdExpr.Neg(IdExpr.Lit(3))
     l IdExpr& = e
-    if e is l and e is IdExpr.Neg and e is not IdExpr.Nil and not e is IdExpr.Lit { t += 1000000 }
+    if e == l and e == IdExpr.Neg and e != IdExpr.Nil and not e == IdExpr.Lit { t += 1000000 }
+    u IdVal& = IdVal(4, null)
+    w IdVal& = IdVal(4, null)
+    if u == w and IdVal(5, null) != w { t += 10000000 }   # by Eq: equal values, two instances
     return t
 }
 
 IdBaked := idCount()
 
-test "E10c: 'a is b' is identity and 'is not' its negation, while compiling and at run time" {
-    assert idCount() == 1111111 and IdBaked == idCount()
+test "E10, E10c: a reference compares by identity unless its type declares Eq, and 'is null' asks for none, while compiling and at run time" {
+    assert idCount() == 11111111 and IdBaked == idCount()
     p IdNode& = IdNode(2, null)
     q IdNode& = IdNode(2, null)
-    assert p == q and p is not q and not p is q        # "not" reads the whole "p is q" (E7a)
-    assert (p is p) == true and p is not q != false     # "is" binds as the comparisons do, tighter than "=="
+    assert p != q and not p == q
+    assert (p == p) == true and (p != q) != false
     xs := Array<I32>(3)
     r Array<I32>& = xs
     s Array<I32>& = xs
-    assert r is s and r is not null
+    ys := Array<I32>(3)
+    assert r == s and r is not null and r == ys     # arrays declare Eq: by contents
     n IdExpr& = null
-    assert n is null and n is not IdExpr.Nil           # a null reference holds no case (E32)
+    assert n is null and n != IdExpr.Nil           # a null reference holds no case (E32)
 }
 
 test "M19d: a prelude generic type is named bare with its arguments written, as an expression too" {
@@ -8757,7 +8766,7 @@ test "a reference stored into an element of a reference-reached array lives in t
     noise I32 = 0
     for i in range I32(20) { noise = noise + noisePoint(i) }   # reuses any chunk a returned call freed
     n I32 = 0
-    for p PreNode& = b.a[0], p != null and n < 10, p = p.next { n++ }
+    for p PreNode& = b.a[0], p is not null and n < 10, p = p.next { n++ }
     assert n == 3 and b.a[0].v == 3 and b.a[0].next.next.v == 1
 }
 
@@ -8771,7 +8780,7 @@ type O4bSlot struct(key String&, val I32, next mut O4bSlot&) {
 }
 type O4bMap struct() { first mut O4bSlot& = null }
 fn (m mut O4bMap&) Put(key String&, val I32) {
-    for s mut O4bSlot&m = m.first, s != null, s = s.next {
+    for s mut O4bSlot&m = m.first, s is not null, s = s.next {
         if s.key.Eq(key) {
             s.val = val
             return
@@ -8780,7 +8789,7 @@ fn (m mut O4bMap&) Put(key String&, val I32) {
     m.first = O4bSlot(key, val, m.first)
 }
 fn (m O4bMap&) Get(key String&) I32 {
-    for s O4bSlot&m = m.first, s != null, s = s.next {
+    for s O4bSlot&m = m.first, s is not null, s = s.next {
         if s.key.Eq(key) { return s.val }
     }
     return -1
@@ -8945,7 +8954,7 @@ fn oBuild(v I32) OHolder {
 
 fn (l OxN&) oLast() OxN&l {
     c OxN&l = l
-    for c.next != null { c = c.next }
+    for c.next is not null { c = c.next }
     return c
 }
 
@@ -8958,7 +8967,7 @@ fn oFresh() OxN& {
 fn oPair() OxN&, OxN& { return OxN(1, null), OxN(2, null) }
 
 fn oSum(e OE&) I32 {
-    if e == null { return 0 }
+    if e is null { return 0 }
     return e.v + oSum(e.left) + oSum(e.right)
 }
 
@@ -9093,7 +9102,7 @@ test "T29: a type over a declared number does not take its constructor" {
 # a cursor starts
 fn oSumFrom(l OxN&) I32 {
     t I32 = 0
-    for c := l.next, c != null, c = c.next { t = t + c.v }
+    for c := l.next, c is not null, c = c.next { t = t + c.v }
     return t
 }
 
@@ -9581,7 +9590,7 @@ test "D16c: a lambda captures values by copy and references by reference" {
     assert LamAdded == lamApply(lamAdder(k + 5), 2) and LamOver == lamCountOver(I32[1, 5, 9], k + 4)
     assert LamSame == lamIdentity(k + 1) and LamSame
     none fn(x I32) I32 = null
-    assert none == null and ($none).Eq("null")
+    assert none is null and ($none).Eq("null")
 }
 
 # T21: a function value is one value wherever it is held - a field, an element, a copy of its container - and two are
@@ -9593,7 +9602,7 @@ fn lamHeld(n I32) I32 {
     plus2 := lamAdder(n + 2)
     s := LamSlot(plus2)
     t LamSlot = s                                   # copied with its container: still the same value
-    assert t.f == plus2 and t.f is s.f and t.f(1) == n + 3
+    assert t.f == plus2 and t.f == s.f and t.f(1) == n + 3
     t.f = lamDoubler()
     assert t.f(5) == 10 and s.f(5) == n + 7 and t.f != s.f
     fs := Array<fn(x I32) I32>(3)
@@ -9686,7 +9695,7 @@ LamVowels I64 = "olang inherits".Count(fn(c) { return c == 'a' or c == 'e' or c 
 
 test "T29e: String and a program's own array type inherit the array methods" {
     s := "hello world"
-    assert s.Count(fn(c) { return c == 'o' }) == 2 and s.Any(fn(c) { return c == ' ' })
+    assert s.Count(fn(c) { return c == 'o' }) == 2 and s.Some(fn(c) { return c == ' ' })
     assert (try s.FindIndex(fn(c) { return c == 'w' }) catch default -1) == 6
     assert (try s.Find("world") catch default -1) == 6   # String's own Find too
     n := LamNums(I32[3, 1, 2])
@@ -9901,14 +9910,14 @@ test "E10a: == consults a declared Eq at every depth, while compiling and at run
     assert EqBaked
     s String& = eqText(EqLen)
     r String& = "ab"
-    assert s == r and s == "ab" and "ab" == s and s != "abc" and s is not r and s is s
+    assert s == r and s == "ab" and "ab" == s and s != "abc"
     assert eqWords(s) == 1 and eqWords(eqText(1)) == 0
     n String& = null
     m String& = null
-    assert n == m and n != s and s != n and n == null
+    assert n == m and n != s and s != n and n is null
     p EqLabel& = EqLabel(s)
     q EqLabel& = EqLabel("zz")
-    assert p == q and p is not q and not (p is q)
+    assert p == q and not (p != q)
 }
 
 # E11c: "$" renders a type through its own Str - at the top level, inside another value, behind a reference -
@@ -10036,7 +10045,7 @@ type CaExpr enum {
     Neg(e CaExpr&)
 }
 fn caWrap(a CaExpr&) CaExpr&a { return CaExpr.Neg(a) }
-fn caSimplify(e CaExpr&) CaExpr&e { return caWrap(e) if e != null else CaExpr.Num(1.0) }
+fn caSimplify(e CaExpr&) CaExpr&e { return caWrap(e) if e is not null else CaExpr.Num(1.0) }
 fn caSimplifyM(e CaExpr&, k I64) CaExpr&e {
     return match k {
         case 0 => caWrap(e)
@@ -10091,7 +10100,7 @@ fn adoptFresh(n I64) I64 {
     h.rows[1] = h.rows[0]
     h.rows[1][1] = 40
     h.s = $(n * 11) "!"
-    assert first is not h.a and first[0] == 0 and h.a.Len() == n and h.rows[0] is h.rows[1]
+    assert first != h.a and first[0] == 0 and h.a.Len() == n and h.rows[0] == h.rows[1]
     return h.a[0] + h.rows[0][1] + h.rows[0][2] + I64(h.s.Len())
 }
 AdoptBaked I64 = adoptFresh(3)
@@ -11399,8 +11408,7 @@ test "T4: an integer rounds once to a float, while compiling and at run time" {
     assert evBF16Bits(1157425104234217472 + evRun) == 23937
 }
 
-# E10: an array reference is the same as another only with the same storage, start and length (the run time compared the
-# pointer alone, the evaluator called any two empty arrays the same)
+# E10: arrays compare by what they hold, the run time and the evaluator alike
 fn evIdentity(n I64) String {
     arr := I32[1, 2, 3, 4, 5]
     a Array<I32>& = arr[1:3]
@@ -11413,11 +11421,11 @@ fn evIdentity(n I64) String {
     x Array<I32>
     y Array<I32>
     none Array<I32>& = null
-    return $(a is b) " " $(a == b) " " $(c is d) " " $(e is f) " " $(a is g) " " $(x[:] is y[:]) " " $(x[:] is none)
+    return $(a == b) " " $(b == g) " " $(c == d) " " $(e == f) " " $(a == g) " " $(x[:] == y[:]) " " $(c == none)
 }
 EvIdentityBaked String = evIdentity(2)
-test "E10: an array reference is the same as another with the same storage and the same length" {
-    assert EvIdentityBaked == "false false false false true true true"
+test "E10: arrays compare by what they hold - lengths, then elements - and a null only equals a null" {
+    assert EvIdentityBaked == "false false true true true true false"
     assert evIdentity(evRun + 1) == EvIdentityBaked
 }
 
@@ -11493,16 +11501,16 @@ test "T7d: a copy into fixed storage of its length, while compiling and at run t
 
 # T25d: a static literal site is one instance (the linker merged two sites holding the same data; the evaluator made a
 # new instance each time one site was reached)
-fn evTwo(a String&, b String&) Bool { return a is b }
-fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a is b }   # E10c: "==" on arrays compares their elements
+fn evTwo(a String&, b String&) Bool { return a == b }
+fn evTwoArr(a Array<I32>&, b Array<I32>&) Bool { return a == b }   # E10c: "==" on arrays compares their elements
 fn evSites(n I64) String {
     l := List<String&>()
     for i in range n { l.Push("hello") }
     return $evTwo(l[0], l[1]) " " $evTwo("hey", "hey") " " $evTwoArr(I32[1, 2], I32[1, 2])
 }
 EvSitesBaked String = evSites(2)
-test "T25d/E10: a static literal site is one instance however often it is reached, and two sites are two" {
-    assert EvSitesBaked == "true false false"
+test "T25d/E10: static literals compare by what they hold, wherever they were written" {
+    assert EvSitesBaked == "true true true"
     assert evSites(evRun + 1) == EvSitesBaked
 }
 
@@ -11515,11 +11523,11 @@ EvG fn(x I32) I32 = evTri
 EvSix I32 = EvG(2)
 EvVia I32 = evApply(EvG, 5)
 test "a function-typed global holds a function value, read, called and assigned as one" {
-    assert EvSix == 6 and EvVia == 15 and EvG(4) == 12 and EvG is evTri
+    assert EvSix == 6 and EvVia == 15 and EvG(4) == 12 and EvG == evTri
     assert EvF(4) == 8 and evApply(EvF, 4) == 8
     k I32 = I32(evRun) + 6
     EvF = evTri
-    assert EvF(4) == 12 and EvF is evTri
+    assert EvF(4) == 12 and EvF == evTri
     EvF = fn(x I32) I32 { return x + k }
     assert EvF(4) == 11
     EvF = evDbl
@@ -11612,7 +11620,7 @@ test "K1: a global reaching what a writable reference can change is not a compil
     EvHold.a[0] = 9
     assert evHeld(0) == 9 and EvHold.a[0] == 9
     EvHold.a[1] = 6
-    assert EvHold.b[0] == 6 and EvHold.b is EvHold.a[1:3]
+    assert EvHold.b[0] == 6 and EvHold.b == EvHold.a[1:3]
 }
 
 # K2b: globals sharing an instance, or a slice of one, share it in the program's data (each global's data was its own copy)
@@ -11627,13 +11635,13 @@ fn evIdr(n EvNode&) EvNode&n { return n }
 EvA EvNode& = evMk(4)
 EvB EvNode& = EvA
 EvC EvNode& = evIdr(EvA)
-EvSameAB Bool = EvA is EvB
+EvSameAB Bool = EvA == EvB
 EvArr Array<I64>& = I64[1, 2, 3, 4]
 EvSl Array<I64>& = EvArr[1:3]
-EvSameSl Bool = EvSl is EvArr[1:3]
+EvSameSl Bool = EvSl == EvArr[1:3]
 test "K2b: globals sharing an instance or a slice of one share it in the program's data too" {
     assert EvSameAB and EvSameSl
-    assert EvA is EvB and EvC is EvA and EvSl is EvArr[1:3] and EvSl[0] == 2
+    assert EvA == EvB and EvC == EvA and EvSl == EvArr[1:3] and EvSl[0] == 2
 }
 
 # E30/E27: a comparison chain re-evaluated inside its own Less (its cached operands were the outer chain's), and
@@ -11754,7 +11762,7 @@ fn fzFill(n I64) String {
     c := Array<I32>(n, 7)
     d := Array<mut Array<I32>&>(n, c)
     d[0][1] = 9
-    return $a " " $b " " $(b[1] is b[2]) " " $d " " $(d[0] is d[1]) " " $c
+    return $a " " $b " " $(b[1] == b[2]) " " $d " " $(d[0] == d[1]) " " $c
 }
 FzFillBaked String = fzFill(3)
 test "T8: an array filled with a reference names one instance in every element" {
@@ -11982,7 +11990,7 @@ fn fzNullArr(n I64) String {
     rd Array<U16>&d = d
     e Array<U16> = Array<U16>(n - n)
     re Array<U16>&e = e
-    return $rd " " $(rd == null) " " $re " " $(re == null)
+    return $rd " " $(rd is null) " " $re " " $(re is null)
 }
 FzNullArrBaked String = fzNullArr(3)
 test "E10: a reference to an array with no storage renders as null" {
@@ -12796,7 +12804,7 @@ type lbRunner struct(n I64, M lbMode = LbDefaultMode) {
 LbDefaultMode lbMode = lbMode.Fast(0.5)
 fn lbDefaults() Bool {
     r := lbRunner(3)
-    return r.M is lbMode.Fast and r.data.Len() == 3 and lbRate() == 0.5 and lbRate(lbMode.Slow) == 0.0
+    return r.M == lbMode.Fast and r.data.Len() == 3 and lbRate() == 0.5 and lbRate(lbMode.Slow) == 0.0
 }
 LbDefaultsBaked := lbDefaults()
 test "D8a: a default naming a global declared later, of a constructor and of a function" {
@@ -13306,7 +13314,7 @@ test "D9a/D16a: a lambda over an array of fixed arrays" {
     a[1][0] = 5
     a[2][1] = 9
     a[0][0] = 7
-    assert a.Any(fn(x) { return x[0] == 5 }) and a.Count(fn(x) { return x[0] > 4 }) == 2
+    assert a.Some(fn(x) { return x[0] == 5 }) and a.Count(fn(x) { return x[0] > 4 }) == 2
     a.Sort(fn(x, y) { return x[0] < y[0] })
     assert a[0][1] == 9 and a[2][0] == 7
     assert a.Map(fn(x) { return x[0] + x[1] })[1] == 5
@@ -13318,7 +13326,7 @@ test "E10c: 'is' meets a reference to fixed storage and one to a run-time length
     f := a[0:3]
     r Array<I64>& = a[0:3]
     q Array<I64>& = a[0:2]
-    assert f is r and r is f and f == r and f is not q
+    assert f == r and r == f and f == r and f != q
 }
 
 # T7d: a local too large for a stack frame lives in its block's arena - declared, written and read like any other
@@ -13596,7 +13604,7 @@ fn (p mut c3Parser&) orNew(c Bool) c3Node&p {
 fn c3Leafs(n c3Node&) I64 {
     return match n {
         case c3Node.One(s) => s.v
-        case c3Node.Many(items) => items.Len() * 100 + (0 if items[0] == null else c3Leafs(items[0]))
+        case c3Node.Many(items) => items.Len() * 100 + (0 if items[0] is null else c3Leafs(items[0]))
     }
 }
 test "E28: a conditional of references shares their scope, and is held and passed as one of them" {
@@ -13675,7 +13683,7 @@ test "O18c: a lookup chained through a list element whose type holds a map" {
     r.mods.Push(m)
     s := r.find("a")
     sbChurn()
-    assert s.name == "alpha" and r.find("b") == null
+    assert s.name == "alpha" and r.find("b") is null
 }
 
 # D16d: a lambda made for a callee that keeps nothing of it is made in the caller's frame, once per call
@@ -13713,18 +13721,18 @@ fn s3ArrayRefEq() I64 {
     b Array<I64>& = I64[1, 2, 3]
     s I64 = 0
     if a == b { s += 1 }
-    if a is not b { s += 2 }
+    if a == I64[1, 2, 3] { s += 2 }
     if a[:2] == b[:2] and a[1:3] != b[:2] { s += 4 }
     n Array<I64>& = null
     e Array<I64>& = Array<I64>(0)
     e2 Array<I64>& = Array<I64>(0)
-    if n != a and n == null and e != n and e != null and e == e2 and e is not e2 { s += 8 }
+    if n != a and n is null and e != n and e is not null and e == e2 { s += 8 }
     if s3Holder(a) == s3Holder(b) { s += 16 }
     f Array<I64>& = I64[1, 2, 3]
     if f == a[0:3] { s += 32 }
     ps Array<s3Pt&>& = s3Pt&[s3Pt(1, 5), s3Pt(2, 6)]
     qs Array<s3Pt&>& = s3Pt&[s3Pt(1, 7), s3Pt(2, 8)]
-    if ps == qs and ps is not qs { s += 64 }               # each element by its own Eq
+    if ps == qs { s += 64 }               # each element by its own Eq
     l := List<I64>()
     for i in range 20 { l.Push(i) }
     if l.ToArray() == l.ToArray() { s += 128 }
@@ -13797,7 +13805,7 @@ type s3Shape enum {
 fn s3Kind(s s3Shape) I32 {
     match s {
         case s3Shape.Dot { return 0 }
-        case _ if s is s3Shape.Circle { return 1 }
+        case _ if s == s3Shape.Circle { return 1 }
         case _ { return 2 }                       # covers the rest, so the match leaves (D10a)
     }
 }
@@ -14517,7 +14525,7 @@ type s4dHold struct() {
 }
 fn s4dDepth(n s4dNode&) I64 {
     d I64 = 0
-    for c := n, c != null and d < 100, c = c.next { d++ }
+    for c := n, c is not null and d < 100, c = c.next { d++ }
     return d
 }
 fn s4dNegs(k I64) I64 {
@@ -14568,8 +14576,8 @@ type s4dT struct(w I64, a mut s4dT&, r s4dT&) {
     v I64 = w + s4dTRead(r)
     next s4dT& = null
 }
-fn s4dTPoke(a mut s4dT&) { if a != null { a.v = 9 } }
-fn s4dTRead(r s4dT&) I64 { return r.v if r != null else 0 }
+fn s4dTPoke(a mut s4dT&) { if a is not null { a.v = 9 } }
+fn s4dTRead(r s4dT&) I64 { return r.v if r is not null else 0 }
 fn s4dTRun(k I64) I64 {
     x s4dT = s4dT(1, null, null)
     r s4dT& = x
@@ -14712,7 +14720,7 @@ test "O17: a callee storing what it reads through the lent value's references ma
     w := o17rW(o17rBox())
     o17rBump(w)
     sbChurn()
-    assert w.b.head.view[2] == 42 and w.b.head.next is w.b.head
+    assert w.b.head.view[2] == 42 and w.b.head.next == w.b.head
 }
 
 # P2/E13b: a task may call a function value read out of a field when that storage lasts until the join
@@ -15559,7 +15567,7 @@ type rv3PE enum {
 fn rv3PBuild(b rv3PBox) { b.head.next = rv3PN(42) }
 fn rv3PSecond(e rv3PE) I64 {
     b := e as rv3PE.A
-    if b.head.next == null { return 0 }
+    if b.head.next is null { return 0 }
     return b.head.next.v
 }
 fn rv3PayloadCopies(n I64) I64 {
@@ -15605,7 +15613,7 @@ fn rv5Work(n mut rv5N&, fns mut List<fn() I64>&) {
         return n.next.v
     })
 }
-fn rv5Same(f fn() I64, g fn() I64) Bool { return f is g }
+fn rv5Same(f fn() I64, g fn() I64) Bool { return f == g }
 fn rv5Kept(k I64, churns I64) I64 {
     n mut rv5N& = rv5N(1 + k)
     g := fn() I64 {
@@ -15627,7 +15635,7 @@ fn rv5Kept(k I64, churns I64) I64 {
     f := fns[0]
     b := f()
     rv3Churn(churns)
-    return a * 10000 + b * 10 + (1 if same and r is g else 0)
+    return a * 10000 + b * 10 + (1 if same and r == g else 0)
 }
 Rv5KeptBaked := rv5Kept(0, 2)
 test "P2: a task keeps the closure it was handed, and one it made over a scope it was handed, past the join" {
@@ -16272,7 +16280,7 @@ type Rv9Res struct(n mut Rv9Node&, k I64) {
     n
     k
 } destruct {
-    if n.next != null { rv9Log = rv9Log * 10 + n.next.v }
+    if n.next is not null { rv9Log = rv9Log * 10 + n.next.v }
     n.next = Rv9Node(k)
     l Rv9Loud& = Rv9Loud(k + 1)
     obChurn()
@@ -16306,7 +16314,7 @@ fn rv9EmptyText() String {
     x3 := Array<I16>(0)
     r Array<I16>& = x3
     e Array<I16>& = x3[0:0]
-    return $e " " $(e == null) " " $(r == null) " " $(e is null)
+    return $e " " $(e is null) " " $(r is null) " " $(e is null)
 }
 Rv9EmptyBaked String = rv9EmptyText()
 rv9EmptyRun mut I64 = 0
@@ -16746,7 +16754,7 @@ test "P4a: defaults holding references outlive the join" {
     }
     sbChurn()
     assert a == "n=5" and b == "none" and p.v == 40 and q.v == -1
-    assert l1.Len() == 3 and l1[2] == 2 and l2.Len() == 0 and z == null
+    assert l1.Len() == 3 and l1[2] == 2 and l2.Len() == 0 and z is null
 }
 
 # P1g/T11b: an array value a task gives its target takes the result's storage, so the call builds it where the target's
@@ -17376,4 +17384,103 @@ test "E27, D9b: a grown comprehension and a written by-value String, read back a
     c2dChurn()
     assert t == 20 * 598 and keep.Len() == 300 and keep[150] == 300
     assert u == 50 * 9 and s == "abcdefgh"
+}
+
+# E10, E32, S8d (2026-10-24): "==" compares what is stored - a case is tested with it, a payload part written compared
+# and "_" matching any; a test narrows a local or a parameter to its case where nothing assigns it, so its payload's
+# fields are read by name - in the "==" branch, in the else of a "!=", and after an "if e != C" that leaves; a case may
+# carry one type written whole, and a narrowed value of it is that type. Baked globals agree with the run time
+type R2Disk struct(r F64) { r }
+fn (d R2Disk&) Area() F64 { return 3.0 * d.r * d.r }
+type R2Shape enum {
+    Round R2Disk
+    Box(w F64, h F64)
+    Dot
+}
+type R2Tree enum {
+    Leaf(v I64)
+    Pair(l R2Tree&, r R2Tree&)
+}
+fn r2Area(s R2Shape) F64 {
+    if s == R2Shape.Round { return s.Area() + s.r }
+    if s != R2Shape.Box { return 0.0 }
+    return s.w * s.h
+}
+fn r2Sum(t R2Tree&) I64 {
+    if t != R2Tree.Pair {
+        if t == R2Tree.Leaf { return t.v }
+        return 0
+    } else {
+        return r2Sum(t.l) + r2Sum(t.r)
+    }
+}
+fn r2Tree(n I64) R2Tree& {
+    if n <= 1 { return R2Tree.Leaf(n) }
+    return R2Tree.Pair(r2Tree(n - 1), R2Tree.Leaf(n))
+}
+fn r2Kinds(s R2Shape) String {
+    return ("round" if s == R2Shape.Round else "box" if s == R2Shape.Box(_, 2.0) else "other")
+}
+R2Baked F64 = r2Area(R2Shape.Round(R2Disk(1.0))) + r2Area(R2Shape.Box(2.0, 3.0)) + F64(r2Sum(r2Tree(4)))
+R2KindsBaked String& = $r2Kinds(R2Shape.Round(R2Disk(2.0))) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0))
+R2ListBaked Bool = I64[1, 2].ToList() == I64[1, 2].ToList() and I64[1, 2].ToList() != I64[1, 3].ToList()
+R2Run mut I64 = 4
+test "E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling" {
+    s := R2Shape.Box(2.0, 3.0)
+    assert s == R2Shape.Box and s == R2Shape.Box(_, 3.0) and s == R2Shape.Box(2.0, 3.0) and s != R2Shape.Box(2.0, 4.0)
+    assert s != R2Shape.Dot and R2Shape.Dot == R2Shape.Dot
+    r := R2Shape.Round(R2Disk(2.0))
+    assert r == R2Shape.Round and r == R2Shape.Round(R2Disk(2.0)) and r != R2Shape.Round(R2Disk(1.0))
+    assert r2Area(r) == 14.0 and r2Area(s) == 6.0 and r2Area(R2Shape.Dot) == 0.0
+    d := r as R2Shape.Round
+    assert d.r == 2.0
+    match r {
+        case R2Shape.Round(c) { assert c.Area() == 12.0 }
+        nomatch { unreachable }
+    }
+    t := r2Tree(R2Run)
+    assert r2Sum(t) == 10 and t == R2Tree.Pair(_, R2Tree.Leaf(4)) and t != R2Tree.Leaf
+    n R2Tree& = null
+    assert n != R2Tree.Leaf and n is null and t is not null
+    assert R2Baked == 3.0 + 1.0 + 6.0 + 10.0 and R2Baked == r2Area(R2Shape.Round(R2Disk(1.0))) + 6.0 + F64(r2Sum(t))
+    assert R2KindsBaked == "round box other"
+    assert R2KindsBaked == ($r2Kinds(r) " " $r2Kinds(R2Shape.Box(1.0, 2.0)) " " $r2Kinds(R2Shape.Box(1.0, 3.0)))
+    assert R2ListBaked
+}
+
+# E10, E10a, E10b: List and Map declare Eq (and Hash) by their contents, so two of them compare by what they hold and a
+# List is a Map key; a struct reference declaring no Eq compares by identity, a null only with a null, and with a value
+# by what it names
+type R2Node struct(v I64) { v }
+test "E10, E10b: List and Map compare and hash by contents; references without Eq by identity" {
+    a := List<I64>()
+    b := List<I64>()
+    for i in range R2Run {
+        a.Push(i)
+        b.Push(i)
+    }
+    assert a == b and a.Hash() == b.Hash()
+    b.Push(9)
+    assert a != b
+    m := Map<String&, I64>()
+    k := Map<String&, I64>()
+    m.Put("x", 1)
+    m.Put("y", 2)
+    k.Put("y", 2)
+    k.Put("x", 1)
+    assert m == k and m.Hash() == k.Hash()
+    k.Put("x", 3)
+    assert m != k
+    keys := Map<List<I64>, I64>()
+    keys.Put(a, 7)
+    c := List<I64>()
+    for i in range R2Run { c.Push(i) }
+    assert (try keys.Get(c) catch default 0) == 7
+    p := R2Node(1)
+    q := R2Node(1)
+    pr R2Node& = p
+    qr R2Node& = q
+    assert pr == pr and pr != qr and pr == R2Node(1) and p == q
+    c2dChurn()
+    assert a == c and m != k
 }

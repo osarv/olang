@@ -303,10 +303,6 @@
 | -- diagnostics
 | error  4:14
 | error L16 4:12
-=== checks/cases/t17sep.olang
-| FN 4:1-4:16
-| -- diagnostics
-| error  3:23
 === checks/cases/t30sep.olang
 | FN 4:1-4:16
 | -- diagnostics

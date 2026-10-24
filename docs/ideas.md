@@ -153,8 +153,8 @@ assignment into an existing array of that length reuses its storage. General fus
 comprehension over its inputs' positions is a map, and maps of maps compose into one loop - `a + b * c - d` and
 `(a * b).Sum()` make no temporaries, for user functions of that shape too. Comparisons lane by lane are methods
 (`a.LanesEqual(b)`, `a.LanesLess(b)` giving `Array<Bool>`), since `==` is whole-array equality; `mask.Select(a, b)`,
-`a.Shuffle(...)` (constant positions), `mask.Bits()`/`FirstSet()`, `acc.DotAdd4(a, b)`, `mask.Any()`/`mask.All()` (the user: "I like Any/All for sure"; the existing
-`Any(f)`/`All(f)` with the predicate defaulting to the element itself, a default fitted per call so it is legal only
+`a.Shuffle(...)` (constant positions), `mask.Bits()`/`FirstSet()`, `acc.DotAdd4(a, b)`, `mask.Some()`/`mask.Every()` (the user: "I like Any/All for sure", the helpers renamed Some/Every since; the existing
+`Some(f)`/`Every(f)` with the predicate defaulting to the element itself, a default fitted per call so it is legal only
 where the element is a Bool). Totals: `a.Sum()` (T has Plus;
 an empty array gives T's zero value; replaces std/stats' Sum), `a.Max()`/`a.Min()` (T has Less; empty fails with
 ArrayError.EMPTY, replacing stats' Min/Max). No implicit threads: parallelism stays explicit (join/spawn,

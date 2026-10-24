@@ -352,7 +352,7 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = null) A
     if n == 0 { return status, said }
     order := Array<I64>(n)
     for k in range n { order[k] = k }
-    if weights != null { order.Sort(fn(a I64, b I64) Bool { return weights[a] > weights[b] }) }
+    if weights is not null { order.Sort(fn(a I64, b I64) Bool { return weights[a] > weights[b] }) }
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
     for k in order { try chan.Send(queue, k) catch chan.ChanError { unreachable } }
@@ -974,7 +974,7 @@ test "B3j: an object another directory's build left in the store is taken from i
     assert BuildProgram(fe, one, "app.olang", d) == 0, $"first build: " $d.Render()
     assert one.Compiled == 5
     kept := try os.ReadDir(one.Store)
-    assert kept.Len() == 5 and not kept.Any(fn(n String&) Bool { return n.EndsWith(".tmp") })
+    assert kept.Len() == 5 and not kept.Some(fn(n String&) Bool { return n.EndsWith(".tmp") })
     # another directory, the same program: every object from the store, linked as before
     two := Config()
     two.Dir = $dir "/two"

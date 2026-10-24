@@ -22,7 +22,7 @@ fn each(a mut Array<RecN>&, g fn(x RecN)) {
 }
 fn run(h mut H&) {
     ns := h.ns
-    each(ns, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
+    each(ns, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
 }
 fn main() ? {
     h mut H& = H()

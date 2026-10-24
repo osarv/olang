@@ -10,7 +10,7 @@ import "std/io"
 fn cc(n I32) String {
     d Array<U16>
     rd Array<U16>&d = d
-    return $rd " " $(rd == null)
+    return $rd " " $(rd is null)
 }
 K String = cc(3)
 v mut I32 = 3

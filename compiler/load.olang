@@ -410,7 +410,7 @@ fn (l mut Loader&) evalCond(mi I64, i I64) cond.Outcome, Bool {
 # the parser conditions are read with, and the globals they may read: "Name [mut] [type] = init" and "Name := init" at
 # the top level, outside every branch - the first declaration of each name (B9a)
 fn (l mut Loader&) CondParser(m mut Module&) {
-    if m.cparser != null { return }
+    if m.cparser is not null { return }
     m.cdiags = diag.Diagnostics(false)
     file := m.cdiags.AddFile(m.Path, m.Src.Text)
     m.cparser = parse.Parser(m.Src, m.Toks, l.Names, m.Oracle, m.cdiags, file)
@@ -709,15 +709,15 @@ fn (l mut Loader&) groups(mi I64, decls Array<ast.Decl&>&) {
 
 fn (l mut Loader&) chainGroups(mi I64, ti ast.TopIf&, chosen I64, index I64) {
     l.branchGroup(mi, ti.Then, chosen, index)
-    if ti.ElseIf != null { l.chainGroups(mi, ti.ElseIf, chosen, index + 1) }
-    if ti.Else != null { l.branchGroup(mi, ti.Else, chosen, index + 1) }
+    if ti.ElseIf is not null { l.chainGroups(mi, ti.ElseIf, chosen, index + 1) }
+    if ti.Else is not null { l.branchGroup(mi, ti.Else, chosen, index + 1) }
 }
 
 fn (l mut Loader&) branchGroup(mi I64, b ast.TopBranch&, chosen I64, index I64) {
     if chosen == Pending { return }
     if chosen == index {
         l.Diags.Choose(b.Group)
-        if b.Decls != null { l.groups(mi, b.Decls) }
+        if b.Decls is not null { l.groups(mi, b.Decls) }
     } else {
         l.Diags.Drop(b.Group)
     }
@@ -830,7 +830,7 @@ test "a program's modules: relative imports, a cycle, the prelude and identities
     assert g.Contains("module lib/util\n  helper lib/helper\n") and g.Contains("module lib/helper\n  util lib/util\n")
     assert g.Contains("module lib/pub\n  stats std/stats\n") and g.Contains("module std/prelude/list\n")
     # the oracle knew the imported type's name through its alias
-    assert l.Mods[root].Oracle != null
+    assert l.Mods[root].Oracle is not null
 }
 
 test "imports that are wrong are reported where they are written" {

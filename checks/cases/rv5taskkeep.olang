@@ -27,5 +27,5 @@ fn main() ? {
     churn()
     assert r() == 42
     churn()
-    assert not (n.next.v != 42 or not (r is g))
+    assert not (n.next.v != 42 or not (r == g))
 }

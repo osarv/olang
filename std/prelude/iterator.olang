@@ -13,11 +13,11 @@ type Iterator<T> trait {
 }
 
 # what every iterator can do, declared once here (M19e): defaults, each a method of every type satisfying Iterator -
-# "l.Iter().Count(f)", "m.Iter().Any(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
+# "l.Iter().Count(f)", "m.Iter().Some(f)", an array's "a.Iter().Fold(...)" - with nothing written on those types.
 # Each walks the iterator onward from where it stands.
 
 # true when keep holds for at least one value
-fn (it mut I&) Any<I Iterator<T>, T>(keep fn(x T) Bool) Bool {
+fn (it mut I&) Some<I Iterator<T>, T>(keep fn(x T) Bool) Bool {
     for x in it {
         if keep(x) { return true }
     }
@@ -25,7 +25,7 @@ fn (it mut I&) Any<I Iterator<T>, T>(keep fn(x T) Bool) Bool {
 }
 
 # true when keep holds for every value - so for none, when there are none
-fn (it mut I&) All<I Iterator<T>, T>(keep fn(x T) Bool) Bool {
+fn (it mut I&) Every<I Iterator<T>, T>(keep fn(x T) Bool) Bool {
     for x in it {
         if not keep(x) { return false }
     }

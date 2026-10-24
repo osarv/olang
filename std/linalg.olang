@@ -79,7 +79,7 @@ type Matrix<T> struct(Rows I64, Cols I64, data mut Array<T>& = null, stride I64 
     Rows
     Cols
     Stride I64 = stride if stride > 0 else Cols
-    Data mut Array<T>& = (data[:spanOf(Rows, Cols, Stride)] if data != null
+    Data mut Array<T>& = (data[:spanOf(Rows, Cols, Stride)] if data is not null
                           else Array<T>(Rows * Cols if Rows >= 0 and Cols >= 0 else -1))
 }
 
@@ -1165,19 +1165,19 @@ fn epilogueAs<T, A, K>(c mut Array<T>&, ldc I64, r0 I64, r1 I64, c0 I64, c1 I64,
     b := colLanes<A>(z)
     for j0 in range c0, c1, 64 {
         w I64 = lesser(64, c1 - j0)
-        if bias != null {
+        if bias is not null {
             for j in range w { b.v[j] = Cast(bias[j0 + j], z) }
         }
         for r in range r0, r1 {
             o I64 = r * ldc + j0
-            if pre != null {
+            if pre is not null {
                 q I64 = r * ldp + j0
                 for j in range w {
-                    v T = Cast(Cast(c[o + j], z) + b.v[j], like) if bias != null else c[o + j]
+                    v T = Cast(Cast(c[o + j], z) + b.v[j], like) if bias is not null else c[o + j]
                     pre[q + j] = v
                     c[o + j] = Cast(activateAs(Cast(v, z), kind), like)
                 }
-            } else if bias != null {
+            } else if bias is not null {
                 for j in range w { c[o + j] = Cast(activateAs(Cast(Cast(Cast(c[o + j], z) + b.v[j], like), z), kind), like) }
             } else {
                 for j in range w { c[o + j] = Cast(activateAs(Cast(c[o + j], z), kind), like) }
@@ -1232,8 +1232,8 @@ fn emptyProduct<A, T>(m I64, n I64, be A, c mut Array<T>&, ldc I64, ep epilogue<
         for j in range w {
             x A = z
             if be != 0 { x = be * Cast(c[i * ldc + j], z) }
-            if ep.bias != null { x = x + Cast(ep.bias[j], z) }
-            if ep.pre != null { ep.pre[i * ep.ldp + j] = Cast(x, like) }
+            if ep.bias is not null { x = x + Cast(ep.bias[j], z) }
+            if ep.pre is not null { ep.pre[i * ep.ldp + j] = Cast(x, like) }
             c[i * ldc + j] = Cast(try Activate(x, ep.act) catch { unreachable }, like)
         }
     }
@@ -1345,11 +1345,11 @@ type GemmWorkspace<T> struct() {
 fn (ws mut GemmWorkspace<T>&) panelB<A>(n I64, z A) mut Array<A>&ws {
     match T {
         case F16, BF16, F8E4M3, F8E5M2 {
-            if ws.wideB == null { ws.wideB = Array<F32>(n) } else if ws.wideB.Len() < n { ws.wideB = Array<F32>(grown(ws.wideB.Len(), n)) }
+            if ws.wideB is null { ws.wideB = Array<F32>(n) } else if ws.wideB.Len() < n { ws.wideB = Array<F32>(grown(ws.wideB.Len(), n)) }
             return ws.wideB
         }
         nomatch {
-            if ws.b == null { ws.b = Array<T>(n) } else if ws.b.Len() < n { ws.b = Array<T>(grown(ws.b.Len(), n)) }
+            if ws.b is null { ws.b = Array<T>(n) } else if ws.b.Len() < n { ws.b = Array<T>(grown(ws.b.Len(), n)) }
             return ws.b
         }
     }
@@ -1359,11 +1359,11 @@ fn (ws mut GemmWorkspace<T>&) panelB<A>(n I64, z A) mut Array<A>&ws {
 fn (ws mut GemmWorkspace<T>&) panelsA<A>(n I64, z A) mut Array<A>&ws {
     match T {
         case F16, BF16, F8E4M3, F8E5M2 {
-            if ws.wideA == null { ws.wideA = Array<F32>(n) } else if ws.wideA.Len() < n { ws.wideA = Array<F32>(grown(ws.wideA.Len(), n)) }
+            if ws.wideA is null { ws.wideA = Array<F32>(n) } else if ws.wideA.Len() < n { ws.wideA = Array<F32>(grown(ws.wideA.Len(), n)) }
             return ws.wideA
         }
         nomatch {
-            if ws.a == null { ws.a = Array<T>(n) } else if ws.a.Len() < n { ws.a = Array<T>(grown(ws.a.Len(), n)) }
+            if ws.a is null { ws.a = Array<T>(n) } else if ws.a.Len() < n { ws.a = Array<T>(grown(ws.a.Len(), n)) }
             return ws.a
         }
     }
@@ -1428,7 +1428,7 @@ type epilogue<T> struct(bias Array<T>&, act Activation, pre mut Array<T>&, ldp I
     ldp
 }
 
-fn (e epilogue<T>&) on() Bool { return e.bias != null or e.pre != null or e.act != Activation.Identity }
+fn (e epilogue<T>&) on() Bool { return e.bias is not null or e.pre is not null or e.act != Activation.Identity }
 
 # act(x), one element: Identity x; Relu max(x, 0), a NaN staying a NaN; Gelu GELU in its tanh form,
 # 0.5 x (1 + tanh(sqrt(2 / pi) (x + 0.044715 x^3))) - Hendrycks and Gimpel's approximation, GPT-2's activation,
@@ -1583,10 +1583,10 @@ fn (ws mut GemmWorkspace<T>&) GemmAct(c mut Matrix<T>&, a Matrix<T>&, transA Boo
 fn epilogueOf<T>(c Matrix<T>&, bias Matrix<T>&, act Activation, pre mut Matrix<T>&) epilogue<T> ? {
     like T
     try checkActivation(like, act)
-    if not (bias == null or rowShape(c, bias)) { error ShapeError.MISMATCH }
-    if not (pre == null or sameShape(c, pre)) { error ShapeError.MISMATCH }
-    if pre == null { return epilogue<T>(bias.Data if bias != null else null, act, null, 0) }
-    return epilogue<T>(bias.Data if bias != null else null, act, pre.Data, pre.Stride)
+    if not (bias is null or rowShape(c, bias)) { error ShapeError.MISMATCH }
+    if not (pre is null or sameShape(c, pre)) { error ShapeError.MISMATCH }
+    if pre is null { return epilogue<T>(bias.Data if bias is not null else null, act, null, 0) }
+    return epilogue<T>(bias.Data if bias is not null else null, act, pre.Data, pre.Stride)
 }
 
 # ---- batches: every sequence and head of attention in one call ----
@@ -2888,8 +2888,8 @@ if TestBuild {
             }
             if size == 0 {
                 # F64 is packed in its own panels, F16 in the F32 ones
-                assert ws.a != null and ws.b != null and ws.wideA == null and ws.wideB == null
-                assert wide.wideA != null and wide.wideB != null and wide.a == null and wide.b == null
+                assert ws.a is not null and ws.b is not null and ws.wideA is null and ws.wideB is null
+                assert wide.wideA is not null and wide.wideB is not null and wide.a is null and wide.b is null
             }
         }
         # the largest product came first, so nothing after it needed more room: the panels are those it made
@@ -2900,7 +2900,7 @@ if TestBuild {
         z := Matrix<F64>(300, 270)
         try ws.Gemm(z, x, false, y, false)
         try wide.Gemm(Matrix<F16>(300, 270), x.ToF16(), false, y.ToF16(), false)
-        assert ws.b is big and wide.wideB is bigWide and ws.wideB == null and wide.b == null
+        assert ws.b == big and wide.wideB == bigWide and ws.wideB is null and wide.b is null
     }
 
     test "a workspace's panels at least double as its products grow, so a growing product replaces them rarely" {
@@ -2919,7 +2919,7 @@ if TestBuild {
             before := ws.b
             try ws.Gemm(s, q, false, k, true)
             assert s.Get(63, t - 1) == 32.0
-            if not (ws.b is before) { replaced++ }
+            if ws.b.Len() != before.Len() { replaced++ }   # a panel is replaced only to grow
         }
         assert replaced <= 7, $replaced " replacements"
         assert ws.b.Len() >= 64 * 1600 and ws.b.Len() < 2 * 64 * (1600 + 64)

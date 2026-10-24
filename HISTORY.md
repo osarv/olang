@@ -22725,3 +22725,53 @@ references, closed traits and contracts follow in later rounds).
   new; unparse writes the colon form back where the source had a `:` before the statement, and the formatter spaces a
   `:` whose innermost open bracket is a block's as `: `. Found on the way, pre-existing: the formatter wrote a postfix
   `!` with a space before it (`f() !`).
+
+## The decisions of 2026-10-24, round 2: equality, case tests, narrowing, whole payloads (2026-10-24)
+
+The user settled equality over the day's agenda: first "`==` always value equality, `is` always identity", then, made
+precise, "don't follow references but compare them ... equal in memory", and for enums "I want == always. It
+generalizes better into the payload case" - with their idea that a tested local reads its payload's fields by name
+(`e.f`). The coordinator added that a case may carry one payload type written whole (`Round Circle`).
+
+- **E10.** `==` compares what is stored and never follows a reference: values structurally, references by identity,
+  unless the type declares `Eq`, which `==` calls at every depth (unchanged). What changes is where `Eq` comes from: the
+  prelude now declares it, by contents, on `List` and `Map` (beside the arrays, `String` and `Vec`, whose contents
+  comparison was the compiler's rule before and is now theirs), with `Hash` to match - a List is a Map key, two Maps
+  holding the same pairs in another order compare equal and hash alike (the sum of each pair's hash). Decided (mine): a
+  reference compared with a value of its referent's type compares the value it names - E12's copy out - since a value
+  has no storage of its own to be the same as; the alternative, building the value as a temporary reference, would
+  make `r == N(1)` false always and is never what anyone writes.
+- **E10c.** `is` tests for null and nothing else. `a is b` (identity) and `x is E.Case` are errors saying what to write
+  (`==`, `!=`), `null is null` says it tests nothing, `x is null` on a value says only a reference or a function value
+  can be null, and `x == null` is an error naming `x is null`. Identity of two arrays or two Lists is no longer
+  writable at all - stated to the coordinator as the capability this removes; `std/filepath` and `std/linalg` had
+  asked it (a storage check, a replacement test) and now ask by length or not at all, and `std/json`'s `Eq` lost an
+  identity shortcut that, written `==`, recursed.
+- **E32.** `e == Shape.Circle` tests the case; `e == Shape.Circle(3.0)` the case and each payload part by `==` (so
+  through `Eq`), `_` matching anything; a part written as a case is a nested test, read through references, a null
+  holding no case. Lowered to the `is`/`as` tests the checker built before, so codegen, the evaluator and `interpret`
+  needed nothing. A case of another enum, or a case beside a non-enum, has its own message (E32).
+- **S8d, narrowing (new).** After `if e == C`, in the else of `if e != C`, and after an `if e != C { ... }` whose block
+  leaves, a local or parameter the block does not assign is narrowed to C: `e.f` reads the payload field, and for a
+  whole payload `e` is that value (`e.Area()`). Decided (mine): only locals and parameters, never fields or elements -
+  a call between the test and the read could change those; the check that nothing assigns the name walks the block's
+  statements, including nested blocks, lambdas and loop clauses. Implemented as a hidden local holding the payload,
+  bound when the test passes, popped with the block; a field read where nothing narrows is S8d's error.
+- **T17a, whole payloads.** `type Shape enum { Round Circle  Box(w F64, h F64)  Dot }`: a case followed by a type is
+  one parameter of that type named as the case. Found on the way, pre-existing: an unknown type in an enum's payload
+  was never reported (the enum built, and failed in emit only when used) - `typeRules` now walks payload types.
+  `{ North South }` on one line, which T17sep pinned as "two cases need a separator", is now one case carrying an
+  unknown `South`, and the case says so.
+- **Narrowed fields through a field, and never written** (found while the whole-payload form waited on a
+  confirmation): `e.c.r`, a field of a narrowed payload field, was S8d's error - the place of a member chain did not
+  look for the narrowing, only a member read did - and a store into a narrowed field (`e.r = 5`, `e.c.r = 5`, or a
+  field of a whole payload) went into the hidden copy and changed nothing the program holds. Both readings go through
+  one lookup now, and a narrowed field is a place read and never written - writing it is S8d's error, naming the
+  whole-value assignment.
+- **Some/Every** (the user, via the coordinator, the same day): the iterator and array helpers `Any`/`All` are renamed
+  `Some`/`Every`, migrated by `tools/helper_rename.olang` (calls and declarations, never comments or strings).
+
+Migration: `tools/equality_migrate.olang`, re-runnable for oann, rewrote 90 files - 997 null tests, 27 case tests, 90
+identities (each listed; a dozen hand-checked in tests/shared.olang, std/json, std/linalg, std/filepath, the agree
+fixture, whose expected output changed for its now-content comparisons). The fuzz generators, which write programs as
+text the tool skips, were changed by hand.

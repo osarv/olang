@@ -17,5 +17,5 @@ fn main() ? {
         c.cur = g
         c.cur.next = N()
     }
-    assert g.next != null
+    assert g.next is not null
 }

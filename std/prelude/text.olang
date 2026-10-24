@@ -1050,9 +1050,8 @@ if TestBuild {
         c String& = b                # E10a: String declares Eq, so "==" compares what two texts say
         d String& = "hello"
         assert a == c and c == "hello" and "hello" == d and a != "hell"
-        assert a is a and a is not c    # E10c: identity, whatever Eq says
         n String& = null
-        assert n == null and n != a and a != n
+        assert n is null and n != a and a != n
     }
 
     test "Compare orders bytewise, a prefix first" {

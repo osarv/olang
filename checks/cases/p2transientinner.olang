@@ -9,7 +9,7 @@ fn apply(f fn() I64) I64 { return f() }
 fn work(n Node&) I64 {
     return apply(fn() I64 {
         h := fn() I64 { return n.v }
-        t := h is h
+        t := h == h
         return h() if t else 0
     })
 }

@@ -1,0 +1,134 @@
+# helper_rename - the prelude's iterator and array helpers Any and All renamed Some and Every (2026-10-24, the user's
+# call): a method named Any or All - called after a ".", or declared after a receiver clause's ")" - followed by its
+# argument list or its type parameters becomes Some or Every. Comments and string literals are left alone. Files are
+# rewritten in place and a count printed; --check writes nothing and the exit status says whether anything would
+# change. A Markdown file has its "```olang" blocks renamed.
+#
+#     $OLANG build tools/helper_rename.olang && build/tools_helper_rename [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "../compiler/scan"
+import "../compiler/token"
+
+type VT struct(k token.Tok, start I64, end I64) { k, start, end }
+
+fn vtokens(src String&) List<VT> {
+    ts := scan.Scan(src)
+    out List<VT>
+    for tk in ts.Toks {
+        if tk.Kind == token.Tok.StmtEnd { continue }
+        out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
+    }
+    return out
+}
+
+type Count struct() { n I64 = 0 }
+
+fn rename(src String&, c mut Count&) String {
+    v := vtokens(src)
+    out := StringBuilder()
+    at I64 = 0
+    for i in range 1, v.Len() - 1 {
+        t := v[i]
+        if t.k != token.Tok.Iden { continue }
+        word := src[t.start:t.end]
+        if word != "Any" and word != "All" { continue }
+        before := v[i - 1].k
+        after := v[i + 1].k
+        if before != token.Tok.Dot and before != token.Tok.RParen { continue }
+        if after != token.Tok.LParen and after != token.Tok.Lt { continue }
+        out.Push(src[at:t.start])
+        out.Push("Some" if word == "Any" else "Every")
+        at = t.end
+        c.n++
+    }
+    if at == 0 { return src }
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# a Markdown file: its olang code blocks renamed, the rest kept
+fn renameMarkdown(src String&, n mut Count&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    inBlock := false
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        last := k == lines.Len() - 1
+        if inBlock and line.StartsWith("```") {
+            out.Push(rename(block.ToString(), n))
+            block.Clear()
+            inBlock = false
+        } else if inBlock {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if line.StartsWith("```olang") {
+            inBlock = true
+        }
+        out.Push(line)
+        if not last { out.PushChar('\n') }
+    }
+    if inBlock { out.Push(block.ToString()) }
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_helper_rename [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("helper_rename: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := renameMarkdown(src, total) if path.EndsWith(".md") else rename(src, total)
+        if out == src { continue }
+        changed++
+        if verbose { srcmask.Say(path) }
+        if not check {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("helper_rename: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.n " names")
+    if check and changed > 0 { os.Exit(1) }
+}
+
+test "Any and All, called or declared, become Some and Every; anything else is left" {
+    n := Count()
+    assert rename("    b := a.Any(fn(x) { return x > 2 }) and it.All(f)\n", n) == "    b := a.Some(fn(x) { return x > 2 }) and it.Every(f)\n"
+    assert rename("fn (it mut I&) Any<I Iterator<T>, T>(keep fn(x T) Bool) Bool {\n", n) == "fn (it mut I&) Some<I Iterator<T>, T>(keep fn(x T) Bool) Bool {\n"
+    assert rename("fn (a Array<T>&) All(keep fn(x T) Bool) Bool {\n", n) == "fn (a Array<T>&) Every(keep fn(x T) Bool) Bool {\n"
+    src := "    Any := 3\n    # a.Any(f)\n    s := \"a.All(f)\"\n    e := Opt.Any\n"
+    assert rename(src, n) == src
+    assert n.n == 4
+}

@@ -4,5 +4,5 @@ type T enum {
     A(v I32)
     B
 }
-fn f(t T) Bool { return t is T.C }
+fn f(t T) Bool { return t == T.C }
 fn main() ? { }
