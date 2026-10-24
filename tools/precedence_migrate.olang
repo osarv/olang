@@ -6,7 +6,10 @@
 # count printed; --check writes nothing and the exit status says whether anything would change; a file that does not
 # parse is named and left. OLANG_STD names std (default "std", as from the repository root).
 #
-#     $OLANG build tools/precedence_migrate.olang && build/tools_precedence_migrate [--check] [-v] FILE|DIR...
+# --verify writes nothing: it reads each file at both precedences and says where the trees differ, which after the
+# migration is nowhere.
+#
+#     $OLANG build tools/precedence_migrate.olang && build/tools_precedence_migrate [--check|--verify] [-v] FILE|DIR...
 
 import "std/os"
 import "srcmask"
@@ -31,6 +34,24 @@ fn mixed(path String&, text String&, std String&, prelude String&) List<source.S
     p.File()
     if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.SYNTAX }
     return p.Mixed
+}
+
+# the shape of a file's expressions read at one precedence: every operator's node, by its span (parse.Operators)
+fn reading(path String&, text String&, std String&, prelude String&, old Bool) String ? Unparsable {
+    src := source.Source($path, $text)
+    names := source.Names()
+    d := diag.Diagnostics(false)
+    o := layout.OracleFor(path, std, prelude, names)
+    file := d.AddFile(src.Path, src.Text)
+    ts := scan.Scan(src.Text)
+    p := parse.Parser(src, ts, names, o, d, file)
+    p.OldBitwise = old
+    p.RecordOperators = true
+    p.File()
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.SYNTAX }
+    b := StringBuilder()
+    for sp in p.Operators { b.Push($sp.Start ":" $sp.End " ") }
+    return b.ToString()
 }
 
 # text with each span parenthesized
@@ -58,6 +79,7 @@ fn main() ? {
 
 fn run() I32 {
     check := false
+    verify := false
     verbose := false
     paths List<String&>
     args := os.Args()
@@ -65,6 +87,8 @@ fn run() I32 {
         a := args[i]
         if a == "--check" {
             check = true
+        } else if a == "--verify" {
+            verify = true
         } else if a == "-v" {
             verbose = true
         } else {
@@ -90,6 +114,17 @@ fn run() I32 {
             srcmask.SayErr("precedence_migrate: cannot read " $path)
             return 1
         }
+        if verify {
+            # the file read at the old precedence and at the new is one tree
+            a := try reading(path, src, std, prelude, true) catch Unparsable { continue }
+            b := try reading(path, src, std, prelude, false) catch Unparsable { continue }
+            if a != b {
+                srcmask.SayErr("precedence_migrate: " $path " reads otherwise at the new precedence")
+                status = 1
+            }
+            changed++
+            continue
+        }
         spans := try mixed(path, src, std, prelude) catch Unparsable {
             srcmask.SayErr("precedence_migrate: " $path " does not parse - left as it is")
             status = 1
@@ -106,6 +141,10 @@ fn run() I32 {
             }
         }
     }
+    if verify {
+        srcmask.Say($"precedence_migrate: " $changed " files read alike at both precedences" $(" but those named" if status != 0 else ""))
+        return status
+    }
     srcmask.Say($"precedence_migrate: " $wrapped " comparisons wrapped in " $changed " files" $(" (nothing written)" if check else ""))
     if check and changed > 0 { return 1 }
     return status
@@ -121,4 +160,12 @@ test "the old reading's comparisons under a bitwise operator are found, and a pa
     text := "fn f(a Bool, b Bool, x I64) Bool { return a & b == b | (x < 3) ^ x in I64[1] }"
     spans := try mixed("none.olang", text, "std", "") catch Unparsable { unreachable "it parses" }
     assert wrap(text, spans) == "fn f(a Bool, b Bool, x I64) Bool { return a & (b == b) | (x < 3) ^ (x in I64[1]) }"
+}
+
+test "after the migration a file reads alike at both precedences" {
+    text := "fn f(a Bool, b Bool, x I64) Bool { return a & b == b | x < 3 }"
+    spans := try mixed("none.olang", text, "std", "") catch Unparsable { unreachable "it parses" }
+    moved := wrap(text, spans)
+    assert (try reading("none.olang", text, "std", "", true) catch default "") != (try reading("none.olang", text, "std", "", false) catch default "")
+    assert (try reading("none.olang", moved, "std", "", true) catch default "a") == (try reading("none.olang", moved, "std", "", false) catch default "b")
 }

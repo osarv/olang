@@ -2471,14 +2471,17 @@ operators groups left-to-right):
 | 2 | `xor` |
 | 3 | `and` |
 | 3½ | prefix `not` (E7a) |
-| 4 | `\|` |
-| 5 | `^` |
-| 6 | `&` |
-| 7 | `==` `!=` |
-| 8 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30), `is null` `is not null` (E10c) |
+| 4 | `==` `!=` |
+| 5 | `<` `<=` `>` `>=` `in` `not in` (E29; the four ordering comparisons chain, E30), `is null` `is not null` (E10c) |
+| 6 | `\|` |
+| 7 | `^` |
+| 8 | `&` |
 | 9 | `<<` `>>` |
 | 10 | `+` `-` |
 | 11 (tightest) | `*` `/` `%` `@` (`@` only as a type declares it, E31) |
+
+The bitwise operators bind tighter than the comparisons and looser than the shifts, as in Go and Rust: `x & 1 == 0`
+is `(x & 1) == 0`, `a | b < c` is `(a | b) < c`.
 
 Unary prefix operators (`-`, `~`, `++`, `--`, `$`) bind tighter than every binary operator; `not` is the
 exception (E7a). The conditional `a if c else b` (E28) binds looser than every binary operator.
@@ -2533,7 +2536,7 @@ already decided the result — `and` stops at a false left operand, `or` at a tr
 `p is not null and p.x > 0` never reads through a null `p`. `xor` always evaluates both operands, since its
 result depends on both.
 
-**E7a.** `not-expr ::= "not" binary` (its operand at the precedence of `|` and tighter). `not` requires a
+**E7a.** `not-expr ::= "not" binary` (its operand at the precedence of `==` and tighter). `not` requires a
 `Bool` operand and produces `Bool`. It binds **looser** than every comparison and bitwise operator and
 tighter than `and`/`or`, so an expression reads as the sentence it spells: `not a == b` is `not (a == b)`,
 and `not a and b` is `(not a) and b`.

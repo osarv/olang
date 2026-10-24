@@ -114,6 +114,10 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # bitwise-tighter precedence (2026-10-24) reads the text otherwise; tools/precedence_migrate.olang wraps them
     Mixed List<source.Span>
     OldBitwise Bool = false            # read with E5's precedence before 2026-10-24, for tools/precedence_migrate.olang
+    # with RecordOperators, the span of every operator's node (binary, chain, in, is) - over one file's tokens, the shape
+    # of every expression; tools/precedence_migrate.olang compares two readings by it
+    RecordOperators Bool = false
+    Operators List<source.Span>
 }
 
 # ---- reading tokens ----
@@ -2048,19 +2052,20 @@ fn (p mut Parser&) condFrom(a ast.Expr&p) ast.Expr&p ? Fail {
     return ast.Expr.Cond(source.Span(a.Span().Start, p.prevEnd), a, c, b)
 }
 
-# the binding power of an operator in infix position (E5), 0 for none. In a type-argument list a comparison or a
+# the binding power of an operator in infix position (E5), 0 for none: "&", "|" and "^" tighter than the comparisons,
+# looser than shifts - OldBitwise the order before 2026-10-24, for tools/precedence_migrate.olang. In a type-argument list a comparison or a
 # shift is none: it would reach across the list's own ">" (G8)
 fn (p Parser&) prec(k token.Tok) I64 {
     return match k {
         case token.Tok.Or => 1
         case token.Tok.Xor => 2
         case token.Tok.And => 3
-        case token.Tok.Pipe => 4
-        case token.Tok.Caret => 5
-        case token.Tok.Amp => 6
-        case token.Tok.EqEq, token.Tok.NotEq => 7
-        case token.Tok.In, token.Tok.Is, token.Tok.Not => 8
-        case token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge => 0 if p.noGt else 8
+        case token.Tok.Pipe => 4 if p.OldBitwise else 6
+        case token.Tok.Caret => 5 if p.OldBitwise else 7
+        case token.Tok.Amp => 6 if p.OldBitwise else 8
+        case token.Tok.EqEq, token.Tok.NotEq => 7 if p.OldBitwise else 4
+        case token.Tok.In, token.Tok.Is, token.Tok.Not => 8 if p.OldBitwise else 5
+        case token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge => 0 if p.noGt else (8 if p.OldBitwise else 5)
         case token.Tok.Shl, token.Tok.Shr => 0 if p.noGt else 9
         case token.Tok.Plus, token.Tok.Minus => 10
         case token.Tok.Star, token.Tok.Slash, token.Tok.Percent, token.Tok.At => 11
@@ -2095,6 +2100,7 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
     links I64 = 0
     defer { p.depth -= links }
     for {
+        if p.RecordOperators and links > 0 { p.Operators.Push(left.Span()) }   # the node the last turn made
         k := p.peek()
         pr := p.prec(k)
         if pr == 0 or pr < min { return left }

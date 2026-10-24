@@ -23174,3 +23174,16 @@ ordinary literal; `\x` takes exactly two digits, `\u` one to six in braces; in a
 are not re-indented with the code around it, which would change its text only if the closing line moved with them; the
 editor syntax (editors/nvim) knows both forms. Found on the way: the session's tooling turns a backslash-u followed by
 four hex digits into the character in commands, which wrote a check case wrong - written through Python's chr(92).
+
+**E5, the bitwise operators bind tighter than the comparisons.** Found by the std breadth batch writing
+`(x >> k) & 1 == 1` and getting `&` of a `Bool`; decided (mine): Go's and Rust's order - `|` (6), `^` (7), `&` (8)
+between the comparisons (4 and 5) and the shifts (9), the relative order of the three and of everything else unchanged,
+`not`'s operand still everything from `==` up. First the migration: `tools/precedence_migrate.olang` reads each file
+with the compiler's parser at the old precedence (a parser flag, `OldBitwise`, which nothing else sets), which records
+every comparison that is an operand of `&`, `|` or `^` with nothing around it (`parse.Mixed`), and wraps each in
+parentheses. Over the repository it wrapped nothing: `&` and `|` take numbers only (E6), so a comparison under one was
+always a type error, and valid code never mixed them - which is also why the change cannot break a program, only make
+the obvious reading of `x & 1 == 1` legal. Then the change, and `--verify`, which reads every file at both precedences
+and compares the spans of every operator's node (`parse.Operators`, recorded under `RecordOperators`; unparse could
+not serve - it writes back the same text for both trees): all 1,445 files that parse read alike. Kept for oann, whose
+code is migrated by the same run.

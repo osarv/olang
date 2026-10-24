@@ -29,7 +29,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `math_methods.olang` | M19d: std/math removed - its functions are the numbers' methods (`math.Sqrt(x)` -> `x.Sqrt()`), its constants the prelude's (`Pi`, `Euler`, `Inf`, `NaN`) | `build/tools_math_methods [--dry] PATH...` |
 | `equality_migrate.olang` | E10/E10c/E32: `x == null` -> `x is null`, `x is E.Case` -> `x == E.Case`, identity `a is b` -> `a == b` (listed, for a person to check where the type declares `Eq`) | `build/tools_equality_migrate [--check] [-v] FILE\|DIR...` |
 | `helper_rename.olang` | the helpers `Any`/`All` renamed `Some`/`Every`, calls and declarations | `build/tools_helper_rename [--check] [-v] FILE\|DIR...` |
-| `precedence_migrate.olang` | E5: `&`, `|` and `^` bind tighter than the comparisons - every comparison that is an operand of one, unparenthesized, is wrapped (`a & b == c` -> `a & (b == c)`), read with the compiler's parser at the old precedence | `build/tools_precedence_migrate [--check] [-v] FILE\|DIR...` |
+| `precedence_migrate.olang` | E5: `&`, `\|` and `^` bind tighter than the comparisons - every comparison that is an operand of one, unparenthesized, is wrapped (`a & b == c` -> `a & (b == c)`), read with the compiler's parser at the old precedence | `build/tools_precedence_migrate [--check\|--verify] [-v] FILE\|DIR...` |
 | `null_migrate.olang` | T2c: references never null unless written `?&` - an array never null (`?` dropped, `null` its empty array, `is null` a length test), a declaration made nullable where a note says, `!` where a value may be null | `build/tools_null_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).

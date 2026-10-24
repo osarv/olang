@@ -123,6 +123,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program
   (`compiler/fmt.olang`, on the port's scanner and parser) built once into the cache; only whitespace changes.
+- **The bitwise operators bind tighter than the comparisons (E5, mine 2026-10-24, found by the std breadth batch).**
+  `x & 1 == 0` is `(x & 1) == 0` - Go's and Rust's order, C's mistake not copied: `| ^ &` sit between the comparisons and
+  the shifts. `tools/precedence_migrate.olang` parenthesizes every comparison under `& | ^` at the old precedence (none
+  in the repository - `&`/`|` never took Bools, so no valid code mixed them) and `--verify` shows each file reads alike.
 - **Logic is in words: `and`/`or`/`not`/`xor` (E7/E7a, the user's design).** `and`/`or` short-circuit (the user's
   call); `not` binds looser than comparisons, as in Python. No compound logic assignments.
 - **One loop keyword, `for` (S9, S9a, the user's direction).** `for { }`, `for cond { }`, three clauses (post clause a
