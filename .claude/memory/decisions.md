@@ -944,3 +944,9 @@ errors and documentation - generic `+` already works).
   the case name; allowed with payloads. Stringifying: reflection (decided 2026-10-18, not built) - T.Name, T.Cases[].Name,
   T.Fields[].Name/Type as compile-time constants; proposed `T.CaseOf(v).Name` for one value's case. ASKED: 1 raw values
   with From; 2 text defaults to the name; 3 T.CaseOf(v).
+- PROVER NOTE 2026-10-24 (docs/prover.md, merged): ASKED, the note's numbering: 1 a call with a false requirement
+  nothing checks runs as written (rec; not UB); 2 compile errors only for must-fail requirements/asserts/unreachable
+  and for a guarantee with one evaluator-confirmed counterexample (rec; not Dafny's "unproved is an error"); 3 loop
+  invariants as `assert`s at the top of the body (rec); 4 our own solver in olang (CDCL SAT + bit-blasting, LRAT-checked;
+  Z3/cvc5/Bitwuzla only as test oracles) (rec); 5 a strict mode failing on "neither" later, as an `olang prove` option;
+  6 order P0 contracts, then compile speed, then P1-P3 (rec).
