@@ -70,6 +70,7 @@ fn suffix(k build.UnitKind) String {
         case build.UnitKind.Main => ".main"
         case build.UnitKind.Tests => ".test"
         case build.UnitKind.Instances => ".inst"
+        case build.UnitKind.Locations => ".loc"
     }
 }
 

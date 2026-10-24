@@ -445,7 +445,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
                     error build.Failed.UNBUILT
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
-                u mut build.Unit&prog = build.Unit($id, build.UnitKind.Module, pir)
+                u mut build.Unit&prog = build.Unit($id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
                 u.Hash = $r.Hashes[k]
                 prog.Units.Push(u)
             }
@@ -459,9 +459,12 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             case emit.ObjectKind.Main => build.UnitKind.Main
             case emit.ObjectKind.Tests => build.UnitKind.Tests
             case emit.ObjectKind.Instances => build.UnitKind.Instances
+            case emit.ObjectKind.Locations => build.UnitKind.Locations
         }
         u mut build.Unit&prog = build.Unit($o.Identity, holds, ir)
-        if kind != build.Kind.Module and o.Kind == emit.ObjectKind.Module { u.Hash = build.IrHash(ir) }
+        if kind != build.Kind.Module and (o.Kind == emit.ObjectKind.Module or o.Kind == emit.ObjectKind.Locations) {
+            u.Hash = build.IrHash(ir)
+        }
         hashes.Push($u.Hash)
         prog.Units.Push(u)
     }
@@ -491,6 +494,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
+    e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     return e
 }
 
@@ -588,11 +592,12 @@ fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) Lis
                 r.Split = line[6:] == "1"
             } else if line.StartsWith("inst ") {
                 r.Inst.Push($line[5:])
-            } else if line.StartsWith("part ") {
-                # "part HASH IDENTITY": the part's IR's SHA-256, then its name
+            } else if line.StartsWith("part ") or line.StartsWith("locs ") {
+                # "part HASH IDENTITY": the part's IR's SHA-256, then its name; "locs ..." its Locations object (B3l)
                 if line.Len() < 71 or line[69] != ' ' or not os.Exists($base ".p" $r.Parts.Len() ".ll") { break }
                 r.Hashes.Push($line[5:69])
                 r.Parts.Push($line[70:])
+                r.Locs.Push(line.StartsWith("locs "))
             }
         }
         if whole and r.Parts.Len() > 0 { out.Push(r) }
@@ -622,7 +627,7 @@ fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made Li
         ok := true
         for k in range r.Parts.Len() {
             if not putFile($base ".p" $k ".ll", objs[r.From + k].Ir, pid) { ok = false }
-            b.Push($"part " $hashes[r.From + k] " " $r.Parts[k] "\n")
+            b.Push($("locs " if r.Locs[k] else "part ") $hashes[r.From + k] " " $r.Parts[k] "\n")
         }
         if not ok { continue }
         b.Push("end\n")

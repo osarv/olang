@@ -113,6 +113,10 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     Made List<Reused>
     Redo Bool = false               # Objects found a reused module cut otherwise than it would now be: emit again without
     testSyms Map<I64, String&>      # each test's symbol, by its body (testSym)
+    # B3l: a failed check's place kept out of the code naming it - each "FILE:LINE: ..." text an item HomeLoc, named by
+    # where it is in its top-level item rather than by its line, defined in an object of its home's own compiled
+    # without link-time optimization (ObjectKind.Locations). False compiling one module, and for the tools
+    LocApart Bool = false
 }
 
 # a module's objects as one emission wrote them, kept to stand for it in a later one (B3i): its index, its parts' names,
@@ -122,6 +126,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
 type Reused struct(Module I64) {
     Module
     Parts List<String&>
+    Locs List<Bool>         # B3l: whether each part is the module's Locations object
     Hashes List<String&>    # each part's IR's SHA-256, as its record keeps it (the caller's)
     Size I64 = 0
     Split Bool = false
@@ -144,6 +149,7 @@ type ObjectKind enum {
     Main
     Tests
     Instances
+    Locations   # B3l: the "FILE:LINE" texts the other objects of its home name, as plain data, never optimized at the link
 }
 
 # one object's IR: the module it is for (its identity), what it holds, its text
@@ -219,7 +225,10 @@ fn (e mut Emitter&) Objects() List<Object> {
                 if e.itemHome[i] == m { made.Size += e.itemText[i].Len() }
             }
             e.parts(out, $mods[m].Identity, ObjectKind.Module, m, false, split, made.Inst)
-            for k in range made.From, out.Len() { made.Parts.Push($out[k].Identity) }
+            for k in range made.From, out.Len() {
+                made.Parts.Push($out[k].Identity)
+                made.Locs.Push(out[k].Kind == ObjectKind.Locations)
+            }
             e.Made.Push(made)
         }
     }
@@ -247,6 +256,7 @@ fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKi
     # recompiled a 2 MB part and redid 15 of its 35 modules' code)
     tests := split and e.Tests and home == e.P.L.Root
     groups := 2 if tests else 1
+    locs Map<I64, Bool>
     for g in range groups {
         grp := g if tests else -1
         size I64 = 0
@@ -260,9 +270,25 @@ fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKi
         if grp == 1 and size == 0 { continue }
         for k in range n {
             name := ($identity if k == 0 else $identity "-" $k) if grp != 1 else $identity "-t" $k
-            out.Push(Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp)))
+            out.Push(Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp, locs)))
         }
     }
+    if locs.Len() > 0 {
+        out.Push(Object($identity $("-i" if kind == ObjectKind.Instances else ""), ObjectKind.Locations, e.locations(locs)))
+    }
+}
+
+# B3l: the Locations object of a home, defining the places its objects name, in the order of their symbols
+fn (e mut Emitter&) locations(locs Map<I64, Bool>&) String {
+    its List<I64>
+    for l in locs { its.Push(l.Key) }
+    syms := e.itemSym
+    sorted := its.ToArray()
+    sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
+    b := StringBuilder()
+    b.Push(e.head())
+    for i in sorted { b.Push(e.itemText[i]) }
+    return b.ToString()
 }
 
 # which of a test build's root's groups item i is in (parts): 1 a test or the harness, 0 anything else
@@ -493,6 +519,15 @@ fn (e mut Emitter&) mergeSame() {
         for r in range 0, rs.Len(), 3 {
             if rs[r] != 0 { continue }
             j := try e.itemAt.Get(text[rs[r + 1]:rs[r + 2]]) catch default -1
+            if j >= 0 and e.itemHome[j] == HomeLoc {
+                # a place (B3l) by its text: named after the function naming it, the same place in two instances
+                b.Push(text[from:rs[r + 1]])
+                lt := e.itemText[j]
+                q := try lt.Find(" = ") catch default 0
+                b.Push(lt[q:])
+                from = rs[r + 2]
+                continue
+            }
             k := try at.Get(j) catch default -1
             if k < 0 { continue }
             b.Push(text[from:rs[r + 1]])
@@ -594,7 +629,7 @@ fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c
 # copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
 # another object, and the types they name
 fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut List<String&>& = null
-    group I64 = -1) String {
+    group I64 = -1, locs mut Map<I64, Bool>& = null) String {
     mine List<I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
@@ -653,6 +688,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 declared.Put(j, true)
                 decls.Push(e.itemDecl[j])
                 if h == HomeInst and inst != null { inst.Push($e.itemSym[j]) }
+                if h == HomeLoc and locs != null { locs.Put(j, true) }
             }
         }
     }
@@ -899,6 +935,25 @@ fn (e mut Emitter&) where(file I64, sp source.Span) String {
     s := e.D.Locate(file, I64(sp.Start))
     k := try s.FindLast(":") catch default -1
     return $s[:k] if k > 0 else $s
+}
+
+# "FILE:LINE" where sp is, then rest, as a C string the function being written names: its symbol. Kept apart (B3l,
+# LocApart), it is named by the function's symbol and how many places the function named before it - neither of which
+# a line added above the function changes - and its text is defined in its home's Locations object: so such an edit
+# leaves the code as it was, and only the Locations object is compiled again
+fn (fe mut fnEm&) located(sp source.Span, rest String&) String {
+    e := fe.E
+    text := $e.where(fe.F.File, sp) $rest
+    if not e.LocApart { return e.cstr(text) }
+    key := $e.sym(fe.Key) "|" $fe.nloc "|" $rest
+    fe.nloc++
+    second := $"~" $key
+    sym := $"olang_loc_" $U64(key.Hash()).Format(16) "_" $U64(second.Hash()).Format(16)
+    if not e.itemAt.Has(sym) {
+        def := $"@" $sym " = weak_odr constant [" $(text.Len() + 1) " x i8] c\"" $escape(text) "\\00\"\n"
+        e.item(sym, HomeLoc, def, $"@" $sym " = external constant [0 x i8]\n")
+    }
+    return $"@" $sym
 }
 
 # ---- debug information (B2e) ----
@@ -1265,6 +1320,7 @@ fn (e mut Emitter&) need(t types.TypeId) {
 HomeShared I64 = -1     # copied, as written, into every object naming it: a declaration, a linkonce_odr helper or thunk
 HomeLocal I64 = -2      # copied into every object naming it, internal and renamed there (constants, lambdas, tasks)
 HomeInst I64 = -3       # the generics' instances (B3d): the root's own object of them
+HomeLoc I64 = -4        # a failed check's place (B3l): declared in every object naming it, defined in its home's Locations
 
 # an item: its symbol, text (whole lines), home and how another object declares it; the first one made of a symbol
 # stands
@@ -1494,6 +1550,7 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     env Bool = false
     big Bool = false
     tagAt String& = ""      # T36: the access tag of the place addr last found, for a scalar there (empty: untagged)
+    nloc I64 = 0            # B3l: the places named so far (located)
     # B2e, in a -debug build: this function's subprogram (-1 none), the location every instruction written now carries
     # (", !dbg !N"), a location per line, and the metadata written after the function
     dbgSp I64 = -1
@@ -1530,7 +1587,7 @@ fn (fe mut fnEm&) trace(sp source.Span) {
     what := "try passed it on" if k == 1 else ("a task failed, and its join passed it on" if k == 2 else "raised here")
     rf := "__olang_ert_pass" if k == 1 else "__olang_ert_raise"
     fe.E.declare(rf, $"void @" $rf "(ptr)")
-    fe.w($"call void @" $rf "(ptr " $fe.E.cstr($fe.E.where(fe.F.File, sp) ": " $what "\n") ")")
+    fe.w($"call void @" $rf "(ptr " $fe.located(sp, $": " $what "\n") ")")
 }
 
 fn (fe mut fnEm&) tmp() String {
@@ -4031,7 +4088,6 @@ fn (fe mut fnEm&) term(tm mir.Term) {
 # the test or the process ends (S16-S18a): a failed check prints "FILE:LINE: " and what failed, an assert's message
 # after it
 fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
-    where := fe.E.where(fe.F.File, sp)
     what := mir.ExitText(kind)
     if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail {
         fe.gap("an Exit " $kind)
@@ -4046,7 +4102,7 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         }
         fe.E.declare("__olang_ert_pass", "void @__olang_ert_pass(ptr)")
         fe.E.declare("__olang_test_error", "void @__olang_test_error(ptr)")
-        fe.w("call void @__olang_ert_pass(ptr " $fe.E.cstr($where ": left the test\n") ")")
+        fe.w("call void @__olang_ert_pass(ptr " $fe.located(sp, ": left the test\n") ")")
         fe.w("call void @__olang_test_error(ptr " $fe.E.cstr(text) ")")
         fe.w("unreachable")
         return
@@ -4060,14 +4116,14 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         }
         hint := "" if fe.E.traced() else "(build with -debug to see where it came from)\n"
         fe.E.declare("__olang_bang_failed", "void @__olang_bang_failed(ptr)")
-        fe.w("call void @__olang_bang_failed(ptr " $fe.E.cstr($where ": " $text "\n" $hint) ")")
+        fe.w("call void @__olang_bang_failed(ptr " $fe.located(sp, $": " $text "\n" $hint) ")")
         fe.w("unreachable")
         return
     }
     match msg {
         case mir.Operand.None {
             fe.E.runtime("__olang_check_failed")
-            fe.w("call void @__olang_check_failed(ptr " $fe.E.cstr($where ": " $what "\n") ")")
+            fe.w("call void @__olang_check_failed(ptr " $fe.located(sp, $": " $what "\n") ")")
         }
         case _ {
             fe.E.runtime("__olang_check_failed_text")
@@ -4075,7 +4131,7 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
             v := fe.val(msg, mt)
             data, n := fe.arrayParts(v, mt)
             p := fe.pair(n, data)
-            fe.w("call void @__olang_check_failed_text(ptr " $fe.E.cstr($where ": " $what ": ") ", { i64, ptr } " $p ")")
+            fe.w("call void @__olang_check_failed_text(ptr " $fe.located(sp, $": " $what ": ") ", { i64, ptr } " $p ")")
         }
     }
     fe.w("unreachable")
@@ -4904,7 +4960,6 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
 # as a "!" names it, where the "!" is
 fn (fe mut fnEm&) taskEnds(b mut StringBuilder&, code String&, k mir.Task) {
     e := fe.E
-    where := e.where(fe.F.File, k.EndsSp)
     hint := "" if e.traced() else "(build with -debug to see where it came from)\n"
     e.declare("__olang_bang_failed", "void @__olang_bang_failed(ptr)")
     for i in range 0, I64(k.Ends.N), 2 {
@@ -4919,9 +4974,9 @@ fn (fe mut fnEm&) taskEnds(b mut StringBuilder&, code String&, k mir.Task) {
             case _ { }
         }
         b.Push("  %bq" $i " = icmp eq i32 " $code ", " $v "\n  br i1 %bq" $i ", label %bang" $i ", label %bnext" $i "\nbang" $i ":\n")
-        b.Push("  call void @__olang_bang_failed(ptr " $e.cstr($where ": " $text "\n" $hint) ")\n  unreachable\nbnext" $i ":\n")
+        b.Push("  call void @__olang_bang_failed(ptr " $fe.located(k.EndsSp, $": " $text "\n" $hint) ")\n  unreachable\nbnext" $i ":\n")
     }
-    b.Push("  call void @__olang_bang_failed(ptr " $e.cstr($where ": unhandled error\n" $hint) ")\n  unreachable\n")
+    b.Push("  call void @__olang_bang_failed(ptr " $fe.located(k.EndsSp, $": unhandled error\n" $hint) ")\n  unreachable\n")
 }
 
 # a code under list from as the same error under list to, written into b: the name of its value

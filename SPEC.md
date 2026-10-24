@@ -5881,6 +5881,13 @@ once the compile ends; a claim whose process has ended, or older than half an ho
 reads is a file of its own build's, renamed to its readable name once compiled, so no build writes the IR another's
 compile is reading.
 
+**B3l.** The text a failed check prints - its `FILE:LINE:` and what failed (S18a), an error's trace entry (S18d), a `!`'s
+report (E35) - is not part of the code naming it. In `build` and `test`, each such text is a constant named by the
+function holding the check and how many such texts that function named before it, and defined in an object of its own
+for the module (or the root's code, or the instances) that holds only those texts and is compiled without link-time
+optimization (`NAME.HASH.loc.o`). A line added or removed above a function therefore changes no object holding code,
+only the text objects. What is printed is the same either way. `compile`, which makes one object, keeps the texts in it.
+
 ### 10.2 Program entry
 
 **B4.** In `build` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
