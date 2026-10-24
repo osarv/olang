@@ -925,3 +925,8 @@ errors and documentation - generic `+` already works).
   struct/enum variable is borrowed (E12c, scope-checked, changes seen); a number/Bool/Char is always copied, even from a
   variable (mine: no references to numbers). Open: type inspection - closed traits only (rec), Go-style with nomatch on
   open traits too, or none.
+- ANY 2026-10-24, DECIDED (the user: "b) Closed traits only" - read as closed only, the words over the letter; stated
+  to the user): `match` by type on an `any` value only for a closed trait, complete, no nomatch; an `any` of an open
+  trait is used only through its methods. With the earlier answers `any` is fully decided (word `any`; temporaries and
+  numbers copied in, struct/enum variables borrowed; enums meet traits; `==` identity; calls through `any` held to the
+  trait's conditions, an implementation's extra requirement checked only under checked). Build after the current batch.
