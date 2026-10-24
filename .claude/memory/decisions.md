@@ -834,3 +834,9 @@ errors and documentation - generic `+` already works).
   `fits`; asked for more contract words - offered (rec 1-3 now, 4 with the prover): 1 `x fits T`; 2 `old e` in
   guarantees; 3 `a implies b`; 4 `every x in a: c` / `some x in a: c`. NEXT DISCUSSION (the user): enums together with
   `any Trait&` - map how they are alike and how not; trait-method conditions with it.
+- CONTRACTS 2026-10-24, DECIDED (the user): no `implies` ("normal logic"), no `every`/`some` ("expressible with for");
+  `x fits T` kept. ASKED: instead of `old` (the user: "taking up yet another name. Is it worth it?"), entry values named
+  by `:=` items in the condition brackets, usable in guarantees and later conditions - `fn (l mut List<T>&) Push(x T)
+  [n := l.Len()] [l.Len() == n + 1]` (rec). The user raised single statements without braces after control flow: rec
+  keep braces (no parentheses around conditions, so `{` ends the condition: `if a (b)` ambiguous; one-line blocks exist;
+  a leaving-keyword-only exception would be a second spelling).
