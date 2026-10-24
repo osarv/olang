@@ -20,6 +20,7 @@ import "std/time"
 
 extern fn getpid() I32
 extern fn sysconf(name I32) I64
+extern fn usleep(us U32) I32
 
 # ---- what the front end gives ----
 
@@ -99,6 +100,7 @@ type Config struct() {
     Compiled I64 = 0
     Linked I64 = 0
     Thin Bool = false   # an optimized build of a large program: ThinLTO, its link cached (B2d, ThinFrom)
+    Store String& = ""  # OLANG_OBJECTS: a directory of objects shared by builds in other directories (B3j); "" for none
     version String& = ""
 }
 
@@ -374,26 +376,44 @@ type compiles struct() {
     temps List<String&>
     finals List<String&>
     irs List<String&>
+    irTemps List<String&>
     sizes List<I64>
+    locks List<String&>       # the objects this build claimed (B3k), each a directory removed once its compile ended
+    waits List<I64>           # what another build was compiling, waited for (B3k): a unit's number, the runtime's after them
 }
 
 # the object made from ir: its path, and - when no such object is there yet - its compile queued in j, its IR written
 fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d mut diag.Diagnostics&
-    hash String& = "") String ? Failed {
+    hash String& = "", unit I64 = -1) String ? Failed {
     flags := c.CompileFlags(ir)
     path := c.ObjectPath(base, k, hash if hash != "" else IrHash(ir), flags)
     if os.Exists(path) or path in j.finals { return path }
+    # B3j: an object's name says what it is made from, so one another build left in the store is this one
+    if c.Store != "" {
+        try os.Link($c.Store "/" $path[c.Dir.Len() + 1:], path) catch os.OsError { }
+        if os.Exists(path) { return path }
+    }
+    # B3k: another build in this directory compiling this very object: waited for, not compiled twice
+    if unit >= 0 and not claim(path, j) {
+        j.waits.Push(unit)
+        return path
+    }
     # the IR is an intermediate written afresh before each compile, so it keeps the readable name alone (B3), as stage 0's
     # does - BASE[.main|.test|.inst][.race][.debug][.san].ll - but for the runtime's, named by its hash, and a second unit
     # of this build whose readable name is taken, which keeps the object's
     irPath := $path[:path.Len() - 2] ".ll"
     readable := $c.Dir "/" $base $kindSuffix(k) $c.modeSuffix() ".ll"
     if not base.StartsWith("olang_") and readable not in j.irs { irPath = readable }
-    try os.WriteFile(irPath, ir) catch os.OsError {
+    # clang reads the IR from a file of this process's own, renamed to irPath once compiled: another build in the same
+    # directory, run beside this one, may write irPath at the same time - the same name with other IR, or the same IR
+    # truncated and written again under clang's feet
+    irTmp := $irPath[:irPath.Len() - 3] "." $getpid() ".tmp.ll"
+    try os.WriteFile(irTmp, ir) catch os.OsError {
         fileFatal(irPath, msgs.CannotOpen(), d)
         error Failed.REPORTED
     }
     if c.Clang == "" {
+        try os.Rename(irTmp, irPath) catch os.OsError { }
         d.Fatal(diag.Where.Nowhere, msgs.NoClang(irPath))
         error Failed.REPORTED
     }
@@ -404,13 +424,43 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     args.Push("-c")
     args.Push("-o")
     args.Push($tmp)
-    args.Push($irPath)
+    args.Push($irTmp)
     j.cmds.Push(args.ToArray())
     j.temps.Push($tmp)
     j.finals.Push($path)
     j.irs.Push($irPath)
+    j.irTemps.Push($irTmp)
     j.sizes.Push(ir.Len())
     return path
+}
+
+# B3k: whether this build may compile the object at path - none other in its directory is (path.lock, a directory, names
+# the process that claimed it), or the one that was has gone - claiming it in j if so
+fn claim(path String&, j mut compiles&) Bool {
+    lock := $path ".lock"
+    for tries in range 2 {
+        made := true
+        try os.MkDir(lock) catch os.OsError.EXISTS { made = false } catch os.OsError { return true }
+        if made {
+            try os.WriteFile($lock "/pid", $getpid()) catch os.OsError { }
+            j.locks.Push($lock)
+            return true
+        }
+        if holderAlive(lock) { return false }
+        try os.RemoveAll(lock) catch os.OsError { }
+    }
+    return true
+}
+
+# whether the build that claimed an object (B3k) still runs: its process is there, and it claimed it less than half an
+# hour ago - a compile never takes that long, and a process number is reused. A lock not yet holding its number is
+# taken for alive for a minute
+fn holderAlive(lock String&) Bool {
+    info := try os.Stat(lock) catch os.OsError { return false }
+    age := time.Wall() - info.ModTime
+    if age > 1800 * 1000000000 { return false }
+    pid := try os.ReadFile($lock "/pid") catch os.OsError { return age < 60 * 1000000000 }
+    return pid != "" and os.Exists($"/proc/" $pid)
 }
 
 # an error about a whole file the build writes or reads
@@ -427,13 +477,40 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&>
     c.Thin = not c.Debug and not c.Race and size >= ThinFrom
     j := compiles()
     paths List<String&>
-    for u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash)) }
-    if prog.Runtime != "" { paths.Push(try c.want(j, "olang_runtime", UnitKind.Module, prog.Runtime, d)) }
-    if prog.Dyncall != "" { paths.Push(try c.want(j, "olang_dyncall", UnitKind.Module, prog.Dyncall, d)) }
+    for i, u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash, i)) }
+    n := prog.Units.Len()
+    if prog.Runtime != "" { paths.Push(try c.want(j, "olang_runtime", UnitKind.Module, prog.Runtime, d, "", n)) }
+    if prog.Dyncall != "" { paths.Push(try c.want(j, "olang_dyncall", UnitKind.Module, prog.Dyncall, d, "", n + 1)) }
+    try c.compile(j, d)
+    # what another build was compiling: there once it is done, else - that build gone or failed - compiled here
+    if j.waits.Len() > 0 {
+        again := compiles()
+        for i in j.waits {
+            path := paths[i] if i < n + 1 or prog.Runtime != "" else paths[n]
+            for not os.Exists(path) and holderAlive($path ".lock") { usleep(20000) }
+            if os.Exists(path) { continue }
+            if i < n {
+                u := prog.Units[i]
+                try c.want(again, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash)
+            } else if i == n {
+                try c.want(again, "olang_runtime", UnitKind.Module, prog.Runtime, d)
+            } else {
+                try c.want(again, "olang_dyncall", UnitKind.Module, prog.Dyncall, d)
+            }
+        }
+        try c.compile(again, d)
+    }
+    return paths
+}
+
+# the compiles queued in j, side by side, each object renamed into place and kept in the store (B3j), and the objects
+# claimed given up (B3k)
+fn (c mut Config&) compile(j mut compiles&, d mut diag.Diagnostics&) ? Failed {
     status, said := RunAll(j.cmds.ToArray(), c.width(), j.sizes.ToArray())
     c.Compiled += j.cmds.Len()
     failed := false
     for i in range status.Len() {
+        try os.Rename(j.irTemps[i], j.irs[i]) catch os.OsError { }
         if status[i] != 0 {
             sayErr(said[i])
             if not failed { d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(j.irs[i])) }
@@ -445,10 +522,24 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&>
         try os.Rename(j.temps[i], j.finals[i]) catch os.OsError {
             if not failed { fileFatal(j.finals[i], msgs.CannotOpen(), d) }
             failed = true
+            continue
         }
+        c.keep(j.finals[i])
     }
+    for l in j.locks { try os.RemoveAll(l) catch os.OsError { } }
     if failed { error Failed.REPORTED }
-    return paths
+}
+
+# B3j: an object just made, given its name in the store too (by way of a temporary renamed into place, so a build
+# reading the store never sees half of one). The store is a cache: what fails here only leaves it without the object
+fn (c Config&) keep(obj String&) {
+    if c.Store == "" { return }
+    kept := $c.Store "/" $obj[c.Dir.Len() + 1:]
+    if os.Exists(kept) { return }
+    try os.MkDirAll(c.Store) catch os.OsError { return }
+    tmp := $kept "." $getpid() ".tmp"
+    try os.Link(obj, tmp) catch os.OsError { return }
+    try os.Rename(tmp, kept) catch os.OsError { try os.Remove(tmp) catch os.OsError { } }
 }
 
 # ---- the link ----
@@ -846,6 +937,59 @@ test "a build compiles and links only what changed: modules, -define, the target
     assert c.Linked == 7
     assert d.Errors() == 0
     assert Interpret(fe, c, "app.olang", String&["a", "b"], d) == 2
+}
+
+test "B3j: an object another directory's build left in the store is taken from it, never compiled again" {
+    clang := target.FindClang()
+    if clang == "" { return }
+    dir := try os.MkTemp("", "olang-store-")
+    defer try os.RemoveAll(dir) catch os.OsError { }
+    d := diag.Diagnostics(false)
+    fe := stubFrontend()
+    one := Config()
+    one.Dir = $dir "/one"
+    one.Clang = $clang
+    one.Quiet = true
+    one.Store = $dir "/store"
+    one.Target = try target.Resolve("native", clang, false, d)
+    assert BuildProgram(fe, one, "app.olang", d) == 0, $"first build: " $d.Render()
+    assert one.Compiled == 5
+    kept := try os.ReadDir(one.Store)
+    assert kept.Len() == 5 and not kept.Any(fn(n String&) Bool { return n.EndsWith(".tmp") })
+    # another directory, the same program: every object from the store, linked as before
+    two := Config()
+    two.Dir = $dir "/two"
+    two.Clang = $clang
+    two.Quiet = true
+    two.Store = $one.Store
+    two.Target = one.Target
+    assert BuildProgram(fe, two, "app.olang", d) == 0
+    assert two.Compiled == 0 and two.Linked == 1 and statusOf($two.Dir "/app") == 41
+    # one module changed: it alone is compiled, and kept beside the rest
+    fe.Edit = 1
+    assert BuildProgram(fe, two, "app.olang", d) == 0
+    assert two.Compiled == 1 and statusOf($two.Dir "/app") == 42
+    assert (try os.ReadDir(one.Store)).Len() == 6
+    assert d.Errors() == 0
+}
+
+test "B3k: an object one build claims another waits for, unless the build that claimed it is gone" {
+    dir := try os.MkTemp("", "olang-claim-")
+    defer try os.RemoveAll(dir) catch os.OsError { }
+    obj := $dir "/m.0123.o"
+    a := compiles()
+    assert claim(obj, a) and a.locks.Len() == 1
+    assert holderAlive($obj ".lock")                  # this process
+    b := compiles()
+    assert not claim(obj, b) and b.locks.Len() == 0
+    # its holder gone (a process number no process has): the next build takes it over
+    try os.WriteFile($obj ".lock/pid", "999999999")
+    assert not holderAlive($obj ".lock")
+    assert claim(obj, b) and b.locks.Len() == 1
+    # a lock no build ever finished writing is waited for a minute
+    other := $dir "/n.4567.o"
+    try os.MkDir($other ".lock")
+    assert holderAlive($other ".lock")
 }
 
 test "listed test files run one after another in processes of their own, a signal said" {

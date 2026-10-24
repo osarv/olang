@@ -613,6 +613,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Testing.** `make verify` runs the corpus (`tests/shared.olang`, `tests/worker.olang`, `tests/runner.olang`), std's tests, `checks/`
   (must-fail cases with their expected diagnostic, and whole-build scenarios, four at a time) and the port's diffs;
   `make race`, `make scopesan`, `make fuzz`, `make scopefuzz` stand apart. Old tests are kept (the user's rule).
+  **The suite runs side by side (2026-10-24, mine; HISTORY.md "The edit-test loop")**: every test file is a make target
+  of its own (`test@FILE`, `PARALLEL` at a time, the longest first, the gigabyte-sized builds in two lanes), with the
+  runner and the diffs beside them (`make suite`); builds sharing a directory claim each object (B3k) and the checks'
+  builds share a store of objects (B3j, `OLANG_OBJECTS`). `make quick` is the edit-test loop - the suite on the compiler
+  already built, rebuilt once by itself - and leaves out only the clean build, the seed bootstrap and its fixed point.
+  `make verify` (clean, `boot`, `suite`) stays the gate; `boot` reuses a bootstrap only of exactly the same inputs (the
+  seed, compiler/, std/, the makefile, clang, the CPU, the checkout's path) that passed before (`.bootcache`).
 
 ### The C compiler and the port
 

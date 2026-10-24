@@ -19,30 +19,59 @@
 import "std/os"
 import "std/io"
 import "std/chan"
+import "std/time"
 
 # how many checks run at once. A check is a compiler run, or several one after another, each using about one core and
 # mostly a few hundred megabytes (the largest, agree's -i, 3.5GB), so four keep a four-core machine busy and leave its
 # memory to spare
-Workers I32 = 4
+Workers I64 = workers()
 
-# the scenarios below, by the directory each runs in - the longest first, so the last check to finish is a short one. A
-# scenario is a function reporting into a report (r.expect(ok, what, dir) for each thing it checks), named here and in
-# scenario(), with a test reporting it: one missing from either is reported as a failure, never skipped.
-Scenarios := String&["cgreview", "agree", "fuzz", "bench", "objnames", "remote", "interp", "landing", "typereview"
-                     "manymods", "preludestale", "ttolerant", "stale", "remotestale", "tcrash", "pkg", "manyifs", "osargs", "twolists"
-                     "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad"
-                     "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv"
-                     "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr"
-                     "frameenv", "regions", "vecalias", "vechandle", "inferfield", "format", "runfile", "output", "words", "testends", "reuse"]
+# CHECKS_WORKERS, else 4
+fn workers() I64 {
+    t := try os.Env("CHECKS_WORKERS") catch default "4"
+    n := try t.ParseInt(10) catch default 4
+    return n if n > 0 else 4
+}
+
+# the scenarios below, by the directory each runs in - the longest first, as CHECKS_TIMES measured them (2026-10-24), so
+# the last check to finish is a short one. A scenario is a function reporting into a report (r.expect(ok, what, dir) for
+# each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
+# a failure, never skipped.
+Scenarios := String&["strheld", "fuzz", "bench", "agree", "linalg", "landing", "cgreview", "vechandle", "testends"
+                     "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "runfile"
+                     "chunkpool", "capscope", "reuse", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
+                     "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
+                     "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
+                     "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
+                     "nestparse", "words", "diag", "sidebyside"]
+
+# what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
+# runs what is left of it. A scenario passes when all of it does
+Checks Array<String&>& = withParts(Scenarios)
+
+fn withParts(names Array<String&>&) Array<String&>& {
+    all List<String&>
+    for n in names {
+        if n == "strheld" { for p in StrheldPrograms { all.Push($"strheld/" $p) } }
+        all.Push($n)
+    }
+    return all.ToArray()
+}
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
 
-# where the prelude's objects, and the runtime's (B3), are built once, for every case to start from - as the cases did
-# when they all shared one directory. Each has a directory of its own now, since each build also writes an olang_build
+# where the prelude's objects, and the runtime's (B3), are built once, before the cases start - as the cases did when
+# they all shared one directory. Each has a directory of its own now, since each build also writes an olang_build
 # module beside them, and building the prelude again costs every case that gets as far as code about 1.6s, two thirds
 # of the cases' time again.
 Seed String& = "prelude"
+
+# the objects the cases' builds share (B3j, OLANG_OBJECTS): what one case's build made - the prelude's, std's, the
+# runtime's for its modes - every other build that needs it takes, and so do the next run's builds while their IR is
+# the same. It is kept across runs, and started again when it holds more than StoreMost objects (make clean removes it)
+Store String& = "build/checks/objects"
+StoreMost I64 = 8000
 
 # the runs compiler/goldens/run.txt stores (compiler/tools/rungold.olang): a run case's program's status and output,
 # captured as runCase builds and runs it
@@ -56,40 +85,69 @@ Outcomes Array<String&>& = runAll()
 # closed and empty. The scenarios are queued first, and the cases once the prelude's objects they start from are built
 # (Seed).
 fn runAll() Array<String&>& {
-    n I64 = Scenarios.Len() + Cases.Len()
+    n I64 = Checks.Len() + Cases.Len()
     outcomes mut Array<String&>&return = Array<String&>(n)
+    took mut Array<I64>& = Array<I64>(n)
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
-    for k in range Scenarios.Len() { chan.Send(queue, k)! }
+    for k in range Checks.Len() { chan.Send(queue, k)! }
+    kept := try os.ReadDir(Store) catch default Array<String&>(0)
+    if kept.Len() > StoreMost { os.Run("rm -rf " $os.Quote(Store)) }
     join {
-        for w in range Workers { spawn worker(queue, outcomes) }
+        for w in range Workers { spawn worker(queue, outcomes, took) }
         seed := fresh(Seed)
         try os.WriteFile($seed "/seed.olang", "fn main() ? { }\n") catch { }
-        sh(seed, "\"$OLANG\" build seed.olang > out.txt 2>&1")
-        for k in range Scenarios.Len(), n { chan.Send(queue, k)! }
+        sh(seed, $store() " \"$OLANG\" build seed.olang > out.txt 2>&1")
+        for k in range Checks.Len(), n { chan.Send(queue, k)! }
         chan.Close(queue)
     }
+    writeTimes(took)
     return outcomes
 }
 
-fn worker(queue mut chan.Chan<I64>&, outcomes mut Array<String&>&) {
-    for k in queue { outcomes[k] = runCheck(k) }
+fn worker(queue mut chan.Chan<I64>&, outcomes mut Array<String&>&, took mut Array<I64>&) {
+    for k in queue {
+        t := time.Now()
+        outcomes[k] = runCheck(k)
+        took[k] = time.Since(t)
+    }
+}
+
+# CHECKS_TIMES set to a path: how long each check took, a line each - milliseconds, then its name - longest first
+fn writeTimes(took Array<I64>&) {
+    path := try os.Env("CHECKS_TIMES") catch default ""
+    if path == "" { return }
+    order := Array<I64>(took.Len())
+    for i in range took.Len() { order[i] = i }
+    order.Sort(fn(a I64, b I64) Bool { return took[a] > took[b] })
+    b := StringBuilder()
+    for k in order {
+        name := Checks[k] if k < Checks.Len() else $"cases/" $Cases[k - Checks.Len()]
+        b.Push($(took[k] / 1000000) " " $name "\n")
+    }
+    try os.WriteFile(path, b.ToString()) catch os.OsError { }
 }
 
 # check number k: a scenario, or a case after them
 fn runCheck(k I64) String& {
-    if k >= Scenarios.Len() { return runCase(Cases[k - Scenarios.Len()]) }
+    if k >= Checks.Len() { return runCase(Cases[k - Checks.Len()]) }
     r := report()
-    try scenario(r, Scenarios[k]) catch Failed { }
+    try scenario(r, Checks[k]) catch Failed { }
     return $r.text
 }
 
 # whether the scenario named "name" passed, printing what went wrong when it did not
 fn passed(name String&) Bool {
-    for i, s in Scenarios {
-        if s == name { return reported(Outcomes[i]) }
+    found := false
+    ok := true
+    for i, s in Checks {
+        if s == name or s.StartsWith($name "/") {
+            found = true
+            if not reported(Outcomes[i]) { ok = false }
+        }
     }
-    return reported("check FAIL: no scenario is named " $name "\n")
+    if not found { return reported("check FAIL: no scenario is named " $name "\n") }
+    return ok
 }
 
 # whether an outcome is a pass, printing it when it is not
@@ -132,6 +190,11 @@ fn root() String& {
     return try os.Cwd() catch default ""
 }
 
+# the store the cases' builds share, as the environment a command is run in names it
+fn store() String& {
+    return "OLANG_OBJECTS=" $os.Quote($root() "/" $Store)
+}
+
 # a fresh, empty directory for one check, as an absolute path
 fn fresh(tag String&) String& {
     dir mut String&return = $root() "/build/checks/" $tag
@@ -170,11 +233,8 @@ fn runCase(name String&) String& {
     flags := lineAfter(src, "# flags: ")
     base := name[:name.Len() - 6]
     dir := fresh("cases/" $base)
-    seeded String& = "build/checks/" $Seed "/build/"
-    prelude String& = ("cp " $seeded "std_prelude_*.o " $seeded "olang_runtime.*.o " $os.Quote($dir "/build")
-                       " 2> /dev/null")
-    os.Run("cp checks/cases/" $name " " $os.Quote(dir) " && mkdir " $os.Quote($dir "/build") " && " $prelude)
-    status := sh(dir, "\"$OLANG\" build " $flags " " $name " > out.txt 2>&1")
+    os.Run("cp checks/cases/" $name " " $os.Quote(dir))
+    status := sh(dir, $store() " \"$OLANG\" build " $flags " " $name " > out.txt 2>&1")
     if check.StartsWith("fail ") {
         if status == 0 { return failure($name " compiled but should not have", dir) }
         want := check[5:]
@@ -266,7 +326,7 @@ test "every case in checks/cases does what its header says" {
     for i, name in Cases {
         if name.EndsWith(".olang") {
             count++
-            if not reported(Outcomes[Scenarios.Len() + i]) { bad++ }
+            if not reported(Outcomes[Checks.Len() + i]) { bad++ }
         }
     }
     assert count > 0
@@ -275,9 +335,14 @@ test "every case in checks/cases does what its header says" {
 
 # the scenario named "name", reporting into r
 fn scenario(r mut report&, name String&) ? Failed {
+    if name.StartsWith("strheld/") {
+        try strheldProgram(r, name[8:])
+        return
+    }
     match name {
         case "landing" { try landing(r) }
         case "twolists" { try twolists(r) }
+        case "sidebyside" { try sidebyside(r) }
         case "remote" { try remote(r) }
         case "remotebad" { try remotebad(r) }
         case "objnames" { try objnames(r) }
@@ -408,6 +473,27 @@ fn twolists(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build twolists.olang > out.txt 2>&1 && ./build/twolists") == 0, "twolists", dir)
     try r.expect(sh(dir, "\"$OLANG\" build samealias.olang > out.txt 2>&1") != 0, "samealias compiled", dir)
     try r.expect(outOf(dir).Contains("alias"), "samealias: expected 'alias'", dir)
+}
+
+# B3k: three programs importing one module, built side by side in one directory, each compile made once - the others
+# wait for it (a clang on PATH writes down every object it is asked for) - each program as it should be, and nothing
+# claimed or half written left behind
+test "builds side by side in one directory compile each object once" { assert passed("sidebyside") }
+
+fn sidebyside(r mut report&) ? Failed {
+    dir := fresh("sidebyside")
+    os.Run("cp checks/fixtures/sidebyside/* " $os.Quote(dir))
+    wrap String& = ("mkdir bin && printf '#!/bin/sh\nfor a; do [ \"$p\" = -o ] && echo \"$a\" >> %s/compiles.txt; p=$a; done\nexec %s \"$@\"\n' "
+                    $os.Quote(dir) " \"$(command -v clang)\" > bin/clang && chmod +x bin/clang")
+    try r.expect(sh(dir, wrap) == 0, "no clang to wrap", dir)
+    side String& = ("export PATH=$PWD/bin:$PATH; \"$OLANG\" build a.olang > a.txt 2>&1 & A=$!; \"$OLANG\" build b.olang > b.txt 2>&1 & " $
+                    "B=$!; \"$OLANG\" build c.olang > c.txt 2>&1 & C=$!; wait $A; a=$?; wait $B; b=$?; wait $C; c=$?; [ $a$b$c = 000 ]")
+    try r.expect(sh(dir, side) == 0, "a build side by side failed", dir)
+    try r.expect(sh(dir, "./build/a > out.txt && ./build/b >> out.txt && ./build/c >> out.txt") == 0, "a program did not run", dir)
+    try r.expect(outOf(dir) == "a 19 5\nb 19 5\nc 19 5\n", "what the programs printed", dir)
+    try r.expect(sh(dir, "grep '\\.o\\.' compiles.txt | sed 's/\\.[0-9]*\\.tmp$//' | sort | uniq -d > out.txt; test ! -s out.txt") == 0
+                 "an object compiled twice", dir)
+    try r.expect(sh(dir, "ls build | grep -e '\\.lock$' -e '\\.tmp' > out.txt; test ! -s out.txt") == 0, "left behind", dir)
 }
 
 # M23a/M23b/M23c: a remote repository is fetched once with git into the cache, "@ref" pins a version beside the default
@@ -1482,9 +1568,9 @@ fn fuzz(r mut report&) ? Failed {
     os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
     # the compiler it tests is this one, handed on: fuzz's own default is under the directory it runs in
-    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 1 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/run*/found)", dir)
+    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug run 1 2 2 12 > out.txt 2>&1") == 0, "fuzz found something (build/checks/fuzz/build/fz/run*/found)", dir)
     # B2f: scope-stress programs built under the scope sanitizer and interpreted give one output (seeds that ran clean)
-    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug scope 3 2 1 12 > out.txt 2>&1") == 0
+    try r.expect(sh(dir, "OLANG=\"$OLANG\" ./build/fuzz.debug scope 3 2 2 12 > out.txt 2>&1") == 0
                  "fuzz scope found something (build/checks/fuzz/build/fz/run*/scope)", dir)
 }
 
@@ -1634,24 +1720,33 @@ fn capscope(r mut report&) ? Failed {
 # reclaims nothing), giving what it was reviewed to give
 test "joins reaching a Str give what they did when reviewed" { assert passed("strheld") }
 
+# the programs strheld builds, each a part of its own (Checks), in a directory of its own taking what the others built
+# from the store (B3j): built, built -s and built -d, and interpreted but for the ones in StrheldNotInterpreted
+StrheldPrograms Array<String&>& = String&["concurrent", "deferred", "earlyexits", "eqwrites", "globals", "manyplaces"
+                                          "mapalone", "opmethods", "order", "samescope", "shrinks", "strchanges", "lambdaany"
+                                          "lambdamade", "lambdafold", "lambdaspawn", "lambdabyvalue", "adapterlocal"
+                                          "adaptercallee", "g9dorder", "condlanding", "trydefault", "helperlambda"
+                                          "transientlambda", "condliteral", "regbattery", "regreturns", "g9deval"
+                                          "g9dcontainers"]
+StrheldNotInterpreted Array<String&>& = String&["earlyexits", "manyplaces", "g9dorder", "condlanding", "trydefault"
+                                                "regbattery", "regreturns", "g9deval", "g9dcontainers"]
+
+fn strheldProgram(r mut report&, n String&) ? Failed {
+    dir := fresh($"strheld/" $n)
+    os.Run("cp checks/fixtures/strheld/" $n ".olang checks/fixtures/strheld/" $n ".want " $os.Quote(dir))
+    try r.expect(sh(dir, $store() " \"$OLANG\" build " $n ".olang > out.txt 2>&1 && ./build/" $n " > b.txt 2>&1 && cmp -s b.txt " $n ".want") ==
+                 0, n, dir)
+    try r.expect(sh(dir, ($store() " \"$OLANG\" build -sanitize " $n ".olang > out.txt 2>&1 && ./build/" $n ".san > s.txt 2>&1 && cmp -s s.txt "
+                    $n ".want")) == 0, $n " -s", dir)
+    try r.expect(sh(dir, ($store() " \"$OLANG\" build -debug " $n ".olang > out.txt 2>&1 && ./build/" $n ".debug > d.txt 2>&1 && cmp -s d.txt "
+                    $n ".want")) == 0, $n " -d", dir)
+    if n in StrheldNotInterpreted { return }
+    try r.expect(sh(dir, "\"$OLANG\" interpret " $n ".olang > i.txt 2>&1 && cmp -s i.txt " $n ".want") == 0, $n " -i", dir)
+}
+
 fn strheld(r mut report&) ? Failed {
-    dir := fresh("strheld")
+    dir := fresh("strheld/tail")
     os.Run("cp checks/fixtures/strheld/* " $os.Quote(dir))
-    for n in String&["concurrent", "deferred", "earlyexits", "eqwrites", "globals", "manyplaces", "mapalone", "opmethods"
-                     "order", "samescope", "shrinks", "strchanges", "lambdaany", "lambdamade", "lambdafold", "lambdaspawn"
-                     "lambdabyvalue", "adapterlocal", "adaptercallee", "g9dorder", "condlanding", "trydefault"
-                     "helperlambda", "transientlambda", "condliteral", "regbattery", "regreturns", "g9deval"
-                     "g9dcontainers"] {
-        try r.expect(sh(dir, "\"$OLANG\" build " $n ".olang > out.txt 2>&1 && ./build/" $n " > b.txt 2>&1 && cmp -s b.txt " $n ".want") ==
-                     0, n, dir)
-        try r.expect(sh(dir, ("\"$OLANG\" build -sanitize " $n ".olang > out.txt 2>&1 && ./build/" $n ".san > s.txt 2>&1 && cmp -s s.txt "
-                        $n ".want")) == 0, $n " -s", dir)
-        try r.expect(sh(dir, ("\"$OLANG\" build -debug " $n ".olang > out.txt 2>&1 && ./build/" $n ".debug > d.txt 2>&1 && cmp -s d.txt "
-                        $n ".want")) == 0, $n " -d", dir)
-        if n in String&["earlyexits", "manyplaces", "g9dorder", "condlanding", "trydefault", "regbattery", "regreturns"
-                        "g9deval", "g9dcontainers"] { continue }
-        try r.expect(sh(dir, "\"$OLANG\" interpret " $n ".olang > i.txt 2>&1 && cmp -s i.txt " $n ".want") == 0, $n " -i", dir)
-    }
     #S16, S18b: a test failing inside a Str unwinds what the Str made, and the next test runs
     try r.expect(sh(dir, "\"$OLANG\" test donenested.olang > out.txt 2>&1") != 0, "donenested", dir)
     try r.expect(outOf(dir).Contains("1 passed, 2 failed") and outOf(dir).CountOf("Res destructed 7") == 2

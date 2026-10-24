@@ -9,12 +9,29 @@ OLANG_TESTS = $(wildcard tests/*.olang) $(wildcard tests/geom/*.olang) $(wildcar
 	$(wildcard tools/*.olang) checks/checks.olang \
 	compiler/tools/toolkit.olang compiler/tools/tokdiff.olang compiler/tools/astdiff.olang compiler/tools/namesdiff.olang \
 	compiler/tools/layoutdiff.olang compiler/tools/layoutgold.olang compiler/tools/modgraph.olang \
-	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang
+	compiler/tools/diaggold_capture.olang compiler/tools/rungold.olang checks/fixtures/frameenv/envcheck.olang \
+	compiler/tools/diaggold.olang
 # the compiler under test (compiler/DESIGN.md section 4): build/olang, which make bootstrap installs (made by it when
 # missing) - "make test OLANG=build/stage1" names another. What it runs - checks/checks.olang, fuzz/, bench/, the tools -
 # reads it from the environment, as an absolute path; unset, each falls back to build/olang
 OLANG ?= build/olang
 OLANG_ENV = OLANG=$(abspath $(OLANG))
+
+# how many test files, checks and diffs run side by side ("make test PARALLEL=1" runs them one at a time)
+PARALLEL ?= $(shell nproc)
+# the test files, each a target of its own (test@FILE) so make runs them side by side, the longest first so the last to
+# finish is a short one - checks/checks.olang, which runs its own checks four at a time, before everything. The test
+# builds holding over a gigabyte each (the compiler's largest modules, the corpus's shared.olang) run in two lanes, one
+# after another in each, so no more than two of them are ever in memory at once (a lane goes on past a failure)
+TEST_LANE_A = compiler/scope.olang compiler/views.olang compiler/olang.olang compiler/emit.olang
+TEST_LANE_B = compiler/lower.olang compiler/check.olang tests/shared.olang compiler/interp.olang
+TEST_HEAVY = checks/checks.olang $(TEST_LANE_A) $(TEST_LANE_B) std/linalg.olang compiler/load.olang compiler/eval.olang \
+	compiler/generic.olang
+TEST_RUNS_HEAVY = $(addprefix test@,$(filter $(OLANG_TESTS),$(TEST_HEAVY)))
+TEST_RUNS_REST = $(addprefix test@,$(filter-out $(TEST_HEAVY),$(OLANG_TESTS)))
+TEST_RUNS = $(TEST_RUNS_HEAVY) $(TEST_RUNS_REST)
+# each file of a lane after the one before it (an order-only prerequisite)
+lane = $(if $(word 2,$1),$(eval test@$(word 2,$1): | test@$(word 1,$1))$(call lane,$(wordlist 2,$(words $1),$1)))
 
 build: build/olang
 
@@ -34,7 +51,7 @@ build/compiler_tools_fmt: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/f
 # B13's acceptance: every file of the repository formatted reads back as the same tree, keeps its comments, and is its
 # own layout ("fmt -v", compiler/tools/fmt.olang): a line for each file that fails, then a count
 fmtdiff: build/compiler_tools_fmt
-	OLANG_STD=std build/compiler_tools_fmt -v $$(git ls-files '*.olang')
+	OLANG_STD=std build/compiler_tools_fmt -v $$(git ls-files '*.olang') || $(NOTE_FAILED)
 
 # the self-hosted compiler's driver (compiler/olang.olang), built by the compiler under test
 build/compiler_olang: $(OLANG) $(wildcard compiler/*.olang)
@@ -49,7 +66,7 @@ GOLD_OLANG ?= build/compiler_olang
 # M10's acceptance: the driver says what compiler/goldens/drv.txt stores - what stage 0 said when it was captured - for command lines decided
 # before code generation and for whole builds
 drvdiff: build/compiler_olang build/compiler_tools_drvdiff
-	build/compiler_tools_drvdiff
+	build/compiler_tools_drvdiff || $(NOTE_FAILED)
 
 # captures compiler/goldens/drv.txt again from $(GOLD_OLANG), after a message or a command line changes
 drvgold: $(GOLD_OLANG) build/compiler_tools_drvdiff
@@ -58,7 +75,7 @@ drvgold: $(GOLD_OLANG) build/compiler_tools_drvdiff
 # M1's acceptance: the self-hosted scanner gives the C tokenizer's stream on every file of the repository, as
 # compiler/goldens/tokens.txt stores it
 tokdiff: build/compiler_tools_dump build/compiler_tools_tokdiff
-	build/compiler_tools_tokdiff
+	build/compiler_tools_tokdiff || $(NOTE_FAILED)
 
 # captures compiler/goldens/tokens.txt and tokens.full.txt again, after .olang files are edited, added or removed
 tokgold: build/compiler_tools_dump build/compiler_tools_tokdiff
@@ -68,7 +85,7 @@ tokgold: build/compiler_tools_dump build/compiler_tools_tokdiff
 # as compiler/goldens/ast.txt stores them,
 # and each tree written back as source and read again is the same tree (compiler/tools/astdiff.olang)
 astdiff: build/compiler_tools_dump build/compiler_tools_astdiff
-	build/compiler_tools_astdiff
+	build/compiler_tools_astdiff || $(NOTE_FAILED)
 
 # captures compiler/goldens/ast.txt and ast.full.txt again, after .olang files are edited, added or removed
 astgold: build/compiler_tools_dump build/compiler_tools_astdiff
@@ -77,12 +94,12 @@ astgold: build/compiler_tools_dump build/compiler_tools_astdiff
 # M4's acceptance: on every checks case the self-hosted loader and name resolver report the errors of their rules that
 # stage 0 reported, at the same position (compiler/tools/namesdiff.olang, against compiler/goldens/diag.txt)
 namesdiff: build/compiler_tools_dump build/compiler_tools_namesdiff
-	build/compiler_tools_namesdiff
+	build/compiler_tools_namesdiff || $(NOTE_FAILED)
 
 # M5a's acceptance: every type stage 0 holds for every root program has the self-hosted type table's layout - size,
 # alignment, LLVM spelling, offsets (compiler/tools/layoutdiff.olang, against compiler/goldens/layout.txt)
 layoutdiff: build/compiler_tools_dump build/compiler_tools_layoutdiff
-	build/compiler_tools_layoutdiff
+	build/compiler_tools_layoutdiff || $(NOTE_FAILED)
 
 # the self-hosted checker's errors and unchecked constructs on files (compiler/tools/checkdump.olang)
 build/compiler_tools_checkdump: $(OLANG) $(wildcard compiler/*.olang) compiler/tools/checkdump.olang
@@ -197,14 +214,39 @@ define BOOTSTRAP
 	@echo "bootstrap: build/olang.2 and build/olang.3 are byte for byte equal; build/olang installed"
 endef
 
-bootstrap: build/olang.seed
+# the seed's objects compiled side by side, then the three builds: the bootstrap from nothing, every time it is asked for
+bootstrap:
+	$(MAKE) -j$(PARALLEL) build/olang.seed
 	$(BOOTSTRAP)
 
-# build/olang as a file, for OLANG=build/olang: made by the same steps when missing or older than the sources it is
-# built from (what the compiler holds of std included)
-build/olang: build/olang.seed $(wildcard compiler/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/*.olang) \
-		$(wildcard std/runtime/*.ll)
-	$(BOOTSTRAP)
+# build/olang as a file, for OLANG=build/olang: bootstrapped (boot, below) when missing or older than the sources it is
+# built from (what the compiler holds of std included). The seed is not among them: build/olang is the third build of
+# the current source, the same whichever seed started the chain (make bootstrap compares the last two builds)
+BOOT_SOURCES = $(wildcard compiler/*.olang) $(wildcard std/*.olang) $(wildcard std/prelude/*.olang) $(wildcard std/runtime/*.ll)
+build/olang: $(BOOT_SOURCES)
+	$(MAKE) boot
+
+# boot: make bootstrap, unless a bootstrap of exactly these inputs has passed here before - then the compiler it
+# installed. A bootstrap is a function of its inputs, which the key names: the seed, the compiler's and std's files
+# (all of std, conservatively), this makefile, clang and the linker, the processor (the build is for the machine it
+# runs on, B12) and this checkout's directory (the compiler holds its absolute std paths). The cache, $(BOOT_CACHE), is
+# outside build/, so make clean keeps it; an entry is written only after build/olang.2 and build/olang.3 compared
+# equal, and only the newest $(BOOT_KEEP) are kept. BOOT_FRESH=1 bootstraps whatever the cache holds
+BOOT_CACHE ?= .bootcache
+BOOT_KEEP ?= 3
+boot:
+	@key=$$( { echo "$(CURDIR)"; sha256sum $(sort $(SEED_FILES) $(BOOT_SOURCES) $(shell find std -type f) makefile); \
+		$(SEED_CLANG) --version; clang --version; ld --version | head -1; \
+		grep -m1 '^model name' /proc/cpuinfo; grep -m1 '^flags' /proc/cpuinfo; } | sha256sum | cut -c1-32 ); \
+	d=$(BOOT_CACHE)/$$key; \
+	if [ -z "$(BOOT_FRESH)" ] && [ -x $$d/olang ]; then \
+		mkdir -p build && cp $$d/olang build/olang.cached && mv build/olang.cached build/olang && \
+		echo "boot: build/olang is the bootstrap of these inputs that passed before ($$d)"; \
+	else \
+		$(MAKE) bootstrap && mkdir -p $(BOOT_CACHE) && t=$$(mktemp -d $(BOOT_CACHE)/new.XXXXXX) && \
+		cp build/olang $$t/olang && rm -rf $$d && mv $$t $$d && \
+		ls -dt $(BOOT_CACHE)/*/ | tail -n +$$(( $(BOOT_KEEP) + 1 )) | xargs -r rm -rf; \
+	fi
 
 # the seed written again from the current source (compiler/tools/seed.olang), from the repository root and with the
 # standard library named relatively, so no path of this checkout is in it. A file whose IR did not change is left as
@@ -227,10 +269,33 @@ seed: build/compiler_tools_seed
 run: $(OLANG)
 	$(OLANG_ENV) $(OLANG) build tests/runner.olang
 
-# picks up every *.olang file automatically - a new test file needs no makefile edit to be included.
-# (usertest.olang is the one deliberate exception - a gitignored scratch file, never part of the suite.)
+# every test file of OLANG_TESTS (usertest.olang, a gitignored scratch file, is never part of the suite), side by side (PARALLEL at a time), each in a compiler process of its own as "olang test" runs them;
+# make's -Otarget prints each file's output whole when it finishes. A failing file does not stop the others (-k), and
+# the failed ones are named at the end
 test: $(OLANG)
-	$(OLANG_ENV) $(OLANG) test $(OLANG_TESTS)
+	@rm -f build/failed.txt
+	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
+
+FAILED = { echo "failed: $$(sort build/failed.txt 2>/dev/null | tr '\n' ' ')"; exit 1; }
+# a part of the suite that failed, named in build/failed.txt
+NOTE_FAILED = { echo "$@" >> build/failed.txt; exit 1; }
+
+# a test file that fails is named in build/failed.txt and its target ends as if it passed, so the lane it is in goes on;
+# test and suite fail by build/failed.txt
+$(TEST_RUNS): test@%: FORCE
+	@$(OLANG_ENV) $(OLANG) test $* || echo "$*" >> build/failed.txt
+$(call lane,$(TEST_LANE_A))
+$(call lane,$(TEST_LANE_B))
+
+FORCE:
+
+# the -c production path end to end: tests/runner.olang built as a program and run
+runner: FORCE
+	@$(OLANG_ENV) $(OLANG) build tests/runner.olang || $(NOTE_FAILED)
+	@./build/tests_runner || $(NOTE_FAILED)
+
+# the port's diffs against the goldens, each named in build/failed.txt when it fails
+DIFFS = tokdiff astdiff namesdiff layoutdiff fmtdiff drvdiff
 
 # builds and runs the gitignored usertest.olang scratch file directly - never part of the suite above.
 usertest: $(OLANG)
@@ -251,27 +316,39 @@ checkir:
 	  END { if (bad) { print "FAIL: " bad " alloca(s) outside an entry block"; exit 1 } }' build/*.ll
 	@echo "checkir: every alloca is in its entry block"
 
-# the one command to run before considering any change done: a from-scratch build, the full
-# olang test suite (every test{} block across every .olang file), and an end-to-end smoke test of the -c
-# production compile path (build tests/runner.olang as a real program, then actually run the resulting binary -
-# not just compile it, since "run" alone only builds). Each step is a separate recursive make invocation so
-# they run in strict sequence (clean genuinely finishes before the rebuild starts, not just "prerequisite
-# order", which make doesn't guarantee under -j); any failure - a compiler warning, a failing olang test, a
-# native-compile error, or the runner binary exiting nonzero - aborts immediately via make's own default
-# stop-on-error behavior, so a clean pass of this target is a real, whole-project guarantee.
+# everything after the compiler is built - every test file, the runner, the diffs - side by side, PARALLEL at a time
+# (-k: a failure stops nothing else; the failed parts are named at the end), then checkir over the IR they wrote
+suite: $(OLANG)
+	@rm -f build/failed.txt
+	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS_HEAVY) runner $(DIFFS) $(TEST_RUNS_REST) \
+		&& [ ! -s build/failed.txt ] || $(FAILED)
+	@$(MAKE) --no-print-directory checkir
+
+# the one command to run before considering any change done, the gate before every merge: a from-scratch build (clean,
+# then the bootstrap from the seed with its fixed point - boot, which reuses only a bootstrap of exactly the same inputs
+# that passed before), then the whole suite: every test{} block of every .olang file, checks/checks.olang (programs that
+# must not compile, whole builds), tests/runner.olang built as a program and run, the IR's allocas, and the port's
+# diffs against the goldens. Any failure fails it
 verify:
 	$(MAKE) clean
-	$(MAKE) test
-	$(MAKE) run
-	./build/tests_runner
-	$(MAKE) checkir
-	$(MAKE) tokdiff
-	$(MAKE) astdiff
-	$(MAKE) namesdiff
-	$(MAKE) layoutdiff
-	$(MAKE) fmtdiff
-	$(MAKE) drvdiff
+	$(MAKE) boot
+	$(MAKE) suite
 	@echo "verify: all checks passed"
+
+# the edit-test loop: the same suite as verify on what is already built - build/olang rebuilt by itself when a source
+# of it is newer (one build, the objects and build/rec it left reused), bootstrapped only when there is none. What it
+# leaves out is what only verify checks: a clean build/, the bootstrap from the seed, and the compiler rebuilding itself
+# identically (a change to the code generator is first applied to the compiler by verify)
+quick:
+	@$(MAKE) --no-print-directory quickolang
+	@$(MAKE) --no-print-directory suite
+	@echo "quick: all checks passed (make verify adds a clean build and the bootstrap from the seed)"
+
+quickolang:
+	@if [ ! -x build/olang ]; then $(MAKE) --no-print-directory boot; \
+	elif [ -n "$$(find $(BOOT_SOURCES) -newer build/olang)" ]; then \
+		echo "quick: build/olang rebuilt by itself"; \
+		build/olang build -output build/olang.next compiler/olang.olang && mv build/olang.next build/olang; fi
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one
 # intentional data race - the "several tasks may be handed the same instance" test, which exists to show
@@ -313,7 +390,6 @@ scopefuzz: $(OLANG)
 # byte for byte, and its -e on every rule a message names. Part of "make test"; "make diaggold" captures the goldens
 # again from $(GOLD_OLANG) (compiler/goldens/diag.txt), after a message or a case changes.
 DIAG_TESTS = compiler/msgs.olang compiler/diag.olang compiler/tools/diaggold.olang
-OLANG_TESTS += compiler/tools/diaggold.olang  # msgs and diag are already in compiler/*.olang
 diagtest: $(OLANG)
 	$(OLANG_ENV) $(OLANG) test $(DIAG_TESTS)
 diaggold: $(GOLD_OLANG) build/compiler_tools_diaggold_capture
@@ -324,4 +400,5 @@ all: clean build run
 clean:
 	rm -rf build
 
-.PHONY: all build bootstrap seed run test usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean
+# FORCE stands in for .PHONY on the test@FILE pattern targets, whose names are no files either
+.PHONY: all build bootstrap boot seed run runner test suite quick quickolang usertest verify checkir tokdiff astdiff fmtdiff namesdiff layoutdiff drvdiff drvgold rungold tokgold astgold modgold checkdiff scopediff lowerdump emitdiff evaldiff layoutgold modgraph diaggold race fuzz scopesan scopefuzz clean

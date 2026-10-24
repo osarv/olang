@@ -1,0 +1,6 @@
+import "std/io"
+import "lib"
+
+fn main() {
+    io.Println($"c " $lib.Sum(10) " " $lib.Words(5))!
+}

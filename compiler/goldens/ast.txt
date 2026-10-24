@@ -1099,7 +1099,7 @@ db0493b055018357 27d7fb9c2bb761e8 checks/cases/vec70ctorfieldblock.olang
 cee1f07ce5c823a4 9cd868f93b377def checks/cases/zeroeffect.olang
 9cf0a1944ee9bdab 34c5e858c74150fe checks/cases/zerofails.olang
 fc6df24d959d964f 81d7dc7230d73880 checks/cases/zeroshared.olang
-de92f48a70c5ff58 b9e76edcc1dda8af checks/checks.olang
+ea3efa49170a56f8 bb78f331231c2986 checks/checks.olang
 7915bba602ac43e9 e289f65fb6da4341 checks/fixtures/agree/agree.olang
 6c612feb2facaf24 855092106b73d871 checks/fixtures/agree/bfrand.olang
 81be033c9d0d83a7 4c03a67a609e9ce4 checks/fixtures/agree/math.olang
@@ -1216,6 +1216,10 @@ f918e17ab5af5193 6adb74399b9a16ea checks/fixtures/reuse/lib.olang
 1f20ff47d941136c de429ad4671e984f checks/fixtures/runfile/script.olang
 d0d875ad7b2ff69f 3d1ad9763884f3fb checks/fixtures/s18c/s18c.olang
 f18c1d85d29a6462 80a55e28df433557 checks/fixtures/scopesan/stub.olang
+49a3a9b08f0972c4 2adf6ac6f711f536 checks/fixtures/sidebyside/a.olang
+43f7b4500e1d0475 2adf6ac6f711f536 checks/fixtures/sidebyside/b.olang
+6893c0bb9080b6de 2adf6ac6f711f536 checks/fixtures/sidebyside/c.olang
+ae9953845a8bfe0d aa96ac24d4ef0e61 checks/fixtures/sidebyside/lib.olang
 2979b3fbe8bb45d0 feab219592028e85 checks/fixtures/spawnerr/tasks.olang
 01c6577b3ceb8a91 8dd18ee013ccb4e1 checks/fixtures/stale/plain.olang
 1aa5d1d6eaa0f2ad 7633c7cd6fe5f623 checks/fixtures/stale/uses.olang
@@ -1279,7 +1283,7 @@ ad7367de57562da1 98ba40282a55ca2d checks/fixtures/vecalias/f3.olang
 2f33ad45e182bf64 4b8c7583b0d5e472 checks/fixtures/vechandle/handle.olang
 007370a44d8f74de 3731be913f85ffe3 checks/fixtures/vechandle/stale.olang
 15062401eda26e89 5fdfe73c81173561 compiler/ast.olang
-835804461953d3fc 340fa37e94499579 compiler/build.olang
+51cf157f2eb8a7db fd387f080c812022 compiler/build.olang
 cb7fd6f710affbd1 e7ff0123f111fa1b compiler/check.olang
 e54ef2d5ceb8a81f db14db0e6b9221e3 compiler/cond.olang
 34b00b29803b8a3a 5c0f347eced1601b compiler/diag.olang
@@ -1294,7 +1298,7 @@ fb8151a783136dbc b440e107bc9fee39 compiler/lower.olang
 5a0346af8dcf7e7a c5f741602e2ce930 compiler/mir.olang
 477dc243330f06f6 5d1cfccb3318c1c1 compiler/msgs.olang
 2dba6ba8fc11bd86 1021d7dd0e240d4b compiler/names.olang
-9a036c882ae279df d3b08f9ed1ae22d5 compiler/olang.olang
+b23e1aa0c3d34173 24bf3e0719ce8e22 compiler/olang.olang
 25dece49d3b624f4 350dda7b053895ee compiler/parse.olang
 ccc000d5f2aa68e5 021eb49d90cc7fba compiler/runtime.olang
 54d8b0747fd20c3d c5b97638f3ccd664 compiler/scan.olang
@@ -1374,7 +1378,7 @@ b23f7c9d73810283 43148425b3b21fd4 std/http.olang
 ba333867cddb3cf0 c58b0bbd364f5d19 std/io.olang
 8e67aec12621b62e 25e97a02338deccb std/json.olang
 27365d03a244eb68 9a3acdc9d221f591 std/linalg.olang
-55f30f9ea6c5d734 cfa22c0d119597a9 std/os.olang
+982d8a94a257bf0c bde71ea84472d064 std/os.olang
 7a7267224a9ffb34 874c9eef15229c84 std/pair.olang
 ec615f4403b4eb38 531cdb4e5fae80e0 std/prelude/array.olang
 0ef50b8c7466b53d e40c5b96b2ff696a std/prelude/builtin.olang

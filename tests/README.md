@@ -28,9 +28,13 @@ working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so o
 
 From the repository root:
 
-- `make test` - every `test { }` block in the repository, these files included.
+- `make test` - every `test { }` block in the repository, these files included, several files at a time
+  (`PARALLEL=1` one at a time); the files that failed are named at the end.
 - `build/olang test tests/shared.olang` - one file's tests.
 - `make run` - build `tests/runner.olang` as a program; `make verify` then runs `build/tests_runner`.
-- `make verify` - the full check before calling a change done.
+- `make quick` - the edit-test loop: the whole suite (tests, checks, the runner, the port's diffs) on the compiler
+  already built, rebuilt once by itself when its source changed. About three minutes.
+- `make verify` - the full check before calling a change done, the gate before every merge: `make quick`'s suite after a
+  clean build and the bootstrap from the seed.
 - `make race`, `make scopesan` - the same suite under ThreadSanitizer and the scope
   sanitizer. They are not part of `verify`.
