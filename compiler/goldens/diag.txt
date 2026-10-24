@@ -1636,14 +1636,14 @@ extendsstruct.olang:3:8: error[T29f]: only a type over a number or an array exte
       |        ^~~~~~~
 compilation failed with 1 error
 === externfnshape.olang
-externfnshape.olang:3:43: error[X2]: fn(x I32) cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers
+externfnshape.olang:3:43: error[X2]: fn(x I32) cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
     3 | extern fn __olang_run_on_stack(bytes I64, f fn(x I32))
       |                                           ^
 compilation failed with 1 error
 === externfnvalue.olang
-externfnvalue.olang:5:18: error[X2]: fn() cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers
-    5 | extern fn atexit(f fn()) I32
-      |                  ^
+externfnvalue.olang:9:12: error[X13]: a C function is given a function by the name of an export fn - declare one with 'export fn' and pass it by name
+    9 |     atexit(bye)
+      |            ^~~
 compilation failed with 1 error
 === forinclausebreak.olang
 forinclausebreak.olang:15:36: error[S9e]: a loop's catch clause runs after the loop has ended, so it has no loop to break or continue - set a flag
@@ -5753,6 +5753,61 @@ vec97globalfieldgrows.olang:14:5: note: 'GL.toks' may grow here, in 'bump' - tak
 vec97globalfieldgrows.olang:10:21: note: 'bump' may grow it here
    10 | fn bump() { GL.toks.Push(5) }
       |                     ^~~~
+compilation failed with 1 error
+=== x10built.olang
+x10built.olang:6:10: error[X10]: Db is an extern type: only C makes one - declare the C function that does, as 'extern fn open() Db&'
+    6 |     d := Db()
+      |          ^~
+compilation failed with 1 error
+=== x10byvalue.olang
+x10byvalue.olang:5:10: error[X10]: Db is an extern type, held only by reference - write 'Db&', or 'Db?&' where it may be null
+    5 | fn use(d Db) { }
+      |          ^~
+compilation failed with 1 error
+=== x10typearg.olang
+x10typearg.olang:6:15: error[X10]: Db is an extern type, held only by reference - write 'Db&', or 'Db?&' where it may be null
+    6 |     l := List<Db>()
+      |               ^~
+compilation failed with 1 error
+=== x11notplain.olang
+x11notplain.olang:8:16: error[X2]: Named cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these
+    8 | extern fn take(s Named) I32
+      |                ^
+compilation failed with 1 error
+=== x12generic.olang
+x12generic.olang:3:1: error[X12]: an export fn is one C function, and a generic one stands for many - declare it for the types C passes
+    3 | export fn same<T>(x T) T { return x }
+      | ^~~~~~
+compilation failed with 1 error
+=== x12method.olang
+x12method.olang:5:1: error[X12]: an export fn is one C calls by its name, and a method has no C name - declare a function taking the receiver
+    5 | export fn (p P&) X() I64 { return p.x }
+      | ^~~~~~
+compilation failed with 1 error
+=== x12result.olang
+x12result.olang:4:28: error[X12]: String& cannot go back to C - an export fn gives one number, Bool, extern type's reference, plain-data struct, or an array of these by value
+    4 | export fn first(t String&) String&t { return t[:1] }
+      |                            ^~~~~~~~
+compilation failed with 1 error
+=== x12type.olang
+x12type.olang:3:17: error[X12]: List<I64> cannot come from C - an export fn's parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array by reference
+    3 | export fn total(l List<I64>) I64 { return l.Len() }
+      |                 ^
+compilation failed with 1 error
+=== x13lambda.olang
+x13lambda.olang:9:21: error[X13]: a C function is given a function by the name of an export fn - declare one with 'export fn' and pass it by name
+    9 |     qsort(xs, 3, 4, fn(a Box&, b Box&) I32 { return a.v - b.v })
+      |                     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== x2result.olang
+x2result.olang:3:21: error[X2]: Array<I64> cannot come back from C - an extern's result is one number, Bool, extern type's reference or plain-data struct
+    3 | extern fn numbers() Array<I64>
+      |                     ^~~~~~~~~~
+compilation failed with 1 error
+=== x9linkname.olang
+x9linkname.olang:3:6: error[X9]: 'lib m' names no library and no file - write a library's name, as 'link "m"', or a path to one, as 'link "lib/libx.a"'
+    3 | link "lib m"
+      |      ^~~~~~~
 compilation failed with 1 error
 === zeroeffect.olang
 zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one - its constructor does not run on zeros while compiling: it writes a global, which the running program would then not see written

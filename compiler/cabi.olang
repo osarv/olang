@@ -1,0 +1,396 @@
+# cabi - the C calling convention (X2, X11, X12): how a value crosses to or from C, as the platform's C compiler passes it
+# (clang's lowering, which is what LLVM's targets expect of a frontend), for a call of an extern and an export fn's
+# entry. A number or a Bool as itself - an integer narrower than 32 bits extended by the side
+# the x86-64 psABI asks to (signext/zeroext), AArch64 asking nothing - a reference or an array as a pointer, and a
+# plain-data struct by its classification:
+# - x86-64 (System V): one of at most 16 bytes in one or two eightbytes, each INTEGER (an integer of the bytes it
+#   holds, a pointer where it is one) or SSE (float, double, <2 x float>, a 16-bit float or a vector of them), each its
+#   own parameter while registers are left (6 integer, 8 SSE), else on the stack ("byval"); larger, on the stack, and
+#   as a result through a pointer the caller gives ("sret");
+# - AArch64 (AAPCS64): a homogeneous floating-point aggregate - up to four members of one float type - as an array of
+#   them (a result as a struct of them); any other of at most 16 bytes as one i64 or [2 x i64] (a result of at most 8
+#   bytes as an integer of its bytes); larger, as a pointer to a copy the caller makes, and as a result through "sret".
+#
+# The tests at the end hold each target's classification to what clang 18 gives for the same C declarations.
+
+import "types"
+
+# one scalar of a plain struct flattened: its offset, size, LLVM type, and whether it is a float
+type Scalar struct(Off I64, Size I64, Llvm String&, IsFloat Bool) {
+    Off
+    Size
+    Llvm
+    IsFloat
+}
+
+# how a value crosses: Kind Direct (a scalar, Attr its extension), Parts (its bytes as Parts at Offs - a parameter
+# each; a result one value, a struct of them where several), Byval (x86-64's stack copy), Copy (AArch64's pointer to
+# a copy), Sret (a result through a pointer the caller gives, the call's first argument)
+type Way struct(Kind Pass, Parts List<String&>, Offs List<I64>, Sizes List<I64>, Attr String&) {
+    Kind
+    Parts
+    Offs
+    Sizes      # each part's bytes
+    Attr
+}
+
+type Pass enum {
+    Direct
+    Parts
+    Byval
+    Copy
+    Sret
+}
+
+# the registers x86-64 passes arguments in, the ones left as a C call's parameters are classified
+type Regs struct(Int I64, Sse I64) {
+    Int
+    Sse
+}
+
+# the scalars of a plain struct (or a number, a Bool, an extern type's reference) at offset base, in order
+fn Flatten(t mut types.Table&, ty types.TypeId, base I64, out mut List<Scalar>&) {
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.Ref {
+        out.Push(Scalar(base, 8, "ptr", false))
+        return
+    }
+    if t.KindOf(r) == types.Kind.Array {
+        el := t.Elem(r)
+        n := t.ConstValue(t.Length(r)) if t.KindOf(t.Length(r)) == types.Kind.Const else 0
+        for i in range n { Flatten(t, el, base + i * t.Size(el), out) }
+        return
+    }
+    if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
+        fs := t.Items(t.Fields(r))
+        offs := t.Offsets(r)
+        for i in range fs.Len() { Flatten(t, fs[i], base + offs[i], out) }
+        return
+    }
+    sz := t.Size(r)
+    ll := "i8" if r == types.BoolT else $t.Llvm(r)
+    out.Push(Scalar(base, sz, $ll, t.IsFloat(r)))
+}
+
+# whether a type crosses as a struct - by its classification - rather than as a scalar
+fn IsStruct(t types.Table&, ty types.TypeId) Bool {
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct
+}
+
+# the extension a C scalar of this type takes as a parameter or a result: "signext"/"zeroext" for an integer narrower
+# than 32 bits on x86-64 (a Bool zero-extended), "" for anything else
+fn Ext(t types.Table&, arch String&, ty types.TypeId) String {
+    if arch != "x86_64" { return "" }
+    r := t.Repr(ty)
+    if r == types.BoolT { return "zeroext" }
+    if not t.IsInt(r) or t.Bits(r) >= 32 { return "" }
+    return "zeroext" if t.IsUnsigned(r) else "signext"
+}
+
+# how a parameter of this type crosses to C (regs: what x86-64 has left, updated)
+fn Param(t mut types.Table&, arch String&, ty types.TypeId, regs mut Regs&) Way {
+    if not IsStruct(t, ty) {
+        r := t.Repr(ty)
+        if t.IsFloat(r) { regs.Sse-- } else { regs.Int-- }
+        return Way(Pass.Direct, List<String&>(), List<I64>(), List<I64>(), Ext(t, arch, ty))
+    }
+    w := Classify(t, arch, ty, false)
+    if arch == "x86_64" and w.Kind == Pass.Parts {
+        ni, ns I64 = 0, 0
+        for p in w.Parts {
+            if inSse(p) { ns++ } else { ni++ }
+        }
+        if ni > regs.Int or ns > regs.Sse { return Way(Pass.Byval, List<String&>(), List<I64>(), List<I64>(), "") }
+        regs.Int -= ni
+        regs.Sse -= ns
+    }
+    return w
+}
+
+# how a result of this type comes back from C
+fn Result(t mut types.Table&, arch String&, ty types.TypeId) Way {
+    if not IsStruct(t, ty) { return Way(Pass.Direct, List<String&>(), List<I64>(), List<I64>(), Ext(t, arch, ty)) }
+    return Classify(t, arch, ty, true)
+}
+
+# whether a part is passed in an SSE register (x86-64)
+fn inSse(p String&) Bool { return p.StartsWith("float") or p.StartsWith("double") or p.StartsWith("half") or p.StartsWith("bfloat") or p.StartsWith("<") }
+
+# a struct's classification, as a parameter or (result) a result
+fn Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) Way {
+    size := t.Size(ty)
+    sc List<Scalar>
+    Flatten(t, ty, 0, sc)
+    parts List<String&>
+    offs List<I64>
+    sizes List<I64>
+    if arch == "aarch64" {
+        # AAPCS64 B.4: a homogeneous floating-point aggregate
+        hfa := sc.Len() >= 1 and sc.Len() <= 4
+        for s in sc {
+            if not s.IsFloat or s.Size != sc[0].Size { hfa = false }
+        }
+        if hfa {
+            ft := sc[0].Llvm
+            if result {
+                b := StringBuilder()
+                b.Push("{ ")
+                for i in range sc.Len() {
+                    if i > 0 { b.Push(", ") }
+                    b.Push(ft)
+                }
+                b.Push(" }")
+                parts.Push(b.ToString())
+            } else {
+                parts.Push($"[" $sc.Len() " x " $ft "] alignstack(8)")
+            }
+            offs.Push(0)
+            sizes.Push(sc.Len() * sc[0].Size)
+            return Way(Pass.Parts, parts, offs, sizes, "")
+        }
+        if size > 16 { return Way(Pass.Sret if result else Pass.Copy, parts, offs, sizes, "") }
+        if size <= 8 {
+            parts.Push($"i" $(size * 8) if result else "i64")
+            sizes.Push(size if result else 8)
+        } else {
+            parts.Push("[2 x i64]")
+            sizes.Push(16)
+        }
+        offs.Push(0)
+        return Way(Pass.Parts, parts, offs, sizes, "")
+    }
+    # x86-64 System V 3.2.3
+    if size > 16 or size == 0 { return Way(Pass.Sret if result else Pass.Byval, parts, offs, sizes, "") }
+    for k in range (size + 7) / 8 {
+        lo := k * 8
+        hi := lo + 8
+        sse := true
+        any := false
+        for s in sc {
+            if s.Off >= lo and s.Off < hi {
+                any = true
+                if not s.IsFloat { sse = false }
+            }
+        }
+        if not any { continue }
+        part, n := sseAt(sc, lo) if sse else intAt(sc, lo, size)
+        parts.Push($part)
+        offs.Push(lo)
+        sizes.Push(n)
+    }
+    return Way(Pass.Parts, parts, offs, sizes, "")
+}
+
+# a classification's parts as one LLVM value's type: the part, or a struct of them
+fn PartsType(w Way&) String {
+    if w.Parts.Len() == 1 { return $w.Parts[0] }
+    b := StringBuilder()
+    b.Push("{ ")
+    for i, p in w.Parts {
+        if i > 0 { b.Push(", ") }
+        b.Push(p)
+    }
+    b.Push(" }")
+    return b.ToString()
+}
+
+# a classification's parts as parameters
+fn PartsList(w Way&) String {
+    b := StringBuilder()
+    for i, p in w.Parts {
+        if i > 0 { b.Push(", ") }
+        b.Push(p)
+    }
+    return b.ToString()
+}
+
+# whether a struct's scalars hold data in [from, to)
+fn data(sc List<Scalar>&, from I64, to I64) Bool {
+    for s in sc {
+        if s.Off < to and s.Off + s.Size > from { return true }
+    }
+    return false
+}
+
+# the scalar starting at offset off, -1 for none
+fn at(sc List<Scalar>&, off I64) I64 {
+    for i, s in sc {
+        if s.Off == off { return i }
+    }
+    return -1
+}
+
+# an INTEGER eightbyte's type (clang's GetINTEGERTypeAtOffset): the scalar there where it is a pointer or a 64-bit
+# integer, or an integer with nothing after it in the eightbyte; else an integer of the bytes left in the struct, at most 8
+fn intAt(sc List<Scalar>&, off I64, size I64) String, I64 {
+    i := at(sc, off)
+    if i >= 0 and not sc[i].IsFloat {
+        s := sc[i]
+        if s.Llvm == "ptr" or s.Size == 8 { return $s.Llvm, 8 }
+        if not data(sc, off + s.Size, off + 8) { return $"i" $(s.Size * 8), s.Size }
+    }
+    n := (size - off).Min(8)
+    return $"i" $(n * 8), n
+}
+
+# an SSE eightbyte's type (clang's GetSSETypeAtOffset): float, double, <2 x float>, a 16-bit float or a vector of them
+fn sseAt(sc List<Scalar>&, off I64) String, I64 {
+    i := at(sc, off)
+    t0 := sc[i].Llvm if i >= 0 else "double"
+    half := ""
+    for s in sc {
+        if s.Off >= off and s.Off < off + 8 and s.Size == 2 and half == "" { half = $s.Llvm }
+    }
+    if not data(sc, off + 4, off + 8) {
+        if t0 == "half" or t0 == "bfloat" {
+            if not data(sc, off + 2, off + 4) { return $t0, 2 }
+            return $"<2 x " $t0 ">", 4
+        }
+        return $t0, 4
+    }
+    if half != "" { return $"<4 x " $half ">", 8 }
+    j := at(sc, off + 4)
+    if t0 == "float" and j >= 0 and sc[j].Llvm == "float" { return "<2 x float>", 8 }
+    return $t0, 8
+}
+
+# the bytes a classification's parts span from the start, for the temporary they are loaded from or stored to
+fn Span(t types.Table&, w Way&, ty types.TypeId) I64 {
+    n := t.Size(ty)
+    for i in range w.Parts.Len() {
+        if w.Offs[i] + w.Sizes[i] > n { n = w.Offs[i] + w.Sizes[i] }
+    }
+    return n
+}
+
+
+# ---- tests ----
+
+import "source"
+
+# a struct of these fields laid out, named n
+fn testStruct(t mut types.Table&, names mut source.Names&, n String&, fields Array<types.TypeId>&) types.TypeId {
+    s := t.Named(t.AddDecl(0, names.Intern(n), types.DeclKind.Struct, 0), types.ListId(0))
+    t.SetStructBody(s, t.List(fields), false)
+    for f in fields { assert t.ComputeLayout(f) }
+    assert t.ComputeLayout(s)
+    return s
+}
+
+# "T f(T a)" as clang declares it for arch, a parameter spelled as a C declaration's
+fn testDecl(t mut types.Table&, arch String&, ty types.TypeId) String {
+    r := Result(t, arch, ty)
+    regs := Regs(6, 8)
+    ret := match r.Kind {
+        case Pass.Direct => $t.Llvm(ty)
+        case Pass.Parts => PartsType(r)
+        case _ => "void"
+    }
+    ps := StringBuilder()
+    if r.Kind == Pass.Sret {
+        ps.Push("sret, ")
+        regs.Int--
+    }
+    p := Param(t, arch, ty, regs)
+    ps.Push(match p.Kind {
+        case Pass.Direct => $t.Llvm(ty)
+        case Pass.Parts => PartsList(p)
+        case Pass.Byval => "byval"
+        case Pass.Copy => "ptr"
+        case Pass.Sret => "?"
+    })
+    return $ret "(" $ps.ToString() ")"
+}
+
+test "a struct crosses to C as clang 18 passes it, on x86-64 and on AArch64 (X11)" {
+    names := source.Names()
+    t := types.NewTable(names)
+    t.AddModule("t")
+    i8, i16, i32, i64 := t.Prim("I8"), t.Prim("I16"), t.Prim("I32"), t.Prim("I64")
+    u8, f16, bf16, f32, f64 := t.Prim("U8"), t.Prim("F16"), t.Prim("BF16"), t.Prim("F32"), t.Prim("F64")
+    for p in types.TypeId[i8, i16, i32, i64, u8, f16, bf16, f32, f64, types.BoolT] { assert t.ComputeLayout(p) }
+    i2 := testStruct(t, names, "I2", types.TypeId[i32, i32])
+    l2 := testStruct(t, names, "L2", types.TypeId[i64, i64])
+    l3 := testStruct(t, names, "L3", types.TypeId[i64, i64, i64])
+    f2 := testStruct(t, names, "F2", types.TypeId[f32, f32])
+    f3 := testStruct(t, names, "F3", types.TypeId[f32, f32, f32])
+    f4 := testStruct(t, names, "F4", types.TypeId[f32, f32, f32, f32])
+    f5 := testStruct(t, names, "F5", types.TypeId[f32, f32, f32, f32, f32])
+    d2 := testStruct(t, names, "D2", types.TypeId[f64, f64])
+    d3 := testStruct(t, names, "D3", types.TypeId[f64, f64, f64])
+    ld := testStruct(t, names, "LD", types.TypeId[i64, f64])
+    di := testStruct(t, names, "DI", types.TypeId[f64, i32])
+    c3 := testStruct(t, names, "C3", types.TypeId[t.Array(u8, t.Const(i64, 3))])
+    sc := testStruct(t, names, "SC", types.TypeId[i16, u8])
+    fif := testStruct(t, names, "FIF", types.TypeId[f32, i32, f32])
+    nf := testStruct(t, names, "NF", types.TypeId[f2, f2])
+    bi := testStruct(t, names, "BI", types.TypeId[types.BoolT, i32])
+    cd := testStruct(t, names, "CD", types.TypeId[i8, f64])
+    h3 := testStruct(t, names, "H3", types.TypeId[t.Array(f16, t.Const(i64, 3))])
+    hf := testStruct(t, names, "HF", types.TypeId[f16, f32])
+    bbf := testStruct(t, names, "BBF", types.TypeId[t.Array(bf16, t.Const(i64, 2)), f32])
+    d1 := testStruct(t, names, "D1", types.TypeId[f64])
+    c9 := testStruct(t, names, "C9", types.TypeId[t.Array(u8, t.Const(i64, 9))])
+    i5 := testStruct(t, names, "I5", types.TypeId[t.Array(i32, t.Const(i64, 5))])
+    x := "x86_64"
+    assert testDecl(t, x, i2) == "i64(i64)"
+    assert testDecl(t, x, l2) == "{ i64, i64 }(i64, i64)"
+    assert testDecl(t, x, l3) == "void(sret, byval)"
+    assert testDecl(t, x, f2) == "<2 x float>(<2 x float>)"
+    assert testDecl(t, x, f3) == "{ <2 x float>, float }(<2 x float>, float)"
+    assert testDecl(t, x, f4) == "{ <2 x float>, <2 x float> }(<2 x float>, <2 x float>)"
+    assert testDecl(t, x, f5) == "void(sret, byval)"
+    assert testDecl(t, x, d2) == "{ double, double }(double, double)"
+    assert testDecl(t, x, d3) == "void(sret, byval)"
+    assert testDecl(t, x, ld) == "{ i64, double }(i64, double)"
+    assert testDecl(t, x, di) == "{ double, i32 }(double, i32)"
+    assert testDecl(t, x, c3) == "i24(i24)"
+    assert testDecl(t, x, sc) == "i32(i32)"
+    assert testDecl(t, x, fif) == "{ i64, float }(i64, float)"
+    assert testDecl(t, x, nf) == "{ <2 x float>, <2 x float> }(<2 x float>, <2 x float>)"
+    assert testDecl(t, x, bi) == "i64(i64)"
+    assert testDecl(t, x, cd) == "{ i8, double }(i8, double)"
+    assert testDecl(t, x, h3) == "<4 x half>(<4 x half>)"
+    assert testDecl(t, x, hf) == "<4 x half>(<4 x half>)"
+    assert testDecl(t, x, bbf) == "<4 x bfloat>(<4 x bfloat>)"
+    assert testDecl(t, x, d1) == "double(double)"
+    assert testDecl(t, x, c9) == "{ i64, i8 }(i64, i8)"
+    assert testDecl(t, x, i5) == "void(sret, byval)"
+    # registers run out: a struct is passed on the stack whole
+    regs := Regs(1, 8)
+    assert Param(t, x, l2, regs).Kind == Pass.Byval and regs.Int == 1
+    a := "aarch64"
+    # clang spells an aggregate result by its struct type; its members, as here, are what the back end reads
+    assert testDecl(t, a, i2) == "i64(i64)"
+    assert testDecl(t, a, l2) == "[2 x i64]([2 x i64])"
+    assert testDecl(t, a, l3) == "void(sret, ptr)"
+    assert testDecl(t, a, f2) == "{ float, float }([2 x float] alignstack(8))"
+    assert testDecl(t, a, f3) == "{ float, float, float }([3 x float] alignstack(8))"
+    assert testDecl(t, a, f4) == "{ float, float, float, float }([4 x float] alignstack(8))"
+    assert testDecl(t, a, f5) == "void(sret, ptr)"
+    assert testDecl(t, a, d2) == "{ double, double }([2 x double] alignstack(8))"
+    assert testDecl(t, a, d3) == "{ double, double, double }([3 x double] alignstack(8))"
+    assert testDecl(t, a, ld) == "[2 x i64]([2 x i64])"
+    assert testDecl(t, a, di) == "[2 x i64]([2 x i64])"
+    assert testDecl(t, a, c3) == "i24(i64)"
+    assert testDecl(t, a, sc) == "i32(i64)"
+    assert testDecl(t, a, fif) == "[2 x i64]([2 x i64])"
+    assert testDecl(t, a, nf) == "{ float, float, float, float }([4 x float] alignstack(8))"
+    assert testDecl(t, a, bi) == "i64(i64)"
+    assert testDecl(t, a, cd) == "[2 x i64]([2 x i64])"
+    assert testDecl(t, a, h3) == "{ half, half, half }([3 x half] alignstack(8))"
+    assert testDecl(t, a, hf) == "i64(i64)"
+    assert testDecl(t, a, bbf) == "i64(i64)"
+    assert testDecl(t, a, d1) == "{ double }([1 x double] alignstack(8))"
+    assert testDecl(t, a, c9) == "[2 x i64]([2 x i64])"
+    assert testDecl(t, a, i5) == "void(sret, ptr)"
+}
+
+test "a narrow integer or a Bool crosses extended on x86-64, as itself on AArch64" {
+    names := source.Names()
+    t := types.NewTable(names)
+    assert Ext(t, "x86_64", t.Prim("I8")) == "signext" and Ext(t, "x86_64", t.Prim("U16")) == "zeroext"
+    assert Ext(t, "x86_64", types.BoolT) == "zeroext" and Ext(t, "x86_64", t.Prim("I32")) == ""
+    assert Ext(t, "aarch64", t.Prim("I8")) == "" and Ext(t, "aarch64", types.BoolT) == ""
+}

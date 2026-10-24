@@ -1,0 +1,5 @@
+# check: fail error[X12]: List<I64> cannot come from C
+# X12: an export fn's parameter is C's - a List is olang's own structure, with no C counterpart
+export fn total(l List<I64>) I64 { return l.Len() }
+
+fn main() ? { }

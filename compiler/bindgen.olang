@@ -1,0 +1,842 @@
+# bindgen - "olang bindgen HEADER.h" (SPEC.md X16): a C header's declarations written as olang declares C's (X1-X13).
+#
+# clang reads the header, as a C compiler would (`-Xclang -ast-dump=json`), and its tree is read here: every function
+# the header itself declares becomes an "extern fn", a struct it needs an olang struct when it is plain data (X11) and
+# an "extern type" otherwise (X10), an enum's cases and every "#define NAME number" become constants. A macro's value
+# is what clang computes: each is asked for as an enumerator of a probe file that includes the header, so
+# "(SQLITE_IOERR | (1<<8))" needs no reading here. What has no olang form - a variadic function, a function taking a
+# struct by value that is not plain data, an extern variable - is listed at the end of the output, with why.
+#
+# The types, as C's on x86-64 and AArch64 Linux (LP64): "int" I32, "long" I64, "char" I8 (U8 when pointed to - text and
+# bytes), "_Bool" Bool, an enum I32. A pointer parameter is an array where it points to numbers ("const T *" an
+# "Array<T>", "T *" a "mut Array<T>&", so text is passed as "t.ToC()"), a reference where it points to a struct
+# ("Db?&", "mut Point?&"), an array of one handle where it points to a pointer ("mut Array<Db?&>&", C's out parameter),
+# a function where it is a function pointer (X13: an export fn is passed); a pointer to anything else - "void *" above
+# all - is a "CVoid?&", an extern type the output declares. A "char *" result is the prelude's "CStr?&" (X15). The
+# names are C's, so most are private to the module the output becomes: the declarations are the layer an olang API is
+# written over, in that module.
+import "std/os"
+import "std/io"
+import "std/json"
+import "std/filepath"
+import "token"
+
+# a C type as clang spells it, parsed, as a node of gen's table: a typedef name stands for what it names
+type CKind enum {
+    Void
+    Num                                                 # Text an olang number type, "Bool", or "char"
+    Rec                                                 # Text the key, "struct X"
+    Ptr                                                 # To what it points to, Ro whether that is const
+    Arr                                                 # To its element, N its length
+    Fn                                                  # To its result, N parameters from First in gen's params
+    Bad                                                 # Text why it has no olang form
+}
+
+type ctype struct(Kind CKind, Text String&, To I64, Ro Bool, N I64) {
+    Kind
+    Text
+    To
+    Ro
+    N
+    First I64 = 0
+}
+
+# a struct or a union a type names: its fields once its definition is seen, and the olang name and form it is given
+type record struct(Key String&) {
+    Key
+    Union Bool = false
+    Complete Bool = false
+    Bitfields Bool = false
+    Names List<String&>
+    Types List<String&>
+    Own Bool = false                                    # declared by the header itself
+    Name String& = ""
+    Used Bool = false
+    Plain I64 = -1                                      # -1 not decided, 0 no, 1 yes, 2 being decided
+}
+
+# a function the header declares: its name, its C type and its parameters' names ("" where unnamed)
+type cFunc struct(Name String&, Type String&, Params Array<String&>&, Static Bool) {
+    Name
+    Type
+    Params
+    Static
+}
+
+error Skip { WHY }
+
+# what was read from clang's tree
+type gen struct(header String&) {
+    header
+    typedefs := Map<String&, String&>()
+    recs := List<record>()
+    recIndex := Map<String&, I64>()
+    unnamed := Map<String&, I64>()                      # an unnamed struct's tree id: its record
+    funcs := List<cFunc>()
+    consts := List<String&>()                           # "NAME TYPE = VALUE"
+    constNames := Map<String&, I64>()
+    nodes := List<ctype>()
+    params := List<I64>()
+    skipped := List<String&>()
+    taken := Map<String&, I64>()                        # every top-level name the output declares
+    usesVoid := false
+    why String& = ""
+    file I64 = 0                                        # where the walk is: 0 elsewhere, 1 the header, 2 the probe
+}
+
+# ---- reading clang's tree ----
+
+fn member(j json.Json&, key String&) json.Json?&j {
+    match j {
+        case json.Json.Obj(o) {
+            for i in range o.Len() {
+                if o.Keys[i] == key { return o.Values[i] }
+            }
+        }
+        case _ { }
+    }
+    return null
+}
+
+fn text(j json.Json&, key String&) String {
+    m := member(j, key)
+    if m is null { return "" }
+    match m {
+        case json.Json.Str(s) { return $s }
+        case _ { return "" }
+    }
+}
+
+fn flag(j json.Json&, key String&) Bool {
+    m := member(j, key)
+    if m is null { return false }
+    match m {
+        case json.Json.Bool(v) { return v }
+        case _ { return false }
+    }
+}
+
+# the type a declaration has, as clang spells it, its typedef names kept
+fn typeOf(j json.Json&) String {
+    t := member(j, "type")
+    if t is null { return "" }
+    return text(t, "qualType")
+}
+
+# a node's children
+fn inner(j json.Json&) Array<json.Json&> {
+    m := member(j, "inner")
+    if m is not null {
+        match m {
+            case json.Json.Arr(items) { return items }
+            case _ { }
+        }
+    }
+    return Array<json.Json&>(0)
+}
+
+# follows the file the walk is in, as the tree names it: a location names its file only where it differs from the one
+# before it, in the order the tree is written
+fn (g mut gen&) track(j json.Json&, probe String&) {
+    match j {
+        case json.Json.Obj(o) {
+            for i in range o.Len() {
+                v := o.Values[i]
+                if o.Keys[i] == "includedFrom" { continue }     # the file that included this one: no location
+                if o.Keys[i] == "file" {
+                    match v {
+                        case json.Json.Str(s) { g.file = 1 if s == g.header else 2 if s == probe else 0 }
+                        case _ { }
+                    }
+                    continue
+                }
+                g.track(v, probe)
+            }
+        }
+        case json.Json.Arr(items) {
+            for x in items { g.track(x, probe) }
+        }
+        case _ { }
+    }
+}
+
+fn (g mut gen&) recordAt(key String&) I64 {
+    i := try g.recIndex.Get(key) catch default -1
+    if i >= 0 { return i }
+    g.recs.Push(record($key))
+    g.recIndex.Put($key, g.recs.Len() - 1)
+    return g.recs.Len() - 1
+}
+
+# the top-level declarations: each read once its location says which file it is in
+fn (g mut gen&) read(root json.Json&, probe String&) {
+    for n in inner(root) {
+        loc := member(n, "loc")
+        if loc is not null { g.track(loc, probe) }
+        where := g.file
+        for k in String&["range", "type", "inner"] {
+            m := member(n, k)
+            if m is not null { g.track(m, probe) }
+        }
+        kind := text(n, "kind")
+        name := text(n, "name")
+        if kind == "TypedefDecl" {
+            t := typeOf(n)
+            g.typedefs.Put($name, $t)
+            # an unnamed struct a typedef names takes the typedef's name: "typedef struct { ... } Pair"
+            for x in inner(n) {
+                owned := member(x, "ownedTagDecl")
+                if owned is null { continue }
+                r := try g.unnamed.Get(text(owned, "id")) catch default -1
+                if r >= 0 and (t.StartsWith("struct ") or t.StartsWith("union ")) {
+                    g.recIndex.Put($t, r)
+                    g.recs[r].Key = $t
+                }
+            }
+            continue
+        }
+        if kind == "RecordDecl" {
+            g.recordDecl(n, name, where == 1)
+            continue
+        }
+        if kind == "EnumDecl" {
+            if where != 1 { continue }
+            next I64 = 0
+            for c in inner(n) {
+                if text(c, "kind") != "EnumConstantDecl" { continue }
+                v := constValue(c)
+                if v != "" { next = try v.ParseInt() catch default next }
+                g.constant(text(c, "name"), next)
+                next++
+            }
+            continue
+        }
+        if kind == "FunctionDecl" and where == 1 {
+            ps mut List<String&>&g = List<String&>()
+            for p in inner(n) {
+                if text(p, "kind") == "ParmVarDecl" { ps.Push(text(p, "name")) }
+            }
+            static := text(n, "storageClass") == "static" or flag(n, "inline")
+            g.funcs.Push(cFunc($name, typeOf(n), ps.ToArray(), static))
+            continue
+        }
+        if kind == "VarDecl" and where == 1 { g.skipped.Push($name ": a variable - an extern variable has no olang form (X1)") }
+    }
+}
+
+# a struct's or a union's declaration, and those declared inside it ("struct a { struct b { ... } *x; }")
+fn (g mut gen&) recordDecl(n json.Json&, name String&, own Bool) {
+    union := text(n, "tagUsed") == "union"
+    r I64 = 0
+    if name == "" {
+        g.recs.Push(record(""))
+        r = g.recs.Len() - 1
+        g.unnamed.Put(text(n, "id"), r)
+    } else {
+        r = g.recordAt($("union " if union else "struct ") $name)
+    }
+    g.recs[r].Union = union
+    if own { g.recs[r].Own = true }
+    if not flag(n, "completeDefinition") or g.recs[r].Complete { return }
+    g.recs[r].Complete = true
+    for f in inner(n) {
+        k := text(f, "kind")
+        if k == "RecordDecl" { g.recordDecl(f, text(f, "name"), own) }
+        if k != "FieldDecl" { continue }
+        if flag(f, "isBitfield") { g.recs[r].Bitfields = true }
+        g.recs[r].Names.Push(text(f, "name"))
+        g.recs[r].Types.Push(typeOf(f))
+    }
+}
+
+# the value clang computed for an enumerator, "" where there is none (an enumerator counting on from the one before)
+fn constValue(j json.Json&) String {
+    v := text(j, "value")
+    if v != "" { return v }
+    for x in inner(j) {
+        w := constValue(x)
+        if w != "" { return w }
+    }
+    return ""
+}
+
+fn (g mut gen&) constant(name String&, v I64) {
+    if not usable(name) or name in g.constNames { return }
+    ty := "I32" if v >= -2147483648 and v <= 2147483647 else "I64"
+    g.consts.Push($name " " $ty " = " $v)
+    g.constNames.Put($name, 0)
+    g.taken.Put($name, 0)
+}
+
+# a C name olang can declare: a word that is no keyword, not beginning with "_" (C's own)
+fn usable(name String&) Bool {
+    if name == "" or name[0] == '_' { return false }
+    for c in name {
+        if not (c.IsLetter() or c.IsDigit() or c == '_') { return false }
+    }
+    return token.Keyword(name, 0, name.Len()) == token.Tok.Iden
+}
+
+# ---- C types ----
+
+# a C type's text in tokens: names, numbers and the punctuation of declarators
+fn ctokens(t String&) Array<String&> {
+    out List<String&>
+    i I64 = 0
+    for i < t.Len() {
+        c := t[i]
+        if c == ' ' {
+            i++
+            continue
+        }
+        j := i + 1
+        if c.IsLetter() or c.IsDigit() or c == '_' {
+            for j < t.Len() and (t[j].IsLetter() or t[j].IsDigit() or t[j] == '_') { j++ }
+        } else if c == '.' {
+            for j < t.Len() and t[j] == '.' { j++ }
+        }
+        out.Push($t[i:j])
+        i = j
+    }
+    return out.ToArray()
+}
+
+# a parse of one type's text
+type ctp struct(toks Array<String&>&) {
+    toks
+    pos I64 = 0
+}
+
+fn (p ctp&) at(k I64 = 0) String {
+    i := p.pos + k
+    return $p.toks[i] if i < p.toks.Len() else ""
+}
+
+fn (g mut gen&) node(kind CKind, label String&, to I64 = -1, ro Bool = false, n I64 = 0) I64 {
+    g.nodes.Push(ctype(kind, label, to, ro, n))
+    return g.nodes.Len() - 1
+}
+
+fn (g mut gen&) bad(why String&) I64 { return g.node(CKind.Bad, why) }
+
+# the node of a type's text: a typedef name stands for the type it names
+fn (g mut gen&) parseType(t String&, depth I64 = 0) I64 {
+    if depth > 32 { return g.bad("a typedef that names itself") }
+    p := ctp(ctokens(t))
+    r := g.typeName(p, depth)
+    if p.pos < p.toks.Len() { return g.bad($"'" $t "', which is no C type read here") }
+    return r
+}
+
+# specifiers then a declarator: "const char *", "int (*)(void *, int)", "unsigned char [64]"
+fn (g mut gen&) typeName(p mut ctp&, depth I64) I64 {
+    signed I64 = 0                                      # 1 signed, 2 unsigned
+    longs I64 = 0
+    word := ""
+    ro := false
+    tag := ""
+    named := ""
+    for p.pos < p.toks.Len() {
+        w := p.at()
+        if w == "const" {
+            ro = true
+        } else if w == "volatile" or w == "restrict" or w == "__restrict" {
+        } else if w == "signed" {
+            signed = 1
+        } else if w == "unsigned" {
+            signed = 2
+        } else if w == "long" {
+            longs++
+        } else if w in String&["short", "int", "char", "float", "double", "void", "_Bool", "bool", "_Float16", "__bf16", "__int128"] {
+            if w != "int" or word == "" { word = $w }
+        } else if w == "struct" or w == "union" or w == "enum" {
+            tag = $w
+            p.pos++
+            named = p.at()
+        } else if word == "" and tag == "" and named == "" and signed == 0 and longs == 0 and w.Len() > 0 and (w[0].IsLetter() or w[0] == '_') {
+            named = $w
+        } else {
+            break
+        }
+        p.pos++
+    }
+    base I64 = 0
+    if tag == "enum" {
+        base = g.node(CKind.Num, "I32")
+    } else if tag != "" {
+        if not usable(named) { return g.bad($"'" $tag " " $named "', a " $tag " with no name of its own, or the C compiler's") }
+        base = g.node(CKind.Rec, $tag " " $named)
+    } else if named != "" {
+        td := try g.typedefs.Get(named) catch default ""
+        if td == "" { return g.bad($"'" $named "', a type no declaration names") }
+        base = g.parseType(td, depth + 1)
+    } else {
+        base = g.numType(word, signed, longs)
+    }
+    return g.declarator(p, base, ro, depth)
+}
+
+fn (g mut gen&) numType(word String&, signed I64, longs I64) I64 {
+    if word == "void" { return g.node(CKind.Void, "") }
+    if word == "_Bool" or word == "bool" { return g.node(CKind.Num, "Bool") }
+    if word == "char" { return g.node(CKind.Num, "I8" if signed == 1 else "U8" if signed == 2 else "char") }
+    if word == "float" { return g.node(CKind.Num, "F32") }
+    if word == "double" { return g.bad("long double") if longs > 0 else g.node(CKind.Num, "F64") }
+    if word == "_Float16" { return g.node(CKind.Num, "F16") }
+    if word == "__bf16" { return g.node(CKind.Num, "BF16") }
+    if word == "__int128" { return g.bad("__int128") }
+    u := signed == 2
+    if word == "short" { return g.node(CKind.Num, "U16" if u else "I16") }
+    if longs > 0 { return g.node(CKind.Num, "U64" if u else "I64") }
+    return g.node(CKind.Num, "U32" if u else "I32")
+}
+
+# a declarator with no name over base: pointers, then a parenthesized declarator or none, then the suffixes - a
+# function's parameters, an array's lengths - which bind tighter than the pointers before them
+fn (g mut gen&) declarator(p mut ctp&, base I64, ro Bool, depth I64) I64 {
+    t := base
+    cnst := ro
+    for p.at() == "*" {
+        t = g.node(CKind.Ptr, "", t, cnst)
+        p.pos++
+        cnst = false
+        for p.at() == "const" or p.at() == "volatile" or p.at() == "restrict" or p.at() == "__restrict" {
+            cnst = p.at() == "const"
+            p.pos++
+        }
+    }
+    nested I64 = -1
+    if p.at() == "(" and (p.at(1) == "*" or p.at(1) == "(" or p.at(1) == "[") {
+        nested = p.pos + 1
+        level I64 = 0
+        for p.pos < p.toks.Len() {
+            if p.at() == "(" { level++ }
+            if p.at() == ")" {
+                level--
+                if level == 0 { break }
+            }
+            p.pos++
+        }
+        p.pos++
+    }
+    lengths List<I64>
+    for {
+        if p.at() == "(" {
+            p.pos++
+            ps List<I64>
+            variadic := false
+            for p.pos < p.toks.Len() and p.at() != ")" {
+                if p.at() == "..." {
+                    variadic = true
+                    p.pos++
+                } else {
+                    pt := g.typeName(p, depth)
+                    if not (g.nodes[pt].Kind == CKind.Void and ps.Len() == 0 and p.at() == ")") { ps.Push(pt) }
+                }
+                if p.at() == "," { p.pos++ }
+            }
+            p.pos++
+            # a function's node: its result "to", its parameters the nodes "n" from the first in g.params
+            first := g.params.Len()
+            for x in ps { g.params.Push(x) }
+            f := g.node(CKind.Fn, "variadic" if variadic else "", t, false, ps.Len())
+            g.nodes[f].First = first
+            t = f
+        } else if p.at() == "[" {
+            p.pos++
+            n I64 = 0
+            if p.at() != "]" {
+                n = try p.at().ParseInt() catch default -1
+                p.pos++
+            }
+            p.pos++
+            lengths.Push(n)
+        } else {
+            break
+        }
+    }
+    for k in range lengths.Len() { t = g.node(CKind.Arr, "", t, false, lengths[lengths.Len() - 1 - k]) }
+    if nested >= 0 {
+        end := p.pos
+        p.pos = nested
+        t = g.declarator(p, t, false, depth)
+        p.pos = end
+    }
+    return t
+}
+
+# ---- olang's forms of them ----
+
+fn (g mut gen&) recOf(key String&) I64 {
+    i := g.recordAt(key)
+    g.recs[i].Used = true
+    return i
+}
+
+# whether a struct is plain data (X11): complete, no bitfields, a struct, every field one
+fn (g mut gen&) plain(i I64) Bool {
+    r := g.recs[i].Plain
+    if r == 0 { return false }
+    if r >= 1 { return true }                           # being decided: a pointer to it is what reached it again
+    g.recs[i].Plain = 2
+    ok := g.recs[i].Complete and not g.recs[i].Bitfields and not g.recs[i].Union
+    if ok {
+        for ft in g.recs[i].Types {
+            t := g.parseType(ft)
+            if g.nodes[t].Kind == CKind.Arr { t = g.nodes[t].To }
+            try g.fieldType(t) catch Skip {
+                ok = false
+                break
+            }
+        }
+    }
+    g.recs[i].Plain = 1 if ok else 0
+    return ok
+}
+
+fn (g mut gen&) name(i I64) String { return $g.recs[i].Name }
+
+fn (g mut gen&) voidRef() String {
+    g.usesVoid = true
+    return "CVoid?&"
+}
+
+fn (g mut gen&) skip(why String&) ? Skip {
+    g.why = $why
+    error Skip.WHY
+}
+
+# whether node t is C's char; isByte also takes signed and unsigned char - what a pointer C gives back to text points to
+fn (g gen&) isChar(t I64) Bool { return g.nodes[t].Kind == CKind.Num and g.nodes[t].Text == "char" }
+fn (g gen&) isByte(t I64) Bool { return g.nodes[t].Kind == CKind.Num and g.nodes[t].Text in String&["char", "U8", "I8"] }
+
+# a field's type (X11): a number, a Bool, a plain struct held in place, an extern type's reference - any pointer, a
+# struct's that is no plain data, text's, or another's (CVoid)
+fn (g mut gen&) fieldType(t I64) String ? Skip {
+    n := g.nodes[t]
+    match n.Kind {
+        case CKind.Num { return "U8" if n.Text == "char" else $n.Text }
+        case CKind.Rec {
+            i := g.recOf(n.Text)
+            if not g.plain(i) { try g.skip("a struct held in place that is not plain data (X11)") }
+            return g.name(i)
+        }
+        case CKind.Ptr {
+            to := g.nodes[n.To]
+            if g.isByte(n.To) { return "CStr?&" }
+            if to.Kind == CKind.Rec {
+                i := g.recOf(to.Text)
+                if not g.plain(i) { return $g.name(i) "?&" }
+            }
+            return g.voidRef()
+        }
+        case CKind.Bad { try g.skip(n.Text) }
+        case _ { try g.skip("a field of this type, which has no olang form") }
+    }
+    return ""
+}
+
+# a result's, or a callback parameter's, type (X2, X13): a number, a Bool, a plain struct by value, an extern type's
+# reference; a callback's parameter may also be a plain struct by reference
+fn (g mut gen&) valueType(t I64, callback Bool) String ? Skip {
+    n := g.nodes[t]
+    match n.Kind {
+        case CKind.Num { return "I8" if n.Text == "char" else $n.Text }
+        case CKind.Rec {
+            i := g.recOf(n.Text)
+            if not g.plain(i) { try g.skip("a struct by value that is not plain data (X11)") }
+            return g.name(i)
+        }
+        case CKind.Ptr {
+            to := g.nodes[n.To]
+            if g.isByte(n.To) { return "CStr?&" }
+            if to.Kind == CKind.Rec {
+                i := g.recOf(to.Text)
+                if not g.plain(i) { return $g.name(i) "?&" }
+                if callback { return $("" if n.Ro else "mut ") $g.name(i) "?&" }
+                try g.skip($"a pointer to plain-data struct " $g.name(i) " as a result - an extern gives only an extern type's reference (X2)")
+            }
+            return g.voidRef()
+        }
+        case CKind.Bad { try g.skip(n.Text) }
+        case _ { try g.skip("a value of this type, which has no olang form") }
+    }
+    return ""
+}
+
+# a parameter's type (X2, X3, X13)
+fn (g mut gen&) paramType(t I64) String ? Skip {
+    n := g.nodes[t]
+    if n.Kind == CKind.Ptr { return try g.pointerParam(n.To, n.Ro) }
+    if n.Kind == CKind.Arr { return try g.pointerParam(n.To, false) }
+    return try g.valueType(t, false)
+}
+
+fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
+    n := g.nodes[t]
+    match n.Kind {
+        case CKind.Num {
+            e := "U8" if n.Text == "char" else $n.Text
+            return "Array<" $e ">" if ro else "mut Array<" $e ">&"
+        }
+        case CKind.Rec {
+            i := g.recOf(n.Text)
+            return $("" if ro or not g.plain(i) else "mut ") $g.name(i) "?&"
+        }
+        case CKind.Ptr {
+            to := g.nodes[n.To]
+            if g.isChar(n.To) { return "mut Array<CStr?&>&" }
+            if to.Kind == CKind.Rec {
+                i := g.recOf(to.Text)
+                if not g.plain(i) { return "mut Array<" $g.name(i) "?&>&" }
+            }
+            if to.Kind == CKind.Void {
+                g.usesVoid = true
+                return "mut Array<CVoid?&>&"
+            }
+            return g.voidRef()
+        }
+        case CKind.Fn {
+            if n.Text == "variadic" { try g.skip("a callback taking a variable number of arguments") }
+            b := StringBuilder()
+            b.Push("fn(")
+            for k in range n.N {
+                if k > 0 { b.Push(", ") }
+                b.Push($"a" $k " " $(try g.valueType(g.params[n.First + k], true)))
+            }
+            b.Push(")")
+            if g.nodes[n.To].Kind != CKind.Void { b.Push($" " $(try g.valueType(n.To, true))) }
+            return b.ToString()
+        }
+        case CKind.Bad { try g.skip(n.Text) }
+        case _ { }
+    }
+    return g.voidRef()
+}
+
+# ---- writing it out ----
+
+# a record's olang name: the typedef naming it ("typedef struct sqlite3 sqlite3"), else its tag, made a name no other
+# declaration of the output has
+fn (g mut gen&) nameRecords() {
+    byKey := Map<String&, String&>()
+    for k in g.typedefs.Keys() {
+        t := try g.typedefs.Get(k) catch default ""
+        if (t.StartsWith("struct ") or t.StartsWith("union ")) and t not in byKey and usable(k) { byKey.Put($t, $k) }
+    }
+    for i in range g.recs.Len() {
+        key := g.recs[i].Key
+        if key == "" { continue }                       # an unnamed struct no typedef names: reached by no type
+        n := try byKey.Get(key) catch default ""
+        if n == "" {
+            sp := try key.Find(" ") catch default -1
+            n = $key[sp + 1:] if sp >= 0 else $key
+        }
+        if not usable(n) { n = "c_" $n }
+        for g.taken.Has(n) { n = $n "_t" }
+        g.recs[i].Name = $n
+        g.taken.Put($n, 0)
+    }
+}
+
+fn (g mut gen&) paramName(c String&, k I64, used mut Map<String&, I64>&) String {
+    n := $c
+    if not usable(n) or n in g.taken or n in used or n == "CVoid" or n == "CStr" { n = "a" $k }
+    used.Put($n, 0)
+    return n
+}
+
+fn (g mut gen&) function(f cFunc&) String ? Skip {
+    t := g.parseType(f.Type)
+    n := g.nodes[t]
+    if n.Kind == CKind.Bad { try g.skip(n.Text) }
+    if n.Kind != CKind.Fn { try g.skip("its type is no function's") }
+    if n.Text == "variadic" { try g.skip("it takes a variable number of arguments") }
+    b := StringBuilder()
+    b.Push("extern fn " $f.Name "(")
+    used := Map<String&, I64>()
+    for k in range n.N {
+        if k > 0 { b.Push(", ") }
+        pn := g.paramName(f.Params[k] if k < f.Params.Len() else "", k, used)
+        b.Push($pn " " $(try g.paramType(g.params[n.First + k])))
+    }
+    b.Push(")")
+    if g.nodes[n.To].Kind != CKind.Void { b.Push($" " $(try g.valueType(n.To, false))) }
+    return b.ToString()
+}
+
+fn (g mut gen&) structDecl(i I64) String {
+    b := StringBuilder()
+    r := g.recs[i]
+    b.Push("type " $r.Name " struct() {\n")
+    used := Map<String&, I64>()
+    for k in range r.Names.Len() {
+        n := g.paramName(r.Names[k], k, used)
+        ct := g.parseType(r.Types[k])
+        if g.nodes[ct].Kind == CKind.Arr {
+            e := try g.fieldType(g.nodes[ct].To) catch Skip default "U8"
+            b.Push($"    " $n " := Array<" $e ">(" $g.nodes[ct].N ")\n")
+        } else {
+            ft := try g.fieldType(ct) catch Skip default "U8"
+            b.Push($"    " $n " " $ft "\n")
+        }
+    }
+    b.Push("}\n")
+    return b.ToString()
+}
+
+# the output: what the header declares, as olang declares it
+fn (g mut gen&) write(display String&) String {
+    for f in g.funcs { g.taken.Put($f.Name, 0) }
+    # a struct C hands back by pointer is C's to lay out: an extern type, whatever its fields
+    for f in g.funcs {
+        t := g.parseType(f.Type)
+        if g.nodes[t].Kind != CKind.Fn { continue }
+        r := g.nodes[g.nodes[t].To]
+        if r.Kind == CKind.Ptr and g.nodes[r.To].Kind == CKind.Rec { g.recs[g.recordAt(g.nodes[r.To].Text)].Plain = 0 }
+    }
+    g.nameRecords()
+    fns := StringBuilder()
+    seen := Map<String&, I64>()
+    for f in g.funcs {
+        if f.Name in seen { continue }
+        if f.Static {
+            seen.Put($f.Name, 0)
+            g.skipped.Push($f.Name ": static or inline in the header - no symbol to link")
+            continue
+        }
+        seen.Put($f.Name, 0)
+        if not usable(f.Name) {
+            g.skipped.Push($f.Name ": a name olang cannot declare (a keyword, or beginning with '_')")
+            continue
+        }
+        line := try g.function(f) catch Skip {
+            g.skipped.Push($f.Name ": " $g.why)
+            continue
+        }
+        fns.Push($line "\n")
+    }
+    out := StringBuilder()
+    out.Push("# Generated by olang bindgen from " $display ":\n")
+    out.Push("# its C declarations as olang declares them (X1-X13), the library linked by a line beside them, as\n")
+    out.Push("# `link \"NAME\"` (X9).\n")
+    if g.usesVoid { out.Push("\n# a pointer C passes as it is: \"void *\", and any other this file gives no form of its own\nextern type CVoid\n") }
+    opaque := StringBuilder()
+    plains := StringBuilder()
+    for i in range g.recs.Len() {
+        r := g.recs[i]
+        if r.Name == "" or not r.Used and not (r.Own and r.Complete) { continue }
+        if g.plain(i) {
+            plains.Push($"\n" $g.structDecl(i))
+        } else {
+            opaque.Push("extern type " $r.Name "\n")
+        }
+    }
+    if opaque.Len() > 0 { out.Push($"\n" $opaque.ToString()) }
+    out.Push(plains.ToString())
+    if g.consts.Len() > 0 {
+        out.Push("\n")
+        for c in g.consts { out.Push($c "\n") }
+    }
+    if fns.Len() > 0 { out.Push($"\n" $fns.ToString()) }
+    if g.skipped.Len() > 0 {
+        out.Push("\n# not declared:\n")
+        for s in g.skipped { out.Push("#   " $s "\n") }
+    }
+    return out.ToString()
+}
+
+# the names a header defines as objects - "#define NAME ...", no parameter list - for the probe to ask clang about
+fn macroNames(header String&) List<String&> {
+    out List<String&>
+    for line in header.Lines() {
+        t := line.Trim()
+        if not t.StartsWith("#") { continue }
+        t = t[1:].Trim()
+        if not t.StartsWith("define") { continue }
+        t = t[6:]
+        if t.Len() == 0 or not (t[0] == ' ' or t[0] == '\t') { continue }
+        t = t.Trim()
+        e I64 = 0
+        for e < t.Len() and (t[e].IsLetter() or t[e].IsDigit() or t[e] == '_') { e++ }
+        if e == 0 or e == t.Len() or t[e] == '(' { continue }     # a function-like macro, or one with no value
+        if usable(t[:e]) { out.Push($t[:e]) }
+    }
+    return out
+}
+
+# "olang bindgen HEADER.h": the declarations on the standard output, or into output; the status
+fn Run(path String&, output String&, clang String&) I32 {
+    said := io.Writer(2)
+    status := run(path, output, clang, said)
+    try said.Flush() catch io.Error { }
+    return status
+}
+
+fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
+    if clang == "" {
+        said.Write("olang: bindgen needs clang, which is not on the PATH\n")
+        return 2
+    }
+    header := try os.RealPath(path) catch os.Error {
+        said.Write("olang: " $path ": no such file\n")
+        return 2
+    }
+    src := try os.ReadFile(header) catch os.Error {
+        said.Write("olang: " $path ": cannot be read\n")
+        return 2
+    }
+    dir := try os.MkTemp("", "olang-bindgen") catch os.Error {
+        said.Write("olang: bindgen: cannot make a temporary directory\n")
+        return 2
+    }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    probe := filepath.Join(dir, "probe.c")
+    names := macroNames(src)
+    pb := StringBuilder()
+    pb.Push("#include \"" $header "\"\n")
+    for k in range names.Len() { pb.Push("enum __olang_m" $k " : long long { __olang_v" $k " = (" $names[k] ") };\n") }
+    try os.WriteFile(probe, pb.ToString()) catch os.Error {
+        said.Write("olang: bindgen: cannot write " $probe "\n")
+        return 2
+    }
+    o := try os.Exec(String&[clang, "-x", "c", "-fsyntax-only", "-w", "-ferror-limit=0", "-Xclang", "-ast-dump=json", probe]) catch os.Error {
+        said.Write("olang: bindgen: clang could not be run\n")
+        return 2
+    }
+    # the probe's own errors are the macros that are no integer constant: what is wanted is the header's
+    if o.Stdout.Len() == 0 {
+        said.Write("olang: bindgen: clang could not read " $path ":\n" $o.Stderr)
+        return 1
+    }
+    doc := try json.Parse(o.Stdout) catch json.Error {
+        said.Write("olang: bindgen: clang's tree of " $path " could not be read\n")
+        return 2
+    }
+    g := gen(header)
+    g.read(doc, probe)
+    # the probe's enumerators: a macro's value where clang computed one
+    g.file = 0
+    for n in inner(doc) {
+        nm := text(n, "name")
+        if text(n, "kind") != "EnumDecl" or not nm.StartsWith("__olang_m") { continue }
+        k := try nm[9:].ParseInt() catch default -1
+        if k < 0 or k >= names.Len() { continue }
+        for c in inner(n) {
+            v := constValue(c)
+            if v == "" { continue }
+            x := try v.ParseInt() catch { continue }
+            g.constant(names[k], x)
+        }
+    }
+    result := g.write(path)
+    if output == "" {
+        try io.Print(result) catch io.Error { return 1 }
+        return 0
+    }
+    try os.WriteFile(output, result) catch os.Error {
+        said.Write("olang: " $output ": cannot be written\n")
+        return 2
+    }
+    return 0
+}

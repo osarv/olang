@@ -219,6 +219,18 @@ type Diag enum {
     TypeVarNamesType
     TypeVarNotInferable
     ExternType
+    ExportMethod
+    ExportGeneric
+    ExportName
+    ExportType
+    ExportResult
+    ExportObligation
+    CallbackNotExport
+    ExternResult
+    ForeignBuilt
+    ForeignByValue
+    LinkName
+    InterpLink
     MutOnValueType
     MutOnValueParam
     MutOnValueField
@@ -639,7 +651,7 @@ type Diag enum {
 fn Usage() Msg { return Msg(Diag.Usage, "B1", "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
 
 # ERR_NOT_A_MODE
-fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp and fix, and a file ending in .olang is built and run") }
+fn NotAMode(text String&) Msg { return Msg(Diag.NotAMode, "B1", "'" $text "' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix and bindgen, and a file ending in .olang is built and run") }
 
 # ERR_MODE_ONE_FILE
 fn ModeOneFile(text String&) Msg { return Msg(Diag.ModeOneFile, "B1", $text " takes exactly one file") }
@@ -1182,7 +1194,43 @@ fn TypeVarNamesType(tok String&) Msg { return Msg(Diag.TypeVarNamesType, "G1", "
 fn TypeVarNotInferable(text String&) Msg { return Msg(Diag.TypeVarNotInferable, "G4", "type variable " $text " appears in no parameter's type, so no call can infer it - introduce it in a parameter's type") }
 
 # ERR_EXTERN_TYPE
-fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers") }
+fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }
+
+# ERR_EXTERN_RESULT
+fn ExternResult(ty String&) Msg { return Msg(Diag.ExternResult, "X2", $ty " cannot come back from C - an extern's result is one number, Bool, extern type's reference or plain-data struct") }
+
+# ERR_FOREIGN_BUILT
+fn ForeignBuilt(ty String&) Msg { return Msg(Diag.ForeignBuilt, "X10", $ty " is an extern type: only C makes one - declare the C function that does, as 'extern fn open() " $ty "&'") }
+
+# ERR_FOREIGN_BY_VALUE
+fn ForeignByValue(ty String&) Msg { return Msg(Diag.ForeignByValue, "X10", $ty " is an extern type, held only by reference - write '" $ty "&', or '" $ty "?&' where it may be null") }
+
+# ERR_EXPORT_METHOD
+fn ExportMethod() Msg { return Msg(Diag.ExportMethod, "X12", "an export fn is one C calls by its name, and a method has no C name - declare a function taking the receiver") }
+
+# ERR_EXPORT_GENERIC
+fn ExportGeneric() Msg { return Msg(Diag.ExportGeneric, "X12", "an export fn is one C function, and a generic one stands for many - declare it for the types C passes") }
+
+# ERR_EXPORT_NAME
+fn ExportName(tok String&) Msg { return Msg(Diag.ExportName, "X12", $tok " is the program's own name in C - name the export fn otherwise") }
+
+# ERR_EXPORT_TYPE
+fn ExportType(ty String&) Msg { return Msg(Diag.ExportType, "X12", $ty " cannot come from C - an export fn's parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array by reference") }
+
+# ERR_EXPORT_RESULT
+fn ExportResult(ty String&) Msg { return Msg(Diag.ExportResult, "X12", $ty " cannot go back to C - an export fn gives one number, Bool, extern type's reference, plain-data struct, or an array of these by value") }
+
+# ERR_EXPORT_OBLIGATION
+fn ExportObligation(rel String&) Msg { return Msg(Diag.ExportObligation, "X12", "an export fn's caller is C, which nothing holds to what its body requires (" $rel ") - keep what it is given only for the call") }
+
+# ERR_CALLBACK_NOT_EXPORT
+fn CallbackNotExport() Msg { return Msg(Diag.CallbackNotExport, "X13", "a C function is given a function by the name of an export fn - declare one with 'export fn' and pass it by name") }
+
+# ERR_LINK_NAME
+fn LinkName(tok String&) Msg { return Msg(Diag.LinkName, "X9", $tok " names no library and no file - write a library's name, as 'link \"m\"', or a path to one, as 'link \"lib/libx.a\"'") }
+
+# ERR_INTERP_LINK
+fn InterpLink(text String&, why String&) Msg { return Msg(Diag.InterpLink, "B3e", "the library '" $text "' a link names cannot be loaded into interpret: " $why " - build the program instead") }
 
 # ERR_MUT_ON_VALUE_TYPE
 fn MutOnValueType(ty String&) Msg { return Msg(Diag.MutOnValueType, "T25b", "'mut' makes a reference writable, and " $ty " is no reference") }

@@ -1429,11 +1429,11 @@ storage.
 
 ```
 top-decl ::= type-decl | import-decl | error-decl | func-decl | var-decl | test-decl
-           | extern-func-decl | top-if
+           | extern-func-decl | extern-type-decl | link-decl | export-func-decl | top-if
 ```
 
 `import-decl` is specified in §4; `test-decl` in
-§10.4; `extern-func-decl` in §11; `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
+§10.4; `extern-func-decl`, `extern-type-decl`, `link-decl` and `export-func-decl` in §11 (X1, X10, X9, X12); `top-if`, conditional compilation, in §10.5 (B9). The remaining four are covered below.
 Declaration order within a module is not significant: any top-level declaration may refer to any
 other, declared earlier or later in the same file, and to any name reachable through an import
 (§4).
@@ -5933,28 +5933,30 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
+            | "bindgen"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
-            | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR
+            | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-(B14), `lsp` (B15), `mcp` (B16) and `fix` (B17). An
+(B14), `lsp` (B15), `mcp` (B16), `fix` (B17) and `bindgen` (§11 X16). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
 
 | option | applies to | rule |
 |---|---|---|
-| `-output PATH` | build, compile | B3h |
+| `-output PATH` | build, compile, bindgen | B3h, §11 X16 |
 | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
 | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
 | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
 | `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
+| `-library` | build | §11 X14 |
 
-`build` and `compile` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
+`build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
@@ -6096,7 +6098,11 @@ stops the interpreter, saying so and naming the task, since nothing else runs to
 and no task in sight waits that time out, as the built program would with nothing to wake it.) Values whose type
 declares a destructor are **not yet interpreted** - except directly in a global's own initializer, whose instance
 lands in the program's scope and is never destructed (K2c); reaching one stops the same way, as does an `extern`
-function with an `F16` or `BF16` parameter or result (an array of either is passed, X3). Whenever the interpreter
+function with an `F16` or `BF16` parameter or result (an array of either is passed, X3), or with a struct or an extern
+type's reference for one (X10, X11). The libraries the program links (X9) are loaded into the interpreting process before
+`main` runs, a library's name as its shared library (`libNAME.so`), so its functions are found as the built program
+finds them; one that cannot be loaded - a static library, an object, a library not there - is an error naming it and
+why. Whenever the interpreter
 stops a program on something it does not run, the blocks it is in are still left as the built program, which would
 go on, leaves them: their deferred code (§6.9) runs, innermost first, before the stop is reported. Where the built
 program itself ends - `os.Exit`, a check failing - deferred code runs only where the built program's
@@ -6509,15 +6515,28 @@ not declare an incorrect prototype. Keeping the vocabulary deliberately narrow (
 be got wrong, but does not close it.
 
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } [ "," ] ]`, where `extern-param ::= IDEN
-extern-type`, and `extern-ret-type ::= extern-scalar-type`. `extern-type` is exactly one of: a
-numeric primitive type (T4/T5 - this is also exactly `extern-scalar-type`), or an array type (T7,
-of any length) whose element type is itself one. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
-return type is never valid (see X3 for why). No other type — `Bool`, a struct, an enum type, an
-error type, a function type, or an array of any type outside the numeric-primitive set —
-is valid in an `extern-param` or `extern-ret-type` position, with one exception: a parameter of one of the runtime's
-own functions (X6, a name beginning `__olang_`) may be the function type `fn()` - no parameters, no result, no errors -
-where that function's prototype in X6 has one. The runtime calls such a value only on a thread it made and set up
-itself, and only before it returns; no C function is ever handed one.
+extern-type`, and `extern-ret-type ::= extern-value-type`. What crosses the C boundary (its **vocabulary**) is:
+
+- an `extern-value-type`, as a parameter or the result: a numeric primitive type (T4/T5) or a type declared over one
+  (T29, a `Char` among them), a `Bool`, a reference to an extern type (X10: `Db&`, `Db?&`), or a plain-data struct
+  held by value (X11);
+- as a parameter only: a reference to a plain-data struct (`p Point&`, `p mut Point&`, `p Point?&`, X11), or an array
+  (T7, held by value or by reference, of any length) whose element is an `extern-value-type`.
+
+`extern-ret-type` is one `extern-value-type` - never an array (see X3 for why), several results (D8c) or nothing else.
+No other type - a struct holding anything else, an enum type, an error type, a function type, an array of any other
+element - is valid in an `extern-param` or `extern-ret-type` position, with one exception: a parameter of one of the
+runtime's own functions (X6, a name beginning `__olang_`) may be the function type `fn()` - no parameters, no result,
+no errors - where that function's prototype in X6 has one. The runtime calls such a value only on a thread it made and
+set up itself, and only before it returns; no C function is ever handed one.
+
+Each crosses as the platform's C compiler passes the C type it corresponds to - the integer of its width (an integer
+narrower than 32 bits extended as the platform's C convention asks), `_Bool`, `_Float16`, `__bf16`, `float`, `double`,
+a pointer for a reference or an array (X3), and a plain-data struct by the platform's rules for a C struct of the same
+fields in the same order (X11): the System V AMD64 psABI on x86-64 and AAPCS64 on AArch64, the two architectures B12
+knows - in registers, on the stack or through a pointer to a copy, a result through a pointer the caller gives, as
+those documents classify it. Every type of the vocabulary has a C counterpart on both, so none is refused for its
+target.
 
 **X3.** An array-typed `extern-param` (X2) is passed as a pointer to the array's own first element
 only — never its length (a runtime-length array's own `{ len, ptr }` representation, T11, is reduced to
@@ -6636,6 +6655,131 @@ and with its prototype - every parameter and the result `F64`, or every one `F32
   (implementation-defined).
 
 A declaration naming one of these with any other prototype is an ordinary external function.
+
+**X9 (linking a library).** `link-decl ::= "link" STR_LIT STMNT_END` is a top-level declaration (D1) naming what the
+program's link reads besides its objects - the library or object file that defines what the module's `extern`
+declarations name. `link` is a word only there: followed by text, at a module's top level; anywhere else it is an
+ordinary name. The text is one of:
+
+- a **library's name** - letters, digits, `_`, `-`, `+` and `.`, the first a letter or a digit - linked as the C
+  compiler's `-lNAME` links it (`link "sqlite3"` reads `libsqlite3.so`, or `libsqlite3.a`, from the platform's library
+  path);
+- a **file's path** - text holding a `/`, or ending in `.a`, `.o` or `.so` (or `.so.` and a version) - resolved, when
+  it is relative, from the directory of the module declaring it (`link "vendor/libz.a"`).
+
+Anything else is a compile-time error. A module's `link`s count when it is part of a build (`build`, `test`, running a
+file, `-library`), in a chosen branch of a top-level `if` (B9) like any declaration, each once whatever number of
+modules name it, in the order the program's modules are loaded and after every object, so a static library finds the
+objects calling it. `compile` (B2), which links nothing, reads none. Changing one changes the link and so relinks the
+program (B3).
+
+**X10 (extern types).** `extern-type-decl ::= "extern" "type" IDEN STMNT_END` declares a type defined in C whose
+contents olang never sees - a `sqlite3`, a `FILE`, a `z_stream` held through the pointer the C library gives. Such a
+type is held **only by reference**: `Db&`, or `Db?&` where it may be null (T2c), in any position a reference may stand
+- a local, a parameter, a result, a field, an array's element, a type argument - and also crossing the C boundary
+(X2): passed back to C, returned by C (`extern fn sqlite3_open(...) Db?&`), and written by C into an array of one
+element given as an out-parameter (`out Array<Db?&>&`, read back as `out[0]`). Written as a value anywhere (`d Db`,
+`List<Db>`) it is a compile-time error naming `Db&`, and so is constructing one (`Db()`): only C makes one. Such a
+reference is never read through and nothing is written through it: it has no fields, no methods unless the program
+declares them (M19), and its permission says nothing - `Db&` and `mut Db&` fit each other. `==` and `!=` compare two
+by identity (E10), and `is null`/`is not null` test one for null; `$` renders one as its type's name, or `null`.
+What it points to belongs to C, never to a scope of the program: such a reference lives in no scope of olang's
+(section 8 takes it, and a value holding only such references, for a value holding none), so it may be stored
+anywhere and outlives everything as far as the scope check is concerned. Whether C has freed what it names - after a
+`sqlite3_close`, say - is C's to say and the compiler's to take on trust, like every other fact about a foreign
+function (X1a).
+
+**X11 (plain-data structs).** A **plain-data struct** is a struct type (T13) declaring no destructor (C7) whose every
+field is a numeric primitive or a type declared over one, a `Bool`, a reference to an extern type (X10), an array laid
+out in place with a length known while compiling (T7c, T7d: `c := Array<U8>(16)` as a field) of these, or a
+plain-data struct held by value. Its layout is C's for a struct of the same fields in the same order (§3.2: each field
+at its natural alignment, the whole rounded to its largest), so a C declaration of those fields describes it exactly,
+and the program's declaration is taken at its word as any prototype is (X1a). It crosses the C boundary (X2) by value
+- as a C function taking or returning `struct S` by value takes it (X2's platform rules) - and by reference, a
+`Point&` crossing as a `struct Point *` naming the program's own instance, which the foreign function may write; an
+array of them crosses as a pointer to the first (X3).
+
+**X12 (export fns).** `export-func-decl ::= "export" func-decl`, `export` a word only there (followed by `fn`, at a
+module's top level), declares an ordinary function (D7) that C may call too: besides being called from olang as any
+function is, it has a **C entry**, a symbol of exactly its name following the platform's C convention (X2). Such a
+function has no receiver (a method has no C name), is not generic, and is not named `main` or with the runtime's
+prefix `__olang_` - each a compile-time error. Its parameters are of the extern vocabulary (X2) - but an array, which
+crosses as C's pointer to its first element and an `int64_t` count of its elements, two C parameters, only by
+reference (`a Array<I32>&`, `t String&`) - and its result is an `extern-value-type`, nothing, or an array value
+(`Array<T>` or `String` by value, its element of the vocabulary), which C receives through a buffer it gives: two
+more C parameters after the rest, a pointer to `cap` elements and `cap`, into which the entry copies as many of the
+result's elements as fit, returning the result's whole length (`int64_t`) - so a caller learns how large a buffer to
+give again. A function declaring errors (R1) has an entry returning an `int32_t`: 0 when it returns, else the code of
+the error it fails with (X14 numbers them); its result, where it has one, is then written through a pointer C gives
+as a last parameter (`T *`), or for an array result its length through a pointer after the buffer's two. A failure of
+any other kind - a failed check, `fail`, `unreachable` - ends the process as it does anywhere.
+
+The entry runs the function in a scope opened for the call and closed as it returns (§8), the result copied out of it
+first: nothing an entry is given outlives the call as far as olang is concerned, and a body requiring anything of its
+parameters' scopes - an obligation (O10b), which no C caller can be held to - is a compile-time error. On a thread
+olang did not start (one C made), the entry first sets up what olang keeps for a thread - its number, its own part of
+the program's scope (P2) - which it asks for with one load and a compare on every entry. That part, and the chunks
+the thread's allocations took, stay with the process after such a thread ends.
+
+**X13 (callbacks).** An extern's parameter may be of a function type (T21) whose parameters are of an export fn's
+vocabulary but arrays (X12), whose result is an `extern-value-type` or nothing, and which declares no errors: a C
+function pointer. What a call passes for it is an export fn, named (`qsort(xs, n, 4, byValue)`), and nothing else -
+not a lambda, not a function held in a variable, not an ordinary function - since C calls its C entry (X12), which
+holds nothing a closure would need. C may call it from any thread, before or after the call returns. What the
+callback works on reaches it through C's usual context argument, passed beside it as a reference to a plain-data
+struct (X11) - `each(n, add, ctx)` with `ctx mut Ctx&` - which lives, as every argument does, for the call's
+duration. A C function keeping the callback, or the context, beyond that call and calling it later is relying on the
+context still being there: a context in the program's scope (a global's, or one built there) is, and anything else is
+the program's word, unchecked, as an extern's prototype is (X1a).
+
+**X14 (libraries).** `olang build -library FILE` builds the program FILE is the root of as a **shared library** for C
+(and anything calling C: Python's `ctypes`, say) rather than an executable: `libNAME.so`, `NAME` the file's base name
+(each character that is no letter, digit or `_` made `_`), in the build directory - or at `-output`'s path - with its C
+header `NAME.h` beside it. FILE needs no `main` (one it has is an ordinary function). The library shows the C entries
+of the program's export fns (X12) and no other symbol, and its globals are initialized as it is loaded - in the order
+B5a gives, on the thread loading it - before any entry can be called. Its code is position-independent and reaches its
+thread-local storage as a library does, so it loads wherever it is put, by the program's link or by `dlopen`.
+
+The header declares, for C: the extern types (X10) the entries name, as opaque structs (`typedef struct Db Db;`);
+the plain-data structs (X11) they name, defined with the same fields in the same order (an inline array as `T name[N]`);
+the error codes the entries return (X12) as constants, `NAME_TYPE_WORD` for each word of each error type their error
+lists name and `NAME_ERROR` for the default error (R1a), all in capitals - an error type's code is its position from 1
+among the error types the library's entries name, in the order their declarations first name them, shifted left 16,
+with the word's position from 0 in its declaration added, so a library gives one code for an error whichever entry
+returns it; and each entry, with the olang signature it is in a comment above it. Each type crosses as X2 says: a
+number as its `<stdint.h>` type (`int8_t` ... `uint64_t`), `float`, `double`, `_Float16`, `__bf16`, a `Bool` as `bool`,
+a `Char` as `char`, an extern type's reference and a plain struct's as pointers (`const` where olang's is read-only), an
+array as a pointer and its `int64_t` length (`const char *t, int64_t t_len` for a `String&`).
+
+**X15 (text and C).** C's string - a `char *` naming bytes ended by a NUL - has two forms here. Text goes to C as
+`t.ToC()`, a method every `String` has (§4 M19d, the prelude): a new `Array<U8>` holding the text's bytes and a NUL
+after them, which an extern's `Array<U8>` parameter hands over as the `char *` (X3); a NUL inside the text ends the
+string C sees there. C's string comes back as a reference to the prelude's extern type `CStr` (X10) - a function
+declared `extern fn getenv(name Array<U8>) CStr?&` - and is read as text with `p.StringFromC(max)`: a new `String`
+holding its bytes up to the first NUL, or its first `max` where there is none sooner (none for a `max` of 0 or less).
+That `p` names a C string at all, and that what it names is still there, is the foreign function's word, taken as
+its prototype is (X1a). Nothing else reads what a `CStr&` names.
+
+**X16 (bindgen).** `olang bindgen HEADER.h` writes a C header's declarations as this section declares them, on the
+standard output or into the file `-output` names (B1); clang reads the header, as a C compiler of the target would,
+and nothing of olang's is built. What it writes is olang source - declarations only, for a module to hold and write its
+own functions over:
+- each function the header itself declares, as an `extern fn` of the C name, its parameters named as the header names
+  them (`a0`, `a1`... where a name is none olang can declare); a variadic function, one static or inline in the header,
+  and one whose types have no form below are not declared, but listed at the end, each with why;
+- each struct a declaration reaches, or the header defines, as a plain-data struct (X11) of its fields where it is one,
+  and else - an incomplete struct, a union, bitfields, a field with no form, a struct some function gives back by
+  pointer - as an `extern type` (X10), named by the typedef naming it where one does, else by its tag;
+- each enumerator of the header's enums, and each macro it defines as an object whose value clang computes as an
+  integer constant, as an immutable global of that value, an `I32` where the value fits one and an `I64` otherwise.
+
+The types are those of C on the target (on x86-64 and AArch64 Linux, `long` is 64 bits): `char` an `I8` held, a `U8`
+pointed to; `_Bool` a `Bool`; an enum an `I32`. A pointer parameter to numbers is an array of them (`const T *` an
+`Array<T>`, `T *` a `mut Array<T>&`, so `const char *` takes `t.ToC()`, X15); to a struct, its reference (`S?&`, a
+plain struct's `mut S?&` where it is not `const`); to a pointer to a struct, to `char` or to `void`, an array of the
+references (`mut Array<S?&>&`, C's out parameter); a function pointer, a function type (X13). A pointer to `char`,
+`signed char` or `unsigned char` given back, or held in a field, is a `CStr?&`; a pointer to anything else not
+already named - `void *` above all - is a `CVoid?&`, an extern type the output declares where it needs it.
 
 ## 12. Generics
 

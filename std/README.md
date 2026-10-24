@@ -23,11 +23,21 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `regex.olang` | RE2-style regular expressions, linear time (a lazy DFA and a Pike VM): `Compile`, `Matches`, `Find`, `FindAll`, `Replace`, `Split`, groups |
 | `json.olang` | JSON parse into an immutable tree, and encode |
 | `csv.olang` | RFC 4180 records, read and written |
-| `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, `net.Error` |
+| `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, names resolved (`Lookup`, `Resolve`), `net.Error` |
 | `http.olang` | requests by running `curl` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, cancellation tokens and deadlines |
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |
 | `ffi.olang` | a C function called by a name chosen at run time (for `-i`) |
+
+## Calling C: `extern fn` or `std/ffi`
+
+Call C through `extern fn` (SPEC §11) whenever the function is known when the program is written: the compiler checks
+every call against the prototype, the call costs what C's does, and numbers, Bools, arrays, extern types (`extern type
+Db`, a handle C lays out), plain-data structs by reference or by value and callbacks (`export fn`s) all cross. `link
+"name"` beside the declarations links the library, and `olang bindgen header.h` writes the declarations from a C
+header. `std/ffi` is for the rest: a function whose name, or whose kinds of arguments, are known only while the program
+runs - what an interpreter needs. It looks the function up and builds the call each time, passes only numbers and
+arrays of them, and links libffi into the program that imports it.
 
 ## Names
 

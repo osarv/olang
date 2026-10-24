@@ -1,0 +1,5 @@
+# check: fail error[X2]: Array<I64> cannot come back from C
+# X2: an extern's result is one value of the vocabulary - an array carries no length C could give back (X3)
+extern fn numbers() Array<I64>
+
+fn main() ? { }

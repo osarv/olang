@@ -472,6 +472,7 @@
 | ok - the evaluator models function values and interfaces, and bakes enums carrying payloads
 | ok - D16: lambdas take their types from where they are passed, and from their bodies
 | ok - a signature renders as it is written, its scopes included
+| ok - D16, S1b: a lambda's one-line body
 | ok - D16c: a lambda captures values by copy and references by reference
 | ok - T21: a function value is one value in fields, elements and copies, and compares by code and captures
 | ok - D16e: a spawned lambda captures its loop's variables per task
@@ -498,6 +499,11 @@
 | ok - M19e: an override of a generic trait's default runs from generic code
 | ok - E33: a float's bits, and a float from bits
 | ok - E33a: a signalling NaN keeps its payload, quieted or not
+| ok - E36: a number type's limits
+| ok - E37: an integer's bit operations
+| ok - L13-L15, L14a: escapes by number, and raw text
+| ok - E5: the bitwise operators bind tighter than the comparisons
+| ok - T17e: raw values
 | ok - S19: deferred code runs on every way out of its block, while compiling and at run time
 | ok - S19a: deferred code runs before its block's scope closes
 | ok - a block inside a catch clause closes at its own brace
@@ -756,6 +762,11 @@
 | ok - T2c: an array is never null - its zero value is the empty array
 | ok - C2d/E28: a conditional or match passed to a constructor lands with the instance
 | ok - T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run
+| ok - D17e: requirements and guarantees hold where the evaluator computes the calls - baked and run
+| ok - D17e: checked f(x) checks a requirement before the call and a guarantee after it, with CheckError.CONTRACT
+| ok - D17a: for and if items, fits, a constructor's contract - checked where asked for
+| ok - D17d, D17f: written scope relations are obligations; a function with value conditions is a value, unchecked
+| ok - D17g: a conversion checked at run time keeps its own words
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -846,7 +857,7 @@
 === test std/http.olang
 | status 0
 | ok - the response is the last of what curl received
-| ok - curl's exit status names the HttpError
+| ok - curl's exit status names the Error
 | ok - what cannot be sent as given is refused before anything runs
 | ok - requests against a local server
 === test std/io.olang
@@ -922,6 +933,7 @@
 === test std/net.olang
 | status 0
 | ok - addresses are read and written as text
+| ok - names are resolved through the C library, numbers read as they are
 | ok - a TCP connection over loopback carries bytes both ways
 | ok - dialing where nothing listens is refused, and a taken address is in use
 | ok - a read times out
@@ -1126,6 +1138,7 @@
 | ok - Format writes an integer in any base from 2 to 36, read back by ParseInt and ParseUint
 | ok - Format, evaluated while compiling as at run time
 | ok - $ renders a StringBuilder as its text
+| ok - text goes to C NUL-terminated and comes back copied (X15)
 === test std/prelude/tests/vec.olang
 | status 0
 | ok - Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort, Pop, Truncate, Clone - while compiling and at run time
@@ -1683,3 +1696,9 @@
 === run vec91fieldcopygrows.olang
 | status 0
 | 0
+=== run x10handles.olang
+| status 0
+=== run x13qsort.olang
+| status 0
+=== run x9linkmath.olang
+| status 0

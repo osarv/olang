@@ -1,0 +1,5 @@
+# check: fail error[X12]: an export fn is one C function, and a generic one stands for many
+# X12: one C entry is one function; a generic is compiled for each type it is used with
+export fn same<T>(x T) T { return x }
+
+fn main() ? { }

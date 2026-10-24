@@ -1,0 +1,11 @@
+# zlib's functions of numbers and arrays, called by a built program and by interpret alike (B3e loads what X9 links)
+link "z"
+import "std/io"
+
+extern fn compressBound(sourceLen U64) U64
+extern fn crc32(crc U64, buf Array<U8>, len U32) U64
+
+fn main() {
+    t := "hello".ToC()
+    io.Println("bound " $compressBound(100) " crc " $crc32(0, t, 5).Format(16))!
+}

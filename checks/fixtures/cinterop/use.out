@@ -1,0 +1,15 @@
+add 5
+sum 10
+greet 13 hello, world!
+greet short 13 hel
+parse 0 42
+parse bad 65537 invalid=1
+check 131072 neg=1
+check 0 14
+norm2 25
+scale 6 8
+mid 3 4
+pid 1
+squares 0 5 16
+threads 509500 509500
+seen 1

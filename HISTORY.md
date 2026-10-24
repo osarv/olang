@@ -23373,3 +23373,100 @@ program's own - the one place I read "as source writes it from outside" less lit
 program's own `Bad` is never written `main.Bad`. Two checks changed (`io.Error.FAILED`, `chan.Error.CLOSED`) and one
 (`linalg.ShapeError.MISMATCH`); SPEC B5 says it.
 
+
+## C interop v2: links, extern types, structs to C, callbacks, libraries, text, DNS, bindgen (X2, X9-X16, B3e, 2026-10-24)
+
+The user's design of 2026-10-24 (decisions.md, "C INTEROP v2 DECIDED"): until it, `extern fn` took numbers and arrays of
+them and nothing else, so no C library with a handle (`sqlite3 *`), a struct (`struct timeval`), a callback (`qsort`) or
+a C string result could be called, std/net could not resolve a name (getaddrinfo hands back a linked list), and nothing
+written in olang could be called from C or Python. Built in nine pieces, each its own commit on wt-cinterop.
+
+**`link "name"` (X9).** A module-level declaration: a library's name (`-lname`) or a file - a path holding `/`, or one
+ending in `.a`, `.o`, `.so` (a version after it too) - read beside the module, the way an import is. Only the links of
+the branches the build chose count (a `link` inside a top-level `if` is configuration). Deduplicated, after the objects
+on the link's command line. A name that is neither is X9's error.
+
+**Extern types (X10).** `extern type Db` declares a type C lays out and olang never looks into: held only as `Db&` or
+`Db?&`, passed back, compared (identity), tested for null, rendered by `$` as its name. Never built (`Db()` an error),
+never held by value, never a type argument by value. Decided (mine): such a reference is no scope-tracked reference -
+section 8 treats it as a number (`HoldsRefs` false), so a handle may sit in a global, a List or a struct of any scope;
+what it names is C's, and its lifetime C's word (X1a), so there is nothing section 8 could check. Its permission is
+ignored the same way (`mut Db&` and `Db&` fit each other). An out parameter is an array of one handle
+(`mut Array<Db?&>&`), the form sqlite3_open's `sqlite3 **` takes.
+
+**Plain-data structs (X11), and the calling conventions.** A struct with no destructor whose fields are numbers, Bools,
+extern types' references, fixed arrays of those or other plain structs crosses by reference (a pointer, `?&` and `mut`
+as olang's) and by value, as a parameter and as a result. By value needed the C ABI: `compiler/cabi.olang` classifies a
+struct as clang 18 does - System V x86-64's eightbytes (INTEGER/SSE, clang's GetINTEGERTypeAtOffset/GetSSETypeAtOffset
+for the part types, byval once the six integer or eight SSE registers are used up, sret above 16 bytes) and AAPCS64's
+(an HFA of up to four floats as `[N x T] alignstack(8)`, up to 16 bytes as integers, a larger one by a pointer to a
+copy, sret above 16). The unit tests give 23 shapes on each architecture with the IR clang 18 writes for them; the
+`cinterop` scenario compiles a battery of C functions (`abi.c`) with clang, calls each from olang and compares, built
+and under `-debug -sanitize`. AArch64 is checked by those unit tests only: this clang cannot build for it (B12a).
+Also: every numeric primitive and Bool at the boundary - narrow integers with the `signext`/`zeroext` x86-64 wants (not
+AArch64's), `F16`/`BF16` as `_Float16`/`__bf16`.
+
+**Export fns and callbacks (X12, X13).** `export fn name(...)` gives an ordinary function a C entry of its own name: no
+receiver, no generics, parameters C has counterparts for (arrays by reference become a pointer and an `int64_t` length,
+a result array is copied into the caller's buffer), and no scope obligations (a C caller cannot be held to one). The
+entry checks olang's thread-local state (`@__olang_self`): null on a thread C made, it runs `__olang_thread_enter` - the
+thread's chunk pool and its part of the program scope - once; then it opens a fresh scope for the call, rebuilds the
+arguments, calls the function, re-encodes its error into the library's numbering, copies results out and closes the
+scope. Decided (mine): that thread state is never released (no hook runs when C's thread ends) - a recorded limit, a
+few hundred bytes per foreign thread. **A callback is an export fn named where it is passed** - a C function's
+parameter of a function type takes only that (X13's error for a lambda, a function value held, an ordinary function),
+since C calls a code pointer with no environment, possibly on another thread, possibly later. Context goes through the
+user-data argument C APIs have, as a reference to a plain struct (`each(n, add, ctx)` with `ctx mut Ctx&`). The old
+case `externfnvalue` (X2: no function value crosses) was rewritten: an ordinary function given to `atexit` is X13's error.
+
+**Libraries (X14).** `build -library FILE` builds `libNAME.so`: objects with `-fPIC`, linked `-shared` with a version
+script showing only the export fns, the soname its file name; the globals initialized when it loads (an
+`@llvm.global_ctors` entry running B5a's order); the runtime's thread-locals in the general-dynamic model (a shared
+library cannot use initial-exec). And `NAME.h`: `<stdint.h>` types, `bool`, `_Float16`/`__bf16`, an opaque `typedef
+struct T T;` per extern type, each plain struct, the error codes, each entry with its olang signature in a comment above
+it. Decided (mine): errors are numbered library-wide - an error type's position from 1 among the types the entries name,
+in the order they first name them, shifted left 16, plus the word's position - so one code means one error whichever
+entry returns it; a fallible entry returns that code (0 for success) and gives its result through a last pointer. The
+scenario's library (`mylib.olang`: numbers, arrays, text, structs, errors, a global set at load from `getpid()`) is
+called by a C program compiled `-Wall -Werror` against the generated header - from four threads it starts - and by a
+Python ctypes script written at test time (skipped without python3); `nm` shows only the entries.
+
+**Text and C (X15).** `t.ToC()` (a new `Array<U8>` with a NUL) and `p.StringFromC(max)` over the prelude's
+`extern type CStr` (`strnlen` and `memcpy` declared in text.olang). Decided (mine): the decided spelling
+`String.FromC(p, max)` has no form - olang reaches nothing through a type's name but E36's limits - so it follows E33's
+precedent (`u.F64FromBits()`): the dot moves, the words stay. The prelude now declares an extern type, which the seed's
+compiler could not parse, so the seed was written again (the second of the batch; `make bootstrap` passes).
+
+**DNS in std/net.** `net.Lookup(host)` gives every address a name has, `net.Resolve("host:port")` an Addr, through
+getaddrinfo: its `addrinfo` list is read through `extern type aiNode`, a plain struct `aiFields` copied out of each node
+by `memcpy`, and the `sockaddr` bytes by `memmove` into an array that `fromSockaddr` already read. A number is no
+lookup (`Lookup("10.1.2.3")` is that address). `net.Error.UNKNOWN_HOST` is new; EAI_AGAIN (no name server answering)
+is UNREACHABLE. The test resolves localhost and RFC 6761's `.invalid`, which must not exist.
+
+**bindgen (X16).** `olang bindgen HEADER.h [-output FILE]` runs clang once on a probe file that includes the header and
+asks, for each `#define NAME` the header has as an object, `enum __olang_mK : long long { __olang_vK = (NAME) };` -
+so clang computes every macro's value (`(SQLITE_IOERR | (1<<8))`) and the ones that are no integer constant are
+simply errors in the probe, ignored. Its `-ast-dump=json` is read with std/json: which declarations are the header's
+own is followed through the tree's locations (a location names its file only where it changes, and an `includedFrom`
+is no location), typedefs resolved by the names they introduce, structs - nested ones too, unnamed ones through the
+typedef that owns them - made plain structs where they are plain data and extern types otherwise, or where a function
+gives one back by pointer. C types are parsed by a small declarator parser (specifiers, pointers, parenthesized
+declarators, function and array suffixes) into a table of nodes. Measured: zlib.h 79 functions, 2 structs, 3 extern
+types, 36 constants, 2 not declared (gzprintf, variadic; gzvprintf's va_list) in 0.07 s; sqlite3.h 280 functions, 20
+structs, 11 extern types, 469 constants, 14 not declared (variadic, the three extern variables, va_lists) in 0.18 s.
+Both outputs compile as they are, and programs using them run (zlib's compress/uncompress, sqlite3's
+open/exec/prepare/step/column_text, by hand; zlib in the scenario where the system has it). Decided (mine): the names
+stay C's, so most are private to the module the output becomes - it is the layer an olang API is written over in that
+module, as a Rust `-sys` crate is used; `void *` and any pointer without a form of its own are `CVoid?&`, an extern type
+the output declares; a pointer to `char`, `signed char` or `unsigned char` given back is a `CStr?&`; a function
+pointer's C names are not kept (`fn(a0 T, ...)` - a function type's parameters need names to be told from types).
+
+**interpret (B3e).** It cannot pass a struct or an extern type's reference through its dynamic call, so such an extern
+stops it with a message (decided: refused, not guessed). It now loads what the program links before `main` runs
+(`dlopen` of `libNAME.so`, RTLD_GLOBAL, so the dynamic call's `dlsym` finds it); a static library or an object cannot be
+loaded and is an error naming it.
+
+**Found on the way.** A fixed local array passed to an extern's `Array<U8>&` parameter crashed (the checker loaded the
+array as a `{len, ptr}` pair where the extern wants its storage) - fixed in the checker's array marshalling. Not fixed:
+R9's diagnostic writes another module's error words bare (`Error.UNREACHABLE can escape here`) where the naming pass
+made `net.Error` the name a reader writes.

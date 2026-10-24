@@ -439,6 +439,7 @@ fn (p mut Parser&) syncItem(start I64) {
 fn (p Parser&) declStarts(i I64) Bool {
     k := p.ts.Toks[i].Kind
     if k == token.Tok.Type or k == token.Tok.Test or k == token.Tok.Import or k == token.Tok.Extern { return true }
+    if k == token.Tok.Iden and i + 1 < p.ts.Toks.Len() and p.text(p.ts.Toks[i]) == "export" and p.ts.Toks[i + 1].Kind == token.Tok.Fn { return true }
     return k == token.Tok.Fn and i + 1 < p.ts.Toks.Len() and p.ts.Toks[i + 1].Kind == token.Tok.Iden
 }
 
@@ -553,6 +554,14 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
         }
         case token.Tok.Extern {
             p.advance()
+            if p.sees(token.Tok.Type) {
+                # X10: "extern type Db" - a C type held only by reference
+                p.advance()
+                tname := try p.name()
+                tsp := p.from(at)
+                try p.endStmt()
+                return ast.Decl.Type(tsp, ast.TypeDecl(tname, Array<ast.TypeParam&>(0), false, ast.TypeBody.Foreign))
+            }
             try p.want(token.Tok.Fn)
             name := try p.name()
             s := try p.sig(false)
@@ -584,6 +593,21 @@ fn (p mut Parser&) decl() ast.Decl?&p ? Fail {
         }
         case token.Tok.If { return try p.topIf() }
         case token.Tok.Iden {
+            # X9: link "name" - a contextual word, as a global's name is never followed by text
+            if p.text(p.tk()) == "link" and p.look(1) == token.Tok.StrLit {
+                p.advance()
+                lpath := p.tk()
+                p.advance()
+                lsp := p.from(at)
+                try p.endStmt()
+                return ast.Decl.Link(lsp, source.Span(lpath.Start, lpath.End))
+            }
+            # X12: export fn - a contextual word too
+            if p.text(p.tk()) == "export" and p.look(1) == token.Tok.Fn {
+                p.advance()
+                xf := try p.function()
+                return ast.Decl.Fn(ast.Func(p.from(at), xf.Recv, xf.Name, xf.S, xf.Body, xf.TypeParams, xf.Bodied, true))
+            }
             v := try p.declNames(false)
             sp := p.from(at)
             try p.endStmt()
