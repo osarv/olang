@@ -881,3 +881,12 @@ errors and documentation - generic `+` already works).
   advises tests only; the prelude already is the one unqualified namespace). If wanted: `import _ "std/io"`, clashes an
   error at the import line. In effect: not built.
   DECIDED (the user: "Ye. Don't use it then"): no unqualified imports. Imports settled.
+- DECIDED 2026-10-24 (the user): one-line bodies with `:` (`if x < 0: return 0`; my limits: one simple statement, same
+  line, never if/for/match, `else:` may begin the next line).
+- CONTRACTS REDESIGNED 2026-10-24 (the user's design; my precision, awaiting a yes): ONE block per function, after the
+  error set, right before the body (constructors too); conditions over receiver, parameters and named results; plain
+  names = value on entry, `return e` = value at return (binds like `not`), allowed only on what reads through a
+  reference (an error on a by-value parameter, and `return n` on a named result redundant/error); a condition mentioning
+  a result or `return` is a guarantee (checked after the call under `checked`), else a requirement (before); failure
+  under checked = CheckError.CONTRACT; `fits`, `for` items, `outlives` chains stay. `old`, `then` and the list after
+  the results go. Example: `fn (l mut List<T>&) Push(x T) [return l.Len() == l.Len() + 1] { }`.
