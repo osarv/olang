@@ -2368,7 +2368,7 @@ fn (fe mut fnEm&) fixedLen(a types.TypeId) I64 {
 # a place's address and type: its base's, each projection followed - and (tagAt) the access tag a scalar there is
 # loaded and stored with (T36): its type's, in the family of the path's last step, an element's for an index and a
 # field's otherwise; untagged within an enum's payload, whose bytes two cases' fields share
-fn (fe mut fnEm&) addr(p mir.Place) (String, types.TypeId) {
+fn (fe mut fnEm&) addr(p mir.Place) String, types.TypeId {
     t := fe.E.T
     at := ""
     ty := types.UnknownT
@@ -2450,7 +2450,7 @@ fn (fe mut fnEm&) index(v String&, ty types.TypeId) String {
 
 # an element's address in the array at at, of type ty
 # (desc: the access tag of the array's descriptor where it is a run-time-length one)
-fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&, desc String& = "") (String, types.TypeId) {
+fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&, desc String& = "") String, types.TypeId {
     t := fe.E.T
     a := fe.arrayOf(ty)
     if a == types.UnknownT {
@@ -2571,7 +2571,7 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where B
 }
 
 # constant c of this function's tables, elements of type el, as a private global: its name and its length
-fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) (String, I64) {
+fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) String, I64 {
     lt, init, n := fe.constInit(el, c)
     key := "d:" $lt " " $init if site == "" else "s:" $site
     if fe.E.dataAt.Has(key) { return (try fe.E.dataAt.Get(key) catch default ""), n }
@@ -2583,7 +2583,7 @@ fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) (String, I64
 }
 
 # an array constant's LLVM type, initializer and length
-fn (fe mut fnEm&) constInit(el types.TypeId, c I32) (String, String, I64) {
+fn (fe mut fnEm&) constInit(el types.TypeId, c I32) String, String, I64 {
     t := fe.E.T
     match fe.F.Consts[I64(c)] {
         case mir.ConstNode.Bytes(r) {
@@ -2979,7 +2979,7 @@ fn (fe mut fnEm&) dataPtr(p mir.Place) String {
 }
 
 # an array value's (or a reference to one's) data pointer and length
-fn (fe mut fnEm&) arrayParts(v String&, ty types.TypeId) (String, String) {
+fn (fe mut fnEm&) arrayParts(v String&, ty types.TypeId) String, String {
     t := fe.E.T
     r := t.Repr(ty)
     x := t.Referent(r) if t.IsRef(r) else r

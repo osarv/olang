@@ -10,10 +10,10 @@ error Alpha {
 N mut I64 = 1
 fn z(n I64) I64 ? Zeta { if n == 1 { error Zeta.Z } return n }
 fn a(n I64) I64 ? Alpha { if n == 2 { error Alpha.A } return n }
-fn runIt(f fn() I64 ? (Alpha, Zeta)) I64 { return try f() catch Zeta default 10 catch Alpha default 20 }
+fn runIt(f (fn() I64 ? Alpha, Zeta)) I64 { return try f() catch Zeta default 10 catch Alpha default 20 }
 fn main() {
     g := fn() I64 { return try z(N) + try a(N) }
     assert runIt(g) == 10
     h := fn() I64 { return try z(N + 1) + try a(N + 1) }
-    assert runIt(h) == 20 and $g == "fn() I64 ? (Alpha, Zeta)"
+    assert runIt(h) == 20 and $g == "fn() I64 ? Alpha, Zeta"
 }

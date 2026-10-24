@@ -30,7 +30,7 @@ fn hasAt(text String&, i I64, s String&) Bool {
 }
 
 # text with "try " put before each call of ALIAS.Print and its three siblings in code, and how many
-fn migrate(text String&, alias String&) (String, I64) {
+fn migrate(text String&, alias String&) String, I64 {
     mask := srcmask.Mask(text, false)
     out := StringBuilder()
     last I64 = 0

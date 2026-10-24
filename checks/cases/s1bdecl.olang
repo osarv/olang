@@ -1,0 +1,5 @@
+# check: fail error[S1b]: a one-line body is one simple statement, not a declaration - write a block, '{ ... }'
+# S1b: a declaration in a one-line body would name nothing after it
+fn main() {
+    for i in range 3: y := i
+}

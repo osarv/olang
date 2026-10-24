@@ -5,7 +5,7 @@ import "std/io"
 type Node struct() {
     v I64 = 0
 }
-fn pick(n Node&) (Node&n, I64) { return n, 1 }
+fn pick(n Node&) Node&n, I64 { return n, 1 }
 fn main() ? {
     x Node& = Node()
     k I64 = 0

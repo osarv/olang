@@ -1,0 +1,6 @@
+# check: fail error[G19, T31]: Bool does not satisfy the constraint Number on T
+# G12: a written type argument meets its variable's constraint
+fn sum<T Number>(x T) T { return x }
+fn main() {
+    b := sum<Bool>(true)
+}

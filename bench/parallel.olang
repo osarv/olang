@@ -14,7 +14,7 @@ fn steps(x I64) I64 {
 }
 
 # the start, among first, first + stride, ... below n, with the longest chain (the smallest such start on a tie)
-fn longest(first I64, stride I64, n I64) (I64, I64) {
+fn longest(first I64, stride I64, n I64) I64, I64 {
     best, bestLen I64
     for x in range first, n, stride {
         len := steps(x)

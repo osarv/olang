@@ -26,6 +26,8 @@ MaxNesting I64 = 20000
 type Oracle struct() {
     bare Map<source.NameId, Bool>
     qualified Map<String&, Bool>      # "alias.Name", "a.b.Name"
+    fns Map<source.NameId, Bool>      # the generic functions, where "name<" lists type arguments (G12)
+    fnsQualified Map<String&, Bool>
 }
 
 fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
@@ -34,6 +36,27 @@ fn (o mut Oracle&) Add(names mut source.Names&, alias String&, name String&) {
     } else {
         o.qualified.Put($alias "." $name, true)
     }
+}
+
+# a generic function's name: "name<I64>" names its instance (G12)
+fn (o mut Oracle&) AddFn(names mut source.Names&, alias String&, name String&) {
+    if alias == "" {
+        o.fns.Put(names.Intern(name), true)
+    } else {
+        o.fnsQualified.Put($alias "." $name, true)
+    }
+}
+
+# the generic functions a file declares: "fn name<", by name
+fn GenericFnNames(text String&, ts scan.Tokens&) List<String&>&text {
+    out mut List<String&>&text = List<String&>()
+    toks := ts.Toks
+    for i in range toks.Len() - 2 {
+        if toks[i].Kind == token.Tok.Fn and toks[i + 1].Kind == token.Tok.Iden and toks[i + 2].Kind == token.Tok.Lt {
+            out.Push(text[toks[i + 1].Start:toks[i + 1].End])
+        }
+    }
+    return out
 }
 
 type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&, oracle Oracle&, diags mut diag.Diagnostics&
@@ -51,10 +74,13 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     prevEnd I32 = 0
     noGt Bool = false                  # in a type-argument list: ">" closes it, and a comparison or shift is no operator
     inCtor Bool = false                # at a constructor body's top level: a bare name is a field (C2)
+    inLine Bool = false                # in a one-line body (S1b): "else" and "catch" end its statement too
     ctorBody Bool = false              # the next block is a constructor's body
     brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
     skip Bool = false                  # in a parenthesized expression or a comprehension: a line's end separates
                                        # nothing there, so its statement ends are passed over (L18a)
+    item Bool = false                  # reading an item of a list: a function type or a lambda here takes one result
+                                       # and one error item, a "," after them the list's (L18c)
     depth I64 = 0                      # L21
     tooDeep Bool = false
     limitAt I64 = -1                   # in a try statement, the token where a level first took the last one (L21)
@@ -81,6 +107,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     # reads them
     ArgAngles List<I64>
     CloseAngles List<I64>
+    TypeGroups List<I64>               # each "(" grouping a function type in a list (L18c), by token index, for the formatter
 }
 
 # ---- reading tokens ----
@@ -305,9 +332,18 @@ fn (p mut Parser&) endStmt() ? Fail {
         return
     }
     if k == token.Tok.RBrace or k == token.Tok.Eof { return }
+    if p.inLine and (k == token.Tok.Else or k == token.Tok.Catch) { return }
     pk := p.prevKind
     if (pk == token.Tok.Amp or pk == token.Tok.Gt or pk == token.Tok.RBrace) and p.breakBefore() { return }
     try p.fail(token.Tok.StmtEnd.Describe())
+}
+
+# where a statement may end without anything more: a line end, a block's "}", the file's end, or in a one-line body
+# (S1b) the "else" or "catch" after it
+fn (p mut Parser&) atEnd() Bool {
+    k := p.peek()
+    if k == token.Tok.StmtEnd or k == token.Tok.RBrace or k == token.Tok.Eof { return true }
+    return p.inLine and (k == token.Tok.Else or k == token.Tok.Catch)
 }
 
 fn (p mut Parser&) skipEnds() {
@@ -755,10 +791,12 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
         p.vars.Push(pn)
         ty ast.TypeRef&p = null
         if not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() {
-            wasNoGt := p.noGt
+            wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
+            p.item = true
             ty = try p.typeExpr()
             p.noGt = wasNoGt
+            p.item = wasItem
         }
         l.Push(ast.TypeParam(p.from(pat), pn, ty))
         if not try p.sep(token.Tok.Gt) { break }
@@ -768,63 +806,53 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
     return l.ToArray()
 }
 
-# "(params) [results] [? errors]" - the "(" not yet read. A lambda's parameters may leave their types out; a function
-# type's or a lambda's error set (value) is one item or parenthesized
+# "(params) [results] [? errors]" - the "(" not yet read; several results bare, "I64, I64" (D8c). A lambda's parameters
+# may leave their types out. A function type or a lambda (value) read as an item of a list takes one result and one
+# error item, so a "," after it is the list's: one with several of either is parenthesized whole (L18c)
 fn (p mut Parser&) sig(lambda Bool, value Bool = false) ast.Sig&p ? Fail {
+    one := value and p.item
     try p.want(token.Tok.LParen)
     params := try p.params(lambda)
     results Array<ast.TypeRef&>&p = Array<ast.TypeRef&>(0)
-    k := p.peek()
     noReturn := p.accept(token.Tok.Noreturn)      # D8e: where a result would stand
-    if noReturn {
-    } else if k == token.Tok.LParen {
-        p.advance()
+    if not noReturn and p.startsResult() {
         from := p.tys.Len()
-        wasSkip := p.skip
-        p.skip = false
+        wasItem := p.item
+        p.item = true
         for {
-            p.tys.Push(try p.typeExpr())
-            if not try p.sep(token.Tok.RParen) { break }
+            t := try p.typeExpr() catch {
+                p.item = wasItem
+                p.tys.Truncate(from)
+                error Fail.SYNTAX
+            }
+            p.tys.Push(t)
+            if one or not p.accept(token.Tok.Comma) { break }
         }
-        p.skip = wasSkip
-        try p.want(token.Tok.RParen)
+        p.item = wasItem
         results = gather(p.tys, from)
-    } else if p.startsResult() {
-        t := try p.typeExpr()
-        results = ast.TypeRef&[t]
     }
-    errs := try p.errorSet(value)
+    errs := try p.errorSet(one)
     return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn)
 }
 
 # whether a signature's result type follows its parameters
 fn (p Parser&) startsResult() Bool {
     k := p.peek()
-    return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or
+    return k == token.Tok.Iden or k == token.Tok.Mut or k == token.Tok.Fn or k == token.Tok.LParen or
            k == token.Tok.Enum or k == token.Tok.Struct or k == token.Tok.Trait
 }
 
-# "[? [A, B.c]]" - in a declaration a list on one line; in a function type or a lambda (value) one item or a
-# parenthesized list, so that a "," after it separates the list it stands in (QY)
-fn (p mut Parser&) errorSet(value Bool = false) ast.Sig&p ? Fail {
+# "[? [A, B.c]]" - a list on one line; one item where the function type or lambda it ends is an item of a list (one),
+# so that a "," after it separates the list it stands in (L18c)
+fn (p mut Parser&) errorSet(one Bool = false) ast.Sig&p ? Fail {
     if not p.accept(token.Tok.Question) {
         return ast.Sig(Array<ast.Param&>(0), Array<ast.TypeRef&>(0), false, Array<ast.Path&>(0))
     }
     l mut List<ast.Path&>&p = List<ast.Path&>()
-    if value and p.sees(token.Tok.LParen) {
-        p.advance()
-        wasSkip := p.skip
-        p.skip = false
+    if p.sees(token.Tok.Iden) {
         for {
             l.Push(try p.path())
-            if not try p.sep(token.Tok.RParen) { break }
-        }
-        p.skip = wasSkip
-        try p.want(token.Tok.RParen)
-    } else if p.sees(token.Tok.Iden) {
-        for {
-            l.Push(try p.path())
-            if value or not p.accept(token.Tok.Comma) { break }
+            if one or not p.accept(token.Tok.Comma) { break }
         }
     }
     return ast.Sig(Array<ast.Param&>(0), Array<ast.TypeRef&>(0), true, l.ToArray())
@@ -846,8 +874,10 @@ fn (p mut Parser&) path() ast.Path&p ? Fail {
 fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>&p ? Fail {
     from := p.prms.Len()
     p.brackets++
-    wasSkip := p.skip
+    wasSkip, wasItem := p.skip, p.item
     p.skip = false
+    p.item = true
+    defer { p.item = wasItem }
     for not p.sees(token.Tok.RParen) {
         p.prms.Push(try p.param(lambda))
         if not try p.sep(token.Tok.RParen) { break }
@@ -933,11 +963,56 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
             if p.sees(token.Tok.Lt) { args = try p.typeArgs() }
             return ast.TypeRef.Named(p.from(at), path, args)
         }
+        # L18c: a function type an item of a list, parenthesized whole where it holds a comma of its own
+        case token.Tok.LParen {
+            p.TypeGroups.Push(p.skipFrom(p.pos))
+            p.advance()
+            wasItem, wasSkip := p.item, p.skip
+            p.item = false
+            p.skip = false
+            t := try p.typeExpr() catch {
+                p.item = wasItem
+                p.skip = wasSkip
+                error Fail.SYNTAX
+            }
+            p.item = wasItem
+            p.skip = wasSkip
+            if not p.sees(token.Tok.RParen) and not isFuncType(t) {
+                # "(I64, I64)": types bare, as several results are written (D8c)
+                p.report(at, p.prevEnd, msgs.NeedlessGroup())
+                error Fail.SYNTAX
+            }
+            try p.want(token.Tok.RParen)
+            if not p.grouped(t) {
+                p.report(at, p.prevEnd, msgs.NeedlessGroup())
+                error Fail.SYNTAX
+            }
+            return t
+        }
         # QW: a variable is introduced in the list after a function's name, never as "<T>" in a parameter's type
         case token.Tok.Lt { try p.fail("a name") }
         nomatch { try p.fail("a type") }
     }
     unreachable
+}
+
+fn isFuncType(t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Func(_, _) => true
+        case _ => false
+    }
+}
+
+# L18c: whether a parenthesized type is grouped as it may be - a function type holding a comma of its own (several
+# results or several error items), or one with no error set before the "?" of the signature it is a result of
+fn (p Parser&) grouped(t ast.TypeRef&) Bool {
+    match t {
+        case ast.TypeRef.Func(_, s) {
+            if s.Results.Len() > 1 or s.Errors.Len() > 1 { return true }
+            return not s.HasErrors and p.sees(token.Tok.Question)
+        }
+        nomatch { return false }
+    }
 }
 
 # reference markers after a type - "&", "&x" (x on the "&"'s own line), "&return"; a second one is the checker's to
@@ -987,8 +1062,10 @@ fn (p mut Parser&) typeArgs() Array<ast.TypeRef&>&p ? Fail {
     try p.openAngle()
     wasNoGt := p.noGt
     p.noGt = true
-    wasSkip := p.skip
+    wasSkip, wasItem := p.skip, p.item
     p.skip = false
+    p.item = true
+    defer { p.item = wasItem }
     from := p.tys.Len()
     for {
         p.tys.Push(try p.typeArg())
@@ -1049,6 +1126,12 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
     wasSkip := p.skip
     p.skip = false
     defer { p.skip = wasSkip }
+    wasItem := p.item
+    p.item = false
+    defer { p.item = wasItem }
+    wasLine := p.inLine
+    p.inLine = false
+    defer { p.inLine = wasLine }
     from := p.stmts.Len()
     for {
         p.skipEnds()
@@ -1115,7 +1198,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         case token.Tok.Return {
             p.advance()
             values Array<ast.Expr&>&p = Array<ast.Expr&>(0)
-            if not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and not p.sees(token.Tok.Eof) {
+            if not p.atEnd() {
                 p.listTry = p.here()
                 values = try p.exprList()
             }
@@ -1126,9 +1209,14 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable {
             k := p.peek()
             p.advance()
+            # S16d: "unreachable why" - a message, evaluated only where it is reached
+            msg ast.Expr&p = null
+            if k == token.Tok.Unreachable and not p.atEnd() {
+                msg = try p.expr()
+            }
             sp := p.from(at)
             try p.endStmt()
-            return ast.Stmt.Jump(sp, k)
+            return ast.Stmt.Jump(sp, k, msg)
         }
         case token.Tok.Assert {
             p.advance()
@@ -1533,6 +1621,17 @@ fn (p mut Parser&) ifStmt() ast.Stmt&p ? Fail {
 # span, bounded by its matching "}" from the brace table
 fn (p mut Parser&) branch() ast.Branch&p ? Fail {
     at := p.here()
+    if p.sees(token.Tok.Colon) {
+        g := p.diags.Hold()
+        body := try p.lineBody() catch {
+            p.diags.EndHold()
+            if p.tooDeep or p.unclosed { error Fail.SYNTAX }
+            p.syncFrom()
+            return ast.Branch(p.from(at), null, g)
+        }
+        p.diags.EndHold()
+        return ast.Branch(p.from(at), body, g)
+    }
     if not p.sees(token.Tok.LBrace) { try p.fail(token.Tok.LBrace.Describe()) }
     g := p.diags.Hold()
     open := p.pos
@@ -1548,6 +1647,63 @@ fn (p mut Parser&) branch() ast.Branch&p ? Fail {
     }
     p.diags.EndHold()
     return ast.Branch(p.from(at), body, g)
+}
+
+# a loop's body: a block, or a one-line body (S1b)
+fn (p mut Parser&) body() Array<ast.Stmt&>&p ? Fail {
+    if p.sees(token.Tok.Colon) { return try p.lineBody() }
+    return try p.block()
+}
+
+# S1b: ":" and one simple statement on its line - an assignment, a call or an increment, a return, a break or continue,
+# an error, unreachable, assert or spawn statement - never a declaration, an if, a loop, a match, a join, a defer or a
+# block
+fn (p mut Parser&) lineBody() Array<ast.Stmt&>&p ? Fail {
+    colon := p.tk()
+    p.advance()
+    t := p.tk()
+    if p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.Eof) or p.src.Line(t.Start) != p.src.Line(colon.Start) {
+        p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
+        error Fail.SYNTAX
+    }
+    what := lineBodyRefused(p.peek())
+    if what != "" {
+        p.report(t.Start, t.End, msgs.LineBodyNotSimple(what))
+        error Fail.SYNTAX
+    }
+    wasLine := p.inLine
+    p.inLine = true
+    defer { p.inLine = wasLine }
+    # a constructor's fields are declared at its body's top level only (C2), never in a one-line body
+    wasCtor := p.inCtor
+    p.inCtor = false
+    defer { p.inCtor = wasCtor }
+    st := try p.stmt()
+    match st {
+        case ast.Stmt.Var(sp, _), ast.Stmt.Multi(sp, _) {
+            p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a declaration"))
+            error Fail.SYNTAX
+        }
+        case ast.Stmt.Join(sp, _) {
+            p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a join"))
+            error Fail.SYNTAX
+        }
+        case _ { }
+    }
+    return ast.Stmt&[st]
+}
+
+# what a one-line body may not begin with (S1b), as its error names it; "" for a simple statement's start
+fn lineBodyRefused(k token.Tok) String {
+    return match k {
+        case token.Tok.If => "an if"
+        case token.Tok.For, token.Tok.Do => "a loop"
+        case token.Tok.Match => "a match"
+        case token.Tok.LBrace => "a block (a block takes no ':')"
+        case token.Tok.Join => "a join"
+        case token.Tok.Defer => "a defer"
+        case _ => ""
+    }
 }
 
 fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
@@ -1571,7 +1727,7 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             try p.want(token.Tok.In)
             tried := p.accept(token.Tok.Try)
             src := try p.forSource()
-            body := try p.block()
+            body := try p.body()
             cl Array<ast.Catch&>&p = Array<ast.Catch&>(0)
             if tried { cl = try p.clauses(false) }
             sp := p.from(at)
@@ -1599,14 +1755,14 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             cond := try p.expr()
             try p.want(token.Tok.Comma)
             post := try p.simpleStmt()
-            body := try p.block()
+            body := try p.body()
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd) { p.advance() }
             return ast.Stmt.For3(sp, ast.For3(init, cond, post, body))
         }
     }
     cond := try p.expr()
-    body := try p.block()
+    body := try p.body()
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd) { p.advance() }
     return ast.Stmt.While(sp, cond, body)
@@ -1704,7 +1860,7 @@ fn (p mut Parser&) caseType() ast.TypeRef&p ? Fail {
 }
 
 # a case's block, or "=> value"
-fn (p mut Parser&) caseBody() (Array<ast.Stmt&>&p, ast.Expr&p) ? Fail {
+fn (p mut Parser&) caseBody() Array<ast.Stmt&>&p, ast.Expr&p ? Fail {
     if p.accept(token.Tok.Arrow) {
         v := try p.expr()
         return null, v
@@ -2023,6 +2179,10 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                     targs := try p.typeArgs()
                     x = ast.Expr.Generic(p.from(start), x, targs)
                     x = try p.literalAfterType(start, x)
+                } else if p.sees(token.Tok.Lt) and isPath(x) and p.oracle.fnsQualified.Has(p.src.TextOf(x.Span())) {
+                    # alias.big<I64>: a generic function's instance through an import (G12)
+                    targs := try p.typeArgs()
+                    x = ast.Expr.Generic(p.from(start), x, targs)
                 }
             }
             case token.Tok.LParen {
@@ -2079,12 +2239,14 @@ fn (p mut Parser&) index(x ast.Expr&p) ast.Expr&p ? Fail {
     start := x.Span().Start
     p.advance()
     if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace) { try p.fail(token.Tok.RBrack.Describe()) }
-    wasNoGt := p.noGt
+    wasNoGt, wasItem := p.noGt, p.item
     p.noGt = false
+    p.item = true
     p.brackets++
     defer {
         p.brackets--
         p.noGt = wasNoGt
+        p.item = wasItem
     }
     if p.sees(token.Tok.Colon) or not p.sees(token.Tok.RBrack) {
         lo ast.Expr&p = null
@@ -2138,8 +2300,10 @@ fn (p mut Parser&) args() Array<ast.Expr&>&p ? Fail {
     wasNoGt := p.noGt
     p.noGt = false
     p.brackets++
-    wasSkip := p.skip
+    wasSkip, wasItem := p.skip, p.item
     p.skip = false
+    p.item = true
+    defer { p.item = wasItem }
     from := p.exprs.Len()
     for not p.sees(token.Tok.RParen) {
         if p.sees(token.Tok.Default) {
@@ -2188,13 +2352,16 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             p.noGt = false
             p.brackets++
             # L18a: a parenthesized expression is one item, not a list - a line's end inside it separates nothing
-            wasSkip := p.skip
+            wasSkip, wasItem := p.skip, p.item
             p.skip = true
+            p.item = false
             x := try p.expr() catch {
                 p.brackets--
                 p.skip = wasSkip
+                p.item = wasItem
                 error Fail.SYNTAX
             }
+            p.item = wasItem
             p.brackets--
             p.noGt = wasNoGt
             try p.want(token.Tok.RParen) catch {
@@ -2232,6 +2399,12 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
                 targs := try p.typeArgs()
                 x := ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
                 return try p.literalAfterType(at, x)
+            }
+            if k2 == token.Tok.Lt and p.oracle.fns.Has(name) {
+                # a generic function's instance: big<I64>(x), f := big<I64> (G12)
+                p.advance()
+                targs := try p.typeArgs()
+                return ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
             }
             if k2 == token.Tok.Amp {
                 # Name&[...]: a marked element type, always a literal; Name&x[...] is one where Name is a type
@@ -2295,12 +2468,14 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&p) ast.Expr&p ? Fail {
     wasNoGt := p.noGt
     p.noGt = false
     p.brackets++
-    wasSkip := p.skip
+    wasSkip, wasItem := p.skip, p.item
     p.skip = false
+    p.item = true
     defer {
         p.brackets--
         p.noGt = wasNoGt
         p.skip = wasSkip
+        p.item = wasItem
     }
     from := p.exprs.Len()
     if not p.sees(token.Tok.RBrack) {

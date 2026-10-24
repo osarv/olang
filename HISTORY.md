@@ -22669,3 +22669,59 @@ done**: caching a diff's or a test file's outcome by its inputs - a test reads f
 runs, so its inputs cannot be listed exactly, and the diffs' inputs include the compiler binary, which nearly every edit
 changes; building tests without -O3 and LTO (QAS, the user's question); starting the suite on stage 2 before stage 3
 (4 s). Two verifies side by side now need about 11 GB, against 4.7 before.
+
+## The decisions of 2026-10-24, round 1: syntax, `-quick`, `explain FILE NAME` (2026-10-24)
+
+The user settled a list of design questions in one day; round 1 builds the syntax half of them (equality, nullable
+references, closed traits and contracts follow in later rounds).
+
+- **Several results bare, and whole-item grouping (D8c, L18c).** `fn divmod(a I64, b I64) (I64, I64)` became `fn
+  divmod(a I64, b I64) I64, I64` - the user: parentheses that need not be there should not be. Inside a list the old
+  form had two different groupings (`(I64, I64)` for results, `? (A, B)` for an error set); the user's rule replaces both
+  with one: an item of a list that holds a top-level comma of its own is parenthesized whole -
+  `Map<String&, (fn(x I64) I64, I64 ? A, B)>`. Details mine: the lists are parameters, arguments, results, type
+  arguments and parameters, array elements and indexes (a statement's value list is no list here); inside a bracket a
+  lambda or function type takes one result and one error item unless wrapped, which is what makes the comma after it
+  unambiguous; one case the rule does not cover is a function type with no error set as a result before the
+  signature's own `?` (`fn f() (fn() I64) ? E` - without the parentheses `? E` would be the inner function's), so it
+  is wrapped too. A parenthesized type that groups nothing (`(I64)`, or the old `(I64, I64)`) is an error saying to
+  write it without, so the old spelling is reported rather than misread. Built in steps so the compiler kept building
+  itself: the parser read both spellings, `tools/results_migrate.olang` (token-based, idempotent, olang) rewrote 60
+  files (143 result lists, 2 error sets, 2 wraps) and later a one-line trait it had missed, and only then was the old
+  form removed. The formatter records the type groups the parser found so it writes `f (fn...)` with its space.
+  Found on the way: the checker spelled error sets with ` + ` (the pre-QY spelling) in `$` and every diagnostic -
+  now `, ` everywhere.
+- **`unreachable "why"` (S16d).** Decided by me when the user asked whether unreachable should have a why: the message
+  is any text, evaluated only when the statement is reached (as an assert's), printed `FILE:LINE: unreachable reached:
+  why`. The plain wording changed from "reached unreachable code" to "unreachable reached" so both read alike; the
+  built program, `-debug`, interpret and the evaluator's errors agree (a checks fixture compares them).
+- **Explicit type arguments (G12, E3).** `big<I64>` names an instance as a value or at a call. The parser needs to know
+  `big` is a generic function before it reads `<` as a type-argument list, so each module's prescan records the
+  generic functions it declares (`Module.Generics`, `parse.GenericFnNames`), and the formatter's own oracle is given
+  them too. Only free functions: a method is reached through a receiver whose type already binds its variables. A
+  generic taking an array by value makes an instance per length (G29), so it cannot be named as one value - the error
+  now says to pass a lambda, where it had said "a generic function is not a value", which was misleading once
+  `big<I64>` exists. Found on the way, a real bug: a type's name read as a value (`if I64 > 3`) compiled to `false`;
+  it is an error now.
+- **`-quick` (B2g).** Measured before the decision (compile speed round 8): the compiler's own clean build 31.5 ->
+  20.8 s, an edit to widely inlined code 17.9 -> 3.8 s, the program about 18% slower. An option, not the default
+  (principle 2); the user picked the name. Its objects carry `.quick` so they never mix with -O3 ones, and it is an
+  error beside `-debug`/`-race`, which pick their own levels (mine).
+- **`explain FILE NAME` (B11b).** The user's idea while talking about contracts: scope obligations are contracts the
+  compiler infers, so a programmer should be able to see them. The driver runs the front end as a build would (values
+  and asserts decided, globals baked, section 8 run) and prints the item from compiler/explain.olang: a signature
+  spelled by the checker with the declaration's parameter names put back (an instance's signature carries none), the
+  inferred error set substituted for `?`, the scope pass's obligations of the body (`Scoper.Obligations`), each instance
+  of a generic; a type's members from its constructor's body (a bare field named by its text) and the traits it meets
+  from every module; a global's value by evaluating a body made for it (`Checker.RenderBody`: `$` of the global, built
+  from typed operands, since an expression the resolver never saw cannot be resolved by position). A global the
+  evaluator refuses, or a mutable one, says `# set at startup`.
+- **One-line bodies (S1b).** The coordinator relayed the user's decision mid-round: `if x < 0: return 0`. Details mine:
+  the simple statements are the decision's list plus `assert` and `spawn`; a declaration in one names nothing after it
+  and is an error, as is any compound statement (each with a message naming the block form); the statement ends at an
+  `else` or `catch` on its line (`if c: x = 1 else: x = 2`); `else` may begin the next line, which also needs nothing
+  new since the one-line statement already consumed its line end. Not for `for { }` (forever) or `do`. The parser
+  treats the body as the block holding the statement, so the checker, scopes, lowering and the evaluator see nothing
+  new; unparse writes the colon form back where the source had a `:` before the statement, and the formatter spaces a
+  `:` whose innermost open bracket is a block's as `: `. Found on the way, pre-existing: the formatter wrote a postfix
+  `!` with a space before it (`f() !`).

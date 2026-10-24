@@ -451,7 +451,7 @@ fn (g migration&) errItemEnd(i I64) I64 {
 }
 
 # the "+"-separated items starting at i: each "+" made ","; returns the index past them and how many there are
-fn (g mut migration&) plusItems(at I64, inCatch Bool) (I64, I64) {
+fn (g mut migration&) plusItems(at I64, inCatch Bool) I64, I64 {
     i := g.errItemEnd(at)
     if i < 0 { return at, 0 }
     count I64 = 1

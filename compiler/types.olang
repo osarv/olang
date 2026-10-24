@@ -876,7 +876,7 @@ fn (t Table&) runTimeArray(id TypeId) Bool {
 }
 
 # fields laid out in order, each at its own alignment; the size rounded to the largest alignment
-fn (t mut Table&) layFields(id TypeId, fields ListId) (I64, I64) {
+fn (t mut Table&) layFields(id TypeId, fields ListId) I64, I64 {
     off, align I64 = 0, 1
     t.offsetsAt[I64(id)] = t.offsets.Len()
     for f in t.Items(fields) {
@@ -891,7 +891,7 @@ fn (t mut Table&) layFields(id TypeId, fields ListId) (I64, I64) {
 
 # T17: an enum carrying no payload is its ordinal, an I32; one that does is a tag word and room for its largest
 # payload, in whole words
-fn (t mut Table&) layEnum(id TypeId, cases ListId) (I64, I64) {
+fn (t mut Table&) layEnum(id TypeId, cases ListId) I64, I64 {
     if not t.HasPayload(cases) { return 4, 4 }
     most I64 = 0
     for c in t.Items(cases) {
@@ -1218,7 +1218,7 @@ fn hex2(v U8) String { return I64(v).Format(16).PadStart(2, '0') }
 fn hex16(v U64) String { return v.Format(16).PadStart(16, '0') }
 
 # two independent 64-bit FNV-1a hashes, from different offset bases
-fn hash128(text String&) (U64, U64) {
+fn hash128(text String&) U64, U64 {
     a U64 = 0xcbf29ce484222325
     b U64 = 0x6c62272e07bb0142
     prime := U64(1099511628211)

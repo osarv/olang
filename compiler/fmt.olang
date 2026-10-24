@@ -40,9 +40,10 @@ import "unparse"
 # the file's text written in the layout: ts is its scan, the lists the parser's type brackets by token index, held the
 # spans of the branches to leave as written
 fn Format(text String&, ts scan.Tokens&, argAngles List<I64>&, closeAngles List<I64>&
-          held Array<source.Span>&) String {
+          held Array<source.Span>&, groups List<I64>&) String {
     f := formatter(text, ts.Toks)
     for i in argAngles { f.argOpen[i] = f.argOpen[i] + 1 }
+    for i in groups { f.group[i] = true }
     for i in closeAngles { f.closes[i] = f.closes[i] + 1 }
     for sp in held {
         f.heldS.Push(lineStartOf(text, I64(sp.Start)))
@@ -69,7 +70,9 @@ type formatter struct(text String&, toks Array<token.Token>&) {
     text
     toks
     argOpen mut Array<I64>& = Array<I64>(toks.Len())
+    group mut Array<Bool>& = Array<Bool>(toks.Len())     # a "(" grouping a function type in a list (L18c)
     closes mut Array<I64>& = Array<I64>(toks.Len())
+    bodyColon mut Array<Bool>& = Array<Bool>(toks.Len())  # a ":" before a one-line body (S8b), outside every bracket
     # the tokens with text, by index into toks, and beside each whether a statement end stands before it
     real List<I64>
     ended List<Bool>
@@ -125,6 +128,14 @@ fn (f mut formatter&) run() {
         k := f.kind(j)
         if k == token.Tok.LParen { opens.Push(j) }
         if k == token.Tok.RParen and opens.Len() > 0 { f.match_[j] = try opens.Pop() catch default 0 }
+    }
+    # S8b: a ":" whose innermost open bracket is a block's "{" (or none) begins a one-line body; any other is a slice's
+    inner List<token.Tok>
+    for j in f.real {
+        k := f.kind(j)
+        if k == token.Tok.LParen or k == token.Tok.LBrack or k == token.Tok.LBrace { inner.Push(k) }
+        if (k == token.Tok.RParen or k == token.Tok.RBrack or k == token.Tok.RBrace) and inner.Len() > 0 { inner.Pop()! }
+        if k == token.Tok.Colon { f.bodyColon[j] = inner.Len() == 0 or (try inner.Last() catch default token.Tok.LBrace) == token.Tok.LBrace }
     }
     at I64 = 0
     r I64 = 0
@@ -503,6 +514,8 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
         if f.kind(pa) == token.Tok.Amp and not f.toks[pa].Has(token.Space) { return f.asWritten(b) }
     }
     if ka == token.Tok.Dot or kb == token.Tok.Dot { return "" }
+    if kb == token.Tok.Bang { return "" }    # "!" is postfix only (E35)
+    if ka == token.Tok.Colon and f.bodyColon[a] { return " " }
     if ka == token.Tok.Colon or kb == token.Tok.Colon { return "" }
     if f.prefix(a, rb - 1) {
         # "- -x" stays apart, or it would read as "--"
@@ -514,6 +527,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
     }
     if (kb == token.Tok.Inc or kb == token.Tok.Dec) and f.operandEnd(a) { return "" }
     if kb == token.Tok.LParen {
+        if f.group[b] { return " " }
         if ka == token.Tok.Fn { return " " if f.receiver(a, rb - 1) else "" }
         if ka == token.Tok.Struct { return "" }
         if ka == token.Tok.RBrace { return f.asWritten(b) }
@@ -522,7 +536,7 @@ fn (f formatter&) space(a I64, b I64, rb I64) String& {
             o := f.match_[f.real[rb - 2]]
             if o > 0 and f.kind(o - 1) == token.Tok.Fn { return "" }
         }
-        # results after a parameter list: "fn f() (I32, I32)"
+        # a grouped result after a parameter list: "fn f() (fn() I32, I32)" (L18c)
         if ka == token.Tok.RParen {
             pl := f.params(f.match_[a])
             if pl == 1 { return " " }
@@ -609,7 +623,7 @@ fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, sa
         error Unparsable.SYNTAX
     }
     held := unparse.HeldBranches(decls, names, src.Text, d)
-    return Format(src.Text, ts, p.ArgAngles, p.CloseAngles, held)
+    return Format(src.Text, ts, p.ArgAngles, p.CloseAngles, held, p.TypeGroups)
 }
 
 # "olang format" over files (B13): mode "-f" rewrites each file in its layout, "-l" names each file not in it, one a
@@ -729,6 +743,11 @@ fn (l mut loader&) load(path String&) I64 {
             b.Push(src.Text[toks[i + 1].Start:toks[i + 1].End])
             b.PushChar(' ')
         }
+        # a generic function, "fn:name": "name<" lists type arguments (G12)
+        if k == token.Tok.Fn and named and i + 2 < n and toks[i + 2].Kind == token.Tok.Lt {
+            b.Push($"fn:" $src.Text[toks[i + 1].Start:toks[i + 1].End])
+            b.PushChar(' ')
+        }
         if k == token.Tok.Import {
             j := i + 1
             alias String& = ""
@@ -769,7 +788,11 @@ fn (l loader&) oracle(o mut parse.Oracle&, names mut source.Names&, m I64, prelu
 
 fn (l loader&) addNames(o mut parse.Oracle&, names mut source.Names&, alias String&, list String&) {
     for t in list.Split(" ") {
-        if t != "" { o.Add(names, alias, t) }
+        if t.StartsWith("fn:") {
+            o.AddFn(names, alias, t[3:])
+        } else if t != "" {
+            o.Add(names, alias, t)
+        }
     }
 }
 

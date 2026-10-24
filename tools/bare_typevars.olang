@@ -141,7 +141,7 @@ fn occurrences(src String&, mask String&, lo I64, hi I64, hasNames Bool, names M
 # ---- items ----
 
 # the pieces of code in src: kind 'w' a word, 'p' one punctuation character, 'n' a line end; and where each starts
-fn tokens(src String&, mask String&) (List<Char>, List<String&>, List<I64>) {
+fn tokens(src String&, mask String&) List<Char>, List<String&>, List<I64> {
     kinds List<Char>
     texts List<String&>
     starts List<I64>
@@ -175,7 +175,7 @@ fn tokens(src String&, mask String&) (List<Char>, List<String&>, List<I64>) {
 # the top-level items as (kind, start, end): "fn", "type" or "other" - those inside a top-level "if"/"else" included. An
 # item starts with a word at the start of a line outside every block, bracket and parenthesis ("destruct" continues the
 # type before it) and runs to the next one. Returned as three lists: kinds ('f', 't', 'o'), starts, ends
-fn items(src String&, mask String&) (List<Char>, List<I64>, List<I64>) {
+fn items(src String&, mask String&) List<Char>, List<I64>, List<I64> {
     kinds, texts, starts := tokens(src, mask)
     stack List<Bool>        # one entry per open "{": true for a top-level "if"/"else" block, whose contents are items
     paren I64 = 0
@@ -414,7 +414,7 @@ fn keepCommentColumns(src String&, mask String&, edits List<Edit>&, reps mut Lis
 }
 
 # src migrated, and how many edits that took (not counting the comment columns kept)
-fn migrate(src String&, path String&, known Map<String&, Bool>&, report mut List<String&>&) (String, I64) {
+fn migrate(src String&, path String&, known Map<String&, Bool>&, report mut List<String&>&) String, I64 {
     mask := srcmask.Mask(src, true)
     edits List<Edit>
     reps List<String&>

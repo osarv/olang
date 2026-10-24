@@ -74,7 +74,7 @@ fn splitArgs(t String&, mask String&) List<String&> {
 
 # a declaration written before at, on its line, with no value after the type: the start of its name and whether it
 # is "mut" - (-1, false) for none
-fn bareDecl(text String&, at I64, end I64) (I64, Bool) {
+fn bareDecl(text String&, at I64, end I64) I64, Bool {
     j := end
     for j < text.Len() and (text[j] == ' ' or text[j] == '\t') { j++ }
     if j < text.Len() and not (text[j] == '\n' or text[j] == '#' or text[j] == '}') { return -1, false }

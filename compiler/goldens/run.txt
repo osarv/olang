@@ -180,6 +180,7 @@
 | ok - a value a task allocates into the caller's scope survives the join
 | ok - a task that allocates repeatedly does not accumulate memory
 | ok - destructors registered on a task thread run when the spawner's scope closes
+| ok - G12: big<I64> names one instance, called or as a value
 | ok - a generic used before its own declaration still gets its body
 | ok - a generic parameterised by a callback can actually call it
 | ok - slicing a compile-time-length array, with either bound omitted
@@ -355,6 +356,7 @@
 | ok - D15: := from a call
 | ok - D8c: several results, destructured
 | ok - D8c: with try, scopes, generics, methods and interfaces
+| ok - L18c: a function type of several results grouped whole in a list
 | ok - D8c: spawn binds several results
 | ok - D8d: several results passed as a call's arguments
 | ok - D8d: a spread reference lives where the outer result lands
@@ -436,7 +438,7 @@
 | ok - E11b: a returned join survives later allocations
 | ok - T7c: fixed-length array fields have the length their type computes
 | ok - T7c: copying an instance copies its fixed-length arrays - nothing is shared
-| ok - T7d: an array of a run-time length fits fixed storage of its length
+| ok - T7d: an array of a run-time length is copied into fixed storage through a slice of its length
 | ok - T7d: a fixed-length field is borrowed as an ordinary array
 | ok - T7c: each instantiation of a generic type has its own fixed length
 | ok - an array declared from a literal can later hold one of another length
@@ -571,6 +573,7 @@
 | ok - S13a: patterns cover a case together, a Bool's values cover it, evaluated while compiling as at run time
 | ok - L18a: lists, literals, comprehensions and joins run over several lines inside brackets
 | ok - S1a: a bare block closes its scope at its end, and leaves as its statements do (D10a)
+| ok - S1b: one-line bodies run as the blocks they stand for, at run time and while compiling
 | ok - D10a: a loop with no condition and no break of its own never falls through
 | ok - E8b: a shift of a literal by a value takes its target's type, or the other operand's
 | ok - E28: ':=' from a conditional of text, and of numbers of one type
@@ -603,27 +606,24 @@
 | ok - E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)
 | ok - S18a: an assert's message is evaluated only when it fails
 | ok - E11a: a float's text, computed directly, is the shortest that reads back - while compiling and at run time
-| ok - G20/G27: a ring over a constant capacity, its rule checked per instantiation
-| ok - G24: constant variables are inferred, and an expression of them computed per instantiation
-| ok - D15: := keeps a fixed length, except a literal's
-| ok - G21: a matrix's dimensions are its type's, and a product's shape is checked by its types
-| ok - G26: decided per instantiation - a recursion on a constant ends where it is chosen to
-| ok - G20: an enum's case and a Bool are constant arguments
-| ok - G23: a constant variable as a value
-| ok - G22: a variable is introduced once, by its first <N>, and written bare after it
-| ok - G21: constant arguments the compile-time evaluator computes
-| ok - T7c: a fixed-length array is a value, laid out in place
-| ok - T7d/E32b: an Array<T, N> fits an Array<T>; an Array<T> is viewed as one of a known length, its length checked
-| ok - T29f: a declared type extends an Array<T, N>
-| ok - G28: a trait's constant parameter is bound through its methods
-| ok - T29a/E32b: a declared type over an Array<T, N> converted from a run-time array views it, its length checked
-| ok - G21: a constant argument is computed in its operands' types, as the program computes it
-| ok - D15: ':=' keeps a fixed length; a literal declares an Array<T>
+| ok - a ring over a capacity its constructor checks
+| ok - G29: arrays by value, an instance per length
+| ok - D15: := copies fixed storage; a local assigned another length holds it at run time
+| ok - a matrix's dimensions are its constructor's, and a product's shape is asserted
+| ok - G30: decided per instance - a recursion on a length ends where it is chosen to
+| ok - marker types and match T choose per instantiation
+| ok - G29: an instance's lengths are constants, read as any value
+| ok - T7d: inline fields whose lengths the compile-time evaluator computes
+| ok - T7d: fixed storage is a value, laid out in place
+| ok - E12, E16a: fixed storage is lent; a slice views part of an array
+| ok - T29f: a declared type extends an array whose length is inferred
+| ok - QP1: a length is computed in its operands' types, as the program computes it
+| ok - D15: ':=' keeps fixed storage, and copies it
 | ok - T7d/E10: long fixed arrays are copied and compared whole
 | ok - D9a/D16a: a lambda over an array of fixed arrays
-| ok - G23/D8a: a default reads its declaration's constant variables, per instantiation
-| ok - E10c: 'is' meets an Array<T, N>& and an Array<T>& as '==' does
-| ok - T7c: a fixed-array local beyond a stack frame's size
+| ok - E10c: 'is' meets a reference to fixed storage and one to a run-time length as '==' does
+| ok - T7d: a fixed-array local beyond a stack frame's size
+| ok - G29: an array of arrays by value under a reference, an instance per element length
 | ok - O26a: a returned List, Map, struct, conditional, destructured local and reference result outlive the call
 | ok - O26a: a local a conditional, a match or a try's default returns outlives the call
 | ok - S12b: text a match value's arm renders outlives the arm
@@ -709,7 +709,7 @@
 | ok - E16a: a slice of a temporary is used where it is made; a call's array result and written text go further
 | ok - C9/O16: what a destructor builds through its fields lives until its scope's destructors have run
 | ok - D8a/D16: a lambda default, from its own module
-| ok - E10/K1: a slice of an Array<T, 0> is empty, not null, while compiling and at run time
+| ok - E10/K1: a slice of an empty fixed array is empty, not null, while compiling and at run time
 | ok - S4c: a parallel assignment builds a global reference field's temporary where the global lives
 | ok - O26a: a copy handed to a method lives where the result goes only where the method can keep it
 | ok - O18c/O20: a field of a call's value result passed on, through a reference parameter
@@ -764,8 +764,9 @@
 | ok - cross-module: ComputeChecked identifies too-small correctly
 | ok - cross-module: catching a specific word by its full alias.Type.word name
 | ok - calling across the worker/runner import cycle
-| ok - D8a: another module's default reads its own global, never a caller's constant variable of that name
+| ok - D8a: another module's default reads its own global, never a caller's type variable of that name
 | ok - D8a/D16: a lambda default from another module
+| ok - G12: sh.PickSecond<I64> names an instance, called or as a value
 === test std/cancel.olang
 | status 0
 | ok - a token fires on Cancel, and not before
@@ -899,6 +900,7 @@
 | ok - Stat gives the kind, the size, and the modification time to the nanosecond
 | ok - MkDir and MkDirAll make directories
 | ok - ReadDir, Rename and Remove
+| ok - Link gives a file a second name, and fails where the name is taken
 | ok - ReadLink, RealPath and Cwd
 | ok - ReadFile names why it failed
 | ok - what os gives back lives where it is put
@@ -1202,6 +1204,10 @@
 | status 0
 === run g10drun.olang
 | status 0
+=== run g21effect.olang
+| status 0
+=== run g21mutable.olang
+| status 0
 === run gemmflat.olang
 | status 0
 === run globalvaluecopy.olang
@@ -1218,6 +1224,8 @@
 === run l18bifinparens.olang
 | status 0
 | 6
+=== run l18cgroupok.olang
+| status 0
 === run l9afields.olang
 | status 0
 === run l9aowntake.olang
@@ -1448,6 +1456,8 @@
 === run s17msgok.olang
 | status 0
 === run s1ablock.olang
+| status 0
+=== run s1bline.olang
 | status 0
 === run s5mapgetreturn.olang
 | status 0

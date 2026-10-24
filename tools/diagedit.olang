@@ -31,7 +31,7 @@ error NotARow {
 # as its parts: the path, line, column, whether it is an error (else a note), the rule ("" when it names none) and the
 # message. Any other row fails with NotARow.ROW. The path is the shortest start of the row that leaves the rest
 # matching, as the Python scripts' non-greedy (.*?) read it
-fn ParseRow(row String&) (String, I64, I64, Bool, String, String) ? {
+fn ParseRow(row String&) String, I64, I64, Bool, String, String ? {
     n := row.Len()
     for k in range n {
         if row[k] != ':' { continue }

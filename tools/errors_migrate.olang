@@ -45,7 +45,7 @@ fn splice(text String&, off I64, n I64, with String&) String {
 }
 
 # the offset line (from 1) starts at, and where it ends (its line break, or the end)
-fn lineSpan(text String&, line I64) (I64, I64) {
+fn lineSpan(text String&, line I64) I64, I64 {
     l I64 = 1
     i I64 = 0
     for l < line and i < text.Len() {
@@ -126,7 +126,7 @@ fn inTest(text String&, line I64) Bool {
 
 # where the call whose name begins at col (from 1) in l starts and ends (from 0, the end not included): its receiver
 # chain included - "a.b(x)[i].f(y)" for f's column starts at a
-fn callExtent(l String&, col I64) (I64, I64) ? {
+fn callExtent(l String&, col I64) I64, I64 ? {
     j := col - 1
     for j < l.Len() and isIdent(l[j]) { j++ }
     if j >= l.Len() or l[j] != '(' { error Unparsed.CALL }

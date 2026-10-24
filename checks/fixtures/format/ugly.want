@@ -5,7 +5,7 @@ type Pair2 struct(a I64, b I64) {
     b
 }
 fn (p Pair2&) Sum() I64 { return p.a + p.b } # a trailing comment
-fn two() (I64, I64) { return 1, -2 }         # aligned with the one above
+fn two() I64, I64 { return 1, -2 }           # aligned with the one above
 
 fn main() ? io.IoError {
     xs := I64[1, 2, 3]
@@ -20,4 +20,6 @@ fn main() ? io.IoError {
     a, b := two()
     try io.Println($f(a) $b $s.Len() $l.Len()) ## a block comment ##
     for i in range 3 { }
+    if n < 0: return
+    for x in xs: io.Println($x)!
 }

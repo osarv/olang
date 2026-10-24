@@ -2106,7 +2106,7 @@ fn renderAdd(a I32, b I32) I32 { return a + b }
 
 type RenderFnHolder struct(f fn(a I32, b I32) I32) { f }
 
-fn renderTwo() (I32, String&) { return 1, "x" }
+fn renderTwo() I32, String& { return 1, "x" }
 
 test "E11a: a call's several results render together" {
     assert bytesEq($renderTwo(), "(1, \"x\")")
@@ -2127,7 +2127,7 @@ fn renderFail(a I32) I32 ? MathError, RangeError { if a == 1 { error MathError.O
 test "E11a/QY: a function's error set renders with commas" {
     assert bytesEq($renderFail, "renderFail(a I32) I32 ? MathError, RangeError")
     f := renderFail
-    assert bytesEq($f, "fn(a I32) I32 ? (MathError, RangeError)")
+    assert bytesEq($f, "fn(a I32) I32 ? MathError, RangeError")
 }
 
 test "E11a: '$' on text is a copy - it is a value, not a second name for the storage" {
@@ -3109,6 +3109,29 @@ test "destructors registered on a task thread run when the spawner's scope close
 # the same file, and for one in an imported module whose bodies are checked after the caller's. Either way
 # the copy got an empty body and codegen emitted a function returning a zero value, with no diagnostic
 # anywhere. Recorded in the signature pass now, which runs for every module before any body is checked.
+# G12: a generic function's instance named by its type arguments - called with no inference, or a function value
+fn g12Big<T>(a T, b T) T { return a if a > b else b }
+fn g12Sum<T Number>(xs Array<T>&) T {
+    s T = 0
+    for x in xs { s += x }
+    return s
+}
+fn g12Apply(f fn(a I64, b I64) I64, x I64) I64 { return f(x, 3) }
+G12Baked I64 = g12Big<I64>(4, 9)               # K2: evaluated while compiling
+G12At mut I64 = 2                               # read at run time
+test "G12: big<I64> names one instance, called or as a value" {
+    assert G12Baked == 9
+    assert g12Big<I64>(G12At, 7) == 7
+    assert g12Big<F32>(1.5, 0.5) == 1.5         # the literals adapt to the instance's parameters
+    assert g12Sum<I32>(I32[1, 2, 3]) == 6
+    f := g12Big<F32>
+    assert f(F32(G12At), 0.5) == 2.0
+    g fn(a I64, b I64) I64 = g12Big<I64>
+    assert g(8, G12At) == 8 and g12Apply(g12Big<I64>, G12At) == 3
+    assert $f == "fn(a F32, b F32) F32"
+    assert g12Big<I64> == g                     # one instance, one value (T21)
+}
+
 fn IdentityLater<T>(x T) T { return x }
 
 test "a generic used before its own declaration still gets its body" {
@@ -4331,7 +4354,7 @@ test "D10a: every path produces a result" {
 # these can only be named here - the first is a compile error, the other two abort:
 #   fn f(c bool) I32 { if c { return 1 } }      D10a: control reaches the end without returning
 #   abort                                           "aborted", the OS abort status, a core dump
-#   unreachable                                     "reached unreachable code", the same abort
+#   unreachable                                     "unreachable reached", the same abort
 # Both behave exactly as a failed assert does, recoverable per-test while a test is running - which is
 # the reason "abort" is worth having at all: "assert false" already did precisely this and said nothing
 # about why. "unreachable" says something different again, and says it to the compiler as well as to a
@@ -6348,11 +6371,11 @@ test "D15: := from a call" {
 # They are received by destructuring, or passed as all of a call's arguments (D8d), and are never one value: there
 # is no tuple type to store or pass (two values held together are a Pair).
 # "_" discards one, ":=" declares, "=" assigns into existing places, and "try" and "spawn" both apply.
-fn divmodD(a I32, b I32) (I32, I32) { return a / b, a % b }
-fn passD(a I32, b I32) (I32, I32) { return divmodD(a, b) }        # several results passed on whole
+fn divmodD(a I32, b I32) I32, I32 { return a / b, a % b }
+fn passD(a I32, b I32) I32, I32 { return divmodD(a, b) }        # several results passed on whole
 
 error DivError { ZERO }
-fn safeDivD(a I32, b I32) (I32, I32) ? DivError {
+fn safeDivD(a I32, b I32) I32, I32 ? DivError {
     if b == 0 { error DivError.ZERO }
     return a / b, a % b
 }
@@ -6362,16 +6385,16 @@ fn digitsD(a I32, b I32) I32 ? DivError {
 }
 
 # each result keeps its own scope tag, and every scope rule applies to it separately
-fn linkAndDouble(n I32) (Link&, I32) { return Link(n), n * 2 }
+fn linkAndDouble(n I32) Link&, I32 { return Link(n), n * 2 }
 
-fn swapD<T>(a T, b T) (T, T) { return b, a }
+fn swapD<T>(a T, b T) T, T { return b, a }
 
 type RangeD struct(l I32, h I32) {
     lo I32 = l
     hi I32 = h
 }
-fn (r RangeD&) Bounds() (I32, I32) { return r.lo, r.hi }
-type BoundedD trait { Bounds() (I32, I32) }
+fn (r RangeD&) Bounds() I32, I32 { return r.lo, r.hi }
+type BoundedD trait { Bounds() I32, I32 }
 fn widthD<B BoundedD>(b B&) I32 {
     lo, hi := b.Bounds()
     return hi - lo
@@ -6412,6 +6435,45 @@ test "D8c: with try, scopes, generics, methods and interfaces" {
     assert widthD(rg) == 7
 }
 
+# L18c: a function type of several results or error items, as an item of a list, is parenthesized whole; a result that
+# is one, likewise, and one with no error set of its own before its signature's "?"
+error L18cErr {
+    BAD
+}
+error L18cOther {
+    WORSE
+}
+fn l18cPairer() (fn(x I64) I64, I64) { return fn(x I64) I64, I64 { return x, x + 1 } }
+fn l18cApply(f (fn(x I64) I64, I64), n I64) I64 {
+    a, b := f(n)
+    return a + b
+}
+fn l18cTwo() (fn(x I64) I64, I64), I64 { return l18cPairer(), 5 }
+fn l18cPlain(k I64) (fn() I64) ? L18cErr {
+    if k < 0 { error L18cErr.BAD }
+    return fn() I64 { return 4 }
+}
+fn l18cFails(f (fn(n I64) I64 ? L18cErr, L18cOther), n I64) I64 ? L18cErr, L18cOther { return try f(n) }
+L18cBaked I64 = l18cApply(l18cPairer(), 10)        # K2: evaluated while compiling
+L18cAt mut I64 = 3                                  # read at run time
+test "L18c: a function type of several results grouped whole in a list" {
+    assert L18cBaked == 21
+    assert l18cApply(l18cPairer(), L18cAt) == 7
+    assert l18cApply((fn(x I64) I64, I64 { return x, 1 }), L18cAt) == 4
+    m Map<String&, (fn(x I64) I64, I64)>
+    m.Put("p", l18cPairer())
+    g := try m.Get("p") catch { unreachable }
+    assert l18cApply(g, 1) == 3
+    f, k := l18cTwo()
+    assert l18cApply(f, k) == 11
+    h := try l18cPlain(L18cAt) catch L18cErr { unreachable }
+    assert h() == 4
+    keep fn(n I64) I64 ? L18cErr, L18cOther = fn(n I64) I64 ? L18cErr, L18cOther { return n * 2 }
+    assert (try l18cFails(keep, L18cAt) catch { unreachable }) == 6
+    assert $keep == "fn(n I64) I64 ? L18cErr, L18cOther"
+    assert $m == "Map<String&, (fn(I64) I64, I64)>{\"p\": (fn(I64) I64, I64)}"
+}
+
 test "D8c: spawn binds several results" {
     q I32 = 0
     r I32 = 0
@@ -6428,7 +6490,7 @@ test "D8c: spawn binds several results" {
 # D8d: a call returning several values, as the only argument of a call, passes them as its arguments - each
 # result to one parameter, in order, the call evaluated once. Functions, generics, methods and constructors alike.
 spreadCallsD mut I32 = 0
-fn countedDivmodD(a I32, b I32) (I32, I32) {
+fn countedDivmodD(a I32, b I32) I32, I32 {
     spreadCallsD++
     return a / b, a % b
 }
@@ -6436,9 +6498,9 @@ fn addD(a I32, b I32) I32 { return a + b }
 fn pickSecondD<T>(a T, b T) T { return b }
 fn (r RangeD&) ShiftedD(dlo I32, dhi I32) I32 { return r.lo + dlo + r.hi + dhi }
 fn digitSumD(n I32) I32 ? DivError { return addD(try safeDivD(n, 10)) }
-fn twiceD(f fn(a I32) I32, v I32) (I32, I32) { return f(v), f(f(v)) }
+fn twiceD(f fn(a I32) I32, v I32) I32, I32 { return f(v), f(f(v)) }
 # a reference among the results lands where the outer call's result does (O18a)
-fn linkPairD(n I32) (Link&, I32) { return Link(n), n }
+fn linkPairD(n I32) Link&, I32 { return Link(n), n }
 fn keepLinkD(l mut Link&, n I32) mut Link&l {
     l.v = l.v + n
     return l
@@ -6592,7 +6654,7 @@ fn tdWide(ok Bool) I64 ? MathError {
     return 5000000000
 }
 
-fn tdPair() (I32, I32) {
+fn tdPair() I32, I32 {
     return try safeDivD(1, 0) catch default 9, 8
 }
 
@@ -8893,7 +8955,7 @@ fn oFresh() OxN& {
     return x
 }
 
-fn oPair() (OxN&, OxN&) { return OxN(1, null), OxN(2, null) }
+fn oPair() OxN&, OxN& { return OxN(1, null), OxN(2, null) }
 
 fn oSum(e OE&) I32 {
     if e == null { return 0 }
@@ -9634,7 +9696,7 @@ test "T29e: String and a program's own array type inherit the array methods" {
 }
 
 # D16c/T7b: a value array is never copied implicitly - a lambda borrows it, read-only, and sees later writes
-fn lamTwoArrays() (Array<I32>, I32) { return Array<I32>(1000, 7), 2 }
+fn lamTwoArrays() Array<I32>, I32 { return Array<I32>(1000, 7), 2 }
 fn lamBorrowSees(k I32) I32 {
     a := I32[1, 2]
     second := fn() { return a[1] }
@@ -11090,7 +11152,7 @@ fn sfMk(k I64) mut SfNode& ? SfErr {
     if k > -100 { error SfErr.BAD }
     return SfNode(k)
 }
-fn sfTwo(k I64) (mut SfNode&, mut SfNode&) ? SfErr {
+fn sfTwo(k I64) mut SfNode&, mut SfNode& ? SfErr {
     if k > -100 { error SfErr.BAD }
     return SfNode(k), SfNode(k + 1)
 }
@@ -11155,7 +11217,7 @@ test "T7/O18a: an array literal or fill built from temporaries, returned, holds 
     assert x6[0].v == 7                     # a fill copies one value: both elements are one node
 }
 
-fn sfPair(k I64) (mut SfNode&, mut SfNode&) { return SfNode(k + 40), SfNode(k + 2) }
+fn sfPair(k I64) mut SfNode&, mut SfNode& { return SfNode(k + 40), SfNode(k + 2) }
 
 test "D8c/O18a: results destructured into existing variables land where those variables live" {
     a SfNode& = SfNode(0)
@@ -11853,7 +11915,7 @@ test "K1/P9: atomic operations are evaluated while compiling, and agree with the
 # every task run to completion at the join, in the order spawned, after the block's deferred code - so a parallel
 # computation bakes into a global and decides an assert, as the run time computes it in parallel; it was refused outright
 fn fzSquare(n I64) I64 { return n * n }
-fn fzDivMod(a I64, b I64) (I64, I64) { return a / b, a % b }
+fn fzDivMod(a I64, b I64) I64, I64 { return a / b, a % b }
 type fzTally struct() {
     v I64 = 0
 }
@@ -12069,6 +12131,52 @@ test "S1a: a bare block closes its scope at its end, and leaves as its statement
         x = y
     }
     assert x == 2
+}
+
+# S1b: a one-line body - ":" and one simple statement on its line - is the block holding it; an "else" may begin the
+# next line, and a statement before an "else" on its line ends there
+error S1bError { NEG }
+fn s1bSign(x I64) I64 {
+    if x < 0: return -1
+    else if x == 0: return 0
+    else: return 1
+}
+fn s1bSum(xs Array<I64>&) I64 {
+    t I64 = 0
+    for x in xs: t += x
+    for i := 0, i < 3, i++: t++
+    k I64 = 0
+    for k < 4: k += 3
+    for i in range 10 {
+        if i == 2: continue
+        if i == 4: break
+        t += i * 100
+    }
+    if t > 1000: t = 0 else: t = t + k
+    return t
+}
+fn s1bCheck(x I64) I64 ? S1bError {
+    if x < 0: error S1bError.NEG
+    for i in range x: assert i < x, "in range"
+    return x
+}
+type s1bPct struct(v I64) ? S1bError {
+    if v < 0: error S1bError.NEG
+    v
+}
+S1bBaked I64 = s1bSign(-3) * 1000 + s1bSum(I64[1, 2, 3]) + (try s1bCheck(-1) catch S1bError default 7)
+test "S1b: one-line bodies run as the blocks they stand for, at run time and while compiling" {
+    n I64 = 0
+    n -= 3
+    assert s1bSign(n) == -1 and s1bSign(n + 3) == 0 and s1bSign(n + 9) == 1
+    assert s1bSum(I64[1, 2, 3]) == 415
+    assert S1bBaked == -1000 + 415 + 7
+    assert (try s1bCheck(n) catch S1bError default 7) == 7 and (try s1bCheck(5) catch S1bError default 7) == 5
+    p := try s1bPct(n + 8) catch S1bError { unreachable "a positive percentage" }
+    assert p.v == 5 and (try s1bPct(n) catch S1bError default s1bPct(1)!).v == 1
+    out List<I64>
+    for x in I64[4, 5, 6]: out.Push(x * 2)
+    assert out.Len() == 3 and out[2] == 12
 }
 
 # D10a: "for { }" with no break of its own leaves only as its body does - no "unreachable" after it
@@ -13291,7 +13399,7 @@ fn c3Pick(n I64, first Bool) List<I64> {
     }
     return a if first else b
 }
-fn c3Two(n I64) (List<I64>, I64) {
+fn c3Two(n I64) List<I64>, I64 {
     l := c3MkList(n)
     return l, n
 }
@@ -15810,7 +15918,7 @@ test "O26a: a for-in element pushed into a returned list" {
 }
 
 # E25 (study 5, r04): a scope argument puts a call's results where it says, destructured or not
-fn s5Mk2(n I64) (List<String&>, I64) {
+fn s5Mk2(n I64) List<String&>, I64 {
     l := List<String&>()
     for i in range n + 1 { l.Push($i "-made") }
     return l, n + 1
@@ -16590,7 +16698,7 @@ test "P4a: a task's clause runs on its thread and counts what it takes" {
 }
 
 # P4a: several targets take one default per target, as a destructuring's try does
-fn peDivmod(a I64, b I64) (I64, I64) ? peErr {
+fn peDivmod(a I64, b I64) I64, I64 ? peErr {
     if b == 0 { error peErr.NEG }
     return a / b, a % b
 }
@@ -16644,8 +16752,8 @@ test "P4a: defaults holding references outlive the join" {
 # P1g/T11b: an array value a task gives its target takes the result's storage, so the call builds it where the target's
 # own storage is - not in the join block, which closes at the join (the port built it there); of several targets, where
 # the longest-lived is
-fn peTwo(n I64) (String, String) { return "a" $n, "b" $(n + 1) }
-fn peTwoE(n I64) (String, I64) ? peErr {
+fn peTwo(n I64) String, String { return "a" $n, "b" $(n + 1) }
+fn peTwoE(n I64) String, I64 ? peErr {
     if n < 0 { error peErr.NEG }
     return "c" $n, n
 }
@@ -17107,7 +17215,7 @@ fn ebOdd(n I64) Bool ? {
 # R1a: a set that comes out empty - called without try
 fn ebNever(n I64) I64 ? { return n + 1 }
 # R1b: a named function fits a function type whose list holds its errors, in another order - re-encoded
-fn ebApply(f fn(n I64) I64 ? (ebB, ebA), n I64) I64 ? ebB, ebA { return try f(n) }
+fn ebApply(f (fn(n I64) I64 ? ebB, ebA), n I64) I64 ? ebB, ebA { return try f(n) }
 fn ebInferred() I64 {
     a := try ebBoth(-1) catch ebA default 10 catch ebB default 20
     b := try ebBoth(200) catch ebA default 10 catch ebB default 20

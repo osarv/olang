@@ -250,7 +250,7 @@
 |   test        runs each file's test blocks, each file built on its own (B3a)
 |   interpret   runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)
 |   format      rewrites each file in olang's one layout (B13)
-|   explain     prints a rule of the specification (B11a)
+|   explain     prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)
 |   help        lists the modes, or a mode's options
 | 
 | 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
@@ -269,6 +269,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 | stderr:
 | status 0
 === olang help run
@@ -283,6 +284,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 | stderr:
 | status 0
 === olang help compile
@@ -298,6 +300,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 | stderr:
 | status 0
 === olang help test
@@ -312,6 +315,7 @@
 |   -target NAME       builds for another machine (B12)
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
+|   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
 | stderr:
 | status 0
 === olang help interpret
@@ -336,8 +340,13 @@
 | status 0
 === olang help explain
 | stdout:
-| usage: olang explain RULE
-| prints a rule of the specification (B11a)
+| usage: olang explain RULE | FILE.olang NAME
+| prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)
+| 
+| options:
+|   -target NAME       builds for another machine (B12)
+|   -define Name=value defines a build constant (B10)
+|   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 | stderr:
 | status 0
 === olang help help
@@ -377,13 +386,13 @@
 | ```
 | command   ::= "olang" [ mode-word ] { option } { argument }
 | mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help"
-| option    ::= "-output" PATH | "-debug" | "-race" | "-sanitize" | "-target" NAME | "-define" NAME "=" VALUE
-|             | "-update" | "-check"
+| option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
+|             | "-define" NAME "=" VALUE | "-update" | "-check"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 | an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
-| `explain` (B11a) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
+| `explain` (B11a, B11b) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
 | **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 | the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 | beginning with `-` that is no option is an error:
@@ -391,9 +400,9 @@
 | | option | applies to | rule |
 | |---|---|---|
 | | `-output PATH` | build, compile | B3h |
-| | `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
-| | `-target NAME` | running a file, build, compile, test, interpret | B12 |
-| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret | B10, §4 M23c |
+| | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
+| | `-target NAME` | running a file, build, compile, test, interpret, explain | B12 |
+| | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain | B10, §4 M23c |
 | | `-check` | format | B13 |
 | 
 | `build` and `compile` take exactly one file, `test` and `format` one or more; for running a file and for `interpret`
@@ -543,6 +552,5 @@
 === in a directory of programs: olang format -check ugly.olang hello.olang
 | stdout:
 | ugly.olang
-| hello.olang
 | stderr:
 | status 1

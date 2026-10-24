@@ -81,9 +81,26 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `choice`, `+` on arrays, lowercase primitives) are simply unknown - their diagnostics were removed at the user's
   request.
 - **Comments: `#` to the line's end, `## ... ##` a block (L4/L4a, the user's call).**
+- **One-line bodies (S1b, the user's decision 2026-10-24).** `if x < 0: return 0`, `for x in xs: total += x`,
+  `else: count++`: `:` and one simple statement on the colon's line - an assignment, a call or increment, `return`,
+  `break`, `continue`, `error`, `unreachable`, `assert` or `spawn` (the last two mine). It is the block holding that
+  statement; a declaration, an `if`, a loop, a `match`, a `join`, a `defer` or a block is an error naming the block
+  form. The statement ends at its line's end or at an `else`/`catch` on its line; `else` may begin the next line, as
+  `catch` does. Not for the forever `for` or a `do` loop. `:` inside brackets stays a slice's. The formatter keeps
+  either form and spaces `: ` (and no longer writes `f() !`).
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build
   compile test interpret format explain help`; options `-output -debug -race -sanitize -target -define -update -check`,
   each checked against the modes it applies to (one table, also `help`'s); old flags simply gone (`tools/cli_words.olang`).
+- **`-quick` (B2g, the user's call 2026-10-24).** For build, compile, test and running a file: `-O2` without
+  link-time optimization, objects apart (`.quick`); an error beside `-debug` or `-race`, which set their own levels.
+  The default stays `-O3` + LTO (B2c).
+- **`explain FILE NAME` (B11b, the user's call 2026-10-24).** Beside `explain RULE`: one top-level item of FILE as the
+  compiler sees it, once the program checks - a function's whole signature, an inferred error set written out (marked
+  `# its error set inferred`), its scope obligations as `[a outlives b]` lines (`return` the result scope), a generic's
+  instances each with their own; a type's constructor, fields, own methods and the parameterless traits it meets; an
+  enum's cases, an error type's words, a trait's methods; a global's type and its baked value (`$` of it, through the
+  evaluator), else `# set at startup`. `Type.Method` names a method. `-target`, `-define` and `-update` apply.
+  compiler/explain.olang.
 - **A file is built and run (B3g):** `olang [options] f.olang args...` builds as `build` does, then runs in the
   compiler's place (its status, `#!/usr/bin/env olang` scripts); `-output PATH` names build's/compile's output (B3h).
 - **`olang format [-check]` (B13)** rewrites files in one gofmt-style layout, no options; an olang program
@@ -109,6 +126,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
   `break` of its own leaves, a leaving `join` counts, a `noreturn` call counts. `unreachable` is checked, never assumed
   (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b), process-wide, tests included.
+- **`unreachable "why"` (S16d, mine 2026-10-24).** An optional message, any text expression, evaluated only where the
+  statement is reached: `FILE:LINE: unreachable reached: why` (a plain one says `unreachable reached`; the old
+  wording "reached unreachable code" changed with it, everywhere). Not a statement that leaves its function (no
+  `return`, error or loop jump inside the message's lambdas), as an assert's message.
 - **A test passes by ending, fails by what fails (S15/S16, QU, the user's design 2026-10-17).** A test passes by
   reaching its end or a bare `return` (deferred code runs); it fails by a failed assert or check, `unreachable`, a `!`,
   or an error leaving its body - a `try` in a test need not catch everything (`FAIL - name: T.W`, then the trace).
@@ -251,6 +272,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   outlive the call counts; a slice of a `try` value is a temporary's (E16a).
 - **Several results, no tuples (D8c/D8d, the user's call).** `return a, b`, `q, r := f()`, `f(g())` when g's call is
   the only argument; `Pair<A, B>` in `std/pair` for two things kept together (the user's call; in the prelude until 2026-10-17).
+  **Results and error sets are written bare** (the user's call 2026-10-24): `fn divmod(a I64, b I64) I64, I64 ? A, B`,
+  in a declaration, a function type and a lambda alike. **Whole-item grouping (L18c, the user's call)**: an item of a
+  list - parameters, arguments, results, type arguments and parameters, array elements, indexes - holding a top-level
+  comma of its own is parenthesized whole, `Map<String&, (fn(x I64) I64, I64 ? A, B)>`, `apply(f (fn(x I64) I64,
+  I64), n I64)`; so a lambda or function type in such a list has one result and one error item unless wrapped. One
+  exception (mine): a function type with no error set as a result before its own signature's `?` is wrapped, `fn f()
+  (fn() I64) ? E`. Parentheses group nothing else: `(I64)` or a wrapped type that needs none is an error. `$` and
+  every diagnostic spell types this way (the checker had written error sets with ` + `). `tools/results_migrate.olang`
+  migrates, re-runnable (oann).
 - **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot; named arguments rejected
   (parameter names stay internal). A default is built per call in its declaration's context.
 - **Lambdas (D16, the user's design).** `fn(x) { return ... }`, `return` always written; captures copied (plain values
@@ -296,6 +326,11 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Generics
 
+- **Explicit type arguments (G12, E3, the user's call 2026-10-24).** `big<I64>` names a generic function's instance, as a
+  value or at a call (`big<I64>(1, 2)`, `lib.Pick<I64>`), its arguments fitted as written ones are (count, bounds,
+  T7c lengths); only free functions (a method's are inferred). A generic still is no value unless named so; one taking
+  an array by value makes an instance per length (G29) and is never a value - the error says to pass a lambda. A
+  type name read as a value (`I64 > 3`) is an error (it silently compiled to `false`).
 - **Type parameter lists (QW, G3, G8b, the user's decision 2026-10-17, reversing G8b's `<T>` introductions and
   G3's no-list rule).** A function's type variables are a list after its name, constraints in it: `fn
   max<T>(a T, b T) T`, `fn area<T Shape>(x T)`; a constraint is a trait (G6, G19); a method gets its type's

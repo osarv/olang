@@ -75,6 +75,7 @@ error Failed {
 type Frontend trait {
     mut Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&, d mut diag.Diagnostics&cfg) ? Failed
     mut Interpret(root String&, args Array<String&>&, cfg mut Config&, d mut diag.Diagnostics&cfg) I32 ? Failed
+    mut Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&cfg) String ? Failed
 }
 
 # ---- a build's configuration ----
@@ -88,6 +89,7 @@ type Config struct() {
     Target target.Target = target.Target()
     Consts cond.Consts = cond.Consts()
     Debug Bool = false
+    Quick Bool = false  # -quick: -O2 without link-time optimization (B2g)
     Race Bool = false
     San Bool = false
     Update Bool = false
@@ -138,13 +140,15 @@ fn (c Config&) paint(code String&, text String&) String {
     return b.ToString()
 }
 
-# ".race", ".debug", ".san" - which modes an object or a binary was built for, for a reader (its hash says it anyway)
+# ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
+# anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".san" if c.San else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "")
 }
 
 # the flags of the build's mode, shared by every compile and the link so the two never disagree (B2c, B2d, P7, B12): the
-# target's triple for another machine and its CPU; -O0 -g under -debug, -O1 under -race, else -O3 with full LTO
+# target's triple for another machine and its CPU; -O0 -g under -debug, -O1 under -race, -O2 under -quick (B2g), else
+# -O3 with full LTO
 fn (c Config&) ModeFlags() List<String&> {
     out List<String&>
     if c.Target.Foreign { out.Push($"--target=" $c.Target.Triple) }
@@ -158,6 +162,10 @@ fn (c Config&) ModeFlags() List<String&> {
     if c.Race {
         out.Push("-O1")
         out.Push("-fsanitize=thread")
+        return out
+    }
+    if c.Quick {
+        out.Push("-O2")
         return out
     }
     out.Push("-O3")
@@ -320,7 +328,7 @@ fn kindSuffix(k UnitKind) String {
 }
 
 # where the object made from the IR whose SHA-256 is irHash, compiled with flags, goes:
-# BASE.HASH[.main|.test|.inst][.race][.debug][.san].o, HASH the first 16 hex digits of the SHA-256 of the IR's hash, the
+# BASE.HASH[.main|.test|.inst][.race][.debug][.quick][.san].o, HASH the first 16 hex digits of the SHA-256 of the IR's hash, the
 # flags and clang's version
 fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags List<String&>&) String {
     parts List<String&>
@@ -337,7 +345,7 @@ fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags Li
 # where it could not be started), and what it wrote to its standard output and error, by the command's number. The
 # commands start in the order of their weights, heaviest first (where weights are given: a compile's, its IR's
 # size), so the longest is not the last to start, keeping every core busy to the end
-fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = null) (Array<I32>, Array<String&>) {
+fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = null) Array<I32>, Array<String&> {
     n := cmds.Len()
     status mut Array<I32>&return = Array<I32>(n)
     said mut Array<String&>&return = Array<String&>(n)
@@ -474,7 +482,7 @@ fn fileFatal(path String&, m msgs.Msg, d mut diag.Diagnostics&) {
 fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&> ? Failed {
     size I64 = 0
     for u in prog.Units { size += u.Ir.Len() }
-    c.Thin = not c.Debug and not c.Race and size >= ThinFrom
+    c.Thin = not c.Debug and not c.Race and not c.Quick and size >= ThinFrom
     j := compiles()
     paths List<String&>
     for i, u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash, i)) }
@@ -759,6 +767,13 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     return try fe.Interpret(file, args, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
 }
 
+# explain FILE NAME (B11b): the item, as the front end sees it, on the standard output; a program with errors says them
+fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d mut diag.Diagnostics&c) I32 {
+    text := try fe.Explain(file, name, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
+    say(text)
+    return 0
+}
+
 # a signal as the C library names it (strsignal)
 fn SignalName(sig I32) String {
     return match sig {
@@ -882,6 +897,10 @@ fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog 
 fn (s mut stubFrontend&) Interpret(root String&, args Array<String&>&, cfg mut Config&
     d mut diag.Diagnostics&cfg) I32 ? Failed {
     return I32(args.Len())
+}
+
+fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&cfg) String ? Failed {
+    return $"fn " $name "()\n"
 }
 
 # the status the binary at bin ends with

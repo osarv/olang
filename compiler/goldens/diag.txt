@@ -24,7 +24,7 @@ assertfalsemsg.olang:5:14: error[S18c]: this assertion is false, evaluated while
       |              ^~
 compilation failed with 1 error
 === assertmsgnottext.olang
-assertmsgnottext.olang:5:23: error[S18a]: an assertion's message is text, found I64 - write it as text: "x is " $x
+assertmsgnottext.olang:5:23: error[S18a]: an assert's message is text, found I64 - write it as text: "x is " $x
     5 |     assert Seed == 0, Seed
       |                       ^~~~
 compilation failed with 1 error
@@ -32,9 +32,9 @@ compilation failed with 1 error
 atnoindex.olang:12:11: error[E31]: Box's At takes no parameters besides its receiver - an ordinary method, not the one 'x[i]' calls, which takes at least one
    12 |     x := b[0]
       |           ^
-atnoindex.olang:8:13: note: 'At' is declared here
+atnoindex.olang:8:1: note: 'At' is declared here
     8 | fn (b Box&) At() I64 { return b.n }
-      |             ^~
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === atomicfloat.olang
 atomicfloat.olang:5:7: error[P9]: the atomic operations are methods of the integer types, and F64 is none
@@ -55,9 +55,6 @@ compilation failed with 1 error
 atomicreadonly.olang:4:19: error[P9]: this atomic operation writes its place, which must be writable
     4 | fn bump(c C&) { c.n.AtomicAdd(1) }
       |                   ^
-atomicreadonly.olang:4:9: note: 'c' is declared read-only here - declare it 'c mut C&' to write through it
-    4 | fn bump(c C&) { c.n.AtomicAdd(1) }
-      |         ^
 compilation failed with 1 error
 === atomicredeclared.olang
 atomicredeclared.olang:4:13: error[E23, E33, P9]: the compiler supplies AtomicAdd for Hits - choose another name
@@ -114,7 +111,10 @@ b10undefined.olang:5:4: error[B10]: unknown name 'Profile' - if it is a build co
 b10undefined.olang:12:8: error[B10]: unknown name 'Mode' - if it is a build constant, define it with '-define Mode=VALUE', or declare it with a default
    12 |     if Mode == "fast" { }
       |        ^~~~
-compilation failed with 2 errors
+b10undefined.olang:12:8: error: unknown name 'Mode'
+   12 |     if Mode == "fast" { }
+      |        ^~~~
+compilation failed with 3 errors
 === b11notehandle.olang
 b11notehandle.olang:14:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    14 |         l.Push(t)
@@ -125,7 +125,7 @@ $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this
 b11notehandle.olang:13:9: note: 't' is declared here, in a block that closes first - declare it where 'm' lives: 't mut String&m = ...'
    13 |         t := "x" $i
       |         ^
-b11notehandle.olang:14:16: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+b11notehandle.olang:14:16: note: this text lives in a block that closes first - pass a copy, which is made where 'm' lives: write '$' before it
    14 |         l.Push(t)
       |                ^
 compilation failed with 1 error
@@ -176,6 +176,9 @@ compilation failed with 1 error
 b6condelem.olang:9:26: error[O25c]: the array outlives what this element refers to - build the element where the array goes
     9 |         keep = String&[x if i == 1 else outer]
       |                          ^~
+b6condelem.olang:9:24: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
+    9 |         keep = String&[x if i == 1 else outer]
+      |                        ^
 compilation failed with 1 error
 === b6condfield.olang
 b6condfield.olang:12:12: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
@@ -236,7 +239,7 @@ compilation failed with 1 error
 === b9aminover.olang
 b9aminover.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it divides the most negative value by -1, which overflows (b9aminover.olang:4)
     4 | if (-9223372036854775807 - 1) / -1 == 0 {
-      |    ^
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === b9anomeet.olang
 b9anomeet.olang:5:6: error[T6b]: '>': these numbers' types do not meet - convert one, as I64(n)
@@ -246,7 +249,7 @@ compilation failed with 1 error
 === badcond.olang
 badcond.olang:5:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads a mutable global, whose value is the running program's (badcond.olang:4)
     5 | if f() == 1 {
-      |    ^
+      |    ^~~~~~~~
 compilation failed with 1 error
 === badform.olang
 badform.olang:2:8: error[M23]: no .olang file at nothere.olang
@@ -295,7 +298,7 @@ c2afieldparam.olang:6:5: error[C2a]: field 'n' has a parameter's name - write it
       |     ^
 c2afieldparam.olang:5:15: note: 'n' is declared here
     5 | type T struct(n I32) {
-      |               ^
+      |               ^~~~~
 compilation failed with 1 error
 === c2dargnote.olang
 c2dargnote.olang:16:46: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
@@ -315,15 +318,9 @@ compilation failed with 2 errors
 c2dbuildarg.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |     next mut N& = nx
       |                   ^~
-c2dbuildarg.olang:3:22: note: 'nx' is declared read-only here - declare it 'nx mut N&' to write through it
-    3 | type N struct(v I32, nx N&) {
-      |                      ^~
 c2dbuildarg.olang:7:40: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     7 | type Cur struct(of N&) { at mut N&of = of }
       |                                        ^~
-c2dbuildarg.olang:7:17: note: 'of' is declared read-only here - declare it 'of mut N&' to write through it
-    7 | type Cur struct(of N&) { at mut N&of = of }
-      |                 ^~
 c2dbuildarg.olang:9:30: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
     9 | fn fill(c mut Cur&) { grow(c.at) }
       |                              ^~
@@ -332,15 +329,9 @@ compilation failed with 3 errors
 c2dbuildassign.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |     next mut N& = nx
       |                   ^~
-c2dbuildassign.olang:3:22: note: 'nx' is declared read-only here - declare it 'nx mut N&' to write through it
-    3 | type N struct(v I32, nx N&) {
-      |                      ^~
 c2dbuildassign.olang:7:40: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     7 | type Cur struct(of N&) { at mut N&of = of }
       |                                        ^~
-c2dbuildassign.olang:7:17: note: 'of' is declared read-only here - declare it 'of mut N&' to write through it
-    7 | type Cur struct(of N&) { at mut N&of = of }
-      |                 ^~
 c2dbuildassign.olang:8:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
     8 | fn fill(c mut Cur&) { c.at.next = N(9, null) }
       |                                 ^
@@ -445,7 +436,7 @@ c3fieldthroughreadonly.olang:4:18: error[T25b]: this writes through a read-only 
       |                  ^
 c3fieldthroughreadonly.olang:4:8: note: 'p' is declared read-only here - declare it 'p mut P&' to write through it
     4 | fn set(p P&) { p.x = 5 }
-      |        ^
+      |        ^~~~
 compilation failed with 1 error
 === c3mutinferredfield.olang
 c3mutinferredfield.olang:4:7: error[C3]: a field is writable wherever its instance is - 'mut' is for a reference, and I64 is none
@@ -458,7 +449,7 @@ c3mutvaluefield.olang:4:7: error[C3]: a field is writable wherever its instance 
       |       ^~~
 compilation failed with 1 error
 === c4punmut.olang
-c4punmut.olang:4:30: error: expected a name, found '}'
+c4punmut.olang:4:30: error: expected a type, found '}'
     4 | type P struct(x I32) { x mut }
       |                              ^
 compilation failed with 1 error
@@ -482,9 +473,6 @@ compilation failed with 1 error
 callrecvreadonly.olang:12:38: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    12 | fn peek(c Counter&) I32 { return run(c) }
       |                                      ^
-callrecvreadonly.olang:12:9: note: 'c' is declared read-only here - declare it 'c mut Counter&' to write through it
-   12 | fn peek(c Counter&) I32 { return run(c) }
-      |         ^
 compilation failed with 1 error
 === callvaluekeeps.olang
 callvaluekeeps.olang:20:13: error[T22a, E31]: Keeper's Call relates its arguments' scopes, which a call through a function value cannot check - call it by name
@@ -504,7 +492,7 @@ compilation failed with 1 error
 === cascadee14.olang
 cascadee14.olang:27:14: error[E14]: expected 1 argument, found 2
    27 |     r := try make("u", 3) catch { return "none" }
-      |              ^~~~
+      |              ^~~~~~~~~~~~
 compilation failed with 1 error
 === cascademember.olang
 cascademember.olang:12:10: error: S has no member 'flag'
@@ -588,10 +576,7 @@ compilation failed with 1 error
 condvaluefield.olang:33:33: error[O11, O12]: where this reference's referent lives is not known here, and the callee may build there - give it one known scope
    33 |         w((i if j < 0 else o).m.inner)
       |                                 ^~~~~
-condvaluefield.olang:33:33: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
-   33 |         w((i if j < 0 else o).m.inner)
-      |                                 ^~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === constraintarg.olang
 constraintarg.olang:10:16: error[G19]: I64 does not satisfy the constraint CtShape on T: it has no method Area that fits
    10 |     h CtHolder<I64>& = CtHolder<I64>(4)
@@ -611,9 +596,6 @@ compilation failed with 1 error
 copyoutrefs.olang:15:9: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
    15 |     d = src
       |         ^~~
-copyoutrefs.olang:13:12: note: 'src' is declared read-only here - declare it 'src mut Box&' to write through it
-   13 | fn copyOut(src Box&) {
-      |            ^~~
 copyoutrefs.olang:15:7: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
    15 |     d = src
       |       ^
@@ -667,10 +649,10 @@ d13czeroref.olang:18:20: error[D13c]: Ticket has no zero value, so this needs on
       |                    ^~~~~~
 $ROOT/std/chan.olang:58:26: note: in the standard library's code, here
    58 |     data mut Array<T>& = Array<T>(1 if cap == 0 else cap)
-      |                          ^~~~~
+      |                          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 d13czeroref.olang:13:5: note: here
    13 |     Counter++
-      |     ^~~~~~~
+      |     ^~~~~~~~~
 d13czeroref.olang:18:20: note: 'Chan<Ticket&>' holds it by reference, whose zero value is null
    18 |     c := chan.Chan<Ticket>(4)
       |                    ^~~~~~
@@ -679,10 +661,10 @@ d13czeroref.olang:20:12: error[D13c]: Ticket has no zero value, so this needs on
       |            ^~~~~~
 $ROOT/std/prelude/array.olang:175:12: note: in the standard library's code, here
   175 |     out := Array<T>(a.Len() * k)
-      |            ^~~~~
+      |            ^~~~~~~~~~~~~~~~~~~~~
 d13czeroref.olang:13:5: note: here
    13 |     Counter++
-      |     ^~~~~~~
+      |     ^~~~~~~~~
 d13czeroref.olang:20:12: note: a reference has one, null - hold Ticket as 'Ticket&' where this use names it
    20 |     b := a.Repeat(2)
       |            ^~~~~~
@@ -703,7 +685,7 @@ d15null.olang:8:10: error[D15]: ':=' takes its type from the initializer, and nu
       |          ^~~~
 d15null.olang:9:10: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
     9 |     y := nothing()
-      |          ^~~~~~~
+      |          ^~~~~~~~~
 d15null.olang:10:31: error[E4a]: this literal expression has no value - it overflows every type
    10 |     z := 18446744073709551615 * 2
       |                               ^
@@ -711,14 +693,8 @@ compilation failed with 3 errors
 === d16arity.olang
 d16arity.olang:5:16: error[D16a]: fn(x I32) I32 takes 1 parameter, and this lambda 2
     5 |     n := apply(fn(a, b) { return a })
-      |                ^~
-d16arity.olang:5:16: error[E12]: expected fn(x I32) I32, found fn(a I32, b I32) I32
-    5 |     n := apply(fn(a, b) { return a })
-      |                ^~
-d16arity.olang:5:16: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a I32, b I32) I32', or pass a lambda calling it
-    5 |     n := apply(fn(a, b) { return a })
-      |                ^~
-compilation failed with 2 errors
+      |                ^~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === d16cborrow.olang
 d16cborrow.olang:6:18: error[D16c]: a lambda's captures are read-only - capture a reference to change what is outside it
     6 |     f := fn() { a[0] = 9 }
@@ -773,12 +749,12 @@ d16return.olang:6:26: error[S3]: this computes a value and discards it - only a 
       |                          ^
 d16return.olang:6:16: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
     6 |     n := apply(fn(x) { x + 1 })
-      |                ^~
+      |                ^~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === d16sig.olang
 d16sig.olang:5:19: error[D16a]: this lambda's signature disagrees with fn(x I32) I32 - leave that part out, or make them agree
     5 |     n := apply(fn(x I64) { return 1 })
-      |                   ^
+      |                   ^~~~~
 compilation failed with 1 error
 === d16untyped.olang
 d16untyped.olang:4:13: error[D16a]: lambda parameter 'x' has no type, and nothing gives it one - write it
@@ -844,7 +820,7 @@ d8dmixed.olang:6:15: error[D8c]: several results are not one value - destructure
       |               ^~
 d8dmixed.olang:6:10: error[E14]: expected 3 arguments, found 2
     6 |     n := sum3(qr(7, 2), 1)
-      |          ^~~~
+      |          ^~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === d8dtype.olang
 d8dtype.olang:6:14: error[E12]: expected I32, found String&
@@ -937,10 +913,10 @@ compilation failed with 1 error
 === derivedcopycapture.olang
 derivedcopycapture.olang:15:9: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    15 |     run(fn() { x.next = Node(x.v + 100) })
-      |         ^~
+      |         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 derivedcopycapture.olang:18:25: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    18 |     for x in w.at { run(fn() { x.next = Node(x.v + 200) }) }
-      |                         ^~
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === derivedhelpercount.olang
 derivedhelpercount.olang:12:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
@@ -1024,7 +1000,10 @@ compilation failed with 1 error
 e15amatchvalue.olang:5:12: error[R8]: nothing here can fail - write it without 'checked'
     5 |     return checked (match x {
       |            ^~~~~~~
-compilation failed with 1 error
+e15amatchvalue.olang:11:10: error[R8]: nothing here can fail - write it without 'try'
+   11 |     r := try f(1, 4, 2)
+      |          ^~~
+compilation failed with 2 errors
 === e15atryonlychecks.olang
 e15atryonlychecks.olang:3:37: error[E15a]: nothing here fails as written - write 'checked' to check it
     3 | fn add(a I32, b I32) I32 ? { return try (a + b) }
@@ -1070,19 +1049,31 @@ compilation failed with 1 error
 e28condlocallent.olang:19:8: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
    19 |     (x if k > 0 else y).Bump()
       |        ^~
+e28condlocallent.olang:19:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   19 |     (x if k > 0 else y).Bump()
+      |      ^~~~~~~~~~~~~~~~~
 e28condlocallent.olang:20:6: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
    20 |     (match k { case 3 => x
       |      ^~~~~
+e28condlocallent.olang:20:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   20 |     (match k { case 3 => x
+      |      ^~~~~~~~~~~~~~~~~~~~~
 e28condlocallent.olang:22:32: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
    22 |     bumpPt((x if k > 0 else y).P)
       |                                ^
 e28condlocallent.olang:22:32: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    22 |     bumpPt((x if k > 0 else y).P)
       |                                ^
+e28condlocallent.olang:22:32: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   22 |     bumpPt((x if k > 0 else y).P)
+      |                                ^
 e28condlocallent.olang:25:11: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
    25 |     (l[0] if k > 0 else x).Bump()
       |           ^~
-compilation failed with 5 errors
+e28condlocallent.olang:25:7: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   25 |     (l[0] if k > 0 else x).Bump()
+      |       ^
+compilation failed with 9 errors
 === e31acheckedonly.olang
 e31acheckedonly.olang:11:11: error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
    11 | fn (c C&) CheckedAt(i I64) I64 ? E, BuiltinError {
@@ -1127,10 +1118,13 @@ e31bfnfield.olang:14:11: error[E31b]: x[i] gives a copy of the element, which th
       |           ^
 compilation failed with 1 error
 === e31bfnhandle.olang
+e31bfnhandle.olang:11:11: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   11 |     h.fv(l[0])
+      |           ^
 e31bfnhandle.olang:11:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    11 |     h.fv(l[0])
       |           ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === e31bfnlambda.olang
 e31bfnlambda.olang:9:31: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
     9 |     fn(c mut Acc&) { c.N++ }(l[0])
@@ -1150,7 +1144,7 @@ e31btryat.olang:13:15: error[E31b]: x[i] gives a copy of the element, which this
       |               ^
 e31btryat.olang:8:23: note: the callee is no view of the element because of this statement
     8 | fn bump(a mut Acc&) { a.N++ }
-      |                       ^
+      |                       ^~~~~
 compilation failed with 2 errors
 === e31btrydefault.olang
 e31btrydefault.olang:10:19: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1184,12 +1178,21 @@ compilation failed with 1 error
 e31bviewbodyerrors.olang:18:40: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    18 | fn hang(e mut E&, k I64) { e.head.next = Node(k) }
       |                                        ^
-compilation failed with 1 error
+e31bviewbodyerrors.olang:29:15: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   29 |         hang(s[k], 100 + k)
+      |               ^
+compilation failed with 2 errors
 === e31bviewbuilds.olang
 e31bviewbuilds.olang:18:27: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
    18 |     for k in range 3 { f(s[k]) }
       |                           ^
-compilation failed with 1 error
+e31bviewbuilds.olang:18:27: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
+   18 |     for k in range 3 { f(s[k]) }
+      |                           ^
+e31bviewbuilds.olang:14:18: note: the callee is no view of the element because of this statement
+   14 | fn f(r mut R&) { r.l.Push($r.n) }
+      |                  ^~~~~~~~~~~~~~
+compilation failed with 2 errors
 === e31bviewcapture.olang
 e31bviewcapture.olang:19:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    19 |     f(s[0])
@@ -1204,7 +1207,7 @@ e31bviewcycle.olang:13:11: error[E31b]: x[i] gives a copy of the element, which 
       |           ^
 e31bviewcycle.olang:16:16: note: the callee is no view of the element because of this statement
    16 |     if k > 0 { up(v, k - 1) }
-      |                ^~
+      |                ^~~~~~~~~~~~
 compilation failed with 1 error
 === e31bviewenumfield.olang
 e31bviewenumfield.olang:32:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1220,23 +1223,26 @@ e31bviewfield.olang:16:8: error[E31b]: x[i] gives a copy of the element, which t
       |        ^
 e31bviewfield.olang:12:18: note: the callee is no view of the element because of this statement
    12 | fn f(v mut V&) { v.n = 5 }
-      |                  ^
+      |                  ^~~~~~~
 compilation failed with 1 error
 === e31bviewfnvalue.olang
+e31bviewfnvalue.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   15 |     f(s[0], fn(x mut V&) { })
+      |        ^
 e31bviewfnvalue.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     f(s[0], fn(x mut V&) { })
       |        ^
 e31bviewfnvalue.olang:11:34: note: the callee is no view of the element because of this statement
    11 | fn f(v mut V&, h fn(x mut V&)) { h(v) }
-      |                                  ^
-compilation failed with 1 error
+      |                                  ^~~~
+compilation failed with 2 errors
 === e31bviewinc.olang
 e31bviewinc.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     f(s[0])
       |        ^
 e31bviewinc.olang:11:18: note: the callee is no view of the element because of this statement
    11 | fn f(v mut V&) { v.n++ }
-      |                  ^
+      |                  ^~~~~
 compilation failed with 1 error
 === e31bviewmut.olang
 e31bviewmut.olang:15:6: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1244,7 +1250,7 @@ e31bviewmut.olang:15:6: error[E31b]: x[i] gives a copy of the element, which thi
       |      ^
 e31bviewmut.olang:11:24: note: the callee is no view of the element because of this statement
    11 | fn (v mut V&) Bump() { v.n += 1 }
-      |                        ^
+      |                        ^~~~~~~~
 compilation failed with 1 error
 === e31bviewnesteddeep.olang
 e31bviewnesteddeep.olang:27:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1252,7 +1258,7 @@ e31bviewnesteddeep.olang:27:11: error[E31b]: x[i] gives a copy of the element, w
       |           ^
 e31bviewnesteddeep.olang:23:5: note: the callee is no view of the element because of this statement
    23 |     c.b.Fill(4)
-      |     ^
+      |     ^~~~~~~~~~~
 compilation failed with 1 error
 === e31bviewnestedwrite.olang
 e31bviewnestedwrite.olang:27:11: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -1260,7 +1266,7 @@ e31bviewnestedwrite.olang:27:11: error[E31b]: x[i] gives a copy of the element, 
       |           ^
 e31bviewnestedwrite.olang:23:5: note: the callee is no view of the element because of this statement
    23 |     c.w.Fill(3)
-      |     ^
+      |     ^~~~~~~~~~~
 compilation failed with 1 error
 === e31bviewnoindexnote.olang
 e31bviewnoindexnote.olang:39:24: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -1279,16 +1285,19 @@ e31bviewpass.olang:14:8: error[E31b]: x[i] gives a copy of the element, which th
       |        ^
 e31bviewpass.olang:16:18: note: the callee is no view of the element because of this statement
    16 | fn f(v mut V&) { g(v) }
-      |                  ^
+      |                  ^~~~
 compilation failed with 1 error
 === e31bviewrepoint.olang
+e31bviewrepoint.olang:15:8: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   15 |     f(s[0])
+      |        ^
 e31bviewrepoint.olang:15:8: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    15 |     f(s[0])
       |        ^
 e31bviewrepoint.olang:11:18: note: the callee is no view of the element because of this statement
    11 | fn f(v mut V&) { v.d = Array<I64>(3) }
-      |                  ^
-compilation failed with 1 error
+      |                  ^~~~~~~~~~~~~~~~~~~
+compilation failed with 2 errors
 === e31bviewtrydefault.olang
 e31bviewtrydefault.olang:17:18: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    17 |     put(checked s[2] catch default V(Array<I64>(1), 0), 9)
@@ -1300,7 +1309,7 @@ e31bviewvalue.olang:19:8: error[E31b]: x[i] gives a copy of the element, which t
       |        ^
 e31bviewvalue.olang:15:18: note: the callee is no view of the element because of this statement
    15 | fn f(w mut W&) { move(w.p) }
-      |                  ^~~~
+      |                  ^~~~~~~~~
 compilation failed with 1 error
 === e31calllocal.olang
 e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
@@ -1316,51 +1325,51 @@ compilation failed with 1 error
 e31opshapeuse.olang:29:12: error[E31]: Graph's MatMul takes 4 parameters besides its receiver - an ordinary method, not the one '@' calls, which takes one
    29 |     a := g @ h
       |            ^
-e31opshapeuse.olang:16:19: note: 'MatMul' is declared here
+e31opshapeuse.olang:16:1: note: 'MatMul' is declared here
    16 | fn (g mut Graph&) MatMul(a I64, b I64, ta Bool, tb Bool) I64 { return 1 }
-      |                   ^~~~~~
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 e31opshapeuse.olang:30:10: error[E31]: Graph's Neg takes one parameter besides its receiver - an ordinary method, not the one '-' calls, which takes none
    30 |     c := -g
-      |          ^
-e31opshapeuse.olang:17:15: note: 'Neg' is declared here
+      |          ^~
+e31opshapeuse.olang:17:1: note: 'Neg' is declared here
    17 | fn (g Graph&) Neg(x I64) I64 { return 3 }
-      |               ^~~
-e31opshapeuse.olang:31:6: error[E31]: Graph's SetAt takes one parameter besides its receiver - an ordinary method, not the one 'x[i] = v' calls, which takes at least 2
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+e31opshapeuse.olang:31:10: error[E31]: Graph's SetAt takes one parameter besides its receiver - an ordinary method, not the one 'x[i] = v' calls, which takes at least 2
    31 |     g[1] = 2
-      |      ^
-e31opshapeuse.olang:18:15: note: 'SetAt' is declared here
+      |          ^
+e31opshapeuse.olang:18:1: note: 'SetAt' is declared here
    18 | fn (g Graph&) SetAt(i I64) { }
-      |               ^~~~~
-e31opshapeuse.olang:32:11: error[E31]: Graph's Slice takes one parameter besides its receiver - an ordinary method, not the one 'x[lo:hi]' calls, which takes 2
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+e31opshapeuse.olang:32:10: error[E31]: Graph's Slice takes one parameter besides its receiver - an ordinary method, not the one 'x[lo:hi]' calls, which takes 2
    32 |     e := g[1:2]
-      |           ^
-e31opshapeuse.olang:19:15: note: 'Slice' is declared here
+      |          ^~~~~~
+e31opshapeuse.olang:19:1: note: 'Slice' is declared here
    19 | fn (g Graph&) Slice(i I64) I64 { return 5 }
-      |               ^~~~~
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 e31opshapeuse.olang:33:12: error[E31]: Graph's Has takes 2 parameters besides its receiver - an ordinary method, not the one 'x in c' calls, which takes one
    33 |     f := 3 in g
       |            ^~
-e31opshapeuse.olang:20:15: note: 'Has' is declared here
+e31opshapeuse.olang:20:1: note: 'Has' is declared here
    20 | fn (g Graph&) Has(a I64, b I64) Bool { return true }
-      |               ^~~
-e31opshapeuse.olang:34:14: error[E31]: Graph's Next takes one parameter besides its receiver - an ordinary method, not the one 'for ... in' calls, which takes none
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+e31opshapeuse.olang:34:5: error[E31]: Graph's Next takes one parameter besides its receiver - an ordinary method, not the one 'for ... in' calls, which takes none
    34 |     for z in g { }
-      |              ^
-e31opshapeuse.olang:21:15: note: 'Next' is declared here
+      |     ^~~~~~~~~~~~~~
+e31opshapeuse.olang:21:1: note: 'Next' is declared here
    21 | fn (g Graph&) Next(k I64) I64 { return 6 }
-      |               ^~~~
-e31opshapeuse.olang:35:6: error[E31]: Graph's Inc takes one parameter besides its receiver - an ordinary method, not the one '++' calls, which takes none
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+e31opshapeuse.olang:35:5: error[E31]: Graph's Inc takes one parameter besides its receiver - an ordinary method, not the one '++' calls, which takes none
    35 |     g++
-      |      ^~
-e31opshapeuse.olang:22:15: note: 'Inc' is declared here
+      |     ^~~
+e31opshapeuse.olang:22:1: note: 'Inc' is declared here
    22 | fn (g Graph&) Inc(k I64) Graph { return Graph() }
-      |               ^~~
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 e31opshapeuse.olang:36:12: error[E31]: Graph's Less takes 2 parameters besides its receiver - an ordinary method, not the one '<' calls, which takes one
    36 |     k := g < h
       |            ^
-e31opshapeuse.olang:23:15: note: 'Less' is declared here
+e31opshapeuse.olang:23:1: note: 'Less' is declared here
    23 | fn (g Graph&) Less(a Graph&, b Graph&) Bool { return true }
-      |               ^~~~
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 8 errors
 === e32marker.olang
 e32marker.olang:11:28: error[E32]: '&mask' after the type is read as a reference marker, not the operator '&' - parenthesize: '(x as T) & mask'
@@ -1385,12 +1394,12 @@ compilation failed with 1 error
 === e33opnan.olang
 e33opnan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a NaN an operation made, whose sign and payload are unspecified (e33opnan.olang:4)
     4 | if (F64(0) / F64(0)).Bits() == 0x7FF8000000000000 {
-      |    ^
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === e33snan.olang
 e33snan.olang:4:4: error[B9c]: this top-level condition cannot be decided while compiling: it reads the bits of a signalling NaN, which moving it may have quieted (e33snan.olang:4)
     4 | if U32(0x7F800001).F32FromBits().Bits() == 0x7F800001 {
-      |    ^~~
+      |    ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === e33width.olang
 e33width.olang:4:17: error[E33]: 'F64FromBits' is a method of the unsigned type of its float's width - convert first, as U64(x).F64FromBits()
@@ -1529,10 +1538,7 @@ compilation failed with 1 error
 g10dgenericextra.olang:4:18: error[G10d]: U is not one of B's parameters, and a generic type's constructor introduces none of its own - add U to the type's list
     4 | type B<T> struct<U>(x T, f U) {
       |                  ^
-g10dgenericextra.olang:7:30: error[E12]: expected U, found I64
-    7 | fn main() ? { b := B<I64>(1, 2) }
-      |                              ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === g10dinferredfield.olang
 g10dinferredfield.olang:8:5: error[G10d]: field 'x' takes its type from ':=', and the constructor introduces T, so its body is checked per call - write the field's type
     8 |     x := n
@@ -1549,7 +1555,7 @@ g10dnozero.olang:12:5: error[D13c]: D has no zero value, so this needs one - its
       |     ^
 g10dnozero.olang:14:10: error[D13c]: D has no zero value, so this needs one - its constructor does not run on zeros while compiling: it introduces a type variable, which no zero binds
    14 |     a := Array<D>(3)
-      |          ^~~~~
+      |          ^~~~~~~~~~~
 compilation failed with 2 errors
 === g10dtypeargs.olang
 g10dtypeargs.olang:9:22: error[G7]: D is not generic, so it takes no type arguments
@@ -1559,17 +1565,37 @@ compilation failed with 1 error
 === g11named.olang
 g11named.olang:6:11: error[G11]: a type argument's reference marker is bare, as 'List<String&>' - its references live in the container
     6 |     b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
-      |           ^~~~~
+      |           ^~~~~~~~~~~~
 g11named.olang:6:32: error[G11]: a type argument's reference marker is bare, as 'List<String&>' - its references live in the container
     6 |     b Box<Array<I32>&p>& = Box<Array<I32>&p>(p)
-      |                                ^~~~~
+      |                                ^~~~~~~~~~~~
 g11named.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 3 errors
+=== g12explicitbound.olang
+g12explicitbound.olang:5:10: error[G19, T31]: Bool does not satisfy the constraint Number on T: Number is sealed - only the types its own module gives 'numberType' satisfy it
+    5 |     b := sum<Bool>(true)
+      |          ^~~~~~~~~
+compilation failed with 1 error
+=== g12explicitcount.olang
+g12explicitcount.olang:5:14: error[G7]: type arguments for big: expected 1, found 2
+    5 |     a := big<I64, I32>(3, 7)
+      |              ^~~
+compilation failed with 1 error
+=== g12explicitfit.olang
+g12explicitfit.olang:6:19: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
+    6 |     c := big<I32>(n, 2)
+      |                   ^
+compilation failed with 1 error
+=== g12explicitlength.olang
+g12explicitlength.olang:5:10: error[G12]: 'first' takes an array by value, an instance per length (G29), so it is no value - pass a lambda calling it
+    5 |     f := first<I64>
+      |          ^~~~~~~~~~
+compilation failed with 1 error
 === g12value.olang
-g12value.olang:7:21: error[G12]: generic function 'id' is not a value - call it
+g12value.olang:7:21: error[G12]: generic function 'id' is not a value - call it, or name an instance by its type arguments, as 'id<I64>'
     7 |   f fn(x I32) I32 = id
       |                     ^~
-g12value.olang:8:14: error[G12]: generic function 'id' is not a value - call it
+g12value.olang:8:14: error[G12]: generic function 'id' is not a value - call it, or name an instance by its type arguments, as 'id<I64>'
     8 |   n := apply(id, 3)
       |              ^~
 compilation failed with 2 errors
@@ -1648,7 +1674,13 @@ compilation failed with 2 errors
 g17func.olang:4:4: error[G17]: this generic's instantiations never end - each one requires a larger one
     4 | fn deep<T>(x T, n I32) I32 {
       |    ^~~~
-g17func.olang:6:10: note: instantiated here, with T = Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<I64>>>>
+g17func.olang:6:10: note: instantiated here, with T = Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<I64>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    6 |   return deep(Box<T>(x), n - 1)
+      |          ^~~~
+g17func.olang:6:10: note: instantiated here, with T = Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<I64>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+    6 |   return deep(Box<T>(x), n - 1)
+      |          ^~~~
+g17func.olang:6:10: note: instantiated here, with T = Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<Box<I64>>>>>>>>>>>>>>>>
     6 |   return deep(Box<T>(x), n - 1)
       |          ^~~~
 compilation failed with 1 error
@@ -1660,17 +1692,8 @@ compilation failed with 1 error
 === g19arrayspell.olang
 g19arrayspell.olang:4:12: error[G19, E10b]: Array<F64> does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
     4 |   m := Map<Array<F64>, I32>()
-      |            ^~~~~
-g19arrayspell.olang:4:12: error[T7a, T7c]: an array inside an array or a struct is held by reference - write Array<F64>&, or a length, Array<T, N>, to hold it in place
-    4 |   m := Map<Array<F64>, I32>()
-      |            ^~~~~
-$ROOT/std/prelude/map.olang:26:5: note: in the standard library's code, here
-   26 |     Key K = key
-      |     ^~~
-g19arrayspell.olang:4:12: note: instantiated here, with K = Array<F64>, V = I32
-    4 |   m := Map<Array<F64>, I32>()
-      |            ^~~~~
-compilation failed with 2 errors
+      |            ^~~~~~~~~~
+compilation failed with 1 error
 === g19methodbody.olang
 g19methodbody.olang:8:14: error[G19, E10b]: K does not satisfy the constraint Hashable on K: it has no Hash - declare 'Hash() I64', agreeing with '=='
     8 |     m := Map<K, I32>()
@@ -1738,7 +1761,7 @@ compilation failed with 1 error
 === g4resultonly.olang
 g4resultonly.olang:4:17: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
     4 | fn mk<T>(n I64) Array<T> { return Array<T>(n) }
-      |                 ^~~~~
+      |                 ^~~~~~~
 compilation failed with 1 error
 === g7argcount.olang
 g7argcount.olang:5:21: error[G7]: type arguments for Box: expected 1, found 2
@@ -1758,7 +1781,7 @@ compilation failed with 1 error
 === g9count.olang
 g9count.olang:5:8: error[E14]: expected 2 arguments, found 1
     5 |   a := pad(5)
-      |        ^~~
+      |        ^~~~~~
 compilation failed with 1 error
 === g9dctorreadonly.olang
 g9dctorreadonly.olang:15:10: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
@@ -1819,10 +1842,7 @@ compilation failed with 1 error
 incdecexpr.olang:5:14: error[S3a]: '++' is a statement of its own, never part of an expression
     5 |     j I32 = i++
       |              ^~
-incdecexpr.olang:5:14: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
-    5 |     j I32 = i++
-      |              ^~
-compilation failed with 2 errors
+compilation failed with 1 error
 === innomethod.olang
 innomethod.olang:5:12: error[E29]: 'x in c' calls Contains, and I64 has none
     5 |     b := 3 in n
@@ -1837,10 +1857,7 @@ compilation failed with 1 error
 inttoolarge.olang:5:13: error[L10]: '99999999999999999999999' is beyond 64 bits - the largest decimal literal is U64's 18446744073709551615
     5 |     z U64 = 99999999999999999999999
       |             ^~~~~~~~~~~~~~~~~~~~~~~
-inttoolarge.olang:5:13: error[T6]: '99999999999999999999999' does not fit U64
-    5 |     z U64 = 99999999999999999999999
-      |             ^~~~~~~~~~~~~~~~~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === isasoperand.olang
 isasoperand.olang:5:10: error[E32]: 'is' and 'as' ask which case an enum value is, and this is I64
     5 |     if x is I32 { }
@@ -1870,9 +1887,9 @@ compilation failed with 1 error
 k1assertaborts.olang:10:20: error[S18c]: this assertion aborts the program, evaluated while compiling: an assertion in it fails, which aborts the program
    10 |     assert half(7) == 3
       |                    ^~
-k1assertaborts.olang:6:18: note: here
+k1assertaborts.olang:6:5: note: here
     6 |     assert x % 2 == 0
-      |                  ^~
+      |     ^~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === k1globalaborts.olang
 k1globalaborts.olang:10:1: error[K2]: this global's initializer aborts the program, evaluated while compiling: it reaches unreachable code, which aborts the program
@@ -1888,7 +1905,7 @@ k1matchnull.olang:16:1: error[K2]: this global's initializer aborts the program,
       | ^
 k1matchnull.olang:10:5: note: here
    10 |     match e {
-      |     ^~~~~
+      |     ^~~~~~~~~
 compilation failed with 1 error
 === l10bdouble.olang
 l10bdouble.olang:4:11: error[L10b]: '_' in a number must stand between two digits
@@ -1946,6 +1963,24 @@ l18bifline.olang:8:10: error: expected '{', found 'else'
     8 |     if c else fn() I64 { return 2 }
       |          ^~~~
 compilation failed with 1 error
+=== l18cneedless.olang
+l18cneedless.olang:4:12: error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list - write this without them
+    4 |     x List<(I64)>
+      |            ^~~~~
+compilation failed with 1 error
+=== l18coldresults.olang
+l18coldresults.olang:3:25: error[L18c]: parentheses group only a function type holding a comma of its own, as an item of a list - write this without them
+    3 | fn divmod(a I64, b I64) (I64, I64) { return a / b, a % b }
+      |                         ^~~~
+compilation failed with 1 error
+=== l18cungrouped.olang
+l18cungrouped.olang:5:11: error[G7]: type arguments for Map: expected 2, found 3
+    5 |     m Map<String&, fn(x I64) I64, I64>
+      |           ^~~~~~~
+l18cungrouped.olang:5:20: note: a function type of several results or error items is parenthesized whole in a list: '(fn(x I64) I64, I64)'
+    5 |     m Map<String&, fn(x I64) I64, I64>
+      |                    ^~~~~~~~~~~~~
+compilation failed with 1 error
 === l18endofline.olang
 l18endofline.olang:9:14: error: expected '{', found end of line
     9 |     if x == 3
@@ -1962,7 +1997,7 @@ l18semicolon.olang:7:36: error[L18]: olang has no ';' - a statement ends where i
       |                                    ^
 compilation failed with 1 error
 === l1junkline.olang
-l1junkline.olang:8:1: error[L16]: unexpected character '\x01'
+l1junkline.olang:8:1: error[L16]: unexpected character ''
     8 | ?
       | ^
 compilation failed with 1 error
@@ -1970,10 +2005,7 @@ compilation failed with 1 error
 l1nul.olang:4:1: error[L1]: NUL byte in the source - is this a text file?
     4 | ?
       | ^
-l1nul.olang:5:25: error[D8]: this function returns I32, found Array<Char, 10>
-    5 | fn later() I32 { return "not an I32" }
-      |                         ^~~~~~~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === l20aline.olang
 l20aline.olang:3:17: error[D12]: a declaration's value follows '=' - write 'state Array<F32> = Array<F32>(4)', or 'state := Array<F32>(4)'
     3 | state Array<F32>(4)
@@ -2018,7 +2050,7 @@ litctoreffect.olang:8:17: error[T29d]: this literal enters Counted through its c
       |                 ^
 litctoreffect.olang:5:5: note: here
     5 |     Made++
-      |     ^~~~
+      |     ^~~~~~
 compilation failed with 1 error
 === localtypename.olang
 localtypename.olang:8:5: error[D3a]: 'Shape' is a type's name - choose another
@@ -2031,7 +2063,10 @@ olang: error[B1]: unknown option '-x' - 'olang help' lists the options of build
 m10stdimport.olang:5:10: error[M10]: 'filepath' is no import here - std has it: 'import "std/filepath"'
     5 |     m := filepath.Base("a/b")
       |          ^~~~~~~~
-compilation failed with 1 error
+m10stdimport.olang:5:10: error: unknown name 'filepath'
+    5 |     m := filepath.Base("a/b")
+      |          ^~~~~~~~
+compilation failed with 2 errors
 === m19dintexp.olang
 m19dintexp.olang:6:12: error[M19]: I64 has no method 'Exp'
     6 |     r := n.Exp()
@@ -2148,7 +2183,7 @@ m19g12task.olang:11:32: error[M19g]: 'v' may grow here while a task holds a view
       |                                ^~~~
 m19g12task.olang:10:9: note: the task holding a view of 'v' is started here
    10 |         spawn look(d)
-      |         ^~~~~
+      |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === m19g13kept.olang
 m19g13kept.olang:10:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
@@ -2180,7 +2215,7 @@ compilation failed with 1 error
 === m19g16forin.olang
 m19g16forin.olang:7:5: error[M19g]: this reads a view of 'v' taken before 'v' may have grown
     7 |     for x in v.View() { v.Push(x) }
-      |     ^~~
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view after it, or copy the elements first: 'v.ToArray()'
     7 |     for x in v.View() { v.Push(x) }
       |                           ^~~~
@@ -2260,12 +2295,12 @@ noextendsmethod.olang:6:12: error[T29f]: Nums declares no 'Count', and does not 
       |            ^~~~~
 compilation failed with 1 error
 === noextendsneg.olang
-noextendsneg.olang:6:16: error[T29f]: Meters does not extend its base, so it takes no '-' - declare its method Neg, or declare it with 'extends'
+noextendsneg.olang:6:16: error[T29f]: Meters does not extend its base, so it takes no '-' - declare its method 'Neg', or declare it with 'extends'
     6 |     b Meters = -a
-      |                ^
+      |                ^~
 compilation failed with 1 error
 === noextendsop.olang
-noextendsop.olang:6:18: error[T29f]: Meters does not extend its base, so it takes no '+' - declare its method Plus, or declare it with 'extends'
+noextendsop.olang:6:18: error[T29f]: Meters does not extend its base, so it takes no '+' - declare its method 'Plus', or declare it with 'extends'
     6 |     b Meters = a + a
       |                  ^
 compilation failed with 1 error
@@ -2338,12 +2373,12 @@ o10cloopcopy.olang:27:9: note: 'p' is the loop's copy of an element, made in the
       |         ^
 compilation failed with 1 error
 === o10cnote.olang
-o10cnote.olang:10:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   10 |     for s mut SSlot& = m.first, s != null, s = s.next {
-      |                          ^~~~~
 o10cnote.olang:10:46: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    10 |     for s mut SSlot& = m.first, s != null, s = s.next {
       |                                              ^
+o10cnote.olang:10:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   10 |     for s mut SSlot& = m.first, s != null, s = s.next {
+      |                          ^~~~~
 o10cnote.olang:19:22: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
    19 |     for s SSlot& = m.first, s != null, s = s.next {
       |                      ^~~~~
@@ -2409,17 +2444,17 @@ o10cresultlanding.olang:19:9: note: 'x' is declared here, in a block that closes
       |         ^
 compilation failed with 1 error
 === o10dd9bslice.olang
-o10dd9bslice.olang:5:43: error[O10d]: this value lives in this function's own scope, which closes first
+o10dd9bslice.olang:5:42: error[O10d]: this value lives in this function's own scope, which closes first
     5 | fn headOf<T>(x T) Array<Char>&x { return x[0:3] }
-      |                                           ^
+      |                                          ^
 o10dd9bslice.olang:8:10: note: instantiated here, with T = String
     8 |     h := headOf(t)
       |          ^~~~~~
 compilation failed with 1 error
 === o12spawntarget.olang
-o12spawntarget.olang:12:16: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
+o12spawntarget.olang:12:29: error[O12]: where this place's references live is not known here, so nothing new is built into it - store what already lives there, or give it one known scope
    12 |         join { spawn arr[0] = mkNode(i + 50) }
-      |                ^~~~~
+      |                             ^
 compilation failed with 1 error
 === o13acopywrap.olang
 o13acopywrap.olang:14:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
@@ -2451,9 +2486,9 @@ o14btypevar.olang:8:19: note: the callee requires it because of this statement
       |                   ^~~~~~
 compilation failed with 1 error
 === o14ccopyslice.olang
-o14ccopyslice.olang:8:13: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
+o14ccopyslice.olang:8:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
     8 |     return b[0:1]
-      |             ^
+      |            ^
 compilation failed with 1 error
 === o14param.olang
 o14param.olang:4:24: error[O14]: this returns a parameter's data, and the result's bare '&' is built - borrow it: 'T&p'
@@ -2478,7 +2513,7 @@ compilation failed with 1 error
 === o17blambdakeep.olang
 o17blambdakeep.olang:18:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    18 |         fs.Push(leak(idList(base)))
-      |                      ^~~~~~
+      |                      ^~~~~~~~~~~~
 compilation failed with 1 error
 === o17bnoand.olang
 o17bnoand.olang:14:9: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2585,7 +2620,7 @@ compilation failed with 1 error
 === o17tempcallresult.olang
 o17tempcallresult.olang:25:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    25 |         addRef(idBox(seed), i + 1)
-      |                ^~~~~
+      |                ^~~~~~~~~~~
 compilation failed with 1 error
 === o17tempcond.olang
 o17tempcond.olang:28:19: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2601,21 +2636,27 @@ compilation failed with 1 error
 o17templambdacond.olang:22:25: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    22 |         fs.Push(leak(b1 if i >= 0 else b2))
       |                         ^~
-compilation failed with 1 error
+o17templambdacond.olang:22:17: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   22 |         fs.Push(leak(b1 if i >= 0 else b2))
+      |                 ^~~~
+o17templambdacond.olang:16:28: note: the callee requires it because of this statement
+   16 | fn leak(b Box&) fn() I64 { return fn() I64 { return b.head.v } }
+      |                            ^~~~~~
+compilation failed with 2 errors
 === o17templambdacycle.olang
 o17templambdacycle.olang:26:14: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    26 |         even(idBox(seed), 2, fs)
-      |              ^~~~~
+      |              ^~~~~~~~~~~
 compilation failed with 1 error
 === o17templambdakeep.olang
 o17templambdakeep.olang:24:22: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    24 |         fs.Push(leak(idBox(seed)))
-      |                      ^~~~~
+      |                      ^~~~~~~~~~~
 compilation failed with 1 error
 === o17tempreadonly.olang
 o17tempreadonly.olang:28:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
    28 |         addVia(mkBox(seed), i + 1)
-      |                ^~~~~
+      |                ^~~~~~~~~~~
 compilation failed with 1 error
 === o18claterkept.olang
 o18claterkept.olang:24:16: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
@@ -2725,9 +2766,6 @@ compilation failed with 1 error
 o25abare.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |     next mut N& = nx
       |                   ^~
-o25abare.olang:3:22: note: 'nx' is declared read-only here - declare it 'nx mut N&' to write through it
-    3 | type N struct(v I32, nx N&) {
-      |                      ^~
 o25abare.olang:8:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
     8 |     c N& = l.next
       |              ^~~~
@@ -2744,9 +2782,9 @@ o25atypevar.olang:14:9: note: 'n' is declared here, in a block that closes first
       |         ^
 compilation failed with 1 error
 === o25carrayelem.olang
-o25carrayelem.olang:13:17: error[T25c, O14]: a built result is new storage and writable, and this reference is read-only - return a copy, or borrow the result from the parameter it is read through
+o25carrayelem.olang:13:18: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    13 |     return Node&[n]
-      |                 ^
+      |                  ^
 o25carrayelem.olang:21:33: error[O25c]: the array outlives what this element refers to - build the element where the array goes
    21 |         c = Array<mut Node&>(1, inner)
       |                                 ^~~~~
@@ -2847,12 +2885,9 @@ compilation failed with 1 error
 o26param.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |     next mut N& = nx
       |                   ^~
-o26param.olang:3:22: note: 'nx' is declared read-only here - declare it 'nx mut N&' to write through it
-    3 | type N struct(v I32, nx N&) {
-      |                      ^~
-o26param.olang:8:13: error[O26]: '&return' names the result scope, and this function has none
+o26param.olang:8:7: error[O26]: '&return' names the result scope, and this function has none
     8 |     x mut N&return = N(1, null)
-      |             ^~~~~~
+      |       ^~~~~~~~~~~~
 o26param.olang:9:12: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
     9 |     l.next = x
       |            ^
@@ -2861,13 +2896,13 @@ compilation failed with 3 errors
 o26two.olang:5:19: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |     next mut N& = nx
       |                   ^~
-o26two.olang:3:22: note: 'nx' is declared read-only here - declare it 'nx mut N&' to write through it
-    3 | type N struct(v I32, nx N&) {
-      |                      ^~
-o26two.olang:8:9: error[O26]: '&return' names the result scope, and this function has none
+o26two.olang:8:7: error[O26]: '&return' names the result scope, and this function has none
     8 |     x N&return = N(1, null)
-      |         ^~~~~~
-compilation failed with 2 errors
+      |       ^~~~~~~~
+o26two.olang:9:12: error[O10d]: this value lives in this function's own scope, which closes first
+    9 |     return x
+      |            ^
+compilation failed with 3 errors
 === o3aremoved.olang
 o3aremoved.olang:4:5: error[O3]: a scope has no name to declare - write a bare '&', or '&x' for where 'x' lives
     4 | fn f&s(x I32) I32 { return x }
@@ -2879,12 +2914,12 @@ o3noname.olang:4:10: error[O4a]: 's' names no variable visible here - a marker n
       |          ^
 compilation failed with 1 error
 === o4bblock.olang
-o4bblock.olang:11:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
-   11 |     for s mut SSlot& = m.first, s != null, s = s.next {
-      |                          ^~~~~
 o4bblock.olang:11:46: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    11 |     for s mut SSlot& = m.first, s != null, s = s.next {
       |                                              ^
+o4bblock.olang:11:26: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   11 |     for s mut SSlot& = m.first, s != null, s = s.next {
+      |                          ^~~~~
 o4bblock.olang:20:22: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
    20 |     for s SSlot& = m.first, s != null, s = s.next {
       |                      ^~~~~
@@ -2932,9 +2967,9 @@ compilation failed with 1 error
 oparity.olang:9:15: error[E31]: V's Plus takes 2 parameters besides its receiver - an ordinary method, not the one '+' calls, which takes one
     9 |     t := V(1) + V(2)
       |               ^
-oparity.olang:6:10: note: 'Plus' is declared here
+oparity.olang:6:1: note: 'Plus' is declared here
     6 | fn (a V) Plus(b V, c V) V { return a }
-      |          ^~~~
+      | ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === opat.olang
 opat.olang:5:12: error[E31]: '@' has no built-in meaning, and I64 declares no MatMul
@@ -3042,12 +3077,12 @@ compilation failed with 1 error
 === p4aclauseerror.olang
 p4aclauseerror.olang:12:42: error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
    12 |         spawn try work(-1) catch E.BAD { error E.WORSE }
-      |                                          ^~~~~
+      |                                          ^~~~~~~~~~~~~
 compilation failed with 1 error
 === p4aclausereturns.olang
 p4aclausereturns.olang:12:38: error[P4a]: a task's clause runs on the task and may not return - it ends where its block does
    12 |         spawn try work(-1) catch E { return 1 }
-      |                                      ^~~~~~
+      |                                      ^~~~~~~~
 compilation failed with 1 error
 === p4aclausetry.olang
 p4aclausetry.olang:14:38: error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
@@ -3072,7 +3107,7 @@ compilation failed with 1 error
 === p4aneedsdefault.olang
 p4aneedsdefault.olang:14:30: error[P4a]: this clause takes an error the targets would get no value for - end it with 'default v', or end the process
    14 |         spawn r = try sq(-1) catch E { hits[0].AtomicAdd(1) }
-      |                              ^~~~~
+      |                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === p4catchnotproduced.olang
 p4catchnotproduced.olang:14:34: error[R14]: the call does not fail with F
@@ -3082,7 +3117,7 @@ compilation failed with 1 error
 === p4cjoincannotfail.olang
 p4cjoincannotfail.olang:10:5: error[P4c]: no task of this join can fail - drop the 'try'
    10 |     try join {
-      |     ^~~
+      |     ^~~~~~~~~~
 compilation failed with 1 error
 === p4cjoincatchnotry.olang
 p4cjoincatchnotry.olang:7:7: error[P4c]: a join takes catch clauses only as 'try join', and no task of this one can fail
@@ -3092,7 +3127,7 @@ compilation failed with 1 error
 === p4cjoinnotried.olang
 p4cjoinnotried.olang:10:5: error[P4c]: this join's tasks can fail with E - write 'try join', with catch clauses for what it handles here
    10 |     join {
-      |     ^~~~
+      |     ^~~~~~
 compilation failed with 1 error
 === p4cjoinundeclared.olang
 p4cjoinundeclared.olang:12:9: error[R9]: E.WORSE can escape here, and this function does not declare it - add it after '?', or catch it
@@ -3107,12 +3142,12 @@ compilation failed with 1 error
 === p4spawnnotry.olang
 p4spawnnotry.olang:11:15: error[P4]: this call can fail - write 'spawn try', and what its clauses do not take reaches the join
    11 |         spawn work(1)
-      |               ^~~~
+      |               ^~~~~~~
 compilation failed with 1 error
 === p4spawntryinfallible.olang
 p4spawntryinfallible.olang:7:19: error[P4]: this task cannot fail - drop the 'try'
     7 |         spawn r = try work(1)
-      |                   ^~~
+      |                   ^~~~~~~~~~~
 compilation failed with 1 error
 === paramtypename.olang
 paramtypename.olang:3:6: error[D3a]: 'I32' is a type's name - choose another
@@ -3203,7 +3238,7 @@ compilation failed with 1 error
 === r11clausevalue.olang
 r11clausevalue.olang:18:9: error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
    18 |         -1
-      |         ^
+      |         ^~
 r11clausevalue.olang:20:30: error[R11]: a block's last value is not the clause's value - write '} default 0' after the block
    20 |     b := try half(5) catch { 0 }
       |                              ^
@@ -3255,18 +3290,12 @@ compilation failed with 1 error
 r1unknownerror.olang:3:14: error[R1]: unknown error type 'peErr'
     3 | fn f() I64 ? peErr { return 1 }
       |              ^~~~~
-r1unknownerror.olang:4:20: error[R8]: nothing here can fail - write it without 'try'
-    4 | fn main() ? { x := try f() }
-      |                    ^~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === r20nothing.olang
 r20nothing.olang:4:13: error[R8]: nothing here can fail - write it without 'checked'
     4 |     r I32 = checked (a == 1) catch default 0
       |             ^~~~~~~
-r20nothing.olang:4:24: error[E12]: expected I32, found Bool
-    4 |     r I32 = checked (a == 1) catch default 0
-      |                        ^~
-compilation failed with 2 errors
+compilation failed with 1 error
 === r20partial.olang
 r20partial.olang:4:13: error[R9]: BuiltinError.DIVIDE_BY_ZERO can escape here, and this function does not declare it - add it after '?', or catch it
     4 |     r I32 = checked (a / b) catch BuiltinError.OVERFLOW default 0
@@ -3291,19 +3320,25 @@ compilation failed with 1 error
 r9adefaultinner.olang:19:40: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
    19 |         keep = try mk(i) catch default inner
       |                                        ^~~~~
-compilation failed with 1 error
+r9adefaultinner.olang:19:14: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   19 |         keep = try mk(i) catch default inner
+      |              ^
+compilation failed with 2 errors
 === r9adefaultlocal.olang
 r9adefaultlocal.olang:15:36: error[R11, O25]: a reference default lives where the call's result does - or is null, or built there
    15 |     return try mk(1) catch default seed
       |                                    ^~~~
-compilation failed with 1 error
+r9adefaultlocal.olang:15:12: error[O10d]: this value lives in this function's own scope, which closes first
+   15 |     return try mk(1) catch default seed
+      |            ^~~
+compilation failed with 2 errors
 === r9atrydefaultassign.olang
 r9atrydefaultassign.olang:15:42: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store
    15 |     (checked a[1] catch default Acc()).P.X = 5
       |                                          ^
-r9atrydefaultassign.olang:16:41: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store
+r9atrydefaultassign.olang:16:5: error[R9a]: a 'try ... catch' value is the element or what a clause gives, a copy either way, so nothing written into it is kept - write 'checked x[i].f = v' to check the store
    16 |     (checked a[1] catch default Acc()).N++
-      |                                         ^~
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 2 errors
 === r9bafterall.olang
 r9bafterall.olang:10:23: error[R11a]: a catch with no error types takes every error left, so no clause can follow it
@@ -3361,23 +3396,23 @@ compilation failed with 1 error
 retire01assert.olang:21:20: error[S18c, K1]: evaluated while compiling, this assertion stops on a stale view: it uses a view of a Vec's elements taken before the Vec grew, which shows the old elements
    21 |     assert work(5) == 5
       |                    ^~
-retire01assert.olang:13:16: note: here
+retire01assert.olang:13:12: note: here
    13 |     return head[0]
-      |                ^
-retire01assert.olang:9:51: note: the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'
+      |            ^~~~~~~
+retire01assert.olang:9:43: note: the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'
     9 | fn add(j mut Job&) { for i in range 100 { j.items.Push(9) } }
-      |                                                   ^~~~
+      |                                           ^~~~~~~~~~~~~~~
 compilation failed with 1 error
 === retire02global.olang
 retire02global.olang:21:1: error[K2, K1]: evaluated while compiling, this global's initializer stops on a stale view: it uses a view of a Vec's elements taken before the Vec grew, which shows the old elements
    21 | G I64 = stale(4)
       | ^
-retire02global.olang:14:13: note: here
+retire02global.olang:14:12: note: here
    14 |     return d[0]
-      |             ^
-retire02global.olang:10:50: note: the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'
+      |            ^~~~
+retire02global.olang:10:42: note: the Vec grew here, after the view was taken; take the view after the growth, or copy the elements first: 'v.ToArray()'
    10 | fn add(j mut Job&) { for i in range 20 { j.items.Push(i) } }
-      |                                                  ^~~~
+      |                                          ^~~~~~~~~~~~~~~
 compilation failed with 1 error
 === retire03outside.olang
 retire03outside.olang:5:7: error[M19]: Array<I64> has no method 'retire'
@@ -3413,14 +3448,17 @@ compilation failed with 1 error
 rv3roat.olang:5:7: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made with 'Clone()'
     5 |     ls[0].Push(9)
       |       ^
-compilation failed with 1 error
+rv3roat.olang:5:7: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+    5 |     ls[0].Push(9)
+      |       ^
+compilation failed with 2 errors
 === rv3roclone.olang
 rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written, and this List<List<I64>> is read-only - pass a writable one
     6 |     c := ro.Clone()
       |          ^~
 $ROOT/std/prelude/list.olang:345:5: note: 'l' is declared here
   345 | fn (l List<T>&) Clone() List<T> {
-      |     ^
+      |     ^~~~~~~~~~
 compilation failed with 1 error
 === rv3rofilter.olang
 rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reaches where it can be written, and this Array<List<I64>> is read-only - pass a writable one
@@ -3428,7 +3466,7 @@ rv3rofilter.olang:4:12: error[T25c]: 'Filter' keeps what its parameter 'a' reach
       |            ^~
 $ROOT/std/prelude/array.olang:96:5: note: 'a' is declared here
    96 | fn (a Array<T>&) Filter(keep fn(x T) Bool) Array<T> {
-      |     ^
+      |     ^~~~~~~~~~~
 compilation failed with 1 error
 === rv3roforin.olang
 rv3roforin.olang:21:10: error[T25c]: 'look' writes through or keeps its parameter 'x', and this B is a read-only copy - pass one of its own, made from its parts
@@ -3445,7 +3483,10 @@ rv3roget.olang:5:5: error[T25c]: a read-only copy cannot be passed where it may 
 rv3roget.olang:4:5: note: 'g' copies a place reached read-only, so it is read-only
     4 |     g := try m.Get(1) catch { return }
       |     ^
-compilation failed with 1 error
+rv3roget.olang:5:5: error[O17]: this value's references live where its own storage does not, and the callee can store through it - declare it a reference where they live ('x T&y = ...')
+    5 |     g.Push(1)
+      |     ^
+compilation failed with 2 errors
 === rv3roslice.olang
 rv3roslice.olang:19:10: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
    19 |     s[0].v += 1
@@ -3610,10 +3651,7 @@ compilation failed with 1 error
 s13caltnames.olang:9:29: error[S13c]: every alternative binds the same names - bind it in each, write '_', or split the case
     9 |         case S.A(x), S.B(x, y) { return x }
       |                             ^
-s13caltnames.olang:9:22: error[S13c]: every alternative binds the same names - bind it in each, write '_', or split the case
-    9 |         case S.A(x), S.B(x, y) { return x }
-      |                      ^
-compilation failed with 2 errors
+compilation failed with 1 error
 === s13caltperm.olang
 s13caltperm.olang:13:37: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
    13 |         case Box.W(x), Box.R(x) { x.v = 99 }
@@ -3675,23 +3713,30 @@ compilation failed with 1 error
 === s15returnvalue.olang
 s15returnvalue.olang:4:5: error[S15]: a test has no result - a bare 'return' ends it as passed
     4 |     return 1
-      |     ^~~~~~
+      |     ^~~~~~~~
+compilation failed with 1 error
+=== s16dmsgerror.olang
+s16dmsgerror.olang:11:32: error[S17]: an error may not leave an unreachable's message - catch it here
+   11 |     if k > 100 { unreachable $(try h(k)) }
+      |                                ^~~
+compilation failed with 1 error
+=== s16dmsgnottext.olang
+s16dmsgnottext.olang:5:31: error[S18a]: an unreachable's message is text, found I64 - write it as text: "x is " $x
+    5 |     if Seed > 0 { unreachable Seed }
+      |                               ^~~~
 compilation failed with 1 error
 === s17msgbreak.olang
-s17msgbreak.olang:11:44: error[S17]: 'break' may not leave an assert's message - it is evaluated only when the assert fails
+s17msgbreak.olang:11:44: error[S17]: 'break' may not leave an assert's message - it is evaluated only where it is used
    11 |         assert i > 100, $(try h(i) catch { break } default 0)
       |                                            ^~~~~
-s17msgbreak.olang:11:52: error[R11]: this clause's block always leaves, so its default is never the value - remove it
-   11 |         assert i > 100, $(try h(i) catch { break } default 0)
-      |                                                    ^~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === s17msgerror.olang
 s17msgerror.olang:10:23: error[S17]: an error may not leave an assert's message - catch it here
    10 |     assert k > 100, $(try h(k))
       |                       ^~~
 compilation failed with 1 error
 === s17msgreturn.olang
-s17msgreturn.olang:13:39: error[S17]: an assert's message may not return - it is evaluated only when the assert fails, and gives text
+s17msgreturn.olang:13:39: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
    13 |     assert k > 100, (try h(k) catch { return 7 })
       |                                       ^~~~~~
 compilation failed with 1 error
@@ -3723,13 +3768,42 @@ compilation failed with 1 error
 === s19spawn.olang
 s19spawn.olang:7:15: error[S19b, P1a]: a spawn in deferred code needs a join written in the deferred code
     7 |         defer spawn h()
-      |               ^~~~~
+      |               ^~~~~~~~~
 compilation failed with 1 error
 === s19try.olang
 s19try.olang:9:16: error[S19b]: an error may not leave deferred code - catch it here
     9 |     defer x := try g()
       |                ^~~
 compilation failed with 1 error
+=== s1bblock.olang
+s1bblock.olang:5:15: error[S1b]: a one-line body is one simple statement, not a block (a block takes no ':') - write a block, '{ ... }'
+    5 |     if x > 0: { x = 2 }
+      |               ^
+s1bblock.olang:5:10: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
+    5 |     if x > 0: { x = 2 }
+      |          ^
+compilation failed with 2 errors
+=== s1bdecl.olang
+s1bdecl.olang:4:23: error[S1b]: a one-line body is one simple statement, not a declaration - write a block, '{ ... }'
+    4 |     for i in range 3: y := i
+      |                       ^~~~~~
+compilation failed with 1 error
+=== s1bnested.olang
+s1bnested.olang:5:15: error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
+    5 |     if x > 0: if x > 1 { x = 2 }
+      |               ^~
+s1bnested.olang:5:10: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
+    5 |     if x > 0: if x > 1 { x = 2 }
+      |          ^
+compilation failed with 2 errors
+=== s1bsameline.olang
+s1bsameline.olang:5:13: error[S1b]: a one-line body stands on the line of its ':' - write a block, '{ ... }'
+    5 |     if x > 0:
+      |             ^
+s1bsameline.olang:5:10: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
+    5 |     if x > 0:
+      |          ^
+compilation failed with 2 errors
 === s3joinnextline.olang
 s3joinnextline.olang:6:9: error[S3, E11b]: text on a line of its own does nothing - a join continues onto the next line only inside parentheses
     6 |         " more"
@@ -3746,7 +3820,7 @@ s5atnosetat.olang:15:6: error[E31b]: x[i] gives a copy of the element, which thi
       |      ^
 s5atnosetat.olang:7:25: note: the callee is no view of the element because of this statement
     7 | fn (a mut Acc&) Add() { a.N++ }
-      |                         ^
+      |                         ^~~~~
 compilation failed with 1 error
 === s5callresultfield.olang
 s5callresultfield.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3758,9 +3832,6 @@ $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this
 s5callresultfield.olang:11:9: note: 't' is declared here, in a block that closes first - declare it where 'ss' lives: 't mut String&ss = ...'
    11 |         t := $k "-text"
       |         ^
-s5callresultfield.olang:12:24: note: this text lives in a block that closes first - pass a copy, which is made where 'ss' lives: write '$' before it
-   12 |         ss.Push(box(t).s)
-      |                        ^
 compilation failed with 1 error
 === s5callresultpush.olang
 s5callresultpush.olang:12:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3799,7 +3870,7 @@ s5destructnoscope.olang:15:14: error[O10c]: the callee needs one argument's scop
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
-s5destructnoscope.olang:14:9: note: 'rec' is the loop's copy of an element, in the loop's block - a call it is lent to by reference ties what it builds to that copy: take that parameter by value, or build from its fields here
+s5destructnoscope.olang:14:9: note: 'rec' is declared here, in a block that closes first - declare it where 'rows' lives: 'rec mut List<String&>&rows = ...'
    14 |         rec, next := mk2(k)
       |         ^~~
 compilation failed with 1 error
@@ -3809,7 +3880,7 @@ s5e31bargs.olang:16:11: error[E31b]: x[i] gives a copy of the element, which thi
       |           ^
 s5e31bargs.olang:10:5: note: the callee is no view of the element because of this statement
    10 |     a.N++
-      |     ^
+      |     ^~~~~
 compilation failed with 1 error
 === s5e31bfield.olang
 s5e31bfield.olang:14:10: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
@@ -3817,19 +3888,13 @@ s5e31bfield.olang:14:10: error[E31b]: x[i] gives a copy of the element, which th
       |          ^~
 s5e31bfield.olang:6:31: note: the callee is no view of the element because of this statement
     6 | fn (p mut Pt&) Move(dx I64) { p.X += dx }
-      |                               ^
+      |                               ^~~~~~~~~
 compilation failed with 1 error
 === s5e31bspawn.olang
 s5e31bspawn.olang:12:16: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    12 |         spawn l[0].Add()
       |                ^
-s5e31bspawn.olang:6:25: note: the callee is no view of the element because of this statement
-    6 | fn (a mut Acc&) Add() { a.N++ }
-      |                         ^
-s5e31bspawn.olang:12:20: error[E31b, P2]: a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself
-   12 |         spawn l[0].Add()
-      |                    ^~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === s5handlenote.olang
 s5handlenote.olang:10:21: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         names[0][0] = t
@@ -3845,15 +3910,21 @@ s5handlenote.olang:10:23: note: this text lives in a block that closes first - p
       |                       ^
 compilation failed with 1 error
 === s5handlerepoint.olang
+s5handlerepoint.olang:17:9: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   17 |     bags[0].Reset()
+      |         ^
 s5handlerepoint.olang:17:9: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    17 |     bags[0].Reset()
       |         ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === s5handlerepointfn.olang
+s5handlerepointfn.olang:13:17: error[E31, O17]: x[i] gives a copy, and the call can build into what it holds where the copy is - hold the elements by reference, or copy it where the collection lives ('t mut T&l = l[i]')
+   13 |     resetFn(bags[0])
+      |                 ^
 s5handlerepointfn.olang:13:17: error[E31b]: x[i] gives a copy of the element, which this call would write while it can reach the collection another way - write 't := x[i]', the call on 't', then 'x[i] = t', or hold the elements by reference
    13 |     resetFn(bags[0])
       |                 ^
-compilation failed with 1 error
+compilation failed with 2 errors
 === s5heldindexnote.olang
 s5heldindexnote.olang:21:37: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    21 |     for k in range 3 { m[$k "-key"] += 100 }
@@ -3911,9 +3982,6 @@ s5nestedhandle.olang:11:21: error[O10c]: the callee needs one argument's scope t
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
-s5nestedhandle.olang:11:26: note: this text lives in a block that closes first - pass a copy, which is made where 'users' lives: write '$' before it
-   11 |         users[0][0].Push(t)
-      |                          ^
 compilation failed with 1 error
 === s5nestedhandlemap.olang
 s5nestedhandlemap.olang:11:28: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3922,18 +3990,12 @@ s5nestedhandlemap.olang:11:28: error[O10c]: the callee needs one argument's scop
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
-s5nestedhandlemap.olang:11:33: note: this text lives in a block that closes first - pass a copy, which is made where 'mm' lives: write '$' before it
-   11 |         (try mm.Get(0))[0].Push(t)
-      |                                 ^
 s5nestedhandlemap.olang:12:9: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    12 |         pushFn((try mm.Get(0))[0], t)
       |         ^~~~~~
 s5nestedhandlemap.olang:3:46: note: the callee requires it because of this statement
     3 | fn pushFn(l mut List<String&>&, s String&) { l.Push(s) }
       |                                              ^
-s5nestedhandlemap.olang:12:36: note: this text lives in a block that closes first - pass a copy, which is made where 'mm' lives: write '$' before it
-   12 |         pushFn((try mm.Get(0))[0], t)
-      |                                    ^
 compilation failed with 2 errors
 === s5projection.olang
 s5projection.olang:16:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -3953,9 +4015,6 @@ s5projectionelem.olang:10:12: error[O10c]: the callee needs one argument's scope
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
-s5projectionelem.olang:9:9: note: 't' is declared here, in a block that closes first - declare it where 'bs' lives: 't mut String&bs = ...'
-    9 |         t := $k "-text"
-      |         ^
 compilation failed with 1 error
 === s5spawnhandle.olang
 s5spawnhandle.olang:8:43: error[E31b, P2]: a task is not handed x[i]: the element is copied here, and the copy would not last until the join - spawn a function that takes the collection and calls 'x[i].M(...)' itself
@@ -4067,7 +4126,7 @@ stradapterbody.olang:16:20: error[E11c, O12]: '$' does not say where a value it 
       |                    ^
 stradapterbody.olang:9:15: note: built here, where the receiver's part it was handed lives
     9 |     x Ctr&c = Ctr(c.v + 1)
-      |               ^~~
+      |               ^~~~~~~~~~~~
 compilation failed with 1 error
 === strarraycallback.olang
 strarraycallback.olang:9:21: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4095,9 +4154,9 @@ $ROOT/std/prelude/array.olang:79:12: note: built here, where the receiver's part
 strcallbackbuilds.olang:20:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    20 |     n := via(b.words, fn(s String&) Bool {
       |          ^~~
-strcallbackbuilds.olang:8:64: note: built here, where the receiver's part it was handed lives
-    8 | fn via(a Array<String&>&, f fn(x String&) Bool) I64 { return a.Count(f) }
-      |                                                                ^~~~~
+$ROOT/std/prelude/array.olang:79:12: note: built here, where the receiver's part it was handed lives
+   79 |         if keep(x) { n++ }
+      |            ^~~~
 compilation failed with 2 errors
 === strcalleeadapter.olang
 strcalleeadapter.olang:30:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4113,7 +4172,7 @@ strcalleecatch.olang:34:13: error[E11c, O12]: '$' does not say where a value it 
       |             ^~~~
 strcalleecatch.olang:30:39: note: built here, where the receiver's part it was handed lives
    30 |     x := try find(n, 1) catch default Node(1, null)
-      |                                       ^~~~
+      |                                       ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strcalleecond.olang
 strcalleecond.olang:27:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4121,7 +4180,7 @@ strcalleecond.olang:27:13: error[E11c, O12]: '$' does not say where a value it r
       |             ^~~~
 strcalleecond.olang:23:29: note: built here, where the receiver's part it was handed lives
    23 |     x := n if n.v == 0 else Node(1, null)
-      |                             ^~~~
+      |                             ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strcalleespawn.olang
 strcalleespawn.olang:28:13: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4137,22 +4196,22 @@ strcalleespawnlambda.olang:26:13: error[E11c, O12]: '$' does not say where a val
       |             ^~~~
 strcalleespawnlambda.olang:22:18: note: built here, where the receiver's part it was handed lives
    22 |     join { spawn fn() { try io.Println($n.v) catch io.IoError { } } }
-      |                  ^~
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === strcatchnode.olang
 strcatchnode.olang:19:44: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    19 |     x := try find(b.head, 9) catch default Node(0, null)
-      |                                            ^~~~
+      |                                            ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strcondnode.olang
 strcondnode.olang:24:34: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    24 |     x := b.head if b.k == 0 else Node(1, null)
-      |                                  ^~~~
+      |                                  ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strcursornewnode.olang
 strcursornewnode.olang:24:9: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    24 |     x = Node(7, null)
-      |         ^~~~
+      |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strcycledeps.olang
 strcycledeps.olang:20:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4173,7 +4232,7 @@ strdefaulthelper.olang:35:19: error[E11c, O12]: '$' does not say where a value i
       |                   ^~~~
 strdefaulthelper.olang:32:32: note: built here, where the receiver's part it was handed lives
    32 | fn g(v I64) mut Node& { return Node(v) }
-      |                                ^~~~
+      |                                ^~~~~~~
 compilation failed with 1 error
 === strdefaultindex.olang
 strdefaultindex.olang:21:54: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4181,7 +4240,7 @@ strdefaultindex.olang:21:54: error[E11c, O12]: '$' does not say where a value it
       |                                                      ^
 strdefaultindex.olang:19:32: note: built here, where the receiver's part it was handed lives
    19 | fn g(v I64) mut Node& { return Node(v) }
-      |                                ^~~~
+      |                                ^~~~~~~
 compilation failed with 1 error
 === strdefaultlanding.olang
 strdefaultlanding.olang:34:47: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4189,7 +4248,7 @@ strdefaultlanding.olang:34:47: error[E11c, O12]: '$' does not say where a value 
       |                                               ^
 strdefaultlanding.olang:32:32: note: built here, where the receiver's part it was handed lives
    32 | fn g(v I64) mut Node& { return Node(v) }
-      |                                ^~~~
+      |                                ^~~~~~~
 compilation failed with 1 error
 === strdefaultmapget.olang
 strdefaultmapget.olang:21:48: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4197,15 +4256,15 @@ strdefaultmapget.olang:21:48: error[E11c, O12]: '$' does not say where a value i
       |                                                ^
 strdefaultmapget.olang:19:32: note: built here, where the receiver's part it was handed lives
    19 | fn g(v I64) mut Node& { return Node(v) }
-      |                                ^~~~
+      |                                ^~~~~~~
 compilation failed with 1 error
 === strdefaultspawned.olang
 strdefaultspawned.olang:33:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    33 |     join { spawn fn() {
-      |                  ^~
+      |                  ^~~~~~
 strdefaultspawned.olang:31:32: note: built here, where the receiver's part it was handed lives
    31 | fn g(v I64) mut Node& { return Node(v) }
-      |                                ^~~~
+      |                                ^~~~~~~
 compilation failed with 1 error
 === strderivedcallback.olang
 strderivedcallback.olang:16:23: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
@@ -4218,7 +4277,7 @@ strescapinglambda.olang:16:40: error[E11c, O12]: '$' does not say where a value 
       |                                        ^~~~
 strescapinglambda.olang:12:10: note: built here, where the receiver's part it was handed lives
    12 |     f := fn() I64 { return n.v }
-      |          ^~
+      |          ^~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === strmovedlocal.olang
 strmovedlocal.olang:29:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4226,7 +4285,7 @@ strmovedlocal.olang:29:10: error[E11c, O12]: '$' does not say where a value it r
       |          ^
 strmovedlocal.olang:25:10: note: built here, where the receiver's part it was handed lives
    25 |     p := P2(n)
-      |          ^~
+      |          ^~~~~
 compilation failed with 1 error
 === strmovedlocalkept.olang
 strmovedlocalkept.olang:29:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4234,7 +4293,7 @@ strmovedlocalkept.olang:29:10: error[E11c, O12]: '$' does not say where a value 
       |          ^
 strmovedlocalkept.olang:24:10: note: built here, where the receiver's part it was handed lives
    24 |     p := P2(n)
-      |          ^~
+      |          ^~~~~
 compilation failed with 1 error
 === strnotecopies.olang
 strnotecopies.olang:14:48: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
@@ -4280,9 +4339,6 @@ stro20condstore.olang:47:13: error[O20]: the container outlives what this refers
 stro20condstore.olang:53:13: error[O20]: the container outlives what this refers to - build it where the container lives ('x T&c', 'f&c(...)')
    53 |         h.f = (local if i == 0 else P(7)) if i < 5 else P(8)
       |             ^
-stro20condstore.olang:53:16: note: this is the value that does not fit - each value a conditional or a match gives is stored as though alone (E28)
-   53 |         h.f = (local if i == 0 else P(7)) if i < 5 else P(8)
-      |                ^~~~~
 compilation failed with 5 errors
 === strobligation.olang
 strobligation.olang:16:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4314,14 +4370,17 @@ compilation failed with 1 error
 strspawnbuilds.olang:21:40: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    21 | fn (b Bag&) Str() String { return "b" $hjoin(b.head) }
       |                                        ^~~~~
-strspawnbuilds.olang:18:22: note: built here, where the receiver's part it was handed lives
-   18 |     join { spawn x = grow(n) }
-      |                      ^~~~
+strspawnbuilds.olang:13:16: note: built here, where the receiver's part it was handed lives
+   13 |     m Node&n = Node(n.v + 1, null)
+      |                ^~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === strspawnclausedefault.olang
 strspawnclausedefault.olang:18:46: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    18 |     join { spawn b.head.next = try f(b.head) catch default Node(b.head.v + 100) }
-      |                                              ^~~~~
+      |                                              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+strspawnclausedefault.olang:18:60: note: built here, where the receiver's part it was handed lives
+   18 |     join { spawn b.head.next = try f(b.head) catch default Node(b.head.v + 100) }
+      |                                                            ^~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === strspawnnobuild.olang
 strspawnnobuild.olang:17:40: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4344,23 +4403,23 @@ compilation failed with 1 error
 === strstorelambda.olang
 strstorelambda.olang:13:10: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    13 |     f := fn() { b.head.next = Node(5, null) }
-      |          ^~
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 strstorelambda.olang:13:31: note: built here, where the receiver's part it was handed lives
    13 |     f := fn() { b.head.next = Node(5, null) }
-      |                               ^~~~
+      |                               ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strstorelocal.olang
 strstorelocal.olang:15:14: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    15 |     w Wr&b = Wr(b.head)
-      |              ^~
+      |              ^~~~~~~~~~
 compilation failed with 1 error
 === strstorespawn.olang
 strstorespawn.olang:12:18: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    12 |     join { spawn fn() { b.head.next = Node(5, null) } }
-      |                  ^~
+      |                  ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 strstorespawn.olang:12:39: note: built here, where the receiver's part it was handed lives
    12 |     join { spawn fn() { b.head.next = Node(5, null) } }
-      |                                       ^~~~
+      |                                       ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strstoresreceiver.olang
 strstoresreceiver.olang:13:5: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4368,7 +4427,7 @@ strstoresreceiver.olang:13:5: error[E11c, O12]: '$' does not say where a value i
       |     ^~~~
 strstoresreceiver.olang:8:33: note: built here, where the receiver's part it was handed lives
     8 | fn grow(n mut Node&) { n.next = Node(6, null) }
-      |                                 ^~~~
+      |                                 ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strtransientadapter.olang
 strtransientadapter.olang:13:48: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
@@ -4381,15 +4440,15 @@ strtransientbuilds.olang:29:41: error[E11c, O12]: '$' does not say where a value
       |                                         ^~~~~
 strtransientbuilds.olang:20:20: note: built here, where the receiver's part it was handed lives
    20 |         m Node&n = Node(n.v + 1)
-      |                    ^~~~
+      |                    ^~~~~~~~~~~~~
 compilation failed with 1 error
 === strtransientinner.olang
 strtransientinner.olang:13:16: error[E11c, O12]: '$' does not say where a value it renders lives, so Str builds and stores nothing where its receiver reaches - read it, and build what it needs here
    13 |     n := apply(fn() I64 {
-      |                ^~
+      |                ^~~~~~~~~~
 strtransientinner.olang:14:14: note: built here, where the receiver's part it was handed lives
    14 |         h := fn() I64 { return b.head.v }
-      |              ^~
+      |              ^~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === t10len.olang
 t10len.olang:5:15: error[T6b]: I64 does not flow into I32 - convert it, as I32(x)
@@ -4401,10 +4460,13 @@ compilation failed with 2 errors
 t13holdsitself.olang:4:7: error[T16]: E cannot hold itself by value - hold it through a reference ('&')
     4 |     A(e E)
       |       ^
+t13holdsitself.olang:7:6: error[T16]: 't13holdsitself:S' cannot hold itself by value - hold it through a reference ('&')
+    7 | type S struct(x I32, s S) {
+      |      ^
 t13holdsitself.olang:9:5: error[T16]: S cannot hold itself by value - hold it through a reference ('&')
     9 |     s
       |     ^
-compilation failed with 2 errors
+compilation failed with 3 errors
 === t16inlinearray.olang
 t16inlinearray.olang:5:3: error[T16]: N cannot hold itself by value - hold it through a reference ('&')
     5 |   kids := Array<N>(2)
@@ -4475,7 +4537,7 @@ t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values -
       |            ^
 t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause
    13 | fn final(e E) Bool { return e != E.A }
-      |                                  ^
+      |                                  ^~~
 t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }')
    15 |     x E
       |       ^
@@ -4494,18 +4556,12 @@ compilation failed with 1 error
 t22aobligation.olang:8:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     8 |     a.next = b
       |            ^
-t22aobligation.olang:7:22: note: 'b' is declared read-only here - declare it 'b mut Node&' to write through it
-    7 | fn hang(a mut Node&, b Node&) {
-      |                      ^
 t22aobligation.olang:17:11: error[T22a]: 'hang' relates its arguments' scopes, which a call through a function value cannot check - call it directly
    17 |     apply(hang, a, b)
       |           ^~~~
 compilation failed with 2 errors
 === t22borrowedresult.olang
 t22borrowedresult.olang:15:10: error[E12]: expected fn(a mut N&) mut N&, found fn(a mut N&) mut N&a
-   15 |     keep(self, x, 42)
-      |          ^~~~
-t22borrowedresult.olang:15:10: note: a function type says where each reference argument and the result live, as the function does - write 'fn(a mut N&) mut N&a', or pass a lambda calling it
    15 |     keep(self, x, 42)
       |          ^~~~
 compilation failed with 1 error
@@ -4515,7 +4571,7 @@ t22callunsafe.olang:20:29: error[E12]: expected fn(n P&) I64, found fn(n mut P&)
       |                             ^
 t22callunsafe.olang:20:48: error[E12]: expected fn(n P&) I64, found R
    20 |     try io.Println($applyRo(w, p) " " $applyRo(R(3), p))
-      |                                                ^
+      |                                                ^~~~
 compilation failed with 2 errors
 === t22sharedscope.olang
 t22sharedscope.olang:13:9: error[E12]: expected fn(a mut N&, b N&), found fn(a mut N&, b N&a)
@@ -4550,9 +4606,6 @@ compilation failed with 1 error
 t25bfield.olang:4:36: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     4 | type Box struct(p P&) { q mut P& = p }
       |                                    ^
-t25bfield.olang:4:17: note: 'p' is declared read-only here - declare it 'p mut P&' to write through it
-    4 | type Box struct(p P&) { q mut P& = p }
-      |                 ^
 compilation failed with 1 error
 === t25bglobal.olang
 t25bglobal.olang:7:6: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
@@ -4566,17 +4619,11 @@ t25biface.olang:8:27: error[T25c]: a read-only reference cannot become writable 
 t25biface.olang:12:5: note: instantiated here, with W = Box
    12 |     feed(b)
       |     ^~~~
-t25biface.olang:8:19: note: 'w' is declared read-only here - declare it 'w mut Box&' to write through it
-    8 | fn feed<W Writer>(w W&) { w.Put(1) }
-      |                   ^
 compilation failed with 1 error
 === t25blocalmutinit.olang
 t25blocalmutinit.olang:5:16: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |     w mut P& = p
       |                ^
-t25blocalmutinit.olang:4:9: note: 'p' is declared read-only here - declare it 'p mut P&' to write through it
-    4 | fn keep(p P&) {
-      |         ^
 t25blocalmutinit.olang:5:16: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
     5 |     w mut P& = p
       |                ^
@@ -4598,17 +4645,11 @@ compilation failed with 1 error
 t25bpass.olang:5:22: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 | fn pass(p P&) { poke(p) }
       |                      ^
-t25bpass.olang:5:9: note: 'p' is declared read-only here - declare it 'p mut P&' to write through it
-    5 | fn pass(p P&) { poke(p) }
-      |         ^
 compilation failed with 1 error
 === t25bstore.olang
 t25bstore.olang:4:44: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     4 | fn link(a mut Array<mut P&>&, b P&) { a[0] = b }
       |                                            ^
-t25bstore.olang:4:31: note: 'b' is declared read-only here - declare it 'b mut P&' to write through it
-    4 | fn link(a mut Array<mut P&>&, b P&) { a[0] = b }
-      |                               ^
 compilation failed with 1 error
 === t25bvalue.olang
 t25bvalue.olang:5:13: error[T25b]: 'mut' makes a reference writable, and I32 is no reference
@@ -4643,9 +4684,9 @@ compilation failed with 1 error
 t25ccondwrite.olang:7:21: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
     7 |     (p if c else q).v = 92
       |                     ^
-t25ccondwrite.olang:10:45: error[T25b]: this writes through a read-only reference - one with no 'mut' in its type
+t25ccondwrite.olang:10:40: error[S12b]: every value of this match is Node&, found Node&
    10 |     (match k { case 1 => p  nomatch => q }).v = 93
-      |                                             ^
+      |                                        ^
 compilation failed with 2 errors
 === t25ccopyarg.olang
 t25ccopyarg.olang:11:14: error[T25c]: 'setFirst' writes through or keeps its parameter 'b', and this Box is a read-only copy - pass one of its own, made from its parts
@@ -4653,7 +4694,7 @@ t25ccopyarg.olang:11:14: error[T25c]: 'setFirst' writes through or keeps its par
       |              ^~
 t25ccopyarg.olang:9:13: note: 'b' is declared here
     9 | fn setFirst(b Box) { b.P[0] = 1 }
-      |             ^
+      |             ^~~~~
 compilation failed with 1 error
 === t25ccopycallvalue.olang
 t25ccopycallvalue.olang:18:27: error[T25c]: 'Call' writes through or keeps its by-value parameter 'b', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
@@ -4682,14 +4723,14 @@ compilation failed with 1 error
 t25ccopyforin.olang:11:22: error[T25c]: this writes through a reference a read-only copy holds - a copy of a place reached read-only writes nothing it shares
    11 |     for b in GA { b.P[0] = 1 }
       |                      ^
-t25ccopyforin.olang:11:9: note: 'b' copies a place reached read-only, so it is read-only
+t25ccopyforin.olang:11:5: note: 'b' copies a place reached read-only, so it is read-only
    11 |     for b in GA { b.P[0] = 1 }
-      |         ^
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === t25ccopyfuncvalue.olang
 t25ccopyfuncvalue.olang:9:10: error[T25c]: this lambda writes through or keeps its by-value parameter 'b', so it cannot be a function value - a caller of one may pass a read-only copy; work on one of its own, made from its parts
     9 |     f := fn(b Box) { b.P[0] = 1 }
-      |          ^~
+      |          ^~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === t25ccopylend.olang
 t25ccopylend.olang:11:5: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made with 'Clone()'
@@ -4716,9 +4757,6 @@ compilation failed with 1 error
 t25ccopyparam.olang:9:13: error[T25c]: this copies a read-only Box, and a written type declares a writable one - declare it with ':=' for a read-only copy, borrow it read-only, or make one of its own from its parts
     9 |     x Box = r
       |             ^
-t25ccopyparam.olang:8:6: note: 'r' is declared read-only here - declare it 'r mut Box&' to write through it
-    8 | fn f(r Box&) {
-      |      ^
 compilation failed with 1 error
 === t25ccopypayload.olang
 t25ccopypayload.olang:13:19: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
@@ -4731,13 +4769,19 @@ t25ccopypun.olang:12:15: error[T25c]: 'Wrap' writes through or keeps its paramet
       |               ^~
 t25ccopypun.olang:8:18: note: 'b' is declared here
     8 | type Wrap struct(b Box) {
-      |                  ^
+      |                  ^~~~~
 compilation failed with 1 error
 === t25ccopyreturn.olang
 t25ccopyreturn.olang:9:29: error[T25c]: a copy of a read-only List<I64> cannot be returned as a writable value - return one of its own, made with 'G.Clone()', or a read-only reference
     9 | fn get() List<I64> { return G }
       |                             ^
-compilation failed with 1 error
+t25ccopyreturn.olang:11:5: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   11 |     get().Push(1)
+      |     ^~~
+t25ccopyreturn.olang:9:22: note: the callee requires it because of this statement
+    9 | fn get() List<I64> { return G }
+      |                      ^~~~~~
+compilation failed with 2 errors
 === t25ccopystore.olang
 t25ccopystore.olang:10:10: error[T25c]: a copy of a read-only Box cannot be stored where it can be written - store one of its own, made from its parts
    10 |     GW = GB
@@ -4746,7 +4790,7 @@ compilation failed with 1 error
 === t25cforinwrites.olang
 t25cforinwrites.olang:19:5: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    19 |     for x in hs[0].ring { t += x }
-      |     ^~~
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 compilation failed with 1 error
 === t27anonenum.olang
 t27anonenum.olang:13:10: error[E12]: expected enum { A B }, found enum { X Y Z }
@@ -4780,9 +4824,6 @@ compilation failed with 1 error
 t29aconvreadonly.olang:5:12: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
     5 |   w(String(b))
       |            ^
-t29aconvreadonly.olang:4:10: note: 'b' is declared read-only here - declare it 'b mut Array<U8>&' to write through it
-    4 | fn touch(b Array<U8>&) {
-      |          ^
 compilation failed with 1 error
 === t29cbytes.olang
 t29cbytes.olang:5:16: error[M19]: Array<U8> has no method 'Eq'
@@ -4793,7 +4834,7 @@ compilation failed with 2 errors
 === t29dliteral.olang
 t29dliteral.olang:10:17: error[T29d]: this literal enters Checked through its constructor, which does not run on it while compiling: it fails with an error no clause handles
    10 |     c Checked = -5
-      |                 ^
+      |                 ^~
 compilation failed with 1 error
 === t29dparams.olang
 t29dparams.olang:3:14: error[T29d]: this constructor takes one parameter, of type I32 - the value it checks
@@ -4808,7 +4849,7 @@ compilation failed with 1 error
 === t29dreturn.olang
 t29dreturn.olang:4:18: error[C2b]: a constructor gives no value - its fields are the instance; fail with 'error'
     4 |     if v > 100 { return 100 }
-      |                  ^~~~~~
+      |                  ^~~~~~~~~~
 compilation failed with 1 error
 === t29dvalue.olang
 t29dvalue.olang:8:17: error[T6b]: I32 does not flow into Percent - convert it, as Percent(x)
@@ -4834,17 +4875,17 @@ t29fcompound.olang:9:5: error[T6b]: I32 does not flow into Pct - convert it, as 
       |     ^~
 compilation failed with 1 error
 === t29fcompound2.olang
-t29fcompound2.olang:7:5: error[T29f]: Pct does not extend its base, so it takes no '+=' - declare its method Plus, or declare it with 'extends'
+t29fcompound2.olang:7:5: error[T29f]: Pct does not extend its base, so it takes no '+=' - declare its method 'Plus', or declare it with 'extends'
     7 |   p += q
       |     ^~
 compilation failed with 1 error
 === t29overgeneric.olang
 t29overgeneric.olang:4:12: error[T29]: a type is declared over a number or an array, not over List<String&> - hold it in a struct's field instead
     4 | type Names List<String&>
-      |            ^~~~
+      |            ^~~~~~~~~~~~~
 compilation failed with 1 error
 === t29overnoextends.olang
-t29overnoextends.olang:7:11: error[T29f]: B does not extend its base, so it takes no '+' - declare its method Plus, or declare it with 'extends'
+t29overnoextends.olang:7:11: error[T29f]: B does not extend its base, so it takes no '+' - declare its method 'Plus', or declare it with 'extends'
     7 |   c B = b + b
       |           ^
 compilation failed with 1 error
@@ -4984,10 +5025,7 @@ compilation failed with 1 error
 tdnovalue.olang:8:32: error[R11]: this call returns no value, so there is nothing for a default to stand in for
     8 | fn novalue() { x := try none() catch default 1 }
       |                                ^~~~~
-tdnovalue.olang:8:25: error[D15]: ':=' takes its type from the initializer, and a call returning nothing has none
-    8 | fn novalue() { x := try none() catch default 1 }
-      |                         ^~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === tdscope.olang
 tdscope.olang:10:8: error[S8a]: this condition is the same on every build, so one branch is dead - depend on a build constant, or remove it
    10 |     if true {
@@ -5030,18 +5068,15 @@ compilation failed with 1 error
 trysetatnolen.olang:9:18: error[E31a]: 'checked c[i] = v' checks against Len, and Bag& has neither CheckedSetAt nor Len
     9 |     checked b[0] = 1 catch { }
       |                  ^
-trysetatnolen.olang:9:5: error[R8]: nothing here can fail - write it without 'checked'
-    9 |     checked b[0] = 1 catch { }
-      |     ^~~~~~~
-compilation failed with 2 errors
+compilation failed with 1 error
 === typenoctor.olang
 typenoctor.olang:8:8: error: type 'Color' has no constructor - an enum's values are its cases
     8 |   c := Color(1)
       |        ^~~~~
 compilation failed with 1 error
 === typenotvalue.olang
-typenotvalue.olang:8:10: error: 'Res' is a type, not a value
-    8 |     r := Res&(3)
+typenotvalue.olang:4:10: error: 'I64' is a type, not a value
+    4 |     e := I64 > 3
       |          ^~~
 compilation failed with 1 error
 === unknowncascade.olang
@@ -5105,7 +5140,7 @@ compilation failed with 1 error
 === unseen.olang
 unseen.olang:7:4: error[B9c]: this top-level condition uses what exists only in the branches it decides, or does not check
     7 | if h() {
-      |    ^
+      |    ^~~
 compilation failed with 1 error
 === varlistcount.olang
 varlistcount.olang:4:5: error[D12b]: 2 names need as many values, found 1
@@ -5209,6 +5244,9 @@ compilation failed with 1 error
 vec160genericselfhold.olang:5:5: error[T16]: N<I64> cannot hold itself by value - hold it through a reference ('&')
     5 |     x N<T> = N<T>()
       |     ^
+vec160genericselfhold.olang:9:12: note: instantiated here, with T = I64
+    9 |     x := N<I64>()
+      |            ^~~
 compilation failed with 1 error
 === vec19listconv.olang
 vec19listconv.olang:12:20: error[M19g]: 'l' holds a view of 'v' taken before 'v' may have grown
@@ -5227,7 +5265,7 @@ $ROOT/std/prelude/vec.olang:224:5: note: the callee requires it because of this 
       |     ^
 compilation failed with 1 error
 === vec54assertmsgreturn.olang
-vec54assertmsgreturn.olang:26:51: error[S17]: an assert's message may not return - it is evaluated only when the assert fails, and gives text
+vec54assertmsgreturn.olang:26:51: error[S17]: an assert's message may not return - it is evaluated only where it is used, and gives text
    26 |     assert a.Len() > 100, (try h(a.Len()) catch { return pick(true, a, b) })
       |                                                   ^~~~~~
 compilation failed with 1 error
@@ -5279,12 +5317,12 @@ vec94lambdakeeps.olang:14:12: note: 'l.toks' may grow here, in 'Push' - take the
       |            ^~~~
 compilation failed with 1 error
 === vec95globalkeeps.olang
-vec95globalkeeps.olang:12:16: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
-   12 |     G = l.toks.View()
-      |                ^~~~
 vec95globalkeeps.olang:12:7: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
    12 |     G = l.toks.View()
       |       ^
+vec95globalkeeps.olang:12:16: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+   12 |     G = l.toks.View()
+      |                ^~~~
 compilation failed with 2 errors
 === vec96taskkeeps.olang
 vec96taskkeeps.olang:15:16: error[M19g]: 'l.toks' may grow here while a task holds a view of it - give the task a copy: 'l.toks.ToArray()'
@@ -5292,7 +5330,7 @@ vec96taskkeeps.olang:15:16: error[M19g]: 'l.toks' may grow here while a task hol
       |                ^~~~
 vec96taskkeeps.olang:14:9: note: the task holding a view of 'l.toks' is started here
    14 |         spawn look(d)
-      |         ^~~~~
+      |         ^~~~~~~~~~~~~
 compilation failed with 1 error
 === vec97globalfieldgrows.olang
 vec97globalfieldgrows.olang:15:21: error[M19g]: 'd' holds a view of 'GL.toks' taken before 'GL.toks' may have grown
@@ -5311,7 +5349,7 @@ zeroeffect.olang:9:5: error[D13c]: Counted has no zero value, so this needs one 
       |     ^
 zeroeffect.olang:6:5: note: here
     6 |     Made++
-      |     ^~~~
+      |     ^~~~~~
 compilation failed with 1 error
 === zerofails.olang
 zerofails.olang:10:5: error[D13c]: NonZero has no zero value, so this needs one - its constructor does not run on zeros while compiling: it fails with an error no clause handles
@@ -5321,5 +5359,5 @@ compilation failed with 1 error
 === zeroshared.olang
 zeroshared.olang:7:13: error[D13c]: Bag's zero value holds references, which a fill would share - give a fill, or build the elements
     7 |     bags := Array<Bag>(3)
-      |             ^~~~~
+      |             ^~~~~~~~~~~~~
 compilation failed with 1 error

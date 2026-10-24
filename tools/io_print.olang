@@ -68,7 +68,7 @@ fn lineStartOf(text String&, i I64) I64 {
 }
 
 # print(...) and its three siblings, in code and in comments, renamed into io's: the new text and how many calls in code
-fn migrateBare(text String&, alias String&) (String, I64) {
+fn migrateBare(text String&, alias String&) String, I64 {
     mask := srcmask.Mask(text, false)
     out := StringBuilder()
     last I64 = 0

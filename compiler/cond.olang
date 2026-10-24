@@ -165,7 +165,7 @@ fn (c mut Consts&) define(flag String&) ? DefineError {
 }
 
 # a build constant's value, and whether it is an integer above I64's maximum (a U64); a miss where there is none
-fn (c Consts&) ValueOf(name String&) (Value, Bool) ? {
+fn (c Consts&) ValueOf(name String&) Value, Bool ? {
     i := try c.find(name)
     return c.values[i], c.big[i]
 }
@@ -215,7 +215,7 @@ fn isName(t String&) Bool {
 
 # a -D value as its literal would be read: true or false, one whole integer or float literal after an optional "-", or
 # else text - quoted text with its quotes taken off. Whether an integer is above I64's maximum (a U64) is the second
-fn (c mut Consts&) literal(value String&) (Value, Bool) ? DefineError {
+fn (c mut Consts&) literal(value String&) Value, Bool ? DefineError {
     if value == "true" or value == "false" { return boolValue(value == "true"), false }
     if value.Len() >= 2 and value[0] == '"' and value[value.Len() - 1] == '"' {
         return Value(ValueKind.Text, 0, 0.0, c.text(value[1:value.Len() - 1]), 0, false), false
@@ -375,7 +375,7 @@ fn (e mut Eval&) runtimeValue(sp source.Span, m msgs.Msg, local Bool) Value {
 }
 
 # a top-level condition: Decided with its value, Deferred, or Failed with the message and where
-fn (e mut Eval&) Top(c ast.Expr&) (Outcome, Bool) {
+fn (e mut Eval&) Top(c ast.Expr&) Outcome, Bool {
     v := e.expr(c)
     if not e.failed and v.Kind != ValueKind.Bool { e.fail(e.first(c), msgs.CondNotBool(e.tokText(e.first(c)))) }
     if e.failed { return Outcome.Deferred if e.deferrable else Outcome.Failed, false }
@@ -384,7 +384,7 @@ fn (e mut Eval&) Top(c ast.Expr&) (Outcome, Bool) {
 
 # a local condition (S8b): decided only where it reads a build constant and no local; Runtime where it reads a local
 # or is anything else the build does not decide; Deferred where compile-time evaluation may yet decide it
-fn (e mut Eval&) Local(c ast.Expr&) (Outcome, Bool) {
+fn (e mut Eval&) Local(c ast.Expr&) Outcome, Bool {
     v := e.expr(c)
     if e.failed {
         if e.runtime or e.mentionsLocal(c) { return Outcome.Runtime, false }
@@ -531,7 +531,7 @@ fn buildType(v Value) Bool {
 }
 
 # a written type's kind and width, as far as B9a tells one from another
-fn declaredKind(t String&) (ValueKind, I64, Bool) {
+fn declaredKind(t String&) ValueKind, I64, Bool {
     if t == "I8" { return ValueKind.Int, 8, false }
     if t == "I16" { return ValueKind.Int, 16, false }
     if t == "I32" { return ValueKind.Int, 32, false }
@@ -651,7 +651,7 @@ fn flows(fromBits I64, fromUns Bool, toBits I64, toUns Bool) Bool {
 }
 
 # the integer type two integers meet at (T6b, E6d), or none
-fn meet(a Value, b Value) (Bool, I64, Bool) {
+fn meet(a Value, b Value) Bool, I64, Bool {
     if a.Bits != 0 and b.Bits != 0 {
         if a.Bits == b.Bits and a.Uns == b.Uns { return true, a.Bits, a.Uns }
         if flows(a.Bits, a.Uns, b.Bits, b.Uns) { return true, b.Bits, b.Uns }
@@ -671,7 +671,7 @@ fn meet(a Value, b Value) (Bool, I64, Bool) {
 }
 
 # an integer literal adapting to a float (T6) - an integer of a type of its own does not meet one (T6b)
-fn asFloat(v Value) (Bool, F64) {
+fn asFloat(v Value) Bool, F64 {
     if v.Bits != 0 or v.I > 9007199254740992 or v.I < -9007199254740992 { return false, 0.0 }
     return true, F64(v.I)
 }
@@ -829,7 +829,7 @@ fn (e mut Eval&) compare(opSp source.Span, op token.Tok, a Value, b Value) Value
 }
 
 # where a failed evaluation went wrong, and what
-fn (e Eval&) Error() (source.Span, msgs.Msg) { return e.errAt, e.err }
+fn (e Eval&) Error() source.Span, msgs.Msg { return e.errAt, e.err }
 
 test "a -D value reads as its literal would" {
     c := Consts()

@@ -139,7 +139,7 @@ fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
 }
 
 # what LowerKey makes of k, held to the verifier, as Verified
-fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) (Bool, String, String) {
+fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) Bool, String, String {
     f mir.Fn&lw = lw.LowerKey(k)
     if lw.Gapped { return true, "", "" }
     problems := f.Verify(lw.P.T)
@@ -163,7 +163,7 @@ fn (lw mut Lowerer&) InitModules() List<I64> {
 
 # body id lowered and held to the verifier: whether lowering met a gap (or a body with errors), the verifier's problems
 # ("" for none), and the function's dump where dump is asked for
-fn (lw mut Lowerer&) Verified(id I64, dump Bool) (Bool, String, String) {
+fn (lw mut Lowerer&) Verified(id I64, dump Bool) Bool, String, String {
     f mir.Fn&lw = lw.Lower(id)
     if lw.Gapped { return true, "", "" }
     problems := f.Verify(lw.P.T)
@@ -657,7 +657,12 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             code := mir.ErrorCode(ln.T, ln.T.Errors(ln.B.Ty), err, word)
             ln.raise(sp, mir.Operand.Const(mir.I32T, code))
         }
-        case typed.Stmt.Exit(sp, _) { ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None)) }
+        case typed.Stmt.Exit(sp, _, msg) {
+            # S16d: the message is computed only here, where the unreachable is reached
+            m := mir.Operand.None
+            if msg != null { m = ln.val(msg) }
+            if not ln.dead { ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, m)) }
+        }
         case typed.Stmt.Assert(sp, c, msg) { ln.assert(sp, c, msg) }
         case typed.Stmt.Block(_, bl) { ln.block(bl) }
         case typed.Stmt.Defer(sp, bl) {
@@ -1624,7 +1629,7 @@ fn (ln mut lowering&) arm(a typed.Arm&, slot mir.LocalId) {
 # ---- calls ----
 
 # what a call reaches, and its function type
-fn (ln mut lowering&) callee(c typed.Callee&, sp source.Span) (mir.Callee, types.TypeId) {
+fn (ln mut lowering&) callee(c typed.Callee&, sp source.Span) mir.Callee, types.TypeId {
     match c {
         case typed.Callee.Body(id) { return ln.bodyCallee(id) }
         case typed.Callee.Extern(f) {
@@ -1636,17 +1641,17 @@ fn (ln mut lowering&) callee(c typed.Callee&, sp source.Span) (mir.Callee, types
     }
 }
 
-fn (ln mut lowering&) bodyCallee(id typed.BodyId) (mir.Callee, types.TypeId) {
+fn (ln mut lowering&) bodyCallee(id typed.BodyId) mir.Callee, types.TypeId {
     ty := ln.L.Bodies[I64(id)].Ty
     return mir.Callee.Fn(mir.FnKey.Body(id), ty), ty
 }
 
-fn (ln mut lowering&) valueCallee(x typed.Expr&) (mir.Callee, types.TypeId) {
+fn (ln mut lowering&) valueCallee(x typed.Expr&) mir.Callee, types.TypeId {
     v := ln.val(x)
     return mir.Callee.Value(v), x.Type()
 }
 
-fn (ln mut lowering&) helperCallee(k typed.Helper, ht types.TypeId) (mir.Callee, types.TypeId) {
+fn (ln mut lowering&) helperCallee(k typed.Helper, ht types.TypeId) mir.Callee, types.TypeId {
     kind := mir.HelperKind.Equal if k == typed.Helper.Equal else mir.HelperKind.Hash
     ht = ln.L.helperTy(kind, ht)
     ty := mir.HelperType(ln.T, kind, ht)
@@ -2210,7 +2215,7 @@ fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.
 # a rendered operand, computed before any piece renders (E11b, Go's rule): a struct or a number as it is then, but an
 # array's elements read when its piece renders - a fixed array read from a place is rendered through a reference to
 # that place, as a run-time array's pair names its storage
-fn (ln mut lowering&) piece(x typed.Expr&, sp source.Span) (mir.Operand, types.TypeId) {
+fn (ln mut lowering&) piece(x typed.Expr&, sp source.Span) mir.Operand, types.TypeId {
     t := ln.T
     xt := x.Type()
     a := ln.arrayOf(xt)
@@ -2382,7 +2387,7 @@ fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Arra
 }
 
 # what a type's value is made of, for the helpers: a struct's, a tuple's or a record's fields; ok false for none
-fn (ln mut lowering&) partsOf(ty types.TypeId) (Array<types.TypeId>, Bool) {
+fn (ln mut lowering&) partsOf(ty types.TypeId) Array<types.TypeId>, Bool {
     t := ln.T
     r := t.Repr(ty)
     k := t.KindOf(r)
@@ -2401,7 +2406,7 @@ fn (ln mut lowering&) items(l types.ListId) Array<types.TypeId> {
 }
 
 # an enum's cases' payloads (a record, or 0 for none); ok false for no enum
-fn (ln mut lowering&) casesOf(ty types.TypeId) (Array<types.TypeId>, Bool) {
+fn (ln mut lowering&) casesOf(ty types.TypeId) Array<types.TypeId>, Bool {
     t := ln.T
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.AnonEnum { return ln.items(t.ShapeCases(r)), true }
@@ -2814,7 +2819,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.word(b, "null", sp)
         ln.goto(after)
         ln.start(some)
-        ln.word(b, ln.spell(ty, true), sp)
+        ln.word(b, ln.spell(ty, true, not top), sp)
         ln.goto(after)
         ln.start(after)
         return
@@ -2865,7 +2870,7 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
         ln.start(after)
     } else if ln.arrayOf(ty) != types.UnknownT {
         el := t.Elem(ln.arrayOf(ty))
-        ln.word(b, $ln.spell(ln.readOnly(el), true) "[", sp)
+        ln.word(b, $ln.spell(ln.readOnly(el), true, true) "[", sp)
         n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
         ln.eachIndex(n, sp, fn(i mir.LocalId) {
             first := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(0)], sp)
@@ -2944,7 +2949,7 @@ fn (ln mut lowering&) readOnly(ty types.TypeId) types.TypeId {
 # a type as source writes it (E11a, E21): primitives and declared types by name, their arguments in angle brackets,
 # references with their permission, arrays as Array<T> whatever their storage (T7c); a function type as a signature, after "fn"
 # where fnWord says
-fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
+fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, group Bool = false) String {
     t := ln.T
     k := t.KindOf(ty)
     if k == types.Kind.Named {
@@ -2956,17 +2961,17 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         out.PushChar('<')
         for i in range args.Len() {
             if i > 0 { out.Push(", ") }
-            out.Push(ln.spell(args[i], true))
+            out.Push(ln.spell(args[i], true, true))
         }
         out.PushChar('>')
         return out.ToString()
     }
     if k == types.Kind.Ref {
         m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
-        return $m $ln.spell(t.Referent(ty), true) "&"
+        return $m $ln.spell(t.Referent(ty), true, item) "&"
     }
     if k == types.Kind.Array {
-        return "Array<" $ln.spell(t.Elem(ty), true) ">"
+        return "Array<" $ln.spell(t.Elem(ty), true, true) ">"
     }
     if k == types.Kind.Const { return $t.ConstValue(ty) }
     if k == types.Kind.Tuple {
@@ -2975,13 +2980,19 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         out.PushChar('(')
         for i in range xs.Len() {
             if i > 0 { out.Push(", ") }
-            out.Push(ln.spell(xs[i], true))
+            out.Push(ln.spell(xs[i], true, true))
         }
         out.PushChar(')')
         return out.ToString()
     }
     if k == types.Kind.Func {
         out := StringBuilder()
+        res := t.Result(ty)
+        es := t.Items(t.Errors(ty))
+        several := (t.KindOf(res) == types.Kind.Tuple and t.Items(t.Parts(res)).Len() > 1) or es.Len() > 1
+        # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
+        wrap := fnWord and (group or (item and several))
+        if wrap { out.PushChar('(') }
         if fnWord { out.Push("fn") }
         out.PushChar('(')
         ps := t.Items(t.Params(ty))
@@ -2989,18 +3000,22 @@ fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool) String {
         for i in range ps.Len() {
             if i > 0 { out.Push(", ") }
             if ns.Len() == ps.Len() { out.Push($t.Names.Text(source.NameId(I32(ns[i]))) " ") }
-            out.Push(ln.spell(ps[i], true))
+            out.Push(ln.spell(ps[i], true, true))
         }
         out.PushChar(')')
-        res := t.Result(ty)
-        if res != types.VoidT { out.Push(" " $ln.spell(res, true)) }
-        es := t.Items(t.Errors(ty))
-        if es.Len() > 0 {
-            # QY: a function type's several error items parenthesized
-            out.Push(" ? (" if es.Len() > 1 else " ? ")
-            for i in range es.Len() { out.Push($(", " if i > 0 else "") $ln.spell(t.ErrOf(es[i]), true)) }
-            if es.Len() > 1 { out.PushChar(')') }
+        if t.KindOf(res) == types.Kind.Tuple {
+            # several results, bare (D8c)
+            parts := t.Items(t.Parts(res))
+            for i in range parts.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(parts[i], true, true)) }
+        } else if res != types.VoidT {
+            g := es.Len() > 0 and t.KindOf(res) == types.Kind.Func and t.Items(t.Errors(res)).Len() == 0
+            out.Push(" " $ln.spell(res, true, true, g))
         }
+        if es.Len() > 0 {
+            out.Push(" ?")
+            for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
+        }
+        if wrap { out.PushChar(')') }
         return out.ToString()
     }
     return t.Canon(ty)
@@ -3083,7 +3098,7 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
 # a program of one file, main.olang, loaded over the repository's std, checked and lowered: the verifier's problems with every body and every function they refer to, a line each
 # ("B<id>: problem"), "gap" lines for what is not lowered yet, and the dump of each body of the root module whose
 # function's name is in dumps
-fn lowerText(text String&, dumps Array<String&>&) (String, String) {
+fn lowerText(text String&, dumps Array<String&>&) String, String {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
     try os.WriteFile($dir "/main.olang", text) catch os.OsError { }

@@ -25,6 +25,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `cli_words.olang` | B1: the command line in words (`-b` -> `build`, `-d` -> `-debug`, ...), in commands and `# flags:` | `build/tools_cli_words FILE...` |
 | `syntax_migrate.olang` | QY/QW: lists by commas on a line and line breaks between lines, `+` gone from error sets and catch items, type parameter lists (`fn f<T>(a T)`, `fn (l List<T>&)`) | `build/tools_syntax_migrate [--old] [--check] [-v] FILE\|DIR...` |
 | `arrays_migrate.olang` | QP1-QP2: `Array<T, N>` and constant parameters removed - `x Array<T, N>` with no value becomes `x := Array<T>(N)`, `Array<T, N>()` becomes `Array<T>(N)`, any other `Array<T, N>` loses its length | `build/tools_arrays_migrate [--dry] PATH...` |
+| `results_migrate.olang` | D8c/L18c: results and error sets written bare (`fn f() I64, I64 ? A, B`), a function type in a list grouped whole (`Map<K, (fn(x I64) I64, I64)>`) | `build/tools_results_migrate [--check] [-v] FILE\|DIR...` |
 | `math_methods.olang` | M19d: std/math removed - its functions are the numbers' methods (`math.Sqrt(x)` -> `x.Sqrt()`), its constants the prelude's (`Pi`, `Euler`, `Inf`, `NaN`) | `build/tools_math_methods [--dry] PATH...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
@@ -45,6 +46,9 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 - `arrays_migrate` works on the text alone and lists for a person what depends on the code: an `Array<T, N>` as a type
   argument (`Array<T>&` unless its storage is made where it is declared, T7a), `as` views (now slices) and constant
   type parameters.
+- `results_migrate` works on the tokens alone and is idempotent; a Markdown file's olang code blocks are migrated too.
+  `checks/cases/l18coldresults.olang` is written in the old form on purpose: leave it out, or restore it after a run.
+  `--check` writes nothing and the exit status says whether anything would change.
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and

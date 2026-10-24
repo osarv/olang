@@ -204,7 +204,7 @@ type Stmt enum {
     DoFor(sp source.Span, body Array<Stmt&>&, cond Expr&)
     MatchS(sp source.Span, m Match&)
     Return(sp source.Span, values Array<Expr&>&)
-    Jump(sp source.Span, kind token.Tok)               # break continue unreachable
+    Jump(sp source.Span, kind token.Tok, msg Expr&)    # break continue unreachable; an unreachable's message (S16d)
     Assert(sp source.Span, cond Expr&, msg Expr&)
     Raise(sp source.Span, word Path&)                  # error T.WORD
     Spawn(sp source.Span, targets Array<Expr&>&, call Expr&)
@@ -318,7 +318,7 @@ fn (s Stmt&) Span() source.Span {
     return match s {
         case Stmt.ExprS(sp, _), Stmt.Var(sp, _), Stmt.Multi(sp, _), Stmt.Assign(sp, _, _, _) => sp
         case Stmt.TryStore(sp, _, _, _), Stmt.If(sp, _), Stmt.Forever(sp, _), Stmt.While(sp, _, _), Stmt.For3(sp, _) => sp
-        case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _) => sp
+        case Stmt.ForIn(sp, _), Stmt.DoFor(sp, _, _), Stmt.MatchS(sp, _), Stmt.Return(sp, _), Stmt.Jump(sp, _, _) => sp
         case Stmt.Assert(sp, _, _), Stmt.Raise(sp, _), Stmt.Spawn(sp, _, _), Stmt.Join(sp, _), Stmt.Defer(sp, _) => sp
         case Stmt.Block(sp, _) => sp
     }

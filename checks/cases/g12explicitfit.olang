@@ -1,0 +1,7 @@
+# check: fail error[T6b]: I64 does not flow into I32
+# G12: called with its type arguments written, an instance binds nothing from its arguments - each fits its parameter
+fn big<T>(a T, b T) T { return a if a > b else b }
+fn main() {
+    n I64 = 5
+    c := big<I32>(n, 2)
+}

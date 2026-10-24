@@ -1,0 +1,15 @@
+# check: run
+# S1b: one-line bodies - an else on the same line ends the statement before it, or begins the next line
+fn main() ? {
+    x I64 = 0
+    x += 3
+    y I64 = 0
+    if x > 2: y = 1 else: y = 2
+    assert y == 1
+    if x > 5: y = 10
+    else if x > 2: y = 20
+    else: y = 30
+    assert y == 20
+    for i in range x: y += i
+    assert y == 23
+}

@@ -320,6 +320,27 @@ x := (small
       if n < 10 else big)     # inside parentheses a line may begin with "if"
 ```
 
+**L18c (grouping an item).** Where an item of a list would hold a comma at its own top level - a function type, or a
+lambda, with several results or several error items - the item is written in parentheses, whole:
+
+```
+m Map<String&, (fn(x I64) I64, I64 ? IoError, ParseError)>
+fn apply(f (fn(x I64) I64, I64), n I64) I64
+total := apply((fn(x I64) I64, I64 { return x, x + 1 }), 3)
+fn adder() (fn(x I64) I64, I64)                         # one result, a function of two
+```
+
+Written as an item without them, a function type or a lambda takes one result and one error item, and a `,` after
+it separates the list it stands in: `Map<K, fn(x I64) I64, I64>` is three type arguments. The lists are those of L18a;
+a function type or a lambda anywhere else - a field's, a local's or a global's type, a lambda written as a statement's
+value - takes its results and error items as a declaration does, comma by comma (`g fn(x I64) I64, I64 ? A, B = h`).
+A type is parenthesized nowhere else: parentheses around a type that is no function type holding such a comma are a
+compile-time error, with one exception - a function type with no error set of its own, written as a declaration's or a
+function type's result before that signature's `?`, is parenthesized so the `?` is not read as its own: `fn f()
+(fn() I64) ? E` returns an infallible function and may fail with `E`, where `fn f() fn() I64 ? E` returns a function
+failing with `E`. Inside the parentheses the item is no item of the list: its commas are its own. A parenthesized
+expression (E1) groups as it always does, so a lambda is grouped by one.
+
 **L19.** Consequently, outside a parenthesized expression (L18a), an operator or continuation that is meant to extend
 an expression onto the next line must appear at the *end* of the first line, not the start of the next - in a list as
 in a statement:
@@ -1367,7 +1388,7 @@ a method, whatever its first parameter's type.
 ```
 param-list      ::= list(param)                         (L18a)
 param           ::= IDEN type-expr [ "=" expr ]
-ret-type        ::= type-expr | "(" type-expr sep type-expr { sep type-expr } [ line-sep ] ")"
+ret-type        ::= type-expr { "," type-expr }          (on one line; several results, D8c)
 error-list      ::= error-list-item { "," error-list-item }     (on one line)
 error-list-item ::= alias-chain IDEN [ "." IDEN ]
 ```
@@ -1382,10 +1403,9 @@ value); a function with no `ret-type` returns no value (bare `return`/fall-throu
 (§2.6's error types are never array or reference-shaped, unlike the general `type-ref`, T24). Each
 `error-list-item` must name a declared error type (§2.6), or one of its words (`ListError.EMPTY`, R1c). `?` with
 nothing after it declares an **inferred** error set (§7.1 R1a); a list declares those types and words and nothing else.
-See §7 for what a `error-list`'s combined set means. A function type's and a lambda's error set (T2, D16) is one
-`error-list-item` or a parenthesized list, `"?" ( error-list-item | "(" list(error-list-item) ")" )`: written inside
-another list, as a parameter's type or an argument, a bare comma would be read as that list's separator
-(`f fn(I64) ? (ParseError, IoError)`).
+See §7 for what a `error-list`'s combined set means. A function type or a lambda (T2, D16) written as an item of a
+list takes one result and one error item, and a function type of several is parenthesized whole there (L18c):
+`f (fn(I64) I64 ? ParseError, IoError)` as a parameter, `g fn(I64) I64 ? ParseError, IoError` as a field or a local.
 
 **D8e (`noreturn`).** A function whose signature writes `noreturn` where a result would stand (`fn Exit(code I32)
 noreturn`) **never returns to its caller**: no path through its body may reach a `return` or fall off its end. Its body is
@@ -1406,8 +1426,10 @@ may be `noreturn`, and so may a trait's method signature (T31); a constructor, a
 lambda (`fn() noreturn { ... }` is a compile-time error - a lambda's type is inferred, D16b, and a function type
 expected of one says no more than its parameters and result) and `main` may not.
 
-**D8c (several results).** A `ret-type` written as a parenthesized list of two or more types declares that
-the function returns **several values**, one per type, in that order. They are not one value: there is no
+**D8c (several results).** A `ret-type` of two or more types, written bare - `fn divmod(a I64, b I64) I64, I64` -
+declares that the function returns **several values**, one per type, in that order. Each result is an item of the
+results' list (L18a), so a result that is itself a function type of several results or error items is parenthesized
+whole (L18c): `fn adder() (fn(x I64) I64, I64), I64`. They are not one value: there is no
 tuple type, and a call returning several values may appear only
 
 - as the right-hand side of a **destructuring** statement (S4b),
@@ -1528,8 +1550,7 @@ name an earlier parameter (`b N&a`, §8 O4a), and the two arguments must then li
 **D16 (lambdas).** A **lambda** is a function written as an expression, with no name:
 
 ```
-lambda       ::= "fn" "(" list(lambda-param) ")" [ ret-type ] [ "?" [ fn-error-set ] ] block
-fn-error-set ::= error-list-item | "(" list(error-list-item) ")"           (D8)
+lambda       ::= "fn" "(" list(lambda-param) ")" [ ret-type ] [ "?" [ error-list ] ] block
 lambda-param ::= IDEN [ type-expr ]
 ```
 
@@ -2076,7 +2097,7 @@ to the even one) - an optional `-` or `+`, digits with an optional `.` (`.5` and
 optional exponent, `e` or `E` with an optional sign and digits; or `inf`, `infinity` or `nan` in any case with an
 optional sign, so the text `$x` writes reads back as `x`. Nothing else is accepted: no surrounding space, no `_`, no
 hexadecimal. It fails with `EMPTY` for no text, `INVALID` for text that is not a number and `OVERFLOW` for a number
-beyond `F64`'s range; one below the smallest is a zero of its sign. Every `F64` has `x.ShortestDecimal() (U64, I64) ?`:
+beyond `F64`'s range; one below the smallest is a zero of its sign. Every `F64` has `x.ShortestDecimal() U64, I64 ?`:
 the fewest decimal digits `d` and the exponent `e` with `|x| = d * 10^e` and no zero at `d`'s end that read back as
 `x` - of those, the closest to it - `0, 0` for a zero, failing with `TextError.NOT_FINITE` for a NaN or an infinity. Both
 are ordinary computation in the prelude, evaluated while compiling (K1) as at run time.
@@ -2306,7 +2327,9 @@ chain; if it resolves as one, ordinary member resolution does not apply to that 
 where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
 `arg ::= expr | "default"` (E14a) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
-type, where it names the instantiation whose constructor is being called (G10a).
+type, where it names the instantiation whose constructor is being called (G10a), or a generic function, where it names
+the instance being called (G12). Where `IDEN <` begins type arguments rather than a comparison is decided by the name:
+a type, or a generic function, the module declares or reaches through its imports' aliases.
 
 **E4.** `literal ::= BOOL_LIT | NULL_LIT | INT_LIT | FLOAT_LIT | CHAR_LIT | STR_LIT`. An expression `op` is a
 **literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.7) exactly
@@ -3354,6 +3377,16 @@ its own: what it declares, what it allocates (§8 O2) and the destructors of wha
 a long function may give memory back before it returns. No expression begins with `{`, so a statement that does is a
 block. It runs once, and it leaves (D10a) when its statements do.
 
+**S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4), expression
+statement (S3, an increment included), `return`, `break`, `continue`, `error`, `unreachable`, `assert` or `spawn`
+statement, beginning on the line of its `:`. An `if`'s and an `else`'s body and a `for` loop's body (but not the
+forever form's, nor a `do` loop's) may be one: `if x < 0: return 0`, `for x in xs: total += x`, `else: count++`. It is
+exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
+after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the
+block, with braces and no `:`). Its statement ends at the end of its line, or at an `else` or a `catch` on that line;
+an `else` (`else:`, `else if`) may also begin the next line, as a `catch` clause may (R9b). A `:` inside brackets is a
+slice's (E16a), never a body's.
+
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
 | defer-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and
@@ -3453,7 +3486,8 @@ so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. With `:=` each
 declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
-**S8.** `if-stmnt ::= "if" expr block [ "else" ( if-stmnt | block ) ]`. `expr` must be `Bool`
+**S8.** `if-stmnt ::= "if" expr body [ "else" ( if-stmnt | body ) ]` (`body`, S1b: a block, or `:` and one simple
+statement). `expr` must be `Bool`
 (E7/E9/E10 all produce `Bool`; any other type is a compile-time error). An `else` clause is
 optional; chaining `else if` is exactly the recursive `"else" if-stmnt` alternative. Both branches are
 checked, except where the build decides the condition (S8b; for the top-level form, see B9), or, in an
@@ -3489,12 +3523,14 @@ except that a function one of whose branches is still being decided is not evalu
 
 ```
 for-stmnt ::= "for" block                                   (forever)
-            | "for" expr block                              (while expr holds)
-            | "for" for-init "," expr "," simple-stmnt block (three clauses)
-            | "for" IDEN [ "," IDEN ] "in" expr block        (S9a)
-            | "for" IDEN [ "," IDEN ] "in" "try" expr block { catch-clause }   (S9e)
-            | "for" IDEN [ "," IDEN ] "in" range-expr block  (S9b)
+            | "for" expr body                               (while expr holds)
+            | "for" for-init "," expr "," simple-stmnt body (three clauses)
+            | "for" IDEN [ "," IDEN ] "in" expr body         (S9a)
+            | "for" IDEN [ "," IDEN ] "in" "try" expr body { catch-clause }   (S9e)
+            | "for" IDEN [ "," IDEN ] "in" range-expr body   (S9b)
 ```
+
+A `body` is a block or a one-line body (S1b): `for x in xs: total += x`.
 
 The first runs its body until something leaves it (`break`, `return`, an error, S11). The second evaluates
 `expr` (which must be `Bool`) before each iteration and stops when it is false. In the three-clause form,
@@ -3768,10 +3804,12 @@ written, so a failed assert inside a helper called from a test fails *that test*
 returning from `main` (or letting an error escape it, §10 B5), by calling a `noreturn` function such as `os.Exit`
 (D8e, B5b), or by an abort.
 
-**S16d.** `unreachable-stmnt ::= "unreachable" STMNT_END` states that control was never expected to
+**S16d.** `unreachable-stmnt ::= "unreachable" [ expr ] STMNT_END` states that control was never expected to
 arrive. Reaching it is a failure and behaves in every respect as a failed `assert` does (S18), with a message saying
 so: it fails the running test, and otherwise aborts the process - no cleanup, the OS's abort status, a core dump where
-the platform produces one. It is **checked, never assumed**: the compiler draws no conclusion from it and generates no
+the platform produces one. The optional `expr` says why, as an assert's message does (S17): text, evaluated **only where
+the `unreachable` is reached**, under S17's rules for what may stand in it, and printed after `: ` - `unreachable "the
+parser takes every token"` prints `FILE:LINE: unreachable reached: the parser takes every token` (S18a). It is **checked, never assumed**: the compiler draws no conclusion from it and generates no
 code that relies on the claim, so a wrong `unreachable` is a diagnosed abort rather than undefined behaviour.
 
 `unreachable` exists because D10a requires a result on every path and the analysis behind it is
@@ -3804,9 +3842,9 @@ deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unrea
 **S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.9 E16b), an
 array length out of range (§3.5 D14b), an `as` that does not hold (E32) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
 error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
-`FILE:LINE: reached unreachable code` (S16d, and a value `match` no clause selects,
+`FILE:LINE: unreachable reached` (S16d, and a value `match` no clause selects,
 S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
-value is not`. An assert's message (S17) follows, after
+value is not`. An assert's or an `unreachable`'s message (S17, S16d) follows, after
 `: `. A program run with `interpret` (B3e) prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
@@ -5616,13 +5654,13 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help"
-option    ::= "-output" PATH | "-debug" | "-race" | "-sanitize" | "-target" NAME | "-define" NAME "=" VALUE
-            | "-update" | "-check"
+option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
+            | "-define" NAME "=" VALUE | "-update" | "-check"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
-`explain` (B11a) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
+`explain` (B11a, B11b) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
@@ -5630,9 +5668,9 @@ beginning with `-` that is no option is an error:
 | option | applies to | rule |
 |---|---|---|
 | `-output PATH` | build, compile | B3h |
-| `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
-| `-target NAME` | running a file, build, compile, test, interpret | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret | B10, §4 M23c |
+| `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
+| `-target NAME` | running a file, build, compile, test, interpret, explain | B12 |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain | B10, §4 M23c |
 | `-check` | format | B13 |
 
 `build` and `compile` take exactly one file, `test` and `format` one or more; for running a file and for `interpret`
@@ -5660,6 +5698,13 @@ it disables optimization so that the emitted code corresponds to the program as 
 inlined, nothing is reordered, and values live in memory rather than in registers, so a backtrace names the
 functions actually called and the state is inspectable. It is an option of the modes that build (B1), and composes
 with `-race`.
+
+**B2g.** `-quick` is a **development build**: optimized at LLVM's level 2 with no link-time optimization (B2d), each
+module compiled to native code of its own, so a build - and above all a rebuild after an edit to code many modules
+inline - takes a fraction of the default's time, and the program runs somewhat slower (about a fifth, measured on the
+compiler itself). It is an option of the modes that build (B1); it says how much to optimize, as `-debug` and `-race`
+do, so it is a compile-time error beside either of them. A quick object is a distinct artifact (B4), named with
+`.quick`. Nothing else changes: the program means what it means in the default build.
 
 **B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
 of the program has a source location and its own name, every statement a line, and every parameter and local
@@ -5706,7 +5751,8 @@ block's scope, and a value the caller holds outside it is reclaimed at the block
 program is optimized once, at the link, so a call into another module is subject to inlining — and to
 everything inlining enables — exactly as a call within one module is. This holds wherever optimization
 holds: `-debug` (B2c) disables it along with the rest, and `-race` (§6.8 P7) does not use it, because
-attributing a report to the right function depends on code not moving between them. Those builds produce
+attributing a report to the right function depends on code not moving between them, and `-quick` (B2g) leaves it out
+to build faster. Those builds produce
 distinct artifacts already (B4), so an optimized object and one that is not are never mixed.
 
 One consequence is visible: the object file `compile` writes holds that intermediate form rather than native
@@ -6065,6 +6111,17 @@ heading, under the heading of the section holding it - and compiles nothing. The
 name; a first letter written in lowercase is read as uppercase (`explain t6b` is T6b). The specification is found as the
 standard library is (M23): `../SPEC.md` beside the compiler. Without it, or for a rule it does not state, `explain` is an
 error.
+
+**B11b.** `explain FILE NAME` prints one top-level item of `FILE` as the compiler sees it, once the program `FILE` is the
+root of has checked: nothing is built, and a program with errors reports them instead. `NAME` is a function, a type, an
+error type, a global, or `Type.Method`. A function is printed with its whole signature - its receiver, parameters with
+their scope markers, results, and its error set, an inferred one (`?` alone, R1a) written out - and then its scope
+obligations (O10b), each a line `[a outlives b]`, `return` standing for its result scope; a generic one is printed as
+declared, then each instance the program made with its own errors and obligations. A struct is printed with its
+constructor's signature, its fields, its methods and the traits with no type parameters it meets; an enum with its
+cases, an error type with its words, a trait with its methods. A global is printed with its type and, where it is baked
+(K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
+tells the two forms apart: `explain` with a word ending in `.olang` and a name is this, a rule is B11a.
 
 ### 10.8 Formatting
 
@@ -6486,7 +6543,15 @@ are two types.
 
 **G12.** An uninstantiated generic name is not a value: a generic function may be called or
 instantiated but never read as a `func-type` value (T2). A fully instantiated one is an ordinary
-value and may be used wherever a function value is expected.
+value and may be used wherever a function value is expected. A generic function's **instance** is named by type
+arguments written after its name (`type-args`, G8), one for each variable its list introduces (G3), in that order -
+`big<I64>`, `lib.big<I64>` - and is a function value (T21), or is called: `big<I64>(3, 7)`. Called so, its variables
+are what the type arguments say and nothing the arguments are (G9 binds none of them): each argument fits the
+instance's parameter as any argument does (E12), a literal adapting. Each type argument meets its variable's
+constraint (G19), and the count is G7's. A function whose instance needs a variable no type argument can name - a
+length an array taken by value gives (G29) - is a value in no instance; called, such variables are inferred from its
+arguments as always. A method's type arguments are inferred only. Only a function's own variables are written: a
+non-generic function takes none (G7).
 
 ### 12.5 Dispatching on a type parameter
 

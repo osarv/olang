@@ -1,0 +1,6 @@
+# check: fail error[G7]: type arguments for big: expected 1, found 2
+# G12: one type argument for each variable the function's list introduces
+fn big<T>(a T, b T) T { return a if a > b else b }
+fn main() {
+    a := big<I64, I32>(3, 7)
+}

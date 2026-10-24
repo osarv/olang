@@ -1,0 +1,7 @@
+# check: fail error[S1b]: a one-line body stands on the line of its ':' - write a block, '{ ... }'
+# S1b: a one-line body's statement begins on the line of its ":"
+fn main() {
+    x I64 = 1
+    if x > 0:
+        x = 2
+}

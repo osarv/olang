@@ -3,7 +3,7 @@
 type It struct() {
     i I32 = 0
 }
-fn (t mut It&) Next() (I32, Bool) { return 0, false }
+fn (t mut It&) Next() I32, Bool { return 0, false }
 fn main() ? {
     t It& = It()
     for x in t { }

@@ -70,7 +70,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InTaskClause Bool = false  # a task's clause, run on the task: it may not leave it (P4a)
     TargetFails I64 = 0        # tasks binding targets that can fail into their join (P4d)
     DeferLoops I64 = -1        # in deferred code: the loops around it then - none of them a jump may leave (S19b)
-    MsgLoops I64 = -1          # in an assert's message: the same (S17)
+    MsgLoops I64 = -1          # in an assert's or an unreachable's message: the same (S17, S16d)
+    MsgOfUnreachable Bool = false  # the message is an unreachable's
     DeferJoins I64 = -1        # in deferred code: the joins around it then, none of which its spawns may join (S19b)
     joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
     joinMarks List<I64>        # where each one's errors start in joinErrs
@@ -94,6 +95,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     P
     Tests                                  # a test build (the root module's test blocks are checked in every build, S15)
     RootOnly Bool = false                  # only the root module's declarations, and what they ask for (tests)
+    spellItem Bool = false                 # spelling an item of a list: a function type holding a comma is grouped (L18c)
+    spellGroup Bool = false                # the next function type is grouped: a result before its signature's "?"
     s4d List<typed.Place&>                 # S4d: the value places an assignment writes over, while its values are checked
     Bodies List<mut typed.Body&>
     Gaps List<Gap>
@@ -1633,6 +1636,40 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     return id
 }
 
+# explain (B11b): a body giving global n of module mi as "$" renders it, for the evaluator; -1 where it does not check
+fn (c mut Checker&) RenderBody(mi I64, n source.NameId, sp source.Span) I64 {
+    d := c.P.L.Diags
+    mark := d.Count()
+    ty := c.textType()
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, mi, ty, types.ListId(0))
+    fr.Ctx = generic.Context(mi, -1)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    gt := c.globalType(mi, n)
+    p mut typed.Place&c = typed.Place.Global(sp, gt, mi, n)
+    seen := Map<types.TypeId, Bool>()
+    c.wantStr(gt, seen, 0)
+    ps mut List<typed.Piece&>&c = List<typed.Piece&>()
+    if c.P.T.KindOf(gt) == types.Kind.Array and c.P.T.Length(gt) != types.TypeId(0) {
+        ps.Push(typed.Piece.Render(typed.Expr.Borrow(sp, c.P.T.Ref(gt, types.ReadOnly), p)))
+    } else {
+        ps.Push(typed.Piece.Render(c.read(sp, p)))
+    }
+    c.stmts.Push(typed.Stmt.Return(sp, typed.Expr.Text(sp, ty, typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    c.drain()
+    if d.Count() > mark {
+        d.Forget(mark)
+        c.Bodies[id].Root = null
+        return -1
+    }
+    return id
+}
+
 # whether an expression declares names of its own (a lambda, a comprehension, a match, a catch clause), which a body of
 # its own with no body around it (S8b, S18c, T7c) does not check. A name is never a local there - no body is being
 # checked, so there are no frames to ask (c.fr() would index the empty list at -1, E16e) - and a type or constant
@@ -2003,6 +2040,7 @@ fn (c mut Checker&) b5aStmt(w mut b5aWalk&, st typed.Stmt&) {
             c.b5aExpr(w, cd)
             c.b5aExpr(w, m)
         }
+        case typed.Stmt.Exit(_, _, m) { c.b5aExpr(w, m) }
         case typed.Stmt.Block(_, b) { c.b5aBlock(w, b) }
         case typed.Stmt.Defer(_, b) { c.b5aBlock(w, b) }
         case typed.Stmt.Join(_, jn) {
@@ -2274,6 +2312,14 @@ fn (c mut Checker&) typeContexts(t types.TypeId, td ast.TypeDecl&) I64 {
 fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 
 fn (c mut Checker&) Ty(t types.TypeId) String { return c.ty(t) }
+
+# for explain (B11b): a function instance's body (-1 for none); what a body can fail with, its set inferred where its
+# signature's is "?" alone (R1a); a global's type; the type text is
+fn (c mut Checker&) BodyOfInstance(inst I64) I64 { return try c.fnBodies.Get(inst) catch default -1 }
+fn (c mut Checker&) ErrorsOf(body I64) types.ListId { return c.bodyErrors(body) }
+fn (c mut Checker&) InfersErrors(sig types.TypeId) Bool { return c.infersErrs(sig) }
+fn (c mut Checker&) GlobalType(mi I64, n source.NameId) types.TypeId { return c.globalType(mi, n) }
+fn (c mut Checker&) TextType() types.TypeId { return c.textType() }
 
 # the same for a type instance: "instantiated here, with T = I32, N = 6"
 fn (c mut Checker&) typeInstNote(t types.TypeId) String {
@@ -2646,6 +2692,7 @@ fn storedStmt(st ast.Stmt&, out mut Map<source.NameId, Bool>&) {
             storedExpr(k, out)
             storedExpr(msg, out)
         }
+        case ast.Stmt.Jump(_, _, msg) { storedExpr(msg, out) }
         case ast.Stmt.Spawn(_, ts, call) {
             if ts != null {
                 for t in ts { storedTarget(t, out) }
@@ -2777,7 +2824,7 @@ fn (c mut Checker&) blockOf(body Array<ast.Stmt&>&, kind typed.BlockKind, sp sou
 }
 
 # a new block entered: its id, the block it is in, and the undo mark to leave it by (close)
-fn (c mut Checker&) open(kind typed.BlockKind, sp source.Span) (I64, I64, I64) {
+fn (c mut Checker&) open(kind typed.BlockKind, sp source.Span) I64, I64, I64 {
     fr := c.fr()
     outer := fr.Block
     id := I64(c.cur().AddBlock(typed.BlockId(I32(outer)), kind, sp))
@@ -3149,7 +3196,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.DefaultErr { b.Push("what its body can fail with") }
         case types.Kind.Noreturn { b.Push("noreturn") }
         case types.Kind.ErrWords {
-            # R1c: "T.W + T.V", as a signature writes the words it names
+            # R1c: "T.W, T.V", as a signature writes the words it names
             et := c.P.T.ErrOf(t)
             name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
             ws := c.P.ErrorWords(c.P.T.DeclOf(et))
@@ -3157,7 +3204,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             first := true
             for i in range ws.Len() {
                 if i < 64 and (mask & (U64(1) << i)) != 0 {
-                    if not first { b.Push(" + ") }
+                    if not first { b.Push(", ") }
                     b.Push($name "." $c.text(ws[i]))
                     first = false
                 }
@@ -3170,7 +3217,10 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.Array {
             b.Push("Array<")
             # T7c: a length is never part of a type as written - fixed storage is spelled as any array
+            was := c.spellItem
+            c.spellItem = true
             c.spell(b, c.P.T.Elem(t), false)
+            c.spellItem = was
             b.PushChar('>')
         }
         case types.Kind.Ref {
@@ -3181,7 +3231,19 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             b.PushChar('&')
         }
         case types.Kind.Func {
-            b.Push("fn(")
+            res := c.P.T.Result(t)
+            es := c.P.T.Items(c.P.T.Errors(t))
+            named := 0
+            for e in es {
+                if e != types.DefaultErrT { named++ }
+            }
+            several := (c.P.T.KindOf(res) == types.Kind.Tuple and c.P.T.Items(c.P.T.Parts(res)).Len() > 1) or named > 1
+            # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
+            wrap := c.spellGroup or (c.spellItem and several)
+            c.spellGroup = false
+            wasItem := c.spellItem
+            c.spellItem = true
+            b.Push("(fn(" if wrap else "fn(")
             ps := c.P.T.Items(c.P.T.Params(t))
             ns := c.P.T.NamesOf(t)
             for i in range ps.Len() {
@@ -3196,28 +3258,40 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                 if sh >= 0 and sh != i and sh < ns.Len() and ns.Len() == ps.Len() { b.Push(c.text(source.NameId(I32(ns[sh])))) }
             }
             b.PushChar(')')
-            res := c.P.T.Result(t)
-            if res != types.VoidT {
+            if c.P.T.KindOf(res) == types.Kind.Tuple {
+                # several results, bare (D8c)
+                parts := c.P.T.Items(c.P.T.Parts(res))
+                for i in range parts.Len() {
+                    b.Push(", " if i > 0 else " ")
+                    c.spell(b, parts[i], false)
+                }
+            } else if res != types.VoidT {
                 b.PushChar(' ')
                 rf := c.P.T.ResultFrom(t, 0) if c.P.T.KindOf(res) == types.Kind.Ref else types.FromTypeVar
                 if rf == types.OwnScope {
                     # a built result is new storage, writable (T25c)
                     c.spell(b, c.P.T.Ref(c.P.T.Referent(res), types.Writable), false)
                 } else {
+                    c.spellGroup = es.Len() > 0 and c.P.T.KindOf(res) == types.Kind.Func and
+                                   c.P.T.Items(c.P.T.Errors(res)).Len() == 0
                     c.spell(b, res, false)
+                    c.spellGroup = false
                     # a result borrowed from a parameter, "mut N&a" (T22)
                     if rf >= 0 and rf < ns.Len() and ns.Len() == ps.Len() { b.Push(c.text(source.NameId(I32(ns[rf])))) }
                 }
             }
-            es := c.P.T.Items(c.P.T.Errors(t))
+            c.spellItem = wasItem
             if es.Len() > 0 {
                 b.Push(" ?")
-                for i in range es.Len() {
-                    if es[i] == types.DefaultErrT { continue }
-                    b.Push(" " if i == 0 else " + ")
-                    c.spell(b, es[i], false)
+                k := 0
+                for e in es {
+                    if e == types.DefaultErrT { continue }
+                    b.Push(" " if k == 0 else ", ")
+                    c.spell(b, e, false)
+                    k++
                 }
             }
+            if wrap { b.PushChar(')') }
         }
         case types.Kind.Tuple { c.spellList(b, c.P.T.Parts(t), "(", ")") }
         case types.Kind.AnonEnum {
@@ -3256,14 +3330,25 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
     }
 }
 
+# whether a type is written as a function type
+fn isFuncTypeRef(t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Func(_, _) => true
+        case _ => false
+    }
+}
+
 fn (c mut Checker&) spellList(b mut StringBuilder&, l types.ListId, open String&, end String&) {
     xs := c.P.T.Items(l)
     if xs.Len() == 0 and open == "<" { return }
     b.Push(open)
+    was := c.spellItem
+    c.spellItem = true
     for i in range xs.Len() {
         if i > 0 { b.Push(", ") }
         c.spell(b, xs[i], false)
     }
+    c.spellItem = was
     b.Push(end)
 }
 
@@ -3715,7 +3800,7 @@ fn (c mut Checker&) foldPart(x ast.Expr&) litv {
 }
 
 # an integer literal value's sign and magnitude: exact for every value T6a gives a literal, I64's and U64's
-fn magOf(v litv) (Bool, U64) {
+fn magOf(v litv) Bool, U64 {
     if v.Big { return false, U64(v.I) }
     if v.I < 0 { return true, U64(0) - U64(v.I) }
     return false, U64(v.I)
@@ -4159,7 +4244,7 @@ fn (c mut Checker&) externArray(target typed.Callee&, x typed.Expr&c, want types
 
 # a value made to fit a type, as fit does, with nothing said: the value, and whether it fits - for a caller saying
 # what is wrong in its own words (S12b, S13, E28)
-fn (c mut Checker&) fitQuiet(x typed.Expr&c, want types.TypeId, sp source.Span) (typed.Expr&c, Bool) {
+fn (c mut Checker&) fitQuiet(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c, Bool {
     n := c.P.L.Diags.Count()
     g := c.P.L.Diags.Hold()
     y := c.fit(x, want, sp)
@@ -4496,6 +4581,12 @@ fn (c mut Checker&) expr(x ast.Expr&, want types.TypeId) typed.Expr&c {
         case ast.Expr.MatchE(sp, m) { return c.matchValue(sp, m, want) }
         case ast.Expr.Compr(sp, cm) { return c.comprehension(sp, cm) }
         case ast.Expr.Lambda(sp, f) { return c.lambda(sp, f, want) }
+        case ast.Expr.Generic(sp, g, targs) if c.genericFn(g) >= 0 {
+            # G12: "big<I64>" names one instance, a function value
+            ex := c.explicitArgs(c.genericFn(g), targs, sp)
+            if ex == null { return c.unknown(sp) }
+            return c.fnValue(sp, c.genericFn(g), ex)
+        }
         nomatch {
             c.gap(x.Span(), exprKindName(x))
             return c.unknown(x.Span())
@@ -4560,6 +4651,11 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
         }
         return c.unknown(sp)
     }
+    if ref.Kind == names.What.Builtin {
+        # a built-in type is no value (it was read as an unknown one, a comparison of it taken for false)
+        c.err(sp, msgs.TypeNotAValue(c.tok(n)))
+        return c.unknown(sp)
+    }
     if ref.Kind == names.What.Type {
         # an enum's name is where its cases are read; a generic's, refused at its declaration, says nothing more
         t := c.typeNamed(ast.Expr.Name(sp, n))
@@ -4579,18 +4675,76 @@ fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr&c {
     return c.unknown(sp)
 }
 
-# a function named as a value (T21): its instance's body, no environment
-fn (c mut Checker&) fnValue(sp source.Span, f I64) typed.Expr&c {
+# the generic function an expression names, as "big" or "lib.big" in "big<I64>" (G12): its index, -1 for none
+fn (c mut Checker&) genericFn(g ast.Expr&) I64 {
+    match g {
+        case ast.Expr.Name(nsp, n) {
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if ref.Kind == names.What.Func { return c.P.FnNamed(ref.Module, n) }
+        }
+        case ast.Expr.Member(msp, _, n) {
+            ref := c.P.R.Member(c.fr().File, msp.End)
+            if ref.Kind == names.What.Func { return c.P.FnNamed(ref.Module, n) }
+        }
+        nomatch { }
+    }
+    return -1
+}
+
+# G12, G7: the types written after a generic function's name, one per variable its list introduces (G3), each checked
+# against its constraint (G19); null where they are not, said
+fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Span) Array<types.TypeId>&c {
+    if f < 0 { return null }
+    d := c.P.FnDecl(f)
+    tn := c.text(d.Name)
+    np := d.TypeParams.Len() if d.TypeParams != null else 0
+    if np == 0 {
+        c.err(targs[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
+        return null
+    }
+    if np != targs.Len() {
+        c.err(targs[0].Span(), msgs.TypeArgCount(tn, np, targs.Len()))
+        return null
+    }
+    out mut Array<types.TypeId>&c = Array<types.TypeId>(np)
+    for i in range np {
+        out[i] = c.resolve(targs[i])
+        if out[i] == types.UnknownT { return null }
+    }
+    return out
+}
+
+# a function named as a value (T21): its instance's body, no environment; a generic one only as an instance its type
+# arguments name, written (G12)
+fn (c mut Checker&) fnValue(sp source.Span, f I64, explicit Array<types.TypeId>& = null) typed.Expr&c {
+    args := types.ListId(0)
     if f >= 0 and not c.P.FnIsExtern(f) and c.P.VarCount(generic.FnOwner(f)) > 0 {
-        c.err(sp, msgs.GenericNotAValue(c.tok(c.P.FnDecl(f).Name)))
-        return c.unknown(sp)
+        owner := generic.FnOwner(f)
+        d := c.P.FnDecl(f)
+        written := d.TypeParams.Len() if d.TypeParams != null else 0
+        # a variable no type argument names - a length an array taken by value gives (G29) - leaves it no value
+        if c.P.VarCount(owner) > written {
+            c.err(sp, msgs.LengthsNotAValue(c.text(d.Name)))
+            return c.unknown(sp)
+        }
+        if explicit == null or c.P.VarCount(owner) != explicit.Len() {
+            c.err(sp, msgs.GenericNotAValue(c.text(d.Name)))
+            return c.unknown(sp)
+        }
+        args = c.P.T.List(explicit)
+        if not c.bound(owner, args, sp) { return c.unknown(sp) }
+        if c.P.FnTooDeep(f, args, c.fnNameAt(f)) { return c.unknown(sp) }   # G17
     }
     if f < 0 or c.P.FnIsExtern(f) {
         c.gap(sp, "an extern function as a value (T21)")
         return c.unknown(sp)
     }
     c.P.Sig(f)
-    inst := c.P.FnInstance(f, types.ListId(0))
+    asking := c.P.Asking
+    c.P.Asking = generic.Origin(c.fr().File, sp, c.curInst())   # G16b: where the instance is asked for
+    inst := c.P.FnInstance(f, args)
+    c.P.Asking = asking
+    if args != types.ListId(0) and not c.instancesMet(c.P.InstanceSig(inst), sp) { return c.unknown(sp) }
     id := c.fnBody(inst)
     sig := c.P.InstanceSig(inst)
     # an inferred set is what the value fails with (R1a)
@@ -5927,7 +6081,7 @@ fn (c mut Checker&) chainFrom(sp source.Span, ch ast.Chain&, base I64, i I64, le
 
 # "a" $b "c": text joined from its pieces (E11b)
 fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr&c {
-    ps List<typed.Piece&>
+    ps mut List<typed.Piece&>&c = List<typed.Piece&>()
     for p in parts {
         ok := false
         match p {
@@ -7123,7 +7277,16 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef&) Bool {
                     return false
                 }
                 if np > 0 and args.Len() > 0 and np != args.Len() {
-                    c.err(args[0].Span(), msgs.TypeArgCount(tn, np, args.Len()))
+                    rec := c.err(args[0].Span(), msgs.TypeArgCount(tn, np, args.Len()))
+                    # L18c: a function type of several results, unparenthesized, took the arguments after it as its own
+                    if np < args.Len() {
+                        for i in range args.Len() - 1 {
+                            if isFuncTypeRef(args[i]) {
+                                c.P.L.Diags.Note(rec, c.at(args[i].Span()), msgs.NoteGroupFunctionType())
+                                break
+                            }
+                        }
+                    }
                     return false
                 }
             }
@@ -7367,6 +7530,25 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 if t == types.UnknownT { return c.unknown(sp) }
                 return c.construct(sp, nsp, t, args)
             }
+            if ref.Kind == names.What.Func {
+                # G12: big<I64>(x) - the instance its type arguments name, called
+                f := c.P.FnNamed(ref.Module, n)
+                ex := c.explicitArgs(f, targs, gsp)
+                if ex == null {
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                return c.invoke(sp, nsp, f, null, args, null, ex)
+            }
+        }
+        case ast.Expr.Member(msp, _, n) if c.genericFn(g) >= 0 {
+            f := c.genericFn(g)
+            ex := c.explicitArgs(f, targs, gsp)
+            if ex == null {
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
+            return c.invoke(sp, memberSpan(msp, c.text(n).Len()), f, null, args, null, ex)
         }
         case ast.Expr.Member(msp, _, _) {
             # alias.Name<args>(...): a type another module declares (M10)
@@ -7558,7 +7740,8 @@ fn (c mut Checker&) badOver(t types.TypeId) Bool {
 
 # a call of a function or method f by name (recv its receiver, checked; pre its arguments checked, where args are not):
 # its instance, inferred from the arguments where it is generic (G9)
-fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Expr&c, args Array<ast.Expr&>&, pre Array<typed.Expr&>&c) typed.Expr&c {
+fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Expr&c, args Array<ast.Expr&>&, pre Array<typed.Expr&>&c
+                          explicit Array<types.TypeId>& = null) typed.Expr&c {
     if f < 0 {
         c.gap(nsp, "a function the checker cannot find")
         return c.unknown(sp)
@@ -7576,6 +7759,10 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     # G9: each argument's type unified with its parameter's, its value checked first
     ps := c.P.T.Items(c.P.T.Params(sig))
     b := generic.Binding(owner, nv)
+    # G12: the variables written type arguments name are theirs, whatever the arguments are
+    if explicit != null {
+        for i in range explicit.Len() { b.Vals[i] = explicit[i] }
+    }
     k I64 = 0
     if recv != null {
         if ps.Len() > 0 { c.unify(ps[0], typeOf(recv), b, false, true) }
@@ -7608,6 +7795,12 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
         }
         vals.Push(e)
         k++
+    }
+    if explicit != null {
+        for i in range explicit.Len() {
+            b.Vals[i] = explicit[i]
+            b.LiteralOnly[i] = false
+        }
     }
     if pre == null { c.literalBinding(owner, b, ps, k0w, args) }
     c.P.InferThroughBounds(b)
@@ -9029,7 +9222,7 @@ fn (c mut Checker&) escapeRules(at source.Span, mark I64, k I64) {
         return
     }
     if fr.MsgLoops >= 0 {
-        c.err(at, msgs.AssertMsgError())
+        c.err(at, msgs.AssertMsgError(c.msgOwner(fr.MsgOfUnreachable)))
         return
     }
     if fr.InTaskClause {
@@ -9141,7 +9334,7 @@ fn (c mut Checker&) catchItem(p ast.Path&, items mut List<typed.Item>&) {
 }
 
 # a path naming an error type and one of its words: the word's position and the type; -1 for none
-fn (c mut Checker&) errorWord(p ast.Path&) (I64, types.TypeId) {
+fn (c mut Checker&) errorWord(p ast.Path&) I64, types.TypeId {
     n := p.Parts.Len()
     if n < 2 { return -1, types.UnknownT }
     head := ast.Path(p.Sp, p.Parts[:n - 1])
@@ -9188,24 +9381,10 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
         case ast.Stmt.DoFor(sp, body, k) { c.doFor(sp, body, k) }
         case ast.Stmt.Return(sp, values) { c.returnStmt(sp, values) }
         case ast.Stmt.MatchS(sp, m) { c.matchStmt(sp, m) }
-        case ast.Stmt.Jump(sp, kind) { c.jump(sp, kind) }
+        case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
         case ast.Stmt.Assert(sp, k, msg) {
             x := c.cond1(k)
-            m typed.Expr&c = null
-            if msg != null {
-                # S18a: its message is text, evaluated only when the assert fails - nothing may leave it (S17)
-                fr := c.fr()
-                was := fr.MsgLoops
-                fr.MsgLoops = fr.loops.Len()
-                me := c.expr(msg, c.P.T.Ref(c.textType(), types.ReadOnly))
-                c.fr().MsgLoops = was
-                mt := c.deref(typeOf(me))
-                if mt != types.UnknownT and not c.sameRepr(mt, c.textType()) {
-                    c.err(msg.Span(), msgs.AssertMessageNotText(c.ty(typeOf(me))))
-                } else {
-                    m = c.fit(me, c.P.T.Ref(c.textType(), types.ReadOnly), msg.Span())
-                }
-            }
+            m := c.message(msg, false)
             c.emit(typed.Stmt.Assert(sp, x, m))
             # S18c: one that reads no local is the evaluator's to decide - in a test only in a test build (B3a)
             fr := c.fr()
@@ -11210,7 +11389,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         return
     }
     if fr.MsgLoops >= 0 {
-        c.err(source.Span(sp.Start, sp.Start + 6), msgs.AssertMsgReturns())
+        c.err(source.Span(sp.Start, sp.Start + 6), msgs.AssertMsgReturns(c.msgOwner(fr.MsgOfUnreachable)))
         c.emit(typed.Stmt.Return(sp, null))   # said: the path still leaves, for R11 and D10a
         return
     }
@@ -11296,7 +11475,29 @@ fn (c mut Checker&) inferReturn(sp source.Span, values Array<ast.Expr&>&) {
                                                                           typed.SiteId(-1), typed.Check.None))))
 }
 
-fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
+# an assert's or an unreachable's message (S17, S16d): text, evaluated only where the assert fails or the unreachable is
+# reached - nothing may leave it; null for none
+fn (c mut Checker&) message(msg ast.Expr&, ofUnreachable Bool) typed.Expr&c {
+    if msg == null { return null }
+    fr := c.fr()
+    was, wasOf := fr.MsgLoops, fr.MsgOfUnreachable
+    fr.MsgLoops = fr.loops.Len()
+    fr.MsgOfUnreachable = ofUnreachable
+    me := c.expr(msg, c.P.T.Ref(c.textType(), types.ReadOnly))
+    c.fr().MsgLoops = was
+    c.fr().MsgOfUnreachable = wasOf
+    mt := c.deref(typeOf(me))
+    if mt != types.UnknownT and not c.sameRepr(mt, c.textType()) {
+        c.err(msg.Span(), msgs.AssertMessageNotText(c.ty(typeOf(me)), c.msgOwner(ofUnreachable)))
+        return null
+    }
+    return c.fit(me, c.P.T.Ref(c.textType(), types.ReadOnly), msg.Span())
+}
+
+# whose message a diagnostic names: "an assert's" or "an unreachable's"
+fn (c Checker&) msgOwner(ofUnreachable Bool) String& { return "an unreachable's" if ofUnreachable else "an assert's" }
+
+fn (c mut Checker&) jump(sp source.Span, kind token.Tok, msg ast.Expr& = null) {
     if kind == token.Tok.Break or kind == token.Tok.Continue {
         fr := c.fr()
         if fr.loops.Len() == 0 and fr.InTaskClause {
@@ -11304,7 +11505,7 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
             return
         }
         if fr.MsgLoops >= 0 and fr.loops.Len() <= fr.MsgLoops {
-            c.err(sp, msgs.AssertMsgLoopJump(msgs.Tok(kind.Text())))
+            c.err(sp, msgs.AssertMsgLoopJump(msgs.Tok(kind.Text()), c.msgOwner(fr.MsgOfUnreachable)))
             return
         }
         if fr.DeferLoops >= 0 and fr.loops.Len() <= fr.DeferLoops {
@@ -11325,7 +11526,7 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
         c.emit(typed.Stmt.Jump(sp, jk, typed.BlockId(I32(l))))
         return
     }
-    if kind == token.Tok.Unreachable { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable)) }
+    if kind == token.Tok.Unreachable { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable, c.message(msg, true))) }
 }
 
 # error E.WORD (R3)
@@ -11339,7 +11540,7 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
         return
     }
     if c.fr().MsgLoops >= 0 {
-        c.err(source.Span(sp.Start, sp.Start + 5), msgs.AssertMsgError())
+        c.err(source.Span(sp.Start, sp.Start + 5), msgs.AssertMsgError(c.msgOwner(c.fr().MsgOfUnreachable)))
         return
     }
     if word == null { return }
@@ -11619,7 +11820,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         noMatch = typed.Arm(nm.Sp, Array<typed.Alt&>(0), null, code, v)
     } else {
         efrom := c.stmts.Len()
-        if exhaustive or isValue { c.stmts.Push(typed.Stmt.Exit(m.Sp, typed.ExitKind.Unreachable)) }
+        if exhaustive or isValue { c.stmts.Push(typed.Stmt.Exit(m.Sp, typed.ExitKind.Unreachable, null)) }
         if not exhaustive and c.isEnum(et) {
             # S13a: an enum's cases covered by unguarded clauses, or a nomatch
             k := c.firstUncovered(rows, et)
@@ -12117,7 +12318,7 @@ fn leaves(s typed.Stmt&) Bool {
     match s {
         case typed.Stmt.Return(_, _) { return true }
         case typed.Stmt.Raise(_, _, _) { return true }
-        case typed.Stmt.Exit(_, _) { return true }
+        case typed.Stmt.Exit(_, _, _) { return true }
         case typed.Stmt.If(_, i) { return i.Else != null and leavesBlock(i.Then) and leavesBlock(i.Else) }
         case typed.Stmt.Block(_, b) { return leavesBlock(b) }
         case typed.Stmt.Join(_, j) {

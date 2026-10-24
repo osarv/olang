@@ -1,7 +1,7 @@
 # olang - the compiler's command line (compiler/DESIGN.md section 1.10, M10), in words, as stage 0's (B1):
 #
 #
-# with the options -output -debug -race -sanitize -target -define -update -check, each for the modes it applies to,
+# with the options -output -debug -race -sanitize -target -define -update -check -quick, each for the modes it applies to,
 # anywhere after the mode and before the file a run or interpret takes. A mistake in the command line is one row,
 # "olang: error[RULE]: ...", and status 1, as every other mistake (B11).
 #
@@ -28,6 +28,7 @@ import "emit"
 import rt "runtime"
 import "eval"
 import "interp"
+import "explain"
 import typecheck "check"
 import "std/pair"
 
@@ -72,7 +73,7 @@ ModeUsage Array<String&> = String&[
     "olang test [OPTION...] FILE.olang..."
     "olang interpret [OPTION...] FILE.olang [ARGUMENT...]"
     "olang format [OPTION...] FILE.olang..."
-    "olang explain RULE"
+    "olang explain RULE | FILE.olang NAME"
     "olang help [MODE]"
 ]
 ModeWhat Array<String&> = String&[
@@ -82,15 +83,16 @@ ModeWhat Array<String&> = String&[
     "runs each file's test blocks, each file built on its own (B3a)"
     "runs the program by compile-time evaluation instead of building it, the arguments after the file its own (B3e)"
     "rewrites each file in olang's one layout (B13)"
-    "prints a rule of the specification (B11a)"
+    "prints a rule of the specification (B11a), or a top-level item as the compiler sees it (B11b)"
     "lists the modes, or a mode's options"
 ]
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
-OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", ""]
-OptModes Array<I64> = I64[6, 15, 15, 15, 31, 31, 31, 32]
+OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
+    "-quick"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", ""]
+OptModes Array<I64> = I64[6, 15, 15, 15, 95, 95, 95, 32, 15]
 OptWhat Array<String&> = String&[
     "writes the executable or the object to PATH (B3h)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -100,6 +102,7 @@ OptWhat Array<String&> = String&[
     "defines a build constant (B10)"
     "moves the remote repositories the build reaches to their refs' current commits (M23c)"
     "rewrites nothing: lists each file not in the layout (B13)"
+    "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -192,9 +195,18 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.USAGE } }
             if o == 6 { c.Update = true }
             if o == 7 { cl.Check = true }
+            if o == 8 { c.Quick = true }
+            # B2g: -quick is a level of optimization, as -debug and -race set theirs
+            if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
             continue
         }
         if cl.Mode == Explain or cl.Mode == Help {
+            # B11b: a file, then the name of one of its items
+            if cl.Mode == Explain and cl.HasWord and cl.Files.Len() == 0 and endsWithOlang(cl.Word) {
+                cl.Files.Push($cl.Word)
+                cl.Word = $a
+                continue
+            }
             if cl.HasWord { try usage(d, msgs.ExplainNeedsRule() if cl.Mode == Explain else msgs.HelpOneMode()) }
             cl.Word = $a
             cl.HasWord = true
@@ -245,7 +257,10 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     if cl.Mode == Help { return cl }
     if cl.Mode == Explain {
         if not cl.HasWord { try usage(d, msgs.ExplainNeedsRule()) }
-        return cl
+        if cl.Files.Len() == 0 {
+            if endsWithOlang(cl.Word) { try usage(d, msgs.ExplainNeedsName(cl.Word)) }
+            return cl
+        }
     }
     if cl.Files.Len() == 0 { try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode))) }
     if (cl.Mode == Build or cl.Mode == Compile) and cl.Files.Len() != 1 {
@@ -288,7 +303,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
 }
 
 # explain RULE: the rule's text, from the specification beside the compiler (B11a)
-fn explain(rule String&, d mut diag.Diagnostics&) String ? Bad {
+fn explainRule(rule String&, d mut diag.Diagnostics&) String ? Bad {
     path := diag.SpecPath()
     spec := try os.ReadFile(path) catch os.OsError {
         d.Error(diag.Where.Nowhere, msgs.NoSpec(path))
@@ -316,7 +331,10 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         return write(text)
     }
     if cl.Mode == Explain {
-        text := try explain(cl.Word, d) catch Bad { return said(d) }
+        if cl.Files.Len() == 1 {
+            return build.Explain(fe, c, cl.Files[0], cl.Word, d)
+        }
+        text := try explainRule(cl.Word, d) catch Bad { return said(d) }
         return write(text)
     }
     if cl.Mode == Format { return format(cl) }
@@ -697,6 +715,32 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     return status
 }
 
+# explain FILE NAME (B11b): the program FILE is the root of checked as for a build - its values and asserts decided,
+# its globals baked, section 8 run - and the item NAME of FILE as the compiler sees it; a name FILE does not declare is
+# an error
+fn (p mut Passes&) Explain(root String&, name String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) String ? build.Failed {
+    l mut load.Loader&cfg = try p.load(root, cfg, d)
+    c mut typecheck.Checker&cfg = interp.Analyze(l, false)
+    asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
+    clean := d.Errors() == 0
+    if clean { interp.DecideValues(c) }
+    interp.DecideAsserts(c, asserts)
+    if clean { interp.Bake(c) }
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
+    sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
+    sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
+    sc.Run()
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
+    text := try explain.Item(c, sc, x, l.Root, name) catch explain.Missing {
+        d.Error(diag.Where.Nowhere, msgs.ExplainNoItem(name, root))
+        error build.Failed.REPORTED
+    }
+    return text
+}
+
 # ---- tests ----
 
 # the row a command line's mistake is reported as, and whether it was one
@@ -738,6 +782,23 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["-x", "-y"]) == mistake(String&["-x"])
     assert mistake(String&["interpret", "p.olang", "-x", "-define"]) == "no mistake: interpret"
     assert mistake(String&["-debug", "p.olang", "-race", "x"]) == "no mistake: running a file"
+    # B2g: -quick is an optimization level of its own
+    assert mistake(String&["build", "-quick", "-debug", "m.olang"]) ==
+        "olang: error[B2g]: -quick and -debug each say how much to optimize - give one\n"
+    assert mistake(String&["test", "-race", "-quick", "m.olang"]) ==
+        "olang: error[B2g]: -quick and -race each say how much to optimize - give one\n"
+    assert mistake(String&["interpret", "-quick", "m.olang"]) ==
+        "olang: error[B1]: -quick applies to running a file, build, compile and test, not to interpret\n"
+    assert mistake(String&["build", "-quick", "m.olang"]) == "no mistake: build"
+}
+
+test "-quick builds at -O2 with no link-time optimization, its objects apart (B2g)" {
+    c := build.Config()
+    c.Quick = true
+    f := c.ModeFlags()
+    assert f.Len() == 1 and f[0] == "-O2"
+    o := build.Config().ModeFlags()
+    assert o.Len() == 2 and o[0] == "-O3" and o[1] == "-flto"
 }
 
 test "the options are recorded wherever they stand, and passed on as written" {
@@ -779,7 +840,50 @@ test "the modes: each said wrong as stage 0 says it" {
         prepared(String&["compile", "-target", "aarch64-linux-gnu", "m.olang"])
     assert prepared(String&["interpret", "p.olang", "x", "-y"]) == "no mistake: interpret"
     assert prepared(String&["explain", "zz9"]) == "no mistake: explain"
+    assert prepared(String&["explain", "m.olang"]) ==
+        "olang: error[B11b]: explain m.olang takes the name of one of its items, as 'olang explain m.olang main'\n"
     assert prepared(String&["help"]) == "no mistake: help"
+}
+
+explainedSrc String& = ("error MathError { ZERO }\n"
+                     "type N struct(v I64, next N&) { v, next }\n"
+                     "fn (n N&) Value() I64 { return n.v }\n"
+                     "type H struct(n N&) { n }\n"
+                     "fn wrap(n N&) H { return H(n) }\n"
+                     "fn divmod(a I64, b I64) I64, I64 ? {\n"
+                     "    if b == 0 { error MathError.ZERO }\n"
+                     "    return a / b, a % b\n"
+                     "}\n"
+                     "fn big<T>(a T, b T) T { return a if a > b else b }\n"
+                     "Answer I64 = 6 * 7\n"
+                     "fn main() ? {\n"
+                     "    q, _ := try divmod(Answer, big(2, 3))\n"
+                     "    assert wrap(N(q, null)).n.Value() == 14\n"
+                     "}\n")
+
+# what explain FILE NAME prints of name in the program above, or its diagnostics
+fn explained(name String&) String {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    file := $dir "/m.olang"
+    try os.WriteFile(file, explainedSrc) catch os.OsError { unreachable }
+    d := diag.Diagnostics(false)
+    c := build.Config()
+    c.Consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    fe := Passes()
+    text := try fe.Explain(file, name, c, d) catch build.Failed { return d.Render() }
+    return text
+}
+
+test "explain FILE NAME prints an item as the compiler sees it: inferred errors, obligations, instances, members, a baked value (B11b)" {
+    assert explained("divmod") == "fn divmod(a I64, b I64) I64, I64 ? MathError.ZERO   # its error set inferred\n"
+    assert explained("wrap") == "fn wrap(n N&) H\n    [n outlives return]\n"
+    assert explained("big") == "fn big<T>(a T, b T) T\n    instance big<I64>: fn(a I64, b I64) I64\n"
+    assert explained("N") == "type N struct(v I64, next N&)\n    v I64\n    next N&\n    fn (n N&) Value() I64\n"
+    assert explained("N.Value") == "fn (n N&) Value() I64\n"
+    assert explained("MathError") == "error MathError\n    ZERO\n"
+    assert explained("Answer") == "Answer I64 = 42\n"
+    assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }
 
 test "help lists the modes, and a mode's options, as stage 0 does" {

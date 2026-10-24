@@ -58,7 +58,7 @@ fn archIndex(a String&) I64 {
 
 # the operating system (lowercase) and the architecture this machine runs, as uname(2) names them: "linux", "x86_64".
 # struct utsname is six fields of 65 bytes each on Linux, sysname first and machine fifth
-fn Host() (String, String) {
+fn Host() String, String {
     buf := Array<U8>(390)
     if uname(buf) != 0 { return "unknown", "unknown" }
     return cField(buf, 0).ToLower(), cField(buf, 260)

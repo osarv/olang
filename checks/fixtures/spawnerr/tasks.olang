@@ -40,7 +40,7 @@ fn many(n I64) List<I64> ? E {
     for i in range n { l.Push(i * i) }
     return l
 }
-fn divmod(a I64, b I64) (I64, I64) ? E {
+fn divmod(a I64, b I64) I64, I64 ? E {
     if b == 0 { error E.NEG }
     return a / b, a % b
 }

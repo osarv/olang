@@ -256,7 +256,7 @@ fn timing(rows List<String&>&, base Bool, reps I64) Map<String&, List<I64>> {
 }
 
 # the median and the minimum of a list of microsecond counts
-fn stat(us List<I64>&) (I64, I64) {
+fn stat(us List<I64>&) I64, I64 {
     sorted := us.Clone()
     sorted.Sort(fn(a I64, b I64) Bool { return a < b })
     n := sorted.Len()
