@@ -846,3 +846,7 @@ errors and documentation - generic `+` already works).
   asked for the clash cases (listed: `(` after the condition, call args vs statement, `<` type arguments, a line break
   after the condition, dangling else, else-if chains, name-starting statements needing lookahead; safe subset only
   leaving keywords) - to be discussed later.
+- CONTRACTS 2026-10-24, DECIDED (the user: "looping in contracts should be done without return values ... for x in
+  List {a} where a is a condition"): a `for` item in contract brackets holds when its body's conditions (listing rule,
+  nested `for` allowed) hold for every element; "some" written `not for x in a { x != v }` (mine); decided like any
+  condition (evaluator where known, `checked` runs the loop); only inside contract brackets (mine).
