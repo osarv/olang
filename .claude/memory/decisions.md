@@ -727,3 +727,10 @@ errors and documentation - generic `+` already works).
 - REVISED 2026-10-24 (the user: "Or we put it before the &?"): the nullable marker is `?&` - `Node?&`, `mut Node?&`,
   `List<Node?&>`, `Point?&q` - on the reference marker it modifies; no ordering question with `mut`; told apart from an
   error set by the `&` that follows. Rec yes; treated as decided unless the user objects.
+- TRAITS PROPOSED 2026-10-24 (the user: "Do you have a grand solution to trait mixing ... traits that name a restricted
+  set of types ... and a way to open up so that a type that knows the trait may implement it"): one `trait`, two forms -
+  parentheses list types (CLOSED: nothing else joins, `match T` complete without nomatch, built-in ops usable; sets list
+  sets, flattened), braces list methods (OPEN: implicit satisfaction as today, `extends` between traits); both together
+  = closed with every member checked for the methods; inline `<T (I32, F64)>`; `and` combines; the bridge: a generic over
+  an open trait may `match T` known types with a `nomatch` arm using the methods. No declared `satisfies` (possible later
+  as a check only). Float/Integer/Number become closed sets (sealed private-method trick removed). Awaiting the user.
