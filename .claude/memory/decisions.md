@@ -1002,3 +1002,13 @@ errors and documentation - generic `+` already works).
   functions only, user-data word, per-thread setup on first entry from a foreign thread; 5 `export fn` + `olang build
   -library` (.so + generated C header), Python via ctypes, errors as codes; 6 `t.CString()`, `String.FromC(p, max)`;
   7 `olang bindgen header.h` later (a tool over clang). extern stays an unchecked hole (X1a).
+- C INTEROP v2 DECIDED 2026-10-24 (the user: 1 yes, 2 yes, 3 "add this too", 4/5 yes + how - explained, 6 "FromC and
+  ToC", 7 explained): `link "name"`; `extern type` opaque handles (C may return them); plain-data structs by reference
+  AND by value (the x86-64/AArch64 C ABI classification in emit, tested against clang); callbacks = `export fn` only,
+  context through the user-data argument as a reference (scope-checked to outlive the call; stored callbacks need
+  program-scope context - stated unchecked like X1a), a thread-local flag sets up olang state on foreign threads, no
+  errors leave an export fn; `olang build -library` -> libx.so + x.h (numbers, handles, plain structs, arrays as
+  pointer+length; `? E` export fns return an I32 code with the result through a pointer, codes in the header; arrays/
+  text out through caller buffers; globals initialized on load); Python via ctypes; `t.ToC()` and `String.FromC(p, max)`
+  in the prelude text module with a prelude `CStr` opaque type; `olang bindgen header.h` (C -> olang declarations).
+  Queued as one batch after lang24 and speed9.

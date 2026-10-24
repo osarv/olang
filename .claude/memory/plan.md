@@ -265,3 +265,5 @@ on sight per rules.md, "Code rules".
 - QUEUED after lang24 + stdx merge: the std naming pass (no module stutter: io.Error, json.Value, chan.Channel ...),
   with tools/stutter_rename.olang for oann.
 - QUEUED after lang24: `olang fix` (runs tools/*_migrate.olang in order, idempotent; oann's catch-up uses it).
+- QUEUED: C interop v2 batch (decided 2026-10-24, decisions.md) after lang24 + speed9; then platforms (LLVM 19/20,
+  aarch64 via qemu, release with bundled clang).
