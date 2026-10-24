@@ -254,6 +254,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     ReadsBuild Map<I64, Bool>
     Dead Map<pair.Pair<I64, I64>, Bool>
     anyBad Map<I64, Bool>       # T32: the tables a method of which the trait's signature cannot reach (said once)
+    slotsCalled Map<I64, diag.Where>  # T32b: the slots (SlotKey) some call through an "any" reaches, by its first call
+    lazyThunks List<I64>        # T32a: the default slots' thunks nothing has called yet, each an "unreachable" for now
 }
 
 # T17e: an enum's raw values - its raw type (UnknownT for none), whether that is text, and each case's value: an
@@ -427,6 +429,8 @@ fn (c mut Checker&) reset() {
     c.Bodies = List<mut typed.Body&>()
     c.Gaps = List<Gap>()
     c.anyBad = Map<I64, Bool>()
+    c.slotsCalled = Map<I64, diag.Where>()
+    c.lazyThunks = List<I64>()
     c.P.ResetAny()      # T32: tables name bodies of this attempt
     c.frames = List<mut frame&>()
     c.queue = List<I64>()
@@ -1490,13 +1494,50 @@ fn (c mut Checker&) declsIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
     if ti.Else is not null and chosen == index + 1 and ti.Else!.Decls.Len() > 0 { c.decls(mi, ti.Else!.Decls) }
 }
 
-# every queued body checked, in the order asked for
+# every queued body checked, in the order asked for - then a table's default slots some call has come to reach since
+# (T32a), until no more do
 fn (c mut Checker&) drain() {
-    for c.queued < c.queue.Len() {
-        id := c.queue[c.queued]
-        c.queued++
-        if c.state[id] == 0 { c.check(id) }
+    for {
+        for c.queued < c.queue.Len() {
+            id := c.queue[c.queued]
+            c.queued++
+            if c.state[id] == 0 { c.check(id) }
+        }
+        if not c.wakeThunks() { return }
     }
+}
+
+# T32a: a default slot's thunk made an "unreachable" while no call reached it, checked again as the call of the default
+# now one does - whether any was
+fn (c mut Checker&) wakeThunks() Bool {
+    woke := false
+    k := 0
+    for k < c.lazyThunks.Len() {
+        id := c.lazyThunks[k]
+        match c.Bodies[id].Of {
+            case typed.BodyOf.Thunk(ti, slot) {
+                if c.slotsCalled.Has(c.P.SlotKey(c.P.AnyTables[ti].Trait, slot)) {
+                    b := c.Bodies[id]
+                    c.Bodies[id] = typed.Body(b.Id, b.Of, b.Ty, b.File, b.Sp)
+                    c.state[id] = 0
+                    c.queue.Push(id)
+                    c.lazyThunks.RemoveAt(k)!
+                    woke = true
+                    continue
+                }
+            }
+            nomatch { }
+        }
+        k++
+    }
+    return woke
+}
+
+# T32b: a call through an "any" of trait r at sp reaches slot k (either of its two, as called or under checked)
+fn (c mut Checker&) slotCall(r types.TypeId, k I64, sp source.Span) {
+    if c.P.AnySlots(r).Len() == 0 { return }
+    key := c.P.SlotKey(r, k)
+    if not c.slotsCalled.Has(key) { c.slotsCalled.Put(key, c.at(sp)) }
 }
 
 fn (c mut Checker&) newBody(of typed.BodyOf, ty types.TypeId, mi I64, sp source.Span) I64 {
@@ -12991,6 +13032,7 @@ fn (c mut Checker&) loopCall(sp source.Span, f I64, recv typed.Expr&c, args Arra
         # an "any"'s Next (T32b): its slot -2 - f, called through the table
         r := c.P.T.AnyTrait(typeOf(recv))
         sl := c.P.AnySlots(r)[-2 - f]
+        c.slotCall(r, -2 - f, sp)
         x = c.callBody(sp, sp, sl.Sig, typed.Callee.Dispatch(r, -2 - f, sl.Sig), -1, recv, Array<ast.Expr&>(0), args)
     } else {
         x = c.invoke(sp, sp, f, recv, Array<ast.Expr&>(0), args)
@@ -15135,10 +15177,26 @@ fn (c mut Checker&) checkThunk(id I64, ti I64, slot I64) {
     x typed.Expr?&c = null
     m := c.P.MethodOf(t, sl.Name)
     name := c.text(sl.Name)
+    if m < 0 and sl.Default >= 0 and not c.slotsCalled.Has(c.P.SlotKey(tab.Trait, k)) {
+        # a default no call through an "any" of the trait reaches: instantiated for the instance's type only once one
+        # does (T32a) - the constraints and body of one never called (Sum's "T Number") stand in no type's way
+        if slot >= n { fr.Checks-- }
+        fr.Tries--
+        c.lazyThunks.Push(id)
+        from0 := c.stmts.Len()
+        c.stmts.Push(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable, null))
+        c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from0))
+        c.pop()
+        return
+    }
     if m >= 0 {
         x = c.invoke(sp, sp, m, rx, Array<ast.Expr&>(0), pre)
     } else if sl.Default >= 0 {
+        # what is wrong with the default for this type said with where a call through an "any" first reached it
+        at := try c.slotsCalled.Get(c.P.SlotKey(tab.Trait, k)) catch default diag.Where.Nowhere
+        if at != diag.Where.Nowhere { c.P.L.Diags.PushContext(at, "'" $name "' is called through an 'any " $c.ty(tab.Trait) "&' here, so " $c.ty(t) " needs it") }
         x = c.invoke(sp, sp, sl.Default, rx, Array<ast.Expr&>(0), pre)
+        if at != diag.Where.Nowhere { c.P.L.Diags.PopContext() }
     } else if name == "Hash" {
         x = c.callOf(sp, c.i64(), typed.Callee.Helper(typed.Helper.Hash, t), c.one(c.value(rx, sp)))
     } else if name == "Len" {
@@ -15270,6 +15328,7 @@ fn (c mut Checker&) anyCall(sp source.Span, x ast.Expr&, rx typed.Expr&c, n sour
     slots := c.P.AnySlots(r)
     for k in range slots.Len() {
         if slots[k].Name != n { continue }
+        c.slotCall(r, k, nsp)
         if c.fr().Checks > 0 {
             # D17f: under checked, the slot checking the instance's own contract after dispatch
             c.checkOp(typed.Check.None, ContractWord)

@@ -366,3 +366,43 @@ test "E11a: $ counts an any as a reference, 8 deep" {
     churn()
     assert chains(Live + 9) == want
 }
+
+# T32a (the any review, finding 4): a table's default slots are instantiated for the instance's type only where a call
+# through an any of the trait reaches them, so an any Iterator of text or of structs exists though Sum's "T Number"
+# and Min's "<" do not fit them
+type Words struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (w mut Words&) Next() String ? Exhausted {
+    if w.at >= w.n { error Exhausted.END }
+    w.at += 1
+    return "w" $w.at
+}
+type WPt struct(x I64) { x }
+type WPtIt struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (w mut WPtIt&) Next() WPt ? Exhausted {
+    if w.at >= w.n { error Exhausted.END }
+    w.at += 1
+    return WPt(w.at)
+}
+fn walked(n I64) String {
+    b := StringBuilder()
+    w := Words(n)
+    it mut any Iterator<String>& = w
+    for x in it { b.Push(x) }
+    p := WPtIt(n)
+    jt mut any Iterator<WPt>& = p
+    b.Push($jt.Count(fn(q WPt) Bool { return q.x > 1 }))
+    return b.ToString()
+}
+BakedWalked String = walked(3)
+
+test "T32a: an any Iterator whose element type some defaults do not fit" {
+    assert BakedWalked == "w1w2w32"
+    churn()
+    assert walked(Live) == BakedWalked
+}

@@ -1470,7 +1470,10 @@ must say no more than the signature: one whose references live elsewhere than th
 from its receiver, a parameter sharing another's scope, T22), or that carries a scope obligation (O10b, D17d - storing
 an argument into its receiver among them), is a compile-time error at the conversion naming the method; called
 directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
-in the table (T35): it is reached as T32c says.
+in the table (T35): it is reached as T32c says. A default the table holds is instantiated for `T` only where some call
+through an `any` of `R` in the program reaches it: so a type a default does not fit - its constraint (`Sum`'s `T
+Number`) or its body (`Min`'s `<`) - is an instance for every other method, and where a call does reach that default
+it is a compile-time error at the conversion, with a note at the call.
 
 **T32b (calls).** `s.M(args)`, `s` an `any R&` and `M` a method of `R` or of a trait it extends, calls the function the
 table holds for `M`: one indirect call, its arguments, result and error set those of `R`'s signature, its receiver the

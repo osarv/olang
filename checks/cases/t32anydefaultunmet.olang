@@ -1,0 +1,19 @@
+# check: fail String does not satisfy the constraint Number on T
+# also: 'Sum' is called through an 'any Iterator<String>&' here, so aWords needs it
+# T32a (the any review, finding 4): a default reached through an any is instantiated for the instance's type, and one
+# whose constraint the type does not meet is an error with a note at the call that reached it
+import "std/io"
+type aWords struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (w mut aWords&) Next() String ? Exhausted {
+    if w.at >= w.n { error Exhausted.END }
+    w.at += 1
+    return "w" $w.at
+}
+fn main() {
+    w := aWords(3)
+    it mut any Iterator<String>& = w
+    io.Println($it.Sum())!
+}
