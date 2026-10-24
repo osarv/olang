@@ -1,8 +1,9 @@
 # regex - regular expressions in RE2's style: matched in time linear in the text, whatever the pattern - no
-# backtracking, so no pattern can take exponential time - by a lazy DFA where it serves and a Pike VM for groups: the pattern compiled to a small program whose
-# threads all advance through the text together, one step per code point. Matching is on code points of UTF-8 (a
-# byte that is not UTF-8 matches as U+FFFD); positions are byte offsets. Leftmost-first, as Perl and RE2: of the matches
-# starting leftmost, the one the pattern prefers - alternatives in order, greedy repetition longest.
+# backtracking, so no pattern can take exponential time. The pattern is compiled to a small program; a lazy DFA built
+# from it finds where each match is (see "the DFA" below), and a Pike VM - every thread advancing through the text
+# together, one step per code point - gives a match's groups. Matching is on code points of UTF-8 (a byte that is not
+# UTF-8 matches as U+FFFD); positions are byte offsets. Leftmost-first, as Perl and RE2: of the matches starting
+# leftmost, the one the pattern prefers - alternatives in order, greedy repetition longest.
 #
 #     re := regex.Compile("(\\w+)@(\\w+)\\.com")!
 #     re.Matches("mail bob@example.com")                 # true
