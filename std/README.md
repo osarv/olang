@@ -12,6 +12,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
 | `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse` |
 | `rand.olang` | seeded xoshiro256** generator |
+| `set.olang`, `deque.olang`, `heap.olang` | `Set<T>` over Map, a double-ended ring `Deque<T>`, a binary `Heap<T>` ordered by a function |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | sum, mean, variance, percentiles, histograms |
 | `linalg.olang` | `Matrix<T>`, GEMM, activations, convolutions by patches |
@@ -25,7 +26,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 ## Subfolders
 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible
-  without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `iterator`, `hash`, `number` (the numeric traits,
+  without an import. `array`, `text` (`String`), `list`, `vec`, `map`, `iterator` (the helpers and the adapters `Take`, `Skip`, `Enumerate`, `Zip`, `Chain`, `Sum`, `Min`/`Max`, `MinBy`/`MaxBy`), `hash`, `number` (the numeric traits,
   the constants `Pi`, `Euler`, `Inf`, `NaN`, and the numbers' methods: every C math function on the floats -
   `x.Sqrt()`, `y.Atan2(x)` - and `Abs`, `Min`, `Max`, `Clamp`, `Pow`, `Sqrt` on the integers), `float`, `complex`, `f8`,
   `builtin` (the language's own errors). Only the prelude may give methods to built-in types (M19d).
