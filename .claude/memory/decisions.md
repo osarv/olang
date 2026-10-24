@@ -734,3 +734,9 @@ errors and documentation - generic `+` already works).
   = closed with every member checked for the methods; inline `<T (I32, F64)>`; `and` combines; the bridge: a generic over
   an open trait may `match T` known types with a `nomatch` arm using the methods. No declared `satisfies` (possible later
   as a check only). Float/Integer/Number become closed sets (sealed private-method trick removed). Awaiting the user.
+- TRAITS REVISED 2026-10-24 (the user: no parentheses, no explicit implements, "isn't a closed trait also dependant on
+  declaring functions, just restricting who is in"): a closed trait is an ordinary trait plus a member list after
+  `for`: `trait Float for F16, BF16, F32, F64 { Sqrt() T }`; members checked at the declaration to have the methods
+  (the trait module's defaults count); `match T` complete; a member may be a closed trait (flattened); a pure set needs
+  no methods (`trait Number for Integer, Float`); no `for` = open as today; no inline sets; `and`, trait `extends`, the
+  match-with-nomatch bridge. Proposed; awaiting the user.
