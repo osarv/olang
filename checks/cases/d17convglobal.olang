@@ -1,0 +1,8 @@
+# check: fail Big does not fit I32, so the conversion's requirement 'x fits I32' is false
+# D17g: an immutable global the evaluator computes is a constant argument too
+Big I64 = 5000000000
+
+fn main() {
+    n := I32(Big)
+    n++
+}

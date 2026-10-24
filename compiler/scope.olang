@@ -294,6 +294,11 @@ fn (s mut Scoper&) Run() {
         s.Plans.Push(typed.NewPlan(s.Bodies[i]))
         s.sums.Push(summary())
         s.judged.Push(false)
+        # D17d: the scope relations a contract writes - obligations every call is held to, as inferred ones are
+        for w in s.Bodies[i].Written {
+            r := rel(Term.Var(w.Hi), Term.Var(w.Lo), false, w.Sp, 0)
+            if not hasRel(s.sums[i].Rels, r) { s.sums[i].Rels.Push(r) }
+        }
         match s.Bodies[i].Of {
             case typed.BodyOf.Ctor(t, twin) {
                 if twin == types.ListId(0) { s.ctorOf.Put(t, i) }

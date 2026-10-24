@@ -606,6 +606,19 @@ type Diag enum {
     GlobalReadsItself
     GlobalsCycle
     ModuleIdentityClash
+    ResultNamesMixed
+    OutlivesNested
+    ContractReturnOnValue
+    ContractReturnOnResult
+    ContractFitsNotNumber
+    ContractEntryWritable
+    ContractOutlivesNoScope
+    ContractOutlivesNotParam
+    ContractFalse
+    ContractGuaranteeFalse
+    ConversionDoesNotFit
+    NoteContractCondition
+    NoteContractCall
 }
 
 # one function each, under the id it is known by
@@ -2289,6 +2302,34 @@ fn GlobalsCycle(text String&) Msg { return Msg(Diag.GlobalsCycle, "B5a", "these 
 fn ModuleIdentityClash(text String&) Msg { return Msg(Diag.ModuleIdentityClash, "M22a", "this module has the same identity as " $text " - rename one, or import it by a relative path") }
 
 # ---- tests ----
+
+# ---- contracts (D17) ----
+
+fn ResultNamesMixed() Msg { return Msg(Diag.ResultNamesMixed, "D17", "name every result or none, as 'q I64, r I64'") }
+
+fn OutlivesNested() Msg { return Msg(Diag.OutlivesNested, "D17d", "an 'outlives' item stands at the top of a contract, not inside a 'for' or an 'if'") }
+
+fn ContractReturnOnValue(tok String&) Msg { return Msg(Diag.ContractReturnOnValue, "D17b", $"'return' reads a value at return through a reference, and " $tok " reads none the call can change - write it without 'return'") }
+
+fn ContractReturnOnResult(tok String&) Msg { return Msg(Diag.ContractReturnOnResult, "D17b", $"a result has only its value at return - write " $tok " without 'return'") }
+
+fn ContractFitsNotNumber(ty String&) Msg { return Msg(Diag.ContractFitsNotNumber, "D17a", $"'fits' names a number type and takes a number, found " $ty) }
+
+fn ContractEntryWritable(text String&) Msg { return Msg(Diag.ContractEntryWritable, "D17b", $"a guarantee reads '" $text "' at entry through what the call may write - write the value it needs of it (its 'Len()', an element), or 'return " $text "' for its value at return") }
+
+fn ContractOutlivesNoScope(tok String&) Msg { return Msg(Diag.ContractOutlivesNoScope, "D17d", $tok " names no scope - an 'outlives' item names a reference parameter, a parameter holding references, or 'return'") }
+
+fn ContractOutlivesNotParam(tok String&) Msg { return Msg(Diag.ContractOutlivesNotParam, "D17d", $tok " is no parameter of this function - an 'outlives' item names its parameters and 'return'") }
+
+fn ContractFalse(cond String&, name String&) Msg { return Msg(Diag.ContractFalse, "D17e", $"this call breaks " $name "'s requirement '" $cond "'") }
+
+fn ContractGuaranteeFalse(name String&, cond String&) Msg { return Msg(Diag.ContractGuaranteeFalse, "D17e", $name "'s guarantee '" $cond "' does not hold for a call evaluated while compiling") }
+
+fn ConversionDoesNotFit(value String&, ty String&) Msg { return Msg(Diag.ConversionDoesNotFit, "D17g", $value " does not fit " $ty ", so the conversion's requirement 'x fits " $ty "' is false - write a value that fits, or 'checked " $ty "(x)' to fail with an error") }
+
+fn NoteContractCondition() Msg { return Msg(Diag.NoteContractCondition, "", "the condition") }
+
+fn NoteContractCall() Msg { return Msg(Diag.NoteContractCall, "", "the call evaluated here") }
 
 test "a message is its text, its arguments in their places" {
     m := Expected("'}'", Tok("South"))

@@ -263,7 +263,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   aside. A run-time array stored into fixed field or element storage is an error naming a slice of its length (`s.m =
   v[0:16]`, T7d) - no store is checked. Storage over 64KB is never on the stack. No 2-D arrays (the user's call) -
   arrays of arrays. `x.Len()` is an `I64` (E23/T10, the user's design; `len` is gone). Not yet built: inferred result
-  lengths (D8f), asserts decided at every call (S18e), constructors by value (`tools/arrays_migrate.olang` migrates
+  lengths (D8f), constructors by value (`tools/arrays_migrate.olang` migrates
   code; `docs/arrays.md` section 7).
 - **Indexing is unchecked, slicing checked once per slice (E16, E16a-E16e)** - a bad slice is a value that stays wrong
   wherever it travels, a bad index one access; an index check cost ~50% on a data-dependent gather, so it went.
@@ -441,7 +441,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   type, per instantiation). A checked form requires its plain one (`CheckedAt` alone is an error); loops never call one.
   `CheckedAt`/`CheckedSlice`/`CheckedSetAt` are derived from the plain form and `Len` when not declared. A method called
   by name has its checked form the same way (`checked x.Pow(n)` calls `CheckedPow`, E31a, 2026-10-18, mine).
-- **`CheckError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE`) is raised only by `checked` (R20);**
+- **`CheckError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE CONTRACT`, std/prelude/check.olang; named
+  `BuiltinError` until 2026-10-24, QAI - `tools/checkerror_rename.olang` migrates) is raised only by `checked` (R20);**
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
   may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`
@@ -814,6 +815,26 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `nomatch` (G15 already checks per instance). Decided (mine): the keywords go after `trait`, `extends` before `for`;
   an intersection is held as a tuple of traits, each checked; a method a binding lacks from an extended trait is
   named with that trait (`Rooms (House's)`); no inline type lists (additive later, decided).
+- **Contracts (D17-D17g, 2026-10-24, the user's design; the details mine).** One bracketed block after the signature,
+  right before the body (constructors too): `fn percent(part I64, whole I64) p I64 [whole > 0, 0 <= p <= 100] { }`,
+  `fn (l mut List<T>&) Push(x T) [return l.Len() == l.Len() + 1]`, `[b outlives a outlives c]`, `[for x in a: x >= 0]`,
+  `[if neg: x < 0 else: x >= 0]`, `[x fits I32]`. Results may be named (all or none) for the contract only. A condition
+  mentioning a result or `return` is a guarantee, else a requirement. Plain names are entry values; `return e` is e's
+  value at return - **a prefix as tight as unary `-`** (mine: "binds like not" would make the user's own Push example
+  read `return (l.Len() == ...)`), only on what is read through a reference parameter. **Decided while compiling where
+  the evaluator can**: a requirement at a call whose arguments are literals, constants, immutable globals or calls of
+  such (no local, not inside a body only the evaluator runs) - false is an error at the call; a guarantee wherever the
+  evaluator runs a call (a baked global, a decided assert, a value) - false is an error at the guarantee with a note at
+  the call. Elsewhere unchecked unless `checked f(x)` (anywhere a `checked` covers): arguments held, requirements, entry
+  values kept, the call, guarantees - `CheckError.CONTRACT`. `outlives` chains are obligations handed to the scope pass
+  (seeded into its summaries), so a function writing one is no function value (T22a); one with value conditions is a
+  value, unchecked through it. **Conversions are contracts (D17g)**: `U8(300)` and `I32(G)` (G an immutable global
+  beyond I32) are compile errors; a run-time value still wraps; `checked T(x)` keeps OVERFLOW/INVALID. S18e (leading
+  asserts at calls) is gone, superseded. Decided (mine): an entry value is kept only for a part read through a reference
+  (a by-value parameter is its entry value already); a part holding references is read at return, an error where it
+  reaches a writable parameter; contract bodies see parameters read-only; one body per item (typed.BodyOf.Contract);
+  the evaluator's guarantee checks are a compile-only lowering (`Lowerer.Ensures`), never in a build. Found on the way:
+  the port's resolver accepted two functions of one name in a module (D2) - an error now.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

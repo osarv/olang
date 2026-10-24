@@ -1,0 +1,13 @@
+# check: fail Grow's guarantee 'return l.Len() == l.Len() + 2' does not hold for a call evaluated while compiling
+# D17b, D17e: "return e" is e's value at return, a name's its value at entry - the evaluator holds an assert's calls to it
+fn (l mut List<I64>&) Grow(x I64) [return l.Len() == l.Len() + 2] { l.Push(x) }
+
+fn grown() I64 {
+    l := List<I64>()
+    l.Grow(1)
+    return l.Len()
+}
+
+fn main() {
+    assert grown() == 1
+}

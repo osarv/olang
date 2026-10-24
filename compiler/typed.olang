@@ -75,6 +75,39 @@ type BodyOf enum {
     # a condition the build decides that B9a could not evaluate (B9c, S8b), as a fn() Bool giving its value, checked in
     # its module's context for the evaluator: at the offset the condition starts at in the module's file
     Cond(module I64, at I32)
+    # one item of a function's or constructor's contract as a function of its own (D17), body its body: a requirement
+    # (Req) or a guarantee (Ensures) giving a Bool, or an entry value a guarantee reads (Entry) giving it; index its
+    # place among the body's items of that kind
+    Contract(body BodyId, kind ContractKind, index I64)
+}
+
+type ContractKind enum {
+    Req        # fn(the function's parameters) Bool
+    Ensures    # fn(its parameters, its results, the entry values it reads) Bool
+    Entry      # fn(its parameters) the value
+}
+
+# a body's contract (D17), its items made bodies of their own: each requirement's body and where it is written; each
+# guarantee's, and where it is written; each condition as written; each entry value's, called before the call; what
+# diagnostics name the function and the file its contract is written in
+type ContractInfo struct(Name String&, File I64) {
+    Name
+    File
+    Reqs List<I64>
+    ReqSps List<source.Span>
+    ReqTexts List<String&>
+    Ens List<I64>
+    EnsSps List<source.Span>
+    EnsTexts List<String&>
+    Entries List<I64>
+}
+
+# a scope relation a contract writes (D17d): Hi outlives Lo, each one of the body's scope variables, by its index in
+# Vars; where it is written
+type ScopeRel struct(Hi I64, Lo I64, Sp source.Span) {
+    Hi
+    Lo
+    Sp
 }
 
 # one of a body's scope variables: what its hidden scope arguments, and its environment's scopes, stand for. The ones
@@ -255,7 +288,7 @@ type Helper enum {
 # parameter's argument is a reference - a Borrow, a Promote, or a reference's value - and a by-value one's a value.
 # A call to a fallible callee stands inside a Try, the innermost of which takes its errors - but a task's call, whose
 # errors go to its Spawn's clauses and then its join (P4)
-type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false) {
+type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Zero Bool = false, Checked Bool = false) {
     Target
     Args
     Scoped     # a written scope argument, "f&x(...)" (E25): Of(x), or Return; None for none
@@ -263,6 +296,7 @@ type Call struct(Target Callee&, Args Array<Expr&>&, Scoped Mark, Site SiteId, Z
     # a type's zero value (D13c): its constructor on its parameters' defaults or zeros. Which it is - all zero bits, the
     # call, or none (an error at the declaration) - is decided once per type after check, by eval (DESIGN.md 1.8)
     Zero
+    Checked    # its callee's contract checked here by the program, under "checked" (D17e): the evaluator checks nothing more
 }
 
 type MakeKind enum {
@@ -329,6 +363,9 @@ type PrimOp enum {
     # evaluator marks it and stops on a later use of it, or of a view of it (K1, M19g), naming where the program grew
     # the collection
     Retire
+    # args [b]: b, once it holds - a contract's condition checked under "checked" (D17e), failing with CheckError's
+    # CONTRACT
+    Holds
 }
 
 type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check) {
@@ -525,6 +562,7 @@ type Body struct(Id BodyId, Of BodyOf, Ty types.TypeId, File I64, Sp source.Span
     # instance's and a twin's constructor, their own
     Fields List<LocalId>
     Root Block?& = null     # null until checked; a payload's (Case) stays null
+    Written List<ScopeRel>   # the scope relations its contract writes (D17d), which section 8 holds every call to
 }
 
 fn (b mut Body&) AddLocal(l Local) LocalId {

@@ -1,0 +1,12 @@
+# check: fail an 'outlives' item stands at the top of a contract, not inside a 'for' or an 'if'
+# D17d: a scope relation is no condition
+type Node struct(v I64) {
+    v
+}
+
+fn link(a mut Node&, b Node&, c Bool) [if c { b outlives a }] { }
+
+fn main() {
+    n := Node(1)
+    link(n, n, true)
+}

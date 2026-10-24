@@ -1,12 +1,13 @@
 # The prover: a design note
 
-Status: written 2026-10-24 for the user's review. Nothing here is built, and contracts themselves are decided but not
-yet built either. It proposes how the compiler decides contract conditions it cannot decide by running them, and what
+Status: written 2026-10-24 for the user's review. Nothing here is built. Contracts themselves are built (SPEC D17-D17g):
+what the compile-time evaluator decides - requirements at calls whose arguments it computes, guarantees at calls it
+runs - and the rest unchecked unless the caller writes `checked`, which is the "neither" of section 0. It proposes how the compiler decides contract conditions it cannot decide by running them, and what
 it decides first. Section 10 holds the direction questions.
 
 Sources: the contract decisions of 2026-10-24 (`.claude/memory/decisions.md`, "CONTRACTS ..."); `direction.md`,
 "Contracts and proving"; SPEC E6a, E6c, E8a, E15a, E16, E26a, S16d, S18c, K1, K1a, O10b, B3i; `compiler/DESIGN.md`
-1.7 and 1.8. Outside work is cited in section 11. `CheckError` is QAI's decided name for today's `CheckError`.
+1.7 and 1.8. Outside work is cited in section 11. `CheckError` is QAI's name for what was `BuiltinError`.
 
 ## 0. Summary
 

@@ -6987,6 +6987,8 @@ fn ktBump(c mut KtCell&) {
     c.v = c.v * 2
 }
 
+fn ktWrap(n I64) U8 { return U8(n) }
+
 fn ktSumTo(n I32) I64 {
     total I64 = 0
     i := 0
@@ -7005,7 +7007,8 @@ KtViaRef I32 = ktViaRef(3)
 KtOddSum I64 = ktSumTo(100)
 KtCaught I32 = try SafeDiv(1, 0) catch default -7
 KtRatio F32 = F32(KtFib20) / 2
-KtWrapped U8 = U8(300)
+KtWrapped U8 = ktWrap(300)        # D17g: a constant 300 does not fit U8, so the wrap is a run-time value's
+
 
 # this one cannot be computed at compile time - it reads a mutable global - and is set at startup as before
 ktRuntimeSeed mut I32 = 5
@@ -10198,7 +10201,8 @@ fn primAll(one I32) Bool {
     w16 I16 = U8(200)                 # T6b: an unsigned type flows into a wider signed one
     w64 I64 = u32
     f F32 = F16(1.5)
-    flows Bool = w16 == 200 and w64 == 4294967295 and f == 1.5 and U8(I8(-1)) == 255
+    m1 I8 = -1
+    flows Bool = w16 == 200 and w64 == 4294967295 and f == 1.5 and U8(m1) == 255
     h F16 = F16(0.1)
     b BF16 = BF16(1.0 / 3.0)
     floats Bool = F64(h) == 0.0999755859375 and F64(b) == 0.333984375 and F64(h * F16(2)) == 0.199951171875
@@ -17698,4 +17702,119 @@ test "T30a, T31a, G19: an extended trait's methods, a closed trait's types, an i
     assert trBoth(trHut(4)) == 18 and trDescribe(trHut(1)) == "hut 1 2"
     assert trTwice(I16(5)) == 7 and trTwice(I8(3)) == 4 and trTwice(I64(-3)) == -6
     assert trTotal(I32[4, 5].Iter()) == 9
+}
+
+# ---- D17: contracts - requirements decided at calls the evaluator computes, guarantees where it runs a call, the
+# rest checked only under checked (D17e); conversions require that their value fits (D17g) ----
+
+fn dkPercent(part I64, whole I64) p I64 [whole > 0, 0 <= part <= whole, 0 <= p <= 100] { return part * 100 / whole }
+fn dkDivmod(a I64, b I64) q I64, r I64 [b > 0, 0 <= r < b] { return a / b, a % b }
+fn (l mut List<I64>&) dkPushTwice(x I64) [return l.Len() == l.Len() + 2] {
+    l.Push(x)
+    l.Push(x)
+}
+fn (l mut List<I64>&) dkPushOnce(x I64) [return l.Len() == l.Len() + 2] { l.Push(x) }
+fn dkSum(a Array<I64>&) s I64 [for x in a: x >= 0, s >= 0] {
+    t I64 = 0
+    for x in a: t += x
+    return t
+}
+fn dkSign(x I64, neg Bool) [if neg: x < 0 else: x >= 0] { }
+fn dkNarrow(x I64) I32 [x fits I32] { return I32(x) }
+type dkRing struct(cap I64) [cap > 0, (cap & (cap - 1)) == 0] { cap }
+type dkNode struct(v I64) { v }
+fn dkLink(a mut dkNode&, b dkNode&) [b outlives a] { }
+fn dkChain(a mut dkNode&, b mut dkNode&, c dkNode&) [c outlives b outlives a] { }
+
+fn dkPushedLen() I64 {
+    l := List<I64>()
+    l.dkPushTwice(7)
+    return l.Len()
+}
+
+# each call the evaluator runs here is held to its guarantees: baked, it agrees with the run time
+DkBaked := dkPercent(30, 60) + dkPushedLen() + dkSum(I64[1, 2, 3])
+DkDiv := dkDivQR()
+
+fn dkDivQR() I64 {
+    q, r := dkDivmod(17, 5)
+    return q * 10 + r
+}
+
+test "D17e: requirements and guarantees hold where the evaluator computes the calls - baked and run" {
+    assert DkBaked == 50 + 2 + 6 and DkDiv == 32
+    assert dkPushedLen() == 2 and dkPercent(1, 4) == 25
+    whole := 60
+    l := List<I64>()
+    l.dkPushTwice(1)
+    assert dkPercent(30, whole) + l.Len() + dkSum(I64[1, 2, 3]) == DkBaked
+}
+
+test "D17e: checked f(x) checks a requirement before the call and a guarantee after it, with CheckError.CONTRACT" {
+    w := 0
+    v := checked dkPercent(5, w) catch CheckError.CONTRACT default -1
+    assert v == -1
+    w = 10
+    v = checked dkPercent(5, w) catch CheckError.CONTRACT default -1
+    assert v == 50
+    b := 0
+    q, r := checked dkDivmod(7, b) catch CheckError.CONTRACT default -1, -1
+    assert q == -1 and r == -1
+    b = 2
+    q, r = checked dkDivmod(7, b) catch CheckError.CONTRACT default -1, -1
+    assert q == 3 and r == 1
+    l := List<I64>()
+    broke := false
+    checked l.dkPushTwice(3) catch CheckError.CONTRACT { broke = true }
+    assert not broke and l.Len() == 2
+    checked l.dkPushOnce(3) catch CheckError.CONTRACT { broke = true }
+    assert broke and l.Len() == 3
+    # without checked nothing is checked: the call runs as written
+    l.dkPushOnce(4)
+    assert l.Len() == 4
+}
+
+test "D17a: for and if items, fits, a constructor's contract - checked where asked for" {
+    a := I64[1, -2, 3]
+    s := checked dkSum(a) catch CheckError.CONTRACT default -99
+    assert s == -99
+    a[1] = 2
+    s = checked dkSum(a) catch CheckError.CONTRACT default -99
+    assert s == 6
+    x := -3
+    ok := true
+    checked dkSign(x, true) catch CheckError.CONTRACT { ok = false }
+    assert ok
+    checked dkSign(x, false) catch CheckError.CONTRACT { ok = false }
+    assert not ok
+    big := 5000000000
+    n := checked dkNarrow(big) catch CheckError.CONTRACT default I32(-1)
+    assert n == -1
+    big = 70
+    n = checked dkNarrow(big) catch CheckError.CONTRACT default I32(-1)
+    assert n == 70
+    cap := 6
+    made := true
+    checked dkRing(cap) catch CheckError.CONTRACT { made = false }
+    assert not made
+    cap = 8
+    rg := checked dkRing(cap) catch CheckError.CONTRACT default dkRing(1)
+    assert rg.cap == 8
+}
+
+test "D17d, D17f: written scope relations are obligations; a function with value conditions is a value, unchecked" {
+    a := dkNode(1)
+    b := dkNode(2)
+    c := dkNode(3)
+    dkLink(a, b)
+    dkChain(a, b, c)
+    f := dkPercent
+    assert f(5, 10) == 50
+}
+
+test "D17g: a conversion checked at run time keeps its own words" {
+    x := 300
+    b := checked U8(x) catch CheckError.OVERFLOW default U8(7)
+    assert b == 7
+    assert U8(x) == 44
 }

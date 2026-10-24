@@ -395,8 +395,8 @@ Marked *(not yet implemented)* in `SPEC.md`, for a later round:
 
 - **D8f**: a declared function's array result has a length known only at run time, even where every return gives
   one length.
-- **S18e**: a function's leading asserts are decided per instance (S18c) but not yet at every call whose arguments are
-  partly known (the evaluator's partial-knowledge mode).
+- **S18e**: superseded on 2026-10-24 by contracts (SPEC D17): a rule a function's callers are held to is a requirement
+  in its contract, decided at each call whose arguments the evaluator computes.
 - **G29 for constructors**: a constructor's array parameter is by reference; by value it is D9a's error.
 - **T7c**: a comprehension's length is not yet known where its source's is; a reference local (`Array<T>&`) is not yet
   judged fixed as a value local is.

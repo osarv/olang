@@ -511,7 +511,7 @@ fn (g mut Gen&) exInt(t I32, d I64) String& {
         op String& = "-" if g.chance(50) else "~"
         return "(" $op $g.solid(t, d - 1) ")"
     }
-    if k == 9 { return $Prims[t] "(" $g.ex(g.intT(), d - 1) ")" }
+    if k == 9 { return g.conv(t, g.ex(g.intT(), d - 1)) }
     if k == 10 { return "(checked " $Prims[t] "(" $g.ex(g.floatT(), d - 1) ") catch default " $g.lit(t) ")" }
     if k == 11 or k == 12 { return g.checkedInt(t, d) }
     if k == 13 { return g.helper(t, d) }
@@ -602,8 +602,8 @@ fn (g mut Gen&) exFloat(t I32, d I64) String& {
         return g.bin(t, d, ops[k])
     }
     if k == 4 { return "(-" $g.solid(t, d - 1) ")" }
-    if k == 5 { return $Prims[t] "(" $g.ex(g.intT(), d - 1) ")" }
-    if k == 6 { return $Prims[t] "(" $g.ex(g.floatT(), d - 1) ")" }
+    if k == 5 { return g.conv(t, g.ex(g.intT(), d - 1)) }
+    if k == 6 { return g.conv(t, g.ex(g.floatT(), d - 1)) }
     if k == 7 or k == 8 {
         ops := String&["+", "-", "*", "/"]
         b := g.ex(t, d - 1)
@@ -1961,6 +1961,20 @@ fn (g mut Gen&) viewElement(t I32, d I64) String& {
     v String& = "(" $g.use(a) "[0:" $n "])"
     if n == g.vlen[a] and g.chance(60) { return $v "[" $g.r(n) "]" }
     return "(checked (" $v "[" $g.solid(g.idxT(), d - 1) "]) catch default " $g.lit(t) ")"
+}
+
+# a conversion to t of x - of a literal, which a conversion requires fits (D17g), a literal of t in its place
+fn (g mut Gen&) conv(t I32, x String&) String& {
+    if constOnly(x) { return g.lit(t) }
+    return $Prims[t] "(" $x ")"
+}
+
+# whether an expression the generator wrote is a literal: digits, a sign, a point, an exponent, parentheses
+fn constOnly(x String&) Bool {
+    for ch in x {
+        if not (ch.IsDigit() or ch == '.' or ch == '-' or ch == '+' or ch == '(' or ch == ')' or ch == ' ' or ch == 'e') { return false }
+    }
+    return true
 }
 
 # whether a value of type s may be converted to t without undefined behaviour (a float becomes an integer only under try)

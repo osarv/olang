@@ -900,7 +900,11 @@ explainedSrc String& = ("error MathError { ZERO }\n"
                      "fn big<T>(a T, b T) T { return a if a > b else b }\n"
                      "type Sh enum {\n    Whole N\n    Parts(a I64, b I64)\n    None\n}\n"
                      "Answer I64 = 6 * 7\n"
+                     "fn pct(part I64, whole I64) p I64 [whole > 0, 0 <= p <= 100] { return part * 100 / whole }\n"
+                     "fn link(a mut N&, b N&) [b outlives a] { }\n"
                      "fn main() ? {\n"
+                     "    nn := N(pct(1, 4), null)\n"
+                     "    link(nn, nn)\n"
                      "    q, _ := try divmod(Answer, big(2, 3))\n"
                      "    assert wrap(N(q, null)).n.Value() == 14\n"
                      "}\n")
@@ -944,6 +948,9 @@ test "explain FILE NAME prints an item as the compiler sees it: inferred errors,
     assert explained("MathError") == "error MathError\n    ZERO\n"
     assert explained("Answer") == "Answer I64 = 42\n"
     assert explained("Sh") == "type Sh enum\n    Whole N\n    Parts(a I64, b I64)\n    None\n"
+    # D17: a contract's conditions as written, its results named; a scope relation it writes among the obligations
+    assert explained("pct") == "fn pct(part I64, whole I64) I64\n    # its results: p\n    [whole > 0]\n    [0 <= p <= 100]\n"
+    assert explained("link") == "fn link(a mut N&, b N&)\n    [b outlives a]\n"
     assert explained("nope").Contains("error[B11b]: 'nope' is no top-level item of ")
 }
 

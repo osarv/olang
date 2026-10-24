@@ -58,10 +58,12 @@ fn fnItem(c mut typecheck.Checker&, sc scope.Scoper&, f I64) String {
         inst := c.P.FnInstance(f, types.ListId(0))
         body := c.BodyOfInstance(inst)
         b.Push($fnLine(c, f, c.P.InstanceSig(inst), body) "\n")
+        contract(b, c, c.P.FnDecl(f).S, c.P.FnModule(f), "    ")
         obligations(b, c, sc, body, "    ")
         return b.ToString()
     }
     b.Push($fnLine(c, f, c.P.Sig(f), -1) "\n")
+    contract(b, c, c.P.FnDecl(f).S, c.P.FnModule(f), "    ")
     decl := c.P.FnDecl(f)
     for i in range c.P.InstanceCount() {
         if c.P.InstanceFn(i) != f { continue }
@@ -175,6 +177,22 @@ fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
     return c.P.T.Items(c.P.T.Args(recv)).Len()
 }
 
+# a contract's conditions (D17), each as written in its brackets, and its results' names - its "outlives" chains are
+# among the obligations
+fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, indent String&) {
+    if s.Contract is null { return }
+    src := c.P.L.Mods[mi].Src!.Text
+    if s.ResultNames.Len() > 0 {
+        b.Push($indent "# its results: ")
+        for i in range s.ResultNames.Len() {
+            if i > 0 { b.Push(", ") }
+            b.Push(c.P.L.Names.Text(s.ResultNames[i]))
+        }
+        b.Push("\n")
+    }
+    for it in s.Contract!.Items { b.Push($indent "[" $src[I64(it.Span().Start):I64(it.Span().End)] "]\n") }
+}
+
 fn obligations(b mut StringBuilder&, c mut typecheck.Checker&, sc scope.Scoper&, body I64, indent String&) {
     if body < 0 { return }
     for o in sc.Obligations(body, c.P.L.Names) { b.Push($indent "[" $o "]\n") }
@@ -253,6 +271,12 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             sig := c.Ty(named(c, c.P.CtorSig(self), null, ctorParams(c.P.TypeDecl(d)!)))
             close := firstClose(sig)
             b.Push($"type " $name " struct" $sig[2:close + 1] $errorsAfter(sig[close + 1:]) "\n")
+            match c.P.TypeDecl(d)!.Body {
+                case ast.TypeBody.Struct(sb) {
+                    if sb.Errs is not null { contract(b, c, sb.Errs!, c.P.DeclModule(d), "    ") }
+                }
+                case _ { }
+            }
             fields(b, c, self)
         }
     }

@@ -2225,7 +2225,7 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         }
         case typed.PrimOp.AtomicLoad, typed.PrimOp.AtomicStore, typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap
              typed.PrimOp.AtomicCompareSwap { return m.atomic(fi, op, args, at) }
-        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl {
+        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl, typed.PrimOp.Holds {
             m.refuse(WhyNotModelled)
             return 0
         }

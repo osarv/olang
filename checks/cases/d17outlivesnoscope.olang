@@ -1,0 +1,12 @@
+# check: fail 'k' names no scope - an 'outlives' item names a reference parameter, a parameter holding references, or 'return'
+# D17d: a number has no scope to outlive anything
+type Node struct(v I64) {
+    v
+}
+
+fn link(a mut Node&, k I64) [k outlives a] { }
+
+fn main() {
+    n := Node(1)
+    link(n, 2)
+}

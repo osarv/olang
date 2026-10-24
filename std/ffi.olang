@@ -130,14 +130,16 @@ test "Has finds the C library's functions, and the math library's" {
 }
 
 test "Call passes numbers and gives each kind of result" {
-    w := U64[U64(-42)]
+    m42 I64 = -42           # its bits read unsigned (D17g: a constant -42 does not fit U64)
+    w := U64[U64(m42)]
     assert I64(try Call("labs", U8[Code(Kind.I64)], w, Code(Kind.I64)) catch default 0) == 42
     x := U64[F64(6.25).Bits()]
     assert (try Call("sqrt", U8[Code(Kind.F64)], x, Code(Kind.F64)) catch default 0).F64FromBits() == 2.5
     f F32 = 2.25
     y := U64[U64(f.Bits())]
     assert U32(try Call("sqrtf", U8[Code(Kind.F32)], y, Code(Kind.F32)) catch default 0).F32FromBits() == 1.5
-    neg := U64[U64(-5)]
+    m5 I64 = -5
+    neg := U64[U64(m5)]
     assert I64(try Call("abs", U8[Code(Kind.I32)], neg, Code(Kind.I32)) catch default 0) == 5     # an I32, extended
     none := Array<U64>(0)
     assert (try Call("getpid", U8[], none, Code(Kind.I32)) catch default 0) > 0

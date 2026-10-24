@@ -1,0 +1,13 @@
+# check: fail T22a
+# D17f: a function writing a scope relation is no function value - a call through one would check nothing of it
+type Node struct(v I64) {
+    v
+}
+
+fn keep(a mut Node&, b Node&) [b outlives a] { }
+
+fn main() {
+    f := keep
+    a := Node(1)
+    f(a, a)
+}

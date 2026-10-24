@@ -296,6 +296,9 @@ type ExitKind enum {
     FixedLength    # T7d: "array length does not match its fixed storage"
     Error          # E35: an error a "!" took - its message, the error's name ("io.IoError.FULL"), is the exit's text
     Escaped        # S16: an error left a test body - the test fails, its FAIL line naming the error, the exit's text
+    # D17e: while compiling, a call's guarantee did not hold - its message the guarantee's position among the
+    # lowering's Guarantees; never in a build
+    Guarantee
 }
 
 # what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
@@ -310,6 +313,7 @@ fn ExitText(k ExitKind) String& {
         case ExitKind.ArrayLength => "array length out of range"
         case ExitKind.As => "'as' named what the value is not"
         case ExitKind.FixedLength => "array length does not match its fixed storage"
+        case ExitKind.Guarantee => "a guarantee does not hold"
     }
 }
 
@@ -1285,7 +1289,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
     want := match op {
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast => 1
         case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire => 1
-        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl => -1
+        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl, typed.PrimOp.Holds => -1
         case typed.PrimOp.AtomicCompareSwap => 3
         case _ => 2
     }
