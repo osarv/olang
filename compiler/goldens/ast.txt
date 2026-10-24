@@ -879,7 +879,8 @@ a87cda4f6e916dd3 483722b560ff6f22 checks/cases/s8bchosen.olang
 0ffb23484e3196fd c9e592dffbe1c94f checks/cases/s8blocalnames.olang
 b23fd296d8c44fb4 483722b560ff6f22 checks/cases/s8bother.olang
 50d12ac86f353db9 01f01caef2495758 checks/cases/s8dassigned.olang
-0fafb3c5b8273a33 8f1686ccf22bad54 checks/cases/s8dnarrow.olang
+7c1504b5f319e4f6 4cf3c1e52585d52c checks/cases/s8dnarrow.olang
+cb1e05ada0d7f3f9 ee489f3ed1288ea7 checks/cases/s8dnarrowwrite.olang
 fffc314051c7b2ab e8aa204b7a736fc5 checks/cases/s8dunnarrowed.olang
 c1ba1213deab9e36 de2f0e50416a5179 checks/cases/s9erangeundertry.olang
 9420be80316ac417 1290f3fb47c43662 checks/cases/samevalue.olang
@@ -1306,7 +1307,7 @@ ad7367de57562da1 98ba40282a55ca2d checks/fixtures/vecalias/f3.olang
 007370a44d8f74de 3731be913f85ffe3 checks/fixtures/vechandle/stale.olang
 5b2066d171f95500 6b3a4b7685ebd944 compiler/ast.olang
 bb0b4ea16fd1d85d d7ffb84939de1d79 compiler/build.olang
-134bcbae836ea2a1 f68107856ade9319 compiler/check.olang
+48b3cd3026019a27 8a9bdd59ed4d7d9b compiler/check.olang
 ea8e8a00cdc7998e 382eed1fed9b48f2 compiler/cond.olang
 3f1492b275e2d8ec 5c0f347eced1601b compiler/diag.olang
 cc9ef5a393d6b69d 13ead1d16dffec4c compiler/emit.olang
@@ -1319,7 +1320,7 @@ e2997d1003c5bac7 2fe24becae9ee906 compiler/generic.olang
 fb50c1d210e0df76 f83f6cab75230bbd compiler/load.olang
 00d211fd8c900ff6 a0131f52e7102cb3 compiler/lower.olang
 0d1b00c6a658c656 cc244227b72d0d31 compiler/mir.olang
-595173b73682243c 87f1c01a69241ad4 compiler/msgs.olang
+aba8d5c213b70115 da41edb4e6692d5d compiler/msgs.olang
 747aa2bdffe2c633 2a95337842f92333 compiler/names.olang
 6fe7ebd1be060551 01e988fd3b34a58c compiler/olang.olang
 6ab00051f7a06e2d 3c13d89ec0382ad6 compiler/parse.olang

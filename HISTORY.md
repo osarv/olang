@@ -22762,6 +22762,12 @@ generalizes better into the payload case" - with their idea that a tested local 
   was never reported (the enum built, and failed in emit only when used) - `typeRules` now walks payload types.
   `{ North South }` on one line, which T17sep pinned as "two cases need a separator", is now one case carrying an
   unknown `South`, and the case says so.
+- **Narrowed fields through a field, and never written** (found while the whole-payload form waited on a
+  confirmation): `e.c.r`, a field of a narrowed payload field, was S8d's error - the place of a member chain did not
+  look for the narrowing, only a member read did - and a store into a narrowed field (`e.r = 5`, `e.c.r = 5`, or a
+  field of a whole payload) went into the hidden copy and changed nothing the program holds. Both readings go through
+  one lookup now, and a narrowed field is a place read and never written - writing it is S8d's error, naming the
+  whole-value assignment.
 - **Some/Every** (the user, via the coordinator, the same day): the iterator and array helpers `Any`/`All` are renamed
   `Some`/`Every`, migrated by `tools/helper_rename.olang` (calls and declarations, never comments or strings).
 

@@ -3506,7 +3506,9 @@ to hold that case: `e.r` reads the payload field `r`. Where the case's payload i
 `else` block of `if e != Shape.Circle { } else { }`, and after `if e != Shape.Circle { ... }` with no `else` whose block
 always leaves (D10a) - from there to the end of the block the `if` stands in. It holds only where `e` is assigned nowhere
 in that region (an assignment, a compound one, an increment, a target), and not inside a lambda written there. The
-payload's fields are read once, where the narrowing begins: what `e` is known to hold does not change after. A field of a
+payload's fields are read once, where the narrowing begins: what `e` is known to hold does not change after, and they
+are read there, never written - a store into `e.r` (or through it, `e.c.r`, or into a payload written whole) is a
+compile-time error naming the whole-value assignment. A field of a
 case the local is not known to hold is no member of an enum, and a compile-time error.
 
 **S8b.** A condition the **build decides** — one S8a describes, except that it does read a build constant —

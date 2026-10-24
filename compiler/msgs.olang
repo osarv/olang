@@ -389,6 +389,7 @@ type Diag enum {
     CaseTestOther
     NullCompared
     FieldOfEnum
+    NarrowedWrite
     AsNeedsCase
     PatternType
     CaseIsPrivate
@@ -1638,6 +1639,7 @@ fn CaseTestOther(text String&, ty String&) Msg { return Msg(Diag.CaseTestOther, 
 fn IsNullOfNull() Msg { return Msg(Diag.IsNullOfNull, "E10c", "'null is null' tests nothing - 'is null' follows a reference or a function value") }
 fn IsNullOfValue(ty String&) Msg { return Msg(Diag.IsNullOfValue, "E10c", $"only a reference or a function value can be null, and this is " $ty) }
 
+fn NarrowedWrite() Msg { return Msg(Diag.NarrowedWrite, "S8d", "a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)") }
 fn FieldOfEnum(ty String&, f String&) Msg { return Msg(Diag.FieldOfEnum, "S8d", $ty " is an enum - its payload's '" $f "' is read where a test narrows a local or a parameter to the case, 'if e == Case { e." $f " }', assigned nowhere there") }
 
 fn NullCompared(x String&, form String&) Msg { return Msg(Diag.NullCompared, "E10c", $"null is tested with 'is', never compared - write '" $x " " $form "'") }

@@ -4090,6 +4090,11 @@ s8dassigned.olang:7:16: error[S8d]: Shape is an enum - its payload's 'r' is read
     7 |         t := s.r
       |                ^
 compilation failed with 1 error
+=== s8dnarrowwrite.olang
+s8dnarrowwrite.olang:9:30: error[S8d]: a narrowed payload field is read, never written - assign the whole case: e = Shape.Circle(...)
+    9 |     if s == Shape.Ring { s.c.r = 5 }
+      |                              ^
+compilation failed with 1 error
 === s8dunnarrowed.olang
 s8dunnarrowed.olang:4:35: error[S8d]: Shape is an enum - its payload's 'r' is read where a test narrows a local or a parameter to the case, 'if e == Case { e.r }', assigned nowhere there
     4 | fn radius(s Shape) I64 { return s.r }

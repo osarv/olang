@@ -2952,7 +2952,11 @@ fn (c mut Checker&) mustWrite(p typed.Place&, sp source.Span, store Bool) {
                 case typed.Expr.Try(_, _, _) => true
                 case _ => false
             }
-            if store { c.err(sp, msgs.AssignIntoTried() if tried else msgs.WriteIntoCallValue()) }
+            if store and c.narrowCopy(x) {
+                c.err(sp, msgs.NarrowedWrite())
+            } else if store {
+                c.err(sp, msgs.AssignIntoTried() if tried else msgs.WriteIntoCallValue())
+            }
         }
         nomatch { }
     }
@@ -8475,16 +8479,8 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId) typed.E
     et := c.typeNamed(x)
     if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, null) }
     # S8d: a payload field of a local known to hold one case
-    match x {
-        case ast.Expr.Name(_, en) {
-            id := c.localNamed(en)
-            if id >= 0 {
-                fl := c.narrowedField(id, n)
-                if fl >= 0 { return c.readLocal(sp, fl) }
-            }
-        }
-        nomatch { }
-    }
+    fl := c.narrowedName(x, n)
+    if fl >= 0 { return c.readLocal(sp, fl) }
     p := c.place(x)
     if p is null { return c.unknown(sp) }
     fp := c.field(sp, nsp, p, n)
@@ -8791,6 +8787,8 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
                 id := c.localOrCapture(n, sp)
                 if id < 0 and c.fr().Inst >= 0 { return c.instField(sp, n) }
                 if id < 0 { return null }
+                # S8d: a local narrowed to a payload written whole is the payload's copy, read and never written
+                if id != c.localNamed(n) { return typed.Place.Temp(sp, c.localType(id), c.readLocal(sp, id), c.site(typed.SiteKind.Temp, sp)) }
                 return typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id)))
             }
             if ref.Kind == names.What.Global { return typed.Place.Global(sp, c.globalType(ref.Module, n), ref.Module, n) }
@@ -8800,6 +8798,9 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place&c {
             ref := c.P.R.Member(c.fr().File, sp.End)
             if ref.Kind == names.What.Global { return typed.Place.Global(sp, c.globalType(ref.Module, n), ref.Module, n) }
             if ref.Kind == names.What.None and c.typeNamed(y) < types.TypeId(0) {
+                # S8d: a narrowed local's payload field, read - never written, being the payload's copy
+                fl := c.narrowedName(y, n)
+                if fl >= 0 { return typed.Place.Temp(sp, c.localType(fl), c.readLocal(sp, fl), c.site(typed.SiteKind.Temp, sp)) }
                 p := c.place(y)
                 if p is null { return null }
                 return c.field(sp, memberSpan(sp, c.text(n).Len()), p, n)
@@ -12492,6 +12493,31 @@ fn caseDecl(td ast.TypeDecl&, k I64) ast.CaseDecl&td {
         case ast.TypeBody.Enum(cases) { return cases[k] if k < cases.Len() else null }
         nomatch { return null }
     }
+}
+
+# S8d: whether a value reads a narrowed local's payload copy
+fn (c mut Checker&) narrowCopy(x typed.Expr&) Bool {
+    p := readPlace(x)
+    if p is null { return false }
+    match p {
+        case typed.Place.Local(_, _, id) {
+            for k in c.fr().narrowFields { if k == I64(id) { return true } }
+        }
+        nomatch { }
+    }
+    return false
+}
+
+# S8d: x.n where x names a narrowed local and n a field of its case's payload: the field's copy, -1 for none
+fn (c mut Checker&) narrowedName(x ast.Expr&, n source.NameId) I64 {
+    match x {
+        case ast.Expr.Name(_, en) {
+            id := c.localNamed(en)
+            if id >= 0 { return c.narrowedField(id, n) }
+        }
+        nomatch { }
+    }
+    return -1
 }
 
 # S8d: a payload field of a narrowed local, "e.r": its copy's local, -1 where e is not narrowed or has no such field

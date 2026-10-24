@@ -1,0 +1,14 @@
+# check: fail error[S8d]: a narrowed payload field is read, never written
+# S8d: a narrowed payload is the payload's copy, so writing a field of it would change nothing the program holds
+type Circle struct(r I64) { r }
+type Shape enum {
+    Ring(c Circle)
+    Dot
+}
+fn grow(s Shape) Shape {
+    if s == Shape.Ring { s.c.r = 5 }
+    return s
+}
+fn main() {
+    assert grow(Shape.Ring(Circle(1))) == Shape.Ring(Circle(1))
+}
