@@ -308,3 +308,7 @@ on sight per rules.md, "Code rules".
   order, two phases, -check; io_print/io_try/io_fix/precedence_migrate left out - not idempotent on current code).
   Follow-up asked: errors print module-qualified (`unhandled error: io.Error.FAILED`, `$e` likewise). Build list item 14's
   `Result<T, E Error>` trait is moot (Result dropped 2026-10-24), so no prelude `Error` is needed.
+- 2026-10-25 ~01:00 CEST: wt-any fix round done (f29a774, verified): both UAFs, $ depth, lazy default slots, generic type
+  cases, O10d by-value borrow refusal (pre-existing stack UAF), recvApplies (pre-existing), fuzzers repaired (differential
+  fuzzer found 4 compiler bugs: E30, E16, E4a, E10 - fixed). Known limit: a List's iterator cannot be an `any` (T22a on
+  ListIter.Next). Follow-up review running (/home/user/review/any2); merge if clean.
