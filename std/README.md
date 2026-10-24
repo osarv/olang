@@ -10,7 +10,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `io.olang` | file descriptors, `Print`/`Println`, buffered `Writer`, `Lines` |
 | `os.olang` | arguments, environment, files and directories, `Exec`/`Start` without a shell, `Exit` |
 | `filepath.olang` | path text: `Dir`, `Base`, `Ext`, `Join`, `Clean`, `Rel` |
-| `time.olang` | monotonic and wall clocks |
+| `time.olang` | monotonic and wall clocks, `Duration` and `Sleep`, `Date` with RFC 3339 `Format`/`Parse` |
 | `rand.olang` | seeded xoshiro256** generator |
 | `pair.olang` | `Pair<A, B>`: two values of any types held as one (a map key when both are) |
 | `stats.olang` | sum, mean, variance, percentiles, histograms |

@@ -39,3 +39,304 @@ test "the monotonic clock never goes back, and measures what passes" {
 test "the wall clock is a date after this was written" {
     assert Wall() > 1790000000000000000        # 2026-09-21, in nanoseconds
 }
+
+# ---- durations ----
+
+# a length of time, in nanoseconds - what Sleep waits and what two clock readings differ by. It extends I64 (T29f), so
+# durations add, subtract, scale by a number and compare as the integers they are ("Seconds(1) + Millis(500)",
+# "d * 3", "d < Millis(10)"), and a Duration goes wherever an I64 is wanted. Made from a count of a unit with the
+# functions below; read back in one with its methods. An I64 of nanoseconds spans 292 years either way, so a Date's Wall() holds the years 1678 to 2262
+type Duration extends I64
+
+fn Nanos(n I64) Duration { return Duration(n) }
+fn Micros(n I64) Duration { return Duration(n * 1000) }
+fn Millis(n I64) Duration { return Duration(n * 1000000) }
+fn Seconds(n I64) Duration { return Duration(n * 1000000000) }
+fn Minutes(n I64) Duration { return Duration(n * 60000000000) }
+fn Hours(n I64) Duration { return Duration(n * 3600000000000) }
+
+# the duration as a whole count of a unit, rounded toward zero, or in seconds as a float
+fn (d Duration) Nanos() I64 { return I64(d) }
+fn (d Duration) Micros() I64 { return I64(d) / 1000 }
+fn (d Duration) Millis() I64 { return I64(d) / 1000000 }
+fn (d Duration) Seconds() F64 { return F64(I64(d)) / 1e9 }
+
+# the time passed since t, a reading of Now(), as a Duration
+fn Elapsed(t I64) Duration { return Duration(Now() - t) }
+
+# how "$" renders a Duration: the largest units first, as Go writes one - "1h2m3.5s", "2m0s", "1.5s", "250ms",
+# "12.5us", "800ns", "0s" - seconds and smaller with as many decimals as they need and no trailing zeros, and a "-"
+# before a negative one
+fn (d Duration) Str() String {
+    n := I64(d)
+    if n == 0 { return "0s" }
+    sign := "-" if n < 0 else ""
+    u U64 = U64(-n) if n < 0 else U64(n)            # the most negative I64 too
+    if u < 1000 { return $sign $u "ns" }
+    if u < 1000000 { return $sign $fraction(u, 1000) "us" }
+    if u < 1000000000 { return $sign $fraction(u, 1000000) "ms" }
+    h := u / 3600000000000
+    m := u / 60000000000 % 60
+    s := fraction(u % 60000000000, 1000000000)
+    if h > 0 { return $sign $h "h" $m "m" $s "s" }
+    if m > 0 { return $sign $m "m" $s "s" }
+    return $sign $s "s"
+}
+
+# u / unit with its remainder as decimals, trailing zeros dropped: fraction(1500, 1000) is "1.5"
+fn fraction(u U64, unit U64) String {
+    whole := u / unit
+    rest := u % unit
+    if rest == 0 { return $whole }
+    digits := StringBuilder()
+    for f := unit / 10, f > 0 and rest > 0, f = f / 10 {
+        digits.PushChar(Char('0' + rest / f))
+        rest = rest % f
+    }
+    return $whole "." $digits.ToString()
+}
+
+extern fn nanosleep(req Array<I64>, rem Array<I64>) I32
+
+# waits d, then returns: the thread sleeps, using no processor time. A negative or zero d returns at once. A signal
+# that interrupts the sleep does not shorten it - the rest is slept. Under "olang interpret", and while compiling
+# where a call is reached, it sleeps as at run time (an effect: a global set from one is set at startup)
+fn Sleep(d Duration) {
+    if d <= 0 { return }
+    req := I64[I64(d) / 1000000000, I64(d) % 1000000000]
+    rem := Array<I64>(2)
+    for nanosleep(req, rem) != 0 {
+        req[0] = rem[0]
+        req[1] = rem[1]
+    }
+}
+
+test "durations are made, read back, compared and rendered" {
+    assert Seconds(2) == Millis(2000) and Minutes(1) == Seconds(1) * 60
+    d := Seconds(1) + Millis(500)
+    assert d.Millis() == 1500 and d.Seconds() == 1.5 and d.Micros() == 1500000
+    assert $d == "1.5s" and $(Hours(1) + Minutes(2) + Millis(3500)) == "1h2m3.5s"
+    assert $Minutes(2) == "2m0s" and $Millis(250) == "250ms" and $Nanos(12500) == "12.5us"
+    assert $Nanos(800) == "800ns" and $Duration(0) == "0s" and $(-Millis(3)) == "-3ms"
+    assert d * 2 == Seconds(3) and d / 3 == Millis(500) and Millis(1) < Seconds(1)
+}
+
+test "Sleep waits at least what it is given" {
+    start := Now()
+    Sleep(Millis(20))
+    assert Elapsed(start) >= Millis(20) and Elapsed(start) < Seconds(10)
+    Sleep(Duration(-5))
+    Sleep(Duration(0))
+}
+
+# ---- dates ----
+
+# a wall-clock reading split into its calendar parts, in the proleptic Gregorian calendar: Month 1-12, Day 1-31, Hour
+# 0-23, Minute and Second 0-59 (no leap seconds - the system clock has none either), Nano 0-999999999, and Offset the
+# minutes the time zone it is written in is ahead of UTC (0 for UTC, 120 for CEST, -300 for EST). The time zone is a
+# fixed offset: what a zone's offset is on a given day is the zone database's business, which this module does not hold
+type Date struct(Year I64, Month I64, Day I64, Hour I64 = 0, Minute I64 = 0, Second I64 = 0, Nano I64 = 0
+    Offset I64 = 0) {
+    Year
+    Month
+    Day
+    Hour
+    Minute
+    Second
+    Nano
+    Offset
+}
+
+# what Parse fails with: text that is not an RFC 3339 date and time (SYNTAX), or one naming a day, hour, minute, second
+# or offset that does not exist (RANGE)
+error Error {
+    SYNTAX
+    RANGE
+}
+
+# days from 1970-01-01 to the date (negative before it) - Hinnant's days_from_civil, exact for every I64 year that fits
+fn daysFromCivil(y0 I64, m I64, d I64) I64 {
+    y := y0 - 1 if m <= 2 else y0
+    era := (y if y >= 0 else y - 399) / 400
+    yoe := y - era * 400
+    mp := m - 3 if m > 2 else m + 9
+    doy := (153 * mp + 2) / 5 + d - 1
+    doe := yoe * 365 + yoe / 4 - yoe / 100 + doy
+    return era * 146097 + doe - 719468
+}
+
+# whether y is a leap year, and the days of month m in it
+fn isLeap(y I64) Bool { return y % 4 == 0 and (y % 100 != 0 or y % 400 == 0) }
+fn daysIn(y I64, m I64) I64 {
+    if m == 2 { return 29 if isLeap(y) else 28 }
+    return 30 if m == 4 or m == 6 or m == 9 or m == 11 else 31
+}
+
+# the date and time "wall" - nanoseconds since 1970-01-01 00:00 UTC, as Wall() gives - is, written in the time zone
+# "offset" minutes ahead of UTC: "time.DateOf(time.Wall())" is now in UTC
+fn DateOf(wall I64, offset I64 = 0) Date {
+    ns := wall + offset * 60000000000
+    days := ns / 86400000000000
+    rest := ns % 86400000000000
+    if rest < 0 {
+        days--
+        rest += 86400000000000
+    }
+    # Hinnant's civil_from_days
+    z := days + 719468
+    era := (z if z >= 0 else z - 146096) / 146097
+    doe := z - era * 146097
+    yoe := (doe - doe / 1460 + doe / 36524 - doe / 146096) / 365
+    doy := doe - (365 * yoe + yoe / 4 - yoe / 100)
+    mp := (5 * doy + 2) / 153
+    d := doy - (153 * mp + 2) / 5 + 1
+    m := mp + 3 if mp < 10 else mp - 9
+    y := yoe + era * 400 + (1 if m <= 2 else 0)
+    secs := rest / 1000000000
+    return Date(y, m, d, secs / 3600, secs / 60 % 60, secs % 60, rest % 1000000000, offset)
+}
+
+# the instant the date names, in nanoseconds since 1970-01-01 00:00 UTC - Offset taken away. Parts out of their range
+# carry, as arithmetic does: Date(2026, 1, 32) is February 1st
+fn (d Date&) Wall() I64 {
+    days := daysFromCivil(d.Year, d.Month, d.Day)
+    secs := days * 86400 + d.Hour * 3600 + d.Minute * 60 + d.Second - d.Offset * 60
+    return secs * 1000000000 + d.Nano
+}
+
+# the day of the week, 0 Sunday to 6 Saturday
+fn (d Date&) Weekday() I64 {
+    w := (daysFromCivil(d.Year, d.Month, d.Day) + 4) % 7      # 1970-01-01 was a Thursday
+    return w + 7 if w < 0 else w
+}
+
+# the day of the year, 1 to 366
+fn (d Date&) YearDay() I64 { return daysFromCivil(d.Year, d.Month, d.Day) - daysFromCivil(d.Year, 1, 1) + 1 }
+
+fn twoDigits(n I64) String { return n.PadStart(2, '0') }
+
+# the date as RFC 3339 writes it (ISO 8601's profile for the internet): "2026-10-24T13:05:01Z" in UTC,
+# "2026-10-24T15:05:01+02:00" with an offset, and the fraction of a second after a '.' when there is one, with as many
+# digits as it needs ("13:05:01.5Z", Go's RFC3339Nano). A year outside 0-9999 is written with as many digits as it has,
+# which RFC 3339 does not allow
+fn (d Date&) Str() String {
+    b := StringBuilder()
+    b.Push(d.Year.PadStart(4, '0'))
+    b.Push(("-" $twoDigits(d.Month) "-" $twoDigits(d.Day) "T" $twoDigits(d.Hour) ":" $twoDigits(d.Minute) ":"
+        $twoDigits(d.Second)))
+    if d.Nano != 0 {
+        b.PushChar('.')
+        digits := d.Nano.PadStart(9, '0')
+        n := digits.Len()
+        for n > 0 and digits[n - 1] == '0' { n-- }
+        b.Push(digits[:n])
+    }
+    if d.Offset == 0 {
+        b.PushChar('Z')
+    } else {
+        o := d.Offset if d.Offset > 0 else -d.Offset
+        b.PushChar('+' if d.Offset > 0 else '-')
+        b.Push($twoDigits(o / 60) ":" $twoDigits(o % 60))
+    }
+    return b.ToString()
+}
+
+# the instant "wall" (as Wall() gives) as RFC 3339 text, in the time zone "offset" minutes ahead of UTC
+fn Format(wall I64, offset I64 = 0) String { return DateOf(wall, offset).Str() }
+
+# n digits of t from at, as a number - failing with SYNTAX when they are not all there
+fn digitsAt(t String&, at I64, n I64) I64 ? Error.SYNTAX {
+    if at + n > t.Len() { error Error.SYNTAX }
+    v I64 = 0
+    for i in range n {
+        c := t[at + i]
+        if not c.IsDigit() { error Error.SYNTAX }
+        v = v * 10 + I64(c - '0')
+    }
+    return v
+}
+
+fn expect(t String&, at I64, c Char) ? Error.SYNTAX {
+    if at >= t.Len() or t[at] != c { error Error.SYNTAX }
+}
+
+# an RFC 3339 date and time read into a Date: "YYYY-MM-DDTHH:MM:SS", a fraction of up to nine digits after a '.', and
+# 'Z' or "+HH:MM"/"-HH:MM" - with 't', 'z' and a space for the 'T' allowed, as the RFC allows. Fails with SYNTAX for any
+# other text and RANGE for a part that names nothing (a 13th month, February 30th, a 25th hour, a 61st second)
+fn Parse(t String&) Date ? Error {
+    y := try digitsAt(t, 0, 4)
+    try expect(t, 4, '-')
+    mo := try digitsAt(t, 5, 2)
+    try expect(t, 7, '-')
+    d := try digitsAt(t, 8, 2)
+    if t.Len() <= 10 or (t[10] != 'T' and t[10] != 't' and t[10] != ' ') { error Error.SYNTAX }
+    h := try digitsAt(t, 11, 2)
+    try expect(t, 13, ':')
+    mi := try digitsAt(t, 14, 2)
+    try expect(t, 16, ':')
+    s := try digitsAt(t, 17, 2)
+    at I64 = 19
+    nano I64 = 0
+    if at < t.Len() and t[at] == '.' {
+        at++
+        start := at
+        scale I64 = 100000000
+        for at < t.Len() and t[at].IsDigit() {
+            if at - start >= 9 { error Error.SYNTAX }
+            nano += I64(t[at] - '0') * scale
+            scale = scale / 10
+            at++
+        }
+        if at == start { error Error.SYNTAX }
+    }
+    if at >= t.Len() { error Error.SYNTAX }
+    off I64 = 0
+    if t[at] == 'Z' or t[at] == 'z' {
+        at++
+    } else if t[at] == '+' or t[at] == '-' {
+        oh := try digitsAt(t, at + 1, 2)
+        try expect(t, at + 3, ':')
+        om := try digitsAt(t, at + 4, 2)
+        if oh > 23 or om > 59 { error Error.RANGE }
+        off = oh * 60 + om
+        if t[at] == '-' { off = -off }
+        at += 6
+    } else {
+        error Error.SYNTAX
+    }
+    if at != t.Len() { error Error.SYNTAX }
+    if mo < 1 or mo > 12 or d < 1 or d > daysIn(y, mo) or h > 23 or mi > 59 or s > 59 { error Error.RANGE }
+    return Date(y, mo, d, h, mi, s, nano, off)
+}
+
+# instants known while compiling: these asserts are decided there (S18c), and run again in the test build
+EpochText String = Format(0)
+Billion String = Format(1000000000 * 1000000000)
+
+test "dates are written as RFC 3339 and read back" {
+    assert EpochText == "1970-01-01T00:00:00Z" and Billion == "2001-09-09T01:46:40Z"
+    assert Format(-1) == "1969-12-31T23:59:59.999999999Z"
+    assert Format(1500000000, 120) == "1970-01-01T02:00:01.5+02:00"
+    d := DateOf(1790000000000000000)
+    assert d.Year == 2026 and d.Month == 9 and d.Day == 21 and d.Weekday() == 1 and d.YearDay() == 264
+    assert d.Wall() == 1790000000000000000
+    p := Parse("2026-10-24T15:05:01.25+02:00")!
+    assert p.Hour == 15 and p.Offset == 120 and p.Nano == 250000000 and $p == "2026-10-24T15:05:01.25+02:00"
+    assert p.Wall() == Parse("2026-10-24T13:05:01.25Z")!.Wall()
+    assert DateOf(p.Wall()) == Parse("2026-10-24t13:05:01.250z")!
+    assert Date(2024, 2, 29).Wall() + Hours(24) == Date(2024, 3, 1).Wall()
+    assert DateOf(Date(1700, 12, 31, 23, 59, 59).Wall()).Year == 1700
+}
+
+test "Parse refuses what is not a date" {
+    for bad in String&["", "2026-10-24", "2026-10-24T13:05:01", "2026-1-24T13:05:01Z", "2026-10-24T13:05:01.Z"
+        "2026-10-24T13:05:01+0200", "2026-10-24T13:05:01Zx", "2026-10-24T13:05:01.1234567890Z"] {
+        try Parse(bad) catch Error.SYNTAX { continue } catch Error.RANGE { unreachable }
+        unreachable
+    }
+    for bad in String&["2026-13-01T00:00:00Z", "2025-02-29T00:00:00Z", "2026-10-24T24:00:00Z", "2026-10-24T13:60:00Z"
+        "2026-10-24T13:05:01+24:00"] {
+        try Parse(bad) catch Error.RANGE { continue } catch Error.SYNTAX { unreachable }
+        unreachable
+    }
+}
