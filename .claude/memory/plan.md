@@ -288,3 +288,5 @@ on sight per rules.md, "Code rules".
   after a block ending in break/continue), E35 `x!` on null; arrays never null (empty is their zero; the agent's call);
   tools/null_migrate.olang for oann. lang24 now runs on through traits, contracts (+ CheckError rename), then the small
   items (limits/bit ops, one-line lambdas, raw values, text literals, bitwise precedence) and the array-literal leak.
+- 2026-10-24: lang24 round 4 merged (9171148, verified): T30a `type A trait extends B, C`, T31a closed traits
+  `type Float trait for F16, BF16, F32, F64 { }` (prelude number traits now closed), G19 intersections `<T Shape House>`.
