@@ -970,3 +970,4 @@ errors and documentation - generic `+` already works).
   std/net; 8 std breadth (Set, regex, flags, Unicode, base64, sha256, iterator adapters, Deque, Heap); 9 `T.Max` limits,
   bit operations; 10 one-line lambdas `fn(x): return ...`; 11 narrowing after a leaving null test; 12 doc comments +
   a minimal LSP. Not asked yet - for the user when rested.
+  The user: "No, build the enum part I agreed on" - the payload form stays decided and is built; only raw values wait.
