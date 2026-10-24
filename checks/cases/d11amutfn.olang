@@ -4,7 +4,7 @@
 import "std/io"
 fn dbl(x I64) I64 { return x * 2 }
 fn use(f mut fn(x I64) I64) I64 { return f(1) }
-fn main() ? io.IoError {
+fn main() ? io.Error {
     f mut fn(x I64) I64 = dbl
     try io.Println($f(3) " " $use(dbl))
 }

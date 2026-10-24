@@ -3118,7 +3118,7 @@ fn (p mut Program&) canonEnum(c mut cursor&) types.TypeId ? {
 
 # a program of one file, main.olang, loaded over the repository's std with the host's build constants
 fn testLoad(dir String&, text String&) load.Loader {
-    try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
+    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
     l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
@@ -3143,8 +3143,8 @@ fn (p mut Program&) roundTrip(text String&) Bool {
 }
 
 test "declared types and instances: laid out as C lays them out, their canonical texts read back" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n"
                        "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\nerror E { BAD }\n"
                        "type Meters extends I32\ntype Buf struct() { a := Array<U8>(5) }\nfn main() ? { }\n"))
@@ -3180,8 +3180,8 @@ test "declared types and instances: laid out as C lays them out, their canonical
 }
 
 test "T16 and G17: a type holding itself, and instances nesting without end" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type A struct() { b B }\ntype B struct() { a A }\ntype D<T> struct() { n D<Array<T>> }\n"
                        "type L struct() { next L& }\nfn main() ? { }\n"))
     r := names.Resolver(l)
@@ -3200,8 +3200,8 @@ test "T16 and G17: a type holding itself, and instances nesting without end" {
 }
 
 test "a known length folds as the program computes it (T7c): typed, wrapping, from globals" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("B U8 = 255\nW I64 = 3\nK := W * 4 + 1\ntype S0 struct() { a := Array<U8>(B + 1) }\n"
                        "type S1 struct() { a := Array<U8>(K - W) }\ntype S2 struct() { a := Array<U8>((2 << 3) | 1) }\n"
                        "type S3 struct() { a := Array<U8>(I64(B) + 1) }\nfn main() ? { }\n"))
@@ -3218,8 +3218,8 @@ test "a known length folds as the program computes it (T7c): typed, wrapping, fr
 }
 
 test "inference (G9): literals adapt, numbers widen unless a receiver bound them, permissions meet" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, "type P struct() { }\nfn pick<T>(a T, b T) T { return a }\nfn main() ? { }\n")
     r := names.Resolver(l)
     r.Resolve()
@@ -3257,8 +3257,8 @@ test "inference (G9): literals adapt, numbers widen unless a receiver bound them
 }
 
 test "constraints (G19): a type satisfies a trait by its methods, checked where a variable is bound" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type K struct() { }\nfn (k K&) Hash() I64 { return 1 }\ntype N struct() { }\n"
                        "fn (n N&) Hash() I32 { return 1 }\ntype Box<T> struct() { }\nfn (b Box<T>&) Get(x T) T { return x }\n"
                        "fn h<T Hashable<T>>(x T) { }\nfn main() ? { }\n"))
@@ -3282,8 +3282,8 @@ test "constraints (G19): a type satisfies a trait by its methods, checked where 
 }
 
 test "a closed trait (T31a): the prelude's Float, Integer and Number are met by the built-in numbers alone" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type D extends F64\ntype M I32\ntype Fake struct() { }\nfn (f Fake&) Area() F64 { return 0.0 }\n"
                        "fn main() ? { }\n"))
     r := names.Resolver(l)
@@ -3311,8 +3311,8 @@ test "a closed trait (T31a): the prelude's Float, Integer and Number are met by 
 }
 
 test "function types carry what their markers say; a call's scope variables come from the type; instances remember where" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type N struct(v I64) {\n    v\n}\ntype Box<T> struct(v T) {\n    v\n}\n"
                        "fn link(a mut N&, b N&a) { }\nfn first(l N&) N&l { return l }\nfn make() N& { return N(1) }\n"
                        "fn (l mut N&) Put(x N&l) { }\nfn apply(f fn(a mut N&, b N&a), x mut N&, y N&) { }\n"

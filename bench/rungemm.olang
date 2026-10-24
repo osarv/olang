@@ -15,12 +15,12 @@ import "benchlib"
 fn main() {
     olang := benchlib.Compiler()
     dir := benchlib.Dir
-    try os.MkDirAll($dir "/build/la") catch os.OsError { benchlib.Fail("cannot make bench/build/la", 1) }
+    try os.MkDirAll($dir "/build/la") catch os.Error { benchlib.Fail("cannot make bench/build/la", 1) }
     # each olang program in a directory of its own, built for this machine and again for baseline x86-64; the C side is
     # built for this machine too, with C's floating point kept as written (-ffp-contract=off), as olang's is (B12c)
     for p in String&["gemm", "mlp"] {
         pdir := $dir "/build/la/" $p
-        try os.MkDirAll(pdir) catch os.OsError { benchlib.Fail("cannot make " $pdir, 1) }
+        try os.MkDirAll(pdir) catch os.Error { benchlib.Fail("cannot make " $pdir, 1) }
         benchlib.MustQuietly(String&[olang, "build", "-target", "x86-64", "../../../" $p ".olang"], pdir)
         benchlib.MustQuietly(String&["cp", "build/" $p, "build/" $p ".base"], pdir)
         benchlib.MustQuietly(String&[olang, "build", "../../../" $p ".olang"], pdir)

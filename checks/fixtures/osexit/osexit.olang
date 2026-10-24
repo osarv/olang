@@ -3,7 +3,7 @@
 import "std/os"
 import "std/io"
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     try io.Print("before\n")
     os.Exit(42)
     try io.Print("after\n")

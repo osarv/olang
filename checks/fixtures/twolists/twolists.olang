@@ -1,7 +1,7 @@
 import "std/io"
 import mine "io"
 error E { X }
-fn main() ? E, io.IoError {
+fn main() ? E, io.Error {
     try io.Print("")
     assert mine.Mine() == 7
 }

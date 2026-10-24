@@ -15,7 +15,7 @@ fn main() {
     dump := toolkit.Env("NAMESDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/diag.txt"
     if not toolkit.Built(dump) { toolkit.Die("namesdiff: " $dump " is not built (make " $dump ")") }
-    root := try os.Cwd() catch os.OsError {
+    root := try os.Cwd() catch os.Error {
         toolkit.Die("namesdiff: no working directory")
         unreachable
     }

@@ -19,7 +19,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn peek(n Node&) I64 {
-    join { spawn fn() { try io.Println($n.v) catch io.IoError { } } }
+    join { spawn fn() { try io.Println($n.v) catch io.Error { } } }
     return n.v
 }
 fn (b Bag&) Str() String {

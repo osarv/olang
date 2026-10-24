@@ -381,6 +381,17 @@
 | VAR 4:8-4:13
 | -- diagnostics
 | error D12b 4:5
+=== checks/fixtures/fix/old.olang
+| CATCH 15:22-15:41
+| ERRORS 4:1-4:19
+| EXPR 14:5-14:36
+| EXPR 16:5-16:23
+| FN 13:1-17:2
+| IMPORT 2:1-2:16
+| VAR 15:5-15:41
+| -- diagnostics
+| error  6:9
+| error  8:26
 === checks/fixtures/format/broken.olang
 | -- diagnostics
 | error  3:1

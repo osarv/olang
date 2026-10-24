@@ -17,7 +17,7 @@ fn (b Big&) Str() String {
 G String& = $Big(1) "g"
 type Res struct(k I64) {
     k
-} destruct { try io.Println("dtor " $Big(k) "!") catch io.IoError { } }
+} destruct { try io.Println("dtor " $Big(k) "!") catch io.Error { } }
 type Holder struct(k I64) {
     k
     t String& = $Big(k) "h"
@@ -40,7 +40,7 @@ fn main() ? {
     try io.Println($f(3) " " $G.Len())
     {
         r := Res(4)
-        defer { try io.Println("defer " $Big(5) "!") catch io.IoError { } }
+        defer { try io.Println("defer " $Big(5) "!") catch io.Error { } }
         match r.k {
             case 4 {
                 x := $Big(6) "m"

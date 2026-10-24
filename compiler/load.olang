@@ -99,7 +99,7 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
 fn StdDir() String {
     env := try os.Env("OLANG_STD") catch default ""
     if env != "" { return $env }
-    exe := try os.ReadLink("/proc/self/exe") catch os.OsError { return "std" }
+    exe := try os.ReadLink("/proc/self/exe") catch os.Error { return "std" }
     return $filepath.Dir(exe) "/../std"
 }
 
@@ -146,14 +146,14 @@ fn (l Loader&) rootIdentity(path String&) String {
 # each other's types)
 fn (l mut Loader&) LoadPrelude() {
     dir := filepath.Join(l.Std, "prelude")
-    names := try os.ReadDir(dir) catch os.OsError { return }
+    names := try os.ReadDir(dir) catch os.Error { return }
     files List<String&>
     for n in names {
         p := filepath.Join(dir, n)
         if n.EndsWith(".olang") { files.Push($p) }
     }
     for f in files {
-        text := try os.ReadFile(f) catch os.OsError { continue }
+        text := try os.ReadFile(f) catch os.Error { continue }
         ts := scan.Scan(text)
         for name in typeNames(text, ts) { l.preludeTypes.Push($name) }
     }
@@ -187,7 +187,7 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool) I64 {
     if real in l.Overlay {
         m.Src = source.Source($m.Path, l.Overlay.Get(real)!)
     } else {
-        m.Src = try source.Read(m.Path) catch os.OsError {
+        m.Src = try source.Read(m.Path) catch os.Error {
             f := l.Diags.AddFile(m.Path, "")
             l.Diags.Error(diag.Where.File(f), msgs.CannotOpen())
             try l.Mods.Pop() catch { }
@@ -808,8 +808,8 @@ fn testLoader(lock String&) Loader {
 
 fn write(dir String&, name String&, text String&) {
     p := $dir "/" $name
-    try os.MkDirAll(filepath.Dir(p)) catch os.OsError { }
-    try os.WriteFile(p, text) catch os.OsError { }
+    try os.MkDirAll(filepath.Dir(p)) catch os.Error { }
+    try os.WriteFile(p, text) catch os.Error { }
 }
 
 fn rules(l mut Loader&) String {
@@ -822,8 +822,8 @@ fn rules(l mut Loader&) String {
 }
 
 test "a program's modules: relative imports, a cycle, the prelude and identities" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     write(dir, "main.olang", "import \"lib/util\"\nimport Pub \"lib/pub\"\nfn main() ? { }\n")
     write(dir, "lib/util.olang", "import \"helper\"\ntype Box struct() { }\n")
     write(dir, "lib/helper.olang", "import \"util\"\nfn H() I64 { return 1 }\n")
@@ -840,8 +840,8 @@ test "a program's modules: relative imports, a cycle, the prelude and identities
 }
 
 test "imports that are wrong are reported where they are written" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     write(dir, "a.olang", "")
     write(dir, "b/a.olang", "")
     write(dir, "main.olang", "import \"a.olang\"\nimport \"nothere\"\nimport \"a\"\nimport \"b/a\"\nimport \"std/../x\"\n")
@@ -855,8 +855,8 @@ test "imports that are wrong are reported where they are written" {
 }
 
 test "a top-level if decides which imports exist, and a pending one waits for Decide" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     write(dir, "lin.olang", "")
     write(dir, "win.olang", "")
     write(dir, "late.olang", "")
@@ -873,8 +873,8 @@ test "a top-level if decides which imports exist, and a pending one waits for De
 }
 
 test "M16 and M17: one file reached twice, and a re-export back to its importer" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     write(dir, "c.olang", "")
     write(dir, "b.olang", "import C \"c\"\n")
     write(dir, "main.olang", "import B \"b\"\nimport \"c\"\n")
@@ -889,13 +889,13 @@ test "M16 and M17: one file reached twice, and a re-export back to its importer"
 }
 
 fn git(dir String&, args Array<String&>&) Bool {
-    out := try os.Exec(args, "", true, dir) catch os.OsError { return false }
+    out := try os.Exec(args, "", true, dir) catch os.Error { return false }
     return out.Status == 0
 }
 
 test "a remote import is fetched, locked, and its relative imports stay inside it" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     repo := $dir "/remote/example.com/me/tools"
     write(repo, "lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
     write(repo, "part/inner.olang", "import \"../lib\"\n")

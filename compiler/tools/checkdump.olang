@@ -24,7 +24,7 @@ import "../views"
 fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
-        try io.PrintErrln("usage: checkdump [-D NAME=VALUE]... [-t] FILE...") catch io.IoError { }
+        try io.PrintErrln("usage: checkdump [-D NAME=VALUE]... [-t] FILE...") catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(args) })
@@ -66,5 +66,5 @@ fn run(args Array<String&>&) {
         for g in c.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }
         out.Write("bodies " $c.Bodies.Len() "\n")
     }
-    try out.Flush() catch io.IoError { os.Exit(1) }
+    try out.Flush() catch io.Error { os.Exit(1) }
 }

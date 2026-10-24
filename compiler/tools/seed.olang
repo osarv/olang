@@ -27,7 +27,7 @@ fn main() ? {
 }
 
 fn die(why String&) noreturn {
-    try io.PrintErrln($"seed: " $why) catch io.IoError { }
+    try io.PrintErrln($"seed: " $why) catch io.Error { }
     os.Exit(1)
 }
 
@@ -40,23 +40,23 @@ fn run(dir String&) I32 {
     d := diag.Diagnostics(false)
     c := build.Config()
     cl := try olang.Prepare(String&["olang", "build", "-target", "x86-64", "compiler/olang.olang"], c, d) catch olang.Bad {
-        try io.Print(d.Render()) catch io.IoError { }
+        try io.Print(d.Render()) catch io.Error { }
         return 1
     }
     fe := olang.Passes()
     prog := build.Program()
     try fe.Analyze(cl.Files[0], build.Kind.Program, c, prog, d) catch build.Failed {
-        try io.Print(d.Render()) catch io.IoError { }
+        try io.Print(d.Render()) catch io.Error { }
         return 1
     }
     if d.Errors() > 0 or prog.Units.Len() == 0 {
-        try io.Print(d.Render()) catch io.IoError { }
+        try io.Print(d.Render()) catch io.Error { }
         return 1
     }
-    try os.MkDirAll(dir) catch os.OsError { die($"cannot make " $dir) }
-    old := try os.ReadDir(dir) catch os.OsError { die($"cannot read " $dir) }
+    try os.MkDirAll(dir) catch os.Error { die($"cannot make " $dir) }
+    old := try os.ReadDir(dir) catch os.Error { die($"cannot read " $dir) }
     for f in old {
-        if f.EndsWith(".ll") { try os.Remove($dir "/" $f) catch os.OsError { die($"cannot remove " $dir "/" $f) } }
+        if f.EndsWith(".ll") { try os.Remove($dir "/" $f) catch os.Error { die($"cannot remove " $dir "/" $f) } }
     }
     for u in prog.Units { write(dir, $build.Readable(u.Identity) $suffix(u.Holds) ".ll", u.Ir) }
     write(dir, "olang_runtime.ll", prog.Runtime)
@@ -76,5 +76,5 @@ fn suffix(k build.UnitKind) String {
 
 fn write(dir String&, name String&, ir String&) {
     path := $dir "/" $name
-    try os.WriteFile(path, ir) catch os.OsError { die($"cannot write " $path) }
+    try os.WriteFile(path, ir) catch os.Error { die($"cannot write " $path) }
 }

@@ -122,7 +122,7 @@ ImportLimit I64 = 70
 # the front end, so the compiler's own speed is measured apart from clang's
 PhaseAt mut I64 = 0
 fn Phase(name String&) {
-    v := try os.Env("OLANG_TIMES") catch os.OsError { return }
+    v := try os.Env("OLANG_TIMES") catch os.Error { return }
     now := time.Now()
     if PhaseAt != 0 { sayErr($"olang: " $name " " $((now - PhaseAt) / 1000000) " ms\n") }
     PhaseAt = now
@@ -199,7 +199,7 @@ fn (c Config&) DataFlags() List<String&> {
 # clang's own version, which every object's name holds: another clang may compile the same IR to another object
 fn (c mut Config&) clangVersion() String&c {
     if c.version == "" {
-        out := try target.ClangSays(String&[$c.Clang, "--version"], "", true) catch os.OsError { return "" }
+        out := try target.ClangSays(String&[$c.Clang, "--version"], "", true) catch os.Error { return "" }
         c.version = $out.Stdout
     }
     return c.version
@@ -367,7 +367,7 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I
     if weights.Len() > 0 { order.Sort(fn(a I64, b I64) Bool { return weights[a] > weights[b] }) }
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     chan.Init(queue)
-    for k in order { try chan.Send(queue, k) catch chan.ChanError { unreachable } }
+    for k in order { try chan.Send(queue, k) catch chan.Error { unreachable } }
     workers := width if width < n else n
     join {
         for w in range workers { spawn runner(queue, cmds, status, said) }
@@ -378,7 +378,7 @@ fn RunAll(cmds Array<Array<String&>&>&, width I64, weights Array<I64>& = Array<I
 
 fn runner(queue mut chan.Chan<I64>&, cmds Array<Array<String&>&>&, status mut Array<I32>&, said mut Array<String&>&) {
     for k in queue {
-        out := try os.Exec(cmds[k]) catch os.OsError {
+        out := try os.Exec(cmds[k]) catch os.Error {
             status[k] = 127
             said[k] = $"cannot run " $cmds[k][0] "\n"
             continue
@@ -410,7 +410,7 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     if os.Exists(path) or path in j.finals { return path }
     # B3j: an object's name says what it is made from, so one another build left in the store is this one
     if c.Store != "" {
-        try os.Link($c.Store "/" $path[c.Dir.Len() + 1:], path) catch os.OsError { }
+        try os.Link($c.Store "/" $path[c.Dir.Len() + 1:], path) catch os.Error { }
         if os.Exists(path) { return path }
     }
     # B3k: another build in this directory compiling this very object: waited for, not compiled twice
@@ -428,12 +428,12 @@ fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d
     # directory, run beside this one, may write irPath at the same time - the same name with other IR, or the same IR
     # truncated and written again under clang's feet
     irTmp := $irPath[:irPath.Len() - 3] "." $getpid() ".tmp.ll"
-    try os.WriteFile(irTmp, ir) catch os.OsError {
+    try os.WriteFile(irTmp, ir) catch os.Error {
         fileFatal(irPath, msgs.CannotOpen(), d)
         error Failed.REPORTED
     }
     if c.Clang == "" {
-        try os.Rename(irTmp, irPath) catch os.OsError { }
+        try os.Rename(irTmp, irPath) catch os.Error { }
         d.Fatal(diag.Where.Nowhere, msgs.NoClang(irPath))
         error Failed.REPORTED
     }
@@ -460,14 +460,14 @@ fn claim(path String&, j mut compiles&) Bool {
     lock := $path ".lock"
     for tries in range 2 {
         made := true
-        try os.MkDir(lock) catch os.OsError.EXISTS { made = false } catch os.OsError { return true }
+        try os.MkDir(lock) catch os.Error.EXISTS { made = false } catch os.Error { return true }
         if made {
-            try os.WriteFile($lock "/pid", $getpid()) catch os.OsError { }
+            try os.WriteFile($lock "/pid", $getpid()) catch os.Error { }
             j.locks.Push($lock)
             return true
         }
         if holderAlive(lock) { return false }
-        try os.RemoveAll(lock) catch os.OsError { }
+        try os.RemoveAll(lock) catch os.Error { }
     }
     return true
 }
@@ -476,10 +476,10 @@ fn claim(path String&, j mut compiles&) Bool {
 # hour ago - a compile never takes that long, and a process number is reused. A lock not yet holding its number is
 # taken for alive for a minute
 fn holderAlive(lock String&) Bool {
-    info := try os.Stat(lock) catch os.OsError { return false }
+    info := try os.Stat(lock) catch os.Error { return false }
     age := time.Wall() - info.ModTime
     if age > 1800 * 1000000000 { return false }
-    pid := try os.ReadFile($lock "/pid") catch os.OsError { return age < 60 * 1000000000 }
+    pid := try os.ReadFile($lock "/pid") catch os.Error { return age < 60 * 1000000000 }
     return pid != "" and os.Exists($"/proc/" $pid)
 }
 
@@ -530,23 +530,23 @@ fn (c mut Config&) compile(j mut compiles&, d mut diag.Diagnostics&) ? Failed {
     c.Compiled += j.cmds.Len()
     failed := false
     for i in range status.Len() {
-        try os.Rename(j.irTemps[i], j.irs[i]) catch os.OsError { }
+        try os.Rename(j.irTemps[i], j.irs[i]) catch os.Error { }
         if status[i] != 0 {
             sayErr(said[i])
             if not failed { d.Fatal(diag.Where.Nowhere, msgs.ClangFailed(j.irs[i])) }
             failed = true
-            try os.Remove(j.temps[i]) catch os.OsError { }
+            try os.Remove(j.temps[i]) catch os.Error { }
             continue
         }
         if said[i] != "" { sayErr(said[i]) }
-        try os.Rename(j.temps[i], j.finals[i]) catch os.OsError {
+        try os.Rename(j.temps[i], j.finals[i]) catch os.Error {
             if not failed { fileFatal(j.finals[i], msgs.CannotOpen(), d) }
             failed = true
             continue
         }
         c.keep(j.finals[i])
     }
-    for l in j.locks { try os.RemoveAll(l) catch os.OsError { } }
+    for l in j.locks { try os.RemoveAll(l) catch os.Error { } }
     if failed { error Failed.REPORTED }
 }
 
@@ -556,10 +556,10 @@ fn (c Config&) keep(obj String&) {
     if c.Store == "" { return }
     kept := $c.Store "/" $obj[c.Dir.Len() + 1:]
     if os.Exists(kept) { return }
-    try os.MkDirAll(c.Store) catch os.OsError { return }
+    try os.MkDirAll(c.Store) catch os.Error { return }
     tmp := $kept "." $getpid() ".tmp"
-    try os.Link(obj, tmp) catch os.OsError { return }
-    try os.Rename(tmp, kept) catch os.OsError { try os.Remove(tmp) catch os.OsError { } }
+    try os.Link(obj, tmp) catch os.Error { return }
+    try os.Rename(tmp, kept) catch os.Error { try os.Remove(tmp) catch os.Error { } }
 }
 
 # ---- the link ----
@@ -590,19 +590,19 @@ fn (c mut Config&) Link(objs List<String&>&, bin String&, dyncall Bool) ? Failed
     h := HashOf(parts)
     stamp := $bin ".link"
     if linkCurrent(bin, stamp, h) { return }
-    try os.Remove(stamp) catch os.OsError { }
+    try os.Remove(stamp) catch os.Error { }
     if c.Clang == "" { error Failed.UNBUILT }
-    out := try os.Exec(args.ToArray(), "", false) catch os.OsError { error Failed.REPORTED }
+    out := try os.Exec(args.ToArray(), "", false) catch os.Error { error Failed.REPORTED }
     if out.Status != 0 { error Failed.REPORTED }
     c.Linked++
-    info := try os.Stat(bin) catch os.OsError { return }
-    try os.WriteFile(stamp, $h " " $info.Size " " $info.ModTime "\n") catch os.OsError { }
+    info := try os.Stat(bin) catch os.Error { return }
+    try os.WriteFile(stamp, $h " " $info.Size " " $info.ModTime "\n") catch os.Error { }
 }
 
 # whether bin is the binary a link hashed h made, and nothing has changed it since
 fn linkCurrent(bin String&, stamp String&, h String&) Bool {
-    text := try os.ReadFile(stamp) catch os.OsError { return false }
-    info := try os.Stat(bin) catch os.OsError { return false }
+    text := try os.ReadFile(stamp) catch os.Error { return false }
+    info := try os.Stat(bin) catch os.Error { return false }
     return text == $h " " $info.Size " " $info.ModTime "\n"
 }
 
@@ -612,9 +612,9 @@ fn linkCurrent(bin String&, stamp String&, h String&) Bool {
 fn Shown(p String&) String { return $p if p.StartsWith("/") else $"./" $p }
 
 # text written to the standard output, or (sayErr) the standard error, where it can be
-fn say(text String&) { try io.Print(text) catch io.IoError { } }
-fn sayln(text String&) { try io.Println(text) catch io.IoError { } }
-fn sayErr(text String&) { try io.PrintErr(text) catch io.IoError { } }
+fn say(text String&) { try io.Print(text) catch io.Error { } }
+fn sayln(text String&) { try io.Println(text) catch io.Error { } }
+fn sayErr(text String&) { try io.PrintErr(text) catch io.Error { } }
 
 # what a failed compilation writes: its diagnostics and the line counting them (B11)
 fn finish(d mut diag.Diagnostics&) I32 {
@@ -634,7 +634,7 @@ fn unbuilt() I32 { return 1 }
 fn Pid() I32 { return getpid() }
 
 fn (c Config&) ensureDir(d mut diag.Diagnostics&) ? Failed {
-    try os.MkDirAll(c.Dir) catch os.OsError {
+    try os.MkDirAll(c.Dir) catch os.Error {
         fileFatal(c.Dir, msgs.CannotOpen(), d)
         error Failed.REPORTED
     }
@@ -657,11 +657,11 @@ fn Compile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagno
     objs := try c.Objects(prog, d) catch Failed { return finish(d) }
     obj := objs[0]
     if c.Output != "" {
-        bytes := try os.ReadFile(obj) catch os.OsError {
+        bytes := try os.ReadFile(obj) catch os.Error {
             fileFatal(obj, msgs.CannotOpen(), d)
             return finish(d)
         }
-        try os.WriteFile(c.Output, bytes) catch os.OsError {
+        try os.WriteFile(c.Output, bytes) catch os.Error {
             fileFatal(c.Output, msgs.OutputCannotWrite(), d)
             return finish(d)
         }
@@ -699,7 +699,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
     av List<String&>
     av.Push($file)
     for a in args { av.Push($a) }
-    try os.ExecInPlace(Shown(c.Built), av.ToArray()) catch os.OsError {
+    try os.ExecInPlace(Shown(c.Built), av.ToArray()) catch os.Error {
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return finish(d)
     }
@@ -708,7 +708,7 @@ fn RunProgram<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Str
 
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
 fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&c) I32 {
-    info := try os.Stat(file) catch os.OsError { return c.unusable(file, msgs.CannotOpen(), d) }
+    info := try os.Stat(file) catch os.Error { return c.unusable(file, msgs.CannotOpen(), d) }
     if info.Kind == os.FileKind.DIR { return c.unusable(file, msgs.IsDirectory(), d) }
     if info.Kind != os.FileKind.FILE { return c.unusable(file, msgs.NotRegular(), d) }
     prog := Program()
@@ -724,7 +724,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     }
     Phase("link")
     if not c.Quiet { sayln(c.paint("36", $"== " $file " ==")) }
-    out := try os.Exec(String&[Shown(bin)], "", false) catch os.OsError { return 1 }
+    out := try os.Exec(String&[Shown(bin)], "", false) catch os.Error { return 1 }
     if out.Status > 128 {
         sayln(c.paint("31", $file ": the tests ended by a signal (" $SignalName(out.Status - 128) ")"))
     }
@@ -761,7 +761,7 @@ fn TestFiles(c Config&, exe String&, passed Array<String&>&, files Array<String&
         args.Push("test")
         for p in passed { args.Push($p) }
         args.Push($f)
-        out := try os.Exec(args.ToArray(), "", false) catch os.OsError {
+        out := try os.Exec(args.ToArray(), "", false) catch os.Error {
             sayln(c.paint("31", $f ": lost track of its build, skipping"))
             failed = true
             continue
@@ -917,7 +917,7 @@ fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d 
 
 # the status the binary at bin ends with
 fn statusOf(bin String&) I32 {
-    out := try os.Exec(String&[$bin]) catch os.OsError { return -1 }
+    out := try os.Exec(String&[$bin]) catch os.Error { return -1 }
     return out.Status
 }
 
@@ -925,7 +925,7 @@ test "a build compiles and links only what changed: modules, -define, the target
     clang := target.FindClang()
     if clang == "" { return } # nothing to build with: passed, as the http tests are
     dir := try os.MkTemp("", "olang-build-")
-    defer try os.RemoveAll(dir) catch os.OsError { }
+    defer try os.RemoveAll(dir) catch os.Error { }
     d := diag.Diagnostics(false)
     c := Config()
     c.Dir = $dir
@@ -974,7 +974,7 @@ test "B3j: an object another directory's build left in the store is taken from i
     clang := target.FindClang()
     if clang == "" { return }
     dir := try os.MkTemp("", "olang-store-")
-    defer try os.RemoveAll(dir) catch os.OsError { }
+    defer try os.RemoveAll(dir) catch os.Error { }
     d := diag.Diagnostics(false)
     fe := stubFrontend()
     one := Config()
@@ -1006,7 +1006,7 @@ test "B3j: an object another directory's build left in the store is taken from i
 
 test "B3k: an object one build claims another waits for, unless the build that claimed it is gone" {
     dir := try os.MkTemp("", "olang-claim-")
-    defer try os.RemoveAll(dir) catch os.OsError { }
+    defer try os.RemoveAll(dir) catch os.Error { }
     obj := $dir "/m.0123.o"
     a := compiles()
     assert claim(obj, a) and a.locks.Len() == 1
@@ -1025,7 +1025,7 @@ test "B3k: an object one build claims another waits for, unless the build that c
 
 test "listed test files run one after another in processes of their own, a signal said" {
     dir := try os.MkTemp("", "olang-tfiles-")
-    defer try os.RemoveAll(dir) catch os.OsError { }
+    defer try os.RemoveAll(dir) catch os.Error { }
     # a stand-in compiler: writes its arguments to a log, and ends as the file it is given says
     exe := $dir "/fake"
     log := $dir "/log"

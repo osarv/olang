@@ -6,7 +6,7 @@ type FRes struct(k I64) ? E {
     gone Bool = false
     if k < 0 { error E.X }
 } destruct {
-    try io.Println("destruct " $k " (this instance destructed before: " $gone ")") catch io.IoError { }
+    try io.Println("destruct " $k " (this instance destructed before: " $gone ")") catch io.Error { }
     gone = true
 }
 fn main() ? {

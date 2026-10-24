@@ -18,7 +18,7 @@ fn work(n I64) I64 {
     return t
 }
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     n I64 = 10000000 * os.Args().Len()
     try io.Print($work(n) "\n")
 }

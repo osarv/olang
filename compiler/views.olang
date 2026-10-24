@@ -1619,9 +1619,9 @@ if TestBuild {
 
     # a program of one file, main.olang, checked and its views judged: the errors said in it, "LINE:COL RULE " each
     fn said(text String&) String {
-        dir := try os.MkTemp() catch os.OsError { unreachable }
-        defer { try os.RemoveAll(dir) catch os.OsError { } }
-        try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
+        dir := try os.MkTemp() catch os.Error { unreachable }
+        defer { try os.RemoveAll(dir) catch os.Error { } }
+        try os.WriteFile($dir "/main.olang", text) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
         l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)

@@ -19,8 +19,8 @@ Workers I64 = 4
 fn main() {
     args := os.Args()
     given := $args[1] if args.Len() > 1 else toolkit.Compiler()
-    root := try os.Cwd() catch os.OsError { toolkit.Die("rungold: no working directory") }
-    dir := try os.RealPath(filepath.Dir(given)) catch os.OsError { toolkit.Die("rungold: no " $given) }
+    root := try os.Cwd() catch os.Error { toolkit.Die("rungold: no working directory") }
+    dir := try os.RealPath(filepath.Dir(given)) catch os.Error { toolkit.Die("rungold: no " $given) }
     olang := $dir "/" $filepath.Base(given)
     golden := toolkit.Env("RUNGOLD_OUT", "compiler/goldens/run.txt")
     out := StringBuilder()
@@ -30,8 +30,8 @@ fn main() {
         toolkit.Say("rungold: " $f " status " $o.Status "\n")
     }
     work := $root "/build/rungold"
-    try os.RemoveAll(work) catch os.OsError { }
-    try os.MkDirAll(work) catch os.OsError { toolkit.Die("rungold: cannot make " $work) }
+    try os.RemoveAll(work) catch os.Error { }
+    try os.MkDirAll(work) catch os.Error { toolkit.Die("rungold: cannot make " $work) }
     cases := RunCases().ToArray()
     join {
         for w in range Workers {
@@ -48,7 +48,7 @@ fn main() {
         out.Push(toolkit.GoldenSection(toolkit.RunKey(f), body.Replace(cdir, "$CASE").Replace(root, "$ROOT")))
     }
     toolkit.GoldenWrite(golden, out.ToString())
-    try os.RemoveAll(work) catch os.OsError { }
+    try os.RemoveAll(work) catch os.Error { }
     toolkit.Say(("rungold: " $TestFiles().Len() " files of tests and " $cases.Len() " cases (" $unstable " unstable) from "
                  $given " into " $golden "\n"))
 }
@@ -102,26 +102,26 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         name := filepath.Base(cases[k])
         base := name[0:name.Len() - 6]
         dir := $work "/" $base
-        try os.MkDirAll(dir) catch os.OsError { continue }
+        try os.MkDirAll(dir) catch os.Error { continue }
         text := read(cases[k])
-        try os.WriteFile($dir "/" $name, text) catch os.OsError { continue }
+        try os.WriteFile($dir "/" $name, text) catch os.Error { continue }
         flags := headerLine(text, "# flags: ")
         args := List<String&>()
         args.Push(olang)
         args.Push("build")
         for f in toolkit.Fields(flags) { args.Push($f) }
         args.Push(name)
-        b := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError { continue }
+        b := try os.Exec(args.ToArray(), "", true, dir) catch os.Error { continue }
         body String& = ""
         if b.Status != 0 {
             body = toolkit.RunBody(-1, false, $"did not build\n" $b.Stdout)
         } else {
             exe := $dir "/build/" $binaryOf(base, flags)
-            one := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.OsError { continue }
-            two := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.OsError { continue }
+            one := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.Error { continue }
+            two := try os.Exec(String&["timeout", "600", exe], "", true, dir) catch os.Error { continue }
             body = toolkit.RunBody(one.Status, one.Stdout != two.Stdout or one.Status != two.Status, one.Stdout)
         }
-        try os.WriteFile($dir "/run.txt", body) catch os.OsError { }
+        try os.WriteFile($dir "/run.txt", body) catch os.Error { }
     }
 }
 

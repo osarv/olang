@@ -36,7 +36,7 @@ fn main() {
     work String& = ""
     if keep != "" {
         work = keep
-        try os.MkDirAll(work) catch os.OsError { toolkit.Die("astdiff: cannot make " $work) }
+        try os.MkDirAll(work) catch os.Error { toolkit.Die("astdiff: cannot make " $work) }
     } else {
         work = toolkit.Scratch("astdiff")
     }

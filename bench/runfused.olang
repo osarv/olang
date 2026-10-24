@@ -12,7 +12,7 @@ import "benchlib"
 fn main() {
     args := os.Args()
     olang := benchlib.Compiler()
-    try os.MkDirAll($benchlib.Dir "/build/fused") catch os.OsError { benchlib.Fail("cannot make bench/build/fused", 1) }
+    try os.MkDirAll($benchlib.Dir "/build/fused") catch os.Error { benchlib.Fail("cannot make bench/build/fused", 1) }
     benchlib.MustQuietly(String&[olang, "build", "../../fused.olang"], $benchlib.Dir "/build/fused")
     benchlib.TakeLock()
     which := $args[1] if args.Len() > 1 else "all"

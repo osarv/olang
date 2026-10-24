@@ -153,7 +153,7 @@ fn ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hos
     if triple != "" { args.Push($"--target=" $triple) }
     if hasCpu { args.Push($ArchCpuFlags[ai] $cpu) }
     for a in String&["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
-    out := try ClangSays(args.ToArray(), "void olang_target_probe(void) { }\n", not interpreting) catch os.OsError {
+    out := try ClangSays(args.ToArray(), "void olang_target_probe(void) { }\n", not interpreting) catch os.Error {
         try refuse(d, msgs.TargetUnknown(spec))
         unreachable
     }
@@ -258,7 +258,7 @@ fn canCompileBf16(clang String&, triple String&) Bool {
     ir := "define float @f(float %x) {\n  %b = fptrunc float %x to bfloat\n  %c = fadd bfloat %b, %b\n" $
         "  %r = fpext bfloat %c to float\n  ret float %r\n}\n"
     args := String&[$clang, $"--target=" $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
-    out := try os.Exec(args, ir) catch os.OsError { return false }
+    out := try os.Exec(args, ir) catch os.Error { return false }
     return out.Status == 0
 }
 
@@ -271,7 +271,7 @@ fn canCompileBf16(clang String&, triple String&) Bool {
 # its size and its time), the arguments and the input, and this processor (/proc/cpuinfo's model and flags, which
 # "native" reads). The file holds its key before the answer, and one whose key is not the one asked is asked again.
 # Only an answer with status 0 is kept, and only where keep is (interpret writes no file)
-fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.OsError {
+fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Error {
     key := probeKey(args, input)
     path := $probeDir() "/" $U64(key.Hash()).Format(16) if key != "" else ""
     if path != "" {
@@ -280,10 +280,10 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.OsEr
     }
     out := try os.Exec(args, input)
     if out.Status == 0 and path != "" and keep {
-        try os.MkDirAll(probeDir()) catch os.OsError { return out }
+        try os.MkDirAll(probeDir()) catch os.Error { return out }
         tmp := $path "." $getpid() ".tmp"
-        try os.WriteFile(tmp, $key $out.Stdout) catch os.OsError { return out }
-        try os.Rename(tmp, path) catch os.OsError { try os.Remove(tmp) catch os.OsError { } }
+        try os.WriteFile(tmp, $key $out.Stdout) catch os.Error { return out }
+        try os.Rename(tmp, path) catch os.Error { try os.Remove(tmp) catch os.Error { } }
     }
     return out
 }
@@ -304,7 +304,7 @@ fn probeKey(args Array<String&>&, input String&) String {
     exe := whereIs(args[0])
     if exe == "" { return "" }
     real := try os.RealPath(exe) catch default ""
-    info := try os.Stat(real) catch os.OsError { return "" }
+    info := try os.Stat(real) catch os.Error { return "" }
     b := StringBuilder()
     b.Push($"olang probe 1\n" $real " " $info.Size " " $info.ModTime "\n")
     for a in args[1:] { b.Push($a "\n") }
@@ -326,7 +326,7 @@ fn whereIs(name String&) String {
 
 # this processor's model, as /proc/cpuinfo names it ("" where it cannot be read)
 fn cpuModel() String {
-    info := try os.ReadFile("/proc/cpuinfo") catch os.OsError { return "" }
+    info := try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
     for line in info.Lines() {
         if line.StartsWith("model name") { return $line }
     }
@@ -337,7 +337,7 @@ fn cpuModel() String {
 
 # the flags of this processor, as /proc/cpuinfo lists them ("" where it cannot be read)
 fn cpuFlags() String {
-    info := try os.ReadFile("/proc/cpuinfo") catch os.OsError { return "" }
+    info := try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
     for line in info.Lines() {
         if line.StartsWith("flags") {
             colon := try line.FindByte(':') catch { return "" }

@@ -152,10 +152,10 @@ fn main() {
     if not toolkit.Built(exe) { toolkit.Die("drvdiff: " $exe " is not built (make " $exe ")") }
     gpath := "compiler/goldens/drv.txt"
     g := toolkit.Golden() if capture else toolkit.GoldenRead(gpath, "drvgold")
-    here := try os.Cwd() catch os.OsError { toolkit.Die("drvdiff: no working directory") }
+    here := try os.Cwd() catch os.Error { toolkit.Die("drvdiff: no working directory") }
     work := toolkit.Scratch("drvdiff")
     defer toolkit.Clean(work)
-    try os.MkDir($work "/adir") catch os.OsError { toolkit.Die("drvdiff: cannot make " $work "/adir") }
+    try os.MkDir($work "/adir") catch os.Error { toolkit.Die("drvdiff: cannot make " $work "/adir") }
     keys := List<String&>()
     got := List<String&>()
     for line in Cases {
@@ -164,7 +164,7 @@ fn main() {
     }
     std := $"OLANG_STD=" $here "/std"
     dir := $work "/programs"
-    try os.MkDir(dir) catch os.OsError { toolkit.Die("drvdiff: cannot make " $dir) }
+    try os.MkDir(dir) catch os.Error { toolkit.Die("drvdiff: cannot make " $dir) }
     for i in range ProgramNames.Len() { toolkit.Write($dir "/" $ProgramNames[i], ProgramTexts[i]) }
     full := $exe if exe.StartsWith("/") else $here "/" $exe
     # stage 0 builds its formatter into its cache the first time, and says so: done once beforehand

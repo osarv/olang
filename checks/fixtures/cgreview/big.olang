@@ -18,7 +18,7 @@ fn grown(m M&) M {
     return c
 }
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     m := M()
     m.data[3] = 2.5
     try io.Print($sum(grown(m)) "\n")

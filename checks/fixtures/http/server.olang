@@ -188,7 +188,7 @@ fn serve(fd I32) {
 
 # writes all of data, giving up quietly when the other side has gone
 fn send(fd I32, data String&) {
-    try io.Write(fd, data) catch io.IoError { }
+    try io.Write(fd, data) catch io.Error { }
 }
 
 fn main() ? {

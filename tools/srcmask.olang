@@ -170,7 +170,7 @@ fn Translate(raw String&) String {
 }
 
 # the text of a file, read as Python's text mode reads it
-fn ReadText(path String&) String ? os.OsError {
+fn ReadText(path String&) String ? os.Error {
     return Translate(try os.ReadFile(path))
 }
 
@@ -228,9 +228,9 @@ fn Compiler() String {
 # ---- running the compiler ----
 
 # what the program args[0] writes to its standard output and then its standard error when run with args in the directory
-# dir, killed when it has run for timeoutMs milliseconds - fails with the OsError when it cannot be started and with
+# dir, killed when it has run for timeoutMs milliseconds - fails with the os.Error when it cannot be started and with
 # cancel.Stopped when the time ran out
-fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.OsError, cancel.Stopped {
+fn Capture(args Array<String&>&, dir String&, timeoutMs I64) String ? os.Error, cancel.Stopped {
     out := try os.ExecUntil(args, cancel.After(timeoutMs), "", true, dir)
     return $out.Stdout $out.Stderr
 }

@@ -29,6 +29,20 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |
 | `ffi.olang` | a C function called by a name chosen at run time (for `-i`) |
 
+## Names
+
+A name never repeats its module's: `io.Error`, not `io.Error`; `os.Error`, `json.Error`, `csv.Error`, `stats.Error`,
+`rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` - the module is already written before the dot. Two exceptions:
+
+- a module named for its main type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `heap.Heap`, `rand.Rand`,
+  as Go's `list.List`);
+- a module with several error types names the others by subject (`linalg.ShapeError`, `linalg.ActivationError`,
+  `http.HeaderError`), and the one for the module as a whole is still `Error`.
+
+The prelude is the exception to the rule, since its names are bare everywhere (`ListError`, `MapError`, `TextError`,
+`CheckError`, `CaseError` keep their prefix) - and so it must never declare a plain `Error`, which would collide with
+every module's own. `tools/stutter_rename.olang` renames the old names in other code (`olang fix` runs it).
+
 ## Subfolders
 
 - `prelude/` - the prelude: every file here is loaded before every program, and its types and methods are visible

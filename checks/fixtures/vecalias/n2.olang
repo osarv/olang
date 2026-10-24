@@ -10,7 +10,7 @@ fn churn() I64 {
     }
     return t
 }
-fn grow(w mut Vec<I64>&) ? io.IoError {
+fn grow(w mut Vec<I64>&) ? io.Error {
     f := vlib.View2
     d := f(w)
     for i in range 1000 { w.Push(i + 100) }

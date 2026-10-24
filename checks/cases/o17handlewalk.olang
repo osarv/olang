@@ -42,5 +42,5 @@ fn main() ? {
     w.b.items[0].v = 3
     n := bump(w)
     assert n == 1133
-    try io.Println($n) catch io.IoError { }
+    try io.Println($n) catch io.Error { }
 }

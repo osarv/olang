@@ -138,7 +138,7 @@ fn main() {
         benchlib.Fail("no benchmark matches " $o.names.ToArray().Join(" "), 2)
     }
     olang := benchlib.Compiler()
-    try os.MkDirAll($benchlib.Dir "/build") catch os.OsError { benchlib.Fail("cannot make bench/build", 1) }
+    try os.MkDirAll($benchlib.Dir "/build") catch os.Error { benchlib.Fail("cannot make bench/build", 1) }
     build(olang, rows, o.base)
     benchlib.TakeLock()
     check(rows, o.base)
@@ -160,7 +160,7 @@ fn build(olang String&, rows List<String&>&, base Bool) {
             if base {
                 # baseline x86-64
                 buildOlang(olang, prog, String&["-target", "x86-64"])
-                try os.Exec(String&["cp", "build/" $prog, "build/" $prog ".base"], "", true, benchlib.Dir) catch os.OsError { }
+                try os.Exec(String&["cp", "build/" $prog, "build/" $prog ".base"], "", true, benchlib.Dir) catch os.Error { }
             }
             buildOlang(olang, prog, Array<String&>(0))
             built.Put("o." $prog, true)
@@ -298,5 +298,5 @@ fn report(rows List<String&>&, base Bool, reps I64, times Map<String&, List<I64>
         out.Push("     (" $secs(omin) " / " $secs(cmin) ")\n")
     }
     benchlib.Say(out.ToString())
-    try os.WriteFile($benchlib.Dir "/build/results.txt", out.ToString()) catch os.OsError { }
+    try os.WriteFile($benchlib.Dir "/build/results.txt", out.ToString()) catch os.Error { }
 }

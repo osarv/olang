@@ -8,7 +8,7 @@ extern fn open(path Array<U8>, flags I32) I32
 extern fn close(fd I32) I32
 extern fn pipe(fds Array<I32>) I32
 
-error IoError {
+error Error {
     FAILED
     PARTIAL
 }
@@ -32,7 +32,7 @@ Stderr I32 = 2
 # goes again. "data[sent:]" is a borrow (E16a): no copy, no allocation, just a pointer and a length, which
 # is what makes retrying free. Before slicing existed this reported PARTIAL and gave up, because there was
 # no way to name the tail at all.
-fn Write(fd I32, data Array<U8>&) ? IoError {
+fn Write(fd I32, data Array<U8>&) ? Error {
     total I64 = I64(data.Len())
     if total == 0 {
         return
@@ -42,11 +42,11 @@ fn Write(fd I32, data Array<U8>&) ? IoError {
         tail := data[sent:]
         n I64 = write(fd, tail, I64(tail.Len()))
         if n < 0 {
-            error IoError.FAILED
+            error Error.FAILED
         }
         # no bytes moved with bytes still outstanding: retrying would spin rather than make progress
         if n == 0 {
-            error IoError.PARTIAL
+            error Error.PARTIAL
         }
         sent = sent + n
     } for sent < total
@@ -57,30 +57,30 @@ fn Write(fd I32, data Array<U8>&) ? IoError {
 # "buf" and the return share the scope variable "s" (O3): the returned slice points into the caller's own
 # buffer, so its lifetime is that buffer's, and saying so is what lets it be returned at all - a bare "&"
 # return type is rejected outright (O13).
-fn Read(fd I32, buf mut Array<U8>&) Array<U8>&buf ? IoError {
+fn Read(fd I32, buf mut Array<U8>&) Array<U8>&buf ? Error {
     n I64 = read(fd, buf, I64(buf.Len()))
     if n < 0 {
-        error IoError.FAILED
+        error Error.FAILED
     }
     return buf[:n]
 }
 
 # Printing: the one way a program writes text to its standard output and error (M19f). Each call writes at once, nothing
 # held back, and a line and its end go as one write, so lines from tasks running at once are not cut into each other. A
-# failed write is an error (IoError), written with "try" like any other; one writing a lot uses a Writer. A value is made
+# failed write is an error (Error), written with "try" like any other; one writing a lot uses a Writer. A value is made
 # text where it is written: "try io.Println("n is " $n)".
 
 # t, then nothing - to the standard output
-fn Print(t String&) ? IoError { try Write(Stdout, t) }
+fn Print(t String&) ? Error { try Write(Stdout, t) }
 
 # t and a line end - to the standard output; with no text, a line end alone
-fn Println(t String& = "") ? IoError { try Write(Stdout, $t "\n") }
+fn Println(t String& = "") ? Error { try Write(Stdout, $t "\n") }
 
 # t, then nothing - to the standard error
-fn PrintErr(t String&) ? IoError { try Write(Stderr, t) }
+fn PrintErr(t String&) ? Error { try Write(Stderr, t) }
 
 # t and a line end - to the standard error
-fn PrintErrln(t String& = "") ? IoError { try Write(Stderr, $t "\n") }
+fn PrintErrln(t String& = "") ? Error { try Write(Stderr, $t "\n") }
 
 # writes n's decimal representation into buf and returns how many bytes it used. The caller supplies the
 # buffer because a function may not return a bare "&" reference (O13) and an I64 never needs more than
@@ -115,7 +115,7 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
     return used
 }
 
-# a file's lines, one at a time: "for line in try io.Lines(fd) { ... } catch IoError { ... }". The file is read through a
+# a file's lines, one at a time: "for line in try io.Lines(fd) { ... } catch Error { ... }". The file is read through a
 # buffer a piece at a time, so reading one of any size takes the memory of its longest line, never of the whole of it -
 # the buffer starts at "size" bytes and doubles whenever a single line fills it.
 # A line is what comes before a newline, without it, and one carriage return just before the newline goes with it, so
@@ -124,7 +124,7 @@ fn FormatInt(n I64, buf mut Array<U8>&) I32 {
 # Each line Next gives is new text, built where its caller puts it (O18a) and nowhere else, so it stays as it is
 # whatever is read after it: in "for line in", the loop body's own scope, reclaimed as each turn ends - to keep one
 # longer, put it where it is to be kept (kept.Push($line) builds a copy in the list's scope; a line, or anything, put
-# into a scope that outlives the loop stays there until that scope closes, O8c). Next fails with IoError.FAILED when
+# into a scope that outlives the loop stays there until that scope closes, O8c). Next fails with Error.FAILED when
 # the read under it does, and with Exhausted when the file has no more lines - and either way calling it again reads
 # again, so the end of the file is never remembered: a file another program is still writing is followed by calling
 # Next again after a wait, as "tail -f" does:
@@ -142,7 +142,7 @@ type Lines struct(fd I32, size I64 = 65536) {
     end I64 = 0
 }
 
-fn (l mut Lines&) Next() String& ? IoError, Exhausted {
+fn (l mut Lines&) Next() String& ? Error, Exhausted {
     from I64 = l.start               # buf[l.start:from] holds no newline
     for {
         for i in range from, l.end {
@@ -164,7 +164,7 @@ fn (l mut Lines&) Next() String& ? IoError, Exhausted {
             for k in range l.end { l.buf[k] = old[k] }
         }
         got := read(l.fd, l.buf[l.end:], l.buf.Len() - l.end)
-        if got < 0 { error IoError.FAILED }
+        if got < 0 { error Error.FAILED }
         if got == 0 {                # the end of the file, as it is now: what is left is its last line
             if l.start == l.end { error Exhausted.END }
             first := l.start
@@ -195,7 +195,7 @@ fn (l Lines&) line(first I64, last I64) String& {
 # left when Flush is called; something larger than the buffer goes straight through. So nothing reaches the
 # descriptor until a Flush or a full buffer - what a program prints with Println meanwhile comes before it.
 # Writing never fails where it is written: a write the system refuses is remembered, everything after it is dropped,
-# and Flush fails with it - IoError.FAILED, or PARTIAL for a descriptor taking nothing more - then and every time after,
+# and Flush fails with it - Error.FAILED, or PARTIAL for a descriptor taking nothing more - then and every time after,
 # since the output is incomplete whatever comes later (C's stdio and Go's bufio keep the first failure the same way).
 # Flush where the output is complete, so a failure is the caller's to handle; to have it written however a function is
 # left, an error included, defer it - "defer out.Flush()!", deferred code having no caller to pass a
@@ -233,10 +233,10 @@ fn (w mut Writer&) WriteChar(c Char) {
 }
 
 # what waits in the buffer, written now - failing with the first write the system refused, now or before
-fn (w mut Writer&) Flush() ? IoError {
+fn (w mut Writer&) Flush() ? Error {
     w.drain()
-    if w.broken == 1 { error IoError.FAILED }
-    if w.broken == 2 { error IoError.PARTIAL }
+    if w.broken == 1 { error Error.FAILED }
+    if w.broken == 2 { error Error.PARTIAL }
 }
 
 # what waits in the buffer, to the descriptor - or dropped, once a write has failed
@@ -246,12 +246,12 @@ fn (w mut Writer&) drain() {
 }
 
 fn (w mut Writer&) send(t Array<U8>&) {
-    try Write(w.fd, t) catch IoError.FAILED { w.broken = 1 } catch IoError.PARTIAL { w.broken = 2 }
+    try Write(w.fd, t) catch Error.FAILED { w.broken = 1 } catch Error.PARTIAL { w.broken = 2 }
 }
 
 test "Write reports a failure from the underlying syscall" {
     failed Bool = false
-    try Write(-1, "no such fd") catch IoError {
+    try Write(-1, "no such fd") catch Error {
         failed = true
     }
     assert failed
@@ -259,19 +259,19 @@ test "Write reports a failure from the underlying syscall" {
 
 test "Write succeeds on a real descriptor" {
     ok Bool = true
-    try Write(Stdout, "io.olang: hello from a standard library written in olang\n") catch IoError {
+    try Write(Stdout, "io.olang: hello from a standard library written in olang\n") catch Error {
         ok = false
     }
     assert ok
 }
 
 test "Print and Println write text, Println with its line end" {
-    try Print("io.olang: Print ") catch IoError { }
-    try Println("and Println") catch IoError { }
-    try Println() catch IoError { }
-    try PrintErr("") catch IoError { }
+    try Print("io.olang: Print ") catch Error { }
+    try Println("and Println") catch Error { }
+    try Println() catch Error { }
+    try PrintErr("") catch Error { }
     n := 42
-    try Println("io.olang: n is " $n) catch IoError { }
+    try Println("io.olang: n is " $n) catch Error { }
 }
 
 # an ordinary zero-filled fixed-size buffer, no marker and no run-time length: passing it to a "Array<U8>&"
@@ -284,7 +284,7 @@ test "Print and Println write text, Println with its line end" {
 # The assertion lives in a fallible helper rather than in the test: "try f()" is an expression only where
 # there is a signature to propagate through, and a "try f() catch { }" statement discards the value it
 # caught - so a test block cannot bind the result of a fallible call at all.
-fn checkReadIsEmpty(fd I32, buf mut Array<U8>&) ? IoError {
+fn checkReadIsEmpty(fd I32, buf mut Array<U8>&) ? Error {
     got := try Read(fd, buf)
     assert got.Len() == 0
 }
@@ -295,7 +295,7 @@ test "Read returns a slice of the caller's own buffer" {
     fd I32 = openReadOnly(path)
     assert fd >= 0
     ok Bool = true
-    try checkReadIsEmpty(fd, buf) catch IoError {
+    try checkReadIsEmpty(fd, buf) catch Error {
         ok = false
     }
     assert ok
@@ -345,7 +345,7 @@ fn bracketed(text String&, size I64) String& {
     out mut String&return = ""
     for line in try Lines(fd, size) {
         out = $out "[" $line "]"
-    } catch IoError { unreachable }
+    } catch Error { unreachable }
     close(fd)
     return out
 }
@@ -381,12 +381,12 @@ test "Lines reports a read that fails, and ends the loop with it" {
     n I64 = 0
     for line in try Lines(-1) {
         n++
-    } catch IoError { failed = true }
+    } catch Error { failed = true }
     assert failed and n == 0
 }
 
 # Exhausted again for every call once the lines have run out
-fn afterTheEnd(fd I32) ? IoError {
+fn afterTheEnd(fd I32) ? Error {
     l := Lines(fd, 2)
     first := l.Next()!
     assert first == "only"
@@ -430,7 +430,7 @@ fn drained(fd I32) String& {
     out mut String&return = ""
     for line in try Lines(fd) {
         out = $out $line "\n"
-    } catch IoError { unreachable }
+    } catch Error { unreachable }
     return out
 }
 
@@ -480,7 +480,7 @@ fn failedFlushes(fd I32) I64 {
     w.WriteChar('!')
     n I64 = 0
     for i in range 3 {
-        try w.Flush() catch IoError.FAILED { n++ } catch IoError.PARTIAL { }
+        try w.Flush() catch Error.FAILED { n++ } catch Error.PARTIAL { }
     }
     return n
 }
@@ -495,11 +495,11 @@ test "a Writer's failed write is Flush's, and every Flush's after it" {
 }
 
 # writes "n" lines and fails partway through - what the deferred Flush still writes
-fn reportTo(fd I32, n I64) ? IoError {
+fn reportTo(fd I32, n I64) ? Error {
     w := Writer(fd)
     defer w.Flush()!
     for i in range n {
-        if i == 3 { error IoError.PARTIAL }
+        if i == 3 { error Error.PARTIAL }
         w.Write("line " $i "\n")
     }
 }
@@ -509,7 +509,7 @@ test "a deferred Flush writes what was written however the function is left" {
     assert pipe(fds) == 0
     try reportTo(fds[1], 2)
     left := false
-    try reportTo(fds[1], 9) catch IoError.PARTIAL { left = true } catch IoError { }
+    try reportTo(fds[1], 9) catch Error.PARTIAL { left = true } catch Error { }
     assert left
     close(fds[1])
     got := drained(fds[0])

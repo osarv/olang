@@ -32,7 +32,7 @@ fn main() ? {
     args := os.Args()
     if args.Len() < 2 {
         try io.PrintErrln("usage: lowerdump [-D NAME=VALUE]... [-t] [-v] [-standin] [-mir PATTERN] [-typed PATTERN] FILE...")
-            catch io.IoError { }
+            catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { run(args) })
@@ -90,7 +90,7 @@ fn run(args Array<String&>&) {
         consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
         for f in defines { try consts.Define(f, d) catch { } }
         # a checks case's own build constants, from its "# flags:" line
-        text := try os.ReadFile(path) catch os.OsError default ""
+        text := try os.ReadFile(path) catch os.Error default ""
         for line in text.Split("\n") {
             if not line.StartsWith("# flags:") { continue }
             words := line[8:].Trim().Split(" ")
@@ -187,7 +187,7 @@ fn run(args Array<String&>&) {
         }
         out.Write(("errors " $errs " bodies " $n.bodies " lowered " $n.lowered " clean " $n.clean " bad " $n.bad " gapped " $n.gapped
                    " unchecked " $n.unchecked "; made " $n.made " clean " $n.madeClean " gapped " $n.madeGapped "\n"))
-        try out.Flush() catch io.IoError { os.Exit(1) }
+        try out.Flush() catch io.Error { os.Exit(1) }
         all.bodies += n.bodies
         all.lowered += n.lowered
         all.clean += n.clean
@@ -202,5 +202,5 @@ fn run(args Array<String&>&) {
                $all.gapped " unchecked " $all.unchecked "; made " $all.made " clean " $all.madeClean " gapped " $all.madeGapped
                "\n"))
     for j in range all.whats.Len() { out.Write("  " $all.counts[j] " " $all.whats[j] "\n") }
-    try out.Flush() catch io.IoError { os.Exit(1) }
+    try out.Flush() catch io.Error { os.Exit(1) }
 }

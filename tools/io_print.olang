@@ -260,7 +260,7 @@ test "print words become io's, except in headers, declarations and strings" {
 }
 
 test "try io.Print loses its try unless a clause handles the error" {
-    text := "try io.Print(\"a\") catch io.IoError { fail }\ntry io.PrintErr(\"b\") catch { x++ }\ntry io.Println(\"c\")\n"
+    text := "try io.Print(\"a\") catch io.Error { fail }\ntry io.PrintErr(\"b\") catch { x++ }\ntry io.Println(\"c\")\n"
     out := StringBuilder()
     migrateTries(text, srcmask.Mask(text, false), "io", 0, text.Len(), out)
     assert out.ToString() == "io.Print(\"a\")\ntry io.Write(io.Stderr, \"b\") catch { x++ }\ntry io.Println(\"c\")\n"

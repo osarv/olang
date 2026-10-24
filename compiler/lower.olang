@@ -1274,7 +1274,7 @@ fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind,
 # ---- errors ----
 
 # E35: the error a "!" took ends the program, named as a program writes it - another module's error type by its
-# module's base name, the prelude's and this module's bare ("io.IoError.FULL") - a test and an exit for each word
+# module's base name, the prelude's and this module's bare ("io.Error.FULL") - a test and an exit for each word
 fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, kind mir.ExitKind = mir.ExitKind.Error) {
     xs := ln.bangNames(from, sp)
     for i in range 0, xs.Len(), 2 {
@@ -1297,13 +1297,8 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         et := t.ErrOf(xs[j])
         if t.KindOf(et) != types.Kind.Named { continue }
         d := t.DeclOf(et)
-        q := ""
         dm := t.DeclModule(d)
-        id := ln.L.P.L.Mods[dm].Identity
-        if not id.StartsWith("std/prelude") and dm != ln.module() {
-            k := try id.FindLast("/") catch default -1
-            q = $id[k + 1:] "."
-        }
+        q := ErrQualifier(ln.L.P.L.Mods[dm].Identity, dm == ln.L.P.L.Root)
         ws := ln.L.P.ErrorWords(d)
         for w in range ws.Len() {
             out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
@@ -1311,6 +1306,14 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         }
     }
     return out.ToArray()
+}
+
+# how an error type's name is written outside its module ("io." for std/io): the module's alias, its identity's base name.
+# The prelude's names are bare everywhere, and so are the root program's own, which is the code that is running
+fn ErrQualifier(identity String&, inRoot Bool) String {
+    if inRoot or identity.StartsWith("std/prelude") { return "" }
+    k := try identity.FindLast("/") catch default -1
+    return $identity[k + 1:] "."
 }
 
 # text as constant data (T25d), a String&
@@ -3347,9 +3350,9 @@ fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source
 # ("B<id>: problem"), "gap" lines for what is not lowered yet, and the dump of each body of the root module whose
 # function's name is in dumps
 fn lowerText(text String&, dumps Array<String&>&) String, String {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
-    try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
+    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
     l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
