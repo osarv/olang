@@ -680,3 +680,14 @@ errors and documentation - generic `+` already works).
   explained (match T per type, defaults per count, named functions for the rest); rec no overloading; ASKED 9b
   `<T Vec2 or I64>` constraint lists, 10b named constructors later. 11 fixed point DEFERRED to FPGA. 12 maybe/null -
   explained (zero values decide it), rec keep nullable; awaiting the user.
+- AGENDA ROUND 2 2026-10-24: 8 doc tests DEFERRED until a doc generator. 12 nullable references KEPT (QAO dropped); the
+  user: "Maybe revert the Result work as well? ... free up ?" - recommended: drop QAN (Result, postfix `?` keep-outcome;
+  a generic enum covers it later), KEEP QAM (errors as values: catch bindings, `error e`, `type X error {}`, named sets);
+  postfix `?` free. 5: the user proposed removing `is` (== identity on references) or a non-nesting == with case tests
+  as ==; recommended instead: `==` = contents (following references, Eq overriding, 5a: self-reaching types need Eq),
+  `is` = same instance / null / case with bindings. 7: the user's brackets `fn f(x I32) [x > 0] F64 ? E` - recommended
+  as the contract syntax (parameters and constants only, decided at known calls, `checked f(x)` at run time, replacing
+  call-site leading asserts, no ensures); scope relations `[b outlives a]`. 9/10: recommended overloading by parameter
+  COUNT only, extra constructors as functions named for the type ending in a call to the main one (D2 exception);
+  overloading by type stays generics + match T, 9b `<T Vec2 or I64>`. ASKED, numbered: 1 dev build name `-quickbuild`
+  or `-draft`; 2 the ==/is plan with 5a; 3 `outlives`; 4 overloading by count + named-for-type constructors; 5 9b.
