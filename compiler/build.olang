@@ -178,7 +178,7 @@ fn (c Config&) CompileFlags(ir String&) List<String&> {
 # clang's own version, which every object's name holds: another clang may compile the same IR to another object
 fn (c mut Config&) clangVersion() String&c {
     if c.version == "" {
-        out := try os.Exec(String&[$c.Clang, "--version"]) catch os.OsError { return "" }
+        out := try target.ClangSays(String&[$c.Clang, "--version"], "", true) catch os.OsError { return "" }
         c.version = $out.Stdout
     }
     return c.version
