@@ -850,3 +850,8 @@ errors and documentation - generic `+` already works).
   List {a} where a is a condition"): a `for` item in contract brackets holds when its body's conditions (listing rule,
   nested `for` allowed) hold for every element; "some" written `not for x in a { x != v }` (mine); decided like any
   condition (evaluator where known, `checked` runs the loop); only inside contract brackets (mine).
+- CONTRACTS 2026-10-24: the user: "We might still wanna do old tho. Just not with the := syntax". Proposed: `old e`
+  prefix word (binds like `not`). Gap: a result-less function (Push, Clear) has nowhere to put guarantees. ASKED: A (rec)
+  one list with `then` dividing needs from promises - `fn sqrt(x F64) [x >= 0.0 then r >= 0.0] r F64`,
+  `fn (l mut List<T>&) Clear() [then l.Len() == 0]` - replacing the second list after named results; or B keep two
+  lists, `fn Clear() _ [l.Len() == 0]`.
