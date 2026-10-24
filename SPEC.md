@@ -1371,7 +1371,8 @@ so a type declared over one or extending it (T29, T29f) is not - and has the tra
 type satisfies it, whatever methods it has. A closed trait listed takes in the types it lists (`type Number trait for
 Integer, Float { }`), at any depth, each once; an open trait has no types to list and is a compile-time error there.
 Each listed type must have the trait's methods, checked at the declaration (for a trait with no type parameters) - a
-listed type without one is an error naming the type and the method. Where a type variable is constrained by a closed
+listed type without one is an error naming the type and the method. An instance of a generic type is listed with its
+arguments (`for Box<I64>, Dot`); a generic type listed without them is G7's error at the declaration. Where a type variable is constrained by a closed
 trait, a `match` on it (G15) whose cases cover every listed type needs no `nomatch`: only those types can bind it. A
 trait with no `for` is **open**, met by any type with its methods, as T31 says.
 
@@ -1502,8 +1503,9 @@ the instance's type declares (E10's "any other reference"); `s is null` asks whe
 has no `Hash` (E10b): it is no `Map` key.
 
 **T34 (closed traits: `match` and `as`).** The instance's type of an `any` of a **closed** trait (T31a) may be asked
-for. A `match` on one takes **type cases**, `case-alt ::= path ( IDEN | "_" )` - a member's name, with no type
-arguments written, then the name it binds:
+for. A `match` on one takes **type cases**, `case-alt ::= path [ type-args ] ( IDEN | "_" )` - a member's name, with
+its type arguments where it is an instance of a generic type (`case Box<I64> b`; written without them it is G7's error
+at the case), then the name it binds:
 
 ```
 match w {
@@ -4057,7 +4059,7 @@ a loop that allocates and sometimes `continue`s cost no more than one that never
 ```
 case-clause    ::= "case" case-alt { sep case-alt } [ "if" expr ] case-body
 case-alt       ::= pattern | type-case | "_" | binary
-type-case      ::= alias-chain IDEN ( IDEN | "_" )                     (T34)
+type-case      ::= alias-chain IDEN [ type-args ] ( IDEN | "_" )       (T34)
 nomatch-clause ::= "nomatch" case-body
 case-body      ::= block | "=>" expr [ STMNT_END ]
 pattern        ::= alias-chain IDEN "." IDEN [ "(" list(sub-pattern) ")" ]

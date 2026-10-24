@@ -1,0 +1,15 @@
+# check: fail type arguments for aBox: expected 1, found 0
+# never: met by
+# T31a, G7 (the any review, finding 5): a closed trait listing a generic type lists one of its instances, with its
+# arguments - said at the declaration, and not again where the trait is met
+type aShape trait for aBox {
+    Area() I64
+}
+type aBox<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b aBox<T>&) Area() I64 { return b.n }
+fn main() {
+    x any aShape& = aBox<I64>(5, 2)
+}

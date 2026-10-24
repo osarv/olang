@@ -406,3 +406,39 @@ test "T32a: an any Iterator whose element type some defaults do not fit" {
     churn()
     assert walked(Live) == BakedWalked
 }
+
+# T34 (the any review, finding 5): a closed trait listing instances of a generic type, matched by type cases naming
+# them with their arguments
+type GShape trait for GBox<I64>, GBox<String&>, GDot {
+    Area() I64
+}
+type GBox<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b GBox<T>&) Area() I64 { return b.n }
+type GDot struct(k I64) { k }
+fn (d GDot&) Area() I64 { return d.k }
+fn gkind(s any GShape&) String {
+    match s {
+        case GBox<I64> b { return "box " $(b.v + b.Area()) }
+        case GBox<String&> t { return "text " $t.v }
+        case GDot _ { return "dot" }
+    }
+}
+fn gkinds(n I64) String {
+    xs := List<any GShape&>()
+    xs.Push(GBox<I64>(n, 2))
+    xs.Push(GBox<String&>("t" $n, 3))
+    xs.Push(GDot(4))
+    churn()
+    b := StringBuilder()
+    for x in xs { b.Push($gkind(x) " ") }
+    return b.ToString()
+}
+BakedGKinds String = gkinds(5)
+
+test "T34: type cases naming a generic's instances" {
+    assert BakedGKinds == "box 7 text t5 dot "
+    assert gkinds(Live + 2) == BakedGKinds
+}

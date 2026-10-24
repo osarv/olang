@@ -254,6 +254,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     ReadsBuild Map<I64, Bool>
     Dead Map<pair.Pair<I64, I64>, Bool>
     anyBad Map<I64, Bool>       # T32: the tables a method of which the trait's signature cannot reach (said once)
+    caseBroken Bool = false     # T34: a type case of the match being checked names a type wrongly (said at it)
     slotsCalled Map<I64, diag.Where>  # T32b: the slots (SlotKey) some call through an "any" reaches, by its first call
     lazyThunks List<I64>        # T32a: the default slots' thunks nothing has called yet, each an "unreachable" for now
 }
@@ -1390,6 +1391,8 @@ fn (c mut Checker&) traitHeader(mi I64, td ast.TypeDecl?&) {
             check := not bad and td.Params.Len() == 0
             for m in members {
                 isTrait := c.traitRef(mi, m)
+                # a generic type listed with its arguments (G7): one instance of it is a member
+                if not isTrait and not c.caseTypeWritten(m) { continue }
                 t := c.P.Resolve(c.fr().Ctx, m) if isTrait else c.resolve(m)
                 if t == types.UnknownT { continue }
                 listed := types.TypeId[t]
@@ -8041,6 +8044,7 @@ fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
         return false
     }
     if u.Closed {
+        if not c.membersWritten(u.Trait) { return false }
         listing := StringBuilder()
         for m in c.P.Members(u.Trait) {
             if listing.Len() > 0 { listing.Push(", ") }
@@ -13836,6 +13840,8 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     }
     all := false
     allSaid := false
+    broken := c.caseBroken
+    c.caseBroken = false
     rows mut List<Array<ast.Pattern&>&>&m = List<Array<ast.Pattern&>&>()
     subjLocal := I64(-1)
     match place {
@@ -13927,6 +13933,8 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     }
     # S13a: unguarded clauses covering each case together - a payload's positions, Bools, enums inside payloads
     if not exhaustive { exhaustive = c.coversRows(rows, Array<types.TypeId>(1, et), 0) }
+    if c.caseBroken { exhaustive = true }
+    c.caseBroken = broken
     noMatch typed.Arm?&c = null
     if m.NoMatch is not null {
         nm := m.NoMatch
@@ -14018,6 +14026,7 @@ fn (c mut Checker&) anyCaseType(sp source.Span, t types.TypeId, tyr ast.TypeRef&
         case ast.TypeRef.Ref(_, of, _, _) { named = of }
         nomatch { }
     }
+    if not c.caseTypeWritten(named) { return types.UnknownT }
     mt := c.P.T.Plain(c.resolve(named))
     if mt == types.UnknownT { return types.UnknownT }
     if not c.P.Member(mt, r) {
@@ -14025,6 +14034,29 @@ fn (c mut Checker&) anyCaseType(sp source.Span, t types.TypeId, tyr ast.TypeRef&
         return types.UnknownT
     }
     return mt
+}
+
+# a type case's or an "as"'s type (T34) names a type, a generic one with its arguments (G7) - what is wrong said at it
+fn (c mut Checker&) caseTypeWritten(tr ast.TypeRef&, say Bool = true) Bool {
+    match tr {
+        case ast.TypeRef.Named(nsp, path, args) {
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if path.Len() > 1 and ref.Kind == names.What.None { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if ref.Kind == names.What.None and path.Len() == 1 {
+                if say { c.unknownType(nsp, path[0]) }
+                return false
+            }
+            if ref.Kind == names.What.Type and ref.Index >= 0 {
+                np := c.P.T.DeclParams(c.P.DeclFor(ref.Module, ref.Index))
+                if np != args.Len() {
+                    if say { c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), np, args.Len())) }
+                    return false
+                }
+            }
+            return true
+        }
+        nomatch { return true }
+    }
 }
 
 # the instance an "any" x holds, of the type mt it lists (T34): a reference to it with the any's permission - a
@@ -14306,8 +14338,18 @@ fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut List<Bool
     match p {
         case ast.Pattern.Type(sp, tyr, _, _) {
             if c.P.T.KindOf(et) != types.Kind.Any { return }
-            mt := c.P.T.Plain(c.resolve(tyr))
+            named := tyr
+            match tyr {
+                case ast.TypeRef.Ref(_, of, _, _) { named = of }
+                nomatch { }
+            }
+            mt := c.P.T.Plain(c.resolve(named)) if c.caseTypeWritten(named, false) else types.UnknownT
             ms := c.P.Members(c.P.T.AnyTrait(et))
+            if mt == types.UnknownT {
+                # a case whose type is wrong (said at it): the match taken as complete, so it is the one error
+                c.caseBroken = true
+                return
+            }
             for k in range ms.Len() {
                 if k < covered.Len() and c.P.T.Same(ms[k], mt) {
                     # T34: a type an earlier clause matches whatever it holds is never matched again
@@ -15038,12 +15080,23 @@ fn (c mut Checker&) anyCopies(t types.TypeId) Bool {
     return not c.referable(t) or c.P.T.KindOf(c.under(t)) == types.Kind.Array
 }
 
+# whether every type a closed trait lists is one (T31a): a generic one listed without its arguments is said at the
+# trait's declaration, and leaves nothing to say where the trait is met
+fn (c mut Checker&) membersWritten(tr types.TypeId) Bool {
+    for m in c.P.Members(tr) {
+        if m == types.UnknownT { return false }
+        if c.P.T.KindOf(m) == types.Kind.Named and c.P.T.DeclParams(c.P.T.DeclOf(m)) != c.P.T.Items(c.P.T.Args(m)).Len() { return false }
+    }
+    return true
+}
+
 # whether a type satisfies a trait for an "any" (T32a), what it lacks said where it does not
 fn (c mut Checker&) anyMeets(t types.TypeId, r types.TypeId, sp source.Span) Bool {
     u := c.P.Missing(t, r)
     if u.Var < 0 { return true }
     tn := c.ty(r)
     if u.Closed {
+        if not c.membersWritten(u.Trait) { return false }
         listing := StringBuilder()
         for m in c.P.Members(u.Trait) {
             if listing.Len() > 0 { listing.Push(", ") }
