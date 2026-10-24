@@ -880,3 +880,4 @@ errors and documentation - generic `+` already works).
   saying where they come from; a library adding an export breaks importers under D3a; two such imports collide; Go
   advises tests only; the prelude already is the one unqualified namespace). If wanted: `import _ "std/io"`, clashes an
   error at the import line. In effect: not built.
+  DECIDED (the user: "Ye. Don't use it then"): no unqualified imports. Imports settled.
