@@ -989,3 +989,6 @@ errors and documentation - generic `+` already works).
   errorformat, LSP config) plus `olang lsp`, and `olang mcp` (MCP tools: check, explain, doc, format, test) - the user:
   "do it. Please explain" (explained). On 3 the user thought `.Destroy()` was rejected: told it was decided FOR (proven
   safe only, 2026-10-18); stays unless they say drop it.
+  REFINED (the user: "chan.Chan can stay no?"): a module named for its main type keeps that type's name (chan.Chan,
+  json.Json, set.Set, as Go's list.List); only other names drop the prefix (io.Error, json.Error, os.Error ...).
+  `Destroy` stays as decided (the user: "It's a good implementation").
