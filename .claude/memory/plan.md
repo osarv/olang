@@ -312,3 +312,8 @@ on sight per rules.md, "Code rules".
   cases, O10d by-value borrow refusal (pre-existing stack UAF), recvApplies (pre-existing), fuzzers repaired (differential
   fuzzer found 4 compiler bugs: E30, E16, E4a, E10 - fixed). Known limit: a List's iterator cannot be an `any` (T22a on
   ListIter.Next). Follow-up review running (/home/user/review/any2); merge if clean.
+- 2026-10-25 CEST: C interop v2 merged (wt-cinterop 7f5dc98, verified; merge = tip + memory only): link, extern type,
+  plain structs by value (cabi.olang, SysV + AAPCS64), export fn, callbacks (export fn only), build -library + header,
+  ToC/StringFromC, net.Lookup/Resolve, `olang bindgen` (zlib, sqlite3 bind and run). Agent decisions 1-6 in HISTORY.
+  Open: R9's diagnostic writes another module's error words bare (net.Error.UNREACHABLE) - small fix, queue it.
+  Direction question QAS (asked): `p.StringFromC(max)` (E33 precedent) vs type-level functions `String.FromC(p, max)`.

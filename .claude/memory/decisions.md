@@ -1023,3 +1023,7 @@ errors and documentation - generic `+` already works).
   `"""` uses a normal string. Awaiting a yes on the escapes. LICENCE: "that's the last thing we do" - deferred to last.
 - DECIDED 2026-10-24 (the user: "Yes, add all if they are standard"): `\x41`, `\u{1F600}` escapes and the `"""` raw
   form as proposed - into lang24 as a later round. Confirmed to the user: `$(expr)` renders any expression (checked).
+
+**Asked 2026-10-25 (C interop):** QAS. `String.FromC(p, max)` has no form (nothing is reached through a type's name);
+built as `p.StringFromC(max)`, as `u.F64FromBits()`. Keep, or add type-level functions? In effect: the method form.
+Recommended: keep it until type-level functions are wanted for more than this.
