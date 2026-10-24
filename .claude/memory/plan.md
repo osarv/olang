@@ -295,3 +295,8 @@ on sight per rules.md, "Code rules".
   fits, for, if, outlives chains as obligations; conversions as contracts), R20 BuiltinError -> CheckError
   (tools/checkerror_rename.olang), D2 duplicate functions an error (a port bug). Left: requirements over fixed locals,
   trait-method/lambda/extern/destructor conditions, the prover.
+- 2026-10-24: wt-small merged (2929bdf, verified with master in): E36 `T.Max/Min` (+ float Inf, NaN, Epsilon,
+  SmallestNormal), E37 bit operations, one-line lambdas, `\x`/`\u{}`/`"""` text, `| ^ &` above comparisons
+  (tools/precedence_migrate.olang changed nothing in the repo), the array-literal leak (34 MB -> 1.8 MB), T17e raw-valued
+  enums (`op.Value()`, `try Op.From(v)` -> CaseError.NO_CASE). Left (found): a fixed local array converted to a run-time
+  value (`v = x`, `return x`) still copies into the program scope - 34 MB over 2M calls; needs the scope pass.
