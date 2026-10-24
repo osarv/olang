@@ -1,0 +1,211 @@
+# equality_migrate - the equality round (E10, E10c, E32, 2026-10-24): "is" tests for null and nothing else, "==" compares
+# what a reference names by identity unless its type declares Eq, and a case is tested with "==". This rewrites olang
+# sources written under the old rules:
+#   - "x == null" becomes "x is null", "x != null" becomes "x is not null" (and "null == x", "null != x" likewise, the
+#     null moved after);
+#   - "x is E.Case" becomes "x == E.Case", "x is not E.Case" becomes "x != E.Case" - a dotted name after "is" whose
+#     last word is capitalized, as a case is written;
+#   - "a is b" and "a is not b" on two references (identity) become "a == b" and "a != b", where b is a plain lowercase
+#     name or a dotted path of them, and are listed: where the type declares Eq (an array, a String, a List) "==" now
+#     compares contents, so a person checks each.
+# Comments and string literals are left alone. Files are rewritten in place and a count printed; --check writes nothing
+# and the exit status says whether anything would change. A Markdown file has its "```olang" blocks migrated.
+#
+#     $OLANG build tools/equality_migrate.olang && build/tools_equality_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "../compiler/scan"
+import "../compiler/token"
+
+# a token of the text: kind, span
+type VT struct(k token.Tok, start I64, end I64) {
+    k
+    start
+    end
+}
+
+fn vtokens(src String&) List<VT> {
+    ts := scan.Scan(src)
+    out List<VT>
+    for tk in ts.Toks {
+        if tk.Kind == token.Tok.StmtEnd { continue }
+        out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
+    }
+    return out
+}
+
+type Counts struct() {
+    nulls I64 = 0
+    cases I64 = 0
+    identities I64 = 0
+    listed List<String&>
+}
+
+# one edit: the span start..end replaced by text
+type Edit struct(start I64, end I64, text String&) {
+    start
+    end
+    text
+}
+
+# where the operand after an "is" at token i ends (the index past it): a dotted name, or -1 for anything else
+fn pathEnd(v List<VT>&, i I64) I64 {
+    j := i
+    if j >= v.Len() or v[j].k != token.Tok.Iden { return -1 }
+    j++
+    for j + 1 < v.Len() and v[j].k == token.Tok.Dot and v[j + 1].k == token.Tok.Iden { j += 2 }
+    return j
+}
+
+fn migrate(src String&, n mut Counts&, path String&) String {
+    v := vtokens(src)
+    edits List<Edit>
+    for i in range v.Len() {
+        t := v[i]
+        if (t.k == token.Tok.EqEq or t.k == token.Tok.NotEq) and i + 1 < v.Len() and v[i + 1].k == token.Tok.NullLit {
+            # "x == null": the operator becomes "is" or "is not"
+            edits.Push(Edit(t.start, t.end, "is" if t.k == token.Tok.EqEq else "is not"))
+            n.nulls++
+            continue
+        }
+        if t.k == token.Tok.NullLit and i + 2 < v.Len() and (v[i + 1].k == token.Tok.EqEq or v[i + 1].k == token.Tok.NotEq) {
+            # "null == x": x moved first, when it is a plain name or path
+            e := pathEnd(v, i + 2)
+            if e > 0 {
+                x := src[v[i + 2].start:v[e - 1].end]
+                op := "is" if v[i + 1].k == token.Tok.EqEq else "is not"
+                edits.Push(Edit(t.start, v[e - 1].end, $x " " $op " null"))
+                n.nulls++
+            } else {
+                n.listed.Push($path ": null compared first, by hand: " $src[t.start:(v[i + 2].end).Min(src.Len())])
+            }
+            continue
+        }
+        if t.k != token.Tok.Is { continue }
+        at := i + 1
+        negated := at < v.Len() and v[at].k == token.Tok.Not
+        if negated { at++ }
+        if at < v.Len() and v[at].k == token.Tok.NullLit { continue }
+        e := pathEnd(v, at)
+        op := "!=" if negated else "=="
+        if e < 0 {
+            n.listed.Push($path ": 'is' before no name, by hand: " $src[t.start:(v[(at).Min(v.Len() - 1)].end).Min(src.Len())])
+            continue
+        }
+        last := src[v[e - 1].start:v[e - 1].end]
+        if e - at > 1 and last[0].IsUpper() {
+            n.cases++
+        } else {
+            n.identities++
+            n.listed.Push($path ": identity made '" $op "', check the type declares no Eq: " $src[t.start:v[e - 1].end])
+        }
+        edits.Push(Edit(t.start, v[at - 1].end, op))
+    }
+    if edits.Len() == 0 { return src }
+    out := StringBuilder()
+    at I64 = 0
+    for ed in edits {
+        out.Push(src[at:ed.start])
+        out.Push(ed.text)
+        at = ed.end
+    }
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+# a Markdown file: its olang code blocks migrated, the rest kept
+fn migrateMarkdown(src String&, n mut Counts&, path String&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    inBlock := false
+    lines := src.Split("\n")
+    for k in range lines.Len() {
+        line := lines[k]
+        last := k == lines.Len() - 1
+        if inBlock and line.StartsWith("```") {
+            out.Push(migrate(block.ToString(), n, path))
+            block.Clear()
+            inBlock = false
+        } else if inBlock {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if line.StartsWith("```olang") {
+            inBlock = true
+        }
+        out.Push(line)
+        if not last { out.PushChar('\n') }
+    }
+    if inBlock { out.Push(block.ToString()) }
+    return out.ToString()
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_equality_migrate [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    total := Counts()
+    changed I64 = 0
+    for path in files {
+        if not (path.EndsWith(".olang") or path.EndsWith(".md")) { continue }
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("equality_migrate: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := migrateMarkdown(src, total, path) if path.EndsWith(".md") else migrate(src, total, path)
+        if out == src { continue }
+        changed++
+        if verbose { srcmask.Say(path) }
+        if not check {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("equality_migrate: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    for l in total.listed { srcmask.Say(l) }
+    verb := "would change " if check else "changed "
+    srcmask.Say(($verb $changed " files: " $total.nulls " null tests, " $total.cases " case tests, " $total.identities
+                 " identities"))
+    if check and changed > 0 { os.Exit(1) }
+}
+
+test "null tests are 'is null', case tests and identity '=='" {
+    n := Counts()
+    assert migrate("    if x == null { }\n", n, "f") == "    if x is null { }\n"
+    assert migrate("    if x.next != null and y { }\n", n, "f") == "    if x.next is not null and y { }\n"
+    assert migrate("    b := null == p.q\n", n, "f") == "    b := p.q is null\n"
+    assert migrate("    b := e is Shape.Circle\n", n, "f") == "    b := e == Shape.Circle\n"
+    assert migrate("    b := e is not Shape.Circle\n", n, "f") == "    b := e != Shape.Circle\n"
+    assert migrate("    b := a is b.c\n", n, "f") == "    b := a == b.c\n"
+    assert migrate("    b := a is null or a is not null\n", n, "f") == "    b := a is null or a is not null\n"
+    assert migrate("    # x == null\n    s := \"x == null\"\n", n, "f") == "    # x == null\n    s := \"x == null\"\n"
+    assert n.identities == 1 and n.cases == 2
+}
+
+test "what is already new is left as it is" {
+    n := Counts()
+    src := "fn f(x Node&) Bool {\n    return x is null or x == y\n}\n"
+    assert migrate(src, n, "f") == src
+}
