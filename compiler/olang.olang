@@ -505,7 +505,7 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
     keys mut Array<String&>&cfg = Array<String&>(n)
     inputs := buildInputs(cfg, tests)
     if inputs == "" { return keys }
-    own := Array<String&>(n)
+    hashOf := Array<String&>(n)
     for m in range n {
         md := mods[m]
         parts List<String&>
@@ -513,7 +513,7 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
         parts.Push(md.Path)
         parts.Push(md.Real)
         parts.Push(md.Src.Text if md.Src != null else "")
-        own[m] = build.HashOf(parts)
+        hashOf[m] = build.HashOf(parts)
     }
     for m in range n {
         if m == l.Root { continue }
@@ -536,8 +536,8 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
         order.Sort(fn(a I64, b I64) Bool { return a < b })
         parts List<String&>
         parts.Push(inputs)
-        parts.Push(own[m])
-        for x in order { parts.Push($mods[x].Identity " " $own[x]) }
+        parts.Push(hashOf[m])
+        for x in order { parts.Push($mods[x].Identity " " $hashOf[x]) }
         keys[m] = build.HashOf(parts)
     }
     return keys
