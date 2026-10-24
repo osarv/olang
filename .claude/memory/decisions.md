@@ -756,3 +756,5 @@ errors and documentation - generic `+` already works).
   explained the ambiguity inside a list of types (`Map<String&, fn(x I64) I64 ? A, B>`); rec: parentheses only where a
   set sits inside a list (built today, same rule as `<T (I32, I64), U>`), a signature's own set stays bare. Reading
   taken: QAM's removal reversed for that case; awaiting a yes.
+  The user asked whether `<T I32, F64>` may be bare when T is the only parameter: rec no - parentheses always (comma
+  means next parameter there, `<T Shape>` trait vs one-member set, one spelling).
