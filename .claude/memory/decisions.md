@@ -714,3 +714,8 @@ errors and documentation - generic `+` already works).
   closed (the user's split). RUNTIME TRAITS (`any Trait&`): the user wants to discuss them before anything is built.
   ASKED: 1 nullable prefix `?Node&` (rec) or suffix `Node&?` with error sets marked `!`; 2 type lists spelled
   `<T (I32, F64)>`; 3 Float/Integer/Number as named type lists `type Float (F16, BF16, F32, F64)` (rec) or sealed traits.
+- AGENDA ROUND 5 2026-10-24: the user: "?Node& and Node&! do basically two versions of the same thing and yet they
+  declare the ? and ! in different places. That just reads ugly". Proposed (rec): both suffixes - `Node&?` nullable,
+  error sets marked `!` after the result (`fn f() Node& ! E`, bare `!` inferred, `Iterator<T ! E>`), `x!`/`f()!` unwrap
+  at the use site; every signature's `?` migrated by a tool. Awaiting a yes; still open: type lists `<T (I32, F64)>`,
+  named type lists replacing the sealed number traits.
