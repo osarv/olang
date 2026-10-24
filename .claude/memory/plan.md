@@ -259,3 +259,6 @@ on sight per rules.md, "Code rules".
   /home/user/wt/lang24-r2. Queued after the batch: `any Trait&` (fully decided today), with a soundness review.
 - 2026-10-24 ~14:40 CEST (weekly 0.12): started wt-speed9 (compile speed round 9: measure, cut the largest share; emit/
   build/lower, not check) and wt-prover (docs/prover.md design note for the user, no code). lang24 round 2 running.
+- 2026-10-24: lang24 round 2 merged (20806ad, full verify on the merged tip passed): E10 stored-value equality (List/Map
+  declare Eq/Hash), `is` null-only, E32 case tests by `==` with `_`, S8d narrowing, T17a payload form, Some/Every;
+  tools/equality_migrate.olang and helper_rename.olang for oann. Round 3 (nullable) running.
