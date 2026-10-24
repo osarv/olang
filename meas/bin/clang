@@ -1,0 +1,8 @@
+#!/bin/bash
+# scratch: log each object compile (its final path) and how long it took, then be clang
+out=""; c=0; prev=""
+for a in "$@"; do [ "$prev" = "-o" ] && out=$a; [ "$a" = "-c" ] && c=1; prev=$a; done
+s=$(date +%s.%N)
+/usr/bin/clang "$@"; rc=$?
+if [ $c = 1 ]; then echo "$(echo $out | sed 's/\.[0-9]*\.tmp$//') $s $(date +%s.%N) $PWD" >> /home/user/wt/fastverify/meas/clang.log; fi
+exit $rc
