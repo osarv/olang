@@ -20,13 +20,18 @@ OLANG_ENV = OLANG=$(abspath $(OLANG))
 # how many test files, checks and diffs run side by side ("make test PARALLEL=1" runs them one at a time)
 PARALLEL ?= $(shell nproc)
 # the test files, each a target of its own (test@FILE) so make runs them side by side, the longest first so the last to
-# finish is a short one - checks/checks.olang, which runs its own checks four at a time, before everything
-TEST_HEAVY = checks/checks.olang compiler/scope.olang compiler/check.olang compiler/lower.olang compiler/views.olang \
-	std/linalg.olang tests/shared.olang compiler/olang.olang compiler/load.olang compiler/generic.olang \
-	compiler/eval.olang compiler/emit.olang
+# finish is a short one - checks/checks.olang, which runs its own checks four at a time, before everything. The test
+# builds holding over a gigabyte each (the compiler's largest modules, the corpus's shared.olang) run in two lanes, one
+# after another in each, so no more than two of them are ever in memory at once (a lane goes on past a failure)
+TEST_LANE_A = compiler/scope.olang compiler/views.olang compiler/olang.olang compiler/emit.olang
+TEST_LANE_B = compiler/lower.olang compiler/check.olang tests/shared.olang compiler/interp.olang
+TEST_HEAVY = checks/checks.olang $(TEST_LANE_A) $(TEST_LANE_B) std/linalg.olang compiler/load.olang compiler/eval.olang \
+	compiler/generic.olang
 TEST_RUNS_HEAVY = $(addprefix test@,$(filter $(OLANG_TESTS),$(TEST_HEAVY)))
 TEST_RUNS_REST = $(addprefix test@,$(filter-out $(TEST_HEAVY),$(OLANG_TESTS)))
 TEST_RUNS = $(TEST_RUNS_HEAVY) $(TEST_RUNS_REST)
+# each file of a lane after the one before it (an order-only prerequisite)
+lane = $(if $(word 2,$1),$(eval test@$(word 2,$1): | test@$(word 1,$1))$(call lane,$(wordlist 2,$(words $1),$1)))
 
 build: build/olang
 
@@ -269,14 +274,18 @@ run: $(OLANG)
 # the failed ones are named at the end
 test: $(OLANG)
 	@rm -f build/failed.txt
-	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS) || $(FAILED)
+	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS) && [ ! -s build/failed.txt ] || $(FAILED)
 
 FAILED = { echo "failed: $$(sort build/failed.txt 2>/dev/null | tr '\n' ' ')"; exit 1; }
-# a part of the suite that failed, named in build/failed.txt (test@FILE as FILE)
-NOTE_FAILED = { echo "$(@:test@%=%)" >> build/failed.txt; exit 1; }
+# a part of the suite that failed, named in build/failed.txt
+NOTE_FAILED = { echo "$@" >> build/failed.txt; exit 1; }
 
+# a test file that fails is named in build/failed.txt and its target ends as if it passed, so the lane it is in goes on;
+# test and suite fail by build/failed.txt
 $(TEST_RUNS): test@%: FORCE
-	@$(OLANG_ENV) $(OLANG) test $* || $(NOTE_FAILED)
+	@$(OLANG_ENV) $(OLANG) test $* || echo "$*" >> build/failed.txt
+$(call lane,$(TEST_LANE_A))
+$(call lane,$(TEST_LANE_B))
 
 FORCE:
 
@@ -312,7 +321,7 @@ checkir:
 suite: $(OLANG)
 	@rm -f build/failed.txt
 	@$(MAKE) --no-print-directory -k -j$(PARALLEL) -Otarget $(TEST_RUNS_HEAVY) runner $(DIFFS) $(TEST_RUNS_REST) \
-		|| $(FAILED)
+		&& [ ! -s build/failed.txt ] || $(FAILED)
 	@$(MAKE) --no-print-directory checkir
 
 # the one command to run before considering any change done, the gate before every merge: a from-scratch build (clean,
