@@ -5860,7 +5860,9 @@ of the compilation's **root** module only — `build`'s and `test`'s root, or `c
 shared name per B3b; every other object refers to them. An ordinary module's object therefore depends on
 nothing but its own module and its imports, and is correctly reused by any program that imports it. The
 root transitively imports every module of the program, the prelude included, so its own staleness (B3) already
-covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time.
+covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time. In
+`build` and `test` the root's instantiations may be held in several objects, each holding those that one module, the
+first to name them in the program's order of modules (the root's own last), names; what is built is the same either way.
 
 **B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
 compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is

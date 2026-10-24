@@ -22725,3 +22725,77 @@ references, closed traits and contracts follow in later rounds).
   new; unparse writes the colon form back where the source had a `:` before the statement, and the formatter spaces a
   `:` whose innermost open bracket is a block's as `: `. Found on the way, pre-existing: the formatter wrote a postfix
   `!` with a space before it (`f() !`).
+
+## Port M9, round 9: compile speed (2026-10-24)
+
+The user: "Making compilation faster is going to matter a lot." Round 8 left the clean `-O3` self-build at the
+ThinLTO link's floor, so this round measured what an *edit* costs and cut where an edit recompiles code it did not
+change. Comparisons ran interleaved, the compiler before this round (master dc36e70, built by itself) against the one
+after, on four cores shared with other agents' suites - CPU time is the figure to read, wall time moved by up to twice.
+
+**Where it went before** (`OLANG_TIMES` and callgrind):
+- An edit adding one line inside a test of tests/shared.olang: 14.7 s, every part of the test build compiled again.
+  The cause was the text a failed check prints: `FILE:LINE:` sat in every function's code as a constant, so a line
+  added above a function changed that function's object.
+- An edit adding a function that makes one new instance (a `List` of a new struct, in compiler/names.olang): 38 of the
+  ~55 ThinLTO backends ran again, 94 s of CPU. The root's instances were one object cut into parts by symbol hash, and
+  a new instance changed which part held which function, and so most parts' import hashes.
+- An edit in the middle of compiler/check.olang: 31.6 s of CPU; under `-quick` 15.6 s - the line numbers of every later
+  function of the module.
+- The front end of a build that changes nothing: 6.93 G instructions, of it the M19g views pass 21% (it runs over
+  every body although only code taking views of a `Vec` can fail it).
+
+**What was changed**, each committed alone; none of it changes what a program means:
+
+1. **A failed check's place lives apart from the code (B3l).** Each text a failed check, an error's trace entry or a
+   `!` prints is a constant named by the function holding it and how many such texts that function named before it (a
+   lambda by its top item and its offset in it, since lambdas are numbered by the order bodies are checked), defined
+   in an object of its own per home (`NAME.HASH.loc.o`) compiled without LTO - it holds only data. A line added above
+   a function now changes only `.loc` objects. One function naming one text twice uses one constant, so failing sites
+   of one line still share one block (without it, a benchmark's cold path gained blocks). `compile`, which makes one
+   object, keeps the texts in it. Measured: the shared.olang test edit 14.7 -> 4.0 s.
+2. **The views pass is skipped where nothing can fail it (M19g).** Before its walk, the pass asks whether any body
+   outside std/prelude/vec calls a Vec function giving an array (`View`, `ViewMut`, `ToArray`); none, no walk. The
+   no-op front end 6.93 -> 5.58 G instructions, a no-op build 2.03 -> 1.60 s.
+3. **The root's instances are grouped by the first module reaching them (B3d).** Modules in the program's order, the
+   root last: each module's items are walked through what they name, and every instance not yet placed goes to that
+   module's group; each group is objects of its own, named by the root and the module. A new instance then lands in
+   the group of the module that made it, and the other groups' objects are unchanged. Merging same-code functions
+   (round 7) crosses groups: a class's kept function is in the earliest group, and a member in another group is a small
+   wrapper calling it by `tail call` (`musttail` failed in the `-O2` backend), so no group's text depends on a later
+   group's. Measured: the new-instance edit 38 -> 9-11 backends run again, 89.8 -> 29.9 s of CPU, 28.2 -> 11.3 s.
+4. **Parts of 1 MB in a ThinLTO build, 512 KB under `-quick` and `-debug` (B3d).** Round 6's 2 MB parts made a
+   one-function edit recompile 2 MB of IR. Measured over the edits above: 512 KB costs `-O3` +0.9% instructions in the
+   compiler binary and more link work (ThinLTO imports across more parts), 1 MB +0.42%, so `-O3` takes 1 MB and the
+   development modes, which inline less, 512 KB; 256 KB was +8% work and not taken. `-quick` is now in a module's
+   record key (B3i): its parts differ.
+
+**Measured after** (base dc36e70 against the final compiler, the same interleaved run; wall, then user CPU):
+
+| `-O3` (the default) | before | after |
+|---|---|---|
+| clean self-build | 45.2 s, 119.2 s | 39.3 s, 119.7 s |
+| no-op | 2.03 s, 1.56 s | 1.60 s, 1.24 s |
+| leaf edit (fmt.olang) | 4.00 s, 3.41 s | 3.46 s, 2.97 s |
+| a function added mid check.olang | 12.0 s, 31.8 s | 9.1 s, 21.7 s |
+| a function making a new instance | 28.2 s, 89.8 s | 11.3 s, 29.9 s |
+| a line added in a shared.olang test | 14.7 s | 4.0 s |
+
+| `-quick` | before | after |
+|---|---|---|
+| no-op | 2.14 s, 1.52 s | 1.84 s, 1.28 s |
+| leaf edit | 2.96 s, 2.31 s | 2.85 s, 2.11 s |
+| a function added mid check.olang | 13.6 s, 15.6 s | 3.8 s, 2.7 s |
+| a function making a new instance | 8.7 s, 11.3 s | 5.2 s, 4.0 s |
+
+The clean builds cost the same CPU (their wall times in this run are the machine's). `-debug` is unchanged: its DWARF
+carries every line, so a line shift changes the code's objects anyway. Hello world unchanged. **Machine code**: the
+benchmarks (nbody, spectral-norm, mandelbrot, fannkuch, binary-trees, k-nucleotide, matmul, sum, text, vec, parallel)
+compare function by function identical before and after; the compiler binary is +0.42% instructions from the 1 MB
+parts and 560 KB larger from the `.loc` constants' symbols. `OLANG_CHECKREUSE` (B3i) is clean.
+
+**Measured and not taken.** Merging same-code functions only within a group: +28% instance IR before the wrappers.
+Parts of 256 KB (+8% work) and 512 KB at `-O3`. Optimizing the slot-folding text pass: measured at ~7.5 ns a byte (10.4
+MB of unfolded check.olang bodies in 78 ms), about 0.3 s of a clean build's front end - not worth a rewrite yet. The
+largest single self-costs of a full emission remain `Emitter.function`'s text passes (`foldSlots`, `refsIn`) and the
+MIR walk (`fnEm.run`); a no-op build is now mostly loading and checking.
