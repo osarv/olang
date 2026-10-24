@@ -873,3 +873,6 @@ errors and documentation - generic `+` already works).
   keep `.` (M20 reserves the alias so `io.` is always the module; one operator for "part X of Y" through modules,
   types, cases - `lib.Dir.North`; Go/Python/Java/Zig/Swift); drop the deferred `lib:Name` idea (`:` would clash with the
   proposed one-line bodies). Awaiting agreement.
+- DECIDED 2026-10-24 (the user: "name '/' imports are just fine and then we access with name ... partial imports ... the
+  extras are just lost at link-time either way"): QAT closed - imports stay quoted `/` paths, access by the alias with
+  `.`, no partial imports, the deferred `lib:Name` separator dropped. Nothing changes in code.
