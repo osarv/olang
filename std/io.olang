@@ -290,7 +290,7 @@ fn checkReadIsEmpty(fd I32, buf mut Array<U8>&) ? IoError {
 }
 
 test "Read returns a slice of the caller's own buffer" {
-    buf Array<U8, 8>
+    buf := Array<U8>(8)
     path := U8['/', 'd', 'e', 'v', '/', 'n', 'u', 'l', 'l', 0]
     fd I32 = openReadOnly(path)
     assert fd >= 0
@@ -303,7 +303,7 @@ test "Read returns a slice of the caller's own buffer" {
 }
 
 test "FormatInt renders decimals, including zero and negatives" {
-    buf Array<U8, 24>
+    buf := Array<U8>(24)
 
     # the extremes: I64's minimum has no positive counterpart to format from
     n0 := FormatInt(-9223372036854775807 - 1, buf)
@@ -332,7 +332,7 @@ test "FormatInt renders decimals, including zero and negatives" {
 # a descriptor reading back "text": the read end of a pipe it has been written into, the write end closed after it -
 # for the tests of Lines, which need no file. Under a pipe's own buffer, 64KB, so the write never waits for a reader
 fn reading(text String&) I32 {
-    fds Array<I32, 2>
+    fds := Array<I32>(2)
     assert pipe(fds) == 0
     Write(fds[1], text)!
     close(fds[1])
@@ -435,7 +435,7 @@ fn drained(fd I32) String& {
 }
 
 test "a Writer gathers what is written and writes it when flushed" {
-    fds Array<I32, 2>
+    fds := Array<I32>(2)
     assert pipe(fds) == 0
     w := Writer(fds[1], 16)
     w.Write("alpha ")
@@ -457,7 +457,7 @@ test "a Writer gathers what is written and writes it when flushed" {
 }
 
 test "a Writer keeps every byte in order across its buffer's edges" {
-    fds Array<I32, 2>
+    fds := Array<I32>(2)
     assert pipe(fds) == 0
     w := Writer(fds[1], 7)
     want := StringBuilder()
@@ -487,7 +487,7 @@ fn failedFlushes(fd I32) I64 {
 
 test "a Writer's failed write is Flush's, and every Flush's after it" {
     assert failedFlushes(-1) == 3
-    fds Array<I32, 2>
+    fds := Array<I32>(2)
     assert pipe(fds) == 0
     close(fds[0])
     close(fds[1])
@@ -505,7 +505,7 @@ fn reportTo(fd I32, n I64) ? IoError {
 }
 
 test "a deferred Flush writes what was written however the function is left" {
-    fds Array<I32, 2>
+    fds := Array<I32>(2)
     assert pipe(fds) == 0
     try reportTo(fds[1], 2)
     left := false

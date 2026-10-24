@@ -44,8 +44,8 @@ fn (r mut Rand&) Next() U64 {
 
 # the generator's whole state, its four 64-bit words - what a checkpoint keeps so that SetState can put a generator back
 # exactly where this one is, to continue the same sequence, rather than replaying every draw made since its seed
-fn (r Rand&) State() Array<U64, 4> {
-    s Array<U64, 4>
+fn (r Rand&) State() Array<U64> {
+    s := Array<U64>(4)
     s[0] = r.s0
     s[1] = r.s1
     s[2] = r.s2
@@ -53,15 +53,17 @@ fn (r Rand&) State() Array<U64, 4> {
     return s
 }
 
-# what SetState fails with: four zeros, which no generator's state is
+# what SetState fails with: four zeros, which no generator's state is, or other than four words
 error RandError {
     ZERO_STATE
+    WRONG_LENGTH
 }
 
 # puts the generator in the state "s", one State gave: from here it draws what the generator State was asked of drew
 # after it. Four zeros are no state xoshiro256** can be in - from them it would give zeros forever, and State never
-# gives them - so they fail with ZERO_STATE, the generator left as it was
-fn (r mut Rand&) SetState(s Array<U64, 4>&) ? RandError {
+# gives them - so they fail with ZERO_STATE, and other than four words with WRONG_LENGTH, the generator left as it was
+fn (r mut Rand&) SetState(s Array<U64>&) ? RandError {
+    if s.Len() != 4 { error RandError.WRONG_LENGTH }
     if s[0] == 0 and s[1] == 0 and s[2] == 0 and s[3] == 0 { error RandError.ZERO_STATE }
     r.s0 = s[0]
     r.s1 = s[1]
