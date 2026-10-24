@@ -4667,7 +4667,12 @@ fn (s mut Scoper&) retOne(k I64, x typed.Expr&) {
     if v.K != ValKind.Existing { return }
     exact := s.storeThrough(t)
     match m {
-        case typed.Mark.Of(_) { s.fit(v.T, dest, exact, x, FitReturn) }
+        case typed.Mark.Of(_) {
+            # borrowed from a by-value parameter holding no reference, which has no scope of its own (O4b): nothing
+            # this function has outlives the call but what lives in the program's scope - the parameter's own copy is
+            # its frame's (O14)
+            s.fit(v.T, dest if dest != Term.None else Term.Program, exact, x, FitReturn)
+        }
         case typed.Mark.TypeVar { s.fit(v.T, dest, exact, x, FitReturn) }
         case _ {
             # a built result: a value whose scope is the result scope (O26), else an obligation where the language
@@ -7235,6 +7240,14 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
     }
     rec := s.fitErrorAt(s.fitSp if s.fitAt else s.opTok(x), kind, exact)
     if rec >= 0 { s.noteCondValue(rec, x) }
+    # a by-value parameter's own storage returned as a reference: it is the call's copy (O14) - what to write instead
+    if rec >= 0 and kind == FitOwn {
+        l := s.argLocal(unPassed(x))
+        if l >= 0 and s.B!.Locals[l].Kind == typed.LocalKind.Param and not s.isRef(s.B!.Locals[l].Ty) and s.Spell is not null {
+            name := s.P.L.Names.Text(s.B!.Locals[l].Name)
+            s.note(rec, s.B!.File, s.wordAt(s.B!.Locals[l].Sp, name), msgs.NoteParamCopy(name, $name " " $s.Spell(s.B!.Locals[l].Ty) "&"))
+        }
+    }
     # T17c: the payload's storage is to be made where the value is kept - a parameter's (B11)
     if rec >= 0 and kind == FitPayload {
         w := s.paramOfTerm(s.fitSlot)
@@ -7248,6 +7261,17 @@ fn (s mut Scoper&) fitError(x typed.Expr&, kind I64, exact Bool) {
         }
         case _ { }
     }
+}
+
+# what a conversion passing its argument's references on (an "any" made, T32a) is made of
+fn unPassed(x typed.Expr&) typed.Expr&x {
+    match x {
+        case typed.Expr.Prim(_, _, op, _, args) {
+            if typed.PassesRefs(op) and args.Len() > 0 { return unPassed(args[0]) }
+        }
+        case _ { }
+    }
+    return x
 }
 
 # the name of the value local of this function's an expression reads or borrows whole, "" for any other

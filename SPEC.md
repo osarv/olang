@@ -5429,7 +5429,10 @@ returning a temporary, or by naming it: `&return` (O26).
   one into the function's own storage, which closes at the return;
 - for a **borrowed** result `&p`: a value in exactly `p`'s scope where something can be stored through it (O25g),
   and otherwise one that outlives it (O10) — a relation between `p` and another parameter being an obligation
-  (O10b). A temporary is built in `p`'s scope.
+  (O10b). A temporary is built in `p`'s scope. A by-value parameter's own storage is the call's copy, in the function's
+  own scope: returning it, or a part of it reached without a reference, as borrowed from `p` is a compile-time error
+  naming `p T&` - and a by-value `p` whose type holds no reference has no scope (O4b), so only what lives in the
+  program's scope is borrowed from it.
 
 **O14a.** A **function value** (T21) is the exception to O14's first case: a built result of function type may
 return a parameter's value, or a function value reached through a parameter's data, with no borrowed form. Nothing

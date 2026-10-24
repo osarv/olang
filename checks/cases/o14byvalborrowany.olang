@@ -1,0 +1,13 @@
+# check: fail this value lives in this function's own scope, which closes first
+# also: take it by reference to give back what the caller passed: 'p aPt&'
+# O14, T32a (the any review, pre-existing): an any borrowing a by-value parameter's own storage, returned as borrowed
+type aNamed trait {
+    Name() String
+}
+type aPt struct(x I64, y I64) {
+    x
+    y
+}
+fn (p aPt&) Name() String { return "pt " $p.x }
+fn bor(p aPt) any aNamed&p { return p }
+fn main() { }

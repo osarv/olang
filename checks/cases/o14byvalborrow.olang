@@ -1,0 +1,13 @@
+# check: fail this value lives in this function's own scope, which closes first
+# also: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
+# O14 (the any review, pre-existing): a by-value parameter's own storage returned as borrowed from it was its frame's
+# copy - a stack use after return
+type aPt struct(x I64, y I64) {
+    x
+    y
+}
+fn bor(p aPt) aPt&p { return p }
+fn main() {
+    q := aPt(3, 4)
+    w := bor(q)
+}

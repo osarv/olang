@@ -612,6 +612,7 @@ type Diag enum {
     NoteRefillKept
     NoteDeclareWhere
     NoteBindingWhere
+    NoteParamCopy
     NoteLoopCopyLent
     NoteViewRefusedBy
     NoteHeldIndexWhere
@@ -2380,6 +2381,8 @@ fn NoteMakeWhere(text1 String&, text2 String&, text3 String&, text4 String&) Msg
 fn NoteRefillKept(text1 String&, text2 String&) Msg { return Msg(Diag.NoteRefillKept, "", "or refill the one kept - '" $text1 ".Clear()', then put the elements in: one made where '" $text2 "' lives stays there, beside every one made before it, until that scope closes") }
 
 # NOTE_DECLARE_WHERE
+fn NoteParamCopy(text1 String&, text2 String&) Msg { return Msg(Diag.NoteParamCopy, "", "'" $text1 "' is the call's own copy of its argument - take it by reference to give back what the caller passed: '" $text2 "'") }
+
 fn NoteBindingWhere(text1 String&, text2 String&) Msg { return Msg(Diag.NoteBindingWhere, "", "'" $text1 "' is bound here to what the matched value holds, which lives in a block that closes first - make that where '" $text2 "' lives") }
 
 fn NoteDeclareWhere(text1 String&, text2 String&, text3 String&, text4 String&, text5 String&) Msg { return Msg(Diag.NoteDeclareWhere, "", "'" $text1 "' is declared here, in a block that closes first - declare it where '" $text2 "' lives: '" $text3 " " $text4 "&" $text5 " = ...'") }
