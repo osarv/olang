@@ -23088,3 +23088,35 @@ after an arena churn, with an assert the evaluator decides; `checks/cases/c2dcon
 writes the shape (`ctorChoiceArgOp`, `ctorScopeOp` kinds 10-13: through a local, a match returned directly, nested by
 value, the constant first): over seeds 1-600 the compiler before the fix gives 21 findings, every one in a program with
 the shape, and the fixed one none, with the same 2,777 scenarios run and 4,423 refused.
+
+## The decisions of 2026-10-24, round 4: traits that extend, closed traits, intersections (2026-10-24)
+
+The user decided (2026-10-24): traits are open (methods) or closed (`trait Float for F16, BF16, F32, F64 { ... }`, the
+members checked for the methods, `match T` complete, a member possibly a closed trait); constraints side by side are an
+intersection (`<T Shape House>`); `trait A extends B, C`; no inline type lists for now.
+
+**What was built.** In the grammar the words follow `trait` - `type Dwelling trait extends Shape, House { ... }`,
+`type Float trait for F16, BF16, F32, F64 { }` - since a trait is a type declaration's body (T30), with `extends` before
+`for` where both are written (mine). T30a: a trait's methods are its own and every extended trait's, at any depth, so
+`Missing` walks what a trait extends, its arguments substituted, and G9c binds variables through them too
+(`type Walk<T> trait extends Iterator<T> { }`, `<I Walk<E>, E>` binds `E`). A trait reaching itself through what it
+extends is an error at the declaration (and the walks stop at a depth, so the error is reported rather than looped on);
+so is a name after `extends` that is no trait. T31a: a closed trait is met by the types it lists - the very type, so
+`Char` (extending `U8`) is not an `Integer` - and has the trait's methods; a closed trait listed is taken in at any
+depth, an open one is an error. Each listed type is checked for the methods at the declaration where the trait has no
+type parameters (a generic closed trait's methods are only known per application). G19: several traits written side by
+side in a type parameter list are held as a tuple of traits, and a binding is checked against each - the representation
+chosen because a tuple already substitutes and compares like any type, so instances, inference (G9c) and `explain` needed
+no type kind of their own. A binding missing a method of an extended trait is named with the written trait and the
+method's own (`... the constraint Dwelling on T: it has no method Rooms (House's) that fits`); one outside a closed trait
+lists the types it lists.
+
+**The numeric traits (T35c) are closed traits now**: `type Float trait for F16, BF16, F32, F64 { }`, `Integer` the eight
+integers, `Number for Integer, Float`. The prelude's private-method sealing (`floatType` on every float, and its two
+siblings) is removed; the errors read "Float is closed, met by F16, BF16, F32, F64 alone" where they said "sealed". The
+sealing rule for traits with private methods (T31) stays: it is what a program writes for an open trait no other module
+may implement.
+
+**Not built, as decided:** inline type lists (`<T (I32, F64)>`). G15 needed no change: a `match T` is already checked per
+instantiation, and only the listed types can instantiate a variable a closed trait constrains, so cases covering them
+make it complete; the rule now says so.

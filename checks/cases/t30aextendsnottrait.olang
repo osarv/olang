@@ -1,0 +1,5 @@
+# check: fail eaBox is not a trait, so a trait cannot extend it
+# T30a: a trait extends traits only - a type gives a trait methods by declaring them
+type eaBox struct(v I64) { v }
+type eaBad trait extends eaBox { }
+fn main() { }

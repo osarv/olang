@@ -1,0 +1,15 @@
+# check: fail eaSq does not satisfy the constraint eaDwelling on T: it has no method Rooms (eaHouse's) that fits
+# T30a: satisfying a trait is satisfying every trait it extends - the method missing is named with its own trait
+type eaShape trait {
+    Area() I64
+}
+type eaHouse trait {
+    Rooms() I64
+}
+type eaDwelling trait extends eaShape, eaHouse { }
+type eaSq struct(w I64) { w }
+fn (s eaSq) Area() I64 { return s.w * s.w }
+fn eaArea<T eaDwelling>(x T) I64 { return x.Area() }
+fn main() {
+    a := eaArea(eaSq(2))
+}

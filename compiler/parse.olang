@@ -699,6 +699,9 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
         }
         case token.Tok.Trait {
             p.advance()
+            # "extends A, B" (T30a) and "for X, Y" (T31a), before the methods
+            exts := try p.typeList(token.Tok.Extends)
+            members := try p.typeList(token.Tok.For)
             try p.want(token.Tok.LBrace)
             methods mut List<ast.Func&>&p = List<ast.Func&>()
             p.skipEnds()
@@ -718,7 +721,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
                 try p.entryEnd()
             }
             p.advance()
-            return ast.TypeBody.Trait(methods.ToArray())
+            return ast.TypeBody.Trait(methods.ToArray(), exts, members)
         }
         nomatch {
             base := try p.typeExpr()
@@ -791,6 +794,17 @@ fn builtinType(t String&) Bool {
 
 # "<" item { sep item } ">": a type's parameters, or a function's or a constructor's own type variables (G1, G3, G10d,
 # QW) - each a name, then its constraint or a constant's type
+# after a trait's name: "KEYWORD T, U, ..." where the keyword is there - the types it lists, none where it is not
+fn (p mut Parser&) typeList(kw token.Tok) Array<ast.TypeRef&>&p ? Fail {
+    if not p.accept(kw) { return Array<ast.TypeRef&>(0) }
+    l mut List<ast.TypeRef&>&p = List<ast.TypeRef&>()
+    for {
+        l.Push(try p.typeExpr())
+        if not p.accept(token.Tok.Comma) { break }
+    }
+    return l.ToArray()
+}
+
 fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
     try p.openAngle()
     wasSkip := p.skip
@@ -801,15 +815,18 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>&p ? Fail {
         pn := try p.name()
         p.vars.Push(pn)
         ty ast.TypeRef?&p = null
-        if not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() {
+        also mut List<ast.TypeRef&>&p = List<ast.TypeRef&>()
+        # its constraint: a trait, or several side by side - their intersection (G19)
+        for not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.closesAngle() {
             wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
             p.item = true
-            ty = try p.typeExpr()
+            t := try p.typeExpr()
             p.noGt = wasNoGt
             p.item = wasItem
+            if ty is null { ty = t } else { also.Push(t) }
         }
-        l.Push(ast.TypeParam(p.from(pat), pn, ty))
+        l.Push(ast.TypeParam(p.from(pat), pn, ty, also.ToArray()))
         if not try p.sep(token.Tok.Gt) { break }
     }
     p.skip = wasSkip
@@ -2954,7 +2971,7 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
             case ast.Decl.Type(_, t) {
                 b.Push("type " $names.Text(t.Name))
                 match t.Body {
-                    case ast.TypeBody.Trait(ms) {
+                    case ast.TypeBody.Trait(ms, _, _) {
                         for m in ms { b.Push(" " $("mut " if m.Recv is not null else "") $names.Text(m.Name)) }
                     }
                     nomatch { }

@@ -1,0 +1,8 @@
+# check: fail iaBox is not a trait, so it cannot constrain a type variable
+# G19: every type side by side in a constraint is a trait
+type iaShape trait {
+    Area() I64
+}
+type iaBox struct(v I64) { v }
+fn iaKeep<T iaShape iaBox>(x T) T { return x }
+fn main() { }

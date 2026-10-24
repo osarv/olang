@@ -1,0 +1,8 @@
+# check: fail I64 is listed by 'caSized' but has no method 'Area' that fits
+# T31a: every type a closed trait lists has the trait's methods - checked at the declaration
+type caBox struct(v I64) { v }
+fn (b caBox) Area() I64 { return b.v }
+type caSized trait for caBox, I64 {
+    Area() I64
+}
+fn main() { }

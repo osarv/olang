@@ -1,0 +1,7 @@
+# check: fail caShape is an open trait, so it lists no types to take in
+# T31a: a closed trait lists types, or closed traits whose types it takes in
+type caShape trait {
+    Area() I64
+}
+type caBad trait for caShape, I8 { }
+fn main() { }

@@ -1,0 +1,7 @@
+# check: fail I32 does not satisfy the constraint caSmall on T: caSmall is closed, met by I8, I16 alone
+# T31a: a closed trait is met by the types it lists and by no other
+type caSmall trait for I8, I16 { }
+fn caKeep<T caSmall>(x T) T { return x }
+fn main() {
+    k := caKeep(I32(3))
+}

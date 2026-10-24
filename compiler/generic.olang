@@ -175,7 +175,7 @@ fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
             match td.Body {
                 case ast.TypeBody.Struct(_) { kind = types.DeclKind.Struct }
                 case ast.TypeBody.Enum(_) { kind = types.DeclKind.Enum }
-                case ast.TypeBody.Trait(_) { kind = types.DeclKind.Trait }
+                case ast.TypeBody.Trait(_, _, _) { kind = types.DeclKind.Trait }
                 case ast.TypeBody.Over(_, _) { kind = types.DeclKind.Over }
             }
         }
@@ -252,7 +252,7 @@ fn (p mut Program&) declVars(d types.DeclId) {
     for i in range td.Params.Len() {
         tp := td.Params[i]
         if tp.Ty is null { continue }
-        t := p.Resolve(c, tp.Ty)
+        t := p.BoundOf(c, tp)
         row := p.vars[base + i]
         p.vars[base + i] = varRow(owner, row.Name, types.UnknownT, t)
     }
@@ -1299,7 +1299,7 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
             p.T.SetEnumBody(t, ns, p.T.List(ps))
         }
         case ast.TypeBody.Over(base, _) { p.T.SetOverBody(t, p.Resolve(c, base)) }
-        case ast.TypeBody.Trait(_) { p.T.SetEmptyBody(t) }
+        case ast.TypeBody.Trait(_, _, _) { p.T.SetEmptyBody(t) }
     }
     return true
 }
@@ -1710,7 +1710,7 @@ fn (p mut Program&) DefaultMethods(t types.TypeId, name source.NameId) List<I64>
         if td is null or td.Body is null { continue }
         ok := false
         match td.Body {
-            case ast.TypeBody.Trait(methods) {
+            case ast.TypeBody.Trait(methods, _, _) {
                 ok = true
                 for m in methods {
                     if p.MethodOf(x, m.Name) < 0 { ok = false }
@@ -1836,7 +1836,7 @@ fn (p mut Program&) Sig(f I64) types.TypeId {
         c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly))
     }
     if row.F.TypeParams.Len() > 0 {
-        for tp in row.F.TypeParams { p.constraint(c, tp.Name, tp.Ty) }
+        for tp in row.F.TypeParams { p.constraint(c, tp) }
     }
     recv := types.UnknownT
     recvName := source.NameId(0)
@@ -1922,14 +1922,30 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut List<source.Na
 
 # a list item's type, read once every variable is known (a constraint may name a later one): its variable's
 # constraint (G19) - one that names no trait is the checker's G6 error
-fn (p mut Program&) constraint(c Context&, n source.NameId, k ast.TypeRef?&) {
-    if k is null { return }
-    v := try c.Vars.Get(n) catch default types.UnknownT
+fn (p mut Program&) constraint(c Context&, tp ast.TypeParam&) {
+    if tp.Ty is null { return }
+    v := try c.Vars.Get(tp.Name) catch default types.UnknownT
     if p.T.KindOf(v) != types.Kind.Var { return }
     i := (try p.varsAt.Get(c.Owner) catch default 0) + p.T.B(v)
     row := p.vars[i]
     if row.Const != types.UnknownT or row.Bound != types.UnknownT { return }
-    p.vars[i] = varRow(c.Owner, n, types.UnknownT, p.Resolve(c, k))
+    p.vars[i] = varRow(c.Owner, tp.Name, types.UnknownT, p.BoundOf(c, tp))
+}
+
+# a type parameter's constraint (G19): its trait, or for several written side by side their intersection - held as a
+# Tuple of the traits, each of which a binding must satisfy
+fn (p mut Program&) BoundOf(c Context&, tp ast.TypeParam&) types.TypeId {
+    if tp.Also.Len() == 0 { return p.Resolve(c, tp.Ty) }
+    ts List<types.TypeId>
+    ts.Push(p.Resolve(c, tp.Ty))
+    for a in tp.Also { ts.Push(p.Resolve(c, a)) }
+    return p.T.Tuple(p.T.List(ts.ToArray()))
+}
+
+# the traits a constraint names: its one trait, or each of an intersection's (G19)
+fn (p mut Program&) BoundTraits(b types.TypeId) Array<types.TypeId> {
+    if p.T.KindOf(b) == types.Kind.Tuple { return p.T.Items(p.T.Parts(b)) }
+    return types.TypeId[b]
 }
 
 # the constraint a type-parameter list gives a name, or null
@@ -2092,7 +2108,7 @@ fn (p mut Program&) CtorVars(d types.DeclId) I64 {
     if tps.Len() > 0 {
         c := Context(p.declMi[I64(d)], owner)
         for i in range ns.Len() { c.Vars.Put(ns[i], p.T.Var(owner, i, types.ReadOnly)) }
-        for tp in tps { p.constraint(c, tp.Name, tp.Ty) }
+        for tp in tps { p.constraint(c, tp) }
     }
     return ns.Len()
 }
@@ -2335,7 +2351,15 @@ fn (p mut Program&) InferThroughBounds(b mut Binding&) {
     }
 }
 
-fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&) Bool {
+fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, depth I64 = 0) Bool {
+    if depth > 32 { return false }
+    if p.T.KindOf(tr) == types.Kind.Tuple {
+        any := false
+        for x in p.T.Items(p.T.Parts(tr)) {
+            if p.unifyBound(t, x, b, depth + 1) { any = true }
+        }
+        return any
+    }
     if p.T.KindOf(tr) != types.Kind.Named { return false }
     d := p.T.DeclOf(tr)
     td := p.typeDecl(d)
@@ -2343,7 +2367,11 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&) 
     before := Array<types.TypeId>(b.N)
     for i in range b.N { before[i] = b.Vals[i] }
     match td.Body {
-        case ast.TypeBody.Trait(methods) {
+        case ast.TypeBody.Trait(methods, exts, _) {
+            # T30a: what the traits it extends bind, too
+            for e in exts {
+                if p.unifyBound(t, p.Subst(p.Resolve(p.declContext(d), e), DeclOwner(d), p.T.Args(tr)), b, depth + 1) { }
+            }
             for m in methods {
                 f := p.MethodOf(t, m.Name)
                 if f < 0 { continue }
@@ -2377,24 +2405,43 @@ fn (p mut Program&) Satisfies(t types.TypeId, tr types.TypeId) Bool { return p.M
 # why a binding fails a constraint (G19): Var the variable's index (-1 for none failing), Trait the trait instance it
 # fails, Method the first of its methods not met where Named, and Sealed where that method is private and so cannot be
 # supplied by the bound type (T31)
-type Unmet struct(Var I64, Trait types.TypeId, Method source.NameId, Named Bool, Sealed Bool) {
+type Unmet struct(Var I64, Trait types.TypeId, Method source.NameId, Named Bool, Sealed Bool, Closed Bool = false) {
     Var
     Trait
     Method
     Named
     Sealed
+    Closed     # the trait is closed (T31a) and the type is none of those it lists
 }
 
 fn met() Unmet { return Unmet(-1, types.UnknownT, source.NameId(0), false, false) }
 
 # the first of a trait's methods a type does not meet (Var 0), or Var -1 where it satisfies the trait
-fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId) Unmet {
+fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = true, depth I64 = 0) Unmet {
+    if depth > 32 { return met() }    # a trait extending itself, said at its declaration (T30a)
+    # G19: an intersection is met where each of its traits is
+    if p.T.KindOf(tr) == types.Kind.Tuple {
+        for x in p.T.Items(p.T.Parts(tr)) {
+            u := p.Missing(t, x, membership, depth + 1)
+            if u.Var >= 0 { return u }
+        }
+        return met()
+    }
     if p.T.KindOf(tr) != types.Kind.Named { return Unmet(0, tr, source.NameId(0), false, false) }
     d := p.T.DeclOf(tr)
     td := p.typeDecl(d)
     if td is null or td.Body is null { return Unmet(0, tr, source.NameId(0), false, false) }
     match td.Body {
-        case ast.TypeBody.Trait(methods) {
+        case ast.TypeBody.Trait(methods, exts, members) {
+            # T31a: a closed trait is met by the types it lists, and by no other
+            if membership and members.Len() > 0 and not p.Member(t, tr) { return Unmet(0, tr, source.NameId(0), false, false, true) }
+            # T30a: what it extends is met too
+            for e in exts {
+                et := p.Subst(p.Resolve(p.declContext(d), e), DeclOwner(d), p.T.Args(tr))
+                if p.T.KindOf(et) != types.Kind.Named or et == tr { continue }
+                u := p.Missing(t, et, membership, depth + 1)
+                if u.Var >= 0 { return u }
+            }
             for m in methods {
                 if p.meets(t, d, p.T.Args(tr), m) { continue }
                 priv := not load.Public(p.text(m.Name))
@@ -2406,6 +2453,72 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId) Unmet {
         }
         nomatch { return Unmet(0, tr, source.NameId(0), false, false) }
     }
+}
+
+# the types a closed trait lists (T31a), a closed trait among them taken in with its own - in order, each once; none for
+# an open trait
+fn (p mut Program&) Members(tr types.TypeId) Array<types.TypeId> {
+    out List<types.TypeId>
+    p.members(tr, out, 0)
+    return out.ToArray()
+}
+
+fn (p mut Program&) members(tr types.TypeId, out mut List<types.TypeId>&, depth I64) {
+    if depth > 32 or p.T.KindOf(tr) != types.Kind.Named { return }
+    d := p.T.DeclOf(tr)
+    td := p.typeDecl(d)
+    if td is null or td.Body is null { return }
+    match td.Body {
+        case ast.TypeBody.Trait(_, _, ms) {
+            c := p.declContext(d)
+            for m in ms {
+                t := p.Subst(p.Resolve(c, m), DeclOwner(d), p.T.Args(tr))
+                if p.IsClosedTrait(t) {
+                    p.members(t, out, depth + 1)
+                } else if not out.Has(t) {
+                    out.Push(t)
+                }
+            }
+        }
+        nomatch { }
+    }
+}
+
+# the traits a trait extends (T30a), as written - its arguments substituted
+fn (p mut Program&) Extended(tr types.TypeId) Array<types.TypeId> {
+    out List<types.TypeId>
+    if p.T.KindOf(tr) != types.Kind.Named { return out.ToArray() }
+    d := p.T.DeclOf(tr)
+    td := p.typeDecl(d)
+    if td is null or td.Body is null { return out.ToArray() }
+    match td.Body {
+        case ast.TypeBody.Trait(_, exts, _) {
+            c := p.declContext(d)
+            for e in exts { out.Push(p.Subst(p.Resolve(c, e), DeclOwner(d), p.T.Args(tr))) }
+        }
+        nomatch { }
+    }
+    return out.ToArray()
+}
+
+# whether t is a trait listing the types that satisfy it (T31a)
+fn (p mut Program&) IsClosedTrait(t types.TypeId) Bool {
+    if p.T.KindOf(t) != types.Kind.Named { return false }
+    td := p.typeDecl(p.T.DeclOf(t))
+    if td is null or td.Body is null { return false }
+    match td.Body {
+        case ast.TypeBody.Trait(_, _, ms) { return ms.Len() > 0 }
+        nomatch { return false }
+    }
+}
+
+# whether t is one of the types a closed trait lists (T31a): the very type - a type declared over one, or extending
+# it, is another type
+fn (p mut Program&) Member(t types.TypeId, tr types.TypeId) Bool {
+    for m in p.Members(tr) {
+        if p.T.Same(t, m) { return true }
+    }
+    return false
 }
 
 fn (p mut Program&) meets(t types.TypeId, d types.DeclId, args types.ListId, m ast.Func&) Bool {
@@ -2577,7 +2690,7 @@ fn (p mut Program&) FirstUnmet(owner I64, args types.ListId) Unmet {
         bound := p.Subst(row.Bound, owner, args)
         if not p.T.Closed(bound) { continue }
         u := p.Missing(xs[i], bound)
-        if u.Var >= 0 { return Unmet(i, u.Trait, u.Method, u.Named, u.Sealed) }
+        if u.Var >= 0 { return Unmet(i, u.Trait, u.Method, u.Named, u.Sealed, u.Closed) }
     }
     return met()
 }
@@ -2911,10 +3024,10 @@ test "constraints (G19): a type satisfies a trait by its methods, checked where 
     assert g >= 0 and p.T.Canon(p.MethodSig(g, bx)) == "fn(" $m ":Box<I16>&, I16) I16 ~[0,2,-1,-1,-2]", p.T.Canon(p.MethodSig(g, bx))
 }
 
-test "a sealed trait (T31): the prelude's Float, Integer and Number are met by the built-in numbers alone" {
+test "a closed trait (T31a): the prelude's Float, Integer and Number are met by the built-in numbers alone" {
     dir := try os.MkTemp() catch os.OsError { unreachable }
     defer { try os.RemoveAll(dir) catch os.OsError { } }
-    l := testLoad(dir, ("type D extends F64\ntype M I32\ntype Fake struct() { }\nfn (f Fake&) floatType() { }\n"
+    l := testLoad(dir, ("type D extends F64\ntype M I32\ntype Fake struct() { }\nfn (f Fake&) Area() F64 { return 0.0 }\n"
                        "fn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()

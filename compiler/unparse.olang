@@ -227,6 +227,10 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
             w.put(" ")
             w.ty(x.Ty!)
         }
+        for a in x.Also {
+            w.put(" ")
+            w.ty(a)
+        }
     }
     w.item = was
     w.put(">")
@@ -267,8 +271,25 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.nl()
             w.put("}")
         }
-        case ast.TypeBody.Trait(methods) {
-            w.put("trait {")
+        case ast.TypeBody.Trait(methods, exts, members) {
+            w.put("trait ")
+            if exts.Len() > 0 {
+                w.put("extends ")
+                for i, e in exts {
+                    if i > 0 { w.put(", ") }
+                    w.ty(e)
+                }
+                w.put(" ")
+            }
+            if members.Len() > 0 {
+                w.put("for ")
+                for i, e in members {
+                    if i > 0 { w.put(", ") }
+                    w.ty(e)
+                }
+                w.put(" ")
+            }
+            w.put("{")
             w.ind++
             for m in methods {
                 w.nl()

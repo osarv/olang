@@ -242,7 +242,8 @@ type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&,
 type TypeBody enum {
     Struct(s StructBody&)
     Enum(cases Array<CaseDecl&>&)
-    Trait(methods Array<Func&>&)
+    # a trait's methods, the traits it extends (T30a) and, for a closed one, the types it lists after "for" (T31a)
+    Trait(methods Array<Func&>&, exts Array<TypeRef&>&, members Array<TypeRef&>&)
     # type T I32 / extends ...; a constructor over a primitive (T29d) when Ctor is not null
     Over(base TypeRef&, ctor Func?&)
 }
@@ -259,11 +260,13 @@ type StructBody struct(Params Array<Param&>&, Errs Sig?&, Body Array<Stmt&>&, Dt
     TypeParams
 }
 
-# a type parameter: its name and its constraint or constant type (null for neither)
-type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&) {
+# a type parameter: its name and its constraint (null for none) - several traits side by side its intersection (G19),
+# the first in Ty and the rest in Also
+type TypeParam struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Also Array<TypeRef&>& = Array<TypeRef&>(0)) {
     Sp
     Name
     Ty
+    Also
 }
 
 type TypeDecl struct(Name source.NameId, Params Array<TypeParam&>&, Extends Bool, Body TypeBody?&) {

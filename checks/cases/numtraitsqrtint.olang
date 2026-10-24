@@ -1,4 +1,4 @@
-# check: fail I64 does not satisfy the constraint Float on T: Float is sealed
+# check: fail I64 does not satisfy the constraint Float on T: Float is closed
 # T35c/G19: a function over the floats refuses an integer at the call, naming the trait - not inside its body at a
 # "match T" missing its case
 fn nsRoot<T Float>(x T) T { return x.Exp() }

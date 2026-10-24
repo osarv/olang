@@ -840,8 +840,10 @@ answered vacuously forever. The instantiation is where the question has an answe
 
 **G19 (constraints).** A type variable may carry a **constraint**, a trait (§2.11) its type must satisfy, written
 after its name in the list introducing it: a function's (`fn area<S Shape>(s S)`, `fn drain<I Iterator<E>, E>(it mut
-I&) E`) or a generic type's (`type Map<K Hashable<K>, V>`). The `type-expr` must name a trait; it is a requirement, not a
-value, so it carries no reference marker. Every occurrence of the variable is its bare name (G8b).
+I&) E`) or a generic type's (`type Map<K Hashable<K>, V>`). Several traits written side by side are their
+**intersection**: `<T Shape House>` is met by a type satisfying both, and the binding is checked against each - a
+comma, as everywhere in the list, begins the next variable. Each `type-expr` must name a trait; it is a requirement,
+not a value, so it carries no reference marker. Every occurrence of the variable is its bare name (G8b).
 
 Where the variable is bound - by inference at a call (G9), by written type arguments (G7), by a constructor's
 inferred ones (G10c) - where only literals reach it, G9a first picks a type that meets the constraint - or by substitution into another generic's signature or fields, reported at the call or type that
@@ -1241,7 +1243,8 @@ requires the same type under T27 unless a specific rule elsewhere states an exce
 destructor, no storage:
 
 ```
-trait-body ::= "trait" "{" [ STMNT_END ] { method-sig STMNT_END } "}"
+trait-body ::= "trait" [ "extends" type-ref { "," type-ref } ] [ "for" type-ref { "," type-ref } ]
+               "{" [ STMNT_END ] { method-sig STMNT_END } "}"
 method-sig ::= [ "mut" ] IDEN func-sig
 ```
 
@@ -1283,6 +1286,24 @@ satisfying types, and satisfaction is decided from the two declarations alone, w
 only a type's declaring module can write its methods, so a declaration of intent would have to be made there too,
 and could name only traits that module already knows; a built-in type has no declaring module at all.
 
+**T30a (extends).** A trait may name traits it **extends**, after `extends`: `type Dwelling trait extends Shape, House
+{ Name() String }`. Its methods are its own and every method of the traits it extends, at any depth, so a type
+satisfies it exactly when it satisfies each of them and has its own methods too; satisfying `Dwelling` is satisfying
+`Shape House` (G19) and more. An extended trait's application takes the extending trait's arguments
+(`type Walk<T> trait extends Iterator<T> { }`). Each name after `extends` must be a trait - a type gives a trait
+methods by declaring them, never by being extended - and a trait may not reach itself through what it extends; both are
+compile-time errors at the declaration.
+
+**T31a (closed traits).** A trait may **list the types that satisfy it**, after `for`: `type Float trait for F16,
+BF16, F32, F64 { }`. Such a trait is **closed**: a type satisfies it when it is one of the types listed - the very type,
+so a type declared over one or extending it (T29, T29f) is not - and has the trait's methods (T31, T30a), and no other
+type satisfies it, whatever methods it has. A closed trait listed takes in the types it lists (`type Number trait for
+Integer, Float { }`), at any depth, each once; an open trait has no types to list and is a compile-time error there.
+Each listed type must have the trait's methods, checked at the declaration (for a trait with no type parameters) - a
+listed type without one is an error naming the type and the method. Where a type variable is constrained by a closed
+trait, a `match` on it (G15) whose cases cover every listed type needs no `nomatch`: only those types can bind it. A
+trait with no `for` is **open**, met by any type with its methods, as T31 says.
+
 **T35.** A method signature in a trait may not introduce type parameters of its own (§12): a type satisfies a trait
 with one method per name, and a generic signature names a family of them.
 
@@ -1310,16 +1331,15 @@ Every array has `Iter()`, giving an `ArrayIter<T>` - a fresh position at its sta
 `Iterator<T>` (M19e) are `Some`, `Every`, `Count`, `Fold`, `Map` and `Filter`, and `ToList()`, a new `List` of every value
 left - `m.Keys().ToList()`.
 
-**T35c (the numeric traits).** The prelude declares three sealed traits (T31) naming the built-in numbers (T4):
-`Float`, satisfied by `F16`, `BF16`, `F32` and `F64`; `Integer`, by `I8`, `I16`, `I32`, `I64`, `U8`, `U16`, `U32` and
-`U64`; and `Number`, by all twelve. `Bool` satisfies none of them. Each trait's one method is private to the prelude
-module declaring the three, which gives it to those types and no others, so no type a program declares satisfies one
-- not by declaring a method of that name, and not by `extends` (T29f): `Char`, `type Meters extends I32` and
-`type Dist extends F64` inherit the method but satisfy nothing, so code constrained by a numeric trait may pick its
-behaviour with `match T` over the built-in types alone. Generic numeric code says which numbers it takes -
-`fn mean<T Float>(a Array<T>&) T`, or a default on the numbers themselves, `fn (x T) Sqrt<T Float>() T` (M19e) - so a
-call with any other type is an error at the call naming the trait (G19); a literal reaching such a variable takes a
-type that meets it (G9a), so `root(4)` with `fn root<T Float>(x T) T` is `root` at `F64`. The prelude's own methods on
+**T35c (the numeric traits).** The prelude declares three closed traits (T31a) naming the built-in numbers (T4):
+`type Float trait for F16, BF16, F32, F64 { }`; `type Integer trait for I8, I16, I32, I64, U8, U16, U32, U64 { }`; and
+`type Number trait for Integer, Float { }`, all twelve. `Bool` satisfies none of them, and no type a program declares
+satisfies one - `Char`, `type Meters extends I32` and `type Dist extends F64` are types of their own - so code
+constrained by a numeric trait may pick its behaviour with `match T` over the built-in types alone, with no `nomatch`.
+Generic numeric code says which numbers it takes - `fn mean<T Float>(a Array<T>&) T`, or a default on the numbers
+themselves, `fn (x T) Sqrt<T Float>() T` (M19e) - so a call with any other type is an error at the call naming the
+trait (G19); a literal reaching such a variable takes a type that meets it (G9a), so `root(4)` with `fn root<T
+Float>(x T) T` is `root` at `F64`. The prelude's own methods on
 the numbers are listed in §4 M19d.
 
 **T36 (no type punning).** Storage is never read as a type other than the one it was written as. There is
@@ -6666,7 +6686,8 @@ belonging to other cases are not checked against this instantiation at all.
 
 **G15.** Unlike a value `match` (S13), a type `match` is exhaustiveness-checked: if no `case` matches
 and no `nomatch` clause is present, it is a compile-time error reported at the **instantiation**
-that produced the unmatched type, naming both the type and the generic. A value `match` performs no
+that produced the unmatched type, naming both the type and the generic. A variable a closed trait constrains (T31a)
+binds only the types it lists, so cases naming each of them make the match complete without a `nomatch`. A value `match` performs no
 such check; the difference is deliberate, since a silently empty type `match` would compile a
 generic that does nothing for some of its instantiations.
 

@@ -181,6 +181,11 @@ type Diag enum {
     ConstraintUnmet
     ConstraintUnmetMethod
     ConstraintSealed
+    ConstraintClosed
+    TraitExtendsNotTrait
+    TraitExtendsItself
+    TraitMemberOpen
+    TraitMemberMissing
     ConstraintUnmetHash
     UnboundedInstantiation
     TypeHoldsItself
@@ -999,6 +1004,21 @@ fn ConstraintUnmetMethod(ty String&, text1 String&, text2 String&, text3 String&
 
 # ERR_CONSTRAINT_SEALED
 fn ConstraintSealed(ty String&, text1 String&, text2 String&, text3 String&, text4 String&) Msg { return Msg(Diag.ConstraintSealed, "G19, T31", $ty " does not satisfy the constraint " $text1 " on " $text2 ": " $text3 " is sealed - only the types its own module gives '" $text4 "' satisfy it") }
+
+# ERR_CONSTRAINT_CLOSED
+fn ConstraintClosed(ty String&, text1 String&, text2 String&, text3 String&, list String&) Msg { return Msg(Diag.ConstraintClosed, "G19, T31a", $ty " does not satisfy the constraint " $text1 " on " $text2 ": " $text3 " is closed, met by " $list " alone") }
+
+# ERR_TRAIT_EXTENDS_NOT_TRAIT
+fn TraitExtendsNotTrait(text String&) Msg { return Msg(Diag.TraitExtendsNotTrait, "T30a", $text " is not a trait, so a trait cannot extend it - a type takes a trait's methods by declaring them") }
+
+# ERR_TRAIT_EXTENDS_ITSELF
+fn TraitExtendsItself(tok String&) Msg { return Msg(Diag.TraitExtendsItself, "T30a", $tok " extends itself through the traits it extends") }
+
+# ERR_TRAIT_MEMBER_OPEN
+fn TraitMemberOpen(text String&) Msg { return Msg(Diag.TraitMemberOpen, "T31a", $text " is an open trait, so it lists no types to take in - list types, or closed traits") }
+
+# ERR_TRAIT_MEMBER_MISSING
+fn TraitMemberMissing(ty String&, tok String&, tok2 String&) Msg { return Msg(Diag.TraitMemberMissing, "T31a", $ty " is listed by " $tok " but has no method " $tok2 " that fits - declare it, or leave " $ty " out") }
 
 # ERR_CONSTRAINT_UNMET_HASH
 fn ConstraintUnmetHash(ty String&, text1 String&, text2 String&) Msg { return Msg(Diag.ConstraintUnmetHash, "G19, E10b", $ty " does not satisfy the constraint " $text1 " on " $text2 ": it has no Hash - declare 'Hash() I64', agreeing with '=='") }

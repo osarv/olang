@@ -592,6 +592,7 @@ fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
     }
     for p in tps {
         if p.Ty is not null { r.typeRef(p.Ty) }
+        for a in p.Also { r.typeRef(a) }
     }
 }
 
@@ -644,6 +645,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
     if t.Params.Len() > 0 {
         for p in t.Params {
             if p.Ty is not null { r.typeRef(p.Ty) }
+            for a in p.Also { r.typeRef(a) }
             r.bind(p.Name, p.Sp, What.TypeVar)
         }
     }
@@ -681,7 +683,9 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
                 }
             }
         }
-        case ast.TypeBody.Trait(methods) {
+        case ast.TypeBody.Trait(methods, exts, members) {
+            for e in exts { r.typeRef(e) }
+            for e in members { r.typeRef(e) }
             for f in methods {
                 m := r.mark()
                 r.sig(f, false)

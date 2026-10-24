@@ -1,0 +1,14 @@
+# check: fail iaSq does not satisfy the constraint iaHouse on T: it has no method Rooms that fits
+# G19: two traits side by side are their intersection - the binding meets each
+type iaShape trait {
+    Area() I64
+}
+type iaHouse trait {
+    Rooms() I64
+}
+type iaSq struct(w I64) { w }
+fn (s iaSq) Area() I64 { return s.w * s.w }
+fn iaBoth<T iaShape iaHouse>(x T) I64 { return x.Area() + x.Rooms() }
+fn main() {
+    b := iaBoth(iaSq(2))
+}

@@ -787,7 +787,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   crash on every condition the build decides was check.olang's own out-of-range index (`c.fr()` with no frame, E16e),
   which the two compilers' arenas laid out differently - not a miscompile (HISTORY.md, "Port M12: the self-built
   compiler's crash").
-- **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** Sealed prelude traits
+- **Numeric traits: `Float`, `Integer`, `Number` (T35c, T31, 2026-10-17, the user's decision).** (Closed traits since
+  2026-10-24, T31a - the entry "Traits: extends, closed, intersections" below; the private-method sealing is gone.)
+  Sealed prelude traits
   (`std/prelude/number.olang`, one private method each) satisfied by the four floats, the eight integers, and all twelve;
   `Bool` none. **A declared type never satisfies one, `extends` included (mine)**: T31 now says a private method is
   supplied only for a type its own module declares (or a built-in one), so `Char` and `type Dist extends F64` inherit
@@ -802,6 +804,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (T6) - `root(4)` with `fn root<T Float>(x T) T` is `root` at `F64`; none fitting, G19's error stays (`whole(2.5)`). A typed argument binds its
   own type: `root(n)` with `n I64` stays an error (no implicit integer-to-float). Both compilers; the evaluator
   sees the bound type.
+- **Traits: extends, closed, intersections (T30a, T31a, G19, T35c, 2026-10-24, the user's decisions).** `type Dwelling
+  trait extends Shape, House { ... }` has its methods and every extended trait's, so satisfying it is satisfying each.
+  `type Float trait for F16, BF16, F32, F64 { }` is **closed**: met by the very types it lists (a declared type over
+  one, or extending one, is another type), each of which must have the trait's methods (checked at the declaration),
+  and by nothing else; a closed trait listed takes its types in (`type Number trait for Integer, Float { }`), an open
+  one is an error there. `<T Shape House>` is an intersection, met by a type satisfying both. The prelude's numeric
+  traits are closed now, their private-method sealing removed; a `match T` over a closed trait's types needs no
+  `nomatch` (G15 already checks per instance). Decided (mine): the keywords go after `trait`, `extends` before `for`;
+  an intersection is held as a tuple of traits, each checked; a method a binding lacks from an extended trait is
+  named with that trait (`Rooms (House's)`); no inline type lists (additive later, decided).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

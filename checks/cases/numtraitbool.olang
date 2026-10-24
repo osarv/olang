@@ -1,4 +1,4 @@
-# check: fail Bool does not satisfy the constraint Number on T: Number is sealed
+# check: fail Bool does not satisfy the constraint Number on T: Number is closed
 # T35c: a Bool is no Number
 fn nbTwice<T Number>(x T) T { return x + x }
 fn main() ? {

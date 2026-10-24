@@ -17652,3 +17652,50 @@ test "C2d/E28: a conditional or match passed to a constructor lands with the ins
     # decided while compiling (S18c), as at run time
     assert ucCond("k", 1).B == "k-made" and ucMatch("k", UcKind.Empty).B == "" and ucNested("k", -1).X!.B == ""
 }
+
+# ---- T30a, T31a, G19: traits that extend, closed traits, intersections ----
+
+type trShape trait {
+    Area() I64
+}
+type trHouse trait {
+    Rooms() I64
+}
+type trDwelling trait extends trShape, trHouse {
+    Label() String
+}
+type trHut struct(w I64) { w }
+fn (h trHut) Area() I64 { return h.w * h.w }
+fn (h trHut) Rooms() I64 { return 2 }
+fn (h trHut) Label() String { return "hut" }
+type trSmall trait for I8, I16 { }
+type trWide trait for trSmall, I64 { }
+type trWalk<T> trait extends Iterator<T> { }
+
+fn trBoth<T trShape trHouse>(x T) I64 { return x.Area() + x.Rooms() }
+fn trDescribe<T trDwelling>(x T) String { return $x.Label() " " $x.Area() " " $x.Rooms() }
+fn trTwice<T trWide>(x T) I64 {
+    match T {
+        case I8 { return I64(x) + 1 }
+        case I16 { return I64(x) + 2 }
+        case I64 { return x * 2 }
+    }
+}
+fn trTotal<I trWalk<E>, E Integer>(it mut I&) E {
+    t E = 0
+    for {
+        x := try it.Next() catch Exhausted { break }
+        t += x
+    }
+    return t
+}
+
+TrBaked := trBoth(trHut(3)) + trTwice(I64(20)) + trTwice(I8(1)) + trTotal(I64[1, 2, 3].Iter())
+TrText := trDescribe(trHut(2))
+
+test "T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run" {
+    assert TrBaked == 11 + 40 + 2 + 6 and TrText == "hut 4 2"
+    assert trBoth(trHut(4)) == 18 and trDescribe(trHut(1)) == "hut 1 2"
+    assert trTwice(I16(5)) == 7 and trTwice(I8(3)) == 4 and trTwice(I64(-3)) == -6
+    assert trTotal(I32[4, 5].Iter()) == 9
+}

@@ -1,8 +1,6 @@
-# check: fail nfFake does not satisfy the constraint Float on T: Float is sealed - only the types its own module gives 'floatType' satisfy it
-# T31/T35c: Float is sealed - a type declaring a method of the trait's private name supplies nothing, since that name
-# belongs to the prelude's module (M6)
+# check: fail nfFake does not satisfy the constraint Float on T: Float is closed, met by F16, BF16, F32, F64 alone
+# T31a/T35c: Float is closed - a type having every method a float has still is none of the types the trait lists
 type nfFake struct(v F64) { v }
-fn (f nfFake) floatType() { }
 fn (f nfFake) Div(d F64) nfFake { return nfFake(f.v / d) }
 fn nfHalf<T Float>(x T) T { return x / 2.0 }
 fn main() ? {

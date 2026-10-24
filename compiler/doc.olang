@@ -366,7 +366,7 @@ fn memberAt(c mut typecheck.Checker&, mi I64, d types.DeclId, name String&) I64 
                 if cd.Name == id { return I64(cd.Sp.Start) }
             }
         }
-        case ast.TypeBody.Trait(ms) {
+        case ast.TypeBody.Trait(ms, _, _) {
             for f in ms {
                 if f.Name == id { return I64(f.Sp.Start) }
             }

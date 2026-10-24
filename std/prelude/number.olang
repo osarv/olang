@@ -6,52 +6,17 @@
 # `fn (x T) Sqrt<T Float>() T` - and a call with any other type is an error at the call naming the trait (G19), not a
 # case missing inside the library.
 #
-# Each trait is sealed (T31, T35c): its one method is private, declared here on each built-in type that satisfies it,
-# so no other module's type can supply it - not by declaring a method of that name, and not by extending a number: Char
-# (`type Char extends U8`) and `type Dist extends F64` inherit the method (T29f) and satisfy nothing. So a body
-# constrained by one may choose per type with "match T" over the built-in numbers alone, as the methods below do.
+# Each trait is closed (T31a, T35c): it lists the types that satisfy it, and no other type does - not one declaring a
+# method of some name, and not one extending a number: Char (`type Char extends U8`) and `type Dist extends F64` are
+# types of their own and satisfy none. So a body constrained by one may choose per type with "match T" over the
+# built-in numbers alone, as the methods below do, and needs no nomatch.
 
-# F16, BF16, F32 and F64
-type Float trait {
-    floatType()
-}
+type Float trait for F16, BF16, F32, F64 { }
 
-# I8, I16, I32, I64, U8, U16, U32 and U64
-type Integer trait {
-    integerType()
-}
+type Integer trait for I8, I16, I32, I64, U8, U16, U32, U64 { }
 
 # every Float and every Integer
-type Number trait {
-    numberType()
-}
-
-fn (x F16) floatType() { }
-fn (x BF16) floatType() { }
-fn (x F32) floatType() { }
-fn (x F64) floatType() { }
-
-fn (x I8) integerType() { }
-fn (x I16) integerType() { }
-fn (x I32) integerType() { }
-fn (x I64) integerType() { }
-fn (x U8) integerType() { }
-fn (x U16) integerType() { }
-fn (x U32) integerType() { }
-fn (x U64) integerType() { }
-
-fn (x F16) numberType() { }
-fn (x BF16) numberType() { }
-fn (x F32) numberType() { }
-fn (x F64) numberType() { }
-fn (x I8) numberType() { }
-fn (x I16) numberType() { }
-fn (x I32) numberType() { }
-fn (x I64) numberType() { }
-fn (x U8) numberType() { }
-fn (x U16) numberType() { }
-fn (x U32) numberType() { }
-fn (x U64) numberType() { }
+type Number trait for Integer, Float { }
 
 # ---- the constants ----
 

@@ -137,6 +137,16 @@ fn firstItemEnd(s String&) I64 {
     return s.Len()
 }
 
+# written types as the source writes them, joined by ", "
+fn listed(src String&, ts Array<ast.TypeRef&>&) String {
+    b := StringBuilder()
+    for t in ts {
+        if b.Len() > 0 { b.Push(", ") }
+        b.Push(src[I64(t.Span().Start):I64(t.Span().End)])
+    }
+    return b.ToString()
+}
+
 # an owner's type variables as its declaration introduces them, "<T Shape, U>", nothing for none
 fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
     n := c.P.VarCount(owner)
@@ -148,7 +158,9 @@ fn typeVars(c mut typecheck.Checker&, owner I64, skip I64) String {
         if i > skip { b.Push(", ") }
         b.Push(c.P.L.Names.Text(v.Name))
         if v.Const != types.UnknownT { b.Push($" " $c.Ty(v.Const)) }
-        if v.Bound != types.UnknownT { b.Push($" " $c.Ty(v.Bound)) }
+        if v.Bound != types.UnknownT {
+            for t in c.P.BoundTraits(v.Bound) { b.Push($" " $c.Ty(t)) }    # an intersection side by side (G19)
+        }
     }
     b.PushChar('>')
     return b.ToString()
@@ -183,12 +195,21 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
             return b.ToString()
         }
         case types.DeclKind.Trait {
-            b.Push($"type " $name " trait\n")
             td := c.P.TypeDecl(d)
             mi := c.P.DeclModule(d)
+            src := c.P.L.Mods[mi].Src!.Text
+            b.Push($"type " $name " trait")
             match td!.Body {
-                case ast.TypeBody.Trait(ms) {
-                    src := c.P.L.Mods[mi].Src!.Text
+                case ast.TypeBody.Trait(_, exts, members) {
+                    # what it extends (T30a) and the types it lists (T31a), as written
+                    if exts.Len() > 0 { b.Push($" extends " $listed(src, exts)) }
+                    if members.Len() > 0 { b.Push($" for " $listed(src, members)) }
+                }
+                case _ { }
+            }
+            b.Push("\n")
+            match td!.Body {
+                case ast.TypeBody.Trait(ms, _, _) {
                     for m in ms { b.Push($"    " $src[I64(m.Sp.Start):I64(m.Sp.End)].Trim() "\n") }
                 }
                 case _ { }

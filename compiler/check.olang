@@ -649,6 +649,9 @@ fn (c mut Checker&) fnTypeParams(f I64) {
             }
             # G19: a variable written after a type that is no trait - a length is never a parameter (T7)
             if tp.Ty is not null and not c.traitRef(mi, tp.Ty!) { c.err(tp.Ty!.Span(), msgs.ConstraintNotTrait(c.src(tp.Ty!.Span()))) }
+            for a in tp.Also {
+                if not c.traitRef(mi, a) { c.err(a.Span(), msgs.ConstraintNotTrait(c.src(a.Span()))) }
+            }
         }
     }
     owner := generic.FnOwner(f)
@@ -1019,6 +1022,7 @@ fn (c mut Checker&) decls(mi I64, ds Array<ast.Decl&>&) {
                 c.typeRules(mi, tsp, td)
                 c.declaredCtor(mi, td)
                 c.traitSets(mi, td)
+                c.traitHeader(mi, td)
             }
             case ast.Decl.If(_, ti) { c.declsIf(mi, ti, c.P.L.Chosen(mi, ti.Cond!.Span().Start), 0) }
             nomatch { }
@@ -1044,6 +1048,9 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
     if td.Params.Len() > 0 {
         for tp in td.Params {
             if tp.Ty is not null and not c.traitRef(mi, tp.Ty!) { c.err(tp.Ty!.Span(), msgs.ConstraintNotTrait(c.src(tp.Ty!.Span()))) }
+            for a in tp.Also {
+                if not c.traitRef(mi, a) { c.err(a.Span(), msgs.ConstraintNotTrait(c.src(a.Span()))) }
+            }
         }
     }
     if td.Params.Len() > 0 {
@@ -1293,11 +1300,72 @@ fn (c mut Checker&) holdsSelf(d types.DeclId, b types.TypeId) Bool {
     return false
 }
 
+# T30a, T31a: what a trait extends is traits, none reaching the trait itself again; what a closed trait lists is types,
+# or closed traits whose types it takes in, each type having the trait's methods
+fn (c mut Checker&) traitHeader(mi I64, td ast.TypeDecl?&) {
+    if td is null or td.Body is null { return }
+    match td.Body {
+        case ast.TypeBody.Trait(_, exts, members) {
+            if exts.Len() == 0 and members.Len() == 0 { return }
+            ei := c.P.TypeEntry(mi, td.Name)
+            if ei < 0 { return }
+            d := c.P.DeclFor(mi, ei)
+            fr := c.push(-1, mi, types.VoidT, types.ListId(0))
+            fr.Ctx = c.P.DeclContext(d)
+            self := c.P.SelfType(d)
+            bad := false
+            for e in exts {
+                if not c.traitRef(mi, e) {
+                    c.err(e.Span(), msgs.TraitExtendsNotTrait(c.src(e.Span())))
+                    bad = true
+                }
+            }
+            if not bad and exts.Len() > 0 and c.reachesTrait(d, self, 0) {
+                c.err(exts[0].Span(), msgs.TraitExtendsItself(c.tok(td.Name)))
+                bad = true
+            }
+            # each listed type has the methods - checked where the trait's own variables are known: not for a generic one
+            check := not bad and td.Params.Len() == 0
+            for m in members {
+                isTrait := c.traitRef(mi, m)
+                t := c.P.Resolve(c.fr().Ctx, m) if isTrait else c.resolve(m)
+                if t == types.UnknownT { continue }
+                listed := types.TypeId[t]
+                if isTrait {
+                    if not c.P.IsClosedTrait(t) {
+                        c.err(m.Span(), msgs.TraitMemberOpen(c.src(m.Span())))
+                        continue
+                    }
+                    listed = c.P.Members(t)
+                }
+                if not check { continue }
+                for x in listed {
+                    u := c.P.Missing(x, self, false)
+                    if u.Var >= 0 and u.Named { c.err(m.Span(), msgs.TraitMemberMissing(c.ty(x), c.tok(td.Name), c.tok(u.Method))) }
+                }
+            }
+            c.pop()
+        }
+        nomatch { }
+    }
+}
+
+# whether the traits tr extends reach the trait declared d (T30a)
+fn (c mut Checker&) reachesTrait(d types.DeclId, tr types.TypeId, depth I64) Bool {
+    if depth > 32 { return true }
+    for e in c.P.Extended(tr) {
+        if c.P.T.KindOf(e) != types.Kind.Named { continue }
+        if c.P.T.DeclOf(e) == d { return true }
+        if c.reachesTrait(d, e, depth + 1) { return true }
+    }
+    return false
+}
+
 # R1b: a trait's method writes its error set - no body says what it is
 fn (c mut Checker&) traitSets(mi I64, td ast.TypeDecl?&) {
     if td is null or td.Body is null { return }
     match td.Body {
-        case ast.TypeBody.Trait(ms) {
+        case ast.TypeBody.Trait(ms, _, _) {
             c.push(-1, mi, types.VoidT, types.ListId(0))
             for m in ms {
                 if m.S.HasErrors and m.S.Errors.Len() == 0 {
@@ -6973,12 +7041,28 @@ fn (c mut Checker&) bound(owner I64, args types.ListId, sp source.Span) Bool {
         c.err(sp, msgs.ConstraintSealed(c.ty(x), tn, v, tn, c.text(u.Method)))
         return false
     }
+    if u.Closed {
+        listing := StringBuilder()
+        for m in c.P.Members(u.Trait) {
+            if listing.Len() > 0 { listing.Push(", ") }
+            listing.Push(c.ty(m))
+        }
+        c.err(sp, msgs.ConstraintClosed(c.ty(x), tn, v, tn, listing.ToString()))
+        return false
+    }
     if not u.Named {
         c.err(sp, msgs.ConstraintUnmet(c.ty(x), tn, v))
         return false
     }
     name := c.text(u.Method)
-    rec := c.err(sp, msgs.ConstraintUnmetHash(c.ty(x), tn, v) if name == "Hash" else msgs.ConstraintUnmetMethod(c.ty(x), tn, v, name))
+    # T30a: a method of a trait the written one extends - named by the written one, the method's own trait said
+    top := c.P.VarAt(owner, u.Var).Bound
+    shown := name
+    if c.P.T.KindOf(top) == types.Kind.Named and c.P.T.DeclOf(top) != c.P.T.DeclOf(u.Trait) {
+        shown = $name " (" $tn "'s)"
+        tn = c.text(c.P.T.DeclName(c.P.T.DeclOf(top)))
+    }
+    rec := c.err(sp, msgs.ConstraintUnmetHash(c.ty(x), tn, v) if name == "Hash" else msgs.ConstraintUnmetMethod(c.ty(x), tn, v, shown))
     # M6b: a tn's method is met by its own name, so a private spelling of it meets nothing; one of its name with
     # another signature is said too
     priv := lowerFirst(name)

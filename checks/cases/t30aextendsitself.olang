@@ -1,0 +1,5 @@
+# check: fail 'eaOne' extends itself through the traits it extends
+# T30a: a trait may not reach itself through what it extends
+type eaOne trait extends eaTwo { }
+type eaTwo trait extends eaOne { }
+fn main() { }
