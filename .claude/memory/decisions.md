@@ -840,3 +840,9 @@ errors and documentation - generic `+` already works).
   [n := l.Len()] [l.Len() == n + 1]` (rec). The user raised single statements without braces after control flow: rec
   keep braces (no parentheses around conditions, so `{` ends the condition: `if a (b)` ambiguous; one-line blocks exist;
   a leaving-keyword-only exception would be a second spelling).
+- CONTRACTS 2026-10-24, DECIDED (the user): no `old` (and no `:=` entry bindings, "clumsy"): a guarantee speaks only
+  about the named results; one bracket list after the parameters and one after the results, never two in a row
+  (normal listing). Contract design complete but trait-method conditions (with `any`) and the prover. Braces: the user
+  asked for the clash cases (listed: `(` after the condition, call args vs statement, `<` type arguments, a line break
+  after the condition, dangling else, else-if chains, name-starting statements needing lookahead; safe subset only
+  leaving keywords) - to be discussed later.
