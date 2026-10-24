@@ -1021,3 +1021,5 @@ errors and documentation - generic `+` already works).
   strings and character literals; `"""` the one raw form - no escapes, one line or several; across lines the first and
   last line breaks are dropped and the closing line's indentation is removed from every line (Swift/Java); text holding
   `"""` uses a normal string. Awaiting a yes on the escapes. LICENCE: "that's the last thing we do" - deferred to last.
+- DECIDED 2026-10-24 (the user: "Yes, add all if they are standard"): `\x41`, `\u{1F600}` escapes and the `"""` raw
+  form as proposed - into lang24 as a later round. Confirmed to the user: `$(expr)` renders any expression (checked).
