@@ -876,3 +876,7 @@ errors and documentation - generic `+` already works).
 - DECIDED 2026-10-24 (the user: "name '/' imports are just fine and then we access with name ... partial imports ... the
   extras are just lost at link-time either way"): QAT closed - imports stay quoted `/` paths, access by the alias with
   `.`, no partial imports, the deferred `lib:Name` separator dropped. Nothing changes in code.
+- ASKED 2026-10-24 (the user: "Can we add import _ "std/io" to import io's namespace into ours?"): rec no (names stop
+  saying where they come from; a library adding an export breaks importers under D3a; two such imports collide; Go
+  advises tests only; the prelude already is the one unqualified namespace). If wanted: `import _ "std/io"`, clashes an
+  error at the import line. In effect: not built.
