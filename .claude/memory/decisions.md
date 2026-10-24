@@ -913,3 +913,7 @@ errors and documentation - generic `+` already works).
   explained per-case behaviour goes through a struct payload (`Round(c Circle)`, `e.c` after narrowing meets traits).
   ASKED: 1 keep field lists (rec; ~166 multi-field cases vs ~99 single in compiler/std would each need a struct);
   2 `Name Type` only; 3 both forms. In effect: field lists.
+- ENUMS 2026-10-24 (the user: "Can't we do a mixing?"): PROPOSED (rec) one rule - a case carries one payload type,
+  named (`Round Circle`) or inline as a field list (`Box(w F64, h F64)`, an unnamed struct), or none (`Empty`);
+  `Shape.Round(c)` / `Shape.Box(2.0, 3.0)`; narrowing makes `e` its payload (`e.r`, `e.Area()`, `e.w`); `case
+  Shape.Round(c)` binds the Circle, `case Shape.Box(w, h)` the fields; `e as Shape.Round` is the Circle. Awaiting a yes.
