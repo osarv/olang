@@ -740,6 +740,11 @@ fn (w mut writer&) pattern(p ast.Pattern&) {
         }
         case ast.Pattern.Bind(_, n) { w.name(n) }
         case ast.Pattern.Value(_, x) { w.expr(x) }
+        case ast.Pattern.Type(_, ty, n, _) {
+            w.ty(ty)
+            w.put(" ")
+            w.name(n)
+        }
     }
 }
 

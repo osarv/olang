@@ -1203,7 +1203,7 @@ fn AnyNotMemberCase(ty String&, tr String&) Msg { return Msg(Diag.AnyNotMemberCa
 fn AnyCaseTwice(ty String&) Msg { return Msg(Diag.AnyCaseTwice, "T34", $ty " is matched by an earlier clause - this one is never reached") }
 
 # ERR_ANY_CASE_ALONE
-fn AnyCaseAlone() Msg { return Msg(Diag.AnyCaseAlone, "T34", "a type case is its clause's only alternative") }
+fn AnyCaseAlone() Msg { return Msg(Diag.AnyCaseAlone, "T34", "a type case binding a name is its clause's only alternative - bind '_' to share a clause") }
 
 # ERR_ANY_CASE_NOT_ANY
 fn AnyCaseNotAny(ty String&) Msg { return Msg(Diag.AnyCaseNotAny, "T34", "a type case matches an 'any' of a closed trait, and this is " $ty) }

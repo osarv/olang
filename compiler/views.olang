@@ -1153,7 +1153,7 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut List<view>&) {
             for i in range args.Len() {
                 part := List<view>()
                 v.expr(args[i], st, part)
-                if op == typed.PrimOp.Convert and i == 0 {
+                if typed.PassesRefs(op) and i == 0 {
                     for r in part { viewAdd(mine, r) }
                 }
             }

@@ -979,6 +979,13 @@ fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut List<source.NameId>&) {
                 r.declare(n, sp)
             }
         }
+        case ast.Pattern.Type(_, ty, n, sp) {
+            r.typeRef(ty)
+            if r.text(n) != "_" and n not in bound {
+                bound.Push(n)
+                r.declare(n, sp)
+            }
+        }
         nomatch { }
     }
 }

@@ -2092,6 +2092,11 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         return v
     }
     if op == typed.PrimOp.AnyMake { return ln.anyMake(args, ty, sp) }
+    if op == typed.PrimOp.AnyIs {
+        x := ln.val(args[0])
+        if ln.dead { return mir.Operand.None }
+        return ln.prim(op, ty, mir.Operand[x, mir.Operand.Const(args[1].Type(), 0)], sp)
+    }
     if op == typed.PrimOp.AnyInstance {
         # T34: the instance an "any" holds - for "as", its type tested first
         x := ln.val(args[0])

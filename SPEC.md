@@ -167,7 +167,8 @@ C2a). Anywhere else - a parameter, a local, a function, a type - the words stay 
 and `a outlives b` there, ordinary names everywhere else. In a contract `return` is also a prefix operator (D17b).
 
 **L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
-`s any Shape&`, `List<any Shape&>`; anywhere else it is an ordinary name.
+`s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name. A result named `any`
+(D17) is read as this word wherever a name follows it.
 
 ### 1.5 Literals
 

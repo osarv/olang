@@ -6837,6 +6837,7 @@ fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.E
     x := c.expr(a, types.UnknownT)
     xt := typeOf(x)
     et := c.deref(xt)
+    if c.P.T.KindOf(et) == types.Kind.Any { return c.anyAs(sp, x, a, tr) }
     k I64 = -1
     # a reference marker on a case reads the same payload (E32: the case is what is asked)
     named := tr
@@ -7368,7 +7369,7 @@ fn (c mut Checker&) roRef(x typed.Expr?&) Bool {
         case typed.Expr.Slice(_, _, sl) => c.roPlace(sl.Base)
         case typed.Expr.Call(_, _, cl) => c.roCallRef(cl)
         # a fixed array borrowed as a run-time-length one (T7c) is as read-only as the borrow
-        case typed.Expr.Prim(_, _, op, _, args) => c.roRef(args[0]) if op == typed.PrimOp.Convert and args.Len() == 1 else true
+        case typed.Expr.Prim(_, _, op, _, args) => c.roRef(args[0]) if typed.PassesRefs(op) and args.Len() > 0 else true
         case typed.Expr.Promote(_, _, _), typed.Expr.Data(_, _, _, _), typed.Expr.Lit(_, _, _) => false
         case _ => true
     }
@@ -7793,7 +7794,7 @@ fn (c mut Checker&) roDeepIn(b I64, x typed.Expr?&, out mut List<I64>&, seen mut
             if m.NoMatch is not null { c.roDeepIn(b, m.NoMatch!.Value, out, seen, depth + 1) }
         }
         case typed.Expr.Prim(_, _, op, _, args) {
-            if op == typed.PrimOp.Convert and args.Len() > 0 { c.roDeepIn(b, args[0], out, seen, depth + 1) }
+            if typed.PassesRefs(op) and args.Len() > 0 { c.roDeepIn(b, args[0], out, seen, depth + 1) }
         }
         case typed.Expr.Call(_, ty, cl) {
             id := c.bodyOfCallee(cl.Target)
@@ -10799,7 +10800,7 @@ fn (c mut Checker&) existingIn(x typed.Expr?&) source.Span {
             }
         }
         case typed.Expr.Prim(_, _, op, _, args) {
-            if op == typed.PrimOp.Convert and args.Len() > 0 { return c.existingIn(args[0]) }
+            if typed.PassesRefs(op) and args.Len() > 0 { return c.existingIn(args[0]) }
         }
         nomatch { }
     }
@@ -13731,6 +13732,9 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     et := c.deref(st)
     if c.isEnum(et) {
         for k in range c.P.T.Items(c.P.T.Cases(et)).Len() { covered.Push(false) }
+    } else if c.P.T.KindOf(et) == types.Kind.Any and c.P.IsClosedTrait(c.P.T.AnyTrait(et)) {
+        # T34: a closed trait's "any" covered by a type case for each type the trait lists
+        for k in range c.P.Members(c.P.T.AnyTrait(et)).Len() { covered.Push(false) }
     }
     all := false
     allSaid := false
@@ -13756,6 +13760,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         for ai in range cs.Alts.Len() {
             p := cs.Alts[ai]
             if isWild(p) and cs.Alts.Len() > 1 { c.err(p.Span(), msgs.WildcardNotAlone()) }
+            if c.bindsType(p) and cs.Alts.Len() > 1 { c.err(p.Span(), msgs.AnyCaseAlone()) }
             binds mut List<typed.Bind&>&c = List<typed.Bind&>()
             tst typed.Expr?&c = null
             if c.caseName(p, subjLocal) {
@@ -13859,6 +13864,87 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
     c.fr().Checks = checks
     if not isValue { rt = types.VoidT }
     return typed.Expr.Match(sp, rt, typed.Match(held, arms.ToArray(), noMatch, isValue))
+}
+
+# ---- type cases (T34) ----
+
+# whether an alternative is a type case binding a name: its clause's only alternative (T34)
+fn (c mut Checker&) bindsType(p ast.Pattern&) Bool {
+    match p {
+        case ast.Pattern.Type(_, _, n, _) { return c.text(n) != "_" }
+        nomatch { return false }
+    }
+}
+
+# the "any" (of type t, at place) holding an instance of the type a type case names (T34): the type identity tested,
+# the instance bound to the name - itself, or for a number its value
+fn (c mut Checker&) typeCase(sp source.Span, tyr ast.TypeRef&, n source.NameId, nsp source.Span, place typed.Place&c, t types.TypeId
+                             binds mut List<typed.Bind&>&c) typed.Expr&c {
+    if t == types.UnknownT { return c.lit(sp, types.BoolT, 0) }
+    mt := c.anyCaseType(sp, t, tyr)
+    if mt == types.UnknownT { return c.lit(sp, types.BoolT, 0) }
+    x := c.read(sp, place)
+    tst := c.prim(sp, types.BoolT, typed.PrimOp.AnyIs, x, c.lit(sp, mt, 0))
+    if c.text(n) != "_" {
+        bv := c.anyInstance(sp, c.read(sp, place), mt, typed.Check.None)
+        id := c.local(n, nsp, typeOf(bv), typed.LocalKind.Binding, typed.Mark.Infer)
+        c.roLet(id, bv)
+        binds.Push(typed.Bind(typed.LocalId(I32(id)), bv))
+    }
+    return tst
+}
+
+# the type a type case or an "as" names for an "any" of type t: one its closed trait lists, else said and Unknown
+fn (c mut Checker&) anyCaseType(sp source.Span, t types.TypeId, tyr ast.TypeRef&) types.TypeId {
+    et := c.deref(t)
+    if c.P.T.KindOf(et) != types.Kind.Any {
+        c.err(sp, msgs.AnyCaseNotAny(c.ty(t)))
+        return types.UnknownT
+    }
+    r := c.P.T.AnyTrait(et)
+    if not c.P.IsClosedTrait(r) {
+        c.err(sp, msgs.AnyOpenInspected(c.ty(t), c.ty(r)))
+        return types.UnknownT
+    }
+    named := tyr
+    match tyr {
+        case ast.TypeRef.Ref(_, of, _, _) { named = of }
+        nomatch { }
+    }
+    mt := c.P.T.Plain(c.resolve(named))
+    if mt == types.UnknownT { return types.UnknownT }
+    if not c.P.Member(mt, r) {
+        c.err(tyr.Span(), msgs.AnyNotMemberCase(c.ty(mt), c.ty(r)))
+        return types.UnknownT
+    }
+    return mt
+}
+
+# the instance an "any" x holds, of the type mt it lists (T34): a reference to it with the any's permission - a
+# number's value, which no reference names; an array's own storage. chk tests the type first (E32: "as")
+fn (c mut Checker&) anyInstance(sp source.Span, x typed.Expr&c, mt types.TypeId, chk typed.Check) typed.Expr&c {
+    perm := c.P.T.PermOf(typeOf(x)) & types.Writable
+    stored := c.P.AnyStored(mt)
+    from := c.exprs.Len()
+    c.exprs.Push(x)
+    c.exprs.Push(c.lit(sp, mt, 0))
+    rt := c.P.T.Ref(stored, perm)
+    ref typed.Expr&c = typed.Expr.Prim(sp, rt, typed.PrimOp.AnyInstance, chk, gather(c.exprs, from))
+    if not c.anyCopies(mt) { return ref }
+    if stored != mt {
+        art := c.P.T.Ref(mt, perm)
+        return typed.Expr.Borrow(sp, art, typed.Place.Field(sp, mt, typed.Place.Deref(sp, stored, ref), 0))
+    }
+    if c.P.T.KindOf(c.under(mt)) == types.Kind.Array { return ref }
+    return c.read(sp, typed.Place.Deref(sp, mt, ref))
+}
+
+# "x as T" on an "any" of a closed trait (T34): its instance, which must be a T - else an abort, or under checked
+# CheckError.WRONG_CASE
+fn (c mut Checker&) anyAs(sp source.Span, x typed.Expr&c, a ast.Expr&, tr ast.TypeRef&) typed.Expr&c {
+    mt := c.anyCaseType(c.between(a.Span(), tr.Span(), 2), typeOf(x), tr)
+    if mt == types.UnknownT { return c.unknown(sp) }
+    return c.anyInstance(sp, x, mt, c.checkOp(typed.Check.Abort, WrongCase))
 }
 
 # the first of an enum's cases the unguarded rows do not cover (S13a), -1 for none
@@ -14111,6 +14197,18 @@ fn isWild(p ast.Pattern&) Bool {
 fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut List<Bool>&, all Bool) {
     if covered.Len() == 0 { return }
     match p {
+        case ast.Pattern.Type(sp, tyr, _, _) {
+            if c.P.T.KindOf(et) != types.Kind.Any { return }
+            mt := c.P.T.Plain(c.resolve(tyr))
+            ms := c.P.Members(c.P.T.AnyTrait(et))
+            for k in range ms.Len() {
+                if k < covered.Len() and c.P.T.Same(ms[k], mt) {
+                    # T34: a type an earlier clause matches whatever it holds is never matched again
+                    if covered[k] or all { c.err(sp, msgs.AnyCaseTwice(c.ty(mt))) }
+                    covered[k] = true
+                }
+            }
+        }
         case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) {
             k := c.caseTag(x, et)
             if k >= 0 { covered[k] = true }
@@ -14192,6 +14290,7 @@ fn (c mut Checker&) matchValueMismatch(sp source.Span, said types.TypeId, rt typ
 fn (c mut Checker&) pattern(p ast.Pattern&, place typed.Place&c, t types.TypeId, binds mut List<typed.Bind&>&c, arm I64) typed.Expr&c {
     match p {
         case ast.Pattern.Wild(sp) { return c.lit(sp, types.BoolT, 1) }
+        case ast.Pattern.Type(sp, tyr, n, nsp) { return c.typeCase(sp, tyr, n, nsp, place, t, binds) }
         case ast.Pattern.Bind(sp, n) {
             id := c.localNamed(n)
             if id < 0 or I64(c.cur().Locals[id].In) != arm or c.cur().Locals[id].Kind != typed.LocalKind.Binding {

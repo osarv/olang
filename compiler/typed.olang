@@ -330,6 +330,10 @@ type Collect struct(Reserve Expr?&, Loop Block&, Site SiteId, Checked Check) {
 
 # an operation over numbers, Bools and Chars - and the few the compiler supplies over other types (Len, Bits, the
 # atomics). Operands are of the operation's type, widened before it (T6b); "==" here is on numbers and Bools only
+# the operations whose result names the storage their first argument names (a conversion, T29a; a run-time trait value
+# made of a reference, and its instance read back, T32): what is said of the argument's references is said of it
+fn PassesRefs(op PrimOp) Bool { return op == PrimOp.Convert or op == PrimOp.AnyMake or op == PrimOp.AnyInstance }
+
 type PrimOp enum {
     Neg
     BitNot

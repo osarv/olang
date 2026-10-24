@@ -156,6 +156,7 @@ type Pattern enum {
     Case(sp source.Span, path Expr&, subs Array<Pattern&>&)   # Shape.Rect(w, _): an enum case and its payload
     Bind(sp source.Span, name source.NameId)           # a payload position's name (S13b)
     Value(sp source.Span, x Expr&)                     # a literal, or any other expression, compared by "==" (S13d)
+    Type(sp source.Span, ty TypeRef&, name source.NameId, at source.Span)   # Button b: an "any"'s instance's type (T34)
 }
 
 # a declaration of names: "x T = v", "x := v", "a, b T = 1, 2", and a constructor's fields - its puns too ("x",
@@ -361,6 +362,6 @@ fn (s Stmt&) Span() source.Span {
 fn (p Pattern&) Span() source.Span {
     return match p {
         case Pattern.Wild(sp), Pattern.Path(sp, _), Pattern.Case(sp, _, _), Pattern.Bind(sp, _) => sp
-        case Pattern.Value(sp, _) => sp
+        case Pattern.Value(sp, _), Pattern.Type(sp, _, _, _) => sp
     }
 }

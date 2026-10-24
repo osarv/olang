@@ -906,7 +906,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
 
 # D17: whether a result here is named - a name followed, on its line, by what starts a type
 fn (p Parser&) namedResult() Bool {
-    if not p.sees(token.Tok.Iden) { return false }
+    if not p.sees(token.Tok.Iden) or p.anyHere() { return false }
     k := p.look(1)
     if k != token.Tok.Iden and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.LParen { return false }
     return not p.lookTok(1).Has(token.LineBreak)
@@ -2080,7 +2080,17 @@ fn (p mut Parser&) matchBody() ast.Match&p ? Fail {
                 p.tys.Push(try p.caseType())
             } else {
                 x := try p.binary(1)
-                p.pats.Push(p.pattern(x, true))
+                if isPath(x) and p.sees(token.Tok.Iden) and not p.tk().Has(token.LineBreak) {
+                    # T34: "case Button b" - a type, then the name its instance is bound to ("_" for none)
+                    nat := p.here()
+                    n := try p.name()
+                    from := p.ids.Len()
+                    pathIds(x, p.ids)
+                    ty := ast.TypeRef.Named(x.Span(), gather(p.ids, from), Array<ast.TypeRef&>(0))
+                    p.pats.Push(ast.Pattern.Type(source.Span(x.Span().Start, p.prevEnd), ty, n, p.from(nat)))
+                } else {
+                    p.pats.Push(p.pattern(x, true))
+                }
             }
             # QY: alternatives on one line are separated by ",", on different lines by the line break - a header goes
             # on to its "{", "=>" or guard, so a line ending in an alternative continues it
@@ -2155,6 +2165,18 @@ fn (p mut Parser&) pattern(x ast.Expr&p, top Bool) ast.Pattern&p {
             return ast.Pattern.Value(sp, x)
         }
         nomatch { return ast.Pattern.Value(x.Span(), x) }
+    }
+}
+
+# a path's names, in order
+fn pathIds(x ast.Expr&, out mut List<source.NameId>&) {
+    match x {
+        case ast.Expr.Name(_, n) { out.Push(n) }
+        case ast.Expr.Member(_, b, n) {
+            pathIds(b, out)
+            out.Push(n)
+        }
+        nomatch { }
     }
 }
 
