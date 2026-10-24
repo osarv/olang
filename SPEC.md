@@ -5744,6 +5744,13 @@ nothing but its own module and its imports, and is correctly reused by any progr
 root transitively imports every module of the program, the prelude included, so its own staleness (B3) already
 covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time.
 
+**B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
+compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is
+made from - its IR - under a hash of exactly those inputs (`build/rec/`), with the instantiations it names. A later
+build whose module has the same inputs takes that IR as the module's and does not make it again: the module is still
+checked, as every module is, but nothing of it is lowered or emitted, and the instantiations its object names are made
+in the root's as before (B3d). What is built is the same program either way.
+
 ### 10.2 Program entry
 
 **B4.** In `build` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
@@ -5925,6 +5932,9 @@ structures as the target's lays them out.
 (B10b) - so the target as resolved, its triple, CPU and extensions, is part of every object's name (B3). A build for one
 target never reuses an object built for another, and changing the target back finds the earlier objects current.
 `native` is resolved before the name is made, so a build directory taken to a machine with another CPU is rebuilt.
+What clang resolves a target to, and clang's version, are kept under `OLANG_CACHE` (`probe/`, beside M23a's checkouts),
+keyed by clang's own file (where it is, its size and its time), the question asked and this processor's model and
+extensions, so a build asks clang once rather than every time; `interpret` keeps nothing.
 
 **B12c (one result on every target).** The target changes how fast a program runs, never what it computes - except
 where the program itself asks, through the build constants. The generated code never fuses a multiplication and an

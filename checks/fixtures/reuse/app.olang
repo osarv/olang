@@ -1,0 +1,8 @@
+# B3i: a program whose modules' objects a later build reuses - lib's and leaf's when only this file changes
+import "std/io"
+import "lib"
+
+fn main() ? {
+    l := lib.Make(3)
+    try io.Println($"app " $lib.Total(l) " " $l.Len())
+}

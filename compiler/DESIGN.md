@@ -1139,7 +1139,8 @@ These are extrapolations from the measurements above, to be measured at M10.
    with the root. With item 2, the instance object is rebuilt only when the instance set or an instance's code
    changes. (Built, M10: `UnitKind.Instances`.) Under `-debug` only since M9 round 4: at -O3 the root's code could
    not inline an instance before the link and the link did not recover it (`for x in v` over a Vec measured 2x slower),
-   so there the root's object holds them, as stage 0's does.
+   so there the root's object holds them, as stage 0's does - where it is one object: where objects are cut into
+   parts (a program linking by ThinLTO), the instances have parts of their own again (M9 round 8, item 11).
 4. **Skip the link when nothing it reads changed**: the binary records a hash of its inputs. A no-op build is then
    the front end alone: about 1.5 s here instead of 10.7 s. (Built, M10: the stamp `BIN.link`.)
 5. **Run clang in parallel** over stale modules, bounded by the core count, using `join` and `spawn` over
@@ -1163,6 +1164,14 @@ These are extrapolations from the measurements above, to be measured at M10.
    start heaviest first; MIR verified in test and -debug builds only. The clean -O3 self-build 238 -> 176 s of CPU,
    tests/shared.olang's test build 56 -> 41. Three quarters of a clean build is still the ThinLTO link, set by how much
    is inlined; a leaf edit is now mostly the front end re-lowering modules whose objects are cached (HISTORY.md).
+11. **What a build makes again, made once** (M9 round 8, built): a module is keyed by its inputs - its text and its
+   imports', the compiler, the build's modes, target and constants - and the IR an emission wrote for it is kept under
+   the key (`build/rec`, B3i); a later build finding the key neither lowers nor emits the module, declaring what of it
+   the other objects name and making the instances its record names. A test is named by its name, and where objects are
+   cut the instances and a test build's tests have parts of their own, so an edit to the root leaves the parts the rest
+   of the program imports from, and so their ThinLTO code, as they were. What clang says of the target is kept
+   (B12b), and only test builds verify MIR. A leaf edit of the compiler 5.0 -> 3.5 s, an edit to a test of
+   tests/shared.olang 10.5 -> 4.1 s; the clean build is clang's, and the link at its floor for -O3 (HISTORY.md).
 
 Make targets: `make dev` (the compiler at `-d`, incremental) is the edit loop; `make` builds a release compiler
 with the installed one; `make bootstrap` is section 5.

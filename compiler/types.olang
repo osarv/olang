@@ -149,6 +149,7 @@ type Table struct(Names mut source.Names&) {
     Names
     types List<data>
     keys Map<data, TypeId>
+    canonNames Bool = false             # Canon writing function types' parameter names too (CanonNamed)
     depths List<I32>                    # G17: how deep a type's arguments nest
     lists List<Array<TypeId>&>
     listKeys Map<Array<TypeId>&, ListId>
@@ -1040,6 +1041,22 @@ fn (t mut Table&) Canon(id TypeId) String {
     return b.ToString()
 }
 
+# a type's canonical text with its function types' parameter names after each, "fn(I64){n}": what tells apart two
+# types Unnamed makes one - a symbol named by it means one type in every program, where a type's number would not
+fn (t mut Table&) CanonNamed(id TypeId) String {
+    t.canonNames = true
+    s := t.Canon(id)
+    t.canonNames = false
+    return s
+}
+
+# a list of types' canonical texts, ", " between them
+fn (t mut Table&) CanonList(l ListId) String {
+    b := StringBuilder()
+    t.joined(b, l)
+    return b.ToString()
+}
+
 fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
     d := t.at(id)
     match d.K {
@@ -1106,6 +1123,15 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
                         t.canon(b, errs[i])
                     }
                 }
+            }
+            if t.canonNames and d.E != 0 {
+                b.PushChar('{')
+                ns := t.nameLists[d.E]
+                for i in range ns.Len() {
+                    if i > 0 { b.PushChar(',') }
+                    b.Push(t.Names.Text(source.NameId(I32(ns[i]))))
+                }
+                b.PushChar('}')
             }
             if d.D != 0 {
                 sc := t.scopes[d.D]

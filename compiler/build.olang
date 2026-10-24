@@ -38,11 +38,20 @@ type UnitKind enum {
     Instances
 }
 
-# one object's IR: the module it is for (its identity, M22a), what it holds, and its text
+# one object's IR: the module it is for (its identity, M22a), what it holds, and its text - and the text's SHA-256,
+# where the front end has it already (a reused module's, B3i), "" for one to take here
 type Unit struct(Identity String&, Holds UnitKind, Ir String&) {
     Identity
     Holds
     Ir
+    Hash String& = ""
+}
+
+# the SHA-256 of an object's IR, what its object is named by (ObjectPath)
+fn IrHash(ir String&) String {
+    s := Sha256()
+    s.Write(ir)
+    return s.Sum()
 }
 
 # what the front end made of a program: its objects' IR, the runtime's (std/runtime filled in for this build), and the
@@ -169,7 +178,7 @@ fn (c Config&) CompileFlags(ir String&) List<String&> {
 # clang's own version, which every object's name holds: another clang may compile the same IR to another object
 fn (c mut Config&) clangVersion() String&c {
     if c.version == "" {
-        out := try os.Exec(String&[$c.Clang, "--version"]) catch os.OsError { return "" }
+        out := try target.ClangSays(String&[$c.Clang, "--version"], "", true) catch os.OsError { return "" }
         c.version = $out.Stdout
     }
     return c.version
@@ -308,11 +317,12 @@ fn kindSuffix(k UnitKind) String {
     }
 }
 
-# where the object made from ir compiled with flags goes: BASE.HASH[.main|.test|.inst][.race][.debug][.san].o, HASH the
-# first 16 hex digits of the SHA-256 of the IR, the flags and clang's version
-fn (c mut Config&) ObjectPath(base String&, k UnitKind, ir String&, flags List<String&>&) String {
+# where the object made from the IR whose SHA-256 is irHash, compiled with flags, goes:
+# BASE.HASH[.main|.test|.inst][.race][.debug][.san].o, HASH the first 16 hex digits of the SHA-256 of the IR's hash, the
+# flags and clang's version
+fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags List<String&>&) String {
     parts List<String&>
-    parts.Push(ir)
+    parts.Push(irHash)
     for f in flags { parts.Push(f) }
     parts.Push(c.clangVersion())
     h := HashOf(parts)
@@ -368,9 +378,10 @@ type compiles struct() {
 }
 
 # the object made from ir: its path, and - when no such object is there yet - its compile queued in j, its IR written
-fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d mut diag.Diagnostics&) String ? Failed {
+fn (c mut Config&) want(j mut compiles&, base String&, k UnitKind, ir String&, d mut diag.Diagnostics&
+    hash String& = "") String ? Failed {
     flags := c.CompileFlags(ir)
-    path := c.ObjectPath(base, k, ir, flags)
+    path := c.ObjectPath(base, k, hash if hash != "" else IrHash(ir), flags)
     if os.Exists(path) or path in j.finals { return path }
     # the IR is an intermediate written afresh before each compile, so it keeps the readable name alone (B3), as stage 0's
     # does - BASE[.main|.test|.inst][.race][.debug][.san].ll - but for the runtime's, named by its hash, and a second unit
@@ -416,7 +427,7 @@ fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&>
     c.Thin = not c.Debug and not c.Race and size >= ThinFrom
     j := compiles()
     paths List<String&>
-    for u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d)) }
+    for u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash)) }
     if prog.Runtime != "" { paths.Push(try c.want(j, "olang_runtime", UnitKind.Module, prog.Runtime, d)) }
     if prog.Dyncall != "" { paths.Push(try c.want(j, "olang_dyncall", UnitKind.Module, prog.Dyncall, d)) }
     status, said := RunAll(j.cmds.ToArray(), c.width(), j.sizes.ToArray())
@@ -710,15 +721,15 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     c.Thin = true
     assert c.ModeFlags()[1] == "-flto=thin"
     c.Thin = false
-    a := c.ObjectPath("m", UnitKind.Module, "define void @f() { ret void }", f)
+    a := c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f)
     assert a.StartsWith("build/m.") and a.EndsWith(".o") and a.Len() == "build/m.".Len() + 16 + 2
-    assert c.ObjectPath("m", UnitKind.Module, "define void @f() { ret void }", f) == a
-    assert c.ObjectPath("m", UnitKind.Module, "define void @g() { ret void }", f) != a
-    assert c.ObjectPath("m", UnitKind.Main, "define void @f() { ret void }", f).EndsWith(".main.o")
+    assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), f) == a
+    assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @g() { ret void }"), f) != a
+    assert c.ObjectPath("m", UnitKind.Main, IrHash("define void @f() { ret void }"), f).EndsWith(".main.o")
     c.Debug = true
     d := c.ModeFlags()
     assert d.Len() == 2 and d[0] == "-O0" and d[1] == "-g"
-    assert c.ObjectPath("m", UnitKind.Module, "define void @f() { ret void }", d).EndsWith(".debug.o")
+    assert c.ObjectPath("m", UnitKind.Module, IrHash("define void @f() { ret void }"), d).EndsWith(".debug.o")
     # FastISel only where the IR holds a bfloat
     assert c.CompileFlags("define void @f() { ret void }").Len() == 2
     assert c.CompileFlags("define bfloat @f(bfloat %x) { ret bfloat %x }").Len() == 4
@@ -727,9 +738,9 @@ test "an object's name is its identity made readable and a hash of its IR, its f
     c.Debug = false
     r := c.ModeFlags()
     assert r.Len() == 2 and r[0] == "-O1"
-    before := c.ObjectPath("m", UnitKind.Module, "x", r)
+    before := c.ObjectPath("m", UnitKind.Module, IrHash("x"), r)
     c.version = "clang 19"
-    assert c.ObjectPath("m", UnitKind.Module, "x", r) != before
+    assert c.ObjectPath("m", UnitKind.Module, IrHash("x"), r) != before
 }
 
 test "commands run side by side, each one's status and output kept by its number" {

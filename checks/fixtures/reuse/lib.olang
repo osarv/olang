@@ -1,0 +1,18 @@
+# B3i: a module calling instances the root's object makes (List<Item>), and a leaf's function
+import "leaf"
+
+type Item struct(N I64) {
+    N
+}
+
+fn Make(n I64) List<Item> {
+    l := List<Item>()
+    for i in range n { l.Push(Item(leaf.Scale(i))) }
+    return l
+}
+
+fn Total(l List<Item>&) I64 {
+    t I64 = 0
+    for x in l { t += x.N }
+    return t
+}

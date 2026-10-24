@@ -1,0 +1,7 @@
+# B3i: a second program in the directory, importing lib: it reuses lib's object as app's build left it
+import "std/io"
+import "lib"
+
+fn main() ? {
+    try io.Println($"other " $lib.Total(lib.Make(5)))
+}

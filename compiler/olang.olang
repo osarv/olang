@@ -392,19 +392,19 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     lw.Plans = placement(c, cfg)
     build.Phase("scope")
     if d.Errors() > 0 { error build.Failed.REPORTED }
-    e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
-    e.Tests = tests
-    e.Baked = baked              # K2: the immutable globals the evaluator gives, written as their values
-    e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
-    e.Module = kind == build.Kind.Module
-    e.Triple = cfg.Target.Triple
-    e.Arch = cfg.Target.Arch
-    e.San = cfg.San
-    e.Debug = cfg.Debug
-    e.VerifyMir = tests or cfg.Debug
-    e.BF16Opaque = cfg.Debug or cfg.Race
-    e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
+    e mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)
+    # B3i: a module whose object a build with the same inputs made already is not lowered or written again
+    keys Array<String&>&cfg = Array<String&>(0)
+    if kind != build.Kind.Module {
+        keys = moduleKeys(l, cfg, tests)
+        e.Reuse = reusable(l, cfg, keys)
+    }
     objs := e.Objects&prog()
+    if e.Redo {
+        # a reused module's objects were cut otherwise than this program's now are: every module written afresh
+        e = emitter(c, lw, d, cfg, kind, baked)
+        objs = e.Objects&prog()
+    }
     build.Phase("lower+emit")
     if e.Gaps.Len() > 0 or lw.Gaps.Len() > 0 {
         for g in e.Gaps { build.Unbuildable($"it does not emit " $g " yet") }
@@ -414,7 +414,25 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     if d.Errors() > 0 { error build.Failed.REPORTED }
     t := cfg.Target
     dyncall := false
+    hashes List<String&>       # each object's IR's hash, where it is a module's (kept in its record), else ""
     for o in objs {
+        if o.From >= 0 {
+            # B3i: a reused module's parts, as its record keeps them, each with its IR's hash
+            r := e.Reuse[o.From]
+            base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
+            for k, id in r.Parts {
+                pir String&prog = try os.ReadFile($base ".p" $k ".ll") catch os.OsError {
+                    build.Unbuildable($"its record " $base " was lost while it was read")
+                    error build.Failed.UNBUILT
+                }
+                if pir.Contains("@__olang_dyncall") { dyncall = true }
+                u mut build.Unit&prog = build.Unit($id, build.UnitKind.Module, pir)
+                u.Hash = $r.Hashes[k]
+                prog.Units.Push(u)
+            }
+            hashes.Push("")
+            continue
+        }
         ir String&prog = o.Ir
         if ir.Contains("@__olang_dyncall") { dyncall = true }
         holds := match o.Kind {
@@ -423,14 +441,207 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
             case emit.ObjectKind.Tests => build.UnitKind.Tests
             case emit.ObjectKind.Instances => build.UnitKind.Instances
         }
-        prog.Units.Push(build.Unit($o.Identity, holds, ir))
+        u mut build.Unit&prog = build.Unit($o.Identity, holds, ir)
+        if kind != build.Kind.Module and o.Kind == emit.ObjectKind.Module { u.Hash = build.IrHash(ir) }
+        hashes.Push($u.Hash)
+        prog.Units.Push(u)
     }
+    if kind != build.Kind.Module { keep(l, cfg, keys, e.Made, objs, hashes) }
+    if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
     if dyncall {
         prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad {
             error build.Failed.REPORTED
         }
     }
+}
+
+# the emission of a checked and placed program, for this build's modes and target
+fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnostics&, cfg mut build.Config&
+    kind build.Kind, baked mut Map<I64, eval.Image>&) mut emit.Emitter&cfg {
+    tests := kind == build.Kind.Tests
+    e mut emit.Emitter&cfg = emit.Emitter(c.P, lw, d, c.P.T)
+    e.Tests = tests
+    e.Baked = baked              # K2: the immutable globals the evaluator gives, written as their values
+    e.Attrs = $("sanitize_thread " if cfg.Race else "") $cfg.Target.Attrs
+    e.Module = kind == build.Kind.Module
+    e.Triple = cfg.Target.Triple
+    e.Arch = cfg.Target.Arch
+    e.San = cfg.San
+    e.Debug = cfg.Debug
+    e.VerifyMir = tests
+    e.BF16Opaque = cfg.Debug or cfg.Race
+    e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
+    return e
+}
+
+# ---- objects reused (B3i) ----
+#
+# A module's object depends on what it is made from: its own text, the text of every module it reaches through its
+# imports (and the prelude's), this compiler, and the build's modes, target and constants - nothing the rest of the
+# program holds (DESIGN.md 3.2). So a module is keyed by a hash of those, and the IR one emission wrote for it is kept
+# under that key (DIR/rec/NAME.KEY: a record of its parts and their IR's hashes, the IR its items took, whether they were
+# cut, and the instances its objects name; NAME.KEY.pN.ll each part's IR). A later build finding its key gives that IR to the build
+# as the module's, and the emitter neither lowers nor writes the module - it declares what of it other objects name,
+# and makes the instances the record names. OLANG_CHECKREUSE set: every reused module, and the root's object, written
+# afresh too and compared with what was reused, a difference said on the standard error and the build ending with 3
+
+# what every module's object depends on beyond the modules it reaches: this compiler (where it is, its size and when
+# it was made), the build's modes, target and constants, where it runs and where the standard library is
+fn buildInputs(cfg build.Config&, tests Bool) String {
+    exe := try os.RealPath("/proc/self/exe") catch default ""
+    info := try os.Stat(exe) catch os.OsError { return "" }
+    cwd := try os.Cwd() catch default ""
+    t := cfg.Target
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $tests "\n" $
+            t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
+}
+
+# each module's key, "" for the root's (never reused): the hash of buildInputs, then of its own text, identity and
+# paths and those of every module its imports reach, in their order, and the prelude's
+fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<String&>&cfg {
+    mods := l.Mods
+    n := mods.Len()
+    keys mut Array<String&>&cfg = Array<String&>(n)
+    # under -debug every object's debug information names the program's compile unit, which is the root's file (B2e):
+    # there a module's object is the root's program's as well as its own
+    base := buildInputs(cfg, tests)
+    if base == "" { return keys }
+    inputs := $base $("\nroot " $mods[l.Root].Identity " " $mods[l.Root].Path if cfg.Debug else "")
+    hashOf := Array<String&>(n)
+    for m in range n {
+        md := mods[m]
+        parts List<String&>
+        parts.Push(md.Identity)
+        parts.Push(md.Path)
+        parts.Push(md.Real)
+        parts.Push(md.Src.Text if md.Src != null else "")
+        hashOf[m] = build.HashOf(parts)
+    }
+    for m in range n {
+        if m == l.Root { continue }
+        seen := Array<Bool>(n)
+        order List<I64>
+        work List<I64>
+        work.Push(m)
+        for p in range n {
+            if mods[p].Prelude { work.Push(p) }
+        }
+        for work.Len() > 0 {
+            x := try work.Pop() catch { break }
+            if seen[x] { continue }
+            seen[x] = true
+            order.Push(x)
+            for im in mods[x].Imports {
+                if im.Target >= 0 and not seen[im.Target] { work.Push(im.Target) }
+            }
+        }
+        order.Sort(fn(a I64, b I64) Bool { return a < b })
+        parts List<String&>
+        parts.Push(inputs)
+        parts.Push(hashOf[m])
+        for x in order { parts.Push($mods[x].Identity " " $hashOf[x]) }
+        keys[m] = build.HashOf(parts)
+    }
+    return keys
+}
+
+# where module m's record is kept, its key's first 20 hex digits naming it
+fn recordPath(cfg build.Config&, identity String&, key String&) String {
+    return $cfg.Dir "/rec/" $build.Readable(identity) "." $key[:20]
+}
+
+# the modules whose records are here, read: each one's parts' IR, its size, whether it was cut, its instances
+fn reusable(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&) List<emit.Reused> {
+    out List<emit.Reused>
+    for m in range keys.Len() {
+        if keys[m] == "" { continue }
+        base := recordPath(cfg, l.Mods[m].Identity, keys[m])
+        text := try os.ReadFile(base) catch os.OsError { continue }
+        r := emit.Reused(m)
+        whole := false
+        for line in text.Lines() {
+            if line == "end" {
+                whole = true
+            } else if line.StartsWith("size ") {
+                r.Size = try line[5:].ParseInt() catch default 0
+            } else if line.StartsWith("split ") {
+                r.Split = line[6:] == "1"
+            } else if line.StartsWith("inst ") {
+                r.Inst.Push($line[5:])
+            } else if line.StartsWith("part ") {
+                # "part HASH IDENTITY": the part's IR's SHA-256, then its name
+                if line.Len() < 71 or line[69] != ' ' or not os.Exists($base ".p" $r.Parts.Len() ".ll") { break }
+                r.Hashes.Push($line[5:69])
+                r.Parts.Push($line[70:])
+            }
+        }
+        if whole and r.Parts.Len() > 0 { out.Push(r) }
+    }
+    return out
+}
+
+# the records of the modules this emission wrote: each part's IR, then the record, each written under a temporary
+# name and renamed into place, so a record that is there is whole and so is every file it names, whatever build ran
+# beside this one
+fn keep(l mut load.Loader&, cfg mut build.Config&, keys Array<String&>&, made List<emit.Reused>&
+    objs List<emit.Object>&, hashes List<String&>&) {
+    if made.Len() == 0 { return }
+    try os.MkDirAll($cfg.Dir "/rec") catch os.OsError { return }
+    pid := build.Pid()
+    for r in made {
+        if r.Module >= keys.Len() or keys[r.Module] == "" { continue }
+        base := recordPath(cfg, l.Mods[r.Module].Identity, keys[r.Module])
+        b := StringBuilder()
+        b.Push($"olang module record\nsize " $r.Size "\nsplit " $("1" if r.Split else "0") "\n")
+        seen Map<String&, Bool>
+        for sym in r.Inst {
+            if seen.Has(sym) { continue }
+            seen.Put(sym, true)
+            b.Push($"inst " $sym "\n")
+        }
+        ok := true
+        for k in range r.Parts.Len() {
+            if not putFile($base ".p" $k ".ll", objs[r.From + k].Ir, pid) { ok = false }
+            b.Push($"part " $hashes[r.From + k] " " $r.Parts[k] "\n")
+        }
+        if not ok { continue }
+        b.Push("end\n")
+        putFile(base, b.ToString(), pid)
+    }
+}
+
+# text written at path by way of a temporary renamed into place: whether it is there
+fn putFile(path String&, text String&, pid I32) Bool {
+    tmp := $path "." $pid ".tmp"
+    try os.WriteFile(tmp, text) catch os.OsError { return false }
+    try os.Rename(tmp, path) catch os.OsError {
+        try os.Remove(tmp) catch os.OsError { }
+        return false
+    }
+    return true
+}
+
+# OLANG_CHECKREUSE: the program emitted again with nothing reused, every object compared with the units this build has
+fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Checker&, lw mut lower.Lowerer&
+    d mut diag.Diagnostics&, cfg mut build.Config&, kind build.Kind, baked mut Map<I64, eval.Image>&) {
+    if e.ReusedAt.Len() == 0 { return }
+    f mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)
+    fresh := f.Objects()
+    bad := fresh.Len() != prog.Units.Len()
+    for i in range fresh.Len() {
+        if i >= prog.Units.Len() { break }
+        u := prog.Units[i]
+        if fresh[i].Identity != u.Identity or fresh[i].Ir != u.Ir {
+            try io.PrintErr($"olang: reuse check: " $fresh[i].Identity " differs\n") catch io.IoError { }
+            bad = true
+        }
+    }
+    if bad {
+        try io.PrintErr($"olang: reuse check: " $prog.Units.Len() " objects, " $fresh.Len() " written afresh\n") catch io.IoError { }
+        os.Exit(3)
+    }
+    try io.PrintErr($"olang: reuse check: " $e.ReusedAt.Len() " modules reused, every object the same\n") catch io.IoError { }
 }
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each

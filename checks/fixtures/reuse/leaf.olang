@@ -1,0 +1,2 @@
+# B3i: a module importing nothing but the prelude
+fn Scale(i I64) I64 { return i * 10 }

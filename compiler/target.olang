@@ -153,7 +153,7 @@ fn ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hos
     if triple != "" { args.Push($"--target=" $triple) }
     if hasCpu { args.Push($ArchCpuFlags[ai] $cpu) }
     for a in String&["-S", "-emit-llvm", "-o", "-", "-x", "c", "-"] { args.Push(a) }
-    out := try os.Exec(args.ToArray(), "void olang_target_probe(void) { }\n") catch os.OsError {
+    out := try ClangSays(args.ToArray(), "void olang_target_probe(void) { }\n", not interpreting) catch os.OsError {
         try refuse(d, msgs.TargetUnknown(spec))
         unreachable
     }
@@ -260,6 +260,77 @@ fn canCompileBf16(clang String&, triple String&) Bool {
     args := String&[$clang, $"--target=" $triple, "-fno-crash-diagnostics", "-c", "-x", "ir", "-", "-o", "/dev/null"]
     out := try os.Exec(args, ir) catch os.OsError { return false }
     return out.Status == 0
+}
+
+# ---- what clang says, kept ----
+
+# what clang says run with args on input - its status and standard output - kept, so that a build need not ask again:
+# the target's probe and clang's version cost every build a process each, 10-20 ms, as much as compiling a small
+# module. Kept in OLANG_CACHE (else ~/.cache/olang, as remote repositories are, M23a) under probe/, a file per
+# question, named by a hash of its key - everything the answer depends on: clang's file as it is (where it really is,
+# its size and its time), the arguments and the input, and this processor (/proc/cpuinfo's model and flags, which
+# "native" reads). The file holds its key before the answer, and one whose key is not the one asked is asked again.
+# Only an answer with status 0 is kept, and only where keep is (interpret writes no file)
+fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.OsError {
+    key := probeKey(args, input)
+    path := $probeDir() "/" $U64(key.Hash()).Format(16) if key != "" else ""
+    if path != "" {
+        text := try os.ReadFile(path) catch default ""
+        if text.Len() > key.Len() and text.StartsWith(key) { return os.Output(0, $text[key.Len():], "") }
+    }
+    out := try os.Exec(args, input)
+    if out.Status == 0 and path != "" and keep {
+        try os.MkDirAll(probeDir()) catch os.OsError { return out }
+        tmp := $path "." $getpid() ".tmp"
+        try os.WriteFile(tmp, $key $out.Stdout) catch os.OsError { return out }
+        try os.Rename(tmp, path) catch os.OsError { try os.Remove(tmp) catch os.OsError { } }
+    }
+    return out
+}
+
+extern fn getpid() I32
+
+fn probeDir() String {
+    c := try os.Env("OLANG_CACHE") catch default ""
+    if c != "" { return $c "/probe" }
+    home := try os.Env("HOME") catch default "."
+    return $home "/.cache/olang/probe"
+}
+
+# what a question to clang is asked under ("" where clang's own file cannot be found): clang's real path, size and
+# time, the arguments and the input, the processor's model and flags
+fn probeKey(args Array<String&>&, input String&) String {
+    if args.Len() == 0 { return "" }
+    exe := whereIs(args[0])
+    if exe == "" { return "" }
+    real := try os.RealPath(exe) catch default ""
+    info := try os.Stat(real) catch os.OsError { return "" }
+    b := StringBuilder()
+    b.Push($"olang probe 1\n" $real " " $info.Size " " $info.ModTime "\n")
+    for a in args[1:] { b.Push($a "\n") }
+    b.Push($"input " $input.Len() "\n" $input "\n" $cpuModel() "\n" $cpuFlags() "\n=====\n")
+    return b.ToString()
+}
+
+# the file a command's name runs, found in PATH as the system finds it ("" for none)
+fn whereIs(name String&) String {
+    if name.Contains("/") { return $name }
+    path := try os.Env("PATH") catch default ""
+    dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
+    for dir in dirs.Split(":") {
+        cand := $dir "/" $name if dir != "" else $name
+        if access($cand "\0", 1) == 0 { return $cand } # 1 is X_OK
+    }
+    return ""
+}
+
+# this processor's model, as /proc/cpuinfo names it ("" where it cannot be read)
+fn cpuModel() String {
+    info := try os.ReadFile("/proc/cpuinfo") catch os.OsError { return "" }
+    for line in info.Lines() {
+        if line.StartsWith("model name") { return $line }
+    }
+    return ""
 }
 
 # ---- without clang (interpret) ----

@@ -476,7 +476,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Optimization (B2c-B2e):** `-O3` and full LTO by default (what the machine can do unless asked otherwise; LTO also
   made builds faster, ThinLTO measured no better at this size; the port links a program of 8 MB of IR or more by
   ThinLTO with a cache, importing functions of at most 70 instructions - the compiler's own -O3 build 213 s -> 108 s, an
-  edit 43 s; then round 7's 238 -> 176 s of CPU); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
+  edit 43 s; then round 7's 238 -> 176 s of CPU; round 8 measured the link at its floor for -O3 over this much IR -
+  the import limit, the opt level, lld and smaller parts each no better without costing the compiler's speed - and a
+  development build at -O2 without LTO, 20.8 s clean and 3.8 s for an edit inlined everywhere against 18 s, proposed
+  to the user); `-debug` is `-O0` with DWARF; `-race` ThreadSanitizer; `-sanitize`
   the scope sanitizer (B2f: closed chunks poisoned and protected).
 - **Targets (B12, the user's call):** native CPU by default, `-target NAME` to cross-compile (`compile` only); target
   constants `TargetOs TargetArch TargetCpu TargetVectorBits TargetHasFma`. No fast-math or contraction (the user's
@@ -640,7 +643,12 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   stack slots folded, the test harness as tables (round 6: the port-run verify 40.7 -> 28.4 min); instances and helpers
   whose code is the same written once, a generic struct's instances named by layout so they meet, the ThinLTO import
   limit 70, compiles started heaviest first, MIR verified only in test and -debug builds (round 7, compile speed: the
-  -O3 self-build 238 -> 176 s of CPU, `OLANG_TIMES` reports the phases); `make emitdiff`; HISTORY.md "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
+  -O3 self-build 238 -> 176 s of CPU, `OLANG_TIMES` reports the phases); a module whose inputs did not change neither
+  lowered nor emitted again, its IR reused from `build/rec` (B3i, `OLANG_CHECKREUSE` compares with a fresh emission), a
+  test named by its name and the instances and a test build's tests in parts of their own, what clang says of the target
+  kept (B12b), MIR verified only in test builds (round 8: a leaf edit of the compiler 5.0 -> 3.5 s and 1.16 GB -> 614 MB,
+  a -debug leaf edit 5.1 -> 2.4 s, an edit to a test of tests/shared.olang 10.5 -> 4.1 s); `make emitdiff`; HISTORY.md
+  "Port M9"). M19g is `compiler/views.olang`, a pass of its own after check
   (summaries over the call graph's components, then a dataflow walk of each body; every M19g case as stage 0 gives
   it - HISTORY.md "Port M5b/M5c", fourth round).
   M12, the suite through stage 1 (`build/stage1`, the port built by stage 0, as `$OLANG`): the test files pass;
