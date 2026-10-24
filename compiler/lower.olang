@@ -1269,13 +1269,8 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         et := t.ErrOf(xs[j])
         if t.KindOf(et) != types.Kind.Named { continue }
         d := t.DeclOf(et)
-        q := ""
         dm := t.DeclModule(d)
-        id := ln.L.P.L.Mods[dm].Identity
-        if not id.StartsWith("std/prelude") and dm != ln.module() {
-            k := try id.FindLast("/") catch default -1
-            q = $id[k + 1:] "."
-        }
+        q := ErrQualifier(ln.L.P.L.Mods[dm].Identity, dm == ln.L.P.L.Root)
         ws := ln.L.P.ErrorWords(d)
         for w in range ws.Len() {
             out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
@@ -1283,6 +1278,14 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         }
     }
     return out.ToArray()
+}
+
+# how an error type's name is written outside its module ("io." for std/io): the module's alias, its identity's base name.
+# The prelude's names are bare everywhere, and so are the root program's own, which is the code that is running
+fn ErrQualifier(identity String&, inRoot Bool) String {
+    if inRoot or identity.StartsWith("std/prelude") { return "" }
+    k := try identity.FindLast("/") catch default -1
+    return $identity[k + 1:] "."
 }
 
 # text as constant data (T25d), a String&

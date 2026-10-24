@@ -875,7 +875,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   several error types names the others by subject (`linalg.ShapeError`, `http.HeaderError`, `regex.SyntaxError`). The
   prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `CheckError`,
   `CaseError`) and must never declare a plain `Error` - a rule in std/README.md. An error escaping `main` now prints
-  its bare type name (`unhandled error: Error.FAILED`, B5 - the type's own name, as ever). `tools/stutter_rename.olang`
+  its type qualified as source writes it outside the module (`unhandled error: io.Error.FAILED`, B5; see the next entry). `tools/stutter_rename.olang`
   renames the old names (idempotent; a qualified use anywhere, the bare name only in the module's own std file) and
   `olang fix` runs it. Migrated: std, compiler, tests, checks, fuzz, bench, docs, SPEC; goldens recaptured (diag.txt
   by `make diaggold`, tokens/ast/layout by their targets).
@@ -899,6 +899,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   std's type names from where its binary sits; it takes `--std DIR` now (the cache is not the repository). A tool's output is shown
   (to the standard error) when it left something for a person, changed something worth a line or failed. A check
   scenario (`fix`) fixes an old program (type variables, an error set with `+`, `io.IoError`) and runs it.
+- **Error names print qualified (B5, S16, S18d, E35, 2026-10-24, the coordinator's follow-up to the naming pass).** With
+  every module's error named `Error`, a bare name said nothing: wherever the compiler or runtime prints an error's name -
+  `unhandled error:` from `main`, a failed test's `FAIL - NAME: T.W`, the error trace, `!`'s FILE:LINE message, built
+  or interpreted - it is written as source writes it outside its module, the module's alias (its identity's base name)
+  before it: `io.Error.FAILED`, `linalg.ShapeError.MISMATCH`. **Decided (mine):** the prelude's types stay bare
+  (`ListError.EMPTY`), and so do the root program's own (`Bad.WORD` for a `Bad` in the file being run - from outside it
+  would be `main.Bad`, which no program writes for its own); the rule is one function, `lower.ErrQualifier`, used by `!`'s
+  names, `main`'s message (emit) and the interpreter. Before, `!` qualified relative to the module the code is in (a
+  bang inside std/io said `Error.X`). Error values are not renderable (T20), so `$e` has nothing to print.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

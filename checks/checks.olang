@@ -907,7 +907,7 @@ fn printing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" interpret print.olang > out.txt 2> err.txt") == 0, "print -i", dir)
     try r.expect(outOf(dir) == out, "print -i: the standard output", dir)
     try r.expect(sh(dir, "./build/print >&- 2> out.txt") == 1, "print to a closed output fails", dir)
-    try r.expect(outOf(dir).StartsWith("unhandled error: Error.FAILED\n"), "print to a closed output: the error", dir)
+    try r.expect(outOf(dir).StartsWith("unhandled error: io.Error.FAILED\n"), "print to a closed output: the error", dir)
 }
 
 # S18a: a failed assert or unreachable says where it is - and an assert the message written after it - built,
@@ -1426,7 +1426,7 @@ fn linalg(r mut report&) ? Failed {
     for which in String&["add", "matmul", "gemm"] {
         try r.expect(sh(dir, "./build/shapes " $which " > out.txt 2>&1") == 1, $which " did not fail", dir)
         out := outOf(dir)
-        try r.expect(out.Contains("unhandled error: ShapeError.MISMATCH") and not out.Contains("not reached")
+        try r.expect(out.Contains("unhandled error: linalg.ShapeError.MISMATCH") and not out.Contains("not reached")
                      $which " printed", dir)
     }
     try r.expect(sh(dir, "./build/shapes caught > out.txt 2>&1") == 0 and outOf(dir) == "caught\n", "caught", dir)
@@ -1706,7 +1706,7 @@ fn crashes(r mut report&) ? Failed {
     # std/chan: a Send on a closed channel fails with chan.Error.CLOSED, here escaping main
     try r.expect(sh(dir, "\"$OLANG\" build chanclosed.olang > out.txt 2>&1") == 0, "chanclosed did not build", dir)
     cc := crashRun(dir, "./build/chanclosed")
-    try r.expect(cc.Status == 1 and cc.Stdout == "got 1\n" and cc.Stderr.Contains("unhandled error: Error.CLOSED")
+    try r.expect(cc.Status == 1 and cc.Stdout == "got 1\n" and cc.Stderr.Contains("unhandled error: chan.Error.CLOSED")
                  "chanclosed: status " $cc.Status ", " $cc.Stdout $cc.Stderr, dir)
     # P7: under -r the crash handler is not instrumented (it can run while ThreadSanitizer holds its own locks); -c,
     # so no sanitizer runtime is needed to check it

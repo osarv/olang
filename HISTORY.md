@@ -23363,3 +23363,13 @@ every run ended with "0 edits"; it calls `olang test`. `bare_typevars` read std 
 (`RepoRoot`), which a cache is not; `--std DIR`. `olang fix` is also the home of `tools/stutter_rename`, the std naming
 pass above.
 
+## Error names print qualified (2026-10-24)
+
+After the naming pass every module's error is `Error`, so `unhandled error: Error.FAILED` named nothing. `!` and a
+test's failure line already wrote a type of another module with its alias, but relative to the module the code sat in
+(inside std/io a `!` said `Error.X`), while `main`'s message and the interpreter wrote the type's own name alone (B5's
+old wording). All four now use `lower.ErrQualifier`: the alias before the type unless it is the prelude's or the root
+program's own - the one place I read "as source writes it from outside" less literally than the words, because a
+program's own `Bad` is never written `main.Bad`. Two checks changed (`io.Error.FAILED`, `chan.Error.CLOSED`) and one
+(`linalg.ShapeError.MISMATCH`); SPEC B5 says it.
+
