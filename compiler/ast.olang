@@ -20,6 +20,8 @@ type TypeRef enum {
     Ref(sp source.Span, of TypeRef&, scope source.NameId, nullable Bool)
     # the permission before a type: "mut" (T25b) - owned never set by the parser, own being gone from the language
     Perm(sp source.Span, of TypeRef?&, writable Bool, owned Bool)
+    # "any Trait": a run-time trait value's referent (T32) - the reference marker after it a Ref around it
+    Any(sp source.Span, of TypeRef&)
 }
 
 # a parameter: name type [= default]. A lambda's parameter may leave its type out (null)
@@ -342,7 +344,7 @@ fn (e Expr&) Span() source.Span {
 fn (t TypeRef&) Span() source.Span {
     return match t {
         case TypeRef.Named(sp, _, _), TypeRef.Func(sp, _) => sp
-        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _) => sp
+        case TypeRef.Shape(sp, _), TypeRef.Ref(sp, _, _, _), TypeRef.Perm(sp, _, _, _), TypeRef.Any(sp, _) => sp
     }
 }
 

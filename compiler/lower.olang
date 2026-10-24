@@ -147,7 +147,30 @@ fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
         case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
         case mir.FnKey.Adapter(call) { return lw.adapterFn(call) }
         case mir.FnKey.Init(m) { return lw.initFn(m) }
+        case mir.FnKey.AnyRender(ti, top) { return lw.anyRender(ti, top) }
     }
+}
+
+# $ of an "any"'s instance (T33): a Render helper over the type the instance is stored as, rendering the instance's
+# value as $ renders its own type - at the top of a piece, or inside another value
+fn (lw mut Lowerer&) anyRender(ti I64, top Bool) mir.Fn {
+    tab := lw.P.AnyTables[ti]
+    hty := mir.HelperType(lw.P.T, mir.HelperKind.Render, tab.Stored)
+    b := standIn(hty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.AnyRender(ti, top), hty))
+    sp := source.Span(0, 0)
+    ln.prologue(mir.VarKind[mir.VarKind.Builder])
+    ln.rdepth = mir.Operand.Copy(mir.L(mir.LocalId(1)))
+    place := ln.at(mir.LocalId(0))
+    if tab.Stored != tab.Concrete { place = ln.with(place, mir.Proj.Field(0)) }
+    if top {
+        ln.render(mir.ScopeRef.Var(0), mir.Operand.Copy(ln.mk(place)), tab.Concrete, sp)
+    } else {
+        ln.inner(place, tab.Concrete, mir.ScopeRef.Var(0), sp)
+    }
+    ln.epilogue(mir.Operand.None)
+    lw.Gapped = ln.gapped
+    return ln.F
 }
 
 # what LowerKey makes of k, held to the verifier, as Verified
@@ -1066,6 +1089,7 @@ fn (ln mut lowering&) taskType(task typed.Expr&) types.TypeId {
                     _, ty := ln.helperCallee(k, ht)
                     return ty
                 }
+                case typed.Callee.Dispatch(_, _, sig) { return sig }
             }
         }
         case _ { }
@@ -1118,6 +1142,10 @@ fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
             if ln.dead { return }
             args := ln.args(c, callee, ty)
             if ln.dead { return }
+            match callee {
+                case mir.Callee.Dispatch(_, k, dty) { callee = mir.Callee.Dispatch(ln.F.Ops[I64(args.At)], k, dty) }
+                case _ { }
+            }
             cls := Array<mir.TaskClause>(sw.Clauses.Len())
             for i in range sw.Clauses.Len() {
                 cl := sw.Clauses[i]
@@ -1669,6 +1697,8 @@ fn (ln mut lowering&) callee(c typed.Callee&, sp source.Span) mir.Callee, types.
         }
         case typed.Callee.Value(x) { return ln.valueCallee(x) }
         case typed.Callee.Helper(k, ht) { return ln.helperCallee(k, ht) }
+        # T32b: through the table of the "any" the first argument is - which call() puts in, once it is computed
+        case typed.Callee.Dispatch(_, k, sig) { return mir.Callee.Dispatch(mir.Operand.None, k, sig), sig }
     }
 }
 
@@ -1721,6 +1751,10 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     if ln.dead { return mir.Operand.None }
     args := ln.args(c, callee, fty)
     if ln.dead { return mir.Operand.None }
+    match callee {
+        case mir.Callee.Dispatch(_, k, dty) { callee = mir.Callee.Dispatch(ln.F.Ops[I64(args.At)], k, dty) }
+        case _ { }
+    }
     # D17e: a call the evaluator runs is held to its callee's guarantees - its arguments held, the entry values read
     gid I64 = -1
     held List<mir.Operand>
@@ -2057,6 +2091,17 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
         ln.check(b, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.SliceBounds, OutOfBounds, sp)
         return v
     }
+    if op == typed.PrimOp.AnyMake { return ln.anyMake(args, ty, sp) }
+    if op == typed.PrimOp.AnyInstance {
+        # T34: the instance an "any" holds - for "as", its type tested first
+        x := ln.val(args[0])
+        if ln.dead { return mir.Operand.None }
+        if chk != typed.Check.None {
+            holds := ln.prim(typed.PrimOp.AnyIs, types.BoolT, mir.Operand[x, mir.Operand.Const(args[1].Type(), 0)], sp)
+            ln.check(holds, chk, mir.ExitKind.As, WrongCase, sp)
+        }
+        return ln.prim(op, ty, mir.Operand[x], sp)
+    }
     if op == typed.PrimOp.Holds {
         # D17e: a contract's condition under checked - true, or CheckError.CONTRACT to the innermost try
         v := ln.val(args[0])
@@ -2094,6 +2139,35 @@ fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<type
     if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
     if chk != typed.Check.None { ln.primChecks(op, chk, ops, args, ty, sp) }
     return ln.prim(op, ty, ops, sp)
+}
+
+# T32a: an "any" made of a reference to its instance and its table - an array's copy put in the box the conversion
+# made where the "any" lands, its elements copied there with it (T7b): the box is a one-part tuple holding the array
+fn (ln mut lowering&) anyMake(args Array<typed.Expr&>&, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    match args[0] {
+        case typed.Expr.Promote(_, bt, pr) {
+            match pr.X {
+                case typed.Expr.Make(msp, st, m) {
+                    if m.Kind == typed.MakeKind.Tuple and m.Items.Len() == 1 and ln.valueArray(m.Items[0].Type()) {
+                        at := ln.built(pr.Site)
+                        item := m.Items[0]
+                        v := ln.val(item)
+                        if ln.dead { return mir.Operand.None }
+                        if ln.copiesArray(item, item.Type()) { v = ln.arrayCopy(v, item.Type(), sp, at) }
+                        agg := ln.into(st, mir.Rvalue.Aggregate(st, 0, ln.F.Args(mir.Operand[v])), msp)
+                        box := ln.into(bt, mir.Rvalue.New(at, agg, bt), sp)
+                        return ln.prim(typed.PrimOp.AnyMake, ty, mir.Operand[box, ln.val(args[1])], sp)
+                    }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    ops := ln.vals(args)
+    if ln.dead { return mir.Operand.None }
+    return ln.prim(typed.PrimOp.AnyMake, ty, ops, sp)
 }
 
 # whether what an enum reference names holds a case: false for a null reference (E32, T17d)
@@ -2362,6 +2436,10 @@ fn (ln mut lowering&) piece(x typed.Expr&, sp source.Span) mir.Operand, types.Ty
 fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
     t := ln.T
     if ty == types.UnknownT or ln.gapped { return }
+    if t.IsAny(t.Repr(ty)) {
+        ln.renderAny(b, v, ty, true, sp)
+        return
+    }
     r := t.Repr(ty)
     how := mir.WriteKind.Bool
     direct := true
@@ -2906,6 +2984,10 @@ fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
 # its signature - each part as it renders inside another value (inner)
 fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span, top Bool = false) {
     t := ln.T
+    if t.IsAny(t.Repr(ty)) {
+        ln.renderAny(b, mir.Operand.Copy(ln.mk(a)), ty, top, sp)
+        return
+    }
     if ln.renderStr(a, ty, b, sp) { return }
     r := t.Repr(ty)
     if t.IsRef(r) {
@@ -3016,6 +3098,31 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
     } else {
         ln.gap(sp, "a Render helper for a type with no rendering")
     }
+}
+
+# T33: $ of an "any" - its instance rendered through its table, "null" for none
+fn (ln mut lowering&) renderAny(b mir.ScopeRef, v mir.Operand, ty types.TypeId, top Bool, sp source.Span) {
+    t := ln.T
+    x := ln.local(v, ty, sp)
+    after := ln.F.NewBlock()
+    if t.IsNullable(t.Repr(ty)) {
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        some, none := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(nn, some, none))
+        ln.start(none)
+        ln.word(b, "null", sp)
+        ln.goto(after)
+        ln.start(some)
+    }
+    hty := mir.HelperType(t, mir.HelperKind.Render, t.Referent(t.Repr(ty)))
+    callee := mir.Callee.Dispatch(mir.Operand.Copy(mir.L(x)), -1 if top else -2, hty)
+    ok := ln.F.NewBlock()
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[mir.Operand.Copy(mir.L(x)), ln.depth()]), ln.F.ScopeRefs(mir.ScopeRef[b])
+                               mir.NoPlace, false, ok, mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
+    ln.goto(after)
+    ln.start(after)
 }
 
 # how many references the rendering being written followed to reach here (E11a): 0 outside a Render helper

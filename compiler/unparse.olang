@@ -441,6 +441,10 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
             w.put("?&" if nullable else "&")
             if scope != source.NameId(0) { w.name(scope) }
         }
+        case ast.TypeRef.Any(_, of) {
+            w.put("any ")
+            w.ty(of)
+        }
         case ast.TypeRef.Perm(_, of, writable, owned) {
             if owned { w.put("own") }
             if owned and writable { w.put(" ") }

@@ -1247,6 +1247,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
             }
         }
         case ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
+        case ast.TypeRef.Any(_, of) { r.typeRef(of) }
     }
 }
 

@@ -54,6 +54,9 @@ type FnKey enum {
     Adapter(call typed.BodyId)
     Helper(kind HelperKind, t types.TypeId)
     Init(module I64)
+    # $ of an "any"'s instance (T33), a table's rendering slot: as a Render helper, fn(x Stored&, depth) with its builder -
+    # rendered at the top of a piece (top), or inside another value's rendering, text and a Char quoted there (E11a)
+    AnyRender(table I64, top Bool)
 }
 
 # the helpers lowering makes for a type (DESIGN.md 1.8). Their ABI is fixed by their kind (HelperType, PassedCount),
@@ -322,6 +325,9 @@ type Callee enum {
     Fn(key FnKey, ty types.TypeId)    # a MIR function, of function type ty
     Extern(f I64, ty types.TypeId)    # an extern fn (X1), by generic.Program's function index
     Value(x Operand)                  # through a function value: x's type is the function type
+    # through an "any"'s table (T32b): x the "any", which the call's first argument is too - passed as its instance, a
+    # pointer - slot its trait's slot (generic.Program.AnySlots; -1 for $'s rendering), ty the call's signature
+    Dispatch(x Operand, slot I64, ty types.TypeId)
 }
 
 # a call: its callee, its arguments one per parameter (the receiver first, defaults filled in, D8a) in f.Ops, the
@@ -550,9 +556,10 @@ I64T types.TypeId = types.TypeId(6)
 # (its builder), Equal and Hash none - and an extern's none
 fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
     return match c {
-        case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _) => 1
+        case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _), Callee.Fn(FnKey.AnyRender(_, _), _) => 1
         case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _) => 0
         case Callee.Extern(_, _) => 0
+        case Callee.Dispatch(_, sl, _) if sl < 0 => 1     # $'s rendering, through the table: a Render helper's builder
         case _ => t.ScopeVarsOf(ty).Len()
     }
 }
@@ -1288,7 +1295,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
     n := I64(r.N)
     want := match op {
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast => 1
-        case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire => 1
+        case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire, typed.PrimOp.AnyInstance => 1
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap => 1
         case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl, typed.PrimOp.Holds => -1
         case typed.PrimOp.AtomicCompareSwap => 3
@@ -1369,6 +1376,20 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             _, ok := v.casesOf(a)
             if not ok { v.bad("IsCase of a " $v.canon(a)) }
             if ty != types.BoolT { v.bad("IsCase typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.AnyMake {
+            # T32a: a reference to an instance, and its table's index
+            if not t.IsRef(ra) or t.IsAny(ra) { v.bad("AnyMake of a " $v.canon(a)) }
+            if not t.IsAny(t.Repr(ty)) { v.bad("AnyMake typed " $v.canon(ty)) }
+            if t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad("AnyMake's table not an I64") }
+        }
+        case typed.PrimOp.AnyInstance {
+            if not t.IsAny(ra) { v.bad("AnyInstance of a " $v.canon(a)) }
+            if not t.IsRef(t.Repr(ty)) { v.bad("AnyInstance typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.AnyIs {
+            if not t.IsAny(ra) { v.bad("AnyIs of a " $v.canon(a)) }
+            if ty != types.BoolT { v.bad("AnyIs typed " $v.canon(ty)) }
         }
         case _ {
             # the atomics: a writable reference to an integer place, then values of its type
@@ -1492,6 +1513,13 @@ fn (v mut verifier&) calleeType(c Callee) types.TypeId {
     ty := match c {
         case Callee.Fn(_, ty), Callee.Extern(_, ty) => ty
         case Callee.Value(x) => v.operandType(x)
+        case Callee.Dispatch(_, _, ty) => ty
+    }
+    match c {
+        case Callee.Dispatch(x, _, _) {
+            if not v.T.IsAny(v.T.Repr(v.operandType(x))) { v.bad("a dispatch through a " $v.canon(v.operandType(x))) }
+        }
+        case _ { }
     }
     if ty == types.UnknownT { return ty }
     if v.T.KindOf(ty) != types.Kind.Func {
@@ -2017,6 +2045,7 @@ fn (w mut dumper&) key(k FnKey) String {
         case FnKey.Adapter(b) => "adapter B" $b
         case FnKey.Helper(kind, ty) => $short($kind) " " $w.T.Canon(ty)
         case FnKey.Init(m) => "init " $m
+        case FnKey.AnyRender(ti, top) => "any render table " $ti $(" top" if top else "")
     }
 }
 
@@ -2140,6 +2169,7 @@ fn (w mut dumper&) callee(c Callee) String {
         case Callee.Fn(key, _) => w.key(key)
         case Callee.Extern(fx, _) => "extern " $fx
         case Callee.Value(x) => "(" $w.operand(x) ")"
+        case Callee.Dispatch(x, k, _) => "dispatch#" $k " (" $w.operand(x) ")"
     }
 }
 

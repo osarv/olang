@@ -79,6 +79,9 @@ type BodyOf enum {
     # (Req) or a guarantee (Ensures) giving a Bool, or an entry value a guarantee reads (Entry) giving it; index its
     # place among the body's items of that kind
     Contract(body BodyId, kind ContractKind, index I64)
+    # a table's slot (T32b): the function an "any"'s call reaches - its parameters the slot's, the instance first as a
+    # reference to the type it is stored as - calling the instance's type's method, or the default it takes
+    Thunk(table I64, slot I64)
 }
 
 type ContractKind enum {
@@ -266,14 +269,16 @@ type Const enum {
     Items(xs Array<Const&>&)
 }
 
-# what a call reaches. A dispatch through a table, for run-time trait values (any Trait&, planned: PRINCIPLES.md 5), is
-# to come as a kind of its own here, beside Value
+# what a call reaches
 type Callee enum {
     # a function instance, a constructor (G10b, G10d), or a lambda called where it is written that captures nothing
     # (D16b): one that captures is made a value and called through it
     Body(id BodyId)
     Extern(f I64)                         # an extern fn (X1), by generic.Program's function index
     Value(x Expr&)                        # through a function value (E13b, T21)
+    # through an "any"'s table (T32b): slot of the trait's slots (generic.Program.AnySlots), the call's Args[0] the
+    # "any"; sig its signature, an "any" of the trait first
+    Dispatch(tr types.TypeId, slot I64, sig types.TypeId)
     Helper(kind Helper, t types.TypeId)   # what lowering makes for a type (DESIGN.md 1.8)
 }
 
@@ -374,6 +379,16 @@ type PrimOp enum {
     # args [b]: b, once it holds - a contract's condition checked under "checked" (D17e), failing with CheckError's
     # CONTRACT
     Holds
+    # T32: args [r, t], r a reference to an instance - a borrow, a temporary's, a copy's box (T32a) - made an "any", ty:
+    # the pair of r and table t (a Lit, its index in generic.Program's AnyTables). Where the "any" lives is where r's
+    # referent does: a conversion, to section 8
+    AnyMake
+    # T34: args [x, w], an "any" and a Lit of a type: the reference to its instance, ty a reference to the type it is
+    # stored as - checked (Abort, Try: WRONG_CASE) that its instance's type is w's, for "as"
+    AnyInstance
+    # T34: args [x, w]: whether the instance an "any" x holds is of the type w's type names - w a Lit of that type,
+    # nothing but its type read
+    AnyIs
 }
 
 type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check) {
@@ -860,6 +875,7 @@ fn (w mut printer&) callee(c Callee&) String {
         case Callee.Extern(f) => "extern " $f
         case Callee.Value(x) => $w.expr(x)
         case Callee.Helper(k, t) => $short($k) " " $w.T.Canon(t)
+        case Callee.Dispatch(r, k, _) => "dispatch " $w.T.Canon(r) "#" $k
     }
 }
 

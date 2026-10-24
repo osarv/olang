@@ -1024,6 +1024,7 @@ fn (e mut Emitter&) sym(k mir.FnKey) String {
         case mir.FnKey.Helper(kind, ty) => types.Symbol("olang." $kind "." $(t.Canon(ty) if t.Unnamed(ty) == ty else t.CanonNamed(ty)))
         case mir.FnKey.Adapter(call) => $e.bodySym(I64(call)) "_adapter"
         case mir.FnKey.Init(m) => types.Symbol("olang.init." $e.P.L.Mods[m].Identity)
+        case mir.FnKey.AnyRender(ti, top) => types.Symbol($"olang.anyrender" $(".top" if top else "") "." $e.tableName(ti))
     }
 }
 
@@ -1040,7 +1041,58 @@ fn (e mut Emitter&) bodySym(id I64) String {
         case typed.BodyOf.Case(_, _) => "olang_case_" $id
         case typed.BodyOf.Cond(_, _) => "olang_cond_" $id
         case typed.BodyOf.Contract(of, kind, i) => types.Symbol($e.bodySym(I64(of)) ".contract." $kind "." $i)
+        case typed.BodyOf.Thunk(ti, k) => types.Symbol($"olang.slot." $e.tableName(ti) "." $k)
     }
+}
+
+# ---- run-time trait values (T32) ----
+
+# a type spelled for a symbol: by its structure, a declared one with its module (as a helper's)
+fn (e mut Emitter&) canonOf(ty types.TypeId) String {
+    t := e.T
+    return t.Canon(ty) if t.Unnamed(ty) == ty else t.CanonNamed(ty)
+}
+
+# table ti's name: its instance's type and its trait - the same in every object, so that the linker keeps one
+fn (e mut Emitter&) tableName(ti I64) String {
+    tab := e.P.AnyTables[ti]
+    return $e.canonOf(tab.Concrete) "|" $e.canonOf(tab.Trait)
+}
+
+# a type's identity word (T34): one byte whose address is the type's, in every object alike
+fn (e mut Emitter&) typeid(ty types.TypeId) String {
+    s := types.Symbol($"olang.typeid." $e.canonOf(ty))
+    e.item(s, HomeShared, $"@" $s " = linkonce_odr constant i8 0\n")
+    return s
+}
+
+# the table an "any" made by table ti points at (T32): its instance's type's identity, $'s two renderings, then a
+# function per slot - each wanted, so that this object holds what the table names
+fn (e mut Emitter&) anyTable(ti I64) String {
+    s := types.Symbol($"olang.table." $e.tableName(ti))
+    if e.has(s) { return s }
+    tab := e.P.AnyTables[ti]
+    words := StringBuilder()
+    words.Push("ptr @" $e.typeid(tab.Concrete))
+    for top in Bool[false, true] {
+        k := mir.FnKey.AnyRender(ti, top)
+        e.want(k)
+        words.Push(", ptr @" $e.sym(k))
+    }
+    for b in tab.Slots {
+        k := mir.FnKey.Body(typed.BodyId(I32(b)))
+        e.want(k)
+        words.Push(", ptr @" $e.sym(k))
+    }
+    n := tab.Slots.Len() + types.AnySlotBase
+    e.item(s, HomeShared, $"@" $s " = linkonce_odr constant [" $n " x ptr] [" $words.ToString() "]\n")
+    return s
+}
+
+# the table of no instance: a null "any"'s, read for its type's identity (T34) - none
+fn (e mut Emitter&) noTable() String {
+    e.item("olang.notable", HomeShared, "@olang.notable = linkonce_odr constant ptr null\n")
+    return "olang.notable"
 }
 
 fn (e mut Emitter&) globalSym(m I64, n source.NameId) String {
@@ -1918,12 +1970,14 @@ fn (e mut Emitter&) homeOf(k mir.FnKey) I64 {
                 case typed.BodyOf.Dtor(ty) { return e.typeHome(ty) }
                 case typed.BodyOf.Global(m, _) { return m }
                 case typed.BodyOf.Test(_) { return p.L.Root }
+                case typed.BodyOf.Thunk(_, _) { return HomeShared }
                 case _ { return HomeLocal }
             }
         }
         case mir.FnKey.Helper(_, _) { return HomeShared }
         case mir.FnKey.Adapter(call) { return e.homeOf(mir.FnKey.Body(call)) }
         case mir.FnKey.Init(m) { return m }
+        case mir.FnKey.AnyRender(_, _) { return HomeShared }
     }
 }
 
@@ -3583,6 +3637,31 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case typed.PrimOp.Not { return fe.let("xor i1 " $x ", true") }
         case typed.PrimOp.Convert { return fe.convert(x, t0, ty) }
         case typed.PrimOp.Bitcast { return fe.bitcast(x, lt, fe.ty(ty)) }
+        case typed.PrimOp.AnyMake {
+            # T32a: the instance with its table - a null instance a null any
+            ti := match fe.arg(args, 1) {
+                case mir.Operand.Const(_, v) => v
+                case _ => -1
+            }
+            if ti < 0 {
+                fe.gap("an any with no table")
+                return "zeroinitializer"
+            }
+            tab := fe.E.anyTable(ti)
+            a := fe.let("insertvalue { ptr, ptr } undef, ptr " $x ", 0")
+            nn := fe.let("icmp ne ptr " $x ", null")
+            tw := fe.let("select i1 " $nn ", ptr @" $tab ", ptr null")
+            return fe.let("insertvalue { ptr, ptr } " $a ", ptr " $tw ", 1")
+        }
+        case typed.PrimOp.AnyInstance { return fe.let("extractvalue { ptr, ptr } " $x ", 0") }
+        case typed.PrimOp.AnyIs {
+            # T34: the table's first word against the type's identity - a null any's table the empty one
+            tab := fe.let("extractvalue { ptr, ptr } " $x ", 1")
+            nn := fe.let("icmp ne ptr " $tab ", null")
+            at := fe.let("select i1 " $nn ", ptr " $tab ", ptr @" $fe.E.noTable())
+            id := fe.let("load ptr, ptr " $at)
+            return fe.let("icmp eq ptr " $id ", @" $fe.E.typeid(fe.otype(fe.arg(args, 1))))
+        }
         case typed.PrimOp.Retire {
             # M19d: an array a collection no longer uses - under -sanitize its storage poisoned and, where it has a
             # chunk of its own, made unreadable until its scope closes (B2f); nothing otherwise
@@ -4362,6 +4441,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
     ty := types.UnknownT
     target := ""
     env := ""
+    inst := ""
     isExtern := false
     match c.Target {
         case mir.Callee.Fn(k, fty) {
@@ -4380,6 +4460,15 @@ fn (fe mut fnEm&) call(c mir.Call) {
             v := fe.val(x, ty)
             target = fe.let("extractvalue { ptr, ptr } " $v ", 0")
             env = fe.let("extractvalue { ptr, ptr } " $v ", 1")
+        }
+        case mir.Callee.Dispatch(x, slot, dty) {
+            # T32b: the function the any's table holds for the slot, handed the instance alone for the any
+            ty = dty
+            v := fe.val(x, fe.otype(x))
+            inst = fe.let("extractvalue { ptr, ptr } " $v ", 0")
+            tab := fe.let("extractvalue { ptr, ptr } " $v ", 1")
+            at := fe.let("getelementptr ptr, ptr " $tab ", i64 " $(types.AnySlotBase + slot))
+            target = fe.let("load ptr, ptr " $at)
         }
     }
     fe.E.signature(ty)
@@ -4410,6 +4499,10 @@ fn (fe mut fnEm&) call(c mir.Call) {
         if not first { args.Push(", ") }
         first = false
         x := fe.arg(c.Args, i)
+        if i == 0 and inst != "" {
+            args.Push("ptr " $inst)
+            continue
+        }
         if not isExtern and pass[i] == 'm' {
             # the callee's own copy, made before the arguments after it run
             p := fe.slot(ps[i])
@@ -4888,6 +4981,11 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
             ty = fe.otype(x)
             isValue = true
             fv = fe.val(x, ty)
+        }
+        case mir.Callee.Dispatch(_, _, dty) {
+            # refused by check (T32b): a task's call is through a function value or to a function
+            ty = dty
+            fe.gap("a task calling through an any")
         }
     }
     ps := t.Items(t.Params(ty))

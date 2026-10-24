@@ -253,6 +253,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # evaluation decided reading none (given before this check, as Decided) - the same on every build, an error
     ReadsBuild Map<I64, Bool>
     Dead Map<pair.Pair<I64, I64>, Bool>
+    anyBad Map<I64, Bool>       # T32: the tables a method of which the trait's signature cannot reach (said once)
 }
 
 # T17e: an enum's raw values - its raw type (UnknownT for none), whether that is text, and each case's value: an
@@ -2366,6 +2367,7 @@ fn (c mut Checker&) check(id I64) {
         case typed.BodyOf.Ctor(t, twin) { c.checkCtor(id, t, twin) }
         case typed.BodyOf.Global(mi, n) { c.checkGlobal(id, mi, n) }
         case typed.BodyOf.Dtor(t) { c.checkDtor(id, t) }
+        case typed.BodyOf.Thunk(ti, k) { c.checkThunk(id, ti, k) }
         nomatch { }
     }
     c.state[id] = 2
@@ -5112,6 +5114,10 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         }
         return c.convert(sp, c.fit(x, c.P.T.NonNull(want), sp), want)
     }
+    # T32a: a value where an "any" is wanted - an "any" of the same trait is itself, its permission fitted below
+    if c.P.T.IsAny(want) and have != types.NullT and not (c.P.T.IsAny(have) and c.P.T.Same(c.P.T.Referent(have), c.P.T.Referent(want))) {
+        return c.toAny(x, want, sp)
+    }
     # an array literal's elements fit the wanted element type each (T25b: a literal's elements take the target's
     # permission where all may be written)
     if hk == types.Kind.Array {
@@ -6467,7 +6473,8 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&c, y typ
         r := c.invoke(sp, sp, eq, x, Array<ast.Expr&>(0), c.one(y))
         return c.negate(sp, r) if op == token.Tok.NotEq else r
     }
-    if c.isRef(ta) and c.isRef(tb) and (c.isStruct(da) or c.isEnum(da)) {
+    # T33: two "any" values are equal when they name one instance
+    if c.isRef(ta) and c.isRef(tb) and (c.isStruct(da) or c.isEnum(da) or c.P.T.KindOf(da) == types.Kind.Any) {
         r := c.prim(sp, types.BoolT, typed.PrimOp.Same, x, y)
         return c.negate(sp, r) if op == token.Tok.NotEq else r
     }
@@ -8367,6 +8374,37 @@ fn (c mut Checker&) traitWritten(tr ast.TypeRef&, whole ast.TypeRef&) Bool {
     }
 }
 
+# T32: "any R&" - R a trait, its arguments as many as its parameters
+fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
+    match tr {
+        case ast.TypeRef.Named(nsp, path, args) {
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if ref.Kind == names.What.None and path.Len() == 1 {
+                c.unknownType(nsp, path[0])
+                return false
+            }
+            if ref.Kind != names.What.Type or ref.Index < 0 or c.P.T.DeclKindOf(c.P.DeclFor(ref.Module, ref.Index)) != types.DeclKind.Trait {
+                c.err(tr.Span(), msgs.AnyNotTrait(c.src(tr.Span())))
+                return false
+            }
+            np := c.P.T.DeclParams(c.P.DeclFor(ref.Module, ref.Index))
+            if np != args.Len() {
+                c.err(tr.Span(), msgs.TypeArgCount(c.text(path[path.Len() - 1]), np, args.Len()))
+                return false
+            }
+            for a in args {
+                if not c.writtenMet(a) { return false }
+            }
+            return true
+        }
+        nomatch {
+            c.err(tr.Span(), msgs.AnyNotTrait(c.src(tr.Span())))
+            return false
+        }
+    }
+}
+
 # T20: an error type written where a value's type goes - it has no values: said at its name, whether it is one
 fn (c mut Checker&) errorTypeHeld(tr ast.TypeRef?&) Bool {
     if tr is null { return false }
@@ -8507,6 +8545,10 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             return c.instancesMet(rt, args[0].Span())
         }
         case ast.TypeRef.Ref(_, of, _, _) {
+            match of {
+                case ast.TypeRef.Any(_, trt) { return c.anyWritten(trt) }
+                nomatch { }
+            }
             if c.traitWritten(of, tr) { return false }
             if not c.writtenMet(of) { return false }
             # T24: only a struct, an enum or an array is held by reference
@@ -8518,6 +8560,11 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             return true
         }
         case ast.TypeRef.Perm(_, of, _, _) { return c.writtenMet(of) }
+        case ast.TypeRef.Any(asp, trt) {
+            # T32: an "any" is always a reference
+            c.err(asp, msgs.AnyNeedsMarker(c.src(trt.Span())))
+            return false
+        }
         case ast.TypeRef.Shape(_, body) {
             match body {
                 case ast.TypeBody.Enum(_, raw) {
@@ -9574,6 +9621,8 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
         return c.unknown(sp)
     }
     name := c.text(n)
+    # T32b: a call through an "any" goes through its table
+    if c.P.T.KindOf(c.deref(rt)) == types.Kind.Any { return c.anyCall(sp, x, rx, n, nsp, args) }
     m := c.P.MethodOf(c.deref(rt), n)
     if m < 0 {
         ds := c.P.DefaultMethods(c.deref(rt), n)
@@ -14737,6 +14786,245 @@ fn breaks(b typed.Block?&, loop typed.BlockId) Bool {
         }
     }
     return false
+}
+
+# ---- run-time trait values (T32-T34) ----
+
+# T32a: a value made an "any R&" where one is wanted - borrowed where it is a struct's or an enum's storage (a place,
+# what a reference names), built where it lands where it is a temporary, copied where it is a number, a Bool, a Char or
+# an array; the instance's type satisfying R, and its table made
+fn (c mut Checker&) toAny(x typed.Expr&c, want types.TypeId, sp source.Span) typed.Expr&c {
+    have := typeOf(x)
+    r := c.P.T.AnyTrait(want)
+    if c.P.T.IsAny(have) {
+        c.err(sp, msgs.AnyNotConverted(c.ty(have), c.ty(want)))
+        return x
+    }
+    inst := c.deref(have)
+    if inst == types.UnknownT or r == types.UnknownT { return x }
+    if c.P.T.KindOf(inst) == types.Kind.Func or inst == types.VoidT or inst == types.NoreturnT or c.P.T.KindOf(inst) == types.Kind.Tuple {
+        c.err(sp, msgs.TypeMismatch(c.ty(want), c.tyOf(x)))
+        return x
+    }
+    if not c.anyMeets(inst, r, sp) { return x }
+    ti := c.anyTable(inst, r, sp)
+    if ti < 0 { return x }
+    perm := c.P.T.PermOf(want) & (types.Writable | types.Nullable)
+    if c.anyCopies(inst) {
+        v := c.fit(x, inst, sp)
+        stored := c.P.AnyStored(inst)
+        if stored != inst {
+            from := c.exprs.Len()
+            c.exprs.Push(v)
+            v = typed.Expr.Make(sp, stored, typed.Make(typed.MakeKind.Tuple, 0, gather(c.exprs, from), null, typed.SiteId(-1), typed.Check.None))
+        }
+        box := typed.Expr.Promote(sp, c.P.T.Ref(stored, perm & types.Writable), typed.Promote(v, c.site(typed.SiteKind.Promote, sp)))
+        return c.prim(sp, want, typed.PrimOp.AnyMake, box, c.lit(sp, c.i64(), ti))
+    }
+    ref := c.fit(x, c.P.T.Ref(inst, perm), sp)
+    return c.prim(sp, want, typed.PrimOp.AnyMake, ref, c.lit(sp, c.i64(), ti))
+}
+
+# whether an instance of the type is copied into an "any" (T32a): a number, a Bool, a Char, a type over one - no
+# reference names them - and an array, whose elements are copied with it
+fn (c mut Checker&) anyCopies(t types.TypeId) Bool {
+    return not c.referable(t) or c.P.T.KindOf(c.under(t)) == types.Kind.Array
+}
+
+# whether a type satisfies a trait for an "any" (T32a), what it lacks said where it does not
+fn (c mut Checker&) anyMeets(t types.TypeId, r types.TypeId, sp source.Span) Bool {
+    u := c.P.Missing(t, r)
+    if u.Var < 0 { return true }
+    tn := c.ty(r)
+    if u.Closed {
+        listing := StringBuilder()
+        for m in c.P.Members(u.Trait) {
+            if listing.Len() > 0 { listing.Push(", ") }
+            listing.Push(c.ty(m))
+        }
+        c.err(sp, msgs.AnyNotMember(c.ty(t), tn, listing.ToString()))
+    } else if u.Named {
+        c.err(sp, msgs.AnyUnmetMethod(c.ty(t), tn, c.tok(u.Method)))
+    } else {
+        c.err(sp, msgs.AnyUnmet(c.ty(t), tn))
+    }
+    return false
+}
+
+# the table of a type and a trait (T32): made the first time it is asked for, a body for each slot calling the method
+# the type meets it with - checked like any other - and $'s rendering of the type made where it calls a Str; -1 where a
+# method's scopes say more than the trait's signature (said where the table is first asked for)
+fn (c mut Checker&) anyTable(t types.TypeId, r types.TypeId, sp source.Span) I64 {
+    ti, fresh := c.P.AnyTableFor(t, r, c.fr().File, sp)
+    if not fresh { return -1 if c.anyBad.Has(ti) else ti }
+    slots := c.P.AnySlots(r)
+    stored := c.P.AnyStored(c.P.T.Plain(t))
+    for k in range slots.Len() {
+        sl := slots[k]
+        m := c.P.MethodOf(t, sl.Name)
+        impl := types.UnknownT
+        if m >= 0 {
+            impl = c.P.MethodSig(m, t)
+            if c.P.VarCount(generic.FnOwner(m)) > 0 { impl = c.implSig(m, t) }
+        } else if sl.Default >= 0 {
+            impl = c.P.DefaultAt(sl.Default, t)
+        }
+        if impl != types.UnknownT and not c.anyScopesAgree(impl, sl.Sig) {
+            rec := c.err(sp, msgs.AnyMethodScopes(c.ty(t), c.tok(sl.Name), c.ty(r)))
+            if m >= 0 { c.noteAt(rec, m, msgs.NoteAnyMethod(c.tok(sl.Name))) }
+            c.anyBad.Put(ti, true)
+            return -1
+        }
+    }
+    tab := c.P.AnyTables[ti]
+    mi := c.fr().Mi
+    for k in range slots.Len() {
+        sl := slots[k]
+        ps := c.P.T.Items(c.P.T.Params(sl.Sig))
+        perm := c.P.T.PermOf(ps[0]) & types.Writable
+        sig := c.recvReplaced(sl.Sig, c.P.T.Ref(stored, perm))
+        tab.Slots.Push(c.newBody(typed.BodyOf.Thunk(ti, k), sig, mi, sp))
+    }
+    # $ through an "any" renders the instance as its type's own rendering does (T33): a Str it declares made here
+    seen := Map<types.TypeId, Bool>()
+    c.wantStr(t, seen, 0)
+    return ti
+}
+
+# a generic method's signature for a receiver of type t: its variables bound by the receiver (G9b) - Unknown where
+# that leaves one unbound
+fn (c mut Checker&) implSig(m I64, t types.TypeId) types.TypeId {
+    sig := c.P.Sig(m)
+    owner := generic.FnOwner(m)
+    nv := c.P.VarCount(owner)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    if ps.Len() == 0 { return types.UnknownT }
+    b := generic.Binding(owner, nv)
+    c.unify(ps[0], t, b, false, true)
+    c.P.InferThroughBounds(b)
+    for v in b.Vals {
+        if v == types.UnknownT { return types.UnknownT }
+    }
+    return c.P.Subst(sig, owner, c.P.T.List(b.Vals))
+}
+
+# a signature with its receiver's type changed, its scopes kept
+fn (c mut Checker&) recvReplaced(sig types.TypeId, recv types.TypeId) types.TypeId {
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    all := Array<types.TypeId>(ps.Len())
+    for i in range ps.Len() { all[i] = ps[i] }
+    all[0] = recv
+    return c.P.T.Func(c.P.T.List(all), c.P.T.Result(sig), c.P.T.Errors(sig), c.P.T.ScopesOf(sig))
+}
+
+# T32a: whether a method's signature says of where its references live what the trait's slot does - each parameter after
+# the receiver sharing the same one (none sharing the receiver's), each result built or borrowed from the same one
+fn (c mut Checker&) anyScopesAgree(impl types.TypeId, slot types.TypeId) Bool {
+    t := c.P.T
+    ips := t.Items(t.Params(impl))
+    sps := t.Items(t.Params(slot))
+    if ips.Len() != sps.Len() { return true }   # what does not meet the trait is said by T31
+    for i in range 1, ips.Len() {
+        if t.ShareOf(impl, i) != t.ShareOf(slot, i) { return false }
+    }
+    ir := t.Results(impl)
+    for k in range ir.Len() {
+        a, b := t.ResultFrom(impl, k), t.ResultFrom(slot, k)
+        if a != b and not ((a == types.OwnScope or a == types.FromTypeVar) and (b == types.OwnScope or b == types.FromTypeVar)) {
+            return false
+        }
+    }
+    return true
+}
+
+# a table's slot (T32b): its parameters the slot's, the instance first as a reference to what it is stored as - a
+# call of the method the instance's type meets the slot with, its own or the default it takes, as "x.M(...)" calls it
+fn (c mut Checker&) checkThunk(id I64, ti I64, k I64) {
+    tab := c.P.AnyTables[ti]
+    sl := c.P.AnySlots(tab.Trait)[k]
+    sig := c.cur0(id).Ty
+    mi := c.thunkModule(id)
+    fr := c.push(id, mi, c.P.T.Result(sig), c.P.T.Errors(sig))
+    fr.Ctx = generic.Context(mi, -1)
+    sp := c.cur().Sp
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    for i in range ps.Len() { c.param(source.NameId(0), sp, ps[i], i) }
+    c.cur().SetVars(c.P.ScopeVarsOf(sig))
+    recv := c.readLocal(sp, 0)
+    t := tab.Concrete
+    place typed.Place&c = typed.Place.Deref(sp, tab.Stored, recv)
+    if tab.Stored != t { place = typed.Place.Field(sp, t, place, 0) }
+    rx := c.read(sp, place)
+    from := c.exprs.Len()
+    for i in range 1, ps.Len() { c.exprs.Push(c.readLocal(sp, i)) }
+    pre := gather(c.exprs, from)
+    fr.Tries++
+    x typed.Expr?&c = null
+    m := c.P.MethodOf(t, sl.Name)
+    name := c.text(sl.Name)
+    if m >= 0 {
+        x = c.invoke(sp, sp, m, rx, Array<ast.Expr&>(0), pre)
+    } else if sl.Default >= 0 {
+        x = c.invoke(sp, sp, sl.Default, rx, Array<ast.Expr&>(0), pre)
+    } else if name == "Hash" {
+        x = c.callOf(sp, c.i64(), typed.Callee.Helper(typed.Helper.Hash, t), c.one(c.value(rx, sp)))
+    } else if name == "Len" {
+        x = c.prim(sp, c.i64(), typed.PrimOp.Len, rx, null)
+    } else if name == "Bits" {
+        x = c.prim(sp, c.P.T.Result(sig), typed.PrimOp.Bitcast, c.value(rx, sp), null)
+    } else {
+        c.gap(sp, "a table slot the instance's type meets no way")
+        x = c.unknown(sp)
+    }
+    fr.Tries--
+    v := x!
+    if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 { v = typed.Expr.Try(sp, typeOf(v), typed.Try(v, Array<typed.Clause&>(0))) }
+    from2 := c.stmts.Len()
+    res := c.P.T.Result(sig)
+    if res == types.VoidT {
+        c.stmts.Push(typed.Stmt.Eval(sp, v))
+    } else if res == types.NoreturnT {
+        c.stmts.Push(typed.Stmt.Eval(sp, v))
+        c.stmts.Push(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable, null))
+    } else {
+        c.stmts.Push(typed.Stmt.Return(sp, c.fit(v, res, sp)))
+    }
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from2))
+    c.pop()
+}
+
+fn (c mut Checker&) cur0(id I64) mut typed.Body&c { return c.Bodies[id] }
+
+# the module a table's slot is checked in: the one whose code asked for the table
+fn (c mut Checker&) thunkModule(id I64) I64 {
+    f := c.Bodies[id].File
+    for mi in range c.P.L.Mods.Len() {
+        if c.P.L.Mods[mi].File == f { return mi }
+    }
+    return 0
+}
+
+# s.M(args) on an "any" (T32b): through its table, M's slot - or, for a default of the trait introducing type variables
+# of its own, the default instantiated for the "any" (T32c)
+fn (c mut Checker&) anyCall(sp source.Span, x ast.Expr&, rx typed.Expr&c, n source.NameId, nsp source.Span, args Array<ast.Expr&>&) typed.Expr&c {
+    rt := typeOf(rx)
+    if c.P.T.IsNullable(rt) {
+        c.err(x.Span(), msgs.ReadMaybeNull(c.src(x.Span()), c.ty(rt), bangOf(c.src(x.Span()))))
+        rx = c.convert(sp, rx, c.P.T.NonNull(rt))
+        rt = typeOf(rx)
+    }
+    r := c.P.T.AnyTrait(rt)
+    slots := c.P.AnySlots(r)
+    for k in range slots.Len() {
+        if slots[k].Name != n { continue }
+        return c.callBody(sp, nsp, slots[k].Sig, typed.Callee.Dispatch(r, k, slots[k].Sig), -1, rx, args, Array<typed.Expr&>(0))
+    }
+    f := c.P.AnyDefault(r, n)
+    if f >= 0 { return c.invoke(sp, nsp, f, rx, args, Array<typed.Expr&>(0)) }
+    c.err(nsp, msgs.AnyNoMethod(c.ty(rt), c.tok(n)))
+    c.dropArgs(args)
+    return c.unknown(sp)
 }
 
 # ---- tests ----

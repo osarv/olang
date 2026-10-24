@@ -768,6 +768,13 @@ fn (x mut Exec&) reach(f mir.Fn&, work mut List<mir.FnKey>&) {
         for s in bb.Stmts {
             match s {
                 case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _, _)) { work.Push(code) }
+                case mir.Stmt.Assign(_, _, mir.Rvalue.Prim(typed.PrimOp.AnyMake, _, args)) {
+                    # T32: the table a run-time trait value is made with, and the functions it holds
+                    match f.Ops[I64(args.At) + 1] {
+                        case mir.Operand.Const(_, ti) { x.table(ti, work) }
+                        case _ { }
+                    }
+                }
                 case mir.Stmt.RegisterDtor(_, _, ty, _) {
                     d := try x.dtorOf.Get(ty) catch default -1
                     if d >= 0 {
@@ -791,8 +798,19 @@ fn (x mut Exec&) callee(c mir.Callee, work mut List<mir.FnKey>&) {
                 x.M.DefineExtern(e, x.P.T.Names.Text(x.P.FnDecl(e).Name))
             }
         }
-        case mir.Callee.Value(_) { }
+        case mir.Callee.Value(_), mir.Callee.Dispatch(_, _, _) { }
     }
+}
+
+# table ti defined for the machine, its functions reached
+fn (x mut Exec&) table(ti I64, work mut List<mir.FnKey>&) {
+    tab := x.P.AnyTables[ti]
+    keys mut Array<mir.FnKey>&x = Array<mir.FnKey>(tab.Slots.Len() + types.AnySlotBase - 1)
+    keys[0] = mir.FnKey.AnyRender(ti, false)
+    keys[1] = mir.FnKey.AnyRender(ti, true)
+    for i in range tab.Slots.Len() { keys[i + 2] = mir.FnKey.Body(typed.BodyId(I32(tab.Slots[i]))) }
+    for k in keys { work.Push(k) }
+    x.M.DefineTable(ti, tab.Concrete, keys)
 }
 
 # ---- what a program has ----

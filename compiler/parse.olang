@@ -1162,6 +1162,12 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
             return ast.TypeRef.Shape(p.from(at), body!)
         }
         case token.Tok.Iden {
+            # T32, L9c: "any" before a type's name on its line - a run-time trait value
+            if p.anyHere() {
+                p.advance()
+                of := try p.typeBase()
+                return ast.TypeRef.Any(p.from(at), of)
+            }
             from := p.ids.Len()
             p.ids.Push(try p.name())
             for p.sees(token.Tok.Dot) {
@@ -1204,6 +1210,13 @@ fn (p mut Parser&) typeBase() ast.TypeRef&p ? Fail {
         nomatch { try p.fail("a type") }
     }
     unreachable
+}
+
+# L9c: whether the next word is "any" with a type's name after it on its line
+fn (p Parser&) anyHere() Bool {
+    if p.half != token.Tok.Eof or p.look(1) != token.Tok.Iden or p.lookTok(1).Has(token.LineBreak) { return false }
+    t := p.tk()
+    return t.End - t.Start == 3 and p.src.Text[I64(t.Start):I64(t.End)] == "any"
 }
 
 fn isFuncType(t ast.TypeRef&) Bool {

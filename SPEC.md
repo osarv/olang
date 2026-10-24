@@ -166,6 +166,9 @@ C2a). Anywhere else - a parameter, a local, a function, a type - the words stay 
 **L9b (words of a contract).** `fits` and `outlives` are words only inside a contract's brackets (D17): `x fits T`
 and `a outlives b` there, ordinary names everywhere else. In a contract `return` is also a prefix operator (D17b).
 
+**L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
+`s any Shape&`, `List<any Shape&>`; anywhere else it is an ordinary name.
+
 ### 1.5 Literals
 
 **L10.** `INT_LIT ::= decimal-int | hex-int | bin-int`, where
@@ -440,7 +443,7 @@ code; a function either declares a success type or declares none (see §3.4).
 a parameter's type, a return type, an array's element type) — is one of:
 
 ```
-type-expr ::= [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref )
+type-expr ::= [ "mut" ] ( enum-body | struct-body | trait-body | func-type | type-ref | any-ref )
 ```
 
 A leading `mut` makes a reference type writable (T25b); it is valid on a reference-shaped type and on a type
@@ -1319,11 +1322,13 @@ L20a's declarations do - or at the body's `}`; two on one line are a compile-tim
 satisfied by every type, built-in types included. The leading `mut` marks a method that needs a **mutable
 receiver**, one that writes through to the value it is called on - the receiver half of D9's two axes.
 
-A trait is **only a constraint** (G19): it is written where a type variable is constrained - `fn area<S Shape>(s S)`,
-`fn drain<I Iterator<E>, E>(it mut I&) E`, `type Map<K Hashable<K>, V>` - and nowhere else. It is never the type of a value, a
-reference, a parameter, a field, a local, an element or a result, and writing it as one is a compile-time error.
+A trait is a **constraint** (G19): it is written where a type variable is constrained - `fn area<S Shape>(s S)`,
+`fn drain<I Iterator<E>, E>(it mut I&) E`, `type Map<K Hashable<K>, V>` - and, after `any`, as a run-time value's type
+(§2.12, T32). Written bare it is never the type of a value, a reference, a parameter, a field, a local, an element or a
+result, and writing it as one is a compile-time error naming `any`.
 Code over a trait is generic (§12): compiled for each type it is used with, every call a direct one. A value of one
-of several types is an enum of them (T17); one thing that can be called is a function value (T21).
+of several types is an enum of them (T17) where the set is closed and known, an `any` of a trait (T32) where it is
+open; one thing that can be called is a function value (T21).
 
 **T31.** A type `T` **satisfies** a trait `R` when, for every method signature in `R`, `T` has a method (§4.4 M19)
 of that name whose
@@ -1420,6 +1425,87 @@ storage holding one is never read as a number, a descriptor or anything else, no
 
 This is a property an implementation may rely on when deciding whether two accesses can refer to the same
 storage.
+
+### 2.12 Run-time trait values (`any`)
+
+**T32 (`any`).** `any-ref ::= "any" type-ref` names a **run-time trait value**: `any Shape&`, `any Iterator<I64>&`,
+`mut any Widget&` (writable: its `mut` methods may be called, T31), `any Shape?&` (nullable, T2c). The `type-ref` names a
+trait - an application of one, with its arguments (T35a) - and carries the reference marker, which is required: an
+`any` is always a reference, and `any Shape` with no marker is a compile-time error, as is `any` before anything but a
+trait. The marker is the instance's, as on any reference: bare, `&x` or `&return` (§8), `?&` for one that may be null.
+`any` is a word only where a type is written and a type's name follows it on its line (L9c); elsewhere it is an ordinary
+name.
+
+An `any R&` is a reference to an **instance** of some type satisfying `R`, decided when the value is made, with the
+methods `R` declares: its value is two words, a reference to the instance and a reference to a static **table** - one
+per pair of a type and a trait, holding for each method of `R` (and of every trait it extends, T30a) the function the
+instance's type meets it with, its own method or the default it takes (M19e). It is a reference type everywhere: a
+parameter, a result, a local, a field, an element (`List<any Shape&>`), a type argument (G11); it lives where its
+instance does, and §8 holds it as it holds any reference - its instance is never reclaimed while it is in use, and
+nothing about where the instance lives is decided at run time. Two `any` types are one type exactly when their traits
+are one trait, with the same marker and permission (T27, T25a).
+
+**T32a (making one).** Where an `any R&` is wanted - an initializer, an assignment, an argument, a stored element, a
+returned value, wherever E12 fits a value to a type - a value of a type `T` that **satisfies** `R` (T31; a closed trait's
+member, T31a) becomes one, `T` its instance's type:
+- a **struct or enum variable** - a place: a local, a parameter, a field, an element - is **borrowed** (E12c): the
+  `any` names that very instance, sees the changes made to it, and lives no longer than it (§8); a `mut any` needs a
+  place that may be written (T25b). A reference to a `T` gives what it names, the same way;
+- a **temporary** - a constructor call, an enum case, a call's result, any other expression - is built where the `any`
+  lands (O18a), as a temporary given a reference is;
+- a **number**, a `Bool`, a `Char`, a type declared over one (T29), and an **array** (text among them) are **copied**:
+  their value, from a variable too, is put in new storage built where the `any` lands - there are no references to
+  numbers (T24), and an array's elements are copied with it (T7b);
+- `null` into a nullable `any`, and an `any R&` of the same trait, which is itself (a reference copied, S4a).
+An `any` of another trait is never converted - not to a trait its trait extends, nor from one: a value is made an `any`
+from its own type, once. A type that does not satisfy `R` is a compile-time error at the conversion naming the first
+method it lacks.
+
+A call through the table knows only `R`'s signature, so where `T` meets `R` for an `any`, each method the table holds
+must say no more than the signature: one whose references live elsewhere than the signature says (a result borrowed
+from its receiver, a parameter sharing another's scope, T22), or that carries a scope obligation (O10b, D17d - storing
+an argument into its receiver among them), is a compile-time error at the conversion naming the method; called
+directly, or from generic code (G19), it is fine. A default of `R` introducing type variables of its own (M19e) is not
+in the table (T35): it is reached as T32c says.
+
+**T32b (calls).** `s.M(args)`, `s` an `any R&` and `M` a method of `R` or of a trait it extends, calls the function the
+table holds for `M`: one indirect call, its arguments, result and error set those of `R`'s signature, its receiver the
+instance. A `mut` method is called only through a `mut any R&` (T31). A default of `R` (M19e) is called the same way,
+through the table, so the instance's type's own method of that name is the one that runs. Nothing else is reached
+through an `any`: no field, no method `R` does not declare, no operator but `==` (T33), no `Len()` or `[i]`.
+
+**T32c (an `any` satisfies its trait).** The type `any R&` satisfies `R`, and every trait `R` extends (T30a), and
+nothing else, whatever its instance's type does: a type variable constrained by such a trait may be bound to it (G19),
+so generic code takes an `any` - `fn total<S Shape>(xs Array<S>&) F64` with `S` the `any Shape&`, each call inside
+dispatched through the table. A default of `R` introducing type variables of its own (`Fold<U>`) is instantiated with
+its constrained variable bound to the `any`.
+
+**T33 (identity and text).** `a == b` on two values of one `any` type is **identity**: the same instance, whatever `Eq`
+the instance's type declares (E10's "any other reference"); `s is null` asks whether a nullable one holds none
+(E10c). `$s` renders the instance, as `$` renders a value of its type (E11a) - a `Str` it declares included. An `any`
+has no `Hash` (E10b): it is no `Map` key.
+
+**T34 (closed traits: `match` and `as`).** The instance's type of an `any` of a **closed** trait (T31a) may be asked
+for. A `match` on one takes **type cases**, `case-alt ::= type-ref ( IDEN | "_" )`:
+
+```
+match w {
+    case Button b { b.Press() }
+    case Slider s { s.Move(1) }
+}
+```
+
+`case T b` is selected when the instance's type is `T`, a member of the trait, and binds `b` to the instance itself -
+a reference to it with the `any`'s permission (`Button&`, `mut Button&` from a `mut any`), or, for a number, a `Bool`
+or a `Char`, a copy of its value - visible to the clause's guard (S13e) and body; `_` binds nothing. A type case is its
+clause's only alternative. The type cases must cover every member of the trait, or the match carries a `nomatch` or a
+`case _` (S13a's rule, S13f); a type that is not a member, or one named in two unguarded clauses, is a compile-time
+error. A null `any` matches no type case (S13: it aborts where nothing else takes it). `w as Button` gives the instance
+as a binding would, and **aborts** when the instance is of another type (E32's rule), under `checked` failing with
+`CheckError.WRONG_CASE` instead.
+
+An `any` of an **open** trait is used through its methods alone: a type case or an `as` on one is a compile-time error -
+its set of types is not written down, and a method the trait lacks is what to add.
 
 ## 3. Declarations
 

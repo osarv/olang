@@ -120,6 +120,35 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     # B5a: every module's global initializers' bodies in the order they run - a module's after its imports', each
     # after the globals its initializer reads (check's orderGlobals, once every body is checked)
     InitOrder List<I64>
+    # T32: the tables of run-time trait values, one per (instance's type, trait) the checker made a value of - by
+    # (Plain type, trait) in anyTableOf - and each trait's slots, once asked
+    AnyTables List<AnyTable>
+    anyTableOf Map<pair.Pair<I64, I64>, I64>
+    anySlotsOf Map<types.TypeId, Array<AnySlot>&>
+}
+
+# a table (T32): the instance's type and the trait, the type the instance is stored as (Stored: the type itself, or for
+# an array of a run-time length a one-part tuple holding it, so the instance is one pointer), and by slot the body each
+# calls (check's: -1 where none), Render the slot $ calls; where the conversion making it first was
+type AnyTable struct(Concrete types.TypeId, Trait types.TypeId, Stored types.TypeId, File I64, Sp source.Span) {
+    Concrete
+    Trait
+    Stored
+    File
+    Sp
+    Slots List<I64>
+}
+
+# a trait's slot (T32b): a method of the trait or of one it extends (Trait the instance declaring it, Method its index
+# among that body's methods), or a default (Default the function, M19e) - its name, whether it writes through its
+# receiver, and its signature with the receiver first, an "any" of the trait's (Sig)
+type AnySlot struct(Name source.NameId, Trait types.TypeId, Method I64, Default I64, Mut Bool, Sig types.TypeId) {
+    Name
+    Trait
+    Method
+    Default
+    Mut
+    Sig
 }
 
 # a constant argument a fold could not compute: its expression, the module whose context reads it, its type, the
@@ -299,6 +328,8 @@ fn (p mut Program&) Resolve(c Context&, t ast.TypeRef?&) types.TypeId {
         case ast.TypeRef.Shape(_, body) => p.shape(c, body)
         case ast.TypeRef.Ref(sp, of, _, nullable) => p.refType(c, sp, p.Resolve(c, of), nullable)
         case ast.TypeRef.Perm(_, of, writable, owned) => p.perm(p.Resolve(c, of), writable, owned)
+        # T32: what "any R&" refers to - the trait R names, the checker saying where it names none (writtenMet)
+        case ast.TypeRef.Any(_, of) => p.T.Any(p.Resolve(c, of))
     }
 }
 
@@ -1918,6 +1949,7 @@ fn (p mut Program&) introductions(mi I64, t ast.TypeRef?&, ns mut List<source.Na
         }
         case ast.TypeRef.Ref(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
         case ast.TypeRef.Perm(_, of, _, _) { p.introductions(mi, of, ns, inArgs) }
+        case ast.TypeRef.Any(_, of) { p.introductions(mi, of, ns, inArgs) }
         nomatch { }
     }
 }
@@ -2371,6 +2403,21 @@ fn (p mut Program&) unifyBound(t types.TypeId, tr types.TypeId, b mut Binding&, 
     }
     if p.T.KindOf(tr) != types.Kind.Named { return false }
     d := p.T.DeclOf(tr)
+    # T32c: an "any" binds what its trait's arguments give, where it answers to the constraint's trait
+    ax := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    if p.T.KindOf(ax) == types.Kind.Any {
+        moved := false
+        for e in p.AnyCovers(p.T.AnyTrait(ax)) {
+            if p.T.DeclOf(e) != d { continue }
+            was := Array<types.TypeId>(b.N)
+            for i in range b.N { was[i] = b.Vals[i] }
+            p.unifyLists(p.T.Args(tr), p.T.Args(e), b)
+            for i in range b.N {
+                if was[i] != b.Vals[i] { moved = true }
+            }
+        }
+        return moved
+    }
     td := p.typeDecl(d)
     if td is null or td.Body is null { return false }
     before := Array<types.TypeId>(b.N)
@@ -2437,6 +2484,14 @@ fn (p mut Program&) Missing(t types.TypeId, tr types.TypeId, membership Bool = t
         return met()
     }
     if p.T.KindOf(tr) != types.Kind.Named { return Unmet(0, tr, source.NameId(0), false, false) }
+    # T32c: an "any" satisfies its trait and what that extends, and nothing else
+    ax := p.T.Referent(t) if p.T.KindOf(t) == types.Kind.Ref else t
+    if p.T.KindOf(ax) == types.Kind.Any {
+        for e in p.AnyCovers(p.T.AnyTrait(ax)) {
+            if p.T.Same(e, tr) { return met() }
+        }
+        return Unmet(0, tr, source.NameId(0), false, false)
+    }
     d := p.T.DeclOf(tr)
     td := p.typeDecl(d)
     if td is null or td.Body is null { return Unmet(0, tr, source.NameId(0), false, false) }
@@ -2703,6 +2758,184 @@ fn (p mut Program&) FirstUnmet(owner I64, args types.ListId) Unmet {
     }
     return met()
 }
+
+# ---- run-time trait values (T32) ----
+
+# the traits an "any" of r answers to (T32c): r, then what it extends, at any depth, each once
+fn (p mut Program&) AnyCovers(r types.TypeId) Array<types.TypeId> {
+    out List<types.TypeId>
+    p.anyCovers(r, out, 0)
+    return out.ToArray()
+}
+
+fn (p mut Program&) anyCovers(r types.TypeId, out mut List<types.TypeId>&, depth I64) {
+    if depth > 32 or p.T.KindOf(r) != types.Kind.Named or out.Has(r) { return }
+    out.Push(r)
+    for e in p.Extended(r) { p.anyCovers(e, out, depth + 1) }
+}
+
+# the slots of a trait's tables, in order (T32b): its methods and those of the traits it extends, then the defaults
+# of those traits a table can hold - one whose type variables the receiver binds, mentioned nowhere but there (T35)
+fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
+    have := try p.anySlotsOf.Get(r) catch default Array<AnySlot>(0)
+    if have.Len() > 0 or p.anySlotsOf.Has(r) { return have }
+    p.allFns()
+    out List<AnySlot>
+    seen List<source.NameId>
+    covers := p.AnyCovers(r)
+    for tr in covers {
+        d := p.T.DeclOf(tr)
+        td := p.typeDecl(d)
+        if td is null or td.Body is null { continue }
+        match td.Body {
+            case ast.TypeBody.Trait(methods, _, _) {
+                for k in range methods.Len() {
+                    m := methods[k]
+                    if seen.Has(m.Name) { continue }
+                    seen.Push(m.Name)
+                    want := p.Subst(p.sigType(p.declContext(d), m.S, types.UnknownT, source.NameId(0)), DeclOwner(d), p.T.Args(tr))
+                    writes := m.Recv is not null
+                    out.Push(AnySlot(m.Name, tr, k, -1, writes, p.WithReceiver(want, p.T.Ref(p.T.Any(r), types.Writable if writes else types.ReadOnly))))
+                }
+            }
+            nomatch { }
+        }
+    }
+    for i in range p.defaultFns.Len() {
+        f := p.defaultFns[i]
+        d := types.DeclId(I32(p.defaultTraits[i]))
+        tr := types.UnknownT
+        for c in covers {
+            if p.T.DeclOf(c) == d { tr = c }
+        }
+        if tr == types.UnknownT or seen.Has(p.fns[f].F.Name) { continue }
+        sig := p.DefaultAt(f, p.T.Any(r))
+        if sig == types.UnknownT { continue }
+        seen.Push(p.fns[f].F.Name)
+        ps := p.T.Items(p.T.Params(sig))
+        writes := ps.Len() > 0 and p.T.KindOf(ps[0]) == types.Kind.Ref and (p.T.PermOf(ps[0]) & types.Writable) != 0
+        out.Push(AnySlot(p.fns[f].F.Name, tr, -1, f, writes, sig))
+    }
+    kept mut Array<AnySlot>&p = Array<AnySlot>(out.Len(), AnySlot(source.NameId(0), types.UnknownT, -1, -1, false, types.UnknownT))
+    for i in range out.Len() { kept[i] = out[i] }
+    p.anySlotsOf.Put(r, kept)
+    return kept
+}
+
+# a signature with a receiver put first: its parameters' and results' scope entries moved past it (DESIGN.md 1.6.1)
+fn (p mut Program&) WithReceiver(sig types.TypeId, recv types.TypeId) types.TypeId {
+    ps := p.T.Items(p.T.Params(sig))
+    all := Array<types.TypeId>(ps.Len() + 1)
+    all[0] = recv
+    for i in range ps.Len() { all[i + 1] = ps[i] }
+    shares := Array<I64>(ps.Len() + 1, types.OwnScope)
+    for i in range ps.Len() {
+        e := p.T.ShareOf(sig, i)
+        shares[i + 1] = e + 1 if e >= 0 else e
+    }
+    rs := p.T.Results(sig)
+    from := Array<I64>(rs.Len(), types.OwnScope)
+    for k in range rs.Len() {
+        e := p.T.ResultFrom(sig, k)
+        from[k] = e + 1 if e >= 0 else e
+    }
+    return p.T.Func(p.T.List(all), p.T.Result(sig), p.T.Errors(sig), p.T.Scopes(p.T.Role(sig), shares, from))
+}
+
+# a default's signature with its receiver's variable bound to x - the instance's type, or an "any" (T32c: the variable a
+# reference to it binds, as G11 says) - and what its constraint binds through it (G9c); Unknown where a variable stays
+# unbound (a default generic in its own types, as Fold is) or the receiver's variable stands anywhere else in it (T35)
+fn (p mut Program&) DefaultAt(f I64, x types.TypeId) types.TypeId {
+    sig := p.Sig(f)
+    owner := FnOwner(f)
+    nv := p.VarCount(owner)
+    ps := p.T.Items(p.T.Params(sig))
+    if ps.Len() == 0 { return types.UnknownT }
+    recv := ps[0]
+    rv := recv
+    if p.T.KindOf(rv) == types.Kind.Ref { rv = p.T.Referent(rv) }
+    if p.T.KindOf(rv) != types.Kind.Var or p.T.A(rv) != owner { return types.UnknownT }
+    vi := p.T.B(rv)
+    b := Binding(owner, nv)
+    by := x
+    # a receiver by value binds the reference an "any" is (G11)
+    if p.T.KindOf(recv) != types.Kind.Ref and p.T.KindOf(x) == types.Kind.Any { by = p.T.Ref(x, types.ReadOnly) }
+    b.Vals[vi] = by
+    p.InferThroughBounds(b)
+    for v in b.Vals {
+        if v == types.UnknownT { return types.UnknownT }
+    }
+    for i in range ps.Len() - 1 {
+        if p.mentionsVar(ps[i + 1], owner, vi, 0) { return types.UnknownT }
+    }
+    if p.mentionsVar(p.T.Result(sig), owner, vi, 0) { return types.UnknownT }
+    return p.Subst(sig, owner, p.T.List(b.Vals))
+}
+
+fn (p mut Program&) mentionsVar(t types.TypeId, owner I64, v I64, depth I64) Bool {
+    if depth > 32 { return false }
+    match p.T.KindOf(t) {
+        case types.Kind.Var { return p.T.A(t) == owner and p.T.B(t) == v }
+        case types.Kind.Ref { return p.mentionsVar(p.T.Referent(t), owner, v, depth + 1) }
+        case types.Kind.Array { return p.mentionsVar(p.T.Elem(t), owner, v, depth + 1) }
+        case types.Kind.Any { return p.mentionsVar(p.T.AnyTrait(t), owner, v, depth + 1) }
+        case types.Kind.Named { return p.mentionsList(p.T.Args(t), owner, v, depth) }
+        case types.Kind.Tuple, types.Kind.Record { return p.mentionsList(p.T.Parts(t), owner, v, depth) }
+        case types.Kind.Func {
+            return p.mentionsList(p.T.Params(t), owner, v, depth) or p.mentionsVar(p.T.Result(t), owner, v, depth + 1)
+        }
+        nomatch { return false }
+    }
+}
+
+fn (p mut Program&) mentionsList(l types.ListId, owner I64, v I64, depth I64) Bool {
+    for x in p.T.Items(l) {
+        if p.mentionsVar(x, owner, v, depth + 1) { return true }
+    }
+    return false
+}
+
+# the type an instance of t is stored as in an "any" (T32): itself, or for an array of a run-time length - its value a
+# pair - a one-part tuple holding it, so the instance is one pointer
+fn (p mut Program&) AnyStored(t types.TypeId) types.TypeId {
+    r := p.T.Repr(t)
+    if p.T.KindOf(r) == types.Kind.Array and p.T.Length(r) == types.TypeId(0) { return p.T.Tuple(p.T.List1(t)) }
+    return t
+}
+
+# the table of an instance's type and a trait, made the first time it is asked for: its index; Fresh whether it was
+# made now, its slots for the checker to fill
+fn (p mut Program&) AnyTableFor(t types.TypeId, r types.TypeId, file I64, sp source.Span) I64, Bool {
+    key := pair.Pair(I64(p.T.Plain(t)), I64(r))
+    i := try p.anyTableOf.Get(key) catch default -1
+    if i >= 0 { return i, false }
+    p.AnyTables.Push(AnyTable(p.T.Plain(t), r, p.AnyStored(p.T.Plain(t)), file, sp))
+    i = p.AnyTables.Len() - 1
+    p.anyTableOf.Put(key, i)
+    return i, true
+}
+
+# the table of a type and a trait, -1 for none made
+fn (p mut Program&) AnyTableOf(t types.TypeId, r types.TypeId) I64 {
+    return try p.anyTableOf.Get(pair.Pair(I64(p.T.Plain(t)), I64(r))) catch default -1
+}
+
+# a default of a trait an "any" of r answers to that no slot holds - one generic in its own types (T32c): by name, -1
+# for none
+fn (p mut Program&) AnyDefault(r types.TypeId, name source.NameId) I64 {
+    p.allFns()
+    covers := p.AnyCovers(r)
+    for i in range p.defaultFns.Len() {
+        f := p.defaultFns[i]
+        if p.fns[f].F.Name != name { continue }
+        d := types.DeclId(I32(p.defaultTraits[i]))
+        for c in covers {
+            if p.T.DeclOf(c) == d { return f }
+        }
+    }
+    return -1
+}
+
 
 # ---- canonical texts ----
 

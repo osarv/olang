@@ -208,6 +208,21 @@ type Diag enum {
     DoubleReferenceMarker
     DestructTypeByValue
     TraitNotAType
+    AnyNotTrait
+    AnyNeedsMarker
+    AnyNotConverted
+    AnyUnmet
+    AnyUnmetMethod
+    AnyNotMember
+    AnyMethodScopes
+    AnyMethodObligations
+    AnyNoMethod
+    AnyOpenInspected
+    AnyNotMemberCase
+    AnyCaseTwice
+    AnyCaseAlone
+    AnyCaseNotAny
+    NoteAnyMethod
     EnumCaseInUse
     DeclaredTwice
     FieldHasParamName
@@ -1149,7 +1164,52 @@ fn DoubleReferenceMarker() Msg { return Msg(Diag.DoubleReferenceMarker, "T24", "
 fn DestructTypeByValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.DestructTypeByValue, "C11", $ty1 " has a destructor, so it is held only by reference - write " $ty2 "&") }
 
 # ERR_TRAIT_NOT_A_TYPE
-fn TraitNotAType(ty String&) Msg { return Msg(Diag.TraitNotAType, "T30", $ty " is a trait - a constraint on a type variable, never the type of a value") }
+fn TraitNotAType(ty String&) Msg { return Msg(Diag.TraitNotAType, "T30, T32", $ty " is a trait - a constraint on a type variable; a value of any type meeting it is an 'any " $ty "&'") }
+
+# ERR_ANY_NOT_TRAIT
+fn AnyNotTrait(ty String&) Msg { return Msg(Diag.AnyNotTrait, "T32", "'any' takes a trait, and " $ty " is none") }
+
+# ERR_ANY_NEEDS_MARKER
+fn AnyNeedsMarker(ty String&) Msg { return Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }
+
+# ERR_ANY_NOT_CONVERTED
+fn AnyNotConverted(ty1 String&, ty2 String&) Msg { return Msg(Diag.AnyNotConverted, "T32a", "an " $ty1 " is never made an " $ty2 " - an 'any' is made from its instance's own type, once") }
+
+# ERR_ANY_UNMET
+fn AnyUnmet(ty String&, tr String&) Msg { return Msg(Diag.AnyUnmet, "T32a", $ty " cannot be an 'any " $tr "&': it does not satisfy " $tr) }
+
+# ERR_ANY_UNMET_METHOD
+fn AnyUnmetMethod(ty String&, tr String&, tok String&) Msg { return Msg(Diag.AnyUnmetMethod, "T32a, T31", $ty " cannot be an 'any " $tr "&': it has no method " $tok " that fits") }
+
+# ERR_ANY_NOT_MEMBER
+fn AnyNotMember(ty String&, tr String&, list String&) Msg { return Msg(Diag.AnyNotMember, "T32a, T31a", $ty " cannot be an 'any " $tr "&': " $tr " is closed, met by " $list " alone") }
+
+# ERR_ANY_METHOD_SCOPES
+fn AnyMethodScopes(ty String&, tok String&, tr String&) Msg { return Msg(Diag.AnyMethodScopes, "T32a, T22", $ty "'s " $tok " says where its references live as " $tr "'s signature does not - it cannot be called through an 'any " $tr "&'") }
+
+# ERR_ANY_METHOD_OBLIGATIONS
+fn AnyMethodObligations(ty String&, tok String&, tr String&) Msg { return Msg(Diag.AnyMethodObligations, "T32a, T22a", $ty "'s " $tok " relates its arguments' scopes, which a call through an 'any " $tr "&' cannot check - call it directly, or through generic code") }
+
+# ERR_ANY_NO_METHOD
+fn AnyNoMethod(ty String&, tok String&) Msg { return Msg(Diag.AnyNoMethod, "T32b", $ty " has no method " $tok " - an 'any' is used through its trait's methods alone") }
+
+# ERR_ANY_OPEN_INSPECTED
+fn AnyOpenInspected(ty String&, tr String&) Msg { return Msg(Diag.AnyOpenInspected, "T34", $ty "'s trait " $tr " is open, so its instance's type is never asked for - use its methods, or add the method it lacks") }
+
+# ERR_ANY_NOT_MEMBER_CASE
+fn AnyNotMemberCase(ty String&, tr String&) Msg { return Msg(Diag.AnyNotMemberCase, "T34", $ty " is not one of the types " $tr " lists") }
+
+# ERR_ANY_CASE_TWICE
+fn AnyCaseTwice(ty String&) Msg { return Msg(Diag.AnyCaseTwice, "T34", $ty " is matched by an earlier clause - this one is never reached") }
+
+# ERR_ANY_CASE_ALONE
+fn AnyCaseAlone() Msg { return Msg(Diag.AnyCaseAlone, "T34", "a type case is its clause's only alternative") }
+
+# ERR_ANY_CASE_NOT_ANY
+fn AnyCaseNotAny(ty String&) Msg { return Msg(Diag.AnyCaseNotAny, "T34", "a type case matches an 'any' of a closed trait, and this is " $ty) }
+
+# NOTE_ANY_METHOD
+fn NoteAnyMethod(tok String&) Msg { return Msg(Diag.NoteAnyMethod, "", $tok " is declared here") }
 
 # ERR_ENUM_CASE_IN_USE
 fn EnumCaseInUse(tok String&) Msg { return Msg(Diag.EnumCaseInUse, "T17", "enum case " $tok " is already declared") }

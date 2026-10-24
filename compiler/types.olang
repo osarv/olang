@@ -69,6 +69,9 @@ type Kind enum {
     Const       # a constant argument's value (G29, T7c): A its type, B its value (a U64's bits)
     ConstExpr   # a constant argument still to be computed from variables (T7c): A its pattern
     ErrWords    # an error set's entry holding some words of an error type (R1c): A the type, B the words (bit i word i)
+    # a run-time trait value's referent (T32): A the trait (a Named trait, its arguments bound) - always under a Ref, the
+    # pair (instance, table)
+    Any
 }
 
 # a reference's permission: read-only, writable ("mut"), owning ("own"), both (T25b, T25e)
@@ -412,6 +415,9 @@ fn (t mut Table&) ConstExpr(key String&) TypeId {
     return t.intern(data(Kind.ConstExpr, p, 0, 0), 1)
 }
 
+# what "any R&" refers to (T32): R a trait instance
+fn (t mut Table&) Any(tr TypeId) TypeId { return t.intern(data(Kind.Any, I64(tr), 0, 0), t.depthOf(tr) + 1) }
+
 # ---- reading types ----
 
 fn (t Table&) KindOf(id TypeId) Kind { return t.at(id).K }
@@ -457,6 +463,13 @@ fn (t Table&) Depth(id TypeId) I64 { return I64(t.depthOf(id)) }
 
 fn (t Table&) IsRef(id TypeId) Bool { return t.KindOf(id) == Kind.Ref }
 
+# T32: whether a type is a run-time trait value, "any R&" - a reference to an Any - and the trait an Any or one names
+fn (t Table&) IsAny(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and t.KindOf(t.Referent(id)) == Kind.Any }
+fn (t Table&) AnyTrait(id TypeId) TypeId {
+    x := t.Referent(id) if t.KindOf(id) == Kind.Ref else id
+    return TypeId(I32(t.A(x))) if t.KindOf(x) == Kind.Any else UnknownT
+}
+
 # T2c: a reference that may be null ("?&"), and the same reference known not to be, or allowed to be
 fn (t Table&) IsNullable(id TypeId) Bool { return t.KindOf(id) == Kind.Ref and (t.PermOf(id) & Nullable) != 0 }
 fn (t mut Table&) NonNull(id TypeId) TypeId {
@@ -488,6 +501,7 @@ fn (t Table&) Closed(id TypeId) Bool {
         case Kind.Func => t.closedList(t.Params(id)) and t.Closed(t.Result(id)) and t.closedList(t.Errors(id))
         case Kind.AnonEnum => t.closedList(t.ShapeCases(id))
         case Kind.Const => t.Closed(t.ConstType(id))
+        case Kind.Any => t.Closed(t.AnyTrait(id))
         case _ => true
     }
 }
@@ -610,7 +624,8 @@ fn (t Table&) ScopesFit(a TypeId, b TypeId) Bool {
 # counts as holding one
 fn (t mut Table&) HoldsRefs(id TypeId) Bool {
     k := t.KindOf(id)
-    if k == Kind.Ref or k == Kind.Func or k == Kind.Var { return true }
+    # an any's instance is of a type not known here (T32): it may hold one
+    if k == Kind.Ref or k == Kind.Func or k == Kind.Var or k == Kind.Any { return true }
     if k != Kind.Named and k != Kind.Array and k != Kind.Tuple and k != Kind.Record and k != Kind.AnonEnum { return false }
     if k == Kind.Named and not t.HasBody(id) { return true }
     state := t.holdsState(id)
@@ -841,8 +856,9 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
         case Kind.DefaultErr { size, align = 4, 4 }
         case Kind.Func { size, align = 16, 8 }   # T21: the pair (code, environment)
         case Kind.Ref {
-            # a reference to a run-time-length array is the pair (length, storage), as the array's value is (T11)
-            if t.runTimeArray(t.Referent(id)) {
+            # a reference to a run-time-length array is the pair (length, storage), as the array's value is (T11); an
+            # any the pair (instance, table) (T32)
+            if t.runTimeArray(t.Referent(id)) or t.KindOf(t.Referent(id)) == Kind.Any {
                 size, align = 16, 8
             } else {
                 size, align = 8, 8
@@ -951,7 +967,7 @@ fn (t mut Table&) spellLlvm(id TypeId) String {
         case Kind.DefaultErr => "i32"
         case Kind.Noreturn => "void"
         case Kind.Func => "{ ptr, ptr }"
-        case Kind.Ref => "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "ptr"
+        case Kind.Ref => "{ i64, ptr }" if t.runTimeArray(t.Referent(id)) else "{ ptr, ptr }" if t.KindOf(t.Referent(id)) == Kind.Any else "ptr"
         case Kind.Array => t.arrayLlvm(id)
         case Kind.Tuple, Kind.Record => t.aggregate(t.Parts(id))
         case Kind.AnonEnum => t.enumLlvm(id)
@@ -1190,6 +1206,10 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
             }
         }
         case Kind.ConstExpr { b.Push("<" $t.Pattern(id) ">") }
+        case Kind.Any {
+            b.Push("any ")
+            t.canon(b, t.AnyTrait(id))
+        }
     }
 }
 
@@ -1365,3 +1385,7 @@ test "symbols are injective and bounded" {
     long := "x".Repeat(200)
     assert Symbol(long).Len() == 122 and Symbol(long) != Symbol($long "y")
 }
+
+# a table's words (T32): its instance's type's identity first, then $'s renderings - inside another value's (slot -2)
+# and at the top of a piece (slot -1) - then each slot's function: slot s at AnySlotBase + s
+AnySlotBase I64 = 3

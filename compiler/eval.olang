@@ -349,6 +349,12 @@ type Machine struct(T mut types.Table&, When Mode) {
     externs Map<I64, String&>
     externCode Map<I64, I64>     # an extern's code allocation
     dtors Map<types.TypeId, mir.FnKey>
+    # T32: each run-time trait value's table by its index - its instance's type and its words' functions - and the
+    # allocation it is once made; each type's identity word (T34)
+    tableTy Map<I64, types.TypeId>
+    tableKeys Map<I64, Array<mir.FnKey>&>
+    tableAt Map<I64, I64>
+    typeidAt Map<types.TypeId, I64>
     globals List<global>
     globalOf Map<gkey, I64>
     datas Map<dkey, I64>
@@ -724,6 +730,39 @@ fn (m mut Machine&) DefineExtern(f I64, name String&) { m.externs.Put(f, $name) 
 
 # the destructor of a type (C7): a function of one parameter, a reference to the instance, run when its scope closes
 fn (m mut Machine&) DefineDestructor(t types.TypeId, k mir.FnKey) { m.dtors.Put(t, k) }
+
+# a run-time trait value's table (T32): ti's instance type, and the function at each of its words after the identity
+fn (m mut Machine&) DefineTable(ti I64, concrete types.TypeId, keys Array<mir.FnKey>&) {
+    if m.tableKeys.Has(ti) { return }
+    m.tableTy.Put(ti, concrete)
+    m.tableKeys.Put(ti, keys)
+}
+
+# a type's identity (T34): an allocation of its own, one per type, as the built program's word is
+fn (m mut Machine&) typeid(t types.TypeId) Ptr {
+    t2 := m.T.Plain(t)
+    have := try m.typeidAt.Get(t2) catch default 0
+    if have != 0 { return Ptr(have, 0) }
+    p := m.allocate(8, aData, m.program)
+    m.typeidAt.Put(t2, p.Id)
+    return p
+}
+
+# table ti as an allocation: its instance's type's identity, then a code pointer per function, made once
+fn (m mut Machine&) table(ti I64) Ptr {
+    have := try m.tableAt.Get(ti) catch default 0
+    if have != 0 { return Ptr(have, 0) }
+    keys := try m.tableKeys.Get(ti) catch {
+        m.refuse(WhyNoBody)
+        return NullPtr
+    }
+    concrete := try m.tableTy.Get(ti) catch default types.UnknownT
+    p := m.allocate(8 * (keys.Len() + 1), aData, m.program)
+    m.wrPtr(p, m.typeid(concrete))
+    for i in range keys.Len() { m.wrPtr(Ptr(p.Id, 8 * (i + 1)), m.codePtr(keys[i])) }
+    m.tableAt.Put(ti, p.Id)
+    return p
+}
 
 # a global, by its module and name: its type, whether it is mutable, and its initializer's function, which gives the
 # value (DESIGN.md 1.8: a body per global). While compiling an immutable one is initialized when first read (K2);
@@ -1934,6 +1973,18 @@ fn (m mut Machine&) assign(fi I64, p mir.Place, rv mir.Rvalue) {
                 m.put(fi, dst, ty, m.arg(fi, args, 0))
                 return
             }
+            if op == typed.PrimOp.AnyMake {
+                # T32a: the instance and its table - a null instance's none
+                inst := m.rdPtr(m.addr(fi, m.arg(fi, args, 0), 1))
+                ti := m.scalar(fi, m.arg(fi, args, 1))
+                m.wrPtr(dst, inst)
+                m.wrPtr(Ptr(dst.Id, dst.Off + 8), NullPtr if inst.Id == 0 else m.table(ti))
+                return
+            }
+            if op == typed.PrimOp.AnyInstance {
+                m.wrPtr(dst, m.rdPtr(m.addr(fi, m.arg(fi, args, 0), 1)))
+                return
+            }
             m.wr(dst, m.width(ty), m.prim(fi, op, ty, args))
         }
         case mir.Rvalue.Overflows(op, ty, args) { m.wr(dst, 1, 1 if m.overflows(fi, op, ty, args) else 0) }
@@ -2219,6 +2270,14 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         }
         case typed.PrimOp.Convert { return m.convert(m.scalar(fi, x), at, ty) }
         case typed.PrimOp.Bitcast { return m.bitcast(m.scalar(fi, x), at) }
+        case typed.PrimOp.AnyIs {
+            # T34: the table's identity word against the type's - a null any's none
+            p := m.addr(fi, x, 1)
+            tab := m.rdPtr(Ptr(p.Id, p.Off + 8))
+            if m.halted or tab.Id == 0 { return 0 }
+            id := m.rdPtr(tab)
+            return 1 if id.Id == m.typeid(m.opType(fi, m.arg(fi, args, 1))).Id else 0
+        }
         case typed.PrimOp.Retire {
             m.retire(fi, m.addr(fi, x, 1), at)
             return 0
@@ -3013,12 +3072,31 @@ fn (m mut Machine&) callee(fi I64, c mir.Callee) I64, Ptr, Bool, I64 {
             if i < 0 { m.refuse(WhyNoBody) }
             return i, env, false, 0
         }
+        case mir.Callee.Dispatch(x, slot, _) {
+            # T32b: the function the any's table holds for the slot
+            p := m.addr(fi, x, 3)
+            tab := m.rdPtr(Ptr(p.Id, p.Off + 8))
+            if m.halted { return -1, NullPtr, false, 0 }
+            if tab.Id == 0 {
+                m.refuse(WhyNullCall)
+                return -1, NullPtr, false, 0
+            }
+            code := m.rdPtr(Ptr(tab.Id, tab.Off + 8 * (types.AnySlotBase + slot)))
+            if m.halted { return -1, NullPtr, false, 0 }
+            if code.Id == 0 or m.allocOf(code.Id).Kind != aCode {
+                m.refuse(WhyNotModelled)
+                return -1, NullPtr, false, 0
+            }
+            i := try m.fnOf.Get(m.codeKeys[m.allocOf(code.Id).Code]) catch default -1
+            if i < 0 { m.refuse(WhyNoBody) }
+            return i, NullPtr, false, 0
+        }
     }
 }
 
 fn (m mut Machine&) calleeType(fi I64, c mir.Callee) types.TypeId {
     return match c {
-        case mir.Callee.Fn(_, ty), mir.Callee.Extern(_, ty) => ty
+        case mir.Callee.Fn(_, ty), mir.Callee.Extern(_, ty), mir.Callee.Dispatch(_, _, ty) => ty
         case mir.Callee.Value(x) => m.T.Repr(m.opType(fi, x))
     }
 }
@@ -3034,9 +3112,18 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     nf := m.pushFrame(callee, ret, retArg)
     if nf < 0 { return -2 }
     g := m.fns[callee]
+    dispatched := match c {
+        case mir.Callee.Dispatch(_, _, _) => true
+        case _ => false
+    }
     for i in range args.N {
         if i < g.Params.Len() {
             l := g.Params[i]
+            if i == 0 and dispatched {
+                # T32b: the any's instance alone, as the built program hands it over
+                m.wrPtr(m.localPtr(nf, l), m.rdPtr(m.addr(fi, f.Ops[I64(args.At)], 1)))
+                continue
+            }
             m.put(fi, m.localPtr(nf, l), g.Locals[I64(l)].Ty, f.Ops[I64(args.At) + i])
         }
     }
@@ -3839,7 +3926,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
     k := f.Tasks[tk.Task]
     waiter := m.nFs - 1
     ty := match k.Target {
-        case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t) => t
+        case mir.Callee.Fn(_, t), mir.Callee.Extern(_, t), mir.Callee.Dispatch(_, _, t) => t
         case mir.Callee.Value(x) => m.T.Repr(m.opType(waiter, x))
     }
     errs := m.T.Errors(ty)
