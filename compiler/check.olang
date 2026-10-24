@@ -794,7 +794,7 @@ fn (c mut Checker&) inheritClash(f I64) {
             return
         }
     }
-    # E23, E33, P9: nor a method the compiler supplies - every array's Len, a type extending a float's or an unsigned
+    # E23, E33, E37, P9: nor a method the compiler supplies - every array's Len, a type extending a float's or an unsigned
     # integer's bit methods, a type extending an integer's atomics
     u := c.under(rt)
     given := false
@@ -802,7 +802,7 @@ fn (c mut Checker&) inheritClash(f I64) {
     if c.P.Extends(rt) {
         if name == "Bits" and c.P.T.IsFloat(u) { given = true }
         if name.EndsWith("FromBits") and c.P.T.IsUnsigned(u) { given = true }
-        if name.StartsWith("Atomic") and c.P.T.IsInt(u) { given = true }
+        if (name.StartsWith("Atomic") or bitOp(name) != typed.PrimOp.Retire) and c.P.T.IsInt(u) { given = true }
     }
     if given { c.err(c.nameSpan(fd), msgs.MethodClashesSupplied(name, c.ty(ps[0]))) }
     c.pop()
@@ -8763,6 +8763,33 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             return c.prim(sp, ft, typed.PrimOp.Bitcast, c.value(rx, sp), null)
         }
     }
+    bop := bitOp(name)
+    if bop != typed.PrimOp.Retire {
+        # E37: an integer's bit operations, supplied
+        if not c.P.T.IsInt(u) {
+            c.err(nsp, msgs.BitOpNotInteger(name, c.ty(rt)))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        rot := bop == typed.PrimOp.RotateLeft or bop == typed.PrimOp.RotateRight
+        want I64 = 1 if rot else 0
+        if args.Len() != want {
+            c.err(sp, msgs.ArgCount(want, "" if want == 1 else "s", args.Len()))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        x0 := c.value(rx, sp)
+        if not rot { return c.prim(sp, rt if bop == typed.PrimOp.ByteSwap else c.i64(), bop, x0, null) }
+        n := c.expr(args[0], c.i64())
+        nt := typeOf(n)
+        if nt == types.UnknownT { return c.unknown(sp) }
+        if not c.isInt(nt) {
+            c.err(args[0].Span(), msgs.BitOpCount(c.ty(nt)))
+            return c.unknown(sp)
+        }
+        if c.under(nt) != c.i64() { n = c.prim(args[0].Span(), c.i64(), typed.PrimOp.Convert, n, null) }
+        return c.prim(sp, rt, bop, x0, n)
+    }
     if name == "retire" and args.Len() == 0 and c.arrayOf(rt) != types.UnknownT and c.P.L.Mods[c.fr().Mi].Prelude {
         # M19g: where a collection stops using an array - nothing at run time but under -sanitize (B2f), where its
         # storage is poisoned; a module that retires arrays gives its arrays chunks of their own there
@@ -8820,6 +8847,19 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
     return null
 }
 
+# E37: the bit operation a supplied method's name names; Retire for none
+fn bitOp(name String&) typed.PrimOp {
+    return match name {
+        case "LeadingZeros" => typed.PrimOp.LeadingZeros
+        case "TrailingZeros" => typed.PrimOp.TrailingZeros
+        case "PopCount" => typed.PrimOp.PopCount
+        case "RotateLeft" => typed.PrimOp.RotateLeft
+        case "RotateRight" => typed.PrimOp.RotateRight
+        case "ByteSwap" => typed.PrimOp.ByteSwap
+        case _ => typed.PrimOp.Retire
+    }
+}
+
 # whether the type a declared type is over has a method of this name - one declared, or one the compiler supplies for
 # it (E33's bits, P9's atomics)
 fn (c mut Checker&) baseHas(t types.TypeId, n source.NameId) Bool {
@@ -8829,13 +8869,14 @@ fn (c mut Checker&) baseHas(t types.TypeId, n source.NameId) Bool {
     u := c.under(b)
     if name == "Bits" { return c.P.T.IsFloat(u) }
     if name.EndsWith("FromBits") { return c.P.T.IsUnsigned(u) }
-    if name.StartsWith("Atomic") { return c.P.T.IsInt(u) }
+    if name.StartsWith("Atomic") or bitOp(name) != typed.PrimOp.Retire { return c.P.T.IsInt(u) }
     return false
 }
 
 fn supplied(name String&) Bool {
     for s in String&["Bits", "F16FromBits", "BF16FromBits", "F32FromBits", "F64FromBits", "AtomicLoad", "AtomicStore"
-                     "AtomicAdd", "AtomicSwap", "AtomicCompareSwap", "Hash", "Eq", "Str", "Len", "Iter"] {
+                     "AtomicAdd", "AtomicSwap", "AtomicCompareSwap", "Hash", "Eq", "Str", "Len", "Iter", "LeadingZeros"
+                     "TrailingZeros", "PopCount", "RotateLeft", "RotateRight", "ByteSwap"] {
         if s == name { return true }
     }
     return false

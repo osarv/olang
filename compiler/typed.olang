@@ -329,6 +329,14 @@ type PrimOp enum {
     # evaluator marks it and stops on a later use of it, or of a view of it (K1, M19g), naming where the program grew
     # the collection
     Retire
+    # an integer's bits (E37): the three counts give an I64; the rotations take args [x, n], n converted to I64 and taken
+    # modulo the width; ByteSwap gives x's type
+    LeadingZeros
+    TrailingZeros
+    PopCount
+    RotateLeft
+    RotateRight
+    ByteSwap
 }
 
 type Slice struct(Base Place&, Lo Expr&, Hi Expr&, Checked Check) {

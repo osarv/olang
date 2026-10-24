@@ -10406,6 +10406,57 @@ test "E36: a number type's limits" {
     assert F16.NaN.Bits() == 0x7E00 and F64.NaN.Bits() == 0x7FF8000000000000 and BF16.NaN.Bits() == 0x7FC0
 }
 
+# E37: an integer's bit operations, supplied by the compiler - each checked against a loop over the bits, at every
+# width, signed and unsigned, run while compiling (BitOpsBaked, K2) and at run time.
+type BoMask extends U16
+fn boCount(x U64, w I64, leading Bool) I64 {
+    for i in range w {
+        b := (x >> U64(w - 1 - i)) & 1 if leading else (x >> U64(i)) & 1
+        if b == 1 { return i }
+    }
+    return w
+}
+fn boPop(x U64, w I64) I64 {
+    n I64 = 0
+    for i in range w {
+        if ((x >> U64(i)) & 1) == 1 { n++ }
+    }
+    return n
+}
+fn bitOpsAll(one I64) Bool {
+    ok := true
+    for v in I64[0, 1, 2, 3, 0x80, 0x7F, 0xFF00, 0x1234, -1, -2, I64.Min, I64.Max, 0x0F0F0F0F0F0F0F0F * one, 12345678901 * one] {
+        u := U64(v)
+        ok = ok and v.LeadingZeros() == boCount(u, 64, true) and v.TrailingZeros() == boCount(u, 64, false)
+        ok = ok and v.PopCount() == boPop(u, 64) and u.PopCount() == boPop(u, 64)
+        b := U8(v)
+        ok = ok and b.LeadingZeros() == boCount(U64(b), 8, true) and b.TrailingZeros() == boCount(U64(b), 8, false)
+        ok = ok and I8(v).PopCount() == boPop(U64(b), 8) and I8(v).LeadingZeros() == boCount(U64(b), 8, true)
+        h := U16(v)
+        ok = ok and h.PopCount() == boPop(U64(h), 16) and I16(v).TrailingZeros() == boCount(U64(h), 16, false)
+        q := U32(v)
+        ok = ok and I32(v).LeadingZeros() == boCount(U64(q), 32, true) and q.PopCount() == boPop(U64(q), 32)
+        for k in I64[0, 1, 7, 8, 13, 31, 32, 63, 64, 65, -1, -9] {
+            ok = ok and u.RotateLeft(k).RotateRight(k) == u and b.RotateLeft(k).RotateRight(I32(k)) == b
+            ok = ok and u.RotateLeft(k) == u.RotateRight(64 - (k % 64 + 64) % 64) and q.RotateLeft(k).PopCount() == q.PopCount()
+            ok = ok and I16(v).RotateRight(U8(k & 0xFF)).PopCount() == I16(v).PopCount()
+        }
+        ok = ok and u.ByteSwap().ByteSwap() == u and q.ByteSwap().ByteSwap() == q and b.ByteSwap() == b
+    }
+    named Bool = U64(0x0102030405060708).ByteSwap() == U64(0x0807060504030201) and U16(0x1234).ByteSwap() == 0x3412
+    named2 Bool = I32(1).ByteSwap() == 0x01000000 and I32(0x80).ByteSwap() == I32(-2147483648) and U8(0x81).RotateLeft(1) == 0x03
+    named3 Bool = U8(1).RotateLeft(-1) == 128 and U32(1).LeadingZeros() == 31 and I64(-1).PopCount() == 64 and U8(0).LeadingZeros() == 8
+    named4 Bool = I8(-128).RotateRight(7) == 1 and U32(0x80000001).RotateRight(1) == 0xC0000000 and U64(0).TrailingZeros() == 64
+    ext Bool = BoMask(0x00F0).TrailingZeros() == 4 and BoMask(0x00F0).ByteSwap() == BoMask(0xF000) and 'a'.PopCount() == 3
+    return ok and named and named2 and named3 and named4 and ext
+}
+BitOpsBaked := bitOpsAll(1)
+
+test "E37: an integer's bit operations" {
+    assert bitOpsAll(I64(WdMutable / 2000000000))
+    assert BitOpsBaked
+}
+
 # S19: deferred code runs on every way out of its block - falling off its end, a return (once the result is
 # computed), a break, a continue, an error leaving the function - last registered first, the innermost block's first,
 # reading variables as they are when it runs, never when the defer was reached; only a defer that was reached runs.

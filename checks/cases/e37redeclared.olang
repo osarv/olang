@@ -1,0 +1,5 @@
+# check: fail error[E23, E33, E37, P9]: the compiler supplies LeadingZeros for Bits - choose another name
+# E37, T29e: a type extending an integer has its bit operations, and may not declare one
+type Bits extends U32
+fn (b Bits) LeadingZeros() I64 { return 0 }
+fn main() { }

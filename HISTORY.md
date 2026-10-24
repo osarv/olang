@@ -23137,3 +23137,14 @@ extends it and declares no constructor - a constructor decides what its values a
 `I32.Max` would bypass it. Limits do not adapt (they are typed values, T6): `x I32 = I64.Max` is T6b's error. Found
 while testing: the evaluator refuses reading the bits of a NaN whose payload is the default one (WhyNaNOp - it cannot
 tell `F16.NaN` from an operation's NaN), so the corpus reads `NaN.Bits()` at run time only.
+
+**E37, bit operations.** `x.LeadingZeros()`, `TrailingZeros()`, `PopCount()`, `RotateLeft(n)`, `RotateRight(n)` and
+`ByteSwap()` on every integer type, supplied as `Bits()` is (E33): six `PrimOp`s, checked in `suppliedCall`, verified by
+MIR's `primType`, emitted as `llvm.ctlz/cttz/ctpop/fshl/fshr/bswap` (an 8-bit ByteSwap is the value), and computed by
+the evaluator over the value's bits (`bitOp`), so a global built from them bakes and an assert on them is decided while
+compiling; the corpus checks each against a loop over the bits at every width, baked and at run time, under `-debug`
+too. Decided (mine): the counts are `I64`, as every count and length is (`Len()`); a rotation's count is any integer,
+converted to `I64` and taken modulo the width - LLVM's funnel shifts take it so, and it makes every count defined (a
+negative one rotates the other way), where a shift's out-of-range amount is undefined (E8a); a declared type has them
+only where it extends an integer (T29f) and may not declare one (T29e) - `MethodClashesSupplied` now names E37. Found
+writing the test: `(x >> k) & 1 == 1` still parses as `(x >> k) & (1 == 1)` - item 6 below changes that.

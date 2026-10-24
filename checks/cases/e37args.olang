@@ -1,0 +1,6 @@
+# check: fail error[E14]: expected 1 argument, found 0
+# E37: a rotation takes its count
+fn main() {
+    x U32 = 5
+    y := x.RotateLeft()
+}

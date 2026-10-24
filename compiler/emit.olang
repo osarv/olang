@@ -3606,6 +3606,28 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
             it := t.Referent(r)
             return fe.let("load atomic " $fe.ty(it) ", ptr " $x " seq_cst, align " $fe.size(it))
         }
+        case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount {
+            # E37: one instruction where the target has one; a zero's count is its width (the intrinsic's i1 false)
+            name := "ctpop" if op == typed.PrimOp.PopCount else ("ctlz" if op == typed.PrimOp.LeadingZeros else "cttz")
+            intr := "llvm." $name "." $lt
+            fe.E.declare(intr, $lt " @" $intr "(" $lt $(", i1)" if name != "ctpop" else ")"))
+            c := fe.let("call " $lt " @" $intr "(" $lt " " $x $(", i1 false)" if name != "ctpop" else ")"))
+            return fe.width(c, r, mir.I64T)
+        }
+        case typed.PrimOp.ByteSwap {
+            if t.Bits(r) == 8 { return x }
+            intr := "llvm.bswap." $lt
+            fe.E.declare(intr, $lt " @" $intr "(" $lt ")")
+            return fe.let("call " $lt " @" $intr "(" $lt " " $x ")")
+        }
+        case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
+            # a funnel shift of x with itself, its count taken modulo the width - the count's low bits, which a
+            # truncation keeps
+            n := fe.width(fe.val(fe.arg(args, 1), mir.I64T), mir.I64T, r)
+            intr := "llvm.fsh" $("l" if op == typed.PrimOp.RotateLeft else "r") "." $lt
+            fe.E.declare(intr, $lt " @" $intr "(" $lt ", " $lt ", " $lt ")")
+            return fe.let("call " $lt " @" $intr "(" $lt " " $x ", " $lt " " $x ", " $lt " " $n ")")
+        }
         case _ { }
     }
     y := fe.val(fe.arg(args, 1), t0)

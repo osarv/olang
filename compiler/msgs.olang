@@ -608,6 +608,7 @@ type Diag enum {
     ModuleIdentityClash
     NoLimit
     BitOpNotInteger
+    BitOpCount
 }
 
 # one function each, under the id it is known by
@@ -1252,7 +1253,7 @@ fn DefaultShadowsRequired(text1 String&, text2 String&) Msg { return Msg(Diag.De
 fn MethodClashesInherited(ty String&, text String&) Msg { return Msg(Diag.MethodClashesInherited, "T29e", $ty " inherits a method " $text " from its base - choose another name") }
 
 # ERR_METHOD_CLASHES_SUPPLIED
-fn MethodClashesSupplied(text String&, ty String&) Msg { return Msg(Diag.MethodClashesSupplied, "E23, E33, P9", "the compiler supplies " $text " for " $ty " - choose another name") }
+fn MethodClashesSupplied(text String&, ty String&) Msg { return Msg(Diag.MethodClashesSupplied, "E23, E33, E37, P9", "the compiler supplies " $text " for " $ty " - choose another name") }
 
 # ERR_METHOD_ON_BUILTIN_TYPE
 fn MethodOnBuiltinType(ty String&) Msg { return Msg(Diag.MethodOnBuiltinType, "M19d", "only the prelude declares methods of " $ty " - declare a type of your own over it: 'type T extends ...'") }
@@ -1763,6 +1764,9 @@ fn NoLimit(ty String&, name String&, tail String&) Msg { return Msg(Diag.NoLimit
 
 # a bit operation on what is no integer (E37)
 fn BitOpNotInteger(name String&, ty String&) Msg { return Msg(Diag.BitOpNotInteger, "E37", "'" $name "' is a method of the integer types, and " $ty " is none") }
+
+# a rotation's count of no integer type (E37)
+fn BitOpCount(ty String&) Msg { return Msg(Diag.BitOpCount, "E37", "a rotation's count is an integer, found " $ty) }
 
 # ERR_ATOMIC_NOT_INTEGER
 fn AtomicNotInteger(ty String&) Msg { return Msg(Diag.AtomicNotInteger, "P9", "the atomic operations are methods of the integer types, and " $ty " is none") }

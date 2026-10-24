@@ -1,0 +1,6 @@
+# check: fail error[E37]: a rotation's count is an integer, found F32
+# E37: a rotation's count is an integer
+fn main() {
+    x U32 = 5
+    y := x.RotateRight(F32(1))
+}

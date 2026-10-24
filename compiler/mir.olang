@@ -1285,6 +1285,7 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
     want := match op {
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast => 1
         case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire => 1
+        case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap => 1
         case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl => -1
         case typed.PrimOp.AtomicCompareSwap => 3
         case _ => 2
@@ -1342,6 +1343,18 @@ fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.T
             x := t.Referent(ra) if t.IsRef(ra) else a
             if v.arrayOf(x) == types.UnknownT { v.bad("Len of a " $v.canon(a)) }
             if ty != I64T { v.bad("Len typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount {
+            if not t.IsInt(ra) { v.bad($short($op) " of a " $v.canon(a)) }
+            if ty != I64T { v.bad($short($op) " typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.ByteSwap {
+            if not t.IsInt(ra) { v.bad("ByteSwap of a " $v.canon(a)) }
+            v.sameArgs(op, r, ty)
+        }
+        case typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
+            if not t.IsInt(ra) or t.Repr(v.operandType(v.arg(r, 1))) != I64T { v.bad($short($op) " of a " $v.canon(a)) }
+            if not v.fits(a, ty) { v.bad($short($op) " of a " $v.canon(a) " typed " $v.canon(ty)) }
         }
         case typed.PrimOp.Retire {
             x := t.Referent(ra) if t.IsRef(ra) else a

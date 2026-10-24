@@ -1,0 +1,6 @@
+# check: fail error[E37]: 'PopCount' is a method of the integer types, and F64 is none
+# E37: the bit operations are an integer's; a float's bits are E33's
+fn main() {
+    f F64 = 1.5
+    n := f.PopCount()
+}

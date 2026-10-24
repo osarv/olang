@@ -2229,6 +2229,14 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
             m.refuse(WhyNotModelled)
             return 0
         }
+        case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount, typed.PrimOp.ByteSwap
+             typed.PrimOp.RotateLeft, typed.PrimOp.RotateRight {
+            n I64 = 0
+            if op == typed.PrimOp.RotateLeft or op == typed.PrimOp.RotateRight { n = m.scalar(fi, m.arg(fi, args, 1)) }
+            a := m.scalar(fi, x)
+            if m.halted { return 0 }
+            return bitOp(op, U64(a & m.mask(m.width(at))), 8 * m.width(at), n)
+        }
         nomatch { }
     }
     sh := m.shape(at)
@@ -2255,6 +2263,33 @@ fn (m mut Machine&) prim(fi I64, op typed.PrimOp, ty types.TypeId, args mir.Rang
         return 1 if same == (op == typed.PrimOp.Eq) else 0
     }
     return m.notModelled()
+}
+
+# E37: an integer's bit operation on its pattern a, of w bits (64 at most), n a rotation's count: as the machine
+# instruction gives it - a count as an I64, a rotation's count taken modulo the width, a result as w bits
+fn bitOp(op typed.PrimOp, a U64, w I64, n I64) I64 {
+    if op == typed.PrimOp.PopCount or op == typed.PrimOp.LeadingZeros or op == typed.PrimOp.TrailingZeros {
+        k I64 = 0
+        for i in range w {
+            bit := (a >> U64(w - 1 - i)) & 1 if op == typed.PrimOp.LeadingZeros else (a >> U64(i)) & 1
+            if op == typed.PrimOp.PopCount {
+                if bit == 1 { k++ }
+            } else if bit == 1 {
+                return i
+            }
+        }
+        return k if op == typed.PrimOp.PopCount else w
+    }
+    mask := U64(0) - 1 if w == 64 else (U64(1) << U64(w)) - 1
+    if op == typed.PrimOp.ByteSwap {
+        r U64 = 0
+        for i in range w / 8 { r = r | (((a >> U64(8 * i)) & 0xFF) << U64(w - 8 - 8 * i)) }
+        return I64(r)
+    }
+    k := U64(n & (w - 1))
+    if op == typed.PrimOp.RotateRight { k = (U64(w) - k) & U64(w - 1) }
+    if k == 0 { return I64(a) }
+    return I64(((a << k) | (a >> (U64(w) - k))) & mask)
 }
 
 # a binary operator on two numbers' bits, a's type at (sh its shape) and b's yt

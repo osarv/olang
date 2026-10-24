@@ -3411,6 +3411,35 @@ has `Char.Max`, 255. A declared type that does not extend, or whose constructor 
 Any other name read through a numeric type, and a limit of a type that is not numeric, is a compile-time error naming
 the limits the type has.
 
+### 5.20 Bit operations
+
+**E37.** Every integer type has six methods the compiler supplies, as it supplies E33's:
+
+| method | gives |
+|---|---|
+| `x.LeadingZeros()` | how many zero bits are above `x`'s highest one bit, as an `I64` |
+| `x.TrailingZeros()` | how many zero bits are below `x`'s lowest one bit, as an `I64` |
+| `x.PopCount()` | how many of `x`'s bits are one, as an `I64` |
+| `x.RotateLeft(n)` | `x`'s bits rotated `n` places toward the top, the bits leaving the top coming in at the bottom |
+| `x.RotateRight(n)` | the same toward the bottom |
+| `x.ByteSwap()` | `x`'s bytes in the reverse order; an 8-bit value is itself |
+
+Each reads `x` as the bit pattern of its width - a signed type's sign bit is a bit like any other - and gives a value of
+`x`'s own type but for the three counts. A zero's leading and trailing zeros are its width. A rotation's `n` is of any
+integer type and is taken modulo the width, so every `n` is defined and a negative one rotates the other way:
+`U8(1).RotateLeft(-1)` is `128`. Nothing is checked, and each is one machine instruction where the target has one.
+
+```
+U32(1).LeadingZeros()         # 31
+I64(-1).PopCount()            # 64
+U16(0x1234).ByteSwap()        # 0x3412
+U8(0x81).RotateLeft(1)        # 0x03
+```
+
+In every other respect they are methods (§4.4 M19). A declared type extending an integer type (T29f) has them as it has
+its base's other methods, and may not declare a method of the same name (T29e); a declared type that does not extend
+its base has none of them. They are not supplied for a float, whose bits E33 reads.
+
 ### 5.18 `!`
 
 **E35 (`!`).** A postfix `!` - `f(x)!`, `a.F().G()!`, `(f(x) + g(y))!`, `x[i]!` on a type whose `At` can fail - handles

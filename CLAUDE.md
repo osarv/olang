@@ -361,6 +361,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   the type, never literals (they do not adapt); a declared type has them only where it extends its base and declares no
   constructor (mine: a constructor decides its values). `MaxFinite` was named in the brief and folded into `Max` (mine:
   one way to write it, Rust's meaning). The `T.` namespace reflection will read through.
+- **Bit operations are supplied methods of every integer type (E37, the user's decision 2026-10-24).**
+  `LeadingZeros TrailingZeros PopCount` (an `I64` count; a zero's is its width), `RotateLeft(n) RotateRight(n)` (any
+  integer count, modulo the width, negative the other way - mine), `ByteSwap`; LLVM's intrinsics, the evaluator
+  computing them bit by bit. Inherited through `extends`, never redeclared, as E33's.
 - **Small type rules:** a type cannot embed itself by value (T16); a self-holding array type is an error (T29); an
   inherited array method is never overridden (T29e); `x.Bits()` and `u.F64FromBits()` etc. move a float's IEEE pattern
   (E33); an `Array<T, 0>` has storage of its own (E10); a NaN renders `nan`.

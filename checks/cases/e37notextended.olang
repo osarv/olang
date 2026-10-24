@@ -1,0 +1,7 @@
+# check: fail error[T29f]: Mask declares no 'ByteSwap', and does not extend its base
+# E37, T29f: a declared type that does not extend its base has none of its bit operations
+type Mask U16
+fn main() {
+    m := Mask(3)
+    n := m.ByteSwap()
+}
