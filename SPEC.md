@@ -1478,7 +1478,8 @@ it is a compile-time error at the conversion, with a note at the call.
 
 **T32b (calls).** `s.M(args)`, `s` an `any R&` and `M` a method of `R` or of a trait it extends, calls the function the
 table holds for `M`: one indirect call, its arguments, result and error set those of `R`'s signature, its receiver the
-instance. A `mut` method is called only through a `mut any R&` (T31). A default of `R` (M19e) is called the same way,
+instance - an argument left off takes the default `R`'s signature writes (D8a), whatever the instance's own method's
+says. A `mut` method is called only through a `mut any R&` (T31). A default of `R` (M19e) is called the same way,
 through the table, so the instance's type's own method of that name is the one that runs. Nothing else is reached
 through an `any`: no field, no method `R` does not declare, no operator but `==` (T33), no `Len()` or `[i]`. A task
 calls a function or a function value (P1), never through a table: `spawn s.M()` is a compile-time error naming

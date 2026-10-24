@@ -9434,7 +9434,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                 nomatch { }
             }
             if isDefault {
-                e = c.defaultArg(sp, f, k, recv is not null, ps[k], c.calleeArgs(target))
+                e = c.argDefault(sp, target, f, k, recv is not null, ps[k])
             } else {
                 e = c.litCtor(args[i], ps[k])
                 if e is null { e = c.expr(args[i], ps[k]) }
@@ -9459,7 +9459,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
         k++
     }
     for k < ps.Len() {
-        c.exprs.Push(c.defaultArg(sp, f, k, recv is not null, ps[k], c.calleeArgs(target)))
+        c.exprs.Push(c.argDefault(sp, target, f, k, recv is not null, ps[k]))
         k++
     }
     errs := types.ListId(0) if decided else c.calleeErrors(target, sig)
@@ -9610,6 +9610,39 @@ fn (c mut Checker&) calleeArgs(t typed.Callee&) types.ListId {
         nomatch { }
     }
     return types.ListId(0)
+}
+
+# a parameter's default an argument left off takes (D8a): through an "any"'s table, the trait's signature's - what the
+# call sees (T32b), whatever the instance's own method says
+fn (c mut Checker&) argDefault(sp source.Span, target typed.Callee&c, f I64, k I64, hasRecv Bool, want types.TypeId) typed.Expr&c {
+    match target {
+        case typed.Callee.Dispatch(r, slot, _) {
+            slots := c.P.AnySlots(r)
+            sl := slots[slot % slots.Len()]
+            if sl.Method < 0 { return c.defaultArg(sp, sl.Default, k, true, want, types.ListId(0)) }
+            m := c.traitMethod(sl)
+            i := k - 1
+            if m is null or i < 0 or i >= m.S.Params.Len() or m.S.Params[i].Dflt is null {
+                np := m.S.Params.Len() if m is not null else 0
+                c.err(sp, msgs.ArgCount(np, "" if np == 1 else "s", i))
+                return c.unknown(sp)
+            }
+            d := c.P.T.DeclOf(sl.Trait)
+            mi := c.P.T.DeclModule(d)
+            here := c.fr().File
+            fr := c.fr()
+            inner := c.push(fr.Body, mi, types.VoidT, types.ListId(0))
+            inner.Ctx = c.P.InstanceContext(sl.Trait)
+            inner.Block = fr.Block
+            x := c.exprTo(m.S.Params[i].Dflt!, want)
+            c.defaultReads(x)
+            file := c.fr().File
+            c.pop()
+            if file != here { return typed.Expr.Away(sp, file, x) }
+            return x
+        }
+        nomatch { return c.defaultArg(sp, f, k, hasRecv, want, c.calleeArgs(target)) }
+    }
 }
 
 fn (c mut Checker&) defaultArg(sp source.Span, f I64, k I64, hasRecv Bool, want types.TypeId, iargs types.ListId) typed.Expr&c {

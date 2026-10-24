@@ -442,3 +442,23 @@ test "T34: type cases naming a generic's instances" {
     assert BakedGKinds == "box 7 text t5 dot "
     assert gkinds(Live + 2) == BakedGKinds
 }
+
+# T32b, D8a (the any review, finding 6): an argument left off a call through an any takes the trait's default, which is
+# all the call sees; a call of the type's own method, or generic code over it, takes the method's own
+type Drawn trait {
+    Draw(scale I64 = 2) I64
+}
+type DBtn struct(n I64) { n }
+fn (b DBtn&) Draw(scale I64 = 5) I64 { return b.n * scale }
+fn drawnGen<S Drawn>(s S) I64 { return s.Draw() }
+fn drawn(n I64) String {
+    b := DBtn(n)
+    w any Drawn& = b
+    return $w.Draw() " " $b.Draw() " " $drawnGen(b) " " $drawnGen(w) " " $w.Draw(3)
+}
+BakedDrawn String = drawn(10)
+
+test "D8a: a trait's defaults through an any" {
+    assert BakedDrawn == "20 50 50 20 30"
+    assert drawn(Live + 7) == BakedDrawn
+}
