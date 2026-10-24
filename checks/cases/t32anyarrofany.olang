@@ -1,0 +1,19 @@
+# check: fail the 'any' outlives what this array's elements refer to
+# T32a (the any review, finding 1): an array of anys of a loop body's temporaries, copied into an any kept outside the
+# loop - the slice of it too
+type aSized trait {
+    Len() I64
+}
+type aW trait {
+    Draw() String
+}
+type aBtn struct(label String&) { label }
+fn (b aBtn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    xs := List<any aSized&>()
+    for i in range 3 {
+        a := Array<any aW&>(2, aBtn("first"))
+        a[1] = aBtn("b" $i)
+        xs.Push(a[0:2])
+    }
+}

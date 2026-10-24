@@ -211,6 +211,7 @@ type Diag enum {
     AnyNotTrait
     AnyNeedsMarker
     AnyNotConverted
+    AnyCopyOutlived
     AnyUnmet
     AnyUnmetMethod
     AnyNotMember
@@ -1175,6 +1176,8 @@ fn AnyNotTrait(ty String&) Msg { return Msg(Diag.AnyNotTrait, "T32", "'any' take
 fn AnyNeedsMarker(ty String&) Msg { return Msg(Diag.AnyNeedsMarker, "T32", "an 'any' is always a reference - write 'any " $ty "&'") }
 
 # ERR_ANY_NOT_CONVERTED
+fn AnyCopyOutlived() Msg { return Msg(Diag.AnyCopyOutlived, "T32a", "the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes") }
+
 fn AnyNotConverted(ty1 String&, ty2 String&) Msg { return Msg(Diag.AnyNotConverted, "T32a", "an '" $ty1 "' is never made an '" $ty2 "' - an 'any' is made from its instance's own type, once") }
 
 # ERR_ANY_UNMET

@@ -2167,7 +2167,7 @@ fn (ln mut lowering&) anyMake(args Array<typed.Expr&>&, ty types.TypeId, sp sour
                         item := m.Items[0]
                         v := ln.val(item)
                         if ln.dead { return mir.Operand.None }
-                        if ln.copiesArray(item, item.Type()) { v = ln.arrayCopy(v, item.Type(), sp, at) }
+                        if anyCopiesItem(item) { v = ln.arrayCopy(v, item.Type(), sp, at) }
                         agg := ln.into(st, mir.Rvalue.Aggregate(st, 0, ln.F.Args(mir.Operand[v])), msp)
                         box := ln.into(bt, mir.Rvalue.New(at, agg, bt), sp)
                         return ln.prim(typed.PrimOp.AnyMake, ty, mir.Operand[box, ln.val(args[1])], sp)
@@ -2181,6 +2181,17 @@ fn (ln mut lowering&) anyMake(args Array<typed.Expr&>&, ty types.TypeId, sp sour
     ops := ln.vals(args)
     if ln.dead { return mir.Operand.None }
     return ln.prim(typed.PrimOp.AnyMake, ty, ops, sp)
+}
+
+# whether an array put in an "any"'s box names existing storage, which the box copies (T32a): a read, a slice, or a
+# conversion of either to a type declared over it (T29a, which names its argument's storage) - anything else is new
+fn anyCopiesItem(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, _, _), typed.Expr.Slice(_, _, _) => true
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and anyCopiesItem(args[0])
+        case typed.Expr.Away(_, _, y) => anyCopiesItem(y)
+        case _ => false
+    }
 }
 
 # whether what an enum reference names holds a case: false for a null reference (E32, T17d)

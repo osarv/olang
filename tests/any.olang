@@ -286,3 +286,47 @@ test "K2: anys evaluated while compiling agree with the run time" {
     assert BakedWidgets == widgets(Live + 2)
     assert mix(1) == "count 1, low, cat n1"
 }
+
+# T32a (the any review, findings 1 and 2): an array is copied into the any's box - a local's text converted to a
+# declared type over it (Lab(s), T29a) as much as a plain one - so writing through a mut any changes the box, never
+# the local, and the box lives where the any goes; baked while compiling and run alike
+type Bump trait {
+    mut Bump()
+}
+type BLab extends String
+fn (l mut BLab&) Bump() { l[0] = 'Z' }
+type BNums extends Array<I64>
+fn (n mut BNums&) Bump() { n[0] = 99 }
+
+fn bumped(k I64) String {
+    s := "hello"
+    b mut any Bump& = BLab(s)
+    b.Bump()
+    a := I64[1, 2, k]
+    c mut any Bump& = BNums(a)
+    c.Bump()
+    l := List<mut any Bump&>()
+    l.Push(BLab(s))
+    l.Push(BNums(a))
+    for x in l { x.Bump() }
+    return $s " " $a " " $b
+}
+BakedBumped String = bumped(3)
+
+fn labels(n I64) String {
+    xs := List<any Named&>()
+    for i in range n {
+        t := "lab" $i "-" $(i * 7)
+        xs.Push(Label(t))
+    }
+    churn()
+    return names(xs)
+}
+BakedLabels String = labels(2)
+
+test "T32a: arrays and conversions of them are copied into the box" {
+    assert BakedBumped == "hello I64[1, 2, 3] Zello"
+    assert bumped(Live) == BakedBumped
+    assert BakedLabels == "label lab0-0, label lab1-7"
+    assert labels(Live - 1) == BakedLabels
+}

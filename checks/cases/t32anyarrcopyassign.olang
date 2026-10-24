@@ -1,0 +1,17 @@
+# check: fail the 'any' outlives what this array's elements refer to
+# T32a (the any review, finding 1): an outer any, and an outer struct's any field, assigned a copy of an inner block's
+# array of text
+type aSized trait {
+    Len() I64
+}
+type aHolder struct() {
+    s any aSized?& = null
+}
+fn main() {
+    h := aHolder()
+    for i in range 3 {
+        a := Array<String&>(1, "x")
+        a[0] = "e" $i
+        h.s = a
+    }
+}

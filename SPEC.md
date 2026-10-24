@@ -1456,7 +1456,10 @@ member, T31a) becomes one, `T` its instance's type:
   lands (O18a), as a temporary given a reference is;
 - a **number**, a `Bool`, a `Char`, a type declared over one (T29), and an **array** (text among them) are **copied**:
   their value, from a variable too, is put in new storage built where the `any` lands - there are no references to
-  numbers (T24), and an array's elements are copied with it (T7b);
+  numbers (T24), and an array's elements are copied with it (T7b). A slice of an array, and a conversion of one to a
+  type declared over it (`Lab(s)`, which elsewhere names its argument's storage, T29a), are copied the same way. The
+  copy's elements still name what they named, so what they refer to must outlive where the `any` lands, as an array
+  literal's elements must (O25c) - a compile-time error at the value otherwise;
 - `null` into a nullable `any`, and an `any R&` of the same trait, which is itself (a reference copied, S4a).
 An `any` of another trait is never converted - not to a trait its trait extends, nor from one: a value is made an `any`
 from its own type, once. A type that does not satisfy `R` is a compile-time error at the conversion naming the first

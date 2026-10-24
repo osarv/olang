@@ -1,0 +1,14 @@
+# check: fail the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+# T32a (the any review, finding 1): an array copied into an any keeps its elements' references - text a loop body built,
+# kept in an outer list, would dangle once the body closed
+type aSized trait {
+    Len() I64
+}
+fn main() {
+    xs := List<any aSized&>()
+    for i in range 4 {
+        a := Array<String&>(2, "x")
+        a[0] = "e" $i
+        xs.Push(a)
+    }
+}
