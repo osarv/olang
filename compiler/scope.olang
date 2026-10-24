@@ -5022,11 +5022,43 @@ fn (s mut Scoper&) isFresh(x typed.Expr&) Bool {
         case typed.Expr.Seq(_, _, q) => s.isFresh(q.X)
         case typed.Expr.Away(_, _, y) => s.isFresh(y)
         case typed.Expr.Try(_, _, t) => s.isFresh(t.X)
-        case typed.Expr.Cond(_, _, c) => s.isFresh(c.A) and s.isFresh(c.B)
+        # a conditional or a value match giving new values and constants only (E28, S12b): a temporary, every new value
+        # built where it lands - a constant (text data, null) lives anywhere a new value would
+        case typed.Expr.Cond(_, _, c) => s.newOrConst(c.A) and s.newOrConst(c.B) and (s.isFresh(c.A) or s.isFresh(c.B))
+        case typed.Expr.Match(_, _, m) => s.matchFresh(m)
         case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() > 0 and s.isFresh(args[0])
         case typed.Expr.Fn(_, _, f) => s.fnFresh(f)
         case _ => false
     }
+}
+
+# whether a choice's value is new storage or a constant (E28): no existing storage it would have to be judged by
+fn (s mut Scoper&) newOrConst(x typed.Expr&) Bool {
+    if x is null { return true }
+    if s.isFresh(x) or s.isNullLit(x) or s.staticLiteral(x) { return true }
+    return match x {
+        case typed.Expr.Data(_, _, _, _) => true
+        case typed.Expr.Away(_, _, y) => s.newOrConst(y)
+        case typed.Expr.Cond(_, _, c) => s.newOrConst(c.A) and s.newOrConst(c.B)
+        case _ => false
+    }
+}
+
+# a value match each of whose values is new storage or a constant, one at least new (E28, S12b); an arm giving none
+# leaves
+fn (s mut Scoper&) matchFresh(m typed.Match&) Bool {
+    if not m.IsValue { return false }
+    anyNew := false
+    for a in m.Arms {
+        if a is null or a.Value is null { continue }
+        if not s.newOrConst(a.Value) { return false }
+        if s.isFresh(a.Value) { anyNew = true }
+    }
+    if m.NoMatch is not null and m.NoMatch.Value is not null {
+        if not s.newOrConst(m.NoMatch.Value) { return false }
+        if s.isFresh(m.NoMatch.Value) { anyNew = true }
+    }
+    return anyNew
 }
 
 fn (s mut Scoper&) fnFresh(f typed.FnVal&) Bool {
