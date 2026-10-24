@@ -112,6 +112,7 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     ReusedAt Map<I64, I64>          # a reused module's index in Reuse
     Made List<Reused>
     Redo Bool = false               # Objects found a reused module cut otherwise than it would now be: emit again without
+    testSyms Map<I64, String&>      # each test's symbol, by its body (testSym)
 }
 
 # a module's objects as one emission wrote them, kept to stand for it in a later one (B3i): its index, its parts' names,
@@ -222,12 +223,16 @@ fn (e mut Emitter&) Objects() List<Object> {
             e.Made.Push(made)
         }
     }
-    # B3d: the instances in an object of their own where nothing is optimized (-debug: an edit to the root recompiles
-    # only its own code), and in the root's otherwise - as stage 0's - so the root's code inlines the instances it
-    # calls before the link: a loop over a Vec in the root, its At and Len in another object, measured 2x slower
-    # (`for x in v`, bench/vec.olang walk), the link's optimization not recovering what the module's missed
-    if e.Debug and used.Has(HomeInst) { e.parts(out, $mods[root].Identity, ObjectKind.Instances, HomeInst, false, split) }
-    e.parts(out, $mods[root].Identity, rootKind, root, not e.Debug, split)
+    # B3d: the instances in the root's object where it is one object - as stage 0's - so the root's code inlines the
+    # instances it calls before the link: a loop over a Vec in the root, its At and Len in another object, measured 2x
+    # slower (`for x in v`, bench/vec.olang walk), the link's optimization not recovering what the module's missed.
+    # Where objects are cut into parts (-debug, and a program linking by ThinLTO) the root's parts already cut its code
+    # from the instances it calls, so the instances have parts of their own: an edit to the root then leaves them as
+    # they were, where a part mixing the two changed with every edit - and since every module imports instances, so did
+    # the cache key of every module's ThinLTO backend (a test build of tests/shared.olang relinked in 6 s, not 1)
+    inst := split and used.Has(HomeInst)
+    if inst { e.parts(out, $mods[root].Identity, ObjectKind.Instances, HomeInst, false, split) }
+    e.parts(out, $mods[root].Identity, rootKind, root, not inst, split)
     return out
 }
 
@@ -235,16 +240,35 @@ fn (e mut Emitter&) Objects() List<Object> {
 # PartSize, as many parts as it takes - the first named identity, the others identity-K
 fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKind, home I64, alsoInst Bool, split Bool
     inst mut List<String&>& = null) {
-    size I64 = 0
-    for i in range e.itemSym.Len() {
-        h := e.itemHome[i]
-        if h == home or (alsoInst and h == HomeInst) { size += e.itemText[i].Len() }
+    # a test build's root cut into parts: its tests (and the harness naming them) apart from the code they call, in
+    # parts of their own, a quarter the size - nothing imports a test, so an edit to one recompiles its part and
+    # relinks only that part's code, where a part holding the functions tests call is imported by every part calling
+    # them, all of which a ThinLTO link optimizes again when it changes (an edit to a test of tests/shared.olang
+    # recompiled a 2 MB part and redid 15 of its 35 modules' code)
+    tests := split and e.Tests and home == e.P.L.Root
+    groups := 2 if tests else 1
+    for g in range groups {
+        grp := g if tests else -1
+        size I64 = 0
+        for i in range e.itemSym.Len() {
+            h := e.itemHome[i]
+            if (h == home or (alsoInst and h == HomeInst)) and (grp < 0 or e.groupOf(i) == grp) { size += e.itemText[i].Len() }
+        }
+        cut := PartSize / 4 if grp == 1 else PartSize
+        n := (size + cut - 1) / cut if split else 1
+        if n < 1 { n = 1 }
+        if grp == 1 and size == 0 { continue }
+        for k in range n {
+            name := ($identity if k == 0 else $identity "-" $k) if grp != 1 else $identity "-t" $k
+            out.Push(Object($name, kind, e.assemble(home, alsoInst, k, n, inst, grp)))
+        }
     }
-    n := (size + PartSize - 1) / PartSize if split else 1
-    if n < 1 { n = 1 }
-    for k in range n {
-        out.Push(Object($identity if k == 0 else $identity "-" $k, kind, e.assemble(home, alsoInst, k, n, inst)))
-    }
+}
+
+# which of a test build's root's groups item i is in (parts): 1 a test or the harness, 0 anything else
+fn (e Emitter&) groupOf(i I64) I64 {
+    sym := e.itemSym[i]
+    return 1 if sym.StartsWith("olang_test_") or sym == "main" else 0
 }
 
 # the IR of one part an object is cut into, at most (Objects)
@@ -569,11 +593,14 @@ fn symbolChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' or c
 # one object's text: the items homed at home (with the instances' too, alsoInst) in its part of parts, each shared or local item they name
 # copied in (a local one renamed, numbered in the order named), a declaration for each item they name that lives in
 # another object, and the types they name
-fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut List<String&>& = null) String {
+fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 1, inst mut List<String&>& = null
+    group I64 = -1) String {
     mine List<I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
-        if (h == home or (alsoInst and h == HomeInst)) and e.partOf(i, parts) == part { mine.Push(i) }
+        if (h == home or (alsoInst and h == HomeInst)) and (group < 0 or e.groupOf(i) == group) and e.partOf(i, parts) == part {
+            mine.Push(i)
+        }
     }
     syms := e.itemSym
     sorted := mine.ToArray()
@@ -591,7 +618,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
     rename Map<I64, String&>
     # the objects holding the instances: what is merged into another (mergeSame) named as that one, an instance merged
     # written as an alias of it
-    merging := alsoInst and e.merged.Len() > 0
+    merging := (alsoInst or home == HomeInst) and e.merged.Len() > 0
     if merging {
         for m in e.merged { rename.Put(m.Key, $e.itemSym[m.Value]) }
     }
@@ -809,7 +836,7 @@ fn (e mut Emitter&) bodySym(id I64) String {
         case typed.BodyOf.Ctor(ty, twin) => types.Symbol($t.Canon(ty) ".ctor" $("" if twin == types.ListId(0) else $"<" $t.CanonList(twin) ">"))
         case typed.BodyOf.Dtor(ty) => types.Symbol($t.Canon(ty) ".dtor")
         case typed.BodyOf.Lambda(_) => "olang_lambda_" $id
-        case typed.BodyOf.Test(_) => "olang_test_" $id
+        case typed.BodyOf.Test(_) => e.testSym(id)
         case typed.BodyOf.Global(m, n) => types.Symbol($e.P.L.Mods[m].Identity "." $e.text(n) ".init")
         case typed.BodyOf.Case(_, _) => "olang_case_" $id
         case typed.BodyOf.Cond(_, _) => "olang_cond_" $id
@@ -4496,6 +4523,27 @@ fn (e mut Emitter&) harness(tests List<I64>) {
 }
 
 # a test's name, as its declaration writes it (between the quotes)
+# a test's symbol: the hash of its name, and after it how many tests before it had that hash - so it names the test,
+# not where its body is in the program's table, and an edit elsewhere in the root leaves every test's symbol (and so
+# the part of the root's object it is in, partOf) as it was
+fn (e mut Emitter&) testSym(id I64) String {
+    s := try e.testSyms.Get(id) catch default ""
+    if s != "" { return $s }
+    seen Map<I64, I64>
+    for i in range e.Lw.Bodies.Len() {
+        match e.Lw.Bodies[i].Of {
+            case typed.BodyOf.Test(_) {
+                h := e.testName(i).Hash()
+                k := try seen.Get(h) catch default 0
+                seen.Put(h, k + 1)
+                e.testSyms.Put(i, $"olang_test_" $U64(h).Format(16) $("" if k == 0 else $"_" $k))
+            }
+            case _ { }
+        }
+    }
+    return try e.testSyms.Get(id) catch default $"olang_test_" $id
+}
+
 fn (e mut Emitter&) testName(id I64) String {
     m := e.P.L.Mods[e.P.L.Root]
     sp := e.Lw.Bodies[id].Sp
