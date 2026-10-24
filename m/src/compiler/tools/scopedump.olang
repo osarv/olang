@@ -1,0 +1,123 @@
+# scopedump - every body of a program checked by the self-hosted checker and judged by its scope pass
+# (compiler/scope.olang, M6), for its acceptance (compiler/DESIGN.md section 4). Apart from checkdump so that the
+# checker's acceptance stays its own.
+#
+#     scopedump [-D NAME=VALUE]... [-t] [-plan PATTERN] FILE...
+#
+# For each file, "== FILE", then the program it is the root of loaded, its names resolved, every body checked and its
+# scopes judged: the diagnostics said, rendered as the compiler renders them, then "gap PATH:LINE:COL WHAT" for each
+# construct the scope pass met and does not judge yet, and "bodies N judged J unjudged U" - U the bodies with code the pass
+# skipped, a type in them left unknown by the checker. compiler/tools/scopediff.olang compares
+# them with stage 0's goldens. -D defines build constants; -t makes TestBuild true and checks the root module's test
+# blocks. -plan prints the plan of each body whose place (PATH:LINE) contains PATTERN.
+
+import "std/os"
+import "std/io"
+import "../source"
+import "../diag"
+import "../cond"
+import "../fetch"
+import "../load"
+import resolver "../names"
+import "../generic"
+import typecheck "../check"
+import "../typed"
+import "../types"
+import "../scope"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PrintErrln("usage: scopedump [-D NAME=VALUE]... [-t] [-plan PATTERN] FILE...") catch io.IoError { }
+        os.Exit(2)
+    }
+    os.RunOnStack(1 << 30, fn() { run(args) })
+}
+
+fn run(args Array<String&>&) {
+    out := io.Writer(1)
+    std := try os.Env("OLANG_STD") catch default "std"
+    defines List<String&>
+    testBuild := false
+    planAt String&args = ""
+    k I64 = 1
+    for k < args.Len() and args[k].StartsWith("-") {
+        if args[k] == "-t" {
+            testBuild = true
+        } else if args[k] == "-D" and k + 1 < args.Len() {
+            k++
+            defines.Push(args[k])
+        } else if args[k] == "-plan" and k + 1 < args.Len() {
+            k++
+            planAt = args[k]
+        }
+        k++
+    }
+    for i in range k, args.Len() {
+        path := args[i]
+        out.Write("== " $path "\n")
+        d := diag.Diagnostics(false)
+        consts := cond.Consts()
+        consts.Builtins("linux", "x86_64", "", 0, -1, false, false, testBuild)
+        for f in defines { try consts.Define(f, d) catch { } }
+        f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
+        l := load.Loader(std, consts, f, source.Names(), d)
+        l.Load(path)
+        r := resolver.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        c := typecheck.Checker(p, testBuild)
+        c.CheckProgram()
+        s := scope.Scoper(p, c.Bodies)
+        cr mut typecheck.Checker& = c
+        s.InstNote = fn(inst I64) String { return cr.InstNote(inst) }
+        s.Spell = fn(t types.TypeId) String { return cr.Ty(t) }
+        s.Run()
+        out.Write(d.Render())
+        for g in s.Gaps { out.Write("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What "\n") }
+        judged I64 = 0
+        unjudged I64 = 0
+        for b in range c.Bodies.Len() {
+            if s.Judged(b) {
+                judged++
+            } else if c.Bodies[b].Root != null {
+                unjudged++
+            }
+            if planAt.Len() == 0 { continue }
+            body := c.Bodies[b]
+            where := d.Locate(body.File, I64(body.Sp.Start))
+            if (try where.Find(planAt) catch default -1) < 0 { continue }
+            out.Write("-- plan B" $b " " $where "\n" $body.Print(p.T) $varsText(body) $planText(s.Plans[b]) $s.Summary(b))
+        }
+        out.Write("bodies " $c.Bodies.Len() " judged " $judged " unjudged " $unjudged "\n")
+    }
+    try out.Flush() catch io.IoError { os.Exit(1) }
+}
+
+# a body's scope variables as text, in the order a call passes them
+fn varsText(b typed.Body&) String {
+    t := StringBuilder()
+    for k in range b.Vars.Len() { t.Push("var " $k " " $b.Vars[k] "\n") }
+    for k in range b.Locals.Len() { t.Push("local " $k " " $b.Locals[k].Kind " " $b.Locals[k].Marked " in " $b.Locals[k].In "\n") }
+    return t.ToString()
+}
+
+# a plan as text: each site's scope, each local's storage that is no stack slot, each call's passed scopes
+fn planText(pl typed.Plan&) String {
+    b := StringBuilder()
+    for i in range pl.Built.Len() {
+        b.Push("site " $i " built " $pl.Built[i])
+        n I64 = 0
+        for {
+            sc := pl.Passed(typed.SiteId(I32(i)), n)
+            if sc == typed.Scope.Unset { break }
+            b.Push($(" passes" if n == 0 else ",") " " $sc)
+            n++
+        }
+        b.PushChar('\n')
+    }
+    for i in range pl.Stored.Len() {
+        if pl.Stored[i] != typed.Scope.Frame { b.Push("local " $i " stored " $pl.Stored[i] "\n") }
+    }
+    return b.ToString()
+}

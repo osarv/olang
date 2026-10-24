@@ -1,0 +1,110 @@
+# benchlib - what the benchmark drivers (run.olang, rungemm.olang, runfused.olang, ir.olang, repro/opt.olang) share:
+# the compiler to build with, running a program without a shell in the benchmark directory, the lock BENCH_LOCK names,
+# and saying things. They were shell scripts; they run from the repository root.
+
+import "std/os"
+import "std/io"
+
+extern fn flock(fd I32, op I32) I32
+
+# the benchmark directory, relative to the repository root
+Dir String& = "bench"
+
+# text on standard output
+fn Say(t String&) {
+    try io.Print(t) catch io.IoError { }
+}
+
+# text on standard error
+fn Warn(t String&) {
+    try io.PrintErr(t) catch io.IoError { }
+}
+
+# says why on standard error and ends with status
+fn Fail(why String&, status I32) noreturn {
+    Warn($why "\n")
+    os.Exit(status)
+}
+
+# the compiler: $OLANG (relative to the repository root when it is relative), else build/olang - as an absolute path.
+# A compiler named is used as it is; when the default is not built, make builds it (make bootstrap)
+fn Compiler() String {
+    root := try os.Cwd() catch os.OsError { Fail("cannot find the working directory", 1) }
+    given := try os.Env("OLANG") catch default ""
+    path String = $given
+    if path.Len() == 0 {
+        path = "build/olang"
+        if not os.Exists(path) { Capture(String&["make", path]) }
+    }
+    if not path.StartsWith("/") { path = $root "/" $path }
+    return path
+}
+
+# runs args[0] with args in dir (the repository root for ""), its output gathered and given back; a program that cannot
+# be started ends the driver
+fn Capture(args Array<String&>&, dir String& = "") os.Output {
+    return try os.Exec(args, "", true, dir) catch os.OsError { Fail("cannot run " $args[0], 1) }
+}
+
+# runs args[0] with args in dir, its output going where ours does; says its exit status
+fn Run(args Array<String&>&, dir String& = "") I32 {
+    o := try os.Exec(args, "", false, dir) catch os.OsError { Fail("cannot run " $args[0], 1) }
+    return o.Status
+}
+
+# runs args[0] in dir (the benchmark directory unless said) with its output going where ours does; a status other than 0
+# ends the driver with it, as "set -e" did
+fn Must(args Array<String&>&, dir String& = "bench") {
+    status := Run(args, dir)
+    if status != 0 { os.Exit(status) }
+}
+
+# the same, its output gathered and dropped (">/dev/null")
+fn MustQuietly(args Array<String&>&, dir String& = "bench") {
+    o := Capture(args, dir)
+    if o.Status != 0 { os.Exit(o.Status) }
+}
+
+# the same, its output written to a file ("> path")
+fn MustInto(args Array<String&>&, dir String&, path String&) {
+    o := Capture(args, dir)
+    if o.Stderr.Len() > 0 { Warn(o.Stderr) }
+    try os.WriteFile($dir "/" $path, o.Stdout) catch os.OsError { Fail("cannot write " $path, 1) }
+    if o.Status != 0 { os.Exit(o.Status) }
+}
+
+# the names ending in .ll in dir/build that are none of the ones a link of a program leaves out, as "build/NAME" and in
+# byte order; the driver ends with status 1 when there are none (grep -v finding nothing)
+fn Objects(dir String&, leaveOut Array<String&>&) List<String&> {
+    l := List<String&>()
+    names := try os.ReadDir($dir "/build") catch os.OsError { Fail("cannot read " $dir "/build", 2) }
+    for n in names {
+        if not n.EndsWith(".ll") { continue }
+        skip := false
+        for suffix in leaveOut {
+            if n.EndsWith(suffix) { skip = true }
+        }
+        if not skip { l.Push("build/" $n) }
+    }
+    if l.Len() == 0 { os.Exit(1) }
+    return l
+}
+
+# $BENCH_LOCK, when set, locked for the rest of the run - on a shared machine, the lock other heavy jobs take, so nothing
+# heavy runs beside the measurements
+fn TakeLock() {
+    path := try os.Env("BENCH_LOCK") catch default ""
+    if path.Len() == 0 { return }
+    fd := try os.Create(path) catch os.OsError { Fail("cannot open " $path, 1) }
+    Warn("waiting for " $path " ...\n")
+    flock(fd, 2)
+}
+
+# the words of a text split at blanks, none of them empty
+fn Words(t String&) List<String&> {
+    l := List<String&>()
+    for w in t.Split(" ") {
+        if w.Len() > 0 { l.Push($w) }
+    }
+    return l
+}

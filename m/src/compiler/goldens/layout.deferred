@@ -1,0 +1,24 @@
+# the types compiler/tools/layoutdiff.olang lets the self-hosted type table leave unlaid ("deferred"), one key per line
+# as compiler/goldens/layout.txt writes it, with why. Each needs what M5a does not have yet; when the milestone that
+# brings it lands, its lines go and layoutdiff holds those types to stage 0's layouts too.
+#
+# an array length a call computes (T7c): the length needs the compile-time evaluator (M8)
+tests/shared:C2eBlock
+tests/shared:C2eBuf<F64>
+tests/shared:C2eBuf<I32>
+tests/shared:KBlock
+tests/shared:KfCalled<3>
+fn() tests/shared:C2eBuf<F64>
+fn() tests/shared:C2eBuf<I32>
+fn() tests/shared:KBlock
+fn() tests/shared:KfCalled<3>
+fn(I32) tests/shared:C2eBlock
+# a type only a top-level if a call decides declares (B9c): the branch is chosen by the evaluator (M8)
+checks/cases/b9scanbranch:Mode
+# a field ':=' from a slice of a known length (T7c): its type is the checker's, which M5a does not have
+checks/cases/rv9ctorview:K
+fn(I64) checks/cases/rv9ctorview:K
+fn(I64) tests/shared:Rv9Large
+fn(I64) tests/shared:Rv9Small
+tests/shared:Rv9Large
+tests/shared:Rv9Small

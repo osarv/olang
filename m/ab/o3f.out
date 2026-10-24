@@ -1,0 +1,4 @@
+o3f base round1 | clean 45.17 119.17 2.30 | noop 2.03 1.56 0.45 | leaf 4.00 3.41 0.54 | midcheck 12.03 31.78 0.94 | newinst 28.18 89.78 1.08
+o3f final round1 | clean 39.30 119.65 3.52 | noop 1.60 1.24 0.34 | leaf 3.46 2.97 0.44 | midcheck 9.12 21.65 0.66 | newinst 11.32 29.93 0.88
+o3f base round2 | clean 77.33 129.89 2.38 | noop 2.08 1.47 0.51 | leaf 4.21 3.40 0.59 | midcheck 26.95 31.59 1.03 | newinst 71.39 92.83 1.09
+o3f final round2 | clean 84.45 122.04 3.31 | noop 1.67 1.20 0.32 | leaf 3.89 2.95 0.49 | midcheck 23.48 27.57 0.71 | newinst 35.25 32.53 1.07

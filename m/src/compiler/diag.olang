@@ -1,0 +1,910 @@
+# diag - the compiler's diagnostics: what it found wrong, where, and how it is shown (compiler/DESIGN.md section 1.3).
+#
+# A pass reports an error - a Msg from msgs, and where it is about - and may add notes to it. Nothing is written as it is
+# found: Render writes them all at the end, in source order (by file, in the order files were first reported against,
+# then by line), whatever order the passes found them in. Each is one row in the form compilers write and editors read
+# (B11):
+#
+#     path:line:col: error[RULE]: text
+#        12 | the source line
+#           |       ^~~~~
+#     path:line:col: note: text
+#
+# with colour only where a person reads them on a terminal. -e RULE prints a rule's text from the specification beside
+# the compiler (B11a) - Explain.
+#
+# What a branch the build decides holds (B9, S8b) is held until the branch is decided (DESIGN.md section 2, point 12):
+# Hold opens a group the diagnostics reported after it belong to, and Choose or Drop decides it. A group never decided
+# reports nothing.
+
+import "std/os"
+import "msgs"
+import "source"
+
+# what a diagnostic is about: a span of a file's text, a line of one known only by its number, a whole file, or the
+# compilation as a whole. A file is the number AddFile gave it
+type Where enum {
+    Nowhere
+    File(file I64)
+    Line(file I64, line I64)
+    Span(file I64, start I64, end I64)
+}
+
+# an error, as reported
+type record struct(at Where, rule String&, text String&, kind msgs.Diag, group I64, oncePerLine Bool) {
+    at
+    rule
+    text
+    kind
+    group
+    oncePerLine
+}
+
+# a note on the error numbered rec
+type note struct(rec I64, at Where, text String&) {
+    rec
+    at
+    text
+}
+
+# what an error is reported inside - a generic's body checked for one instantiation (G16): every error reported while
+# one is open carries a note saying so, innermost first. An empty text is no context of its own
+type context struct(at Where, text String&) {
+    at
+    text
+}
+
+# the diagnostics of one compilation. color: write the terminal's colours (ColorWanted says whether to)
+type Diagnostics struct(Color Bool) {
+    Color
+    paths := List<String&>()
+    texts := List<String&>()
+    library := List<Bool>()
+    starts := List<I64>()           # every file's line starts, one file's after another's, made when first needed
+    startsFrom := List<I64>()       # per file: where its line starts begin in starts, or -1 until they are made
+    startsLen := List<I64>()
+    records := List<record>()
+    notes := List<note>()
+    groupParent := List<I64>()      # per group: the group it was opened inside, or -1
+    groupState := List<I64>()       # per group: Pending, Chosen, Dropped or Cut
+    held := List<I64>()             # the groups open now, innermost last
+    contexts := List<context>()     # the contexts open now, innermost last
+    ctxFrom I64 = 0                 # the first of them in effect: those below belong to a body set aside (ContextBase)
+    scopeOn Bool = false            # inside a statement's group of errors about where things live (ScopeGroupStart)
+    scopeSeen Bool = false
+    yielding := List<I64>()         # errors a later one of the same text at the same place replaces (Yield)
+    fatalAt Where = Where.Nowhere
+    fatalRule String& = ""
+    fatalText String& = ""
+    fatal Bool = false
+}
+
+Pending I64 = 0
+Chosen I64 = 1
+Dropped I64 = 2
+Cut I64 = 3          # dropped because a branch before it in its chain was taken
+
+# ---- files ----
+
+# a file diagnostics may be about: its path as written in them, its text, and whether it is the standard library's
+# (an error met in that, while it is checked for one of the program's uses of it, is reported at that use). The number
+# names it in a Where
+fn (d mut Diagnostics&) AddFile(path String&, text String&, library Bool = false) I64 {
+    d.paths.Push($path)
+    d.texts.Push(text)
+    d.library.Push(library)
+    d.startsFrom.Push(-1)
+    d.startsLen.Push(0)
+    return d.paths.Len() - 1
+}
+
+# the line (from 1) offset at lies on in file, and the offset that line starts at
+fn (d mut Diagnostics&) lineOf(file I64, at I64) I64, I64 {
+    if d.startsFrom[file] < 0 {
+        d.startsFrom[file] = d.starts.Len()
+        made := source.LineStarts(d.texts[file])
+        for s in made { d.starts.Push(I64(s)) }
+        d.startsLen[file] = made.Len()
+    }
+    from := d.startsFrom[file]
+    lo I64 = 0                      # the last line starting at or before at is between lo and hi
+    hi I64 = d.startsLen[file] - 1
+    for lo < hi {
+        mid := (lo + hi + 1) / 2
+        if d.starts[from + mid] <= at { lo = mid } else { hi = mid - 1 }
+    }
+    return lo + 1, d.starts[from + lo]
+}
+
+# a file's path, as the build names it
+fn (d Diagnostics&) PathOf(file I64) String { return $d.paths[file] if file >= 0 and file < d.paths.Len() else "?" }
+
+# the line an offset of a file is on (B2e: where a debugger shows the code)
+fn (d mut Diagnostics&) LineAt(file I64, at I64) I64 {
+    if file < 0 or file >= d.paths.Len() { return 0 }
+    line, _ := d.lineOf(file, at)
+    return line
+}
+
+# where an offset of a file is, as a row writes it: "PATH:LINE:COL"
+fn (d mut Diagnostics&) Locate(file I64, at I64) String {
+    if file < 0 or file >= d.paths.Len() { return "?" }
+    line, start := d.lineOf(file, at)
+    return $d.paths[file] ":" $line ":" $(at - start + 1)
+}
+
+# ---- reporting ----
+
+# reports an error at where m is about; the number it gives names it to Note, and is -1 for an error not reported (the
+# second about where something lives in one statement, ScopeGroupStart)
+fn (d mut Diagnostics&) Error(at Where, m msgs.Msg) I64 { return d.report(at, m, false) }
+
+# the same, unless an error of m's kind was already reported this way on that line - one cause several checks meet
+fn (d mut Diagnostics&) ErrorOncePerLine(at Where, m msgs.Msg) I64 { return d.report(at, m, true) }
+
+fn (d mut Diagnostics&) report(at Where, m msgs.Msg, oncePerLine Bool) I64 {
+    if d.scopeOn and isScopeRule(m.Rule) {
+        if d.scopeSeen { return -1 }
+        d.scopeSeen = true
+    }
+    # an error met in the library is reported at the program's use of it - the innermost context in the program's own
+    # files - with a note at the library's line
+    use := d.programUse(at)
+    where Where = at if use < 0 else d.contexts[use].at
+    group I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
+    d.records.Push(record(where, $m.Rule, $m.Text, m.Kind, group, oncePerLine))
+    rec := d.records.Len() - 1
+    top := d.contexts.Len()
+    if use >= 0 {
+        d.notes.Push(note(rec, at, $msgs.NoteInLibrary().Text))
+        top = use + 1
+    }
+    # the innermost contexts, and always the outermost - the program's own use that began the chain (G16b)
+    outer I64 = -1
+    valid I64 = 0
+    for i in range d.ctxFrom, top {
+        if d.contexts[i].text.Len() == 0 { continue }
+        if outer < 0 { outer = i }
+        valid++
+    }
+    inner I64 = 2 if valid > 3 else 3
+    shown I64 = 0
+    i := top - 1
+    for i >= d.ctxFrom and shown < inner {
+        if d.contexts[i].text.Len() > 0 {
+            if i == outer and valid > 3 { break }
+            d.notes.Push(note(rec, d.contexts[i].at, $d.contexts[i].text))
+            shown++
+        }
+        i--
+    }
+    if valid > 3 { d.notes.Push(note(rec, d.contexts[outer].at, $d.contexts[outer].text)) }
+    return rec
+}
+
+# a note on the error numbered rec - nothing when that error was not reported
+fn (d mut Diagnostics&) Note(rec I64, at Where, m msgs.Msg) {
+    if rec < 0 { return }
+    d.notes.Push(note(rec, at, $m.Text))
+}
+
+# G16b: the error numbered rec yields to a later one of the same text at the same place - one an instance of a generic
+# reported where what its note would say needs bindings two variables share, so another instance's says it
+fn (d mut Diagnostics&) Yield(rec I64) {
+    if rec >= 0 { d.yielding.Push(rec) }
+}
+
+# an error that ends the compilation: Render writes it after every other, as a row with no line and no excerpt
+fn (d mut Diagnostics&) Fatal(at Where, m msgs.Msg) {
+    d.fatal = true
+    d.fatalAt = at
+    d.fatalRule = $m.Rule
+    d.fatalText = $m.Text
+}
+
+# the rules about where something lives: a statement reports the first error of these (B11) - a scope found wrong is
+# wrong for every check that reads it after, and the first one says what to change
+fn isScopeRule(rule String&) Bool {
+    if rule.Len() >= 2 and rule[0] == 'O' and rule[1].IsDigit() { return true }
+    return rule.StartsWith("C2d") or rule.StartsWith("T17c")
+}
+
+# between Start and End - a statement - only the first error about where something lives is reported; End takes what
+# Start gave, so statements nest (a catch block's, a lambda's)
+fn (d mut Diagnostics&) ScopeGroupStart() I64 {
+    saved I64 = (1 if d.scopeOn else 0) + (2 if d.scopeSeen else 0)
+    d.scopeOn = true
+    d.scopeSeen = false
+    return saved
+}
+
+fn (d mut Diagnostics&) ScopeGroupEnd(saved I64) {
+    d.scopeOn = saved % 2 == 1
+    d.scopeSeen = saved / 2 == 1
+}
+
+# ---- contexts ----
+
+# every error reported until the matching PopContext carries a note at at saying text - "instantiated here" (G16)
+fn (d mut Diagnostics&) PushContext(at Where, text String&) { d.contexts.Push(context(at, $text)) }
+
+fn (d mut Diagnostics&) PopContext() { try d.contexts.Pop() catch { } }
+
+# the contexts from the open ones' count on are in effect, those below set aside - a body checked inside another's
+# check has its own: what was in effect before, for the matching call to give back
+fn (d mut Diagnostics&) ContextBase(from I64) I64 {
+    old := d.ctxFrom
+    d.ctxFrom = from
+    return old
+}
+
+fn (d Diagnostics&) ContextDepth() I64 { return d.contexts.Len() }
+
+fn (d Diagnostics&) RecordCount() I64 { return d.records.Len() }
+
+# whether an error was reported inside [from, to) of a file - a body a syntax error was found in, whose rest the
+# checker reads as recovered
+fn (d Diagnostics&) ErrorWithin(file I64, from I64, to I64, upto I64) Bool {
+    for i in range upto {
+        if i >= d.records.Len() { break }
+        r := d.records[i]
+        if not d.mayReport(r.group) { continue }
+        match r.at {
+            case Where.Span(f, s, _) { if f == file and s >= from and s < to { return true } }
+            nomatch { }
+        }
+    }
+    return false
+}
+
+# whether an error was reported before the records' count was upto - a syntax error that may have hidden what is checked
+# after it (B4: a missing main is said only where none was)
+fn (d Diagnostics&) ErrorBefore(upto I64) Bool {
+    for i in range upto {
+        if i >= d.records.Len() { break }
+        if d.mayReport(d.records[i].group) { return true }
+    }
+    return false
+}
+
+# whether what group g holds may still be reported: neither it nor a group it is inside dropped or cut off - one still
+# pending may yet be chosen. Held diagnostics of a branch the build did not take were recorded and never are
+fn (d Diagnostics&) mayReport(group I64) Bool {
+    g := group
+    for g >= 0 {
+        if d.groupState[g] == Dropped or d.groupState[g] == Cut { return false }
+        g = d.groupParent[g]
+    }
+    return true
+}
+
+# the innermost open context in the program's own files, when at is in the library: the use of the library's code at
+# was met for. -1 when there is none
+fn (d Diagnostics&) programUse(at Where) I64 {
+    if not d.isLibrary(at) { return -1 }
+    i := d.contexts.Len() - 1
+    for i >= d.ctxFrom {
+        if d.contexts[i].text.Len() > 0 and not d.isLibrary(d.contexts[i].at) { return i }
+        i--
+    }
+    return -1
+}
+
+# where an error at at is reported: the program's use of the library's code at is in, or at itself (B11)
+fn (d Diagnostics&) UseOf(at Where) Where {
+    use := d.programUse(at)
+    return at if use < 0 else d.contexts[use].at
+}
+
+# the innermost context open now - where and its note - and "" for none
+fn (d Diagnostics&) TopContext() Where, String {
+    i := d.contexts.Len() - 1
+    for i >= d.ctxFrom {
+        if d.contexts[i].text.Len() > 0 { return d.contexts[i].at, $d.contexts[i].text }
+        i--
+    }
+    return Where.Nowhere, ""
+}
+
+# a file's text
+fn (d Diagnostics&) TextOf(file I64) String&d { return d.texts[file] }
+
+fn (d Diagnostics&) isLibrary(at Where) Bool {
+    match at {
+        case Where.File(f) { return d.library[f] }
+        case Where.Line(f, _) { return d.library[f] }
+        case Where.Span(f, _, _) { return d.library[f] }
+        case Where.Nowhere { return false }
+    }
+}
+
+# ---- held back ----
+
+# opens a group: what is reported until EndHold belongs to it, and is reported only once it is chosen (Choose) - a
+# branch the build decides. Groups nest: what one inside another holds is reported only when both are chosen
+fn (d mut Diagnostics&) Hold() I64 {
+    parent I64 = -1 if d.held.Len() == 0 else d.held[d.held.Len() - 1]
+    d.groupParent.Push(parent)
+    d.groupState.Push(Pending)
+    g := d.groupParent.Len() - 1
+    d.held.Push(g)
+    return g
+}
+
+# closes the group opened last
+fn (d mut Diagnostics&) EndHold() { try d.held.Pop() catch { } }
+
+# how many diagnostics have been reported, held ones included - whether a step reported one
+fn (d Diagnostics&) Count() I64 { return d.records.Len() }
+
+# forgets every diagnostic reported since Count gave mark, and the notes on them - a step done again from the start
+# (the checker's attempts, R1a)
+fn (d mut Diagnostics&) Forget(mark I64) {
+    if mark >= d.records.Len() { return }
+    d.records.Truncate(mark)
+    k I64 = 0
+    for i in range d.notes.Len() {
+        if d.notes[i].rec < mark {
+            d.notes[k] = d.notes[i]
+            k++
+        }
+    }
+    d.notes.Truncate(k)
+}
+
+# opens group g again: what is reported until EndHold belongs to it, as what the parser met in a branch does - a later
+# pass reporting inside a branch the build decides
+fn (d mut Diagnostics&) Reopen(g I64) { d.held.Push(g) }
+
+# an error held by no group, whatever groups are open: what ends more than the branch it is met in (a nesting limit, a
+# block left open) is reported whichever branch is taken
+fn (d mut Diagnostics&) ErrorUnheld(at Where, m msgs.Msg) I64 {
+    saved := d.held.ToArray()
+    d.held.Clear()
+    rec := d.report(at, m, false)
+    for g in saved { d.held.Push(g) }
+    return rec
+}
+
+# the branch group g holds was taken: its diagnostics are reported
+fn (d mut Diagnostics&) Choose(g I64) { d.groupState[g] = Chosen }
+
+# the branch group g holds was not taken: its diagnostics are never reported
+fn (d mut Diagnostics&) Drop(g I64) { d.groupState[g] = Dropped }
+
+# every group chosen, as when every branch is compiled - for tools comparing the parse of all branches
+fn (d mut Diagnostics&) ChooseAll() {
+    for g in range d.groupState.Len() { d.groupState[g] = Chosen }
+}
+
+# the branch group g holds was not taken because a branch before it in its chain was: dropped, and said so
+fn (d mut Diagnostics&) CutOff(g I64) { d.groupState[g] = Cut }
+
+# whether group g was dropped: its branch was not taken
+fn (d Diagnostics&) IsDropped(g I64) Bool {
+    return g >= 0 and g < d.groupState.Len() and (d.groupState[g] == Dropped or d.groupState[g] == Cut)
+}
+
+# whether group g was dropped because a branch before it in its chain was taken - an else-if dropped for its own
+# condition is not
+fn (d Diagnostics&) IsCut(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Cut }
+
+# whether group g is neither chosen nor dropped: a branch nothing has decided yet (B9c, S8b)
+fn (d Diagnostics&) IsPending(g I64) Bool { return g >= 0 and g < d.groupState.Len() and d.groupState[g] == Pending }
+
+# whether group g, or a group inside it, holds a diagnostic - a branch that met a syntax error
+fn (d Diagnostics&) Holds(g I64) Bool {
+    for r in d.records {
+        h := r.group
+        for h >= 0 and h != g { h = d.groupParent[h] }
+        if h == g { return true }
+    }
+    return false
+}
+
+# whether what group g holds is reported: it and every group it is inside were chosen
+fn (d Diagnostics&) chosen(group I64) Bool {
+    g := group
+    for g >= 0 {
+        if d.groupState[g] != Chosen { return false }
+        g = d.groupParent[g]
+    }
+    return true
+}
+
+# ---- what is written ----
+
+# whether diagnostics are written in colour: on a terminal, unless it asks for none (NO_COLOR set, TERM unset or dumb)
+fn ColorWanted() Bool {
+    if not os.IsTerminal(1) { return false }
+    try os.Env("NO_COLOR") catch { return termAllowsColor() }
+    return false
+}
+
+fn termAllowsColor() Bool {
+    term := try os.Env("TERM") catch { return false }
+    return term != "dumb"
+}
+
+# the terminal's codes, and none where colour is off
+fn (d Diagnostics&) sgr(code String&) String {
+    if not d.Color { return "" }
+    b := StringBuilder()
+    b.PushChar(Char(27))
+    b.Push("[")
+    b.Push(code)
+    b.Push("m")
+    return b.ToString()
+}
+
+# the numbers of the errors reported, in the order they are written: decided groups only, the second of two identical
+# ones left out, sorted by file (in the order files were first reported against), then line, then report order. The
+# number of errors is how many these are, and a fatal one
+fn (d mut Diagnostics&) written() Array<I64> {
+    n := d.records.Len()
+    line := Array<I64>(n)           # the line each is on, I64's maximum where it has none
+    col := Array<I64>(n)
+    file := Array<I64>(n)           # the file each is about, -1 for none
+    keep List<I64>
+    for r in range n {
+        rec := d.records[r]
+        file[r] = -1
+        line[r] = 9223372036854775807
+        match rec.at {
+            case Where.Span(f, s, _) {
+                file[r] = f
+                l, ls := d.lineOf(f, s)
+                line[r] = l
+                col[r] = s - ls + 1
+            }
+            case Where.Line(f, l) {
+                file[r] = f
+                line[r] = l
+            }
+            case Where.File(f) { file[r] = f }
+            nomatch { }
+        }
+        if not d.chosen(rec.group) { continue }
+        # one cause several checks meet is one error: the same text at the same place again, or a second of a kind
+        # reported once per line
+        repeated := false
+        for j in range keep.Len() {
+            k := keep[j]
+            other := d.records[k]
+            if file[k] == file[r] and line[k] == line[r] and col[k] == col[r] and other.text == rec.text {
+                repeated = true
+                # one that yields is replaced by a later one that does not (G16b)
+                if k in d.yielding and r not in d.yielding { keep[j] = r }
+            }
+            if rec.oncePerLine and other.oncePerLine and other.kind == rec.kind and file[k] == file[r] and line[k] == line[r] {
+                repeated = true
+            }
+        }
+        if not repeated { keep.Push(r) }
+    }
+    rank := Array<I64>(d.paths.Len() + 1, -1)  # per file (and the last for none): the order it was first reported in
+    next I64 = 0
+    for r in keep {
+        if rank[file[r] + 1] < 0 {
+            rank[file[r] + 1] = next
+            next++
+        }
+    }
+    order := keep.ToArray()
+    order.Sort(fn(a I64, b I64) Bool {
+        if rank[file[a] + 1] != rank[file[b] + 1] { return rank[file[a] + 1] < rank[file[b] + 1] }
+        if line[a] != line[b] { return line[a] < line[b] }
+        return a < b
+    })
+    return order
+}
+
+# each error Render writes, in its order, as a tool comparing it with another compiler's output reads it: its rule,
+# its file (-1 for none), where it starts in that file's text (-1 for none), and its text
+type Said struct(Rule String&, File I64, Start I64, Text String&) {
+    Rule
+    File
+    Start
+    Text
+}
+
+fn (d mut Diagnostics&) AllSaid() List<Said> {
+    l List<Said>
+    for r in d.written() {
+        rec := d.records[r]
+        match rec.at {
+            case Where.Span(f, s, _) { l.Push(Said($rec.rule, f, s, $rec.text)) }
+            case Where.Line(f, _) { l.Push(Said($rec.rule, f, -1, $rec.text)) }
+            case Where.File(f) { l.Push(Said($rec.rule, f, -1, $rec.text)) }
+            nomatch { l.Push(Said($rec.rule, -1, -1, $rec.text)) }
+        }
+    }
+    return l
+}
+
+# the number of errors Render writes
+fn (d mut Diagnostics&) Errors() I64 { return d.written().Len() + (1 if d.fatal else 0) }
+
+# whether a fatal error was reported: nothing after it is worth judging
+fn (d Diagnostics&) HasFatal() Bool { return d.fatal }
+
+# every diagnostic, in source order: each error with its source and its notes, then the fatal one if there is one
+fn (d mut Diagnostics&) Render() String {
+    b := StringBuilder()
+    for r in d.written() {
+        rec := d.records[r]
+        d.putRow(b, rec.at, "error", rec.rule, rec.text)
+        for nt in d.notes {
+            if nt.rec == r { d.putRow(b, nt.at, "note", "", nt.text) }
+        }
+    }
+    if d.fatal {
+        d.putLocation(b, d.fatalAt)
+        b.Push(d.errorWord(d.fatalRule))
+        b.Push(d.fatalText)
+        b.PushChar('\n')
+    }
+    return b.ToString()
+}
+
+# the line ending a compilation: how many errors it found, or that it succeeded
+fn (d mut Diagnostics&) Summary() String {
+    n := d.Errors()
+    if n == 0 { return $d.sgr("1") "compilation successful" $d.sgr("0") "\n" }
+    return $d.sgr("1;31") "compilation failed with " $n " error" $("" if n == 1 else "s") $d.sgr("0") "\n"
+}
+
+# a mistake in the command line, before any compilation: "olang: error[RULE]: text"
+fn (d mut Diagnostics&) Usage(m msgs.Msg) String {
+    b := StringBuilder()
+    d.putLocation(b, Where.Nowhere)
+    b.Push(d.errorWord(m.Rule))
+    b.Push(m.Text)
+    b.PushChar('\n')
+    return b.ToString()
+}
+
+# "error[RULE]: ", coloured
+fn (d Diagnostics&) errorWord(rule String&) String {
+    if rule.Len() == 0 { return $d.sgr("1;31") "error:" $d.sgr("0") " " }
+    return $d.sgr("1;31") "error[" $rule "]:" $d.sgr("0") " "
+}
+
+# one row - "path:line:col: error[RULE]: text" or "...: note: text" - and the source under it
+fn (d mut Diagnostics&) putRow(b mut StringBuilder&, at Where, word String&, rule String&, text String&) {
+    d.putLocation(b, at)
+    if word == "error" {
+        b.Push(d.errorWord(rule))
+    } else {
+        b.Push($d.sgr("1;36") "note:" $d.sgr("0") " ")
+    }
+    b.Push(text)
+    b.PushChar('\n')
+    d.putExcerpt(b, at)
+}
+
+# "path:line:col: " - or as much of it as is known, and "olang: " for the compilation as a whole
+fn (d mut Diagnostics&) putLocation(b mut StringBuilder&, at Where) {
+    b.Push(d.sgr("1"))
+    match at {
+        case Where.Nowhere { b.Push("olang") }
+        case Where.File(f) { b.Push(d.paths[f]) }
+        case Where.Line(f, l) { b.Push($d.paths[f] ":" $l) }
+        case Where.Span(f, s, _) {
+            l, ls := d.lineOf(f, s)
+            b.Push($d.paths[f] ":" $l ":" $(s - ls + 1))
+        }
+    }
+    b.Push(": ")
+    b.Push(d.sgr("0"))
+}
+
+# a source byte in an excerpt: a tab stays a tab, so the caret line below lines up; any other control byte, which a
+# terminal would act on, is shown as '?'
+fn printable(c Char) Char {
+    if c == '\t' { return c }
+    if U8(c) < 32 or U8(c) == 127 { return '?' }
+    return c
+}
+
+# a UTF-8 continuation byte: part of the character before it, taking no column of its own
+fn continues(c Char) Bool { return U8(c) >= 128 and U8(c) < 192 }
+
+ExcerptMax I64 = 160                # a line longer than this is shown as a window around the span
+ExcerptAround I64 = 70
+
+# the source line a span is on, and a caret under the span: "   12 | x I32 = 1.5" then "      |         ^~~". Nothing
+# for a blank line, or for what is no span
+fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
+    f, start, end := 0, 0, 0
+    match at {
+        case Where.Span(sf, ss, se) {
+            f = sf
+            start = ss
+            end = se
+        }
+        nomatch { return }
+    }
+    text := d.texts[f]
+    line, lineStart := d.lineOf(f, start)
+    lineEnd := start
+    for lineEnd < text.Len() and text[lineEnd] != '\n' { lineEnd++ }
+    blank := true
+    for i in range lineStart, lineEnd {
+        if text[i] != ' ' and text[i] != '\t' and text[i] != '\r' { blank = false }
+    }
+    if blank { return }
+    spanEnd := end if end > start else start + 1
+    from, to := lineStart, lineEnd
+    if lineEnd - lineStart > ExcerptMax {
+        if start - ExcerptAround > from { from = start - ExcerptAround }
+        last := (spanEnd if spanEnd < start + ExcerptAround else start + ExcerptAround) + ExcerptAround
+        if last < to { to = last }
+    }
+    b.Push($line.PadStart(5) " | ")
+    if from > lineStart { b.Push("...") }
+    for i in range from, to { b.PushChar(printable(text[i])) }
+    if to < lineEnd { b.Push("...") }
+    b.Push("\n      | ")
+    if from > lineStart { b.Push("   ") }
+    i := from
+    for i < start and i < to {
+        if not continues(text[i]) { b.PushChar('\t' if text[i] == '\t' else ' ') }
+        i++
+    }
+    b.Push(d.sgr("1;32"))
+    b.PushChar('^')
+    i = start + 1
+    for i < spanEnd and i < to {
+        if not continues(text[i]) { b.PushChar('~') }
+        i++
+    }
+    b.Push(d.sgr("0"))
+    b.PushChar('\n')
+}
+
+# ---- B11a: a rule's text ----
+
+# the specification beside the compiler - found from where the compiler itself is, as the standard library is (B3)
+fn SpecPath() String& {
+    exe := try os.ReadLink("/proc/self/exe") catch { return "SPEC.md" }
+    slash := try exe.FindLast("/") catch { return "SPEC.md" }
+    return $exe[:slash] "/../SPEC.md"
+}
+
+# the section sign, which olang source (ASCII, L1) cannot write: U+00A7 in UTF-8
+fn section() String {
+    b := StringBuilder()
+    b.PushChar(Char(194))
+    b.PushChar(Char(167))
+    return b.ToString()
+}
+
+# the rule a line defines - "**B1.**", "- **O25a.**", "**T6b (a title).**" - or "" when it defines none
+fn ruleIdAt(line String&) String&line {
+    l := line[2:] if line.StartsWith("- ") else line[:]
+    if l.Len() < 4 or not l.StartsWith("**") or not l[2].IsUpper() or not l[3].IsDigit() { return line[0:0] }
+    p I64 = 3
+    for p < l.Len() and l[p].IsDigit() { p++ }
+    for p < l.Len() and l[p].IsLower() { p++ }
+    if not l[p:].StartsWith(".**") and not l[p:].StartsWith(" (") { return line[0:0] }
+    return l[2:p]
+}
+
+# Explain's failure: the specification states no such rule
+error RuleError {
+    NOT_FOUND
+}
+
+# rule's text in the specification spec, under the heading of the section holding it, as -e RULE prints it: from the
+# line defining it to the next rule or heading. A first letter written in lowercase is read as uppercase (-e t6b is
+# T6b). Fails with RuleError.NOT_FOUND when spec states no such rule
+fn Explain(spec String&, rule String&) String ? {
+    want := StringBuilder()
+    for i, c in rule { want.PushChar(c.ToUpper() if i == 0 else c) }
+    wanted := want.ToString()
+    out := StringBuilder()
+    heading := spec[0:0]
+    inside, found := false, false
+    blanks I64 = 0
+    rest := spec[:]
+    for rest.Len() > 0 {
+        nl := try rest.FindByte('\n') catch default (rest.Len() - 1)
+        line := rest[:nl + 1]
+        rest = rest[nl + 1:]
+        id := ruleIdAt(line)
+        head := line[0] == '#'
+        if inside and (id.Len() > 0 or head) { break }
+        if head {
+            heading = line
+            continue
+        }
+        if not inside and id == wanted {
+            inside = true
+            found = true
+            # "### 10.1 Compilation modes" is "§10.1 Compilation modes"
+            h I64 = 0
+            for h < heading.Len() and (heading[h] == '#' or heading[h] == ' ') { h++ }
+            if heading.Len() > 0 {
+                if h < heading.Len() and heading[h].IsDigit() { out.Push(section()) }
+                out.Push(heading[h:])
+                out.PushChar('\n')
+            }
+        }
+        if not inside { continue }
+        if line == "\n" {
+            blanks++                # written only if more of the rule follows
+            continue
+        }
+        for blanks > 0 {
+            out.PushChar('\n')
+            blanks--
+        }
+        out.Push(line)
+    }
+    if not found { error RuleError.NOT_FOUND }
+    return out.ToString()
+}
+
+# ---- tests ----
+
+test "a span is written as path:line:col, with its line and a caret under it" {
+    src := "fn main() ? {\n    x I32 = 1.5\n}\n"
+    d := Diagnostics(false)
+    f := d.AddFile("a.olang", src)
+    d.Error(Where.Span(f, 26, 29), msgs.Expected("I32", msgs.Tok("1.5")))
+    assert d.Render() == "a.olang:2:13: error: expected I32, found '1.5'\n    2 |     x I32 = 1.5\n      |             ^~~\n"
+    assert d.Summary() == "compilation failed with 1 error\n"
+}
+
+test "a rule is written in brackets, and an error with no rule has none" {
+    d := Diagnostics(false)
+    f := d.AddFile("b.olang", "x\n")
+    d.Error(Where.Span(f, 0, 1), msgs.UnknownChar('@'))
+    assert d.Render() == "b.olang:1:1: error[L16]: unexpected character '@'\n    1 | x\n      | ^\n"
+}
+
+test "errors are written in source order: by file as first reported, then by line, then as reported" {
+    d := Diagnostics(false)
+    a := d.AddFile("a.olang", "one\ntwo\nthree\n")
+    b := d.AddFile("b.olang", "four\n")
+    d.Error(Where.Span(a, 8, 13), msgs.CannotOpen())
+    d.Error(Where.Span(b, 0, 4), msgs.NotRegular())
+    d.Error(Where.Span(a, 0, 3), msgs.IsDirectory())
+    d.Error(Where.Span(a, 9, 10), msgs.Semicolon())
+    out := d.Render()
+    i1 := try out.Find("a.olang:1:1") catch default -1
+    i2 := try out.Find("a.olang:3:1") catch default -1
+    i3 := try out.Find("a.olang:3:2") catch default -1
+    i4 := try out.Find("b.olang:1:1") catch default -1
+    assert 0 <= i1 and i1 < i2 and i2 < i3 and i3 < i4
+    assert d.Errors() == 4
+}
+
+test "notes follow their error, and a note on an error not reported is dropped" {
+    d := Diagnostics(false)
+    f := d.AddFile("c.olang", "a\nb\n")
+    e := d.Error(Where.Span(f, 2, 3), msgs.NoMain())
+    d.Note(e, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
+    d.Note(-1, Where.Span(f, 0, 1), msgs.NoteObligationOrigin())
+    want := "c.olang:2:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    2 | b\n      | ^\n" "c.olang:1:1: note: the callee requires it because of this statement\n    1 | a\n      | ^\n"
+    assert d.Render() == want
+}
+
+test "a whole file, a line, and the compilation as a whole are written with what is known of them" {
+    d := Diagnostics(false)
+    f := d.AddFile("d.olang", "a\n")
+    d.Error(Where.File(f), msgs.CannotOpen())
+    d.Error(Where.Line(f, 7), msgs.NotRegular())
+    d.Fatal(Where.Nowhere, msgs.DefineMissing())
+    assert d.Render() == "d.olang:7: error: not a regular file\nd.olang: error: cannot open this file\nolang: error[B10]: -define needs Name=value after it\n"
+    assert d.Summary() == "compilation failed with 3 errors\n"
+}
+
+test "the same error at the same place twice is one error, and once per line means once" {
+    d := Diagnostics(false)
+    f := d.AddFile("e.olang", "abc\n")
+    d.Error(Where.Span(f, 0, 1), msgs.CannotOpen())
+    d.Error(Where.Span(f, 0, 1), msgs.CannotOpen())
+    d.ErrorOncePerLine(Where.Span(f, 1, 2), msgs.NotRegular())
+    d.ErrorOncePerLine(Where.Span(f, 2, 3), msgs.NotRegular())
+    d.Error(Where.Span(f, 2, 3), msgs.NotRegular())
+    assert d.Errors() == 3
+}
+
+test "a statement reports one error about where something lives" {
+    d := Diagnostics(false)
+    f := d.AddFile("f.olang", "abc\n")
+    saved := d.ScopeGroupStart()
+    first := d.Error(Where.Span(f, 0, 1), msgs.Msg(msgs.Diag.CannotOpen, "O25", "first"))
+    second := d.Error(Where.Span(f, 1, 2), msgs.Msg(msgs.Diag.CannotOpen, "C2d", "second"))
+    other := d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "T6", "other"))
+    d.ScopeGroupEnd(saved)
+    third := d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "O10c", "third"))
+    assert first >= 0 and second < 0 and other >= 0 and third >= 0
+    assert d.Errors() == 3
+}
+
+test "what a branch holds is reported once the branch is chosen, never when it is dropped or undecided" {
+    d := Diagnostics(false)
+    f := d.AddFile("g.olang", "abc\n")
+    taken := d.Hold()
+    d.Error(Where.Span(f, 0, 1), msgs.Msg(msgs.Diag.CannotOpen, "", "taken"))
+    inner := d.Hold()
+    d.Error(Where.Span(f, 1, 2), msgs.Msg(msgs.Diag.CannotOpen, "", "inner"))
+    d.EndHold()
+    d.EndHold()
+    untaken := d.Hold()
+    d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "", "untaken"))
+    d.EndHold()
+    undecided := d.Hold()
+    d.Error(Where.Span(f, 2, 3), msgs.Msg(msgs.Diag.CannotOpen, "", "undecided"))
+    d.EndHold()
+    d.Error(Where.Span(f, 0, 1), msgs.Msg(msgs.Diag.CannotOpen, "", "plain"))
+    d.Choose(taken)
+    d.Drop(untaken)
+    out := d.Render()
+    assert out.Contains("taken") and out.Contains("plain")
+    assert not out.Contains("inner") and not out.Contains("untaken") and not out.Contains("undecided")
+    d.Choose(inner)
+    assert d.Render().Contains("inner")
+    assert d.Errors() == 3
+}
+
+test "an error inside an instantiation says where it was asked for; one in the library is reported at the use" {
+    d := Diagnostics(false)
+    prog := d.AddFile("main.olang", "use()\n")
+    lib := d.AddFile("lib.olang", "bad\n", true)
+    d.PushContext(Where.Span(prog, 0, 3), "instantiated here")
+    d.Error(Where.Span(lib, 0, 3), msgs.NoMain())
+    d.PopContext()
+    out := d.Render()
+    want := "main.olang:1:1: error[B4]: no main function - a program starts at 'fn main() { }'\n    1 | use()\n      | ^~~\n" "lib.olang:1:1: note: in the standard library's code, here\n    1 | bad\n      | ^~~\n" "main.olang:1:1: note: instantiated here\n    1 | use()\n      | ^~~\n"
+    assert out == want
+}
+
+test "only the innermost contexts and the outermost are named" {
+    d := Diagnostics(false)
+    f := d.AddFile("h.olang", "a b c d e\n")
+    for i in range 5 { d.PushContext(Where.Span(f, i * 2, i * 2 + 1), "at " $i) }
+    d.Error(Where.Span(f, 8, 9), msgs.NoMain())
+    out := d.Render()
+    assert out.Contains("note: at 4") and out.Contains("note: at 3") and out.Contains("note: at 0")
+    assert not out.Contains("note: at 2") and not out.Contains("note: at 1")
+}
+
+test "a long line is shown as a window around the span; tabs line up and control bytes do not reach the terminal" {
+    d := Diagnostics(false)
+    long := StringBuilder()
+    for i in range 200 { long.PushChar('a') }
+    f := d.AddFile("i.olang", long.ToString())
+    d.Error(Where.Span(f, 100, 102), msgs.NoMain())
+    out := d.Render()
+    assert out.Contains("\n    1 | ...") and out.Contains("...\n      |    ")
+    d2 := Diagnostics(false)
+    t := d2.AddFile("k.olang", "\tab" "\0" "c\n")
+    d2.Error(Where.Span(t, 4, 5), msgs.NoMain())
+    assert d2.Render().EndsWith("    1 | \tab?c\n      | \t   ^\n")
+}
+
+test "colour is the terminal's codes around each part" {
+    d := Diagnostics(true)
+    f := d.AddFile("l.olang", "x\n")
+    d.Error(Where.Span(f, 0, 1), msgs.NoMain())
+    out := d.Render()
+    e := Char(27)
+    b := StringBuilder()
+    b.PushChar(e)
+    esc := b.ToString()
+    assert out.StartsWith($esc "[1ml.olang:1:1: " $esc "[0m" $esc "[1;31merror[B4]:" $esc "[0m no main")
+    assert d.Summary() == $esc "[1;31mcompilation failed with 1 error" $esc "[0m\n"
+}
+
+test "-e prints a rule under its section's heading, up to the next rule" {
+    spec := "# 1 Intro\n\n### 10.1 Modes\n\n**B1.** One.\nMore of it.\n\n**B1a.** Two.\n\n## Other\n- **O25a.** Three.\n\n"
+    assert try Explain(spec, "B1") catch default "" == $section() "10.1 Modes\n\n**B1.** One.\nMore of it.\n"
+    assert try Explain(spec, "o25a") catch default "" == "Other\n\n- **O25a.** Three.\n"
+    missing := false
+    try Explain(spec, "B2") catch { missing = true }
+    assert missing
+}

@@ -1,0 +1,3182 @@
+# lower - the typed core language lowered to MIR (compiler/DESIGN.md sections 1.8 and 1.8.1, M7): one MIR function for
+# each typed body, made by rules of its own and by the plan's placement, which emit (M9) and eval (M8) execute and the
+# MIR verifier (mir.Fn.Verify) holds to the contract.
+#
+# What lowering makes explicit, once:
+# - the order of evaluation (S4, E11b, P1g): an expression's operands are values computed by the statements before it,
+#   left to right, each in a temporary of its own; a place's indices and references are computed before the place is
+#   used; an assignment's target before its value;
+# - every scope opened and closed (O2): a typed block that is a block of its own (one whose id is not its enclosing
+#   block's) opens a scope where it is entered, a loop's body one each turn, a join one waited for on every way out;
+# - the exit sequence: every way out of a block - its end, break, continue, return, an error leaving - runs for each block
+#   it leaves, innermost first, the block's deferred code (S19, last registered first, only what was reached), a join's
+#   wait (P1b), then its close;
+# - errors (R6-R21): a call's error edge gets its code under the callee's own list; dispatch is a test per clause item
+#   over it, the unwinding to the try's depth, a jump to the clause; what no clause takes is re-encoded under the body's
+#   own list and raised once every scope is closed;
+# - checks (E15a, E16b, D14b, E32): a test and a branch - to an Exit for a guaranteed check, to the try's dispatch with
+#   BuiltinError's code for a checked one.
+#
+# Placement is the plan's (typed.Plan, M6): the scope pass's (compiler/scope.olang) where Plans holds one per body, else
+# the stand-in DESIGN.md 1.6.1 allows - every site built in the program's scope, every local in its frame, every scope
+# variable passed the program's. A plan's block is the MIR scope its typed block opened; an Inert scope (O12, E11c) is
+# the program's until lowering opens Inert scopes of its own.
+#
+# Memory is one model (docs/memory.md): scopes and destructor registration. Owned references are being removed, so a
+# Take lowers to MIR's Take and nothing is released, held or given (no Release, RegisterOwner, Region or Give).
+#
+# What lowering meets and does not lower yet is recorded as a gap (Gaps), with where and what; a body with one is not
+# verified (compiler/tools/lowerdump.olang counts them).
+
+import "std/os"
+import "std/pair"
+import "source"
+import "diag"
+import "cond"
+import "fetch"
+import "load"
+import "names"
+import "types"
+import "generic"
+import "typed"
+import "mir"
+import "check"
+
+# a construct met and not lowered yet: where, and what
+type Gap struct(File I64, Sp source.Span, What String&) {
+    File
+    Sp
+    What
+}
+
+# the lowering of a program's bodies: P the checked program, Bodies check's table of typed bodies
+type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
+    P
+    Bodies
+    Plans List<typed.Plan>      # the scope pass's, one per body; none for the stand-in placement
+    Gaps List<Gap>
+    Gapped Bool = false     # whether the body lowered last met a gap
+    # B3e: for interpret - each registration of deferred code made with a cleanup of its own (Stmt.Deferred), which
+    # interpret runs for the blocks a stop leaves; never for a build (emit has no use for them)
+    Cleanups Bool = false
+    # S18c (mir.Key.Assert): the asserts decided true while compiling, by body and where the assert starts - no test
+    AssertsTrue Map<pair.Pair<I64, I64>, Bool>
+    # the functions lowering refers to that are no typed body - helpers, adapters, modules' initializations - in the
+    # order first referred to, each once: what LowerKey makes next
+    Wanted List<mir.FnKey>
+    wanted Map<mir.FnKey, Bool>
+    ctorOf Map<types.TypeId, I64>   # a type's constructor's body (twin 0), once looked up
+    strOf Map<types.TypeId, I64>    # a type's Str's body, -1 for none, once looked up
+    indexed Bool = false
+    builtinT types.TypeId = types.TypeId(-1)
+    charT types.TypeId = types.TypeId(-1)
+    textT types.TypeId = types.TypeId(-1)
+}
+
+# BuiltinError's words (R20, std/prelude/builtin.olang), in its declared order
+OutOfBounds I64 = 0
+DivideByZero I64 = 1
+Overflow I64 = 2
+Invalid I64 = 3
+WrongCase I64 = 4
+
+fn (lw mut Lowerer&) builtin() types.TypeId {
+    if lw.builtinT < types.TypeId(0) { lw.builtinT = lw.P.PreludeType("std/prelude/builtin", "BuiltinError") }
+    return lw.builtinT
+}
+
+fn (lw mut Lowerer&) char() types.TypeId {
+    if lw.charT < types.TypeId(0) { lw.charT = lw.P.PreludeType("std/prelude/text", "Char") }
+    return lw.charT
+}
+
+fn (lw mut Lowerer&) text() types.TypeId {
+    if lw.textT < types.TypeId(0) { lw.textT = lw.P.PreludeType("std/prelude/text", "String") }
+    return lw.textT
+}
+
+# whether body id has code to lower: an enum case's payload has none, nor a body check left unfinished
+fn (lw mut Lowerer&) HasCode(id I64) Bool {
+    b := lw.Bodies[id]
+    if b.Root == null { return false }
+    return match b.Of {
+        case typed.BodyOf.Case(_, _) => false
+        case _ => true
+    }
+}
+
+# body id lowered: its MIR function. Gapped says whether lowering met a construct it does not lower yet (a gap, in Gaps)
+# or a type check left unknown (a body with errors) - either way the function is not one to verify
+fn (lw mut Lowerer&) Lower(id I64) mir.Fn {
+    b := lw.Bodies[id]
+    f := mir.Fn(mir.FnKey.Body(typed.BodyId(I32(id))), b.Ty, b.File, b.Sp)
+    ln := lowering(lw, b, lw.P.T, f)
+    ln.file = b.File
+    if id < lw.Plans.Len() {
+        ln.planned = true
+        ln.plan = lw.Plans[id]
+    }
+    ln.run()
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+# a function lowering refers to, to be made by LowerKey
+fn (lw mut Lowerer&) Want(k mir.FnKey) {
+    if lw.wanted.Has(k) { return }
+    lw.wanted.Put(k, true)
+    lw.Wanted.Push(k)
+}
+
+# the function a key names, lowered: a typed body, a helper, an adapter or a module's initialization. Gapped as Lower's
+fn (lw mut Lowerer&) LowerKey(k mir.FnKey) mir.Fn {
+    match k {
+        case mir.FnKey.Body(id) { return lw.Lower(I64(id)) }
+        case mir.FnKey.Helper(kind, t) { return lw.helper(kind, t) }
+        case mir.FnKey.Adapter(call) { return lw.adapterFn(call) }
+        case mir.FnKey.Init(m) { return lw.initFn(m) }
+    }
+}
+
+# what LowerKey makes of k, held to the verifier, as Verified
+fn (lw mut Lowerer&) VerifiedKey(k mir.FnKey, dump Bool) Bool, String, String {
+    f mir.Fn&lw = lw.LowerKey(k)
+    if lw.Gapped { return true, "", "" }
+    problems := f.Verify(lw.P.T)
+    text := f.Dump(lw.P.T) if dump else ""
+    return false, problems, text
+}
+
+# the modules whose initialization runs a global's initializer, in order
+fn (lw mut Lowerer&) InitModules() List<I64> {
+    out List<I64>
+    for i in range lw.Bodies.Len() {
+        match lw.Bodies[i].Of {
+            case typed.BodyOf.Global(m, _) {
+                if m not in out { out.Push(m) }
+            }
+            case _ { }
+        }
+    }
+    return out
+}
+
+# body id lowered and held to the verifier: whether lowering met a gap (or a body with errors), the verifier's problems
+# ("" for none), and the function's dump where dump is asked for
+fn (lw mut Lowerer&) Verified(id I64, dump Bool) Bool, String, String {
+    f mir.Fn&lw = lw.Lower(id)
+    if lw.Gapped { return true, "", "" }
+    problems := f.Verify(lw.P.T)
+    text := f.Dump(lw.P.T) if dump else ""
+    return false, problems, text
+}
+
+# ---- one body ----
+
+# a scope the function has open, while lowering: its MIR scope, the typed block it stands for, its kind
+type level struct(S mir.ScopeId, Block typed.BlockId, Kind mir.ScopeKind) {
+    S
+    Block
+    Kind
+}
+
+# a loop being lowered: its body block, the level outside its turn's scope, the blocks a continue and a break go to
+# (made when first wanted), the ends that jump there
+type loopCtx struct(Body typed.BlockId, Depth I64) {
+    Body
+    Depth
+    cont mir.BlockId = mir.NoBlock
+    brk List<mir.BlockId>
+    conts List<mir.BlockId>
+}
+
+# a try being lowered: the level it stands at, its clauses and each one's entry (made when an error first reaches it),
+# whether "!" ends the program instead (E35)
+type tryCtx struct(Depth I64, Clauses Array<typed.Clause&>&, Ends Bool, Passes Bool = false) {
+    Depth
+    Clauses
+    Ends
+    Passes     # what its clauses do not take goes on to the try around it (typed.Try.Passes)
+    entries List<mir.BlockId>
+}
+
+# a comprehension being lowered (E27): its buffer (an array reference), how many it holds, its element type, and the
+# scope its storage is made in - where a full buffer's bigger one is made too
+type collectCtx struct(Buf mir.LocalId, N mir.LocalId, Elem types.TypeId, ArrT types.TypeId, At mir.ScopeRef) {
+    Buf
+    N
+    Elem
+    ArrT
+    At
+}
+
+# a place being built: its base and its projections
+type pl struct(B mir.Base) {
+    B
+    Ps List<mir.Proj>
+}
+
+type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut mir.Fn&) {
+    L
+    B
+    T
+    F mir.Fn = made        # its own copy (D9c: a by-value parameter holds at most 128 bytes)
+    file I64 = 0
+    rdepth mir.Operand = mir.Operand.None   # in a Render helper, how many references were followed to reach it (E11a)
+    cur mir.BlockId = mir.BlockId(0)
+    dead Bool = false
+    gapped Bool = false
+    levels List<level>
+    # deferred code registered (S19), each with the scope of the level it was registered at, in order
+    defers List<typed.Block&>
+    deferAt List<mir.ScopeId>
+    loops List<loopCtx>
+    tries List<tryCtx>
+    collects List<collectCtx>
+    targets List<pl>    # the places of the Assigns being lowered, innermost last (Place.Target)
+    joins List<tryCtx>  # the joins being lowered, innermost last: each one's clauses (P4c), beside its scope
+    joinS List<mir.ScopeId>
+    erroring Bool = false   # an error is leaving: a join's failure does not replace it (P4b)
+    planned Bool = false    # whether plan is the scope pass's plan for B, not the stand-in
+    adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
+    adoptAt mir.ScopeRef = mir.ScopeRef.Program
+    plan typed.Plan = typed.Plan(0, 0, 0)
+}
+
+fn (ln mut lowering&) gap(sp source.Span, what String&) {
+    if not ln.gapped { ln.L.Gaps.Push(Gap(ln.file, sp, $what)) }
+    ln.gapped = true
+}
+
+fn (ln mut lowering&) run() {
+    b := ln.B
+    t := ln.T
+    # locals: the typed body's, in its numbering
+    for i in range b.Locals.Len() {
+        l := b.Locals[i]
+        k := match l.Kind {
+            case typed.LocalKind.Param => mir.LocalKind.Param
+            case typed.LocalKind.Capture => mir.LocalKind.Capture
+            case _ => mir.LocalKind.Var
+        }
+        if l.Ty == types.UnknownT { ln.gapped = true }
+        # where its storage is: the frame, or a scope variable where the scope pass moved it (O26a's returned locals)
+        home := mir.ScopeRef.Frame
+        if ln.planned and i < ln.plan.Stored.Len() {
+            match ln.plan.Stored[i] {
+                case typed.Scope.Var(v) { home = mir.ScopeRef.Var(v) }
+                case typed.Scope.Program { home = mir.ScopeRef.Program }
+                case _ { }
+            }
+        }
+        ln.F.AddLocal(mir.Local(l.Name, l.Sp, l.Ty, k, home))
+    }
+    for p in b.Params { ln.F.Params.Push(mir.LocalId(I32(p))) }
+    caps List<typed.LocalId>
+    for i in range b.Locals.Len() {
+        if b.Locals[i].Kind == typed.LocalKind.Capture {
+            caps.Push(typed.LocalId(I32(i)))
+            ln.F.Captures.Push(mir.LocalId(I32(i)))
+        }
+    }
+    for v in b.Vars {
+        k := match v {
+            case typed.ScopeVar.Param(l) => mir.VarKind.Param(indexOf(b.Params, l))
+            case typed.ScopeVar.Result => mir.VarKind.Result
+            case typed.ScopeVar.Instance => mir.VarKind.Instance
+            case typed.ScopeVar.Closing => mir.VarKind.Closing
+            case typed.ScopeVar.Capture(l) => mir.VarKind.Capture(indexOf(caps, l))
+        }
+        ln.F.Vars.Push(k)
+    }
+    if ln.gapped {
+        ln.L.Gaps.Push(Gap(ln.file, b.Sp, "an unknown type (a check error or gap): a local"))
+        return
+    }
+    ln.F.NewBlock()
+    root := b.Root
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, root.Id, b.Sp)
+    ln.emit(mir.Stmt.Open(b.Sp, frame))
+    ln.levels.Push(level(frame, root.Id, mir.ScopeKind.Frame))
+    for s in root.Stmts { ln.stmt(s) }
+    if ln.dead { return }
+    # falling off the end
+    ctor := match b.Of {
+        case typed.BodyOf.Ctor(_, _) => true
+        case _ => false
+    }
+    res := t.Result(b.Ty)
+    if ctor {
+        ln.assemble(res)
+    } else if res == types.VoidT {
+        ln.leave(0)
+        ln.end(mir.Term.Return(b.Sp, mir.Operand.None))
+    } else {
+        ln.end(mir.Term.Exit(b.Sp, mir.ExitKind.Unreachable, mir.Operand.None))
+    }
+}
+
+fn indexOf(xs List<typed.LocalId>, l typed.LocalId) I64 {
+    for i in range xs.Len() {
+        if xs[i] == l { return i }
+    }
+    return -1
+}
+
+# a constructor's end: its instance assembled from its fields in order (C2a, C6) and returned; a declared number's
+# (T29d) the value of its one field
+fn (ln mut lowering&) assemble(res types.TypeId) {
+    b := ln.B
+    t := ln.T
+    inst := t.Referent(res) if t.IsRef(res) else res
+    r := t.Repr(inst)
+    isStruct := t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct
+    if not isStruct {
+        if b.Fields.Len() != 1 or inst != res {
+            ln.gap(b.Sp, "a constructor of a type that is no struct")
+            return
+        }
+        x := ln.copyLocal(mir.LocalId(I32(b.Fields[0])))
+        ln.leave(0)
+        ln.end(mir.Term.Return(b.Sp, x))
+        return
+    }
+    ops := Array<mir.Operand>(b.Fields.Len())
+    for i in range b.Fields.Len() { ops[i] = mir.Operand.Copy(mir.L(mir.LocalId(I32(b.Fields[i])))) }
+    v := ln.into(inst, mir.Rvalue.Aggregate(inst, 0, ln.F.Args(ops)), b.Sp)
+    if inst != res {
+        # an instance of a reference-only type (C11): made where it lands, its instance scope, and a destructor-bearing
+        # one registered there, once per constructor call (O16)
+        s := ln.instance()
+        v = ln.into(res, mir.Rvalue.New(s, v, res), b.Sp)
+        if t.KindOf(r) == types.Kind.Named and t.HasBody(r) and t.Destructs(r) { ln.emit(mir.Stmt.RegisterDtor(b.Sp, s, inst, v)) }
+    }
+    ln.leave(0)
+    ln.end(mir.Term.Return(b.Sp, v))
+}
+
+# a constructor's instance scope: its scope variable, the program's for the stand-in placement
+fn (ln mut lowering&) instance() mir.ScopeRef {
+    if not ln.planned { return mir.ScopeRef.Program }
+    for k in range ln.B.Vars.Len() {
+        if ln.B.Vars[k] == typed.ScopeVar.Instance { return mir.ScopeRef.Var(k) }
+    }
+    return mir.ScopeRef.Program
+}
+
+# ---- emitting ----
+
+fn (ln mut lowering&) emit(s mir.Stmt&) {
+    if not ln.dead { ln.F.Add(ln.cur, s) }
+}
+
+fn (ln mut lowering&) end(t mir.Term) {
+    if ln.dead { return }
+    ln.F.End(ln.cur, t)
+    ln.dead = true
+}
+
+fn (ln mut lowering&) start(b mir.BlockId) {
+    ln.cur = b
+    ln.dead = false
+}
+
+fn (ln mut lowering&) goto(b mir.BlockId) { ln.end(mir.Term.Goto(b)) }
+
+# a jump from here to a block made later: this block, its terminator set once the block is made (patch); none when
+# nothing reaches here
+fn (ln mut lowering&) leaveOpen(ends mut List<mir.BlockId>&) {
+    if ln.dead { return }
+    ends.Push(ln.cur)
+    ln.dead = true
+}
+
+# a block every end in ends jumps to, made now and entered; dead where there are none
+fn (ln mut lowering&) patch(ends List<mir.BlockId>) {
+    if ends.Len() == 0 {
+        ln.dead = true
+        return
+    }
+    m := ln.F.NewBlock()
+    for e in ends { ln.F.End(e, mir.Term.Goto(m)) }
+    ln.start(m)
+}
+
+fn (ln mut lowering&) temp(ty types.TypeId, sp source.Span) mir.LocalId { return ln.F.AddTemp(ty, sp) }
+
+# rv computed into a temporary of type ty: a copy of it
+fn (ln mut lowering&) into(ty types.TypeId, rv mir.Rvalue, sp source.Span) mir.Operand {
+    l := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(l), rv))
+    return mir.Operand.Copy(mir.L(l))
+}
+
+fn (ln mut lowering&) copyLocal(l mir.LocalId) mir.Operand { return mir.Operand.Copy(mir.L(l)) }
+
+# an operand as a local: itself where it is a copy of a local, else held in a temporary
+fn (ln mut lowering&) local(x mir.Operand, ty types.TypeId, sp source.Span) mir.LocalId {
+    match x {
+        case mir.Operand.Copy(p) {
+            if p.Path.N == I32(0) {
+                match p.B {
+                    case mir.Base.Local(l) { return l }
+                    case _ { }
+                }
+            }
+        }
+        case _ { }
+    }
+    l := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(x)))
+    return l
+}
+
+fn (ln mut lowering&) prim(op typed.PrimOp, ty types.TypeId, args Array<mir.Operand>&, sp source.Span) mir.Operand {
+    return ln.into(ty, mir.Rvalue.Prim(op, ty, ln.F.Args(args)), sp)
+}
+
+fn (ln mut lowering&) i64() types.TypeId { return mir.I64T }
+
+fn (ln mut lowering&) constI64(v I64) mir.Operand { return mir.Operand.Const(mir.I64T, v) }
+
+# a value converted to I64 where it is not one
+fn (ln mut lowering&) asI64(x mir.Operand, ty types.TypeId, sp source.Span) mir.Operand {
+    if ln.T.Repr(ty) == mir.I64T { return x }
+    return ln.prim(typed.PrimOp.Convert, mir.I64T, mir.Operand[x], sp)
+}
+
+# the scope a site builds in: the plan's, the program's for the stand-in placement
+fn (ln mut lowering&) built(site typed.SiteId) mir.ScopeRef {
+    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() { return mir.ScopeRef.Program }
+    return ln.scopeRef(ln.plan.Built[I64(site)])
+}
+
+# where an array made at site is: where the reference it is promoted to goes, if it is the one promote adopts
+fn (ln mut lowering&) madeAt(site typed.SiteId) mir.ScopeRef {
+    if site == ln.adoptSite and site >= typed.SiteId(0) { return ln.adoptAt }
+    return ln.built(site)
+}
+
+# the scopes a call at site passes for its callee's n variables: the plan's, the program's for the stand-in placement
+fn (ln mut lowering&) passed(n I64, site typed.SiteId = typed.SiteId(-1)) mir.Range {
+    xs := Array<mir.ScopeRef>(n)
+    for i in range n {
+        xs[i] = mir.ScopeRef.Program
+        if ln.planned and site >= typed.SiteId(0) and I64(site) < ln.plan.Built.Len() {
+            xs[i] = ln.scopeRef(ln.plan.Passed(site, i))
+        }
+    }
+    return ln.F.ScopeRefs(xs)
+}
+
+# a plan's scope as MIR names it: a block the scope its typed block opened - the innermost open level standing for it,
+# else the innermost enclosing it (a block check reuses its parent's id for) - a scope variable, the program's
+fn (ln mut lowering&) scopeRef(sc typed.Scope) mir.ScopeRef {
+    match sc {
+        case typed.Scope.Block(b) {
+            for i := ln.levels.Len() - 1, i >= 0, i-- {
+                if ln.levels[i].Block == b { return mir.ScopeRef.Scope(ln.levels[i].S) }
+            }
+            for i := ln.levels.Len() - 1, i >= 0, i-- {
+                lb := ln.levels[i].Block
+                if lb >= typed.BlockId(0) and ln.B.Encloses(lb, b) { return mir.ScopeRef.Scope(ln.levels[i].S) }
+            }
+            return mir.ScopeRef.Program
+        }
+        case typed.Scope.Var(i) { return mir.ScopeRef.Var(i) }
+        case typed.Scope.Frame { return mir.ScopeRef.Frame }
+        case _ { return mir.ScopeRef.Program }
+    }
+}
+
+# ---- scopes and the exit sequence ----
+
+fn (ln mut lowering&) top() level { return ln.levels[ln.levels.Len() - 1] }
+
+# a typed block lowered: a scope of its own where its id is not the enclosing block's, its statements, and on falling
+# off its end the exit sequence for it
+fn (ln mut lowering&) block(bl typed.Block&) {
+    if ln.dead { return }
+    if ln.levels.Len() > 0 and ln.top().Block == bl.Id {
+        for s in bl.Stmts { ln.stmt(s) }
+        return
+    }
+    kind := match ln.B.Blocks[I64(bl.Id)].Kind {
+        case typed.BlockKind.Loop => mir.ScopeKind.Loop
+        case typed.BlockKind.Join => mir.ScopeKind.Join
+        case _ => mir.ScopeKind.Block
+    }
+    ln.openBlock(bl, kind)
+    for s in bl.Stmts { ln.stmt(s) }
+    ln.closeBlock()
+}
+
+fn (ln mut lowering&) openBlock(bl typed.Block&, kind mir.ScopeKind, errors types.ListId = types.ListId(0)) {
+    s := ln.F.AddScope(kind, ln.top().S, bl.Id, ln.B.Blocks[I64(bl.Id)].Sp, errors)
+    ln.emit(mir.Stmt.Open(ln.B.Blocks[I64(bl.Id)].Sp, s))
+    ln.levels.Push(level(s, bl.Id, kind))
+}
+
+# the innermost level closed on falling off its end, and popped
+fn (ln mut lowering&) closeBlock() {
+    n := ln.levels.Len() - 1
+    if not ln.dead { ln.exitLevel(n) }
+    ln.popLevel()
+}
+
+fn (ln mut lowering&) popLevel() {
+    s := ln.top().S
+    for ln.deferAt.Len() > 0 and ln.deferAt[ln.deferAt.Len() - 1] == s {
+        try ln.deferAt.Pop() catch { }
+        try ln.defers.Pop() catch { }
+    }
+    try ln.levels.Pop() catch { }
+}
+
+# the exit sequence for every level from the innermost down to level to: each one's deferred code, its wait, its close.
+# The levels stay as they are for the paths that do not leave
+fn (ln mut lowering&) leave(to I64) {
+    for i := ln.levels.Len() - 1, i >= to, i-- { ln.exitLevel(i) }
+}
+
+# level i left - every level above it already left on this path: its deferred code (lowered as if the levels above
+# were closed, which they are here), its wait if it is a join, its close
+fn (ln mut lowering&) exitLevel(i I64) {
+    if ln.dead { return }
+    lv := ln.levels[i]
+    # the levels above i, set aside while i's deferred code is lowered
+    saved List<level>
+    for ln.levels.Len() > i + 1 { saved.Push(try ln.levels.Pop() catch { unreachable }) }
+    mine List<I64>
+    for k in range ln.defers.Len() {
+        if ln.deferAt[k] == lv.S { mine.Push(k) }
+    }
+    # what runs here is no longer pending while it runs: a path leaving from inside deferred code (one that cannot be
+    # taken - S19 lets none leave - or is caught there) does not run it again, which would lower it without end
+    for k in mine { ln.deferAt[k] = mir.ScopeId(-1) }
+    for k := mine.Len() - 1, k >= 0, k-- {
+        # no longer pending once it runs here (B3e): a stop inside it does not run it again
+        if ln.L.Cleanups {
+            ln.emit(mir.Stmt.Deferred(ln.B.Blocks[I64(ln.defers[mine[k]].Id)].Sp, lv.S, mir.NoBlock))
+        }
+        # deferred code runs as a block of its own, inside the block it is registered in
+        ln.block(ln.defers[mine[k]])
+    }
+    for k in mine { ln.deferAt[k] = lv.S }
+    for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
+    if ln.dead { return }
+    sp := ln.B.Blocks[I64(lv.Block)].Sp if lv.Block >= typed.BlockId(0) else ln.B.Sp
+    if lv.Kind == mir.ScopeKind.Join {
+        errs := ln.F.Scopes[I64(lv.S)].Errors
+        ok := ln.F.NewBlock()
+        if ln.T.Items(errs).Len() == 0 {
+            ln.end(mir.Term.Wait(sp, lv.S, ok, mir.NoLocal, mir.NoBlock))
+        } else if ln.erroring {
+            code := ln.temp(mir.I32T, sp)
+            ln.end(mir.Term.Wait(sp, lv.S, ok, code, ok))
+        } else {
+            code := ln.temp(mir.I32T, sp)
+            failed := ln.F.NewBlock()
+            ln.end(mir.Term.Wait(sp, lv.S, ok, code, failed))
+            ln.start(failed)
+            ln.emit(mir.Stmt.Close(sp, lv.S))
+            ln.joinFailed(i, lv.S, mir.Operand.Copy(mir.L(code)), errs, sp)
+        }
+        ln.start(ok)
+    }
+    ln.emit(mir.Stmt.Close(sp, lv.S))
+}
+
+# B3e: deferred code k, just registered, lowered once more as its cleanup - blocks nothing but the registration reaches
+# (Stmt.Deferred), ending in Resume - which interpret runs for each block a stop on what it does not run leaves, as the
+# built program, going on, would leave them. Lowered where it is registered: inside its block, nothing above it open
+fn (ln mut lowering&) cleanup(sp source.Span, k I64) {
+    if ln.dead { return }
+    s := ln.deferAt[k]
+    entry := ln.F.NewBlock()
+    ln.emit(mir.Stmt.Deferred(sp, s, entry))
+    back := ln.cur
+    ln.start(entry)
+    ln.deferAt[k] = mir.ScopeId(-1)
+    ln.block(ln.defers[k])
+    ln.deferAt[k] = s
+    ln.end(mir.Term.Resume(sp))
+    ln.start(back)
+}
+
+# join s, at level i, failed with code under its list: its clauses, then the tries around it, take it - as an error
+# reaching the join statement, with every level from i up closed on this path
+fn (ln mut lowering&) joinFailed(i I64, s mir.ScopeId, code mir.Operand, errs types.ListId, sp source.Span) {
+    saved List<level>
+    for ln.levels.Len() > i { saved.Push(try ln.levels.Pop() catch { unreachable }) }
+    savedT mut List<tryCtx>&ln = List<tryCtx>()
+    for ln.tries.Len() > 0 and ln.tries[ln.tries.Len() - 1].Depth > i { savedT.Push(try ln.tries.Pop() catch { unreachable }) }
+    pushed := false
+    for k in range ln.joinS.Len() {
+        if ln.joinS[k] == s {
+            ln.tries.Push(ln.joins[k])
+            pushed = true
+        }
+    }
+    ln.dispatch(code, errs, sp)
+    if pushed { try ln.tries.Pop() catch { } }
+    for savedT.Len() > 0 { ln.tries.Push(try savedT.Pop() catch { unreachable }) }
+    for saved.Len() > 0 { ln.levels.Push(try saved.Pop() catch { unreachable }) }
+}
+
+# ---- statements ----
+
+fn (ln mut lowering&) stmt(s typed.Stmt&) {
+    if ln.dead { return }
+    match s {
+        case typed.Stmt.Let(sp, l, init) {
+            ty := ln.B.Locals[I64(l)].Ty
+            v := ln.fit(ln.val(init), init, ty, sp)
+            if ln.copiesArray(init, ty) and not ln.dead { v = ln.arrayCopy(v, ty, sp, ln.storageOf(l)) }
+            if ln.F.Locals[I64(l)].Home != mir.ScopeRef.Frame { ln.emit(mir.Stmt.Live(sp, mir.LocalId(I32(l)))) }
+            ln.emit(mir.Stmt.Assign(sp, mir.L(mir.LocalId(I32(l))), mir.Rvalue.Use(v)))
+        }
+        case typed.Stmt.Assign(sp, target, value) {
+            p := ln.place(target)
+            ln.targets.Push(p)
+            v := ln.fit(ln.val(value), value, target.Type(), sp)
+            try ln.targets.Pop() catch { }
+            if ln.valueArray(target.Type()) and not ln.dead {
+                copies := ln.copiesArray(value, target.Type())
+                ln.arrayStore(ln.mk(p), v, target.Type(), copies, sp, ln.placeStorage(target))
+            } else {
+                ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
+            }
+        }
+        case typed.Stmt.Eval(_, x) { ln.val(x) }
+        case typed.Stmt.If(sp, i) { ln.ifStmt(sp, i) }
+        case typed.Stmt.Loop(sp, body, post) { ln.loop(sp, body, post) }
+        case typed.Stmt.Jump(sp, kind, loop) { ln.jump(sp, kind, loop) }
+        case typed.Stmt.Return(sp, value) { ln.ret(sp, value) }
+        case typed.Stmt.Raise(sp, err, word) {
+            code := mir.ErrorCode(ln.T, ln.T.Errors(ln.B.Ty), err, word)
+            ln.raise(sp, mir.Operand.Const(mir.I32T, code))
+        }
+        case typed.Stmt.Exit(sp, _, msg) {
+            # S16d: the message is computed only here, where the unreachable is reached
+            m := mir.Operand.None
+            if msg != null { m = ln.val(msg) }
+            if not ln.dead { ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, m)) }
+        }
+        case typed.Stmt.Assert(sp, c, msg) { ln.assert(sp, c, msg) }
+        case typed.Stmt.Block(_, bl) { ln.block(bl) }
+        case typed.Stmt.Defer(sp, bl) {
+            ln.defers.Push(bl)
+            ln.deferAt.Push(ln.top().S)
+            if ln.L.Cleanups { ln.cleanup(sp, ln.defers.Len() - 1) }
+        }
+        case typed.Stmt.Join(sp, j) { ln.join(sp, j) }
+        case typed.Stmt.Spawn(sp, sw) { ln.spawn(sp, sw) }
+        case typed.Stmt.Yield(sp, x) { ln.yield(sp, x) }
+    }
+}
+
+# ---- array values (T7b, T11b) ----
+
+# whether a type is an array of a run-time length held by value: its storage its own, made where it is declared (T7b)
+fn (ln mut lowering&) valueArray(ty types.TypeId) Bool {
+    t := ln.T
+    r := t.Repr(ty)
+    return t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)
+}
+
+# whether storing x where a value array of type ty is wanted copies its elements: x is existing storage (a place read),
+# not a temporary whose storage the target takes
+fn (ln mut lowering&) copiesArray(x typed.Expr&, ty types.TypeId) Bool {
+    if not ln.valueArray(ty) { return false }
+    return match x {
+        case typed.Expr.Read(_, _, _, _) => true
+        # a fixed array a reference names, converted (it names that storage)
+        case typed.Expr.Prim(_, _, op, _, args) => op == typed.PrimOp.Convert and args.Len() == 1 and derefOf(args[0]) != null
+        case _ => false
+    }
+}
+
+# the reference a read of what it names reads through, else null
+fn derefOf(x typed.Expr&) typed.Expr&x {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => match p {
+            case typed.Place.Deref(_, _, r) => r
+            case _ => null
+        }
+        case _ => null
+    }
+}
+
+# an array value's elements copied into storage of its own (T7b), made in scope at
+fn (ln mut lowering&) arrayCopy(v mir.Operand, ty types.TypeId, sp source.Span, at mir.ScopeRef) mir.Operand {
+    t := ln.T
+    src := ln.local(v, ty, sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    buf := ln.temp(ty, sp)
+    el := t.Elem(t.Repr(ty))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(at, ty, n, mir.Operand.Const(el, 0))))
+    ln.emit(mir.Stmt.CopyElems(sp, mir.L(buf), mir.L(src), n))
+    return mir.Operand.Copy(mir.L(buf))
+}
+
+# where local l's own storage is, so a copy of an array value it takes is made there: its home where the scope pass
+# moved it, else the scope of the block declaring it; the program's for the stand-in placement
+fn (ln mut lowering&) storageOf(l typed.LocalId) mir.ScopeRef {
+    if not ln.planned { return mir.ScopeRef.Program }
+    h := ln.F.Locals[I64(l)].Home
+    if h != mir.ScopeRef.Frame { return h }
+    return ln.scopeRef(typed.Scope.Block(ln.B.Locals[I64(l)].In))
+}
+
+# where the storage of an array value place is: a local's, a global's in the program's scope (a value array is held
+# by value only there, T7b)
+fn (ln mut lowering&) placeStorage(p typed.Place&) mir.ScopeRef {
+    return match p {
+        case typed.Place.Local(_, _, id) => ln.storageOf(id)
+        case _ => mir.ScopeRef.Program
+    }
+}
+
+# where a function's result is built: its result scope, else the program's
+fn (ln mut lowering&) resultScope() mir.ScopeRef {
+    if not ln.planned { return mir.ScopeRef.Program }
+    for k in range ln.B.Vars.Len() {
+        if ln.B.Vars[k] == typed.ScopeVar.Result { return mir.ScopeRef.Var(k) }
+    }
+    return mir.ScopeRef.Program
+}
+
+# v stored into the value array at dst (T11b): written into the storage dst holds where the length is unchanged, else
+# dst given v's storage - a copy of it where v is existing storage
+fn (ln mut lowering&) arrayStore(dst mir.Place, v mir.Operand, ty types.TypeId, copies Bool, sp source.Span
+    at mir.ScopeRef) {
+    src := ln.local(v, ty, sp)
+    old := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(dst)], sp)
+    n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(src))], sp)
+    same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[old, n], sp)
+    inPlace, fresh, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(same, inPlace, fresh))
+    ln.start(inPlace)
+    ln.emit(mir.Stmt.CopyElems(sp, dst, mir.L(src), n))
+    ln.goto(after)
+    ln.start(fresh)
+    w := ln.arrayCopy(mir.Operand.Copy(mir.L(src)), ty, sp, at) if copies else mir.Operand.Copy(mir.L(src))
+    ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(w)))
+    ln.goto(after)
+    ln.start(after)
+}
+
+fn (ln mut lowering&) ifStmt(sp source.Span, i typed.If&) {
+    c := ln.val(i.Test)
+    if ln.dead { return }
+    yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(c, yes, no))
+    ends List<mir.BlockId>
+    ln.start(yes)
+    ln.block(i.Then)
+    ln.leaveOpen(ends)
+    ln.start(no)
+    if i.Else != null { ln.block(i.Else) }
+    ln.leaveOpen(ends)
+    ln.patch(ends)
+}
+
+# a loop (S9): its body a scope of its own each turn, entered at its head; a continue runs the post clause, then the
+# head again; a break leaves to after it
+fn (ln mut lowering&) loop(sp source.Span, body typed.Block&, post typed.Block&) {
+    head := ln.F.NewBlock()
+    ln.goto(head)
+    ln.start(head)
+    ln.loops.Push(loopCtx(body.Id, ln.levels.Len()))
+    ln.block(body)
+    lc := ln.loops[ln.loops.Len() - 1]
+    # falling off the body's end continues, as a continue does
+    ln.leaveOpen(lc.conts)
+    if lc.conts.Len() > 0 {
+        ln.patch(lc.conts)
+        if post != null { ln.block(post) }
+        ln.goto(head)
+    }
+    try ln.loops.Pop() catch { }
+    ln.patch(lc.brk)
+}
+
+fn (ln mut lowering&) jump(sp source.Span, kind typed.JumpKind, loop typed.BlockId) {
+    for k := ln.loops.Len() - 1, k >= 0, k-- {
+        lc := ln.loops[k]
+        if lc.Body == loop {
+            ln.leave(lc.Depth)
+            if kind == typed.JumpKind.Break { ln.leaveOpen(lc.brk) } else { ln.leaveOpen(lc.conts) }
+            return
+        }
+    }
+    ln.gap(sp, "a jump out of a loop not being lowered")
+}
+
+fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
+    if value == null {
+        ln.leave(0)
+        ln.end(mir.Term.Return(sp, mir.Operand.None))
+        return
+    }
+    res := ln.T.Result(ln.B.Ty)
+    v := ln.fit(ln.val(value), value, res, sp)
+    # S19: deferred code runs after the result is computed - an array value read out of storage it may write is copied
+    # (under the stand-in placement here, into the program's scope; under the plan by retArrays, into the result scope)
+    if not ln.dead and not ln.planned and ln.defers.Len() > 0 and ln.copiesArray(value, res) {
+        v = ln.arrayCopy(v, res, sp, mir.ScopeRef.Program)
+    }
+    if ln.dead { return }
+    l := ln.local(v, res, sp)
+    ln.retArrays(l, res, value, sp)
+    ln.leave(0)
+    ln.end(mir.Term.Return(sp, mir.Operand.Copy(mir.L(l))))
+}
+
+# T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
+# closes into its result scope (types.ScopeVarsOf gives such a result one) - where it is existing storage that is not
+# there already: a temporary the scope pass built there, and a local it moved there (O26a), are returned as they are;
+# under the stand-in placement it is in the program's scope already, and copied only where it is storage another name
+# reaches - what a reference names, a global, a field - which the caller could write after the call (the evaluator's
+# placement: it aliased the caller's array, so a global baked from a copy-out read the caller's later writes)
+fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Expr&, sp source.Span) {
+    t := ln.T
+    if not ln.planned {
+        if ln.valueArray(res) and ln.copiesArray(value, res) and not ownLocalRead(value) {
+            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, mir.ScopeRef.Program)
+            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
+        }
+        sr := t.Repr(res)
+        if ln.valueArray(res) or t.KindOf(sr) != types.Kind.Tuple { return }
+        sparts := t.Items(t.Parts(sr))
+        sitems := tupleItems(value)
+        if sitems == null { return }
+        for i in range sparts.Len() {
+            if i >= sitems.Len() or not ln.valueArray(sparts[i]) or not ln.copiesArray(sitems[i], sparts[i]) or ownLocalRead(sitems[i]) { continue }
+            at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
+            cp := ln.arrayCopy(mir.Operand.Copy(at), sparts[i], sp, mir.ScopeRef.Program)
+            ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
+        }
+        return
+    }
+    if ln.valueArray(res) {
+        if ln.retCopies(value, res) {
+            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, ln.resultScope())
+            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
+        }
+        return
+    }
+    r := t.Repr(res)
+    if t.KindOf(r) != types.Kind.Tuple { return }
+    parts := t.Items(t.Parts(r))
+    items := tupleItems(value)
+    for i in range parts.Len() {
+        if not ln.valueArray(parts[i]) { continue }
+        if items != null and i < items.Len() and not ln.retCopies(items[i], parts[i]) { continue }
+        at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
+        cp := ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp, ln.resultScope())
+        ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
+    }
+}
+
+# whether x reads a local of the function as a whole - its own storage, which nothing outside names once it returns
+fn ownLocalRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => match p {
+            case typed.Place.Local(_, _, _) => true
+            case _ => false
+        }
+        case _ => false
+    }
+}
+
+# whether a returned array value is copied into the result scope: existing storage, but for a local living there - a
+# conditional, a match or a try's default by any value it may give (as stage 0's cgBuiltInResult)
+fn (ln mut lowering&) retCopies(x typed.Expr&, ty types.TypeId) Bool {
+    if x == null { return false }
+    if ln.valueArray(ty) {
+        match x {
+            case typed.Expr.Cond(_, _, c) { return ln.retCopies(c.A, ty) or ln.retCopies(c.B, ty) }
+            case typed.Expr.Match(_, _, m) {
+                for a in m.Arms {
+                    if a != null and ln.retCopies(a.Value, ty) { return true }
+                }
+                return m.NoMatch != null and ln.retCopies(m.NoMatch.Value, ty)
+            }
+            case typed.Expr.Try(_, _, t) {
+                if ln.retCopies(t.X, ty) { return true }
+                for c in t.Clauses {
+                    for df in c.Defaults {
+                        if ln.retCopies(df, ty) { return true }
+                    }
+                }
+                return false
+            }
+            case typed.Expr.Seq(_, _, q) { return ln.retCopies(q.X, ty) }
+            case _ { }
+        }
+    }
+    if not ln.copiesArray(x, ty) { return false }
+    # deferred code or a join's tasks still to run on the way out may write the local after the result is computed
+    if ln.defers.Len() > 0 { return true }
+    for lv in ln.levels {
+        if lv.Kind == mir.ScopeKind.Join { return true }
+    }
+    match x {
+        case typed.Expr.Read(_, _, p, _) {
+            match p {
+                case typed.Place.Local(_, _, id) { return ln.F.Locals[I64(id)].Home != ln.resultScope() }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    return true
+}
+
+# the items of a tuple a return makes, else null
+fn tupleItems(x typed.Expr&) Array<typed.Expr&>&x {
+    match x {
+        case typed.Expr.Make(_, _, m) {
+            if m.Kind == typed.MakeKind.Tuple { return m.Items }
+        }
+        case _ { }
+    }
+    return null
+}
+
+# the body failing with code, under its own list, once every scope is closed
+fn (ln mut lowering&) raise(sp source.Span, code mir.Operand) {
+    if ln.T.Items(ln.T.Errors(ln.B.Ty)).Len() == 0 {
+        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
+        return
+    }
+    l := ln.local(code, mir.I32T, sp)
+    was := ln.erroring
+    ln.erroring = true
+    ln.leave(0)
+    ln.erroring = was
+    ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(l))))
+}
+
+# an assert (S17, S18): the test, its message computed only on the failing path
+fn (ln mut lowering&) assert(sp source.Span, c typed.Expr&, msg typed.Expr&) {
+    if ln.L.AssertsTrue.Has(pair.Pair(I64(ln.B.Id), I64(sp.Start))) { return }     # decided true while compiling (S18c)
+    x := ln.val(c)
+    if ln.dead { return }
+    ok, bad := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(x, ok, bad))
+    ln.start(bad)
+    m := mir.Operand.None
+    if msg != null { m = ln.val(msg) }
+    ln.end(mir.Term.Exit(sp, mir.ExitKind.Assert, m))
+    ln.start(ok)
+}
+
+# a join (P1, P1b, P4b, P4c): a scope its tasks are spawned into, waited for on every way out; where a task can let an
+# error through, the wait's failed edge takes the earliest-spawned's error to the join's clauses ("try join"), then to
+# the tries around it, else out of the body - unless an error is already leaving, which the join's failure does not
+# replace
+fn (ln mut lowering&) join(sp source.Span, j typed.Join&) {
+    errs := ln.joinErrors(j.Code)
+    tc mut tryCtx&ln = tryCtx(ln.levels.Len(), j.Clauses, false)
+    for c in j.Clauses { tc.entries.Push(mir.NoBlock) }
+    ln.openBlock(j.Code, mir.ScopeKind.Join, errs)
+    ln.joins.Push(tc)
+    ln.joinS.Push(ln.top().S)
+    for s in j.Code.Stmts { ln.stmt(s) }
+    ln.closeBlock()
+    try ln.joins.Pop() catch { }
+    try ln.joinS.Pop() catch { }
+    ends List<mir.BlockId>
+    ln.leaveOpen(ends)
+    ln.clauses(tc, j.Clauses, mir.NoLocal, types.VoidT, ends)
+    ln.patch(ends)
+}
+
+# the errors a join's wait can fail with (P4b): what each task's call can fail with and its clauses do not take whole -
+# its spawns, through the blocks in it but not through a join nested in it (P1a)
+fn (ln mut lowering&) joinErrors(code typed.Block&) types.ListId {
+    out List<types.TypeId>
+    ln.spawnErrors(code, out)
+    return ln.T.List(out.ToArray())
+}
+
+fn (ln mut lowering&) spawnErrors(bl typed.Block&, out mut List<types.TypeId>&) {
+    if bl == null { return }
+    for s in bl.Stmts { ln.stmtSpawnErrors(s, out) }
+}
+
+fn (ln mut lowering&) stmtSpawnErrors(s typed.Stmt&, out mut List<types.TypeId>&) {
+    t := ln.T
+    match s {
+        case typed.Stmt.Spawn(_, sw) {
+            fty := ln.taskType(sw.Task)
+            if fty == types.UnknownT { return }
+            for e in t.Items(t.Errors(fty)) {
+                taken := false
+                for cl in sw.Clauses {
+                    if cl.All { taken = true }
+                    for it in cl.Items {
+                        if it.Word < 0 and t.Same(t.ErrOf(it.Err), t.ErrOf(e)) { taken = true }
+                    }
+                }
+                if taken { continue }
+                have := false
+                for x in out { have = have or t.Same(t.ErrOf(x), t.ErrOf(e)) }
+                if not have { out.Push(t.ErrOf(e)) }
+            }
+        }
+        case typed.Stmt.Block(_, b) { ln.spawnErrors(b, out) }
+        case typed.Stmt.If(_, i) {
+            ln.spawnErrors(i.Then, out)
+            ln.spawnErrors(i.Else, out)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            ln.spawnErrors(body, out)
+            ln.spawnErrors(post, out)
+        }
+        case _ { }
+    }
+}
+
+# a task's function type: its call's callee's, found without evaluating it; Unknown for a task that is no call
+fn (ln mut lowering&) taskType(task typed.Expr&) types.TypeId {
+    match task {
+        case typed.Expr.Call(_, _, c) {
+            match c.Target {
+                case typed.Callee.Body(id) { return ln.L.Bodies[I64(id)].Ty }
+                case typed.Callee.Extern(f) { return ln.L.P.Sig(f) }
+                case typed.Callee.Value(x) { return x.Type() }
+                case typed.Callee.Helper(k, ht) {
+                    _, ty := ln.helperCallee(k, ht)
+                    return ty
+                }
+            }
+        }
+        case _ { }
+    }
+    return types.UnknownT
+}
+
+# a task (P1, P1g, P4a): its targets' places, then its call's callee and arguments, then the spawn into the innermost
+# join, its clauses handlers run on its thread
+fn (ln mut lowering&) spawn(sp source.Span, sw typed.Spawn&) {
+    j := mir.NoScope
+    for k := ln.levels.Len() - 1, k >= 0, k-- {
+        if ln.levels[k].Kind == mir.ScopeKind.Join and j == mir.NoScope { j = ln.levels[k].S }
+    }
+    if j == mir.NoScope {
+        ln.gap(sp, "a spawn outside a join")
+        return
+    }
+    # E35: "spawn f(x)!" - the call itself is the task, and what it fails with ends the program from the task's thread
+    task := sw.Task
+    banged := false
+    match task {
+        case typed.Expr.Try(_, _, tr) if tr.Ends {
+            task = tr.X
+            banged = true
+        }
+        case _ { }
+    }
+    fty := ln.taskType(task)
+    if fty == types.UnknownT {
+        ln.gap(sp, "a task that is no call")
+        return
+    }
+    # the targets' places, a discarded one ("_") a temporary of its result's type, given its zero
+    rs := ln.T.Results(fty)
+    places := Array<mir.Place>(sw.Targets.Len())
+    for i in range sw.Targets.Len() {
+        if sw.Targets[i] == null {
+            dt := rs[i] if i < rs.Len() else types.UnknownT
+            d := ln.temp(dt, sp)
+            ln.emit(mir.Stmt.Assign(sp, mir.L(d), mir.Rvalue.Use(mir.Operand.Const(dt, 0))))
+            places[i] = mir.L(d)
+        } else {
+            places[i] = ln.mk(ln.place(sw.Targets[i]))
+        }
+    }
+    match task {
+        case typed.Expr.Call(csp, _, c) {
+            callee, ty := ln.callee(c.Target, csp)
+            if ln.dead { return }
+            args := ln.args(c, callee, ty)
+            if ln.dead { return }
+            cls := Array<mir.TaskClause>(sw.Clauses.Len())
+            for i in range sw.Clauses.Len() {
+                cl := sw.Clauses[i]
+                h := mir.Operand.None
+                if cl.Handler != null { h = ln.val(cl.Handler) }
+                cls[i] = mir.TaskClause(ln.F.AddItems(cl.Items), cl.All, h)
+            }
+            if ln.dead { return }
+            ends := mir.Empty
+            if banged { ends = ln.F.Args(ln.bangNames(ln.T.Errors(ty), sp)) }
+            k := ln.F.AddTask(callee, args, ln.passed(mir.PassedCount(ln.T, callee, ty), c.Site), places, cls, ends
+                              sw.Task.Span())
+            ln.emit(mir.Stmt.Spawn(sp, j, k))
+        }
+        case _ { }
+    }
+}
+
+# ---- places ----
+
+fn (ln mut lowering&) mk(p pl) mir.Place { return ln.F.Place(p.B, p.Ps.ToArray()) }
+
+fn (ln mut lowering&) with(p pl, x mir.Proj) pl {
+    q := pl(p.B)
+    for y in p.Ps { q.Ps.Push(y) }
+    q.Ps.Push(x)
+    return q
+}
+
+# a place's base and projections, its references and indices computed before
+fn (ln mut lowering&) place(p typed.Place&) pl {
+    if ln.dead { return pl(mir.Base.None) }
+    if p == null {
+        ln.gap(ln.B.Sp, "a place that is none")
+        return pl(mir.Base.None)
+    }
+    return match p {
+        case typed.Place.Local(_, _, id) => pl(mir.Base.Local(mir.LocalId(I32(id))))
+        case typed.Place.Global(_, ty, m, n) => pl(mir.Base.Global(m, n, ty))
+        case typed.Place.Deref(sp, _, r) => ln.deref(r, sp)
+        case typed.Place.Field(_, _, base, i) => ln.with(ln.place(base), mir.Proj.Field(i))
+        case typed.Place.Elem(sp, _, e) => ln.elem(e, sp)
+        case typed.Place.Payload(sp, _, py) => ln.payload(py, sp)
+        case typed.Place.Temp(sp, ty, v, _) => pl(mir.Base.Local(ln.local(ln.val(v), ty, sp)))
+        case typed.Place.Target(sp, _) => ln.target(sp)
+    }
+}
+
+fn (ln mut lowering&) deref(r typed.Expr&, sp source.Span) pl {
+    v := ln.val(r)
+    if ln.dead { return pl(mir.Base.None) }
+    l := ln.local(v, r.Type(), sp)
+    return ln.with(pl(mir.Base.Local(l)), mir.Proj.Deref)
+}
+
+fn (ln mut lowering&) target(sp source.Span) pl {
+    if ln.targets.Len() == 0 {
+        ln.gap(sp, "a compound assignment's old value outside an assignment")
+        return pl(mir.Base.None)
+    }
+    return ln.targets[ln.targets.Len() - 1]
+}
+
+fn (ln mut lowering&) elem(e typed.Elem&, sp source.Span) pl {
+    base := ln.place(e.Base)
+    x := ln.val(e.Index)
+    if ln.dead { return base }
+    ity := e.Index.Type()
+    if e.Checked != typed.Check.None {
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(base))], sp)
+        i := ln.asI64(x, ity, sp)
+        ln.bounds(i, n, false, e.Checked, mir.ExitKind.SliceBounds, sp)
+    }
+    if e.Checked == typed.Check.None {
+        match x {
+            case mir.Operand.Const(_, v) {
+                if v >= 0 { return ln.with(base, mir.Proj.At(v)) }
+            }
+            case _ { }
+        }
+    }
+    return ln.with(base, mir.Proj.Index(ln.local(x, ity, sp)))
+}
+
+fn (ln mut lowering&) payload(py typed.Payload&, sp source.Span) pl {
+    base := ln.place(py.Base)
+    if ln.dead { return base }
+    if py.Checked != typed.Check.None {
+        tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(base)), sp)
+        ok := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[tag, ln.constI64(py.Tag)], sp)
+        ln.check(ok, py.Checked, mir.ExitKind.As, WrongCase, sp)
+    }
+    return ln.with(base, mir.Proj.Payload(py.Tag))
+}
+
+# 0 <= i < n (or <= n where incl): on to the code after, or to the check's failure
+fn (ln mut lowering&) bounds(i mir.Operand, n mir.Operand, incl Bool, chk typed.Check, kind mir.ExitKind, sp source.Span) {
+    lo := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[i, ln.constI64(0)], sp)
+    ln.check(lo, chk, kind, OutOfBounds, sp)
+    hi := ln.prim(typed.PrimOp.Le if incl else typed.PrimOp.Lt, types.BoolT, mir.Operand[i, n], sp)
+    ln.check(hi, chk, kind, OutOfBounds, sp)
+}
+
+# a check: on where ok holds; where it does not, an Exit for a guaranteed one (Abort), or BuiltinError's word to the
+# innermost try for a checked one (Try)
+fn (ln mut lowering&) check(ok mir.Operand, chk typed.Check, kind mir.ExitKind, word I64, sp source.Span) {
+    if ln.dead or chk == typed.Check.None { return }
+    good, bad := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(ok, good, bad))
+    ln.start(bad)
+    if chk == typed.Check.Abort {
+        ln.end(mir.Term.Exit(sp, kind, mir.Operand.None))
+    } else {
+        ln.dispatch(mir.Operand.Const(mir.I32T, (1 << 16) | word), ln.T.List1(ln.L.builtin()), sp, true)
+    }
+    ln.start(good)
+}
+
+# a failure in the innermost check of the same kind as check but where a test failing means the check fails: not(ok)
+fn (ln mut lowering&) fails(bad mir.Operand, chk typed.Check, kind mir.ExitKind, word I64, sp source.Span) {
+    if ln.dead or chk == typed.Check.None { return }
+    ok := ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[bad], sp)
+    ln.check(ok, chk, kind, word, sp)
+}
+
+# ---- errors ----
+
+# E35: the error a "!" took ends the program, named as a program writes it - another module's error type by its
+# module's base name, the prelude's and this module's bare ("io.IoError.FULL") - a test and an exit for each word
+fn (ln mut lowering&) bang(code mir.Operand, from types.ListId, sp source.Span, kind mir.ExitKind = mir.ExitKind.Error) {
+    xs := ln.bangNames(from, sp)
+    for i in range 0, xs.Len(), 2 {
+        yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+        same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, xs[i]], sp)
+        ln.end(mir.Term.Branch(same, yes, no))
+        ln.start(yes)
+        ln.end(mir.Term.Exit(sp, kind, xs[i + 1]))
+        ln.start(no)
+    }
+    ln.end(mir.Term.Exit(sp, kind, ln.textData("unhandled error", sp)))
+}
+
+# the errors of list from as "!" names them: for each word, its code (an I32 constant) and its name as text data
+fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(0, 0)) Array<mir.Operand>& {
+    t := ln.T
+    xs := t.Items(from)
+    out mut List<mir.Operand>& = List<mir.Operand>()
+    for j in range xs.Len() {
+        et := t.ErrOf(xs[j])
+        if t.KindOf(et) != types.Kind.Named { continue }
+        d := t.DeclOf(et)
+        q := ""
+        dm := t.DeclModule(d)
+        id := ln.L.P.L.Mods[dm].Identity
+        if not id.StartsWith("std/prelude") and dm != ln.module() {
+            k := try id.FindLast("/") catch default -1
+            q = $id[k + 1:] "."
+        }
+        ws := ln.L.P.ErrorWords(d)
+        for w in range ws.Len() {
+            out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
+            out.Push(ln.textData($q $t.Names.Text(t.DeclName(d)) "." $t.Names.Text(ws[w]), sp))
+        }
+    }
+    return out.ToArray()
+}
+
+# text as constant data (T25d), a String&
+fn (ln mut lowering&) textData(text String&, sp source.Span) mir.Operand {
+    c := ln.F.AddConst(typed.Const.Bytes(text))
+    return mir.Operand.Data(ln.T.Ref(ln.L.text(), types.ReadOnly), c, ln.file, sp)
+}
+
+# the module the body being lowered is in
+fn (ln mut lowering&) module() I64 {
+    for m in range ln.L.P.L.Mods.Len() {
+        if ln.L.P.L.Mods[m].File == ln.file { return m }
+    }
+    return -1
+}
+
+# an error with code, under list from, reaching here: to the first clause of the innermost try taking it, the scopes
+# opened since the try closed on the way; what its clauses do not take leaves the body under its own list (R13, R17),
+# every scope closed - a try around it never sees it, but for a loop's own call (Passes), whose leftovers go on to it
+# raised: the error is raised here, by a check, not passed on by a call - a "!" taking it starts its trace here (S18d)
+fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Span, raised Bool = false) {
+    t := ln.T
+    xs := t.Items(from)
+    for ti := ln.tries.Len() - 1, ti >= 0, ti-- {
+        tc := ln.tries[ti]
+        for ci in range tc.Clauses.Len() {
+            if ln.dead { return }
+            cl := tc.Clauses[ci]
+            test1 := mir.Operand.None
+            always := cl.All
+            for it in cl.Items {
+                if always { break }
+                k := -1
+                for j in range xs.Len() {
+                    if k < 0 and t.Same(t.ErrOf(xs[j]), t.ErrOf(it.Err)) { k = j }
+                }
+                if k < 0 { continue }
+                one := mir.Operand.None
+                if it.Word < 0 {
+                    hi := ln.prim(typed.PrimOp.Shr, mir.I32T, mir.Operand[code, mir.Operand.Const(mir.I32T, 16)], sp)
+                    one = ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[hi, mir.Operand.Const(mir.I32T, k + 1)], sp)
+                } else {
+                    w := mir.Operand.Const(mir.I32T, ((k + 1) << 16) | it.Word)
+                    one = ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[code, w], sp)
+                }
+                test1 = one if test1 == mir.Operand.None else ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[test1, one], sp)
+            }
+            if not always and test1 == mir.Operand.None { continue }
+            if always {
+                ln.toClause(tc, ci)
+                return
+            }
+            yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(test1, yes, no))
+            ln.start(yes)
+            ln.toClause(tc, ci)
+            ln.start(no)
+        }
+        # what this try's clauses do not take leaves the body - past a "!", it ends the program
+        if tc.Ends {
+            if raised { ln.emit(mir.Stmt.Raised(sp)) }
+            ln.bang(code, from, sp)
+            return
+        }
+        if not tc.Passes { break }
+    }
+    # with no try at all, the call is a T29d literal's constructor - decided while compiling not to fail (Key.Literal),
+    # its error edge never taken
+    mineErrs := ln.T.Errors(ln.B.Ty)
+    match ln.B.Of {
+        case typed.BodyOf.Test(_) {
+            # S16: an error a try lets out of a test body fails the test, named on its FAIL line
+            if ln.tries.Len() > 0 {
+                ln.bang(code, from, sp, mir.ExitKind.Escaped)
+                return
+            }
+        }
+        case _ { }
+    }
+    if t.Items(mineErrs).Len() == 0 or ln.tries.Len() == 0 {
+        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
+        return
+    }
+    ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(code, from, mineErrs), sp))
+}
+
+# from here to clause ci of try tc: the scopes opened since the try closed, then a jump to the clause's entry
+fn (ln mut lowering&) toClause(tc tryCtx, ci I64) {
+    was := ln.erroring
+    ln.erroring = true
+    ln.leave(tc.Depth)
+    ln.erroring = was
+    if ln.dead { return }
+    if tc.entries[ci] == mir.NoBlock { tc.entries[ci] = ln.F.NewBlock() }
+    ln.goto(tc.entries[ci])
+}
+
+# a try (R8-R11): X with its errors taken by the clauses, its value - or a clause's default - in one slot
+fn (ln mut lowering&) try(x typed.Expr&, t typed.Try&, sp source.Span) mir.Operand {
+    ty := x.Type()
+    slot := mir.NoLocal
+    if ty != types.VoidT and ty != types.NoreturnT { slot = ln.temp(ty, sp) }
+    tc mut tryCtx&ln = tryCtx(ln.levels.Len(), t.Clauses, t.Ends, t.Passes)
+    for c in t.Clauses { tc.entries.Push(mir.NoBlock) }
+    ln.tries.Push(tc)
+    v := ln.val(t.X)
+    try ln.tries.Pop() catch { }
+    ends List<mir.BlockId>
+    if not ln.dead and slot != mir.NoLocal and v != mir.Operand.None {
+        ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(v)))
+    }
+    ln.leaveOpen(ends)
+    ln.clauses(tc, t.Clauses, slot, ty, ends)
+    ln.patch(ends)
+    if slot == mir.NoLocal { return mir.Operand.None }
+    return mir.Operand.Copy(mir.L(slot))
+}
+
+# the clauses errors reached, each from its entry: its code as a block of its own, then its defaults into the slot;
+# each falls through to where ends lead
+fn (ln mut lowering&) clauses(tc tryCtx, cls Array<typed.Clause&>&, slot mir.LocalId, ty types.TypeId
+                              ends mut List<mir.BlockId>&) {
+    for ci in range cls.Len() {
+        if tc.entries[ci] == mir.NoBlock { continue }
+        cl := cls[ci]
+        ln.start(tc.entries[ci])
+        ln.F.Taken.Push(tc.entries[ci])
+        if cl.Code != null { ln.block(cl.Code) }
+        if not ln.dead and slot != mir.NoLocal and cl.Defaults.Len() > 0 {
+            if cl.Defaults.Len() == 1 {
+                d := ln.val(cl.Defaults[0])
+                ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(slot), mir.Rvalue.Use(d)))
+            } else {
+                ops := Array<mir.Operand>(cl.Defaults.Len())
+                for k in range cl.Defaults.Len() { ops[k] = ln.val(cl.Defaults[k]) }
+                ln.emit(mir.Stmt.Assign(cl.Sp, mir.L(slot), mir.Rvalue.Aggregate(ty, 0, ln.F.Args(ops))))
+            }
+        }
+        ln.leaveOpen(ends)
+    }
+}
+
+# ---- expressions ----
+
+# a value: computed by the statements emitted so far, held in a temporary (or a constant)
+fn (ln mut lowering&) val(x typed.Expr&) mir.Operand {
+    if ln.dead or x == null { return mir.Operand.None }
+    t := ln.T
+    ty := x.Type()
+    if ty == types.UnknownT {
+        ln.gap(x.Span(), "an unknown type (a check error or gap): an expression")
+        return mir.Operand.None
+    }
+    return match x {
+        case typed.Expr.Lit(_, lt, bits) => mir.Operand.Const(lt, bits)
+        case typed.Expr.Data(sp, dt, _, c) => mir.Operand.Data(dt, ln.F.AddConst(c), ln.file, sp)
+        case typed.Expr.Read(sp, rt, p, _) => ln.read(p, rt, sp)
+        case typed.Expr.Borrow(sp, bt, p) => ln.into(bt, mir.Rvalue.Ref(ln.mk(ln.place(p)), bt), sp)
+        case typed.Expr.Take(sp, tt, p) => ln.take(p, tt, sp)
+        case typed.Expr.Promote(sp, pt, pr) => ln.promote(pr, pt, sp)
+        case typed.Expr.Call(sp, ct, c) => ln.call(c, ct, sp)
+        case typed.Expr.Make(sp, mt, m) => ln.make(m, mt, sp)
+        case typed.Expr.Collect(sp, ct, c) => ln.collect(c, ct, sp)
+        case typed.Expr.Prim(sp, pt, op, chk, args) => ln.primExpr(op, chk, args, pt, sp)
+        case typed.Expr.Slice(sp, st, s) => ln.slice(s, st, sp)
+        case typed.Expr.Cond(sp, ct, c) => ln.cond(c, ct, sp)
+        case typed.Expr.Seq(_, _, s) => ln.seq(s)
+        case typed.Expr.Match(sp, mt, m) => ln.match(m, mt, sp)
+        case typed.Expr.Try(sp, _, tr) => ln.try(x, tr, sp)
+        case typed.Expr.Fn(sp, ft, fv) => ln.fnVal(fv, ft, sp)
+        case typed.Expr.Text(sp, tt, tx) => ln.text(tx, tt, sp)
+        case typed.Expr.Away(_, file, y) => ln.away(file, y)
+    }
+}
+
+# a value fitted to where it goes: a fixed array where a run-time one of its element is wanted widened to it (T7c),
+# which check leaves implicit where a ":=" global or a local's array is given a literal
+fn (ln mut lowering&) fit(v mir.Operand, x typed.Expr&, to types.TypeId, sp source.Span) mir.Operand {
+    if ln.dead or x == null { return v }
+    t := ln.T
+    from := t.Repr(x.Type())
+    want := t.Repr(to)
+    if t.KindOf(from) == types.Kind.Array and t.KindOf(want) == types.Kind.Array and t.Length(from) != types.TypeId(0) and
+            t.Length(want) == types.TypeId(0) and t.Same(t.Elem(from), t.Elem(want)) {
+        return ln.prim(typed.PrimOp.Convert, to, mir.Operand[v], sp)
+    }
+    return v
+}
+
+fn (ln mut lowering&) away(file I64, y typed.Expr&) mir.Operand {
+    was := ln.file
+    ln.file = file
+    v := ln.val(y)
+    ln.file = was
+    return v
+}
+
+fn (ln mut lowering&) read(p typed.Place&, ty types.TypeId, sp source.Span) mir.Operand {
+    q := ln.place(p)
+    if ln.dead { return mir.Operand.None }
+    return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
+}
+
+# a move out of a place (E34): an own reference's Take; an owner held by value copied out and its zero value left
+# (owned references are being removed, docs/memory.md: nothing is released)
+fn (ln mut lowering&) take(p typed.Place&, ty types.TypeId, sp source.Span) mir.Operand {
+    q := ln.mk(ln.place(p))
+    if ln.dead { return mir.Operand.None }
+    t := ln.T
+    pt := p.Type()
+    if t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0 { return ln.into(ty, mir.Rvalue.Take(q), sp) }
+    v := ln.into(pt, mir.Rvalue.Use(mir.Operand.Copy(q)), sp)
+    ln.emit(mir.Stmt.Assign(sp, q, mir.Rvalue.Use(mir.Operand.Const(pt, 0))))
+    return v
+}
+
+# a temporary given storage (E12c): New in the site's scope, a destructor-bearing instance registered there (O16)
+fn (ln mut lowering&) promote(pr typed.Promote&, ty types.TypeId, sp source.Span) mir.Operand {
+    # a fresh run-time-length array made only to be promoted - "s.data = Array<T>(n)", a literal - is made where the
+    # reference goes, the reference its pair, rather than made and copied there (T7)
+    t0 := ln.T
+    a0 := ln.arrayOf(ty)
+    if t0.IsRef(t0.Repr(ty)) and a0 != types.UnknownT and ln.fixedLen(a0) < 0 {
+        match pr.X {
+            case typed.Expr.Make(_, _, m) {
+                if (m.Kind == typed.MakeKind.Fill or m.Kind == typed.MakeKind.Array) and m.Site >= typed.SiteId(0) {
+                    sv, sa := ln.adoptSite, ln.adoptAt
+                    ln.adoptSite = m.Site
+                    ln.adoptAt = ln.built(pr.Site)
+                    r := ln.fill(m, ty, sp) if m.Kind == typed.MakeKind.Fill else ln.arrayLit(m, ty, sp)
+                    ln.adoptSite, ln.adoptAt = sv, sa
+                    return r
+                }
+            }
+            case _ { }
+        }
+    }
+    v := ln.val(pr.X)
+    if ln.dead { return mir.Operand.None }
+    s := ln.built(pr.Site)
+    r := ln.into(ty, mir.Rvalue.New(s, v, ty), sp)
+    t := ln.T
+    if t.IsRef(ty) and t.KindOf(t.Referent(ty)) == types.Kind.Named and t.HasBody(t.Referent(ty)) and t.Destructs(t.Referent(ty)) {
+        ln.emit(mir.Stmt.RegisterDtor(sp, s, t.Referent(ty), r))
+    }
+    return r
+}
+
+fn (ln mut lowering&) seq(s typed.Seq&) mir.Operand {
+    for st in s.Stmts { ln.stmt(st) }
+    if s.X == null { return mir.Operand.None }
+    return ln.val(s.X)
+}
+
+# "a if c else b" (E28), and/or (E7): only the chosen value computed, into one slot
+fn (ln mut lowering&) cond(c typed.Cond&, ty types.TypeId, sp source.Span) mir.Operand {
+    x := ln.val(c.C)
+    if ln.dead { return mir.Operand.None }
+    slot := ln.temp(ty, sp)
+    yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(x, yes, no))
+    ends List<mir.BlockId>
+    ln.start(yes)
+    a := ln.val(c.A)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(a)))
+    ln.leaveOpen(ends)
+    ln.start(no)
+    b := ln.val(c.B)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(b)))
+    ln.leaveOpen(ends)
+    ln.patch(ends)
+    return mir.Operand.Copy(mir.L(slot))
+}
+
+# a match (S12, S13): the subject held, then each arm's alternatives tested in order; the first that holds binds, then
+# the guard; a value match's arms each give the one slot
+fn (ln mut lowering&) match(m typed.Match&, ty types.TypeId, sp source.Span) mir.Operand {
+    for s in m.Held { ln.stmt(s) }
+    if ln.dead { return mir.Operand.None }
+    slot := mir.NoLocal
+    if m.IsValue and ty != types.VoidT and ty != types.NoreturnT { slot = ln.temp(ty, sp) }
+    ends List<mir.BlockId>
+    for a in m.Arms {
+        if ln.dead { break }
+        next List<mir.BlockId>
+        hit List<mir.BlockId>
+        for k in range a.Alts.Len() {
+            if ln.dead { break }
+            alt := a.Alts[k]
+            c := ln.val(alt.Test)
+            if ln.dead { break }
+            yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(c, yes, no))
+            ln.start(yes)
+            for bd in alt.Binds {
+                v := ln.val(bd.From)
+                ln.emit(mir.Stmt.Assign(a.Sp, mir.L(mir.LocalId(I32(bd.To))), mir.Rvalue.Use(v)))
+            }
+            ln.leaveOpen(hit)
+            ln.start(no)
+        }
+        ln.leaveOpen(next)
+        ln.patch(hit)
+        if ln.dead {
+            ln.patch(next)
+            continue
+        }
+        if a.Guard != null {
+            g := ln.val(a.Guard)
+            if not ln.dead {
+                yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+                ln.end(mir.Term.Branch(g, yes, no))
+                ln.start(no)
+                ln.leaveOpen(next)
+                ln.start(yes)
+            }
+        }
+        ln.arm(a, slot)
+        ln.leaveOpen(ends)
+        ln.patch(next)
+    }
+    if not ln.dead {
+        ln.arm(m.NoMatch, slot)
+        ln.leaveOpen(ends)
+    }
+    ln.patch(ends)
+    if slot == mir.NoLocal { return mir.Operand.None }
+    return mir.Operand.Copy(mir.L(slot))
+}
+
+# an arm's code, as a block of its own, then its value into the slot
+fn (ln mut lowering&) arm(a typed.Arm&, slot mir.LocalId) {
+    if a.Code == null {
+        if a.Value != null and slot != mir.NoLocal {
+            v := ln.val(a.Value)
+            ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
+        }
+        return
+    }
+    if ln.levels.Len() > 0 and ln.top().Block == a.Code.Id {
+        for s in a.Code.Stmts { ln.stmt(s) }
+        if a.Value != null and slot != mir.NoLocal {
+            v := ln.val(a.Value)
+            ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
+        }
+        return
+    }
+    ln.openBlock(a.Code, mir.ScopeKind.Block)
+    for s in a.Code.Stmts { ln.stmt(s) }
+    if a.Value != null and slot != mir.NoLocal {
+        v := ln.val(a.Value)
+        ln.emit(mir.Stmt.Assign(a.Sp, mir.L(slot), mir.Rvalue.Use(v)))
+    }
+    ln.closeBlock()
+}
+
+# ---- calls ----
+
+# what a call reaches, and its function type
+fn (ln mut lowering&) callee(c typed.Callee&, sp source.Span) mir.Callee, types.TypeId {
+    match c {
+        case typed.Callee.Body(id) { return ln.bodyCallee(id) }
+        case typed.Callee.Extern(f) {
+            ty := ln.L.P.Sig(f)
+            return mir.Callee.Extern(f, ty), ty
+        }
+        case typed.Callee.Value(x) { return ln.valueCallee(x) }
+        case typed.Callee.Helper(k, ht) { return ln.helperCallee(k, ht) }
+    }
+}
+
+fn (ln mut lowering&) bodyCallee(id typed.BodyId) mir.Callee, types.TypeId {
+    ty := ln.L.Bodies[I64(id)].Ty
+    return mir.Callee.Fn(mir.FnKey.Body(id), ty), ty
+}
+
+fn (ln mut lowering&) valueCallee(x typed.Expr&) mir.Callee, types.TypeId {
+    v := ln.val(x)
+    return mir.Callee.Value(v), x.Type()
+}
+
+fn (ln mut lowering&) helperCallee(k typed.Helper, ht types.TypeId) mir.Callee, types.TypeId {
+    kind := mir.HelperKind.Equal if k == typed.Helper.Equal else mir.HelperKind.Hash
+    ht = ln.L.helperTy(kind, ht)
+    ty := mir.HelperType(ln.T, kind, ht)
+    ln.L.Want(mir.FnKey.Helper(kind, ht))
+    return mir.Callee.Fn(mir.FnKey.Helper(kind, ht), ty), ty
+}
+
+# a call's arguments, left to right: a helper's taken as references to their values held (its ABI, DESIGN.md 1.8.1)
+fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mir.Range {
+    t := ln.T
+    ps := t.Items(t.Params(ty))
+    helper := match callee {
+        case mir.Callee.Fn(mir.FnKey.Helper(_, _), _) => true
+        case _ => false
+    }
+    ops := Array<mir.Operand>(c.Args.Len())
+    for i in range c.Args.Len() {
+        a := c.Args[i]
+        v := ln.val(a)
+        if i < ps.Len() { v = ln.fit(v, a, ps[i], a.Span()) }
+        # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
+        held := t.IsRef(a.Type()) and t.Same(t.Plain(t.Referent(a.Type())), t.Plain(t.Referent(ps[i]))) if i < ps.Len() and t.IsRef(ps[i]) else true
+        if helper and i < ps.Len() and t.IsRef(ps[i]) and not held {
+            l := ln.local(v, a.Type(), a.Span())
+            v = ln.into(ps[i], mir.Rvalue.Ref(mir.L(l), ps[i]), a.Span())
+        }
+        ops[i] = v
+    }
+    return ln.F.Args(ops)
+}
+
+fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    if c.Zero and c.Args.Len() == 0 { return ln.zero(ty, sp) }
+    callee, fty := ln.callee(c.Target, sp)
+    if ln.dead { return mir.Operand.None }
+    args := ln.args(c, callee, fty)
+    if ln.dead { return mir.Operand.None }
+    res := t.Result(fty)
+    scopes := ln.passed(mir.PassedCount(t, callee, fty), c.Site)
+    ok := ln.F.NewBlock()
+    dest := mir.NoLocal
+    if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(ty if ty != types.VoidT else res, sp) }
+    errs := t.Errors(fty)
+    code := mir.NoLocal
+    eb := mir.NoBlock
+    if t.Items(errs).Len() > 0 {
+        code = ln.temp(mir.I32T, sp)
+        eb = ln.F.NewBlock()
+    }
+    k := ln.F.AddCall(mir.Call(callee, args, scopes, mir.L(dest) if dest != mir.NoLocal else mir.NoPlace
+                               dest != mir.NoLocal, ok, code, eb))
+    ln.end(mir.Term.Call(sp, k))
+    if eb != mir.NoBlock {
+        ln.start(eb)
+        ln.dispatch(mir.Operand.Copy(mir.L(code)), errs, sp)
+    }
+    ln.start(ok)
+    if res == types.NoreturnT {
+        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
+        return mir.Operand.None
+    }
+    if dest == mir.NoLocal { return mir.Operand.None }
+    return mir.Operand.Copy(mir.L(dest))
+}
+
+# the type a helper is made for: one helper per type but for its function types' parameter names (types.Unnamed) - a
+# Render helper per type with them, which its function values render with (E11a)
+fn (lw mut Lowerer&) helperTy(kind mir.HelperKind, ty types.TypeId) types.TypeId {
+    return ty if kind == mir.HelperKind.Render else lw.P.T.Unnamed(ty)
+}
+
+# a type's zero value (D13c), a call of its Zero helper: all zero bits, its constructor on its parameters' defaults or
+# zeros, as eval decides once per type (Key.Zero) - the helper's to say which
+fn (ln mut lowering&) zero(ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    ty = ln.L.helperTy(mir.HelperKind.Zero, ty)
+    hty := mir.HelperType(t, mir.HelperKind.Zero, ty)
+    callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Zero, ty), hty)
+    ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Zero, ty))
+    ok := ln.F.NewBlock()
+    dest := ln.temp(ty, sp)
+    k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.passed(mir.PassedCount(t, callee, hty)), mir.L(dest), true, ok
+                               mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
+    return mir.Operand.Copy(mir.L(dest))
+}
+
+# ---- values made ----
+
+fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    match m.Kind {
+        case typed.MakeKind.Tuple, typed.MakeKind.Case {
+            ops := ln.vals(m.Items)
+            if ln.dead { return mir.Operand.None }
+            if m.Site >= typed.SiteId(0) and t.IsRef(ty) {
+                inner := t.Referent(ty)
+                v := ln.into(inner, mir.Rvalue.Aggregate(inner, m.Tag, ln.F.Args(ops)), sp)
+                return ln.into(ty, mir.Rvalue.New(ln.built(m.Site), v, ty), sp)
+            }
+            return ln.into(ty, mir.Rvalue.Aggregate(ty, m.Tag, ln.F.Args(ops)), sp)
+        }
+        case typed.MakeKind.Array { return ln.arrayLit(m, ty, sp) }
+        case typed.MakeKind.Fill { return ln.fill(m, ty, sp) }
+    }
+}
+
+fn (ln mut lowering&) vals(xs Array<typed.Expr&>&) Array<mir.Operand> {
+    ops := Array<mir.Operand>(xs.Len())
+    for i in range xs.Len() { ops[i] = ln.val(xs[i]) }
+    return ops
+}
+
+# the array type behind ty: ty's representation, or what a reference to one names
+fn (ln mut lowering&) arrayOf(ty types.TypeId) types.TypeId {
+    t := ln.T
+    r := t.Repr(ty)
+    if t.IsRef(r) { r = t.Repr(t.Referent(r)) }
+    return r if t.KindOf(r) == types.Kind.Array else types.UnknownT
+}
+
+# a fixed array's length, -1 for a run-time one
+fn (ln mut lowering&) fixedLen(at types.TypeId) I64 {
+    n := ln.T.Length(at)
+    if n == types.TypeId(0) or ln.T.KindOf(n) != types.Kind.Const { return -1 }
+    return ln.T.ConstValue(n)
+}
+
+# an array literal (E19): a fixed array made of its elements, or a run-time one's storage made and filled
+fn (ln mut lowering&) arrayLit(m typed.Make&, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    at := ln.arrayOf(ty)
+    if at == types.UnknownT {
+        ln.gap(sp, "an array literal of a type that is no array")
+        return mir.Operand.None
+    }
+    ops := ln.vals(m.Items)
+    if ln.dead { return mir.Operand.None }
+    if ln.fixedLen(at) >= 0 {
+        v := ln.into(at, mir.Rvalue.Aggregate(at, 0, ln.F.Args(ops)), sp)
+        if not t.IsRef(t.Repr(ty)) { return v }
+        return ln.into(ty, mir.Rvalue.New(ln.built(m.Site), v, ty), sp)
+    }
+    el := t.Elem(at)
+    a := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(a), mir.Rvalue.NewArray(ln.madeAt(m.Site), ty, ln.constI64(ops.Len())
+                                                             mir.Operand.Const(el, 0))))
+    deref := t.IsRef(t.Repr(ty))
+    for i in range ops.Len() {
+        p := ln.F.Place(mir.Base.Local(a), mir.Proj[mir.Proj.Deref, mir.Proj.At(i)] if deref else mir.Proj[mir.Proj.At(i)])
+        ln.emit(mir.Stmt.Assign(sp, p, mir.Rvalue.Use(ops[i])))
+    }
+    return mir.Operand.Copy(mir.L(a))
+}
+
+# Array<T>(n, fill) (D14, T8): its length checked (D14b), its storage n of the fill - or of the zero value
+fn (ln mut lowering&) fill(m typed.Make&, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    at := ln.arrayOf(ty)
+    if at == types.UnknownT {
+        ln.gap(sp, "a fill of a type that is no array")
+        return mir.Operand.None
+    }
+    el := t.Elem(at)
+    n := mir.Operand.None
+    if m.Length != null { n = ln.val(m.Length) }
+    fv := mir.Operand.Const(el, 0)
+    if m.Items.Len() > 0 {
+        zero := match m.Items[0] {
+            case typed.Expr.Call(_, _, k) => k.Zero
+            case _ => false
+        }
+        if zero and n != mir.Operand.None and not ln.dead {
+            # an element type's zero value made only for an array that has an element: Array<T>(0) needs none (D13c)
+            v := ln.temp(el, sp)
+            ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(fv)))
+            some := ln.prim(typed.PrimOp.Gt, types.BoolT, mir.Operand[ln.asI64(n, m.Length.Type(), sp), ln.constI64(0)], sp)
+            yes, after := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(some, yes, after))
+            ln.start(yes)
+            z := ln.val(m.Items[0])
+            if not ln.dead { ln.emit(mir.Stmt.Assign(sp, mir.L(v), mir.Rvalue.Use(z))) }
+            ln.goto(after)
+            ln.start(after)
+            fv = mir.Operand.Copy(mir.L(v))
+        } else {
+            fv = ln.val(m.Items[0])
+        }
+    }
+    if ln.dead { return mir.Operand.None }
+    fixed := ln.fixedLen(at)
+    if fixed >= 0 {
+        ops := Array<mir.Operand>(fixed)
+        for i in range fixed { ops[i] = fv }
+        v := ln.into(at, mir.Rvalue.Aggregate(at, 0, ln.F.Args(ops)), sp)
+        if not t.IsRef(t.Repr(ty)) { return v }
+        return ln.into(ty, mir.Rvalue.New(ln.built(m.Site), v, ty), sp)
+    }
+    if n == mir.Operand.None {
+        ln.gap(sp, "a run-time array's fill with no length")
+        return mir.Operand.None
+    }
+    n64 := ln.asI64(n, m.Length.Type(), sp)
+    if m.Checked != typed.Check.None {
+        ok := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[n64, ln.constI64(0)], sp)
+        ln.check(ok, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
+        # ... and its byte count an I64 (D14b)
+        ln.L.P.Layout(el)
+        size := t.Size(el)
+        if size > 1 {
+            fits := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[n64, ln.constI64(9223372036854775807 / size)], sp)
+            ln.check(fits, m.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
+        }
+    }
+    return ln.into(ty, mir.Rvalue.NewArray(ln.madeAt(m.Site), ty, n64, fv), sp)
+}
+
+# a comprehension (E27): its buffer made at its reservation (or 100), each Yield stored at its count, the buffer grown
+# twice over when full; then an array of exactly its count, the elements copied in
+fn (ln mut lowering&) collect(c typed.Collect&, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    at := ln.arrayOf(ty)
+    if at == types.UnknownT or ln.fixedLen(at) >= 0 {
+        ln.gap(sp, "a comprehension of a type that is no run-time array")
+        return mir.Operand.None
+    }
+    el := t.Elem(at)
+    bt := t.Ref(t.Array(el, types.TypeId(0)), types.Writable)
+    cap := ln.constI64(100)
+    if c.Reserve != null {
+        r := ln.val(c.Reserve)
+        cap = ln.asI64(r, c.Reserve.Type(), sp)
+        if c.Checked != typed.Check.None {
+            ok := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[cap, ln.constI64(0)], sp)
+            ln.check(ok, c.Checked, mir.ExitKind.ArrayLength, OutOfBounds, sp)
+        }
+    }
+    if ln.dead { return mir.Operand.None }
+    buf := ln.temp(bt, sp)
+    s := ln.built(c.Site)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(buf), mir.Rvalue.NewArray(s, bt, cap, mir.Operand.Const(el, 0))))
+    n := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(n), mir.Rvalue.Use(ln.constI64(0))))
+    ln.collects.Push(collectCtx(buf, n, el, bt, s))
+    ln.block(c.Loop)
+    try ln.collects.Pop() catch { }
+    if ln.dead { return mir.Operand.None }
+    out := ln.temp(ty, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(out), mir.Rvalue.NewArray(s, ty, mir.Operand.Copy(mir.L(n)), mir.Operand.Const(el, 0))))
+    dst := ln.F.Place(mir.Base.Local(out), mir.Proj[mir.Proj.Deref] if t.IsRef(t.Repr(ty)) else mir.Proj[])
+    ln.emit(mir.Stmt.CopyElems(sp, dst, ln.F.Place(mir.Base.Local(buf), mir.Proj[mir.Proj.Deref]), mir.Operand.Copy(mir.L(n))))
+    return mir.Operand.Copy(mir.L(out))
+}
+
+fn (ln mut lowering&) yield(sp source.Span, x typed.Expr&) {
+    if ln.collects.Len() == 0 {
+        ln.gap(sp, "a yield outside a comprehension")
+        return
+    }
+    cc := ln.collects[ln.collects.Len() - 1]
+    v := ln.val(x)
+    if ln.dead { return }
+    t := ln.T
+    deref := ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref])
+    n := mir.Operand.Copy(mir.L(cc.N))
+    full := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[n, ln.prim(typed.PrimOp.Len, mir.I64T
+                                                                       mir.Operand[mir.Operand.Copy(mir.L(cc.Buf))], sp)], sp)
+    grow, store := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(full, grow, store))
+    ln.start(grow)
+    more := ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[ln.prim(typed.PrimOp.Mul, mir.I64T
+                                                                   mir.Operand[n, ln.constI64(2)], sp), ln.constI64(1)], sp)
+    nb := ln.temp(cc.ArrT, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(nb), mir.Rvalue.NewArray(cc.At, cc.ArrT, more, mir.Operand.Const(cc.Elem, 0))))
+    ln.emit(mir.Stmt.CopyElems(sp, ln.F.Place(mir.Base.Local(nb), mir.Proj[mir.Proj.Deref]), deref, n))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(cc.Buf), mir.Rvalue.Use(mir.Operand.Copy(mir.L(nb)))))
+    ln.goto(store)
+    ln.start(store)
+    ln.emit(mir.Stmt.Assign(sp, ln.F.Place(mir.Base.Local(cc.Buf), mir.Proj[mir.Proj.Deref, mir.Proj.Index(cc.N)])
+                            mir.Rvalue.Use(v)))
+    ln.emit(mir.Stmt.Assign(sp, mir.L(cc.N), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[n, ln.constI64(1)]))))
+}
+
+# ---- operations ----
+
+fn (ln mut lowering&) primExpr(op typed.PrimOp, chk typed.Check, args Array<typed.Expr&>&, ty types.TypeId
+                              sp source.Span) mir.Operand {
+    t := ln.T
+    if op == typed.PrimOp.InRange or op == typed.PrimOp.InRangeIncl {
+        # args [v, lo, hi]: v, once lo <= v < hi (or <= hi) - a check, a test and a branch here
+        v := ln.val(args[0])
+        lo := ln.val(args[1])
+        hi := ln.val(args[2])
+        if ln.dead { return mir.Operand.None }
+        vt := args[0].Type()
+        a := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[v, lo], sp)
+        ln.check(a, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+        b := ln.prim(typed.PrimOp.Le if op == typed.PrimOp.InRangeIncl else typed.PrimOp.Lt, types.BoolT, mir.Operand[v, hi], sp)
+        ln.check(b, chk if chk != typed.Check.None else typed.Check.Abort, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+        return v
+    }
+    # a fixed array a reference names, as a run-time-length array value: the pair naming that storage, not a copy of it
+    # (D9b: a by-value array is the caller's array whatever the argument is - a copy is made where one is wanted, a
+    # declaration's or a body that writes it)
+    r typed.Expr&args = null
+    if op == typed.PrimOp.Convert and args.Len() == 1 and ln.valueArray(ty) { r = derefOf(args[0]) }
+    if r != null and ln.arrayOf(args[0].Type()) != types.UnknownT and ln.fixedLen(ln.arrayOf(args[0].Type())) >= 0 {
+        v := ln.val(r)
+        if ln.dead { return mir.Operand.None }
+        return ln.prim(op, ty, mir.Operand[v], sp)
+    }
+    ops := ln.vals(args)
+    if ln.dead { return mir.Operand.None }
+    if op == typed.PrimOp.IsCase and t.IsRef(t.Repr(args[0].Type())) { return ln.isCaseRef(ops[0], args[0].Type(), ops[1], sp) }
+    if chk != typed.Check.None { ln.primChecks(op, chk, ops, args, ty, sp) }
+    return ln.prim(op, ty, ops, sp)
+}
+
+# whether what an enum reference names holds a case: false for a null reference (E32, T17d)
+fn (ln mut lowering&) isCaseRef(r mir.Operand, rt types.TypeId, tag mir.Operand, sp source.Span) mir.Operand {
+    slot := ln.temp(types.BoolT, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Use(ln.constBool(false, sp))))
+    l := ln.local(r, rt, sp)
+    nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(l)), mir.Operand.Const(rt, 0)], sp)
+    yes, after := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(nn, yes, after))
+    ln.start(yes)
+    tg := ln.into(mir.I64T, mir.Rvalue.Tag(ln.F.Place(mir.Base.Local(l), mir.Proj[mir.Proj.Deref])), sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(slot), mir.Rvalue.Prim(typed.PrimOp.Eq, types.BoolT
+                                                             ln.F.Args(mir.Operand[tg, ln.asI64(tag, mir.I64T, sp)]))))
+    ln.goto(after)
+    ln.start(after)
+    return mir.Operand.Copy(mir.L(slot))
+}
+
+# what a checked operation tests before it runs (E15a): an integer result that does not fit, a zero divisor, a shift's
+# amount outside the width, a conversion that changes the value, a float made infinite or NaN
+fn (ln mut lowering&) primChecks(op typed.PrimOp, chk typed.Check, ops Array<mir.Operand>&, args Array<typed.Expr&>&
+                                 ty types.TypeId, sp source.Span) {
+    t := ln.T
+    at := t.Repr(args[0].Type())
+    rt := t.Repr(ty)
+    kind := mir.ExitKind.Abort
+    match op {
+        case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Neg {
+            if t.IsInt(rt) {
+                over := ln.into(types.BoolT, mir.Rvalue.Overflows(op, ty, ln.F.Args(ops)), sp)
+                ln.fails(over, chk, kind, Overflow, sp)
+            } else if t.IsFloat(rt) {
+                ln.floatResult(op, ty, ops, chk, sp)
+            }
+        }
+        case typed.PrimOp.Div, typed.PrimOp.Rem {
+            if t.IsInt(rt) {
+                zero := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[ops[1], mir.Operand.Const(args[1].Type(), 0)], sp)
+                ln.fails(zero, chk, kind, DivideByZero, sp)
+                if not t.IsUnsigned(rt) {
+                    over := ln.into(types.BoolT, mir.Rvalue.Overflows(typed.PrimOp.Div, ty, ln.F.Args(ops)), sp)
+                    ln.fails(over, chk, kind, Overflow, sp)
+                }
+            } else if t.IsFloat(rt) {
+                ln.floatResult(op, ty, ops, chk, sp)
+            }
+        }
+        case typed.PrimOp.Shl, typed.PrimOp.Shr {
+            w := t.Bits(rt)
+            st := args[1].Type()
+            amt := ln.asI64(ops[1], st, sp)
+            lo := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[amt, ln.constI64(0)], sp)
+            ln.check(lo, chk, kind, OutOfBounds, sp)
+            hi := ln.prim(typed.PrimOp.Lt, types.BoolT, mir.Operand[amt, ln.constI64(w)], sp)
+            ln.check(hi, chk, kind, OutOfBounds, sp)
+            if op == typed.PrimOp.Shl {
+                # the true value x * 2^n fits: shifting back gives x
+                back := ln.prim(typed.PrimOp.Shr, ty, mir.Operand[ln.prim(typed.PrimOp.Shl, ty, ops, sp), ops[1]], sp)
+                same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[back, ops[0]], sp)
+                ln.check(same, chk, kind, Overflow, sp)
+            }
+        }
+        case typed.PrimOp.Convert {
+            # T7d: an array of a run-time length copied into fixed storage - its length checked, once
+            fa := ln.arrayOf(ty)
+            sa := ln.arrayOf(args[0].Type())
+            if fa != types.UnknownT and sa != types.UnknownT and ln.fixedLen(fa) >= 0 and ln.fixedLen(sa) < 0 {
+                n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[ops[0]], sp)
+                same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[n, mir.Operand.Const(mir.I64T, ln.fixedLen(fa))], sp)
+                ln.check(same, chk, mir.ExitKind.FixedLength, OutOfBounds, sp)
+                return
+            }
+            if t.IsInt(rt) and (t.IsInt(at) or t.IsFloat(at)) {
+                if t.IsFloat(at) {
+                    # a NaN or an infinity: x - x is not 0
+                    d := ln.prim(typed.PrimOp.Sub, args[0].Type(), mir.Operand[ops[0], ops[0]], sp)
+                    fin := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(args[0].Type(), 0)], sp)
+                    ln.check(fin, chk, kind, Invalid, sp)
+                }
+                over := ln.into(types.BoolT, mir.Rvalue.Overflows(op, ty, ln.F.Args(ops)), sp)
+                ln.fails(over, chk, kind, Overflow, sp)
+            } else if t.IsFloat(rt) {
+                # OVERFLOW when a finite value becomes infinite: an infinity converted stays one
+                res := ln.prim(op, ty, ops, sp)
+                d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[res, res], sp)
+                ok := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+                ok = ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ok, ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[res, res], sp)], sp)
+                if t.IsFloat(at) {
+                    d0 := ln.prim(typed.PrimOp.Sub, args[0].Type(), mir.Operand[ops[0], ops[0]], sp)
+                    fin0 := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d0, mir.Operand.Const(args[0].Type(), 0)], sp)
+                    ok = ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ok, ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[fin0], sp)], sp)
+                }
+                ln.check(ok, chk, kind, Overflow, sp)
+            }
+        }
+        case _ { }
+    }
+}
+
+# a float result's checks (E15a): INVALID for a NaN from operands that are not, DIVIDE_BY_ZERO for a finite nonzero
+# dividend by zero, OVERFLOW for any other infinite result from finite operands. Computed first, tested, then computed
+# again by the operation itself
+fn (ln mut lowering&) floatResult(op typed.PrimOp, ty types.TypeId, ops Array<mir.Operand>&, chk typed.Check, sp source.Span) {
+    r := ln.prim(op, ty, ops, sp)
+    # r is a NaN where r != r
+    nan := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[r, r], sp)
+    argsNan := ln.constBool(false, sp)
+    for x in ops {
+        xn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[x, x], sp)
+        argsNan = ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[argsNan, xn], sp)
+    }
+    bad := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[nan, ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[argsNan], sp)], sp)
+    ln.fails(bad, chk, mir.ExitKind.Abort, Invalid, sp)
+    # whether each operand is finite: x - x == 0 holds for a finite float only
+    argsFinite := ln.constBool(true, sp)
+    for x in ops {
+        d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[x, x], sp)
+        xf := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+        argsFinite = ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[argsFinite, xf], sp)
+    }
+    if op == typed.PrimOp.Div {
+        z := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[ops[1], mir.Operand.Const(ty, 0)], sp)
+        nz := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[ops[0], mir.Operand.Const(ty, 0)], sp)
+        d0 := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[ops[0], ops[0]], sp)
+        fin0 := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d0, mir.Operand.Const(ty, 0)], sp)
+        byZero := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[z, nz], sp), fin0], sp)
+        ln.fails(byZero, chk, mir.ExitKind.Abort, DivideByZero, sp)
+    }
+    # OVERFLOW only for an infinite result from finite operands
+    d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[r, r], sp)
+    fin := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+    ok := ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[fin, nan], sp)
+                                                                ln.prim(typed.PrimOp.Not, types.BoolT, mir.Operand[argsFinite], sp)], sp)
+    ln.check(ok, chk, mir.ExitKind.Abort, Overflow, sp)
+}
+
+# r - r == 0 holds for a finite float only: a check failing with word where it does not (an infinity; a NaN was said)
+fn (ln mut lowering&) finite(r mir.Operand, ty types.TypeId, chk typed.Check, word I64, sp source.Span) {
+    d := ln.prim(typed.PrimOp.Sub, ty, mir.Operand[r, r], sp)
+    nan := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[r, r], sp)
+    fin := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[d, mir.Operand.Const(ty, 0)], sp)
+    ok := ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[fin, nan], sp)
+    ln.check(ok, chk, mir.ExitKind.Abort, word, sp)
+}
+
+fn (ln mut lowering&) constBool(b Bool, sp source.Span) mir.Operand { return mir.Operand.Const(types.BoolT, 1 if b else 0) }
+
+# a slice (E16a): its bounds tested (E16b, E16c) - 0 <= lo <= hi <= the base's length - then the reference to its
+# elements
+fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir.Operand {
+    base := ln.place(s.Base)
+    lo := ln.val(s.Lo)
+    hi := ln.val(s.Hi)
+    if ln.dead { return mir.Operand.None }
+    lo64 := ln.asI64(lo, s.Lo.Type(), sp)
+    hi64 := ln.asI64(hi, s.Hi.Type(), sp)
+    if s.Checked != typed.Check.None {
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(base))], sp)
+        a := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[lo64, ln.constI64(0)], sp)
+        ln.check(a, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+        b := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[lo64, hi64], sp)
+        ln.check(b, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+        c := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[hi64, n], sp)
+        ln.check(c, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+    }
+    return ln.into(ty, mir.Rvalue.Slice(ln.mk(base), lo64, hi64, ty), sp)
+}
+
+# ---- function values ----
+
+fn (ln mut lowering&) fnVal(fv typed.FnVal&, ty types.TypeId, sp source.Span) mir.Operand {
+    return match fv {
+        case typed.FnVal.Named(body) => ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, mir.ScopeRef.Frame, mir.Empty, mir.Empty), sp)
+        case typed.FnVal.Lambda(body, caps, site) => ln.lambda(body, caps, site, ty, sp)
+        case typed.FnVal.Adapter(call, recv, site) => ln.adapter(call, recv, site, ty, sp)
+    }
+}
+
+fn (ln mut lowering&) lambda(body typed.BodyId, caps Array<typed.Capture&>&, site typed.SiteId, ty types.TypeId
+                            sp source.Span) mir.Operand {
+    ops := Array<mir.Operand>(caps.Len())
+    for i in range caps.Len() { ops[i] = ln.val(caps[i].Outer) }
+    if ln.dead { return mir.Operand.None }
+    s := mir.ScopeRef.Frame if caps.Len() == 0 else ln.built(site)
+    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Body(body), ty, s, ln.F.Args(ops), ln.capScopes(site)), sp)
+}
+
+fn (ln mut lowering&) adapter(call typed.BodyId, recv typed.Expr&, site typed.SiteId, ty types.TypeId, sp source.Span) mir.Operand {
+    r := ln.val(recv)
+    if ln.dead { return mir.Operand.None }
+    ln.L.Want(mir.FnKey.Adapter(call))
+    return ln.into(ty, mir.Rvalue.Closure(mir.FnKey.Adapter(call), ty, ln.built(site), ln.F.Args(mir.Operand[r]), ln.capScopes(site))
+                   sp)
+}
+
+# where a closure's captures holding references live, in order (D16c): the plan's at its site, none recorded under the
+# stand-in placement
+fn (ln mut lowering&) capScopes(site typed.SiteId) mir.Range {
+    if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len() { return mir.Empty }
+    xs List<mir.ScopeRef>
+    for i := I64(0), ln.plan.Passed(site, i) != typed.Scope.Unset, i++ { xs.Push(ln.scopeRef(ln.plan.Passed(site, i))) }
+    return ln.F.ScopeRefs(xs.ToArray())
+}
+
+# ---- text ----
+
+# renderings joined (E11a, E11b): every rendered operand computed first, then a builder opened, each piece written - a
+# number, a Bool, a Char or text by kind, anything else by its type's Render helper - and the text made where the site
+# says, the builder closed
+fn (ln mut lowering&) text(tx typed.Text&, ty types.TypeId, sp source.Span) mir.Operand {
+    t := ln.T
+    vals := Array<mir.Operand>(tx.Pieces.Len())
+    tys := Array<types.TypeId>(tx.Pieces.Len())
+    for i in range tx.Pieces.Len() {
+        match tx.Pieces[i] {
+            case typed.Piece.Render(x) {
+                vals[i], tys[i] = ln.piece(x, sp)
+            }
+            case _ { }
+        }
+    }
+    if ln.dead { return mir.Operand.None }
+    b := ln.F.AddScope(mir.ScopeKind.Builder, ln.top().S, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, b))
+    bref := mir.ScopeRef.Scope(b)
+    u8 := t.Prim("U8")
+    bytesT := t.Ref(t.Array(u8, types.TypeId(0)), types.ReadOnly)
+    for i in range tx.Pieces.Len() {
+        match tx.Pieces[i] {
+            case typed.Piece.Lit(bytes) {
+                c := ln.F.AddConst(typed.Const.Bytes(bytes))
+                ln.emit(mir.Stmt.Write(sp, bref, mir.WriteKind.Bytes, mir.Operand.Data(bytesT, c, ln.file, sp)))
+            }
+            case typed.Piece.Render(_) { ln.render(bref, vals[i], tys[i], sp) }
+        }
+    }
+    r := ln.into(ty, mir.Rvalue.Text(bref, ln.built(tx.Site), ty), sp)
+    ln.emit(mir.Stmt.Close(sp, b))
+    return r
+}
+
+# a rendered operand, computed before any piece renders (E11b, Go's rule): a struct or a number as it is then, but an
+# array's elements read when its piece renders - a fixed array read from a place is rendered through a reference to
+# that place, as a run-time array's pair names its storage
+fn (ln mut lowering&) piece(x typed.Expr&, sp source.Span) mir.Operand, types.TypeId {
+    t := ln.T
+    xt := x.Type()
+    a := ln.arrayOf(xt)
+    if not t.IsRef(t.Repr(xt)) and a != types.UnknownT and ln.fixedLen(a) >= 0 {
+        match x {
+            case typed.Expr.Read(_, _, p, _) {
+                q := ln.place(p)
+                if ln.dead { return mir.Operand.None, xt }
+                rt := t.Ref(xt, types.ReadOnly)
+                return ln.into(rt, mir.Rvalue.Ref(ln.mk(q), rt), sp), rt
+            }
+            case _ { }
+        }
+    }
+    return ln.val(x), xt
+}
+
+# one value written into builder b: by kind where it is a number, a Bool, a Char or text, else through its type's Render
+# helper, the builder its one scope
+fn (ln mut lowering&) render(b mir.ScopeRef, v mir.Operand, ty types.TypeId, sp source.Span) {
+    t := ln.T
+    if ty == types.UnknownT or ln.gapped { return }
+    r := t.Repr(ty)
+    how := mir.WriteKind.Bool
+    direct := true
+    if ln.hasStr(ty) {
+        direct = false
+    } else if ln.isChar(ty) {
+        how = mir.WriteKind.Char
+    } else if r == types.BoolT {
+        how = mir.WriteKind.Bool
+    } else if t.IsUnsigned(r) {
+        how = mir.WriteKind.Uint
+    } else if t.IsInt(r) {
+        how = mir.WriteKind.Int
+    } else if t.IsFloat(r) {
+        how = mir.WriteKind.Float
+    } else if ln.isText(ty) {
+        how = mir.WriteKind.Bytes
+    } else {
+        direct = false
+    }
+    if direct {
+        ln.emit(mir.Stmt.Write(sp, b, how, v))
+        return
+    }
+    ty = ln.L.helperTy(mir.HelperKind.Render, ty)
+    hty := mir.HelperType(t, mir.HelperKind.Render, ty)
+    ref := ln.into(t.Items(t.Params(hty))[0], mir.Rvalue.Ref(mir.L(ln.local(v, ty, sp)), t.Items(t.Params(hty))[0]), sp)
+    callee := mir.Callee.Fn(mir.FnKey.Helper(mir.HelperKind.Render, ty), hty)
+    ln.L.Want(mir.FnKey.Helper(mir.HelperKind.Render, ty))
+    ok := ln.F.NewBlock()
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[ref, ln.depth()]), ln.F.ScopeRefs(mir.ScopeRef[b]), mir.NoPlace, false, ok
+                               mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
+}
+
+# text: an array of Chars, or a reference to one - what a Bytes write appends
+fn (ln mut lowering&) isText(ty types.TypeId) Bool {
+    t := ln.T
+    x := t.Repr(ty)
+    if t.IsRef(x) { x = t.Repr(t.Referent(x)) }
+    if t.KindOf(x) != types.Kind.Array { return false }
+    return t.Same(t.Elem(x), ln.L.char())
+}
+
+# ---- helpers, adapters, modules' initializations (DESIGN.md 1.8, 1.8.1) ----
+
+# a lowering of no typed body: for a function lowering makes itself, its parameters and blocks written here
+fn (lw mut Lowerer&) bare(k mir.FnKey, ty types.TypeId) mir.Fn { return mir.Fn(k, ty, 0, source.Span(0, 0)) }
+
+# a typed body standing in for a function lowering makes itself: its type, no locals and no code
+fn standIn(ty types.TypeId) typed.Body { return typed.Body(typed.BodyId(-1), typed.BodyOf.Test(-1), ty, 0, source.Span(0, 0)) }
+
+# the bodies by what they are, once: a type's constructor's (twin 0)
+fn (lw mut Lowerer&) index() {
+    if lw.indexed { return }
+    lw.indexed = true
+    for i in range lw.Bodies.Len() {
+        match lw.Bodies[i].Of {
+            case typed.BodyOf.Ctor(t, twin) {
+                if twin == types.ListId(0) { lw.ctorOf.Put(t, i) }
+            }
+            case _ { }
+        }
+    }
+}
+
+# a helper for type t (DESIGN.md 1.8.1): its ABI its kind's (mir.HelperType), its code what the kind says of t's parts
+fn (lw mut Lowerer&) helper(kind mir.HelperKind, t types.TypeId) mir.Fn {
+    hty := mir.HelperType(lw.P.T, kind, t)
+    b := standIn(hty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Helper(kind, t), hty))
+    ln.helper(kind, t)
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+# the parameters of a function lowering makes, from its type, and its scope variables; the entry block opening the frame
+fn (ln mut lowering&) prologue(vars Array<mir.VarKind>&) {
+    t := ln.T
+    for p in t.Items(t.Params(ln.F.Ty)) { ln.F.AddParam(source.NameId(0), ln.B.Sp, p) }
+    for v in vars { ln.F.Vars.Push(v) }
+    ln.F.NewBlock()
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), ln.B.Sp)
+    ln.emit(mir.Stmt.Open(ln.B.Sp, frame))
+    ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
+}
+
+fn (ln mut lowering&) epilogue(x mir.Operand) {
+    ln.leave(0)
+    ln.end(mir.Term.Return(ln.B.Sp, x))
+}
+
+fn (ln mut lowering&) helper(kind mir.HelperKind, ty types.TypeId) {
+    t := ln.T
+    sp := ln.B.Sp
+    match kind {
+        case mir.HelperKind.Equal {
+            ln.prologue(mir.VarKind[])
+            a := ln.at(mir.LocalId(0))
+            b := ln.at(mir.LocalId(1))
+            ln.epilogue(ln.equalAt(a, b, ty, sp, true))
+        }
+        case mir.HelperKind.Hash {
+            ln.prologue(mir.VarKind[])
+            ln.epilogue(ln.hashAt(ln.at(mir.LocalId(0)), ty, sp, true))
+        }
+        case mir.HelperKind.Zero {
+            vs := t.ScopeVarsOf(ln.F.Ty)
+            ln.prologue(mir.VarKind[mir.VarKind.Result] if vs.Len() > 0 else mir.VarKind[])
+            ln.epilogue(ln.zeroOf(ty, sp))
+        }
+        case mir.HelperKind.Render {
+            ln.prologue(mir.VarKind[mir.VarKind.Builder])
+            ln.rdepth = mir.Operand.Copy(mir.L(mir.LocalId(1)))
+            ln.renderAt(ln.at(mir.LocalId(0)), ty, mir.ScopeRef.Var(0), sp, true)
+            ln.epilogue(mir.Operand.None)
+        }
+    }
+}
+
+# what reference parameter l names, as a place
+fn (ln mut lowering&) at(l mir.LocalId) pl { return ln.with(pl(mir.Base.Local(l)), mir.Proj.Deref) }
+
+# a reference to a place, of type "T&" read-only, for a helper's parameter
+fn (ln mut lowering&) refTo(p pl, ty types.TypeId, sp source.Span) mir.Operand {
+    rt := ln.T.Ref(ty, types.ReadOnly)
+    return ln.into(rt, mir.Rvalue.Ref(ln.mk(p), rt), sp)
+}
+
+# a helper of kind for type ty called with args (and its kind's scopes), its result, if any, into a temporary of res
+fn (ln mut lowering&) helperCall(kind mir.HelperKind, ty types.TypeId, args Array<mir.Operand>&, scopes Array<mir.ScopeRef>&
+                                 res types.TypeId, sp source.Span) mir.Operand {
+    ty = ln.L.helperTy(kind, ty)
+    hty := mir.HelperType(ln.T, kind, ty)
+    k := mir.FnKey.Helper(kind, ty)
+    ln.L.Want(k)
+    ok := ln.F.NewBlock()
+    dest := mir.NoLocal
+    if res != types.VoidT { dest = ln.temp(res, sp) }
+    c := ln.F.AddCall(mir.Call(mir.Callee.Fn(k, hty), ln.F.Args(args), ln.F.ScopeRefs(scopes)
+                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, mir.NoLocal
+                               mir.NoBlock))
+    ln.end(mir.Term.Call(sp, c))
+    ln.start(ok)
+    return mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest))
+}
+
+# what a type's value is made of, for the helpers: a struct's, a tuple's or a record's fields; ok false for none
+fn (ln mut lowering&) partsOf(ty types.TypeId) Array<types.TypeId>, Bool {
+    t := ln.T
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k == types.Kind.Tuple or k == types.Kind.Record { return ln.items(t.Parts(r)), true }
+    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r) {
+        return ln.items(t.Fields(r)), true
+    }
+    return Array<types.TypeId>(0), false
+}
+
+fn (ln mut lowering&) items(l types.ListId) Array<types.TypeId> {
+    xs := ln.T.Items(l)
+    out := Array<types.TypeId>(xs.Len())
+    for i in range xs.Len() { out[i] = xs[i] }
+    return out
+}
+
+# an enum's cases' payloads (a record, or 0 for none); ok false for no enum
+fn (ln mut lowering&) casesOf(ty types.TypeId) Array<types.TypeId>, Bool {
+    t := ln.T
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.AnonEnum { return ln.items(t.ShapeCases(r)), true }
+    if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r) {
+        return ln.items(t.Cases(r)), true
+    }
+    return Array<types.TypeId>(0), false
+}
+
+# whether a value of the type is compared, hashed and rendered as itself: a number, a Bool, a Char
+fn (ln mut lowering&) scalar(ty types.TypeId) Bool {
+    r := ln.T.Repr(ty)
+    return r == types.BoolT or ln.T.IsNumber(r)
+}
+
+# a Bool slot set true, then false along the way where a test fails; its value at the end
+fn (ln mut lowering&) flag(v Bool, sp source.Span) mir.LocalId {
+    f := ln.temp(types.BoolT, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(f), mir.Rvalue.Use(ln.constBool(v, sp))))
+    return f
+}
+
+# "==" part by part (E10): numbers, Bools and Chars by their own "==", references to arrays by their contents and every
+# other reference or function value by identity, a null equal only to a null; a struct's, tuple's or record's fields in
+# order, an enum's case then its payload, an array's length then its elements - an aggregate part through its own
+# Equal helper, so a type that comes round to itself is one function
+fn (ln mut lowering&) equalAt(a pl, b pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
+    t := ln.T
+    r := t.Repr(ty)
+    if ln.scalar(ty) {
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        y := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(b))), sp)
+        return ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[x, y], sp)
+    }
+    if t.KindOf(r) == types.Kind.Func or (t.IsRef(r) and ln.arrayOf(t.Referent(r)) == types.UnknownT) {
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        y := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(b))), sp)
+        return ln.prim(typed.PrimOp.Same, types.BoolT, mir.Operand[x, y], sp)
+    }
+    if t.IsRef(r) {
+        # a reference to an array: both null, or neither and the arrays equal
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        y := ln.local(mir.Operand.Copy(ln.mk(b)), ty, sp)
+        res := ln.flag(false, sp)
+        xn := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        yn := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(y)), mir.Operand.Const(ty, 0)], sp)
+        both := ln.prim(typed.PrimOp.BitAnd, types.BoolT, mir.Operand[xn, yn], sp)
+        either := ln.prim(typed.PrimOp.BitOr, types.BoolT, mir.Operand[xn, yn], sp)
+        bothB, notBoth, neither, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(both, bothB, notBoth))
+        ln.start(bothB)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constBool(true, sp))))
+        ln.goto(after)
+        ln.start(notBoth)
+        ln.end(mir.Term.Branch(either, after, neither))
+        ln.start(neither)
+        e := ln.equalAt(ln.at(x), ln.at(y), t.Referent(r), sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(e)))
+        ln.goto(after)
+        ln.start(after)
+        return mir.Operand.Copy(mir.L(res))
+    }
+    if not top {
+        return ln.helperCall(mir.HelperKind.Equal, ty, mir.Operand[ln.refTo(a, ty, sp), ln.refTo(b, ty, sp)], mir.ScopeRef[]
+                             types.BoolT, sp)
+    }
+    res := ln.flag(true, sp)
+    no := ln.F.NewBlock()
+    ends List<mir.BlockId>
+    parts, isParts := ln.partsOf(ty)
+    cases, isEnum := ln.casesOf(ty)
+    if isParts {
+        for i in range parts.Len() {
+            e := ln.equalAt(ln.with(a, mir.Proj.Field(i)), ln.with(b, mir.Proj.Field(i)), parts[i], sp)
+            next := ln.F.NewBlock()
+            ln.end(mir.Term.Branch(e, next, no))
+            ln.start(next)
+        }
+    } else if isEnum {
+        ta := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
+        tb := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(b)), sp)
+        same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[ta, tb], sp)
+        next := ln.F.NewBlock()
+        ln.end(mir.Term.Branch(same, next, no))
+        ln.start(next)
+        ln.payloads(cases, ta, sp, fn(tag I64, rec types.TypeId) {
+            fs := ln.items(ln.T.Parts(rec))
+            for i in range fs.Len() {
+                pa := ln.with(ln.with(a, mir.Proj.Payload(tag)), mir.Proj.Field(i))
+                pb := ln.with(ln.with(b, mir.Proj.Payload(tag)), mir.Proj.Field(i))
+                e := ln.equalAt(pa, pb, fs[i], sp)
+                go := ln.F.NewBlock()
+                ln.end(mir.Term.Branch(e, go, no))
+                ln.start(go)
+            }
+        })
+    } else if ln.arrayOf(ty) != types.UnknownT {
+        el := t.Elem(ln.arrayOf(ty))
+        na := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
+        nb := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(b))], sp)
+        same := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[na, nb], sp)
+        next := ln.F.NewBlock()
+        ln.end(mir.Term.Branch(same, next, no))
+        ln.start(next)
+        ln.eachIndex(na, sp, fn(i mir.LocalId) {
+            e := ln.equalAt(ln.with(a, mir.Proj.Index(i)), ln.with(b, mir.Proj.Index(i)), el, sp)
+            go := ln.F.NewBlock()
+            ln.end(mir.Term.Branch(e, go, no))
+            ln.start(go)
+        })
+    } else {
+        ln.gap(sp, "an Equal helper for a type with no parts")
+    }
+    ln.leaveOpen(ends)
+    ln.start(no)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constBool(false, sp))))
+    ln.leaveOpen(ends)
+    ln.patch(ends)
+    return mir.Operand.Copy(mir.L(res))
+}
+
+# for each case of an enum with a payload: the code each gives, run where the tag tag (an I64) is that case's
+fn (ln mut lowering&) payloads(cases Array<types.TypeId>&, tag mir.Operand, sp source.Span, each fn(tag I64, rec types.TypeId)) {
+    with List<I64>
+    for i in range cases.Len() {
+        if cases[i] != types.TypeId(0) and ln.T.Items(ln.T.Parts(cases[i])).Len() > 0 { with.Push(i) }
+    }
+    if with.Len() == 0 { return }
+    after := ln.F.NewBlock()
+    cs := Array<mir.Case>(with.Len())
+    bs := Array<mir.BlockId>(with.Len())
+    for k in range with.Len() {
+        bs[k] = ln.F.NewBlock()
+        cs[k] = mir.Case(with[k], bs[k])
+    }
+    ln.end(mir.Term.Switch(tag, ln.F.AddCases(cs), after))
+    for k in range with.Len() {
+        ln.start(bs[k])
+        each(with[k], cases[with[k]])
+        ln.goto(after)
+    }
+    ln.start(after)
+}
+
+# a counted loop, i from 0 below n: the code each gives run for each i
+fn (ln mut lowering&) eachIndex(n mir.Operand, sp source.Span, each fn(i mir.LocalId)) {
+    i := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(i), mir.Rvalue.Use(ln.constI64(0))))
+    head, body, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+    ln.goto(head)
+    ln.start(head)
+    more := ln.prim(typed.PrimOp.Lt, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), n], sp)
+    ln.end(mir.Term.Branch(more, body, after))
+    ln.start(body)
+    each(i)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(i), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T
+                                                         ln.F.Args(mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(1)]))))
+    ln.goto(head)
+    ln.start(after)
+}
+
+# the prelude's mixHash of an I64 (std/prelude/hash.olang): a multiply by the golden-ratio constant, the high bits
+# folded into the low ones
+fn (ln mut lowering&) mix(x mir.Operand, sp source.Span) mir.Operand {
+    h := ln.prim(typed.PrimOp.Mul, mir.I64T, mir.Operand[x, ln.constI64(-7046029254386353131)], sp)
+    return ln.prim(typed.PrimOp.BitXor, mir.I64T, mir.Operand[h, ln.prim(typed.PrimOp.Shr, mir.I64T, mir.Operand[h, ln.constI64(29)], sp)], sp)
+}
+
+# h, then one more part's hash combined in, as the prelude's HashElements combines an array's
+fn (ln mut lowering&) combine(h mir.LocalId, x mir.Operand, sp source.Span) {
+    m := ln.prim(typed.PrimOp.Mul, mir.I64T, mir.Operand[mir.Operand.Copy(mir.L(h)), ln.constI64(1099511628211)], sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Prim(typed.PrimOp.Add, mir.I64T, ln.F.Args(mir.Operand[m, x]))))
+}
+
+# the supplied Hash (E10b): an integer, Bool or Char by the prelude's mixHash, a reference to an array by its
+# elements' (a null 0); a struct's, tuple's or record's fields combined in order, an enum's case then its payload's, an
+# array's elements - an aggregate part through its own Hash helper
+fn (ln mut lowering&) hashAt(a pl, ty types.TypeId, sp source.Span, top Bool = false) mir.Operand {
+    t := ln.T
+    r := t.Repr(ty)
+    # a part whose type declares Hash (or, in its own module, hash: M6b) hashes by it (E10b)
+    hb := -1 if top else ln.methodBody(ty, "Hash", "hash")
+    if hb >= 0 {
+        callee, fty := ln.bodyCallee(typed.BodyId(I32(hb)))
+        p0 := t.Items(t.Params(fty))[0]
+        recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp) if t.IsRef(p0) else ln.into(p0, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        ok := ln.F.NewBlock()
+        dest := ln.temp(mir.I64T, sp)
+        k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest)
+                                   true, ok, mir.NoLocal, mir.NoBlock))
+        ln.end(mir.Term.Call(sp, k))
+        ln.start(ok)
+        return mir.Operand.Copy(mir.L(dest))
+    }
+    if ln.scalar(ty) {
+        x := ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+        return ln.mix(ln.asI64(x, ty, sp), sp)
+    }
+    if t.IsRef(r) {
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        res := ln.temp(mir.I64T, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(ln.constI64(0))))
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        some, after := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(nn, some, after))
+        ln.start(some)
+        h := ln.hashAt(ln.at(x), t.Referent(r), sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.L(res), mir.Rvalue.Use(h)))
+        ln.goto(after)
+        ln.start(after)
+        return mir.Operand.Copy(mir.L(res))
+    }
+    if not top { return ln.helperCall(mir.HelperKind.Hash, ty, mir.Operand[ln.refTo(a, ty, sp)], mir.ScopeRef[], mir.I64T, sp) }
+    h := ln.temp(mir.I64T, sp)
+    ln.emit(mir.Stmt.Assign(sp, mir.L(h), mir.Rvalue.Use(ln.constI64(0))))
+    parts, isParts := ln.partsOf(ty)
+    cases, isEnum := ln.casesOf(ty)
+    if isParts {
+        for i in range parts.Len() { ln.combine(h, ln.hashAt(ln.with(a, mir.Proj.Field(i)), parts[i], sp), sp) }
+    } else if isEnum {
+        tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
+        ln.combine(h, ln.mix(tag, sp), sp)
+        ln.payloads(cases, tag, sp, fn(k I64, rec types.TypeId) {
+            fs := ln.items(ln.T.Parts(rec))
+            for i in range fs.Len() {
+                ln.combine(h, ln.hashAt(ln.with(ln.with(a, mir.Proj.Payload(k)), mir.Proj.Field(i)), fs[i], sp), sp)
+            }
+        })
+    } else if ln.arrayOf(ty) != types.UnknownT {
+        el := t.Elem(ln.arrayOf(ty))
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
+        ln.eachIndex(n, sp, fn(i mir.LocalId) { ln.combine(h, ln.hashAt(ln.with(a, mir.Proj.Index(i)), el, sp), sp) })
+    } else {
+        ln.gap(sp, "a Hash helper for a type with no parts")
+    }
+    return mir.Operand.Copy(mir.L(h))
+}
+
+# a type's zero value (D13c): a constructor with no parameters called, else all zero bits - which of these, or the
+# constructor on its parameters' defaults, is eval's to decide once per type (Key.Zero, M8)
+fn (ln mut lowering&) zeroOf(ty types.TypeId, sp source.Span) mir.Operand {
+    lw := ln.L
+    lw.index()
+    id := try lw.ctorOf.Get(ty) catch default -1
+    t := ln.T
+    if id >= 0 and t.Items(t.Params(lw.Bodies[id].Ty)).Len() == 0 {
+        callee, fty := ln.bodyCallee(typed.BodyId(I32(id)))
+        ok := ln.F.NewBlock()
+        dest := ln.temp(ty, sp)
+        errs := t.Errors(fty)
+        if t.Items(errs).Len() > 0 {
+            ln.gap(sp, "a zero value whose constructor can fail")
+            return mir.Operand.None
+        }
+        k := ln.F.AddCall(mir.Call(callee, mir.Empty, ln.passed(mir.PassedCount(t, callee, fty)), mir.L(dest), true, ok
+                                   mir.NoLocal, mir.NoBlock))
+        ln.end(mir.Term.Call(sp, k))
+        ln.start(ok)
+        return mir.Operand.Copy(mir.L(dest))
+    }
+    return mir.Operand.Const(ty, 0)
+}
+
+# an instance's Call as a function value (E31): its environment the instance, its code calling Call on it with the
+# value's own arguments, its result and its errors Call's
+# the scopes an adapter passes its Call: for the receiver's, the scope its instance lives in (the capture's, O4b, D16c)
+# - which the runtime gives this thread's part of where it is called elsewhere (P2) - for another parameter's, the
+# adapter's own for that parameter, for the result's the adapter's result scope
+fn (ln mut lowering&) adapterPassed(cty types.TypeId, recv types.TypeId) mir.Range {
+    t := ln.T
+    cvs := t.ScopeVarsOf(cty)
+    avs := t.ScopeVarsOf(ln.F.Ty)
+    xs := Array<mir.ScopeRef>(cvs.Len())
+    for i in range cvs.Len() {
+        xs[i] = mir.ScopeRef.Program
+        v := cvs[i]
+        if v == 0 and t.HoldsRefs(recv) {
+            xs[i] = mir.ScopeRef.Var(avs.Len())
+            continue
+        }
+        want := v - 1 if v > 0 else v
+        for j in range avs.Len() {
+            if avs[j] == want { xs[i] = mir.ScopeRef.Var(j) }
+        }
+    }
+    return ln.F.ScopeRefs(xs)
+}
+
+fn (lw mut Lowerer&) adapterFn(call typed.BodyId) mir.Fn {
+    cty := lw.Bodies[I64(call)].Ty
+    ps := lw.P.T.Items(lw.P.T.Params(cty))
+    rest := Array<types.TypeId>(ps.Len() - 1)
+    for i in range rest.Len() { rest[i] = ps[i + 1] }
+    ty := lw.P.T.Func(lw.P.T.List(rest), lw.P.T.Result(cty), lw.P.T.Errors(cty))
+    b := standIn(ty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Adapter(call), ty))
+    ln.adapterBody(call, cty, ps[0])
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+fn (ln mut lowering&) adapterBody(call typed.BodyId, cty types.TypeId, recv types.TypeId) {
+    t := ln.T
+    sp := ln.B.Sp
+    for p in t.Items(t.Params(ln.F.Ty)) { ln.F.AddParam(source.NameId(0), sp, p) }
+    inst := ln.F.AddLocal(mir.Local(source.NameId(0), sp, recv, mir.LocalKind.Capture, mir.ScopeRef.Frame))
+    ln.F.Captures.Push(inst)
+    for v in t.ScopeVarsOf(ln.F.Ty) { ln.F.Vars.Push(mir.VarKind.Result if v < 0 else mir.VarKind.Param(v)) }
+    if t.HoldsRefs(recv) { ln.F.Vars.Push(mir.VarKind.Capture(0)) }
+    ln.F.NewBlock()
+    frame := ln.F.AddScope(mir.ScopeKind.Frame, mir.NoScope, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, frame))
+    ln.levels.Push(level(frame, typed.BlockId(-1), mir.ScopeKind.Frame))
+    args := Array<mir.Operand>(ln.F.Params.Len() + 1)
+    args[0] = mir.Operand.Copy(mir.L(inst))
+    for i in range ln.F.Params.Len() { args[i + 1] = mir.Operand.Copy(mir.L(ln.F.Params[i])) }
+    res := t.Result(cty)
+    ok := ln.F.NewBlock()
+    dest := mir.NoLocal
+    if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(res, sp) }
+    code := mir.NoLocal
+    eb := mir.NoBlock
+    if t.Items(t.Errors(cty)).Len() > 0 {
+        code = ln.temp(mir.I32T, sp)
+        eb = ln.F.NewBlock()
+    }
+    callee := mir.Callee.Fn(mir.FnKey.Body(call), cty)
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(args), ln.adapterPassed(cty, recv)
+                               mir.L(dest) if dest != mir.NoLocal else mir.NoPlace, dest != mir.NoLocal, ok, code, eb))
+    ln.end(mir.Term.Call(sp, k))
+    if eb != mir.NoBlock {
+        ln.start(eb)
+        ln.leave(0)
+        ln.end(mir.Term.Raise(sp, mir.Operand.Copy(mir.L(code))))
+    }
+    ln.start(ok)
+    if res == types.NoreturnT {
+        ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None))
+        return
+    }
+    ln.epilogue(mir.Operand.None if dest == mir.NoLocal else mir.Operand.Copy(mir.L(dest)))
+}
+
+# a module's initialization (B5a): each of its globals' initializers run, each after the globals it reads - check's
+# order (P.InitOrder), a summary of their reads computed once every body is checked (DESIGN.md 1.6)
+fn (lw mut Lowerer&) initFn(m I64) mir.Fn {
+    ty := lw.P.T.Func(types.ListId(0), types.VoidT, types.ListId(0))
+    b := standIn(ty)
+    ln := lowering(lw, b, lw.P.T, lw.bare(mir.FnKey.Init(m), ty))
+    ln.prologue(mir.VarKind[])
+    for i in lw.P.InitOrder {
+        match lw.Bodies[i].Of {
+            case typed.BodyOf.Global(gm, _) {
+                if gm == m and lw.Bodies[i].Root != null {
+                    ok := ln.F.NewBlock()
+                    callee := mir.Callee.Fn(mir.FnKey.Body(typed.BodyId(I32(i))), lw.Bodies[i].Ty)
+                    k := ln.F.AddCall(mir.Call(callee, mir.Empty, mir.Empty, mir.NoPlace, false, ok, mir.NoLocal, mir.NoBlock))
+                    ln.end(mir.Term.Call(lw.Bodies[i].Sp, k))
+                    ln.start(ok)
+                }
+            }
+            case _ { }
+        }
+    }
+    ln.epilogue(mir.Operand.None)
+    lw.Gapped = ln.gapped
+    return ln.F
+}
+
+# "$x" of a value of the type, at the top of its rendering, written into builder b (E11a): a type declaring Str by what
+# Str returns; a struct as its name and its fields, an enum as its type and case and its payload, an array as its
+# element type and its items, several results as a tuple, a reference as null or what it names, a function value as
+# its signature - each part as it renders inside another value (inner)
+fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span, top Bool = false) {
+    t := ln.T
+    if ln.renderStr(a, ty, b, sp) { return }
+    r := t.Repr(ty)
+    if t.IsRef(r) {
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        some, none, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(nn, some, none))
+        ln.start(none)
+        ln.word(b, "null", sp)
+        ln.goto(after)
+        ln.start(some)
+        # references followed 8 deep, then "..." - a cycle is cut off
+        d := ln.depth()
+        far := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[d, ln.constI64(8)], sp)
+        dots, deeper := ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(far, dots, deeper))
+        ln.start(dots)
+        ln.word(b, "...", sp)
+        ln.goto(after)
+        ln.start(deeper)
+        saved := ln.rdepth
+        ln.rdepth = ln.prim(typed.PrimOp.Add, mir.I64T, mir.Operand[d, ln.constI64(1)], sp)
+        ln.inner(ln.at(x), t.Referent(r), b, sp)
+        ln.rdepth = saved
+        ln.goto(after)
+        ln.start(after)
+        return
+    }
+    if t.KindOf(r) == types.Kind.Func {
+        x := ln.local(mir.Operand.Copy(ln.mk(a)), ty, sp)
+        nn := ln.prim(typed.PrimOp.Ne, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(x)), mir.Operand.Const(ty, 0)], sp)
+        some, none, after := ln.F.NewBlock(), ln.F.NewBlock(), ln.F.NewBlock()
+        ln.end(mir.Term.Branch(nn, some, none))
+        ln.start(none)
+        ln.word(b, "null", sp)
+        ln.goto(after)
+        ln.start(some)
+        ln.word(b, ln.spell(ty, true, not top), sp)
+        ln.goto(after)
+        ln.start(after)
+        return
+    }
+    if not top {
+        ln.helperCall(mir.HelperKind.Render, ty, mir.Operand[ln.refTo(a, ty, sp), ln.depth()], mir.ScopeRef[b], types.VoidT, sp)
+        return
+    }
+    parts, isParts := ln.partsOf(ty)
+    cases, isEnum := ln.casesOf(ty)
+    if isParts {
+        if t.KindOf(r) == types.Kind.Named { ln.word(b, ln.T.Names.Text(t.DeclName(t.DeclOf(r))), sp) }
+        ln.word(b, "(", sp)
+        for i in range parts.Len() {
+            if i > 0 { ln.word(b, ", ", sp) }
+            ln.inner(ln.with(a, mir.Proj.Field(i)), parts[i], b, sp)
+        }
+        ln.word(b, ")", sp)
+    } else if isEnum {
+        caseNames := t.CaseNames(r) if t.KindOf(r) == types.Kind.Named else t.ShapeNames(r)
+        tag := ln.into(mir.I64T, mir.Rvalue.Tag(ln.mk(a)), sp)
+        prefix := "" if t.KindOf(r) != types.Kind.Named else $ln.T.Names.Text(t.DeclName(t.DeclOf(r))) "."
+        after := ln.F.NewBlock()
+        cs := Array<mir.Case>(cases.Len())
+        bs := Array<mir.BlockId>(cases.Len())
+        for k in range cases.Len() {
+            bs[k] = ln.F.NewBlock()
+            cs[k] = mir.Case(k, bs[k])
+        }
+        ln.end(mir.Term.Switch(tag, ln.F.AddCases(cs), after))
+        for k in range cases.Len() {
+            ln.start(bs[k])
+            name := ln.T.Names.Text(caseNames[k]) if caseNames != null and k < caseNames.Len() else $k
+            ln.word(b, $prefix $name, sp)
+            if cases[k] != types.TypeId(0) {
+                fs := ln.items(t.Parts(cases[k]))
+                if fs.Len() > 0 {
+                    ln.word(b, "(", sp)
+                    for i in range fs.Len() {
+                        if i > 0 { ln.word(b, ", ", sp) }
+                        ln.inner(ln.with(ln.with(a, mir.Proj.Payload(k)), mir.Proj.Field(i)), fs[i], b, sp)
+                    }
+                    ln.word(b, ")", sp)
+                }
+            }
+            ln.goto(after)
+        }
+        ln.start(after)
+    } else if ln.arrayOf(ty) != types.UnknownT {
+        el := t.Elem(ln.arrayOf(ty))
+        ln.word(b, $ln.spell(ln.readOnly(el), true, true) "[", sp)
+        n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(a))], sp)
+        ln.eachIndex(n, sp, fn(i mir.LocalId) {
+            first := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[mir.Operand.Copy(mir.L(i)), ln.constI64(0)], sp)
+            sep, item := ln.F.NewBlock(), ln.F.NewBlock()
+            ln.end(mir.Term.Branch(first, item, sep))
+            ln.start(sep)
+            ln.word(b, ", ", sp)
+            ln.goto(item)
+            ln.start(item)
+            ln.inner(ln.with(a, mir.Proj.Index(i)), el, b, sp)
+        })
+        ln.word(b, "]", sp)
+    } else {
+        ln.gap(sp, "a Render helper for a type with no rendering")
+    }
+}
+
+# how many references the rendering being written followed to reach here (E11a): 0 outside a Render helper
+fn (ln mut lowering&) depth() mir.Operand { return ln.constI64(0) if ln.rdepth == mir.Operand.None else ln.rdepth }
+
+# a value written inside another's rendering (E11a): a Char as a character literal, text as a string literal, a
+# number or a Bool as at the top, anything else as at the top through its Render helper
+fn (ln mut lowering&) inner(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span) {
+    t := ln.T
+    r := t.Repr(ty)
+    if ln.isChar(ty) {
+        ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.QuotedChar, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        return
+    }
+    if ln.isText(ty) and not ln.hasStr(ty) {
+        ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Quoted, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        return
+    }
+    if ln.scalar(ty) {
+        how := mir.WriteKind.Bool
+        if t.IsUnsigned(r) { how = mir.WriteKind.Uint } else if t.IsInt(r) { how = mir.WriteKind.Int } else if t.IsFloat(r) {
+            how = mir.WriteKind.Float
+        }
+        ln.emit(mir.Stmt.Write(sp, b, how, ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)))
+        return
+    }
+    ln.renderAt(a, ty, b, sp)
+}
+
+# a Char, or a type declared over one (E11a renders those as characters)
+fn (ln mut lowering&) isChar(ty types.TypeId) Bool {
+    t := ln.T
+    x := ty
+    for k in range 16 {
+        if t.Same(x, ln.L.char()) { return true }
+        if not (t.KindOf(x) == types.Kind.Named and t.DeclKindOf(t.DeclOf(x)) == types.DeclKind.Over and t.HasBody(x)) {
+            return false
+        }
+        x = t.Base(x)
+    }
+    return false
+}
+
+# text written into builder b as it is
+fn (ln mut lowering&) word(b mir.ScopeRef, text String&, sp source.Span) {
+    bytes := Array<U8>(text.Len())
+    for i in range text.Len() { bytes[i] = U8(text[i]) }
+    u8 := ln.T.Prim("U8")
+    bt := ln.T.Ref(ln.T.Array(u8, types.TypeId(0)), types.ReadOnly)
+    c := ln.F.AddConst(typed.Const.Bytes(bytes))
+    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Data(bt, c, ln.file, sp)))
+}
+
+# the type with its own write permission dropped: an array's element type as a literal writes it (E11a)
+fn (ln mut lowering&) readOnly(ty types.TypeId) types.TypeId {
+    t := ln.T
+    if t.IsRef(ty) { return t.Ref(t.Referent(ty), t.PermOf(ty) & (0 - 1 - types.Writable)) }
+    return ty
+}
+
+# a type as source writes it (E11a, E21): primitives and declared types by name, their arguments in angle brackets,
+# references with their permission, arrays as Array<T> whatever their storage (T7c); a function type as a signature, after "fn"
+# where fnWord says
+fn (ln mut lowering&) spell(ty types.TypeId, fnWord Bool, item Bool = false, group Bool = false) String {
+    t := ln.T
+    k := t.KindOf(ty)
+    if k == types.Kind.Named {
+        name := ln.T.Names.Text(t.DeclName(t.DeclOf(ty)))
+        args := t.Items(t.Args(ty))
+        if args.Len() == 0 { return $name }
+        out := StringBuilder()
+        out.Push(name)
+        out.PushChar('<')
+        for i in range args.Len() {
+            if i > 0 { out.Push(", ") }
+            out.Push(ln.spell(args[i], true, true))
+        }
+        out.PushChar('>')
+        return out.ToString()
+    }
+    if k == types.Kind.Ref {
+        m := "mut " if (t.PermOf(ty) & types.Writable) != 0 else ""
+        return $m $ln.spell(t.Referent(ty), true, item) "&"
+    }
+    if k == types.Kind.Array {
+        return "Array<" $ln.spell(t.Elem(ty), true, true) ">"
+    }
+    if k == types.Kind.Const { return $t.ConstValue(ty) }
+    if k == types.Kind.Tuple {
+        out := StringBuilder()
+        xs := t.Items(t.Parts(ty))
+        out.PushChar('(')
+        for i in range xs.Len() {
+            if i > 0 { out.Push(", ") }
+            out.Push(ln.spell(xs[i], true, true))
+        }
+        out.PushChar(')')
+        return out.ToString()
+    }
+    if k == types.Kind.Func {
+        out := StringBuilder()
+        res := t.Result(ty)
+        es := t.Items(t.Errors(ty))
+        several := (t.KindOf(res) == types.Kind.Tuple and t.Items(t.Parts(res)).Len() > 1) or es.Len() > 1
+        # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
+        wrap := fnWord and (group or (item and several))
+        if wrap { out.PushChar('(') }
+        if fnWord { out.Push("fn") }
+        out.PushChar('(')
+        ps := t.Items(t.Params(ty))
+        ns := t.NamesOf(ty)
+        for i in range ps.Len() {
+            if i > 0 { out.Push(", ") }
+            if ns.Len() == ps.Len() { out.Push($t.Names.Text(source.NameId(I32(ns[i]))) " ") }
+            out.Push(ln.spell(ps[i], true, true))
+        }
+        out.PushChar(')')
+        if t.KindOf(res) == types.Kind.Tuple {
+            # several results, bare (D8c)
+            parts := t.Items(t.Parts(res))
+            for i in range parts.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(parts[i], true, true)) }
+        } else if res != types.VoidT {
+            g := es.Len() > 0 and t.KindOf(res) == types.Kind.Func and t.Items(t.Errors(res)).Len() == 0
+            out.Push(" " $ln.spell(res, true, true, g))
+        }
+        if es.Len() > 0 {
+            out.Push(" ?")
+            for i in range es.Len() { out.Push($(", " if i > 0 else " ") $ln.spell(t.ErrOf(es[i]), true)) }
+        }
+        if wrap { out.PushChar(')') }
+        return out.ToString()
+    }
+    return t.Canon(ty)
+}
+
+# whether a type declares Str (E11c), and its body: its Str, rendering it at every depth
+fn (ln mut lowering&) strBody(ty types.TypeId) I64 {
+    lw := ln.L
+    t := ln.T
+    # a declared type over a number or an array is its own type here, with its own Str (E11c)
+    r := ty if t.KindOf(ty) == types.Kind.Named else t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Named { return -1 }
+    got := try lw.strOf.Get(r) catch default -2
+    if got != -2 { return got }
+    id := ln.methodBody(ty, "Str", "str")
+    lw.strOf.Put(r, id)
+    return id
+}
+
+# the checked body of a one-parameter method a type declares, by either spelling (M6b) - -1 where none was made
+fn (ln mut lowering&) methodBody(ty types.TypeId, cap String&, low String&) I64 {
+    lw := ln.L
+    t := ln.T
+    # a declared type over a number or an array is its own type here, with its own methods (E11c)
+    r := ty if t.KindOf(ty) == types.Kind.Named else t.Repr(ty)
+    if t.KindOf(r) != types.Kind.Named { return -1 }
+    id := -1
+    for name in String&[cap, low] {
+        m := lw.P.MethodOf(r, t.Names.Intern(name))
+        if m < 0 { continue }
+        for i in range lw.Bodies.Len() {
+            match lw.Bodies[i].Of {
+                case typed.BodyOf.Fn(inst) {
+                    if id < 0 and lw.P.InstanceFn(inst) == m {
+                        ps := t.Items(t.Params(lw.Bodies[i].Ty))
+                        if ps.Len() == 1 {
+                            p0 := t.Referent(ps[0]) if t.IsRef(ps[0]) else ps[0]
+                            if t.Same(t.Repr(p0), t.Repr(r)) { id = i }
+                        }
+                    }
+                }
+                case _ { }
+            }
+        }
+    }
+    return id
+}
+
+fn (ln mut lowering&) hasStr(ty types.TypeId) Bool { return ln.strBody(ty) >= 0 }
+
+# a value of a type declaring Str rendered by it: Str called on it, what it returns written as it is
+fn (ln mut lowering&) renderStr(a pl, ty types.TypeId, b mir.ScopeRef, sp source.Span) Bool {
+    id := ln.strBody(ty)
+    if id < 0 { return false }
+    t := ln.T
+    callee, fty := ln.bodyCallee(typed.BodyId(I32(id)))
+    p0 := t.Items(t.Params(fty))[0]
+    recv := ln.into(p0, mir.Rvalue.Ref(ln.mk(a), p0), sp) if t.IsRef(p0) else ln.into(p0, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
+    res := t.Result(fty)
+    ok := ln.F.NewBlock()
+    dest := ln.temp(res, sp)
+    # E11c: what Str builds for its result is built in a scope "$" opens for the call, closed once the text is copied -
+    # its destructors run there, and an unwind through it closes it
+    rs := ln.F.AddScope(mir.ScopeKind.Block, ln.top().S, typed.BlockId(-1), sp)
+    ln.emit(mir.Stmt.Open(sp, rs))
+    vs := t.ScopeVarsOf(fty)
+    xs := Array<mir.ScopeRef>(vs.Len())
+    for i in range vs.Len() { xs[i] = mir.ScopeRef.Scope(rs) if vs[i] == types.ResultVar else mir.ScopeRef.Program }
+    k := ln.F.AddCall(mir.Call(callee, ln.F.Args(mir.Operand[recv]), ln.F.ScopeRefs(xs), mir.L(dest)
+                               true, ok, mir.NoLocal, mir.NoBlock))
+    ln.end(mir.Term.Call(sp, k))
+    ln.start(ok)
+    ln.emit(mir.Stmt.Write(sp, b, mir.WriteKind.Bytes, mir.Operand.Copy(mir.L(dest))))
+    ln.emit(mir.Stmt.Close(sp, rs))
+    return true
+}
+
+# ---- tests ----
+
+# a program of one file, main.olang, loaded over the repository's std, checked and lowered: the verifier's problems with every body and every function they refer to, a line each
+# ("B<id>: problem"), "gap" lines for what is not lowered yet, and the dump of each body of the root module whose
+# function's name is in dumps
+fn lowerText(text String&, dumps Array<String&>&) String, String {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                     source.Names(), diag.Diagnostics(false))
+    l.Load($dir "/main.olang")
+    r := names.Resolver(l)
+    r.Resolve()
+    p := generic.Program(l, r)
+    c := check.Checker(p, false)
+    c.CheckProgram()
+    lw := Lowerer(p, c.Bodies)
+    problems := StringBuilder()
+    out := StringBuilder()
+    root := l.Mods[l.Root].File
+    for b in range c.Bodies.Len() {
+        if not lw.HasCode(b) { continue }
+        body := c.Bodies[b]
+        name := ""
+        match body.Of {
+            case typed.BodyOf.Fn(inst) { name = $p.L.Names.Text(p.FnDecl(p.InstanceFn(inst)).Name) }
+            case _ { }
+        }
+        dump := body.File == root and name in dumps
+        gapped, bad, shown := lw.Verified(b, dump)
+        if gapped { problems.Push("B" $b ": gapped\n") }
+        for line in bad.Split("\n") {
+            if line.Len() > 0 { problems.Push("B" $b ": " $line "\n") }
+        }
+        out.Push(shown)
+    }
+    for m in lw.InitModules() { lw.Want(mir.FnKey.Init(m)) }
+    w I64 = 0
+    for w < lw.Wanted.Len() {
+        key := lw.Wanted[w]
+        w++
+        gapped, bad, _ := lw.VerifiedKey(key, false)
+        if gapped { problems.Push($key ": gapped\n") }
+        for line in bad.Split("\n") {
+            if line.Len() > 0 { problems.Push($key ": " $line "\n") }
+        }
+    }
+    for g in lw.Gaps { problems.Push("gap " $g.What "\n") }
+    return problems.ToString(), out.ToString()
+}
+
+test "a function lowers to straight-line MIR: its operands in temporaries, its frame opened and closed" {
+    problems, dump := lowerText("fn add(a I32, b I32) I32 {\n    s := a + b\n    return s\n}\nfn main() { x := add(1, 2) }\n"
+                                String&["add"])
+    assert problems == "", problems
+    want := ("  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  L3 Temp: I32\n  L4 Temp: I32\n  L5 Temp: I32\n"
+             "  L6 Temp: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L3 = copy L0\n  L4 = copy L1\n  L5 = Add I32(copy L3, copy L4)\n"
+             "  L2 = copy L5\n  L6 = copy L2\n  close S0\n  return copy L6\n")
+    assert (try dump.Find(want) catch default -1) > 0, dump
+}
+
+test "control flow verifies clean: ifs, loops with break and continue, ranges, for-in, matches, tries, defers" {
+    text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
+             "error E {\n    BAD\n    WORSE\n}\n"
+             "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.BAD }\n    if n > 100 { error E.WORSE }\n    return n\n}\n"
+             "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r) => 3 * r * r\n        case Shape.Square => 1\n    }\n}\n"
+             "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"
+             "        if x > 50 { break }\n        t += try pick(x) catch E.BAD default 0\n    }\n    for i in range 3 { t += i }\n"
+             "    return t\n}\n"
+             "fn main() ? E {\n    s := try walk(I64[1, 2, 3]) + area(Shape.Circle(2))\n    assert s > 0, \"positive\"\n"
+             "    q := checked (s * 2) catch default 0\n    assert $q \" \" $Shape.Square != \"\"\n}\n")
+    problems, _ := lowerText(text, String&[])
+    assert problems == "", problems
+}
+
+test "helpers: == on a struct, its Hash, its rendering; a comprehension; a join of tasks" {
+    text := ("type Point struct(x I64, y I64) {\n    x, y\n}\n"
+             "fn sq(n I64) I64 { return n * n }\n"
+             "fn main() {\n    p := Point(1, 2)\n    assert p == Point(1, 2) and p.Hash() == Point(1, 2).Hash()\n"
+             "    t := $p\n    a := I64[x * 2 for x in I64[1, 2, 3] if x > 1]\n    out := Array<I64>(3)\n"
+             "    join {\n        for i in range 3 { spawn out[i] = sq(i) }\n    }\n    assert a.Len() == 2 and out[2] == 4 and t.Len() > 0\n}\n")
+    problems, _ := lowerText(text, String&[])
+    assert problems == "", problems
+}

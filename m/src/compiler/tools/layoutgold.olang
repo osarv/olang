@@ -1,0 +1,46 @@
+# layoutgold - captures compiler/goldens/layout.txt, the layouts M5a's acceptance compares the self-hosted type table
+# with (compiler/DESIGN.md section 4, compiler/tools/layoutdiff.olang). Stage 0 (the C compiler, removed; tagged
+# stage0-final) wrote the golden: every type it held for every root program of the repository - the corpus, std,
+# compiler/ and its tools, checks, fuzz and bench, each as an ordinary and as a test build - and for every checks case
+# that builds or runs, with the case's flags, each type written once, under the first program that holds it
+# ("== ROOT FLAGS"). Captured again here, the golden's own types are laid out again by the self-hosted type table ("dump
+# layout", as layoutdiff reads it, LAYOUTDIFF_DUMP naming another build), a deferred or unparsed one keeping the golden's
+# row: the set of types stays the one stage 0 captured.
+#
+# Run from the repository root after "make build/compiler_tools_dump" (make layoutgold), after a change to a layout.
+# LAYOUTGOLD_OUT names another file to write than the golden (to compare a capture without replacing it).
+
+import "std/os"
+import "toolkit"
+
+fn main() {
+    fromPort(toolkit.Env("LAYOUTGOLD_OUT", "compiler/goldens/layout.txt"))
+}
+
+# the golden laid out again by the self-hosted type table, row for row; a row it leaves unlaid keeps the golden's
+fn fromPort(out String&) {
+    dump := toolkit.Env("LAYOUTDIFF_DUMP", "build/compiler_tools_dump")
+    golden := "compiler/goldens/layout.txt"
+    if not toolkit.Built(dump) { toolkit.Die("layoutgold: " $dump " is not built (make " $dump ")") }
+    o := toolkit.Run(String&[dump, "layout", golden])
+    if o.Status != 0 or o.Stderr.Len() > 0 {
+        toolkit.Say(o.Stderr)
+        toolkit.Die("layoutgold: " $dump " layout failed")
+    }
+    old := toolkit.Rows(toolkit.Read(golden))
+    got := toolkit.Rows(o.Stdout)
+    if got.Len() != old.Len() { toolkit.Die("layoutgold: " $dump " gave " $got.Len() " rows for the golden's " $old.Len()) }
+    b := StringBuilder()
+    kept I64 = 0
+    for i in range old.Len() {
+        row := got[i]
+        if row.EndsWith("\tdeferred") or row.EndsWith("\tunparsed") {
+            row = old[i]
+            kept++
+        }
+        b.Push(row)
+        b.PushChar('\n')
+    }
+    toolkit.Write(out, b.ToString())
+    toolkit.Say("layoutgold: " $old.Len() " rows laid out by " $dump " into " $out " (" $kept " left as the golden had them)\n")
+}

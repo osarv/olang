@@ -1,0 +1,47 @@
+# binary-trees: many perfect binary trees built, walked and dropped (the Benchmarks Game's algorithm) - allocation
+# heavy. Each tree lives in the block that holds it, so dropping one is the block closing: no free, no collector.
+import "std/io"
+import "std/os"
+
+type Node struct(left Node&, right Node&) {
+    left
+    right
+}
+
+# a perfect tree of the given depth, built where the caller puts it
+fn tree(depth I64) Node& {
+    if depth == 0 { return Node(null, null) }
+    return Node(tree(depth - 1), tree(depth - 1))
+}
+
+# how many nodes it has
+fn check(n Node&) I64 {
+    if n.left == null { return 1 }
+    return 1 + check(n.left) + check(n.right)
+}
+
+# a tree built, checked and dropped as this function returns
+fn built(depth I64) I64 {
+    t := tree(depth)
+    return check(t)
+}
+
+fn main() ? {
+    args := os.Args()
+    n I64 = 10
+    if args.Len() > 1 { n = try args[1].ParseInt() }
+    minDepth I64 = 4
+    maxDepth I64 = n if n > minDepth + 2 else minDepth + 2
+    try io.Print("stretch tree of depth " $(maxDepth + 1) "\t check: " $built(maxDepth + 1) "\n")
+    longLived := tree(maxDepth)
+    for d in range minDepth, maxDepth + 1, 2 {
+        iterations I64 = I64(1) << (maxDepth - d + minDepth)        # "1 << ..." alone shifts an I32 (E8a)
+        sum I64 = 0
+        for i in range iterations {
+            t := tree(d)        # lives in the loop body's block: gone at the end of each iteration
+            sum += check(t)
+        }
+        try io.Print($iterations "\t trees of depth " $d "\t check: " $sum "\n")
+    }
+    try io.Print("long lived tree of depth " $maxDepth "\t check: " $check(longLived) "\n")
+}

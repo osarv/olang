@@ -1,0 +1,948 @@
+# interp - the checked program as the evaluator runs it (compiler/DESIGN.md 1.8, the M8 row): an eval.Machine given
+# the MIR functions lowering makes, each lowered once a request can reach it, its globals and destructors defined.
+# What serves the decisions made while compiling (K2, S18c: decide.olang) and interpret (B3e) alike.
+#
+# A request's code is lowered before the request runs: from the function asked for, every function its MIR can call -
+# by name, as a task, as a function value it makes (a closure's code) - and every destructor it registers, to a fixed
+# point. A body lowering leaves unfinished (a check error, a lowering gap) is not defined: a call of it stops the
+# evaluation (eval's "a function whose body is not available"), as emit makes it a stub failing when called. Every
+# global the program has is defined at the start, its initializer lowered with what that reaches, so a global is
+# initialized where it is first read (B5a's order falls out: each after the globals it reads).
+
+import "std/pair"
+import "std/io"
+import "source"
+import "ast"
+import "diag"
+import "msgs"
+import "load"
+import "names"
+import "types"
+import "generic"
+import "typed"
+import "mir"
+import typecheck "check"
+import "views"
+import "lower"
+import "scope"
+import "eval"
+
+# ---- checking with the build's decisions (B9c, S8b) ----
+
+# the program l loaded, resolved and checked - each condition the build decides that B9a could not evaluate decided by
+# evaluating it (B9c at the top level, S8b in a body), and the program resolved and checked again with the decisions,
+# until a check meets none left to decide: that last check. What an earlier check said is forgotten. tests as Checker's
+fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
+    decided Map<pair.Pair<I64, I64>, Bool>
+    dead Map<pair.Pair<I64, I64>, Bool>
+    lengths Map<String&, I64>
+    # B9c: the top-level conditions decided as errors - each said once the last check is made, the if taking no branch
+    condErrs List<CondErr>
+    for {
+        mark := l.Diags.Count()
+        r := names.Resolver(l)
+        r.Resolve()
+        p := generic.Program(l, r)
+        p.Lengths = lengths
+        c := typecheck.Checker(p, tests)
+        c.Decided = decided
+        c.Dead = dead
+        c.CheckProgram()
+        if not decide(l, c, decided, dead, lengths, condErrs) {
+            for e in condErrs { l.Diags.Error(e.At, e.M) }
+            if l.Diags.Count() == mark { judgeViews(c) }
+            return c
+        }
+        l.Diags.Forget(mark)
+    }
+}
+
+# M19g (compiler/views.olang), on a program that checked cleanly: a Vec's view used after the Vec may have grown
+fn judgeViews(c mut typecheck.Checker&) {
+    vw mut views.Viewer&c = views.Viewer(c.P, c.Bodies)
+    vw.Run()
+}
+
+# the decisions one check of the program leaves to evaluation, made where they can be: whether any was
+fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&
+    dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&, condErrs mut List<CondErr>&) Bool {
+    tops := l.PendingIfs()
+    if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 { return false }
+    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
+    x.ReadsBuild = c.ReadsBuild
+    made := false
+    undecided List<ast.If&>
+    for a in c.Asks {
+        key := pair.Pair(a.File, I64(a.At))
+        if decided.Has(key) or dead.Has(key) { continue }
+        v, ok := x.Cond(a.Body)
+        if ok and not x.M.UsedBuild {
+            # S8a: decided reading no build constant - the same on every build, which the next check reports
+            dead.Put(key, true)
+            made = true
+        } else if ok {
+            decided.Put(key, v)
+            made = true
+        } else {
+            undecided.Push(a.If)
+        }
+    }
+    # QP1: an array's length a call computes, evaluated in its module's context - one the evaluator cannot compute, or
+    # that does not check as a constant, is a length known only at run time, never an error (the program's own check
+    # says what is wrong with it)
+    for a in c.P.ConstAsks {
+        key := a.Key
+        if lengths.Has(key) { continue }
+        made = true
+        b := c.ExprBodyIn(a.Mi, a.Owner, a.Names, a.Vals, a.Expr, a.Want)
+        if b < 0 {
+            lengths.Put($key, generic.RunTimeLength)
+            continue
+        }
+        k := mir.FnKey.Body(typed.BodyId(I32(b)))
+        x.Need(k)
+        match x.M.Eval(k, Array<I64>(0)) {
+            case eval.Stop.None { lengths.Put($key, x.M.Int(x.M.Result, a.Want)) }
+            case _ { lengths.Put($key, generic.RunTimeLength) }
+        }
+    }
+    for t in tops {
+        ti := findIf(l.Mods[t.First].Decls, t.Second)
+        if ti == null { continue }
+        chosen, ok, why, at := chain(x, c, t.First, ti)
+        # one whose check already said why (B10's unknown name) stays pending: the last check says it again
+        if not ok and why == "" and condSaid(l.Diags, at) { continue }
+        if not ok {
+            # B9c: a condition that does not check here - what it uses exists only in the branches being decided - or
+            # whose evaluation stops is an error at it, decided now as stage 0 decides it: its if takes no branch
+            condErrs.Push(CondErr(at, msgs.CondUnseen() if why == "" else msgs.CondUndecidable(why)))
+            chosen = load.NoBranch
+        }
+        l.Decide(t.First, t.Second, chosen)
+        made = true
+    }
+    # a condition that does not evaluate is the running program's, what its branches hold reported - once no decision
+    # is left to make: one calling a function whose own if is still undecided may evaluate in the next check (S8b)
+    if not made {
+        for i in undecided { c.Running(i) }
+    }
+    return made
+}
+
+# whether the program's check said an error inside the condition at
+fn condSaid(d diag.Diagnostics&, at diag.Where) Bool {
+    match at {
+        case diag.Where.Span(f, s, e) { return d.ErrorWithin(f, s, e, d.Count()) }
+        nomatch { return false }
+    }
+}
+
+# a B9c condition decided as an error: where it is, and what is said
+type CondErr struct(At diag.Where, M msgs.Msg) {
+    At
+    M
+}
+
+# a pending top-level if's branch, its conditions evaluated in order (B9c): the first true one's, the else's after
+# them, load.NoBranch for none - and whether every condition read decided, or for the first that cannot, why: "" where it
+# does not check in its module, else what stopped its evaluation and where (stage 0's ERR_COND_UNDECIDABLE), and where
+# the condition is
+fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool, String, diag.Where {
+    d := c.P.L.Diags
+    file := c.P.L.Mods[mi].File
+    k I64 = 0
+    link := ti
+    for link != null {
+        csp := link.Cond.Span()
+        at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
+        b := c.CondBody(mi, link.Cond)
+        if b < 0 { return 0, false, "", at }
+        v, s := x.CondStop(b)
+        match s {
+            case eval.Stop.None { }
+            case eval.Stop.Refused(why, f, sp) { return 0, false, $why " (" $line(d, f, sp) ")", at }
+            case eval.Stop.Exited(kind, f, sp, _) { return 0, false, $AbortWhy(kind) " (" $line(d, f, sp) ")", at }
+            case eval.Stop.Raised(_) { return 0, false, "it fails with an error no clause handles", at }
+        }
+        if v { return k, true, "", at }
+        k++
+        if link.ElseIf == null { return (k if link.Else != null else load.NoBranch), true, "", at }
+        link = link.ElseIf
+    }
+    return load.NoBranch, true, "", diag.Where.Span(file, 0, 0)
+}
+
+# the top-level if whose first condition starts at that offset, in decls or a branch of an if in them
+fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf&ds {
+    if ds == null { return null }
+    for d in ds {
+        match d {
+            case ast.Decl.If(_, ti) {
+                if ti.Cond != null and ti.Cond.Span().Start == at { return ti }
+                f := findInIf(ti, at)
+                if f != null { return f }
+            }
+            case _ { }
+        }
+    }
+    return null
+}
+
+fn findInIf(ti ast.TopIf&, at I32) ast.TopIf&ti {
+    if ti == null { return null }
+    if ti.Then != null {
+        f := findIf(ti.Then.Decls, at)
+        if f != null { return f }
+    }
+    if ti.Else != null {
+        f := findIf(ti.Else.Decls, at)
+        if f != null { return f }
+    }
+    return findInIf(ti.ElseIf, at)
+}
+
+# ---- asserts decided while compiling (S18c) ----
+
+# the asserts c met whose condition reads no local, evaluated while compiling (K1): each true one put into the
+# lowering's AssertsTrue (no test at run time), a false one - or one whose evaluation reaches what aborts the program -
+# reported at the assert, with its message where that evaluates too; one the evaluator refuses stays the run time's.
+# How many were decided
+fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&) I64 {
+    if c.AssertAsks.Len() == 0 { return 0 }
+    d := c.P.L.Diags
+    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
+    n I64 = 0
+    for a in c.AssertAsks {
+        key := pair.Pair(a.Body, I64(a.Sp.Start))
+        if decided.Has(key) { continue }
+        k := mir.FnKey.Body(typed.BodyId(I32(a.Cond)))
+        x.Need(k)
+        s := x.M.Eval(k, Array<I64>(0))
+        at := diag.Where.Span(a.File, a.At.Start, a.At.End)
+        match s {
+            case eval.Stop.None {
+                n++
+                if x.M.Int(x.M.Result, types.BoolT) != 0 {
+                    decided.Put(key, true)
+                } else {
+                    text, has := x.Text(a.Msg)
+                    rec := d.Error(at, msgs.AssertFalseMessage(text) if has else msgs.AssertFalse())
+                    # G30/G16b: the instance it was false for
+                    if a.CtxText != "" { d.Note(rec, a.Ctx, msgs.Msg(msgs.NoteHere().Kind, "", a.CtxText)) }
+                }
+            }
+            case eval.Stop.Exited(kind, file, sp, _) {
+                n++
+                rec := d.Error(at, msgs.AssertAborts(AbortWhy(kind)))
+                d.Note(rec, diag.Where.Span(file, sp.Start, sp.End), msgs.NoteHere())
+            }
+            # M19g: it reads a view of a Vec taken before the Vec grew - what the program cannot have meant
+            case eval.Stop.Refused(why, file, sp) {
+                if why == eval.WhyStale {
+                    n++
+                    rec := d.Error(at, msgs.AssertStale(why))
+                    staleNotes(x, d, rec, file, sp)
+                }
+            }
+            case _ { }
+        }
+    }
+    return n
+}
+
+# ---- values decided while compiling (T29d, D13c) ----
+
+# the literals entering a declared number through its constructor (T29d) and the zero values constructors make
+# (D13c), on a program that checked cleanly, each evaluated while compiling (K1): a literal whose constructor does not
+# run on it, a type whose constructor does not run on zeros, is an error at it - and a zero value filling an array
+# that holds an address, which every element would share. How many were decided
+fn DecideValues(c mut typecheck.Checker&) I64 {
+    if c.ValueAsks.Len() == 0 { return 0 }
+    d := c.P.L.Diags
+    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
+    said Map<pair.Pair<I64, I64>, Bool>
+    n I64 = 0
+    for a in c.ValueAsks {
+        key := pair.Pair(a.File, I64(a.Sp.Start))
+        if said.Has(key) { continue }
+        k := mir.FnKey.Body(typed.BodyId(I32(a.Body)))
+        x.Need(k)
+        s := x.M.Eval(k, Array<I64>(0))
+        at := diag.Where.Span(a.File, I64(a.Sp.Start), I64(a.Sp.End))
+        why, file, sp := valueWhy(s, a.Sp)
+        if why == "" {
+            n++
+            if a.Kind == typecheck.ValueKind.Fill and x.M.ResultHoldsAddress() {
+                said.Put(key, true)
+                d.Error(at, msgs.ZeroValueShared(c.Ty(a.Ty)))
+            }
+            continue
+        }
+        said.Put(key, true)
+        if a.Kind == typecheck.ValueKind.Literal {
+            rec := d.Error(at, msgs.LiteralCtorFails(c.Ty(a.Ty), why))
+            noteWhy(d, rec, a.File, a.Sp, file, sp)
+            continue
+        }
+        # B11: met in the library's code for a program's use - at the type argument the program wrote, if it wrote
+        # one, with that type held by reference as the fix (a reference's zero value is null)
+        moved := a.Use != at
+        use := a.Use
+        fix String = ""
+        if moved { use, fix = zeroUseArg(d, a.Use, c.Ty(a.Ty)) }
+        rec := d.Error(use, msgs.NoZeroValue(c.Ty(a.Ty), why))
+        if moved { d.Note(rec, at, msgs.NoteInLibrary()) }
+        noteWhy(d, rec, a.File, a.Sp, file, sp)
+        if fix != "" {
+            d.Note(rec, use, msgs.NoteZeroByReference(fix))
+        } else if moved {
+            d.Note(rec, use, msgs.NoteZeroReferenceHasOne(c.Ty(a.Ty), c.Ty(a.Ty)))
+        }
+    }
+    return n
+}
+
+# a note at where an evaluation stopped, when that is on another line than what is reported (stage 0's noteWhy)
+fn noteWhy(d mut diag.Diagnostics&, rec I64, file I64, sp source.Span, whyFile I64, whySp source.Span) {
+    if whyFile < 0 { return }
+    if whyFile == file and d.LineAt(whyFile, I64(whySp.Start)) == d.LineAt(file, I64(sp.Start)) { return }
+    d.Note(rec, diag.Where.Span(whyFile, I64(whySp.Start), I64(whySp.End)), msgs.NoteHere())
+}
+
+# where in the program's use the type named ty is written as a type argument - "Chan<Ticket>" - and the generic
+# spelled with it held by reference ("Chan<Ticket&>"); the use itself and "" where it is not written there
+fn zeroUseArg(d mut diag.Diagnostics&, use diag.Where, ty String&) diag.Where, String {
+    match use {
+        case diag.Where.Span(f, from, to) {
+            text := d.TextOf(f)
+            i := from
+            for i + ty.Len() <= to and i + ty.Len() <= text.Len() {
+                if text[i:i + ty.Len()] == ty and i > 0 and i + ty.Len() < text.Len() {
+                    before := text[i - 1]
+                    after := text[i + ty.Len()]
+                    if (before == '<' or before == ' ' or before == ',') and (after == '>' or after == ',') {
+                        lt := i - 1
+                        for lt > from and text[lt] != '<' { lt-- }
+                        st := lt
+                        for st > from and (text[st - 1].IsLetter() or text[st - 1].IsDigit() or text[st - 1] == '_') { st-- }
+                        gt := i + ty.Len()
+                        for gt < to and text[gt] != '>' { gt++ }
+                        if text[lt] == '<' and gt < text.Len() {
+                            fix := $text[st:i + ty.Len()] "&" $text[i + ty.Len():gt + 1]
+                            return diag.Where.Span(f, i, i + ty.Len()), fix
+                        }
+                    }
+                }
+                i++
+            }
+            return use, ""
+        }
+        nomatch { return use, "" }
+    }
+}
+
+# why an evaluation giving a value decided while compiling gave none, and where: "" for a value. The constructor's
+# error edge - where the call itself, at sp, is decided not to fail - is the error no clause handles (stage 0 judges it
+# without the clause standing in for a failure at run time)
+fn valueWhy(s eval.Stop, at source.Span) String, I64, source.Span {
+    match s {
+        case eval.Stop.None { return "", -1, at }
+        case eval.Stop.Refused(why, f, sp) { return $why, f, sp }
+        case eval.Stop.Exited(kind, f, sp, _) {
+            if kind == mir.ExitKind.Unreachable and sp.Start == at.Start { return "it fails with an error no clause handles", -1, at }
+            return $AbortWhy(kind), f, sp
+        }
+        case eval.Stop.Raised(_) { return "it fails with an error no clause handles", -1, at }
+    }
+}
+
+# ---- globals baked into the program's data (K2) ----
+
+# every immutable global c checked whose value the evaluator gives while compiling (K1), and which is plain data or
+# reaches only storage the program's globals made, by its initializer's body: emit writes each as its value and runs
+# none of them at startup. One the evaluator refuses is set at startup as before
+fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
+    out Map<I64, eval.Image>
+    x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
+    x.Faulty = c.Faulty
+    x.start()
+    d := c.P.L.Diags
+    abortsAt Map<pair.Pair<I64, I64>, Bool>
+    for i in x.Globals {
+        match x.Bodies[i].Of {
+            case typed.BodyOf.Global(m, n) {
+                img := try x.M.Image(m, n) catch eval.NotBaked {
+                    # K1/K2: an initializer reaching what aborts the program would abort it at startup - an error at
+                    # the global, said once per place it is reached (a global reading another reaches the other's)
+                    match x.M.Stopped {
+                        case eval.Stop.Refused(why, file, sp) {
+                            if why != eval.WhyStale { continue }
+                            key := pair.Pair(file, I64(sp.Start))
+                            if abortsAt.Has(key) { continue }
+                            abortsAt.Put(key, true)
+                            b := x.Bodies[i]
+                            rec := d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.GlobalStale(why))
+                            staleNotes(x, d, rec, file, sp)
+                        }
+                        case eval.Stop.Exited(kind, file, sp, _) {
+                            if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail { continue }
+                            key := pair.Pair(file, I64(sp.Start))
+                            if abortsAt.Has(key) { continue }
+                            abortsAt.Put(key, true)
+                            b := x.Bodies[i]
+                            at := diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End))
+                            rec := d.Error(at, msgs.GlobalAborts(AbortWhy(kind)))
+                            if file != b.File or d.LineAt(file, I64(sp.Start)) != d.LineAt(b.File, I64(b.Sp.Start)) {
+                                d.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), msgs.NoteHere())
+                            }
+                        }
+                        case _ { }
+                    }
+                    continue
+                }
+                out.Put(i, img)
+            }
+            case _ { }
+        }
+    }
+    # K2b: storage two globals reach - one naming the instance another's initializer made, a slice of another's array,
+    # the same constant text - is one instance, written once per module: with the first global (in the order they are
+    # set) whose image holds it, which every other names. A global naming storage no baked global of its own module
+    # holds - another module's, or one set at startup's - is set at startup itself
+    home Map<I64, pair.Pair<I64, I64>>        # an allocation: the global (body) whose image holds it, and its blob there
+    for i in x.Globals {
+        img := try out.Get(i) catch { continue }
+        mi := globalModule(x.Bodies[i])
+        ok := true
+        newIdx := Array<I64>(img.Blobs.Len(), -1)
+        k I64 = 0
+        for j in range img.Blobs.Len() {
+            sl := img.Slots[j]
+            if j > 0 and home.Has(sl) {
+                h := try home.Get(sl) catch default pair.Pair(I64(-1), I64(-1))
+                if globalModule(x.Bodies[h.First]) != mi { ok = false }
+                continue
+            }
+            newIdx[j] = k
+            k++
+        }
+        for b in img.Blobs {
+            for e in b.Ext {
+                if e < 0 { continue }
+                h := try home.Get(e) catch default pair.Pair(I64(-1), I64(-1))
+                if h.First < 0 or globalModule(x.Bodies[h.First]) != mi { ok = false }
+            }
+        }
+        if not ok {
+            out.Remove(i)
+            continue
+        }
+        kept := eval.Image()
+        for j in range img.Blobs.Len() {
+            if newIdx[j] < 0 { continue }
+            b := img.Blobs[j]
+            nb := eval.Blob()
+            nb.Bytes = b.Bytes
+            nb.Align = b.Align
+            nb.Constant = b.Constant
+            for r in range b.At.Len() {
+                nb.At.Push(b.At[r])
+                nb.Off.Push(b.Off[r])
+                target := b.Ext[r] if b.To[r] < 0 else img.Slots[b.To[r]]
+                if b.To[r] >= 0 and newIdx[b.To[r]] >= 0 {
+                    nb.To.Push(newIdx[b.To[r]])
+                    nb.Ext.Push(-1)
+                    continue
+                }
+                h := try home.Get(target) catch default pair.Pair(I64(-1), I64(-1))
+                hm, hn := globalName(x.Bodies[h.First])
+                nb.To.Push(-1)
+                nb.Ext.Push(target)
+                nb.ExtMod.Push(hm)
+                nb.ExtName.Push(hn)
+                nb.ExtIdx.Push(h.Second)
+            }
+            kept.Blobs.Push(nb)
+            kept.Slots.Push(img.Slots[j])
+            home.Put(img.Slots[j], pair.Pair(i, newIdx[j]))
+        }
+        out.Put(i, kept)
+    }
+    return out
+}
+
+fn globalModule(b typed.Body&) I64 {
+    m, _ := globalName(b)
+    return m
+}
+
+# a global initializer's global: its module and name
+fn globalName(b typed.Body&) I64, source.NameId {
+    match b.Of {
+        case typed.BodyOf.Global(m, n) { return m, n }
+        case _ { return -1, source.NameId(0) }
+    }
+}
+
+# M19g: where a stale view was read, and where the program grew its Vec
+fn staleNotes(x mut Exec&, d mut diag.Diagnostics&, rec I64, file I64, sp source.Span) {
+    d.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), msgs.NoteHere())
+    gf, gsp := x.M.StaleGrewAt()
+    if gf >= 0 { d.Note(rec, diag.Where.Span(gf, I64(gsp.Start), I64(gsp.End)), msgs.NoteVecGrewHere()) }
+}
+
+# why an evaluation that reached an exit aborts the program, as K1 says it (stage 0's words)
+fn AbortWhy(k mir.ExitKind) String& {
+    return match k {
+        case mir.ExitKind.Unreachable => "it reaches unreachable code, which aborts the program"
+        case mir.ExitKind.Assert => "an assertion in it fails, which aborts the program"
+        case mir.ExitKind.SliceBounds => "it slices out of range, which aborts the program"
+        case mir.ExitKind.ArrayLength => "it makes an array of a length out of range, which aborts the program"
+        case mir.ExitKind.FixedLength => "it copies an array of another length into fixed storage, which aborts the program"
+        case mir.ExitKind.As => "an 'as' that does not hold aborts the program"
+        case mir.ExitKind.Error => "an error reaches '!', which ends the program"
+        case mir.ExitKind.Escaped => "an error leaves the test, which ends it"
+        nomatch => "it ends the test or the process"
+    }
+}
+
+# a text body's value evaluated while compiling (an assert's message, S18c): the text, and whether it has one
+fn (x mut Exec&) Text(body I64) String, Bool {
+    if body < 0 { return "", false }
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return "", false }
+    return x.M.Text(x.M.Result, x.M.ResultTy), true
+}
+
+# a condition's body evaluated while compiling (K1): its value, and whether it has one
+fn (x mut Exec&) Cond(body I64) Bool, Bool {
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return false, false }
+    return x.M.Int(x.M.Result, types.BoolT) != 0, true
+}
+
+# the same, with what stopped an evaluation that gave no value
+fn (x mut Exec&) CondStop(body I64) Bool, eval.Stop {
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return false, s }
+    return x.M.Int(x.M.Result, types.BoolT) != 0, s
+}
+
+# a body giving an integer evaluated (a length computed while compiling, T7c): its value, and whether evaluation reached one
+fn (x mut Exec&) Int(body I64, ty types.TypeId) I64, Bool {
+    k := mir.FnKey.Body(typed.BodyId(I32(body)))
+    x.Need(k)
+    s := x.M.Eval(k, Array<I64>(0))
+    if s != eval.Stop.None { return 0, false }
+    return x.M.Int(x.M.Result, ty), true
+}
+
+# ---- the machine ----
+
+type Exec struct(P mut generic.Program&, Bodies List<mut typed.Body&>, When eval.Mode) {
+    P
+    Bodies
+    When
+    Lw := lower.Lowerer(P, Bodies)
+    M := eval.NewMachine(P.T, When)
+    Unlowered List<mir.FnKey>       # the functions a request reached that did not lower, each once
+    defined Map<mir.FnKey, Bool>
+    dtorOf Map<types.TypeId, I64>
+    externs Map<I64, Bool>
+    Globals List<I64>               # the global initializers' bodies, in B5a's order (P.InitOrder)
+    # K1a: while compiling, the bodies checking met an error or a gap in - never evaluated, as an unlowered one is not
+    Faulty Map<I64, Bool>
+    ReadsBuild Map<I64, Bool>       # S8a: the bodies reading a build constant (check's)
+    started Bool = false
+}
+
+# under interpret, where things live is the scope pass's (M6) - each scope closes where the built program's does, so
+# what it registers (destructors, O16; owners, O35) runs then, as stage 0's interpret does not. Its own errors are not
+# shown (stage 0's checker reports section 8's, and the pass is still being finished): a body it erred in, or one a
+# check error is within, is placed by lowering's stand-in placement, its plan not one to trust. While compiling
+# nothing is placed: evaluation there runs what lowering makes without a plan (DESIGN.md 1.6.1)
+fn (x mut Exec&) Place() {
+    d := x.P.L.Diags
+    mark := d.Count()
+    sc mut scope.Scoper&x = scope.Scoper(x.P, x.Bodies)
+    sc.Run()
+    upto := d.RecordCount()
+    for b in range x.Bodies.Len().Min(sc.Plans.Len()) {
+        body := x.Bodies[b]
+        if d.ErrorWithin(body.File, I64(body.Sp.Start), I64(body.Sp.End), upto) { sc.Plans[b] = typed.NewPlan(body) }
+    }
+    d.Forget(mark)
+    x.Lw.Plans = sc.Plans
+}
+
+# the machine's program defined: every global, with its initializer, and the bodies by what they are
+fn (x mut Exec&) start() {
+    if x.started { return }
+    x.started = true
+    # M19g: the library's files - where the program grew a collection is the innermost frame outside them
+    for mo in x.P.L.Mods {
+        if mo.Identity.StartsWith("std/") { x.M.Library.Put(mo.File, true) }
+    }
+    for i in range x.Bodies.Len() {
+        b := x.Bodies[i]
+        match b.Of {
+            case typed.BodyOf.Dtor(t) { x.dtorOf.Put(t, i) }
+            case typed.BodyOf.Global(m, n) {
+                if b.Root == null { continue }
+                ty := globalType(b, m, n)
+                if ty == types.UnknownT { continue }
+                k := mir.FnKey.Body(typed.BodyId(I32(i)))
+                x.M.DefineGlobal(m, n, ty, writtenMut(x.P.GlobalDecl(m, n)), k)
+                if x.buildDefault(m, ty, writtenMut(x.P.GlobalDecl(m, n))) { x.M.BuildGlobal(m, n) }
+                x.Globals.Push(i)
+            }
+            case _ { }
+        }
+    }
+    # B5a: set in check's order - a module's after its imports', each after the globals it reads
+    ordered List<I64>
+    for i in x.P.InitOrder {
+        if i in x.Globals { ordered.Push(i) }
+    }
+    for i in x.Globals {
+        if i not in ordered { ordered.Push(i) }
+    }
+    x.Globals.Clear()
+    for i in ordered { x.Globals.Push(i) }
+    for i in x.Globals { x.Need(mir.FnKey.Body(typed.BodyId(I32(i)))) }
+}
+
+# B10c: whether a global of module m is a build constant's default - immutable, outside std, of a type a -define
+# value can have (Bool, I32, I64, U64, F64, String) - which a condition reading it depends on (S8a)
+fn (x mut Exec&) buildDefault(m I64, ty types.TypeId, mutable Bool) Bool {
+    if mutable { return false }
+    mod := x.P.L.Mods[m]
+    if mod.Prelude or mod.Identity.StartsWith("std/") { return false }
+    for name in String&["Bool", "I32", "I64", "U64", "F64"] {
+        if ty == x.P.T.Prim(name) { return true }
+    }
+    return ty == x.P.PreludeType("std/prelude/text", "String")
+}
+
+# a global's type, as its initializer's store into it says (check writes one Assign to the global)
+fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
+    for s in b.Root.Stmts {
+        match s {
+            case typed.Stmt.Assign(_, typed.Place.Global(_, ty, gm, gn), _) {
+                if gm == m and gn == n { return ty }
+            }
+            case _ { }
+        }
+    }
+    return types.UnknownT
+}
+
+fn writtenMut(v ast.VarDecl&) Bool {
+    if v == null or v.Ty == null { return false }
+    return match v.Ty {
+        case ast.TypeRef.Perm(_, _, w, _) => w
+        case _ => false
+    }
+}
+
+# k and everything its code can reach lowered and defined in the machine
+fn (x mut Exec&) Need(k mir.FnKey) {
+    x.start()
+    work List<mir.FnKey>
+    work.Push(k)
+    for work.Len() > 0 {
+        key := try work.Pop() catch { break }
+        if x.defined.Has(key) { continue }
+        x.defined.Put(key, true)
+        if x.When == eval.Mode.Compile {
+            match key {
+                case mir.FnKey.Body(id) {
+                    if x.Faulty.Has(I64(id)) {
+                        x.Unlowered.Push(key)
+                        continue
+                    }
+                }
+                case _ { }
+            }
+        }
+        f := x.Lw.LowerKey(key)
+        if x.Lw.Gapped {
+            x.Unlowered.Push(key)
+            continue
+        }
+        match key {
+            case mir.FnKey.Body(id) {
+                if x.ReadsBuild.Has(I64(id)) { x.M.BuildFns.Put(key, true) }
+            }
+            case _ { }
+        }
+        x.reach(f, work)
+        x.M.Define(f)
+    }
+}
+
+# what f's code can reach: its calls' and tasks' callees, the code of the function values it makes, the destructors it
+# registers - each pushed onto work; its externs defined by name
+fn (x mut Exec&) reach(f mir.Fn&, work mut List<mir.FnKey>&) {
+    for c in f.Calls { x.callee(c.Target, work) }
+    for t in f.Tasks { x.callee(t.Target, work) }
+    for bb in f.Blocks {
+        for s in bb.Stmts {
+            match s {
+                case mir.Stmt.Assign(_, _, mir.Rvalue.Closure(code, _, _, _, _)) { work.Push(code) }
+                case mir.Stmt.RegisterDtor(_, _, ty, _) {
+                    d := try x.dtorOf.Get(ty) catch default -1
+                    if d >= 0 {
+                        dk := mir.FnKey.Body(typed.BodyId(I32(d)))
+                        x.M.DefineDestructor(ty, dk)
+                        work.Push(dk)
+                    }
+                }
+                case _ { }
+            }
+        }
+    }
+}
+
+fn (x mut Exec&) callee(c mir.Callee, work mut List<mir.FnKey>&) {
+    match c {
+        case mir.Callee.Fn(key, _) { work.Push(key) }
+        case mir.Callee.Extern(e, _) {
+            if not x.externs.Has(e) {
+                x.externs.Put(e, true)
+                x.M.DefineExtern(e, x.P.T.Names.Text(x.P.FnDecl(e).Name))
+            }
+        }
+        case mir.Callee.Value(_) { }
+    }
+}
+
+# ---- what a program has ----
+
+# the root module's test bodies, in order, and its main's body (-1 for none)
+fn (x mut Exec&) Entries() List<I64>, I64 {
+    tests List<I64>
+    main I64 = -1
+    p := x.P
+    for i in range x.Bodies.Len() {
+        match x.Bodies[i].Of {
+            case typed.BodyOf.Test(_) {
+                if x.Bodies[i].Root != null { tests.Push(i) }
+            }
+            case typed.BodyOf.Fn(inst) {
+                f := p.InstanceFn(inst)
+                if p.FnModule(f) == p.L.Root and p.T.Names.Text(p.FnDecl(f).Name) == "main" { main = i }
+            }
+            case _ { }
+        }
+    }
+    return tests, main
+}
+
+# a test's name, as its declaration writes it (between the quotes)
+fn (x mut Exec&) TestName(id I64) String {
+    m := x.P.L.Mods[x.P.L.Root]
+    name := findTest(m.Decls, x.Bodies[id].Sp)
+    if name.End == I32(0) { return "test" }
+    s := m.Src.TextOf(name)
+    if s.Len() >= 2 and s[0] == '"' { return $s[1:s.Len() - 1] }
+    return $s
+}
+
+fn findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
+    if ds == null { return source.Span(0, 0) }
+    for d in ds {
+        match d {
+            case ast.Decl.Test(dsp, name, _) {
+                if dsp == sp { return name }
+            }
+            case ast.Decl.If(_, ti) {
+                found := findTestIf(ti, sp)
+                if found.End > I32(0) { return found }
+            }
+            case _ { }
+        }
+    }
+    return source.Span(0, 0)
+}
+
+fn findTestIf(ti ast.TopIf&, sp source.Span) source.Span {
+    if ti == null { return source.Span(0, 0) }
+    if ti.Then != null {
+        f := findTest(ti.Then.Decls, sp)
+        if f.End > I32(0) { return f }
+    }
+    if ti.Else != null {
+        f := findTest(ti.Else.Decls, sp)
+        if f.End > I32(0) { return f }
+    }
+    return findTestIf(ti.ElseIf, sp)
+}
+
+# what a stop says, as the built program says it (S18a, B3e): "FILE:LINE: text", "" for none
+fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
+    match s {
+        case eval.Stop.None { return "" }
+        case eval.Stop.Raised(code) { return "an error escapes, code " $code }
+        case eval.Stop.Exited(kind, file, sp, msg) {
+            what := mir.ExitText(kind)
+            # E35: an error a "!" took, where the "!" is - as a debug build says it
+            if kind == mir.ExitKind.Error { return $line(d, file, sp) ": " $msg }
+            if what == "" { return $msg }
+            if msg == "" { return $line(d, file, sp) ": " $what }
+            return $line(d, file, sp) ": " $what ": " $msg
+        }
+        case eval.Stop.Refused(why, file, sp) { return $line(d, file, sp) ": " $why }
+    }
+}
+
+# "PATH:LINE" of where sp starts
+fn line(d mut diag.Diagnostics&, file I64, sp source.Span) String {
+    at := d.Locate(file, I64(sp.Start))
+    k := try at.FindLast(":") catch default -1
+    return $at[:k] if k >= 0 else $at
+}
+
+# ---- running a program (B3e) ----
+
+# each global set in B5a's order - a module's after its imports', each after the globals it reads. One that stops
+# leaves its global unset, read later as the stop again: the first such stop
+fn (x mut Exec&) InitGlobals() eval.Stop {
+    x.start()
+    first := eval.Stop.None
+    for i in x.Globals {
+        match x.Bodies[i].Of {
+            case typed.BodyOf.Global(m, n) {
+                s := x.M.InitGlobal(m, n)
+                if s != eval.Stop.None and first == eval.Stop.None { first = s }
+            }
+            case _ { }
+        }
+    }
+    return first
+}
+
+# the root module's tests run as "olang test" runs them (S15, S16): each global set, then each test "ok - NAME", or
+# what stopped it and "FAIL - NAME"; then the counts. The status: 1 where any failed
+fn (x mut Exec&) RunTests(d mut diag.Diagnostics&) I32 {
+    tests, _ := x.Entries()
+    for t in tests { x.Need(mir.FnKey.Body(typed.BodyId(I32(t)))) }
+    x.InitGlobals()
+    pass, fail I64 = 0, 0
+    none := Array<I64>(0)
+    for t in tests {
+        name := x.TestName(t)
+        s := x.M.Eval(mir.FnKey.Body(typed.BodyId(I32(t))), none)
+        if s == eval.Stop.None {
+            pass++
+            say("ok - " $name "\n")
+        } else {
+            fail++
+            text := x.StopText(s, t, d)
+            if text != "" { say($text "\n") }
+            say("FAIL - " $name "\n")
+        }
+    }
+    say($pass " passed, " $fail " failed\n")
+    return 1 if fail > 0 else 0
+}
+
+# the program's main run, its globals set first (B5a, B3e): the status 0 for its return, 1 for an error leaving it
+# ("unhandled error: T.W" on standard error, its trace after it, S18d), 1 for what interpret stops at - undefined
+# behaviour, what it cannot run ("olang interpret: FILE:LINE: why") - 134 for a failed check (its "FILE:LINE: text"),
+# what it asks for with os.Exit (the process ends there); 1 for no main
+fn (x mut Exec&) RunMain(d mut diag.Diagnostics&) I32 {
+    _, entry := x.Entries()
+    if entry < 0 {
+        sayErr("no main\n")
+        return 1
+    }
+    k := mir.FnKey.Body(typed.BodyId(I32(entry)))
+    x.Need(k)
+    s := x.InitGlobals()
+    if s == eval.Stop.None { s = x.M.Eval(k, Array<I64>(0)) }
+    match s {
+        case eval.Stop.None { return 0 }
+        case eval.Stop.Raised(_) {
+            sayErr($x.StopText(s, entry, d) "\n")
+            sayErr(x.TraceText(d))
+            return 1
+        }
+        case eval.Stop.Refused(why, _, _) {
+            # what interpret cannot run, or the built program leaves undefined: interpret's own stop (B3e)
+            sayErr("olang interpret: " $x.StopText(s, entry, d) "\n")
+            # M19g: a stale view - and where the program grew its Vec
+            if why == eval.WhyStale {
+                gf, gsp := x.M.StaleGrewAt()
+                if gf >= 0 { sayErr("olang interpret: " $line(d, gf, gsp) ": the Vec grew here\n") }
+            }
+            return 1
+        }
+        case eval.Stop.Exited(kind, _, _, _) {
+            sayErr($x.StopText(s, entry, d) "\n")
+            # E35, S18d: where the error a "!" took came from, as a debug build prints it
+            if kind == mir.ExitKind.Error { sayErr(x.TraceText(d)) }
+            return 134
+        }
+        case _ {
+            sayErr($x.StopText(s, entry, d) "\n")
+            return 134
+        }
+    }
+}
+
+# what a stop says, as the built program says it (S18a, B3e): "FILE:LINE: text"; an error leaving body b "unhandled
+# error: T.W", its code under b's error list
+fn (x mut Exec&) StopText(s eval.Stop, b I64, d mut diag.Diagnostics&) String {
+    match s {
+        case eval.Stop.Raised(code) { return "unhandled error: " $x.errorName(code, x.Bodies[b].Ty) }
+        case eval.Stop.Refused(why, _, _) {
+            # a wait for another task, in a task: which one (B3e)
+            if why == eval.WhyWaits and x.M.WaitTaskFile >= 0 {
+                return $StopText(s, d) " - here in the task spawned at " $line(d, x.M.WaitTaskFile, x.M.WaitTaskSp)
+            }
+            return StopText(s, d)
+        }
+        case _ { return StopText(s, d) }
+    }
+}
+
+# the trace of the error that just left the request (S18d), as a debug build prints it: "(N earlier places not kept)"
+# where more than 32 were recorded, then a "FILE:LINE: what" line a place, oldest first
+fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
+    b := StringBuilder()
+    if x.M.TraceDropped > 0 { b.Push("(" $x.M.TraceDropped " earlier places not kept)\n") }
+    for i in range x.M.TraceLen() {
+        file, at, kind := x.M.TraceAt(i)
+        what := "raised here" if kind == 0 else "try passed it on" if kind == 1 else "a task failed, and its join passed it on"
+        b.Push($line(d, file, source.Span(I32(at), I32(at))) ": " $what "\n")
+    }
+    return b.ToString()
+}
+
+# an error's name as a program writes it outside its module ("io.IoError.FULL"): code under the error list of
+# function type ty (R6)
+fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
+    errs := x.P.T.Items(x.P.T.Errors(ty))
+    i := (code >> 16) - 1
+    if i < 0 or i >= errs.Len() { return "error " $code }
+    et := x.P.T.ErrOf(errs[i])
+    dl := x.P.T.DeclOf(et)
+    ws := x.P.ErrorWords(dl)
+    w := code & 0xFFFF
+    word := $x.P.T.Names.Text(ws[w]) if w < ws.Len() else $w
+    name := x.P.T.Names.Text(x.P.T.DeclName(dl))
+    return $name "." $word   # B5: the type's own name, wherever it is declared
+}
+
+fn say(t String&) { try io.Print(t) catch io.IoError { } }
+fn sayErr(t String&) { try io.PrintErr(t) catch io.IoError { } }

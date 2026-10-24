@@ -1,0 +1,201 @@
+# vec: a Vec against an Array and a List (docs/memory.md section 4.6) - "MODE KIND N PASSES", MODE one of
+#   walk     "for x in c", summed, PASSES times over N elements
+#   gather   "c[idx[i]]" at N * PASSES random positions of N elements
+#   store    "c[i] = c[i] * 2" over N elements, PASSES times
+#   fields   "s.pos[i] += s.vel[i]" in a method of a struct holding two of them, PASSES times
+#   push     N Pushes (KIND vec or list), the length and the last element printed
+#   opaque   a loop over N elements calling a function it cannot see through each time, PASSES times
+#   sort     Sort with a lambda over N pseudo-random elements
+# and KIND vec, array or list (list for walk, gather, store and push). Every mode prints one number; the C version
+# (c/vec.c) computes the same over arrays.
+import "std/io"
+import "std/os"
+
+error Usage {
+    ARGS
+    MODE
+    KIND
+}
+
+# the pseudo-random values every mode starts from, as c/vec.c makes them
+fn values(n I64) Array<I64> {
+    a := Array<I64>(n)
+    s I64 = 1
+    for i in range n {
+        s = s * 6364136223846793005 + 1442695040888963407
+        a[i] = s >> 33
+    }
+    return a
+}
+
+# what "opaque" calls: through a mutable global, so no optimizer sees which function it is
+fn twice(x I64) I64 { return x * 2 + 1 }
+Opaque mut fn(x I64) I64 = twice
+
+type SimV struct(n I64) {
+    pos Vec<I64> = Vec<I64>()
+    vel Vec<I64> = Vec<I64>()
+}
+fn (s mut SimV&) step() {
+    for i in range s.pos.Len() { s.pos[i] += s.vel[i] }
+}
+type SimA struct(n I64) {
+    pos mut Array<I64>& = Array<I64>(n)
+    vel mut Array<I64>& = Array<I64>(n)
+}
+fn (s mut SimA&) step() {
+    for i in range s.pos.Len() { s.pos[i] += s.vel[i] }
+}
+
+fn walkVec(v Vec<I64>&, passes I64) I64 {
+    t I64 = 0
+    for p in range passes {
+        for x in v { t += x ^ p }
+    }
+    return t
+}
+fn walkArray(a Array<I64>&, passes I64) I64 {
+    t I64 = 0
+    for p in range passes {
+        for x in a { t += x ^ p }
+    }
+    return t
+}
+fn walkList(l List<I64>&, passes I64) I64 {
+    t I64 = 0
+    for p in range passes {
+        for x in l { t += x ^ p }
+    }
+    return t
+}
+
+# the positions "gather" reads, as c/vec.c makes them
+fn positions(m I64, n I64) Array<I64> {
+    idx := Array<I64>(m)
+    s I64 = 7
+    for i in range m {
+        s = s * 6364136223846793005 + 1442695040888963407
+        idx[i] = ((s >> 33) % n + n) % n
+    }
+    return idx
+}
+fn gatherVec(v Vec<I64>&, idx Array<I64>&) I64 {
+    t I64 = 0
+    for i in range idx.Len() { t += v[idx[i]] }
+    return t
+}
+fn gatherArray(a Array<I64>&, idx Array<I64>&) I64 {
+    t I64 = 0
+    for i in range idx.Len() { t += a[idx[i]] }
+    return t
+}
+fn gatherList(l List<I64>&, idx Array<I64>&) I64 {
+    t I64 = 0
+    for i in range idx.Len() { t += l[idx[i]] }
+    return t
+}
+
+fn storeVec(v mut Vec<I64>&, passes I64) I64 {
+    for p in range passes {
+        for i in range v.Len() { v[i] = v[i] * 2 + p }
+    }
+    t I64 = 0
+    for x in v { t += x }
+    return t
+}
+fn storeArray(a mut Array<I64>&, passes I64) I64 {
+    for p in range passes {
+        for i in range a.Len() { a[i] = a[i] * 2 + p }
+    }
+    t I64 = 0
+    for x in a { t += x }
+    return t
+}
+fn storeList(l mut List<I64>&, passes I64) I64 {
+    for p in range passes {
+        for i in range l.Len() { l[i] = l[i] * 2 + p }
+    }
+    t I64 = 0
+    for x in l { t += x }
+    return t
+}
+
+fn opaqueVec(v Vec<I64>&, passes I64) I64 {
+    f := Opaque
+    t I64 = 0
+    for p in range passes {
+        for i in range v.Len() { t += f(v[i]) }
+    }
+    return t
+}
+fn opaqueArray(a Array<I64>&, passes I64) I64 {
+    f := Opaque
+    t I64 = 0
+    for p in range passes {
+        for i in range a.Len() { t += f(a[i]) }
+    }
+    return t
+}
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 5 { error Usage.ARGS }
+    mode := args[1]
+    kind := args[2]
+    n := try args[3].ParseInt()
+    passes := try args[4].ParseInt()
+    if not (kind == "vec" or kind == "array" or kind == "list") { error Usage.KIND }
+    a := values(n)
+    v := Vec<I64>()
+    l := List<I64>()
+    if mode != "push" and mode != "fields" {
+        if kind == "vec" { v.PushAll(a) }
+        if kind == "list" { l.PushAll(a) }
+    }
+    total I64 = 0
+    if mode == "walk" {
+        total = walkVec(v, passes) if kind == "vec" else walkList(l, passes) if kind == "list" else walkArray(a, passes)
+    } else if mode == "gather" {
+        idx := positions(n * passes, n)
+        total = gatherVec(v, idx) if kind == "vec" else gatherList(l, idx) if kind == "list" else gatherArray(a, idx)
+    } else if mode == "store" {
+        total = storeVec(v, passes) if kind == "vec" else storeList(l, passes) if kind == "list" else storeArray(a, passes)
+    } else if mode == "fields" {
+        if kind == "vec" {
+            sv := SimV(n)
+            sv.pos.PushAll(a)
+            for i in range n { sv.vel.Push(i) }
+            for p in range passes { sv.step() }
+            for x in sv.pos { total += x }
+        } else {
+            sa := SimA(n)
+            for i in range n {
+                sa.pos[i] = a[i]
+                sa.vel[i] = i
+            }
+            for p in range passes { sa.step() }
+            for x in sa.pos { total += x }
+        }
+    } else if mode == "push" {
+        if kind == "vec" {
+            for i in range n { v.Push(a[i]) }
+            total = v.Len() + v[n - 1]
+        } else {
+            for i in range n { l.Push(a[i]) }
+            total = l.Len() + l[n - 1]
+        }
+    } else if mode == "opaque" {
+        total = opaqueVec(v, passes) if kind == "vec" else opaqueArray(a, passes)
+    } else if mode == "sort" {
+        if kind == "vec" {
+            v.Sort(fn(x I64, y I64) Bool { return x < y })
+            for i in range n { total += v[i] * (i % 7) }
+        } else {
+            a.Sort(fn(x I64, y I64) Bool { return x < y })
+            for i in range n { total += a[i] * (i % 7) }
+        }
+    } else {
+        error Usage.MODE
+    }
+    try io.Print($total "\n")
+}

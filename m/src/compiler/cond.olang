@@ -1,0 +1,871 @@
+# cond - build constants, and deciding a condition before the program is checked (B9, B9a, B10, B10a, B10c;
+# compiler/DESIGN.md 1.5).
+#
+# A top-level condition decides which declarations exist, so it is decided before types are resolved where B9a can:
+# from literals, build constants and the module's immutable globals, computed exactly as the program would compute
+# them. What B9a cannot decide - a call, another module's name, a value that wraps or depends on a type's width - is
+# left undecided here: the checker decides it by compile-time evaluation (B9c, M5 and M8), through the loader's and
+# the resolver's Decide. A mistake in a condition (values that do not combine, a mutable global, a cycle) is reported.
+#
+# The evaluator works on the parsed condition (ast), not on tokens: what it reads is what the parser read, and where it
+# stops reading is where B9c takes over. A local condition (S8b) is the same evaluation with the function's locals
+# made run-time values.
+import "source"
+import "token"
+import "ast"
+import "msgs"
+import "scan"
+import "diag"
+
+# ---- values ----
+
+type ValueKind enum {
+    None      # no value: what a failure leaves, or the right side of an "and"/"or" its left decided (E7)
+    Bool
+    Int
+    Float
+    Text
+}
+
+# a value: a Bool or an integer in I, a float in F, a text by its index in the constants' text pool. Bits is a number's
+# type's width, 0 for a literal's (which adapts, T6); Uns an integer type's signedness
+type Value struct(Kind ValueKind, I I64, F F64, S I64, Bits I64, Uns Bool) {
+    Kind
+    I
+    F
+    S
+    Bits
+    Uns
+}
+
+fn none() Value { return Value(ValueKind.None, 0, 0.0, 0, 0, false) }
+fn boolValue(b Bool) Value { return Value(ValueKind.Bool, 1 if b else 0, 0.0, 0, 0, false) }
+
+# T6a: an integer literal's own type is an I64; a float literal's an F64
+LiteralIntBits I64 = 64
+
+# ---- build constants (B10, B10a) ----
+
+# every build constant: -D's and the eight built in (B10a). A text's value lives in Texts; a decimal integer above
+# I64's maximum is a U64 (Big), which B9a does not compute in. Known is false for a built-in whose value this
+# compilation has not been told (the target's CPU before the driver resolves it): a condition reading one is undecided
+type Consts struct() {
+    names List<String&>
+    values List<Value>
+    builtin List<Bool>
+    big List<Bool>
+    known List<Bool>
+    raws List<String&>
+    Texts List<String&>
+}
+
+fn (c mut Consts&) add(name String&, v Value, builtin Bool, big Bool, known Bool) {
+    c.names.Push($name)
+    c.values.Push(v)
+    c.builtin.Push(builtin)
+    c.big.Push(big)
+    c.known.Push(known)
+    c.raws.Push("")
+}
+
+fn (c mut Consts&) text(t String&) I64 {
+    c.Texts.Push($t)
+    return c.Texts.Len() - 1
+}
+
+# a name that is not there: a build constant (Consts.find) or a global (Scope.find)
+error missing {
+    NAME
+}
+
+# the index of a build constant, or a miss
+fn (c Consts&) find(name String&) I64 ? {
+    for i in range c.names.Len() {
+        if c.names[i] == name { return i }
+    }
+    error missing.NAME
+}
+
+# whether name is a build constant, and whether it is one of B10a's
+fn (c Consts&) Has(name String&) Bool { return (try c.find(name) catch default -1) >= 0 }
+fn (c Consts&) IsBuiltin(name String&) Bool {
+    i := try c.find(name) catch default -1
+    return i >= 0 and c.builtin[i]
+}
+# whether -D defined name (never one of B10a's) - a build constant's default takes its value (B10c)
+fn (c Consts&) Defined(name String&) Bool {
+    i := try c.find(name) catch default -1
+    return i >= 0 and not c.builtin[i]
+}
+
+# the eight build constants of B10a. A target's facts the driver has not resolved are left unknown
+fn (c mut Consts&) Builtins(os String&, arch String&, cpu String&, vectorBits I64, hasFma I64, debug Bool, race Bool
+                             testBuild Bool) {
+    c.add("TargetOs", Value(ValueKind.Text, 0, 0.0, c.text(os), 0, false), true, false, os != "")
+    c.add("TargetArch", Value(ValueKind.Text, 0, 0.0, c.text(arch), 0, false), true, false, arch != "")
+    c.add("TargetCpu", Value(ValueKind.Text, 0, 0.0, c.text(cpu), 0, false), true, false, cpu != "")
+    c.add("TargetVectorBits", Value(ValueKind.Int, vectorBits, 0.0, 0, LiteralIntBits, false), true, false, vectorBits > 0)
+    c.add("TargetHasFma", boolValue(hasFma == 1), true, false, hasFma >= 0)
+    c.add("DebugBuild", boolValue(debug), true, false, true)
+    c.add("RaceBuild", boolValue(race), true, false, true)
+    c.add("TestBuild", boolValue(testBuild), true, false, true)
+}
+
+# what is wrong with a -D flag (B10, B10a)
+error DefineError {
+    SHAPE
+    NOT_NAME
+    TWICE
+    BUILTIN
+    BAD_NUMBER
+    INT_RANGE
+    NEG_RANGE
+    FLOAT_RANGE
+}
+
+# a -D flag that could not be defined - its diagnostic said
+error Bad { FLAG }
+
+# -D NAME=VALUE (B10): defines a build constant, its value read as its literal would be. What is wrong with the flag is
+# reported to d, as the compiler reports a command line's mistakes
+fn (c mut Consts&) Define(flag String&, d mut diag.Diagnostics&) ? Bad {
+    eq := try flag.FindByte('=') catch default flag.Len()
+    name := flag[:eq]
+    value := flag[eq + 1:] if eq < flag.Len() else flag[flag.Len():]
+    try c.define(flag)
+        catch DefineError.SHAPE { try badDefine(d, msgs.DefineShape(flag)) }
+        catch DefineError.NOT_NAME { try badDefine(d, msgs.DefineNotName(name, value)) }
+        catch DefineError.TWICE { try badDefine(d, msgs.DefineTwice(name, value)) }
+        catch DefineError.BUILTIN { try badDefine(d, msgs.DefineBuiltin(name)) }
+        catch DefineError.BAD_NUMBER { try badDefine(d, msgs.DefineBadNumber(name, value)) }
+        catch DefineError.INT_RANGE { try badDefine(d, msgs.DefineIntRange(name, value)) }
+        catch DefineError.NEG_RANGE { try badDefine(d, msgs.DefineNegRange(name, value)) }
+        catch DefineError.FLOAT_RANGE { try badDefine(d, msgs.DefineFloatRange(name, value)) }
+}
+
+# a -D flag's mistake, reported where the command line's are
+fn badDefine(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
+    d.Error(diag.Where.Nowhere, m)
+    error Bad.FLAG
+}
+
+fn (c mut Consts&) define(flag String&) ? DefineError {
+    eq := try flag.FindByte('=') catch { error DefineError.SHAPE }
+    name := flag[:eq]
+    value := flag[eq + 1:]
+    if not isName(name) { error DefineError.NOT_NAME }
+    i := try c.find(name) catch default -1
+    if i >= 0 {
+        if c.builtin[i] { error DefineError.BUILTIN }
+        error DefineError.TWICE
+    }
+    v, big := try c.literal(value)
+    c.add(name, v, false, big, true)
+    c.raws[c.raws.Len() - 1] = $value
+}
+
+# a build constant's value, and whether it is an integer above I64's maximum (a U64); a miss where there is none
+fn (c Consts&) ValueOf(name String&) Value, Bool ? {
+    i := try c.find(name)
+    return c.values[i], c.big[i]
+}
+
+# every build constant, its value and whether it is known, as text: what a build's objects are made under (B3i)
+fn (c Consts&) Fingerprint() String {
+    b := StringBuilder()
+    for i in range c.names.Len() {
+        v := c.values[i]
+        t := c.Texts[v.S] if v.Kind == ValueKind.Text and v.S < c.Texts.Len() else ""
+        b.Push($c.names[i] "=" $v " " $t " " $c.raws[i] " " $c.known[i] " " $c.big[i] "\n")
+    }
+    return b.ToString()
+}
+
+# -D's value for name as written, for a message
+fn (c Consts&) Raw(name String&) String {
+    i := try c.find(name) catch { return "" }
+    return $c.raws[i]
+}
+
+# B10c: whether -D's value for name fits a default of type ty - Bool, I32, I64, U64, F64 or String - as its literal
+# written there would
+fn (c Consts&) Fits(name String&, ty String&) Bool {
+    i := try c.find(name) catch { return false }
+    v := c.values[i]
+    big := c.big[i]
+    return match ty {
+        case "Bool" => v.Kind == ValueKind.Bool
+        case "String" => v.Kind == ValueKind.Text
+        case "I32" => v.Kind == ValueKind.Int and not big and fits(v.I, 32, false)
+        case "I64" => v.Kind == ValueKind.Int and not big
+        case "U64" => v.Kind == ValueKind.Int and (big or v.I >= 0)
+        case "F64" => v.Kind == ValueKind.Float or (v.Kind == ValueKind.Int and not big)
+        case _ => false
+    }
+}
+
+fn isName(t String&) Bool {
+    if t.Len() == 0 { return false }
+    for i, ch in t {
+        letter := ch.IsLetter() or ch == '_'
+        if not letter and not (i > 0 and ch.IsDigit()) { return false }
+    }
+    return token.Keyword(t, 0, t.Len()) == token.Tok.Iden
+}
+
+# a -D value as its literal would be read: true or false, one whole integer or float literal after an optional "-", or
+# else text - quoted text with its quotes taken off. Whether an integer is above I64's maximum (a U64) is the second
+fn (c mut Consts&) literal(value String&) Value, Bool ? DefineError {
+    if value == "true" or value == "false" { return boolValue(value == "true"), false }
+    if value.Len() >= 2 and value[0] == '"' and value[value.Len() - 1] == '"' {
+        return Value(ValueKind.Text, 0, 0.0, c.text(value[1:value.Len() - 1]), 0, false), false
+    }
+    neg := value.Len() > 0 and value[0] == '-'
+    digits := value[1:] if neg else value[:]
+    hexBin := digits.Len() >= 2 and digits[0] == '0' and (digits[1] == 'x' or digits[1] == 'X' or digits[1] == 'b' or
+                                                         digits[1] == 'B')
+    ts := scan.Scan(digits)
+    one := ts.Toks.Len() >= 2 and ts.Diags.Len() == 0 and ts.Toks[0].Start == 0 and ts.Toks[0].End == I32(digits.Len())
+    kind := ts.Toks[0].Kind if one else token.Tok.Eof
+    if kind != token.Tok.IntLit and kind != token.Tok.FloatLit {
+        if hexBin { error DefineError.BAD_NUMBER }
+        return Value(ValueKind.Text, 0, 0.0, c.text(value), 0, false), false
+    }
+    if kind == token.Tok.FloatLit {
+        f := try stripped(digits).ParseFloat() catch { error DefineError.FLOAT_RANGE }
+        if f - f != 0.0 { error DefineError.FLOAT_RANGE }
+        return Value(ValueKind.Float, 0, -f if neg else f, 0, 64, false), false
+    }
+    u := try digits.ParseUint(0) catch { error DefineError.INT_RANGE }
+    if hexBin {
+        n := I64(u)
+        return Value(ValueKind.Int, -n if neg else n, 0.0, 0, LiteralIntBits, false), false
+    }
+    if neg {
+        if u > U64(9223372036854775807) + 1 { error DefineError.NEG_RANGE }
+        return Value(ValueKind.Int, 0 - I64(u), 0.0, 0, LiteralIntBits, false), false
+    }
+    big := u > U64(9223372036854775807)
+    return Value(ValueKind.Int, I64(u), 0.0, 0, LiteralIntBits, false), big
+}
+
+fn stripped(t String&) String {
+    b := StringBuilder()
+    for ch in t {
+        if ch != '_' { b.PushChar(ch) }
+    }
+    return b.ToString()
+}
+
+# ---- the module's immutable globals (B9a) ----
+
+# a global a condition may read: declared at the module's top level outside every conditional, "Name [mut] [type] =
+# init" or "Name := init". Declared is its written type when that is one name ("" for ":=", "?" for any other type);
+# Whole is false where the initializer goes on past what was read (a method call, a member) - B9c's to evaluate
+type Global struct(Name String&, Sp source.Span, Mut Bool, Declared String&, Init ast.Expr&, Whole Bool) {
+    Name
+    Sp
+    Mut
+    Declared
+    Init
+    Whole
+}
+
+# what a module offers its conditions: its globals by name, the first declaration of each, and whether it is std's
+type Scope struct(Std Bool) {
+    Std
+    globals List<Global&>
+    Locals List<source.NameId>    # a local condition's (S8b): every parameter and local named so far in its item
+    # of them, those declared with a value of their own: a local that may be fixed (S8c), which only the checker can
+    # tell - a condition reading one is left to compile-time evaluation, as one calling a function is
+    Fixed List<source.NameId>
+}
+
+fn (s mut Scope&) Add(g Global&) {
+    for h in s.globals {
+        if h.Name == g.Name { return }
+    }
+    s.globals.Push(g)
+}
+
+fn (s Scope&) find(name String&) Global&s ? {
+    for g in s.globals {
+        if g.Name == name { return g }
+    }
+    error missing.NAME
+}
+
+# ---- evaluation ----
+
+# how an evaluation ended
+type Outcome enum {
+    Decided     # Value holds the answer
+    Deferred    # B9a cannot evaluate it: compile-time evaluation decides (B9c)
+    Failed      # a mistake in the condition, said by Msg at At
+    Runtime     # S8b: it reads a local - the running program's
+    Same        # S8a: a local condition's value, reading no build constant - the same on every build
+}
+
+# one condition being evaluated, in a module's text and names
+type Eval struct(text String&, names source.Names&, scope Scope&, consts Consts&) {
+    text
+    names
+    scope
+    consts
+    failed Bool = false
+    deferrable Bool = false
+    runtime Bool = false
+    errAt source.Span = source.Span(0, 0)
+    err msgs.Msg = msgs.CondNotBool("")
+    depth I64 = 0
+    skip I64 = 0
+    UsedBuild Bool = false
+    texts List<String&>        # the text values this evaluation met: Value.S indexes them
+}
+
+fn (e mut Eval&) addText(t String&) I64 {
+    e.texts.Push($t)
+    return e.texts.Len() - 1
+}
+
+# a build constant's value, its text copied into this evaluation's
+fn (e mut Eval&) constValue(i I64) Value {
+    v := e.consts.values[i]
+    if v.Kind != ValueKind.Text { return v }
+    return Value(v.Kind, v.I, v.F, e.addText(e.consts.Texts[v.S]), v.Bits, v.Uns)
+}
+
+fn (e Eval&) tokText(sp source.Span) String { return msgs.Tok(e.text[sp.Start:sp.End]) }
+
+# the span of the token starting at an offset: a word, a literal or an operator, as far as a caret needs
+fn (e Eval&) tokenAt(at I32) source.Span {
+    i := I64(at)
+    for i < e.text.Len() and (e.text[i] == ' ' or e.text[i] == '\t' or e.text[i] == '\n' or e.text[i] == '(') { i++ }
+    j := i
+    if j < e.text.Len() and (e.text[j].IsLetter() or e.text[j].IsDigit() or e.text[j] == '_') {
+        for j < e.text.Len() and (e.text[j].IsLetter() or e.text[j].IsDigit() or e.text[j] == '_') { j++ }
+    } else {
+        for j < e.text.Len() and j < i + 2 and "=!<>+-*/%".Contains(e.text[j:j + 1]) { j++ }
+        if j == i { j = i + 1 }
+    }
+    return source.Span(I32(i), I32(j))
+}
+
+fn (e mut Eval&) fail(sp source.Span, m msgs.Msg) Value {
+    if not e.failed {
+        e.failed = true
+        e.errAt = sp
+        e.err = m
+    }
+    return none()
+}
+
+# a value B9a cannot know: decided by compile-time evaluation (B9c). Where it would never be read (E7), nothing
+fn (e mut Eval&) defer(sp source.Span) Value {
+    if e.skip > 0 { return none() }
+    if not e.failed { e.deferrable = true }
+    return e.fail(sp, msgs.CondName(e.tokText(sp)))
+}
+
+# a value only the running program has - a local (S8b) or a mutable global (an error at the top level)
+fn (e mut Eval&) runtimeValue(sp source.Span, m msgs.Msg, local Bool) Value {
+    if e.skip > 0 { return none() }
+    if local and not e.failed { e.runtime = true }
+    return e.fail(sp, m)
+}
+
+# a top-level condition: Decided with its value, Deferred, or Failed with the message and where
+fn (e mut Eval&) Top(c ast.Expr&) Outcome, Bool {
+    v := e.expr(c)
+    if not e.failed and v.Kind != ValueKind.Bool { e.fail(e.first(c), msgs.CondNotBool(e.tokText(e.first(c)))) }
+    if e.failed { return Outcome.Deferred if e.deferrable else Outcome.Failed, false }
+    return Outcome.Decided, v.I != 0
+}
+
+# a local condition (S8b): decided only where it reads a build constant and no local; Runtime where it reads a local
+# or is anything else the build does not decide; Deferred where compile-time evaluation may yet decide it
+fn (e mut Eval&) Local(c ast.Expr&) Outcome, Bool {
+    v := e.expr(c)
+    if e.failed {
+        if e.runtime or e.mentionsLocal(c) { return Outcome.Runtime, false }
+        return Outcome.Deferred if e.deferrable else Outcome.Runtime, false
+    }
+    if v.Kind != ValueKind.Bool { return Outcome.Runtime, false }
+    if not e.UsedBuild { return Outcome.Same, v.I != 0 }
+    return Outcome.Decided, v.I != 0
+}
+
+fn (e Eval&) isLocal(n source.NameId) Bool {
+    if e.isFixed(n) { return false }
+    for l in e.scope.Locals {
+        if l == n { return true }
+    }
+    return false
+}
+
+# whether a condition names a local anywhere - the evaluator stops at the first thing it cannot read, so one further
+# on was never seen
+fn (e Eval&) mentionsLocal(c ast.Expr&) Bool {
+    if c == null { return false }
+    return match c {
+        case ast.Expr.Name(_, n) => e.isLocal(n)
+        case ast.Expr.Paren(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _) => e.mentionsLocal(x)
+        case ast.Expr.Binary(_, _, a, b) => e.mentionsLocal(a) or e.mentionsLocal(b)
+        case ast.Expr.Call(_, f, args) => e.mentionsLocal(f) or e.anyLocal(args)
+        case ast.Expr.Index(_, x, items) => e.mentionsLocal(x) or e.anyLocal(items)
+        case ast.Expr.Chain(_, ch) => e.anyLocal(ch.Xs)
+        case ast.Expr.Cond(_, a, k, b) => e.mentionsLocal(a) or e.mentionsLocal(k) or e.mentionsLocal(b)
+        case ast.Expr.Postfix(_, _, x), ast.Expr.IsType(_, x, _, _), ast.Expr.As(_, x, _), ast.Expr.Generic(_, x, _)
+             ast.Expr.Try(_, x, _, _) => e.mentionsLocal(x)
+        case ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) => e.mentionsLocal(a) or e.mentionsLocal(b)
+        case ast.Expr.ScopeCall(_, f, _, args) => e.mentionsLocal(f) or e.anyLocal(args)
+        case ast.Expr.Slice(_, x, lo, hi) => e.mentionsLocal(x) or e.mentionsLocal(lo) or e.mentionsLocal(hi)
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Join(_, items) => e.anyLocal(items)
+        # what declares names of its own is the running program's whatever it reads
+        case ast.Expr.Compr(_, _), ast.Expr.Lambda(_, _), ast.Expr.MatchE(_, _) => true
+        case _ => false
+    }
+}
+
+fn (e Eval&) anyLocal(xs Array<ast.Expr&>&) Bool {
+    for x in xs {
+        if e.mentionsLocal(x) { return true }
+    }
+    return false
+}
+
+# the span of an expression's first token
+fn (e Eval&) first(x ast.Expr&) source.Span {
+    return match x {
+        case ast.Expr.Binary(_, _, a, _) => e.first(a)
+        case ast.Expr.Chain(_, ch) => e.first(ch.Xs[0])
+        case ast.Expr.Cond(_, a, _, _) => e.first(a)
+        case ast.Expr.Call(_, f, _), ast.Expr.Member(_, f, _), ast.Expr.Index(_, f, _) => e.first(f)
+        case ast.Expr.Is(_, f, _, _), ast.Expr.IsType(_, f, _, _), ast.Expr.As(_, f, _) => e.first(f)
+        case ast.Expr.Lit(sp, _), ast.Expr.Name(sp, _) => sp
+        case _ => e.tokenAt(x.Span().Start)
+    }
+}
+
+fn (e mut Eval&) expr(x ast.Expr&) Value {
+    return match x {
+        case ast.Expr.Lit(sp, k) => e.literal(sp, k)
+        case ast.Expr.Name(sp, n) => e.name(sp, n)
+        case ast.Expr.Paren(_, inner) => e.expr(inner)
+        case ast.Expr.Unary(sp, op, inner) => e.unary(sp, op, inner)
+        case ast.Expr.Binary(sp, op, a, b) => e.binary(sp, op, a, b)
+        case _ => e.defer(e.first(x))
+    }
+}
+
+fn (e mut Eval&) literal(sp source.Span, k token.Tok) Value {
+    t := e.text[sp.Start:sp.End]
+    match k {
+        case token.Tok.BoolLit { return boolValue(t == "true") }
+        case token.Tok.IntLit {
+            # a U64 literal is beyond the 64-bit signed arithmetic here, and compile-time evaluation decides it (L10)
+            u := try t.ParseUint(0) catch { return e.defer(sp) }
+            hexBin := t.Len() > 2 and t[0] == '0' and t[1] != '.' and not t[1].IsDigit()
+            if not hexBin and u > U64(9223372036854775807) { return e.defer(sp) }
+            return Value(ValueKind.Int, I64(u), 0.0, 0, 0, false)
+        }
+        case token.Tok.FloatLit {
+            f := try stripped(t).ParseFloat() catch { return e.defer(sp) }
+            if f - f != 0.0 { return e.defer(sp) }   # infinite: the checker reports it (L12b)
+            return Value(ValueKind.Float, 0, f, 0, 0, false)
+        }
+        case token.Tok.StrLit { return Value(ValueKind.Text, 0, 0.0, e.addText(decode(t)), 0, false) }
+        nomatch { return e.defer(sp) }
+    }
+}
+
+# a string literal's text, escapes decoded
+fn decode(t String&) String {
+    b := StringBuilder()
+    i I64 = 1
+    for i < t.Len() - 1 {
+        ch := t[i]
+        if ch == '\\' and i + 1 < t.Len() - 1 {
+            i++
+            esc := t[i]
+            ch = '\n' if esc == 'n' else '\t' if esc == 't' else '\r' if esc == 'r' else '\0' if esc == '0' else esc
+        }
+        b.PushChar(ch)
+        i++
+    }
+    return b.ToString()
+}
+
+fn (e Eval&) isFixed(n source.NameId) Bool {
+    for l in e.scope.Fixed {
+        if l == n { return true }
+    }
+    return false
+}
+
+fn (e mut Eval&) name(sp source.Span, n source.NameId) Value {
+    if e.isFixed(n) { return e.defer(sp) }
+    if e.isLocal(n) { return e.runtimeValue(sp, msgs.CondName(e.tokText(sp)), true) }
+    t := e.names.Text(n)
+    # B10c: the module's own declaration of the name first - a build constant's default, or B10's error
+    g := try e.scope.find(t) catch default null
+    if g != null { return e.global(sp, g) }
+    i := try e.consts.find(t) catch default -1
+    if i >= 0 {
+        if e.consts.big[i] or not e.consts.known[i] { return e.defer(sp) }
+        v := e.constValue(i)
+        if e.skip == 0 { e.UsedBuild = true }
+        return v
+    }
+    return e.defer(sp)
+}
+
+# B10c: a type a -D value can have - Bool, I32, I64, U64, F64 or String
+fn buildType(v Value) Bool {
+    return match v.Kind {
+        case ValueKind.Bool, ValueKind.Text => true
+        case ValueKind.Float => v.Bits == 64
+        case ValueKind.Int => v.Bits == 64 if v.Uns else (v.Bits == 32 or v.Bits == 64)
+        case _ => false
+    }
+}
+
+# a written type's kind and width, as far as B9a tells one from another
+fn declaredKind(t String&) ValueKind, I64, Bool {
+    if t == "I8" { return ValueKind.Int, 8, false }
+    if t == "I16" { return ValueKind.Int, 16, false }
+    if t == "I32" { return ValueKind.Int, 32, false }
+    if t == "I64" { return ValueKind.Int, 64, false }
+    if t == "U8" { return ValueKind.Int, 8, true }
+    if t == "U16" { return ValueKind.Int, 16, true }
+    if t == "U32" { return ValueKind.Int, 32, true }
+    if t == "U64" { return ValueKind.Int, 64, true }
+    if t == "F16" or t == "BF16" { return ValueKind.Float, 16, false }
+    if t == "F32" { return ValueKind.Float, 32, false }
+    if t == "F64" { return ValueKind.Float, 64, false }
+    if t == "Bool" { return ValueKind.Bool, 0, false }
+    if t == "String" { return ValueKind.Text, 0, false }
+    return ValueKind.None, 0, false
+}
+
+fn (e mut Eval&) global(sp source.Span, g Global&) Value {
+    if e.depth > 64 { return e.fail(sp, msgs.CondCycle(e.tokText(sp))) }
+    if g.Mut { return e.runtimeValue(sp, msgs.CondMutable(e.tokText(sp)), false) }
+    defined := not e.scope.Std and e.consts.Defined(g.Name)
+    dk, dbits, duns := declaredKind(g.Declared)
+    if not e.scope.Std and g.Declared != "" and dk != ValueKind.None {
+        if buildType(Value(dk, 0, 0.0, 0, dbits, duns)) {
+            if e.skip == 0 { e.UsedBuild = true }
+            if defined { return e.asDeclared(sp, g, e.definedValue(sp, g.Name)) }
+        }
+    }
+    wasFailed, wasDeferrable, wasRuntime, wasAt, wasErr := e.failed, e.deferrable, e.runtime, e.errAt, e.err
+    e.failed, e.deferrable, e.runtime = false, false, false
+    e.depth++
+    v := e.expr(g.Init)
+    e.depth--
+    innerFailed, innerDeferrable, innerErr := e.failed, e.deferrable, e.err
+    e.failed, e.deferrable, e.runtime, e.errAt, e.err = wasFailed, wasDeferrable, wasRuntime, wasAt, wasErr
+    if innerFailed {
+        if e.failed or e.skip > 0 { return none() }
+        cycle := innerErr.Kind == msgs.Diag.CondCycle
+        e.fail(sp, msgs.CondCycle(e.tokText(sp)) if cycle else msgs.CondGlobalInit(e.tokText(sp)))
+        e.deferrable = innerDeferrable   # a global computed by a call can still be evaluated
+        return none()
+    }
+    # more than B9a evaluates - a method call, a member, an index: compile-time evaluation can (B9c)
+    if not g.Whole { return e.defer(sp) }
+    typed := e.asDeclared(sp, g, v)
+    # B10c: a ":=" default takes its initializer's type - -D's value fitted to it as a literal written there would be
+    if not e.scope.Std and g.Declared == "" and buildType(typed) {
+        if e.skip == 0 { e.UsedBuild = true }
+        if defined {
+            dv := e.definedValue(sp, g.Name)
+            if dv.Kind == ValueKind.None { return dv }
+            if typed.Kind == ValueKind.Float and dv.Kind == ValueKind.Int {
+                if dv.Bits == 0 and (dv.I > 9007199254740992 or dv.I < -9007199254740992) { return e.defer(sp) }
+                dv = Value(ValueKind.Float, 0, F64(dv.I), 0, 0, false)
+            }
+            if dv.Kind != typed.Kind { return e.defer(sp) }   # the checker reports it (B10c)
+            if dv.Kind == ValueKind.Int and not fits(dv.I, typed.Bits, typed.Uns) { return e.defer(sp) }
+            return Value(dv.Kind, dv.I, dv.F, dv.S, typed.Bits, typed.Uns)
+        }
+    }
+    return typed
+}
+
+# -D's value for a build constant's default, as its literal would be read
+fn (e mut Eval&) definedValue(sp source.Span, name String&) Value {
+    i := try e.consts.find(name) catch { return e.defer(sp) }
+    if e.consts.big[i] { return e.defer(sp) }
+    v := e.constValue(i)
+    return Value(v.Kind, v.I, v.F, v.S, 0, false)
+}
+
+# a global's value as its type makes it - anything B9a cannot reproduce exactly is B9c's
+fn (e mut Eval&) asDeclared(sp source.Span, g Global&, v Value) Value {
+    if v.Kind == ValueKind.None { return v }
+    if g.Declared == "" {
+        if v.Kind == ValueKind.Int and v.Bits == 0 { return Value(v.Kind, v.I, v.F, v.S, LiteralIntBits, false) }
+        if v.Kind == ValueKind.Float { return Value(v.Kind, v.I, v.F, v.S, 64, false) }
+        return v
+    }
+    dk, bits, uns := declaredKind(g.Declared)
+    return match dk {
+        case ValueKind.Int => e.intDeclared(sp, v, bits, uns)
+        case ValueKind.Float => e.floatDeclared(sp, v, bits)
+        case ValueKind.Bool => v if v.Kind == ValueKind.Bool else e.defer(sp)
+        case ValueKind.Text => v if v.Kind == ValueKind.Text else e.defer(sp)
+        case _ => v if v.Kind == ValueKind.Text or v.Kind == ValueKind.Bool else e.defer(sp)
+    }
+}
+
+fn (e mut Eval&) intDeclared(sp source.Span, v Value, bits I64, uns Bool) Value {
+    if v.Kind != ValueKind.Int or not fits(v.I, bits, uns) { return e.defer(sp) }
+    return Value(ValueKind.Int, v.I, 0.0, 0, bits, uns)
+}
+
+fn (e mut Eval&) floatDeclared(sp source.Span, v Value, bits I64) Value {
+    if bits != 64 { return e.defer(sp) }
+    if v.Kind == ValueKind.Int {
+        if v.Bits != 0 or v.I > 9007199254740992 or v.I < -9007199254740992 { return e.defer(sp) }
+        return Value(ValueKind.Float, 0, F64(v.I), 0, 64, false)
+    }
+    if v.Kind != ValueKind.Float { return e.defer(sp) }
+    return Value(ValueKind.Float, 0, v.F, 0, 64, false)
+}
+
+# whether v fits an integer type of that width and signedness (0 bits: a literal, which fits anything here)
+fn fits(v I64, bits I64, uns Bool) Bool {
+    if bits == 0 { return true }
+    if uns { return v >= 0 and (bits == 64 or v < (I64(1) << bits)) }
+    if bits == 64 { return true }
+    lim := I64(1) << (bits - 1)
+    return v >= -lim and v < lim
+}
+
+# T6b: an integer type flows into a wider one of its signedness, and an unsigned one into a strictly wider signed one
+fn flows(fromBits I64, fromUns Bool, toBits I64, toUns Bool) Bool {
+    if fromBits >= toBits { return false }
+    return fromUns == toUns or (fromUns and not toUns)
+}
+
+# the integer type two integers meet at (T6b, E6d), or none
+fn meet(a Value, b Value) Bool, I64, Bool {
+    if a.Bits != 0 and b.Bits != 0 {
+        if a.Bits == b.Bits and a.Uns == b.Uns { return true, a.Bits, a.Uns }
+        if flows(a.Bits, a.Uns, b.Bits, b.Uns) { return true, b.Bits, b.Uns }
+        if flows(b.Bits, b.Uns, a.Bits, a.Uns) { return true, a.Bits, a.Uns }
+        return false, 0, false
+    }
+    if a.Bits != 0 or b.Bits != 0 {
+        typed := a if a.Bits != 0 else b
+        lit := b if a.Bits != 0 else a
+        if fits(lit.I, typed.Bits, typed.Uns) { return true, typed.Bits, typed.Uns }
+        if not flows(typed.Bits, typed.Uns, LiteralIntBits, false) and not (typed.Bits == LiteralIntBits and not typed.Uns) {
+            return false, 0, false
+        }
+        return true, LiteralIntBits, false
+    }
+    return true, 0, false
+}
+
+# an integer literal adapting to a float (T6) - an integer of a type of its own does not meet one (T6b)
+fn asFloat(v Value) Bool, F64 {
+    if v.Bits != 0 or v.I > 9007199254740992 or v.I < -9007199254740992 { return false, 0.0 }
+    return true, F64(v.I)
+}
+
+fn numeric(v Value) Bool { return v.Kind == ValueKind.Int or v.Kind == ValueKind.Float }
+
+fn (e mut Eval&) unary(sp source.Span, op token.Tok, x ast.Expr&) Value {
+    opSp := source.Span(sp.Start, sp.Start + (3 if op == token.Tok.Not else 1))
+    if op == token.Tok.Not {
+        v := e.expr(x)
+        if v.Kind == ValueKind.None { return v }
+        if v.Kind != ValueKind.Bool { return e.fail(opSp, msgs.CondTypes(e.tokText(opSp))) }
+        return boolValue(v.I == 0)
+    }
+    if op != token.Tok.Minus { return e.defer(opSp) }
+    v := e.expr(x)
+    if v.Kind == ValueKind.None { return v }
+    if v.Kind == ValueKind.Float { return Value(ValueKind.Float, 0, -v.F, 0, v.Bits, false) }
+    if v.Kind != ValueKind.Int { return e.fail(opSp, msgs.CondTypes(e.tokText(opSp))) }
+    # E6c: negating its type's most negative value, or any unsigned value but 0, wraps
+    if v.I == -9223372036854775807 - 1 or not fits(-v.I, v.Bits, v.Uns) { return e.defer(opSp) }
+    return Value(ValueKind.Int, -v.I, 0.0, 0, v.Bits, v.Uns)
+}
+
+fn (e mut Eval&) binary(sp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&) Value {
+    opSp := e.tokenAt(a.Span().End)
+    match op {
+        case token.Tok.And, token.Tok.Or { return e.logic(opSp, op, a, b) }
+        case token.Tok.EqEq, token.Tok.NotEq, token.Tok.Lt, token.Tok.Le, token.Tok.Gt, token.Tok.Ge {
+            return e.compare(opSp, op, e.expr(a), e.expr(b))
+        }
+        case token.Tok.Plus, token.Tok.Minus, token.Tok.Star, token.Tok.Slash, token.Tok.Percent {
+            return e.arith(opSp, op, e.expr(a), e.expr(b))
+        }
+        nomatch {
+            e.expr(a)
+            return e.defer(opSp)
+        }
+    }
+}
+
+# E7: "a and b" / "a or b" decided by its left never evaluates its right, which is still read for values that cannot
+# combine - and nothing it names is a value the condition depends on
+fn (e mut Eval&) logic(opSp source.Span, op token.Tok, a ast.Expr&, b ast.Expr&) Value {
+    v := e.expr(a)
+    decided := not e.failed and v.Kind == ValueKind.Bool and v.I == (1 if op == token.Tok.Or else 0)
+    if decided { e.skip++ }
+    w := e.expr(b)
+    if decided {
+        e.skip--
+        return v
+    }
+    if (v.Kind != ValueKind.None and v.Kind != ValueKind.Bool) or (w.Kind != ValueKind.None and w.Kind != ValueKind.Bool) {
+        return e.fail(opSp, msgs.CondTypes(e.tokText(opSp)))
+    }
+    if v.Kind == ValueKind.None or w.Kind == ValueKind.None { return none() }
+    if op == token.Tok.Or { return boolValue(v.I != 0 or w.I != 0) }
+    return boolValue(v.I != 0 and w.I != 0)
+}
+
+fn (e mut Eval&) arith(opSp source.Span, op token.Tok, a Value, b Value) Value {
+    if a.Kind == ValueKind.None or b.Kind == ValueKind.None { return none() }
+    if not numeric(a) or not numeric(b) { return e.fail(opSp, msgs.CondTypes(e.tokText(opSp))) }
+    if a.Kind == ValueKind.Int and b.Kind == ValueKind.Int {
+        ok, bits, uns := meet(a, b)
+        if not ok { return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp))) }
+        r I64 = 0
+        over := false
+        match op {
+            case token.Tok.Plus {
+                r = a.I + b.I
+                over = (b.I > 0 and r < a.I) or (b.I < 0 and r > a.I)
+            }
+            case token.Tok.Minus {
+                r = a.I - b.I
+                over = (b.I < 0 and r < a.I) or (b.I > 0 and r > a.I)
+            }
+            case token.Tok.Star {
+                r = a.I * b.I
+                over = a.I != 0 and (r / a.I != b.I or (a.I == -1 and b.I == -9223372036854775807 - 1))
+            }
+            nomatch {
+                # E6a: a zero divisor, and MIN / -1, are undefined - compile-time evaluation says so where it is written
+                if b.I == 0 or (a.I == -9223372036854775807 - 1 and b.I == -1) { return e.defer(opSp) }
+                r = a.I / b.I if op == token.Tok.Slash else a.I % b.I
+            }
+        }
+        # E6c: a result its type cannot hold wraps in the program - not a value B9a has
+        if over or not fits(r, bits if bits != 0 else LiteralIntBits, uns) { return e.defer(opSp) }
+        return Value(ValueKind.Int, r, 0.0, 0, bits, uns)
+    }
+    if (a.Kind == ValueKind.Int and a.Bits != 0) or (b.Kind == ValueKind.Int and b.Bits != 0) {
+        return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp)))
+    }
+    x := a.F
+    y := b.F
+    if a.Kind == ValueKind.Int {
+        ok, f := asFloat(a)
+        if not ok { return e.defer(opSp) }
+        x = f
+    }
+    if b.Kind == ValueKind.Int {
+        ok, f := asFloat(b)
+        if not ok { return e.defer(opSp) }
+        y = f
+    }
+    if op == token.Tok.Percent { return e.defer(opSp) }
+    bits := 64 if a.Bits != 0 or b.Bits != 0 else 0
+    f := x + y if op == token.Tok.Plus else x - y if op == token.Tok.Minus else x * y if op == token.Tok.Star else x / y
+    return Value(ValueKind.Float, 0, f, 0, bits, false)
+}
+
+# text compares by content (B9); a NaN is unordered
+fn (e mut Eval&) compare(opSp source.Span, op token.Tok, a Value, b Value) Value {
+    if a.Kind == ValueKind.None or b.Kind == ValueKind.None { return boolValue(false) if e.skip > 0 else none() }
+    eqOp := op == token.Tok.EqEq or op == token.Tok.NotEq
+    order I64 = 0
+    if a.Kind == ValueKind.Text and b.Kind == ValueKind.Text and eqOp {
+        order = 0 if e.texts[a.S] == e.texts[b.S] else 1
+    } else if a.Kind == ValueKind.Bool and b.Kind == ValueKind.Bool and eqOp {
+        order = 0 if a.I == b.I else 1
+    } else if a.Kind == ValueKind.Int and b.Kind == ValueKind.Int {
+        ok, _, _ := meet(a, b)
+        if not ok { return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp))) }
+        order = -1 if a.I < b.I else 1 if a.I > b.I else 0
+    } else if numeric(a) and numeric(b) {
+        if (a.Kind == ValueKind.Int and a.Bits != 0) or (b.Kind == ValueKind.Int and b.Bits != 0) {
+            return e.fail(opSp, msgs.CondNoMeet(e.tokText(opSp)))
+        }
+        x := a.F
+        y := b.F
+        if a.Kind == ValueKind.Int {
+            ok, f := asFloat(a)
+            if not ok { return e.defer(opSp) }
+            x = f
+        }
+        if b.Kind == ValueKind.Int {
+            ok, f := asFloat(b)
+            if not ok { return e.defer(opSp) }
+            y = f
+        }
+        if x != x or y != y { return boolValue(op == token.Tok.NotEq) }
+        order = -1 if x < y else 1 if x > y else 0
+    } else {
+        return e.fail(opSp, msgs.CondTypes(e.tokText(opSp)))
+    }
+    return match op {
+        case token.Tok.EqEq => boolValue(order == 0)
+        case token.Tok.NotEq => boolValue(order != 0)
+        case token.Tok.Lt => boolValue(order < 0)
+        case token.Tok.Le => boolValue(order <= 0)
+        case token.Tok.Gt => boolValue(order > 0)
+        case _ => boolValue(order >= 0)
+    }
+}
+
+# where a failed evaluation went wrong, and what
+fn (e Eval&) Error() source.Span, msgs.Msg { return e.errAt, e.err }
+
+test "a -D value reads as its literal would" {
+    c := Consts()
+    for f in String&["A=5", "B=true", "C=1.5", "D=1.2.3", "E=-0x10", "F=18446744073709551615"] {
+        try c.define(f) catch { unreachable }
+    }
+    assert c.values[0].Kind == ValueKind.Int and c.values[0].I == 5 and c.values[0].Bits == 64
+    assert c.values[1].Kind == ValueKind.Bool and c.values[1].I == 1
+    assert c.values[2].Kind == ValueKind.Float and c.values[2].F == 1.5
+    assert c.values[3].Kind == ValueKind.Text and c.Texts[c.values[3].S] == "1.2.3"
+    assert c.values[4].I == -16 and c.big[5]
+    bad := 0
+    try c.define("X=0x") catch DefineError.BAD_NUMBER { bad++ } catch { unreachable }
+    try c.define("X=99999999999999999999") catch DefineError.INT_RANGE { bad++ } catch { unreachable }
+    try c.define("X=-9223372036854775809") catch DefineError.NEG_RANGE { bad++ } catch { unreachable }
+    try c.define("X=1e400") catch DefineError.FLOAT_RANGE { bad++ } catch { unreachable }
+    try c.define("A=6") catch DefineError.TWICE { bad++ } catch { unreachable }
+    try c.define("2x=1") catch DefineError.NOT_NAME { bad++ } catch { unreachable }
+    try c.define("nothing") catch DefineError.SHAPE { bad++ } catch { unreachable }
+    assert bad == 7
+    c.Builtins("linux", "x86_64", "", 0, -1, false, false, true)
+    try c.define("TestBuild=false") catch DefineError.BUILTIN { bad++ } catch { unreachable }
+    assert bad == 8 and c.IsBuiltin("TargetOs") and not c.Defined("TargetOs") and c.Defined("A")
+}
+
+test "integers meet as T6b says" {
+    i32 := Value(ValueKind.Int, 1, 0.0, 0, 32, false)
+    i64 := Value(ValueKind.Int, 1, 0.0, 0, 64, false)
+    u8 := Value(ValueKind.Int, 1, 0.0, 0, 8, true)
+    i8 := Value(ValueKind.Int, 1, 0.0, 0, 8, false)
+    lit := Value(ValueKind.Int, 300, 0.0, 0, 0, false)
+    ok, bits, _ := meet(i32, i64)
+    assert ok and bits == 64
+    ok2, _, _ := meet(u8, i8)
+    assert not ok2
+    ok3, bits3, _ := meet(u8, lit)
+    assert ok3 and bits3 == 64
+    assert fits(127, 8, false) and not fits(128, 8, false) and not fits(-1, 8, true)
+}

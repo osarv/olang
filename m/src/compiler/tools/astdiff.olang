@@ -1,0 +1,255 @@
+# astdiff [FILE...] - holds the self-hosted parser's tree to the C parser's (compiler/DESIGN.md section 4): every
+# declaration and statement, as its kind and the span of its tokens, and the syntax errors - each item's first, by rule
+# and position, and the lexical ones - and checks that each tree, written back as source, holds the file's tokens and
+# reads back as itself ("dump roundtrip"). The C parser's trees (stage 0, removed; tagged stage0-final), normalized, are
+# stored in compiler/goldens/ast.txt (a hash of each file's text and of its tree) and ast.full.txt (the whole tree of
+# each small file with syntax errors); "astdiff -capture" (make astgold) writes them again from the parser. With no
+# FILE, every .olang file of the repository. A file edited since the capture is reported as stale. Prints the first
+# differences and exits 1 if there are any.
+#
+#     astdiff [FILE...]          the parser against the golden, then the round trip
+#     astdiff -capture           the golden captured again from the parser (make astgold)
+#
+# Run from the repository root after "make build/compiler_tools_dump". What is normalized away, as DESIGN.md section 4
+# lists: the order of lines (each file's structure, and its diagnostics, are sorted - the trees hold the same nodes in
+# different shapes), the C diagnostics' text and notes (only "error RULE LINE:COL" is kept), the C parser's reports
+# beyond an item's first (it reports one an item; the self-hosted parser goes on and the dump keeps its first), an L21
+# said inside an item kept whole (stage 0 says one where a form it tried and dropped reached the limit), and the
+# position of an L21 that ends an item (for the same reason; the rows say which item ends). A missing tool, or one
+# printing fewer files than it was given, is a failure. ASTDIFF_DUMP names another build of the
+# tool; ASTDIFF_KEEP names a directory to leave the renderings in.
+
+import "std/os"
+import "toolkit"
+
+Golden String& = "compiler/goldens/ast"
+
+fn main() {
+    args := os.Args()
+    dump := toolkit.Env("ASTDIFF_DUMP", "build/compiler_tools_dump")
+    if args.Len() > 1 and args[1] == "-capture" {
+        capture(dump)
+        return
+    }
+    files := toolkit.FilesOr(args, toolkit.Tracked("*.olang"))
+    keep := toolkit.Env("ASTDIFF_KEEP", "")
+    work String& = ""
+    if keep != "" {
+        work = keep
+        try os.MkDirAll(work) catch os.OsError { toolkit.Die("astdiff: cannot make " $work) }
+    } else {
+        work = toolkit.Scratch("astdiff")
+    }
+    defer {
+        if keep == "" { toolkit.Clean(work) }
+    }
+    if not toolkit.Built(dump) { toolkit.Die("astdiff: " $dump " is not built (make " $dump ")") }
+    g := toolkit.HashGoldenRead(Golden, "astgold")
+    oraw := run(dump, "ast", files)
+    toolkit.Write($work "/olang.raw", oraw)
+    sections(oraw, files.Len(), $dump " ast")
+    olang := normalize(oraw)
+    toolkit.Write($work "/olang", olang)
+    o := toolkit.DumpSections(olang)
+    stale := toolkit.HashGoldenStale(g, files)
+    isStale := Map<String&, Bool>()
+    for f in stale { isStale.Put(f, true) }
+    bad I64 = 0
+    for f in files {
+        if f in isStale { continue }
+        rep := toolkit.HashGoldenCheck(g, work, f, try o.Bodies.Get(f) catch default "")
+        if rep != "" {
+            bad++
+            if bad <= 5 { toolkit.Say(rep) }
+        }
+    }
+    for f in stale { toolkit.Say("astdiff: " $f " changed since the golden was captured (make astgold)\n") }
+    bad += stale.Len()
+    if bad > 0 {
+        toolkit.Say("astdiff: the trees of " $bad " of " $files.Len() " files differ\n")
+        os.Exit(1)
+    }
+    toolkit.Say("astdiff: no difference over " $files.Len() " files\n")
+    # each tree written back as source holds the file's tokens, and reads back as itself
+    rt := run(dump, "roundtrip", files)
+    toolkit.Write($work "/rt", rt)
+    sections(rt, files.Len(), $dump " roundtrip")
+    broken := false
+    header String& = ""
+    for line in toolkit.Rows(rt) {
+        if line.StartsWith("== ") {
+            header = $line
+            continue
+        }
+        if line == "ok" or line.StartsWith("skipped") { continue }
+        toolkit.Say($header "\n" $line "\n")
+        broken = true
+    }
+    if broken {
+        toolkit.Say("astdiff: a tree written back is not the file's\n")
+        os.Exit(1)
+    }
+    toolkit.Say("astdiff: every tree written back reads as itself\n")
+}
+
+# what a tool printed for the files, its own diagnostics passed on
+fn run(tool String&, mode String&, files List<String&>&) String {
+    args := List<String&>()
+    args.Push(tool)
+    if mode != "" { args.Push(mode) }
+    for f in files { args.Push(f) }
+    return $toolkit.RunShowing(args.ToArray()).Stdout
+}
+
+# every tracked file's tree, normalized, from the self-hosted parser, written as the golden
+fn capture(dump String&) {
+    files := toolkit.Tracked("*.olang")
+    if not toolkit.Built(dump) { toolkit.Die("astdiff: " $dump " is not built (make " $dump ")") }
+    raw := run(dump, "ast", files)
+    sections(raw, files.Len(), dump)
+    s := toolkit.DumpSections(normalize(raw))
+    toolkit.HashGoldenWrite(Golden, "the C parser's trees, normalized (compiler/tools/astdiff.olang)", files, s, fn(body String&) Bool {
+        return body.Len() < 8192 and (try body.Find("\nerror") catch default -1) >= 0
+    })
+    toolkit.Say("astdiff: " $files.Len() " files captured from " $dump " into " $Golden ".txt\n")
+}
+
+# a tool that stops early prints fewer sections than files: that is a failure, never an empty match
+fn sections(text String&, files I64, who String&) {
+    n := toolkit.Sections(text)
+    if n != files { toolkit.Die("astdiff: " $who " printed " $n " of " $files " files") }
+}
+
+# a position "LINE:COL" as one number
+fn pos(at String&) I64 {
+    parts := at.Split(":")
+    line := try parts[0].ParseInt() catch default 0
+    col := try parts[1].ParseInt() catch default 0
+    return line * 1000000 + col
+}
+
+# whether text is a span "L:C-L:C"
+fn isSpan(t String&) Bool {
+    dash := try t.FindByte('-') catch default -1
+    if dash < 0 { return false }
+    for half in String&[t[0:dash], t[dash + 1:]] {
+        colon := try half.FindByte(':') catch default -1
+        if colon < 0 or not toolkit.IsNumber(half[0:colon]) or not toolkit.IsNumber(half[colon + 1:]) { return false }
+    }
+    return true
+}
+
+# the state of normalizing one rendering: the rows of the section being read, the spans of the file's items
+type norm struct() {
+    out List<String&> = List<String&>()
+    header String& = ""
+    rows List<String&> = List<String&>()
+    lo List<I64> = List<I64>()
+    hi List<I64> = List<I64>()
+}
+
+# the section read so far written out - its header, then its rows sorted by bytes - and a new one begun
+fn (n mut norm&) flush(next String&) {
+    if n.header != "" { n.out.Push(n.header) }
+    for r in toolkit.Sorted(n.rows) { n.out.Push($r) }
+    n.rows.Clear()
+    n.header = $next
+}
+
+# whether an item the file keeps whole holds the position
+fn (n norm&) kept(at I64) Bool {
+    for i in range n.lo.Len() {
+        if n.lo[i] <= at and at <= n.hi[i] { return true }
+    }
+    return false
+}
+
+# a diagnostic's row: an L21 said inside an item kept whole is not compared, and one ending an item is compared
+# without its position (stage 0 says it where the first form it tried reached the limit)
+fn (n mut norm&) emit(rule String&, at String&) {
+    if rule == "L21" {
+        if not n.kept(pos(at)) { n.rows.Push("error L21") }
+        return
+    }
+    n.rows.Push("error " $rule " " $at)
+}
+
+# "error RULE LINE:COL" of the self-hosted parser's rendering: the rule may be several ("T17, T19, C2") or none
+fn (n mut norm&) olangDiag(line String&) {
+    f := toolkit.Fields(line)
+    last := f[f.Len() - 1]
+    r := $line[6:]
+    # drop the last word and the blanks before it
+    cut := r.Len() - last.Len()
+    for cut > 0 and r[cut - 1] == ' ' { cut-- }
+    n.emit(r[0:cut], last)
+}
+
+# stage 0's rendering: "path:LINE:COL: error[RULE]: text" - the rule, if written, and the position; a row
+# "path: error[RULE]:" names no position
+fn (n mut norm&) cDiag(line String&) {
+    e := try line.Find(": error") catch default -1
+    if e < 0 { return }
+    head := line[0:e]
+    if (try head.FindByte(' ') catch default -1) >= 0 { return }
+    after := line[e + 7:]
+    rule String = ""
+    if after.StartsWith("[") {
+        close := try after.FindByte(']') catch default -1
+        if close < 0 { return }
+        rule = $after[1:close]
+        after = after[close + 1:]
+    }
+    if not after.StartsWith(":") { return }
+    c2 := try head.FindLast(":") catch default -1
+    if c2 >= 0 {
+        c1 := try head[0:c2].FindLast(":") catch default -1
+        if c1 >= 0 and toolkit.IsNumber(head[c2 + 1:]) and toolkit.IsNumber(head[c1 + 1:c2]) {
+            n.emit(rule, head[c1 + 1:])
+            return
+        }
+    }
+    n.rows.Push("error " $rule " 0:0")
+}
+
+# each file's sections sorted; the C rows reduced to "error RULE LINE:COL"
+fn normalize(raw String&) String {
+    n := norm()
+    diag := false
+    for line in toolkit.Rows(raw) {
+        if line.StartsWith("== ") {
+            n.lo.Clear()
+            n.hi.Clear()
+        }
+        if line.StartsWith("== ") or line == "-- diagnostics" {
+            n.flush(line)
+            diag = line.StartsWith("-- ")
+            continue
+        }
+        if diag {
+            if line.StartsWith("error ") { n.olangDiag(line) } else { n.cDiag(line) }
+            continue
+        }
+        f := toolkit.Fields(line)
+        if f.Len() >= 2 and isSpan(f[1]) {
+            dash := try f[1].FindByte('-') catch default 0
+            n.lo.Push(pos(f[1][0:dash]))
+            n.hi.Push(pos(f[1][dash + 1:]))
+        }
+        n.rows.Push($line)
+    }
+    n.flush("")
+    return toolkit.Text(n.out)
+}
+
+test "an L21 inside a kept item is dropped, one ending an item loses its position" {
+    raw := "== f\nFN 3:1-9:2\n-- diagnostics\nf:4:5: error[L21]: deep\nf:12:1: error[L21]: deep\n"
+    assert normalize(raw) == "== f\nFN 3:1-9:2\n-- diagnostics\nerror L21\n"
+}
+
+test "rows of the two renderings meet, sorted by bytes" {
+    raw := "== f\nRETURN 5:1-5:9\nFN 3:1-6:2\n-- diagnostics\nerror T17, T19 7:3\nerror  2:2\n"
+    assert normalize(raw) == "== f\nFN 3:1-6:2\nRETURN 5:1-5:9\n-- diagnostics\nerror  2:2\nerror T17, T19 7:3\n"
+    c := "== f\nFN 3:1-6:2\n-- diagnostics\nf:7:3: error[T17, T19]: text\n   7 | source\nf:2:2: error: bare\nf: error[B1]: none\n"
+    assert normalize(c) == "== f\nFN 3:1-6:2\n-- diagnostics\nerror  2:2\nerror B1 0:0\nerror T17, T19 7:3\n"
+}

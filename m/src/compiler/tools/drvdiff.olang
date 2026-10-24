@@ -1,0 +1,218 @@
+# drvdiff - M10's acceptance: the self-hosted driver (compiler/olang.olang, built as build/compiler_olang, or the compiler
+# $DRVDIFF_DRIVER names) says what stage 0 said for every command line below - what each writes to standard output and to
+# standard error, and the status it ends with - as compiler/goldens/drv.txt stores it, captured once from stage 0. These
+# are the command lines whose outcome is decided before code is generated: the command line's own mistakes (B1, B3h,
+# B10, B10a, B11a, B12, B12a), help, explain, and files that cannot be built. Then whole builds (Builds): the programs in
+# Programs written into a directory, and each command line run there - building, running a file (its arguments and its
+# first word, the file as written), test, interpret, format - with what the compiler and what it runs write, and their
+# status. (compile is left out: its object is named by a hash of the IR.) Prints the differences and exits 1 if there
+# are any.
+#
+#     drvdiff                    the driver against the golden
+#     drvdiff -capture COMPILER  the golden captured again from COMPILER (make drvgold; GOLD_OLANG names it)
+#
+# Run from the repository root (make drvdiff). A case's words are split at spaces; W stands for a scratch directory
+# holding an empty directory "adir" - the golden writes it W, as it writes the directory of programs D and the
+# repository's root $ROOT.
+
+import "std/os"
+import "toolkit"
+
+Cases Array<String&> = String&[
+    # nothing to do, and options alone
+    ""
+    "-debug"
+    "-race -sanitize -update"
+    # unknown options, the first said
+    "-x"
+    "-race build main.olang"
+    "build main.olang -x -y"
+    "--help"
+    "build -b main.olang"
+    # options for other modes, and options needing a value
+    "test -output o main.olang"
+    "format -debug a.olang"
+    "interpret -race p.olang"
+    "help -debug"
+    "explain -check B1"
+    "build main.olang -target"
+    "build -output"
+    "compile main.olang -define"
+    # -output
+    "build -output W/adir main.olang"
+    "build -output W/nodir/x main.olang"
+    "compile -output W/adir main.olang"
+    # -target
+    "compile -target bogus-cpu main.olang"
+    "compile -target riscv64-linux-gnu main.olang"
+    "compile -target x86_64-apple-darwin main.olang"
+    "compile -target x86_64-linux-gnu:a:b main.olang"
+    "compile -target aarch64-linux-gnu main.olang"
+    "build -target aarch64-linux-gnu main.olang"
+    "test -target aarch64-linux-gnu main.olang"
+    "interpret -target aarch64-linux-gnu main.olang"
+    # -define
+    "build -define X main.olang"
+    "build -define X=1 -define X=2 main.olang"
+    "build -define 1x=2 main.olang"
+    "build -define X=1.2.3e main.olang"
+    "build -define X=0xZZ main.olang"
+    "build -define X=99999999999999999999 main.olang"
+    "build -define X=-99999999999999999999 main.olang"
+    "build -define X=1e400 main.olang"
+    "build -define TargetOs=x main.olang"
+    "test -define TestBuild=1 main.olang"
+    # the modes
+    "build"
+    "build a.olang b.olang"
+    "compile"
+    "compile a.olang b.olang"
+    "test"
+    "interpret"
+    "format"
+    "bogus"
+    "main.txt"
+    "-debug main.txt"
+    "-debug test main.olang"
+    # help
+    "help"
+    "help build"
+    "help run"
+    "help compile"
+    "help test"
+    "help interpret"
+    "help format"
+    "help explain"
+    "help help"
+    "help nope"
+    "help build test"
+    # explain
+    "explain"
+    "explain B1 B2"
+    "explain B1"
+    "explain t6b"
+    "explain Zz9"
+    # files that cannot be built
+    "test W/none.olang"
+    "test W/adir"
+    "test /dev/null"
+    "test W/none.olang W/adir /dev/null"
+    "build W/none.olang"
+    "compile W/none.olang"
+    "interpret W/none.olang a b"
+    "W/none.olang a b"
+]
+
+# the programs the whole builds use, by file name, and their text
+ProgramNames Array<String&> = String&["hello.olang", "args.olang", "exit.olang", "fails.olang", "tests.olang"
+    "bad.olang", "defs.olang", "ugly.olang"]
+ProgramTexts Array<String&> = String&[
+    "import \"std/io\"\n\nfn main() {\n    io.Println(\"hello \" $(40 + 2))!\n}\n"
+    ("import \"std/io\"\nimport \"std/os\"\n\nfn main() {\n    for a in os.Args() { io.Println(a)! }\n}\n")
+    "import \"std/os\"\n\nfn main() {\n    os.Exit(3)\n}\n"
+    "error E {\n    BAD\n}\n\nfn main() ? E {\n    error E.BAD\n}\n"
+    ("test \"one passes\" {\n    assert 1 + 1 == 2\n}\n\nfn two() I64 { return 2 }\n\n" $
+            "test \"one fails\" {\n    assert two() == 3\n}\n")
+    "fn main() {\n    x := y\n}\n"
+    "import \"std/io\"\n\nfn main() {\n    io.Println($N)!\n}\n"
+    "fn main( ) {\n  x := 1\n}\n"
+]
+
+# the command lines the whole builds run, each in a directory holding Programs
+Builds Array<String&> = String&[
+    "build hello.olang"
+    "hello.olang"
+    "args.olang a -b c"
+    "exit.olang"
+    "fails.olang"
+    "test tests.olang"
+    "build bad.olang"
+    "-define N=7 defs.olang"
+    "interpret args.olang x y"
+    "interpret exit.olang"
+    "format -check ugly.olang hello.olang"
+]
+
+fn main() {
+    args := os.Args()
+    capture := args.Len() == 3 and args[1] == "-capture"
+    if args.Len() > 1 and not capture { toolkit.Die("usage: drvdiff [-capture COMPILER]") }
+    exe := $args[2] if capture else toolkit.Env("DRVDIFF_DRIVER", "build/compiler_olang")
+    if not toolkit.Built(exe) { toolkit.Die("drvdiff: " $exe " is not built (make " $exe ")") }
+    gpath := "compiler/goldens/drv.txt"
+    g := toolkit.Golden() if capture else toolkit.GoldenRead(gpath, "drvgold")
+    here := try os.Cwd() catch os.OsError { toolkit.Die("drvdiff: no working directory") }
+    work := toolkit.Scratch("drvdiff")
+    defer toolkit.Clean(work)
+    try os.MkDir($work "/adir") catch os.OsError { toolkit.Die("drvdiff: cannot make " $work "/adir") }
+    keys := List<String&>()
+    got := List<String&>()
+    for line in Cases {
+        keys.Push($"olang " $line)
+        got.Push(normal(outcome(exe, line, work), work, "", here))
+    }
+    std := $"OLANG_STD=" $here "/std"
+    dir := $work "/programs"
+    try os.MkDir(dir) catch os.OsError { toolkit.Die("drvdiff: cannot make " $dir) }
+    for i in range ProgramNames.Len() { toolkit.Write($dir "/" $ProgramNames[i], ProgramTexts[i]) }
+    full := $exe if exe.StartsWith("/") else $here "/" $exe
+    # stage 0 builds its formatter into its cache the first time, and says so: done once beforehand
+    outcome(full, "format -check hello.olang", dir, std, dir)
+    for line in Builds {
+        keys.Push($"in a directory of programs: olang " $line)
+        got.Push(normal(outcome(full, line, dir, std, dir), work, dir, here))
+    }
+    if capture {
+        b := StringBuilder()
+        for i in range keys.Len() { b.Push(toolkit.GoldenSection(keys[i], got[i])) }
+        toolkit.GoldenWrite(gpath, b.ToString())
+        toolkit.Say("drvdiff: " $keys.Len() " command lines captured from " $exe " into " $gpath "\n")
+        return
+    }
+    bad I64 = 0
+    ran := Map<String&, Bool>()
+    for i in range keys.Len() {
+        ran.Put(keys[i], true)
+        want := try g.Bodies.Get(keys[i]) catch {
+            bad++
+            toolkit.Say("-- " $keys[i] ": not in " $gpath " (make drvgold)\n")
+            continue
+        }
+        if want != got[i] {
+            bad++
+            toolkit.Say("-- " $keys[i] " (< golden, > " $exe ")\n")
+            toolkit.Say(toolkit.Head(toolkit.Diff(work, want, got[i]), 12))
+        }
+    }
+    for k in g.Keys {
+        if k not in ran {
+            bad++
+            toolkit.Say("-- " $k ": in " $gpath " and not run (make drvgold)\n")
+        }
+    }
+    if bad > 0 {
+        toolkit.Say("drvdiff: " $bad " of " $keys.Len() " command lines differ from the golden\n")
+        os.Exit(1)
+    }
+    toolkit.Say("drvdiff: no difference from the golden over " $keys.Len() " command lines\n")
+}
+
+# an outcome with the directory of programs written D, the scratch directory W and the repository's root $ROOT
+fn normal(t String&, work String&, dir String&, here String&) String {
+    a := t.Replace(dir, "D") if dir != "" else $t
+    return a.Replace(work, "W").Replace(here, "$ROOT")
+}
+
+# what the compiler at exe writes for the command line line, and its status, as one text
+fn outcome(exe String&, line String&, work String&, std String& = "", dir String& = "") String {
+    args := List<String&>()
+    args.Push(exe)
+    for w in line.Split(" ") {
+        if w == "" { continue }
+        args.Push(w.Replace("W/", $work "/") if w.StartsWith("W/") else $w)
+    }
+    env := List<String&>()
+    if std != "" { env.Push($std) }
+    o := toolkit.Run(args.ToArray(), env.ToArray(), dir)
+    return $"stdout:\n" $o.Stdout "stderr:\n" $o.Stderr "status " $o.Status "\n"
+}

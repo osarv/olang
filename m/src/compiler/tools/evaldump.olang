@@ -1,0 +1,87 @@
+# evaldump - a program checked by the self-hosted checker, placed by the scope pass, lowered (compiler/lower.olang)
+# and run by the self-hosted evaluator (compiler/eval.olang, compiler/interp.olang) as interpret runs it: M8's tool,
+# as emitdump is M9's.
+#
+#     evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]
+#
+# With -t the root module's test blocks are run as "olang test FILE" runs them - each global set first, each test then
+# "ok - NAME" or the stop that ended it and "FAIL - NAME", then "N passed, M failed", the status 1 where any failed.
+# Without, the program's main runs with ARGS, its globals set first (B5a): the status 0 for its return, 1 for an error
+# leaving it ("unhandled error", the error's trace after it) or for what interpret stops at - undefined behaviour, what
+# it cannot run ("olang interpret: FILE:LINE: why") - what it asked for with os.Exit, 134 for a failed check - the
+# stop's "FILE:LINE: text" on standard error. On standard error too, the check's errors when there are any, and
+# "unlowered WHAT" for each function a run reached that did not lower, and "gap PLACE WHAT" for what stopped it.
+
+import "std/os"
+import "std/io"
+import "std/pair"
+import "../source"
+import "../diag"
+import "../cond"
+import "../fetch"
+import "../load"
+import "../mir"
+import "../typed"
+import "../eval"
+import "../interp"
+import "../target"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() < 2 {
+        try io.PrintErrln("usage: evaldump [-D NAME=VALUE]... [-t] FILE [ARGS...]") catch io.IoError { }
+        os.Exit(2)
+    }
+    os.RunOnStack(1 << 30, fn() { os.Exit(run(args)) })
+}
+
+fn run(args Array<String&>&) I32 {
+    std := try os.Env("OLANG_STD") catch default "std"
+    defines List<String&>
+    testBuild := false
+    k I64 = 1
+    for k < args.Len() and args[k].StartsWith("-") {
+        if args[k] == "-t" {
+            testBuild = true
+        } else if args[k] == "-D" and k + 1 < args.Len() {
+            k++
+            defines.Push(args[k])
+        }
+        k++
+    }
+    if k >= args.Len() { return 2 }
+    path := args[k]
+    d := diag.Diagnostics(false)
+    consts := cond.Consts()
+    # B12: for this machine, as interpret is (the target constants of what clang would build, without clang if none)
+    tg := try target.Resolve("native", target.FindClang(), false, d) catch target.Bad {
+        try io.PrintErr(d.Render()) catch io.IoError { }
+        return 1
+    }
+    consts.Builtins(tg.Os, tg.Arch, tg.Cpu, tg.VectorBits, 1 if tg.Fma else 0, false, false, testBuild)
+    for f in defines { try consts.Define(f, d) catch { } }
+    f := fetch.Fetcher(load.LockPath(path), fetch.CacheDir(), fetch.GitBase(), false, true)
+    l := load.Loader(std, consts, f, source.Names(), d)
+    l.Load(path)
+    # checked with the build's decisions made by evaluation (B9c, S8b)
+    c := interp.Analyze(l, testBuild)
+    p := c.P
+    # the asserts the evaluator decides while compiling (S18c): a true one is not tested at run time
+    asserts Map<pair.Pair<I64, I64>, Bool>
+    interp.DecideAsserts(c, asserts)
+    if d.Count() > 0 { try io.PrintErr(d.Render()) catch io.IoError { } }
+    x := interp.Exec(p, c.Bodies, eval.Mode.Run)
+    x.Lw.AssertsTrue = asserts
+    x.Place()
+    # the command line the program is given: under -t the test binary's, as stage 0 names it (build/std_os_test)
+    if testBuild {
+        base := path[:path.Len() - 6] if path.EndsWith(".olang") else path
+        x.M.Args.Push("build/" $base.Replace("/", "_") "_test")
+    } else {
+        for i in range k, args.Len() { x.M.Args.Push(args[i]) }
+    }
+    status := x.RunTests(d) if testBuild else x.RunMain(d)
+    for key in x.Unlowered { try io.PrintErrln("unlowered " $key) catch io.IoError { } }
+    for g in x.Lw.Gaps { try io.PrintErrln("gap " $d.Locate(g.File, I64(g.Sp.Start)) " " $g.What) catch io.IoError { } }
+    return status
+}

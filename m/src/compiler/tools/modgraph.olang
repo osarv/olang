@@ -1,0 +1,165 @@
+# modgraph [ROOT...] - M4's acceptance for loading (compiler/DESIGN.md section 4): from every root program of the
+# repository, the self-hosted loader reaches the modules stage 0's did, with the same identities and the same import
+# edges, in an ordinary build and in a test build (-t: TestBuild true, so the prelude's tests are reached), and a remote
+# import is fetched, locked and loaded as stage 0 did it. Stage 0's graphs (the C compiler, removed; tagged
+# stage0-final) are stored in compiler/goldens/modgraph.txt; "modgraph -capture" (make modgold) writes them again from
+# the loader ("dump modules"). A graph that is not the stored one is a difference. Prints the differences and exits 1 if
+# there are any.
+#
+#     modgraph [ROOT...]         the loader against the golden
+#     modgraph -capture          the golden captured again from the loader (make modgold)
+#
+# Run from the repository root after "make build/compiler_tools_dump". A root here decides no top-level condition the
+# token evaluator cannot (B9c): the loader leaves such a chain to M5/M8. MODGRAPH_DUMP names another build of the dump.
+
+import "std/os"
+import "toolkit"
+
+Golden String& = "compiler/goldens/modgraph.txt"
+
+fn main() {
+    args := os.Args()
+    dump := toolkit.Env("MODGRAPH_DUMP", "build/compiler_tools_dump")
+    capture := args.Len() > 1 and args[1] == "-capture"
+    if not toolkit.Built(dump) { toolkit.Die("modgraph: " $dump " is not built (make " $dump ")") }
+    roots := defaultRoots() if capture else toolkit.FilesOr(args, defaultRoots())
+    g := toolkit.Golden() if capture else toolkit.GoldenRead(Golden, "modgold")
+    work := toolkit.Scratch("modgraph")
+    defer toolkit.Clean(work)
+    out := StringBuilder()
+    n I64 = 0
+    bad := false
+    for mode in String&["", "-t"] {
+        for f in roots {
+            key := $mode " " $f
+            new := loader(dump, mode, f)
+            if capture {
+                if new == "" {
+                    toolkit.Say("modgraph: " $dump " refuses " $key ", left out\n")
+                    continue
+                }
+                out.Push(toolkit.GoldenSection(key, new))
+                n++
+                continue
+            }
+            want := try g.Bodies.Get(key) catch {
+                toolkit.Say("modgraph: " $key " is not in " $Golden ", skipped (make modgold)\n")
+                continue
+            }
+            n++
+            if want == new { continue }
+            toolkit.Say("modgraph: " $key ": the golden (<) and the self-hosted loader (>) differ:\n")
+            toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, want, new)), 20))
+            bad = true
+        }
+    }
+    if capture {
+        r := remote(work, dump)
+        if r != "" { out.Push(toolkit.GoldenSection("remote", r)) }
+        toolkit.GoldenWrite(Golden, out.ToString())
+        toolkit.Say("modgraph: " $n " graphs captured from " $dump " into " $Golden "\n")
+        return
+    }
+    new := remote(work, dump)
+    if new != "" {
+        n++
+        want := try g.Bodies.Get("remote") catch default ""
+        if want != new {
+            toolkit.Say("modgraph: the remote program: the golden (<) and the self-hosted loader (>) differ:\n")
+            toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, want, new)), 25))
+            bad = true
+        }
+    }
+    if bad { os.Exit(1) }
+    toolkit.Say("modgraph: " $n " graphs, every one the same\n")
+}
+
+# the self-hosted loader's graph of a root
+fn loader(dump String&, mode String&, f String&) String {
+    args := List<String&>()
+    args.Push(dump)
+    args.Push("modules")
+    if mode != "" { args.Push(mode) }
+    args.Push(f)
+    return withoutHeaders(toolkit.RunShowing(args.ToArray()).Stdout)
+}
+
+# the root programs of the repository
+fn defaultRoots() List<String&> {
+    roots := List<String&>()
+    for dir in String&["tests", "tests/geom", "std", "compiler", "compiler/tools"] {
+        for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
+    }
+    roots.Push("checks/checks.olang")
+    for dir in String&["fuzz", "bench"] {
+        for f in toolkit.Matching(dir, ".olang") { roots.Push($f) }
+    }
+    return roots
+}
+
+# the synthetic module of build constants is stage 0's way of holding them, not a module anyone imports
+fn withoutBuildModule(t String&) String {
+    rows := List<String&>()
+    for r in toolkit.Rows(t) {
+        if r != "module olang_build" { rows.Push($r) }
+    }
+    return toolkit.Text(rows)
+}
+
+fn withoutHeaders(t String&) String {
+    rows := List<String&>()
+    for r in toolkit.Rows(t) {
+        if not r.StartsWith("== ") { rows.Push($r) }
+    }
+    return toolkit.Text(rows)
+}
+
+# the first word of each row of an olang.lock, comments left out
+fn lockKeys(t String&) String {
+    rows := List<String&>()
+    for r in toolkit.Rows(t) {
+        if r.StartsWith("#") { continue }
+        sp := try r.FindByte(' ') catch default r.Len()
+        rows.Push($r[0:sp])
+    }
+    return toolkit.Text(rows)
+}
+
+# git with a fixed identity and no signing, in dir
+fn gitIn(dir String&, rest Array<String&>&) {
+    args := List<String&>()
+    for a in String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false"] { args.Push(a) }
+    for a in rest { args.Push($a) }
+    toolkit.Run(args.ToArray(), Array<String&>(0), dir)
+}
+
+# a remote import, from a local repository, fetched, locked and its relative imports kept inside it (M23, M23b): the
+# module graph and the lock's keys, as the self-hosted loader reaches them; "" where git is missing
+fn remote(work String&, dump String&) String {
+    if (try os.Exec(String&["git", "--version"]) catch os.OsError { return "" }).Status != 0 { return "" }
+    root := try os.Cwd() catch os.OsError { toolkit.Die("modgraph: no working directory") }
+    base := $work "/remote"
+    try os.RemoveAll(base) catch os.OsError { }
+    r := $base "/remote/example.com/me/tools"
+    try os.MkDirAll($r "/part") catch os.OsError { toolkit.Die("modgraph: cannot make " $r) }
+    toolkit.Write($r "/lib.olang", "import \"part/inner\"\nfn F() I64 { return 1 }\n")
+    toolkit.Write($r "/part/inner.olang", "import \"../lib\"\n")
+    gitIn(r, String&["init", "-q"])
+    gitIn(r, String&["add", "."])
+    gitIn(r, String&["commit", "-qm", "x"])
+    toolkit.Write($base "/main.olang", "import T \"example.com/me/tools/lib\"\nfn main() ? { }\n")
+    env := String&["OLANG_CACHE=" $base "/cache", "OLANG_GIT_BASE=file://" $base "/remote/", "OLANG_STD=" $root "/std"]
+    o := toolkit.RunShowing(String&[$root "/" $dump, "modules", "main.olang"], env, base)
+    graph := withoutHeaders(withoutBuildModule(o.Stdout))
+    lock := try os.ReadFile($base "/olang.lock") catch default ""
+    return $graph "-- lock\n" $lockKeys(lock)
+}
+
+test "stage 0's build-constants module and the section headers are left out" {
+    assert withoutBuildModule("module a\nmodule olang_build\n  X b\n") == "module a\n  X b\n"
+    assert withoutHeaders("== f\nmodule a\n") == "module a\n"
+}
+
+test "a lock's keys are its rows' first words" {
+    assert lockKeys("# header\nexample.com/me/tools abc123\nother def\n") == "example.com/me/tools\nother\n"
+}

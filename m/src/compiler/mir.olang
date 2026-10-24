@@ -1,0 +1,2506 @@
+# mir - the mid-level IR (compiler/DESIGN.md section 1.8.1): what lowering makes of each typed body, and all that the
+# evaluator (eval, M8), LLVM emission (emit, M9) and the liveness check of owned references (O39-O41, over MIR) read.
+#
+# The contract, in short:
+# - A function is a control-flow graph of basic blocks over typed locals and places, not SSA (rustc's MIR is the
+#   model). Each block is a list of statements and one terminator. Block 0 is the entry.
+# - Everything the source leaves implicit is explicit here, in one place: the order of evaluation (S4, E11b, P1g),
+#   temporaries, every scope opened and closed (O2) - a block's arena, a loop turn's, a join's, an own object's region,
+#   an inert scope, a text builder - the code deferred to every way out of a block, copied on each (S19), the wait for a
+#   join's tasks on each (P1b), catch dispatch as branches over error codes (R9-R11), each checked operation as a test
+#   and a branch (E15a, S18a), every destructor and owner registered (O16, O35), every release (O30, O35) and every hold
+#   (F3). Nothing here is decided again by a later pass: emit and eval execute it.
+# - It is plain data. A function's statements, places and operands index the function's own flat tables - its
+#   projections, operand lists, calls, switch cases, tasks, constants - by Range, so nothing in it refers into a
+#   shorter-lived tree, and a function is reclaimed whole when its scope closes (DESIGN.md 3.1).
+# - Locals keep the typed body's numbering: MIR local i, for i below the typed body's local count, is typed local i
+#   (a parameter, a variable, a held or hidden value, a binding, a capture, a field); lowering's own temporaries
+#   follow. A local lives in its function's frame, or, where the plan says (O26a, T7c), in an arena from its Live.
+# - The verifier (Verify) holds a function to the contract: ids in range, every block reachable and terminated, every
+#   assignment, argument and result typed, every local initialized before it is read on every path, every scope
+#   opened and closed in nesting order on every path and none left open at a return, nothing built into a scope that
+#   is not open or is inert, a join waited for before it closes.
+
+import "source"
+import "types"
+import "typed"
+
+# ---- ids ----
+
+# a function's local, by its index in Locals: the typed body's own first, in its numbering, then lowering's
+type LocalId extends I32
+# a basic block, by its index in Blocks: 0 is the entry
+type BlockId extends I32
+# a scope the function opens, by its index in Scopes
+type ScopeId extends I32
+
+NoBlock BlockId = BlockId(-1)
+NoLocal LocalId = LocalId(-1)
+NoScope ScopeId = ScopeId(-1)
+
+# a run of entries in one of a function's flat tables, from At
+type Range struct(At I32, N I32) {
+    At
+    N
+}
+
+Empty Range = Range(0, 0)
+
+# what a MIR function is: a typed body; the adapter making an instance's Call a function value (E31), whose
+# environment holds the instance; a helper lowering makes for a type; or a module's initialization, which runs its
+# globals' initializers in B5a's order. Two functions are one function exactly when their keys are equal
+type FnKey enum {
+    Body(id typed.BodyId)
+    Adapter(call typed.BodyId)
+    Helper(kind HelperKind, t types.TypeId)
+    Init(module I64)
+}
+
+# the helpers lowering makes for a type (DESIGN.md 1.8). Their ABI is fixed by their kind (HelperType, PassedCount),
+# not by types.ScopeVarsOf: Equal and Hash never build and take no scope, Render takes the text builder it writes
+# into, Zero takes its result scope where its value holds references
+type HelperKind enum {
+    Render     # writes "$x" of a value of the type into a builder (E11a): fn(x T&) with the builder its one scope
+    Equal      # "==" part by part (E10): fn(a T&, b T&) Bool, pure data, calling nothing
+    Hash       # the supplied Hash (E10b): fn(x T&) I64, pure data, calling nothing
+    Zero       # the type's zero value (D13c): fn() T - its constructor called on its parameters' defaults or zeros
+}
+
+# a decision taken about a node after check made it, by eval (or check) and read by lowering and emit: kept under
+# these keys, never written onto the tree (DESIGN.md 1.6.1, 1.8)
+type Key enum {
+    Assert(body typed.BodyId, sp source.Span)       # S18c: an assert decided while compiling
+    Global(module I64, name source.NameId)          # K2: a global baked - its initializer runs at no start-up
+    Literal(body typed.BodyId, site typed.SiteId)   # T29d: a literal's constructor run while compiling
+    Zero(t types.TypeId)                            # D13c: a type's zero value - all zero bits, a call, or none
+}
+
+fn (k Key) Text() String {
+    return match k {
+        case Key.Assert(b, sp) => "assert B" $b " " $sp.Start ":" $sp.End
+        case Key.Global(m, n) => "global " $m ":" $n
+        case Key.Literal(b, s) => "literal B" $b " site " $s
+        case Key.Zero(ty) => "zero T" $ty
+    }
+}
+
+# ---- locals ----
+
+type LocalKind enum {
+    Param      # a parameter, the receiver first: holds its argument at the entry
+    Capture    # a lambda's or an adapter's capture: holds what its environment holds at the entry (D16c, E31)
+    Var        # a typed body's local other than a parameter or a capture: initialized by its Let
+    Temp       # lowering's own: a value in flight, a hold slot (F3), an error code, a try's result slot
+}
+
+# a local: its name (0 for none), where it is written, its type, what it is, and where its storage is - Frame for the
+# function's frame, or an arena (a scope this function opens or one of its scope variables) for a local the plan puts
+# in one (O26a, T7c), whose storage is made by its Live
+type Local struct(Name source.NameId, Sp source.Span, Ty types.TypeId, Kind LocalKind, Home ScopeRef) {
+    Name
+    Sp
+    Ty
+    Kind
+    Home
+}
+
+# ---- scopes ----
+
+type ScopeKind enum {
+    Frame      # the function's own scope, the typed body's block 0: opened first, closed by every return (O2)
+    Block      # a block's arena (O2): opened where the block is entered, closed on every way out of it
+    Loop       # a loop body's: opened and closed every turn (O2b)
+    Join       # a join block's arena: tasks are spawned into it, and it is waited for before it closes (P1b)
+    # an own object's region (O30): opened where the object is built, then given to the slot that owns it (Give), or
+    # closed where the object is never stored (the expression it is built in left first, O35)
+    Region
+    Inert      # a live scope nothing is built in: passed where a callee only reads (O12, a Str's receiver, E11c)
+    Builder    # a text builder and its scratch arena (E11a, E11b): written into, finished into text built elsewhere
+}
+
+# a scope this function opens: what it is, the scope it is opened in (-1: none, the frame's), the typed block it stands
+# for (-1 for none), where it is written, and for a join the errors its wait can fail with (P4b, P4c; 0 for none)
+type ScopeInfo struct(Kind ScopeKind, Parent ScopeId, Block typed.BlockId, Sp source.Span, Errors types.ListId) {
+    Kind
+    Parent
+    Block
+    Sp
+    Errors
+}
+
+# a scope something is built in or passed: one this function opens; one of its scope variables, by index in Vars; the
+# program's (O1b); the frame - storage on the stack, live until the function returns (a temporary nothing keeps, an
+# environment no callee keeps, D16c); or the region of the object a local's reference names (O32, O33)
+type ScopeRef enum {
+    Scope(s ScopeId)
+    Var(i I64)
+    Program
+    Frame
+    RegionOf(l LocalId)
+}
+
+# what a function's scope variable stands for: the ones a call passes first (types.ScopeVarsOf of its type, in order,
+# or the fixed list of a helper's kind), then the scopes of its captures, carried in its environment (D16c)
+type VarKind enum {
+    Param(i I64)       # where parameter i's referent lives, or a by-value one's references (O4b)
+    Result             # the result scope (O14, O18a)
+    Instance           # a constructor's: where its instance lands (C2d)
+    Closing            # a destructor's: the scope being closed (C9a)
+    Capture(i I64)     # where capture i's referent lives (D16c)
+    Builder            # a Render helper's: the text builder it writes into
+}
+
+# ---- places ----
+
+# where a place starts: a local, or a global by its module and name, with its type; None in an unused Place
+type Base enum {
+    None
+    Local(l LocalId)
+    Global(module I64, name source.NameId, ty types.TypeId)
+}
+
+# a step from a place to a part of it. An index is a local's value (or a constant), evaluated before the place is
+# used - never checked here: a check is a test and a branch before it (E16, E15a)
+type Proj enum {
+    Field(i I64)        # a struct's, tuple's or record's field, by position
+    Index(l LocalId)    # an array's element, by an integer local
+    At(i I64)           # an array's element, by a constant
+    Deref               # what a reference names - what an own reference owns among them
+    Payload(tag I64)    # an enum value's payload, a record, for the case it holds: the case tested before (S13b)
+}
+
+# storage, named: a base and its projections, f.Projs[Proj.At ..]
+type Place struct(B Base, Path Range) {
+    B
+    Path
+}
+
+NoPlace Place = Place(Base.None, Empty)
+
+# ---- operands and values ----
+
+type Operand enum {
+    None                                   # no value: a return of none, an assert's absent message
+    Copy(p Place)                          # the place's value, copied
+    Const(ty types.TypeId, bits I64)       # a number, Bool or Char as its bits, null all zero bits; an aggregate's
+                                           # zero bits (D13c's all-zero zero value)
+    # read-only constant storage (T25d): f.Consts[c], one instance for each written position, file and span (E10c,
+    # K2b) - two evaluations, in any instance or call, are the same storage
+    Data(ty types.TypeId, c I32, file I64, sp source.Span)
+}
+
+# a value computed, of one statement. Operands are in f.Ops[args.At ..], evaluated before the value is
+type Rvalue enum {
+    Use(x Operand)
+    Ref(p Place, ty types.TypeId)                  # a reference to the place itself (E12c), of type ty
+    Take(p Place)                                  # the owner p holds, moved out, null left in p (E34)
+    Prim(op typed.PrimOp, ty types.TypeId, args Range)       # an operation, unchecked (E6c), of result type ty
+    # whether op over args, of result type ty, has a true result that does not fit ty: integer + - * and unary -,
+    # / of the most negative value by -1, a narrowing or a float-to-integer conversion (a NaN or an infinity among
+    # those) - E15a's OVERFLOW, tested before the operation runs
+    Overflows(op typed.PrimOp, ty types.TypeId, args Range)
+    Tag(p Place)                                   # the case an enum value holds, as an I64 (S13)
+    # a value made of its parts: a struct (a constructor's assembly, C6), a tuple (D8c), a record, an enum case
+    # (tag its case, args its payload's fields), a fixed array (T7c)
+    Aggregate(ty types.TypeId, tag I64, args Range)
+    New(s ScopeRef, x Operand, ty types.TypeId)    # x given storage in s, a reference ty to it (E12c, O16, O30)
+    # an array value of type ty - its storage n elements in s, each fill (Array<T>(n, fill), D14; an array literal's
+    # storage, E19; a comprehension's, E27). n's range is checked before (D14b)
+    NewArray(s ScopeRef, ty types.TypeId, n Operand, fill Operand)
+    Slice(p Place, lo Operand, hi Operand, ty types.TypeId)   # p's elements lo up to hi, a reference ty (E16a)
+    # a function value (T21) of type ty: code with an environment in s holding args, its captures in order (D16c), or
+    # an adapter's instance (E31); a named function's value has no environment (args empty, s Frame). Where ty's
+    # scopes differ from code's own, the value adapts them (DESIGN.md 1.6.1, T22a). caps (in Refs) are where the
+    # captures that hold references live, in order - code's Capture variables, carried in the environment (D16c);
+    # none recorded (the stand-in placement) is the program's for each
+    Closure(code FnKey, ty types.TypeId, s ScopeRef, args Range, caps Range)
+    # an error code under one error list, as the same error under another (R6): one the target list does not name
+    # becomes its default error (R17), which it then names
+    Recode(code Operand, from types.ListId, to types.ListId)
+    Text(b ScopeRef, into ScopeRef, ty types.TypeId)   # what builder b holds, as text of type ty built in into (E11b)
+}
+
+# what a Write appends to a builder: an array of U8 or Char as bytes, a Char as itself, a number as E11a writes it
+# (an integer in decimal, a float as its shortest text), a Bool as true or false; text and a Char inside another
+# value, as E11a writes them there - a string literal and a character literal, escaped (Quoted, QuotedChar)
+type WriteKind enum {
+    Bytes
+    Quoted
+    Char
+    QuotedChar
+    Int
+    Uint
+    Float
+    Bool
+}
+
+# ---- statements ----
+
+type Stmt enum {
+    # p's place - its projections' indices, evaluated before - is written with the value (S4): a store into an own
+    # slot is preceded by its Release where the slot held one (O35)
+    Assign(sp source.Span, p Place, v Rvalue)
+    Live(sp source.Span, l LocalId)    # l's storage is made: in its Home's arena where it has one; not initialized
+    Dead(sp source.Span, l LocalId)    # l's storage ends; it is not read again until a Live and a store
+    Open(sp source.Span, s ScopeId)    # s opens, inside the scope opened last that is still open (its Parent)
+    # s closes: its owners released and its destructors run, last registered first (O15, O35), its storage
+    # reclaimed. The scope opened last that is still open, and for a join one waited for since its last Spawn
+    Close(sp source.Span, s ScopeId)
+    Give(sp source.Span, s ScopeId)    # region s now belongs to the owner just stored: no longer this function's
+    RegisterDtor(sp source.Span, s ScopeRef, t types.TypeId, x Operand)   # the instance x refers to, a t, destructed
+                                                                          # when s closes (O16)
+    RegisterOwner(sp source.Span, s ScopeRef, p Place)    # the owner slot p released when s closes, if it holds one:
+                                                          # an owner local (O35), a hold (F3), a result in flight (N3)
+    Release(sp source.Span, p Place)   # the object the own slot p holds, if any, released, and p left null (O35)
+    Write(sp source.Span, b ScopeRef, how WriteKind, x Operand)    # x appended to the text builder b (E11a)
+    CopyElems(sp source.Span, dst Place, src Place, n Operand)     # n elements of array src into array dst, from 0
+    Spawn(sp source.Span, j ScopeId, task I32)    # f.Tasks[task] started in join j (P1): see Task
+    Raised(sp source.Span)    # S18d: an error raised at sp that a "!" takes in this body - its trace's first place
+    # B3e: deferred code registered at s, its cleanup at entry - blocks reached by nothing but this, a copy of the
+    # deferred code ending in Resume, which interpret runs for each block a stop leaves (S19's "on every way out", as
+    # the built program, going on, would run it); with entry NoBlock, the newest registered at s about to run on this
+    # way out of s, so no longer pending. Only lowering for interpret makes these
+    Deferred(sp source.Span, s ScopeId, entry BlockId)
+}
+
+# ---- terminators ----
+
+type Term enum {
+    None                                        # not yet set: an error once the function is finished
+    Goto(b BlockId)
+    Branch(c Operand, yes BlockId, no BlockId)  # c a Bool
+    Switch(x Operand, cases Range, otherwise BlockId)   # f.Cases[cases.At ..]: x an integer, each value distinct
+    Call(sp source.Span, c I32)                 # f.Calls[c]
+    Return(sp source.Span, x Operand)           # x the result (None for a function with none); every scope closed
+    Raise(sp source.Span, code Operand)         # the function fails with code, under its own error list (R6)
+    # join j's tasks waited for (P1b): to ok, or, where one let an error through, to failed with code holding the
+    # earliest-spawned's under the join's list (P4b) - failed NoBlock for a join none of whose tasks can fail
+    Wait(sp source.Span, j ScopeId, ok BlockId, code LocalId, failed BlockId)
+    # the test or the process ends (S16, S16a, S18): no deferred code runs, the scopes still open are left to the
+    # runtime's unwinding (S19c, P1d). msg is an Assert's or an Unreachable's message (S17, S16d), None for none
+    Exit(sp source.Span, kind ExitKind, msg Operand)
+    Resume(sp source.Span)    # a cleanup's end (Stmt.Deferred): the stop it ran for goes on to the next
+}
+
+# how an Exit ends: as S16-S16d say, or as a failed check names itself (S18a)
+type ExitKind enum {
+    Done           # S16
+    Fail           # S16a
+    Abort          # S16c: "aborted"
+    Unreachable    # S16d: "unreachable reached" - a value match no clause selects too (S12b); msg its message
+    Assert         # S18: "assertion failed"
+    SliceBounds    # E16b: "slice bounds out of range"
+    ArrayLength    # D14b: "array length out of range"
+    As             # E32: "'as' named what the value is not"
+    FixedLength    # T7d: "array length does not match its fixed storage"
+    Error          # E35: an error a "!" took - its message, the error's name ("io.IoError.FULL"), is the exit's text
+    Escaped        # S16: an error left a test body - the test fails, its FAIL line naming the error, the exit's text
+}
+
+# what a failed check prints after "FILE:LINE: " (S18a); "" for done and fail, which print nothing
+fn ExitText(k ExitKind) String& {
+    return match k {
+        case ExitKind.Done, ExitKind.Fail, ExitKind.Error, ExitKind.Escaped => ""
+        case ExitKind.Abort => "aborted"
+        case ExitKind.Unreachable => "unreachable reached"
+        case ExitKind.Assert => "assertion failed"
+        case ExitKind.SliceBounds => "slice bounds out of range"
+        case ExitKind.ArrayLength => "array length out of range"
+        case ExitKind.As => "'as' named what the value is not"
+        case ExitKind.FixedLength => "array length does not match its fixed storage"
+    }
+}
+
+# what a call reaches
+type Callee enum {
+    Fn(key FnKey, ty types.TypeId)    # a MIR function, of function type ty
+    Extern(f I64, ty types.TypeId)    # an extern fn (X1), by generic.Program's function index
+    Value(x Operand)                  # through a function value: x's type is the function type
+}
+
+# a call: its callee, its arguments one per parameter (the receiver first, defaults filled in, D8a) in f.Ops, the
+# scopes it passes for its callee's passed variables in f.Refs (PassedCount of them), where its result is stored
+# (HasDest false: dropped), the block it continues at, and for a fallible callee the local its error code is put in -
+# under the callee's own error list (R6) - and the block that dispatches it (Err NoBlock for an infallible one).
+# Arguments are evaluated before the terminator, left to right (S4): an operand here is already a value
+type Call struct(Target Callee, Args Range, Scopes Range, Dest Place, HasDest Bool, Ok BlockId, Code LocalId
+                 Err BlockId) {
+    Target
+    Args
+    Scopes
+    Dest
+    HasDest
+    Ok
+    Code
+    Err
+}
+
+type Case struct(Value I64, To BlockId) {
+    Value
+    To
+}
+
+# a task (P1): Target called with Args and Scopes on a thread of its own, each scope it is handed standing in by one of
+# the task's own, folded into it at the join (P2) - emit's and eval's to make, nothing here names them. Targets
+# (f.Places) are the places its results are stored into, on its thread (P1g), their addresses taken at the spawn,
+# before the arguments are evaluated (the operands here are values already). An error its call fails with goes to the
+# first of Clauses (f.Clauses) naming it, run on its thread (P4a); one none takes is re-encoded under its join's list
+# and carried to the join (P4b)
+type Task struct(Target Callee, Args Range, Scopes Range, Targets Range, Clauses Range, Ends Range = Range(0, 0)
+                 EndsSp source.Span = source.Span(0, 0)) {
+    Target
+    Args
+    Scopes
+    Targets
+    Clauses
+    Ends     # "spawn f(x)!" (E35): pairs in f.Ops, an error code then its name as text data, each ending the program
+    EndsSp   # from the task's thread where the call fails with it (P6); where the "!" is
+}
+
+# a task's clause: the errors it takes (f.Items: an error type and a word, -1 every word; All for every error) and
+# its handler, a function value called on the task's thread whose result is the targets' value (P4a) - Operand.None
+# for "catch E { }"
+type TaskClause struct(Items Range, All Bool, Handler Operand) {
+    Items
+    All
+    Handler
+}
+
+# a constant, flattened (Operand.Data): a number's bits, text (f.Bytes), or an array of constants (f.ConstItems,
+# each an index into f.Consts)
+type ConstNode enum {
+    Bits(v I64)
+    Bytes(r Range)
+    Items(r Range)
+}
+
+# a basic block: its statements, run in order, and its terminator
+type BasicBlock struct() {
+    Stmts List<Stmt>
+    T Term = Term.None
+}
+
+# ---- functions ----
+
+# a MIR function: its key, its function type (the receiver first, with its scopes), its file and span; its
+# parameters and captures (locals, in order), its scope variables (the passed ones first), its locals, the scopes it
+# opens, its blocks - and the flat tables its statements index
+type Fn struct(Of FnKey, Ty types.TypeId, File I64, Sp source.Span) {
+    Of
+    Ty
+    File
+    Sp
+    Params List<LocalId>
+    Captures List<LocalId>
+    Vars List<VarKind>
+    Locals List<Local>
+    Scopes List<ScopeInfo>
+    Blocks List<BasicBlock>
+    Projs List<Proj>
+    Ops List<Operand>
+    Refs List<ScopeRef>
+    Places List<Place>
+    Calls List<Call>
+    Cases List<Case>
+    Tasks List<Task>
+    Clauses List<TaskClause>
+    Items List<typed.Item>
+    Consts List<ConstNode>
+    ConstItems List<I32>
+    Bytes List<U8>
+    Taken List<BlockId>     # S18d: each clause's entry, where it takes an error - a kept error return trace cleared there
+}
+
+fn (f mut Fn&) AddLocal(l Local) LocalId {
+    f.Locals.Push(l)
+    return LocalId(I32(f.Locals.Len() - 1))
+}
+
+# a parameter: a local, listed in Params
+fn (f mut Fn&) AddParam(name source.NameId, sp source.Span, ty types.TypeId) LocalId {
+    l := f.AddLocal(Local(name, sp, ty, LocalKind.Param, ScopeRef.Frame))
+    f.Params.Push(l)
+    return l
+}
+
+fn (f mut Fn&) AddTemp(ty types.TypeId, sp source.Span) LocalId {
+    return f.AddLocal(Local(source.NameId(0), sp, ty, LocalKind.Temp, ScopeRef.Frame))
+}
+
+fn (f mut Fn&) AddScope(kind ScopeKind, parent ScopeId, block typed.BlockId, sp source.Span
+                        errors types.ListId = types.ListId(0)) ScopeId {
+    f.Scopes.Push(ScopeInfo(kind, parent, block, sp, errors))
+    return ScopeId(I32(f.Scopes.Len() - 1))
+}
+
+fn (f mut Fn&) NewBlock() BlockId {
+    f.Blocks.Push(BasicBlock())
+    return BlockId(I32(f.Blocks.Len() - 1))
+}
+
+# through a local: stage 0 builds the first chunk of a list pushed to as `f.Blocks[i].Stmts.Push(s)` (E31b's held copy
+# of an element of a parameter's list) where the call's frame is, and frees it on return
+fn (f mut Fn&) Add(b BlockId, s Stmt&) {
+    blk := f.Blocks[I64(b)]
+    blk.Stmts.Push(s)
+}
+
+fn (f mut Fn&) End(b BlockId, t Term) { f.Blocks[I64(b)].T = t }
+
+fn (f Fn&) TermOf(b BlockId) Term { return f.Blocks[I64(b)].T }
+
+# a place: a local, or a base and its projections
+fn (f mut Fn&) Place(base Base, projs Array<Proj>&) Place {
+    at := f.Projs.Len()
+    for p in projs { f.Projs.Push(p) }
+    return Place(base, Range(I32(at), I32(projs.Len())))
+}
+
+fn L(l LocalId) Place { return Place(Base.Local(l), Empty) }
+
+fn (f mut Fn&) Args(xs Array<Operand>&) Range {
+    at := f.Ops.Len()
+    for x in xs { f.Ops.Push(x) }
+    return Range(I32(at), I32(xs.Len()))
+}
+
+fn (f mut Fn&) ScopeRefs(xs Array<ScopeRef>&) Range {
+    at := f.Refs.Len()
+    for x in xs { f.Refs.Push(x) }
+    return Range(I32(at), I32(xs.Len()))
+}
+
+fn (f mut Fn&) AddCall(c Call) I32 {
+    f.Calls.Push(c)
+    return I32(f.Calls.Len() - 1)
+}
+
+fn (f mut Fn&) AddCases(cs Array<Case>&) Range {
+    at := f.Cases.Len()
+    for c in cs { f.Cases.Push(c) }
+    return Range(I32(at), I32(cs.Len()))
+}
+
+fn (f mut Fn&) AddTask(target Callee, args Range, scopes Range, targets Array<Place>&, clauses Array<TaskClause>&
+                       ends Range = Range(0, 0), endsSp source.Span = source.Span(0, 0)) I32 {
+    at := f.Places.Len()
+    for p in targets { f.Places.Push(p) }
+    ct := f.Clauses.Len()
+    for c in clauses { f.Clauses.Push(c) }
+    f.Tasks.Push(Task(target, args, scopes, Range(I32(at), I32(targets.Len())), Range(I32(ct), I32(clauses.Len())), ends
+                      endsSp))
+    return I32(f.Tasks.Len() - 1)
+}
+
+fn (f mut Fn&) AddItems(xs Array<typed.Item>&) Range {
+    at := f.Items.Len()
+    for x in xs { f.Items.Push(x) }
+    return Range(I32(at), I32(xs.Len()))
+}
+
+# a typed constant, flattened into this function's tables: its index in Consts
+fn (f mut Fn&) AddConst(c typed.Const&) I32 {
+    node := match c {
+        case typed.Const.Bits(v) => ConstNode.Bits(v)
+        case typed.Const.Bytes(b) => ConstNode.Bytes(f.addBytes(b))
+        case typed.Const.Items(xs) => ConstNode.Items(f.addConstItems(xs))
+    }
+    f.Consts.Push(node)
+    return I32(f.Consts.Len() - 1)
+}
+
+fn (f mut Fn&) addBytes(b Array<U8>&) Range {
+    at := f.Bytes.Len()
+    for x in b { f.Bytes.Push(x) }
+    return Range(I32(at), I32(b.Len()))
+}
+
+fn (f mut Fn&) addConstItems(xs Array<typed.Const&>&) Range {
+    ids := Array<I32>(xs.Len())
+    for i in range xs.Len() { ids[i] = f.AddConst(xs[i]) }
+    at := f.ConstItems.Len()
+    for id in ids { f.ConstItems.Push(id) }
+    return Range(I32(at), I32(ids.Len()))
+}
+
+# ---- what the ABI says ----
+
+# a helper's function type: Render fn(x T&), Equal fn(a T&, b T&) Bool, Hash fn(x T&) I64, Zero fn() T - each
+# reference read-only (DESIGN.md 1.8.1)
+fn HelperType(t mut types.Table&, kind HelperKind, ty types.TypeId) types.TypeId {
+    r := t.Ref(ty, types.ReadOnly)
+    return match kind {
+        case HelperKind.Render => t.Func(t.List(types.TypeId[r, I64T]), types.VoidT, types.ListId(0))
+        case HelperKind.Equal => t.Func(t.List(types.TypeId[r, r]), types.BoolT, types.ListId(0))
+        case HelperKind.Hash => t.Func(t.List1(r), I64T, types.ListId(0))
+        case HelperKind.Zero => t.Func(types.ListId(0), ty, types.ListId(0))
+    }
+}
+
+I32T types.TypeId = types.TypeId(5)
+I64T types.TypeId = types.TypeId(6)
+
+# how many scopes a call of a callee of function type ty passes: types.ScopeVarsOf's, but a helper's own - Render one
+# (its builder), Equal and Hash none - and an extern's none
+fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
+    return match c {
+        case Callee.Fn(FnKey.Helper(HelperKind.Render, _), _) => 1
+        case Callee.Fn(FnKey.Helper(HelperKind.Equal, _), _), Callee.Fn(FnKey.Helper(HelperKind.Hash, _), _) => 0
+        case Callee.Extern(_, _) => 0
+        case _ => t.ScopeVarsOf(ty).Len()
+    }
+}
+
+# an error's code under an error list (R6): (its type's position from 1) << 16 | its word; an error type the list does
+# not name is its default error where the list has one (R17); -1 where neither
+fn ErrorCode(t types.Table&, errors types.ListId, err types.TypeId, word I64) I64 {
+    xs := t.Items(errors)
+    for k in range xs.Len() {
+        if t.Same(t.ErrOf(xs[k]), t.ErrOf(err)) { return ((k + 1) << 16) | word }
+    }
+    for k in range xs.Len() {
+        if xs[k] == types.DefaultErrT { return (k + 1) << 16 }
+    }
+    return -1
+}
+
+# ---- the verifier ----
+
+# the problems with a function, a line each - "bbN[i]: ..." for the i-th statement of block N, "bbN[term]: ..." for
+# its terminator, "fn: ..." for the function's own tables; "" when it keeps the contract
+fn (f Fn&) Verify(t mut types.Table&) String {
+    v mut verifier&t = verifier(f, t)
+    v.run()
+    return v.out.ToString()
+}
+
+type verifier struct(F Fn&, T mut types.Table&) {
+    F
+    T
+    out StringBuilder
+    at I64 = -1         # the block a problem is in, -1 for the function's own tables
+    idx I64 = -1        # its statement, -1 for the terminator
+    report Bool = true
+    # the dataflow, per block's entry: whether it is reached yet, which locals are initialized and which arena locals
+    # live (flat, nb x nl), which joins have tasks not waited for (nb x ns), and the stack of open scopes (in stacks)
+    seen mut Array<Bool>& = null
+    initAt mut Array<Bool>& = null
+    liveAt mut Array<Bool>& = null
+    pendAt mut Array<Bool>& = null
+    stackAt mut Array<I64>& = null
+    stackN mut Array<I64>& = null
+    stacks List<ScopeId>
+    reached mut Array<Bool>& = null
+    # the state walking a block
+    init mut Array<Bool>& = null
+    live mut Array<Bool>& = null
+    pend mut Array<Bool>& = null
+    stack List<ScopeId>
+    changed Bool = false
+}
+
+fn (v mut verifier&) bad(text String&) {
+    if not v.report { return }
+    if v.at < 0 {
+        v.out.Push("fn: ")
+    } else if v.idx < 0 {
+        v.out.Push("bb" $v.at "[term]: ")
+    } else {
+        v.out.Push("bb" $v.at "[" $v.idx "]: ")
+    }
+    v.out.Push(text)
+    v.out.PushChar('\n')
+}
+
+fn (v mut verifier&) run() {
+    if not v.shape() { return }
+    v.reach()
+    v.types()
+    v.flow()
+}
+
+# ---- shape: ids and ranges in bounds, every block terminated ----
+
+fn (v mut verifier&) shape() Bool {
+    f := v.F
+    start := v.out.Len()
+    v.at, v.idx = -1, -1
+    if f.Blocks.Len() == 0 {
+        v.bad("no blocks")
+        return false
+    }
+    if v.T.KindOf(f.Ty) != types.Kind.Func {
+        v.bad("its type is no function type")
+        return false
+    }
+    ps := v.T.Items(v.T.Params(f.Ty))
+    if ps.Len() != f.Params.Len() {
+        v.bad("its type has " $ps.Len() " parameters, its Params " $f.Params.Len())
+    }
+    for i in range f.Params.Len() {
+        if v.local(f.Params[i]) {
+            l := f.Locals[I64(f.Params[i])]
+            if l.Kind != LocalKind.Param { v.bad("parameter " $i " is local L" $f.Params[i] ", not a Param") }
+            if i < ps.Len() and not v.T.Same(l.Ty, ps[i]) {
+                v.bad("parameter " $i " is a " $v.T.Canon(l.Ty) ", its type says " $v.T.Canon(ps[i]))
+            }
+        }
+    }
+    for c in f.Captures {
+        if v.local(c) and f.Locals[I64(c)].Kind != LocalKind.Capture { v.bad("capture L" $c " is no Capture local") }
+    }
+    for i in range f.Locals.Len() {
+        l := f.Locals[i]
+        if l.Ty == types.UnknownT { v.bad("L" $i " has the Unknown type") }
+        v.ref(l.Home)
+    }
+    for i in range f.Scopes.Len() {
+        p := f.Scopes[i].Parent
+        if p >= ScopeId(I32(i)) or p < NoScope { v.bad("S" $i "'s parent S" $p " is not opened before it") }
+    }
+    for c in f.Calls {
+        v.callee(c.Target)
+        v.ops(c.Args)
+        v.refs(c.Scopes)
+        if c.HasDest { v.place(c.Dest) }
+        v.block(c.Ok)
+        if c.Err != NoBlock {
+            v.block(c.Err)
+            v.local(c.Code)
+        }
+    }
+    for c in f.Cases { v.block(c.To) }
+    for k in f.Tasks {
+        v.callee(k.Target)
+        v.ops(k.Args)
+        v.ops(k.Ends)
+        v.refs(k.Scopes)
+        if v.within(k.Targets, f.Places.Len(), "targets") {
+            for i in range k.Targets.N { v.place(f.Places[I64(k.Targets.At) + i]) }
+        }
+        if v.within(k.Clauses, f.Clauses.Len(), "clauses") {
+            for i in range k.Clauses.N {
+                cl := f.Clauses[I64(k.Clauses.At) + i]
+                v.within(cl.Items, f.Items.Len(), "items")
+                v.operand(cl.Handler)
+            }
+        }
+    }
+    for x in f.Ops { v.operand(x) }
+    for x in f.Refs { v.ref(x) }
+    for x in f.Projs {
+        match x {
+            case Proj.Index(l) { v.local(l) }
+            case _ { }
+        }
+    }
+    for i in range f.Consts.Len() {
+        match f.Consts[i] {
+            case ConstNode.Bytes(r) { v.within(r, f.Bytes.Len(), "bytes") }
+            case ConstNode.Items(r) {
+                if v.within(r, f.ConstItems.Len(), "constant items") {
+                    for k in range r.N {
+                        c := f.ConstItems[I64(r.At) + k]
+                        if c < I32(0) or c >= I32(i) { v.bad("constant " $i " holds constant " $c ", not made before it") }
+                    }
+                }
+            }
+            case _ { }
+        }
+    }
+    for b in range f.Blocks.Len() {
+        v.at = b
+        bb := f.Blocks[b]
+        for i in range bb.Stmts.Len() {
+            v.idx = i
+            v.stmtShape(bb.Stmts[i])
+        }
+        v.idx = -1
+        v.termShape(bb.T)
+    }
+    v.at, v.idx = -1, -1
+    return v.out.Len() == start
+}
+
+fn (v mut verifier&) within(r Range, n I64, what String&) Bool {
+    if r.At < I32(0) or r.N < I32(0) or I64(r.At) + I64(r.N) > n {
+        v.bad("a range of " $what " out of bounds")
+        return false
+    }
+    return true
+}
+
+fn (v mut verifier&) local(l LocalId) Bool {
+    if l < LocalId(0) or I64(l) >= v.F.Locals.Len() {
+        v.bad("no local L" $l)
+        return false
+    }
+    return true
+}
+
+fn (v mut verifier&) block(b BlockId) Bool {
+    if b < BlockId(0) or I64(b) >= v.F.Blocks.Len() {
+        v.bad("no block bb" $b)
+        return false
+    }
+    return true
+}
+
+fn (v mut verifier&) scope(s ScopeId) Bool {
+    if s < ScopeId(0) or I64(s) >= v.F.Scopes.Len() {
+        v.bad("no scope S" $s)
+        return false
+    }
+    return true
+}
+
+fn (v mut verifier&) ref(r ScopeRef) {
+    match r {
+        case ScopeRef.Scope(s) { v.scope(s) }
+        case ScopeRef.Var(i) {
+            if i < 0 or i >= v.F.Vars.Len() { v.bad("no scope variable V" $i) }
+        }
+        case ScopeRef.RegionOf(l) { v.local(l) }
+        case _ { }
+    }
+}
+
+fn (v mut verifier&) ops(r Range) {
+    v.within(r, v.F.Ops.Len(), "operands")
+}
+
+fn (v mut verifier&) refs(r Range) {
+    v.within(r, v.F.Refs.Len(), "scopes")
+}
+
+fn (v mut verifier&) place(p Place) {
+    match p.B {
+        case Base.Local(l) { v.local(l) }
+        case Base.None { v.bad("a place with no base") }
+        case _ { }
+    }
+    v.within(p.Path, v.F.Projs.Len(), "projections")
+}
+
+fn (v mut verifier&) operand(x Operand) {
+    match x {
+        case Operand.Copy(p) { v.place(p) }
+        case Operand.Data(_, c, _, _) {
+            if c < I32(0) or I64(c) >= v.F.Consts.Len() { v.bad("no constant " $c) }
+        }
+        case _ { }
+    }
+}
+
+fn (v mut verifier&) callee(c Callee) {
+    match c {
+        case Callee.Value(x) { v.operand(x) }
+        case _ { }
+    }
+}
+
+fn (v mut verifier&) stmtShape(st Stmt&) {
+    match st {
+        case Stmt.Assign(_, p, rv) {
+            v.place(p)
+            v.rvalueShape(rv)
+        }
+        case Stmt.Live(_, l), Stmt.Dead(_, l) { v.local(l) }
+        case Stmt.Open(_, s), Stmt.Close(_, s), Stmt.Give(_, s) { v.scope(s) }
+        case Stmt.RegisterDtor(_, s, _, x) {
+            v.ref(s)
+            v.operand(x)
+        }
+        case Stmt.RegisterOwner(_, s, p) {
+            v.ref(s)
+            v.place(p)
+        }
+        case Stmt.Release(_, p) { v.place(p) }
+        case Stmt.Write(_, b, _, x) {
+            v.ref(b)
+            v.operand(x)
+        }
+        case Stmt.CopyElems(_, d, src, n) {
+            v.place(d)
+            v.place(src)
+            v.operand(n)
+        }
+        case Stmt.Spawn(_, j, k) {
+            v.scope(j)
+            if k < I32(0) or I64(k) >= v.F.Tasks.Len() { v.bad("no task " $k) }
+        }
+        case Stmt.Raised(_) { }
+        case Stmt.Deferred(_, s, e) {
+            v.scope(s)
+            if e != NoBlock { v.block(e) }
+        }
+    }
+}
+
+fn (v mut verifier&) rvalueShape(rv Rvalue) {
+    match rv {
+        case Rvalue.Use(x) { v.operand(x) }
+        case Rvalue.Ref(p, _), Rvalue.Take(p), Rvalue.Tag(p) { v.place(p) }
+        case Rvalue.Prim(_, _, r), Rvalue.Overflows(_, _, r), Rvalue.Aggregate(_, _, r) { v.ops(r) }
+        case Rvalue.New(s, x, _) {
+            v.ref(s)
+            v.operand(x)
+        }
+        case Rvalue.NewArray(s, _, n, fill) {
+            v.ref(s)
+            v.operand(n)
+            v.operand(fill)
+        }
+        case Rvalue.Slice(p, lo, hi, _) {
+            v.place(p)
+            v.operand(lo)
+            v.operand(hi)
+        }
+        case Rvalue.Closure(_, _, s, r, cs) {
+            v.ref(s)
+            v.ops(r)
+            v.refs(cs)
+        }
+        case Rvalue.Recode(x, _, _) { v.operand(x) }
+        case Rvalue.Text(b, into, _) {
+            v.ref(b)
+            v.ref(into)
+        }
+    }
+}
+
+fn (v mut verifier&) termShape(t Term) {
+    match t {
+        case Term.None { v.bad("no terminator") }
+        case Term.Goto(b) { v.block(b) }
+        case Term.Branch(c, y, n) {
+            v.operand(c)
+            v.block(y)
+            v.block(n)
+        }
+        case Term.Switch(x, r, o) {
+            v.operand(x)
+            v.within(r, v.F.Cases.Len(), "cases")
+            v.block(o)
+        }
+        case Term.Call(_, c) {
+            if c < I32(0) or I64(c) >= v.F.Calls.Len() { v.bad("no call " $c) }
+        }
+        case Term.Return(_, x), Term.Raise(_, x), Term.Exit(_, _, x) { v.operand(x) }
+        case Term.Wait(_, j, ok, code, failed) {
+            v.scope(j)
+            v.block(ok)
+            if failed != NoBlock {
+                v.block(failed)
+                v.local(code)
+            }
+        }
+        case Term.Resume(_) { }
+    }
+}
+
+# ---- reachability ----
+
+fn (v mut verifier&) succs(t Term) Array<BlockId> {
+    f := v.F
+    return match t {
+        case Term.Goto(b) => BlockId[b]
+        case Term.Branch(_, y, n) => BlockId[y, n]
+        case Term.Switch(_, r, o) => v.switchSuccs(r, o)
+        case Term.Call(_, c) => (BlockId[f.Calls[I64(c)].Ok] if f.Calls[I64(c)].Err == NoBlock
+                                 else BlockId[f.Calls[I64(c)].Ok, f.Calls[I64(c)].Err])
+        case Term.Wait(_, _, ok, _, failed) => BlockId[ok] if failed == NoBlock else BlockId[ok, failed]
+        case _ => BlockId[]
+    }
+}
+
+fn (v mut verifier&) switchSuccs(r Range, o BlockId) Array<BlockId> {
+    out := Array<BlockId>(I64(r.N) + 1)
+    for i in range r.N { out[i] = v.F.Cases[I64(r.At) + i].To }
+    out[I64(r.N)] = o
+    return out
+}
+
+fn (v mut verifier&) reach() {
+    nb := v.F.Blocks.Len()
+    v.reached = Array<Bool>(nb)
+    work List<BlockId>
+    work.Push(BlockId(0))
+    v.reached[0] = true
+    for work.Len() > 0 {
+        b := try work.Pop() catch { unreachable }
+        succ List<BlockId>
+        for s in v.succs(v.F.Blocks[I64(b)].T) { succ.Push(s) }
+        # a cleanup's entry, reached from where its deferred code is registered
+        for st in v.F.Blocks[I64(b)].Stmts {
+            match st {
+                case Stmt.Deferred(_, _, e) {
+                    if e != NoBlock { succ.Push(e) }
+                }
+                case _ { }
+            }
+        }
+        for s in succ {
+            if not v.reached[I64(s)] {
+                v.reached[I64(s)] = true
+                work.Push(s)
+            }
+        }
+    }
+    v.idx = -1
+    for b in range nb {
+        if not v.reached[b] {
+            v.at = b
+            v.bad("unreachable: no path from the entry")
+        }
+    }
+}
+
+# ---- types ----
+
+fn (v mut verifier&) types() {
+    f := v.F
+    for b in range f.Blocks.Len() {
+        if not v.reached[b] { continue }
+        v.at = b
+        bb := f.Blocks[b]
+        for i in range bb.Stmts.Len() {
+            v.idx = i
+            v.stmtTypes(bb.Stmts[i])
+        }
+        v.idx = -1
+        v.termTypes(bb.T)
+    }
+    v.at, v.idx = -1, -1
+}
+
+fn (v mut verifier&) canon(ty types.TypeId) String { return v.T.Canon(ty) }
+
+# whether a value of type from may be put where a to is: one representation (T29: a declared type over another is its
+# representation, an array of a declared number one of its base's, T29h), null into a reference or a function value,
+# and a reference into one of the same referent with no permission it lacks - writable or owning dropped (T25b; a
+# borrow of an own slot, O32)
+fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
+    t := v.T
+    if from == types.UnknownT or to == types.UnknownT { return false }
+    if v.sameRepr(from, to) { return true }
+    if from == types.NullT { return t.IsRef(to) or t.KindOf(to) == types.Kind.Func }
+    if t.IsRef(from) and t.IsRef(to) {
+        pf, pt := t.PermOf(from), t.PermOf(to)
+        return v.sameRepr(t.Referent(from), t.Referent(to)) and (pf | pt) == pf
+    }
+    return false
+}
+
+# whether two types have one representation: past declared types over others (T29), and through arrays to their
+# elements' (T29h's Array<Char> is an Array<U8>)
+fn (v mut verifier&) sameRepr(a types.TypeId, b types.TypeId) Bool {
+    t := v.T
+    ra, rb := t.Repr(a), t.Repr(b)
+    if t.Same(ra, rb) { return true }
+    if t.KindOf(ra) == types.Kind.Array and t.KindOf(rb) == types.Kind.Array {
+        return t.Length(ra) == t.Length(rb) and v.sameRepr(t.Elem(ra), t.Elem(rb))
+    }
+    return false
+}
+
+# a call's result as the caller holds it: a result built in the result scope is new storage only the caller holds, and
+# writable (T25b) - a reference result built, or one of several results built, with its write permission
+fn (v mut verifier&) held(f types.TypeId) types.TypeId {
+    t := v.T
+    res := t.Result(f)
+    if t.KindOf(res) == types.Kind.Tuple {
+        xs := t.Items(t.Parts(res))
+        out := Array<types.TypeId>(xs.Len())
+        for k in range xs.Len() { out[k] = v.builtPart(f, k, xs[k]) }
+        return t.Tuple(t.List(out))
+    }
+    return v.builtPart(f, 0, res)
+}
+
+fn (v mut verifier&) builtPart(f types.TypeId, k I64, x types.TypeId) types.TypeId {
+    t := v.T
+    if not t.IsRef(x) or t.ResultFrom(f, k) != types.OwnScope { return x }
+    return t.Ref(t.Referent(x), t.PermOf(x) | types.Writable)
+}
+
+fn (v mut verifier&) want(from types.TypeId, to types.TypeId, what String&) {
+    if not v.fits(from, to) { v.bad($what " is a " $v.canon(from) ", where a " $v.canon(to) " is wanted") }
+}
+
+# an array type, past a declared type over one; Unknown for none
+fn (v mut verifier&) arrayOf(ty types.TypeId) types.TypeId {
+    r := v.T.Repr(ty)
+    return r if v.T.KindOf(r) == types.Kind.Array else types.UnknownT
+}
+
+# the fields of a struct, a tuple or a record, in order; none (with ok false) for any other
+fn (v mut verifier&) fieldsOf(ty types.TypeId) types.ListId, Bool {
+    t := v.T
+    r := t.Repr(ty)
+    k := t.KindOf(r)
+    if k == types.Kind.Tuple or k == types.Kind.Record { return t.Parts(r), true }
+    if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct and t.HasBody(r) {
+        return t.Fields(r), true
+    }
+    return types.ListId(0), false
+}
+
+# an enum's cases' payloads (a Record, or 0 for none), in order; none (with ok false) for any other type
+fn (v mut verifier&) casesOf(ty types.TypeId) types.ListId, Bool {
+    t := v.T
+    r := t.Repr(ty)
+    if t.KindOf(r) == types.Kind.AnonEnum { return t.ShapeCases(r), true }
+    if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum and t.HasBody(r) {
+        return t.Cases(r), true
+    }
+    return types.ListId(0), false
+}
+
+fn (v mut verifier&) localType(l LocalId) types.TypeId { return v.F.Locals[I64(l)].Ty }
+
+# a place's type, its projections followed; Unknown, said, where one does not apply
+fn (v mut verifier&) placeType(p Place) types.TypeId {
+    t := v.T
+    ty := match p.B {
+        case Base.Local(l) => v.localType(l)
+        case Base.Global(_, _, gt) => gt
+        case Base.None => types.UnknownT
+    }
+    for i in range p.Path.N {
+        if ty == types.UnknownT { return ty }
+        pr := v.F.Projs[I64(p.Path.At) + i]
+        match pr {
+            case Proj.Field(k) {
+                fl, ok := v.fieldsOf(ty)
+                fs := t.Items(fl)
+                if not ok or k < 0 or k >= fs.Len() {
+                    v.bad("no field " $k " in a " $v.canon(ty))
+                    return types.UnknownT
+                }
+                ty = fs[k]
+            }
+            case Proj.Index(l) {
+                if not t.IsInt(t.Repr(v.localType(l))) { v.bad("an index L" $l " is a " $v.canon(v.localType(l))) }
+                a := v.arrayOf(ty)
+                if a == types.UnknownT {
+                    v.bad("an index into a " $v.canon(ty) ", not an array")
+                    return a
+                }
+                ty = t.Elem(a)
+            }
+            case Proj.At(k) {
+                a := v.arrayOf(ty)
+                if a == types.UnknownT {
+                    v.bad("an index into a " $v.canon(ty) ", not an array")
+                    return a
+                }
+                n := t.Length(a)
+                if k < 0 or (n != types.TypeId(0) and t.KindOf(n) == types.Kind.Const and k >= t.ConstValue(n)) {
+                    v.bad("constant index " $k " outside a " $v.canon(ty))
+                }
+                ty = t.Elem(a)
+            }
+            case Proj.Deref {
+                if not t.IsRef(ty) {
+                    v.bad("a deref of a " $v.canon(ty) ", not a reference")
+                    return types.UnknownT
+                }
+                ty = t.Referent(ty)
+            }
+            case Proj.Payload(tag) {
+                cl, ok := v.casesOf(ty)
+                cs := t.Items(cl)
+                if not ok or tag < 0 or tag >= cs.Len() {
+                    v.bad("no case " $tag " in a " $v.canon(ty))
+                    return types.UnknownT
+                }
+                if cs[tag] == types.TypeId(0) {
+                    v.bad("case " $tag " of a " $v.canon(ty) " has no payload")
+                    return types.UnknownT
+                }
+                ty = cs[tag]
+            }
+        }
+    }
+    return ty
+}
+
+fn (v mut verifier&) operandType(x Operand) types.TypeId {
+    return match x {
+        case Operand.None => types.VoidT
+        case Operand.Copy(p) => v.placeType(p)
+        case Operand.Const(ty, _), Operand.Data(ty, _, _, _) => ty
+    }
+}
+
+fn (v mut verifier&) arg(r Range, i I64) Operand { return v.F.Ops[I64(r.At) + i] }
+
+fn (v mut verifier&) stmtTypes(s Stmt&) {
+    t := v.T
+    match s {
+        case Stmt.Assign(_, p, rv) {
+            pt := v.placeType(p)
+            rt := v.rvalueType(rv)
+            if pt != types.UnknownT and rt != types.UnknownT { v.want(rt, pt, "the value stored") }
+            # a store into an own slot takes an owner: one moved (Take), made (New in a region) or carried
+            if t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0 and t.IsRef(rt) and (t.PermOf(rt) & types.Owning) == 0 {
+                v.bad("an own slot given a borrow, not an owner")
+            }
+        }
+        case Stmt.RegisterDtor(_, _, ty, x) {
+            xt := v.operandType(x)
+            if not t.IsRef(xt) or not t.Same(t.Referent(xt), ty) {
+                v.bad("a destructor registered for a " $v.canon(xt) ", not a reference to a " $v.canon(ty))
+            } else if not t.Destructs(ty) {
+                v.bad("a destructor registered for a " $v.canon(ty) ", which declares none")
+            }
+        }
+        case Stmt.RegisterOwner(_, _, p), Stmt.Release(_, p) {
+            pt := v.placeType(p)
+            if pt != types.UnknownT and not (t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0) {
+                v.bad("an owner slot of a " $v.canon(pt) ", not an own reference")
+            }
+        }
+        case Stmt.Write(_, b, how, x) {
+            v.builder(b)
+            xt := v.operandType(x)
+            r := t.Repr(xt)
+            good := match how {
+                case WriteKind.Bytes, WriteKind.Quoted => v.isText(xt)
+                case WriteKind.Char, WriteKind.QuotedChar => r == types.TypeId(7)
+                case WriteKind.Int => t.IsInt(r) and not t.IsUnsigned(r)
+                case WriteKind.Uint => t.IsUnsigned(r)
+                case WriteKind.Float => t.IsFloat(r)
+                case WriteKind.Bool => r == types.BoolT
+            }
+            if not good { v.bad("a " $short($how) " write of a " $v.canon(xt)) }
+        }
+        case Stmt.CopyElems(_, d, src, n) {
+            da := v.arrayOf(v.placeType(d))
+            sa := v.arrayOf(v.placeType(src))
+            if da == types.UnknownT or sa == types.UnknownT {
+                v.bad("elements copied between places that are not both arrays")
+            } else if not t.Same(t.Repr(t.Elem(da)), t.Repr(t.Elem(sa))) {
+                v.bad("elements copied between a " $v.canon(sa) " and a " $v.canon(da))
+            }
+            if not t.IsInt(t.Repr(v.operandType(n))) { v.bad("a count of copied elements that is no integer") }
+        }
+        case Stmt.Spawn(_, j, k) {
+            if v.F.Scopes[I64(j)].Kind != ScopeKind.Join { v.bad("a spawn into S" $j ", which is no join") }
+            task := v.F.Tasks[I64(k)]
+            ty := v.calleeType(task.Target)
+            if ty != types.UnknownT {
+                v.args(task.Target, ty, task.Args, task.Scopes)
+                rs := t.Results(t.Func(t.Params(ty), v.held(ty), t.Errors(ty)))
+                if task.Targets.N > I32(0) and I64(task.Targets.N) != rs.Len() {
+                    v.bad("a task with " $task.Targets.N " targets for " $rs.Len() " results")
+                } else {
+                    for i in range task.Targets.N {
+                        v.want(rs[i], v.placeType(v.F.Places[I64(task.Targets.At) + i]), "a task's result " $i)
+                    }
+                }
+                if task.Clauses.N > I32(0) and t.Items(t.Errors(ty)).Len() == 0 {
+                    v.bad("a task's clauses for a call that cannot fail")
+                }
+            }
+        }
+        case _ { }
+    }
+}
+
+# an array of U8 or of Char, or a reference to one: what a Bytes write appends
+fn (v mut verifier&) isText(ty types.TypeId) Bool {
+    t := v.T
+    x := t.Referent(t.Repr(ty)) if t.IsRef(t.Repr(ty)) else ty
+    a := v.arrayOf(x)
+    return a != types.UnknownT and t.Repr(t.Elem(a)) == types.TypeId(7)
+}
+
+# a scope a Write or a Text reads: a builder this function opened, or its builder variable
+fn (v mut verifier&) builder(b ScopeRef) {
+    good := match b {
+        case ScopeRef.Scope(s) => v.F.Scopes[I64(s)].Kind == ScopeKind.Builder
+        case ScopeRef.Var(i) => v.F.Vars[i] == VarKind.Builder
+        case _ => false
+    }
+    if not good { v.bad("a text builder that is none") }
+}
+
+fn (v mut verifier&) rvalueType(rv Rvalue) types.TypeId {
+    t := v.T
+    return match rv {
+        case Rvalue.Use(x) => v.operandType(x)
+        case Rvalue.Ref(p, ty) => v.refType(v.placeType(p), ty)
+        case Rvalue.Take(p) => v.takeType(v.placeType(p))
+        case Rvalue.Prim(op, ty, r) => v.primType(op, ty, r)
+        case Rvalue.Overflows(op, ty, r) => v.overflowsType(op, ty, r)
+        case Rvalue.Tag(p) => v.tagType(v.placeType(p))
+        case Rvalue.Aggregate(ty, tag, r) => v.aggregateType(ty, tag, r)
+        case Rvalue.New(_, x, ty) => v.refType(v.operandType(x), ty)
+        case Rvalue.NewArray(_, ty, n, fill) => v.newArrayType(ty, n, fill)
+        case Rvalue.Slice(p, lo, hi, ty) => v.sliceType(v.placeType(p), lo, hi, ty)
+        case Rvalue.Closure(_, ty, _, _, _) => v.closureType(ty)
+        case Rvalue.Recode(x, _, _) => v.intOf(v.operandType(x), I32T, "an error code")
+        case Rvalue.Text(b, _, ty) => v.textType(b, ty)
+    }
+}
+
+fn (v mut verifier&) intOf(got types.TypeId, want types.TypeId, what String&) types.TypeId {
+    if v.T.Repr(got) != want { v.bad($what " is a " $v.canon(got) ", not a " $v.canon(want)) }
+    return want
+}
+
+fn (v mut verifier&) refType(of types.TypeId, ty types.TypeId) types.TypeId {
+    t := v.T
+    if not t.IsRef(ty) {
+        v.bad("a reference typed " $v.canon(ty))
+        return types.UnknownT
+    }
+    if of != types.UnknownT and not v.fits(of, t.Referent(ty)) {
+        v.bad("a reference " $v.canon(ty) " to a " $v.canon(of))
+    }
+    return ty
+}
+
+fn (v mut verifier&) takeType(of types.TypeId) types.TypeId {
+    if of != types.UnknownT and not (v.T.IsRef(of) and (v.T.PermOf(of) & types.Owning) != 0) {
+        v.bad("a take of a " $v.canon(of) ", not an own reference")
+    }
+    return of
+}
+
+fn (v mut verifier&) tagType(of types.TypeId) types.TypeId {
+    _, ok := v.casesOf(of)
+    if of != types.UnknownT and not ok { v.bad("the case of a " $v.canon(of) ", not an enum") }
+    return I64T
+}
+
+fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.TypeId {
+    t := v.T
+    n := I64(r.N)
+    want := match op {
+        case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast => 1
+        case typed.PrimOp.Len, typed.PrimOp.AtomicLoad, typed.PrimOp.Retire => 1
+        case typed.PrimOp.InRange, typed.PrimOp.InRangeIncl => -1
+        case typed.PrimOp.AtomicCompareSwap => 3
+        case _ => 2
+    }
+    if want < 0 {
+        v.bad($short($op) " is a check: a test and a branch in MIR")
+        return types.UnknownT
+    }
+    if n != want {
+        v.bad($short($op) " of " $n " operands")
+        return types.UnknownT
+    }
+    a := v.operandType(v.arg(r, 0))
+    if a == types.UnknownT { return types.UnknownT }
+    ra := t.Repr(a)
+    match op {
+        case typed.PrimOp.Neg, typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div
+             typed.PrimOp.Rem {
+            if not t.IsNumber(ra) { v.bad($short($op) " of a " $v.canon(a)) }
+            v.sameArgs(op, r, ty)
+        }
+        case typed.PrimOp.BitNot, typed.PrimOp.BitAnd, typed.PrimOp.BitOr, typed.PrimOp.BitXor {
+            if not t.IsInt(ra) and ra != types.BoolT { v.bad($short($op) " of a " $v.canon(a)) }
+            v.sameArgs(op, r, ty)
+        }
+        case typed.PrimOp.Shl, typed.PrimOp.Shr {
+            if not t.IsInt(ra) or not t.IsInt(t.Repr(v.operandType(v.arg(r, 1)))) { v.bad($short($op) " of a " $v.canon(a)) }
+            if not v.fits(a, ty) { v.bad($short($op) " of a " $v.canon(a) " typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.Not {
+            if ra != types.BoolT { v.bad("Not of a " $v.canon(a)) }
+            v.sameArgs(op, r, ty)
+        }
+        case typed.PrimOp.Eq, typed.PrimOp.Ne, typed.PrimOp.Lt, typed.PrimOp.Le, typed.PrimOp.Gt, typed.PrimOp.Ge {
+            b := v.operandType(v.arg(r, 1))
+            if not t.Same(ra, t.Repr(b)) { v.bad($short($op) " of a " $v.canon(a) " and a " $v.canon(b)) }
+            if not t.IsNumber(ra) and ra != types.BoolT and op != typed.PrimOp.Eq and op != typed.PrimOp.Ne {
+                v.bad($short($op) " of a " $v.canon(a))
+            }
+            if ty != types.BoolT { v.bad($short($op) " typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.Same {
+            b := v.operandType(v.arg(r, 1))
+            k := t.KindOf(ra)
+            rb := t.Repr(b)
+            same := t.Same(rb, ra)
+            if k == types.Kind.Ref and t.IsRef(rb) { same = v.sameRepr(t.Referent(ra), t.Referent(rb)) }
+            if (k != types.Kind.Ref and k != types.Kind.Func) or not same {
+                v.bad("Same of a " $v.canon(a) " and a " $v.canon(b))
+            }
+            if ty != types.BoolT { v.bad("Same typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.Convert, typed.PrimOp.Bitcast { }
+        case typed.PrimOp.Len {
+            x := t.Referent(ra) if t.IsRef(ra) else a
+            if v.arrayOf(x) == types.UnknownT { v.bad("Len of a " $v.canon(a)) }
+            if ty != I64T { v.bad("Len typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.Retire {
+            x := t.Referent(ra) if t.IsRef(ra) else a
+            if v.arrayOf(x) == types.UnknownT { v.bad("Retire of a " $v.canon(a)) }
+            if ty != types.VoidT { v.bad("Retire typed " $v.canon(ty)) }
+        }
+        case typed.PrimOp.IsCase {
+            _, ok := v.casesOf(a)
+            if not ok { v.bad("IsCase of a " $v.canon(a)) }
+            if ty != types.BoolT { v.bad("IsCase typed " $v.canon(ty)) }
+        }
+        case _ {
+            # the atomics: a writable reference to an integer place, then values of its type
+            if not t.IsRef(ra) or not t.IsInt(t.Repr(t.Referent(ra))) or (t.PermOf(ra) & types.Writable) == 0 {
+                v.bad($short($op) " of a " $v.canon(a) ", not a writable reference to an integer")
+            } else {
+                it := t.Referent(ra)
+                for i in range 1, n { v.want(v.operandType(v.arg(r, i)), it, $short($op) "'s operand " $i) }
+                if op == typed.PrimOp.AtomicStore {
+                    if ty != types.VoidT { v.bad("AtomicStore typed " $v.canon(ty)) }
+                } else if not v.fits(it, ty) {
+                    v.bad($short($op) " typed " $v.canon(ty))
+                }
+            }
+        }
+    }
+    return ty
+}
+
+fn (v mut verifier&) sameArgs(op typed.PrimOp, r Range, ty types.TypeId) {
+    for i in range r.N {
+        x := v.operandType(v.arg(r, i))
+        if not v.T.Same(v.T.Repr(x), v.T.Repr(ty)) { v.bad($short($op) " typed " $v.canon(ty) " of a " $v.canon(x)) }
+    }
+}
+
+fn (v mut verifier&) overflowsType(op typed.PrimOp, ty types.TypeId, r Range) types.TypeId {
+    t := v.T
+    good := match op {
+        case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div => r.N == I32(2)
+        case typed.PrimOp.Neg, typed.PrimOp.Convert => r.N == I32(1)
+        case _ => false
+    }
+    if not good {
+        v.bad("no overflow test for " $short($op) " of " $r.N " operands")
+        return types.BoolT
+    }
+    if not t.IsInt(t.Repr(ty)) { v.bad("an overflow test of " $short($op) " to a " $v.canon(ty) ", not an integer") }
+    return types.BoolT
+}
+
+fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.TypeId {
+    t := v.T
+    n := I64(r.N)
+    k := t.KindOf(t.Repr(ty))
+    a := v.arrayOf(ty)
+    if a != types.UnknownT {
+        len := t.Length(a)
+        if len == types.TypeId(0) or t.KindOf(len) != types.Kind.Const or t.ConstValue(len) != n {
+            v.bad("a " $v.canon(ty) " made of " $n " elements")
+        }
+        for i in range n { v.want(v.operandType(v.arg(r, i)), t.Elem(a), "element " $i) }
+        return ty
+    }
+    cl, isEnum := v.casesOf(ty)
+    cs := t.Items(cl)
+    if isEnum {
+        if tag < 0 or tag >= cs.Len() {
+            v.bad("no case " $tag " in a " $v.canon(ty))
+            return ty
+        }
+        v.parts(ty, t.Parts(cs[tag]) if cs[tag] != types.TypeId(0) else types.ListId(0), r)
+        return ty
+    }
+    fl, ok := v.fieldsOf(ty)
+    if not ok {
+        v.bad("a " $v.canon(ty) " made of parts")
+        return ty
+    }
+    v.parts(ty, fl, r)
+    return ty
+}
+
+fn (v mut verifier&) parts(ty types.TypeId, fl types.ListId, r Range) {
+    fs := v.T.Items(fl)
+    if fs.Len() != I64(r.N) {
+        v.bad("a " $v.canon(ty) " of " $fs.Len() " parts made of " $r.N)
+        return
+    }
+    for i in range fs.Len() { v.want(v.operandType(v.arg(r, i)), fs[i], "part " $i) }
+}
+
+fn (v mut verifier&) newArrayType(ty types.TypeId, n Operand, fill Operand) types.TypeId {
+    t := v.T
+    x := t.Referent(t.Repr(ty)) if t.IsRef(t.Repr(ty)) else ty
+    a := v.arrayOf(x)
+    if a == types.UnknownT or t.Length(a) != types.TypeId(0) {
+        v.bad("a new array typed " $v.canon(ty) ", not a run-time-length array")
+        return types.UnknownT
+    }
+    if not t.IsInt(t.Repr(v.operandType(n))) { v.bad("a new array's length that is no integer") }
+    v.want(v.operandType(fill), t.Elem(a), "a new array's fill")
+    return ty
+}
+
+fn (v mut verifier&) sliceType(of types.TypeId, lo Operand, hi Operand, ty types.TypeId) types.TypeId {
+    t := v.T
+    a := v.arrayOf(of)
+    s := v.arrayOf(t.Referent(t.Repr(ty))) if t.IsRef(t.Repr(ty)) else types.UnknownT
+    if a == types.UnknownT or s == types.UnknownT or not t.Same(t.Repr(t.Elem(a)), t.Repr(t.Elem(s))) {
+        v.bad("a slice " $v.canon(ty) " of a " $v.canon(of))
+    }
+    for x in Operand[lo, hi] {
+        if not t.IsInt(t.Repr(v.operandType(x))) { v.bad("a slice's bound that is no integer") }
+    }
+    return ty
+}
+
+fn (v mut verifier&) closureType(ty types.TypeId) types.TypeId {
+    if v.T.KindOf(ty) != types.Kind.Func { v.bad("a function value typed " $v.canon(ty)) }
+    return ty
+}
+
+fn (v mut verifier&) textType(b ScopeRef, ty types.TypeId) types.TypeId {
+    v.builder(b)
+    if not v.isText(ty) { v.bad("text typed " $v.canon(ty)) }
+    return ty
+}
+
+fn (v mut verifier&) calleeType(c Callee) types.TypeId {
+    ty := match c {
+        case Callee.Fn(_, ty), Callee.Extern(_, ty) => ty
+        case Callee.Value(x) => v.operandType(x)
+    }
+    if ty == types.UnknownT { return ty }
+    if v.T.KindOf(ty) != types.Kind.Func {
+        v.bad("a call of a " $v.canon(ty) ", not a function")
+        return types.UnknownT
+    }
+    return ty
+}
+
+# a call's or a task's arguments and scopes against its callee's type
+fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
+    t := v.T
+    ps := t.Items(t.Params(ty))
+    if ps.Len() != I64(args.N) {
+        v.bad("a call of " $args.N " arguments to a function of " $ps.Len() " parameters")
+    } else {
+        for i in range ps.Len() { v.want(v.operandType(v.arg(args, i)), ps[i], "argument " $i) }
+    }
+    want := PassedCount(t, c, ty)
+    if want != I64(scopes.N) { v.bad("a call passing " $scopes.N " scopes for its callee's " $want) }
+    for i in range scopes.N {
+        if v.F.Refs[I64(scopes.At) + i] == ScopeRef.Frame { v.bad("a call passing the frame for a scope variable") }
+    }
+}
+
+fn (v mut verifier&) termTypes(term Term) {
+    t := v.T
+    f := v.F
+    match term {
+        case Term.Branch(c, _, _) {
+            ct := v.operandType(c)
+            if t.Repr(ct) != types.BoolT { v.bad("a branch on a " $v.canon(ct)) }
+        }
+        case Term.Switch(x, r, _) {
+            xt := v.operandType(x)
+            if not t.IsInt(t.Repr(xt)) { v.bad("a switch on a " $v.canon(xt)) }
+            for i in range r.N {
+                for j in range i {
+                    if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value {
+                        v.bad("a switch with the value " $f.Cases[I64(r.At) + i].Value " twice")
+                    }
+                }
+            }
+        }
+        case Term.Call(_, k) {
+            c := f.Calls[I64(k)]
+            ty := v.calleeType(c.Target)
+            if ty == types.UnknownT { return }
+            v.args(c.Target, ty, c.Args, c.Scopes)
+            res := v.held(ty)
+            if c.HasDest {
+                if res == types.VoidT { v.bad("a call with no result stores one") } else {
+                    v.want(res, v.placeType(c.Dest), "the call's result")
+                }
+            }
+            fallible := t.Items(t.Errors(ty)).Len() > 0
+            if fallible and c.Err == NoBlock { v.bad("a call that can fail with no error edge") }
+            if not fallible and c.Err != NoBlock { v.bad("an error edge for a call that cannot fail") }
+            if c.Err != NoBlock { v.intOf(v.localType(c.Code), I32T, "the call's error code") }
+        }
+        case Term.Return(_, x) {
+            res := t.Result(f.Ty)
+            if x == Operand.None {
+                if res != types.VoidT { v.bad("a return with no value from a function giving a " $v.canon(res)) }
+            } else if res == types.VoidT {
+                v.bad("a return with a value from a function giving none")
+            } else {
+                v.want(v.operandType(x), res, "the value returned")
+            }
+        }
+        case Term.Raise(_, code) {
+            if t.Items(t.Errors(f.Ty)).Len() == 0 { v.bad("a raise in a function that cannot fail") }
+            v.intOf(v.operandType(code), I32T, "the error raised")
+        }
+        case Term.Wait(_, j, _, code, failed) {
+            si := f.Scopes[I64(j)]
+            if si.Kind != ScopeKind.Join { v.bad("a wait for S" $j ", which is no join") }
+            fails := t.Items(si.Errors).Len() > 0
+            if fails and failed == NoBlock { v.bad("a wait for a join that can fail with no failed edge") }
+            if not fails and failed != NoBlock { v.bad("a failed edge for a join that cannot fail") }
+            if failed != NoBlock { v.intOf(v.localType(code), I32T, "the join's error code") }
+        }
+        case Term.Exit(_, kind, msg) {
+            if msg != Operand.None {
+                if kind != ExitKind.Assert and kind != ExitKind.Unreachable and kind != ExitKind.Error and
+                   kind != ExitKind.Escaped {
+                    v.bad("a message for a " $short($kind) " exit")
+                }
+                if not v.isText(v.operandType(msg)) { v.bad("an assert's message that is no text") }
+            }
+        }
+        case _ { }
+    }
+}
+
+# ---- the dataflow: initialization, live storage, scopes, joins ----
+
+fn (v mut verifier&) flow() {
+    f := v.F
+    nb, nl, ns := f.Blocks.Len(), f.Locals.Len(), f.Scopes.Len()
+    v.seen = Array<Bool>(nb)
+    v.initAt = Array<Bool>(nb * nl)
+    v.liveAt = Array<Bool>(nb * nl)
+    v.pendAt = Array<Bool>(nb * ns)
+    v.stackAt = Array<I64>(nb)
+    v.stackN = Array<I64>(nb)
+    v.init = Array<Bool>(nl)
+    v.live = Array<Bool>(nl)
+    v.pend = Array<Bool>(ns)
+    # the entry: parameters and captures hold their values, every frame local's storage exists
+    for l in f.Params { v.init[I64(l)] = true }
+    for l in f.Captures { v.init[I64(l)] = true }
+    for i in range nl { v.live[i] = f.Locals[i].Home == ScopeRef.Frame }
+    v.report = false
+    v.enter(BlockId(0))
+    # to a fixed point: every block walked from its entry state until no entry state changes
+    for {
+        v.changed = false
+        for b in range nb {
+            if v.seen[b] { v.walk(BlockId(I32(b))) }
+        }
+        if not v.changed { break }
+    }
+    # then once more, saying what is wrong
+    v.report = true
+    for b in range nb {
+        if v.seen[b] { v.walk(BlockId(I32(b))) }
+    }
+    v.at, v.idx = -1, -1
+}
+
+# the current state given to block b's entry: its first state kept; after it, initialized and live where every
+# path says so, a join pending where any path says so, and the open scopes the same on every path
+fn (v mut verifier&) enter(b BlockId) {
+    f := v.F
+    nl, ns := f.Locals.Len(), f.Scopes.Len()
+    bi := I64(b)
+    if not v.seen[bi] {
+        v.seen[bi] = true
+        v.changed = true
+        for i in range nl {
+            v.initAt[bi * nl + i] = v.init[i]
+            v.liveAt[bi * nl + i] = v.live[i]
+        }
+        for i in range ns { v.pendAt[bi * ns + i] = v.pend[i] }
+        v.stackAt[bi] = v.stacks.Len()
+        v.stackN[bi] = v.stack.Len()
+        for s in v.stack { v.stacks.Push(s) }
+        return
+    }
+    for i in range nl {
+        if v.initAt[bi * nl + i] and not v.init[i] {
+            v.initAt[bi * nl + i] = false
+            v.changed = true
+        }
+        if v.liveAt[bi * nl + i] and not v.live[i] {
+            v.liveAt[bi * nl + i] = false
+            v.changed = true
+        }
+    }
+    for i in range ns {
+        if v.pend[i] and not v.pendAt[bi * ns + i] {
+            v.pendAt[bi * ns + i] = true
+            v.changed = true
+        }
+    }
+    same := v.stackN[bi] == v.stack.Len()
+    if same {
+        for k in range v.stack.Len() { same = same and v.stacks[v.stackAt[bi] + k] == v.stack[k] }
+    }
+    if not same { v.bad("enters bb" $b " with scopes " $v.stackText() ", where another path has " $v.stackOf(b)) }
+}
+
+fn (v mut verifier&) stackText() String {
+    out := StringBuilder()
+    out.PushChar('[')
+    for k in range v.stack.Len() { out.Push($(" " if k > 0 else "") "S" $v.stack[k]) }
+    out.PushChar(']')
+    return out.ToString()
+}
+
+fn (v mut verifier&) stackOf(b BlockId) String {
+    out := StringBuilder()
+    out.PushChar('[')
+    for k in range v.stackN[I64(b)] { out.Push($(" " if k > 0 else "") "S" $v.stacks[v.stackAt[I64(b)] + k]) }
+    out.PushChar(']')
+    return out.ToString()
+}
+
+fn (v mut verifier&) walk(b BlockId) {
+    f := v.F
+    nl, ns := f.Locals.Len(), f.Scopes.Len()
+    bi := I64(b)
+    for i in range nl {
+        v.init[i] = v.initAt[bi * nl + i]
+        v.live[i] = v.liveAt[bi * nl + i]
+    }
+    for i in range ns { v.pend[i] = v.pendAt[bi * ns + i] }
+    v.stack.Clear()
+    for k in range v.stackN[bi] { v.stack.Push(v.stacks[v.stackAt[bi] + k]) }
+    v.at = bi
+    bb := f.Blocks[bi]
+    for i in range bb.Stmts.Len() {
+        v.idx = i
+        v.stmtFlow(bb.Stmts[i])
+    }
+    v.idx = -1
+    v.termFlow(bb.T)
+}
+
+fn (v mut verifier&) open(s ScopeId) Bool {
+    for x in v.stack {
+        if x == s { return true }
+    }
+    return false
+}
+
+# an operand's, a place's reads: each local they read initialized
+fn (v mut verifier&) reads(x Operand) {
+    match x {
+        case Operand.Copy(p) { v.readPlace(p) }
+        case _ { }
+    }
+}
+
+fn (v mut verifier&) readPlace(p Place) {
+    match p.B {
+        case Base.Local(l) { v.used(l) }
+        case _ { }
+    }
+    for i in range p.Path.N {
+        match v.F.Projs[I64(p.Path.At) + i] {
+            case Proj.Index(l) { v.used(l) }
+            case _ { }
+        }
+    }
+}
+
+fn (v mut verifier&) used(l LocalId) {
+    if not v.init[I64(l)] { v.bad("L" $l " read before it is initialized on every path") }
+}
+
+fn (v mut verifier&) readArgs(r Range) {
+    for i in range r.N { v.reads(v.arg(r, i)) }
+}
+
+# a store's place: a local is initialized by a whole store, and one stored into through a projection must hold its
+# value already; an arena local must be live
+fn (v mut verifier&) stores(p Place) {
+    match p.B {
+        case Base.Local(l) {
+            if not v.live[I64(l)] { v.bad("L" $l " stored into with no storage: its Live not reached") }
+            if p.Path.N == I32(0) {
+                v.init[I64(l)] = true
+            } else {
+                v.readPlace(p)
+            }
+        }
+        case _ { v.readPlace(p) }
+    }
+}
+
+# a scope something is built in: open, and not inert
+fn (v mut verifier&) buildsIn(s ScopeRef) {
+    match s {
+        case ScopeRef.Scope(x) {
+            if not v.open(x) { v.bad("built in S" $x ", which is not open") }
+            else if v.F.Scopes[I64(x)].Kind == ScopeKind.Inert { v.bad("built in S" $x ", which is inert") }
+        }
+        case ScopeRef.RegionOf(l) { v.used(l) }
+        case _ { }
+    }
+}
+
+# a scope passed or written to: open where it is one of this function's
+fn (v mut verifier&) usesScope(s ScopeRef) {
+    match s {
+        case ScopeRef.Scope(x) {
+            if not v.open(x) { v.bad("S" $x " used where it is not open") }
+        }
+        case ScopeRef.RegionOf(l) { v.used(l) }
+        case _ { }
+    }
+}
+
+fn (v mut verifier&) stmtFlow(s Stmt&) {
+    f := v.F
+    match s {
+        case Stmt.Assign(_, p, rv) {
+            v.rvalueFlow(rv)
+            v.stores(p)
+        }
+        case Stmt.Live(_, l) {
+            home := f.Locals[I64(l)].Home
+            if home != ScopeRef.Frame { v.buildsIn(home) }
+            v.live[I64(l)] = true
+            v.init[I64(l)] = false
+        }
+        case Stmt.Dead(_, l) {
+            v.init[I64(l)] = false
+            v.live[I64(l)] = f.Locals[I64(l)].Home == ScopeRef.Frame
+        }
+        case Stmt.Open(_, x) {
+            if v.open(x) {
+                v.bad("S" $x " opened while it is open")
+                return
+            }
+            top := v.stack[v.stack.Len() - 1] if v.stack.Len() > 0 else NoScope
+            parent := f.Scopes[I64(x)].Parent
+            if parent != top { v.bad("S" $x " opened in " $v.name(top) ", not in its parent " $v.name(parent)) }
+            v.stack.Push(x)
+            v.pend[I64(x)] = false
+        }
+        case Stmt.Close(_, x) {
+            v.pop(x, "closed")
+            if v.pend[I64(x)] { v.bad("join S" $x " closed with tasks not waited for") }
+        }
+        case Stmt.Give(_, x) {
+            if f.Scopes[I64(x)].Kind != ScopeKind.Region { v.bad("S" $x " given away, but it is no region") }
+            v.pop(x, "given away")
+        }
+        case Stmt.RegisterDtor(_, sc, _, x) {
+            v.usesScope(sc)
+            v.reads(x)
+        }
+        case Stmt.RegisterOwner(_, sc, p) {
+            v.usesScope(sc)
+            v.readPlace(p)
+        }
+        case Stmt.Release(_, p) { v.readPlace(p) }
+        case Stmt.Write(_, b, _, x) {
+            v.usesScope(b)
+            v.reads(x)
+        }
+        case Stmt.CopyElems(_, d, src, n) {
+            v.readPlace(src)
+            v.reads(n)
+            v.readPlace(d)
+        }
+        case Stmt.Spawn(_, j, k) {
+            if not v.open(j) { v.bad("a spawn into S" $j ", which is not open") }
+            task := f.Tasks[I64(k)]
+            for i in range task.Targets.N { v.readPlace(f.Places[I64(task.Targets.At) + i]) }
+            v.calleeReads(task.Target)
+            v.readArgs(task.Args)
+            for i in range task.Scopes.N { v.usesScope(f.Refs[I64(task.Scopes.At) + i]) }
+            for i in range task.Clauses.N { v.reads(f.Clauses[I64(task.Clauses.At) + i].Handler) }
+            v.pend[I64(j)] = true
+        }
+        case Stmt.Raised(_) { }
+        # a cleanup entered with the state where its deferred code is registered, inside the scope registering it
+        case Stmt.Deferred(_, x, e) {
+            if not v.open(x) { v.bad("deferred code registered at S" $x ", which is not open") }
+            if e != NoBlock { v.enter(e) }
+        }
+    }
+}
+
+fn (v mut verifier&) name(s ScopeId) String { return "none" if s == NoScope else "S" $s }
+
+fn (v mut verifier&) pop(x ScopeId, what String&) {
+    if v.stack.Len() == 0 or v.stack[v.stack.Len() - 1] != x {
+        if v.open(x) {
+            v.bad("S" $x " " $what " while S" $v.stack[v.stack.Len() - 1] ", opened in it, is open")
+        } else {
+            v.bad("S" $x " " $what ", but it is not open")
+        }
+        return
+    }
+    try v.stack.Pop() catch { unreachable }
+}
+
+fn (v mut verifier&) calleeReads(c Callee) {
+    match c {
+        case Callee.Value(x) { v.reads(x) }
+        case _ { }
+    }
+}
+
+fn (v mut verifier&) rvalueFlow(rv Rvalue) {
+    match rv {
+        case Rvalue.Use(x), Rvalue.Recode(x, _, _) { v.reads(x) }
+        case Rvalue.Ref(p, _), Rvalue.Take(p), Rvalue.Tag(p) { v.readPlace(p) }
+        case Rvalue.Prim(_, _, r), Rvalue.Overflows(_, _, r), Rvalue.Aggregate(_, _, r) { v.readArgs(r) }
+        case Rvalue.New(s, x, _) {
+            v.reads(x)
+            v.buildsIn(s)
+        }
+        case Rvalue.NewArray(s, _, n, fill) {
+            v.reads(n)
+            v.reads(fill)
+            v.buildsIn(s)
+        }
+        case Rvalue.Slice(p, lo, hi, _) {
+            v.readPlace(p)
+            v.reads(lo)
+            v.reads(hi)
+        }
+        case Rvalue.Closure(_, _, s, r, cs) {
+            v.readArgs(r)
+            if r.N > I32(0) { v.buildsIn(s) }
+            for i in range cs.N { v.usesScope(v.F.Refs[I64(cs.At) + i]) }
+        }
+        case Rvalue.Text(b, into, _) {
+            v.usesScope(b)
+            v.buildsIn(into)
+        }
+    }
+}
+
+fn (v mut verifier&) termFlow(term Term) {
+    f := v.F
+    match term {
+        case Term.Goto(b) { v.enter(b) }
+        case Term.Branch(c, y, n) {
+            v.reads(c)
+            v.enter(y)
+            v.enter(n)
+        }
+        case Term.Switch(x, r, o) {
+            v.reads(x)
+            for i in range r.N { v.enter(f.Cases[I64(r.At) + i].To) }
+            v.enter(o)
+        }
+        case Term.Call(_, k) {
+            c := f.Calls[I64(k)]
+            v.calleeReads(c.Target)
+            v.readArgs(c.Args)
+            for i in range c.Scopes.N { v.usesScope(f.Refs[I64(c.Scopes.At) + i]) }
+            if c.Err != NoBlock {
+                if v.live[I64(c.Code)] {
+                    was := v.init[I64(c.Code)]
+                    v.init[I64(c.Code)] = true
+                    v.enter(c.Err)
+                    v.init[I64(c.Code)] = was
+                } else {
+                    v.bad("L" $c.Code " given an error code with no storage")
+                }
+            }
+            if c.HasDest { v.stores(c.Dest) }
+            v.enter(c.Ok)
+        }
+        case Term.Return(_, x), Term.Raise(_, x) {
+            v.reads(x)
+            if v.stack.Len() > 0 { v.bad("leaves the function with " $v.stackText() " open") }
+        }
+        case Term.Exit(_, _, x) { v.reads(x) }
+        case Term.Wait(_, j, ok, code, failed) {
+            if not v.open(j) { v.bad("a wait for S" $j ", which is not open") }
+            v.pend[I64(j)] = false
+            if failed != NoBlock {
+                was := v.init[I64(code)]
+                v.init[I64(code)] = true
+                v.enter(failed)
+                v.init[I64(code)] = was
+            }
+            v.enter(ok)
+        }
+        case _ { }
+    }
+}
+
+# ---- printing (DESIGN.md section 4: "dump mir" serves review, lower's tests and debugging) ----
+
+# a function as text: its signature, its locals, its scopes, then each block's statements and terminator
+fn (f Fn&) Dump(t mut types.Table&) String {
+    w mut dumper&t = dumper(f, t)
+    w.all()
+    return w.out.ToString()
+}
+
+type dumper struct(F Fn&, T mut types.Table&) {
+    F
+    T
+    out StringBuilder
+}
+
+fn (w mut dumper&) line(depth I64, text String&) {
+    for k in range depth { w.out.Push("  ") }
+    w.out.Push(text)
+    w.out.PushChar('\n')
+}
+
+fn (w mut dumper&) all() {
+    f := w.F
+    w.line(0, "fn " $w.key(f.Of) ": " $w.T.Canon(f.Ty))
+    if f.Vars.Len() > 0 {
+        vs := StringBuilder()
+        for i in range f.Vars.Len() { vs.Push($(", " if i > 0 else "") "V" $i " " $w.varKind(f.Vars[i])) }
+        w.line(1, "vars " $vs.ToString())
+    }
+    for i in range f.Locals.Len() {
+        l := f.Locals[i]
+        name := w.T.Names.Text(l.Name)
+        home := "" if l.Home == ScopeRef.Frame else " in " $w.ref(l.Home)
+        w.line(1, "L" $i " " $short($l.Kind) $(" " $name if name.Len() > 0 else "") ": " $w.T.Canon(l.Ty) $home)
+    }
+    for i in range f.Scopes.Len() {
+        s := f.Scopes[i]
+        parent := "" if s.Parent == NoScope else " in S" $s.Parent
+        block := "" if s.Block < typed.BlockId(0) else " block " $s.Block
+        errs := "" if s.Errors == types.ListId(0) else " fails " $w.list(s.Errors)
+        w.line(1, "S" $i " " $short($s.Kind) $parent $block $errs)
+    }
+    for b in range f.Blocks.Len() {
+        w.line(0, "bb" $b ":")
+        bb := f.Blocks[b]
+        for s in bb.Stmts { w.line(1, w.stmt(s)) }
+        w.line(1, w.term(bb.T))
+    }
+}
+
+fn (w mut dumper&) list(l types.ListId) String {
+    out := StringBuilder()
+    xs := w.T.Items(l)
+    for i in range xs.Len() { out.Push($(" + " if i > 0 else "") $w.T.Canon(xs[i])) }
+    return out.ToString()
+}
+
+fn (w mut dumper&) key(k FnKey) String {
+    return match k {
+        case FnKey.Body(b) => "B" $b
+        case FnKey.Adapter(b) => "adapter B" $b
+        case FnKey.Helper(kind, ty) => $short($kind) " " $w.T.Canon(ty)
+        case FnKey.Init(m) => "init " $m
+    }
+}
+
+fn (w mut dumper&) varKind(k VarKind) String {
+    return match k {
+        case VarKind.Param(i) => "param " $i
+        case VarKind.Capture(i) => "capture " $i
+        case _ => $short($k)
+    }
+}
+
+fn (w mut dumper&) ref(s ScopeRef) String {
+    return match s {
+        case ScopeRef.Scope(x) => "S" $x
+        case ScopeRef.Var(i) => "V" $i
+        case ScopeRef.Program => "program"
+        case ScopeRef.Frame => "frame"
+        case ScopeRef.RegionOf(l) => "region(L" $l ")"
+    }
+}
+
+fn (w mut dumper&) place(p Place) String {
+    out := StringBuilder()
+    match p.B {
+        case Base.None { out.Push("_") }
+        case Base.Local(l) { out.Push("L" $l) }
+        case Base.Global(m, n, _) { out.Push("G" $m ":" $w.T.Names.Text(n)) }
+    }
+    for i in range p.Path.N {
+        match w.F.Projs[I64(p.Path.At) + i] {
+            case Proj.Field(k) { out.Push("." $k) }
+            case Proj.Index(l) { out.Push("[L" $l "]") }
+            case Proj.At(k) { out.Push("[" $k "]") }
+            case Proj.Deref { out.Push(".*") }
+            case Proj.Payload(tag) { out.Push(" as " $tag) }
+        }
+    }
+    return out.ToString()
+}
+
+fn (w mut dumper&) operand(x Operand) String {
+    return match x {
+        case Operand.None => "none"
+        case Operand.Copy(p) => "copy " $w.place(p)
+        case Operand.Const(ty, bits) => "const " $w.T.Canon(ty) " " $bits
+        case Operand.Data(ty, c, file, sp) => "data " $w.T.Canon(ty) " " $w.constant(c) " @" $file ":" $sp.Start
+    }
+}
+
+fn (w mut dumper&) constant(c I32) String {
+    return match w.F.Consts[I64(c)] {
+        case ConstNode.Bits(v) => $v
+        case ConstNode.Bytes(r) => "text " $r.N
+        case ConstNode.Items(r) => w.constItems(r)
+    }
+}
+
+fn (w mut dumper&) constItems(r Range) String {
+    out := StringBuilder()
+    out.PushChar('[')
+    for i in range r.N { out.Push($(" " if i > 0 else "") $w.constant(w.F.ConstItems[I64(r.At) + i])) }
+    out.PushChar(']')
+    return out.ToString()
+}
+
+fn (w mut dumper&) operands(r Range) String {
+    out := StringBuilder()
+    for i in range r.N { out.Push($(", " if i > 0 else "") $w.operand(w.F.Ops[I64(r.At) + i])) }
+    return out.ToString()
+}
+
+fn (w mut dumper&) refs(r Range) String {
+    out := StringBuilder()
+    for i in range r.N { out.Push($(", " if i > 0 else "") $w.ref(w.F.Refs[I64(r.At) + i])) }
+    return out.ToString()
+}
+
+fn (w mut dumper&) rvalue(rv Rvalue) String {
+    t := w.T
+    return match rv {
+        case Rvalue.Use(x) => w.operand(x)
+        case Rvalue.Ref(p, ty) => "ref " $w.place(p) ": " $t.Canon(ty)
+        case Rvalue.Take(p) => "take " $w.place(p)
+        case Rvalue.Prim(op, ty, r) => $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
+        case Rvalue.Overflows(op, ty, r) => "overflows " $short($op) " " $t.Canon(ty) "(" $w.operands(r) ")"
+        case Rvalue.Tag(p) => "tag " $w.place(p)
+        case Rvalue.Aggregate(ty, tag, r) => "make " $t.Canon(ty) $(" #" $tag if tag > 0 else "") "(" $w.operands(r) ")"
+        case Rvalue.New(s, x, ty) => "new in " $w.ref(s) " " $w.operand(x) ": " $t.Canon(ty)
+        case Rvalue.NewArray(s, ty, n, fill) => ("newarray in " $w.ref(s) " " $t.Canon(ty) "(" $w.operand(n) ", "
+                                                 $w.operand(fill) ")")
+        case Rvalue.Slice(p, lo, hi, ty) => ("slice " $w.place(p) "[" $w.operand(lo) " : " $w.operand(hi) "]: "
+                                             $t.Canon(ty))
+        case Rvalue.Closure(code, ty, s, r, cs) => ("closure " $w.key(code) " in " $w.ref(s) "(" $w.operands(r) ")"
+                                                    $(" captures " $w.refs(cs) if cs.N > I32(0) else "") ": " $t.Canon(ty))
+        case Rvalue.Recode(x, from, to) => "recode " $w.operand(x) " from " $w.list(from) " to " $w.list(to)
+        case Rvalue.Text(b, into, ty) => "text " $w.ref(b) " in " $w.ref(into) ": " $t.Canon(ty)
+    }
+}
+
+fn (w mut dumper&) stmt(s Stmt&) String {
+    return match s {
+        case Stmt.Assign(_, p, rv) => $w.place(p) " = " $w.rvalue(rv)
+        case Stmt.Live(_, l) => "live L" $l
+        case Stmt.Dead(_, l) => "dead L" $l
+        case Stmt.Open(_, x) => "open S" $x
+        case Stmt.Close(_, x) => "close S" $x
+        case Stmt.Give(_, x) => "give S" $x
+        case Stmt.RegisterDtor(_, sc, ty, x) => "register dtor " $w.T.Canon(ty) " " $w.operand(x) " in " $w.ref(sc)
+        case Stmt.RegisterOwner(_, sc, p) => "register owner " $w.place(p) " in " $w.ref(sc)
+        case Stmt.Release(_, p) => "release " $w.place(p)
+        case Stmt.Write(_, b, how, x) => "write " $short($how) " " $w.operand(x) " to " $w.ref(b)
+        case Stmt.CopyElems(_, d, src, n) => "copy " $w.operand(n) " from " $w.place(src) " to " $w.place(d)
+        case Stmt.Spawn(_, j, k) => "spawn in S" $j " " $w.task(w.F.Tasks[I64(k)])
+        case Stmt.Raised(_) => "raised"
+        case Stmt.Deferred(_, x, e) => "deferred at S" $x $(" cleanup bb" $e if e != NoBlock else " runs")
+    }
+}
+
+fn (w mut dumper&) callee(c Callee) String {
+    return match c {
+        case Callee.Fn(key, _) => w.key(key)
+        case Callee.Extern(fx, _) => "extern " $fx
+        case Callee.Value(x) => "(" $w.operand(x) ")"
+    }
+}
+
+fn (w mut dumper&) task(k Task) String {
+    out := StringBuilder()
+    if k.Targets.N > I32(0) {
+        for i in range k.Targets.N { out.Push($(", " if i > 0 else "") $w.place(w.F.Places[I64(k.Targets.At) + i])) }
+        out.Push(" = ")
+    }
+    out.Push($w.callee(k.Target) "(" $w.operands(k.Args) ")")
+    if k.Scopes.N > I32(0) { out.Push(" [" $w.refs(k.Scopes) "]") }
+    for i in range k.Clauses.N {
+        cl := w.F.Clauses[I64(k.Clauses.At) + i]
+        out.Push(" catch")
+        if cl.All { out.Push(" all") }
+        for j in range cl.Items.N {
+            it := w.F.Items[I64(cl.Items.At) + j]
+            out.Push(" " $w.T.Canon(it.Err) $("" if it.Word < 0 else "." $it.Word))
+        }
+        if cl.Handler != Operand.None { out.Push(" -> " $w.operand(cl.Handler)) }
+    }
+    return out.ToString()
+}
+
+fn (w mut dumper&) term(term Term) String {
+    f := w.F
+    return match term {
+        case Term.None => "(no terminator)"
+        case Term.Goto(b) => "goto bb" $b
+        case Term.Branch(c, y, n) => "branch " $w.operand(c) " bb" $y " bb" $n
+        case Term.Switch(x, r, o) => "switch " $w.operand(x) " [" $w.cases(r) "] else bb" $o
+        case Term.Call(_, k) => w.call(f.Calls[I64(k)])
+        case Term.Return(_, x) => "return" $(" " $w.operand(x) if x != Operand.None else "")
+        case Term.Raise(_, x) => "raise " $w.operand(x)
+        case Term.Wait(_, j, ok, code, failed) => ("wait S" $j " then bb" $ok
+                                                  $(" failed L" $code " bb" $failed if failed != NoBlock else ""))
+        case Term.Exit(_, kind, msg) => "exit " $short($kind) $(" " $w.operand(msg) if msg != Operand.None else "")
+        case Term.Resume(_) => "resume"
+    }
+}
+
+fn (w mut dumper&) cases(r Range) String {
+    out := StringBuilder()
+    for i in range r.N {
+        c := w.F.Cases[I64(r.At) + i]
+        out.Push($(", " if i > 0 else "") $c.Value " bb" $c.To)
+    }
+    return out.ToString()
+}
+
+fn (w mut dumper&) call(c Call) String {
+    out := StringBuilder()
+    if c.HasDest { out.Push($w.place(c.Dest) " = ") }
+    out.Push("call " $w.callee(c.Target) "(" $w.operands(c.Args) ")")
+    if c.Scopes.N > I32(0) { out.Push(" [" $w.refs(c.Scopes) "]") }
+    out.Push(" then bb" $c.Ok)
+    if c.Err != NoBlock { out.Push(" err L" $c.Code " bb" $c.Err) }
+    return out.ToString()
+}
+
+# an enum case's name without its type's
+fn short(t String&) String&t {
+    at := try t.FindLast(".") catch { return t }
+    return t[at + 1:]
+}
+
+# ---- tests ----
+
+Sp0 source.Span = source.Span(0, 0)
+
+# a test's function of type ty: its parameters, its frame scope S0, and block 0 opening it
+fn tfn(t mut types.Table&, ty types.TypeId) Fn {
+    f := Fn(FnKey.Body(typed.BodyId(9)), ty, 0, Sp0)
+    for p in t.Items(t.Params(ty)) { f.AddParam(source.NameId(0), Sp0, p) }
+    f.AddScope(ScopeKind.Frame, NoScope, typed.BlockId(0), Sp0)
+    f.NewBlock()
+    f.Add(BlockId(0), Stmt.Open(Sp0, ScopeId(0)))
+    return f
+}
+
+# the verifier finds want among the problems with f
+fn expect(t mut types.Table&, f Fn&t, want String&) {
+    got := f.Verify(t)
+    at := try got.Find(want) catch default -1
+    assert at >= 0, "wanted '" $want "' among:\n" $got
+}
+
+# "fn add(a I32, b I32) I32 { s := a + b; return s }", as lower would make it
+fn addFn(t mut types.Table&) Fn {
+    i32 := t.Prim("I32")
+    f := tfn(t, t.Func(t.List(types.TypeId[i32, i32]), i32, types.ListId(0)))
+    f.Locals[0] = Local(t.Names.Intern("a"), Sp0, i32, LocalKind.Param, ScopeRef.Frame)
+    f.Locals[1] = Local(t.Names.Intern("b"), Sp0, i32, LocalKind.Param, ScopeRef.Frame)
+    s := f.AddLocal(Local(t.Names.Intern("s"), Sp0, i32, LocalKind.Var, ScopeRef.Frame))
+    b0 := BlockId(0)
+    f.Add(b0, Stmt.Assign(Sp0, L(s), Rvalue.Prim(typed.PrimOp.Add, i32, f.Args(Operand[Operand.Copy(L(LocalId(0)))
+                                                                                        Operand.Copy(L(LocalId(1)))]))))
+    f.Add(b0, Stmt.Close(Sp0, ScopeId(0)))
+    f.End(b0, Term.Return(Sp0, Operand.Copy(L(s))))
+    return f
+}
+
+test "a function: built, verified and dumped" {
+    names := source.Names()
+    t := types.NewTable(names)
+    f := addFn(t)
+    assert f.Verify(t) == "", f.Verify(t)
+    got := f.Dump(t)
+    want := ("fn B9: fn(I32, I32) I32\n  L0 Param a: I32\n  L1 Param b: I32\n  L2 Var s: I32\n  S0 Frame block 0\nbb0:\n"
+             "  open S0\n  L2 = Add I32(copy L0, copy L1)\n  close S0\n  return copy L2\n")
+    assert got == want, got
+}
+
+# "fn sum(n I64) I64 ? { i := 0; for i < n { g(i); i = i + 1 }; return i }", g fallible: a loop whose body is a scope
+# of its own every turn, a call with its error edge, the error re-encoded and raised once every scope is closed
+fn loopFn(t mut types.Table&) Fn {
+    i64 := t.Prim("I64")
+    def := t.List1(types.DefaultErrT)
+    f := tfn(t, t.Func(t.List1(i64), i64, def))
+    g := t.Func(t.List1(i64), i64, def)
+    n := LocalId(0)
+    i := f.AddLocal(Local(t.Names.Intern("i"), Sp0, i64, LocalKind.Var, ScopeRef.Frame))
+    c := f.AddTemp(types.BoolT, Sp0)
+    r := f.AddTemp(i64, Sp0)
+    code := f.AddTemp(I32T, Sp0)
+    mine := f.AddTemp(I32T, Sp0)
+    body := f.AddScope(ScopeKind.Loop, ScopeId(0), typed.BlockId(1), Sp0)
+    head, turn, next, exit, failed := f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock(), f.NewBlock()
+    f.Add(BlockId(0), Stmt.Assign(Sp0, L(i), Rvalue.Use(Operand.Const(i64, 0))))
+    f.End(BlockId(0), Term.Goto(head))
+    f.Add(head, Stmt.Assign(Sp0, L(c), Rvalue.Prim(typed.PrimOp.Lt, types.BoolT
+                                                   f.Args(Operand[Operand.Copy(L(i)), Operand.Copy(L(n))]))))
+    f.End(head, Term.Branch(Operand.Copy(L(c)), turn, exit))
+    f.Add(turn, Stmt.Open(Sp0, body))
+    call := f.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f.Args(Operand[Operand.Copy(L(i))]), Empty
+                           L(r), true, next, code, failed))
+    f.End(turn, Term.Call(Sp0, call))
+    f.Add(next, Stmt.Assign(Sp0, L(i), Rvalue.Prim(typed.PrimOp.Add, i64
+                                                   f.Args(Operand[Operand.Copy(L(i)), Operand.Const(i64, 1)]))))
+    f.Add(next, Stmt.Close(Sp0, body))
+    f.End(next, Term.Goto(head))
+    f.Add(exit, Stmt.Close(Sp0, ScopeId(0)))
+    f.End(exit, Term.Return(Sp0, Operand.Copy(L(i))))
+    f.Add(failed, Stmt.Assign(Sp0, L(mine), Rvalue.Recode(Operand.Copy(L(code)), def, def)))
+    f.Add(failed, Stmt.Close(Sp0, body))
+    f.Add(failed, Stmt.Close(Sp0, ScopeId(0)))
+    f.End(failed, Term.Raise(Sp0, Operand.Copy(L(mine))))
+    return f
+}
+
+test "control flow: a loop's scope every turn, a call's error edge, an error raised with every scope closed" {
+    names := source.Names()
+    t := types.NewTable(names)
+    f := loopFn(t)
+    assert f.Verify(t) == "", f.Verify(t)
+    got := f.Dump(t)
+    want := ("fn B9: fn(I64) I64 ?\n  L0 Param: I64\n  L1 Var i: I64\n  L2 Temp: Bool\n  L3 Temp: I64\n  L4 Temp: I32\n"
+             "  L5 Temp: I32\n  S0 Frame block 0\n  S1 Loop in S0 block 1\nbb0:\n  open S0\n  L1 = const I64 0\n"
+             "  goto bb1\nbb1:\n  L2 = Lt Bool(copy L1, copy L0)\n  branch copy L2 bb2 bb4\nbb2:\n  open S1\n"
+             "  L3 = call B1(copy L1) then bb3 err L4 bb5\nbb3:\n  L1 = Add I64(copy L1, const I64 1)\n  close S1\n"
+             "  goto bb1\nbb4:\n  close S0\n  return copy L1\nbb5:\n  L5 = recode copy L4 from default to default\n"
+             "  close S1\n  close S0\n  raise copy L5\n")
+    assert got == want, got
+    # the loop's turn left with its scope open: two paths reach the head with different scopes
+    g := loopFn(t)
+    g.Blocks[3].Stmts.Clear()
+    g.Add(BlockId(3), Stmt.Assign(Sp0, L(LocalId(1)), Rvalue.Use(Operand.Const(t.Prim("I64"), 2))))
+    expect(t, g, "enters bb1 with scopes [S0 S1], where another path has [S0]")
+    # the result read on the error edge, where the call stored nothing
+    h := loopFn(t)
+    h.Blocks[5].Stmts.Clear()
+    h.Add(BlockId(5), Stmt.Assign(Sp0, L(LocalId(1)), Rvalue.Use(Operand.Copy(L(LocalId(3))))))
+    expect(t, h, "L3 read before it is initialized on every path")
+}
+
+# "fn f() { x := 1; defer { x = 2 }; x = 3 }" as interpret's lowering makes it (B3e): the deferred code registered with
+# its cleanup - a copy reached from nothing else, ending in resume - then the registration dropped where the inline copy
+# runs on the way out
+fn deferFn(t mut types.Table&) Fn {
+    i32 := t.Prim("I32")
+    f := tfn(t, t.Func(types.ListId(0), types.VoidT, types.ListId(0)))
+    x := f.AddLocal(Local(t.Names.Intern("x"), Sp0, i32, LocalKind.Var, ScopeRef.Frame))
+    b0, clean := BlockId(0), f.NewBlock()
+    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 1))))
+    f.Add(b0, Stmt.Deferred(Sp0, ScopeId(0), clean))
+    f.Add(clean, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 2))))
+    f.End(clean, Term.Resume(Sp0))
+    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 3))))
+    f.Add(b0, Stmt.Deferred(Sp0, ScopeId(0), NoBlock))
+    f.Add(b0, Stmt.Assign(Sp0, L(x), Rvalue.Use(Operand.Const(i32, 2))))
+    f.Add(b0, Stmt.Close(Sp0, ScopeId(0)))
+    f.End(b0, Term.Return(Sp0, Operand.None))
+    return f
+}
+
+test "a cleanup: reached from where its deferred code is registered, inside the scope registering it" {
+    names := source.Names()
+    t := types.NewTable(names)
+    f := deferFn(t)
+    assert f.Verify(t) == "", f.Verify(t)
+    got := f.Dump(t)
+    want := ("fn B9: fn()\n  L0 Var x: I32\n  S0 Frame block 0\nbb0:\n  open S0\n  L0 = const I32 1\n"
+             "  deferred at S0 cleanup bb1\n  L0 = const I32 3\n  deferred at S0 runs\n  L0 = const I32 2\n  close S0\n"
+             "  return\nbb1:\n  L0 = const I32 2\n  resume\n")
+    assert got == want, got
+    # registered at a scope that is not open
+    g := deferFn(t)
+    g.Blocks[0].Stmts[2] = Stmt.Deferred(Sp0, g.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0), BlockId(1))
+    expect(t, g, "deferred code registered at S1, which is not open")
+}
+
+test "a malformed function: every malformation is caught" {
+    names := source.Names()
+    t := types.NewTable(names)
+    i32, i64 := t.Prim("I32"), t.Prim("I64")
+    b0 := BlockId(0)
+    # shape: no terminator, a target that is no block, a local that is none
+    f1 := addFn(t)
+    f1.End(b0, Term.None)
+    expect(t, f1, "bb0[term]: no terminator")
+    f2 := addFn(t)
+    f2.End(b0, Term.Goto(BlockId(9)))
+    expect(t, f2, "no block bb9")
+    f3 := addFn(t)
+    f3.Add(b0, Stmt.Live(Sp0, LocalId(7)))
+    expect(t, f3, "no local L7")
+    # a block no path reaches
+    f4 := addFn(t)
+    f4.End(f4.NewBlock(), Term.Exit(Sp0, ExitKind.Abort, Operand.None))
+    expect(t, f4, "bb1[term]: unreachable: no path from the entry")
+    # types: a store, a return, a branch's condition
+    f5 := addFn(t)
+    f5.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Use(Operand.Const(types.BoolT, 1)))
+    expect(t, f5, "bb0[1]: the value stored is a Bool, where a I32 is wanted")
+    f6 := addFn(t)
+    f6.End(b0, Term.Return(Sp0, Operand.None))
+    expect(t, f6, "a return with no value from a function giving a I32")
+    f7 := addFn(t)
+    f7.End(b0, Term.Branch(Operand.Copy(L(LocalId(0))), b0, b0))
+    expect(t, f7, "a branch on a I32")
+    # a local read before anything is stored in it
+    f8 := addFn(t)
+    f8.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Use(Operand.Copy(L(LocalId(2)))))
+    expect(t, f8, "bb0[1]: L2 read before it is initialized on every path")
+    # scopes: left open at a return, closed out of order, opened outside their parent, reopened
+    f9 := addFn(t)
+    f9.Blocks[0].Stmts.Truncate(2)
+    expect(t, f9, "bb0[term]: leaves the function with [S0] open")
+    f10 := addFn(t)
+    s1 := f10.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0)
+    f10.Blocks[0].Stmts[1] = Stmt.Open(Sp0, s1)
+    expect(t, f10, "bb0[2]: S0 closed while S1, opened in it, is open")
+    f11 := addFn(t)
+    s11 := f11.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0)
+    f11.Blocks[0].Stmts[0] = Stmt.Open(Sp0, s11)
+    expect(t, f11, "bb0[0]: S1 opened in none, not in its parent S0")
+    f12 := addFn(t)
+    f12.Blocks[0].Stmts[1] = Stmt.Open(Sp0, ScopeId(0))
+    expect(t, f12, "bb0[1]: S0 opened while it is open")
+    # building: into a scope that is not open, into an inert one, into a give of what is no region
+    ri := t.Ref(i32, types.Writable)
+    f13 := addFn(t)
+    s13 := f13.AddScope(ScopeKind.Block, ScopeId(0), typed.BlockId(1), Sp0)
+    r13 := f13.AddTemp(ri, Sp0)
+    f13.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(r13), Rvalue.New(ScopeRef.Scope(s13), Operand.Const(i32, 1), ri))
+    expect(t, f13, "bb0[1]: built in S1, which is not open")
+    f14 := addFn(t)
+    s14 := f14.AddScope(ScopeKind.Inert, ScopeId(0), typed.BlockId(-1), Sp0)
+    r14 := f14.AddTemp(ri, Sp0)
+    f14.Blocks[0].Stmts[1] = Stmt.Open(Sp0, s14)
+    try f14.Blocks[0].Stmts.Insert(2, Stmt.Assign(Sp0, L(r14), Rvalue.New(ScopeRef.Scope(s14), Operand.Const(i32, 1), ri)))
+    try f14.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, s14))
+    expect(t, f14, "bb0[2]: built in S1, which is inert")
+    f15 := addFn(t)
+    f15.Blocks[0].Stmts[2] = Stmt.Give(Sp0, ScopeId(0))
+    expect(t, f15, "S0 given away, but it is no region")
+    # an arena local stored into before its storage is made
+    f16 := addFn(t)
+    a16 := f16.AddLocal(Local(source.NameId(0), Sp0, i32, LocalKind.Temp, ScopeRef.Scope(ScopeId(0))))
+    try f16.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(a16), Rvalue.Use(Operand.Const(i32, 3))))
+    expect(t, f16, "bb0[1]: L3 stored into with no storage: its Live not reached")
+    # an own slot given a borrow
+    m := t.AddModule("t")
+    q := t.Named(t.AddDecl(m, names.Intern("Q"), types.DeclKind.Struct, 0), types.ListId(0))
+    t.SetStructBody(q, t.List1(i64), false)
+    f17 := addFn(t)
+    ow := f17.AddTemp(t.Ref(q, types.Owning | types.Writable), Sp0)
+    brw := f17.AddTemp(t.Ref(q, types.Writable), Sp0)
+    try f17.Blocks[0].Stmts.Insert(1, Stmt.Assign(Sp0, L(ow), Rvalue.Use(Operand.Copy(L(brw)))))
+    expect(t, f17, "bb0[1]: an own slot given a borrow, not an owner")
+    # a check written as an operation; a switch with a value twice
+    f18 := addFn(t)
+    f18.Blocks[0].Stmts[1] = Stmt.Assign(Sp0, L(LocalId(2)), Rvalue.Prim(typed.PrimOp.InRange, i32
+                                         f18.Args(Operand[Operand.Copy(L(LocalId(0))), Operand.Const(i32, 0)
+                                                          Operand.Const(i32, 4)])))
+    expect(t, f18, "InRange is a check: a test and a branch in MIR")
+    f19 := addFn(t)
+    f19.End(b0, Term.Switch(Operand.Copy(L(LocalId(0))), f19.AddCases(Case[Case(1, b0), Case(1, b0)]), b0))
+    expect(t, f19, "a switch with the value 1 twice")
+    # calls: arguments counted and typed, an error edge exactly where the callee can fail; a raise only where this can
+    g := t.Func(t.List1(i32), i32, t.List1(types.DefaultErrT))
+    f20 := addFn(t)
+    b20 := f20.NewBlock()
+    f20.Blocks[0].Stmts.Truncate(2)
+    k20 := f20.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), g), f20.Args(Operand[Operand.Const(i64, 1)]), Empty
+                            L(LocalId(2)), true, b20, NoLocal, NoBlock))
+    f20.End(b0, Term.Call(Sp0, k20))
+    f20.Add(b20, Stmt.Close(Sp0, ScopeId(0)))
+    f20.End(b20, Term.Raise(Sp0, Operand.Const(i32, 65536)))
+    got20 := f20.Verify(t)
+    for w in String&["argument 0 is a I64, where a I32 is wanted", "a call that can fail with no error edge"
+                     "a raise in a function that cannot fail"] {
+        assert (try got20.Find(w) catch default -1) >= 0, got20
+    }
+    h := t.Func(t.List1(i32), i32, types.ListId(0))
+    f24 := addFn(t)
+    b24, e24 := f24.NewBlock(), f24.NewBlock()
+    f24.Blocks[0].Stmts.Truncate(2)
+    c24 := f24.AddTemp(I32T, Sp0)
+    k24 := f24.AddCall(Call(Callee.Fn(FnKey.Body(typed.BodyId(1)), h), f24.Args(Operand[Operand.Const(i32, 1)
+                                                                                       Operand.Const(i32, 2)])
+                            Empty, L(LocalId(2)), true, b24, c24, e24))
+    f24.End(b0, Term.Call(Sp0, k24))
+    f24.Add(b24, Stmt.Close(Sp0, ScopeId(0)))
+    f24.End(b24, Term.Return(Sp0, Operand.Copy(L(LocalId(2)))))
+    f24.Add(e24, Stmt.Close(Sp0, ScopeId(0)))
+    f24.End(e24, Term.Exit(Sp0, ExitKind.Unreachable, Operand.None))
+    got24 := f24.Verify(t)
+    for w in String&["a call of 2 arguments to a function of 1 parameters", "an error edge for a call that cannot fail"] {
+        assert (try got24.Find(w) catch default -1) >= 0, got24
+    }
+    # joins: a spawn outside a join, a join closed with its tasks not waited for, a wait missing its failed edge
+    unit := t.Func(types.ListId(0), types.VoidT, types.ListId(0))
+    f21 := addFn(t)
+    j21 := f21.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0)
+    k21 := f21.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Place[], TaskClause[])
+    try f21.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j21))
+    try f21.Blocks[0].Stmts.Insert(2, Stmt.Spawn(Sp0, j21, k21))
+    try f21.Blocks[0].Stmts.Insert(3, Stmt.Close(Sp0, j21))
+    expect(t, f21, "bb0[3]: join S1 closed with tasks not waited for")
+    f22 := addFn(t)
+    j22 := f22.AddScope(ScopeKind.Join, ScopeId(0), typed.BlockId(1), Sp0, t.List1(types.DefaultErrT))
+    b22 := f22.NewBlock()
+    f22.Blocks[0].Stmts.Truncate(2)
+    try f22.Blocks[0].Stmts.Insert(1, Stmt.Open(Sp0, j22))
+    f22.End(b0, Term.Wait(Sp0, j22, b22, NoLocal, NoBlock))
+    f22.Add(b22, Stmt.Close(Sp0, j22))
+    f22.Add(b22, Stmt.Close(Sp0, ScopeId(0)))
+    f22.End(b22, Term.Return(Sp0, Operand.Copy(L(LocalId(2)))))
+    assert f22.Verify(t) == "bb0[term]: a wait for a join that can fail with no failed edge\n", f22.Verify(t)
+    f23 := addFn(t)
+    k23 := f23.AddTask(Callee.Fn(FnKey.Body(typed.BodyId(2)), unit), Empty, Empty, Place[], TaskClause[])
+    try f23.Blocks[0].Stmts.Insert(1, Stmt.Spawn(Sp0, ScopeId(0), k23))
+    expect(t, f23, "a spawn into S0, which is no join")
+}
+
+test "error codes are each function's own: an error's type's position from 1, its word; the default error for the rest" {
+    names := source.Names()
+    t := types.NewTable(names)
+    m := t.AddModule("t")
+    e := t.Named(t.AddDecl(m, names.Intern("E"), types.DeclKind.Error, 0), types.ListId(0))
+    o := t.Named(t.AddDecl(m, names.Intern("O"), types.DeclKind.Error, 0), types.ListId(0))
+    named := t.List(types.TypeId[o, e])
+    assert ErrorCode(t, named, e, 3) == ((2 << 16) | 3) and ErrorCode(t, named, o, 0) == 1 << 16
+    general := t.List(types.TypeId[e, types.DefaultErrT])
+    assert ErrorCode(t, general, o, 5) == 2 << 16 and ErrorCode(t, t.List1(e), o, 1) == -1
+    assert ExitText(ExitKind.SliceBounds) == "slice bounds out of range" and ExitText(ExitKind.Done) == ""
+    assert Key.Assert(typed.BodyId(3), source.Span(4, 9)).Text() == "assert B3 4:9"
+}
+
+test "constants are flattened into the function's tables; helpers' ABI is their kind's" {
+    names := source.Names()
+    t := types.NewTable(names)
+    f := addFn(t)
+    c := f.AddConst(typed.Const.Items(typed.Const&[typed.Const.Bytes(U8[104, 105]), typed.Const.Bits(7)]))
+    w mut dumper&t = dumper(f, t)
+    assert w.constant(c) == "[text 2 7]" and f.Bytes.Len() == 2 and f.ConstItems.Len() == 2
+    i64 := t.Prim("I64")
+    render := HelperType(t, HelperKind.Render, i64)
+    assert t.Canon(render) == "fn(I64&, I64)" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Render, i64), render), render) == 1
+    eq := HelperType(t, HelperKind.Equal, i64)
+    assert t.Canon(eq) == "fn(I64&, I64&) Bool" and PassedCount(t, Callee.Fn(FnKey.Helper(HelperKind.Equal, i64), eq), eq) == 0
+    assert PassedCount(t, Callee.Fn(FnKey.Body(typed.BodyId(0)), eq), eq) == 2
+}

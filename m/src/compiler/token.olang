@@ -1,0 +1,357 @@
+# token - what the scanner gives the parser: a token's kind, its flags and its span (compiler/DESIGN.md 1.1).
+#
+# A token is a few words held by value, one Array<Token> per file. Its text is never copied: Start and End are byte
+# offsets into its file's text, [Start, End), so a token's text is text[t.Start:t.End]. A literal's value is decoded
+# from that span when it is needed.
+
+# what a token is. A keyword (L9) is a kind of its own; true and false are BoolLit and null is NullLit (L11, L11a). A word
+# after "." is always Iden, whatever it spells (L9a). StmtEnd has no text: it is synthesized where a line ends a
+# statement (L18) and stands just past the last token of that line. Eof stands at the end of the text, once, last.
+type Tok enum {
+    Eof
+    Iden
+    IntLit
+    FloatLit
+    CharLit
+    StrLit
+    BoolLit
+    NullLit
+    StmtEnd
+    # keywords (L9)
+    If
+    Else
+    Try
+    Checked
+    Catch
+    Return
+    Join
+    Spawn
+    Defer
+    Break
+    Continue
+    Unreachable
+    Extends
+    Noreturn
+    Assert
+    For
+    Do
+    In
+    Is
+    As
+    Range
+    Match
+    Case
+    Nomatch
+    Type
+    Struct
+    Enum
+    Trait
+    Fn
+    Error
+    Mut
+    Import
+    Test
+    Destruct
+    Extern
+    Default
+    And
+    Or
+    Xor
+    Not
+    # operators and punctuation (L16)
+    Plus
+    Minus
+    Star
+    Slash
+    Percent
+    At
+    Comma
+    Dot
+    Question
+    Assign
+    Colon
+    Define
+    PlusEq
+    MinusEq
+    StarEq
+    SlashEq
+    PercentEq
+    ShlEq
+    ShrEq
+    AmpEq
+    PipeEq
+    CaretEq
+    Inc
+    Dec
+    EqEq
+    Arrow
+    NotEq
+    Bang
+    Lt
+    Le
+    Gt
+    Ge
+    Amp
+    Pipe
+    Caret
+    Tilde
+    Dollar
+    Shl
+    Shr
+    LParen
+    RParen
+    LBrack
+    RBrack
+    LBrace
+    RBrace
+}
+
+# Flags: what stood between a token and the token before it
+LineBreak U8 = 1     # a line ended since the previous token - a newline, a line comment, or a block comment spanning one
+Space U8 = 2         # anything at all stood between them: whitespace, a comment, a dropped byte (E25's adjacency)
+LineStart U8 = 4     # the token begins its line: the byte before it is a newline, or it is the file's first byte
+
+# one token: its kind, its flags and where its text is, [Start, End) in its file's text
+type Token struct(Kind Tok, Flags U8, Start I32, End I32) {
+    Kind
+    Flags
+    Start
+    End
+}
+
+fn (t Token) Has(flag U8) Bool { return (t.Flags & flag) != 0 }
+
+# L18: the tokens after which a line's end ends the statement
+fn (k Tok) EndsStatement() Bool {
+    return match k {
+        case Tok.Iden, Tok.IntLit, Tok.FloatLit, Tok.CharLit, Tok.StrLit, Tok.BoolLit, Tok.NullLit => true
+        case Tok.Inc, Tok.Dec, Tok.Bang, Tok.RParen, Tok.RBrack => true
+        case Tok.Return, Tok.Error, Tok.Noreturn, Tok.Break, Tok.Continue, Tok.Unreachable => true
+        nomatch => false
+    }
+}
+
+# the text a kind always has - a keyword's or an operator's - or "" for one whose text varies (a name, a literal) and
+# for the two that have none (StmtEnd, Eof)
+fn (k Tok) Text() String& {
+    return match k {
+        case Tok.If => "if"
+        case Tok.Else => "else"
+        case Tok.Try => "try"
+        case Tok.Checked => "checked"
+        case Tok.Catch => "catch"
+        case Tok.Return => "return"
+        case Tok.Join => "join"
+        case Tok.Spawn => "spawn"
+        case Tok.Defer => "defer"
+        case Tok.Break => "break"
+        case Tok.Continue => "continue"
+        case Tok.Unreachable => "unreachable"
+        case Tok.Extends => "extends"
+        case Tok.Noreturn => "noreturn"
+        case Tok.Assert => "assert"
+        case Tok.For => "for"
+        case Tok.Do => "do"
+        case Tok.In => "in"
+        case Tok.Is => "is"
+        case Tok.As => "as"
+        case Tok.Range => "range"
+        case Tok.Match => "match"
+        case Tok.Case => "case"
+        case Tok.Nomatch => "nomatch"
+        case Tok.Type => "type"
+        case Tok.Struct => "struct"
+        case Tok.Enum => "enum"
+        case Tok.Trait => "trait"
+        case Tok.Fn => "fn"
+        case Tok.Error => "error"
+        case Tok.Mut => "mut"
+        case Tok.Import => "import"
+        case Tok.Test => "test"
+        case Tok.Destruct => "destruct"
+        case Tok.Extern => "extern"
+        case Tok.Default => "default"
+        case Tok.And => "and"
+        case Tok.Or => "or"
+        case Tok.Xor => "xor"
+        case Tok.Not => "not"
+        case Tok.NullLit => "null"
+        case Tok.Plus => "+"
+        case Tok.Minus => "-"
+        case Tok.Star => "*"
+        case Tok.Slash => "/"
+        case Tok.Percent => "%"
+        case Tok.At => "@"
+        case Tok.Comma => ","
+        case Tok.Dot => "."
+        case Tok.Question => "?"
+        case Tok.Assign => "="
+        case Tok.Colon => ":"
+        case Tok.Define => ":="
+        case Tok.PlusEq => "+="
+        case Tok.MinusEq => "-="
+        case Tok.StarEq => "*="
+        case Tok.SlashEq => "/="
+        case Tok.PercentEq => "%="
+        case Tok.ShlEq => "<<="
+        case Tok.ShrEq => ">>="
+        case Tok.AmpEq => "&="
+        case Tok.PipeEq => "|="
+        case Tok.CaretEq => "^="
+        case Tok.Inc => "++"
+        case Tok.Dec => "--"
+        case Tok.EqEq => "=="
+        case Tok.Arrow => "=>"
+        case Tok.NotEq => "!="
+        case Tok.Bang => "!"
+        case Tok.Lt => "<"
+        case Tok.Le => "<="
+        case Tok.Gt => ">"
+        case Tok.Ge => ">="
+        case Tok.Amp => "&"
+        case Tok.Pipe => "|"
+        case Tok.Caret => "^"
+        case Tok.Tilde => "~"
+        case Tok.Dollar => "$"
+        case Tok.Shl => "<<"
+        case Tok.Shr => ">>"
+        case Tok.LParen => "("
+        case Tok.RParen => ")"
+        case Tok.LBrack => "["
+        case Tok.RBrack => "]"
+        case Tok.LBrace => "{"
+        case Tok.RBrace => "}"
+        nomatch => ""
+    }
+}
+
+# a kind as a diagnostic names it: "a name", "end of line", or its text in quotes ("')'")
+fn (k Tok) Describe() String {
+    return match k {
+        case Tok.Eof => "end of file"
+        case Tok.Iden => "a name"
+        case Tok.IntLit => "an integer literal"
+        case Tok.FloatLit => "a float literal"
+        case Tok.CharLit => "a character literal"
+        case Tok.StrLit => "a string literal"
+        case Tok.BoolLit => "a Bool literal"
+        case Tok.StmtEnd => "end of line"
+        nomatch => "'" $k.Text() "'"
+    }
+}
+
+# the keyword a word spells (L9), BoolLit for true and false, NullLit for null, else Iden. A switch on the first letter
+# and the length, then one comparison: no table is built (DESIGN.md 1.1)
+fn Keyword(t String&, at I64, n I64) Tok {
+    c := t[at]
+    if n < 2 or n > 11 or c < 'a' or c > 'x' { return Tok.Iden }
+    match c {
+        case 'a' {
+            if n == 2 and t[at + 1] == 's' { return Tok.As }
+            if n == 3 and spells(t, at, "and") { return Tok.And }
+            if n == 6 and spells(t, at, "assert") { return Tok.Assert }
+        }
+        case 'b' { if n == 5 and spells(t, at, "break") { return Tok.Break } }
+        case 'c' {
+            if n == 4 and spells(t, at, "case") { return Tok.Case }
+            if n == 5 and spells(t, at, "catch") { return Tok.Catch }
+            if n == 7 and spells(t, at, "checked") { return Tok.Checked }
+            if n == 8 and spells(t, at, "continue") { return Tok.Continue }
+        }
+        case 'd' {
+            if n == 2 and t[at + 1] == 'o' { return Tok.Do }
+            if n == 5 and spells(t, at, "defer") { return Tok.Defer }
+            if n == 7 and spells(t, at, "default") { return Tok.Default }
+            if n == 8 and spells(t, at, "destruct") { return Tok.Destruct }
+        }
+        case 'e' {
+            if n == 4 and spells(t, at, "else") { return Tok.Else }
+            if n == 4 and spells(t, at, "enum") { return Tok.Enum }
+            if n == 5 and spells(t, at, "error") { return Tok.Error }
+            if n == 7 and spells(t, at, "extends") { return Tok.Extends }
+            if n == 6 and spells(t, at, "extern") { return Tok.Extern }
+        }
+        case 'f' {
+            if n == 2 and t[at + 1] == 'n' { return Tok.Fn }
+            if n == 3 and spells(t, at, "for") { return Tok.For }
+            if n == 5 and spells(t, at, "false") { return Tok.BoolLit }
+        }
+        case 'i' {
+            if n == 2 {
+                d := t[at + 1]
+                if d == 'f' { return Tok.If }
+                if d == 'n' { return Tok.In }
+                if d == 's' { return Tok.Is }
+            }
+            if n == 6 and spells(t, at, "import") { return Tok.Import }
+        }
+        case 'j' { if n == 4 and spells(t, at, "join") { return Tok.Join } }
+        case 'm' {
+            if n == 3 and spells(t, at, "mut") { return Tok.Mut }
+            if n == 5 and spells(t, at, "match") { return Tok.Match }
+        }
+        case 'n' {
+            if n == 3 and spells(t, at, "not") { return Tok.Not }
+            if n == 4 and spells(t, at, "null") { return Tok.NullLit }
+            if n == 7 and spells(t, at, "nomatch") { return Tok.Nomatch }
+            if n == 8 and spells(t, at, "noreturn") { return Tok.Noreturn }
+        }
+        case 'o' {
+            if n == 2 and t[at + 1] == 'r' { return Tok.Or }
+        }
+        case 'r' {
+            if n == 5 and spells(t, at, "range") { return Tok.Range }
+            if n == 6 and spells(t, at, "return") { return Tok.Return }
+        }
+        case 's' {
+            if n == 5 and spells(t, at, "spawn") { return Tok.Spawn }
+            if n == 6 and spells(t, at, "struct") { return Tok.Struct }
+        }
+        case 't' {
+            if n == 3 and spells(t, at, "try") { return Tok.Try }
+            if n == 4 {
+                if spells(t, at, "type") { return Tok.Type }
+                if spells(t, at, "test") { return Tok.Test }
+                if spells(t, at, "true") { return Tok.BoolLit }
+            }
+            if n == 5 and spells(t, at, "trait") { return Tok.Trait }
+        }
+        case 'u' { if n == 11 and spells(t, at, "unreachable") { return Tok.Unreachable } }
+        case 'x' { if n == 3 and spells(t, at, "xor") { return Tok.Xor } }
+        nomatch { }
+    }
+    return Tok.Iden
+}
+
+# whether t holds word at at; its length was checked already
+fn spells(t String&, at I64, word String&) Bool {
+    for k in range 1, word.Len() {
+        if t[at + k] != word[k] { return false }
+    }
+    return true
+}
+
+test "Keyword finds every reserved word and nothing else" {
+    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Checked, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.Break
+                 Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
+                 Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum
+                 Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
+                 Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.NullLit] {
+        w := k.Text()
+        assert Keyword(w, 0, w.Len()) == k, "keyword " $w
+    }
+    assert Keyword("true", 0, 4) == Tok.BoolLit
+    assert Keyword("false", 0, 5) == Tok.BoolLit
+    for w in String&["i", "iff", "If", "returns", "retur", "types", "x", "xo", "unreachables", "tru", "_if", "zz"] {
+        assert Keyword(w, 0, w.Len()) == Tok.Iden, "not a keyword: " $w
+    }
+    assert Keyword("a mut b", 2, 3) == Tok.Mut
+}
+
+test "a token's description names it as a diagnostic does" {
+    assert Tok.Iden.Describe() == "a name"
+    assert Tok.StmtEnd.Describe() == "end of line"
+    assert Tok.RParen.Describe() == "')'"
+    assert Tok.Return.Describe() == "'return'"
+    assert Tok.Return.EndsStatement() and not Tok.RBrace.EndsStatement() and not Tok.Mut.EndsStatement()
+}

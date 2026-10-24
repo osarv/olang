@@ -1,0 +1,1339 @@
+# names - who each name is: every module's declaration table, and every name a body, a signature or a type writes
+# resolved against it (D2, D3, D3a, D8c, M10, M14, M20, B10, B10c; compiler/DESIGN.md 1.5).
+#
+# A module's table holds its types, functions, globals and error types - those of the branches of its top-level ifs
+# that are chosen; a branch still pending (B9c) waits aside, and DecideTop resolves it once the checker has decided
+# it. Parameters and locals live in one flat map with an undo log: D3 and D3a forbid shadowing, so a name means one
+# thing at every point of a body and leaving a block only takes back what it declared.
+#
+# What a name is is recorded by where it is written (Use). An unknown name is recorded as None and left to the checker
+# (M5), which knows a type's members and reports one error per name with its suggestion; names reports here only the
+# rules that are about declarations and imports, and B10's unknown name in a condition. A local if whose condition
+# the build decides (S8b) has its branches' diagnostics chosen or dropped here; one only compile-time evaluation can
+# decide stays pending for the checker.
+import "std/pair"
+import "std/os"
+import "source"
+import "token"
+import "ast"
+import "diag"
+import "msgs"
+import "cond"
+import "fetch"
+import "load"
+
+# what a name is
+type What enum {
+    None        # nothing this pass knows: the checker's to report
+    Local       # a parameter or a local of the item being resolved
+    Global
+    Func
+    Type        # a type or an error type
+    Import      # an import's alias: Index is the module it reaches
+    Build       # a build constant (B10)
+    Builtin     # a primitive, Bool or Array
+    TypeVar     # a type variable of the declaration
+}
+
+# a resolved name: what it is, and in which module and entry (a local's index in its item)
+type Ref struct(Kind What, Module I64, Index I64) {
+    Kind
+    Module
+    Index
+}
+
+# a top-level declaration: its name and where it is written, and what it is. Decl is a type's declaration (null else)
+type Entry struct(Name source.NameId, Sp source.Span, Kind What, Mut Bool, Decl ast.TypeDecl&) {
+    Name
+    Sp
+    Kind
+    Mut
+    Decl
+}
+
+# a module's names: its entries, the first function or global and the type of each name, and its import aliases
+type Table struct() {
+    Entries List<Entry>
+    values Map<source.NameId, I64>
+    types Map<source.NameId, I64>
+    aliases Map<source.NameId, I64>
+    waiting Map<source.NameId, Bool>   # the names a pending branch declares (B9c): not unknown until it is decided
+}
+
+# a parameter, a local or a type variable in scope
+type local struct(Name source.NameId, Sp source.Span, Kind What) {
+    Name
+    Sp
+    Kind
+}
+
+# T4, T7: the names every module sees as a type
+fn speedLam(xs Array<I64>&) I64 { return xs.Count(fn(x I64) Bool { return x > 2 }) }
+fn BuiltinTypeName(t String&) Bool {
+    return t == "Bool" or t == "Array" or t == "I8" or t == "I16" or t == "I32" or t == "I64" or t == "U8" or
+           t == "U16" or t == "U32" or t == "U64" or t == "F16" or t == "BF16" or t == "F32" or t == "F64"
+}
+
+type Resolver struct(L mut load.Loader&) {
+    L
+    Tables List<mut Table&>
+    preludeTypes Map<source.NameId, I64>   # an exported type of the prelude: the module declaring it
+    preludeConsts Map<source.NameId, Ref>  # M19d: an exported immutable global of the prelude ("Pi"): where it is
+    uses Map<I64, Ref>                     # by where a name is written: its file and offset
+    members Map<I64, Ref>                  # by where a member's name ends: x.y through an import's alias
+    # the item being resolved
+    mi I64 = -1
+    locals List<local>
+    scope Map<source.NameId, I64>
+    undo List<pair.Pair<source.NameId, I64>>
+    itemNames List<source.NameId>
+    itemInits List<source.NameId>   # the locals of the item declared with an initializer, one value each: S8c's candidates
+    inCond Bool = false
+    lambdaParams Bool = false   # declaring a lambda's parameters (D16c: "already declared here")
+    item I64 = 0
+    unknownSaid List<pair.Pair<source.NameId, I64>>   # B11: (name, item) a B10 or M10 error was said for
+    # S8a: the local ifs whose condition B9a evaluated reading no build constant, by (file, the condition's start) - the
+    # same on every build, which the checker reports once the condition checks
+    Same Map<pair.Pair<I64, I64>, Bool>
+}
+
+# ---- the program ----
+
+# every module's table, then every body resolved
+fn (r mut Resolver&) Resolve() {
+    for mi in range r.L.Mods.Len() { r.Tables.Push(Table()) }
+    for mi in range r.L.Mods.Len() {
+        m := r.L.Mods[mi]
+        if not m.Prelude { continue }
+        r.tableOf(mi)
+        for t in r.L.Mods[mi].Types {
+            if t[0].IsUpper() { r.preludeTypes.Put(r.L.Names.Intern(t), mi) }
+        }
+        for e in r.Tables[mi].values {
+            en := r.Tables[mi].Entries[e.Value]
+            if en.Kind == What.Global and not en.Mut and r.text(e.Key)[0].IsUpper() {
+                r.preludeConsts.Put(e.Key, Ref(What.Global, mi, e.Value))
+            }
+        }
+    }
+    for mi in range r.L.Mods.Len() {
+        if not r.L.Mods[mi].Prelude { r.tableOf(mi) }
+    }
+    for mi in range r.L.Mods.Len() {
+        m := r.L.Mods[mi]
+        if m.Decls != null { r.bodies(mi, m.Decls) }
+    }
+}
+
+# the checker's decision for a pending top-level if (B9c): its imports loaded, its branch's declarations entered and
+# resolved
+fn (r mut Resolver&) DecideTop(mi I64, condStart I32, chosen I64) {
+    before := r.L.Mods.Len()
+    r.L.Decide(mi, condStart, chosen)
+    for k in range before, r.L.Mods.Len() { r.Tables.Push(Table()) }
+    for k in range before, r.L.Mods.Len() { r.tableOf(k) }
+    r.aliasesOf(mi)
+    m := r.L.Mods[mi]
+    for d in m.Decls {
+        match d {
+            case ast.Decl.If(_, ti) {
+                if ti.Cond.Span().Start == condStart {
+                    r.collectIf(mi, ti, chosen, 0)
+                    r.bodiesIf(mi, ti, chosen, 0)
+                }
+            }
+            nomatch { }
+        }
+    }
+    for k in range before, r.L.Mods.Len() {
+        if r.L.Mods[k].Decls != null { r.bodies(k, r.L.Mods[k].Decls) }
+    }
+}
+
+# what the name written at that offset of that file is; None where it was not resolved
+fn (r Resolver&) Use(file I64, at I32) Ref {
+    return try r.uses.Get(key(file, at)) catch default Ref(What.None, -1, -1)
+}
+
+# what the member whose name ends at that offset is, where its base is an import's alias
+fn (r Resolver&) Member(file I64, end I32) Ref {
+    return try r.members.Get(key(file, end)) catch default Ref(What.None, -1, -1)
+}
+
+fn key(file I64, at I32) I64 { return (file << 32) | I64(at) }
+
+fn (r mut Resolver&) text(n source.NameId) String&r { return r.L.Names.Text(n) }
+
+fn (r mut Resolver&) at(mi I64, sp source.Span) diag.Where {
+    return diag.Where.Span(r.L.Mods[mi].File, I64(sp.Start), I64(sp.End))
+}
+
+fn (r mut Resolver&) tok(n source.NameId) String { return msgs.Tok(r.text(n)) }
+
+# the span of the name n written first at or after offset from in module mi - a declaration's name, which its node's
+# span does not give apart
+fn (r mut Resolver&) nameSpan(mi I64, from I32, n source.NameId) source.Span {
+    m := r.L.Mods[mi]
+    toks := m.Toks.Toks
+    lo I64 = 0
+    hi := toks.Len()
+    for lo < hi {
+        mid := (lo + hi) / 2
+        if toks[mid].Start < from {
+            lo = mid + 1
+        } else {
+            hi = mid
+        }
+    }
+    want := r.text(n)
+    for i in range lo, toks.Len() {
+        t := toks[i]
+        if t.Kind == token.Tok.Eof or i - lo > 256 { break }
+        if t.Kind == token.Tok.Iden and m.Src.Text[t.Start:t.End] == want { return source.Span(t.Start, t.End) }
+    }
+    return source.Span(from, from)
+}
+
+# ---- tables ----
+
+fn (r mut Resolver&) tableOf(mi I64) {
+    r.aliasesOf(mi)
+    m := r.L.Mods[mi]
+    if m.Decls != null { r.collect(mi, m.Decls) }
+}
+
+fn (r mut Resolver&) aliasesOf(mi I64) {
+    t := r.Tables[mi]
+    for imp in r.L.Mods[mi].Imports {
+        if imp.Target >= 0 { t.aliases.Put(r.L.Names.Intern(imp.Alias), imp.Target) }
+    }
+}
+
+# the declarations of a module or of a chosen branch, in order; a pending branch's wait aside
+fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
+    for d in decls {
+        match d {
+            case ast.Decl.If(_, ti) {
+                chosen := r.L.Chosen(mi, ti.Cond.Span().Start)
+                if chosen == load.Pending {
+                    r.waitAside(mi, ti)
+                } else {
+                    r.collectIf(mi, ti, chosen, 0)
+                }
+            }
+            case ast.Decl.Fn(f), ast.Decl.Extern(f) {
+                from := f.Recv.Sp.End if f.Recv != null else f.Sp.Start
+                r.addValue(mi, f.Name, r.nameSpan(mi, from, f.Name), false, true, f.Recv != null, null)
+            }
+            case ast.Decl.Type(sp, t) { r.addType(mi, t.Name, r.nameSpan(mi, sp.Start, t.Name), t) }
+            case ast.Decl.Errors(sp, name, _) { r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null) }
+            case ast.Decl.Global(_, v) {
+                for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], writable(v.Ty), false, false, v) }
+            }
+            nomatch { }
+        }
+    }
+}
+
+fn (r mut Resolver&) collectIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
+    if chosen == index and ti.Then.Decls != null { r.collect(mi, ti.Then.Decls) }
+    if ti.ElseIf != null { r.collectIf(mi, ti.ElseIf, chosen, index + 1) }
+    if ti.Else != null and chosen == index + 1 and ti.Else.Decls != null { r.collect(mi, ti.Else.Decls) }
+}
+
+# the names a pending if's branches declare, which wait aside until it is decided
+fn (r mut Resolver&) waitAside(mi I64, ti ast.TopIf&) {
+    r.waitBranch(mi, ti.Then)
+    if ti.ElseIf != null { r.waitAside(mi, ti.ElseIf) }
+    if ti.Else != null { r.waitBranch(mi, ti.Else) }
+}
+
+fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
+    if b.Decls == null { return }
+    t := r.Tables[mi]
+    for d in b.Decls {
+        match d {
+            case ast.Decl.If(_, ti) { r.waitAside(mi, ti) }
+            case ast.Decl.Fn(f), ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
+            case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
+            case ast.Decl.Errors(_, name, _) { t.waiting.Put(name, true) }
+            case ast.Decl.Global(_, v) {
+                for n in v.Names { t.waiting.Put(n, true) }
+            }
+            case ast.Decl.Import(_, alias, path) {
+                name := alias
+                if name == source.NameId(0) {
+                    spec := r.L.Mods[mi].Src.Text[path.Start + 1:path.End - 1]
+                    name = r.L.Names.Intern(load.DeriveAlias(spec))
+                }
+                t.waiting.Put(name, true)
+            }
+            nomatch { }
+        }
+    }
+}
+
+# whether a declaration's written type makes it assignable: "mut" at its top (T2)
+fn writable(t ast.TypeRef&) Bool {
+    if t == null { return false }
+    return match t {
+        case ast.TypeRef.Perm(_, _, w, _) => w
+        case _ => false
+    }
+}
+
+# D2, D3a, M20: a type or an error type
+fn (r mut Resolver&) addType(mi I64, n source.NameId, sp source.Span, decl ast.TypeDecl&) {
+    t := r.Tables[mi]
+    m := r.L.Mods[mi]
+    name := r.text(n)
+    if n in t.types {
+        r.L.Diags.Error(r.at(mi, sp), msgs.TypeNameInUse(r.tok(n)))
+        return
+    }
+    if not m.Prelude and n in r.preludeTypes { r.L.Diags.Error(r.at(mi, sp), msgs.BuiltinTypeRedeclared(r.tok(n))) }
+    if BuiltinTypeName(name) { r.L.Diags.Error(r.at(mi, sp), msgs.BuiltinTypeRedeclared(r.tok(n))) }
+    r.noAliasClash(mi, n, sp)
+    if n in t.values { r.L.Diags.Error(r.at(mi, sp), msgs.NameIsType(r.tok(n))) }
+    t.types.Put(n, t.Entries.Len())
+    t.Entries.Push(Entry(n, sp, What.Type, false, decl))
+}
+
+# D2, D8c, B10, B10c, M20: a function or a global (a method is in no namespace of names)
+fn (r mut Resolver&) addValue(mi I64, n source.NameId, sp source.Span, mutable Bool, isFunc Bool, isMethod Bool
+                              v ast.VarDecl&) {
+    t := r.Tables[mi]
+    m := r.L.Mods[mi]
+    name := r.text(n)
+    if name == "_" { r.L.Diags.Error(r.at(mi, sp), msgs.UnderscoreDeclared()) }
+    if isMethod {
+        t.Entries.Push(Entry(n, sp, What.Func, false, null))
+        return
+    }
+    if r.L.Consts.Has(name) {
+        std := m.Identity.StartsWith("std/") or m.Prelude
+        if isFunc or std or not r.L.Consts.Defined(name) {
+            r.L.Diags.Error(r.at(mi, sp), msgs.BuildConstRedeclared(r.tok(n)))
+        } else if mutable {
+            r.L.Diags.Error(r.at(mi, sp), msgs.BuildDefaultMut(r.tok(n)))
+        } else {
+            r.buildDefault(mi, n, sp, v)
+        }
+    }
+    prev := try t.values.Get(n) catch default -1
+    if prev >= 0 and not (isFunc and t.Entries[prev].Kind == What.Func) {
+        r.L.Diags.Error(r.at(mi, sp), msgs.NameInUse(r.tok(n)))
+        return
+    }
+    if prev < 0 {
+        r.noAliasClash(mi, n, sp)
+        if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
+            r.L.Diags.Error(r.at(mi, sp), msgs.NameIsType(r.tok(n)))
+        }
+        if not m.Prelude and n in r.preludeConsts { r.L.Diags.Error(r.at(mi, sp), msgs.PreludeConstRedeclared(r.tok(n))) }
+        t.values.Put(n, t.Entries.Len())
+    }
+    t.Entries.Push(Entry(n, sp, What.Func if isFunc else What.Global, mutable, null))
+}
+
+# B10c: an immutable global giving a build constant a default - of a type a -D value can have, which the value fits
+fn (r mut Resolver&) buildDefault(mi I64, n source.NameId, sp source.Span, v ast.VarDecl&) {
+    if v == null { return }
+    ty := ""
+    if v.Ty != null {
+        ty = $r.L.Mods[mi].Src.Text[v.Ty.Span().Start:v.Ty.Span().End]
+    } else if v.Values.Len() == 1 {
+        ty = $literalType(v.Values[0])
+    }
+    if ty == "" { return }   # its type is the checker's to find
+    if ty != "Bool" and ty != "I32" and ty != "I64" and ty != "U64" and ty != "F64" and ty != "String" {
+        r.L.Diags.Error(r.at(mi, sp), msgs.BuildDefaultType(r.tok(n), ty))
+        return
+    }
+    name := r.text(n)
+    if not r.L.Consts.Fits(name, ty) {
+        r.L.Diags.Error(r.at(mi, sp), msgs.BuildDefaultFit(name, r.L.Consts.Raw(name), r.tok(n), ty))
+    }
+}
+
+# the type a literal's own type gives a ":=" declaration (T6a), "" for anything else
+fn literalType(x ast.Expr&) String {
+    return match x {
+        case ast.Expr.Lit(_, k) => "I64" if k == token.Tok.IntLit else "F64" if k == token.Tok.FloatLit else
+                                   "Bool" if k == token.Tok.BoolLit else "String" if k == token.Tok.StrLit else ""
+        case ast.Expr.Unary(_, op, inner) => literalType(inner) if op == token.Tok.Minus else ""
+        case ast.Expr.Paren(_, inner) => literalType(inner)
+        case _ => ""
+    }
+}
+
+# M20: an import's alias names nothing else in the module that wrote the import
+fn (r mut Resolver&) noAliasClash(mi I64, n source.NameId, sp source.Span) {
+    if n in r.Tables[mi].aliases { r.L.Diags.Error(r.at(mi, sp), msgs.NameClashesWithImport(r.tok(n))) }
+}
+
+# ---- looking a name up ----
+
+fn (r mut Resolver&) lookup(n source.NameId) Ref {
+    i := try r.scope.Get(n) catch default -1
+    if i >= 0 { return Ref(r.locals[i].Kind, r.mi, i) }
+    t := r.Tables[r.mi]
+    v := try t.values.Get(n) catch default -1
+    if v >= 0 { return Ref(t.Entries[v].Kind, r.mi, v) }
+    ty := try t.types.Get(n) catch default -1
+    if ty >= 0 { return Ref(What.Type, r.mi, ty) }
+    a := try t.aliases.Get(n) catch default -1
+    if a >= 0 { return Ref(What.Import, a, -1) }
+    name := r.text(n)
+    if r.L.Consts.Has(name) { return Ref(What.Build, -1, -1) }
+    pc := try r.preludeConsts.Get(n) catch default Ref(What.None, -1, -1)
+    if pc.Kind != What.None { return pc }
+    p := try r.preludeTypes.Get(n) catch default -1
+    if p >= 0 { return Ref(What.Type, p, try r.Tables[p].types.Get(n) catch default -1) }
+    if BuiltinTypeName(name) { return Ref(What.Builtin, -1, -1) }
+    return Ref(What.None, -1, -1)
+}
+
+# a type's name in module mi: its own, the prelude's exported one, or a built-in one
+fn (r mut Resolver&) typeIn(mi I64, n source.NameId) Ref {
+    ty := try r.Tables[mi].types.Get(n) catch default -1
+    if ty >= 0 { return Ref(What.Type, mi, ty) }
+    p := try r.preludeTypes.Get(n) catch default -1
+    if p >= 0 { return Ref(What.Type, p, try r.Tables[p].types.Get(n) catch default -1) }
+    if BuiltinTypeName(r.text(n)) { return Ref(What.Builtin, -1, -1) }
+    return Ref(What.None, -1, -1)
+}
+
+# a name declared in module mi as another module sees it through an alias: a value, a type or a further alias
+fn (r mut Resolver&) memberOf(mi I64, n source.NameId) Ref {
+    t := r.Tables[mi]
+    v := try t.values.Get(n) catch default -1
+    if v >= 0 { return Ref(t.Entries[v].Kind, mi, v) }
+    ty := try t.types.Get(n) catch default -1
+    if ty >= 0 { return Ref(What.Type, mi, ty) }
+    a := try t.aliases.Get(n) catch default -1
+    if a >= 0 { return Ref(What.Import, a, -1) }
+    return Ref(What.None, -1, -1)
+}
+
+fn (r mut Resolver&) record(sp source.Span, ref Ref) {
+    if ref.Kind != What.None { r.uses.Put(key(r.L.Mods[r.mi].File, sp.Start), ref) }
+}
+
+# ---- parameters and locals ----
+
+fn (r mut Resolver&) mark() I64 { return r.undo.Len() }
+
+fn (r mut Resolver&) popTo(mark I64) {
+    for r.undo.Len() > mark {
+        p := try r.undo.Pop() catch { return }
+        if p.Second < 0 {
+            r.scope.Remove(p.First)
+        } else {
+            r.scope.Put(p.First, p.Second)
+        }
+    }
+}
+
+fn (r mut Resolver&) bind(n source.NameId, sp source.Span, what What) {
+    prev := try r.scope.Get(n) catch default -1
+    r.undo.Push(pair.Pair(n, prev))
+    r.scope.Put(n, r.locals.Len())
+    r.locals.Push(local(n, sp, what))
+    if n not in r.itemNames { r.itemNames.Push(n) }
+}
+
+# D3, D3a, D8c, M20: a parameter or a local declared - a name its module, the build or a type already gives
+# is an error, as is one already declared here
+fn (r mut Resolver&) declare(n source.NameId, sp source.Span, field Bool = false) {
+    name := r.text(n)
+    if name == "_" {
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.UnderscoreDeclared())
+        return
+    }
+    i := try r.scope.Get(n) catch default -1
+    if i >= 0 and r.locals[i].Kind == What.Local and not field {
+        # D16c: a lambda's parameter reusing a name it could capture
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.AlreadyDeclared(r.tok(n)) if r.lambdaParams else msgs.DeclaredTwice(r.tok(n)))
+    }
+    r.noShadow(n, sp)
+    r.noAliasClash(r.mi, n, sp)
+    r.bind(n, sp, What.Local)
+}
+
+fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
+    t := r.Tables[r.mi]
+    name := r.text(n)
+    v := try t.values.Get(n) catch default -1
+    if v >= 0 {
+        e := t.Entries[v]
+        rec := r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsFunction(r.tok(n)) if e.Kind == What.Func else
+                                               msgs.ShadowsGlobal(r.tok(n)))
+        r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
+    } else if r.L.Consts.Has(name) {
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
+    } else if n in r.preludeConsts {
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeConstRedeclared(r.tok(n)))
+    } else if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n)))
+    } else {
+        # a type variable of the declaration is a type too
+        i := try r.scope.Get(n) catch default -1
+        if i >= 0 and r.locals[i].Kind == What.TypeVar { r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n))) }
+    }
+}
+
+# an item starts: nothing in scope
+fn (r mut Resolver&) startItem(mi I64) {
+    r.mi = mi
+    r.locals.Clear()
+    r.scope.Clear()
+    r.undo.Clear()
+    r.itemNames.Clear()
+    r.itemInits.Clear()
+    r.inCond = false
+    r.item++
+}
+
+# ---- bodies ----
+
+fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
+    for d in decls {
+        match d {
+            case ast.Decl.If(_, ti) {
+                chosen := r.L.Chosen(mi, ti.Cond.Span().Start)
+                if chosen == load.Pending {
+                    r.startItem(mi)
+                    r.topConds(ti)
+                } else {
+                    r.bodiesIf(mi, ti, chosen, 0)
+                }
+            }
+            case ast.Decl.Fn(f) {
+                r.startItem(mi)
+                r.func(f)
+            }
+            case ast.Decl.Extern(f) {
+                r.startItem(mi)
+                r.sig(f, false)
+            }
+            case ast.Decl.Type(_, t) {
+                r.startItem(mi)
+                r.typeDecl(t)
+            }
+            case ast.Decl.Global(_, v) {
+                r.startItem(mi)
+                if v.Ty != null { r.typeRef(v.Ty) }
+                for x in v.Values { r.expr(x) }
+            }
+            case ast.Decl.Test(_, _, body) {
+                r.startItem(mi)
+                r.block(body)
+            }
+            nomatch { }
+        }
+    }
+}
+
+fn (r mut Resolver&) bodiesIf(mi I64, ti ast.TopIf&, chosen I64, index I64) {
+    if chosen == index and ti.Then.Decls != null { r.bodies(mi, ti.Then.Decls) }
+    if ti.ElseIf != null { r.bodiesIf(mi, ti.ElseIf, chosen, index + 1) }
+    if ti.Else != null and chosen == index + 1 and ti.Else.Decls != null { r.bodies(mi, ti.Else.Decls) }
+}
+
+# a pending top-level if's conditions, which the checker evaluates (B9c): their names, and B10's unknown ones
+fn (r mut Resolver&) topConds(ti ast.TopIf&) {
+    r.inCond = true
+    r.expr(ti.Cond)
+    r.inCond = false
+    if ti.ElseIf != null { r.topConds(ti.ElseIf) }
+}
+
+# a function, a method or a lambda: its type variables, its parameters and its body
+fn (r mut Resolver&) func(f ast.Func&) {
+    m := r.mark()
+    r.sig(f, true)
+    if f.Body != null { r.block(f.Body) }
+    r.popTo(m)
+}
+
+# a signature, its parameters declared where a body follows (a parameter is a local of the body, D3a)
+fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
+    s := f.S
+    r.typeParams(f.TypeParams)
+    if f.Recv != null and f.Recv.Ty != null {
+        r.receiverVars(f.Recv.Ty, false)
+        r.typeRef(f.Recv.Ty)
+    }
+    for p in s.Params {
+        if p.Ty != null { r.typeRef(p.Ty) }
+    }
+    for t in s.Results { r.typeRef(t) }
+    for e in s.Errors { r.path(e) }
+    for p in s.Params {
+        if p.Dflt != null { r.expr(p.Dflt) }
+    }
+    if f.Recv != null and f.Recv.Name != source.NameId(0) { r.param(f.Recv, body) }
+    for p in s.Params { r.param(p, body) }
+}
+
+# a function's or a constructor's type-parameter list (G3, G10d, QW): every item declared for the rest of its item,
+# then the constraints read, so an item's may name a later one
+fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
+    if tps == null { return }
+    for p in tps {
+        nsp := r.nameSpan(r.mi, p.Sp.Start, p.Name)
+        r.bind(p.Name, nsp, What.TypeVar)
+        r.record(nsp, Ref(What.TypeVar, r.mi, r.locals.Len() - 1))
+    }
+    for p in tps {
+        if p.Ty != null { r.typeRef(p.Ty) }
+    }
+}
+
+# the type variables a method's receiver introduces (QW: "fn (l List<T>&) Push(x T)"): its type's arguments that name
+# no type and no variable already declared
+fn (r mut Resolver&) receiverVars(t ast.TypeRef&, inArgs Bool) {
+    if t == null { return }
+    match t {
+        case ast.TypeRef.Named(sp, path, args) {
+            for i in range args.Len() {
+                a := args[i]
+                match a {
+                    case ast.TypeRef.Named(asp, ap, aargs) {
+                        if ap.Len() == 1 and aargs.Len() == 0 {
+                            n := ap[0]
+                            j := try r.scope.Get(n) catch default -1
+                            known := j >= 0 and r.locals[j].Kind == What.TypeVar
+                            if not known and r.typeIn(r.mi, n).Kind == What.None {
+                                r.introduce(asp, n, null)
+                            }
+                        } else {
+                            r.receiverVars(a, true)
+                        }
+                    }
+                    case _ { r.receiverVars(a, true) }
+                }
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _) { r.receiverVars(of, inArgs) }
+        case ast.TypeRef.Perm(_, of, _, _) { r.receiverVars(of, inArgs) }
+        nomatch { }
+    }
+}
+
+fn (r mut Resolver&) param(p ast.Param&, body Bool) {
+    if r.text(p.Name) == "_" {
+        r.L.Diags.Error(r.at(r.mi, p.Sp), msgs.UnderscoreDeclared())
+        return
+    }
+    sp := r.nameSpan(r.mi, p.Sp.Start, p.Name)
+    if body {
+        r.declare(p.Name, sp)
+    } else {
+        r.noAliasClash(r.mi, p.Name, sp)
+        r.bind(p.Name, sp, What.Local)
+    }
+}
+
+fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
+    if t.Params != null {
+        for p in t.Params {
+            if p.Ty != null { r.typeRef(p.Ty) }
+            r.bind(p.Name, p.Sp, What.TypeVar)
+        }
+    }
+    if t.Body == null { return }
+    match t.Body {
+        case ast.TypeBody.Struct(s) {
+            m0 := r.mark()
+            r.typeParams(s.TypeParams)
+            for p in s.Params {
+                if p.Ty != null { r.typeRef(p.Ty) }
+            }
+            if s.Errs != null {
+                for e in s.Errs.Errors { r.path(e) }
+            }
+            m := r.mark()
+            for p in s.Params {
+                if p.Dflt != null { r.expr(p.Dflt) }
+                r.param(p, true)
+            }
+            if s.Body != null { r.block(s.Body) }
+            r.popTo(m)
+            r.popTo(m0)
+            if s.Dtor != null {
+
+                m2 := r.mark()
+                for f in fieldNames(s) { r.bind(f, source.Span(0, 0), What.Local) }
+                r.block(s.Dtor)
+                r.popTo(m2)
+            }
+        }
+        case ast.TypeBody.Enum(cases) {
+            for c in cases {
+                for p in c.Payload {
+                    if p.Ty != null { r.typeRef(p.Ty) }
+                }
+            }
+        }
+        case ast.TypeBody.Trait(methods) {
+            for f in methods {
+                m := r.mark()
+                r.sig(f, false)
+                r.popTo(m)
+            }
+        }
+        case ast.TypeBody.Over(base, ctor) {
+            r.typeRef(base)
+            if ctor != null { r.func(ctor) }
+        }
+    }
+}
+
+# a constructor's fields, which its destructor reads bare: its parameters and the names its body declares as fields
+fn fieldNames(s ast.StructBody&) List<source.NameId> {
+    out List<source.NameId>
+    for p in s.Params { out.Push(p.Name) }
+    if s.Body == null { return out }
+    for st in s.Body {
+        match st {
+            case ast.Stmt.Var(_, v) {
+                for n in v.Names { out.Push(n) }
+            }
+            nomatch { }
+        }
+    }
+    return out
+}
+
+# ---- statements ----
+
+fn (r mut Resolver&) block(body Array<ast.Stmt&>&) {
+    if body == null { return }
+    m := r.mark()
+    for s in body { r.stmt(s) }
+    r.popTo(m)
+}
+
+fn (r mut Resolver&) stmt(s ast.Stmt&) {
+    if s == null { return }
+    match s {
+        case ast.Stmt.ExprS(_, x) { r.expr(x) }
+        case ast.Stmt.Var(_, v) { r.varDecl(v) }
+        case ast.Stmt.Multi(_, mu) {
+            for x in mu.Values { r.expr(x) }
+            for t in mu.Targets {
+                match t {
+                    case ast.Expr.Name(sp, n) {
+                        if mu.Define and r.text(n) != "_" {
+                            r.declare(n, sp)
+                        } else if not mu.Define {
+                            r.expr(t)
+                        }
+                    }
+                    case _ { r.expr(t) }
+                }
+            }
+        }
+        case ast.Stmt.Assign(_, _, target, value) {
+            r.expr(target)
+            r.expr(value)
+        }
+        case ast.Stmt.TryStore(_, inner, clauses, _) {
+            r.stmt(inner)
+            r.clauses(clauses)
+        }
+        case ast.Stmt.If(_, i) { r.ifStmt(i) }
+        case ast.Stmt.Forever(_, body) { r.block(body) }
+        case ast.Stmt.While(_, c, body) {
+            r.expr(c)
+            r.block(body)
+        }
+        case ast.Stmt.For3(_, f) {
+            m := r.mark()
+            r.stmt(f.Init)
+            if f.Cond != null { r.expr(f.Cond) }
+            r.stmt(f.Post)
+            r.block(f.Body)
+            r.popTo(m)
+        }
+        case ast.Stmt.ForIn(sp, f) {
+            r.expr(f.Source)
+            m := r.mark()
+            r.forNames(sp.Start, f.Key, f.Name)
+            r.block(f.Body)
+            r.popTo(m)
+            r.clauses(f.Clauses)
+        }
+        case ast.Stmt.DoFor(_, body, c) {
+            r.block(body)
+            r.expr(c)
+        }
+        case ast.Stmt.MatchS(_, mt) { r.matchOf(mt) }
+        case ast.Stmt.Return(_, values) {
+            for x in values { r.expr(x) }
+        }
+        case ast.Stmt.Assert(_, c, msg) {
+            r.expr(c)
+            if msg != null { r.expr(msg) }
+        }
+        case ast.Stmt.Jump(_, _, msg) {
+            if msg != null { r.expr(msg) }
+        }
+        case ast.Stmt.Raise(_, word) {
+            if word != null { r.path(word) }
+        }
+        case ast.Stmt.Spawn(_, targets, call) {
+            for t in targets { r.expr(t) }
+            r.expr(call)
+        }
+        case ast.Stmt.Join(_, j) {
+            r.block(j.Body)
+            r.clauses(j.Clauses)
+        }
+        case ast.Stmt.Defer(_, inner) {
+            m := r.mark()
+            r.stmt(inner)
+            r.popTo(m)
+        }
+        case ast.Stmt.Block(_, body) { r.block(body) }
+        nomatch { }
+    }
+}
+
+fn (r mut Resolver&) varDecl(v ast.VarDecl&) {
+    if v.Ty != null { r.typeRef(v.Ty) }
+    for x in v.Values { r.expr(x) }
+    # a constructor's pun is its parameter, already in scope (C4)
+    if v.Field and v.Ty == null and v.Values.Len() == 0 and not v.Infer { return }
+    # a field named as a parameter is C2a's error, the checker's to say
+    for i in range v.Names.Len() { r.declare(v.Names[i], v.NameSps[i], v.Field) }
+    # S8c: a local declared with its own value may be fixed - which the checker decides, knowing its type and its writes
+    if not v.Field and v.Values.Len() == v.Names.Len() {
+        for n in v.Names {
+            if n not in r.itemInits { r.itemInits.Push(n) }
+        }
+    }
+}
+
+# D3a, E29: a for-in's names are new - one already declared makes the loop an error, never a membership test
+fn (r mut Resolver&) forNames(from I32, k source.NameId, n source.NameId) {
+    r.forName(from, k)
+    r.forName(from, n)
+}
+
+fn (r mut Resolver&) forName(from I32, id source.NameId) {
+    if id == source.NameId(0) { return }
+    sp := r.nameSpan(r.mi, from, id)
+    i := try r.scope.Get(id) catch default -1
+    if (i >= 0 and r.locals[i].Kind == What.Local) or id in r.Tables[r.mi].values {
+        r.L.Diags.Error(r.at(r.mi, sp), msgs.ForInNameExists(r.tok(id), r.text(id)))
+        r.bind(id, sp, What.Local)
+    } else {
+        r.declare(id, sp)
+    }
+}
+
+# a local if: its condition's names, B10's unknown ones, and S8b - a condition the build decides chooses its branch
+fn (r mut Resolver&) ifStmt(i ast.If&) {
+    if i.Cond == null {
+        r.branch(i.Then)
+        return
+    }
+    r.inCond = true
+    r.expr(i.Cond)
+    r.inCond = false
+    outcome, value := r.decideLocal(i.Cond)
+    if outcome == cond.Outcome.Same { r.Same.Put(pair.Pair(r.L.Mods[r.mi].File, I64(i.Cond.Span().Start)), true) }
+    decided := outcome == cond.Outcome.Decided
+    runtime := outcome != cond.Outcome.Deferred
+    r.choose(i.Then, decided, value, runtime)
+    r.branch(i.Then)
+    if i.Else == null { return }
+    match i.Else {
+        case ast.Stmt.If(_, e) {
+            if e.Cond == null {
+                r.choose(e.Then, decided, not value, runtime)
+                r.branch(e.Then)
+            } else if decided and value {
+                r.dropAll(e)
+            } else {
+                r.ifStmt(e)
+            }
+        }
+        case _ { r.stmt(i.Else) }
+    }
+}
+
+fn (r mut Resolver&) choose(b ast.Branch&, decided Bool, taken Bool, runtime Bool) {
+    if b.Group < 0 { return }
+    if decided {
+        if taken {
+            r.L.Diags.Choose(b.Group)
+        } else {
+            r.L.Diags.Drop(b.Group)
+        }
+    } else if runtime and not r.L.Diags.Holds(b.Group) {
+        # a branch that did not parse may be one compile-time evaluation drops (S8c, B9c): the checker decides it
+        r.L.Diags.Choose(b.Group)
+    }
+}
+
+# an else-if chain after a branch the build took: none of it is compiled
+fn (r mut Resolver&) dropAll(i ast.If&) {
+    if i.Then.Group >= 0 { r.L.Diags.CutOff(i.Then.Group) }
+    if i.Else == null { return }
+    match i.Else {
+        case ast.Stmt.If(_, e) { r.dropAll(e) }
+        nomatch { }
+    }
+}
+
+fn (r mut Resolver&) branch(b ast.Branch&) {
+    if b.Group >= 0 { r.L.Diags.Reopen(b.Group) }
+    r.block(b.Body)
+    if b.Group >= 0 { r.L.Diags.EndHold() }
+}
+
+# S8b: what the build decides of a local condition - Decided where it reads a build constant and no local
+fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Outcome, Bool {
+    m := r.L.Mods[r.mi]
+    r.L.CondParser(m)
+    m.Scope.Locals.Clear()
+    for n in r.itemNames { m.Scope.Locals.Push(n) }
+    m.Scope.Fixed.Clear()
+    for n in r.itemInits { m.Scope.Fixed.Push(n) }
+    e mut cond.Eval&m = cond.Eval(m.Src.Text, r.L.Names, m.Scope, r.L.Consts)
+    return e.Local(c)
+}
+
+fn (r mut Resolver&) clauses(cl Array<ast.Catch&>&) {
+    if cl == null { return }
+    for c in cl {
+        for p in c.Items { r.path(p) }
+        r.block(c.Body)
+        for x in c.Defaults { r.expr(x) }
+    }
+}
+
+fn (r mut Resolver&) matchOf(mt ast.Match&) {
+    r.expr(mt.Subject)
+    for c in mt.Cases { r.caseOf(c) }
+    if mt.NoMatch != null { r.caseOf(mt.NoMatch) }
+}
+
+fn (r mut Resolver&) caseOf(c ast.Case&) {
+    m := r.mark()
+    if c.Alts != null {
+        bound List<source.NameId>
+        for p in c.Alts { r.pattern(p, bound) }
+    }
+    if c.Types != null {
+        for t in c.Types { r.typeRef(t) }
+    }
+    if c.Guard != null { r.expr(c.Guard) }
+    r.block(c.Body)
+    if c.Value != null { r.expr(c.Value) }
+    r.popTo(m)
+}
+
+# a case's alternative: its paths resolved, its bindings declared - once each, as alternatives bind the same names
+fn (r mut Resolver&) pattern(p ast.Pattern&, bound mut List<source.NameId>&) {
+    match p {
+        case ast.Pattern.Path(_, x), ast.Pattern.Value(_, x) { r.expr(x) }
+        case ast.Pattern.Case(_, path, subs) {
+            r.expr(path)
+            for s in subs { r.pattern(s, bound) }
+        }
+        case ast.Pattern.Bind(sp, n) {
+            if n not in bound {
+                bound.Push(n)
+                r.declare(n, sp)
+            }
+        }
+        nomatch { }
+    }
+}
+
+# ---- expressions ----
+
+fn (r mut Resolver&) expr(x ast.Expr&) {
+    if x == null { return }
+    match x {
+        case ast.Expr.Name(sp, n) { r.name(sp, n) }
+        case ast.Expr.Paren(_, a), ast.Expr.Unary(_, _, a), ast.Expr.Postfix(_, _, a) { r.expr(a) }
+        case ast.Expr.Binary(_, _, a, b), ast.Expr.NotIn(_, a, b), ast.Expr.Is(_, a, b, _) {
+            r.expr(a)
+            r.expr(b)
+        }
+        case ast.Expr.Chain(_, ch) {
+            for e in ch.Xs { r.expr(e) }
+        }
+        case ast.Expr.Cond(_, a, c, b) {
+            r.expr(a)
+            r.expr(c)
+            r.expr(b)
+        }
+        case ast.Expr.IsType(_, a, t, _), ast.Expr.As(_, a, t) {
+            r.expr(a)
+            r.typeRef(t)
+        }
+        case ast.Expr.Call(_, f, args) {
+            r.expr(f)
+            for a in args { r.expr(a) }
+        }
+        case ast.Expr.ScopeCall(sp, f, scope, args) {
+            r.expr(f)
+            for a in args { r.expr(a) }
+        }
+        case ast.Expr.Generic(_, a, args) {
+            r.expr(a)
+            for t in args { r.typeRef(t) }
+        }
+        case ast.Expr.Member(sp, a, n) { r.member(sp, a, n) }
+        case ast.Expr.Index(_, a, items) {
+            r.expr(a)
+            for e in items { r.expr(e) }
+        }
+        case ast.Expr.Slice(_, a, lo, hi) {
+            r.expr(a)
+            r.expr(lo)
+            r.expr(hi)
+        }
+        case ast.Expr.ArrayLit(_, elem, items) {
+            if elem != null { r.typeRef(elem) }
+            for e in items { r.expr(e) }
+        }
+        case ast.Expr.Row(_, items), ast.Expr.Join(_, items), ast.Expr.Range(_, items) {
+            for e in items { r.expr(e) }
+        }
+        case ast.Expr.Compr(sp, c) {
+            if c.Elem != null { r.typeRef(c.Elem) }
+            r.expr(c.Source)
+            m := r.mark()
+            r.forNames(sp.Start, c.Key, c.Name)
+            r.expr(c.Value)
+            r.expr(c.Filter)
+            r.popTo(m)
+        }
+        case ast.Expr.Try(_, a, clauses, _) {
+            r.expr(a)
+            r.clauses(clauses)
+        }
+        case ast.Expr.Lambda(_, f) {
+            wasCond := r.inCond
+            r.inCond = false
+            m := r.mark()
+            r.lambdaParams = true
+            r.sig(f, true)
+            r.lambdaParams = false
+            if f.Body != null { r.block(f.Body) }
+            r.popTo(m)
+            r.inCond = wasCond
+        }
+        case ast.Expr.MatchE(_, mt) { r.matchOf(mt) }
+        nomatch { }
+    }
+}
+
+fn (r mut Resolver&) name(sp source.Span, n source.NameId) {
+    ref := r.lookup(n)
+    r.record(sp, ref)
+    if ref.Kind == What.None and r.inCond { r.unknownInCond(sp, n) }
+}
+
+# B10: a name nothing declares, in a condition, with nothing near it - most likely a build constant -D did not define.
+# Said once a name in an item
+fn (r mut Resolver&) unknownInCond(sp source.Span, n source.NameId) {
+    if n in r.Tables[r.mi].waiting { return }
+    name := r.text(n)
+    if r.suggests(name) or r.importedType(n) { return }
+    for u in r.unknownSaid {
+        if u.First == n and u.Second == r.item { return }
+    }
+    r.unknownSaid.Push(pair.Pair(n, r.item))
+    r.L.Diags.Error(r.at(r.mi, sp), msgs.UnknownBuildName(r.tok(n), name))
+}
+
+# whether a name is near one the module or the language declares (B11's suggestion) - then it is most likely misspelt
+fn (r mut Resolver&) suggests(name String&) Bool {
+    if name.Len() >= 2 and name[name.Len() - 1].IsDigit() {
+        k := name.Len()
+        for k > 0 and name[k - 1].IsDigit() { k-- }
+        if name.Len() - k < 8 and BuiltinTypeName($name[:1].ToUpper() $name[k:]) { return true }
+    }
+    if name == "Byte" { return true }
+    best := 2 if name.Len() <= 4 else 3
+    for t in String&["I8", "I16", "I32", "I64", "U8", "U16", "U32", "U64", "F16", "BF16", "F32", "F64", "Bool", "Array"] {
+        if distance(name, t) < best { return true }
+    }
+    for e in r.Tables[r.mi].Entries {
+        if distance(name, r.text(e.Name)) < best { return true }
+    }
+    for t in r.L.Mods[r.mi].Types {
+        if distance(name, t) < best { return true }
+    }
+    for e in r.preludeTypes {
+        if distance(name, r.text(e.Key)) < best { return true }
+    }
+    return false
+}
+
+# T4: case-insensitive edit distance
+fn distance(a String&, b String&) I64 {
+    if a.Len() > 40 or b.Len() > 40 { return 99 }
+    prev := Array<I64>(b.Len() + 1)
+    cur := Array<I64>(b.Len() + 1)
+    for j in range b.Len() + 1 { prev[j] = j }
+    for i in range 1, a.Len() + 1 {
+        cur[0] = i
+        for j in range 1, b.Len() + 1 {
+            sub := prev[j - 1] + (0 if a[i - 1].ToLower() == b[j - 1].ToLower() else 1)
+            del := prev[j] + 1
+            ins := cur[j - 1] + 1
+            cur[j] = sub if sub < del and sub < ins else del if del < ins else ins
+        }
+        for j in range b.Len() + 1 { prev[j] = cur[j] }
+    }
+    return prev[b.Len()]
+}
+
+# whether an import of the module exports a type of that name
+fn (r mut Resolver&) importedType(n source.NameId) Bool {
+    for imp in r.L.Mods[r.mi].Imports {
+        if imp.Target >= 0 and n in r.Tables[imp.Target].types and r.text(n)[0].IsUpper() { return true }
+    }
+    return false
+}
+
+# x.y: where x is an import's alias, y is a name of the module it reaches (M14: past the first alias, only a public
+# alias reaches further); where the first name is none of this module's and std has a module of that name, M10 says
+# which import to write
+fn (r mut Resolver&) member(sp source.Span, a ast.Expr&, n source.NameId) {
+    t := r.aliasTarget(a)
+    if t >= 0 {
+        ref := r.memberOf(t, n)
+        if ref.Kind != What.None {
+            r.notPrivate(t, ref, n, source.Span(sp.End - I32(r.text(n).Len()), sp.End))
+            r.members.Put(key(r.L.Mods[r.mi].File, sp.End), ref)
+        }
+        return
+    }
+    r.expr(a)
+}
+
+# the module an alias chain reaches - a name that is an import's alias, then public aliases - or -1
+fn (r mut Resolver&) aliasTarget(a ast.Expr&) I64 {
+    return match a {
+        case ast.Expr.Name(sp, n) => r.aliasHead(sp, n)
+        case ast.Expr.Member(sp, inner, n) => r.aliasHop(sp, inner, n)
+        case _ => -1
+    }
+}
+
+fn (r mut Resolver&) aliasHead(sp source.Span, n source.NameId) I64 {
+    ref := r.lookup(n)
+    if ref.Kind == What.Import {
+        r.record(sp, ref)
+        return ref.Module
+    }
+    if ref.Kind == What.None { r.unknownHead(sp, n) }
+    return -1
+}
+
+fn (r mut Resolver&) aliasHop(sp source.Span, inner ast.Expr&, n source.NameId) I64 {
+    t := r.aliasTarget(inner)
+    if t < 0 { return -1 }
+    next := try r.Tables[t].aliases.Get(n) catch default -1
+    if next < 0 { return -1 }
+    name := r.text(n)
+    if not load.Public(name) {
+        r.L.Diags.Error(r.at(r.mi, source.Span(sp.End - I32(name.Len()), sp.End)), msgs.ImportIsPrivate(r.tok(n)))
+        return -1
+    }
+    r.members.Put(key(r.L.Mods[r.mi].File, sp.End), Ref(What.Import, next, -1))
+    return next
+}
+
+# M10: the first name of a dotted path no declaration or import gives, which std has a module of
+fn (r mut Resolver&) unknownHead(sp source.Span, n source.NameId) {
+    if n in r.Tables[r.mi].waiting { return }
+    name := r.text(n)
+    if not os.Exists($r.L.Std "/" $name ".olang") { return }
+    for u in r.unknownSaid {
+        if u.First == n and u.Second == -1 { return }
+    }
+    r.unknownSaid.Push(pair.Pair(n, I64(-1)))
+    r.L.Diags.Error(r.at(r.mi, sp), msgs.UnknownImportStd(r.tok(n), name))
+}
+
+# an error set's, a catch clause's or an error statement's path: alias chain, then the type and its word
+fn (r mut Resolver&) path(p ast.Path&) {
+    if p == null or p.Parts.Len() == 0 { return }
+    head := p.Parts[0]
+    sp := r.nameSpan(r.mi, p.Sp.Start, head)
+    ref := r.lookup(head)
+    r.record(sp, ref)
+    if ref.Kind == What.None and p.Parts.Len() >= 2 { r.unknownHead(sp, head) }
+}
+
+# ---- types ----
+
+fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
+    if t == null { return }
+    match t {
+        case ast.TypeRef.Named(sp, path, args) {
+            r.typePath(sp, path)
+            for i in range args.Len() {
+                r.typeRef(args[i])
+            }
+        }
+        case ast.TypeRef.Func(_, s) {
+            for p in s.Params {
+                if p.Ty != null { r.typeRef(p.Ty) }
+            }
+            for res in s.Results { r.typeRef(res) }
+            for e in s.Errors { r.path(e) }
+        }
+        case ast.TypeRef.Shape(_, body) {
+            match body {
+                case ast.TypeBody.Enum(cases) {
+                    for c in cases {
+                        for p in c.Payload {
+                            if p.Ty != null { r.typeRef(p.Ty) }
+                        }
+                    }
+                }
+                case ast.TypeBody.Struct(s) {
+                    for p in s.Params {
+                        if p.Ty != null { r.typeRef(p.Ty) }
+                    }
+                }
+                nomatch { }
+            }
+        }
+        case ast.TypeRef.Ref(sp, of, scope) {
+            r.typeRef(of)
+            if scope != source.NameId(0) and r.text(scope) != "return" {
+                r.record(r.nameSpan(r.mi, of.Span().End, scope), r.lookup(scope))
+            }
+        }
+        case ast.TypeRef.Perm(_, of, _, _) { r.typeRef(of) }
+    }
+}
+
+# a type variable's introduction by a receiver (QW): declared for the rest of its item, once
+fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef&) {
+    if c != null { r.typeRef(c) }
+    i := try r.scope.Get(n) catch default -1
+    if i >= 0 and r.locals[i].Kind == What.TypeVar {
+        r.record(sp, Ref(What.TypeVar, r.mi, i))
+        return
+    }
+    nsp := r.nameSpan(r.mi, sp.Start, n)
+    r.bind(n, nsp, What.TypeVar)
+    r.record(sp, Ref(What.TypeVar, r.mi, r.locals.Len() - 1))
+}
+
+# the module a type path's alias chain reaches, or -1
+fn (r mut Resolver&) aliasModule(path Array<source.NameId>&) I64 {
+    t := r.mi
+    for k in range path.Len() - 1 {
+        next := try r.Tables[t].aliases.Get(path[k]) catch default -1
+        if next < 0 { return -1 }
+        if k > 0 and not load.Public(r.text(path[k])) { return -1 }
+        t = next
+    }
+    return t
+}
+
+# a type's name: a type variable, a type of this module, the prelude's or a built-in one; or through an alias chain
+fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
+    if path.Len() == 1 {
+        n := path[0]
+        i := try r.scope.Get(n) catch default -1
+        if i >= 0 and r.locals[i].Kind == What.TypeVar {
+            r.record(sp, Ref(What.TypeVar, r.mi, i))
+            return
+        }
+        r.record(sp, r.typeIn(r.mi, n))
+        return
+    }
+    head := path[0]
+    if (try r.Tables[r.mi].aliases.Get(head) catch default -1) < 0 and r.lookup(head).Kind == What.None {
+        r.unknownHead(r.nameSpan(r.mi, sp.Start, head), head)
+        return
+    }
+    t := r.aliasModule(path)
+    if t >= 0 {
+        last := path[path.Len() - 1]
+        ref := r.memberOf(t, last)
+        r.notPrivate(t, ref, last, source.Span(sp.End - I32(r.text(last).Len()), sp.End))
+        r.record(sp, ref)
+    }
+}
+
+# M6: a name another module declares, reached through an alias, is visible only where it is public - its first letter
+# a capital; one that is not is said where it is written (and resolved still, so nothing else is said of it)
+fn (r mut Resolver&) notPrivate(t I64, ref Ref, n source.NameId, sp source.Span) {
+    if t == r.mi or ref.Kind == What.None or ref.Kind == What.Import or load.Public(r.text(n)) { return }
+    m := msgs.TypeIsPrivate(r.tok(n)) if ref.Kind == What.Type else msgs.VarIsPrivate(r.tok(n))
+    r.L.Diags.Error(r.at(r.mi, sp), m)
+}
+
+# ---- tests ----
+
+# the rules of what names says about a program: its files as name, text pairs, the first its root
+fn testRules(files Array<String&>&, defines Array<String&>&) String {
+    dir := try os.MkTemp() catch os.OsError { unreachable }
+    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    for k in range 0, files.Len(), 2 {
+        try os.WriteFile($dir "/" $files[k], files[k + 1]) catch os.OsError { }
+    }
+    consts := cond.Consts()
+    consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
+    d := diag.Diagnostics(false)
+    for f in defines { try consts.Define(f, d) catch { } }
+    l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
+                     source.Names(), d)
+    l.Load($dir "/" $files[0])
+    r := Resolver(l)
+    r.Resolve()
+    b := StringBuilder()
+    for s in d.AllSaid() {
+        line, col := lineCol(files[1], s.Start)
+        b.Push($s.Rule " " $line ":" $col "\n")
+    }
+    return b.ToString()
+}
+
+fn lineCol(text String&, at I64) I64, I64 {
+    line, col I64 = 1, 1
+    for i in range at {
+        if text[i] == '\n' {
+            line++
+            col = 1
+        } else {
+            col++
+        }
+    }
+    return line, col
+}
+
+test "D2, D3a and M20: a name means one thing in a module; nothing is reached bare that no import gave" {
+    got := testRules(String&["main.olang", "import \"util\"\nfn Circle() I32 { return 3 }\ntype Circle struct() { }\nCount I32 = 1\nfn f(Count I32, I32 I32) { for c in I32[1] { c := 2 } }\nfn print() { }\nutil := 3\nfn main() ? { }\n", "util.olang", ""], String&[])
+    assert got.Contains("D2 3:6\n") and got.Contains("D3a 5:6\n") and got.Contains("D3a 5:17\n"), got
+    assert got.Contains(" 5:46\n") and not got.Contains("M19f") and got.Contains("M20 7:1\n"), got
+}
+
+test "B10, B10c: build constants and their defaults, and an unknown name in a condition" {
+    got := testRules(String&["main.olang", "Port I64 = 8080\nLevel U8 = 3\nfn Mode() { }\nfn main() ? {\n    if Profil == 1 { }\n    TargetOs := 1\n}\n"], String&["Port=x", "Level=1", "Mode=2"])
+    assert got.Contains("B10c 1:1\n") and got.Contains("B10c 2:1\n") and got.Contains("B10 3:4\n"), got
+    assert got.Contains("B10 5:8\n") and got.Contains("D3a 6:5\n"), got
+}
+
+test "D3a, E29: a for-in declares new names; a local if the build decides chooses its branch" {
+    got := testRules(String&["main.olang", "fn main() ? {\n    x := 2\n    for x in I32[1] { }\n    if TargetOs == \"none\" { y := missing }\n}\n"], String&[])
+    assert got == "D3a, E29 3:9\n", got
+}

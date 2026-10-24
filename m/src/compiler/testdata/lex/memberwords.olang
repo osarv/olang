@@ -1,0 +1,4 @@
+s.in
+s.done
+x := s.true
+fn (w W&) spawn() { }

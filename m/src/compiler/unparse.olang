@@ -1,0 +1,829 @@
+# unparse - a syntax tree written back as olang source (compiler/DESIGN.md section 4): one statement a line, four
+# spaces a level, a single space between tokens where the language allows one. Nothing is added that the tree does
+# not hold - no parentheses, so a tree written and read again is the same tree, which "dump roundtrip" checks. A
+# literal is written as its text, so the source the tree was read from is given beside it.
+import "source"
+import "token"
+import "ast"
+import "diag"
+
+# the declarations of a file, written as source; a branch the build may decide that met a syntax error (diags holds it)
+# is written as the text it was
+fn Unparse(decls Array<ast.Decl&>&, names source.Names&, text String&, diags diag.Diagnostics&) String {
+    w := writer(names, text, diags)
+    for d in decls {
+        w.decl(d)
+        w.b.PushChar('\n')
+    }
+    return w.b.ToString()
+}
+
+# the branches the build may decide that met a syntax error, which Unparse writes as their text: their spans, in order
+fn HeldBranches(decls Array<ast.Decl&>&, names source.Names&, text String&, diags diag.Diagnostics&) Array<source.Span> {
+    w := writer(names, text, diags)
+    for d in decls { w.decl(d) }
+    return w.held.ToArray()
+}
+
+type writer struct(names source.Names&, text String&, diags diag.Diagnostics&) {
+    names
+    text
+    diags
+    b StringBuilder = StringBuilder()
+    ind I64 = 0
+    held List<source.Span>          # the branches written as their text
+    item Bool = false               # writing an item of a list: a function type holding a comma is parenthesized (L18c)
+    group Bool = false              # the next function type is parenthesized: a result before its signature's "?"
+}
+
+fn (w mut writer&) put(s String&) { w.b.Push(s) }
+
+fn (w mut writer&) name(n source.NameId) { w.b.Push(w.names.Text(n)) }
+
+fn (w mut writer&) span(sp source.Span) { w.b.Push(w.text[sp.Start:sp.End]) }
+
+# a line is indented four spaces a level up to MaxIndent levels, and no further: the text of a deep nesting would
+# otherwise grow with the square of its depth (1.6 GB at L21's 20,000 levels), and indentation means nothing to a reader
+# of the tree
+MaxIndent I64 = 64
+
+fn (w mut writer&) nl() {
+    w.b.PushChar('\n')
+    for i in range w.ind.Min(MaxIndent) { w.b.Push("    ") }
+}
+
+# ---- declarations ----
+
+fn (w mut writer&) decl(d ast.Decl&) {
+    match d {
+        case ast.Decl.Fn(f) { w.func(f) }
+        case ast.Decl.Extern(f) {
+            w.put("extern fn ")
+            w.name(f.Name)
+            w.sig(f.S)
+        }
+        case ast.Decl.Type(_, t) { w.typeDecl(t) }
+        case ast.Decl.Global(_, v) { w.varDecl(v) }
+        case ast.Decl.Import(_, alias, path) {
+            w.put("import ")
+            if alias != source.NameId(0) {
+                w.name(alias)
+                w.put(" ")
+            }
+            w.span(path)
+        }
+        case ast.Decl.Errors(_, name, words) {
+            w.put("error ")
+            w.name(name)
+            w.put(" {")
+            w.ind++
+            for x in words {
+                w.nl()
+                w.name(x)
+            }
+            w.ind--
+            w.nl()
+            w.put("}")
+        }
+        case ast.Decl.Test(_, name, body) {
+            w.put("test ")
+            w.span(name)
+            w.put(" ")
+            w.block(body)
+        }
+        case ast.Decl.If(_, i) { w.topIf(i) }
+    }
+}
+
+fn (w mut writer&) topIf(i ast.TopIf&) {
+    w.put("if ")
+    w.expr(i.Cond)
+    w.put(" ")
+    w.topBranch(i.Then)
+    if i.ElseIf != null {
+        w.put(" else ")
+        w.topIf(i.ElseIf)
+    } else if i.Else != null {
+        w.put(" else ")
+        w.topBranch(i.Else)
+    }
+}
+
+fn (w mut writer&) topBranch(b ast.TopBranch&) {
+    if w.diags.Holds(b.Group) {
+        w.span(b.Sp)
+        w.held.Push(b.Sp)
+        return
+    }
+    w.put("{")
+    w.ind++
+    for d in b.Decls {
+        w.nl()
+        w.decl(d)
+    }
+    w.ind--
+    w.nl()
+    w.put("}")
+}
+
+fn (w mut writer&) func(f ast.Func&) {
+    w.put("fn ")
+    if f.Recv != null {
+        w.put("(")
+        w.param(f.Recv)
+        w.put(") ")
+    }
+    w.name(f.Name)
+    w.typeParams(f.TypeParams)
+    w.sig(f.S)
+    w.put(" ")
+    w.block(f.Body)
+}
+
+# (params) results ? errors - several results bare (D8c); each result an item of the results' list, the last a
+# function type with no error set of its own parenthesized before the signature's "?" (L18c)
+fn (w mut writer&) sig(s ast.Sig&) {
+    w.put("(")
+    w.params(s.Params)
+    w.put(")")
+    if s.NoReturn { w.put(" noreturn") }
+    was := w.item
+    w.item = true
+    for i, t in s.Results {
+        w.put(", " if i > 0 else " ")
+        if i == s.Results.Len() - 1 and s.HasErrors { w.group = noErrorsOf(t) }
+        w.ty(t)
+        w.group = false
+    }
+    w.item = was
+    w.errors(s)
+}
+
+# whether a type is a function type with no error set of its own
+fn noErrorsOf(t ast.TypeRef&) Bool {
+    return match t {
+        case ast.TypeRef.Func(_, s) => not s.HasErrors
+        case _ => false
+    }
+}
+
+fn (w mut writer&) errors(s ast.Sig&) {
+    if not s.HasErrors { return }
+    w.put(" ?")
+    for i, e in s.Errors {
+        w.put(", " if i > 0 else " ")
+        w.path(e)
+    }
+}
+
+fn (w mut writer&) params(ps Array<ast.Param&>&) {
+    was := w.item
+    w.item = true
+    for i, x in ps {
+        if i > 0 { w.put(", ") }
+        w.param(x)
+    }
+    w.item = was
+}
+
+fn (w mut writer&) param(x ast.Param&) {
+    if x.Name != source.NameId(0) { w.name(x.Name) }
+    if x.Ty != null {
+        if x.Name != source.NameId(0) { w.put(" ") }
+        w.ty(x.Ty)
+    }
+    if x.Dflt != null {
+        w.put(" = ")
+        w.expr(x.Dflt)
+    }
+}
+
+fn (w mut writer&) path(p ast.Path&) {
+    for i, n in p.Parts {
+        if i > 0 { w.put(".") }
+        w.name(n)
+    }
+}
+
+fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
+    w.put("type ")
+    w.name(t.Name)
+    w.typeParams(t.Params)
+    if t.Extends { w.put(" extends") }
+    w.put(" ")
+    w.typeBody(t.Body)
+}
+
+# "<T, U Shape, N I64>": a type's, a function's or a constructor's type parameters (G1, G3, G10d)
+fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
+    if tps == null or tps.Len() == 0 { return }
+    w.put("<")
+    was := w.item
+    w.item = true
+    for i, x in tps {
+        if i > 0 { w.put(", ") }
+        w.name(x.Name)
+        if x.Ty != null {
+            w.put(" ")
+            w.ty(x.Ty)
+        }
+    }
+    w.item = was
+    w.put(">")
+}
+
+fn (w mut writer&) typeBody(b ast.TypeBody&) {
+    match b {
+        case ast.TypeBody.Struct(s) {
+            w.put("struct")
+            w.typeParams(s.TypeParams)
+            w.put("(")
+            w.params(s.Params)
+            w.put(")")
+            w.errors(s.Errs)
+            w.put(" ")
+            w.block(s.Body)
+            if s.Dtor != null {
+                w.put(" destruct ")
+                w.block(s.Dtor)
+            }
+        }
+        case ast.TypeBody.Enum(cases) {
+            w.put("enum {")
+            w.ind++
+            for c in cases {
+                w.nl()
+                w.name(c.Name)
+                if c.Payload.Len() > 0 {
+                    w.put("(")
+                    w.params(c.Payload)
+                    w.put(")")
+                }
+            }
+            w.ind--
+            w.nl()
+            w.put("}")
+        }
+        case ast.TypeBody.Trait(methods) {
+            w.put("trait {")
+            w.ind++
+            for m in methods {
+                w.nl()
+                if m.Recv != null { w.put("mut ") }
+                w.name(m.Name)
+                w.sig(m.S)
+            }
+            w.ind--
+            w.nl()
+            w.put("}")
+        }
+        case ast.TypeBody.Over(base, ctor) {
+            w.ty(base)
+            if ctor != null {
+                w.put("(")
+                w.params(ctor.S.Params)
+                w.put(")")
+                w.errors(ctor.S)
+                w.put(" ")
+                w.block(ctor.Body)
+            }
+        }
+    }
+}
+
+# ---- types ----
+
+fn (w mut writer&) types(ts Array<ast.TypeRef&>&) {
+    was := w.item
+    w.item = true
+    for i, t in ts {
+        if i > 0 { w.put(", ") }
+        w.ty(t)
+    }
+    w.item = was
+}
+
+fn (w mut writer&) ty(t ast.TypeRef&) {
+    match t {
+        case ast.TypeRef.Named(_, path, args) {
+            for i, n in path {
+                if i > 0 { w.put(".") }
+                w.name(n)
+            }
+            if args.Len() > 0 {
+                w.put("<")
+                w.types(args)
+                w.put(">")
+            }
+        }
+        case ast.TypeRef.Func(_, s) {
+            # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
+            wrap := w.group or (w.item and (s.Results.Len() > 1 or s.Errors.Len() > 1))
+            w.group = false
+            w.put("(fn" if wrap else "fn")
+            was := w.item
+            w.item = false
+            w.sig(s)
+            w.item = was
+            if wrap { w.put(")") }
+        }
+        case ast.TypeRef.Shape(_, body) { w.typeBody(body) }
+        case ast.TypeRef.Ref(_, of, scope) {
+            w.ty(of)
+            w.put("&")
+            if scope != source.NameId(0) { w.name(scope) }
+        }
+        case ast.TypeRef.Perm(_, of, writable, owned) {
+            if owned { w.put("own") }
+            if owned and writable { w.put(" ") }
+            if writable { w.put("mut") }
+            if of != null {
+                w.put(" ")
+                w.ty(of)
+            }
+        }
+    }
+}
+
+# ---- statements ----
+
+fn (w mut writer&) block(body Array<ast.Stmt&>&) {
+    if body.Len() == 0 {
+        w.put("{ }")
+        return
+    }
+    w.put("{")
+    w.ind++
+    was := w.item
+    w.item = false
+    for s in body {
+        w.nl()
+        w.stmt(s)
+    }
+    w.item = was
+    w.ind--
+    w.nl()
+    w.put("}")
+}
+
+# a body as it was written (S1b): ": statement" where a ":" stood before its one statement, else " " and its block
+fn (w mut writer&) body(body Array<ast.Stmt&>&) {
+    if body.Len() == 1 {
+        k := I64(body[0].Span().Start) - 1
+        for k >= 0 and (w.text[k] == ' ' or w.text[k] == '\t') { k-- }
+        if k >= 0 and w.text[k] == ':' {
+            w.put(": ")
+            w.stmt(body[0])
+            return
+        }
+    }
+    w.put(" ")
+    w.block(body)
+}
+
+fn (w mut writer&) varDecl(v ast.VarDecl&) {
+    for i, n in v.Names {
+        if i > 0 { w.put(", ") }
+        w.name(n)
+    }
+    if v.Infer {
+        if v.Ty != null {
+            w.put(" ")
+            w.ty(v.Ty)
+        }
+        w.put(" := ")
+        w.exprs(v.Values)
+        return
+    }
+    if v.Ty == null { return }
+    w.put(" ")
+    w.ty(v.Ty)
+    if v.Values.Len() > 0 {
+        w.put(" = ")
+        w.exprs(v.Values)
+    }
+}
+
+fn (w mut writer&) clauses(cl Array<ast.Catch&>&) {
+    for c in cl {
+        w.put(" catch")
+        for i, it in c.Items {
+            w.put(", " if i > 0 else " ")
+            w.path(it)
+        }
+
+        if c.Body != null {
+            w.put(" ")
+            w.block(c.Body)
+        }
+        if c.Defaults.Len() > 0 {
+            w.put(" default ")
+            w.exprs(c.Defaults)
+        }
+    }
+}
+
+fn (w mut writer&) stmt(s ast.Stmt&) {
+    match s {
+        case ast.Stmt.ExprS(_, x) { w.expr(x) }
+        case ast.Stmt.Var(_, v) { w.varDecl(v) }
+        case ast.Stmt.Multi(_, m) {
+            w.exprs(m.Targets)
+            w.put(" := " if m.Define else " = ")
+            w.exprs(m.Values)
+        }
+        case ast.Stmt.Assign(_, op, target, value) {
+            w.expr(target)
+            w.put(" ")
+            w.put(op.Text())
+            w.put(" ")
+            w.expr(value)
+        }
+        case ast.Stmt.TryStore(_, inner, cl, isChecked) {
+            w.put("checked " if isChecked else "try ")
+            w.stmt(inner)
+            w.clauses(cl)
+        }
+        case ast.Stmt.If(_, i) { w.ifStmt(i) }
+        case ast.Stmt.Forever(_, body) {
+            w.put("for ")
+            w.block(body)
+        }
+        case ast.Stmt.While(_, cond, body) {
+            w.put("for ")
+            w.expr(cond)
+            w.body(body)
+        }
+        case ast.Stmt.For3(_, f) {
+            w.put("for ")
+            w.stmt(f.Init)
+            w.put(", ")
+            w.expr(f.Cond)
+            w.put(", ")
+            w.stmt(f.Post)
+            w.body(f.Body)
+        }
+        case ast.Stmt.ForIn(_, f) {
+            w.put("for ")
+            if f.Key != source.NameId(0) {
+                w.name(f.Key)
+                w.put(", ")
+            }
+            w.name(f.Name)
+            w.put(" in ")
+            if f.Tried { w.put("try ") }
+            w.expr(f.Source)
+            w.body(f.Body)
+            w.clauses(f.Clauses)
+        }
+        case ast.Stmt.DoFor(_, body, cond) {
+            w.put("do ")
+            w.block(body)
+            w.put(" for ")
+            w.expr(cond)
+        }
+        case ast.Stmt.MatchS(_, m) { w.match(m) }
+        case ast.Stmt.Return(_, values) {
+            w.put("return")
+            if values.Len() > 0 {
+                w.put(" ")
+                w.exprs(values)
+            }
+        }
+        case ast.Stmt.Jump(_, kind, msg) {
+            w.put(kind.Text())
+            if msg != null {
+                w.put(" ")
+                w.expr(msg)
+            }
+        }
+        case ast.Stmt.Assert(_, cond, msg) {
+            w.put("assert ")
+            w.expr(cond)
+            if msg != null {
+                w.put(", ")
+                w.expr(msg)
+            }
+        }
+        case ast.Stmt.Raise(_, word) {
+            w.put("error")
+            if word != null {
+                w.put(" ")
+                w.path(word)
+            }
+        }
+        case ast.Stmt.Spawn(_, targets, call) {
+            w.put("spawn ")
+            if targets.Len() > 0 {
+                w.exprs(targets)
+                w.put(" = ")
+            }
+            w.expr(call)
+        }
+        case ast.Stmt.Join(_, j) {
+            if j.Tried { w.put("try ") }
+            w.put("join ")
+            w.block(j.Body)
+            w.clauses(j.Clauses)
+        }
+        case ast.Stmt.Defer(_, inner) {
+            w.put("defer ")
+            w.stmt(inner)
+        }
+        case ast.Stmt.Block(_, body) { w.block(body) }
+    }
+}
+
+# a branch that did not parse is written as the text it was, its diagnostics held where they were (DESIGN.md point 12);
+# an else whose block did not parse is an If with no condition
+fn (w mut writer&) ifStmt(i ast.If&) {
+    if i.Cond == null {
+        w.branch(i.Then)
+        return
+    }
+    w.put("if ")
+    w.expr(i.Cond)
+    w.branch(i.Then)
+    if i.Else != null {
+        w.put(" else")
+        match i.Else {
+            case ast.Stmt.If(_, e) {
+                if e.Cond == null {
+                    w.branch(e.Then)
+                    return
+                }
+            }
+            case _ { }
+        }
+        w.put(" ")
+        w.stmt(i.Else)
+    }
+}
+
+# a branch after its condition or "else": " " and its block, or ": " and its statement (S1b)
+fn (w mut writer&) branch(b ast.Branch&) {
+    if b.Body == null or w.diags.Holds(b.Group) {
+        if w.text[I64(b.Sp.Start)] != ':' { w.put(" ") }
+        w.span(b.Sp)
+        w.held.Push(b.Sp)
+        return
+    }
+    w.body(b.Body)
+}
+
+fn (w mut writer&) match(m ast.Match&) {
+    w.put("match ")
+    w.expr(m.Subject)
+    w.put(" {")
+    w.ind++
+    for c in m.Cases {
+        w.nl()
+        w.put("case ")
+        for i, a in c.Alts {
+            if i > 0 { w.put(", ") }
+            w.pattern(a)
+        }
+        for i, t in c.Types {
+            if i > 0 { w.put(", ") }
+            w.ty(t)
+        }
+        if c.Guard != null {
+            w.put(" if ")
+            w.expr(c.Guard)
+        }
+        w.caseBody(c)
+    }
+    if m.NoMatch != null {
+        w.nl()
+        w.put("nomatch")
+        w.caseBody(m.NoMatch)
+    }
+    w.ind--
+    w.nl()
+    w.put("}")
+}
+
+fn (w mut writer&) caseBody(c ast.Case&) {
+    if c.Value != null {
+        w.put(" => ")
+        w.expr(c.Value)
+        return
+    }
+    w.put(" ")
+    w.block(c.Body)
+}
+
+fn (w mut writer&) pattern(p ast.Pattern&) {
+    match p {
+        case ast.Pattern.Wild(_) { w.put("_") }
+        case ast.Pattern.Path(_, x) { w.expr(x) }
+        case ast.Pattern.Case(_, path, subs) {
+            w.expr(path)
+            w.put("(")
+            for i, s in subs {
+                if i > 0 { w.put(", ") }
+                w.pattern(s)
+            }
+            w.put(")")
+        }
+        case ast.Pattern.Bind(_, n) { w.name(n) }
+        case ast.Pattern.Value(_, x) { w.expr(x) }
+    }
+}
+
+# ---- expressions ----
+
+fn (w mut writer&) exprs(xs Array<ast.Expr&>&) {
+    for i, x in xs {
+        if i > 0 { w.put(", ") }
+        w.expr(x)
+    }
+}
+
+# the items of a bracketed list - arguments, indexes, an array literal's elements (L18c)
+fn (w mut writer&) items(xs Array<ast.Expr&>&) {
+    was := w.item
+    w.item = true
+    w.exprs(xs)
+    w.item = was
+}
+
+fn (w mut writer&) expr(x ast.Expr&) {
+    match x {
+        case ast.Expr.Name(_, n) { w.name(n) }
+        case ast.Expr.Lit(sp, _) { w.span(sp) }
+        case ast.Expr.Paren(_, y) {
+            w.put("(")
+            was := w.item
+            w.item = false
+            w.expr(y)
+            w.item = was
+            w.put(")")
+        }
+        case ast.Expr.Unary(_, op, y) {
+            w.put(op.Text())
+            if op == token.Tok.Not {
+                w.put(" ")
+            } else if (op == token.Tok.Minus or op == token.Tok.Dec) and startsWithMinus(y) {
+                w.put(" ")          # "- -x" is no "--x"
+            }
+            w.expr(y)
+        }
+        case ast.Expr.Postfix(_, op, y) {
+            w.expr(y)
+            w.put(op.Text())
+        }
+        case ast.Expr.Binary(_, op, a, b) {
+            w.expr(a)
+            w.put(" ")
+            w.put(op.Text())
+            w.put(" ")
+            w.expr(b)
+        }
+        case ast.Expr.NotIn(_, a, b) {
+            w.expr(a)
+            w.put(" not in ")
+            w.expr(b)
+        }
+        case ast.Expr.Chain(_, c) {
+            for i, y in c.Xs {
+                if i > 0 {
+                    w.put(" ")
+                    w.put(c.Ops[i - 1].Text())
+                    w.put(" ")
+                }
+                w.expr(y)
+            }
+        }
+        case ast.Expr.Cond(_, a, c, b) {
+            w.expr(a)
+            w.put(" if ")
+            w.expr(c)
+            w.put(" else ")
+            w.expr(b)
+        }
+        case ast.Expr.IsType(_, y, t, negated) {
+            w.expr(y)
+            w.put(" is not " if negated else " is ")
+            w.ty(t)
+        }
+        case ast.Expr.Is(_, y, z, negated) {
+            w.expr(y)
+            w.put(" is not " if negated else " is ")
+            w.expr(z)
+        }
+        case ast.Expr.As(_, y, t) {
+            w.expr(y)
+            w.put(" as ")
+            w.ty(t)
+        }
+        case ast.Expr.Call(_, f, args) {
+            w.expr(f)
+            w.put("(")
+            w.items(args)
+            w.put(")")
+        }
+        case ast.Expr.ScopeCall(_, f, scope, args) {
+            w.expr(f)
+            w.put("&")
+            w.name(scope)
+            w.put("(")
+            w.items(args)
+            w.put(")")
+        }
+        case ast.Expr.Generic(_, y, args) {
+            w.expr(y)
+            w.put("<")
+            w.types(args)
+            w.put(">")
+        }
+        case ast.Expr.Member(_, y, n) {
+            w.expr(y)
+            w.put(".")
+            w.name(n)
+        }
+        case ast.Expr.Index(_, y, items) {
+            w.expr(y)
+            w.put("[")
+            w.items(items)
+            w.put("]")
+        }
+        case ast.Expr.Slice(_, y, lo, hi) {
+            w.expr(y)
+            w.put("[")
+            if lo != null { w.expr(lo) }
+            w.put(":")
+            if hi != null { w.expr(hi) }
+            w.put("]")
+        }
+        case ast.Expr.ArrayLit(_, elem, items) {
+            w.ty(elem)
+            w.put("[")
+            w.items(items)
+            w.put("]")
+        }
+        case ast.Expr.Row(_, items) {
+            w.put("[")
+            w.items(items)
+            w.put("]")
+        }
+        case ast.Expr.Compr(_, c) {
+            w.ty(c.Elem)
+            w.put("[")
+            w.expr(c.Value)
+            w.put(" for ")
+            if c.Key != source.NameId(0) {
+                w.name(c.Key)
+                w.put(", ")
+            }
+            w.name(c.Name)
+            w.put(" in ")
+            w.expr(c.Source)
+            if c.Filter != null {
+                w.put(" if ")
+                w.expr(c.Filter)
+            }
+            w.put("]")
+        }
+        case ast.Expr.Join(_, parts) {
+            for i, y in parts {
+                if i > 0 { w.put(" ") }
+                w.expr(y)
+            }
+        }
+        case ast.Expr.Try(_, y, cl, isChecked) {
+            w.put("checked " if isChecked else "try ")
+            w.expr(y)
+            w.clauses(cl)
+        }
+        case ast.Expr.Lambda(_, f) {
+            was := w.item
+            w.item = false
+            w.put("fn")
+            w.sig(f.S)
+            w.item = was
+            w.put(" ")
+            w.block(f.Body)
+        }
+        case ast.Expr.MatchE(_, m) { w.match(m) }
+        case ast.Expr.Range(_, args) {
+            w.put("range ")
+            w.exprs(args)
+        }
+        case ast.Expr.Default(_) { w.put("default") }
+    }
+}
+
+# whether an expression is written starting with "-": "- -x" must keep its space
+fn startsWithMinus(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Unary(_, op, _) => op == token.Tok.Minus or op == token.Tok.Dec
+        case ast.Expr.Lit(_, _) => false
+        case ast.Expr.Binary(_, _, a, _) => startsWithMinus(a)
+        case ast.Expr.Postfix(_, _, a) => startsWithMinus(a)
+        case ast.Expr.Call(_, a, _) => startsWithMinus(a)
+        case ast.Expr.Member(_, a, _) => startsWithMinus(a)
+        case ast.Expr.Index(_, a, _) => startsWithMinus(a)
+        nomatch => false
+    }
+}

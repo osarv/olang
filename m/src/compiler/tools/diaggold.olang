@@ -1,0 +1,227 @@
+# diaggold - holds the new diagnostics module (compiler/diag.olang) to stage 0's rendering (compiler/DESIGN.md section 4,
+# item 3).
+#
+# compiler/goldens/diag.txt is what stage 0 (the C compiler, removed; tagged stage0-final) printed for every checks/cases program that must fail to
+# compile, captured by compiler/tools/diaggold_capture.olang. Each row there - "path:line:col: error[RULE]: text", a note,
+# a file's or the compilation's - is read back into a record (the span from its line, column and caret, the rule, the
+# text) and reported to diag again, and what diag renders must be the case's output byte for byte: the rows, their
+# order, the source lines, the carets and the summary. -e is held to stage 0 the same way, for every rule msgs.olang
+# names. Run from the repository root (make diagtest); the -e checks run $OLANG, else build/olang.
+
+import "std/os"
+import "../diag"
+import "../msgs"
+import "std/io"
+
+# a case's golden output, row by row, and what diag makes of it
+type golden struct(name String&, text String&) {
+    name
+    text
+}
+
+# the golden file, split into cases
+fn cases(all String&) List<golden> {
+    out List<golden>
+    rest := all[:]
+    for rest.StartsWith("=== ") {
+        nl := try rest.FindByte('\n') catch default rest.Len()
+        name := rest[4:nl]
+        body := rest[nl + 1:]
+        end := try body.Find("\n=== ") catch default (body.Len() - 1)
+        out.Push(golden(name, body[:end + 1]))
+        rest = body[end + 1:]
+    }
+    return out
+}
+
+# the offset line (from 1) starts at in text
+fn lineStart(text String&, line I64) I64 {
+    l I64 = 1
+    i I64 = 0
+    for l < line and i < text.Len() {
+        if text[i] == '\n' { l++ }
+        i++
+    }
+    return i
+}
+
+# whether a row of output is a source line of an excerpt: "%5d | "
+fn isExcerpt(row String&) Bool {
+    i I64 = 0
+    for i < row.Len() and row[i] == ' ' { i++ }
+    digits := i
+    for i < row.Len() and row[i].IsDigit() { i++ }
+    return i > digits and row[i:].StartsWith(" | ")
+}
+
+# where a row's location says: the path, then the line and column when they are written
+fn (g mut goldenRun&) where(loc String&) diag.Where {
+    if loc == "olang" { return diag.Where.Nowhere }
+    parts := loc.Split(":")
+    f := g.file(parts[0])
+    if parts.Len() == 1 { return diag.Where.File(f) }
+    line := try parts[1].ParseInt() catch default 0
+    if parts.Len() == 2 { return diag.Where.Line(f, line) }
+    col := try parts[2].ParseInt() catch default 0
+    start := lineStart(g.texts[f], line) + col - 1
+    return diag.Where.Span(f, start, start)
+}
+
+# one case's rendering: the diagnostics reported from its rows, the files they are about
+type goldenRun struct() {
+    d diag.Diagnostics = diag.Diagnostics(false)
+    paths List<String&>
+    texts List<String&>
+}
+
+# the file a path names - a case's own beside it, the library's under the repository - added once
+fn (g mut goldenRun&) file(path String&) I64 {
+    for i in range g.paths.Len() {
+        if g.paths[i] == path { return i }
+    }
+    real := "checks/cases/" $path
+    if path.StartsWith("$ROOT/") { real = $(path[6:]) }
+    text := try os.ReadFile&g(real) catch default ""
+    g.paths.Push($path)
+    g.texts.Push(text)
+    return g.d.AddFile(path, text)
+}
+
+# the span's end, from the caret under it: '^' and a '~' per character after it (a UTF-8 continuation byte takes none)
+fn spanEnd(text String&, start I64, caret String&) I64 {
+    hat := try caret.FindByte('^') catch { return start }
+    tildes I64 = 0
+    for c in caret[hat + 1:] {
+        if c == '~' { tildes++ }
+    }
+    end := start + 1
+    for tildes > 0 and end < text.Len() {
+        if U8(text[end]) < 128 or U8(text[end]) >= 192 { tildes-- }
+        end++
+    }
+    for end < text.Len() and U8(text[end]) >= 128 and U8(text[end]) < 192 { end++ }
+    return end if tildes == 0 else start
+}
+
+# renders a case's rows through diag; "" when it renders as stage 0 did, else what differs
+fn check(c golden&) String {
+    g := goldenRun()
+    rows := c.text.Split("\n")
+    summary := ""
+    rec I64 = -1
+    i I64 = 0
+    for i < rows.Len() {
+        row := rows[i]
+        i++
+        if row.Len() == 0 { continue }
+        if row.StartsWith("compilation failed") or row.StartsWith("compilation successful") {
+            summary = row
+            continue
+        }
+        e := try row.Find(": error") catch default -1
+        n := try row.Find(": note: ") catch default -1
+        if e < 0 and n < 0 { return "unreadable row: " $row }
+        isNote := n >= 0 and (e < 0 or n < e)
+        at := n if isNote else e
+        where := g.where(row[:at])
+        rule := ""
+        text := row[at + 8:]
+        if not isNote {
+            rest := row[at + 7:]
+            if rest.StartsWith("[") {
+                close := try rest.Find("]: ") catch default 0
+                rule = rest[1:close]
+                text = rest[close + 3:]
+            } else {
+                text = rest[2:]
+            }
+        }
+        # the excerpt under it gives the span's end
+        if i + 1 < rows.Len() and isExcerpt(rows[i]) {
+            match where {
+                case diag.Where.Span(f, s, _) { where = diag.Where.Span(f, s, spanEnd(g.texts[f], s, rows[i + 1])) }
+                nomatch { }
+            }
+            i += 2
+        }
+        m := msgs.Msg(msgs.Diag.Expected, rule, text)
+        if isNote { g.d.Note(rec, where, m) } else { rec = g.d.Error(where, m) }
+    }
+    got := $g.d.Render() $(g.d.Summary() if summary.Len() > 0 else "")
+    if got == c.text { return "" }
+    # the first row that differs
+    want := c.text.Split("\n")
+    have := got.Split("\n")
+    for k in range want.Len() {
+        if k >= have.Len() { return "line " $(k + 1) ": missing '" $(want[k]) "'" }
+        if have[k] != want[k] { return "line " $(k + 1) ": want '" $(want[k]) "', got '" $(have[k]) "'" }
+    }
+    return "extra line '" $(have[want.Len()]) "'"
+}
+
+test "diag renders stage 0's diagnostics on every checks/cases program byte for byte" {
+    all := try os.ReadFile("compiler/goldens/diag.txt") catch default ""
+    assert all.Len() > 0, "no compiler/goldens/diag.txt - run make diaggold"
+    bad := 0
+    count := 0
+    for c in cases(all) {
+        count++
+        why := check(c)
+        if why.Len() > 0 {
+            try io.PrintErrln($c.name ": " $why) catch io.IoError { }
+            bad++
+        }
+    }
+    assert count > 800
+    assert bad == 0, $bad " of " $count " cases render otherwise"
+}
+
+# every rule msgs.olang's messages name, each once
+fn rules(src String&) List<String&> {
+    out List<String&>
+    rest := src[:]
+    for {
+        at := try rest.Find("Msg(Diag.") catch { break }
+        rest = rest[at:]
+        q := try rest.Find(", \"") catch { break }
+        rest = rest[q + 3:]
+        close := try rest.FindByte('"') catch { break }
+        names := rest[:close]
+        for r in names.Split(", ") {
+            if r.Len() > 0 and not out.Has(r) { out.Push($r) }
+        }
+    }
+    return out
+}
+
+test "-e prints each rule a message names as stage 0 does" {
+    spec := try os.ReadFile("SPEC.md") catch default ""
+    src := try os.ReadFile("compiler/msgs.olang") catch default ""
+    # the compiler $OLANG names, else the one make bootstrap installs
+    olang := try os.Env("OLANG") catch default "build/olang"
+    out := try os.MkTemp() catch default "/tmp"
+    bad := 0
+    count := 0
+    for r in rules(src) {
+        count++
+        os.Run($os.Quote(olang) " explain " $r " > " $os.Quote($out "/e.txt") " 2>&1")
+        want := try os.ReadFile($out "/e.txt") catch default ""
+        got := try diag.Explain(spec, r) catch default "(none)"
+        if got != want {
+            try io.PrintErrln("-e " $r ": differs") catch io.IoError { }
+            bad++
+        }
+    }
+    # a first letter in lowercase is read as uppercase; a rule the specification does not state is a usage error
+    os.Run($os.Quote(olang) " explain t6b > " $os.Quote($out "/e.txt") " 2>&1")
+    assert try diag.Explain(spec, "t6b") catch default "" == try os.ReadFile($out "/e.txt") catch default "-"
+    os.Run($os.Quote(olang) " explain Q99 > " $os.Quote($out "/e.txt") " 2>&1")
+    nowhere := false
+    try diag.Explain(spec, "Q99") catch { nowhere = true }
+    assert nowhere
+    d := diag.Diagnostics(false)
+    assert d.Usage(msgs.NoRule("Q99")) == try os.ReadFile($out "/e.txt") catch default "-"
+    try os.RemoveAll(out) catch { }
+    assert count > 150
+    assert bad == 0, $bad " of " $count " rules print otherwise"
+}

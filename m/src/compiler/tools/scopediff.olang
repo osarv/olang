@@ -1,0 +1,377 @@
+# scopediff - M6's acceptance (compiler/DESIGN.md section 4): the self-hosted scope pass against stage 0.
+#
+#     scopediff [-v]
+#
+# 1. Every checks/cases program stage 0 refuses (compiler/goldens/diag.txt) whose first error's rule is section 8's - an
+#    O rule, C2d, C2g, T17c, D16d, P2, T22a, E12c or E31b's lends - must give that error at the same file, line and
+#    column ("first"), and say the message the case pins ("pinned"); "exact" counts the cases whose every row of a scope
+#    rule is stage 0's.
+# 2. Every root stage 0 accepts - the checks cases that build or run, and the corpus, std, compiler, checks, fuzz and
+#    bench programs - must be scope clean: no error of a scope rule and no construct the scope pass leaves unjudged
+#    ("gap"). The checker's own errors are checkdiff's to count.
+#
+# Prints the fractions, and with -v the cases that differ. Run from the repository root after
+# "make build/compiler_tools_scopedump" (SCOPEDIFF_DUMP names another build of it). Exits 0: the acceptance is measured,
+# not yet required. Leaves what scopedump said in build/scopediff.said.
+
+import "std/os"
+import "std/io"
+
+fn main() ? {
+    os.RunOnStack(1 << 28, fn() { run(os.Args()) })
+}
+
+# a row of a rendering: a case, and an error's place and rule ("FILE:LINE:COL RULE") or a gap's ("gap PLACE")
+type row struct(Case String&, What String&) {
+    Case
+    What
+}
+
+fn run(args Array<String&>&) {
+    out := io.Writer(1)
+    verbose := args.Len() > 1 and args[1] == "-v"
+    dump := try os.Env("SCOPEDIFF_DUMP") catch default "build/compiler_tools_scopedump"
+    root := try os.Cwd() catch os.OsError {
+        stop(out, "scopediff: no working directory")
+        unreachable
+    }
+    if not os.Exists(dump) { stop(out, "scopediff: " $dump " is not built (make " $dump ")") }
+    exe := $dump if dump.StartsWith("/") else $root "/" $dump
+    golden := try os.ReadFile("compiler/goldens/diag.txt") catch os.OsError {
+        stop(out, "scopediff: no goldens")
+        unreachable
+    }
+    old := rows(golden)
+    names := try os.ReadDir("checks/cases") catch os.OsError {
+        stop(out, "scopediff: no checks/cases")
+        unreachable
+    }
+    fails List<String&>
+    oks List<String&>
+    for n in names {
+        if not n.EndsWith(".olang") { continue }
+        text := try os.ReadFile("checks/cases/" $n) catch os.OsError { continue }
+        if header(text, "# check:").StartsWith("fail") { fails.Push(n) } else { oks.Push(n) }
+    }
+
+    # ---- 1. the cases stage 0 refuses by a scope rule ----
+    mineCases List<String&>
+    for c in fails {
+        want := firstRow(old, c)
+        if want != "" and scopeRow(want) { mineCases.Push(c) }
+    }
+    said := StringBuilder()
+    runAll(said, exe, $root "/checks/cases", mineCases, root)
+    saidText := said.ToString()
+    got := rows(saidText)
+    texts := caseTexts(saidText)
+    pinned I64 = 0
+    first I64 = 0
+    exact I64 = 0
+    unpinned := StringBuilder()
+    missed := StringBuilder()
+    # the cases giving no scope error at all: the pass's (by stage 0's first rule), or the checker's - where the port's
+    # checker said an error of its own, or left a body the pass skipped (a type unknown)
+    silent := Map<String&, I64>()
+    silentChecker I64 = 0
+    silentMine I64 = 0
+    silentList := StringBuilder()
+    for c in mineCases {
+        want := firstRow(old, c)
+        text := try os.ReadFile("checks/cases/" $c) catch os.OsError default ""
+        pin := header(text, "# check:")[4:].Trim()
+        said1 := try texts.Get(c) catch default ""
+        if pin.Len() > 0 and (try said1.Find(pin) catch default -1) >= 0 {
+            pinned++
+        } else {
+            unpinned.Push($c ": " $pin "\n")
+        }
+        mineRows := scopeRows(got, c)
+        if want in mineRows {
+            first++
+            if sameRows(scopeRows(old, c), mineRows) { exact++ }
+        } else {
+            missed.Push($c ": want " $want "; got ")
+            for r in errorRows(got, c) { missed.Push($r "; ") }
+            missed.PushChar('\n')
+            if mineRows.Len() == 0 {
+                if checkerSaid(got, c) or unjudged(said1) > 0 {
+                    silentChecker++
+                    silentList.Push($c " (checker's): " $want "\n")
+                } else {
+                    silentMine++
+                    silent.Update(errorOf(want), 1, fn(v I64) I64 { return v + 1 })
+                    silentList.Push($c ": " $want "\n")
+                }
+            }
+        }
+    }
+    n1 := mineCases.Len()
+    out.Write(("scopediff: refused programs: " $first " of " $n1 " scope cases give stage 0's first error (" $exact
+        " give exactly its scope errors)\n"))
+    out.Write("scopediff: pinned messages: " $pinned " of " $n1 " scope cases say their header's message\n")
+    out.Write(("scopediff: no scope error at all: " $silentMine " cases the scope pass misses, " $silentChecker
+        " where the checker erred or left a body unjudged\n"))
+
+    # ---- 2. the programs stage 0 accepts ----
+    said2 := StringBuilder()
+    runAll(said2, exe, $root "/checks/cases", oks, root)
+    tests List<String&>
+    for dir in String&["tests", "std", "compiler", "fuzz", "bench"] {
+        fs := try os.ReadDir(dir) catch os.OsError { continue }
+        for f in fs {
+            if f.EndsWith(".olang") { tests.Push($dir "/" $f) }
+        }
+    }
+    tests.Push("checks/checks.olang")
+    for f in tests { said2.Push(check(exe, root, String&["-t", f], root)) }
+    clean := rows(said2.ToString())
+    n I64 = 0
+    ok I64 = 0
+    dirty := StringBuilder()
+    all := List<String&>()
+    for c in oks { all.Push(c) }
+    for c in tests { all.Push(c) }
+    for c in all {
+        n++
+        k I64 = 0
+        for r in clean {
+            if r.Case == c and (r.What.StartsWith("gap ") or scopeRow(r.What)) { k++ }
+        }
+        if k == 0 { ok++ } else { dirty.Push($c ": " $k "\n") }
+    }
+    out.Write("scopediff: accepted programs: " $ok " of " $n " are scope clean\n")
+    errs := Map<String&, I64>()
+    gaps := Map<String&, I64>()
+    for r in clean {
+        if r.What.StartsWith("gap ") {
+            gaps.Put(r.What, 1)
+        } else if scopeRow(r.What) {
+            errs.Put(r.What, 1)
+        }
+    }
+    out.Write("scopediff: on them, " $errs.Len() " distinct scope error rows and " $gaps.Len() " distinct gap places\n")
+    if verbose {
+        out.Write("-- refused programs not giving stage 0's first error:\n")
+        out.Write(missed.ToString())
+        out.Write("-- refused programs with no scope error, by stage 0's first rule (the scope pass's):\n")
+        out.Write(counted(silent))
+        out.Write(silentList.ToString())
+        out.Write("-- scope cases not saying their pinned message:\n")
+        out.Write(unpinned.ToString())
+        out.Write("-- accepted programs not scope clean (rows):\n")
+        out.Write(dirty.ToString())
+        out.Write("-- scope errors said on accepted programs:\n")
+        byRule := Map<String&, I64>()
+        for r in clean {
+            if r.What.StartsWith("gap ") or not scopeRow(r.What) { continue }
+            byRule.Update(errorOf(r.What), 1, fn(v I64) I64 { return v + 1 })
+        }
+        out.Write(counted(byRule))
+    }
+    try os.WriteFile("build/scopediff.said", $saidText $said2.ToString()) catch os.OsError { }
+    try os.WriteFile("build/scopediff.missed", missed.ToString()) catch os.OsError { }
+    try os.WriteFile("build/scopediff.silent", $counted(silent) $silentList.ToString()) catch os.OsError { }
+    try out.Flush() catch io.IoError { }
+}
+
+# whether an error row's rules name one of section 8's (the scope pass's: compiler/scope.olang)
+fn scopeRow(what String&) Bool {
+    sp := try what.Find(" ") catch default -1
+    for r in what[sp + 1:].Split(", ") {
+        if scopeRule(r) { return true }
+    }
+    return false
+}
+
+fn scopeRule(r String&) Bool {
+    if r.StartsWith("O") { return true }
+    for x in String&["C2d", "C2g", "T17c", "D16d", "P2", "T22a", "E12c", "E31b"] {
+        if r == x { return true }
+    }
+    return false
+}
+
+# whether the port said an error of a rule no scope rule is, for a case: the checker's own
+fn checkerSaid(rs List<row>&, c String&) Bool {
+    for r in rs {
+        if r.Case == c and not r.What.StartsWith("gap ") and not scopeRow(r.What) { return true }
+    }
+    return false
+}
+
+# the bodies a case's rendering says the pass skipped ("bodies N judged J unjudged U")
+fn unjudged(text String&) I64 {
+    for line in text.Lines() {
+        if not line.StartsWith("bodies ") { continue }
+        at := try line.Find(" unjudged ") catch { continue }
+        return try line[at + 10:].Trim().ParseInt() catch default 0
+    }
+    return 0
+}
+
+# a case's error rows of a scope rule, sorted
+fn scopeRows(rs List<row>&, c String&) List<String&> {
+    l := List<String&>()
+    for r in rs {
+        if r.Case == c and not r.What.StartsWith("gap ") and scopeRow(r.What) { l.Push(r.What) }
+    }
+    l.Sort(fn(a String&, b String&) Bool { return a < b })
+    return l
+}
+
+# ends the program with why said
+fn stop(out mut io.Writer&, why String&) {
+    out.Write($why "\n")
+    try out.Flush() catch io.IoError { }
+    os.Exit(1)
+}
+
+# ---- reading renderings ----
+
+# the error and gap rows of what checkdump or stage 0 said: "=== CASE" or "== CASE" begins a case's rows
+fn rows(text String&) List<row> {
+    rs := List<row>()
+    c String& = ""
+    for line in text.Lines() {
+        if line.StartsWith("=== ") {
+            c = $line[4:]
+        } else if line.StartsWith("== ") {
+            c = $line[3:]
+        } else if line.StartsWith("gap ") {
+            sp := try line[4:].Find(" ") catch default line.Len() - 4
+            rs.Push(row(c, "gap " $line[4:4 + sp]))
+        } else {
+            e := try line.Find(": error[") catch default -1
+            if e < 0 or (try line[0:e].Find(" ") catch default -1) >= 0 { continue }
+            close := try line[e:].Find("]") catch default -1
+            if close < 0 { continue }
+            rs.Push(row(c, $line[0:e] " " $line[e + 8:e + close]))
+        }
+    }
+    return rs
+}
+
+# what checkdump said of each case: its rendering, by case
+fn caseTexts(text String&) Map<String&, String&> {
+    m := Map<String&, String&>()
+    c String& = ""
+    b := StringBuilder()
+    for line in text.Lines() {
+        if line.StartsWith("== ") and not line.StartsWith("=== ") {
+            if c.Len() > 0 { m.Put(c, b.ToString()) }
+            c = $line[3:]
+            b = StringBuilder()
+            continue
+        }
+        b.Push($line "\n")
+    }
+    if c.Len() > 0 { m.Put(c, b.ToString()) }
+    return m
+}
+
+# what a case's first header line of this kind says, after the key: "fail E12" for "# check: fail E12"
+fn header(text String&, key String&) String& {
+    for line in text.Lines() {
+        if line.StartsWith(key) { return $line[key.Len():].Trim() }
+        if not line.StartsWith("#") { break }
+    }
+    return ""
+}
+
+# a case's first error row, "" for none
+fn firstRow(rs List<row>&, c String&) String& {
+    for r in rs {
+        if r.Case == c and not r.What.StartsWith("gap ") { return $r.What }
+    }
+    return ""
+}
+
+# a case's error rows, sorted
+fn errorRows(rs List<row>&, c String&) List<String&> {
+    l := List<String&>()
+    for r in rs {
+        if r.Case == c and not r.What.StartsWith("gap ") { l.Push(r.What) }
+    }
+    l.Sort(fn(a String&, b String&) Bool { return a < b })
+    return l
+}
+
+fn sameRows(a List<String&>&, b List<String&>&) Bool {
+    if a.Len() != b.Len() { return false }
+    for i in range a.Len() {
+        if a[i] != b[i] { return false }
+    }
+    return true
+}
+
+# an error row without its place: its rule
+fn errorOf(what String&) String& {
+    sp := try what.Find(" ") catch default -1
+    return $what[sp + 1:]
+}
+
+# counts, most first, one "COUNT WHAT" a line
+fn counted(m Map<String&, I64>&) String& {
+    l := m.Iter().ToList()
+    l.Sort(fn(a MapEntry<String&, I64>, b MapEntry<String&, I64>) Bool { return a.Value > b.Value })
+    b := StringBuilder()
+    for e in l { b.Push($e.Value.PadStart(7) " " $e.Key "\n") }
+    return b.ToString()
+}
+
+# ---- running checkdump ----
+
+# scopedump over cases in dir: those with flags one by one (a test build, build constants), the rest in one process
+fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&>&, root String&) {
+    plain := List<String&>()
+    for c in cases {
+        text := try os.ReadFile($dir "/" $c) catch os.OsError { continue }
+        flags := header(text, "# flags:")
+        if flags == "" {
+            plain.Push(c)
+            continue
+        }
+        args := List<String&>()
+        words := flags.Split(" ")
+        for i in range words.Len() {
+            if words[i] == "-define" and i + 1 < words.Len() {
+                args.Push("-D")
+                args.Push(words[i + 1])
+            } else if words[i] == "test" {
+                args.Push("-t")
+            }
+        }
+        args.Push(c)
+        said.Push(check(dump, dir, args.ToArray(), root))
+    }
+    # in batches, so one case that runs away costs only its batch
+    for at in range 0, plain.Len(), 50 {
+        end := at + 50 if at + 50 < plain.Len() else plain.Len()
+        args := List<String&>()
+        for k in range at, end { args.Push(plain[k]) }
+        said.Push(check(dump, dir, args.ToArray(), root))
+    }
+}
+
+# what scopedump says of files, run in dir over the repository's std
+fn check(dump String&, dir String&, files Array<String&>&, root String&) String& {
+    args := List<String&>()
+    args.Push("env")
+    args.Push("OLANG_STD=" $root "/std")
+    args.Push(dump)
+    for f in files { args.Push(f) }
+    o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError {
+        io.PrintErrln("scopediff: cannot run " $dump)!
+        os.Exit(1)
+    }
+    if o.Status == 0 { return $o.Stdout $o.Stderr }
+    # a run that ended badly leaves its files unjudged: each counts as refused by the scope pass, never as clean
+    b := StringBuilder()
+    b.Push($o.Stdout)
+    for f in files {
+        if f.StartsWith("-") { continue }
+        b.Push("== " $f "\n" $f ":0:0: error[O0]: the scope pass ended with status " $o.Status "\n")
+    }
+    return b.ToString()
+}

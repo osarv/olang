@@ -1,0 +1,79 @@
+# seed - the bootstrap seed (compiler/DESIGN.md section 5): the compiler's own LLVM IR, as the compiler writes it of
+# itself, from which clang alone builds a compiler that builds compiler/ again.
+#
+#     OLANG_STD=std seed DIR
+#
+# Run from the repository root. What `olang build -target x86-64 compiler/olang.olang` makes of the compiler - the
+# same command line read by the driver's own Prepare, the same passes (olang.Passes) - is written to DIR, one file per
+# object, named by what it is rather than by a hash: each module's IR as IDENTITY.ll (std/os is std_os.ll), the root's
+# with main as compiler_olang.main.ll, the instances as compiler_olang.inst.ll, the runtime filled in for the target as
+# olang_runtime.ll and the dynamic call's as olang_dyncall.ll. Every .ll already in DIR is removed first, so DIR holds
+# this compiler's seed and nothing older.
+#
+# x86-64 is the baseline level of the architecture, so the seed runs on any x86-64 Linux machine. The standard library
+# is named relatively (OLANG_STD=std), since a failed check's message names its file as the loader found it: with std
+# found beside the compiler, every std path in the IR would be this checkout's.
+
+import "std/os"
+import "std/io"
+import "../build"
+import "../diag"
+import "../olang"
+
+fn main() ? {
+    args := os.Args()
+    if args.Len() != 2 { die("usage: OLANG_STD=std seed DIR (from the repository root)") }
+    os.RunOnStack(1 << 30, fn() { os.Exit(run(args[1])) })
+}
+
+fn die(why String&) noreturn {
+    try io.PrintErrln($"seed: " $why) catch io.IoError { }
+    os.Exit(1)
+}
+
+fn run(dir String&) I32 {
+    std := try os.Env("OLANG_STD") catch default ""
+    if std == "" or std.StartsWith("/") {
+        die("OLANG_STD must name the standard library relatively (OLANG_STD=std), or the IR names this checkout's paths")
+    }
+    if not os.Exists("compiler/olang.olang") { die("run it from the repository root: no compiler/olang.olang here") }
+    d := diag.Diagnostics(false)
+    c := build.Config()
+    cl := try olang.Prepare(String&["olang", "build", "-target", "x86-64", "compiler/olang.olang"], c, d) catch olang.Bad {
+        try io.Print(d.Render()) catch io.IoError { }
+        return 1
+    }
+    fe := olang.Passes()
+    prog := build.Program()
+    try fe.Analyze(cl.Files[0], build.Kind.Program, c, prog, d) catch build.Failed {
+        try io.Print(d.Render()) catch io.IoError { }
+        return 1
+    }
+    if d.Errors() > 0 or prog.Units.Len() == 0 {
+        try io.Print(d.Render()) catch io.IoError { }
+        return 1
+    }
+    try os.MkDirAll(dir) catch os.OsError { die($"cannot make " $dir) }
+    old := try os.ReadDir(dir) catch os.OsError { die($"cannot read " $dir) }
+    for f in old {
+        if f.EndsWith(".ll") { try os.Remove($dir "/" $f) catch os.OsError { die($"cannot remove " $dir "/" $f) } }
+    }
+    for u in prog.Units { write(dir, $build.Readable(u.Identity) $suffix(u.Holds) ".ll", u.Ir) }
+    write(dir, "olang_runtime.ll", prog.Runtime)
+    if prog.Dyncall != "" { write(dir, "olang_dyncall.ll", prog.Dyncall) }
+    return 0
+}
+
+fn suffix(k build.UnitKind) String {
+    return match k {
+        case build.UnitKind.Module => ""
+        case build.UnitKind.Main => ".main"
+        case build.UnitKind.Tests => ".test"
+        case build.UnitKind.Instances => ".inst"
+    }
+}
+
+fn write(dir String&, name String&, ir String&) {
+    path := $dir "/" $name
+    try os.WriteFile(path, ir) catch os.OsError { die($"cannot write " $path) }
+}
