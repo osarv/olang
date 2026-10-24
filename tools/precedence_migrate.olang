@@ -1,0 +1,124 @@
+# precedence_migrate - E5, 2026-10-24: "&", "|" and "^" bind tighter than the comparisons (Go's and Rust's order;
+# before it they bound looser, as in C). This wraps every comparison that is an operand of "&", "|" or "^" with nothing
+# around it in parentheses - "a & b == c" becomes "a & (b == c)" - so each file keeps the meaning it had. The files are
+# read with the compiler's own parser at the old precedence, which records each such comparison (parse.Mixed), so
+# nothing is guessed from the text and comments and literals are never touched. Files are rewritten in place and a
+# count printed; --check writes nothing and the exit status says whether anything would change; a file that does not
+# parse is named and left. OLANG_STD names std (default "std", as from the repository root).
+#
+#     $OLANG build tools/precedence_migrate.olang && build/tools_precedence_migrate [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "../compiler/source"
+import "../compiler/scan"
+import "../compiler/parse"
+import "../compiler/diag"
+import layout "../compiler/fmt"
+
+error Unparsable { SYNTAX }
+
+# the comparisons the old reading of a file has as operands of a bitwise operator
+fn mixed(path String&, text String&, std String&, prelude String&) List<source.Span> ? Unparsable {
+    src := source.Source($path, $text)
+    names := source.Names()
+    d := diag.Diagnostics(false)
+    o := layout.OracleFor(path, std, prelude, names)
+    file := d.AddFile(src.Path, src.Text)
+    ts := scan.Scan(src.Text)
+    p := parse.Parser(src, ts, names, o, d, file)
+    p.OldBitwise = true
+    p.File()
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 { error Unparsable.SYNTAX }
+    return p.Mixed
+}
+
+# text with each span parenthesized
+fn wrap(text String&, spans List<source.Span>&) String {
+    opens := Map<I64, I64>()
+    closes := Map<I64, I64>()
+    for sp in spans {
+        opens.Put(I64(sp.Start), (try opens.Get(I64(sp.Start)) catch default 0) + 1)
+        closes.Put(I64(sp.End), (try closes.Get(I64(sp.End)) catch default 0) + 1)
+    }
+    out := StringBuilder()
+    for i in range text.Len() + 1 {
+        nc := try closes.Get(i) catch default 0
+        no := try opens.Get(i) catch default 0
+        for k in range nc: out.PushChar(')')
+        for k in range no: out.PushChar('(')
+        if i < text.Len(): out.PushChar(text[i])
+    }
+    return out.ToString()
+}
+
+fn main() ? {
+    os.RunOnStack(1 << 30, fn() { os.Exit(run()) })
+}
+
+fn run() I32 {
+    check := false
+    verbose := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_precedence_migrate [--check] [-v] FILE|DIR...")
+        return 2
+    }
+    std := try os.Env("OLANG_STD") catch default "std"
+    prelude := layout.PreludeTypes(std)
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
+    }
+    wrapped I64 = 0
+    changed I64 = 0
+    status I32 = 0
+    for path in files {
+        if not path.EndsWith(".olang") { continue }
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("precedence_migrate: cannot read " $path)
+            return 1
+        }
+        spans := try mixed(path, src, std, prelude) catch Unparsable {
+            srcmask.SayErr("precedence_migrate: " $path " does not parse - left as it is")
+            status = 1
+            continue
+        }
+        if spans.Len() == 0 { continue }
+        wrapped += spans.Len()
+        changed++
+        if verbose { srcmask.Say($path ": " $spans.Len()) }
+        if not check {
+            try os.WriteFile(path, wrap(src, spans)) catch {
+                srcmask.SayErr("precedence_migrate: cannot write " $path)
+                return 1
+            }
+        }
+    }
+    srcmask.Say($"precedence_migrate: " $wrapped " comparisons wrapped in " $changed " files" $(" (nothing written)" if check else ""))
+    if check and changed > 0 { return 1 }
+    return status
+}
+
+test "a comparison under a bitwise operator is wrapped, nothing else" {
+    spans := List<source.Span>()
+    spans.Push(source.Span(4, 10))
+    assert wrap("a & b == c", spans) == "a & (b == c)"
+}
+
+test "the old reading's comparisons under a bitwise operator are found, and a parenthesized one is not" {
+    text := "fn f(a Bool, b Bool, x I64) Bool { return a & b == b | (x < 3) ^ x in I64[1] }"
+    spans := try mixed("none.olang", text, "std", "") catch Unparsable { unreachable "it parses" }
+    assert wrap(text, spans) == "fn f(a Bool, b Bool, x I64) Bool { return a & (b == b) | (x < 3) ^ (x in I64[1]) }"
+}

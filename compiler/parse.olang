@@ -110,6 +110,10 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     ArgAngles List<I64>
     CloseAngles List<I64>
     TypeGroups List<I64>               # each "(" grouping a function type in a list (L18c), by token index, for the formatter
+    # every comparison read as an operand of "&", "|" or "^" with nothing around it, by its span - where E5's
+    # bitwise-tighter precedence (2026-10-24) reads the text otherwise; tools/precedence_migrate.olang wraps them
+    Mixed List<source.Span>
+    OldBitwise Bool = false            # read with E5's precedence before 2026-10-24, for tools/precedence_migrate.olang
 }
 
 # ---- reading tokens ----
@@ -2064,6 +2068,19 @@ fn (p Parser&) prec(k token.Tok) I64 {
     }
 }
 
+# whether an expression is a comparison, unparenthesized: ==, !=, an ordering or a chain of them, in, not in, is (E5)
+fn comparison(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Binary(_, op, _, _) {
+            return op == token.Tok.EqEq or op == token.Tok.NotEq or isOrdering(op) or op == token.Tok.In
+        }
+        case ast.Expr.Chain(_, _), ast.Expr.NotIn(_, _, _), ast.Expr.Is(_, _, _, _), ast.Expr.IsType(_, _, _, _) {
+            return true
+        }
+        nomatch { return false }
+    }
+}
+
 fn isOrdering(k token.Tok) Bool { return k == token.Tok.Lt or k == token.Tok.Le or k == token.Tok.Gt or k == token.Tok.Ge }
 
 # precedence climbing: operators binding at least as tightly as min
@@ -2127,6 +2144,10 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&p, min I64) ast.Expr&p ? Fail {
             }
             left = ast.Expr.Chain(source.Span(start, p.prevEnd), ast.Chain(ops.ToArray(), gather(p.exprs, from)))
             continue
+        }
+        if k == token.Tok.Amp or k == token.Tok.Pipe or k == token.Tok.Caret {
+            if comparison(left) { p.Mixed.Push(left.Span()) }
+            if comparison(right) { p.Mixed.Push(right.Span()) }
         }
         left = ast.Expr.Binary(source.Span(start, p.prevEnd), k, left, right)
         # each operator applied makes the tree on its left one level deeper, counted once it is built (L21)
