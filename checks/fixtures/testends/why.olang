@@ -1,0 +1,5 @@
+# S16d: an unreachable's message, computed where it is reached, after "unreachable reached: " - built, -d and under -i
+Count mut I64 = 3
+fn main() {
+    if Count > 0 { unreachable "the count is " $Count }
+}

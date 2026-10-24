@@ -1,7 +1,7 @@
 # olang - the compiler's command line (compiler/DESIGN.md section 1.10, M10), in words, as stage 0's (B1):
 #
 #
-# with the options -output -debug -race -sanitize -target -define -update -check, each for the modes it applies to,
+# with the options -output -debug -race -sanitize -target -define -update -check -quick, each for the modes it applies to,
 # anywhere after the mode and before the file a run or interpret takes. A mistake in the command line is one row,
 # "olang: error[RULE]: ...", and status 1, as every other mistake (B11).
 #
@@ -88,9 +88,10 @@ ModeWhat Array<String&> = String&[
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
-OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", ""]
-OptModes Array<I64> = I64[6, 15, 15, 15, 31, 31, 31, 32]
+OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
+    "-quick"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", ""]
+OptModes Array<I64> = I64[6, 15, 15, 15, 31, 31, 31, 32, 15]
 OptWhat Array<String&> = String&[
     "writes the executable or the object to PATH (B3h)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -100,6 +101,7 @@ OptWhat Array<String&> = String&[
     "defines a build constant (B10)"
     "moves the remote repositories the build reaches to their refs' current commits (M23c)"
     "rewrites nothing: lists each file not in the layout (B13)"
+    "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -192,6 +194,9 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 5 { try c.Consts.Define(v, d) catch cond.Bad { error Bad.USAGE } }
             if o == 6 { c.Update = true }
             if o == 7 { cl.Check = true }
+            if o == 8 { c.Quick = true }
+            # B2g: -quick is a level of optimization, as -debug and -race set theirs
+            if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
             continue
         }
         if cl.Mode == Explain or cl.Mode == Help {
@@ -738,6 +743,23 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["-x", "-y"]) == mistake(String&["-x"])
     assert mistake(String&["interpret", "p.olang", "-x", "-define"]) == "no mistake: interpret"
     assert mistake(String&["-debug", "p.olang", "-race", "x"]) == "no mistake: running a file"
+    # B2g: -quick is an optimization level of its own
+    assert mistake(String&["build", "-quick", "-debug", "m.olang"]) ==
+        "olang: error[B2g]: -quick and -debug each say how much to optimize - give one\n"
+    assert mistake(String&["test", "-race", "-quick", "m.olang"]) ==
+        "olang: error[B2g]: -quick and -race each say how much to optimize - give one\n"
+    assert mistake(String&["interpret", "-quick", "m.olang"]) ==
+        "olang: error[B1]: -quick applies to running a file, build, compile and test, not to interpret\n"
+    assert mistake(String&["build", "-quick", "m.olang"]) == "no mistake: build"
+}
+
+test "-quick builds at -O2 with no link-time optimization, its objects apart (B2g)" {
+    c := build.Config()
+    c.Quick = true
+    f := c.ModeFlags()
+    assert f.Len() == 1 and f[0] == "-O2"
+    o := build.Config().ModeFlags()
+    assert o.Len() == 2 and o[0] == "-O3" and o[1] == "-flto"
 }
 
 test "the options are recorded wherever they stand, and passed on as written" {

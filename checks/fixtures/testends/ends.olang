@@ -125,3 +125,20 @@ test "a ! takes an error" {
     assert y == 0
 }
 test "after" { assert true }
+
+# S16d: an unreachable says why, its message computed only where it is reached
+Asked mut I64 = 0
+fn reason(n I64) String {
+    Asked += 1
+    return "n is " $n
+}
+fn pick(n I64) I64 {
+    if n < 10 { return n }
+    unreachable reason(n)
+}
+test "an unreachable says why" {
+    assert pick(Depth) == 3
+    x := pick(Depth * 10)
+    assert x == 0
+}
+test "its message was computed once, where it was reached" { assert Asked == 1 }

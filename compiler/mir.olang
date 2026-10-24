@@ -277,7 +277,7 @@ type Term enum {
     # earliest-spawned's under the join's list (P4b) - failed NoBlock for a join none of whose tasks can fail
     Wait(sp source.Span, j ScopeId, ok BlockId, code LocalId, failed BlockId)
     # the test or the process ends (S16, S16a, S18): no deferred code runs, the scopes still open are left to the
-    # runtime's unwinding (S19c, P1d). msg is an Assert's message (S17), None for none
+    # runtime's unwinding (S19c, P1d). msg is an Assert's or an Unreachable's message (S17, S16d), None for none
     Exit(sp source.Span, kind ExitKind, msg Operand)
     Resume(sp source.Span)    # a cleanup's end (Stmt.Deferred): the stop it ran for goes on to the next
 }
@@ -287,7 +287,7 @@ type ExitKind enum {
     Done           # S16
     Fail           # S16a
     Abort          # S16c: "aborted"
-    Unreachable    # S16d: "reached unreachable code" - a value match no clause selects too (S12b)
+    Unreachable    # S16d: "unreachable reached" - a value match no clause selects too (S12b); msg its message
     Assert         # S18: "assertion failed"
     SliceBounds    # E16b: "slice bounds out of range"
     ArrayLength    # D14b: "array length out of range"
@@ -302,7 +302,7 @@ fn ExitText(k ExitKind) String& {
     return match k {
         case ExitKind.Done, ExitKind.Fail, ExitKind.Error, ExitKind.Escaped => ""
         case ExitKind.Abort => "aborted"
-        case ExitKind.Unreachable => "reached unreachable code"
+        case ExitKind.Unreachable => "unreachable reached"
         case ExitKind.Assert => "assertion failed"
         case ExitKind.SliceBounds => "slice bounds out of range"
         case ExitKind.ArrayLength => "array length out of range"
@@ -1556,7 +1556,8 @@ fn (v mut verifier&) termTypes(term Term) {
         }
         case Term.Exit(_, kind, msg) {
             if msg != Operand.None {
-                if kind != ExitKind.Assert and kind != ExitKind.Error and kind != ExitKind.Escaped {
+                if kind != ExitKind.Assert and kind != ExitKind.Unreachable and kind != ExitKind.Error and
+                   kind != ExitKind.Escaped {
                     v.bad("a message for a " $short($kind) " exit")
                 }
                 if not v.isText(v.operandType(msg)) { v.bad("an assert's message that is no text") }

@@ -827,6 +827,7 @@ fn collectStmt(st typed.Stmt&, out mut walked&) {
             collectExpr(c, out)
             collectExpr(m, out)
         }
+        case typed.Stmt.Exit(_, _, m) { collectExpr(m, out) }
         case typed.Stmt.Block(_, b) { collectBlock(b, out) }
         case typed.Stmt.Defer(_, b) { collectBlock(b, out) }
         case typed.Stmt.Join(_, jn) {
@@ -1733,6 +1734,7 @@ fn (s mut Scoper&) flStmt(st typed.Stmt&) {
             s.flExpr(c)
             s.flExpr(m)
         }
+        case typed.Stmt.Exit(_, _, m) { s.flExpr(m) }
         case typed.Stmt.Block(_, b) { s.flBlockOf(b) }
         case typed.Stmt.Defer(_, b) { s.flBlockOf(b) }
         case typed.Stmt.Join(_, jn) {
@@ -2393,6 +2395,7 @@ fn (s mut Scoper&) rlStmt(st typed.Stmt&, pass I64) {
             s.rlExpr(c, pass)
             s.rlExpr(m, pass)
         }
+        case typed.Stmt.Exit(_, _, m) { s.rlExpr(m, pass) }
         case typed.Stmt.Block(_, bl), typed.Stmt.Defer(_, bl) { s.rlBlock(bl, pass) }
         case typed.Stmt.Join(_, jn) {
             s.rlBlock(jn.Code, pass)
@@ -2552,6 +2555,7 @@ fn (s mut Scoper&) kwStmt(st typed.Stmt&) {
             s.kwExpr(c, true)
             s.kwExpr(m, true)
         }
+        case typed.Stmt.Exit(_, _, m) { s.kwExpr(m, true) }
         case typed.Stmt.Block(_, b) { s.kwBlock(b) }
         case typed.Stmt.Defer(_, b) { s.kwBlock(b) }
         case typed.Stmt.Join(_, jn) {
@@ -3090,6 +3094,7 @@ fn (s mut Scoper&) ueStmt(b typed.Body&, st typed.Stmt&, l I64, mode I64) Bool {
         case typed.Stmt.Loop(_, body, post) { return s.ueBlock(b, body, l, mode) and s.ueBlock(b, post, l, mode) }
         case typed.Stmt.Return(_, x) { return s.ueExpr(b, x, l, mode) }
         case typed.Stmt.Assert(_, c, m) { return s.ueExpr(b, c, l, mode) and s.ueExpr(b, m, l, mode) }
+        case typed.Stmt.Exit(_, _, m) { return s.ueExpr(b, m, l, mode) }
         case typed.Stmt.Block(_, bl) { return s.ueBlock(b, bl, l, mode) }
         case typed.Stmt.Defer(_, bl) { return s.ueBlock(b, bl, l, mode) }
         case typed.Stmt.Join(_, jn) {
@@ -3465,6 +3470,7 @@ fn (s mut Scoper&) ocStmt(st typed.Stmt&, l I64, passOn Bool) Bool {
         case typed.Stmt.Loop(_, body, post) { return s.ocBlock(body, l, passOn) and s.ocBlock(post, l, passOn) }
         case typed.Stmt.Return(_, x) { return s.ocExpr(x, l, passOn) }
         case typed.Stmt.Assert(_, c, m) { return s.ocExpr(c, l, passOn) and s.ocExpr(m, l, passOn) }
+        case typed.Stmt.Exit(_, _, m) { return s.ocExpr(m, l, passOn) }
         case typed.Stmt.Block(_, b) { return s.ocBlock(b, l, passOn) }
         case typed.Stmt.Defer(_, b) { return s.ocBlock(b, l, passOn) }
         case typed.Stmt.Join(_, jn) {
@@ -3633,7 +3639,7 @@ fn (s mut Scoper&) stmt(st typed.Stmt&) {
         case typed.Stmt.Jump(_, _, _) { }
         case typed.Stmt.Return(sp, x) { s.ret(sp, x) }
         case typed.Stmt.Raise(_, _, _) { }
-        case typed.Stmt.Exit(_, _) { }
+        case typed.Stmt.Exit(_, _, m) { s.val(m, Term.None) }
         case typed.Stmt.Assert(_, c, m) {
             s.val(c, Term.None)
             s.val(m, Term.None)

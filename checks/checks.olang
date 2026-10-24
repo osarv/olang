@@ -889,13 +889,13 @@ fn assertloc(r mut report&) ? Failed {
     try r.expect(sh(dir, "./build/located > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("located.olang:8: assertion failed: n is 1\n"), "an assert's location and message", dir)
     try r.expect(sh(dir, "./build/located a > out.txt 2>&1") == 134 and
-                 outOf(dir).StartsWith("located.olang:6: reached unreachable code\n"), "the first unreachable's location", dir)
+                 outOf(dir).StartsWith("located.olang:6: unreachable reached\n"), "the first unreachable's location", dir)
     try r.expect(sh(dir, "./build/located a b > out.txt 2>&1") == 134 and
-                 outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "an unreachable's location", dir)
+                 outOf(dir).StartsWith("located.olang:7: unreachable reached\n"), "an unreachable's location", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret located.olang > out.txt 2>&1") == 134 and
                  outOf(dir).StartsWith("located.olang:8: assertion failed: n is 1\n"), "-i: an assert's location and message", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret located.olang a b > out.txt 2>&1") == 134 and
-                 outOf(dir).StartsWith("located.olang:7: reached unreachable code\n"), "-i: an unreachable's location", dir)
+                 outOf(dir).StartsWith("located.olang:7: unreachable reached\n"), "-i: an unreachable's location", dir)
     # and a check the language guarantees - a slice, an array length, an 'as' (a copy into fixed storage is never
     # checked: its length is known while compiling, T7d)
     try r.expect(sh(dir, "\"$OLANG\" build guaranteed.olang > out.txt 2>&1") == 0, "guaranteed did not build", dir)
@@ -1811,7 +1811,7 @@ fn testends(r mut report&) ? Failed {
     os.Run("cp checks/fixtures/testends/* " $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test ends.olang > out.txt 2>&1") != 0, "ends", dir)
     try r.expect(sh(dir, "cmp -s out.txt ends.want") == 0, "ends output", dir)
-    for n in String&["traced", "banged", "spawnbanged", "checkbanged"] {
+    for n in String&["traced", "banged", "spawnbanged", "checkbanged", "why"] {
         try r.expect(sh(dir, "\"$OLANG\" build " $n ".olang > out.txt 2>&1") == 0, $n " build", dir)
         # the shell adds its own "Aborted" line after what a program stopped by '!' printed
         try r.expect(sh(dir, "./build/" $n " > b.txt 2>&1; grep -v '^Aborted' b.txt | cmp -s - " $n ".b.want") == 0, n, dir)

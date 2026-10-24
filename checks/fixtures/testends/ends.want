@@ -1,20 +1,20 @@
 == ends.olang ==
-ends.olang:16: reached unreachable code
+ends.olang:16: unreachable reached
 FAIL - fails inside a join
 ok - the join's task had finished
-ends.olang:30: reached unreachable code
+ends.olang:30: unreachable reached
 FAIL - fails two frames down
 ok - all three handles were destructed
-ends.olang:44: reached unreachable code
+ends.olang:44: unreachable reached
 FAIL - fails in a helper with code deferred
 ok - no deferred code ran
-ends.olang:64: reached unreachable code
+ends.olang:64: unreachable reached
 FAIL - fails inside a Str
 ok - both of the Str's destructors ran
-ends.olang:79: reached unreachable code
+ends.olang:79: unreachable reached
 FAIL - fails in a destructor
 ok - the other destructors ran once each
-ends.olang:96: reached unreachable code
+ends.olang:96: unreachable reached
 FAIL - fails on another stack
 ok - the stack's code ran, and the caller's handle was destructed
 FAIL - an error leaves the test: FxErr.GONE
@@ -27,4 +27,7 @@ ends.olang:107: raised here
 ends.olang:111: try passed it on
 FAIL - a ! takes an error
 ok - after
-8 passed, 8 failed
+ends.olang:137: unreachable reached: n is 30
+FAIL - an unreachable says why
+ok - its message was computed once, where it was reached
+9 passed, 9 failed

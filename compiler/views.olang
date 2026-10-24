@@ -889,7 +889,11 @@ fn (v mut Viewer&) stmt(s typed.Stmt&, st mut state&) {
             }
             st.Dead = true
         }
-        case typed.Stmt.Raise(_, _, _), typed.Stmt.Exit(_, _) { st.Dead = true }
+        case typed.Stmt.Raise(_, _, _) { st.Dead = true }
+        case typed.Stmt.Exit(_, _, m) {
+            if m != null { v.expr(m, st, scratch) }
+            st.Dead = true
+        }
         case typed.Stmt.Assert(_, c, m) {
             v.expr(c, st, scratch)
             if m != null {
@@ -1471,6 +1475,7 @@ fn callsStmt(s typed.Stmt&, out mut List<I64>&) {
             callsExpr(c, out)
             callsExpr(m, out)
         }
+        case typed.Stmt.Exit(_, _, m) { callsExpr(m, out) }
         case typed.Stmt.Block(_, b), typed.Stmt.Defer(_, b) { calls(b, out) }
         case typed.Stmt.Join(_, j) {
             calls(j.Code, out)

@@ -54,6 +54,7 @@ type Diag enum {
     UnknownFlag
     OptionNotForMode
     OptionNeedsValue
+    QuickAlone
     NotASource
     ModeFirst
     HelpOneMode
@@ -598,6 +599,9 @@ fn OptionNotForMode(text1 String&, text2 String&, text3 String&) Msg { return Ms
 
 # ERR_OPTION_NEEDS_VALUE
 fn OptionNeedsValue(text1 String&, text2 String&) Msg { return Msg(Diag.OptionNeedsValue, "B1", $text1 " needs a value after it: " $text2) }
+
+# ERR_QUICK_ALONE
+fn QuickAlone(text String&) Msg { return Msg(Diag.QuickAlone, "B2g", "-quick and " $text " each say how much to optimize - give one") }
 
 # ERR_NOT_A_SOURCE
 fn NotASource(text String&) Msg { return Msg(Diag.NotASource, "B1", "'" $text "' is no olang file to run - a file's name ends in .olang") }
@@ -2100,16 +2104,16 @@ fn AssertFalse() Msg { return Msg(Diag.AssertFalse, "S18c", "this assertion is f
 fn AssertFalseMessage(text String&) Msg { return Msg(Diag.AssertFalseMessage, "S18c", "this assertion is false, evaluated while compiling: " $text) }
 
 # ERR_ASSERT_MSG_RETURNS
-fn AssertMsgReturns() Msg { return Msg(Diag.AssertMsgReturns, "S17", "an assert's message may not return - it is evaluated only when the assert fails, and gives text") }
+fn AssertMsgReturns(text String&) Msg { return Msg(Diag.AssertMsgReturns, "S17", $text " message may not return - it is evaluated only where it is used, and gives text") }
 
 # ERR_ASSERT_MSG_ERROR
-fn AssertMsgError() Msg { return Msg(Diag.AssertMsgError, "S17", "an error may not leave an assert's message - catch it here") }
+fn AssertMsgError(text String&) Msg { return Msg(Diag.AssertMsgError, "S17", "an error may not leave " $text " message - catch it here") }
 
 # ERR_ASSERT_MSG_LOOP_JUMP
-fn AssertMsgLoopJump(tok String&) Msg { return Msg(Diag.AssertMsgLoopJump, "S17", $tok " may not leave an assert's message - it is evaluated only when the assert fails") }
+fn AssertMsgLoopJump(tok String&, text String&) Msg { return Msg(Diag.AssertMsgLoopJump, "S17", $tok " may not leave " $text " message - it is evaluated only where it is used") }
 
 # ERR_ASSERT_MESSAGE_NOT_TEXT
-fn AssertMessageNotText(ty String&) Msg { return Msg(Diag.AssertMessageNotText, "S18a", "an assertion's message is text, found " $ty " - write it as text: \"x is \" $x") }
+fn AssertMessageNotText(ty String&, text String&) Msg { return Msg(Diag.AssertMessageNotText, "S18a", $text " message is text, found " $ty " - write it as text: \"x is \" $x") }
 
 # ERR_ASSERT_ABORTS
 fn AssertAborts(text String&) Msg { return Msg(Diag.AssertAborts, "S18c", "this assertion aborts the program, evaluated while compiling: " $text) }

@@ -451,7 +451,13 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
                 w.exprs(values)
             }
         }
-        case ast.Stmt.Jump(_, kind) { w.put(kind.Text()) }
+        case ast.Stmt.Jump(_, kind, msg) {
+            w.put(kind.Text())
+            if msg != null {
+                w.put(" ")
+                w.expr(msg)
+            }
+        }
         case ast.Stmt.Assert(_, cond, msg) {
             w.put("assert ")
             w.expr(cond)

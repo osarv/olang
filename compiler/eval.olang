@@ -4992,7 +4992,7 @@ test "exits: a failed check stops with FILE:LINE and its message (S18a); done an
         s := m.Eval(tkey(1), I64[])
         assert s == Stop.Exited(mir.ExitKind.Assert, 0, source.Span(4, 9), "boom"), $s
         assert s.Text(src) == "a.olang:2: assertion failed: boom", s.Text(src)
-        assert m.Eval(tkey(2), I64[]).Text(src) == "a.olang:1: reached unreachable code"
+        assert m.Eval(tkey(2), I64[]).Text(src) == "a.olang:1: unreachable reached"
         ended := m.Eval(tkey(3), I64[])
         if mode == Mode.Compile {
             assert ended == Stop.Refused(WhyEnds, 0, Sp0)

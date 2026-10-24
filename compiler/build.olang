@@ -88,6 +88,7 @@ type Config struct() {
     Target target.Target = target.Target()
     Consts cond.Consts = cond.Consts()
     Debug Bool = false
+    Quick Bool = false  # -quick: -O2 without link-time optimization (B2g)
     Race Bool = false
     San Bool = false
     Update Bool = false
@@ -138,13 +139,15 @@ fn (c Config&) paint(code String&, text String&) String {
     return b.ToString()
 }
 
-# ".race", ".debug", ".san" - which modes an object or a binary was built for, for a reader (its hash says it anyway)
+# ".race", ".debug", ".quick", ".san" - which modes an object or a binary was built for, for a reader (its hash says it
+# anyway)
 fn (c Config&) modeSuffix() String {
-    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".san" if c.San else "")
+    return $(".race" if c.Race else "") $(".debug" if c.Debug else "") $(".quick" if c.Quick else "") $(".san" if c.San else "")
 }
 
 # the flags of the build's mode, shared by every compile and the link so the two never disagree (B2c, B2d, P7, B12): the
-# target's triple for another machine and its CPU; -O0 -g under -debug, -O1 under -race, else -O3 with full LTO
+# target's triple for another machine and its CPU; -O0 -g under -debug, -O1 under -race, -O2 under -quick (B2g), else
+# -O3 with full LTO
 fn (c Config&) ModeFlags() List<String&> {
     out List<String&>
     if c.Target.Foreign { out.Push($"--target=" $c.Target.Triple) }
@@ -158,6 +161,10 @@ fn (c Config&) ModeFlags() List<String&> {
     if c.Race {
         out.Push("-O1")
         out.Push("-fsanitize=thread")
+        return out
+    }
+    if c.Quick {
+        out.Push("-O2")
         return out
     }
     out.Push("-O3")
@@ -320,7 +327,7 @@ fn kindSuffix(k UnitKind) String {
 }
 
 # where the object made from the IR whose SHA-256 is irHash, compiled with flags, goes:
-# BASE.HASH[.main|.test|.inst][.race][.debug][.san].o, HASH the first 16 hex digits of the SHA-256 of the IR's hash, the
+# BASE.HASH[.main|.test|.inst][.race][.debug][.quick][.san].o, HASH the first 16 hex digits of the SHA-256 of the IR's hash, the
 # flags and clang's version
 fn (c mut Config&) ObjectPath(base String&, k UnitKind, irHash String&, flags List<String&>&) String {
     parts List<String&>
@@ -474,7 +481,7 @@ fn fileFatal(path String&, m msgs.Msg, d mut diag.Diagnostics&) {
 fn (c mut Config&) Objects(prog Program&, d mut diag.Diagnostics&) List<String&> ? Failed {
     size I64 = 0
     for u in prog.Units { size += u.Ir.Len() }
-    c.Thin = not c.Debug and not c.Race and size >= ThinFrom
+    c.Thin = not c.Debug and not c.Race and not c.Quick and size >= ThinFrom
     j := compiles()
     paths List<String&>
     for i, u in prog.Units { paths.Push(try c.want(j, Readable(u.Identity), u.Holds, u.Ir, d, u.Hash, i)) }

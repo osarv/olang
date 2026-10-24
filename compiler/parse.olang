@@ -1126,9 +1126,15 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         case token.Tok.Break, token.Tok.Continue, token.Tok.Unreachable {
             k := p.peek()
             p.advance()
+            # S16d: "unreachable why" - a message, evaluated only where it is reached
+            msg ast.Expr&p = null
+            if k == token.Tok.Unreachable and not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and
+               not p.sees(token.Tok.Eof) {
+                msg = try p.expr()
+            }
             sp := p.from(at)
             try p.endStmt()
-            return ast.Stmt.Jump(sp, k)
+            return ast.Stmt.Jump(sp, k, msg)
         }
         case token.Tok.Assert {
             p.advance()

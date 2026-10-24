@@ -453,7 +453,7 @@ type Stmt enum {
     # null for none; several results a Make of a tuple; an owner local returned is a Take of it (O36, O42)
     Return(sp source.Span, value Expr&)
     Raise(sp source.Span, err types.TypeId, word I64)   # "error E.WORD" (R3)
-    Exit(sp source.Span, kind ExitKind)
+    Exit(sp source.Span, kind ExitKind, msg Expr&)  # msg: an unreachable's message (S16d), null for none
     Assert(sp source.Span, cond Expr&, msg Expr&)   # msg null for none; read only when it fails (S17)
     Block(sp source.Span, b Block&)
     Defer(sp source.Span, b Block&)                 # registered here, run on every way out of the enclosing block
@@ -676,7 +676,7 @@ fn (p Place&) Span() source.Span {
 fn (s Stmt&) Span() source.Span {
     return match s {
         case Stmt.Let(sp, _, _), Stmt.Assign(sp, _, _), Stmt.Eval(sp, _), Stmt.If(sp, _), Stmt.Loop(sp, _, _) => sp
-        case Stmt.Jump(sp, _, _), Stmt.Return(sp, _), Stmt.Raise(sp, _, _), Stmt.Exit(sp, _), Stmt.Assert(sp, _, _) => sp
+        case Stmt.Jump(sp, _, _), Stmt.Return(sp, _), Stmt.Raise(sp, _, _), Stmt.Exit(sp, _, _), Stmt.Assert(sp, _, _) => sp
         case Stmt.Block(sp, _), Stmt.Defer(sp, _), Stmt.Join(sp, _), Stmt.Spawn(sp, _), Stmt.Yield(sp, _) => sp
     }
 }
@@ -731,7 +731,7 @@ fn (w mut printer&) stmt(s Stmt&, d I64) {
         case Stmt.Jump(_, k, l) { w.line(d, $("break" if k == JumpKind.Break else "continue") " {" $l) }
         case Stmt.Return(_, x) { w.line(d, "return" $(" " $w.expr(x) if x != null else "")) }
         case Stmt.Raise(_, e, word) { w.line(d, "raise " $w.T.Canon(e) "." $word) }
-        case Stmt.Exit(_, k) { w.line(d, "exit " $short($k)) }
+        case Stmt.Exit(_, k, _) { w.line(d, "exit " $short($k)) }
         case Stmt.Assert(_, c, _) { w.line(d, "assert " $w.expr(c)) }
         case Stmt.Block(_, bl) { w.block(bl, d + 1) }
         case Stmt.Defer(_, bl) {

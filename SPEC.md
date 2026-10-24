@@ -3768,10 +3768,12 @@ written, so a failed assert inside a helper called from a test fails *that test*
 returning from `main` (or letting an error escape it, §10 B5), by calling a `noreturn` function such as `os.Exit`
 (D8e, B5b), or by an abort.
 
-**S16d.** `unreachable-stmnt ::= "unreachable" STMNT_END` states that control was never expected to
+**S16d.** `unreachable-stmnt ::= "unreachable" [ expr ] STMNT_END` states that control was never expected to
 arrive. Reaching it is a failure and behaves in every respect as a failed `assert` does (S18), with a message saying
 so: it fails the running test, and otherwise aborts the process - no cleanup, the OS's abort status, a core dump where
-the platform produces one. It is **checked, never assumed**: the compiler draws no conclusion from it and generates no
+the platform produces one. The optional `expr` says why, as an assert's message does (S17): text, evaluated **only where
+the `unreachable` is reached**, under S17's rules for what may stand in it, and printed after `: ` - `unreachable "the
+parser takes every token"` prints `FILE:LINE: unreachable reached: the parser takes every token` (S18a). It is **checked, never assumed**: the compiler draws no conclusion from it and generates no
 code that relies on the claim, so a wrong `unreachable` is a diagnosed abort rather than undefined behaviour.
 
 `unreachable` exists because D10a requires a result on every path and the analysis behind it is
@@ -3804,9 +3806,9 @@ deferred code (S19b); a `spawn` in it needs a `join` written in it (P1a). `unrea
 **S18a.** A failed assert, and each check the language guarantees - an out-of-range slice bound (§5.9 E16b), an
 array length out of range (§3.5 D14b), an `as` that does not hold (E32) - prints a message naming what failed, and **where** it is written, as `FILE:LINE: ` before it - to standard
 error, or while a test is running to standard output, before the test's `FAIL` line: `FILE:LINE: assertion failed`,
-`FILE:LINE: reached unreachable code` (S16d, and a value `match` no clause selects,
+`FILE:LINE: unreachable reached` (S16d, and a value `match` no clause selects,
 S12b), `FILE:LINE: slice bounds out of range`, `FILE:LINE: array length out of range`, `FILE:LINE: 'as' named what the
-value is not`. An assert's message (S17) follows, after
+value is not`. An assert's or an `unreachable`'s message (S17, S16d) follows, after
 `: `. A program run with `interpret` (B3e) prints the same.
 
 **S18c.** An `assert` whose condition can be evaluated at compile time (K1), reading only locals whose
@@ -5616,8 +5618,8 @@ other entry point; or it names a file, which is built and run (B3g):
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
 mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help"
-option    ::= "-output" PATH | "-debug" | "-race" | "-sanitize" | "-target" NAME | "-define" NAME "=" VALUE
-            | "-update" | "-check"
+option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
+            | "-define" NAME "=" VALUE | "-update" | "-check"
 ```
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
@@ -5630,7 +5632,7 @@ beginning with `-` that is no option is an error:
 | option | applies to | rule |
 |---|---|---|
 | `-output PATH` | build, compile | B3h |
-| `-debug`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2b, B2f |
+| `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
 | `-target NAME` | running a file, build, compile, test, interpret | B12 |
 | `-define Name=value`, `-update` | running a file, build, compile, test, interpret | B10, §4 M23c |
 | `-check` | format | B13 |
@@ -5660,6 +5662,13 @@ it disables optimization so that the emitted code corresponds to the program as 
 inlined, nothing is reordered, and values live in memory rather than in registers, so a backtrace names the
 functions actually called and the state is inspectable. It is an option of the modes that build (B1), and composes
 with `-race`.
+
+**B2g.** `-quick` is a **development build**: optimized at LLVM's level 2 with no link-time optimization (B2d), each
+module compiled to native code of its own, so a build - and above all a rebuild after an edit to code many modules
+inline - takes a fraction of the default's time, and the program runs somewhat slower (about a fifth, measured on the
+compiler itself). It is an option of the modes that build (B1); it says how much to optimize, as `-debug` and `-race`
+do, so it is a compile-time error beside either of them. A quick object is a distinct artifact (B4), named with
+`.quick`. Nothing else changes: the program means what it means in the default build.
 
 **B2e.** Under `-debug` the build also carries **source-level debug information** (DWARF): every function
 of the program has a source location and its own name, every statement a line, and every parameter and local
@@ -5706,7 +5715,8 @@ block's scope, and a value the caller holds outside it is reclaimed at the block
 program is optimized once, at the link, so a call into another module is subject to inlining — and to
 everything inlining enables — exactly as a call within one module is. This holds wherever optimization
 holds: `-debug` (B2c) disables it along with the rest, and `-race` (§6.8 P7) does not use it, because
-attributing a report to the right function depends on code not moving between them. Those builds produce
+attributing a report to the right function depends on code not moving between them, and `-quick` (B2g) leaves it out
+to build faster. Those builds produce
 distinct artifacts already (B4), so an optimized object and one that is not are never mixed.
 
 One consequence is visible: the object file `compile` writes holds that intermediate form rather than native

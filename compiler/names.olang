@@ -777,6 +777,9 @@ fn (r mut Resolver&) stmt(s ast.Stmt&) {
             r.expr(c)
             if msg != null { r.expr(msg) }
         }
+        case ast.Stmt.Jump(_, _, msg) {
+            if msg != null { r.expr(msg) }
+        }
         case ast.Stmt.Raise(_, word) {
             if word != null { r.path(word) }
         }

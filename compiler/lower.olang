@@ -657,7 +657,12 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             code := mir.ErrorCode(ln.T, ln.T.Errors(ln.B.Ty), err, word)
             ln.raise(sp, mir.Operand.Const(mir.I32T, code))
         }
-        case typed.Stmt.Exit(sp, _) { ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, mir.Operand.None)) }
+        case typed.Stmt.Exit(sp, _, msg) {
+            # S16d: the message is computed only here, where the unreachable is reached
+            m := mir.Operand.None
+            if msg != null { m = ln.val(msg) }
+            if not ln.dead { ln.end(mir.Term.Exit(sp, mir.ExitKind.Unreachable, m)) }
+        }
         case typed.Stmt.Assert(sp, c, msg) { ln.assert(sp, c, msg) }
         case typed.Stmt.Block(_, bl) { ln.block(bl) }
         case typed.Stmt.Defer(sp, bl) {

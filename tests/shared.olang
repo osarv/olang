@@ -4331,7 +4331,7 @@ test "D10a: every path produces a result" {
 # these can only be named here - the first is a compile error, the other two abort:
 #   fn f(c bool) I32 { if c { return 1 } }      D10a: control reaches the end without returning
 #   abort                                           "aborted", the OS abort status, a core dump
-#   unreachable                                     "reached unreachable code", the same abort
+#   unreachable                                     "unreachable reached", the same abort
 # Both behave exactly as a failed assert does, recoverable per-test while a test is running - which is
 # the reason "abort" is worth having at all: "assert false" already did precisely this and said nothing
 # about why. "unreachable" says something different again, and says it to the compiler as well as to a

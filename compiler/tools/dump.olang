@@ -590,13 +590,14 @@ fn (w mut walker&) stmt(s ast.Stmt&) {
             w.line("RETURN", sp)
             w.exprs(vals)
         }
-        case ast.Stmt.Jump(sp, k) {
+        case ast.Stmt.Jump(sp, k, msg) {
             kind := match k {
                 case token.Tok.Break => "BREAK"
                 case token.Tok.Continue => "CONTINUE"
                 case _ => "UNREACHABLE"
             }
             w.line(kind, sp)
+            if msg != null { w.expr(msg) }
         }
         case ast.Stmt.Assert(sp, c, msg) {
             w.line("ASSERT", sp)

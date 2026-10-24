@@ -70,7 +70,8 @@ type frame struct(Body I64, Mi I64, File I64, Result types.TypeId, Errors types.
     InTaskClause Bool = false  # a task's clause, run on the task: it may not leave it (P4a)
     TargetFails I64 = 0        # tasks binding targets that can fail into their join (P4d)
     DeferLoops I64 = -1        # in deferred code: the loops around it then - none of them a jump may leave (S19b)
-    MsgLoops I64 = -1          # in an assert's message: the same (S17)
+    MsgLoops I64 = -1          # in an assert's or an unreachable's message: the same (S17, S16d)
+    MsgOfUnreachable Bool = false  # the message is an unreachable's
     DeferJoins I64 = -1        # in deferred code: the joins around it then, none of which its spawns may join (S19b)
     joins List<I64>            # the join blocks around, innermost last: how many spawns each holds (P1a)
     joinMarks List<I64>        # where each one's errors start in joinErrs
@@ -2003,6 +2004,7 @@ fn (c mut Checker&) b5aStmt(w mut b5aWalk&, st typed.Stmt&) {
             c.b5aExpr(w, cd)
             c.b5aExpr(w, m)
         }
+        case typed.Stmt.Exit(_, _, m) { c.b5aExpr(w, m) }
         case typed.Stmt.Block(_, b) { c.b5aBlock(w, b) }
         case typed.Stmt.Defer(_, b) { c.b5aBlock(w, b) }
         case typed.Stmt.Join(_, jn) {
@@ -2646,6 +2648,7 @@ fn storedStmt(st ast.Stmt&, out mut Map<source.NameId, Bool>&) {
             storedExpr(k, out)
             storedExpr(msg, out)
         }
+        case ast.Stmt.Jump(_, _, msg) { storedExpr(msg, out) }
         case ast.Stmt.Spawn(_, ts, call) {
             if ts != null {
                 for t in ts { storedTarget(t, out) }
@@ -9029,7 +9032,7 @@ fn (c mut Checker&) escapeRules(at source.Span, mark I64, k I64) {
         return
     }
     if fr.MsgLoops >= 0 {
-        c.err(at, msgs.AssertMsgError())
+        c.err(at, msgs.AssertMsgError(c.msgOwner(fr.MsgOfUnreachable)))
         return
     }
     if fr.InTaskClause {
@@ -9188,24 +9191,10 @@ fn (c mut Checker&) stmt(s ast.Stmt&) {
         case ast.Stmt.DoFor(sp, body, k) { c.doFor(sp, body, k) }
         case ast.Stmt.Return(sp, values) { c.returnStmt(sp, values) }
         case ast.Stmt.MatchS(sp, m) { c.matchStmt(sp, m) }
-        case ast.Stmt.Jump(sp, kind) { c.jump(sp, kind) }
+        case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
         case ast.Stmt.Assert(sp, k, msg) {
             x := c.cond1(k)
-            m typed.Expr&c = null
-            if msg != null {
-                # S18a: its message is text, evaluated only when the assert fails - nothing may leave it (S17)
-                fr := c.fr()
-                was := fr.MsgLoops
-                fr.MsgLoops = fr.loops.Len()
-                me := c.expr(msg, c.P.T.Ref(c.textType(), types.ReadOnly))
-                c.fr().MsgLoops = was
-                mt := c.deref(typeOf(me))
-                if mt != types.UnknownT and not c.sameRepr(mt, c.textType()) {
-                    c.err(msg.Span(), msgs.AssertMessageNotText(c.ty(typeOf(me))))
-                } else {
-                    m = c.fit(me, c.P.T.Ref(c.textType(), types.ReadOnly), msg.Span())
-                }
-            }
+            m := c.message(msg, false)
             c.emit(typed.Stmt.Assert(sp, x, m))
             # S18c: one that reads no local is the evaluator's to decide - in a test only in a test build (B3a)
             fr := c.fr()
@@ -11210,7 +11199,7 @@ fn (c mut Checker&) returnStmt(sp source.Span, values Array<ast.Expr&>&) {
         return
     }
     if fr.MsgLoops >= 0 {
-        c.err(source.Span(sp.Start, sp.Start + 6), msgs.AssertMsgReturns())
+        c.err(source.Span(sp.Start, sp.Start + 6), msgs.AssertMsgReturns(c.msgOwner(fr.MsgOfUnreachable)))
         c.emit(typed.Stmt.Return(sp, null))   # said: the path still leaves, for R11 and D10a
         return
     }
@@ -11296,7 +11285,29 @@ fn (c mut Checker&) inferReturn(sp source.Span, values Array<ast.Expr&>&) {
                                                                           typed.SiteId(-1), typed.Check.None))))
 }
 
-fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
+# an assert's or an unreachable's message (S17, S16d): text, evaluated only where the assert fails or the unreachable is
+# reached - nothing may leave it; null for none
+fn (c mut Checker&) message(msg ast.Expr&, ofUnreachable Bool) typed.Expr&c {
+    if msg == null { return null }
+    fr := c.fr()
+    was, wasOf := fr.MsgLoops, fr.MsgOfUnreachable
+    fr.MsgLoops = fr.loops.Len()
+    fr.MsgOfUnreachable = ofUnreachable
+    me := c.expr(msg, c.P.T.Ref(c.textType(), types.ReadOnly))
+    c.fr().MsgLoops = was
+    c.fr().MsgOfUnreachable = wasOf
+    mt := c.deref(typeOf(me))
+    if mt != types.UnknownT and not c.sameRepr(mt, c.textType()) {
+        c.err(msg.Span(), msgs.AssertMessageNotText(c.ty(typeOf(me)), c.msgOwner(ofUnreachable)))
+        return null
+    }
+    return c.fit(me, c.P.T.Ref(c.textType(), types.ReadOnly), msg.Span())
+}
+
+# whose message a diagnostic names: "an assert's" or "an unreachable's"
+fn (c Checker&) msgOwner(ofUnreachable Bool) String& { return "an unreachable's" if ofUnreachable else "an assert's" }
+
+fn (c mut Checker&) jump(sp source.Span, kind token.Tok, msg ast.Expr& = null) {
     if kind == token.Tok.Break or kind == token.Tok.Continue {
         fr := c.fr()
         if fr.loops.Len() == 0 and fr.InTaskClause {
@@ -11304,7 +11315,7 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
             return
         }
         if fr.MsgLoops >= 0 and fr.loops.Len() <= fr.MsgLoops {
-            c.err(sp, msgs.AssertMsgLoopJump(msgs.Tok(kind.Text())))
+            c.err(sp, msgs.AssertMsgLoopJump(msgs.Tok(kind.Text()), c.msgOwner(fr.MsgOfUnreachable)))
             return
         }
         if fr.DeferLoops >= 0 and fr.loops.Len() <= fr.DeferLoops {
@@ -11325,7 +11336,7 @@ fn (c mut Checker&) jump(sp source.Span, kind token.Tok) {
         c.emit(typed.Stmt.Jump(sp, jk, typed.BlockId(I32(l))))
         return
     }
-    if kind == token.Tok.Unreachable { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable)) }
+    if kind == token.Tok.Unreachable { c.emit(typed.Stmt.Exit(sp, typed.ExitKind.Unreachable, c.message(msg, true))) }
 }
 
 # error E.WORD (R3)
@@ -11339,7 +11350,7 @@ fn (c mut Checker&) raise(sp source.Span, word ast.Path&) {
         return
     }
     if c.fr().MsgLoops >= 0 {
-        c.err(source.Span(sp.Start, sp.Start + 5), msgs.AssertMsgError())
+        c.err(source.Span(sp.Start, sp.Start + 5), msgs.AssertMsgError(c.msgOwner(c.fr().MsgOfUnreachable)))
         return
     }
     if word == null { return }
@@ -11619,7 +11630,7 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         noMatch = typed.Arm(nm.Sp, Array<typed.Alt&>(0), null, code, v)
     } else {
         efrom := c.stmts.Len()
-        if exhaustive or isValue { c.stmts.Push(typed.Stmt.Exit(m.Sp, typed.ExitKind.Unreachable)) }
+        if exhaustive or isValue { c.stmts.Push(typed.Stmt.Exit(m.Sp, typed.ExitKind.Unreachable, null)) }
         if not exhaustive and c.isEnum(et) {
             # S13a: an enum's cases covered by unguarded clauses, or a nomatch
             k := c.firstUncovered(rows, et)
@@ -12117,7 +12128,7 @@ fn leaves(s typed.Stmt&) Bool {
     match s {
         case typed.Stmt.Return(_, _) { return true }
         case typed.Stmt.Raise(_, _, _) { return true }
-        case typed.Stmt.Exit(_, _) { return true }
+        case typed.Stmt.Exit(_, _, _) { return true }
         case typed.Stmt.If(_, i) { return i.Else != null and leavesBlock(i.Then) and leavesBlock(i.Else) }
         case typed.Stmt.Block(_, b) { return leavesBlock(b) }
         case typed.Stmt.Join(_, j) {
