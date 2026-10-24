@@ -27,6 +27,6 @@ fn main() ? {
     }
     try churn()
     n := 0
-    for x := seed.head, x != null, x = x.next { n = n * 10 + x.v }
+    for x := seed.head, x is not null, x = x.next { n = n * 10 + x.v }
     try io.Println("chain " $n)
 }

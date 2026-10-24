@@ -26,5 +26,5 @@ fn run(h mut H&, g fn(x RecN)) {
 }
 fn main() ? {
     h mut H& = H()
-    run(h, fn(x RecN) { if x.nd != null { x.nd.next = N2(5) } })
+    run(h, fn(x RecN) { if x.nd is not null { x.nd.next = N2(5) } })
 }

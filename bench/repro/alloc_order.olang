@@ -26,7 +26,7 @@ fn parentFirst(depth I64) Node& {
 }
 
 fn check(n Node&) I64 {
-    if n.left == null { return 1 }
+    if n.left is null { return 1 }
     return 1 + check(n.left) + check(n.right)
 }
 

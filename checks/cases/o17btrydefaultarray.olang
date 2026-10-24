@@ -23,7 +23,7 @@ type Bag struct() {
 fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
 fn (b Bag&) Sum() I64 {
     t I64 = 0
-    for n := b.s.head, n != null, n = n.next { t = t * 10 + n.v }
+    for n := b.s.head, n is not null, n = n.next { t = t * 10 + n.v }
     return t
 }
 fn main() ? {

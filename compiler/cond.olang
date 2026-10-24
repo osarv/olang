@@ -406,7 +406,7 @@ fn (e Eval&) isLocal(n source.NameId) Bool {
 # whether a condition names a local anywhere - the evaluator stops at the first thing it cannot read, so one further
 # on was never seen
 fn (e Eval&) mentionsLocal(c ast.Expr&) Bool {
-    if c == null { return false }
+    if c is null { return false }
     return match c {
         case ast.Expr.Name(_, n) => e.isLocal(n)
         case ast.Expr.Paren(_, x), ast.Expr.Unary(_, _, x), ast.Expr.Member(_, x, _) => e.mentionsLocal(x)
@@ -509,7 +509,7 @@ fn (e mut Eval&) name(sp source.Span, n source.NameId) Value {
     t := e.names.Text(n)
     # B10c: the module's own declaration of the name first - a build constant's default, or B10's error
     g := try e.scope.find(t) catch default null
-    if g != null { return e.global(sp, g) }
+    if g is not null { return e.global(sp, g) }
     i := try e.consts.find(t) catch default -1
     if i >= 0 {
         if e.consts.big[i] or not e.consts.known[i] { return e.defer(sp) }

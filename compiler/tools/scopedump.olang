@@ -80,7 +80,7 @@ fn run(args Array<String&>&) {
         for b in range c.Bodies.Len() {
             if s.Judged(b) {
                 judged++
-            } else if c.Bodies[b].Root != null {
+            } else if c.Bodies[b].Root is not null {
                 unjudged++
             }
             if planAt.Len() == 0 { continue }

@@ -15,7 +15,7 @@ fn (b Bag&) Str() String {
     return $name "/" $kind
 }
 fn pick(t String&, c Bool) String&t { return t if c else "same" }
-Baked := pick("x", false) is pick("y", false)
+Baked := pick("x", false) == pick("y", false)
 fn main() ? {
     a := $Bag("")
     b := $Bag("x")
@@ -25,5 +25,5 @@ fn main() ? {
         k += s.Len()
     }
     assert a == "anon/empty" and b == "x/x", "rendered"
-    assert Baked and pick("x", false) is pick("y", false), "one site, one instance"
+    assert Baked and pick("x", false) == pick("y", false), "one site, one instance"
 }

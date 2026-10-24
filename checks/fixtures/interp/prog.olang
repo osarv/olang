@@ -69,7 +69,7 @@ fn main() ? Oops, io.IoError, os.OsError {
     q P& = P(1, 2)
     r P& = q
     o P& = P(1, 2)
-    try io.Print("atomics " $found " " $hits.AtomicLoad() " identity " $(q is r) " " $(q is not o) "\n")
+    try io.Print("atomics " $found " " $hits.AtomicLoad() " identity " $(q == r) " " $(q != o) "\n")
     os.Run("echo written > prog.txt")
     t := try os.ReadFile("prog.txt")
     try io.Print("read " $t.Trim() " " $(try risky(1) catch default -1) " " $(try risky(5) catch default -1) "\n")

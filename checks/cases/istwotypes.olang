@@ -5,5 +5,5 @@ type Q struct(v I32) { v }
 fn main() ? {
     p P& = P(1)
     q Q& = Q(1)
-    assert p is not q
+    assert p != q
 }

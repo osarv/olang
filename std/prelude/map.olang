@@ -52,7 +52,7 @@ fn (s mapState<K, V>&) bucketOf(key K) I64 { return key.Hash() & (s.buckets.Len(
 # a new key and its value, at the head of bucket i's chain - in a slot a removed key left, when there is one, so a Map
 # whose keys come and go stays the size of what it holds
 fn (s mut mapState<K, V>&) add(i I64, key K, value V) {
-    if s.free == null {
+    if s.free is null {
         s.buckets[i] = mapSlot<K, V>(key, value, s.buckets[i])
     } else {
         f mut mapSlot<K, V>&s = s.free
@@ -69,7 +69,7 @@ fn (s mut mapState<K, V>&) add(i I64, key K, value V) {
 fn (m mut Map<K, V>&) Put(key K, value V) {
     s := m.s
     i := s.bucketOf(key)
-    for f mut mapSlot<K, V>&s = s.buckets[i], f != null, f = f.next {
+    for f mut mapSlot<K, V>&s = s.buckets[i], f is not null, f = f.next {
         if f.entry.Key == key {
             f.entry.Value = value
             return
@@ -84,7 +84,7 @@ fn (s mut mapState<K, V>&) grow() {
     s.buckets = Array<mut mapSlot<K, V>&>(old.Len() * 2)
     for i in range old.Len() {
         f mut mapSlot<K, V>&s = old[i]
-        for f != null {
+        for f is not null {
             after := f.next
             j := s.bucketOf(f.entry.Key)
             f.next = s.buckets[j]
@@ -99,7 +99,7 @@ fn (s mut mapState<K, V>&) grow() {
 fn (m mut Map<K, V>&) Update(key K, init V, f fn(v V) V) {
     s := m.s
     i := s.bucketOf(key)
-    for g mut mapSlot<K, V>&s = s.buckets[i], g != null, g = g.next {
+    for g mut mapSlot<K, V>&s = s.buckets[i], g is not null, g = g.next {
         if g.entry.Key == key {
             g.entry.Value = f(g.entry.Value)
             return
@@ -112,7 +112,7 @@ fn (m mut Map<K, V>&) Update(key K, init V, f fn(v V) V) {
 # "try m.Get(k) catch default 0" gives a fallback, "try m.Get(k)" passes the miss on, "k in m" only asks
 fn (m Map<K, V>&) Get(key K) V ? MapError {
     s := m.s
-    for f mut mapSlot<K, V>&s = s.buckets[s.bucketOf(key)], f != null, f = f.next {
+    for f mut mapSlot<K, V>&s = s.buckets[s.bucketOf(key)], f is not null, f = f.next {
         if f.entry.Key == key { return f.entry.Value }
     }
     error MapError.MISSING
@@ -121,7 +121,7 @@ fn (m Map<K, V>&) Get(key K) V ? MapError {
 # whether key has a value - what "key in m" asks (E29)
 fn (m Map<K, V>&) Has(key K) Bool {
     s := m.s
-    for f mapSlot<K, V>&s = s.buckets[s.bucketOf(key)], f != null, f = f.next {
+    for f mapSlot<K, V>&s = s.buckets[s.bucketOf(key)], f is not null, f = f.next {
         if f.entry.Key == key { return true }
     }
     return false
@@ -132,9 +132,9 @@ fn (m mut Map<K, V>&) Remove(key K) Bool {
     s := m.s
     i := s.bucketOf(key)
     prev mut mapSlot<K, V>&s = null
-    for f mut mapSlot<K, V>&s = s.buckets[i], f != null, f = f.next {
+    for f mut mapSlot<K, V>&s = s.buckets[i], f is not null, f = f.next {
         if f.entry.Key == key {
-            if prev == null { s.buckets[i] = f.next } else { prev.next = f.next }
+            if prev is null { s.buckets[i] = f.next } else { prev.next = f.next }
             f.next = s.free
             s.free = f
             s.count--
@@ -151,7 +151,7 @@ fn (m mut Map<K, V>&) Clear() {
     s := m.s
     for i in range s.buckets.Len() {
         f mut mapSlot<K, V>&s = s.buckets[i]
-        for f != null {
+        for f is not null {
             after := f.next
             f.next = s.free
             s.free = f
@@ -173,14 +173,31 @@ fn (m Map<K, V>&) Clone() Map<K, V> {
     t.buckets = Array<mut mapSlot<K, V>&>(s.buckets.Len())
     for i in range s.buckets.Len() {
         last mut mapSlot<K, V>&t = null
-        for f mapSlot<K, V>&s = s.buckets[i], f != null, f = f.next {
+        for f mapSlot<K, V>&s = s.buckets[i], f is not null, f = f.next {
             n mut mapSlot<K, V>&t = mapSlot<K, V>(f.entry.Key, f.entry.Value, null)
-            if last == null { t.buckets[i] = n } else { last.next = n }
+            if last is null { t.buckets[i] = n } else { last.next = n }
             last = n
         }
     }
     t.count = s.count
     return c
+}
+
+# whether two Maps hold the same keys, each with an equal value - "==" (E10a), whatever order they were put in
+fn (m Map<K, V>&) Eq(o Map<K, V>&) Bool {
+    if m.Len() != o.Len() { return false }
+    for e in m {
+        v := try o.Get(e.Key) catch MapError { return false }
+        if v != e.Value { return false }
+    }
+    return true
+}
+
+# the entries' hashes summed, so equal Maps hash alike whatever order they were put in (E10b)
+fn (m Map<K, V>&) Hash() I64 {
+    h I64 = 0
+    for e in m { h += e.Key.Hash() * 1099511628211 + e.Value.Hash() }
+    return h
 }
 
 # how "$" renders a Map (E11c): its entries in the order a walk gives them, each "key: value", in braces after the Map's
@@ -235,7 +252,7 @@ fn (it mut MapIter<K, V>&) Next() MapEntry<K, V> ? Exhausted {
 
 # on to the next slot, which becomes the one given - failing with Exhausted when every slot has been
 fn (it mut MapIter<K, V>&) advance() ? Exhausted {
-    for it.slot == null {
+    for it.slot is null {
         if it.bucket >= it.m.buckets.Len() { error Exhausted.END }
         it.slot = it.m.buckets[it.bucket]
         it.bucket++
@@ -269,7 +286,7 @@ type MapKeyIter<K, V> struct(of Map<K, V>&) {
 }
 
 fn (it mut MapKeyIter<K, V>&) Next() K ? Exhausted {
-    for it.slot == null {
+    for it.slot is null {
         if it.bucket == it.m.buckets.Len() { error Exhausted.END }
         it.slot = it.m.buckets[it.bucket]
         it.bucket++
@@ -286,7 +303,7 @@ type MapValueIter<K, V> struct(of Map<K, V>&) {
 }
 
 fn (it mut MapValueIter<K, V>&) Next() V ? Exhausted {
-    for it.slot == null {
+    for it.slot is null {
         if it.bucket == it.m.buckets.Len() { error Exhausted.END }
         it.slot = it.m.buckets[it.bucket]
         it.bucket++

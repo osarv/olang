@@ -687,7 +687,7 @@ fn (s Stmt&) Span() source.Span {
 fn (b Body&) Print(t mut types.Table&) String {
     w mut printer&t = printer(t)
     w.line(0, "body " $b.Locals.Len() " locals " $b.Blocks.Len() " blocks " $b.Sites.Len() " sites")
-    if b.Root != null { w.block(b.Root, 1) }
+    if b.Root is not null { w.block(b.Root, 1) }
     return w.out.ToString()
 }
 
@@ -715,7 +715,7 @@ fn (w mut printer&) stmt(s Stmt&, d I64) {
         case Stmt.If(_, i) {
             w.line(d, "if " $w.expr(i.Test))
             w.block(i.Then, d + 1)
-            if i.Else != null {
+            if i.Else is not null {
                 w.line(d, "else")
                 w.block(i.Else, d + 1)
             }
@@ -723,13 +723,13 @@ fn (w mut printer&) stmt(s Stmt&, d I64) {
         case Stmt.Loop(_, body, post) {
             w.line(d, "loop")
             w.block(body, d + 1)
-            if post != null {
+            if post is not null {
                 w.line(d, "post")
                 w.block(post, d + 1)
             }
         }
         case Stmt.Jump(_, k, l) { w.line(d, $("break" if k == JumpKind.Break else "continue") " {" $l) }
-        case Stmt.Return(_, x) { w.line(d, "return" $(" " $w.expr(x) if x != null else "")) }
+        case Stmt.Return(_, x) { w.line(d, "return" $(" " $w.expr(x) if x is not null else "")) }
         case Stmt.Raise(_, e, word) { w.line(d, "raise " $w.T.Canon(e) "." $word) }
         case Stmt.Exit(_, k, _) { w.line(d, "exit " $short($k)) }
         case Stmt.Assert(_, c, _) { w.line(d, "assert " $w.expr(c)) }
@@ -757,7 +757,7 @@ fn (w mut printer&) exprs(xs Array<Expr&>&) String {
 }
 
 fn (w mut printer&) expr(x Expr&) String {
-    if x == null { return "_" }
+    if x is null { return "_" }
     ty := w.T.Canon(x.Type())
     return match x {
         case Expr.Lit(_, _, v) => "(lit " $ty " " $v ")"

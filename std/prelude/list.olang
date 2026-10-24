@@ -104,7 +104,7 @@ fn (s mut listState<T>&) grow(fill T) {
         s.tail = s.first
         s.made = 1
     } else {
-        if s.chunks == null {
+        if s.chunks is null {
             s.chunks = Array<mut Array<T>&>(4)
             s.chunks[0] = s.first
         } else if s.made == s.chunks.Len() {
@@ -596,6 +596,22 @@ fn (l mut List<T>&) SwapTake(i I64) T ? ListError.OUT_OF_RANGE {
     s.dropLast()
     if i < s.count { l.SetAt(i, s.tail[s.used]) }             # the last element, just dropped, into the gap
     return x
+}
+
+# whether two Lists hold equal elements in the same order - "==" (E10a), each pair by its own "==", as two arrays compare
+fn (l List<T>&) Eq(o List<T>&) Bool {
+    if l.Len() != o.Len() { return false }
+    for i in range l.Len() {
+        if l[i] != o[i] { return false }
+    }
+    return true
+}
+
+# the elements' hashes combined in order, as an array's (HashElements) - so equal Lists hash alike (E10b)
+fn (l List<T>&) Hash() I64 {
+    h I64 = 0
+    for y in l { h = h * 1099511628211 + y.Hash() }
+    return h
 }
 
 # how "$" renders a List (E11c): as an array of its elements renders, with the List named in front - "List<I64>[1, 2, 3]",

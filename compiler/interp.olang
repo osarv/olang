@@ -109,7 +109,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     }
     for t in tops {
         ti := findIf(l.Mods[t.First].Decls, t.Second)
-        if ti == null { continue }
+        if ti is null { continue }
         chosen, ok, why, at := chain(x, c, t.First, ti)
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
         if not ok and why == "" and condSaid(l.Diags, at) { continue }
@@ -153,7 +153,7 @@ fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool
     file := c.P.L.Mods[mi].File
     k I64 = 0
     link := ti
-    for link != null {
+    for link is not null {
         csp := link.Cond.Span()
         at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
         b := c.CondBody(mi, link.Cond)
@@ -167,7 +167,7 @@ fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool
         }
         if v { return k, true, "", at }
         k++
-        if link.ElseIf == null { return (k if link.Else != null else load.NoBranch), true, "", at }
+        if link.ElseIf is null { return (k if link.Else is not null else load.NoBranch), true, "", at }
         link = link.ElseIf
     }
     return load.NoBranch, true, "", diag.Where.Span(file, 0, 0)
@@ -175,13 +175,13 @@ fn chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) I64, Bool
 
 # the top-level if whose first condition starts at that offset, in decls or a branch of an if in them
 fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf&ds {
-    if ds == null { return null }
+    if ds is null { return null }
     for d in ds {
         match d {
             case ast.Decl.If(_, ti) {
-                if ti.Cond != null and ti.Cond.Span().Start == at { return ti }
+                if ti.Cond is not null and ti.Cond.Span().Start == at { return ti }
                 f := findInIf(ti, at)
-                if f != null { return f }
+                if f is not null { return f }
             }
             case _ { }
         }
@@ -190,14 +190,14 @@ fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf&ds {
 }
 
 fn findInIf(ti ast.TopIf&, at I32) ast.TopIf&ti {
-    if ti == null { return null }
-    if ti.Then != null {
+    if ti is null { return null }
+    if ti.Then is not null {
         f := findIf(ti.Then.Decls, at)
-        if f != null { return f }
+        if f is not null { return f }
     }
-    if ti.Else != null {
+    if ti.Else is not null {
         f := findIf(ti.Else.Decls, at)
-        if f != null { return f }
+        if f is not null { return f }
     }
     return findInIf(ti.ElseIf, at)
 }
@@ -597,7 +597,7 @@ fn (x mut Exec&) start() {
         match b.Of {
             case typed.BodyOf.Dtor(t) { x.dtorOf.Put(t, i) }
             case typed.BodyOf.Global(m, n) {
-                if b.Root == null { continue }
+                if b.Root is null { continue }
                 ty := globalType(b, m, n)
                 if ty == types.UnknownT { continue }
                 k := mir.FnKey.Body(typed.BodyId(I32(i)))
@@ -647,7 +647,7 @@ fn globalType(b typed.Body&, m I64, n source.NameId) types.TypeId {
 }
 
 fn writtenMut(v ast.VarDecl&) Bool {
-    if v == null or v.Ty == null { return false }
+    if v is null or v.Ty is null { return false }
     return match v.Ty {
         case ast.TypeRef.Perm(_, _, w, _) => w
         case _ => false
@@ -736,7 +736,7 @@ fn (x mut Exec&) Entries() List<I64>, I64 {
     for i in range x.Bodies.Len() {
         match x.Bodies[i].Of {
             case typed.BodyOf.Test(_) {
-                if x.Bodies[i].Root != null { tests.Push(i) }
+                if x.Bodies[i].Root is not null { tests.Push(i) }
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
@@ -759,7 +759,7 @@ fn (x mut Exec&) TestName(id I64) String {
 }
 
 fn findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
-    if ds == null { return source.Span(0, 0) }
+    if ds is null { return source.Span(0, 0) }
     for d in ds {
         match d {
             case ast.Decl.Test(dsp, name, _) {
@@ -776,12 +776,12 @@ fn findTest(ds Array<ast.Decl&>&, sp source.Span) source.Span {
 }
 
 fn findTestIf(ti ast.TopIf&, sp source.Span) source.Span {
-    if ti == null { return source.Span(0, 0) }
-    if ti.Then != null {
+    if ti is null { return source.Span(0, 0) }
+    if ti.Then is not null {
         f := findTest(ti.Then.Decls, sp)
         if f.End > I32(0) { return f }
     }
-    if ti.Else != null {
+    if ti.Else is not null {
         f := findTest(ti.Else.Decls, sp)
         if f.End > I32(0) { return f }
     }

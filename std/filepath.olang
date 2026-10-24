@@ -272,12 +272,12 @@ test "Clean follows Go's rules, case for case" {
 test "Clean borrows the path where its clean form is the path's own beginning, and builds otherwise" {
     p String& = "a/b/c//"
     q := Clean(p)
-    assert q == "a/b/c" and q is p[:5]                        # the path's own storage
+    assert q == "a/b/c" and q == p[:5]                        # the path's own storage
     r String& = "x/./y/../z"
     s := Clean(r)
-    assert s == "x/z" and s is not r[:3]                      # new text
+    assert s == "x/z" and s != r[:3]                      # new text
     t String& = "/usr/lib/"                                 # its last element is the empty one after its slash
-    assert Dir(t) is t[:8] and Base(t) is t[5:8] and Ext("a.txt") == ".txt"
+    assert Dir(t) == t[:8] and Base(t) == t[5:8] and Ext("a.txt") == ".txt"
     assert churn() > 0 and q == "a/b/c" and s == "x/z"
 }
 

@@ -225,7 +225,7 @@ test "a List of mutable references, reordered and emptied" {
     f := try l.First() catch { unreachable }
     k := try l.Last() catch { unreachable }
     f.next = k                                              # still writable, and still the list's own instances
-    assert x.v == 27 and p.v == 1 and f is x and l[0].next is k and k.v == 2
+    assert x.v == 27 and p.v == 1 and f == x and l[0].next == k and k.v == 2
     l.Clear()
     assert l.Len() == 0 and x.next.v == 2
 }
@@ -293,7 +293,7 @@ test "a List's Clone outlives the list it copies, across chunk boundaries" {
     line String& = "a bb ccc"
     for w in line.Split(" ") { words.Push(w) }
     copy := words.Clone()                         # a List of references clones to the same references
-    assert copy.Len() == 3 and copy[2] is words[2]
+    assert copy.Len() == 3 and copy[2] == words[2]
 }
 
 # Clone of a List of every length around the first chunk's edge - held on its own, with no array of chunks until a second

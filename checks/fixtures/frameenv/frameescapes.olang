@@ -29,7 +29,7 @@ fn spawned(n Node&) I64 {
 }
 fn compared(n Node&) I64 {
     f := fn() I64 { return n.v + 4 }
-    same := f is f
+    same := f == f
     return f() if same else 0
 }
 fn assigned(n Node&) fn() I64 {

@@ -38,5 +38,5 @@ fn main() ? {
     d := c.next
     c.next, c.v = Node(10), 10
     assert not (kept[0].v != 0 or kept[3].v != 30 or a.next.v != 5 or b.next.v != 6 or a.v != 5)
-    assert not (d.v != 9 or c.next.v != 10 or d is c.next)
+    assert not (d.v != 9 or c.next.v != 10 or d == c.next)
 }

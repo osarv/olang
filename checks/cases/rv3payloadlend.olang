@@ -24,7 +24,7 @@ fn build(b Box) { b.head.next = Node(42) }
 fn grow(b mut Box&) { b.head.next = Node(43) }
 fn second(e E) I64 {
     b := e as E.A
-    if b.head.next == null { return 0 }
+    if b.head.next is null { return 0 }
     return b.head.next.v
 }
 type Countdown struct(n I64) {

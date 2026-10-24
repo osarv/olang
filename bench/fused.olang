@@ -19,8 +19,8 @@ reps mut I64 = 15
 # the median of each variant's times over reps runs, the variants run one after another each time round
 fn compare(title String&, names Array<String&>&, a fn(), b fn(), c fn() = null, d fn() = null) ? io.IoError {
     n I64 = 2
-    if c != null { n = 3 }
-    if d != null { n = 4 }
+    if c is not null { n = 3 }
+    if d is not null { n = 4 }
     times := Array<I64>(n * reps)
     for r in range reps {
         for v in range n {

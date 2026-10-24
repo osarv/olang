@@ -116,7 +116,7 @@ fn (j Json&) Has(key String&) Bool {
     }
 }
 
-fn (j Json&) IsNull() Bool { return j is Json.Null }
+fn (j Json&) IsNull() Bool { return j == Json.Null }
 
 # the number j holds - failing with WRONG_KIND when it holds something else
 fn (j Json&) AsNum() F64 ? JsonError {
@@ -243,9 +243,9 @@ fn nameIndex(keys Array<String&>&) Array<I32>& {
 # byte by byte, arrays item by item, and objects with the same number of members, each name having an equal value in
 # both - in whatever order they were written
 fn (a Json&) Eq(b Json&) Bool {
-    if a is b { return true }
+    if a == b { return true }
     match a {
-        case Json.Null { return b is Json.Null }
+        case Json.Null { return b == Json.Null }
         case Json.Bool(x) {
             match b {
                 case Json.Bool(y) { return x == y }
@@ -326,7 +326,7 @@ fn (j Json&) Hash() I64 {
 fn Parse(text String&, at mut Position& = null) Json& ? JsonError {
     r mut reader&return = reader(text)
     defer {
-        if at != null { r.place(at) }
+        if at is not null { r.place(at) }
     }
     try r.run()
     return r.vals[0]
@@ -634,7 +634,7 @@ fn (r mut reader&) escape(w I64, out mut String&) I64 ? JsonError {
     } else {
         error JsonError.BAD_ESCAPE
     }
-    if out != null { out[w] = b }
+    if out is not null { out[w] = b }
     r.pos += 2
     return 1
 }
@@ -667,25 +667,25 @@ fn (r mut reader&) hex4(i I64) I64 ? JsonError {
 # code point cp's UTF-8 bytes, written into out at w when out is given, and how many there are
 fn putUtf8(cp I64, w I64, out mut String&) I64 {
     if cp < 0x80 {
-        if out != null { out[w] = Char(cp) }
+        if out is not null { out[w] = Char(cp) }
         return 1
     }
     if cp < 0x800 {
-        if out != null {
+        if out is not null {
             out[w] = Char(0xC0 | (cp >> 6))
             out[w + 1] = Char(0x80 | (cp & 0x3F))
         }
         return 2
     }
     if cp < 0x10000 {
-        if out != null {
+        if out is not null {
             out[w] = Char(0xE0 | (cp >> 12))
             out[w + 1] = Char(0x80 | ((cp >> 6) & 0x3F))
             out[w + 2] = Char(0x80 | (cp & 0x3F))
         }
         return 3
     }
-    if out != null {
+    if out is not null {
         out[w] = Char(0xF0 | (cp >> 18))
         out[w + 1] = Char(0x80 | ((cp >> 12) & 0x3F))
         out[w + 2] = Char(0x80 | ((cp >> 6) & 0x3F))
