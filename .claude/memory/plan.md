@@ -284,3 +284,7 @@ on sight per rules.md, "Code rules".
   call boxes each element in the PROGRAM scope (`len0(String&[$i])` in a function called 2M times: 34 MB growing);
   through a local it stays flat. Reproducers /home/user/review/uafcc/repro/leak_*.olang. Fix agent after lang24 round 3
   (scope.olang).
+- 2026-10-24: lang24 round 3 merged (98050e5, verified with master in): T2c nullable `T?&` only, S8e narrowing (also
+  after a block ending in break/continue), E35 `x!` on null; arrays never null (empty is their zero; the agent's call);
+  tools/null_migrate.olang for oann. lang24 now runs on through traits, contracts (+ CheckError rename), then the small
+  items (limits/bit ops, one-line lambdas, raw values, text literals, bitwise precedence) and the array-literal leak.
