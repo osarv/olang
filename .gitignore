@@ -2,3 +2,5 @@ build
 usertest.olang
 *.log
 .bootcache
+verify.rc
+quick.rc
