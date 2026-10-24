@@ -656,3 +656,7 @@ errors and documentation - generic `+` already works).
   token/msgs tables, ~700 lines. Recommended later. Also, decided by me (no language change): msgs.olang's echo comments
   and blank lines dropped (~1,090 lines); redundant integer casts cleaned up; a child-walk for enum trees comes with
   reflection (build list item 5). In effect: nothing built.
+- QAS ASKED 2026-10-24 (compile speed round 8): an opt-in development build at -O2 without LTO - measured on the
+  compiler itself: clean 31.5 -> 20.8 s, an edit to widely inlined code 17.9 -> 3.8 s, the built program ~18% slower.
+  Asked: add it, and what to call it (a mode, `-fast`, ...)? Recommended yes, as an option (`-quick`?) - the default
+  stays -O3 + LTO (B2c). In effect: not built.
