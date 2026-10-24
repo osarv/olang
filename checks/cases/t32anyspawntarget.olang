@@ -1,0 +1,15 @@
+# check: fail write 'spawn r = fn() I64 { return a.Peek() }()'
+# T32b, P1g (the any review, finding 6): a task calling through an any's table is written as a lambda, the target kept
+type aAcct trait {
+    Peek() I64
+}
+type aWal struct(c I64) { c }
+fn (w aWal&) Peek() I64 { return w.c }
+fn main() {
+    w := aWal(100)
+    a any aAcct& = w
+    r I64 = 0
+    join {
+        spawn r = a.Peek()
+    }
+}

@@ -3239,14 +3239,16 @@ type is that field's declared type.
 ### 5.7 Array literals
 
 **E19.** `array-literal ::= elem-type "[" list(arr-item) "]"` (L18a), where
-`elem-type ::= PRIMITIVE-NAME | scalar-name [ type-args ] [ reference-marker ]` and
+`elem-type ::= PRIMITIVE-NAME | scalar-name [ type-args ] [ reference-marker ] | "any" type-name [ type-args ]
+reference-marker` and
 `scalar-name ::= alias-chain IDEN`
 (§4.4 M8) names the literal's
 element type, stated exactly once regardless of nesting depth (E21) - a type's name, or a type variable of the generic
 the literal is written in (`T[a, b]`, §12 G8b). The optional
 `reference-marker` (T24) makes each element a separately allocated reference rather than a value laid
 out inline — `Handle&[a, b, c]` builds three instances, each with its own allocation and its own scope
-tag. A primitive scalar type may never carry one (T24).
+tag. A primitive scalar type may never carry one (T24). An element type `any R&` (T32) makes an array of run-time trait
+values, `any Shape&[c, s]`, each item made an `any` as T32a says - the form `$` renders such an array in (E11a).
 
 An element type may itself be an **array**: an `Array<T>` as a reference (T7a) - `Array<I32>&[r0, r1]` has two
 elements, references to the arrays `r0` and `r1`, each with its own length - and an `Array<T>` as a value, whose items

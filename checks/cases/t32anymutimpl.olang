@@ -1,0 +1,18 @@
+# check: fail aTally cannot be an 'any aW&': it has no method 'Seen' that fits
+# also: 'Seen' is declared here, with another signature
+# never: writes through a read-only reference
+# never: never narrows
+# T31, T32a (the any review, finding 6): a method writing its receiver meets no trait method that only reads it, said
+# at the conversion as what does not fit - once
+type aW trait {
+    Seen() I64
+}
+type aTally struct(at I64) { at }
+fn (t mut aTally&) Seen() I64 {
+    t.at = 55
+    return t.at
+}
+G aTally& = aTally(1)
+fn main() {
+    w any aW& = G
+}

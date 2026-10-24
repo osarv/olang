@@ -6766,6 +6766,11 @@ fn (s mut Scoper&) noteMadeNamed(rec I64, short typed.Expr?&, w I64, wname Strin
     }
     name := s.P.L.Names.Text(loc.Name)
     at := s.wordAt(loc.Sp, name)
+    if loc.Kind == typed.LocalKind.Binding {
+        # a match's binding (S13b, T34) has no declaration to write a scope in: what it is bound to is made elsewhere
+        s.note(rec, s.B!.File, at, msgs.NoteBindingWhere(name, wname))
+        return
+    }
     init := try s.inits.Get(made) catch default null
     ic := s.callOf(init) if init is not null else null
     if ic is not null and s.P.T.Role(s.calleeType(ic)) != types.RoleCtor {

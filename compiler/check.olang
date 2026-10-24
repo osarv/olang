@@ -11495,7 +11495,22 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
     fr.leaks.Truncate(lm)
     if task is null { return }
     if dispatched(task) {
-        c.err(inner.Span(), msgs.AnySpawned(c.src(inner.Span())))
+        if targets.Len() == 0 {
+            c.err(inner.Span(), msgs.AnySpawned(c.src(inner.Span())))
+        } else {
+            # the lambda giving what the target is set to (P1g): "spawn r = fn() I64 { return a.Peek() }()"
+            rt := typeOf(task)
+            res := c.ty(rt)
+            if c.P.T.KindOf(rt) == types.Kind.Tuple {
+                b := StringBuilder()
+                for x in c.P.T.Items(c.P.T.Parts(rt)) {
+                    if b.Len() > 0 { b.Push(", ") }
+                    b.Push(c.ty(x))
+                }
+                res = b.ToString()
+            }
+            c.err(inner.Span(), msgs.AnySpawnedResult(c.src(source.Span(targets[0].Span().Start, call.Span().Start)), res, c.src(inner.Span())))
+        }
         return
     }
     errs := c.P.T.Items(c.lastErrs)
@@ -15088,9 +15103,10 @@ fn (c mut Checker&) toAny(x typed.Expr&c, want types.TypeId, sp source.Span) typ
         c.err(sp, msgs.TypeMismatch(c.ty(want), c.tyOf(x)))
         return x
     }
-    if not c.anyMeets(inst, r, sp) { return x }
+    # what is wrong said once: the value given the stand-in, which fits anything
+    if not c.anyMeets(inst, r, sp) { return c.unknown(sp) }
     ti := c.anyTable(inst, r, sp)
-    if ti < 0 { return x }
+    if ti < 0 { return c.unknown(sp) }
     perm := c.P.T.PermOf(want) & (types.Writable | types.Nullable)
     if c.anyCopies(inst) {
         v := c.fit(x, inst, sp)
@@ -15137,7 +15153,10 @@ fn (c mut Checker&) anyMeets(t types.TypeId, r types.TypeId, sp source.Span) Boo
         }
         c.err(sp, msgs.AnyNotMember(c.ty(t), tn, listing.ToString()))
     } else if u.Named {
-        c.err(sp, msgs.AnyUnmetMethod(c.ty(t), tn, c.tok(u.Method)))
+        rec := c.err(sp, msgs.AnyUnmetMethod(c.ty(t), tn, c.tok(u.Method)))
+        # one of its name with another signature - a "mut" one writing what the trait only reads among them - said too
+        sm := c.P.MethodOf(t, u.Method)
+        if sm >= 0 { c.noteAt(rec, sm, msgs.NoteOtherSignature(c.text(u.Method))) }
     } else {
         c.err(sp, msgs.AnyUnmet(c.ty(t), tn))
     }

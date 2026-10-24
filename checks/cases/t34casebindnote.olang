@@ -1,0 +1,22 @@
+# check: fail the callee needs one argument's scope to outlive another's
+# also: 'b' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'keep' lives
+# never: 'b mut aBtn&keep
+# T34, O10c, B11 (the any review, finding 6): a type case's binding has no declaration to name a scope in - the note
+# says to make what it is bound to elsewhere
+type aW trait for aBtn, aSl {
+    Draw() String
+}
+type aBtn struct(label String&) { label }
+fn (b aBtn&) Draw() String { return "[" $b.label "]" }
+type aSl struct(at I64) { at }
+fn (s aSl&) Draw() String { return "<" $s.at ">" }
+fn main() {
+    keep := List<aBtn&>()
+    for i in range 4 {
+        w any aW& = aBtn("b" $i)
+        match w {
+            case aBtn b { keep.Push(b) }
+            case aSl _ { }
+        }
+    }
+}

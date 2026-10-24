@@ -2721,6 +2721,12 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
             return ast.Expr.MatchE(p.from(at), m)
         }
         case token.Tok.Iden {
+            if p.anyHere() {
+                # an array literal of run-time trait values, its element type written as $ renders it: "any W&[a, b]"
+                # (T32, E19) - "any" begins no other expression
+                elem := try p.typeExpr()
+                return try p.arrayLit(at, elem)
+            }
             t := p.tk()
             k2 := p.look(1)
             name := p.names.Intern(p.text(t))

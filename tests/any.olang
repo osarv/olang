@@ -462,3 +462,18 @@ test "D8a: a trait's defaults through an any" {
     assert BakedDrawn == "20 50 50 20 30"
     assert drawn(Live + 7) == BakedDrawn
 }
+
+# E19, E11a (the any review, finding 6): an array of anys is written as $ renders it, "any Named&[...]", and reads back
+fn listed(n I64) String {
+    c := Cat("c" $n)
+    xs := any Named&[c, Count(n), Lev.High]
+    ys := any Named?&[null, c]
+    return $xs " " $ys " " $xs.Len()
+}
+BakedListed String = listed(4)
+
+test "E19: an array literal of anys, rendered as written" {
+    assert BakedListed == "any Named&[Cat(\"c4\"), 4, Lev.High] any Named?&[null, Cat(\"c4\")] 3"
+    churn()
+    assert listed(Live + 1) == BakedListed
+}
