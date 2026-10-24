@@ -764,3 +764,9 @@ errors and documentation - generic `+` already works).
   (intersection). Rec juxtaposition over `and`. Supersedes the earlier `and` proposal; awaiting a yes.
   The user asked whether `<T: ...>` would clear things up: rec no - the comma still ends the constraint, so a union
   still needs parentheses; `name Type` everywhere else; `:` kept free (deferred `lib:Name`).
+- DECIDED 2026-10-24 (the user: "Keep it as it is then ... The alternative is not listing valid types, which I would
+  also be okay with ... What do you say?" - I recommended dropping inline sets): traits: open (methods) or closed
+  (`trait Float for F16, BF16, F32, F64 { ... }`, members checked for the methods, `match T` complete, members may be
+  closed traits); constraints side by side = intersection (`<T Shape House>`); `trait A extends B, C`; NO inline type
+  lists for now (additive later as `<T (I32, F64)>`); explicit type arguments `big<I64>`; no `:`. Run-time traits to
+  be discussed before building.
