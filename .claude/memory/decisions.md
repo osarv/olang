@@ -950,3 +950,8 @@ errors and documentation - generic `+` already works).
   invariants as `assert`s at the top of the body (rec); 4 our own solver in olang (CDCL SAT + bit-blasting, LRAT-checked;
   Z3/cvc5/Bitwuzla only as test oracles) (rec); 5 a strict mode failing on "neither" later, as an `olang prove` option;
   6 order P0 contracts, then compile speed, then P1-P3 (rec).
+- ENUM RAW VALUES 2026-10-24: the user proposed `$` giving the name and the value giving the raw text, then "kinda
+  redundant". Rec: `$op` stays the source form (`Op.Plus`); `op.Value` the raw value, explicit (no implicit conversion);
+  `T.CaseOf` dropped - an unrolled `for c in T.Cases: if v == c: return c.Name` covers generic code (reflection +
+  case test). Still ASKED: raw values (`enum String { Plus = "+" }`, `.Value`, `T.From`) and defaults (text = name,
+  integers from 0).
