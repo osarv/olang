@@ -257,3 +257,5 @@ on sight per rules.md, "Code rules".
   (L18c, tools/results_migrate.olang for oann), `unreachable "why"`, `big<I64>`, `-quick` (B2g), `olang explain FILE
   NAME` (B11b), `:` one-line bodies (S1b). Round 2 (equality, case tests, narrowing, payloads) running in
   /home/user/wt/lang24-r2. Queued after the batch: `any Trait&` (fully decided today), with a soundness review.
+- 2026-10-24 ~14:40 CEST (weekly 0.12): started wt-speed9 (compile speed round 9: measure, cut the largest share; emit/
+  build/lower, not check) and wt-prover (docs/prover.md design note for the user, no code). lang24 round 2 running.
