@@ -75,6 +75,7 @@ error Failed {
 type Frontend trait {
     mut Analyze(root String&, kind Kind, cfg mut Config&, prog mut Program&, d mut diag.Diagnostics&cfg) ? Failed
     mut Interpret(root String&, args Array<String&>&, cfg mut Config&, d mut diag.Diagnostics&cfg) I32 ? Failed
+    mut Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&cfg) String ? Failed
 }
 
 # ---- a build's configuration ----
@@ -766,6 +767,13 @@ fn Interpret<F Frontend>(fe mut F&, c mut Config&, file String&, args Array<Stri
     return try fe.Interpret(file, args, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
 }
 
+# explain FILE NAME (B11b): the item, as the front end sees it, on the standard output; a program with errors says them
+fn Explain<F Frontend>(fe mut F&, c mut Config&, file String&, name String&, d mut diag.Diagnostics&c) I32 {
+    text := try fe.Explain(file, name, c, d) catch Failed.REPORTED { return finish(d) } catch Failed.UNBUILT { return unbuilt() }
+    say(text)
+    return 0
+}
+
 # a signal as the C library names it (strsignal)
 fn SignalName(sig I32) String {
     return match sig {
@@ -889,6 +897,10 @@ fn (s mut stubFrontend&) Analyze(root String&, kind Kind, cfg mut Config&, prog 
 fn (s mut stubFrontend&) Interpret(root String&, args Array<String&>&, cfg mut Config&
     d mut diag.Diagnostics&cfg) I32 ? Failed {
     return I32(args.Len())
+}
+
+fn (s mut stubFrontend&) Explain(root String&, name String&, cfg mut Config&, d mut diag.Diagnostics&cfg) String ? Failed {
+    return $"fn " $name "()\n"
 }
 
 # the status the binary at bin ends with

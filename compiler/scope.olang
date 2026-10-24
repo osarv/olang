@@ -7429,6 +7429,42 @@ fn (s Scoper&) Summary(b I64) String {
     return t.ToString()
 }
 
+# body b's obligations as its signature would state them (B11b, O10b): "a outlives b", each once, a parameter's scope
+# by its name, the result scope as "return", an equality as its two halves
+fn (s Scoper&) Obligations(b I64, nm source.Names&) Array<String&> {
+    out List<String&>
+    if b >= s.sums.Len() { return out.ToArray() }
+    for r in s.sums[b].Rels {
+        t := $s.termName(b, r.Hi, nm) " outlives " $s.termName(b, r.Lo, nm)
+        if not out.Has(t) { out.Push(t) }
+    }
+    return out.ToArray()
+}
+
+fn (s Scoper&) termName(b I64, t Term, nm source.Names&) String {
+    body := s.Bodies[b]
+    return match t {
+        case Term.Var(i) => s.varName(body, body.Vars[i], nm)
+        case Term.Program => "the program"
+        case Term.Derived(p, w) => $"the scope " $s.localName(body, body.Params[p], nm) "'s argument bound"
+        case _ => $t
+    }
+}
+
+fn (s Scoper&) varName(body typed.Body&, v typed.ScopeVar, nm source.Names&) String {
+    return match v {
+        case typed.ScopeVar.Param(l), typed.ScopeVar.Capture(l) => s.localName(body, l, nm)
+        case typed.ScopeVar.Result => "return"
+        case typed.ScopeVar.Instance => "the instance"
+        case typed.ScopeVar.Closing => "the closing scope"
+    }
+}
+
+fn (s Scoper&) localName(body typed.Body&, l typed.LocalId, nm source.Names&) String {
+    n := body.Locals[I64(l)].Name
+    return "a hidden local" if n == source.NameId(0) else $nm.Text(n)
+}
+
 # ---- tests: the plan and the summaries, which compiler/tools/scopediff.olang cannot show ----
 
 if TestBuild {

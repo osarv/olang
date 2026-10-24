@@ -1636,6 +1636,40 @@ fn (c mut Checker&) ExprBodyIn(mi I64, owner I64, ns Array<source.NameId>&, vals
     return id
 }
 
+# explain (B11b): a body giving global n of module mi as "$" renders it, for the evaluator; -1 where it does not check
+fn (c mut Checker&) RenderBody(mi I64, n source.NameId, sp source.Span) I64 {
+    d := c.P.L.Diags
+    mark := d.Count()
+    ty := c.textType()
+    id := c.newBody(typed.BodyOf.Cond(mi, sp.Start), c.P.T.Func(types.ListId(0), ty, types.ListId(0)), mi, sp)
+    c.state[id] = 1
+    fr := c.push(id, mi, ty, types.ListId(0))
+    fr.Ctx = generic.Context(mi, -1)
+    c.cur().AddBlock(typed.BlockId(-1), typed.BlockKind.Body, sp)
+    from := c.stmts.Len()
+    gt := c.globalType(mi, n)
+    p mut typed.Place&c = typed.Place.Global(sp, gt, mi, n)
+    seen := Map<types.TypeId, Bool>()
+    c.wantStr(gt, seen, 0)
+    ps mut List<typed.Piece&>&c = List<typed.Piece&>()
+    if c.P.T.KindOf(gt) == types.Kind.Array and c.P.T.Length(gt) != types.TypeId(0) {
+        ps.Push(typed.Piece.Render(typed.Expr.Borrow(sp, c.P.T.Ref(gt, types.ReadOnly), p)))
+    } else {
+        ps.Push(typed.Piece.Render(c.read(sp, p)))
+    }
+    c.stmts.Push(typed.Stmt.Return(sp, typed.Expr.Text(sp, ty, typed.Text(ps.ToArray(), c.site(typed.SiteKind.Text, sp)))))
+    c.cur().Root = typed.Block(typed.BlockId(0), gather(c.stmts, from))
+    c.pop()
+    c.state[id] = 2
+    c.drain()
+    if d.Count() > mark {
+        d.Forget(mark)
+        c.Bodies[id].Root = null
+        return -1
+    }
+    return id
+}
+
 # whether an expression declares names of its own (a lambda, a comprehension, a match, a catch clause), which a body of
 # its own with no body around it (S8b, S18c, T7c) does not check. A name is never a local there - no body is being
 # checked, so there are no frames to ask (c.fr() would index the empty list at -1, E16e) - and a type or constant
@@ -2278,6 +2312,14 @@ fn (c mut Checker&) typeContexts(t types.TypeId, td ast.TypeDecl&) I64 {
 fn (c mut Checker&) InstNote(inst I64) String { return c.instNote(inst) }
 
 fn (c mut Checker&) Ty(t types.TypeId) String { return c.ty(t) }
+
+# for explain (B11b): a function instance's body (-1 for none); what a body can fail with, its set inferred where its
+# signature's is "?" alone (R1a); a global's type; the type text is
+fn (c mut Checker&) BodyOfInstance(inst I64) I64 { return try c.fnBodies.Get(inst) catch default -1 }
+fn (c mut Checker&) ErrorsOf(body I64) types.ListId { return c.bodyErrors(body) }
+fn (c mut Checker&) InfersErrors(sig types.TypeId) Bool { return c.infersErrs(sig) }
+fn (c mut Checker&) GlobalType(mi I64, n source.NameId) types.TypeId { return c.globalType(mi, n) }
+fn (c mut Checker&) TextType() types.TypeId { return c.textType() }
 
 # the same for a type instance: "instantiated here, with T = I32, N = 6"
 fn (c mut Checker&) typeInstNote(t types.TypeId) String {
@@ -6039,7 +6081,7 @@ fn (c mut Checker&) chainFrom(sp source.Span, ch ast.Chain&, base I64, i I64, le
 
 # "a" $b "c": text joined from its pieces (E11b)
 fn (c mut Checker&) join(sp source.Span, parts Array<ast.Expr&>&) typed.Expr&c {
-    ps List<typed.Piece&>
+    ps mut List<typed.Piece&>&c = List<typed.Piece&>()
     for p in parts {
         ok := false
         match p {

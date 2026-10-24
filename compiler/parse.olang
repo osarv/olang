@@ -74,6 +74,7 @@ type Parser struct(src source.Source&, ts scan.Tokens&, names mut source.Names&,
     prevEnd I32 = 0
     noGt Bool = false                  # in a type-argument list: ">" closes it, and a comparison or shift is no operator
     inCtor Bool = false                # at a constructor body's top level: a bare name is a field (C2)
+    inLine Bool = false                # in a one-line body (S1b): "else" and "catch" end its statement too
     ctorBody Bool = false              # the next block is a constructor's body
     brackets I64 = 0                   # open "(" and "[" around here, outside every block (L18b)
     skip Bool = false                  # in a parenthesized expression or a comprehension: a line's end separates
@@ -331,9 +332,18 @@ fn (p mut Parser&) endStmt() ? Fail {
         return
     }
     if k == token.Tok.RBrace or k == token.Tok.Eof { return }
+    if p.inLine and (k == token.Tok.Else or k == token.Tok.Catch) { return }
     pk := p.prevKind
     if (pk == token.Tok.Amp or pk == token.Tok.Gt or pk == token.Tok.RBrace) and p.breakBefore() { return }
     try p.fail(token.Tok.StmtEnd.Describe())
+}
+
+# where a statement may end without anything more: a line end, a block's "}", the file's end, or in a one-line body
+# (S1b) the "else" or "catch" after it
+fn (p mut Parser&) atEnd() Bool {
+    k := p.peek()
+    if k == token.Tok.StmtEnd or k == token.Tok.RBrace or k == token.Tok.Eof { return true }
+    return p.inLine and (k == token.Tok.Else or k == token.Tok.Catch)
 }
 
 fn (p mut Parser&) skipEnds() {
@@ -1119,6 +1129,9 @@ fn (p mut Parser&) block() Array<ast.Stmt&>&p ? Fail {
     wasItem := p.item
     p.item = false
     defer { p.item = wasItem }
+    wasLine := p.inLine
+    p.inLine = false
+    defer { p.inLine = wasLine }
     from := p.stmts.Len()
     for {
         p.skipEnds()
@@ -1185,7 +1198,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
         case token.Tok.Return {
             p.advance()
             values Array<ast.Expr&>&p = Array<ast.Expr&>(0)
-            if not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and not p.sees(token.Tok.Eof) {
+            if not p.atEnd() {
                 p.listTry = p.here()
                 values = try p.exprList()
             }
@@ -1198,8 +1211,7 @@ fn (p mut Parser&) stmt() ast.Stmt&p ? Fail {
             p.advance()
             # S16d: "unreachable why" - a message, evaluated only where it is reached
             msg ast.Expr&p = null
-            if k == token.Tok.Unreachable and not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and
-               not p.sees(token.Tok.Eof) {
+            if k == token.Tok.Unreachable and not p.atEnd() {
                 msg = try p.expr()
             }
             sp := p.from(at)
@@ -1609,6 +1621,17 @@ fn (p mut Parser&) ifStmt() ast.Stmt&p ? Fail {
 # span, bounded by its matching "}" from the brace table
 fn (p mut Parser&) branch() ast.Branch&p ? Fail {
     at := p.here()
+    if p.sees(token.Tok.Colon) {
+        g := p.diags.Hold()
+        body := try p.lineBody() catch {
+            p.diags.EndHold()
+            if p.tooDeep or p.unclosed { error Fail.SYNTAX }
+            p.syncFrom()
+            return ast.Branch(p.from(at), null, g)
+        }
+        p.diags.EndHold()
+        return ast.Branch(p.from(at), body, g)
+    }
     if not p.sees(token.Tok.LBrace) { try p.fail(token.Tok.LBrace.Describe()) }
     g := p.diags.Hold()
     open := p.pos
@@ -1624,6 +1647,63 @@ fn (p mut Parser&) branch() ast.Branch&p ? Fail {
     }
     p.diags.EndHold()
     return ast.Branch(p.from(at), body, g)
+}
+
+# a loop's body: a block, or a one-line body (S1b)
+fn (p mut Parser&) body() Array<ast.Stmt&>&p ? Fail {
+    if p.sees(token.Tok.Colon) { return try p.lineBody() }
+    return try p.block()
+}
+
+# S1b: ":" and one simple statement on its line - an assignment, a call or an increment, a return, a break or continue,
+# an error, unreachable, assert or spawn statement - never a declaration, an if, a loop, a match, a join, a defer or a
+# block
+fn (p mut Parser&) lineBody() Array<ast.Stmt&>&p ? Fail {
+    colon := p.tk()
+    p.advance()
+    t := p.tk()
+    if p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.Eof) or p.src.Line(t.Start) != p.src.Line(colon.Start) {
+        p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
+        error Fail.SYNTAX
+    }
+    what := lineBodyRefused(p.peek())
+    if what != "" {
+        p.report(t.Start, t.End, msgs.LineBodyNotSimple(what))
+        error Fail.SYNTAX
+    }
+    wasLine := p.inLine
+    p.inLine = true
+    defer { p.inLine = wasLine }
+    # a constructor's fields are declared at its body's top level only (C2), never in a one-line body
+    wasCtor := p.inCtor
+    p.inCtor = false
+    defer { p.inCtor = wasCtor }
+    st := try p.stmt()
+    match st {
+        case ast.Stmt.Var(sp, _), ast.Stmt.Multi(sp, _) {
+            p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a declaration"))
+            error Fail.SYNTAX
+        }
+        case ast.Stmt.Join(sp, _) {
+            p.report(sp.Start, sp.End, msgs.LineBodyNotSimple("a join"))
+            error Fail.SYNTAX
+        }
+        case _ { }
+    }
+    return ast.Stmt&[st]
+}
+
+# what a one-line body may not begin with (S1b), as its error names it; "" for a simple statement's start
+fn lineBodyRefused(k token.Tok) String {
+    return match k {
+        case token.Tok.If => "an if"
+        case token.Tok.For, token.Tok.Do => "a loop"
+        case token.Tok.Match => "a match"
+        case token.Tok.LBrace => "a block (a block takes no ':')"
+        case token.Tok.Join => "a join"
+        case token.Tok.Defer => "a defer"
+        case _ => ""
+    }
 }
 
 fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
@@ -1647,7 +1727,7 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             try p.want(token.Tok.In)
             tried := p.accept(token.Tok.Try)
             src := try p.forSource()
-            body := try p.block()
+            body := try p.body()
             cl Array<ast.Catch&>&p = Array<ast.Catch&>(0)
             if tried { cl = try p.clauses(false) }
             sp := p.from(at)
@@ -1675,14 +1755,14 @@ fn (p mut Parser&) forStmt() ast.Stmt&p ? Fail {
             cond := try p.expr()
             try p.want(token.Tok.Comma)
             post := try p.simpleStmt()
-            body := try p.block()
+            body := try p.body()
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd) { p.advance() }
             return ast.Stmt.For3(sp, ast.For3(init, cond, post, body))
         }
     }
     cond := try p.expr()
-    body := try p.block()
+    body := try p.body()
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd) { p.advance() }
     return ast.Stmt.While(sp, cond, body)

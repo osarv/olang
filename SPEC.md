@@ -3377,6 +3377,16 @@ its own: what it declares, what it allocates (§8 O2) and the destructors of wha
 a long function may give memory back before it returns. No expression begins with `{`, so a statement that does is a
 block. It runs once, and it leaves (D10a) when its statements do.
 
+**S1b (a one-line body).** `body ::= block | ":" line-stmnt`, where `line-stmnt` is one assignment (S4), expression
+statement (S3, an increment included), `return`, `break`, `continue`, `error`, `unreachable`, `assert` or `spawn`
+statement, beginning on the line of its `:`. An `if`'s and an `else`'s body and a `for` loop's body (but not the
+forever form's, nor a `do` loop's) may be one: `if x < 0: return 0`, `for x in xs: total += x`, `else: count++`. It is
+exactly the block holding that one statement - a scope of its own (S1), so a declaration in one would name nothing
+after it and is a compile-time error, as are an `if`, a loop, a `match`, a `join`, a `defer` and a block (write the
+block, with braces and no `:`). Its statement ends at the end of its line, or at an `else` or a `catch` on that line;
+an `else` (`else:`, `else if`) may also begin the next line, as a `catch` clause may (R9b). A `:` inside brackets is a
+slice's (E16a), never a body's.
+
 **S2.** `statement ::= var-decl | assign-stmnt | if-stmnt | for-stmnt | do-stmnt | match-stmnt | block-stmnt
 | destruct-stmnt | return-stmnt | break-stmnt | continue-stmnt | unreachable-stmnt | assert-stmnt | error-stmnt | try-catch-stmnt | spawn-stmnt | join-stmnt
 | defer-stmnt | try-store-stmnt | expr-stmnt`. `var-decl` is specified in §3.5; `error-stmnt`, `try-catch-stmnt` and
@@ -3476,7 +3486,8 @@ so `G.next, k = Node(i), i` is `G.next = Node(i)` beside `k = i`. With `:=` each
 declared from its value as by D15, in order. Any other count of values is a compile-time error. The list is not a
 value of its own - there is no tuple type - and exists only in this statement.
 
-**S8.** `if-stmnt ::= "if" expr block [ "else" ( if-stmnt | block ) ]`. `expr` must be `Bool`
+**S8.** `if-stmnt ::= "if" expr body [ "else" ( if-stmnt | body ) ]` (`body`, S1b: a block, or `:` and one simple
+statement). `expr` must be `Bool`
 (E7/E9/E10 all produce `Bool`; any other type is a compile-time error). An `else` clause is
 optional; chaining `else if` is exactly the recursive `"else" if-stmnt` alternative. Both branches are
 checked, except where the build decides the condition (S8b; for the top-level form, see B9), or, in an
@@ -3512,12 +3523,14 @@ except that a function one of whose branches is still being decided is not evalu
 
 ```
 for-stmnt ::= "for" block                                   (forever)
-            | "for" expr block                              (while expr holds)
-            | "for" for-init "," expr "," simple-stmnt block (three clauses)
-            | "for" IDEN [ "," IDEN ] "in" expr block        (S9a)
-            | "for" IDEN [ "," IDEN ] "in" "try" expr block { catch-clause }   (S9e)
-            | "for" IDEN [ "," IDEN ] "in" range-expr block  (S9b)
+            | "for" expr body                               (while expr holds)
+            | "for" for-init "," expr "," simple-stmnt body (three clauses)
+            | "for" IDEN [ "," IDEN ] "in" expr body         (S9a)
+            | "for" IDEN [ "," IDEN ] "in" "try" expr body { catch-clause }   (S9e)
+            | "for" IDEN [ "," IDEN ] "in" range-expr body   (S9b)
 ```
+
+A `body` is a block or a one-line body (S1b): `for x in xs: total += x`.
 
 The first runs its body until something leaves it (`break`, `return`, an error, S11). The second evaluates
 `expr` (which must be `Bool`) before each iteration and stops when it is false. In the three-clause form,
@@ -5647,7 +5660,7 @@ option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-t
 
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
-`explain` (B11a) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
+`explain` (B11a, B11b) and `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
@@ -5656,8 +5669,8 @@ beginning with `-` that is no option is an error:
 |---|---|---|
 | `-output PATH` | build, compile | B3h |
 | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
-| `-target NAME` | running a file, build, compile, test, interpret | B12 |
-| `-define Name=value`, `-update` | running a file, build, compile, test, interpret | B10, §4 M23c |
+| `-target NAME` | running a file, build, compile, test, interpret, explain | B12 |
+| `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain | B10, §4 M23c |
 | `-check` | format | B13 |
 
 `build` and `compile` take exactly one file, `test` and `format` one or more; for running a file and for `interpret`
@@ -6098,6 +6111,17 @@ heading, under the heading of the section holding it - and compiles nothing. The
 name; a first letter written in lowercase is read as uppercase (`explain t6b` is T6b). The specification is found as the
 standard library is (M23): `../SPEC.md` beside the compiler. Without it, or for a rule it does not state, `explain` is an
 error.
+
+**B11b.** `explain FILE NAME` prints one top-level item of `FILE` as the compiler sees it, once the program `FILE` is the
+root of has checked: nothing is built, and a program with errors reports them instead. `NAME` is a function, a type, an
+error type, a global, or `Type.Method`. A function is printed with its whole signature - its receiver, parameters with
+their scope markers, results, and its error set, an inferred one (`?` alone, R1a) written out - and then its scope
+obligations (O10b), each a line `[a outlives b]`, `return` standing for its result scope; a generic one is printed as
+declared, then each instance the program made with its own errors and obligations. A struct is printed with its
+constructor's signature, its fields, its methods and the traits with no type parameters it meets; an enum with its
+cases, an error type with its words, a trait with its methods. A global is printed with its type and, where it is baked
+(K2), its value as `$` renders it, else `set at startup`. A name `FILE` does not declare is an error. The first word
+tells the two forms apart: `explain` with a word ending in `.olang` and a name is this, a rule is B11a.
 
 ### 10.8 Formatting
 

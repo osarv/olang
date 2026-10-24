@@ -38,6 +38,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `lower.olang` | lowering: each typed body, helper, adapter and module initialization made a MIR function (M7, in progress) |
 | `eval.olang` | the MIR abstract machine (M8): allocations, scopes and K1's refusals, while compiling or running |
 | `interp.olang` | evaluation in the pipeline: the build's conditions and asserts decided, a program's main or tests run |
+| `explain.olang` | `olang explain FILE NAME` (B11b): one top-level item as the compiler sees it - signature, inferred errors, obligations, a type's members, a global's baked value |
 | `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress) |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |

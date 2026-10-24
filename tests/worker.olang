@@ -204,6 +204,6 @@ test "G12: sh.PickSecond<I64> names an instance, called or as a value" {
     assert G12Picked == 2
     assert sh.PickSecond<I32>(5, 6) == 6
     assert g12Apply(sh.PickSecond<I64>, 4) == 9
-    f := sh.PickSecond<String&>
-    assert f("a", "b") == "b"
+    f := sh.PickSecond<F64>
+    assert f(1.5, 2.5) == 2.5
 }

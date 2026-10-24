@@ -6394,7 +6394,7 @@ type RangeD struct(l I32, h I32) {
     hi I32 = h
 }
 fn (r RangeD&) Bounds() I32, I32 { return r.lo, r.hi }
-type BoundedD trait { Bounds() (I32, I32) }
+type BoundedD trait { Bounds() I32, I32 }
 fn widthD<B BoundedD>(b B&) I32 {
     lo, hi := b.Bounds()
     return hi - lo
@@ -12131,6 +12131,52 @@ test "S1a: a bare block closes its scope at its end, and leaves as its statement
         x = y
     }
     assert x == 2
+}
+
+# S1b: a one-line body - ":" and one simple statement on its line - is the block holding it; an "else" may begin the
+# next line, and a statement before an "else" on its line ends there
+error S1bError { NEG }
+fn s1bSign(x I64) I64 {
+    if x < 0: return -1
+    else if x == 0: return 0
+    else: return 1
+}
+fn s1bSum(xs Array<I64>&) I64 {
+    t I64 = 0
+    for x in xs: t += x
+    for i := 0, i < 3, i++: t++
+    k I64 = 0
+    for k < 4: k += 3
+    for i in range 10 {
+        if i == 2: continue
+        if i == 4: break
+        t += i * 100
+    }
+    if t > 1000: t = 0 else: t = t + k
+    return t
+}
+fn s1bCheck(x I64) I64 ? S1bError {
+    if x < 0: error S1bError.NEG
+    for i in range x: assert i < x, "in range"
+    return x
+}
+type s1bPct struct(v I64) ? S1bError {
+    if v < 0: error S1bError.NEG
+    v
+}
+S1bBaked I64 = s1bSign(-3) * 1000 + s1bSum(I64[1, 2, 3]) + (try s1bCheck(-1) catch S1bError default 7)
+test "S1b: one-line bodies run as the blocks they stand for, at run time and while compiling" {
+    n I64 = 0
+    n -= 3
+    assert s1bSign(n) == -1 and s1bSign(n + 3) == 0 and s1bSign(n + 9) == 1
+    assert s1bSum(I64[1, 2, 3]) == 415
+    assert S1bBaked == -1000 + 415 + 7
+    assert (try s1bCheck(n) catch S1bError default 7) == 7 and (try s1bCheck(5) catch S1bError default 7) == 5
+    p := try s1bPct(n + 8) catch S1bError { unreachable "a positive percentage" }
+    assert p.v == 5 and (try s1bPct(n) catch S1bError default s1bPct(1)!).v == 1
+    out List<I64>
+    for x in I64[4, 5, 6]: out.Push(x * 2)
+    assert out.Len() == 3 and out[2] == 12
 }
 
 # D10a: "for { }" with no break of its own leaves only as its body does - no "unreachable" after it

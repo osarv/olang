@@ -366,6 +366,21 @@ fn (w mut writer&) block(body Array<ast.Stmt&>&) {
     w.put("}")
 }
 
+# a body as it was written (S1b): ": statement" where a ":" stood before its one statement, else " " and its block
+fn (w mut writer&) body(body Array<ast.Stmt&>&) {
+    if body.Len() == 1 {
+        k := I64(body[0].Span().Start) - 1
+        for k >= 0 and (w.text[k] == ' ' or w.text[k] == '\t') { k-- }
+        if k >= 0 and w.text[k] == ':' {
+            w.put(": ")
+            w.stmt(body[0])
+            return
+        }
+    }
+    w.put(" ")
+    w.block(body)
+}
+
 fn (w mut writer&) varDecl(v ast.VarDecl&) {
     for i, n in v.Names {
         if i > 0 { w.put(", ") }
@@ -437,8 +452,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
         case ast.Stmt.While(_, cond, body) {
             w.put("for ")
             w.expr(cond)
-            w.put(" ")
-            w.block(body)
+            w.body(body)
         }
         case ast.Stmt.For3(_, f) {
             w.put("for ")
@@ -447,8 +461,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.expr(f.Cond)
             w.put(", ")
             w.stmt(f.Post)
-            w.put(" ")
-            w.block(f.Body)
+            w.body(f.Body)
         }
         case ast.Stmt.ForIn(_, f) {
             w.put("for ")
@@ -460,8 +473,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
             w.put(" in ")
             if f.Tried { w.put("try ") }
             w.expr(f.Source)
-            w.put(" ")
-            w.block(f.Body)
+            w.body(f.Body)
             w.clauses(f.Clauses)
         }
         case ast.Stmt.DoFor(_, body, cond) {
@@ -531,21 +543,32 @@ fn (w mut writer&) ifStmt(i ast.If&) {
     }
     w.put("if ")
     w.expr(i.Cond)
-    w.put(" ")
     w.branch(i.Then)
     if i.Else != null {
-        w.put(" else ")
+        w.put(" else")
+        match i.Else {
+            case ast.Stmt.If(_, e) {
+                if e.Cond == null {
+                    w.branch(e.Then)
+                    return
+                }
+            }
+            case _ { }
+        }
+        w.put(" ")
         w.stmt(i.Else)
     }
 }
 
+# a branch after its condition or "else": " " and its block, or ": " and its statement (S1b)
 fn (w mut writer&) branch(b ast.Branch&) {
     if b.Body == null or w.diags.Holds(b.Group) {
+        if w.text[I64(b.Sp.Start)] != ':' { w.put(" ") }
         w.span(b.Sp)
         w.held.Push(b.Sp)
         return
     }
-    w.block(b.Body)
+    w.body(b.Body)
 }
 
 fn (w mut writer&) match(m ast.Match&) {

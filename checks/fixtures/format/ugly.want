@@ -20,4 +20,6 @@ fn main() ? io.IoError {
     a, b := two()
     try io.Println($f(a) $b $s.Len() $l.Len()) ## a block comment ##
     for i in range 3 { }
+    if n < 0: return
+    for x in xs: io.Println($x)!
 }

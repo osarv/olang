@@ -176,12 +176,12 @@ fn (g migration&) sigs() List<I64> {
                 out.Push(i + 1)
             }
         } else if k == token.Tok.Trait and i + 1 < n and g.v[i + 1].k == token.Tok.LBrace and g.m[i + 1] > 0 {
-            # a trait's methods: "[mut] Name(params) results" at the start of a line
+            # a trait's methods: "[mut] Name(params) results" at the start of a line, or just after a one-line "{"
             j := i + 2
             for j < g.m[i + 1] {
                 t := g.v[j]
                 at := j + 1 if t.k == token.Tok.Mut else j
-                if t.lb and at + 1 < n and g.v[at + 1].k == token.Tok.LParen and g.v[at + 1].start == g.v[at].end {
+                if (t.lb or j == i + 2) and at + 1 < n and g.v[at + 1].k == token.Tok.LParen and g.v[at + 1].start == g.v[at].end {
                     out.Push(at + 1)
                 }
                 j++
@@ -456,6 +456,7 @@ test "a declaration's results lose their parentheses" {
     assert run("fn (p Parser&) two() (I64, Bool) ? E { }\n") == "fn (p Parser&) two() I64, Bool ? E { }\n"
     assert run("fn g<T>(x T) (T, T) { }\n") == "fn g<T>(x T) T, T { }\n"
     assert run("type R trait {\n    Two() (I64, I64)\n}\n") == "type R trait {\n    Two() I64, I64\n}\n"
+    assert run("type R trait { Two() (I64, I64) }\n") == "type R trait { Two() I64, I64 }\n"
 }
 
 test "a function type outside a list is bare, inside one parenthesized whole" {

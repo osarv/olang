@@ -1,0 +1,6 @@
+# check: fail error[S1b]: a one-line body is one simple statement, not an if - write a block, '{ ... }'
+# S1b: an if, a loop or a match in a one-line body is written as a block
+fn main() {
+    x I64 = 1
+    if x > 0: if x > 1 { x = 2 }
+}
