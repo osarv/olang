@@ -1,0 +1,44 @@
+# check: run
+# flags: -debug -sanitize
+# C2d, E28: a constructor argument given a conditional of new text and a constant, the instance returned through a
+# local (the review's shape) and directly, the constant arm first - each new value built where the instance lands,
+# read after a churn under the scope sanitizer
+import "std/io"
+
+type E struct(A String&, B String&) {
+    A
+    B
+}
+
+fn mk(s String&) String { return $s "-made" }
+
+fn viaLocal(t String&, at I64) E {
+    e := E($t, mk(t) if at >= 0 else "")
+    return e
+}
+
+fn direct(t String&, at I64) E { return E($t, mk(t) if at >= 0 else "") }
+
+fn constFirst(t String&, at I64) E {
+    e := E($t, "" if at < 0 else mk(t))
+    return e
+}
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn main() {
+    n I64 = 0
+    for i in range 1000 {
+        a := viaLocal("x", i)
+        b := direct("y", i)
+        c := constFirst("z", i)
+        churn()
+        if a.B == "x-made" and b.B == "y-made" and c.B == "z-made" { n += 1 }
+    }
+    io.Println($n " " $viaLocal("w", -1).B.Len())!
+}
