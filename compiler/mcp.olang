@@ -260,3 +260,50 @@ test "a test run read as outcomes" {
     assert r.Contains("\"tests\":[{\"name\":\"one\",\"passed\":true},{\"name\":\"two: T.W\",\"passed\":false}]")
     assert r.Contains("\"passed\":1,\"failed\":1,\"status\":1") and r.EndsWith("\"isError\":true}")
 }
+
+# the compiler under test: $OLANG, else build/olang
+fn compilerUnderTest() String {
+    c := try os.Env("OLANG") catch default ""
+    return $c if c != "" else "build/olang"
+}
+
+test "olang mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.OsError { }
+    bad := $dir "/bad.olang"
+    good := $dir "/good.olang"
+    try os.WriteFile(bad, "fn main() {\n    x I32 = \"no\"\n}\n") catch os.OsError { unreachable "no file" }
+    try os.WriteFile(good, "# twice n\nfn Twice(n I64) I64 { return 2*n }\n\ntest \"twice\" {\n    k := 4\n    assert Twice(k) == 8\n}\n") catch os.OsError {
+        unreachable "no file"
+    }
+    lines := StringBuilder()
+    lines.Push("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\"}}\n")
+    lines.Push("{\"jsonrpc\":\"2.0\",\"method\":\"notifications/initialized\"}\n")
+    lines.Push("{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}\n")
+    callLine := fn(id I64, tool String&, args String&) String {
+        return $"{\"jsonrpc\":\"2.0\",\"id\":" $id ",\"method\":\"tools/call\",\"params\":{\"name\":\"" $tool "\",\"arguments\":" $args "}}\n"
+    }
+    lines.Push(callLine(3, "check", $"{\"file\":\"" $bad "\"}"))
+    lines.Push(callLine(4, "check", $"{\"file\":\"" $bad "\",\"text\":\"fn main() { }\\n\"}"))
+    lines.Push(callLine(5, "explain", $"{\"file\":\"" $good "\",\"name\":\"Twice\"}"))
+    lines.Push(callLine(6, "doc", $"{\"file\":\"" $good "\"}"))
+    lines.Push(callLine(7, "format", $"{\"file\":\"" $good "\"}"))
+    lines.Push(callLine(8, "test", $"{\"file\":\"" $good "\"}"))
+    lines.Push(callLine(9, "nothing", "{}"))
+    out := try os.Exec(String&[compilerUnderTest(), "mcp"], lines.ToString()) catch os.OsError { unreachable "olang mcp did not run" }
+    assert out.Status == 0, out.Stderr
+    got := Map<String&, String&>()
+    for line in out.Stdout.Lines() {
+        msg := try json.Parse(line) catch json.JsonError { unreachable "a line that is no JSON: " $line }
+        got.Put(idOf(msg), $line)
+    }
+    assert (got.Get("1")!).Contains("\"tools\":{\"listChanged\":false}")
+    assert (got.Get("2")!).Contains("\"name\":\"check\"") and (got.Get("2")!).Contains("\"name\":\"test\"")
+    assert (got.Get("3")!).Contains("\"rule\":\"E12\"") and (got.Get("3")!).Contains("\"line\":2,\"column\":13"), got.Get("3")!
+    assert (got.Get("4")!).Contains("\"errors\":0"), got.Get("4")!
+    assert (got.Get("5")!).Contains("fn Twice(n I64) I64"), got.Get("5")!
+    assert (got.Get("6")!).Contains("twice n"), got.Get("6")!
+    assert (got.Get("7")!).Contains("return 2 * n"), got.Get("7")!
+    assert (got.Get("8")!).Contains("\"passed\":1,\"failed\":0"), got.Get("8")!
+    assert (got.Get("9")!).Contains("no tool nothing")
+}

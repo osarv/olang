@@ -1,0 +1,24 @@
+# check: doc Counter
+# also: type Counter struct(Start I64)
+# also:     counts upward from where it starts
+# also:     fn (c mut Counter&) Step() I64
+# also:         one more, and the count after it
+# also:     fn (c Counter&) peek() I64
+# never: fn main
+# a module whose item alone is documented
+
+# counts upward from where it starts
+type Counter struct(Start I64) {
+    n := Start
+}
+
+# one more, and the count after it
+fn (c mut Counter&) Step() I64 {
+    c.n++
+    return c.n
+}
+
+# a private method is shown when the item is asked for by name
+fn (c Counter&) peek() I64 { return c.n }
+
+fn main() { }

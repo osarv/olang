@@ -7,6 +7,8 @@
 #     # check: build          it must build
 #     # check: run            it must build, and the program must exit 0 - and print what compiler/goldens/run.txt
 #                             stores for it, captured from stage 0 (make rungold), where it stores a stable output
+#     # check: doc [NAME]     "olang doc" must print its documentation (or NAME's), with every "# also:" text in it
+#                             and no "# never:" text (B14)
 #     # flags: <arguments>    passed to the compiler (a -D value, say)
 # The multi-step scenarios below drive the compiler themselves, with their files in checks/fixtures.
 # Everything is built under build/checks, so nothing touches the tree.
@@ -225,6 +227,30 @@ fn failure(what String&, dir String&) String& {
     return "check FAIL: " $what "\n" $outOf(dir) "\n"
 }
 
+# a case's "# also:" texts each in what the compiler said, its "# never:" texts none of them: "" where so, else the
+# failure
+fn alsoNever(src String&, name String&, dir String&) String& {
+    rest := src[:]
+    for {
+        at := try rest.Find("# also: ") catch { break }
+        line := rest[at + 8:]
+        end := try line.FindByte('\n') catch default line.Len()
+        also := line[:end]
+        if not outOf(dir).Contains(also) { return failure($name ": expected '" $also "'", dir) }
+        rest = line[end:]
+    }
+    rest = src[:]
+    for {
+        at := try rest.Find("# never: ") catch { break }
+        line := rest[at + 9:]
+        end := try line.FindByte('\n') catch default line.Len()
+        never := line[:end]
+        if outOf(dir).Contains(never) { return failure($name ": did not expect '" $never "'", dir) }
+        rest = line[end:]
+    }
+    return ""
+}
+
 # builds one case file, in a directory of its own, and judges it against its own header
 fn runCase(name String&) String& {
     if not name.EndsWith(".olang") { return "" }
@@ -234,30 +260,27 @@ fn runCase(name String&) String& {
     base := name[:name.Len() - 6]
     dir := fresh("cases/" $base)
     os.Run("cp checks/cases/" $name " " $os.Quote(dir))
+    if check.StartsWith("doc") {
+        # the header's lines are comments too: the documentation is of the program without them
+        body := StringBuilder()
+        for line in src.Lines() {
+            if not (line.StartsWith("# check: ") or line.StartsWith("# also: ") or line.StartsWith("# never: ") or
+                    line.StartsWith("# flags: ")) {
+                body.Push($line "\n")
+            }
+        }
+        try os.WriteFile($dir "/" $name, body.ToString()) catch os.OsError { return failure($name ": not copied", dir) }
+        if sh(dir, $store() " \"$OLANG\" doc " $flags " " $name " " $check[3:].Trim() " > out.txt 2>&1") != 0 {
+            return failure($name ": olang doc failed", dir)
+        }
+        return alsoNever(src, name, dir)
+    }
     status := sh(dir, $store() " \"$OLANG\" build " $flags " " $name " > out.txt 2>&1")
     if check.StartsWith("fail ") {
         if status == 0 { return failure($name " compiled but should not have", dir) }
         want := check[5:]
         if not outOf(dir).Contains(want) { return failure($name ": expected '" $want "'", dir) }
-        rest := src[:]
-        for {
-            at := try rest.Find("# also: ") catch { break }
-            line := rest[at + 8:]
-            end := try line.FindByte('\n') catch default line.Len()
-            also := line[:end]
-            if not outOf(dir).Contains(also) { return failure($name ": expected '" $also "'", dir) }
-            rest = line[end:]
-        }
-        rest = src[:]
-        for {
-            at := try rest.Find("# never: ") catch { break }
-            line := rest[at + 9:]
-            end := try line.FindByte('\n') catch default line.Len()
-            never := line[:end]
-            if outOf(dir).Contains(never) { return failure($name ": did not expect '" $never "'", dir) }
-            rest = line[end:]
-        }
-        return ""
+        return alsoNever(src, name, dir)
     }
     if status != 0 { return failure($name " did not build", dir) }
     bin := base

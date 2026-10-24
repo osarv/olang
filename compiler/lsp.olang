@@ -660,7 +660,7 @@ fn (w mut worker&) answer(body String&) {
     w.send(reply(id, b.ToString()))
 }
 
-# completion at offset at of an open file: after "x." x's members - checked with the "." and what follows it up to at
+# completion at offset at of an open file: after "x." x's members - checked with the "." and the word the cursor is in
 # taken out, so the line is what it was before they were typed - else the names that may stand there
 fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut build.Config&, d mut diag.Diagnostics&cfg) {
     start := at
@@ -668,7 +668,10 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
     it := session.Items()
     if start > 0 and text[start - 1] == '.' {
         dot := start - 1
-        cut := $text[:dot] $text[at:]
+        # the word the cursor stands in goes too, so what follows does not join x
+        end := at
+        for end < text.Len() and session.WordChar(text[end]) { end++ }
+        cut := $text[:dot] $text[end:]
         overlay := Map<String&, String&>()
         for e in w.overlay { overlay.Put($e.Key, $e.Value) }
         overlay.Put($doc.Real, cut)
@@ -755,4 +758,103 @@ test "a file URI and its path" {
     assert PathOf("file:///home/a%20b/x.olang") == "/home/a b/x.olang"
     assert UriOf("/home/a b/x.olang") == "file:///home/a%20b/x.olang"
     assert PathOf(UriOf("/tmp/ä#1.olang")) == "/tmp/ä#1.olang"
+}
+
+# ---- a session, end to end ----
+
+# the compiler under test: $OLANG, else build/olang
+fn compilerUnderTest() String {
+    c := try os.Env("OLANG") catch default ""
+    return $c if c != "" else "build/olang"
+}
+
+# a message framed as LSP frames it
+fn framed(body String&) String { return $"Content-Length: " $body.Len() "\r\n\r\n" $body }
+
+# the messages an LSP output holds, each body
+fn frames(out String&) List<String&>&out {
+    l mut List<String&>&out = List<String&>()
+    r := out[:]
+    for {
+        at := try r.Find("Content-Length: ") catch { break }
+        rest := r[at + 16:]
+        nl := try rest.Find("\r\n\r\n") catch { break }
+        n := try rest[:nl].Trim().ParseInt() catch { break }
+        if rest.Len() < nl + 4 + n { break }
+        l.Push(rest[nl + 4:nl + 4 + n])
+        r = rest[nl + 4 + n:]
+    }
+    return l
+}
+
+SessionSrc String& = ("import \"std/io\"\n\n# a point on a plane\ntype Point struct(X I64, Y I64) {\n    X\n    Y\n}\n\n" $
+                      "# the sum of a point's coordinates\nfn sum(p Point) I64 {\n    return p.X+p.Y\n}\n\n" $
+                      "fn main() {\n    q := Point(1, 2)\n    io.Println($sum(q))!\n    bad I32 = \"x\"\n}\n")
+
+test "olang lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
+    dir := try os.MkTemp() catch os.OsError { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.OsError { }
+    path := $dir "/p.olang"
+    try os.WriteFile(path, SessionSrc) catch os.OsError { unreachable "no file" }
+    uri := UriOf(path)
+    td := $"{\"uri\":\"" $uri "\"}"
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{\"general\":" $
+                  "{\"positionEncodings\":[\"utf-8\"]}}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"initialized\",\"params\":{}}"))
+    t := StringBuilder()
+    session.JsonStr(t, SessionSrc)
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" $uri $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" $t.ToString() "}}}"))
+    # hover and definition on "sum" in main (line 15, from 0), hover on the field X in sum's body
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/hover\",\"params\":{\"textDocument\":" $td $
+                  ",\"position\":{\"line\":15,\"character\":17}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"textDocument/definition\",\"params\":{\"textDocument\":" $td $
+                  ",\"position\":{\"line\":15,\"character\":17}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":4,\"method\":\"textDocument/documentSymbol\",\"params\":{\"textDocument\":" $
+                  td "}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":5,\"method\":\"textDocument/completion\",\"params\":{\"textDocument\":" $td $
+                  ",\"position\":{\"line\":15,\"character\":7}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":6,\"method\":\"textDocument/formatting\",\"params\":{\"textDocument\":" $td $
+                  ",\"options\":{\"tabSize\":4,\"insertSpaces\":true}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":7,\"method\":\"textDocument/noSuchThing\",\"params\":{}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":8,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.OsError { unreachable "olang lsp did not run" }
+    assert out.Status == 0, "olang lsp ended with " $out.Status ": " $out.Stderr
+    got := Map<String&, String&>()
+    diags := ""
+    for m in frames(out.Stdout) {
+        msg := try json.Parse(m) catch json.JsonError { unreachable "a message that is no JSON: " $m }
+        if str(msg, "method") == "textDocument/publishDiagnostics" { diags = $m }
+        id := idOf(msg)
+        if id != "" { got.Put($id, $m) }
+    }
+    assert got.Has("1") and (got.Get("1")!).Contains("\"positionEncoding\":\"utf-8\"")
+    assert diags.Contains("\"code\":\"E12\"") and diags.Contains("\"start\":{\"line\":16,\"character\":14}"), diags
+    assert (got.Get("2")!).Contains("fn sum(p Point) I64") and (got.Get("2")!).Contains("the sum of a point's coordinates")
+    assert (got.Get("3")!).Contains("\"range\":{\"start\":{\"line\":9,\"character\":3}"), got.Get("3")!
+    assert (got.Get("4")!).Contains("\"name\":\"Point\"") and (got.Get("4")!).Contains("\"name\":\"X\"")
+    assert (got.Get("5")!).Contains("\"label\":\"Println\""), got.Get("5")!
+    assert (got.Get("6")!).Contains("return p.X + p.Y"), got.Get("6")!
+    assert (got.Get("7")!).Contains("-32601")
+    assert (got.Get("8")!).Contains("\"result\":null")
+}
+
+test "a file that does not parse gets its diagnostics, and requests on it answer nothing" {
+    t := StringBuilder()
+    session.JsonStr(t, "fn main( {\n")
+    uri := "file:///nowhere/broken.olang"
+    b := StringBuilder()
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"capabilities\":{}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"method\":\"textDocument/didOpen\",\"params\":{\"textDocument\":{\"uri\":\"" $uri $
+                  "\",\"languageId\":\"olang\",\"version\":1,\"text\":" $t.ToString() "}}}"))
+    b.Push(framed($"{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"textDocument/hover\",\"params\":{\"textDocument\":{\"uri\":\"" $
+                  uri "\"},\"position\":{\"line\":0,\"character\":4}}}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"shutdown\"}"))
+    b.Push(framed("{\"jsonrpc\":\"2.0\",\"method\":\"exit\"}"))
+    out := try os.Exec(String&[compilerUnderTest(), "lsp"], b.ToString()) catch os.OsError { unreachable "olang lsp did not run" }
+    assert out.Status == 0, out.Stderr
+    assert out.Stdout.Contains("textDocument/publishDiagnostics") and out.Stdout.Contains("\"severity\":1")
+    assert out.Stdout.Contains("{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":null}"), out.Stdout
 }

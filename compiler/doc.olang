@@ -295,7 +295,8 @@ fn item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, 
         me := Entry($line, "", mname)
         mat := memberAt(c, mi, d, mname)
         if mat >= 0 {
-            me.Doc = Comment(text, mat, true)
+            # a member written on its declaration's own line has the declaration's comments, none of its own
+            if at < 0 or lineStart(text, mat) != lineStart(text, at) { me.Doc = Comment(text, mat, true) }
             me.File = m.File
             me.At = mat
         }
