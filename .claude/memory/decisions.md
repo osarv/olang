@@ -1012,3 +1012,7 @@ errors and documentation - generic `+` already works).
   text out through caller buffers; globals initialized on load); Python via ctypes; `t.ToC()` and `String.FromC(p, max)`
   in the prelude text module with a prelude `CStr` opaque type; `olang bindgen header.h` (C -> olang declarations).
   Queued as one batch after lang24 and speed9.
+- DECIDED 2026-10-24 (mine, found by stdx): bitwise `& | ^ << >>` bind tighter than comparisons (Go/Rust; C's mistake
+  fixed); migration first parenthesizes every expression mixing them, keeping today's meaning, then the precedence
+  changes - into lang24 as a later round. `Mutex<I64>` impossible (no number references): atomics or a Mutex of a
+  struct, said in std/sync's README.
