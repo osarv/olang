@@ -788,3 +788,11 @@ errors and documentation - generic `+` already works).
   (the user: "not built-in remember" - CheckError per QAI); undecidable calls unchecked otherwise; DROP the
   test/-debug entry checks (instructions not written). Awaiting a yes; still open: functions with conditions as values
   (calls through them unchecked), no trait-method conditions, no `ensures`, a command printing inferred signatures.
+- CONTRACTS DECIDED 2026-10-24 (the user: "Yes thats good"): decided per condition while compiling where known (a
+  false one an error at a plain call), otherwise unchecked unless the caller writes `checked f(x)` (CheckError.CONTRACT);
+  no test/-debug entry checks. Still open (my recs stand): functions with conditions as values (calls through them
+  unchecked), no trait-method conditions, no `ensures`, a command printing inferred signatures.
+  The user asked whether `checked` on conversions confuses since conversions look like constructors: proposed (rec) a
+  conversion IS the built-in type's constructor with a contract `[x fits I32]` - constant arguments decided while
+  compiling (out of range an error at the call), `checked I32(x)` at run time with OVERFLOW/INVALID; `try` = declared
+  errors, `checked` = opted-in conditions, for every call alike.
