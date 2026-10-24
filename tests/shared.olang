@@ -17484,3 +17484,101 @@ test "E10, E10b: List and Map compare and hash by contents; references without E
     c2dChurn()
     assert a == c and m != k
 }
+
+# C2d, E28 (2026-10-24, the uafcc fix): a constructor ARGUMENT given a conditional or a match of new values and
+# constants is a temporary, each new value built where the instance lands - it was built in the calling function's
+# own block, so an instance returned through a local read freed text
+UcRun mut I64 = 3
+type UcPair struct(A String&, B String&) {
+    A
+    B
+}
+type UcOuter struct(X UcPair&) {
+    X
+}
+type UcVal struct(Q UcPair, N I64) {
+    Q
+    N
+}
+type UcKind enum {
+    New
+    Empty
+}
+type UcHolder struct(N I64) {
+    N
+    L List<String&>
+}
+fn (h mut UcHolder&) Keep(s String&) { h.L.Push(s) }
+fn ucMk(s String&) String { return $s "-made" }
+fn ucCond(t String&, at I64) UcPair {
+    e := UcPair($t, ucMk(t) if at >= 0 else "")
+    return e
+}
+fn ucStatic(t String&, at I64) UcPair {
+    e := UcPair($t, "" if at < 0 else ucMk(t))
+    return e
+}
+fn ucMatch(t String&, k UcKind) UcPair {
+    return UcPair($t, match k {
+        case UcKind.New => ucMk(t)
+        case UcKind.Empty => ""
+    })
+}
+fn ucBoth(t String&, k UcKind) UcPair {
+    e := UcPair($t, match k {
+        case UcKind.New => ucMk(t)
+        case UcKind.Empty => $t "-empty"
+    })
+    return e
+}
+fn ucNested(t String&, at I64) UcOuter {
+    w := UcOuter(UcPair($t, ucMk(t) if at >= 0 else ""))
+    return w
+}
+fn ucByValue(t String&, at I64) UcVal {
+    v := UcVal(UcPair($t, ucMk(t) if at >= 0 else ""), at)
+    return v
+}
+fn ucNull(t String&, at I64) UcOuter {
+    w := UcOuter(UcPair($t, $t) if at >= 0 else null)
+    return w
+}
+fn ucLocal(t String&, at I64) UcPair {
+    b := ucMk(t) if at >= 0 else ""
+    return UcPair($t, b)
+}
+fn ucKeep(h mut UcHolder&, t String&, at I64) { h.Keep(ucMk(t) if at >= 0 else "") }
+fn ucLoop(t String&) List<UcPair> {
+    l := List<UcPair>()
+    for i in range 4 {
+        l.Push(UcPair($t, ucMk(t) if i >= 0 else ""))
+        obChurn()
+    }
+    return l
+}
+
+test "C2d/E28: a conditional or match passed to a constructor lands with the instance" {
+    kept := List<UcPair>()
+    h := UcHolder(0)
+    for i in range UcRun {
+        a := ucCond("x", i)
+        b := ucStatic("x", i)
+        c := ucMatch("x", UcKind.New)
+        d := ucBoth("x", UcKind.Empty)
+        e := ucNested("x", i)
+        f := ucByValue("x", i)
+        g := ucNull("x", i)
+        l := ucLocal("x", i)
+        ucKeep(h, "x", i)
+        kept.Push(ucCond("y", i))
+        lp := ucLoop("z")
+        obChurn()
+        assert a.B == "x-made" and b.B == "x-made" and c.B == "x-made" and d.B == "x-empty"
+        assert e.X.B == "x-made" and f.Q.B == "x-made" and f.N == i and g.X.B == "x" and l.B == "x-made"
+        assert lp[3].B == "z-made" and h.L[i] == "x-made"
+    }
+    obChurn()
+    assert kept[UcRun - 1].B == "y-made" and h.L.Len() == UcRun
+    # decided while compiling (S18c), as at run time
+    assert ucCond("k", 1).B == "k-made" and ucMatch("k", UcKind.Empty).B == "" and ucNested("k", -1).X.B == ""
+}

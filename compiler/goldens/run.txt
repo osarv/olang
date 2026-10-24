@@ -751,6 +751,7 @@
 | ok - E27, D9b: a grown comprehension and a written by-value String, read back after a churn
 | ok - E10, E32, S8d: case tests with '==', '_', narrowing in every form, whole payloads, agreeing while compiling
 | ok - E10, E10b: List and Map compare and hash by contents; references without Eq by identity
+| ok - C2d/E28: a conditional or match passed to a constructor lands with the instance
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -1106,6 +1107,12 @@
 | status 0
 === run b9scanbranch.olang
 | status 0
+=== run c2dcondarg.olang
+| status 0
+| 1000 0
+=== run c2dcondargkinds.olang
+| status 0
+| 300 300
 === run c2dcondfieldok.olang
 | status 0
 | 3 3 0
