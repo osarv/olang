@@ -828,3 +828,9 @@ errors and documentation - generic `+` already works).
   top-level comma of its own is parenthesized whole - `Map<String&, (fn(x I64) I64, I64 ? IoError, ParseError)>`,
   `fn apply(f (fn(x I64) I64, I64), n I64)` - replacing the inner `(I64, I64)` and `? (A, B)`; a function type outside
   a list (a field, a lambda, a declaration) never wrapped. One migration tool for both. Awaiting "gold".
+- DECIDED 2026-10-24 (the user): whole-item grouping (an item of a list with a top-level comma of its own is wrapped
+  whole: `Map<String&, (fn(x I64) I64, I64 ? A, B)>`); Result type and postfix `?` DROPPED ("If the user wants a result
+  type they make their own and ? doesn't interact with it") - QAN reversed, QAM (errors as values) kept. The user likes
+  `fits`; asked for more contract words - offered (rec 1-3 now, 4 with the prover): 1 `x fits T`; 2 `old e` in
+  guarantees; 3 `a implies b`; 4 `every x in a: c` / `some x in a: c`. NEXT DISCUSSION (the user): enums together with
+  `any Trait&` - map how they are alike and how not; trait-method conditions with it.
