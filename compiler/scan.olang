@@ -923,3 +923,19 @@ test "the brace table matches braces alone" {
     assert ts.Match(0) == 5 and ts.Match(5) == -1 and ts.Match(2) == 3 and ts.Match(1) == -1
     assert ts.Opens.Len() == 2
 }
+
+test "escapes by number and raw text (L15, L14a)" {
+    cases := String&["\"\\x4\"", "\"\\u{}\"", "\"\\u{D800}\"", "'\\u{E9}'", "\"\"\"a\nb\n\"\"\"", "\"\"\"\n  a\n b\n  \"\"\""
+                     "\"\"\"\na\nb\"\"\"", "\"\"\"abc"]
+    want := LexError[LexError.BadHexEscape, LexError.BadUnicodeEscape, LexError.BadCodePoint, LexError.WideCharEscape
+                     LexError.RawAfterOpen, LexError.RawIndent, LexError.RawCloseNotAlone, LexError.RawUnclosed]
+    for k, c in cases {
+        ts := Scan(c)
+        assert ts.Diags.Len() == 1 and ts.Diags[0].Kind == want[k], "literal " $k ": " $c
+    }
+    assert String(LiteralBytes("\"\\x41\\u{E9}\\n\"")) == "A" $Char(0xC3) $Char(0xA9) "\n"
+    assert String(LiteralBytes("\"\"\"a\\n\"\"\"")) == "a\\n" and LiteralBytes("'\\x7F'")[0] == 127
+    assert String(LiteralBytes("\"\"\"\n    x\n\n      y\n    \"\"\"")) == "x\n\n  y"
+    t := "s := \"\"\"\n  a\n  \"\"\"\nn := 1"
+    assert spelled(t, Scan(t)) == "s := \"\"\"\n  a\n  \"\"\" ; n := 1 ;"
+}
