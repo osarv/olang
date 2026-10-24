@@ -893,3 +893,5 @@ errors and documentation - generic `+` already works).
 - CONTRACTS DECIDED 2026-10-24 (the user: "Yes you got it"): the redesign above. `for` items use the statement forms:
   `for x in a: x < 4` (one condition), braces for several by the listing rule; everything in the block is Boolean - a
   call must give a Bool ("These are only boolean statements"). Left: trait-method conditions (with `any`), the prover.
+- CONTRACTS 2026-10-24 (the user: "ifs work in there too producing implications"): `if a: b` / `if a { b, c }` in the
+  contract block is a implies b; with `else`, the else part holds when a is false (mine); `if` and `for` nest freely.
