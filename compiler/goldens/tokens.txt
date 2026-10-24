@@ -1119,7 +1119,7 @@ db0493b055018357 a6414c999ef4d994 checks/cases/vec70ctorfieldblock.olang
 cee1f07ce5c823a4 0b2ab9b7260bcdc3 checks/cases/zeroeffect.olang
 9cf0a1944ee9bdab 7b2a8fa92d66c5c7 checks/cases/zerofails.olang
 fc6df24d959d964f 6feb7314c9745c86 checks/cases/zeroshared.olang
-0079aa21edd42210 4f4d247a26cd40ac checks/checks.olang
+69c8e44c8597e7fc f7fbac44dfc453d3 checks/checks.olang
 7915bba602ac43e9 cbd87dd5893935b5 checks/fixtures/agree/agree.olang
 6c612feb2facaf24 77f81f4c3bdbdc5b checks/fixtures/agree/bfrand.olang
 81be033c9d0d83a7 018a23099cc7a227 checks/fixtures/agree/math.olang
