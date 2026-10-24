@@ -84,6 +84,9 @@ Cases Array<String&> = String&[
     "help format"
     "help explain"
     "help help"
+    "help doc"
+    "help lsp"
+    "help mcp"
     "help nope"
     "help build test"
     # explain
@@ -92,6 +95,14 @@ Cases Array<String&> = String&[
     "explain B1"
     "explain t6b"
     "explain Zz9"
+    # doc, lsp, mcp (B14-B16)
+    "doc"
+    "doc a.olang b.olang"
+    "doc W/none.olang"
+    "doc main.olang Main Extra"
+    "lsp main.olang"
+    "mcp -debug"
+    "doc -check main.olang"
     # files that cannot be built
     "test W/none.olang"
     "test W/adir"

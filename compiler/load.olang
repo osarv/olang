@@ -89,6 +89,8 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     Mods List<mut Module&>
     preludeTypes List<String&>
     Root I64 = -1
+    # files read from here, by real path, rather than from disk: the text an editor holds (B15)
+    Overlay Map<String&, String&>
     stdReal String& = ""
     cwd String& = ""
 }
@@ -182,11 +184,15 @@ fn (l mut Loader&) load(path String&, identity String&, prelude Bool) I64 {
     i := l.Mods.Len()
     l.Mods.Push(Module($path, $real, $identity, prelude))
     m := l.Mods[i]
-    m.Src = try source.Read(m.Path) catch os.OsError {
-        f := l.Diags.AddFile(m.Path, "")
-        l.Diags.Error(diag.Where.File(f), msgs.CannotOpen())
-        try l.Mods.Pop() catch { }
-        return -1
+    if real in l.Overlay {
+        m.Src = source.Source($m.Path, l.Overlay.Get(real)!)
+    } else {
+        m.Src = try source.Read(m.Path) catch os.OsError {
+            f := l.Diags.AddFile(m.Path, "")
+            l.Diags.Error(diag.Where.File(f), msgs.CannotOpen())
+            try l.Mods.Pop() catch { }
+            return -1
+        }
     }
     m.File = l.Diags.AddFile(m.Path, m.Src.Text, m.Identity.StartsWith("std/"))
     m.Toks = scan.Scan(m.Src.Text)
