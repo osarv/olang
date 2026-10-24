@@ -895,3 +895,10 @@ errors and documentation - generic `+` already works).
   call must give a Bool ("These are only boolean statements"). Left: trait-method conditions (with `any`), the prover.
 - CONTRACTS 2026-10-24 (the user: "ifs work in there too producing implications"): `if a: b` / `if a { b, c }` in the
   contract block is a implies b; with `else`, the else part holds when a is false (mine); `if` and `for` nest freely.
+- ENUMS AND `any` 2026-10-24 (the user wanted them mapped together before building `any`): map given (closed cases with
+  payloads in place vs open full types behind a reference + table; operations cheap vs kinds cheap; keep both separate,
+  share syntax). ASKED, numbered: 1 type tests on `any` by `match s { case Circle c { } ... nomatch { } }` (rec); 2 `any`
+  of a closed trait matched completely without nomatch (rec yes); 3 enums may meet traits (rec yes); 4 calls through
+  `any` held to the trait's conditions, an implementation's extra requirement checked only under checked after dispatch
+  (rec); 5 keep the word `any` (rec), structs/enums convert implicitly, numbers don't; `==` on two `any` values is
+  identity.
