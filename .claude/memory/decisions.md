@@ -796,3 +796,7 @@ errors and documentation - generic `+` already works).
   conversion IS the built-in type's constructor with a contract `[x fits I32]` - constant arguments decided while
   compiling (out of range an error at the call), `checked I32(x)` at run time with OVERFLOW/INVALID; `try` = declared
   errors, `checked` = opted-in conditions, for every call alike.
+- DECIDED 2026-10-24 (mine, the user asked "Should unreachable also have a why?"): `unreachable "why"` - an optional
+  message, evaluated only when reached, printed `FILE:LINE: unreachable reached: why`; no comma (nothing precedes it).
+  Also confirmed to the user: assert stays a language statement (decided, message lazy, FILE:LINE, test-aware); abort,
+  done, fail are gone (2026-10-17). Into the next batch with today's decisions.
