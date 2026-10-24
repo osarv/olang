@@ -253,3 +253,7 @@ on sight per rules.md, "Code rules".
   memory lanes for the >1 GB builds, a cached bootstrap in .bootcache/ keyed on all inputs, BOOT_FRESH=1 forces one,
   shared object store OLANG_OBJECTS, B3j/B3k), `make quick` ~2 min (no clean build/bootstrap/fixed point). Peak 5.4 GB per
   verify: keep /home/user/vlock at ONE slot. Agents: `make quick` while developing, one full verify at the end.
+- 2026-10-24: lang24 round 1 merged (19e68c7, verified, seed rewritten): bare results/error sets, whole-item grouping
+  (L18c, tools/results_migrate.olang for oann), `unreachable "why"`, `big<I64>`, `-quick` (B2g), `olang explain FILE
+  NAME` (B11b), `:` one-line bodies (S1b). Round 2 (equality, case tests, narrowing, payloads) running in
+  /home/user/wt/lang24-r2. Queued after the batch: `any Trait&` (fully decided today), with a soundness review.
