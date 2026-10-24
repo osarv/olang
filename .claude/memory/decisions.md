@@ -930,3 +930,6 @@ errors and documentation - generic `+` already works).
   trait is used only through its methods. With the earlier answers `any` is fully decided (word `any`; temporaries and
   numbers copied in, struct/enum variables borrowed; enums meet traits; `==` identity; calls through `any` held to the
   trait's conditions, an implementation's extra requirement checked only under checked). Build after the current batch.
+- ANY 2026-10-24: the word `any` stays (the user). Explained: values come out of an `any` through methods; for a CLOSED
+  trait also `match` (each case binds the instance itself) and, decided by me for symmetry with enums, `w as Button`
+  (fails WRONG_CASE under checked); for an OPEN trait never (no downcast - a missing method is the fix).
