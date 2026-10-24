@@ -1,0 +1,15 @@
+# an array of text built in a loop body, copied into an any stored in an outer list; its elements' text lives in the body
+type Sized trait {
+    Len() I64
+}
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 4 {
+        a := Array<String&>(2, "x")
+        a[0] = "e" $i "-" $(i * 11)
+        a[1] = "f" $i
+        xs.Push(a)
+    }
+    churn()
+    for x in xs { say($x) }
+}

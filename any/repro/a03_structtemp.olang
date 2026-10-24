@@ -1,0 +1,15 @@
+# a temporary struct holding a reference to text made in the loop body, made an any in an outer list
+type Named trait {
+    Name() String
+}
+type Cat struct(n String&) { n }
+fn (c Cat&) Name() String { return "cat " $c.n }
+fn main() {
+    xs := List<any Named&>()
+    for i in range 4 {
+        s := "name" $i "-" $(i * 7)
+        xs.Push(Cat(s))
+    }
+    churn()
+    for x in xs { say(x.Name()) }
+}

@@ -1,0 +1,14 @@
+# a number made an any inside a loop body, pushed into a list that outlives the loop
+type Hashy trait {
+    Hash() I64
+}
+fn main() {
+    xs := List<any Hashy&>()
+    for i in range 5 {
+        n I64 = i * 1000 + 7
+        xs.Push(n)
+    }
+    churn()
+    t I64 = 0
+    for x in xs { say($x) }
+}
