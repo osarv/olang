@@ -1,0 +1,34 @@
+# anys handed to tasks; a mut any written by two tasks through a lambda
+type Counter trait {
+    mut Bump() I64
+    Seen() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Bump() I64 {
+    t.at += 1
+    return t.at
+}
+fn (t Tally&) Seen() I64 { return t.at }
+fn work(c mut any Counter&, n I64) {
+    for i in range n { c.Bump() }
+}
+fn mk(i I64) Tally { return Tally(i) }
+fn main() {
+    xs := List<mut any Counter&>()
+    for i in range 4 { xs.Push(Tally(i * 100)) }
+    join {
+        for k in range 4 {
+            x := xs[k]
+            spawn work(x, 1000)
+        }
+    }
+    churn()
+    for x in xs { say($x.Seen()) }
+    join {
+        for k in range 4 {
+            x := xs[k]
+            spawn fn() { x.Bump() }()
+        }
+    }
+    for x in xs { say($x.Seen()) }
+}

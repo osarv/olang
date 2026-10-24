@@ -1,0 +1,19 @@
+# a method declared for one instantiation, and a trait default - direct, generic and through an any
+type Shape trait {
+    Area() I64
+}
+fn (s S) Describe<S Shape>() String { return "default " $s.Area() }
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+fn (b Box<String&>&) Describe() String { return "text box " $b.v }
+fn gen<S Shape>(s S) String { return s.Describe() }
+fn main() {
+    a := Box<I64>(5, 2)
+    say(a.Describe())
+    say(gen(a))
+    x any Shape& = a
+    say(x.Describe())
+}

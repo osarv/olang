@@ -1,0 +1,29 @@
+# destructor-bearing instances made anys: temporaries in an outer list, a borrowed variable, one returned
+type W trait {
+    Id() I64
+}
+Closed mut I64 = 0
+type Res struct(id I64) {
+    id
+} destruct {
+    Closed = Closed + 1
+}
+fn (r Res&) Id() I64 { return r.id }
+fn mk(i I64) any W& { return Res(i) }
+fn sub() I64 {
+    xs := List<any W&>()
+    for i in range 5 { xs.Push(Res(i)) }
+    r := Res(9)
+    xs.Push(r)
+    xs.Push(mk(20))
+    w any W& = Res(30)
+    v any W& = Res(31) if xs.Len() > 3 else Res(32)
+    churn()
+    t I64 = 0
+    for x in xs { t += x.Id() }
+    return t + w.Id() + v.Id()
+}
+fn main() {
+    say($sub())
+    say("closed " $Closed)
+}

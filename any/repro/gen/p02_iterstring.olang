@@ -1,0 +1,47 @@
+import "std/io"
+# an any Iterator<String&>& of a hand-written iterator: the trait's Number-constrained defaults get in the way?
+type Words struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (w mut Words&) Next() String ? Exhausted {
+    if w.at >= w.n { error Exhausted.END }
+    w.at += 1
+    return "w" $w.at
+}
+type Pt struct(x I64) { x }
+type PtIt struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (w mut PtIt&) Next() Pt ? Exhausted {
+    if w.at >= w.n { error Exhausted.END }
+    w.at += 1
+    return Pt(w.at)
+}
+fn main() {
+    w := Words(3)
+    it mut any Iterator<String>& = w
+    for x in it { say(x) }
+    p := PtIt(2)
+    jt mut any Iterator<Pt>& = p
+    for x in jt { say($x) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

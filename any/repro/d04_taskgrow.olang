@@ -1,0 +1,46 @@
+# tasks building into an any's instance through its table: a spawned function and a spawned lambda, from other threads
+type Gr trait {
+    mut Grow(v I64)
+    Val() I64
+}
+type Node struct(v I64) {
+    v
+    next mut Node?& = null
+}
+fn (n mut Node&) Grow(v I64) {
+    for i in range 200 {
+        x mut Node&n = Node(v + i)
+        x.next = n.next
+        n.next = x
+    }
+}
+fn (n Node&) Val() I64 {
+    t I64 = 0
+    for c Node?&n = n, c is not null, c = c.next { t += c.v }
+    return t
+}
+fn growIt(g mut any Gr&, v I64) { g.Grow(v) }
+fn main() {
+    ns := List<mut Node&>()
+    for k in range 4 { ns.Push(Node(k)) }
+    gs := List<mut any Gr&>()
+    for n in ns { gs.Push(n) }
+    for round in range 20 {
+        join {
+            for k in range 4 {
+                g := gs[k]
+                spawn growIt(g, round)
+            }
+        }
+        join {
+            for k in range 4 {
+                g := gs[k]
+                spawn fn() { g.Grow(round + 1000) }()
+            }
+        }
+    }
+    churn()
+    t I64 = 0
+    for g in gs { t += g.Val() }
+    say($t)
+}

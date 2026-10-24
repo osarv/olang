@@ -1,0 +1,15 @@
+# an any captured by a lambda kept past the any's instance
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    fs := List<fn() String>()
+    for i in range 3 {
+        w any W& = Btn("b" $i)
+        fs.Push(fn() String { return w.Draw() })
+    }
+    churn()
+    for f in fs { say(f()) }
+}

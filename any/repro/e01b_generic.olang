@@ -1,0 +1,18 @@
+# anys of generic instances; a closed trait listing a generic's instances; a default overridden by one instance
+type Shape trait for Box<I64>, Box<String&> {
+    Area() I64
+}
+fn (s S) Describe<S Shape>() String { return "default " $s.Area() }
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+fn (b Box<String&>&) Describe() String { return "text box " $b.v }
+fn main() {
+    xs := List<any Shape&>()
+    xs.Push(Box<I64>(5, 2))
+    xs.Push(Box<String&>("hi", 3))
+    churn()
+    for x in xs { say($x.Describe()) }
+}

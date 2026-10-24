@@ -1,0 +1,17 @@
+# the trait's parameter read-only, the method's writable
+type Item struct(v I64) { v }
+type Sink trait {
+    Take(it Item&) I64
+}
+type S struct(k I64) { k }
+fn (s S&) Take(it mut Item&) I64 {
+    it.v = 77
+    return it.v
+}
+G Item& = Item(1)
+fn main() {
+    s := S(0)
+    w any Sink& = s
+    say($w.Take(G))
+    say($G.v)
+}

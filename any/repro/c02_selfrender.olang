@@ -1,0 +1,15 @@
+# $ of an any whose instance holds an any of itself
+type Named trait {
+    Name() String
+}
+type Node struct(v I64) {
+    v
+    next any Named?& = null
+}
+fn (n Node&) Name() String { return "node" }
+fn main() {
+    n := Node(1)
+    n.next = n
+    a any Named& = n
+    say($a)
+}

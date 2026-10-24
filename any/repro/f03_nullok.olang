@@ -1,0 +1,26 @@
+# a nullable any: rendering, match, a null made from a null reference, narrowing
+type W trait for Btn, Sl {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Sl struct(at I64) { at }
+fn (s Sl&) Draw() String { return "<" $s.at ">" }
+fn pick(k I64) Btn?& { return null if k > 0 else Btn("x") }
+fn main() {
+    w any W?& = pick(1)
+    say($w)
+    say($(w is null))
+    v any W?& = pick(0)
+    say($v)
+    if v is not null { say(v.Draw()) }
+    match w {
+        case Btn b { say("btn") }
+        case Sl s { say("sl") }
+        nomatch { say("none") }
+    }
+    match w {
+        case Btn b { say("btn") }
+        case Sl s { say("sl") }
+    }
+}

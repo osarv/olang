@@ -1,0 +1,13 @@
+# an array literal / a new array holding loop-local text, made an any in an outer list
+type Sized trait {
+    Len() I64
+}
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 4 {
+        s := "e" $i "-" $(i * 11)
+        xs.Push(String&[s, "k"])
+    }
+    churn()
+    for x in xs { say($x) }
+}

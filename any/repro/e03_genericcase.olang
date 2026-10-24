@@ -1,0 +1,22 @@
+# a closed trait listing two instances of one generic; a type case naming the generic without arguments
+type Shape trait for Box<I64>, Box<String&> {
+    Area() I64
+}
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+fn kind(s any Shape&) String {
+    match s {
+        case Box b { return "box " $b.v }
+        nomatch { return "other" }
+    }
+}
+fn main() {
+    xs := List<any Shape&>()
+    xs.Push(Box<I64>(5, 2))
+    xs.Push(Box<String&>("hi", 3))
+    churn()
+    for x in xs { say($x.Area() " / " $kind(x)) }
+}

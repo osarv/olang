@@ -1,0 +1,15 @@
+# an any borrowing a loop-local struct, kept outside
+type W trait {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+fn main() {
+    keep := List<any W&>()
+    for i in range 4 {
+        b := Btn("b" $i)
+        keep.Push(b)
+    }
+    churn()
+    for k in keep { say(k.Draw()) }
+}

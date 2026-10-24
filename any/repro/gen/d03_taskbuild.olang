@@ -1,0 +1,41 @@
+import "std/io"
+# a task builds a number box into a list of anys it was handed: the box lands where the list lives - from another thread
+type Hashy trait {
+    Hash() I64
+}
+fn fill(l mut List<any Hashy&>&, base I64) {
+    for i in range 2000 { l.Push(base + i) }
+}
+fn main() {
+    ls := List<mut List<any Hashy&>&>()
+    for k in range 4 { ls.Push(List<any Hashy&>()) }
+    join {
+        for k in range 4 {
+            l := ls[k]
+            spawn fill(l, k * 10000)
+        }
+    }
+    t I64 = 0
+    for l in ls {
+        for x in l { t += x.Hash() }
+    }
+    say($t)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

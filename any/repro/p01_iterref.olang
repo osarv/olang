@@ -1,0 +1,14 @@
+# an any Iterator over references: elements of a list of text kept past the list's block
+fn drain(it mut any Iterator<String&>&, out mut List<String&>&) {
+    for x in it { out.Push(x) }
+}
+fn main() {
+    out := List<String&>()
+    for k in range 3 {
+        l := List<String&>()
+        for i in range 3 { l.Push("s" $k "-" $i) }
+        drain(l.Iter(), out)
+    }
+    churn()
+    for s in out { say(s) }
+}

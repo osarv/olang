@@ -1,0 +1,15 @@
+# a type whose method writes its receiver meeting a trait method that does not
+type W trait {
+    Seen() I64
+}
+type Tally struct(at I64) { at }
+fn (t mut Tally&) Seen() I64 {
+    t.at = 55
+    return t.at
+}
+G Tally& = Tally(1)
+fn main() {
+    w any W& = G
+    say($w.Seen())
+    say($G.at)
+}

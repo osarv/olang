@@ -1,0 +1,16 @@
+# an array of text made in a function, returned as an any (a copy): its elements' text lives in the function's block
+type Sized trait {
+    Len() I64
+}
+fn mk(k I64) any Sized& {
+    a := Array<String&>(2, "x")
+    a[0] = "t" $k "-" $(k * 19)
+    a[1] = "u" $k
+    return a
+}
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 3 { xs.Push(mk(i)) }
+    churn()
+    for x in xs { say($x) }
+}

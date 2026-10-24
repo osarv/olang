@@ -1,0 +1,21 @@
+# an array of text from a function (a temporary result) and an array param copied into an outer any
+type Sized trait {
+    Len() I64
+}
+fn mk(i I64) Array<String&> {
+    a := Array<String&>(2, "x")
+    a[0] = "m" $i "-" $(i * 13)
+    return a
+}
+fn put(xs mut List<any Sized&>&, a Array<String&>&) { xs.Push(a) }
+fn main() {
+    xs := List<any Sized&>()
+    for i in range 3 { xs.Push(mk(i)) }
+    for i in range 3 {
+        b := Array<String&>(1, "q")
+        b[0] = "p" $i "-" $(i * 17)
+        put(xs, b)
+    }
+    churn()
+    for x in xs { say($x) }
+}

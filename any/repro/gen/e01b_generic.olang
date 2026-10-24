@@ -1,0 +1,37 @@
+import "std/io"
+# anys of generic instances; a closed trait listing a generic's instances; a default overridden by one instance
+type Shape trait for Box<I64>, Box<String&> {
+    Area() I64
+}
+fn (s S) Describe<S Shape>() String { return "default " $s.Area() }
+type Box<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b Box<T>&) Area() I64 { return b.n }
+fn (b Box<String&>&) Describe() String { return "text box " $b.v }
+fn main() {
+    xs := List<any Shape&>()
+    xs.Push(Box<I64>(5, 2))
+    xs.Push(Box<String&>("hi", 3))
+    churn()
+    for x in xs { say($x.Describe()) }
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

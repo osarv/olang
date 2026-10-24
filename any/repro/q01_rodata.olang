@@ -1,0 +1,28 @@
+# an array made an any from constant data, written through a mut any: the box must hold a copy
+type Bump trait {
+    mut Bump()
+    Show() String
+}
+type Nums extends Array<I64>
+fn (n mut Nums&) Bump() { n[0] += 1 }
+fn (n Nums&) Show() String { return $n[0] }
+type Lab extends String
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn (l Lab&) Show() String { return String(l) }
+fn go(k I64) String {
+    a mut any Bump& = Nums(I64[1, 2, 3])
+    a.Bump()
+    b mut any Bump& = Lab("hello")
+    b.Bump()
+    c mut any Bump& = Nums(I64[1, 2, 3])
+    t := List<mut any Bump&>()
+    t.Push(Lab("tt"))
+    t[0].Bump()
+    return $a.Show() " " $b.Show() " " $c.Show() " " $t[0].Show() " " $k
+}
+Baked String = go(1)
+fn main() {
+    say(Baked)
+    say(go(2))
+    say(go(3))
+}

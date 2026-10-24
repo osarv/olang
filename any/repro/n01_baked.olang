@@ -1,0 +1,37 @@
+# globals holding anys, baked while compiling: a struct, a number, text, a list of them, a closed trait's match
+type W trait for Btn, Lv, Lab {
+    Draw() String
+}
+type Btn struct(label String&) { label }
+fn (b Btn&) Draw() String { return "[" $b.label "]" }
+type Lv extends I64
+fn (l Lv) Draw() String { return "L" $I64(l) }
+type Lab extends String
+fn (l Lab&) Draw() String { return "T" $String(l) }
+fn kind(w any W&) String {
+    return match w {
+        case Btn b => "btn " $b.label
+        case Lv n => "lv " $I64(n)
+        case Lab l => "lab " $String(l)
+    }
+}
+GB any W& = Btn("gb")
+GN any W& = Lv(7)
+GT any W& = Lab("gt")
+fn mkl() List<any W&> {
+    l := List<any W&>()
+    l.Push(Btn("a"))
+    l.Push(Lv(2))
+    l.Push(Lab("c"))
+    return l
+}
+GL List<any W&> = mkl()
+GS String = $kind(GB) " " $kind(GN) " " $kind(GT)
+fn main() {
+    say($GB.Draw() " " $GN.Draw() " " $GT.Draw())
+    say($GB " " $GN " " $GT)
+    say(GS)
+    for w in GL { say($kind(w) " " $w.Draw()) }
+    say($GL)
+    say($(GL[0] == GL[0]) " " $(GB == GB))
+}

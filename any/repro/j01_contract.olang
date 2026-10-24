@@ -1,0 +1,29 @@
+# the instance's own contract through an any under checked; evaluator (baked) against the run time; a default with one
+type Acct trait {
+    mut Take(n I64) I64
+    Peek(n I64) I64
+}
+fn (a A) Twice<A Acct>(n I64) I64 [n < 50] { return a.Peek(n) * 2 }
+type Wal struct(c I64) { c }
+fn (w mut Wal&) Take(n I64) I64 [n <= 10] {
+    w.c -= n
+    return w.c
+}
+fn (w Wal&) Peek(n I64) I64 [n >= 0] { return w.c + n }
+type Num extends I64
+fn (x Num) Peek(n I64) I64 [n != 3] { return I64(x) + n }
+fn (x Num) Take(n I64) I64 { return I64(x) - n }
+fn tk(a mut any Acct&, n I64) I64 { return checked a.Take(n) catch CheckError.CONTRACT default -1 }
+fn pk(a any Acct&, n I64) I64 { return checked a.Peek(n) catch CheckError.CONTRACT default -1 }
+fn tw(a any Acct&, n I64) I64 { return checked a.Twice(n) catch CheckError.CONTRACT default -1 }
+fn go(k I64) String {
+    w := Wal(100)
+    x := Num(5)
+    return $tk(w, k) " " $tk(w, k * 10) " " $pk(w, -k) " " $pk(x, k) " " $pk(x, k + 1) " " $tw(w, k) " " $tw(x, k * 30) " " $tk(x, 50) " " $w.c
+}
+Baked String = go(3)
+Live mut I64 = 3
+fn main() {
+    say(Baked)
+    say(go(Live))
+}

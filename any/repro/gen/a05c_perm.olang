@@ -1,0 +1,46 @@
+import "std/io"
+# a closed trait's type case writing through a read-only any's binding
+type W trait for Tally, Other {
+    Seen() I64
+}
+type Tally struct(at I64) { at }
+fn (t Tally&) Seen() I64 { return t.at }
+type Other struct(at I64) { at }
+fn (t Other&) Seen() I64 { return t.at }
+G Tally& = Tally(1)
+fn poke(w any W&) {
+    match w {
+        case Tally t { t.at = 99 }
+        case Other o { }
+    }
+}
+fn poke2(w any W&) {
+    t := w as Tally
+    t.at = 98
+}
+fn poke3(w any W&) {
+    t mut Tally& = w as Tally
+    t.at = 97
+}
+fn main() {
+    poke(G)
+    say($G.at)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}
