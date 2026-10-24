@@ -1,0 +1,8 @@
+# check: fail error[T17e]: the raw value 256 does not fit U8
+type Odd enum U8 {
+    A = 255
+    B
+}
+
+fn main() ? {
+}

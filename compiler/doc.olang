@@ -361,7 +361,7 @@ fn memberAt(c mut typecheck.Checker&, mi I64, d types.DeclId, name String&) I64 
     td := c.P.TypeDecl(d)
     if td is null or td.Body is null { return -1 }
     match td.Body {
-        case ast.TypeBody.Enum(cases) {
+        case ast.TypeBody.Enum(cases, _) {
             for cd in cases {
                 if cd.Name == id { return I64(cd.Sp.Start) }
             }

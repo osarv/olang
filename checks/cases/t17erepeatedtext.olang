@@ -1,0 +1,8 @@
+# check: fail error[T17e]: 'B' has the raw value "B", which 'A' has already - raw values are distinct
+type Odd enum String {
+    A = "B"
+    B
+}
+
+fn main() ? {
+}

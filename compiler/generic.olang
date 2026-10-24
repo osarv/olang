@@ -174,7 +174,7 @@ fn (p mut Program&) DeclFor(mi I64, ei I64) types.DeclId {
         if td.Body is not null {
             match td.Body {
                 case ast.TypeBody.Struct(_) { kind = types.DeclKind.Struct }
-                case ast.TypeBody.Enum(_) { kind = types.DeclKind.Enum }
+                case ast.TypeBody.Enum(_, _) { kind = types.DeclKind.Enum }
                 case ast.TypeBody.Trait(_, _, _) { kind = types.DeclKind.Trait }
                 case ast.TypeBody.Over(_, _) { kind = types.DeclKind.Over }
             }
@@ -644,7 +644,7 @@ fn (p mut Program&) aliasStep(mi I64, alias source.NameId) I64 {
 # an anonymous type written in place: an enum's cases, or a struct's fields (T27)
 fn (p mut Program&) shape(c Context&, body ast.TypeBody&) types.TypeId {
     return match body {
-        case ast.TypeBody.Enum(cases) => p.anonEnum(c, cases)
+        case ast.TypeBody.Enum(cases, _) => p.anonEnum(c, cases)
         case ast.TypeBody.Struct(s) => p.T.Record(p.paramTypes(c, s.Params))
         case _ => types.UnknownT
     }
@@ -1289,7 +1289,7 @@ fn (p mut Program&) Body(t types.TypeId) Bool {
         case ast.TypeBody.Struct(s) {
             p.T.SetStructBody(t, p.fields(c, s), s.DtorSp.End > 0)
         }
-        case ast.TypeBody.Enum(cases) {
+        case ast.TypeBody.Enum(cases, _) {
             ns := Array<source.NameId>(cases.Len())
             ps := Array<types.TypeId>(cases.Len())
             for i in range cases.Len() {
@@ -2082,6 +2082,13 @@ fn (p mut Program&) MethodByKey(key I64, name source.NameId) I64 {
 fn TraitKey(d types.DeclId) I64 { return keyTrait(d) }
 # a declared type of a std module by its name, Unknown for none (String, Char, BuiltinError, Exhausted ...)
 fn (p mut Program&) PreludeType(identity String&, name String&) types.TypeId { return p.preludeType(identity, name) }
+
+# a function of the prelude module of this identity, by name; -1 for none (T17e's caseIndex)
+fn (p mut Program&) PreludeFn(identity String&, name String&) I64 {
+    p.ensureModules()
+    mi := try p.identity.Get(identity) catch { return -1 }
+    return p.FnNamed(mi, p.L.Names.Intern(name))
+}
 # a struct's constructor's signature (C2, G10b), or a declared number's (T29d): its parameters as written, its type the
 # result - a destructor-declaring struct's by reference (C11) - and its errors, with RoleCtor's scopes (C2d); Unknown for
 # a type with no constructor
@@ -2150,7 +2157,7 @@ fn (p mut Program&) CaseSig(t types.TypeId, tag I64) types.TypeId {
     td := p.typeDecl(p.T.DeclOf(t))
     if td is null or td.Body is null { return types.UnknownT }
     match td.Body {
-        case ast.TypeBody.Enum(cases) {
+        case ast.TypeBody.Enum(cases, _) {
             if tag < 0 or tag >= cases.Len() { return types.UnknownT }
             ps := cases[tag].Payload
             if ps.Len() == 0 { return p.T.Func(types.ListId(0), t, types.ListId(0)) }

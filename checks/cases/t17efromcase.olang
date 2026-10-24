@@ -1,0 +1,8 @@
+# check: fail error[T17e]: a case of an enum with raw values may not be named 'From', which makes a case from its raw value
+type Way enum String {
+    From
+    To
+}
+
+fn main() ? {
+}

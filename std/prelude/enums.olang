@@ -1,0 +1,14 @@
+# what enums need of the prelude: the error an enum's From fails with, and the search it is made of (T17e)
+
+# no case of the enum has the raw value asked for
+error CaseError {
+    NO_CASE
+}
+
+# E.From(v): the position of v among an enum's raw values, which the compiler passes in its cases' order
+fn caseIndex<R>(v R, values Array<R>&) I64 ? CaseError {
+    for i, x in values {
+        if x == v { return i }
+    }
+    error CaseError.NO_CASE
+}

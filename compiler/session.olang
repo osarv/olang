@@ -661,7 +661,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
             if td.Body is not null {
                 kind = match td.Body {
                     case ast.TypeBody.Struct(_) => KindStruct
-                    case ast.TypeBody.Enum(_) => KindEnum
+                    case ast.TypeBody.Enum(_, _) => KindEnum
                     case ast.TypeBody.Trait(_, _, _) => KindInterface
                     case _ => KindClass
                 }
@@ -714,7 +714,7 @@ fn (w mut symWriter&) members(b mut StringBuilder&, body ast.TypeBody&, nm sourc
                 }
             }
         }
-        case ast.TypeBody.Enum(cases) {
+        case ast.TypeBody.Enum(cases, _) {
             for cd in cases {
                 cname := nm.Text(cd.Name)
                 w.leaf(b, cname, KindEnumMember, I64(cd.Sp.Start), I64(cd.Sp.End), I64(cd.Sp.Start), I64(cd.Sp.Start) + cname.Len(), "")

@@ -1,0 +1,9 @@
+# check: fail error[T17e]: 'C' has the raw value 1, which 'A' has already - raw values are distinct
+type Odd enum I32 {
+    A = 1
+    B = 0
+    C
+}
+
+fn main() ? {
+}

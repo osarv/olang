@@ -263,14 +263,14 @@ fn typeItem(c mut typecheck.Checker&, d types.DeclId) String {
 
 fn casePayload(td ast.TypeDecl&, k I64) Array<ast.Param&>&td {
     match td.Body {
-        case ast.TypeBody.Enum(cases) { return cases[k].Payload }
+        case ast.TypeBody.Enum(cases, _) { return cases[k].Payload }
         case _ { return Array<ast.Param&>(0) }
     }
 }
 
 fn caseWhole(td ast.TypeDecl&, k I64) Bool {
     match td.Body {
-        case ast.TypeBody.Enum(cases) { return cases[k].Whole }
+        case ast.TypeBody.Enum(cases, _) { return cases[k].Whole }
         case _ { return false }
     }
 }

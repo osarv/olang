@@ -305,6 +305,16 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Round Circle` (the coordinator's decision 2026-10-24): `Shape.Round(c)` builds it, a narrowed value is that type
   (`e.r`, `e.Area()`), `case Shape.Round(c)` and `e as Shape.Round` give it; so `{ North South }` on one line is one case
   carrying a `South`.
+- **Enum raw values (T17e, the user's decision 2026-10-24).** `type Op enum String { Plus = "+" }`, `type Status enum
+  U8 { Ok  Busy = 9 }`: a table of constants beside the cases, never their representation (a value still holds its
+  case; `$op` is `Op.Plus`). Text defaults to the case's name, an integer to 0 or one more than the case before; values
+  are literals (an integer literal-only expression, a character literal; mine: no names, so the table needs nothing
+  resolved), fit the type and are distinct. `op.Value()` is supplied (a case-by-case test, the constant itself where
+  the case is written); `try Op.From(v)` through the type's name fails with the prelude's `CaseError.NO_CASE`, a call of
+  the prelude's generic `caseIndex` (std/prelude/enums.olang), so `try`, R8 and the evaluator need nothing new. Mine:
+  `Value()` with parentheses as every supplied method; the raw type is `String` or an integer type (a declared one
+  over an integer, `Char` included); `From` only where no case carries a payload, and then no case is named `From`; an
+  anonymous enum has none.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
   share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
 - **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should

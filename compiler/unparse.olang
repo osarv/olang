@@ -252,8 +252,13 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
                 w.block(s.Dtor)
             }
         }
-        case ast.TypeBody.Enum(cases) {
-            w.put("enum {")
+        case ast.TypeBody.Enum(cases, raw) {
+            w.put("enum ")
+            if raw is not null {
+                w.ty(raw)
+                w.put(" ")
+            }
+            w.put("{")
             w.ind++
             for c in cases {
                 w.nl()
@@ -265,6 +270,10 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
                     w.put("(")
                     w.params(c.Payload)
                     w.put(")")
+                }
+                if c.Value is not null {
+                    w.put(" = ")
+                    w.expr(c.Value!)
                 }
             }
             w.ind--

@@ -1,4 +1,4 @@
-# check: fail error[E23, E33, E37, P9]: the compiler supplies Bits for Temp
+# check: fail error[E23, E33, E37, P9, T17e]: the compiler supplies Bits for Temp
 # E33/T29e: a type extending a float has the supplied Bits(), which is never overridden
 type Temp extends F64
 fn (t Temp) Bits() U64 { return 7 }

@@ -1,0 +1,7 @@
+# check: fail error[T17e]: an enum's raw type is String or an integer type, found F64
+type Odd enum F64 {
+    A
+}
+
+fn main() ? {
+}

@@ -1,0 +1,10 @@
+# check: fail error[T17e]: Dir declares no raw values, so it has no 'Value' - name a raw type after 'enum'
+type Dir enum {
+    North
+    South
+}
+
+fn main() ? {
+    d := Dir.North
+    keep := $d.Value()
+}

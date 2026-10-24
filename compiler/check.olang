@@ -165,6 +165,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     opCall String& = ""                       # the operator method a call being built stands for (E31): what it says
     textT types.TypeId = types.TypeId(-1)
     charT types.TypeId = types.TypeId(-1)
+    raws Map<I64, rawTable&>               # by enum declaration: its raw values (T17e)
     # R1a: the bodies whose error set is inferred, each one's set once checked, what was read of one not final yet (a
     # cycle) - its body and the set's length then - and the bodies whose set rests on such a read
     inferring Map<I64, Bool>
@@ -233,6 +234,15 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # evaluation decided reading none (given before this check, as Decided) - the same on every build, an error
     ReadsBuild Map<I64, Bool>
     Dead Map<pair.Pair<I64, I64>, Bool>
+}
+
+# T17e: an enum's raw values - its raw type (UnknownT for none), whether that is text, and each case's value: an
+# integer's bits (as Lit's) or text's bytes
+type rawTable struct(Ty types.TypeId, Text Bool, Bits Array<I64>&, Bytes Array<Array<U8>&>&) {
+    Ty
+    Text
+    Bits
+    Bytes
 }
 
 # a local that may be fixed (S8c): its initializer, checked again where a condition reads it, and its type
@@ -805,6 +815,7 @@ fn (c mut Checker&) inheritClash(f I64) {
         if name.EndsWith("FromBits") and c.P.T.IsUnsigned(u) { given = true }
         if (name.StartsWith("Atomic") or bitOp(name) != typed.PrimOp.Retire) and c.P.T.IsInt(u) { given = true }
     }
+    if name == "Value" and c.isEnum(rt) and c.rawsOf(rt).Ty != types.UnknownT { given = true }   # T17e
     if given { c.err(c.nameSpan(fd), msgs.MethodClashesSupplied(name, c.ty(ps[0]))) }
     c.pop()
 }
@@ -1057,7 +1068,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
     if td.Params.Len() > 0 {
         # G6: only a struct or a trait takes type parameters
         match td.Body {
-            case ast.TypeBody.Enum(_), ast.TypeBody.Over(_, _) { c.err(td.Params[0].Sp, msgs.GenericNotStruct()) }
+            case ast.TypeBody.Enum(_, _), ast.TypeBody.Over(_, _) { c.err(td.Params[0].Sp, msgs.GenericNotStruct()) }
             nomatch { }
         }
     }
@@ -1068,12 +1079,13 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
                 for prm in sb.Params { c.errorTypeHeld(prm.Ty) }   # T20
             }
         }
-        case ast.TypeBody.Enum(cases) {
+        case ast.TypeBody.Enum(cases, _) {
             # T4, T17: a payload's types are known ones, said where they are written
             for cd in cases {
                 if cd.Payload.Len() == 0 { continue }
                 for prm in cd.Payload { c.writtenMet(prm.Ty) }
             }
+            c.raws.Put(I64(d), c.rawTable(d, true))   # T17e, said here
         }
         nomatch { }
     }
@@ -1114,7 +1126,7 @@ fn (c mut Checker&) typeRules(mi I64, sp source.Span, td ast.TypeDecl?&) {
                 }
             }
         }
-        case ast.TypeBody.Enum(cases) {
+        case ast.TypeBody.Enum(cases, _) {
             self := c.P.SelfType(d)
             # T7a, T7b: a payload holds an array by reference - its parameters have no declaration to give a length
             for cd in cases {
@@ -7562,6 +7574,18 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
             return true
         }
         case ast.TypeRef.Perm(_, of, _, _) { return c.writtenMet(of) }
+        case ast.TypeRef.Shape(_, body) {
+            match body {
+                case ast.TypeBody.Enum(_, raw) {
+                    if raw is not null {
+                        c.err(raw.Span(), msgs.RawAnonymous())   # T17e
+                        return false
+                    }
+                }
+                nomatch { }
+            }
+            return true
+        }
         case ast.TypeRef.Func(_, s) {
             for prm in s.Params {
                 if not c.writtenMet(prm.Ty) { return false }
@@ -7625,6 +7649,7 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 return c.unknown(sp)
             }
             et := c.typeNamed(x)
+            if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
             if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
             if ref.Kind == names.What.None and c.importPath(x) {
                 # a name the imported module does not declare (or does not export: the resolver said so already)
@@ -8731,6 +8756,7 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
             return c.prim(sp, ft, typed.PrimOp.Bitcast, c.value(rx, sp), null)
         }
     }
+    if name == "Value" and c.isEnum(rt) { return c.rawValue(sp, nsp, rt, rx, args) }   # T17e
     bop := bitOp(name)
     if bop != typed.PrimOp.Retire {
         # E37: an integer's bit operations, supplied
@@ -9045,6 +9071,238 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
     }
     items := gather(c.exprs, from)
     return typed.Expr.Make(sp, t, typed.Make(typed.MakeKind.Case, tag, items, null, typed.SiteId(-1), typed.Check.None))
+}
+
+# ---- raw values (T17e) ----
+
+fn (c mut Checker&) hasCase(t types.TypeId, n source.NameId) Bool {
+    for cn in c.P.T.CaseNames(t) {
+        if cn == n { return true }
+    }
+    return false
+}
+
+# an enum's raw values, worked out once
+fn (c mut Checker&) rawsOf(t types.TypeId) rawTable&c {
+    d := c.P.T.DeclOf(t)
+    if c.raws.Has(I64(d)) { return try c.raws.Get(I64(d)) catch { unreachable } }
+    r := c.rawTable(d, false)
+    c.raws.Put(I64(d), r)
+    return r
+}
+
+# an enum declaration's raw values (T17e), its errors said where report is: a raw type that is text or an integer
+# type; each case's value written as a literal of it, else text its name, an integer one more than the case before's
+fn (c mut Checker&) rawTable(d types.DeclId, report Bool) rawTable&c {
+    none := rawTable(types.UnknownT, false, Array<I64>(0), Array<Array<U8>&>(0))
+    td := c.P.TypeDecl(d)
+    if td is null or td.Body is null { return none }
+    match td.Body {
+        case ast.TypeBody.Enum(cases, raw) {
+            if raw is null {
+                if report {
+                    for cd in cases {
+                        if cd.Value is not null { c.err(cd.Value!.Span(), msgs.RawWithoutType()) }
+                    }
+                }
+                return none
+            }
+            rt := c.P.Resolve(c.P.DeclContext(d), raw)
+            if rt == types.UnknownT { return none }
+            text := c.P.T.Same(rt, c.textType())
+            if not text and not c.isInt(rt) {
+                if report { c.err(raw.Span(), msgs.RawType(c.ty(rt))) }
+                return none
+            }
+            n := cases.Len()
+            bits := Array<I64>(n)
+            bytes := Array<Array<U8>&>(n, Array<U8>(0))
+            set := Array<Bool>(n)    # the values worked out: only those are compared
+            prev := intLit(-1)
+            for i in range n {
+                cd := cases[i]
+                if report and c.text(cd.Name) == "From" { c.err(c.caseNameSpan(cd), msgs.FromCaseName()) }
+                at := c.caseNameSpan(cd) if cd.Value is null else cd.Value!.Span()
+                if text {
+                    if cd.Value is null {
+                        bytes[i] = textBytes(c.text(cd.Name))
+                    } else {
+                        sp, ok := c.textValue(cd.Value!)
+                        if not ok {
+                            if report { c.err(at, msgs.RawNotLiteral(c.ty(rt))) }
+                            continue
+                        }
+                        bytes[i] = c.strBytes(sp)
+                    }
+                    set[i] = true
+                    for j in range i {
+                        if set[j] and bytes[j] == bytes[i] {
+                            if report { c.err(at, msgs.RawRepeated(c.text(cd.Name), "\"" $String(bytes[i]) "\"", c.text(cases[j].Name))) }
+                            break
+                        }
+                    }
+                    continue
+                }
+                v := noLit()
+                if cd.Value is null {
+                    na, ma := magOf(prev)
+                    v = addMag(na, ma, false, U64(1)) if prev.Ok else noLit()
+                } else if numberLitsOnly(cd.Value!) or isCharLit(cd.Value!) {
+                    v = c.foldPart(cd.Value!)
+                }
+                if not v.Ok or v.IsFloat {
+                    # a written value that is no integer literal, or one counted past U64's maximum
+                    if report { c.err(at, msgs.RawNotLiteral(c.ty(rt)) if cd.Value is not null else msgs.RawNoFit("18446744073709551616", c.ty(rt))) }
+                    prev = noLit()
+                    continue
+                }
+                prev = v
+                if not c.rawFits(v, rt) {
+                    if report { c.err(at, msgs.RawNoFit(litText(v), c.ty(rt))) }
+                    continue
+                }
+                bits[i] = v.I
+                set[i] = true
+                for j in range i {
+                    if set[j] and bits[j] == bits[i] {
+                        if report { c.err(at, msgs.RawRepeated(c.text(cd.Name), litText(v), c.text(cases[j].Name))) }
+                        break
+                    }
+                }
+            }
+            return rawTable(rt, text, bits, bytes)
+        }
+        nomatch { return none }
+    }
+}
+
+fn (c mut Checker&) caseNameSpan(cd ast.CaseDecl&) source.Span {
+    return source.Span(cd.Sp.Start, cd.Sp.Start + I32(c.text(cd.Name).Len()))
+}
+
+# a raw value written as one text literal: its span
+fn (c mut Checker&) textValue(x ast.Expr&) source.Span, Bool {
+    match x {
+        case ast.Expr.Lit(sp, kind) { return sp, kind == token.Tok.StrLit }
+        case ast.Expr.Paren(_, y) { return c.textValue(y) }
+        nomatch { return source.Span(0, 0), false }
+    }
+}
+
+fn isCharLit(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(_, kind) => kind == token.Tok.CharLit
+        case _ => false
+    }
+}
+
+fn textBytes(t String&) Array<U8> {
+    b := Array<U8>(t.Len())
+    for i, ch in t { b[i] = U8(ch) }
+    return b
+}
+
+fn litText(v litv) String { return $U64(v.I) if v.Big else $v.I }
+
+# whether an integer literal's value fits the integer type t (T17e)
+fn (c mut Checker&) rawFits(v litv, t types.TypeId) Bool {
+    u := c.under(t)
+    w := c.P.T.Bits(u)
+    if c.P.T.IsUnsigned(u) {
+        if v.Big { return w == 64 }
+        if v.I < 0 { return false }
+        return w == 64 or v.I < (I64(1) << w)
+    }
+    if v.Big { return false }
+    if w == 64 { return true }
+    lim := I64(1) << (w - 1)
+    return v.I >= -lim and v.I < lim
+}
+
+# a case's raw value, as Value gives it: a Lit, or text's constant data (T25d)
+fn (c mut Checker&) rawOf(sp source.Span, tb rawTable&, k I64) typed.Expr&c {
+    if tb.Text { return typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(tb.Bytes[k])) }
+    return c.lit(sp, tb.Ty, tb.Bits[k])
+}
+
+# x.Value() (T17e): the raw value of the case x holds - each case tested in turn, the case known where x is one
+fn (c mut Checker&) rawValue(sp source.Span, nsp source.Span, et types.TypeId, rx typed.Expr&c, args Array<ast.Expr&>&) typed.Expr&c {
+    tb := c.rawsOf(et)
+    if tb.Ty == types.UnknownT {
+        c.err(nsp, msgs.NoRawValues(c.ty(et), "Value"))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    if args.Len() > 0 {
+        c.err(nsp, msgs.TakesNoArgs("'Value'"))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    x := c.value(rx, sp)
+    match x {
+        case typed.Expr.Make(_, _, m) {
+            if m.Kind == typed.MakeKind.Case and m.Items.Len() == 0 { return c.rawOf(sp, tb, m.Tag) }
+        }
+        nomatch { }
+    }
+    rt := typeOf(c.rawOf(sp, tb, 0))
+    sfrom := c.stmts.Len()
+    px := c.heldOf(sp, x)
+    n := c.P.T.Items(c.P.T.Cases(et)).Len()
+    r := c.rawOf(sp, tb, n - 1)
+    for kk in range n - 1 {
+        k := n - 2 - kk
+        here := c.prim(sp, types.BoolT, typed.PrimOp.IsCase, c.read(sp, px), c.lit(sp, c.i64(), k))
+        r = typed.Expr.Cond(sp, rt, typed.Cond(here, c.rawOf(sp, tb, k), r))
+    }
+    if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, rt, typed.Seq(gather(c.stmts, sfrom), r)) }
+    return r
+}
+
+# E.From(v) (T17e): the case whose raw value v is - its position found by the prelude's caseIndex, failing with
+# CaseError.NO_CASE, then the case at it
+fn (c mut Checker&) enumFrom(sp source.Span, nsp source.Span, et types.TypeId, args Array<ast.Expr&>&) typed.Expr&c {
+    tb := c.rawsOf(et)
+    if tb.Ty == types.UnknownT {
+        c.err(nsp, msgs.NoRawValues(c.ty(et), "From"))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    cn := c.P.T.CaseNames(et)
+    n := cn.Len()
+    for k in range n {
+        if c.P.T.Items(c.P.T.Params(c.P.CaseSig(et, k))).Len() > 0 {
+            c.err(nsp, msgs.FromPayload(c.ty(et), c.text(cn[k])))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+    }
+    if args.Len() != 1 {
+        c.err(sp, msgs.ArgCount(1, "", args.Len()))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
+    vt := typeOf(c.rawOf(sp, tb, 0))
+    v := c.exprTo(args[0], vt)
+    if typeOf(v) == types.UnknownT { return c.unknown(sp) }
+    from := c.exprs.Len()
+    for k in range n { c.exprs.Push(c.rawOf(sp, tb, k)) }
+    vals := typed.Expr.Make(sp, c.P.T.Array(vt, c.P.T.Const(c.i64(), n)), typed.Make(typed.MakeKind.Array, 0
+                            gather(c.exprs, from), null, c.site(typed.SiteKind.Make, sp), typed.Check.None))
+    f := c.P.PreludeFn("std/prelude/enums", "caseIndex")
+    i := c.invoke(sp, nsp, f, null, Array<ast.Expr&>(0), typed.Expr&[v, vals])
+    if typeOf(i) == types.UnknownT { return c.unknown(sp) }
+    sfrom := c.stmts.Len()
+    pi := c.heldOf(sp, i)
+    r typed.Expr&c = typed.Expr.Make(sp, et, typed.Make(typed.MakeKind.Case, n - 1, Array<typed.Expr&>(0), null, typed.SiteId(-1), typed.Check.None))
+    for kk in range n - 1 {
+        k := n - 2 - kk
+        here := c.prim(sp, types.BoolT, typed.PrimOp.Eq, c.read(sp, pi), c.lit(sp, c.i64(), k))
+        cs := typed.Expr.Make(sp, et, typed.Make(typed.MakeKind.Case, k, Array<typed.Expr&>(0), null, typed.SiteId(-1), typed.Check.None))
+        r = typed.Expr.Cond(sp, et, typed.Cond(here, cs, r))
+    }
+    if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, et, typed.Seq(gather(c.stmts, sfrom), r)) }
+    return r
 }
 
 # x[i]: an array's element (E16); T[a, b] where x names a type: an array literal (E19)
@@ -13245,7 +13503,7 @@ fn (c mut Checker&) wholeNarrowed(id I64) I64 {
 fn caseDecl(td ast.TypeDecl?&, k I64) ast.CaseDecl?&td {
     if td is null or td.Body is null { return null }
     match td.Body {
-        case ast.TypeBody.Enum(cases) { return cases[k] if k < cases.Len() else null }
+        case ast.TypeBody.Enum(cases, _) { return cases[k] if k < cases.Len() else null }
         nomatch { return null }
     }
 }
@@ -13296,7 +13554,7 @@ fn (c mut Checker&) narrowedField(id I64, n source.NameId) I64 {
 fn casePayload(td ast.TypeDecl?&, k I64) Array<ast.Param&>&td {
     if td is null or td.Body is null { return Array<ast.Param&>(0) }
     match td.Body {
-        case ast.TypeBody.Enum(cases) { return cases[k].Payload if k < cases.Len() else Array<ast.Param&>(0) }
+        case ast.TypeBody.Enum(cases, _) { return cases[k].Payload if k < cases.Len() else Array<ast.Param&>(0) }
         nomatch { return Array<ast.Param&>(0) }
     }
 }

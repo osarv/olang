@@ -23175,6 +23175,26 @@ are not re-indented with the code around it, which would change its text only if
 editor syntax (editors/nvim) knows both forms. Found on the way: the session's tooling turns a backslash-u followed by
 four hex digits into the character in commands, which wrote a check case wrong - written through Python's chr(92).
 
+**T17e, enum raw values.** `type Op enum String { Plus = "+" }` and `type Status enum U8 { Ok  Busy = 9 }`, as the
+user decided: a table of constants beside the cases. The enum's representation does not change - a value holds its case
+and nothing else - so equality, matching, hashing and `$` needed nothing; the table lives in the checker (`rawTable`,
+worked out once per declaration from the declaration's syntax and said there). `op.Value()` is elaborated as a test of
+each case in turn over the value held once, as `==` on enums already is (`enumsEqual`), each case's value a `Lit` or
+text's constant data; where the value is a case written out (`Op.Plus.Value()`) it is the constant itself, and LLVM
+turns the chain into a switch or a table where it is not. `Op.From(v)` is a call of the prelude's generic
+`caseIndex<R>(v R, values Array<R>&) I64 ? CaseError` (std/prelude/enums.olang) with the values as a static array
+(T25d), then the case at the position it gives - so `From` is fallible exactly as a call is: `try` covers it, R8 says
+when it is missing, and the evaluator runs it with nothing new (a global built from `From` bakes). Decided (mine): the
+method is called `Value()`, with parentheses, as every supplied method is (`Len()`, `Bits()`); a raw type is `String`
+or an integer type, a declared one over an integer included, so `enum Char { Up = 'w' }` works; a written value is a
+literal - a text literal, an integer literal-only expression (E4a) or a character literal - never a name, so the table
+needs nothing resolved and is the same in every module; integers count on from the case before (0 for the first), and
+counting past U64 is said as a value that does not fit; values fit the type and are distinct (said at the later case,
+naming the earlier); `From` needs every case to be a bare tag (a case with a payload has no value to build from its
+raw value alone), and in a raw-valued enum no case is named `From`, which `Op.From` reads; a raw-valued enum may not
+declare `Value`; an anonymous enum has none. The error is `CaseError.NO_CASE`, a type of its own in the prelude, so a
+caller catches exactly it.
+
 **E5, the bitwise operators bind tighter than the comparisons.** Found by the std breadth batch writing
 `(x >> k) & 1 == 1` and getting `&` of a `Bool`; decided (mine): Go's and Rust's order - `|` (6), `^` (7), `&` (8)
 between the comparisons (4 and 5) and the shifts (9), the relative order of the three and of everything else unchanged,
@@ -23206,4 +23226,4 @@ under `-debug -sanitize` (nothing read after its scope closed); `lowerdump` give
 `v = x`, `return x` with `x := I64[i, 3]` - still takes the conversion's copy in the program's scope (34 MB over 2M
 calls), though what consumes it (T11b's assignment, T7b's return) copies again where the value goes. It needs the
 conversion's storage placed by the scope pass, so a site the checker gives it, or the converted value made a view the
-consumers copy from where they do and adopt nowhere - plan.md has it.
+consumers copy from where they do and adopt nowhere - left for the plan.

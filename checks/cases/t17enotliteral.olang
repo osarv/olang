@@ -1,0 +1,9 @@
+# check: fail error[T17e]: a raw value is a literal of the raw type U8
+Base U8 = 3
+
+type Odd enum U8 {
+    A = Base
+}
+
+fn main() ? {
+}

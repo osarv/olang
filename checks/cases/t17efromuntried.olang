@@ -1,0 +1,9 @@
+# check: fail error[E15]: this call can fail
+type Op enum String {
+    Plus = "+"
+}
+
+fn main() ? {
+    o := Op.From("+")
+    keep := $o
+}

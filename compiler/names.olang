@@ -677,7 +677,8 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
                 r.popTo(m2)
             }
         }
-        case ast.TypeBody.Enum(cases) {
+        case ast.TypeBody.Enum(cases, raw) {
+            if raw is not null { r.typeRef(raw) }   # T17e
             for c in cases {
                 for p in c.Payload {
                     if p.Ty is not null { r.typeRef(p.Ty) }
@@ -1207,7 +1208,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef?&) {
         }
         case ast.TypeRef.Shape(_, body) {
             match body {
-                case ast.TypeBody.Enum(cases) {
+                case ast.TypeBody.Enum(cases, _) {
                     for c in cases {
                         for p in c.Payload {
                             if p.Ty is not null { r.typeRef(p.Ty) }

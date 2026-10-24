@@ -609,6 +609,15 @@ type Diag enum {
     NoLimit
     BitOpNotInteger
     BitOpCount
+    RawType
+    RawNotLiteral
+    RawNoFit
+    RawRepeated
+    RawWithoutType
+    RawAnonymous
+    NoRawValues
+    FromPayload
+    FromCaseName
 }
 
 # one function each, under the id it is known by
@@ -1253,7 +1262,7 @@ fn DefaultShadowsRequired(text1 String&, text2 String&) Msg { return Msg(Diag.De
 fn MethodClashesInherited(ty String&, text String&) Msg { return Msg(Diag.MethodClashesInherited, "T29e", $ty " inherits a method " $text " from its base - choose another name") }
 
 # ERR_METHOD_CLASHES_SUPPLIED
-fn MethodClashesSupplied(text String&, ty String&) Msg { return Msg(Diag.MethodClashesSupplied, "E23, E33, E37, P9", "the compiler supplies " $text " for " $ty " - choose another name") }
+fn MethodClashesSupplied(text String&, ty String&) Msg { return Msg(Diag.MethodClashesSupplied, "E23, E33, E37, P9, T17e", "the compiler supplies " $text " for " $ty " - choose another name") }
 
 # ERR_METHOD_ON_BUILTIN_TYPE
 fn MethodOnBuiltinType(ty String&) Msg { return Msg(Diag.MethodOnBuiltinType, "M19d", "only the prelude declares methods of " $ty " - declare a type of your own over it: 'type T extends ...'") }
@@ -1767,6 +1776,33 @@ fn BitOpNotInteger(name String&, ty String&) Msg { return Msg(Diag.BitOpNotInteg
 
 # a rotation's count of no integer type (E37)
 fn BitOpCount(ty String&) Msg { return Msg(Diag.BitOpCount, "E37", "a rotation's count is an integer, found " $ty) }
+
+# an enum's raw type that is neither text nor an integer type (T17e)
+fn RawType(ty String&) Msg { return Msg(Diag.RawType, "T17e", "an enum's raw type is String or an integer type, found " $ty) }
+
+# a raw value that is no literal of the raw type (T17e)
+fn RawNotLiteral(ty String&) Msg { return Msg(Diag.RawNotLiteral, "T17e", "a raw value is a literal of the raw type " $ty) }
+
+# a raw value the raw type cannot hold (T17e)
+fn RawNoFit(v String&, ty String&) Msg { return Msg(Diag.RawNoFit, "T17e", "the raw value " $v " does not fit " $ty) }
+
+# two cases of one enum with one raw value (T17e)
+fn RawRepeated(name String&, v String&, other String&) Msg { return Msg(Diag.RawRepeated, "T17e", "'" $name "' has the raw value " $v ", which '" $other "' has already - raw values are distinct") }
+
+# a raw value in an enum that names no raw type (T17e)
+fn RawWithoutType() Msg { return Msg(Diag.RawWithoutType, "T17e", "a raw value needs the enum's raw type, written after 'enum': 'enum String {' or 'enum U8 {'") }
+
+# a raw type on an anonymous enum (T17e)
+fn RawAnonymous() Msg { return Msg(Diag.RawAnonymous, "T17e", "only a declared enum has raw values - declare the enum with 'type'") }
+
+# Value or From on an enum without raw values (T17e)
+fn NoRawValues(ty String&, name String&) Msg { return Msg(Diag.NoRawValues, "T17e", $ty " declares no raw values, so it has no '" $name "' - name a raw type after 'enum'") }
+
+# From on an enum a case of which carries a payload (T17e)
+fn FromPayload(ty String&, name String&) Msg { return Msg(Diag.FromPayload, "T17e", "'From' makes a case from its raw value alone, and " $ty "'s case '" $name "' carries a payload") }
+
+# a case named From in an enum with raw values (T17e)
+fn FromCaseName() Msg { return Msg(Diag.FromCaseName, "T17e", "a case of an enum with raw values may not be named 'From', which makes a case from its raw value") }
 
 # ERR_ATOMIC_NOT_INTEGER
 fn AtomicNotInteger(ty String&) Msg { return Msg(Diag.AtomicNotInteger, "P9", "the atomic operations are methods of the integer types, and " $ty " is none") }

@@ -10518,6 +10518,52 @@ test "E5: the bitwise operators bind tighter than the comparisons" {
     assert PrecBaked
 }
 
+# T17e: an enum's raw values - written, text defaulting to the case's name, integers counting on from the case before -
+# read by Value() and turned back into a case by From, failing with CaseError where no case has the value. Baked (K2)
+# and at run time
+type RvOp enum String {
+    Plus = "+"
+    Minus = "-"
+    Times
+}
+type RvStatus enum U8 {
+    Ok
+    Busy = 9
+    Gone
+}
+type RvKey enum Char {
+    Up = 'w'
+    Down = 's'
+}
+type RvShape enum I32 {
+    Dot = -1
+    Round(r F64)
+    Box(w F64, h F64) = 7
+}
+fn rvAll(one I64) Bool {
+    op := RvOp.Minus if one == 1 else RvOp.Plus
+    a Bool = RvOp.Plus.Value() == "+" and op.Value() == "-" and RvOp.Times.Value() == "Times"
+    b Bool = RvStatus.Ok.Value() == 0 and RvStatus.Gone.Value() == 10 and RvKey.Down.Value() == 's'
+    s RvShape = RvShape.Round(2.0 * F64(one))
+    c Bool = s.Value() == 0 and RvShape.Box(1.0, 2.0).Value() == 7 and RvShape.Dot.Value() == -1
+    f := try RvOp.From("Times") catch default RvOp.Plus
+    g := try RvStatus.From(U8(9 * one)) catch default RvStatus.Ok
+    h := try RvOp.From("*") catch default RvOp.Minus
+    missed := false
+    try RvKey.From('x') catch CaseError { missed = true }
+    for st in RvStatus[RvStatus.Ok, RvStatus.Busy, RvStatus.Gone] {
+        back := try RvStatus.From(st.Value()) catch default RvStatus.Ok
+        if back != st { return false }
+    }
+    return a and b and c and f == RvOp.Times and g == RvStatus.Busy and h == RvOp.Minus and missed and $op == "RvOp.Minus"
+}
+RawBaked := rvAll(1)
+
+test "T17e: raw values" {
+    assert rvAll(I64(WdMutable / 2000000000))
+    assert RawBaked
+}
+
 # S19: deferred code runs on every way out of its block - falling off its end, a return (once the result is
 # computed), a break, a continue, an error leaving the function - last registered first, the innermost block's first,
 # reading variables as they are when it runs, never when the defer was reached; only a defer that was reached runs.

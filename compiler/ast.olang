@@ -230,18 +230,20 @@ type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body 
 }
 
 # an enum case: name and payload
-# Whole for a case whose payload is one type written whole, "Round Circle": then Payload is one Param, named as the case
-type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&, Whole Bool = false) {
+# Whole for a case whose payload is one type written whole, "Round Circle": then Payload is one Param, named as the case;
+# Value its raw value written after "=" (T17e), null for none
+type CaseDecl struct(Sp source.Span, Name source.NameId, Payload Array<Param&>&, Whole Bool = false, Value Expr?& = null) {
     Sp
     Name
     Payload
     Whole
+    Value
 }
 
 # the body of a type declaration
 type TypeBody enum {
     Struct(s StructBody&)
-    Enum(cases Array<CaseDecl&>&)
+    Enum(cases Array<CaseDecl&>&, raw TypeRef?&)   # raw: the raw type after "enum" (T17e), null for none
     # a trait's methods, the traits it extends (T30a) and, for a closed one, the types it lists after "for" (T31a)
     Trait(methods Array<Func&>&, exts Array<TypeRef&>&, members Array<TypeRef&>&)
     # type T I32 / extends ...; a constructor over a primitive (T29d) when Ctor is not null

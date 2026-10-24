@@ -1,0 +1,11 @@
+# check: fail error[E23, E33, E37, P9, T17e]: the compiler supplies Value for Op - choose another name
+type Op enum String {
+    Plus = "+"
+}
+
+fn (o Op) Value() I64 {
+    return 0
+}
+
+fn main() ? {
+}

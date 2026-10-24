@@ -685,6 +685,8 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
         }
         case token.Tok.Enum {
             p.advance()
+            raw ast.TypeRef?&p = null
+            if not p.sees(token.Tok.LBrace) { raw = try p.typeExpr() }   # T17e: "enum String {"
             try p.want(token.Tok.LBrace)
             cases mut List<ast.CaseDecl&>&p = List<ast.CaseDecl&>()
             p.skipEnds()
@@ -696,18 +698,20 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
                 if p.accept(token.Tok.LParen) {
                     payload = try p.params(false)
                 } else if not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and
-                          not p.sees(token.Tok.Eof) {
+                          not p.sees(token.Tok.Eof) and not p.sees(token.Tok.Assign) {
                     # T17: a payload of one type written whole, "Round Circle"
                     tat := p.here()
                     ty := try p.typeExpr()
                     payload = ast.Param&[ast.Param(p.from(tat), cn, ty, null)]
                     whole = true
                 }
-                cases.Push(ast.CaseDecl(p.from(cat), cn, payload, whole))
+                value ast.Expr?&p = null
+                if p.accept(token.Tok.Assign) { value = try p.expr() }   # T17e: a raw value
+                cases.Push(ast.CaseDecl(p.from(cat), cn, payload, whole, value))
                 try p.entryEnd()
             }
             p.advance()
-            return ast.TypeBody.Enum(cases.ToArray())
+            return ast.TypeBody.Enum(cases.ToArray(), raw)
         }
         case token.Tok.Trait {
             p.advance()

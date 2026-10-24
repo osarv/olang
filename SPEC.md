@@ -732,7 +732,8 @@ compile-time error, reported at the member that closes it. A generic type is jud
 **T17.** `enum-body ::= "enum" "{" list(IDEN) "}"`. An enum type declares a
 **closed, ordered set of named cases**, of which a value holds exactly one. It has no numeric
 representation available to a program: it supports only equality (`==`/`!=`) and structural matching
-(`match`/`case`, §6.4) — no ordering, no arithmetic, no explicit conversion to or from any integer type.
+(`match`/`case`, §6.4) — no ordering, no arithmetic, no explicit conversion to or from any integer type. A table of
+constants beside the cases may be declared (T17e), which changes none of this.
 
 Cases follow the listing rule (L18a), as every list does: on one line they are separated by `,` (`enum { North, South
 }`), on different lines by the line break, and two on one line with nothing between them are a compile-time error.
@@ -740,9 +741,11 @@ Cases follow the listing rule (L18a), as every list does: on one line they are s
 **T17a.** A case may carry a **payload**, written as a parameter list after its name, or as one type written whole:
 
 ```
-enum-body ::= "enum" "{" list(case-decl) "}"
-case-decl   ::= IDEN [ "(" param-list ")" | type-ref ]
+enum-body ::= "enum" [ type-ref ] "{" list(case-decl) "}"
+case-decl   ::= IDEN [ "(" param-list ")" | type-ref ] [ "=" expr ]
 ```
+
+(The `type-ref` after `enum` and the `= expr` are T17e's.)
 
 `Round Circle` carries one value of the type `Circle`, which is the payload: it is built as `Shape.Round(c)`, bound
 whole by `case Shape.Round(c)`, given whole by `s as Shape.Round`, and where a test narrows a local to that case (S8d)
@@ -807,6 +810,37 @@ never assigned, so a reference to an enum whose payloads hold only read-only ref
 nowhere (O25g), and may be held wherever it outlives the holder. An enum may also hold itself through a struct
 holding it by value, reached by reference (`type Node struct(e Expr) { e }` beside a case `Add(a Node&, b Node&)`),
 in either declaration order.
+
+**T17e (raw values).** A declared enum may name a **raw type** after `enum` - `String`, or an integer type (a primitive,
+or a declared type over one, `Char` included) - and then every case has a **raw value**, a constant of that type:
+
+```
+type Op enum String {
+    Plus = "+"
+    Minus = "-"
+    Times            # "Times": text defaults to the case's name
+}
+type Status enum U8 {
+    Ok               # 0: an integer defaults to 0 for the first case, one more than the case before for the others
+    Busy = 9
+    Gone             # 10
+}
+```
+
+A written value is a literal: a text literal for `String`; an integer literal-only expression (E4a) or a character
+literal (its code) for an integer type. Counting on past `U64`'s maximum is a value that does not fit. Values must fit the type and be distinct; an error otherwise, at the
+case. A raw value is a table beside the cases, not their representation: an enum value still holds its case and nothing
+else, and compares, matches, hashes and renders as before (`$Op.Plus` is `Op.Plus`).
+
+- `x.Value()`, on a value of the enum, is the raw value of the case it holds - a method the compiler supplies (as E23's
+  `Len`), computed while compiling where the case is known. A text value is constant data (T25d), a `String&` read
+  only. A raw-valued enum may not declare a method named `Value`.
+- `Op.From(v)`, reached through the type's name, is the case whose raw value is `v`, failing with the prelude's
+  `CaseError.NO_CASE` where no case has it - so it is written under `try` (R8): `op := try Op.From(s) catch default
+  Op.Plus`. It exists for an enum none of whose cases carries a payload, a case of which may not be named `From`.
+
+Cases carrying payloads may have raw values; `Value()` then gives the case's whatever its payload. An anonymous enum
+(a `type-ref` shape) declares no raw type.
 
 **G8a (composition).** A type argument (G8) may be a **type variable**, so one generic can be written in terms
 of another — `Vec<T>` inside a declaration that has a `T`. This is what makes a generic type's own

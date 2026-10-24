@@ -1,0 +1,10 @@
+# check: fail error[T17e]: 'From' makes a case from its raw value alone, and Shape's case 'Round' carries a payload
+type Shape enum U8 {
+    Dot
+    Round(r F64)
+}
+
+fn main() ? {
+    s := try Shape.From(0) catch default Shape.Dot
+    keep := $s
+}

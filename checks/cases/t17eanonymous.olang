@@ -1,0 +1,7 @@
+# check: fail error[T17e]: only a declared enum has raw values - declare the enum with 'type'
+fn pick(x enum String { A, B }) I64 {
+    return 0
+}
+
+fn main() ? {
+}
