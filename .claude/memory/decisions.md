@@ -869,3 +869,7 @@ errors and documentation - generic `+` already works).
   dotted module names. To weigh when discussed: remote imports name hosts that contain dots (`github.com/owner/repo`),
   relative imports (`../shared`, `geom/rect`), file names with dots, and the alias rule (M4: base name). In effect:
   `/` paths in quotes. Not discussed yet.
+- 2026-10-24 (the user: "import dereferencing ... Should we use . as for structs or is there something better?"): rec
+  keep `.` (M20 reserves the alias so `io.` is always the module; one operator for "part X of Y" through modules,
+  types, cases - `lib.Dir.North`; Go/Python/Java/Zig/Swift); drop the deferred `lib:Name` idea (`:` would clash with the
+  proposed one-line bodies). Awaiting agreement.
