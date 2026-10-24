@@ -933,3 +933,6 @@ errors and documentation - generic `+` already works).
 - ANY 2026-10-24: the word `any` stays (the user). Explained: values come out of an `any` through methods; for a CLOSED
   trait also `match` (each case binds the instance itself) and, decided by me for symmetry with enums, `w as Button`
   (fails WRONG_CASE under checked); for an OPEN trait never (no downcast - a missing method is the fix).
+- DECIDED 2026-10-24 (the user): the iterator/array helper `Any` renamed `Some` (beside `All`; JavaScript's pairing) -
+  migrate by tool. Confirmed: no type test of any kind on an open trait's `any` (`is` is null-only; match/as closed
+  only).
