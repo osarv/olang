@@ -111,6 +111,9 @@ d6cf37382bfc9f9f 08d44f655dd8a633 checks/cases/c2afieldparam.olang
 db41416a2af6a616 710d5663ea4527de checks/cases/c2dbuildarg.olang
 cdd796c3b45c49fe 00c3c0139af7e86c checks/cases/c2dbuildassign.olang
 7ae9c0edabd97fb8 9241cfe923652f11 checks/cases/c2dbuildlocal.olang
+57399c0efec9a37d e677c67a37fb7b42 checks/cases/c2dcondarg.olang
+c087113c5eec0b02 f5ea45e9283d27a7 checks/cases/c2dcondargkinds.olang
+68faa1bd5ae4640b d60b331f796882cc checks/cases/c2dcondargshort.olang
 52f4fbca01272c45 d49d769cccffc6e7 checks/cases/c2dcondfield.olang
 45e539910fac5b02 fa8b07422513e70c checks/cases/c2dcondfieldok.olang
 54a47714c4338466 904a00081d0dd15a checks/cases/c2dctorarg.olang
@@ -1333,7 +1336,7 @@ a7f5f4d2a846502b f056e8f85a4dc248 compiler/olang.olang
 6ab00051f7a06e2d befe92d3b3c8b276 compiler/parse.olang
 ccc000d5f2aa68e5 62b82c76b0b65e77 compiler/runtime.olang
 2f36633667aaa09d 7f9056eddcc1ffbb compiler/scan.olang
-59c30f5f637cea29 3c9187af2948dc20 compiler/scope.olang
+136a70f5b6b8d5f3 1eb10325145d11e4 compiler/scope.olang
 4c8a98b96e03685c 4134d0aa258ddd82 compiler/session.olang
 1a80f24067b7128c 1c65a46c1732c402 compiler/source.olang
 05d1a1654b33f250 38f9561424cc76b0 compiler/target.olang
@@ -1400,7 +1403,7 @@ f8eb9903e0fd1405 2f351680a962dbc6 fuzz/repro/bf16fastisel.olang
 c2e6ef7011f4e5c9 faca769a87e58dd0 fuzz/repro/scopepayloadcopy.olang
 1108f0db76d54b21 57efd31c8d1606e4 fuzz/repro/trygenericindex.olang
 bcaca9898b51c76c 4cccee54556e71ed fuzz/repro/trystmtarg.olang
-f58bcc873c9509ab df3c138755f01613 fuzz/scopegen.olang
+5eb8778cfd0f7dfb 52ff57202b38fb03 fuzz/scopegen.olang
 245159ddf78be1ee cd30e32ceebd11b3 std/base64.olang
 54644dc4fc6a9bd3 694c062117e1efcf std/cancel.olang
 f408dba37e890f4e 29d274341e2b500e std/chan.olang
@@ -1452,7 +1455,7 @@ cbf29ce484222325 cbf29ce484222325 tests/Lib.olang
 c3154015ef1cc50e 1477cf615d58d5df tests/geom/measure.olang
 92220429c12f8095 212ae6a7e863ef00 tests/geom/rect.olang
 4a6d215a6cef8bf6 6811d46629c57da3 tests/runner.olang
-2afc59a368994eea 83258712fb51009a tests/shared.olang
+6e33968e0f8bc6cc cadb5306ca1e8a58 tests/shared.olang
 aec07da7d56774f9 f4268587ff0e3e3d tests/worker.olang
 a2164371847187c4 56c12aa777ce91e2 tools/arrays_migrate.olang
 8ba65ab58f8daa42 06a88cb71378d908 tools/bare_typevars.olang

@@ -111,6 +111,9 @@ d6cf37382bfc9f9f 473b524a177c1a19 checks/cases/c2afieldparam.olang
 db41416a2af6a616 85a9cacf8c9a5533 checks/cases/c2dbuildarg.olang
 cdd796c3b45c49fe ae9a9978712dc23e checks/cases/c2dbuildassign.olang
 7ae9c0edabd97fb8 700c741e13004ffe checks/cases/c2dbuildlocal.olang
+57399c0efec9a37d f6d30e05538e4dd5 checks/cases/c2dcondarg.olang
+c087113c5eec0b02 200c0040fa91e7b3 checks/cases/c2dcondargkinds.olang
+68faa1bd5ae4640b a14052995cb976ca checks/cases/c2dcondargshort.olang
 52f4fbca01272c45 c01606a2065e492f checks/cases/c2dcondfield.olang
 45e539910fac5b02 34166f76766c7757 checks/cases/c2dcondfieldok.olang
 54a47714c4338466 f9bdfcd7f9a4616b checks/cases/c2dctorarg.olang
@@ -1333,7 +1336,7 @@ a7f5f4d2a846502b f60dd4f829e6944e compiler/olang.olang
 6ab00051f7a06e2d 3c13d89ec0382ad6 compiler/parse.olang
 ccc000d5f2aa68e5 021eb49d90cc7fba compiler/runtime.olang
 2f36633667aaa09d c5b97638f3ccd664 compiler/scan.olang
-59c30f5f637cea29 1dc5d61253181f68 compiler/scope.olang
+136a70f5b6b8d5f3 36e1f6b8a14a71b9 compiler/scope.olang
 4c8a98b96e03685c 844db4c4e069b590 compiler/session.olang
 1a80f24067b7128c 5efd7175b2549522 compiler/source.olang
 05d1a1654b33f250 9825757af37f84aa compiler/target.olang
@@ -1400,7 +1403,7 @@ f8eb9903e0fd1405 17d45f048a504a18 fuzz/repro/bf16fastisel.olang
 c2e6ef7011f4e5c9 b99ce3173e292405 fuzz/repro/scopepayloadcopy.olang
 1108f0db76d54b21 225829a0ca4718da fuzz/repro/trygenericindex.olang
 bcaca9898b51c76c c5e5e13bc2e016f7 fuzz/repro/trystmtarg.olang
-f58bcc873c9509ab 9a80d3113ff58fa2 fuzz/scopegen.olang
+5eb8778cfd0f7dfb cc152b34c749fc5b fuzz/scopegen.olang
 245159ddf78be1ee a1841656dcb52195 std/base64.olang
 54644dc4fc6a9bd3 3ccbb05352a35eed std/cancel.olang
 f408dba37e890f4e eede478f4f498d6f std/chan.olang
@@ -1452,7 +1455,7 @@ cbf29ce484222325 a14087b1061575cf tests/Lib.olang
 c3154015ef1cc50e e1777a72e9172179 tests/geom/measure.olang
 92220429c12f8095 e4e590d0650bd89b tests/geom/rect.olang
 4a6d215a6cef8bf6 d21357182345bb7b tests/runner.olang
-2afc59a368994eea 9409893f746abf54 tests/shared.olang
+6e33968e0f8bc6cc 0ae86ba42bcd3668 tests/shared.olang
 aec07da7d56774f9 0502b2f3cd989c0e tests/worker.olang
 a2164371847187c4 693299f8713316ba tools/arrays_migrate.olang
 8ba65ab58f8daa42 ba2e97c27c41eebd tools/bare_typevars.olang
