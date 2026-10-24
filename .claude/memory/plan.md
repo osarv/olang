@@ -238,3 +238,7 @@ is the one type walker still kept in step with the others by hand.
 
 **How to apply:** the user sets the order; don't start an item from the future-work list unasked. Fix bugs and debts
 on sight per rules.md, "Code rules".
+- 2026-10-24 08:55 CEST (new week, weekly 0.02): compile-speed round 8 merged (c96d7d8). Started wt-fastverify (a quick
+  ~5-minute tier for agents, `make verify` stays the merge gate but skips unchanged work) and wt-arrays2 (the arrays
+  batch, port only, re-applying wt-arrays' phase-1 doc and SPEC onto today's master; PROGRESS.md hand-off). 2-hourly
+  check-in re-enabled. QAS (dev build -O2 no LTO) and QAR (verbosity: `is` binding, bodyless constructors) asked.
