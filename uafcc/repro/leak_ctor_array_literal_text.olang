@@ -1,0 +1,16 @@
+import "std/io"
+
+type E struct(A Array<String&>&) {
+    A
+}
+
+fn one(i I64) I64 {
+    e := E(String&[$i])
+    return e.A[0].Len()
+}
+
+fn main() {
+    n I64 = 0
+    for i in range 2000000 { n += one(i) }
+    io.Println($n)!
+}
