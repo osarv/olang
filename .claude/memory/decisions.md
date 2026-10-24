@@ -890,3 +890,6 @@ errors and documentation - generic `+` already works).
   a result or `return` is a guarantee (checked after the call under `checked`), else a requirement (before); failure
   under checked = CheckError.CONTRACT; `fits`, `for` items, `outlives` chains stay. `old`, `then` and the list after
   the results go. Example: `fn (l mut List<T>&) Push(x T) [return l.Len() == l.Len() + 1] { }`.
+- CONTRACTS DECIDED 2026-10-24 (the user: "Yes you got it"): the redesign above. `for` items use the statement forms:
+  `for x in a: x < 4` (one condition), braces for several by the listing rule; everything in the block is Boolean - a
+  call must give a Bool ("These are only boolean statements"). Left: trait-method conditions (with `any`), the prover.
