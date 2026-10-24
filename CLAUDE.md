@@ -403,7 +403,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Derived and unknown scopes (O12, O23, O23a).** A `&p` field of a parameter reads at a derived scope resolved per
   call; a scope not known here (alternatives from different scopes) is read but never built into.
 - **Constructors (C2d, C2g).** A bare field lives with the instance; an argument binds the instance only where the
-  body can make it hold it; a constructor's top level allocates into the instance scope.
+  body can make it hold it; a constructor's top level allocates into the instance scope. A field given a lambda or an
+  adapter is never "a local only ever called" (D16d's frame latitude): the instance is assembled from it, so the
+  closure lives where what it captured does (2026-10-24, the unpar review's use-after-free).
 - **Scopes belong to one thread (P2, decision 48).** A task's scope arguments are private stand-ins folded at the
   join; a closure that may build into a captured scope asks for its thread's part of it (`__olang_capture_scope`);
   reading closures pay nothing.
