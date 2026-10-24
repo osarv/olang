@@ -275,3 +275,6 @@ on sight per rules.md, "Code rules".
 - FOUND 2026-10-24 by wt-lsp (scope pass, unfixed): a use-after-free - a conditional passed as a constructor argument,
   the instance returned (`e := E($t, mk(t) if at >= 0 else ""); return e`), fails under -debug -sanitize; reproducer
   /home/user/review/uaf-condctor/repro.olang. Fix agent to start after the current verify.
+- 2026-10-24: wt-speed9 merged (7535fc1 + goldens, full verify on the merged tip passed): FILE:LINE texts out of the code
+  (B3l), views pass skipped when unused, instance groups per first-reaching module, smaller parts, -quick in the record
+  key; mid-checker edit 31.8 -> 21.7 s CPU (-quick 15.6 -> 2.7), new-instance edit 89.8 -> 29.9 s.
