@@ -1,0 +1,34 @@
+import "std/io"
+
+type E struct(A String&, B String&) {
+    A
+    B
+}
+type Keeper struct(n I64) {
+    n
+    L List<String&>
+}
+fn (k mut Keeper&) keep(s String&) { k.L.Push(s) }
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+fn f(t String&, kp mut Keeper&, n I64) E {
+    b := mk(t) if n >= 0 else ""
+    kp.keep(b)
+    return E($t, b)
+}
+
+fn main() {
+    kp := Keeper(0)
+    for i in range 4 {
+        e := f($i, kp, i)
+        churn()
+        io.Println($e.B)!
+    }
+    churn()
+    io.Println($kp.L[1])!
+}

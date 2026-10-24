@@ -1,0 +1,44 @@
+import "std/io"
+
+type K enum {
+    A(s String&)
+    B
+}
+type H struct(r String&) {
+    r
+}
+type O struct(h H&) {
+    h
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+fn mkK(t String&, n I64) K { return K.A(mk(t)) if n >= 0 else K.B }
+
+fn f(t String&, n I64) O {
+    return O(match mkK(t, n) {
+        case K.A(s) => H(s)
+        case K.B => null
+    })
+}
+fn g(t String&, n I64) O {
+    return O(match (K.A(mk(t)) if n >= 0 else K.B) {
+        case K.A(s) => H(s)
+        case K.B => null
+    })
+}
+
+fn main() {
+    l := List<O>()
+    for i in range 4 {
+        l.Push(f($i, i))
+        l.Push(g($i "g", i))
+        churn()
+    }
+    churn()
+    io.Println($l[2].h.r " " $l[7].h.r)!
+}

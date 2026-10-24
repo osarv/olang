@@ -1,0 +1,25 @@
+import "std/io"
+
+type E struct(A String&, B String&) {
+    A
+    B
+}
+type O struct(e E&) {
+    e
+}
+fn mk(s String&) String { return $s "-made" }
+fn build(t String&, k I64) O {
+    o := O(E($t, mk(t) if k > 0 else "") if k > -5 else null)
+    return o
+}
+fn buildm(t String&, k I64) E {
+    return E($t, match k { case 0 => ""  case 1 => mk(t)  nomatch => mk(mk(t)) })
+}
+G O = build("g", 3)
+Gm E = buildm("h", 2)
+Gn O = build("n", -9)
+
+fn main() {
+    io.Println($G.e.B " " $Gm.B " " $(Gn.e is null) " " $build("r", 1).e.B)!
+    assert G.e.B == "g-made" and Gm.B == "h-made-made"
+}

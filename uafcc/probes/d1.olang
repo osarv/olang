@@ -1,0 +1,39 @@
+import "std/io"
+
+Dtors mut I64 = 0
+type R struct(n I64) {
+    n
+} destruct {
+    Dtors += 1
+}
+type Hold struct(r R&) {
+    r
+}
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn mk(i I64) Hold { return Hold(R(i) if i >= 0 else null) }
+fn mkm(i I64) Hold {
+    h := Hold(match i {
+        case 0 => null
+        case _ => R(i)
+    })
+    return h
+}
+
+fn main() {
+    sum I64 = 0
+    for i in range 10 {
+        h := mk(i)
+        g := mkm(i)
+        churn()
+        sum += h.r.n
+        if g.r is not null { sum += g.r.n }
+    }
+    io.Println($sum " " $Dtors)!
+}

@@ -1,0 +1,34 @@
+import "std/io"
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+type Box struct(s String&) {
+    s
+}
+fn keepIt(l mut List<Box&>&, b Box&) { l.Push(b) }
+fn sum(l List<Box&>&) I64 {
+    n I64 = 0
+    for b in l { n += b.s.Len() }
+    return n
+}
+
+fn main() {
+    ls := Array<List<Box&>>(4, List<Box&>())
+    ls[0] = List<Box&>()
+    ls[1] = List<Box&>()
+    ls[2] = List<Box&>()
+    ls[3] = List<Box&>()
+    join {
+        for i in range 4 {
+            t := $i
+            spawn keepIt(ls[i], Box(mk(t) if i >= 0 else ""))
+        }
+    }
+    churn()
+    io.Println($sum(ls[0]) " " $ls[3][0].s)!
+}

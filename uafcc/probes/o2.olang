@@ -1,0 +1,47 @@
+import "std/io"
+
+type H struct(r String&) {
+    r
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn each(n I64, f fn(s String&)) {
+    for i in range n {
+        t := $i "-each"
+        f(t)
+    }
+}
+
+fn mk(n I64) H& {
+    x H& = H("start") if n > 1000 else null
+    for i in range n {
+        w := List<String&>()
+        w.Push($i "-inner")
+        x = H(w[0]) if i >= 0 else null
+    }
+    churn()
+    return x
+}
+fn mk3(n I64) H& {
+    x H& = null
+    for i in range n {
+        w := List<String&>()
+        w.Push($i "-inner")
+        for s in w {
+            x = match i { case 0 => null  case _ => H(s) }
+        }
+    }
+    churn()
+    return x
+}
+
+fn main() {
+    h := mk(5)
+    g := mk3(5)
+    churn()
+    io.Println($h.r " " $g.r)!
+}

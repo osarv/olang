@@ -1,0 +1,28 @@
+# a static literal of reference type as the constant arm; the new arm an array
+import "std/io"
+
+type E struct(A Array<I64>&) {
+    A
+}
+fn mkA(n I64) Array<I64> { return Array<I64>(4, n) }
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn mk(at I64) E {
+    return E(mkA(at) if at >= 0 else I64[1, 2])
+}
+
+fn main() {
+    n I64 = 0
+    for i in range 100 {
+        o := mk(i)
+        churn()
+        if o.A[2] == i { n += 1 }
+    }
+    io.Println($n)!
+}

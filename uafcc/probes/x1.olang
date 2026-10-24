@@ -1,0 +1,19 @@
+import "std/io"
+
+type E struct(A Array<String&>&) {
+    A
+}
+
+fn f(tt String&, i I64) E { return E(String&[tt, "q"] if i >= 0 else String&["x", "y"]) }
+fn g(tt String&, i I64) E { return E(String&[tt, "q"]) }
+
+fn main() {
+    n I64 = 0
+    for i in range 5 {
+        t := $i "-t"
+        e := f(t, i)
+        d := g(t, i)
+        n += e.A[0].Len() + d.A[0].Len()
+    }
+    io.Println($n)!
+}

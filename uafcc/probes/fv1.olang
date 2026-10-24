@@ -1,0 +1,23 @@
+import "std/io"
+
+type E struct(A String&, B String&) {
+    A
+    B
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+
+fn main() {
+    keep := E("a", "b")
+    for i in range 5 {
+        t := $i "-inner"
+        get := fn() String& { return t }
+        keep = E("a", get() if i >= 0 else "")
+    }
+    churn()
+    io.Println($keep.B)!
+}

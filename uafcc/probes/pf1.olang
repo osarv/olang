@@ -1,0 +1,36 @@
+import "std/io"
+
+type V struct(p String&, n I64) {
+    y String&p = p
+    n
+}
+type W struct(p String&) {
+    y := p
+}
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+fn mkV(t String&, n I64) V {
+    v := V(mk(t) if n >= 0 else "", n)
+    return v
+}
+fn mkW(t String&, n I64) W { return W(match n { case 0 => ""  nomatch => mk(t) }) }
+
+fn main() {
+    l := List<V>()
+    ws := List<W>()
+    keep := V("o", 0)
+    for i in range 4 {
+        t := $i
+        l.Push(mkV(t, i))
+        ws.Push(mkW(t, i))
+        keep = V(mk(t) if i >= 0 else "", i)
+        churn()
+    }
+    churn()
+    io.Println($l[2].y " " $ws[3].y " " $keep.y)!
+}

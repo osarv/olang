@@ -1,0 +1,27 @@
+import "std/io"
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+fn pick(s String&) String&s { return s }
+type Box struct(s String&) {
+    s
+}
+fn unbox(b Box&) String&b { return b.s }
+
+fn main() {
+    keep String& = "o"
+    keep2 String& = "o"
+    for i in range 4 {
+        t := $i
+        keep = pick(mk(t) if i >= 0 else "")
+        keep2 = unbox(Box(mk(t)) if i >= 0 else null)
+        churn()
+    }
+    churn()
+    io.Println($keep " " $keep2)!
+}

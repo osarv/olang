@@ -1,0 +1,10 @@
+import "std/io"
+
+fn len0(a Array<String&>&) I64 { return a[0].Len() }
+fn one(i I64) I64 { return len0(String&[$i]) }
+
+fn main() {
+    n I64 = 0
+    for i in range 2000000 { n += one(i) }
+    io.Println($n)!
+}

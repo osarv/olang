@@ -1,0 +1,20 @@
+import "std/io"
+
+fn churn() {
+    for k in range 50 {
+        x := Array<I64>(100, k)
+        assert x[3] == k
+    }
+}
+fn mk(s String&) String { return $s "-made" }
+
+fn main() {
+    l := List<String&>()
+    f := fn(ll mut List<String&>&, s String&) { ll.Push(s) }
+    for i in range 10 {
+        t := $i
+        f(l, mk(t) if i >= 0 else "")
+    }
+    churn()
+    io.Println(l[3])!
+}
