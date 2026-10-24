@@ -7758,6 +7758,30 @@ test "E28/E29/E30: evaluated while compiling, as at run time" {
     assert condMax(3, n - 1) == CondMaxBaked
 }
 
+# T6, E30, E16, E4a, E10 (the any review's differential fuzzer, pre-existing): a literal in a comparison chain adapts to
+# the operand beside it as in one comparison; an index of any integer type, a conditional or a match of U64s too; I64's
+# least written as a literal; arrays of two known lengths compared - baked while compiling and run alike
+FzLive mut I64 = 3
+fn fzChain(x U64, y U64) Bool { return 5 > x >= 2 and x < 9 <= y }
+fn fzIndex(k I64) I64 {
+    a := I64[10, 20, 30]
+    u := U64(k)
+    return a[(match k { case 1 => U64(2) case _ => u })] + a[(U64(1) if k > 0 else u)]
+}
+fn fzLeast() String { return $(-9223372036854775808) " " $((-9223372036854775808)) }
+fn fzArrays(k I64) Bool {
+    a := I64[1, 2]
+    b := I64[k]
+    return a != b and not (b == a)
+}
+FzBaked String = $fzChain(3, 9) " " $fzIndex(1) " " $fzLeast() " " $fzArrays(1)
+
+test "E30: literals in chains adapt; indexes of any integer type; arrays of two lengths compared" {
+    assert FzBaked == "true 50 -9223372036854775808 -9223372036854775808 true"
+    assert $fzChain(U64(FzLive), U64(FzLive) * 3) " " $fzIndex(FzLive - 2) " " $fzLeast() " " $fzArrays(FzLive - 2) == FzBaked
+    assert not fzChain(U64(FzLive - 3), 9)
+}
+
 # E28/T29c: two pieces of written text are two Strings and two array literals two arrays, whatever their lengths; and
 # M19: a case of an enum written as a chain is a receiver like any value ("Color.Red.Hash()")
 type CondColor enum {

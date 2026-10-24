@@ -5026,7 +5026,8 @@ fn (c mut Checker&) litOf(x ast.Expr&, v litv, want types.TypeId) typed.Expr&c {
     sp := x.Span()
     target := c.under(want)
     if not c.P.T.IsNumber(target) {
-        want = c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big or c.litU64(x) else c.i64()
+        # T6a, E4a: a U64 literal's expression is a U64 - but a negative value, I64's least (L10) among them, an I64
+        want = c.P.T.Prim("F64") if v.IsFloat else c.P.T.Prim("U64") if v.Big or (c.litU64(x) and v.I >= 0) else c.i64()
         target = want
     }
     if v.IsFloat {
@@ -6511,6 +6512,15 @@ fn (c mut Checker&) equality(sp source.Span, op token.Tok, x typed.Expr&c, y typ
             y = c.fit(y, c.P.T.Ref(da, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else da, sp)
             tb = typeOf(y)
             db = da
+        } else if c.P.T.KindOf(da) == types.Kind.Array and c.P.T.KindOf(db) == types.Kind.Array and
+                  c.P.T.Same(c.P.T.Elem(da), c.P.T.Elem(db)) {
+            # E10, T7c: arrays of two known lengths meet at the run-time length both flow into - unequal, as their
+            # lengths differ
+            rt := c.P.T.Array(c.P.T.Elem(da), types.TypeId(0))
+            x = c.fit(x, c.P.T.Ref(rt, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else rt, sp)
+            y = c.fit(y, c.P.T.Ref(rt, types.ReadOnly) if c.isRef(ta) and c.isRef(tb) else rt, sp)
+            ta, tb = typeOf(x), typeOf(y)
+            da, db = rt, rt
         } else {
             c.err(sp, msgs.TypeMismatch(c.ty(da), c.ty(db)))
             return c.lit(sp, types.BoolT, 0)
@@ -7283,7 +7293,44 @@ fn (c mut Checker&) membership(sp source.Span, a ast.Expr&, b ast.Expr&) typed.E
 # a < b <= c (E30): each operand evaluated once, the next comparison only where the last held
 fn (c mut Checker&) chain(sp source.Span, ch ast.Chain&) typed.Expr&c {
     base := c.exprs.Len()
-    for x in ch.Xs { c.exprs.Push(c.value(c.expr(x, types.UnknownT), x.Span())) }
+    n := ch.Xs.Len()
+    # a literal operand adapts to the nearest operand that is none, as beside one comparison's (T6, E6d) - its left
+    # neighbour's type first
+    lit := Array<Bool>(n, false)
+    for i in range n {
+        lit[i] = c.litLike(ch.Xs[i])
+        if lit[i] {
+            c.exprs.Push(c.unknown(sp))
+        } else {
+            c.exprs.Push(c.value(c.expr(ch.Xs[i], types.UnknownT), ch.Xs[i].Span()))
+        }
+    }
+    for i in range n {
+        if not lit[i] { continue }
+        j := -1
+        for d in range 1, n {
+            if i - d >= 0 and not lit[i - d] {
+                j = i - d
+                break
+            }
+            if i + d < n and not lit[i + d] {
+                j = i + d
+                break
+            }
+        }
+        x := ch.Xs[i]
+        if j < 0 {
+            c.exprs[base + i] = c.value(c.expr(x, types.UnknownT), x.Span())
+            continue
+        }
+        other := typeOf(c.exprs[base + j])
+        tb := c.literalBeside(other) if c.isNumber(other) else types.UnknownT
+        fits := c.litLikeFits(x, tb)
+        e := c.value(c.expr(x, tb if fits else types.UnknownT), x.Span())
+        k := i if i < j else j
+        if not fits { c.noMeet(c.between(ch.Xs[k].Span(), ch.Xs[k + 1].Span(), ch.Ops[k].Text().Len()), other, typeOf(e)) }
+        c.exprs[base + i] = e
+    }
     r := c.chainFrom(sp, ch, base, 0, c.exprs[base])
     c.exprs.Truncate(base)
     return r
@@ -10528,7 +10575,8 @@ fn (c mut Checker&) elemPlace(sp source.Span, b typed.Place&c, items Array<ast.E
         c.err(items[1].Span(), msgs.ArrayOneIndex(c.ty(t)))
         return null
     }
-    i := c.value(c.expr(items[0], c.i64()), items[0].Span())
+    # E16: an index of any integer type - only a literal one is made an I64; a conditional or a match of U64s is a U64
+    i := c.value(c.expr(items[0], c.i64() if c.litLike(items[0]) else types.UnknownT), items[0].Span())
     if not c.isInt(typeOf(i)) and typeOf(i) != types.UnknownT {
         c.err(items[0].Span(), msgs.IndexNotInt(c.ty(typeOf(i))))
     }

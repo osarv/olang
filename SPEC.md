@@ -2820,7 +2820,8 @@ numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)
   reference: `a == b` is `a.Eq(b)`. Through references a null equals another null and nothing else - `Eq` is never
   called with a null. The prelude declares `Eq`, by contents, for every array (`Array<T>`, a declared array type with no
   `Eq` of its own, `String` - lengths first, then each element by this same rule), `List` (the same elements in the
-  same order), `Map` (the same keys, each with an equal value, whatever order they were put in) and `Vec`;
+  same order), `Map` (the same keys, each with an equal value, whatever order they were put in) and `Vec`; two arrays
+  of known, different lengths (T7c) meet at the run-time length both flow into, and are unequal;
 - otherwise, a primitive by value; an enum value by its case first, then its payload's fields by this same rule; a
   struct value field by field by this same rule;
 - any other **reference**: identity - two references are equal exactly when they name the same storage, or are both
@@ -3158,8 +3159,8 @@ operation behaves as the rules above state - wrapping, IEEE results, or undefine
 
 ### 5.5 Indexing and member access
 
-**E16.** `base [ index ]` requires `base` to be an array type and `index` to be an integer type; its
-result type is `base`'s element type. **The index is not checked at run time.** An `index` outside
+**E16.** `base [ index ]` requires `base` to be an array type and `index` to be an integer type - any one: a literal
+index is an `I64`, a conditional or a `match` of `U64`s a `U64`; its result type is `base`'s element type. **The index is not checked at run time.** An `index` outside
 `[0, base.Len())` (E23) reads or writes storage the array does not own, which is **undefined behaviour** —
 the same reading C gives it, and one of exactly two places in this language where a program can reach
 storage it does not own (the other is `extern fn`, §11 X1a).
@@ -3434,7 +3435,9 @@ error, not a loop while `x` is in `c`. That loop is written `for { if x not in c
 
 **E30.** A run of the ordering comparisons `<`, `<=`, `>`, `>=` with no parentheses between them, `a op1 b op2 c
 ...`, is a chain: `a op1 b and b op2 c and ...`, each operand evaluated once, left to right, and evaluation stopping at
-the first comparison that is `false`. So `0 <= i < n` asks whether `i` is in range. `==` and `!=` do not chain:
+the first comparison that is `false`. So `0 <= i < n` asks whether `i` is in range. A literal operand adapts to the
+operand beside it as in one comparison (T6, E6d), its left neighbour's type first: `5 > u >= 2` with `u` a `U64` compares
+`U64`s. `==` and `!=` do not chain:
 `a == b == c` is `(a == b) == c`, a comparison of `Bool`s.
 
 ### 5.15 Operators declared by types
