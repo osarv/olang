@@ -762,3 +762,5 @@ errors and documentation - generic `+` already works).
   side by side = intersection (`<T Shape House>`, `<T Shape (Circle, Square)>`), parentheses = union of member types,
   comma = next type parameter; named: `trait Number for Integer, Float` (union), `trait Dwelling extends Shape, House`
   (intersection). Rec juxtaposition over `and`. Supersedes the earlier `and` proposal; awaiting a yes.
+  The user asked whether `<T: ...>` would clear things up: rec no - the comma still ends the constraint, so a union
+  still needs parentheses; `name Type` everywhere else; `:` kept free (deferred `lib:Name`).
