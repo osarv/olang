@@ -15,7 +15,7 @@
 #   over it, the unwinding to the try's depth, a jump to the clause; what no clause takes is re-encoded under the body's
 #   own list and raised once every scope is closed;
 # - checks (E15a, E16b, D14b, E32): a test and a branch - to an Exit for a guaranteed check, to the try's dispatch with
-#   BuiltinError's code for a checked one.
+#   CheckError's code for a checked one.
 #
 # Placement is the plan's (typed.Plan, M6): the scope pass's (compiler/scope.olang) where Plans holds one per body, else
 # the stand-in DESIGN.md 1.6.1 allows - every site built in the program's scope, every local in its frame, every scope
@@ -73,7 +73,7 @@ type Lowerer struct(P mut generic.Program&, Bodies List<mut typed.Body&>) {
     textT types.TypeId = types.TypeId(-1)
 }
 
-# BuiltinError's words (R20, std/prelude/builtin.olang), in its declared order
+# CheckError's words (R20, std/prelude/check.olang), in its declared order
 OutOfBounds I64 = 0
 DivideByZero I64 = 1
 Overflow I64 = 2
@@ -81,7 +81,7 @@ Invalid I64 = 3
 WrongCase I64 = 4
 
 fn (lw mut Lowerer&) builtin() types.TypeId {
-    if lw.builtinT < types.TypeId(0) { lw.builtinT = lw.P.PreludeType("std/prelude/builtin", "BuiltinError") }
+    if lw.builtinT < types.TypeId(0) { lw.builtinT = lw.P.PreludeType("std/prelude/check", "CheckError") }
     return lw.builtinT
 }
 
@@ -1209,7 +1209,7 @@ fn (ln mut lowering&) bounds(i mir.Operand, n mir.Operand, incl Bool, chk typed.
     ln.check(hi, chk, kind, OutOfBounds, sp)
 }
 
-# a check: on where ok holds; where it does not, an Exit for a guaranteed one (Abort), or BuiltinError's word to the
+# a check: on where ok holds; where it does not, an Exit for a guaranteed one (Abort), or CheckError's word to the
 # innermost try for a checked one (Try)
 fn (ln mut lowering&) check(ok mir.Operand, chk typed.Check, kind mir.ExitKind, word I64, sp source.Span) {
     if ln.dead or chk == typed.Check.None { return }

@@ -10,5 +10,5 @@ fn (a Money&) Minus(b Money&) Money ? MoneyError {
     if b.c > a.c { error MoneyError.NEGATIVE }
     return Money(a.c - b.c)
 }
-fn (a Money&) CheckedMinus(b Money&) Money ? BuiltinError { return Money(checked (a.c - b.c)) }
+fn (a Money&) CheckedMinus(b Money&) Money ? CheckError { return Money(checked (a.c - b.c)) }
 fn main() { }

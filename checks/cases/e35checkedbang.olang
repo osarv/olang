@@ -1,12 +1,12 @@
 # check: run
-# E15a/E35: a clause-less 'checked' in what '!' or 'try' covers hands its errors to them - no 'BuiltinError' is named
+# E15a/E35: a clause-less 'checked' in what '!' or 'try' covers hands its errors to them - no 'CheckError' is named
 At mut I64 = 1
 fn read(a Array<I64>&, i I64) I64 { return (checked a[i])! }
 fn plusOne(a Array<I64>&, i I64) I64 ? { return try (checked a[i]) + 1 }
-fn guarded(a Array<I64>&, i I64) I64 { return try (checked a[i]) catch BuiltinError.OUT_OF_BOUNDS default -1 }
+fn guarded(a Array<I64>&, i I64) I64 { return try (checked a[i]) catch CheckError.OUT_OF_BOUNDS default -1 }
 fn use(n I64) { }
 fn stmt(a Array<I64>&, i I64) I64 {
-    try use(checked a[i]) catch BuiltinError.OUT_OF_BOUNDS { return -5 }
+    try use(checked a[i]) catch CheckError.OUT_OF_BOUNDS { return -5 }
     return 0
 }
 Baked I64 = guarded(I64[1, 2], 7) + stmt(I64[1], 4)

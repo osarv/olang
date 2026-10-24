@@ -1081,17 +1081,17 @@ e28condlocallent.olang:25:7: error[E31b]: x[i] gives a copy of the element, whic
 compilation failed with 9 errors
 === e31acheckedonly.olang
 e31acheckedonly.olang:11:11: error[E31a]: CheckedAt is a checked form, which only adds checks to its plain form - declare At beside it
-   11 | fn (c C&) CheckedAt(i I64) I64 ? E, BuiltinError {
+   11 | fn (c C&) CheckedAt(i I64) I64 ? E, CheckError {
       |           ^~~~~~~~~
 compilation failed with 1 error
 === e31anotsuperset.olang
 e31anotsuperset.olang:13:15: error[E31a]: CheckedMinus is Minus's checked form, so it fails with every error Minus can - add MoneyError after its '?'
-   13 | fn (a Money&) CheckedMinus(b Money&) Money ? BuiltinError { return Money(checked (a.c - b.c)) }
+   13 | fn (a Money&) CheckedMinus(b Money&) Money ? CheckError { return Money(checked (a.c - b.c)) }
       |               ^~~~~~~~~~~~
 compilation failed with 1 error
 === e31asupersetinst.olang
 e31asupersetinst.olang:21:15: error[E31a]: CheckedPlus is Plus's checked form, so it fails with every error Plus can - add VErr after its '?'
-   21 | fn (a Box<T>) CheckedPlus(b Box<T>) Box<T> ? BuiltinError {
+   21 | fn (a Box<T>) CheckedPlus(b Box<T>) Box<T> ? CheckError {
       |               ^~~~~~~~~~~
 e31asupersetinst.olang:28:29: note: instantiated here, with T = V
    28 |     y := checked (Box(V(1)) + Box(V(Neg))) catch default Box(V(0))
@@ -3312,12 +3312,12 @@ r20nothing.olang:4:13: error[R8]: nothing here can fail - write it without 'chec
       |             ^~~~~~~
 compilation failed with 1 error
 === r20partial.olang
-r20partial.olang:4:13: error[R9]: BuiltinError.DIVIDE_BY_ZERO can escape here, and this function does not declare it - add it after '?', or catch it
-    4 |     r I32 = checked (a / b) catch BuiltinError.OVERFLOW default 0
+r20partial.olang:4:13: error[R9]: CheckError.DIVIDE_BY_ZERO can escape here, and this function does not declare it - add it after '?', or catch it
+    4 |     r I32 = checked (a / b) catch CheckError.OVERFLOW default 0
       |             ^~~~~~~
 compilation failed with 1 error
 === r20undeclared.olang
-r20undeclared.olang:7:13: error[R9]: BuiltinError.OVERFLOW can escape here, and this function does not declare it - add it after '?', or catch it
+r20undeclared.olang:7:13: error[R9]: CheckError.OVERFLOW can escape here, and this function does not declare it - add it after '?', or catch it
     7 |     r I32 = checked (a + b)
       |             ^~~~~~~
 compilation failed with 1 error

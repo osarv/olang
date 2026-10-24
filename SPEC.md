@@ -1758,7 +1758,7 @@ program's own scope, which is never closed (§8 O1b).
 **D14b.** `n` must evaluate to a length in range: **non-negative**, and no larger than the largest whose byte
 count (`n` times the element's size) fits an `I64`. One out of range aborts the program, the same hard abort an
 out-of-range slice bound produces (§5.9 E16b), with the message `array length out of range`; under `checked` (R20) it
-fails with `BuiltinError.OUT_OF_BOUNDS` instead. A length of `0` is valid and produces a genuinely empty array.
+fails with `CheckError.OUT_OF_BOUNDS` instead. A length of `0` is valid and produces a genuinely empty array.
 
 The check is cheap for the same reason E16b's is and E16's was not: it is paid **once per allocation**,
 never per element access. A negative length multiplies out to a negative byte count, which the allocator's
@@ -1999,7 +1999,7 @@ clears the sign bit, and `Min` and `Max` are IEEE 754's minimum and maximum - a 
 staying as it is, as negation wraps, E6c), and an unsigned one is its own. `x.Clamp(lo, hi)` is `x.Max(lo).Min(hi)`, so
 `hi` when `lo` is above `hi`. A type other than a number that wants them declares its own. Every integer has `x.Pow(n
 U32)`, `x` to the `n`th power, wrapping as `*` does (E6c), whose checked form `CheckedPow` (E31a) fails with
-`BuiltinError.OVERFLOW` where the true power does not fit - so `checked x.Pow(n)` checks it; and `Sqrt()`, the integer
+`CheckError.OVERFLOW` where the true power does not fit - so `checked x.Pow(n)` checks it; and `Sqrt()`, the integer
 square root - the largest whole number whose square is not above the value (`17` gives `4`), in the receiver's type,
 exact for every value: an unsigned integer's cannot fail, a signed integer's fails with `NumberError.NEGATIVE` (an
 error type the prelude declares) for a negative value, so it is written with `try`.
@@ -2850,7 +2850,7 @@ call's arguments included - other than in the called function's body (which has 
 lambda, or a `match` used as a value
 (S12b), whose clauses are statements' bodies. An operation a type declares (E31) is checked by calling its checked
 form (E31a), whose own errors the expression then can produce too; with no checked form it calls the plain method, as
-`try` would. Each check fails with a word of `BuiltinError` (§7.6) instead of doing what the unchecked operation
+`try` would. Each check fails with a word of `CheckError` (§7.6) instead of doing what the unchecked operation
 does:
 
 | operation | fails with |
@@ -2894,7 +2894,7 @@ defined: it compiles, and fails with `OUT_OF_BOUNDS` where it runs - in a functi
 Array<I32>) I32 { return checked a[2] catch default -1 }`) one instance (G29) may have the element and another not.
 
 **E16d.** `checked base [ index ]` (E15a) **opts in to a bounds check**: the index is checked against
-`[0, base.Len())` and an out-of-range one produces `BuiltinError.OUT_OF_BOUNDS` (§7.6) rather than reading or
+`[0, base.Len())` and an out-of-range one produces `CheckError.OUT_OF_BOUNDS` (§7.6) rather than reading or
 writing storage the array does not own, propagating like any other `try` so the enclosing signature must
 cover it. This is the mirror of E16c, which opts a *slice* out of its abort — in both, `checked` means "give me
 the failure as an error I handle". An index written without `checked` is unchecked and costs nothing.
@@ -2944,7 +2944,7 @@ cheap exactly where a per-index check is not, since a slice is taken once and re
 paid per slice expression, never per element access.
 
 **E16c.** Writing the slice as `checked base [ lo : hi ]` (E15a) makes it **fallible** instead: an
-out-of-range bound produces `BuiltinError.OUT_OF_BOUNDS` (§7.6) rather than aborting, and the expression
+out-of-range bound produces `CheckError.OUT_OF_BOUNDS` (§7.6) rather than aborting, and the expression
 propagates it like any other `try`, so the enclosing signature must cover it.
 
 The two forms divide the two cases cleanly. Bounds that come from the program itself (`a[:]`, `a[0:a.Len()]`,
@@ -3272,7 +3272,7 @@ possibly more: one whose errors do not include each of the plain form's is a com
 naming the error to add. Where a type declares no checked form:
 
 - `CheckedAt` is **derived** from a one-index `At` and `Len`: the position is checked against `[0, x.Len())`, failing
-  with `BuiltinError.OUT_OF_BOUNDS` (R20), and `At` is called - so `checked x[i]` on such a type checks exactly as it
+  with `CheckError.OUT_OF_BOUNDS` (R20), and `At` is called - so `checked x[i]` on such a type checks exactly as it
   does on an array. `CheckedSlice` is derived from `Slice` and `Len` the same way (`0 <= lo <= hi <= x.Len()`), and
   `CheckedSetAt` from `SetAt` and `Len`. A type with neither the checked form nor `Len` cannot be indexed, sliced or
   stored into under `checked` - a compile-time error - and neither can one indexed by several indices (`checked m[i,
@@ -3344,7 +3344,7 @@ after it is that type's reference marker (§2.9): `b as Box.Val & mask` is an `a
 compile-time error saying so - `(b as Box.Val) & mask` applies `&` to the result.
 
 An `as` whose answer is no **aborts**, as an out-of-range slice does (E16b); under `checked` (E15a) it fails with
-`BuiltinError.WRONG_CASE` instead. A case test never fails. A null reference to an enum is no case: a test is false and
+`CheckError.WRONG_CASE` instead. A case test never fails. A null reference to an enum is no case: a test is false and
 `as` does not hold. The safe forms are a test that narrows (S8d), and a `match` (S13).
 
 A part of an array of a known length is a **slice** with known bounds (T7c, E16a), checked once where it is taken:
@@ -3408,7 +3408,7 @@ and elsewhere evaluation stops there.
 A `checked` with no clauses written in what `!` or a `try` covers (E15a) hands what it checks to them: `(checked a[i])!`
 is the bounds-checked index that ends the program when `i` is out of range, and `try (checked a[i]) + 1` propagates
 its `OUT_OF_BOUNDS` with whatever else the `try` covers - the inner `checked` neither propagates on its own nor needs
-the enclosing function to name `BuiltinError` for it. A `checked` with clauses handles its errors itself, as a nested
+the enclosing function to name `CheckError` for it. A `checked` with clauses handles its errors itself, as a nested
 `try` does. On a spawned call (P4) `spawn f(x)!` and `spawn n = f(x)!` end the program from the task's thread when the
 call fails, as a failed `assert` there does (P6); no error reaches the join.
 
@@ -4558,7 +4558,7 @@ written would be kept by neither; `checked x[i].f = v` (R21) is a checked store.
   references are where the result's are, and what is later put into it lands there too. A default naming existing
   storage, or built from it, is a compile-time error: its references would have to agree with every scope the
   result's live in.
-- A checked index `checked a[i]` and a slice `checked a[lo:hi]` can fail only with `BuiltinError.OUT_OF_BOUNDS`
+- A checked index `checked a[i]` and a slice `checked a[lo:hi]` can fail only with `CheckError.OUT_OF_BOUNDS`
   (§7.6), which a clause names or takes with an item-less `catch`: `checked a[i] catch default -1`. The
   expression is then a value, never an lvalue.
 
@@ -4613,7 +4613,7 @@ callee happens to only ever produce a subset of them internally. A callee writte
 `catch ListError.EMPTY` (R1c); catching a word the callee's set does not hold is a compile-time error, as catching a
 type it does not name is (R13).
 
-### 7.6 Built-in errors
+### 7.6 Check errors
 
 **R21 (tried and checked statements).** `try-store-stmnt ::= ( "try" | "checked" ) ( lvalue assign-op expr |
 increment ) { catch-clause } STMNT_END`, where `increment` is one of `x++`, `x--`, `++x`, `--x`. With `try` the
@@ -4625,10 +4625,10 @@ adds through `CheckedPlus` when declared, or the built-in checked addition; `x++
 a declared type calls `CheckedInc`, else `CheckedPlus`, else the plain forms). Its clauses are a statement's (R10): one
 that takes an error runs its block and control continues after the statement; an error no clause names propagates.
 
-**R20.** The checks the language itself makes report **`BuiltinError`**, an error type declared in the prelude:
+**R20.** The checks the language itself makes report **`CheckError`**, an error type declared in the prelude:
 
 ```
-error BuiltinError {
+error CheckError {
     OVERFLOW
     DIVIDE_BY_ZERO
     OUT_OF_BOUNDS
@@ -4638,7 +4638,7 @@ error BuiltinError {
 ```
 
 A check runs only where it is asked for, with `checked` (E15a); an operation written without it behaves as §5 says,
-and `try` asks for none. Only these checks raise `BuiltinError`; no function raises it with `error`, only lets through
+and `try` asks for none. Only these checks raise `CheckError`; no function raises it with `error`, only lets through
 one a `checked` in it produced. It is an ordinary error type in every other respect: a function letting one through
 names it in its `?` (or infers it, R1a), and a `catch` names it, or one of its words. A check names exactly the words
 it can produce, and catching those is complete (R13): a checked index or slice produces only `OUT_OF_BOUNDS`, a
@@ -6779,7 +6779,7 @@ without a running program. No declaration marks a function as evaluable: any fun
 call, when what that call actually does is evaluable. Evaluation follows this specification's own
 meaning for every operation - integer widths wrap exactly as generated code does, a reference names the very
 value it was taken from, a function value names the function, a slice shares its base's elements, text renders exactly as the generated code
-writes it, a checked operation (E15a) fails with the same `BuiltinError` word, and a `try`'s clauses handle an
+writes it, a checked operation (E15a) fails with the same `CheckError` word, and a `try`'s clauses handle an
 error as they would at run time. It is **not** possible when evaluation would:
 
 - read a mutable global, whose value is the running program's, or write any global or what one holds (its

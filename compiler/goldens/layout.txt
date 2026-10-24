@@ -220,7 +220,7 @@ mut std/prelude/text:decimal&	8 8	ptr	-	-
 mut std/prelude/vec:vecState<std/prelude/text:String&>&	8 8	ptr	-	-
 std/prelude/array:ArrayError	4 4	i32	-	-
 std/prelude/array:ChunkSize	8 8	i64	-	-
-std/prelude/builtin:BuiltinError	4 4	i32	-	-
+std/prelude/check:CheckError	4 4	i32	-	-
 std/prelude/complex:C16	4 2	%"std/prelude/complex:C16"	{ half, half }	fields 0,2
 std/prelude/complex:C32	8 4	%"std/prelude/complex:C32"	{ float, float }	fields 0,4
 std/prelude/complex:C64	16 8	%"std/prelude/complex:C64"	{ double, double }	fields 0,8
@@ -983,7 +983,7 @@ fn(Array<Array<I32, 2>>&, fn(Array<I32, 2>) Bool) I64	16 8	{ ptr, ptr }	-	ret i6
 fn(Array<Array<I32, 2>>&, fn(Array<I32, 2>) I32) Array<I32>	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass vs
 fn(Array<F32, 3>&, Array<F32, 3>&) F32	16 8	{ ptr, ptr }	-	ret float pass vv
 fn(Array<F32>&) F32	16 8	{ ptr, ptr }	-	ret float pass v
-fn(Array<F32>&) F32 ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, float } pass v
+fn(Array<F32>&) F32 ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, float } pass v
 fn(Array<F64, 3>&) Array<F64, 3>	16 8	{ ptr, ptr }	-	ret [3 x double] pass v
 fn(Array<F64>&) Array<F64, 3>	16 8	{ ptr, ptr }	-	ret [3 x double] pass v
 fn(Array<F64>&) F64	16 8	{ ptr, ptr }	-	ret double pass v
@@ -1019,7 +1019,7 @@ fn(Array<I32>&, I32) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
 fn(Array<I32>&, I32) I64	16 8	{ ptr, ptr }	-	ret i64 pass vv
 fn(Array<I32>&, I32, fn(I32, I32) I32) I32	16 8	{ ptr, ptr }	-	ret i32 pass vvs
 fn(Array<I32>&, I64) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(Array<I32>&, I64) I32 ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
+fn(Array<I32>&, I64) I32 ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
 fn(Array<I32>&, I64) std/pair:Pair<Array<I32>&, I64>	16 8	{ ptr, ptr }	-	ret %"std/pair:Pair.ef37386b9f0625afbaa73bd3cf091381" pass vv
 fn(Array<I32>&, I64, I32) I32	16 8	{ ptr, ptr }	-	ret i32 pass vvv
 fn(Array<I32>&, I64, fn(I64, I32) I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvs
@@ -1063,8 +1063,8 @@ fn(Array<U8, 7>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(Array<U8>&) Array<U8>&	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
 fn(Array<U8>&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(Array<U8>&, Array<U8>&) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
-fn(Array<U8>&, I32) I64 ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vv
-fn(Array<U8>&, I32, I32) ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret i32 pass vvv
+fn(Array<U8>&, I32) I64 ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vv
+fn(Array<U8>&, I32, I32) ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret i32 pass vvv
 fn(Array<mut tests/shared:rvN&>)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(Array<mut tests/shared:sbNode&>&) tests/shared:sbIt<mut tests/shared:sbNode&>	16 8	{ ptr, ptr }	-	ret %"tests/shared:sbIt.ef37386b9f0625afbaa73bd3cf091381" pass v
 fn(Array<std/prelude/list:List<I64>>&) mut std/prelude/list:List<std/prelude/list:List<I64>>&	16 8	{ ptr, ptr }	-	ret ptr pass v
@@ -1242,7 +1242,7 @@ fn(I32, I32) (I32, I32)	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
 fn(I32, I32) (I32, I32) ? tests/shared:DivError	16 8	{ ptr, ptr }	-	ret { i32, { i32, i32 } } pass vv
 fn(I32, I32) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(I32, I32) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
-fn(I32, I32) I32 ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
+fn(I32, I32) I32 ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
 fn(I32, I32) I32 ? tests/shared:DivError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
 fn(I32, I32) I32 ? tests/shared:MathError	16 8	{ ptr, ptr }	-	ret { i32, i32 } pass vv
 fn(I32, I32) mut tests/shared:LandE&	16 8	{ ptr, ptr }	-	ret ptr pass vv
@@ -2486,7 +2486,7 @@ fn(tests/shared:SfNode&) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(tests/shared:SfNode&) tests/shared:SfHolder	16 8	{ ptr, ptr }	-	ret %"tests/shared:SfHolder" pass v
 fn(tests/shared:SfNode&) tests/shared:SfWrap	16 8	{ ptr, ptr }	-	ret %"tests/shared:SfWrap" pass v
 fn(tests/shared:SfNode&, Bool) tests/shared:SfNode&	16 8	{ ptr, ptr }	-	ret ptr pass vv
-fn(tests/shared:SfWorld&) I64 ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
+fn(tests/shared:SfWorld&) I64 ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 fn(tests/shared:SmallPay) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
 fn(tests/shared:Square&) I32	16 8	{ ptr, ptr }	-	ret i32 pass v
 fn(tests/shared:StrCents) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
@@ -2563,7 +2563,7 @@ fn(tests/shared:e31Views&, I64)	16 8	{ ptr, ptr }	-	ret void pass vv
 fn(tests/shared:e31Views&, I64) tests/shared:e31View	16 8	{ ptr, ptr }	-	ret %"tests/shared:e31View" pass vv
 fn(tests/shared:ebBox&) I64 ? tests/shared:ebB	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 fn(tests/shared:ebMoney&, tests/shared:ebMoney&) tests/shared:ebMoney ? tests/shared:ebMoneyError	16 8	{ ptr, ptr }	-	ret { i32, %"tests/shared:ebMoney" } pass vv
-fn(tests/shared:ebMoney&, tests/shared:ebMoney&) tests/shared:ebMoney ? tests/shared:ebMoneyError + std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, %"tests/shared:ebMoney" } pass vv
+fn(tests/shared:ebMoney&, tests/shared:ebMoney&) tests/shared:ebMoney ? tests/shared:ebMoneyError + std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, %"tests/shared:ebMoney" } pass vv
 fn(tests/shared:evTimes, I32) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
 fn(tests/shared:fzG&, I32) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
 fn(tests/shared:fzShape&) std/prelude/text:String	16 8	{ ptr, ptr }	-	ret { i64, ptr } pass v
@@ -2601,9 +2601,9 @@ fn(tests/shared:lbTally&, I64) I32	16 8	{ ptr, ptr }	-	ret i32 pass vv
 fn(tests/shared:lcProbe&, I64) Bool	16 8	{ ptr, ptr }	-	ret i1 pass vv
 fn(tests/shared:lcProbe)	16 8	{ ptr, ptr }	-	ret void pass v
 fn(tests/shared:mxGrid&, I64, I64) I64	16 8	{ ptr, ptr }	-	ret i64 pass vvv
-fn(tests/shared:mxGrid&, I64, I64) I64 ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vvv
+fn(tests/shared:mxGrid&, I64, I64) I64 ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vvv
 fn(tests/shared:mxGrid&, I64, I64, I64)	16 8	{ ptr, ptr }	-	ret void pass vvvv
-fn(tests/shared:mxGrid&, I64, I64, I64) ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
+fn(tests/shared:mxGrid&, I64, I64, I64) ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret i32 pass vvvv
 fn(tests/shared:o17rBox) tests/shared:o17rW	16 8	{ ptr, ptr }	-	ret %"tests/shared:o17rW" pass v
 fn(tests/shared:qcBox) I64	16 8	{ ptr, ptr }	-	ret i64 pass v
 fn(tests/shared:rv3Box)	16 8	{ ptr, ptr }	-	ret void pass v
@@ -12845,7 +12845,7 @@ fn(mut std/prelude/list:List<std/prelude/list:List<I64>>&, I64, std/prelude/list
 Array<checks/cases/e31btryelem:Acc, 3>	24 8	[3 x %"checks/cases/e31btryelem:Acc"]	-	-
 Array<checks/cases/e31btryelem:Acc>	16 8	{ i64, ptr }	-	-
 checks/cases/e31btryelem:Acc	8 8	%"checks/cases/e31btryelem:Acc"	{ i64 }	fields 0
-fn() ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret i32 pass 
+fn() ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret i32 pass 
 fn() checks/cases/e31btryelem:Acc	16 8	{ ptr, ptr }	-	ret %"checks/cases/e31btryelem:Acc" pass 
 fn(mut checks/cases/e31btryelem:Acc&)	16 8	{ ptr, ptr }	-	ret void pass v
 mut checks/cases/e31btryelem:Acc&	8 8	ptr	-	-
@@ -12954,7 +12954,7 @@ checks/cases/e32asref:Shape&	8 8	ptr	-	-
 checks/cases/e35bangrun:E	4 4	i32	-	-
 fn(I64) I64 ? checks/cases/e35bangrun:E	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass v
 == checks/cases/e35checkedbang.olang
-fn(Array<I64>&, I64) I64 ? std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vv
+fn(Array<I64>&, I64) I64 ? std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret { i32, i64 } pass vv
 == checks/cases/enumcomma.olang
 checks/cases/enumcomma:D	4 4	i32	-	-
 checks/cases/enumcomma:E	4 4	i32	-	-
@@ -14187,7 +14187,7 @@ fn() ? checks/cases/s8bchosen:E	16 8	{ ptr, ptr }	-	ret i32 pass
 checks/cases/s8bfixedbuild:E	4 4	i32	-	-
 fn() ? checks/cases/s8bfixedbuild:E	16 8	{ ptr, ptr }	-	ret i32 pass 
 == checks/cases/s9erangeundertry.olang
-fn() ? std/io:IoError + std/prelude/builtin:BuiltinError	16 8	{ ptr, ptr }	-	ret i32 pass 
+fn() ? std/io:IoError + std/prelude/check:CheckError	16 8	{ ptr, ptr }	-	ret i32 pass 
 == checks/cases/strborrowedcond.olang
 checks/cases/strborrowedcond:Bag	32 8	%"checks/cases/strborrowedcond:Bag"	{ ptr, { i64, ptr }, i64 }	fields 0,8,24
 checks/cases/strborrowedcond:Bag&	8 8	ptr	-	-

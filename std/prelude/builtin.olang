@@ -1,3 +1,5 @@
+# kept only while the bootstrap seed's compiler still names it (it looks this type up for the checks it compiles):
+# the current compiler reports CheckError (std/prelude/check.olang). Removed once the seed is written again.
 # the errors the language's own checks report, part of the prelude. Each is produced only under "try": an
 # operation written without it behaves as it always does (§5, E6a-E6c, E8a, E16, E26a). A function that lets
 # one through names BuiltinError in its signature, as it would any error type, or catches it.

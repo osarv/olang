@@ -184,7 +184,7 @@ type Payload struct(Base Place&, Tag I64, Checked Check) {
 type Check enum {
     None       # nothing is checked (E16, E6c)
     Abort      # a guaranteed check (S18a): a slice's bounds, an array's length, an "as", a copy into fixed storage
-    Try        # it fails with BuiltinError's word, to the innermost enclosing Try (E15a, R20)
+    Try        # it fails with CheckError's word, to the innermost enclosing Try (E15a, R20)
 }
 
 # ---- expressions ----

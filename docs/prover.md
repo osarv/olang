@@ -6,7 +6,7 @@ it decides first. Section 10 holds the direction questions.
 
 Sources: the contract decisions of 2026-10-24 (`.claude/memory/decisions.md`, "CONTRACTS ..."); `direction.md`,
 "Contracts and proving"; SPEC E6a, E6c, E8a, E15a, E16, E26a, S16d, S18c, K1, K1a, O10b, B3i; `compiler/DESIGN.md`
-1.7 and 1.8. Outside work is cited in section 11. `CheckError` is QAI's decided name for today's `BuiltinError`.
+1.7 and 1.8. Outside work is cited in section 11. `CheckError` is QAI's decided name for today's `CheckError`.
 
 ## 0. Summary
 

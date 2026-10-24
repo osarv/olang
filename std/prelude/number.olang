@@ -500,9 +500,9 @@ fn (x T) Pow<T Integer>(n U32) T {
     return r
 }
 
-# x.Pow(n), failing with BuiltinError.OVERFLOW where the true power does not fit - the checked form "checked x.Pow(n)"
+# x.Pow(n), failing with CheckError.OVERFLOW where the true power does not fit - the checked form "checked x.Pow(n)"
 # calls (E31a). A square no later step needs is never taken, so it fails exactly where the result does not fit
-fn (x T) CheckedPow<T Integer>(n U32) T ? BuiltinError {
+fn (x T) CheckedPow<T Integer>(n U32) T ? CheckError {
     r T = 1
     b T = x
     e U32 = n

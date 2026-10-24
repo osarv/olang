@@ -158,7 +158,7 @@ test "Pow wraps as * does, and checked checks it" {
     assert (checked I64(-2).Pow(63) catch default 0) == -9223372036854775807 - 1
     assert (checked I64(2).Pow(63) catch default 0) == 0
     assert (checked U8(2).Pow(7) catch default 0) == 128 and (checked U8(2).Pow(8) catch default 0) == 0
-    assert (checked U8(16).Pow(2) catch BuiltinError.OVERFLOW default 7) == 7
+    assert (checked U8(16).Pow(2) catch CheckError.OVERFLOW default 7) == 7
 }
 
 test "an integer's Sqrt is the floor of its root, exact at every edge" {

@@ -3721,7 +3721,7 @@ fn (c mut Checker&) readLocal(sp source.Span, id I64) typed.Expr&c {
     return c.read(sp, typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id))))
 }
 
-# BuiltinError's words (R20), as bits of an error set's entry (R1c): what each check can fail with
+# CheckError's words (R20), as bits of an error set's entry (R1c): what each check can fail with
 Bounds U64 = 1
 DivideByZero U64 = 2
 Overflow U64 = 4
@@ -3736,7 +3736,7 @@ fn (c mut Checker&) checkOp(off typed.Check, words U64 = Bounds) typed.Check {
     if words == 0 { return off }
     if fr.Checks > 0 {
         fr.Fallible++
-        c.leaks1(c.P.T.ErrWords(c.P.PreludeType("std/prelude/builtin", "BuiltinError"), words))
+        c.leaks1(c.P.T.ErrWords(c.P.PreludeType("std/prelude/check", "CheckError"), words))
         return typed.Check.Try
     }
     if fr.Tries > 0 { fr.Checkable++ }
@@ -5901,7 +5901,7 @@ fn isNullLit(x ast.Expr&) Bool {
 }
 
 # x as E.Case (E32): the payload of the case x holds - its one field, or its fields as several results; aborts where x
-# holds another case, fails with BuiltinError.INVALID under try
+# holds another case, fails with CheckError.INVALID under try
 fn (c mut Checker&) asCase(sp source.Span, a ast.Expr&, tr ast.TypeRef&) typed.Expr&c {
     x := c.expr(a, types.UnknownT)
     xt := typeOf(x)
@@ -6122,7 +6122,7 @@ fn (c mut Checker&) slice(sp source.Span, y ast.Expr&, lo ast.Expr?&, hi ast.Exp
             h = c.value(c.exprTo(hi, c.i64()), hi.Span())
         }
         if derived {
-            # E31a's derived CheckedSlice: 0 <= lo <= hi <= Len(), failing with BuiltinError.OUT_OF_BOUNDS before Slice is
+            # E31a's derived CheckedSlice: 0 <= lo <= hi <= Len(), failing with CheckError.OUT_OF_BOUNDS before Slice is
             # called - both bounds held once, in order
             hl := c.hidden(sp, c.i64())
             c.emit(typed.Stmt.Let(sp, typed.LocalId(I32(hl)), l))
@@ -9016,7 +9016,7 @@ fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) 
 }
 
 # under checked, x[i] on a type with At and Len but no CheckedAt (E31a): the index checked against Len() before At is called,
-# failing with BuiltinError.OUT_OF_BOUNDS - the At call's checked arguments; null where no such check is derived
+# failing with CheckError.OUT_OF_BOUNDS - the At call's checked arguments; null where no such check is derived
 fn (c mut Checker&) derivedCheckedAt(sp source.Span, base typed.Place&c, t types.TypeId, items Array<ast.Expr&>&) Array<typed.Expr&>&c {
     if c.roleMethod(t, "CheckedAt", items.Len()) >= 0 { return Array<typed.Expr&>(0) }
     if c.fr().Checks == 0 {
@@ -9038,7 +9038,7 @@ fn (c mut Checker&) derivedCheckedAt(sp source.Span, base typed.Place&c, t types
 }
 
 # an index checked against what Len() gives (E31a's derived forms): the one checked argument
-# a checked bounds prim over [v, lo, hi] (InRange, InRangeIncl): v once in range, else BuiltinError.OUT_OF_BOUNDS
+# a checked bounds prim over [v, lo, hi] (InRange, InRangeIncl): v once in range, else CheckError.OUT_OF_BOUNDS
 fn (c mut Checker&) prim3(sp source.Span, op typed.PrimOp, v typed.Expr&c, lo typed.Expr&c, hi typed.Expr&c) typed.Expr&c {
     from := c.exprs.Len()
     c.exprs.Push(v)
@@ -13673,7 +13673,7 @@ test "errors: inferred sets across a cycle, checked, words, noreturn and ! (R1a,
     l := testLoad(dir, ("error E {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
                        "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n"
                        "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n"
-                       "fn half(a I32, b I32) I32 ? E.B { return checked (a / b) catch BuiltinError default 0 }\n"
+                       "fn half(a I32, b I32) I32 ? E.B { return checked (a / b) catch CheckError default 0 }\n"
                        "fn never() ? { }\n"
                        "fn pick(n I64) I64 {\n    if n > 0 { return n }\n    die()\n}\n"
                        "fn main() {\n    never()\n    x := try even(4) catch E.A default false\n"

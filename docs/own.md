@@ -1132,7 +1132,7 @@ handed to a helper that runs it (`Any`, `Fold` - T22a), made into a struct local
 
 F3 held an owner (for an owning parameter, a constructor's region, an own array's buffer) only where a later argument
 "runs code" (`cgRunsCode`, written for E11a's joins), which takes a checked index, slice, division, conversion or `as`
-for a plain operation. Under `try` each can leave by propagating a `BuiltinError`. **Decided**: an argument can leave
+for a plain operation. Under `try` each can leave by propagating a `CheckError`. **Decided**: an argument can leave
 whenever it holds an operation that can fail or jump - a call, a checked operation under `try` (`checkRoot`), a tried
 operation, a catch clause - `cgMayLeave`, keyed on at the three F3 sites.
 

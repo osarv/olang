@@ -156,7 +156,7 @@ fn highBit(x I64) I64 {
 }
 
 # the element at position i - "l[i]" (E31). Unchecked, as an array index is (E16): "try l[i]" checks i against
-# Len() first and fails with BuiltinError.OUT_OF_BOUNDS (E31a, derived from this and Len)
+# Len() first and fails with CheckError.OUT_OF_BOUNDS (E31a, derived from this and Len)
 fn (l List<T>&) At(i I64) T {
     if i < firstChunk { return l.s.first[i] }
     p I64 = i + firstChunk
@@ -851,9 +851,9 @@ if TestBuild {
         assert (checked l[20] catch default -1) == -1
         assert (checked l[-1] catch default -1) == -1
         missed := false
-        checked l[20] = 5 catch BuiltinError.OUT_OF_BOUNDS { missed = true }
+        checked l[20] = 5 catch CheckError.OUT_OF_BOUNDS { missed = true }
         assert missed and l.Len() == 20
-        checked l[3] = 30 catch BuiltinError.OUT_OF_BOUNDS { unreachable }
+        checked l[3] = 30 catch CheckError.OUT_OF_BOUNDS { unreachable }
         assert l[3] == 30
         e List<I32>& = List<I32>()
         assert (checked e[0] catch default 7) == 7

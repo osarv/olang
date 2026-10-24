@@ -441,7 +441,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   type, per instantiation). A checked form requires its plain one (`CheckedAt` alone is an error); loops never call one.
   `CheckedAt`/`CheckedSlice`/`CheckedSetAt` are derived from the plain form and `Len` when not declared. A method called
   by name has its checked form the same way (`checked x.Pow(n)` calls `CheckedPow`, E31a, 2026-10-18, mine).
-- **`BuiltinError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE`) is raised only by `checked` (R20);**
+- **`CheckError` (`OVERFLOW DIVIDE_BY_ZERO OUT_OF_BOUNDS INVALID WRONG_CASE`) is raised only by `checked` (R20);**
   `Exhausted` is the loop protocol's. Nothing else is built in (QO3 withdrawn by the user).
 - **std fails with its own errors, never ends the program on a caller's mistake (R22, QO4, the user: "No std function
   may ever exit").** `ListError`/`VecError` (`EMPTY NOT_FOUND OUT_OF_RANGE`), `MapError.MISSING`, `TextError`

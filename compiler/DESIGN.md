@@ -736,7 +736,7 @@ error list (R6), every scope closed; `Wait(j, ok, code, failed)`; and `Exit(kind
   operands are all evaluated before any piece is rendered.
 - **Checks** (E15a, E16b, D14b, E32, T7d, S18a): a check is a test (`Prim` compares, `Len`, `Overflows`, `x - x == 0`
   for a float result's finiteness) and a branch - to an `Exit` for a guaranteed check, to the try's dispatch for a
-  checked one, which goes on with `BuiltinError`'s code (R20). There is no check statement, and nothing is checked that
+  checked one, which goes on with `CheckError`'s code (R20). There is no check statement, and nothing is checked that
   MIR does not show.
 - **Errors** (R6-R21): a call's error edge gets the code under the callee's list; dispatch is branches and switches
   over it; a propagated error is `Recode`d under this function's list and `Raise`d after the scopes on the way out are

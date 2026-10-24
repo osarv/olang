@@ -3268,7 +3268,7 @@ test "slicing a runtime-length array, and slicing a slice" {
 }
 
 # E16c: "try a[lo:hi]" makes the slice fallible instead of aborting - the ordinary try expression on the
-# ordinary terms. The error is BuiltinError.OUT_OF_BOUNDS (R20): out of range is one fact with no further detail
+# ordinary terms. The error is CheckError.OUT_OF_BOUNDS (R20): out of range is one fact with no further detail
 # worth tracking, so no new error type is needed and "?"/"catch { }" already compose. A slice with no
 # "try" keeps E16b's abort, so bounds that provably hold cost nothing and force no signature change on any
 # caller - which is why this is opt-in rather than making every slice fallible.
@@ -8369,7 +8369,7 @@ fn txReads() I32 {
     g mut TxGrid& = TxGrid(4)
     for i in range I64(4) { g[i] = I32(i) * 10 }
     a := checked g[2] catch default -1
-    b := checked g[7] catch BuiltinError.OUT_OF_BOUNDS default -1
+    b := checked g[7] catch CheckError.OUT_OF_BOUNDS default -1
     s := checked g[1:3] catch default I32[0]
     t := checked g[3:9] catch default I32[5, 5, 5]
     sp TxSparse& = TxSparse(1)
@@ -8384,12 +8384,12 @@ fn txStores() I32 {
     g mut TxGrid& = TxGrid(3)
     m I32 = 0
     checked g[1] = 5 catch { m += 1 }
-    checked g[5] = 9 catch BuiltinError.OUT_OF_BOUNDS { m += 10 }
+    checked g[5] = 9 catch CheckError.OUT_OF_BOUNDS { m += 10 }
     checked g[1] += 2 catch { m += 100 }
     a := I32[1, 2]
     checked a[2] = 3 catch { m += 1000 }
     n I32 = 2147483647
-    checked n++ catch BuiltinError.OVERFLOW { m += 10000 }
+    checked n++ catch CheckError.OVERFLOW { m += 10000 }
     c TxCtr = TxCtr(1)
     checked c++ catch { m += 100000 }
     checked c++ catch { m += 200000 }
@@ -8459,7 +8459,7 @@ fn txMember(down Bool) I32 {
 
 fn txCollect(n I32, failAt I32) I32 {
     l mut TxLines& = TxLines(n, failAt)
-    xs := checked I32[x * 2 for x in l if x != 2] catch TxErr, BuiltinError default I32[-1]
+    xs := checked I32[x * 2 for x in l if x != 2] catch TxErr, CheckError default I32[-1]
     t I32 = 0
     for x in xs { t += x }
     return t
@@ -9132,27 +9132,27 @@ test "E6c: integer arithmetic wraps" {
     assert I32(1) << 31 == -2147483648
 }
 
-# a checked index or slice fails with BuiltinError.OUT_OF_BOUNDS, from the prelude - caught by name, or let
+# a checked index or slice fails with CheckError.OUT_OF_BOUNDS, from the prelude - caught by name, or let
 # through by a signature naming it, as any error type is
-fn builtinAt(a Array<I32>&, i I64) I32 ? BuiltinError {
+fn builtinAt(a Array<I32>&, i I64) I32 ? CheckError {
     v I32 = checked a[i]
     return v
 }
 
 fn builtinCode(a Array<I32>&, i I64) I32 {
-    v := try builtinAt(a, i) catch BuiltinError default -1
+    v := try builtinAt(a, i) catch CheckError default -1
     return v
 }
 
-test "BuiltinError.OUT_OF_BOUNDS from a checked index, caught by name and propagated" {
+test "CheckError.OUT_OF_BOUNDS from a checked index, caught by name and propagated" {
     a := I32[4, 5, 6]
     assert builtinCode(a, 1) == 5
     assert builtinCode(a, 7) == -1
-    assert (checked a[9] catch BuiltinError.OUT_OF_BOUNDS default -2) == -2
+    assert (checked a[9] catch CheckError.OUT_OF_BOUNDS default -2) == -2
     n := 3
-    s := checked a[1:n] catch BuiltinError default a[0:0]
+    s := checked a[1:n] catch CheckError default a[0:0]
     assert s.Len() == 2
-    t := checked a[2:n + 5] catch BuiltinError default a[0:0]    # n + 5 is checked too: OVERFLOW is possible
+    t := checked a[2:n + 5] catch CheckError default a[0:0]    # n + 5 is checked too: OVERFLOW is possible
     assert t.Len() == 0
     near U8 = 1
     far U8 = 200
@@ -9162,31 +9162,31 @@ test "BuiltinError.OUT_OF_BOUNDS from a checked index, caught by name and propag
 
 # R20: "try (...)" checks every operation inside that can fail - integer overflow, a zero divisor, a shift amount
 # outside the width, a conversion out of range, a float result becoming infinite or NaN, a negative array length,
-# an index - each failing with its BuiltinError word, caught or propagated like any error
-fn ckAdd32(a I32, b I32) I32 ? BuiltinError {
+# an index - each failing with its CheckError word, caught or propagated like any error
+fn ckAdd32(a I32, b I32) I32 ? CheckError {
     r I32 = checked (a + b)
     return r
 }
 fn ckSafe(a I32, b I32) I32 {
-    r I32 = checked (a + b) catch BuiltinError.OVERFLOW default -1
+    r I32 = checked (a + b) catch CheckError.OVERFLOW default -1
     return r
 }
 fn ckDivide(a I32, b I32) I32 {
-    r I32 = checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1 catch BuiltinError.OVERFLOW default -2
+    r I32 = checked (a / b) catch CheckError.DIVIDE_BY_ZERO default -1 catch CheckError.OVERFLOW default -2
     return r
 }
 fn ckShift(a I64, n I32) I64 { return checked (a << n) catch default -1 }
 fn ckNarrow(v I64) I32 { return checked I32(v) catch default -1 }
-fn ckToInt(f F64) I32 { return checked I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
-fn ckFdiv(a F64, b F64) F64 { return checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1.0 catch default -2.0 }
-fn ckFmul(a F64, b F64) F64 { return checked (a * b) catch BuiltinError.OVERFLOW default -1.0 catch default -2.0 }
+fn ckToInt(f F64) I32 { return checked I32(f) catch CheckError.INVALID default -2 catch CheckError.OVERFLOW default -1 }
+fn ckFdiv(a F64, b F64) F64 { return checked (a / b) catch CheckError.DIVIDE_BY_ZERO default -1.0 catch default -2.0 }
+fn ckFmul(a F64, b F64) F64 { return checked (a * b) catch CheckError.OVERFLOW default -1.0 catch default -2.0 }
 fn ckByteAdd(a U8, b U8) I32 { return checked (a + b) catch default 0 }
 fn ckNeg(a I32) I32 { return checked (-a) catch default 7 }
 fn ckLen(n I32) I64 {
     a := checked Array<I32>(n) catch default Array<I32>(0)
     return a.Len()
 }
-fn ckMixed(a Array<I32>&, i I64, k I32) I32 { return checked (a[i] * k) catch BuiltinError.OUT_OF_BOUNDS default -1 catch default -2 }
+fn ckMixed(a Array<I32>&, i I64, k I32) I32 { return checked (a[i] * k) catch CheckError.OUT_OF_BOUNDS default -1 catch default -2 }
 
 test "R20: try (...) checks arithmetic, shifts, conversions and lengths" {
     big I32 = 2147483647
@@ -9218,17 +9218,17 @@ test "R20: try (...) checks arithmetic, shifts, conversions and lengths" {
 # integer type's range is OVERFLOW, as is an integer that becomes infinite in a narrow float; "<<" fails exactly when
 # x * 2^n does not fit. EcIn is mutable, so the test runs them at run time; EcBaked runs the same while compiling (K2)
 fn ecDiv(a F64, b F64) I32 {
-    r := checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default 1.0 catch BuiltinError.INVALID default 2.0
-         catch BuiltinError.OVERFLOW default 3.0 catch default 4.0
+    r := checked (a / b) catch CheckError.DIVIDE_BY_ZERO default 1.0 catch CheckError.INVALID default 2.0
+         catch CheckError.OVERFLOW default 3.0 catch default 4.0
     return I32(r) if r < 5.0 else 0
 }
-fn ecSub(a F64, b F64) I32 { return 0 if (checked (a - b) catch BuiltinError.INVALID default 0.0 catch default 1.0) != 0.0 else 2 }
-fn ecToInt(f F64) I32 { return checked I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
+fn ecSub(a F64, b F64) I32 { return 0 if (checked (a - b) catch CheckError.INVALID default 0.0 catch default 1.0) != 0.0 else 2 }
+fn ecToInt(f F64) I32 { return checked I32(f) catch CheckError.INVALID default -2 catch CheckError.OVERFLOW default -1 }
 fn ecToF16(n I64) I32 {
-    h := checked F16(n) catch BuiltinError.OVERFLOW default F16(1.0)
+    h := checked F16(n) catch CheckError.OVERFLOW default F16(1.0)
     return 1 if h == F16(1.0) else 0
 }
-fn ecShl(x I8, n I64) I32 { return I32(checked (x << n) catch BuiltinError.OVERFLOW default 99 catch default 98) }
+fn ecShl(x I8, n I64) I32 { return I32(checked (x << n) catch CheckError.OVERFLOW default 99 catch default 98) }
 fn ecInf() F64 {
     big F64 = 1.0e308
     return big * 10.0
@@ -9273,18 +9273,18 @@ test "T6b/R20: a tried value widened where it lands keeps its checks" {
 
 # R20/K1: the compile-time evaluator runs checked operations as the generated code does - each global below is
 # baked from a check that failed and was caught (one through a call), and the test reads the same at run time
-fn ctSafe(a I32, b I32) I32 { return checked (a + b) catch BuiltinError.OVERFLOW default -1 }
-fn ctDiv(a I32, b I32) I32 { return checked (a / b) catch BuiltinError.DIVIDE_BY_ZERO default -1 catch BuiltinError.OVERFLOW default -2 }
+fn ctSafe(a I32, b I32) I32 { return checked (a + b) catch CheckError.OVERFLOW default -1 }
+fn ctDiv(a I32, b I32) I32 { return checked (a / b) catch CheckError.DIVIDE_BY_ZERO default -1 catch CheckError.OVERFLOW default -2 }
 fn ctShift(a I64, n I32) I64 { return checked (a << n) catch default -1 }
 fn ctNarrow(v I64) I32 { return checked I32(v) catch default -1 }
-fn ctToInt(f F64) I32 { return checked I32(f) catch BuiltinError.INVALID default -2 catch BuiltinError.OVERFLOW default -1 }
-fn ctFmul(a F64, b F64) F64 { return checked (a * b) catch BuiltinError.OVERFLOW default -1.0 catch default -2.0 }
+fn ctToInt(f F64) I32 { return checked I32(f) catch CheckError.INVALID default -2 catch CheckError.OVERFLOW default -1 }
+fn ctFmul(a F64, b F64) F64 { return checked (a * b) catch CheckError.OVERFLOW default -1.0 catch default -2.0 }
 fn ctIdx(i I64) I32 {
     a := I32[1, 2, 3]
-    return checked (a[i] * 2) catch BuiltinError.OUT_OF_BOUNDS default -1 catch default -2
+    return checked (a[i] * 2) catch CheckError.OUT_OF_BOUNDS default -1 catch default -2
 }
-fn ctProp(a I32, b I32) I32 ? BuiltinError { return checked (a * b) }
-fn ctOuter(a I32) I32 { return try ctProp(a, a) catch BuiltinError.OVERFLOW default -9 catch default -8 }
+fn ctProp(a I32, b I32) I32 ? CheckError { return checked (a * b) }
+fn ctOuter(a I32) I32 { return try ctProp(a, a) catch CheckError.OVERFLOW default -9 catch default -8 }
 
 CtBaked1 I32 = ctSafe(2147483647, 1)
 CtBaked2 I32 = ctDiv(-2147483647 - 1, -1)
@@ -10648,7 +10648,7 @@ test "an array filled with a struct holds the struct in every element" {
 # D14b: a length whose byte count would not fit an I64 is out of range, as a negative one is - it wrapped to a small
 # allocation the array then ran past
 fn cgLenOut(n I64) I64 {
-    a := checked Array<I64>(n) catch BuiltinError.OUT_OF_BOUNDS default Array<I64>(1, 7)
+    a := checked Array<I64>(n) catch CheckError.OUT_OF_BOUNDS default Array<I64>(1, 7)
     return a.Len() * 10 + a[0]
 }
 CgLenBaked I64 = cgLenOut(2305843009213693953)
@@ -12901,12 +12901,12 @@ type mxGrid struct(rows I64, cols I64) {
 }
 fn (g mxGrid&) At(i I64, j I64) I64 { return g.cells[i * g.cols + j] }
 fn (g mxGrid&) SetAt(i I64, j I64, v I64) { g.cells[i * g.cols + j] = v }
-fn (g mxGrid&) CheckedAt(i I64, j I64) I64 ? BuiltinError {
-    if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
+fn (g mxGrid&) CheckedAt(i I64, j I64) I64 ? CheckError {
+    if not (0 <= i < g.rows and 0 <= j < g.cols) { error CheckError.OUT_OF_BOUNDS }
     return g[i, j]
 }
-fn (g mxGrid&) CheckedSetAt(i I64, j I64, v I64) ? BuiltinError {
-    if not (0 <= i < g.rows and 0 <= j < g.cols) { error BuiltinError.OUT_OF_BOUNDS }
+fn (g mxGrid&) CheckedSetAt(i I64, j I64, v I64) ? CheckError {
+    if not (0 <= i < g.rows and 0 <= j < g.cols) { error CheckError.OUT_OF_BOUNDS }
     g[i, j] = v
 }
 MxCalls mut I64 = 0
@@ -12931,7 +12931,7 @@ test "E31: x[i, j] calls At(i, j), and x[i, j] = v SetAt(i, j, v)" {
     g[mxNext() - 2, 0] *= 3
     assert MxCalls == 3 and g[1, 0] == 15
     checked g[1, 1] = 4
-    checked g[2, 0] = 9 catch BuiltinError { MxCalls = 0 }
+    checked g[2, 0] = 9 catch CheckError { MxCalls = 0 }
     assert MxCalls == 0 and g[1, 1] == 4 and (checked g[-1, 0] catch default 7) == 7
 }
 
@@ -14029,7 +14029,7 @@ fn sc3Increments() I64 {
     l[0]++
     l[1]--
     oob I64 = 0
-    checked l[7]++ catch BuiltinError { oob = 1 }
+    checked l[7]++ catch CheckError { oob = 1 }
     s := sc3Vals()
     s.values.Push(10)
     sc3BumpField(s, 0)
@@ -14651,7 +14651,7 @@ test "S5/E31: an increment evaluates its place once" {
     assert IncCalls == 2 and c[1].v == 1 and c[2].v == -1
     IncCalls = 0
     b := Array<I64>(4, 0)
-    checked b[incNext()]++ catch BuiltinError { b[0] = 99 }
+    checked b[incNext()]++ catch CheckError { b[0] = 99 }
     assert IncCalls == 1 and b[1] == 1 and b[0] == 0
 }
 
@@ -17275,12 +17275,12 @@ fn ebChecked(k I64) I64 {
     neg I64 = -1
     huge F64 = 1e300
     s := ebShape.Square(4)
-    shl := checked (one << I32(k)) catch BuiltinError.OVERFLOW default -1 catch BuiltinError.OUT_OF_BOUNDS default -2
-    conv := checked I32(big) catch BuiltinError.OVERFLOW default -3
-    sign := checked U64(neg) catch BuiltinError.OVERFLOW default 0
-    narrow := checked F32(huge) catch BuiltinError.OVERFLOW default -4.0
-    wrong := checked (s as ebShape.Circle) catch BuiltinError.WRONG_CASE default -5
-    right := checked (s as ebShape.Square) catch BuiltinError.WRONG_CASE default -5
+    shl := checked (one << I32(k)) catch CheckError.OVERFLOW default -1 catch CheckError.OUT_OF_BOUNDS default -2
+    conv := checked I32(big) catch CheckError.OVERFLOW default -3
+    sign := checked U64(neg) catch CheckError.OVERFLOW default 0
+    narrow := checked F32(huge) catch CheckError.OVERFLOW default -4.0
+    wrong := checked (s as ebShape.Circle) catch CheckError.WRONG_CASE default -5
+    right := checked (s as ebShape.Square) catch CheckError.WRONG_CASE default -5
     return I64(shl) * 1000000 + I64(conv) * 10000 + I64(sign) * 1000 + I64(narrow) * 100 + wrong * 10 + right
 }
 EbCheckedBaked := ebChecked(31) * 10 + ebChecked(40)
@@ -17303,13 +17303,13 @@ fn (a ebMoney&) Minus(b ebMoney&) ebMoney ? ebMoneyError {
     if b.c > a.c { error ebMoneyError.NEGATIVE }
     return ebMoney(a.c - b.c)
 }
-fn (a ebMoney&) CheckedMinus(b ebMoney&) ebMoney ? ebMoneyError, BuiltinError {
+fn (a ebMoney&) CheckedMinus(b ebMoney&) ebMoney ? ebMoneyError, CheckError {
     if b.c > a.c { error ebMoneyError.NEGATIVE }
     return ebMoney(checked (a.c - b.c))
 }
 fn ebOps(a I64, b I64) I64 {
     x := try (ebMoney(a) - ebMoney(b)) catch ebMoneyError default ebMoney(-1)
-    y := checked (ebMoney(a) - ebMoney(b)) catch ebMoneyError default ebMoney(-2) catch BuiltinError default ebMoney(-3)
+    y := checked (ebMoney(a) - ebMoney(b)) catch ebMoneyError default ebMoney(-2) catch CheckError default ebMoney(-3)
     return x.c * 1000 + y.c
 }
 EbOpsBaked := ebOps(10, 3) + ebOps(3, 10) * 10

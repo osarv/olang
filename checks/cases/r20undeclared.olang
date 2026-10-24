@@ -1,5 +1,5 @@
-# check: fail error[R9]: BuiltinError.OVERFLOW can escape here, and this function does not declare it
-# R20: a checked operation fails with BuiltinError, which a signature must name or a catch take
+# check: fail error[R9]: CheckError.OVERFLOW can escape here, and this function does not declare it
+# R20: a checked operation fails with CheckError, which a signature must name or a catch take
 fn add(a I32, b I32) I32 ? {
     return a
 }

@@ -2080,7 +2080,7 @@ fn (p mut Program&) MethodByKey(key I64, name source.NameId) I64 {
     return try p.methods.Get(pair.Pair(key, I64(name))) catch default -1
 }
 fn TraitKey(d types.DeclId) I64 { return keyTrait(d) }
-# a declared type of a std module by its name, Unknown for none (String, Char, BuiltinError, Exhausted ...)
+# a declared type of a std module by its name, Unknown for none (String, Char, CheckError, Exhausted ...)
 fn (p mut Program&) PreludeType(identity String&, name String&) types.TypeId { return p.preludeType(identity, name) }
 # a struct's constructor's signature (C2, G10b), or a declared number's (T29d): its parameters as written, its type the
 # result - a destructor-declaring struct's by reference (C11) - and its errors, with RoleCtor's scopes (C2d); Unknown for
