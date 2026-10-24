@@ -1,0 +1,28 @@
+# check: run
+# X10: an extern type's reference, null here since nothing calls C: held in a local, a global, a field, a List and a
+# method's receiver, compared and rendered - and in no scope, so stored anywhere
+extern type Db
+
+G mut Db?& = null
+
+type Conn struct(db Db?&, tag I64) {
+    db
+    tag
+}
+
+fn (d Db&) Twice(n I64) I64 { return n * 2 }
+
+fn keep(c mut Conn&, d Db?&) { c.db = d }
+
+fn main() ? {
+    c := Conn(null, 1)
+    l := List<Db?&>()
+    for i in range 3 {
+        d Db?& = null
+        keep(c, d)
+        l.Push(d)
+        G = d
+    }
+    assert c.db is null and l[2] is null and G == l[0]
+    assert $c == "Conn(null, 1)"
+}

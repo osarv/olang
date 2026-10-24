@@ -219,6 +219,9 @@ type Diag enum {
     TypeVarNamesType
     TypeVarNotInferable
     ExternType
+    ExternResult
+    ForeignBuilt
+    ForeignByValue
     LinkName
     MutOnValueType
     MutOnValueParam
@@ -1183,7 +1186,16 @@ fn TypeVarNamesType(tok String&) Msg { return Msg(Diag.TypeVarNamesType, "G1", "
 fn TypeVarNotInferable(text String&) Msg { return Msg(Diag.TypeVarNotInferable, "G4", "type variable " $text " appears in no parameter's type, so no call can infer it - introduce it in a parameter's type") }
 
 # ERR_EXTERN_TYPE
-fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter or result is a number, or a parameter an array of numbers") }
+fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }
+
+# ERR_EXTERN_RESULT
+fn ExternResult(ty String&) Msg { return Msg(Diag.ExternResult, "X2", $ty " cannot come back from C - an extern's result is one number, Bool, extern type's reference or plain-data struct") }
+
+# ERR_FOREIGN_BUILT
+fn ForeignBuilt(ty String&) Msg { return Msg(Diag.ForeignBuilt, "X10", $ty " is an extern type: only C makes one - declare the C function that does, as 'extern fn open() " $ty "&'") }
+
+# ERR_FOREIGN_BY_VALUE
+fn ForeignByValue(ty String&) Msg { return Msg(Diag.ForeignByValue, "X10", $ty " is an extern type, held only by reference - write '" $ty "&', or '" $ty "?&' where it may be null") }
 
 # ERR_LINK_NAME
 fn LinkName(tok String&) Msg { return Msg(Diag.LinkName, "X9", $tok " names no library and no file - write a library's name, as 'link \"m\"', or a path to one, as 'link \"lib/libx.a\"'") }

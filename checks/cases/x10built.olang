@@ -1,0 +1,7 @@
+# check: fail error[X10]: Db is an extern type: only C makes one
+# X10: nothing in olang makes an extern type's instance - a C function does, and gives its reference
+extern type Db
+
+fn main() ? {
+    d := Db()
+}

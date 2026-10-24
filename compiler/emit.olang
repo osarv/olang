@@ -31,6 +31,7 @@ import "typed"
 import "mir"
 import "lower"
 import "eval"
+import "cabi"
 import olrt "runtime"
 
 # the emission of a program: P the checked program, Lw its lowering, D for where things are (FILE:LINE)
@@ -4382,6 +4383,10 @@ fn (fe mut fnEm&) call(c mir.Call) {
             env = fe.let("extractvalue { ptr, ptr } " $v ", 1")
         }
     }
+    if isExtern and not target.StartsWith("@llvm.") {
+        fe.cCall(c, target, ty)
+        return
+    }
     fe.E.signature(ty)
     res := t.Result(ty)
     errs := t.Items(t.Errors(ty)).Len() > 0
@@ -4505,20 +4510,8 @@ fn (e mut Emitter&) extern(f I64, ty types.TypeId) String {
     }
     if e.has(name) { return name }
     b := StringBuilder()
-    b.Push($e.externRet(ty) " @" $name "(")
-    ps := t.Items(t.Params(ty))
-    for i in range ps.Len() {
-        if i > 0 { b.Push(", ") }
-        r := t.Repr(ps[i])
-        x := t.Referent(r) if t.IsRef(r) else r
-        if t.KindOf(r) == types.Kind.Func {
-            b.Push("ptr, ptr")
-        } else if t.KindOf(t.Repr(x)) == types.Kind.Array {
-            b.Push("ptr")
-        } else {
-            b.Push(e.ty(r))
-        }
-    }
+    b.Push($e.cHeader(ty) " @" $name "(")
+    b.Push(e.cParamList(ty))
     b.Push(")")
     # X8: any other C math function as C's default -fmath-errno declares it (it may write errno), and nobuiltin, so LLVM
     # never rewrites a call of it - the program calls exactly the function the evaluator called
@@ -4585,6 +4578,159 @@ fn (e mut Emitter&) externRet(ty types.TypeId) String {
     r := e.T.Result(ty)
     if r == types.VoidT or r == types.NoreturnT { return "void" }
     return e.ty(r)
+}
+
+# a C function's result as its declaration spells it: the extension, the type ("void" for none or through sret)
+fn (e mut Emitter&) cHeader(ty types.TypeId) String {
+    r := e.T.Result(ty)
+    if r == types.VoidT or r == types.NoreturnT { return "void" }
+    e.P.Layout(r)
+    w := cabi.Result(e.T, e.Arch, r)
+    return match w.Kind {
+        case cabi.Pass.Direct => $($w.Attr " " if w.Attr != "" else "") $e.ty(r)
+        case cabi.Pass.Parts => cabi.PartsType(w)
+        case _ => "void"
+    }
+}
+
+# a C function's parameters as its declaration spells them (X2, X3, X11)
+fn (e mut Emitter&) cParamList(ty types.TypeId) String {
+    t := e.T
+    b := StringBuilder()
+    first := true
+    regs := cabi.Regs(6, 8)
+    r := t.Result(ty)
+    if r != types.VoidT and r != types.NoreturnT and e.P.Layout(r) and cabi.Result(e.T, e.Arch, r).Kind == cabi.Pass.Sret {
+        b.Push($"ptr sret(" $e.ty(r) ") align " $t.Align(r))
+        first = false
+        regs.Int--
+    }
+    for p in t.Items(t.Params(ty)) {
+        if not first { b.Push(", ") }
+        first = false
+        b.Push(e.cParamSpelled(p, regs))
+    }
+    return b.ToString()
+}
+
+# one C parameter spelled for a declaration
+fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&) String {
+    t := e.T
+    rp := t.Repr(p)
+    if t.KindOf(rp) == types.Kind.Func {
+        regs.Int -= 2
+        return "ptr, ptr"
+    }
+    x := t.Referent(rp) if t.IsRef(rp) else rp
+    if t.IsRef(rp) or t.KindOf(t.Repr(x)) == types.Kind.Array {
+        regs.Int--
+        return "ptr"
+    }
+    e.P.Layout(p)
+    w := cabi.Param(e.T, e.Arch, p, regs)
+    return match w.Kind {
+        case cabi.Pass.Direct => $e.ty(p) $(" " $w.Attr if w.Attr != "" else "")
+        case cabi.Pass.Parts => cabi.PartsList(w)
+        case cabi.Pass.Byval => $"ptr byval(" $e.ty(p) ") align " $(t.Align(p).Max(8))
+        case _ => "ptr"
+    }
+}
+
+# a call of an extern (X1-X3, X11): each argument as C takes it, the result as C gives it, stored on the ok edge
+fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId) {
+    t := fe.E.T
+    res := t.Result(ty)
+    args := StringBuilder()
+    first := true
+    regs := cabi.Regs(6, 8)
+    sret := ""
+    rw := cabi.Way(cabi.Pass.Direct, List<String&>(), List<I64>(), List<I64>(), "")
+    if res != types.VoidT and res != types.NoreturnT {
+        fe.E.P.Layout(res)
+        rw = cabi.Result(t, fe.E.Arch, res)
+        if rw.Kind == cabi.Pass.Sret {
+            sret = fe.slot(res)
+            args.Push($"ptr sret(" $fe.ty(res) ") align " $t.Align(res) " " $sret)
+            first = false
+            regs.Int--
+        }
+    }
+    ps := t.Items(t.Params(ty))
+    for i in range ps.Len() {
+        if not first { args.Push(", ") }
+        first = false
+        x := fe.arg(c.Args, i)
+        p := ps[i]
+        rp := t.Repr(p)
+        if t.KindOf(rp) == types.Kind.Func {
+            regs.Int -= 2
+            args.Push(fe.externArg(fe.val(x, p), p))
+            continue
+        }
+        xr := t.Referent(rp) if t.IsRef(rp) else rp
+        if t.IsRef(rp) or t.KindOf(t.Repr(xr)) == types.Kind.Array {
+            regs.Int--
+            args.Push(fe.externArg(fe.val(x, p), p))
+            continue
+        }
+        fe.E.P.Layout(p)
+        w := cabi.Param(t, fe.E.Arch, p, regs)
+        match w.Kind {
+            case cabi.Pass.Direct {
+                args.Push($fe.ty(p) $(" " $w.Attr if w.Attr != "" else "") " " $fe.val(x, p))
+            }
+            case cabi.Pass.Parts {
+                tmp := fe.alloca($"[" $cabi.Span(t, w, p) " x i8]", 8)
+                fe.put(tmp, p, x)
+                for k in range w.Parts.Len() {
+                    if k > 0 { args.Push(", ") }
+                    pt := w.Parts[k].Replace(" alignstack(8)", "")
+                    at := tmp if w.Offs[k] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $w.Offs[k])
+                    args.Push($w.Parts[k] " " $fe.load(pt, at))
+                }
+            }
+            case cabi.Pass.Byval {
+                s := fe.slot(p)
+                fe.put(s, p, x)
+                args.Push($"ptr byval(" $fe.ty(p) ") align " $(t.Align(p).Max(8)) " " $s)
+            }
+            case _ {
+                s := fe.slot(p)
+                fe.put(s, p, x)
+                args.Push("ptr " $s)
+            }
+        }
+    }
+    hdr := fe.E.cHeader(ty)
+    rt := hdr
+    if rw.Kind == cabi.Pass.Direct and rw.Attr != "" { rt = hdr[rw.Attr.Len() + 1:] }
+    r := ""
+    if hdr == "void" {
+        fe.w("call void " $target "(" $args.ToString() ")")
+    } else {
+        r = fe.let("call " $hdr " " $target "(" $args.ToString() ")")
+    }
+    if res == types.NoreturnT {
+        fe.w("unreachable")
+        return
+    }
+    if c.HasDest and res != types.VoidT {
+        at, dt := fe.addr(c.Dest)
+        match rw.Kind {
+            case cabi.Pass.Direct { fe.store(fe.ty(dt), r, at) }
+            case cabi.Pass.Parts {
+                tmp := fe.alloca($"[" $cabi.Span(t, rw, res) " x i8]", 8)
+                for k in range rw.Parts.Len() {
+                    v := r if rw.Parts.Len() == 1 else fe.let($"extractvalue " $rt " " $r ", " $k)
+                    to := tmp if rw.Offs[k] == 0 else fe.let($"getelementptr i8, ptr " $tmp ", i64 " $rw.Offs[k])
+                    fe.store(rw.Parts[k], v, to)
+                }
+                fe.memmove(at, tmp, fe.size(res))
+            }
+            case _ { fe.memmove(at, sret, fe.size(res)) }
+        }
+    }
+    fe.w("br label %" $blockName(c.Ok))
 }
 
 # ---- the runtime ----

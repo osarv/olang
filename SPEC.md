@@ -6509,15 +6509,28 @@ not declare an incorrect prototype. Keeping the vocabulary deliberately narrow (
 be got wrong, but does not close it.
 
 **X2.** `extern-param-list ::= [ extern-param { "," extern-param } [ "," ] ]`, where `extern-param ::= IDEN
-extern-type`, and `extern-ret-type ::= extern-scalar-type`. `extern-type` is exactly one of: a
-numeric primitive type (T4/T5 - this is also exactly `extern-scalar-type`), or an array type (T7,
-of any length) whose element type is itself one. `extern-ret-type` is restricted to `extern-scalar-type` alone — an array
-return type is never valid (see X3 for why). No other type — `Bool`, a struct, an enum type, an
-error type, a function type, or an array of any type outside the numeric-primitive set —
-is valid in an `extern-param` or `extern-ret-type` position, with one exception: a parameter of one of the runtime's
-own functions (X6, a name beginning `__olang_`) may be the function type `fn()` - no parameters, no result, no errors -
-where that function's prototype in X6 has one. The runtime calls such a value only on a thread it made and set up
-itself, and only before it returns; no C function is ever handed one.
+extern-type`, and `extern-ret-type ::= extern-value-type`. What crosses the C boundary (its **vocabulary**) is:
+
+- an `extern-value-type`, as a parameter or the result: a numeric primitive type (T4/T5) or a type declared over one
+  (T29, a `Char` among them), a `Bool`, a reference to an extern type (X10: `Db&`, `Db?&`), or a plain-data struct
+  held by value (X11);
+- as a parameter only: a reference to a plain-data struct (`p Point&`, `p mut Point&`, `p Point?&`, X11), or an array
+  (T7, held by value or by reference, of any length) whose element is an `extern-value-type`.
+
+`extern-ret-type` is one `extern-value-type` - never an array (see X3 for why), several results (D8c) or nothing else.
+No other type - a struct holding anything else, an enum type, an error type, a function type, an array of any other
+element - is valid in an `extern-param` or `extern-ret-type` position, with one exception: a parameter of one of the
+runtime's own functions (X6, a name beginning `__olang_`) may be the function type `fn()` - no parameters, no result,
+no errors - where that function's prototype in X6 has one. The runtime calls such a value only on a thread it made and
+set up itself, and only before it returns; no C function is ever handed one.
+
+Each crosses as the platform's C compiler passes the C type it corresponds to - the integer of its width (an integer
+narrower than 32 bits extended as the platform's C convention asks), `_Bool`, `_Float16`, `__bf16`, `float`, `double`,
+a pointer for a reference or an array (X3), and a plain-data struct by the platform's rules for a C struct of the same
+fields in the same order (X11): the System V AMD64 psABI on x86-64 and AAPCS64 on AArch64, the two architectures B12
+knows - in registers, on the stack or through a pointer to a copy, a result through a pointer the caller gives, as
+those documents classify it. Every type of the vocabulary has a C counterpart on both, so none is refused for its
+target.
 
 **X3.** An array-typed `extern-param` (X2) is passed as a pointer to the array's own first element
 only — never its length (a runtime-length array's own `{ len, ptr }` representation, T11, is reduced to
@@ -6653,6 +6666,32 @@ file, `-library`), in a chosen branch of a top-level `if` (B9) like any declarat
 modules name it, in the order the program's modules are loaded and after every object, so a static library finds the
 objects calling it. `compile` (B2), which links nothing, reads none. Changing one changes the link and so relinks the
 program (B3).
+
+**X10 (extern types).** `extern-type-decl ::= "extern" "type" IDEN STMNT_END` declares a type defined in C whose
+contents olang never sees - a `sqlite3`, a `FILE`, a `z_stream` held through the pointer the C library gives. Such a
+type is held **only by reference**: `Db&`, or `Db?&` where it may be null (T2c), in any position a reference may stand
+- a local, a parameter, a result, a field, an array's element, a type argument - and also crossing the C boundary
+(X2): passed back to C, returned by C (`extern fn sqlite3_open(...) Db?&`), and written by C into an array of one
+element given as an out-parameter (`out Array<Db?&>&`, read back as `out[0]`). Written as a value anywhere (`d Db`,
+`List<Db>`) it is a compile-time error naming `Db&`, and so is constructing one (`Db()`): only C makes one. Such a
+reference is never read through and nothing is written through it: it has no fields, no methods unless the program
+declares them (M19), and its permission says nothing - `Db&` and `mut Db&` fit each other. `==` and `!=` compare two
+by identity (E10), and `is null`/`is not null` test one for null; `$` renders one as its type's name, or `null`.
+What it points to belongs to C, never to a scope of the program: such a reference lives in no scope of olang's
+(section 8 takes it, and a value holding only such references, for a value holding none), so it may be stored
+anywhere and outlives everything as far as the scope check is concerned. Whether C has freed what it names - after a
+`sqlite3_close`, say - is C's to say and the compiler's to take on trust, like every other fact about a foreign
+function (X1a).
+
+**X11 (plain-data structs).** A **plain-data struct** is a struct type (T13) declaring no destructor (C7) whose every
+field is a numeric primitive or a type declared over one, a `Bool`, a reference to an extern type (X10), an array laid
+out in place with a length known while compiling (T7c, T7d: `c := Array<U8>(16)` as a field) of these, or a
+plain-data struct held by value. Its layout is C's for a struct of the same fields in the same order (§3.2: each field
+at its natural alignment, the whole rounded to its largest), so a C declaration of those fields describes it exactly,
+and the program's declaration is taken at its word as any prototype is (X1a). It crosses the C boundary (X2) by value
+- as a C function taking or returning `struct S` by value takes it (X2's platform rules) - and by reference, a
+`Point&` crossing as a `struct Point *` naming the program's own instance, which the foreign function may write; an
+array of them crosses as a pointer to the first (X3).
 
 ## 12. Generics
 
