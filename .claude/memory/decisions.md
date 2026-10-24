@@ -1016,3 +1016,8 @@ errors and documentation - generic `+` already works).
   fixed); migration first parenthesizes every expression mixing them, keeping today's meaning, then the precedence
   changes - into lang24 as a later round. `Mutex<I64>` impossible (no number references): atomics or a Mutex of a
   struct, said in std/sync's README.
+- TEXT LITERALS 2026-10-24: the user asked what \x and \u{} are (explained) and "also do the raw bytes string" (read as
+  yes to raw strings). PROPOSED (rec): `\x41` (one byte, hex) and `\u{1F600}` (a code point, written as UTF-8) in normal
+  strings and character literals; `"""` the one raw form - no escapes, one line or several; across lines the first and
+  last line breaks are dropped and the closing line's indentation is removed from every line (Swift/Java); text holding
+  `"""` uses a normal string. Awaiting a yes on the escapes. LICENCE: "that's the last thing we do" - deferred to last.
