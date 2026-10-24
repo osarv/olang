@@ -3,7 +3,7 @@
 # where the result goes; read back after the arena has been churned
 import "std/io"
 type Holder struct() {
-    names Array<String&, 2>
+    names := Array<String&>(2)
 }
 fn make() Holder {
     a := "alpha" $3

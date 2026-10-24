@@ -1,10 +1,12 @@
-# check: fail error[G21]: a constant argument must be computable while compiling
-# G21: a call computing a constant argument must be one compile-time evaluation can run - this one writes a global
+# check: run
+# QP1: a length a call computes is fixed where compile-time evaluation can run the call - this one writes a global, so
+# the length is the running program's, and nothing is an error
 Counter mut I64 = 0
 fn next() I64 {
     Counter++
     return 4
 }
 fn main() ? {
-    a Array<U8, next()>
+    a := Array<U8>(next())
+    assert a.Len() == 4 and Counter == 1
 }

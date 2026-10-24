@@ -1,7 +1,7 @@
 # check: run
 # an array made with no fill, of an element whose zero value its constructor makes, whose length is read at run time
 # through a match binding: its length is no constant argument to evaluate (D13c asks only whether a length that
-# folds as written is 0) - the port asked the evaluator for it and reported G21 on its own source
+# folds as written is 0) - the port asked the evaluator for it and reported an error on its own source
 import "std/io"
 type V struct(n I64 = 7) { n }
 type Box struct(xs Array<I64>&) { xs }

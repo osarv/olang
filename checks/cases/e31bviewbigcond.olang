@@ -3,7 +3,7 @@
 # result and the view's hidden copy each come from the enclosing block's arena, which does not close while the loop
 # runs, so each turn keeps two 72KB copies until the loop ends; kept short here, it pins that it builds and runs
 type Big struct() {
-    a Array<I64, 9000> = Array<I64, 9000>()
+    a Array<I64> = Array<I64>(9000)
 }
 type V struct(d mut Array<I64>&, n I64) {
     d

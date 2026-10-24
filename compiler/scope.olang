@@ -4898,13 +4898,12 @@ fn (s mut Scoper&) valueAdmits(t types.TypeId) Bool {
     return r
 }
 
-# where a slice is said: its "[", a view at its "as"
+# where a slice is said: its "["
 fn (s mut Scoper&) sliceAt(sp source.Span, sl typed.Slice&) source.Span {
     text := try s.texts.Get(s.B.File) catch default ""
     k := I64(sl.Base.Span().End)
     for k < I64(sp.End) and k < text.Len() {
-        if not sl.Exact and text[k] == '[' { return source.Span(I32(k), I32(k + 1)) }
-        if sl.Exact and k + 2 <= text.Len() and text[k] == 'a' and text[k + 1] == 's' { return source.Span(I32(k), I32(k + 2)) }
+        if text[k] == '[' { return source.Span(I32(k), I32(k + 1)) }
         k++
     }
     return sp

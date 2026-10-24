@@ -303,7 +303,6 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
             w.put("fn")
             w.sig(s, true)
         }
-        case ast.TypeRef.Const(_, x) { w.expr(x) }
         case ast.TypeRef.Shape(_, body) { w.typeBody(body) }
         case ast.TypeRef.Ref(_, of, scope) {
             w.ty(of)

@@ -832,10 +832,29 @@ fn (ln mut lowering&) ret(sp source.Span, value typed.Expr&) {
 # T7b: an array value the function returns (alone or among several results) copied out of the scopes the return
 # closes into its result scope (types.ScopeVarsOf gives such a result one) - where it is existing storage that is not
 # there already: a temporary the scope pass built there, and a local it moved there (O26a), are returned as they are;
-# under the stand-in placement it is in the program's scope already
+# under the stand-in placement it is in the program's scope already, and copied only where it is storage another name
+# reaches - what a reference names, a global, a field - which the caller could write after the call (the evaluator's
+# placement: it aliased the caller's array, so a global baked from a copy-out read the caller's later writes)
 fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Expr&, sp source.Span) {
-    if not ln.planned { return }
     t := ln.T
+    if not ln.planned {
+        if ln.valueArray(res) and ln.copiesArray(value, res) and not ownLocalRead(value) {
+            cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, mir.ScopeRef.Program)
+            ln.emit(mir.Stmt.Assign(sp, mir.L(l), mir.Rvalue.Use(cp)))
+        }
+        sr := t.Repr(res)
+        if ln.valueArray(res) or t.KindOf(sr) != types.Kind.Tuple { return }
+        sparts := t.Items(t.Parts(sr))
+        sitems := tupleItems(value)
+        if sitems == null { return }
+        for i in range sparts.Len() {
+            if i >= sitems.Len() or not ln.valueArray(sparts[i]) or not ln.copiesArray(sitems[i], sparts[i]) or ownLocalRead(sitems[i]) { continue }
+            at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
+            cp := ln.arrayCopy(mir.Operand.Copy(at), sparts[i], sp, mir.ScopeRef.Program)
+            ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
+        }
+        return
+    }
     if ln.valueArray(res) {
         if ln.retCopies(value, res) {
             cp := ln.arrayCopy(mir.Operand.Copy(mir.L(l)), res, sp, ln.resultScope())
@@ -853,6 +872,17 @@ fn (ln mut lowering&) retArrays(l mir.LocalId, res types.TypeId, value typed.Exp
         at := ln.mk(ln.with(pl(mir.Base.Local(l)), mir.Proj.Field(i)))
         cp := ln.arrayCopy(mir.Operand.Copy(at), parts[i], sp, ln.resultScope())
         ln.emit(mir.Stmt.Assign(sp, at, mir.Rvalue.Use(cp)))
+    }
+}
+
+# whether x reads a local of the function as a whole - its own storage, which nothing outside names once it returns
+fn ownLocalRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, p, _) => match p {
+            case typed.Place.Local(_, _, _) => true
+            case _ => false
+        }
+        case _ => false
     }
 }
 
@@ -2083,8 +2113,8 @@ fn (ln mut lowering&) finite(r mir.Operand, ty types.TypeId, chk typed.Check, wo
 
 fn (ln mut lowering&) constBool(b Bool, sp source.Span) mir.Operand { return mir.Operand.Const(types.BoolT, 1 if b else 0) }
 
-# a slice (E16a): its bounds tested (E16b, E16c) - 0 <= lo <= hi <= the base's length, or for a view (E32b) the length
-# itself the type's - then the reference to its elements
+# a slice (E16a): its bounds tested (E16b, E16c) - 0 <= lo <= hi <= the base's length - then the reference to its
+# elements
 fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir.Operand {
     base := ln.place(s.Base)
     lo := ln.val(s.Lo)
@@ -2094,18 +2124,12 @@ fn (ln mut lowering&) slice(s typed.Slice&, ty types.TypeId, sp source.Span) mir
     hi64 := ln.asI64(hi, s.Hi.Type(), sp)
     if s.Checked != typed.Check.None {
         n := ln.prim(typed.PrimOp.Len, mir.I64T, mir.Operand[mir.Operand.Copy(ln.mk(base))], sp)
-        if s.Exact {
-            want := ln.fixedLen(ln.arrayOf(ty))
-            ok := ln.prim(typed.PrimOp.Eq, types.BoolT, mir.Operand[n, ln.constI64(want)], sp)
-            ln.check(ok, s.Checked, mir.ExitKind.As, OutOfBounds, sp)
-        } else {
-            a := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[lo64, ln.constI64(0)], sp)
-            ln.check(a, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
-            b := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[lo64, hi64], sp)
-            ln.check(b, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
-            c := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[hi64, n], sp)
-            ln.check(c, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
-        }
+        a := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[lo64, ln.constI64(0)], sp)
+        ln.check(a, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+        b := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[lo64, hi64], sp)
+        ln.check(b, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
+        c := ln.prim(typed.PrimOp.Le, types.BoolT, mir.Operand[hi64, n], sp)
+        ln.check(c, s.Checked, mir.ExitKind.SliceBounds, OutOfBounds, sp)
     }
     return ln.into(ty, mir.Rvalue.Slice(ln.mk(base), lo64, hi64, ty), sp)
 }

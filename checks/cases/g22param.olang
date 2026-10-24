@@ -1,6 +1,6 @@
-# check: fail error[G22, D3a]: 'K' is a constant variable of this declaration
-# G22, D3a: a constructor's parameter may not take its type's constant parameter's name
-type Ring<T, K I64> struct(K I64) {
-    data Array<T, K>
+# check: fail error[D3a]: 'K' is a type's name - choose another
+# D3a: a constructor's parameter may not take its type's type parameter's name
+type Ring<T, K> struct(K I64) {
+    data mut Array<T>& = Array<T>(K)
 }
-fn main() ? { r := Ring<I32, 3>(1) }
+fn main() ? { r := Ring<I32, I64>(1) }

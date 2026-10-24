@@ -2402,7 +2402,7 @@ test "a malformed function: every malformation is caught" {
     expect(t, f16, "bb0[1]: L3 stored into with no storage: its Live not reached")
     # an own slot given a borrow
     m := t.AddModule("t")
-    q := t.Named(t.AddDecl(m, names.Intern("Q"), types.DeclKind.Struct, 0, 0), types.ListId(0))
+    q := t.Named(t.AddDecl(m, names.Intern("Q"), types.DeclKind.Struct, 0), types.ListId(0))
     t.SetStructBody(q, t.List1(i64), false)
     f17 := addFn(t)
     ow := f17.AddTemp(t.Ref(q, types.Owning | types.Writable), Sp0)
@@ -2479,8 +2479,8 @@ test "error codes are each function's own: an error's type's position from 1, it
     names := source.Names()
     t := types.NewTable(names)
     m := t.AddModule("t")
-    e := t.Named(t.AddDecl(m, names.Intern("E"), types.DeclKind.Error, 0, 0), types.ListId(0))
-    o := t.Named(t.AddDecl(m, names.Intern("O"), types.DeclKind.Error, 0, 0), types.ListId(0))
+    e := t.Named(t.AddDecl(m, names.Intern("E"), types.DeclKind.Error, 0), types.ListId(0))
+    o := t.Named(t.AddDecl(m, names.Intern("O"), types.DeclKind.Error, 0), types.ListId(0))
     named := t.List(types.TypeId[o, e])
     assert ErrorCode(t, named, e, 3) == ((2 << 16) | 3) and ErrorCode(t, named, o, 0) == 1 << 16
     general := t.List(types.TypeId[e, types.DefaultErrT])

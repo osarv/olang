@@ -1748,7 +1748,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     if e.Debug { fe.subprogram() }
     fe.run()
     if e.badType {
-        # a type the program's layouts do not settle (a length a call computes, G21, is the evaluator's, M8)
+        # a type the program's layouts do not settle (a length a call computes, T7c, is the evaluator's, M8)
         e.runtime("__olang_check_failed")
         e.fnItem(k, f.Ty, symbol, passed, env, $hdr $e.stub("not emitted", symbol))
         return

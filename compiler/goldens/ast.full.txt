@@ -80,9 +80,6 @@
 | IMPORT 5:1-5:16
 | -- diagnostics
 | error E11b 9:20
-=== checks/cases/g21paren.olang
-| -- diagnostics
-| error G21 4:19
 === checks/cases/l10bdouble.olang
 | FN 3:1-5:2
 | VAR 4:5-4:16

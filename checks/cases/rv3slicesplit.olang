@@ -5,7 +5,7 @@ type Node struct() {
     next mut Node& = null
 }
 type Box struct() {
-    items Array<mut Node&, 2>
+    items := Array<mut Node&>(2)
 }
 type W struct(b Box) { b }
 fn f(src mut W&) {

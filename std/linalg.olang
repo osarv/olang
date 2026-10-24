@@ -592,7 +592,7 @@ fn (x Patches<T>&) pack<R, S, A>(trans Bool, w0 I64, p0 I64, width I64, depth I6
     z A
     wr := panelWidth(z, role, sh)
     data := x.Images.Data
-    C, H, W, K, S, P := x.C, x.H, x.W, x.K, x.Stride, x.Pad
+    C, H, W, K, St, P := x.C, x.H, x.W, x.K, x.Stride, x.Pad
     ow, per, ld := x.OutW, x.OutH * x.OutW, x.Images.Stride
     kk I64 = K * K
     hu U64 = U64(H)
@@ -608,8 +608,8 @@ fn (x Patches<T>&) pack<R, S, A>(trans Bool, w0 I64, p0 I64, width I64, depth I6
         inside Bool = n == wr
         for w in range wr {
             if w < n {
-                y0 I64 = oy * S - P
-                x0 I64 = ox * S - P
+                y0 I64 = oy * St - P
+                x0 I64 = ox * St - P
                 win.at[w] = img * ld + (y0 * W + x0) * C
                 win.y0[w] = y0
                 win.x0[w] = x0

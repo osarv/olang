@@ -3,7 +3,7 @@
 import "std/io"
 type Node struct(k I64) {
     k
-    pad Array<I64, 16>
+    pad := Array<I64>(16)
 }
 fn idr(x Node&) Node&x { return x }
 fn takeR(r Node&) I64 { return r.k }

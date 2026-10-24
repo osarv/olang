@@ -1,10 +1,10 @@
 # check: fail error[T6b]: I64 does not flow into U8 - convert it, as U8(x)
-# G23: a constant variable is no literal - it adapts to no other type, and narrows only where that is written
-fn first<N>(a Array<I32, N>&) U8 {
-    x U8 = N
+# G29: an instance's length is a constant of type I64 - no literal, so it adapts to no other type
+fn first(a Array<I32>) U8 {
+    x U8 = a.Len()
     return x
 }
 fn main() ? {
-    a Array<I32, 3>
+    a := Array<I32>(3)
     q := first(a)
 }

@@ -1,5 +1,5 @@
 # names - who each name is: every module's declaration table, and every name a body, a signature or a type writes
-# resolved against it (D2, D3, D3a, D8c, M10, M14, M20, B10, B10c, G22; compiler/DESIGN.md 1.5).
+# resolved against it (D2, D3, D3a, D8c, M10, M14, M20, B10, B10c; compiler/DESIGN.md 1.5).
 #
 # A module's table holds its types, functions, globals and error types - those of the branches of its top-level ifs
 # that are chosen; a branch still pending (B9c) waits aside, and DecideTop resolves it once the checker has decided
@@ -32,7 +32,7 @@ type What enum {
     Import      # an import's alias: Index is the module it reaches
     Build       # a build constant (B10)
     Builtin     # a primitive, Bool or Array
-    TypeVar     # a type variable or a constant variable of the declaration
+    TypeVar     # a type variable of the declaration
 }
 
 # a resolved name: what it is, and in which module and entry (a local's index in its item)
@@ -61,11 +61,10 @@ type Table struct() {
 }
 
 # a parameter, a local or a type variable in scope
-type local struct(Name source.NameId, Sp source.Span, Kind What, Const Bool) {
+type local struct(Name source.NameId, Sp source.Span, Kind What) {
     Name
     Sp
     Kind
-    Const
 }
 
 # T4, T7: the names every module sees as a type
@@ -435,15 +434,15 @@ fn (r mut Resolver&) popTo(mark I64) {
     }
 }
 
-fn (r mut Resolver&) bind(n source.NameId, sp source.Span, what What, constant Bool) {
+fn (r mut Resolver&) bind(n source.NameId, sp source.Span, what What) {
     prev := try r.scope.Get(n) catch default -1
     r.undo.Push(pair.Pair(n, prev))
     r.scope.Put(n, r.locals.Len())
-    r.locals.Push(local(n, sp, what, constant))
+    r.locals.Push(local(n, sp, what))
     if n not in r.itemNames { r.itemNames.Push(n) }
 }
 
-# D3, D3a, D8c, M20, G22: a parameter or a local declared - a name its module, the build or a type already gives
+# D3, D3a, D8c, M20: a parameter or a local declared - a name its module, the build or a type already gives
 # is an error, as is one already declared here
 fn (r mut Resolver&) declare(n source.NameId, sp source.Span, field Bool = false) {
     name := r.text(n)
@@ -458,7 +457,7 @@ fn (r mut Resolver&) declare(n source.NameId, sp source.Span, field Bool = false
     }
     r.noShadow(n, sp)
     r.noAliasClash(r.mi, n, sp)
-    r.bind(n, sp, What.Local, false)
+    r.bind(n, sp, What.Local)
 }
 
 fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
@@ -477,26 +476,9 @@ fn (r mut Resolver&) noShadow(n source.NameId, sp source.Span) {
     } else if n in t.types or n in r.preludeTypes or BuiltinTypeName(name) {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n)))
     } else {
+        # a type variable of the declaration is a type too
         i := try r.scope.Get(n) catch default -1
-        if i >= 0 and r.locals[i].Const { r.L.Diags.Error(r.at(r.mi, sp), msgs.ConstVarShadowed(r.tok(n))) }
-    }
-}
-
-# G22, D3a: a constant variable is named apart from the module's globals and functions and the build's constants. A type's name is G1's, reported where the variable is written
-fn (r mut Resolver&) noConstClash(n source.NameId, sp source.Span) {
-    t := r.Tables[r.mi]
-    name := r.text(n)
-    if n in t.types { return }
-    v := try t.values.Get(n) catch default -1
-    if v >= 0 {
-        e := t.Entries[v]
-        rec := r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsFunction(r.tok(n)) if e.Kind == What.Func else
-                                               msgs.ShadowsGlobal(r.tok(n)))
-        r.L.Diags.Note(rec, r.at(r.mi, e.Sp), msgs.NoteDeclaredHere(r.tok(n)))
-    } else if r.L.Consts.Has(name) {
-        r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsBuildConst(r.tok(n)))
-    } else if n in r.preludeConsts {
-        r.L.Diags.Error(r.at(r.mi, sp), msgs.PreludeConstRedeclared(r.tok(n)))
+        if i >= 0 and r.locals[i].Kind == What.TypeVar { r.L.Diags.Error(r.at(r.mi, sp), msgs.ShadowsType(r.tok(n))) }
     }
 }
 
@@ -577,7 +559,7 @@ fn (r mut Resolver&) func(f ast.Func&) {
 # a signature, its parameters declared where a body follows (a parameter is a local of the body, D3a)
 fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     s := f.S
-    r.typeParams(f.TypeParams, f.Recv, s.Params, s.Results)
+    r.typeParams(f.TypeParams)
     if f.Recv != null and f.Recv.Ty != null {
         r.receiverVars(f.Recv.Ty, false)
         r.typeRef(f.Recv.Ty)
@@ -595,15 +577,12 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
 }
 
 # a function's or a constructor's type-parameter list (G3, G10d, QW): every item declared for the rest of its item,
-# then the constraints and constants' types read, so an item's may name a later one. An item is a constant where it
-# has a constant's type, or where the signature writes it as a constant argument (G22)
-fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&, recv ast.Param&, ps Array<ast.Param&>&, rs Array<ast.TypeRef&>&) {
+# then the constraints read, so an item's may name a later one
+fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&) {
     if tps == null { return }
     for p in tps {
-        constant := (p.Ty != null and r.constType(p.Ty)) or (p.Ty == null and r.constIn(p.Name, recv, ps, rs))
         nsp := r.nameSpan(r.mi, p.Sp.Start, p.Name)
-        if constant { r.noConstClash(p.Name, nsp) }
-        r.bind(p.Name, nsp, What.TypeVar, constant)
+        r.bind(p.Name, nsp, What.TypeVar)
         r.record(nsp, Ref(What.TypeVar, r.mi, r.locals.Len() - 1))
     }
     for p in tps {
@@ -611,50 +590,8 @@ fn (r mut Resolver&) typeParams(tps Array<ast.TypeParam&>&, recv ast.Param&, ps 
     }
 }
 
-# whether a signature writes n as a constant argument somewhere (G20: Array's length, a parameter its type declares
-# a constant)
-fn (r mut Resolver&) constIn(n source.NameId, recv ast.Param&, ps Array<ast.Param&>&, rs Array<ast.TypeRef&>&) Bool {
-    if recv != null and r.constUse(n, recv.Ty) { return true }
-    for p in ps {
-        if r.constUse(n, p.Ty) { return true }
-    }
-    for t in rs {
-        if r.constUse(n, t) { return true }
-    }
-    return false
-}
-
-fn (r mut Resolver&) constUse(n source.NameId, t ast.TypeRef&) Bool {
-    if t == null { return false }
-    match t {
-        case ast.TypeRef.Named(_, path, args) {
-            for i in range args.Len() {
-                match args[i] {
-                    case ast.TypeRef.Named(_, ap, aargs) {
-                        if ap.Len() == 1 and aargs.Len() == 0 and ap[0] == n and r.constArg(path, i) { return true }
-                    }
-                    nomatch { }
-                }
-                if r.constUse(n, args[i]) { return true }
-            }
-        }
-        case ast.TypeRef.Func(_, sg) {
-            for p in sg.Params {
-                if r.constUse(n, p.Ty) { return true }
-            }
-            for x in sg.Results {
-                if r.constUse(n, x) { return true }
-            }
-        }
-        case ast.TypeRef.Ref(_, of, _) { return r.constUse(n, of) }
-        case ast.TypeRef.Perm(_, of, _, _) { return r.constUse(n, of) }
-        nomatch { }
-    }
-    return false
-}
-
 # the type variables a method's receiver introduces (QW: "fn (l List<T>&) Push(x T)"): its type's arguments that name
-# no type and no variable already declared - each a constant where the type's parameter is one (G20)
+# no type and no variable already declared
 fn (r mut Resolver&) receiverVars(t ast.TypeRef&, inArgs Bool) {
     if t == null { return }
     match t {
@@ -668,7 +605,7 @@ fn (r mut Resolver&) receiverVars(t ast.TypeRef&, inArgs Bool) {
                             j := try r.scope.Get(n) catch default -1
                             known := j >= 0 and r.locals[j].Kind == What.TypeVar
                             if not known and r.typeIn(r.mi, n).Kind == What.None {
-                                r.introduce(asp, n, null, r.constArg(path, i))
+                                r.introduce(asp, n, null)
                             }
                         } else {
                             r.receiverVars(a, true)
@@ -694,24 +631,22 @@ fn (r mut Resolver&) param(p ast.Param&, body Bool) {
         r.declare(p.Name, sp)
     } else {
         r.noAliasClash(r.mi, p.Name, sp)
-        r.bind(p.Name, sp, What.Local, false)
+        r.bind(p.Name, sp, What.Local)
     }
 }
 
 fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
     if t.Params != null {
         for p in t.Params {
-            constant := p.Ty != null and r.constType(p.Ty)
-            if constant { r.noConstClash(p.Name, r.nameSpan(r.mi, p.Sp.Start, p.Name)) }
             if p.Ty != null { r.typeRef(p.Ty) }
-            r.bind(p.Name, p.Sp, What.TypeVar, constant)
+            r.bind(p.Name, p.Sp, What.TypeVar)
         }
     }
     if t.Body == null { return }
     match t.Body {
         case ast.TypeBody.Struct(s) {
             m0 := r.mark()
-            r.typeParams(s.TypeParams, null, s.Params, Array<ast.TypeRef&>(0))
+            r.typeParams(s.TypeParams)
             for p in s.Params {
                 if p.Ty != null { r.typeRef(p.Ty) }
             }
@@ -729,7 +664,7 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             if s.Dtor != null {
 
                 m2 := r.mark()
-                for f in fieldNames(s) { r.bind(f, source.Span(0, 0), What.Local, false) }
+                for f in fieldNames(s) { r.bind(f, source.Span(0, 0), What.Local) }
                 r.block(s.Dtor)
                 r.popTo(m2)
             }
@@ -769,27 +704,6 @@ fn fieldNames(s ast.StructBody&) List<source.NameId> {
         }
     }
     return out
-}
-
-# whether a type parameter's type makes it a constant (G20) rather than a constrained type variable (G19): it names
-# no trait
-fn (r mut Resolver&) constType(t ast.TypeRef&) Bool {
-    return match t {
-        case ast.TypeRef.Named(_, path, _) => not r.namesTrait(path)
-        case _ => false
-    }
-}
-
-fn (r mut Resolver&) namesTrait(path Array<source.NameId>&) Bool {
-    if path.Len() != 1 { return true }   # through an alias: a trait unless shown otherwise
-    ref := r.typeIn(r.mi, path[0])
-    if ref.Kind != What.Type or ref.Index < 0 { return false }
-    d := r.Tables[ref.Module].Entries[ref.Index].Decl
-    if d == null or d.Body == null { return false }
-    return match d.Body {
-        case ast.TypeBody.Trait(_) => true
-        case _ => false
-    }
 }
 
 # ---- statements ----
@@ -911,7 +825,7 @@ fn (r mut Resolver&) forName(from I32, id source.NameId) {
     i := try r.scope.Get(id) catch default -1
     if (i >= 0 and r.locals[i].Kind == What.Local) or id in r.Tables[r.mi].values {
         r.L.Diags.Error(r.at(r.mi, sp), msgs.ForInNameExists(r.tok(id), r.text(id)))
-        r.bind(id, sp, What.Local, false)
+        r.bind(id, sp, What.Local)
     } else {
         r.declare(id, sp)
     }
@@ -1268,7 +1182,7 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
         case ast.TypeRef.Named(sp, path, args) {
             r.typePath(sp, path)
             for i in range args.Len() {
-                if not r.constName(path, i, args[i]) { r.typeRef(args[i]) }
+                r.typeRef(args[i])
             }
         }
         case ast.TypeRef.Func(_, s) {
@@ -1278,7 +1192,6 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
             for res in s.Results { r.typeRef(res) }
             for e in s.Errors { r.path(e) }
         }
-        case ast.TypeRef.Const(_, v) { r.expr(v) }
         case ast.TypeRef.Shape(_, body) {
             match body {
                 case ast.TypeBody.Enum(cases) {
@@ -1306,26 +1219,8 @@ fn (r mut Resolver&) typeRef(t ast.TypeRef&) {
     }
 }
 
-# a constant argument (G20) written as a bare name that is no type and no type variable - a global, a build constant:
-# recorded as the value it names, as an expression would read it
-fn (r mut Resolver&) constName(path Array<source.NameId>&, i I64, a ast.TypeRef&) Bool {
-    match a {
-        case ast.TypeRef.Named(asp, ap, aargs) {
-            if ap.Len() != 1 or aargs.Len() > 0 or not r.constArg(path, i) { return false }
-            j := try r.scope.Get(ap[0]) catch default -1
-            if j >= 0 and r.locals[j].Kind == What.TypeVar { return false }
-            if r.typeIn(r.mi, ap[0]).Kind != What.None { return false }
-            got := r.lookup(ap[0])
-            if got.Kind == What.None { return false }
-            r.record(asp, got)
-            return true
-        }
-        nomatch { return false }
-    }
-}
-
-# a type variable's or a constant's introduction by a receiver (QW, G22): declared for the rest of its item, once
-fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef&, constant Bool) {
+# a type variable's introduction by a receiver (QW): declared for the rest of its item, once
+fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef&) {
     if c != null { r.typeRef(c) }
     i := try r.scope.Get(n) catch default -1
     if i >= 0 and r.locals[i].Kind == What.TypeVar {
@@ -1333,32 +1228,8 @@ fn (r mut Resolver&) introduce(sp source.Span, n source.NameId, c ast.TypeRef&, 
         return
     }
     nsp := r.nameSpan(r.mi, sp.Start, n)
-    if constant { r.noConstClash(n, nsp) }
-    r.bind(n, nsp, What.TypeVar, constant)
+    r.bind(n, nsp, What.TypeVar)
     r.record(sp, Ref(What.TypeVar, r.mi, r.locals.Len() - 1))
-}
-
-# whether the i-th argument of the generic type a path names is a constant (G20): Array's length, or a parameter its
-# declaration gives a type that is no trait
-fn (r mut Resolver&) constArg(path Array<source.NameId>&, i I64) Bool {
-    if path.Len() == 1 and r.text(path[0]) == "Array" { return i == 1 }
-    ref := Ref(What.None, -1, -1)
-    if path.Len() == 1 {
-        ref = r.typeIn(r.mi, path[0])
-    } else {
-        t := r.aliasModule(path)
-        if t >= 0 { ref = r.memberOf(t, path[path.Len() - 1]) }
-    }
-    if ref.Kind != What.Type or ref.Index < 0 { return false }
-    d := r.Tables[ref.Module].Entries[ref.Index].Decl
-    if d == null or d.Params == null or i >= d.Params.Len() { return false }
-    p := d.Params[i]
-    if p.Ty == null { return false }
-    saved := r.mi
-    r.mi = ref.Module
-    constant := r.constType(p.Ty)
-    r.mi = saved
-    return constant
 }
 
 # the module a type path's alias chain reaches, or -1
@@ -1389,14 +1260,6 @@ fn (r mut Resolver&) typePath(sp source.Span, path Array<source.NameId>&) {
     if (try r.Tables[r.mi].aliases.Get(head) catch default -1) < 0 and r.lookup(head).Kind == What.None {
         r.unknownHead(r.nameSpan(r.mi, sp.Start, head), head)
         return
-    }
-    if path.Len() == 2 and (try r.Tables[r.mi].aliases.Get(head) catch default -1) < 0 {
-        # an enum's case written where a type argument goes (G20: a constant argument): its head is the type
-        h := r.typeIn(r.mi, head)
-        if h.Kind == What.Type {
-            r.record(sp, h)
-            return
-        }
     }
     t := r.aliasModule(path)
     if t >= 0 {

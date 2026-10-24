@@ -1,12 +1,12 @@
 # check: fail error[E16]: index 0 is outside the array's 0 elements
-# also: g16boutermost.olang:11:21: note: instantiated here, with N = 3
-# G16b: a long chain of instantiations shows its innermost notes and always the outermost - the program's own call
+# also: g16boutermost.olang:11:21: note: instantiated here, with a.Len() = 3
+# G16b: a long chain of instances shows its innermost notes and always the outermost - the program's own call
 import "std/io"
-fn Total<N>(a Array<I64, N>&) I64 {
-    if N == 0 { return 0 }
-    return a[0] + Total(a[1:] as Array<I64, N - 1>&)
+fn Total(a Array<I64>) I64 {
+    if a.Len() == 0 { return 0 }
+    return a[0] + Total(a[1:])
 }
 fn main() ? {
-    x Array<I64, 3> = I64[1, 2, 3]
+    x := I64[1, 2, 3]
     try io.Println($Total(x))
 }
