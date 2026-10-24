@@ -170,6 +170,17 @@ fn (c Consts&) ValueOf(name String&) (Value, Bool) ? {
     return c.values[i], c.big[i]
 }
 
+# every build constant, its value and whether it is known, as text: what a build's objects are made under (B3i)
+fn (c Consts&) Fingerprint() String {
+    b := StringBuilder()
+    for i in range c.names.Len() {
+        v := c.values[i]
+        t := c.Texts[v.S] if v.Kind == ValueKind.Text and v.S < c.Texts.Len() else ""
+        b.Push($c.names[i] "=" $v " " $t " " $c.raws[i] " " $c.known[i] " " $c.big[i] "\n")
+    }
+    return b.ToString()
+}
+
 # -D's value for name as written, for a message
 fn (c Consts&) Raw(name String&) String {
     i := try c.find(name) catch { return "" }

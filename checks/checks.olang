@@ -33,7 +33,7 @@ Scenarios := String&["cgreview", "agree", "fuzz", "bench", "objnames", "remote",
                      "osexit", "k2", "enumwords", "listloop", "opvis", "bits", "retslot", "tbaa", "s18c", "static", "remotebad"
                      "nestdeep", "nestparse", "diag", "linalg", "assertloc", "chunkpool", "print", "protopriv"
                      "target", "lazytype", "updir", "crash", "scopesan", "capscope", "strheld", "spawnerr"
-                     "frameenv", "regions", "vecalias", "vechandle", "inferfield", "format", "runfile", "output", "words", "testends"]
+                     "frameenv", "regions", "vecalias", "vechandle", "inferfield", "format", "runfile", "output", "words", "testends", "reuse"]
 
 # the files in checks/cases
 Cases Array<String&>& = try os.ReadDir("checks/cases") catch default Array<String&>(0)
@@ -288,6 +288,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "diag" { try diag(r) }
         case "pkg" { try pkg(r) }
         case "stale" { try stale(r) }
+        case "reuse" { try reuse(r) }
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
@@ -664,6 +665,32 @@ fn stale(r mut report&) ? Failed {
     try r.expect(sh(dir, "stat -c %Y.%N build/plain.*.o | cmp -s - before.txt") == 0, "plain's object was rebuilt", dir)
     try r.expect(sh(dir, "test $(ls build/uses.*.main.o | wc -l) -gt $(cat first.txt)") == 0
                  "uses was not rebuilt", dir)
+}
+
+# B3i: a module none of whose inputs changed is neither lowered nor written again, its IR taken from its record - and
+# the program so built is the one written afresh: OLANG_CHECKREUSE emits it again with nothing reused and compares every
+# object, ending the build with 3 where one differs
+test "an unchanged module's object is reused, and the program is the one written afresh" { assert passed("reuse") }
+
+fn reuse(r mut report&) ? Failed {
+    dir := fresh("reuse")
+    os.Run("cp checks/fixtures/reuse/* " $os.Quote(dir))
+    same := "modules reused, every object the same"
+    try r.expect(sh(dir, "\"$OLANG\" build app.olang > out.txt 2>&1 && ./build/app > run.txt") == 0, "first build", dir)
+    try r.expect(sh(dir, "grep -qx 'app 30 3' run.txt && ls build/rec/lib.* build/rec/leaf.* > /dev/null") == 0
+                 "the first build's output, or the records of lib and leaf", dir)
+    # the root edited: every other module reused
+    try r.expect(sh(dir, "echo 'fn unused() I64 { return 1 }' >> app.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build " $
+                    "app.olang > out.txt 2>&1 && ./build/app > run.txt") == 0, "the build after the root's edit", dir)
+    try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'app 30 3' run.txt") == 0, "the build after the root's edit", dir)
+    # leaf edited: leaf and lib, which imports it, written again, and what they compute now the program's
+    try r.expect(sh(dir, "sed -i 's/i \\* 10/i * 100/' leaf.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build app.olang > " $
+                    "out.txt 2>&1 && ./build/app > run.txt") == 0, "the build after leaf's edit", dir)
+    try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'app 300 3' run.txt") == 0, "the build after leaf's edit", dir)
+    # another program importing lib reuses the object app's build left
+    try r.expect(sh(dir, "OLANG_CHECKREUSE=1 \"$OLANG\" build other.olang > out.txt 2>&1 && ./build/other > run.txt") == 0
+                 "other's build", dir)
+    try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'other 1000' run.txt") == 0, "other's build", dir)
 }
 
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping

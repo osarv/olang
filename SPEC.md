@@ -5744,6 +5744,13 @@ nothing but its own module and its imports, and is correctly reused by any progr
 root transitively imports every module of the program, the prelude included, so its own staleness (B3) already
 covers every change to the instantiation set. Copies a `compile` object of another module carries are discarded at link time.
 
+**B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
+compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is
+made from - its IR - under a hash of exactly those inputs (`build/rec/`), with the instantiations it names. A later
+build whose module has the same inputs takes that IR as the module's and does not make it again: the module is still
+checked, as every module is, but nothing of it is lowered or emitted, and the instantiations its object names are made
+in the root's as before (B3d). What is built is the same program either way.
+
 ### 10.2 Program entry
 
 **B4.** In `build` and `interpret` modes, and running a file (B3g), the root module must declare a function named `main` with exactly this shape:
