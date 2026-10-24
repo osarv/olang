@@ -262,3 +262,5 @@ on sight per rules.md, "Code rules".
 - 2026-10-24: lang24 round 2 merged (20806ad, full verify on the merged tip passed): E10 stored-value equality (List/Map
   declare Eq/Hash), `is` null-only, E32 case tests by `==` with `_`, S8d narrowing, T17a payload form, Some/Every;
   tools/equality_migrate.olang and helper_rename.olang for oann. Round 3 (nullable) running.
+- QUEUED after lang24 + stdx merge: the std naming pass (no module stutter: io.Error, json.Value, chan.Channel ...),
+  with tools/stutter_rename.olang for oann.

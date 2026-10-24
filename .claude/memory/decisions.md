@@ -978,3 +978,9 @@ errors and documentation - generic `+` already works).
   `if n is null: return`) - the round-3 agent told; 12 YES doc comments + LSP ("both for MCP and neovim"). TO DISCUSS:
   2 C interop v2, 4 errors carrying data (explained: plain-data payloads on words, rec), 5 text literals, 6 `olang fix`
   (explained: one command applying every migration since a file's version).
+- DECIDED 2026-10-24 (the user: "we don't integrate the knowledge that modules have namespaces, so the IO error is
+  actually called IOError instead of just Error"): std names never repeat their module's name - io.Error, os.Error,
+  json.Error (json.Json -> json.Value), chan.Error (chan.Chan -> chan.Channel), csv/stats/rand/http/net.Error; several
+  error types are named by subject (linalg ShapeError, ActivationError); the prelude is the exception (bare names:
+  ListError, MapError, TextError stay) and must never declare a plain `Error`. New modules follow it now (stdx told);
+  existing types renamed in one pass, with a tool (oann too), after lang24 and stdx merge. A rule in std/README.md.
