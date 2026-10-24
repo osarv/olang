@@ -855,3 +855,8 @@ errors and documentation - generic `+` already works).
   one list with `then` dividing needs from promises - `fn sqrt(x F64) [x >= 0.0 then r >= 0.0] r F64`,
   `fn (l mut List<T>&) Clear() [then l.Len() == 0]` - replacing the second list after named results; or B keep two
   lists, `fn Clear() _ [l.Len() == 0]`.
+- BRACES 2026-10-24: the user refuted my clash list (greedy condition, `(` after an expression is a call, no redundant
+  parentheses, body on the same line, else binds nearest, `ok total` no expression) - conceded: one-token lookahead
+  suffices. PROPOSED (rec): a brace-less body for `if`/`else`/`for` is ONE simple statement on the condition's line
+  (return/break/continue/error/unreachable/assignment/call/increment - never if/for/match/block, so no dangling else);
+  `else` may begin the next line as `catch` does; the formatter never adds or removes braces. ASKED: take it in?
