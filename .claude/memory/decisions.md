@@ -818,3 +818,7 @@ errors and documentation - generic `+` already works).
   out of "unchecked" (proved: no check even under checked; refuted: compile error; neither: unchecked unless checked),
   so a better prover never changes a program's meaning. Prover design (logic: bit-vectors for wrapping integers;
   own solver or an existing one) later. Trait-method conditions parked until run-time traits are discussed.
+- 2026-10-24: no naked returns (the user, confirmed). The user: "Why are you parenthesising the return values? We don't
+  want that no?" - proposed (rec): several results bare in a declaration (`fn divmod(a I64, b I64) q I64, r I64 [..] ?
+  E {`), parenthesized only in a function type inside a list (`List<fn(x I64) (I64, I64)>`), the grouping rule;
+  reverses D8c's parenthesized form for declarations; a tool migrates. ASKED: include in today's batch?
