@@ -1813,12 +1813,30 @@ fn (p mut Program&) MethodOf(t types.TypeId, name source.NameId) I64 {
         key := p.typeKey(x)
         if key < 0 { return -1 }
         m := try p.methods.Get(pair.Pair(key, I64(name))) catch default -1
-        if m >= 0 { return m }
+        if m >= 0 {
+            # a method declared for one instance of a generic type (M21: "fn (b Box<String&>&) Describe()") is not
+            # another's
+            return m if p.recvApplies(m, x) else -1
+        }
         if p.T.KindOf(x) != types.Kind.Named or not p.Body(x) { return -1 }
         if p.T.DeclKindOf(p.T.DeclOf(x)) != types.DeclKind.Over or not p.extends(p.T.DeclOf(x)) { return -1 }
         x = p.T.Base(x)
     }
     return -1
+}
+
+# whether method f's receiver is written for x (M19, M21): its receiver's type arguments x's, or variables binding them
+fn (p mut Program&) recvApplies(f I64, x types.TypeId) Bool {
+    if p.T.KindOf(x) != types.Kind.Named or p.T.Items(p.T.Args(x)).Len() == 0 { return true }
+    ps := p.T.Items(p.T.Params(p.Sig(f)))
+    if ps.Len() == 0 { return true }
+    r := p.T.Referent(ps[0]) if p.T.KindOf(ps[0]) == types.Kind.Ref else ps[0]
+    if p.T.KindOf(r) != types.Kind.Named or p.T.DeclOf(r) != p.T.DeclOf(x) { return true }
+    owner := FnOwner(f)
+    n := p.VarCount(owner)
+    if n == 0 { return p.T.Same(p.T.Plain(r), p.T.Plain(x)) }
+    b := Binding(owner, n)
+    return p.UnifyArg(r, x, b, false, true)
 }
 
 # whether a declared type extends its base (T29f): it takes the base's methods and operators

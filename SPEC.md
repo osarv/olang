@@ -2606,7 +2606,10 @@ name that was both an alias and a declaration would have two valid readings with
 **M21.** A module may declare several **methods** with the same name, provided no two have the same
 receiver type — where a receiver's reference marker does not count (`(p Point)` and `(p Point&)` both
 declare a method of `Point`), and an array receiver is identified as M19 says. A method may also share its
-name with at most one ordinary function. Any other reuse of a name is a compile-time error.
+name with at most one ordinary function. Any other reuse of a name is a compile-time error. A method whose receiver
+names one instance of a generic type (`fn (b Box<String&>&) Describe()`) is that instance's method alone: another
+instance (`Box<I64>`) has no such method of its own, and takes the trait default of that name where there is one
+(M19e).
 
 This is what lets two types declared in one module both satisfy one trait (T31): without it a given
 method name could be written only once per module, and two shapes in one file would not compile. It

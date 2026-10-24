@@ -477,3 +477,30 @@ test "E19: an array literal of anys, rendered as written" {
     churn()
     assert listed(Live + 1) == BakedListed
 }
+
+# M19, M21 (the any review, pre-existing): a method declared for one instance of a generic type belongs to that instance
+# alone - another takes the trait's default, called directly, from generic code or through an any
+type IShape trait {
+    Area() I64
+}
+fn (s S) Describe<S IShape>() String { return "default " $s.Area() }
+type IBox<T> struct(v T, n I64) {
+    v
+    n
+}
+fn (b IBox<T>&) Area() I64 { return b.n }
+fn (b IBox<String&>&) Describe() String { return "text box " $b.v }
+fn describeGen<S IShape>(s S) String { return s.Describe() }
+fn described(n I64) String {
+    a := IBox<I64>(5, n)
+    t := IBox<String&>("t" $n, n)
+    x any IShape& = a
+    y any IShape& = t
+    return $a.Describe() "|" $describeGen(a) "|" $x.Describe() "|" $t.Describe() "|" $describeGen(t) "|" $y.Describe()
+}
+BakedDescribed String = described(2)
+
+test "M21: a method of one instance is not another's" {
+    assert BakedDescribed == "default 2|default 2|default 2|text box t2|text box t2|text box t2"
+    assert described(Live - 1) == BakedDescribed
+}
