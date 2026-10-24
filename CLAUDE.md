@@ -316,7 +316,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   over an integer, `Char` included); `From` only where no case carries a payload, and then no case is named `From`; an
   anonymous enum has none.
 - **Methods are declared with a receiver clause and called only as methods (M19, the user's call).** A method may not
-  share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21).
+  share a field's name. Built-in types get methods only from the prelude (M19d). Overloading by receiver only (M21); a
+  method written for one instance of a generic (`Box<String&>`) is no other instance's.
 - **A number written as a literal is a receiver like any other value (E13c, 2026-10-18, the user: "2.0.Sqrt() should
   be valid code. Don't make an exception for floats like that" - reversing their 2026-10-17 refusal).** `2.0.Sqrt()`,
   `7.Hash()`, `255.Format(16)`, `(1 + 2).Hash()` take the literal's own type (T6a: `I64`, `F64`, `U64` above `I64`'s
@@ -561,7 +562,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **More scope rules (O2d, O13a, O13c, O14b/O14c, O16, O18a, O20, O26).** A binding records the depth it was made at;
   each return in a loop is judged again by later assignments in that loop; a call's result carries its callee's result
   bindings; a by-value parameter's references returned are an obligation; destructors register once per constructor
-  call and run at the instance scope's close, in reverse construction order; a reference field's scope is its
+  call and run at the instance scope's close, in reverse construction order; a by-value parameter's own storage is never
+  returned as borrowed from it (O14, the frame's copy); a reference field's scope is its
   container's, through whole chains; a local array's or block-built value's references are not returned past their
   block. A destructor's top level is the scope being closed (C9a); a slice or view of a temporary borrows it in the
   block it is written in (E16a); a by-value parameter's scope variable is built into wherever stores are possible
