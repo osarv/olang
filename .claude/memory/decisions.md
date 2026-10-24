@@ -660,3 +660,9 @@ errors and documentation - generic `+` already works).
   compiler itself: clean 31.5 -> 20.8 s, an edit to widely inlined code 17.9 -> 3.8 s, the built program ~18% slower.
   Asked: add it, and what to call it (a mode, `-fast`, ...)? Recommended yes, as an option (`-quick`?) - the default
   stays -O3 + LTO (B2c). In effect: not built.
+- AGENDA ASKED 2026-10-24 (the user: "Today we are going to settle design questions as well"), numbered as asked:
+  1 QAS dev build (rec yes, `-quick`); 2 QAR1 `is` binding a pattern (rec yes); 3 QAR2 bodyless constructor = fields
+  (rec yes); 4 QAR3 text-valued enum cases (rec later); 5 QAP one null test `x is null` (rec yes, migrate); 6 units of
+  measure (rec defer; if built: `unit m`, `F64<m/s>`, literals unitless); 7 contracts (rec no syntax, leading asserts);
+  8 doc tests (rec yes, `#` + four spaces); 9 method overloading (rec no); 10 constructor overloading (rec no, named
+  functions); 11 fixed point (rec with FPGA); 12 QAO maybe/Option (rec drop, keep nullable). In effect: nothing changed.
