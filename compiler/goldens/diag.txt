@@ -618,6 +618,21 @@ copyoutrefs.olang:15:7: error[O25h]: this value holds references into a scope th
    15 |     d = src
       |       ^
 compilation failed with 2 errors
+=== ctorlambdafieldloop.olang
+ctorlambdafieldloop.olang:16:22: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   16 |         ms.Push(M(2, d))
+      |                      ^
+compilation failed with 1 error
+=== ctorlambdafieldout.olang
+ctorlambdafieldout.olang:16:19: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   16 |         ds.Push(D(ct))
+      |                   ^~
+compilation failed with 1 error
+=== ctorlambdafieldval.olang
+ctorlambdafieldval.olang:17:17: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
+   17 |         m = M(W(b))
+      |                 ^
+compilation failed with 1 error
 === d10adroppedbranch.olang
 d10adroppedbranch.olang:6:4: error[D10a]: the end can be reached without returning I32 - return on every path, or end it with 'unreachable'
     6 | fn pick() I32 {

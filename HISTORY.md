@@ -22313,3 +22313,73 @@ storing what lives where a scope variable says into a global is O1b's error rath
 element's first chunk in the call's frame (`f.Blocks[i].Stmts.Push(s)`); and a plain copy of a value local
 (`keep := l; return keep`) is no flow of its source (O25h's guard), so with `l` from a local map that program is O26's
 error where `return l` runs.
+
+## A constructor field's lambda, and a callee keeping a derived scope (2026-10-24)
+
+The soundness review of the parity revert (`/home/user/review/unpar`) found one hole, older than the revert and in
+master too: **a constructor field written directly as a lambda capturing a reference read freed memory.**
+
+```
+type M struct(n I64, data Array<I64>&) {
+    n
+    F fn() I64 = fn() I64 { return data[1] }
+}
+```
+
+`m := M(2, d); churn(); m.F()` was accepted. Under `-debug -sanitize` it reported a use after its scope closed, and
+`interpret` said so too. A lambda capturing another field segfaulted, and so did an instance pushed into a list
+outliving its argument's loop body.
+
+*The cause.* D16d lets an implementation keep a capturing lambda in the frame where nothing can see where it lives.
+The scope pass did that for a lambda (or a `Call` adapter, E31) held in a local only ever called after its declaration
+(`onFrame`, and `kwTransient` in O17's keep walk). It asked that of a constructor's field too. A field is a local of
+the constructor (C2a), but the instance is assembled from it as the constructor returns, which is a use no statement
+shows. With no later statement the field looked "only ever called", so its closure environment was built in the
+constructor's frame. Binding the lambda to a local first, a conditional, an argument or an assignment in the body all
+gave the closure a real read, which is why only the direct field form was wrong.
+
+*The fix.* `onlyCalled` refuses a constructor's field. Such a field's lambda now takes D16d's ordinary path: it lives
+where what it captured lives. For a reference parameter that is the argument's scope, and C2d holds the instance to it.
+For another field it is the instance scope (C2g). An adapter lives where its instance does. The plan, lowering and
+`interpret` all read the same site, so they agree. No rule changed: SPEC D16d already says the lambda lives where its
+captures do, and the frame is only an implementation's latitude where nothing can tell.
+
+*Cases.* These run under `-debug -sanitize`, each read back after an arena churn:
+- `ctorlambdafield`: the review's first reproducer.
+- `ctorlambdafield2`: a field capturing another field and the argument.
+- `ctorlambdafieldkinds`: a by-value parameter holding references, a fixed array field borrowed, a field called in the
+  body too, a `Call` adapter, and `:=` fields.
+
+These must fail with C2d:
+- `ctorlambdafieldloop`: the review's third reproducer.
+- `ctorlambdafieldout`: an adapter of a loop body's counter kept outside the loop. Master accepted it, and the assert
+  read garbage.
+- `ctorlambdafieldval`: a by-value parameter holding a node from an inner block.
+
+The scope fuzzer writes the shape now (`ctorScopeOp` kinds 7 to 9: a field's lambda capturing the parameter, kept outside
+or read where it lives, or capturing only another field). Over seeds 1-60 and 100-399, the compiler before the fix gives
+13 findings, every one in a program with the shape (12 of them in the 300). The fixed compiler gives none, with 4 more
+scenarios refused (C2d).
+
+**Found on the way: a `:=` field whose type needs the checker was unknown where another body read it first (D15).**
+`type C struct(n I64) { F := fn() I64 { return 3 } }`, then `c.F()` in `main`, stopped the build: "it does not lower an
+unknown type". A conditional did the same (`K := 3 if n > 0 else 4`). A field declared with `:=` takes its type from
+its value. Where that type is not plain from the syntax (generic.olang's `Infer`), the type is filled in once the
+constructor's body is checked, which happened after main. A member read of such a field now checks the constructor's
+body first (`field`, check.olang), as a call does. Pinned by `ctorlambdafieldkinds`.
+
+**The review's precision note: `canKeep` read only the parameter's own scope's obligations (O26a, O23a).** Take a callee
+that keeps an argument only through what the argument's `&p` field refers to, for example
+`fn RewrapR(x W&) H { return H(x.D) }`. It records `Derived(0, w) >= result`, and canKeep did not count that as keeping
+x. So `w1 := W(d); return RewrapR(w1)` moved neither `w1` nor `d` to the result scope, and the return was O26's error.
+Same-module and cross-module code both hit it after the parity revert. canKeep now counts a Derived relation of
+parameter j the same way it counts parameter j's own scope variable.
+
+*Why it is sound.* canKeep only ever widens what may be kept. Every reader takes "kept" as the cautious answer:
+- O26a's flow moves more locals to the result scope, which lengthens their lifetimes;
+- O18c's landing keeps more;
+- O17b's use walk accepts less.
+A local that is moved is still judged against its new scope by the obligations it meets. The diagnostics of all 841
+failing checks cases, captured with the compiler before and after the change, differ only in the two new
+`ctorlambdafield` cases. `o26aderived` runs the review's t17 in one module, by reference and by value, under
+`-debug -sanitize`. The cross-module t17 from the review also runs clean, and `interpret` agrees.
