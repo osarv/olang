@@ -1201,7 +1201,7 @@ df8cc76d146feb71 ff12633c101d2e1d checks/cases/vec95globalkeeps.olang
 cee1f07ce5c823a4 9cd868f93b377def checks/cases/zeroeffect.olang
 9cf0a1944ee9bdab 34c5e858c74150fe checks/cases/zerofails.olang
 fc6df24d959d964f 81d7dc7230d73880 checks/cases/zeroshared.olang
-898363aa6ccdd814 8df8e05d784fe23c checks/checks.olang
+e5f37a3e1a4e7f1d 1be7ba7dc79bcb8c checks/checks.olang
 1c182323af86f3e3 e289f65fb6da4341 checks/fixtures/agree/agree.olang
 ccaeb6a5859fc860 855092106b73d871 checks/fixtures/agree/bfrand.olang
 e27a6cd6df3ee9ef a9fec8aaa2d2e2f6 checks/fixtures/agree/math.olang
@@ -1404,9 +1404,9 @@ b72f808bdc743538 de819e35f88dbf15 compiler/lower.olang
 ab16f167412b17f0 cacf92d9bd8c858c compiler/lsp.olang
 1bb1f9a0522a85d5 27762324e7d60b67 compiler/mcp.olang
 243a5c8f584c7b98 9973630d5338ff0d compiler/mir.olang
-a31e30dec90939fe d5982e94ebbd0f3d compiler/msgs.olang
+cc4b4ef6f3197dc1 f4b7a3c8bebcabac compiler/msgs.olang
 46dd87707b4b5557 1128d77dcbbe7cd6 compiler/names.olang
-50203ba8e2a0fcd7 f3882024060313b1 compiler/olang.olang
+9e841259f68cbe60 5eaf1ae3497fa0c7 compiler/olang.olang
 c030cf95d3135a38 30cca8d52ea80854 compiler/parse.olang
 d5f1363ec5ee8e03 eedb9eb795e028ca compiler/runtime.olang
 09705e2cdd759cec a0d02649cc24dd91 compiler/scan.olang
@@ -1539,7 +1539,7 @@ f1b606c14a2e344e 7afcae1101f271c4 tools/checkerror_rename.olang
 64244689fceaf640 9e169df53253960d tools/diagedit.olang
 183e8ca7630e06f3 178242776f373c3a tools/donefail_migrate.olang
 476d22551b563cc1 d4043e31845a3b30 tools/equality_migrate.olang
-a9fa8408d3c5bbd2 33539a54e35fb878 tools/errors_migrate.olang
+dc385dcef695ca04 4803853df763ab85 tools/errors_migrate.olang
 e10e763b1d10ad10 eb30f42a2a2560a9 tools/helper_rename.olang
 e53bd27982baf123 b6d21d5096577e3e tools/int_literal_i64.olang
 b3125c6dcf160df8 893e63fcd99cb363 tools/io_fix.olang
@@ -1551,4 +1551,5 @@ e3391a0fc2ec40f6 522ae6702873a7c2 tools/perm_mut.olang
 0c34966761cf7198 3206b547cea98726 tools/precedence_migrate.olang
 150288baf335cf43 03298f2c8e742636 tools/results_migrate.olang
 0d0918b2771e7cc6 ffb3df4b62d6cbf5 tools/srcmask.olang
+685b418daa3582bb b9ad54b8dfd92212 tools/stutter_rename.olang
 94478a82bf28b022 2c62d7267b0ba76d tools/syntax_migrate.olang

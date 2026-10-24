@@ -23333,3 +23333,33 @@ escape here`. **A visible cost, decided:** an error escaping `main` prints its t
 **Goldens:** `make diaggold` changed two rows (one case's source line); tokens, ast and layout were recaptured, and layout's
 rows that stage 0 had and the self-hosted table cannot lay out were renamed in place.
 
+## `olang fix` (B17, 2026-10-24)
+
+The user's decision: one command that applies every migration since a file was written, the tools in order, no version
+marker - "each tool already changes only old forms". Built as a driver mode over `tools/*` rather than a seventeenth
+tool: `compiler/fix.olang` holds one ordered table (name, how it is called) and `fix.Files` builds each tool into the
+cache with the compiler that is running, runs it over all the files, and compares every file before and after to list
+the ones changed. `-check` is the same run with every file put back afterwards, which is the only way to say what a
+*pipeline* would do (a later tool sees the earlier one's output); the tools' own `--check`/`--dry` would each judge the
+original text.
+
+**The premise held for fifteen of nineteen.** Each text tool was run over std, tests, compiler, checks, bench, fuzz,
+tools, docs and editors (the four driven by diagnostics over five files of std and tests, for the time they take), and
+every one but four changed only files written in the old form on purpose (checks cases, the fixtures) or its own
+documentation. The four: `io_print` takes `try` off a call of `io.Print` (the old `print` had none)
+and `io_try` puts it back - the pair turns `try io.Print(t) catch io.Error { }` into `try io.Print(t)`, and drops the
+`!` of `io.Println(x)!` for a `try`; `precedence_migrate` wraps `a & b == c` because it reads it under the old
+precedence, which is not a form that can be told from the new; `io_fix` follows `io_try`. They stay one-shot tools and
+are listed as such in tools/README.md.
+
+**Order:** introduction order (the tools' first commits), text tools first, then the four driven by diagnostics. A
+driven tool on an unmigrated file is useless (the file does not parse, so the compiler reports nothing but syntax errors,
+which they do not read), and a text tool never needs the compiler, so the split loses nothing and the order inside each
+group is the order of the changes. **Cost:** the first run builds up to fifteen tools (45 s here, once per compiler); the
+driven four compile each file, so a run over a large tree is minutes, not seconds.
+
+**Found on the way:** `errors_migrate` had been calling `olang -t FILE` since B1 removed the one-character flags -
+every run ended with "0 edits"; it calls `olang test`. `bare_typevars` read std from the directory above its binary
+(`RepoRoot`), which a cache is not; `--std DIR`. `olang fix` is also the home of `tools/stutter_rename`, the std naming
+pass above.
+

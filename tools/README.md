@@ -31,6 +31,7 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
 | `equality_migrate.olang` | E10/E10c/E32: `x == null` -> `x is null`, `x is E.Case` -> `x == E.Case`, identity `a is b` -> `a == b` (listed, for a person to check where the type declares `Eq`) | `build/tools_equality_migrate [--check] [-v] FILE\|DIR...` |
 | `helper_rename.olang` | the helpers `Any`/`All` renamed `Some`/`Every`, calls and declarations | `build/tools_helper_rename [--check] [-v] FILE\|DIR...` |
 | `precedence_migrate.olang` | E5: `&`, `\|` and `^` bind tighter than the comparisons - every comparison that is an operand of one, unparenthesized, is wrapped (`a & b == c` -> `a & (b == c)`), read with the compiler's parser at the old precedence | `build/tools_precedence_migrate [--check\|--verify] [-v] FILE\|DIR...` |
+| `stutter_rename.olang` | the std naming rule: an error type named for its module is `Error` (`io.Error`, and likewise `os`, `json`, `csv`, `stats`, `rand`, `http`, `chan`, `ffi`, `filepath`) (a qualified use anywhere; the bare name only in the module's own file) | `build/tools_stutter_rename [--check] [-v] FILE\|DIR...` |
 | `null_migrate.olang` | T2c: references never null unless written `?&` - an array never null (`?` dropped, `null` its empty array, `is null` a length test), a declaration made nullable where a note says, `!` where a value may be null | `build/tools_null_migrate [--olang PATH] [-j N] FILE\|DIR...` |
 
 - `bare_typevars` works on the text alone (it finds std's type names from the repository its binary is built in).
@@ -45,7 +46,8 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
   read as an operator to move up, which an already migrated file cannot tell. Programs written inside strings (tests,
   generators) are not migrated - search them for `<T>`, `<<` and `+` in error sets by hand. Two checks cases are written
   in the old syntax on purpose (`checks/cases/commaendsline.olang`, `qwnointro.olang`): leave `checks/cases` out of a
-  run on this repository, or restore them after it.
+  run on this repository, or restore them after it; so is the fixture
+  `olang fix` is tested on (`checks/fixtures/fix/old.olang`).
 - `math_methods` works on the text alone and lists the literal receivers whose type a person should write (`math.Pow(2.0,
   x)` with an F32 `x` wants `F32(2.0).Pow(x)`); code inside strings and comments is searched for `math.` by hand.
 - `arrays_migrate` works on the text alone and lists for a person what depends on the code: an `Array<T, N>` as a type
@@ -60,6 +62,26 @@ tools/srcmask.olang` and `build/olang test tools/diagedit.olang` run their tests
   `checks/cases/l18coldresults.olang` is written in the old form on purpose: leave it out, or restore it after a run.
   `--check` writes nothing and the exit status says whether anything would change.
 - Comments and string literals are left alone. Run them again after merging a branch written under the old rule.
+
+## olang fix
+
+`olang fix FILE|DIR...` (SPEC B17) runs these tools, so a file from any earlier time can be brought to the language of
+today in one command: `olang fix -check FILES` lists the files that would change and writes nothing. Each tool changes
+only the forms it was written for, so there is no version in a file and fixing twice changes nothing. The tools are
+built into the cache (`fix/` in `OLANG_CACHE`) the first time, by the compiler that runs `fix`, from `tools/` beside it
+(`OLANG_TOOLS` names another place). The table is in `compiler/fix.olang`, in the order the changes were made, with the
+tools that read the text alone first and the ones driven by the compiler's diagnostics (`perm_mut`, `int_literal_i64`,
+`errors_migrate`, `null_migrate`) after them - an old file does not parse, so the compiler has nothing to say about it
+until the text tools have run:
+
+`bare_typevars`, `perm_mut`, `int_literal_i64`, `errors_migrate`, `cli_words`, `donefail_migrate`, `syntax_migrate`,
+`math_methods`, `arrays_migrate`, `results_migrate`, `equality_migrate`, `helper_rename`, `null_migrate`,
+`checkerror_rename`, `stutter_rename`.
+
+**Not run by `fix`**, because they are not idempotent - on code of today they would damage it: `io_print`, `io_try` and
+`io_fix` (M19f: they take `try` and `catch` off a call of `io.Print` and put `try` back without the `catch`, and `!`
+forms are lost), and `precedence_migrate` (E5: it reads every `a & b == c` as written for the old precedence and wraps
+the comparison). Run them by hand, on a tree written under the old rule, as before.
 
 The compiler's own tools are in `compiler/tools/` (the acceptance diffs and golden captures, which were shell scripts and
 are olang programs now, run by their make targets - `compiler/README.md`); the benchmark drivers are in `bench/`

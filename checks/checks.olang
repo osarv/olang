@@ -39,7 +39,7 @@ fn workers() I64 {
 # the last check to finish is a short one. A scenario is a function reporting into a report (r.expect(ok, what, dir) for
 # each thing it checks), named here and in scenario(), with a test reporting it: one missing from either is reported as
 # a failure, never skipped.
-Scenarios := String&["strheld", "fuzz", "bench", "agree", "linalg", "landing", "cgreview", "vechandle", "testends"
+Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "landing", "cgreview", "vechandle", "testends"
                      "scopesan", "frameenv", "crash", "interp", "target", "assertloc", "objnames", "spawnerr", "runfile"
                      "chunkpool", "capscope", "reuse", "updir", "stale", "osargs", "print", "inferfield", "tbaa", "pkg"
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
@@ -364,6 +364,7 @@ fn scenario(r mut report&, name String&) ? Failed {
     }
     match name {
         case "landing" { try landing(r) }
+        case "fix" { try fixing(r) }
         case "twolists" { try twolists(r) }
         case "sidebyside" { try sidebyside(r) }
         case "remote" { try remote(r) }
@@ -1917,6 +1918,28 @@ fn formatting(r mut report&) ? Failed {
                  sh(dir, "cmp -s b.olang broken.olang") == 0, "a file that does not parse", dir)
     try r.expect(sh(dir, "\"$OLANG\" format -debug u.olang > out.txt 2>&1") == 1 and
                  outOf(dir).Contains("-debug applies to"), "format -debug", dir)
+}
+
+# B17: fix runs the migration tools of tools/ over files written in an older language: -check lists the files it would
+# change and writes nothing, fix rewrites them and lists them, a file already in today's language is left alone, and
+# fixing a second time changes nothing. The tools are built into the cache the check gives it (OLANG_CACHE)
+test "fix rewrites old code to the language of today, and -check only says so" { assert passed("fix") }
+
+fn fixing(r mut report&) ? Failed {
+    dir := fresh("fix")
+    os.Run("cp checks/fixtures/fix/* checks/fixtures/output/prog.olang " $os.Quote(dir) " && cd " $os.Quote(dir) " && cp old.olang o.olang && cp prog.olang p.olang && cp prog.olang prog.keep")
+    env := "export OLANG_CACHE=" $os.Quote($dir "/cache") " && "
+    try r.expect(sh(dir, $env "\"$OLANG\" fix -check o.olang p.olang > out.txt 2> err.txt") == 1 and outOf(dir) == "o.olang\n"
+                 "fix -check lists the old file and only that", dir)
+    try r.expect(sh(dir, "cmp -s o.olang old.olang") == 0, "fix -check rewrote a file", dir)
+    try r.expect(sh(dir, $env "\"$OLANG\" fix o.olang p.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "o.olang\n"
+                 "fix lists the file it rewrote", dir)
+    try r.expect(sh(dir, "cmp -s o.olang new.want") == 0, "fix's result", dir)
+    try r.expect(sh(dir, "cmp -s p.olang prog.keep") == 0, "a file of today changed", dir)
+    try r.expect(sh(dir, $env "\"$OLANG\" fix -check o.olang p.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "", "fixed twice", dir)
+    try r.expect(sh(dir, "\"$OLANG\" o.olang > out.txt 2>&1") == 0 and outOf(dir) == "fixed 7\n4\n", "the fixed program runs", dir)
+    try r.expect(sh(dir, "\"$OLANG\" fix -debug o.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("-debug applies to"), "fix -debug", dir)
+    try r.expect(sh(dir, "\"$OLANG\" fix missing.olang > out.txt 2>&1") == 2 and outOf(dir).Contains("missing.olang: cannot be read"), "a missing file", dir)
 }
 
 # B1: the command line is words - a mode, options checked against the modes they apply to, help - and a one-character

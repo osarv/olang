@@ -5932,7 +5932,7 @@ other entry point; or it names a file, which is built and run (B3g):
 
 ```
 command   ::= "olang" [ mode-word ] { option } { argument }
-mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp"
+mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR
 ```
@@ -5940,7 +5940,7 @@ option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-t
 A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-(B14), `lsp` (B15) and `mcp` (B16). An
+(B14), `lsp` (B15), `mcp` (B16) and `fix` (B17). An
 **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 beginning with `-` that is no option is an error:
@@ -5951,10 +5951,10 @@ beginning with `-` that is no option is an error:
 | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
 | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
 | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
-| `-check` | format | B13 |
+| `-check` | format, fix | B13, B17 |
 | `-html DIR` | doc | B14 |
 
-`build` and `compile` take exactly one file, `test` and `format` one or more, `doc` one and a name or (with
+`build` and `compile` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
 every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 spellings: a flag of one character is an unknown option.
@@ -6469,6 +6469,18 @@ that does not parse has its diagnostics and answers nothing else; no request end
 **B16.** `mcp` serves the Model Context Protocol on the standard input and output (JSON-RPC 2.0, one message a line)
 with the tools `check` (a file's diagnostics, each its file, line, column, rule and message), `explain` (B11b),
 `doc` (B14), `format` (B13, the formatted text, the file unchanged) and `test` (B3a, each test's outcome).
+
+**B17.** `fix <file or directory> ...` rewrites code written in an older language to the language of today, by running
+the migration tools the language's changes came with (`tools/`, beside the compiler's `std/`; `OLANG_TOOLS` names another
+place) over the files - a directory standing for every `.olang` file under it - in the order the changes were made: the
+tools that read the text alone first, in that order, then those driven by the compiler's own diagnostics, which need a
+file it can read. Each tool changes only the forms it was written for, so there is no version in a file, and running `fix`
+on code of today changes nothing. It writes the name of each file it changed, one a line; with `-check` it changes nothing
+(the files are put back as they were) and its status is 1 when any would change. What a tool leaves for a person is
+written to the standard error. The status is 2 when a file cannot be read or a tool cannot be built or run. The tools
+are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), and again when the compiler or their source
+is newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
+`precedence_migrate`) - is not run.
 
 ## 11. External Functions
 
