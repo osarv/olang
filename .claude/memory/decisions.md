@@ -800,3 +800,14 @@ errors and documentation - generic `+` already works).
   message, evaluated only when reached, printed `FILE:LINE: unreachable reached: why`; no comma (nothing precedes it).
   Also confirmed to the user: assert stays a language statement (decided, message lazy, FILE:LINE, test-aware); abort,
   done, fail are gone (2026-10-17). Into the next batch with today's decisions.
+- CONTRACTS 2026-10-24, DECIDED (the user): functions with value conditions may be values, calls through them
+  unchecked; obligations are implicit contracts - conditions on scopes, always decided at the call (a call that can't
+  meet one is an error), which is why a function with scope conditions can't be a value; `olang explain FILE NAME`
+  prints any top-level item (functions/methods with inferred errors, scope and value conditions; types with
+  constructor, fields, methods, traits met; globals with type and baked value). The user wants trait-method conditions
+  and result guarantees. Proposed: a call through a constraint is held to the trait's conditions AND, per instance, the
+  implementing method's (no implication proofs; `any Trait&` calls get the trait's only); guarantees in brackets after
+  the result type `fn sqrt(x F64) [x >= 0.0] F64 [result >= 0.0]`, checked where the evaluator runs the call (blaming
+  the callee) and after the call under `checked`; optional later: a caller condition literally matching a guarantee is
+  decided. ASKED: `result` as the name (keyword only in those brackets); single results only for now (rec) or
+  `result.0`.
