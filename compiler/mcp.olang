@@ -1,0 +1,262 @@
+# mcp - "olang mcp" (B16): a Model Context Protocol server on the standard input and output, for agents. JSON-RPC 2.0, one
+# message a line; the tools check (diagnostics as data), explain (B11b), doc (B14), format (B13) and test (B3a).
+#
+# Each tool call runs in a process of its own - a fork of the server for check, explain, doc and format, the compiler
+# itself for test - so a crash of the compiler ends the call, with an error said, never the server, and each call's
+# memory goes with its process. check and format take the file's text in the call, where an agent has it unsaved.
+
+import "std/os"
+import "std/io"
+import "std/json"
+import "source"
+import "diag"
+import "build"
+import "explain"
+import "doc"
+import "session"
+
+# the tools, as tools/list describes them
+Tools String& = ("[{\"name\":\"check\",\"description\":\"Check an olang file as the compiler does (its program loaded, " $
+    "type-checked, its compile-time values and asserts decided, held to the scope rules): every diagnostic, each its " $
+    "file, line, column, rule and message, and the compiler's own one-row rendering. Pass text to check unsaved code " $
+    "in place of the file's contents.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"file\":{\"type\":" $
+    "\"string\",\"description\":\"path of the .olang file, the root of the program\"},\"text\":{\"type\":\"string\"," $
+    "\"description\":\"the file's text, if not as saved\"}},\"required\":[\"file\"]}}," $
+    "{\"name\":\"explain\",\"description\":\"A top-level item of an olang file as the compiler sees it: a function's " $
+    "whole signature with its inferred error set and scope obligations, a type's constructor, fields, methods and " $
+    "traits, a global's type and value - or, given a rule such as T6b and no file, that rule of the specification." $
+    "\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"file\":{\"type\":\"string\"},\"name\":{\"type\":" $
+    "\"string\",\"description\":\"an item, or Type.Method; or a rule of the specification when file is left out\"}}," $
+    "\"required\":[\"name\"]}}," $
+    "{\"name\":\"doc\",\"description\":\"The documentation of an olang module (its doc comments and the signatures of " $
+    "its exported items), or of one item of it.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"file\":" $
+    "{\"type\":\"string\",\"description\":\"a .olang file, or a std module as std/json\"},\"name\":{\"type\":" $
+    "\"string\"}},\"required\":[\"file\"]}}," $
+    "{\"name\":\"format\",\"description\":\"An olang file in the language's one layout, as olang format writes it - " $
+    "returned, the file left unchanged.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"file\":{\"type\":" $
+    "\"string\"},\"text\":{\"type\":\"string\",\"description\":\"the text to format, if not the file's\"}}," $
+    "\"required\":[\"file\"]}}," $
+    "{\"name\":\"test\",\"description\":\"Run an olang file's test blocks, as olang test does: each test's outcome " $
+    "and what the run printed.\",\"inputSchema\":{\"type\":\"object\",\"properties\":{\"file\":{\"type\":\"string\"}}," $
+    "\"required\":[\"file\"]}}]")
+
+# serves the protocol until the end of the input: 0
+fn Serve(cfg mut build.Config&, exe String&) I32 {
+    session.IgnoreBrokenPipes()
+    input mut session.Reader&cfg = session.Reader(0)
+    for input.Fill() {
+        for {
+            line := try input.NextLine() catch session.Incomplete { break }
+            if line.Trim() == "" { continue }
+            handle(line, cfg, exe)
+        }
+    }
+    return 0
+}
+
+fn send(body String&) { try io.Write(1, $body "\n") catch io.IoError { } }
+
+fn handle(line String&, cfg mut build.Config&, exe String&) {
+    msg := try json.Parse(line) catch json.JsonError {
+        send(errorReply("null", -32700, "the message is not JSON"))
+        return
+    }
+    method := str(msg, "method")
+    id := idOf(msg)
+    if method == "initialize" {
+        version := try msg["params"]["protocolVersion"].AsStr() catch json.JsonError default "2025-06-18"
+        b := StringBuilder()
+        b.Push("{\"protocolVersion\":")
+        session.JsonStr(b, version)
+        b.Push(",\"capabilities\":{\"tools\":{\"listChanged\":false}},\"serverInfo\":{\"name\":\"olang\",\"version\":\"0\"}," $
+               "\"instructions\":")
+        session.JsonStr(b, "Tools for the olang language: check a file's diagnostics, explain an item or a rule, a " $
+                        "module's documentation, format, and run a file's tests. Paths are relative to the server's " $
+                        "working directory.")
+        b.PushChar('}')
+        send(reply(id, b.ToString()))
+        return
+    }
+    if id == "" { return }             # a notification: initialized, cancelled
+    if method == "ping" {
+        send(reply(id, "{}"))
+        return
+    }
+    if method == "tools/list" {
+        send(reply(id, $"{\"tools\":" $Tools "}"))
+        return
+    }
+    if method == "tools/call" {
+        name := try msg["params"]["name"].AsStr() catch json.JsonError default ""
+        args := try msg["params"]["arguments"] catch json.JsonError default json.Json.Null
+        send(reply(id, call(name, args, cfg, exe)))
+        return
+    }
+    send(errorReply(id, -32601, $"olang mcp has no " $method))
+}
+
+# a tool call's result, CallToolResult as JSON
+fn call(name String&, args json.Json&, cfg mut build.Config&, exe String&) String {
+    file := str(args, "file")
+    if name == "test" {
+        if file == "" { return toolError("test needs a file") }
+        out := try os.Exec(String&[exe, "test", file]) catch os.OsError { return toolError("the compiler could not be run") }
+        return testResult($out.Stdout $out.Stderr, out.Status)
+    }
+    if name == "explain" and file == "" {
+        rule := str(args, "name")
+        out := try os.Exec(String&[exe, "explain", rule]) catch os.OsError { return toolError("the compiler could not be run") }
+        return textResult($out.Stdout $out.Stderr, out.Status != 0)
+    }
+    if name != "check" and name != "explain" and name != "doc" and name != "format" { return toolError($"no tool " $name) }
+    if file == "" { return toolError($name " needs a file") }
+    hasText := (try args["text"] catch json.JsonError default json.Json.Null) != json.Json.Null
+    text := str(args, "text")
+    item := str(args, "name")
+    out, status := session.ChildOutput(fn() String { return run(name, file, hasText, text, item, cfg) })
+    if status != 0 { return toolError($"the compiler ended while running " $name " (status " $status ") - a bug in the compiler") }
+    return out
+}
+
+# a tool run, in its own process: its CallToolResult
+fn run(name String&, file String&, hasText Bool, text String&, item String&, cfg mut build.Config&) String {
+    path := file
+    if name == "doc" and not file.EndsWith(".olang") { path = $session.StdModule(file) }
+    overlay := Map<String&, String&>()
+    if hasText { overlay.Put(session.RealOf(path), $text) }
+    if name == "format" {
+        given := text if hasText else (try os.ReadFile(path) catch os.OsError { return toolError($"cannot read " $path) })
+        formatted := try session.Format(path, given) catch { return textResult($path " does not parse - check it for its diagnostics", true) }
+        return textResult(formatted, false)
+    }
+    d mut diag.Diagnostics&cfg = diag.Diagnostics(false)
+    a := session.Analyze(path, cfg, d, overlay)
+    if name == "check" { return checkResult(a, d) }
+    if d.Errors() > 0 or a.C is null or a.Sc is null { return textResult($d.Render() $d.Summary(), true) }
+    if name == "explain" {
+        t := try explain.Item(a.C, a.Sc, a.X, a.L.Root, item) catch explain.Missing {
+            return textResult($"'" $item "' is no top-level item of " $path, true)
+        }
+        return textResult(t, false)
+    }
+    if item != "" {
+        t := try doc.ItemText(a.C, a.Sc, a.X, a.L.Root, item) catch explain.Missing {
+            return textResult($"'" $item "' is no item of " $path, true)
+        }
+        return textResult(t, false)
+    }
+    return textResult(doc.Of(a.C, a.Sc, a.X, a.L.Root, false).Text(), false)
+}
+
+# check's result: the diagnostics rendered as the compiler writes them, and as data
+fn checkResult(a session.Analysis&, d mut diag.Diagnostics&) String {
+    items := d.Items()
+    b := StringBuilder()
+    b.Push("{\"diagnostics\":[")
+    n I64 = 0
+    for i in range items.Len() {
+        it := items[i]
+        if not it.Error { continue }
+        if n > 0 { b.PushChar(',') }
+        n++
+        located(b, a, d, it)
+        b.Push(",\"notes\":[")
+        k I64 = 0
+        for j in range i + 1, items.Len() {
+            nt := items[j]
+            if nt.Error { break }
+            if k > 0 { b.PushChar(',') }
+            k++
+            located(b, a, d, nt)
+            b.PushChar('}')
+        }
+        b.Push("]}")
+    }
+    b.Push($"],\"errors\":" $n "}")
+    text := "no errors" if n == 0 else $d.Render() $d.Summary()
+    r := StringBuilder()
+    r.Push("{\"content\":[{\"type\":\"text\",\"text\":")
+    session.JsonStr(r, text)
+    r.Push($"}],\"structuredContent\":" $b.ToString() ",\"isError\":false}")
+    return r.ToString()
+}
+
+# a diagnostic's place and text as an open JSON object: file, line, column, end (both from 1, columns in bytes), rule,
+# message
+fn located(b mut StringBuilder&, a session.Analysis&, d mut diag.Diagnostics&, it diag.Item&) {
+    b.Push("{\"file\":")
+    session.JsonStr(b, d.PathOf(it.File) if it.File >= 0 else "")
+    if it.Start >= 0 {
+        p := session.Positions(d.TextOf(it.File), true)
+        l1, c1 := p.Pos(it.Start)
+        l2, c2 := p.Pos(it.End if it.End > it.Start else it.Start)
+        b.Push($",\"line\":" $(l1 + 1) ",\"column\":" $(c1 + 1) ",\"endLine\":" $(l2 + 1) ",\"endColumn\":" $(c2 + 1))
+    } else if it.Line > 0 {
+        b.Push($",\"line\":" $it.Line)
+    }
+    if it.Rule != "" {
+        b.Push(",\"rule\":")
+        session.JsonStr(b, it.Rule)
+    }
+    b.Push(",\"message\":")
+    session.JsonStr(b, it.Text)
+}
+
+# test's result: what the run printed, and each test's outcome from its "ok - " and "FAIL - " lines
+fn testResult(out String&, status I32) String {
+    b := StringBuilder()
+    b.Push("{\"tests\":[")
+    n I64 = 0
+    passed I64 = 0
+    for line in out.Lines() {
+        ok := line.StartsWith("ok - ")
+        if not ok and not line.StartsWith("FAIL - ") { continue }
+        if n > 0 { b.PushChar(',') }
+        n++
+        if ok { passed++ }
+        b.Push("{\"name\":")
+        session.JsonStr(b, line[5:] if ok else line[7:])
+        b.Push($",\"passed\":" $("true" if ok else "false") "}")
+    }
+    b.Push($"],\"passed\":" $passed ",\"failed\":" $(n - passed) ",\"status\":" $status "}")
+    r := StringBuilder()
+    r.Push("{\"content\":[{\"type\":\"text\",\"text\":")
+    session.JsonStr(r, out)
+    r.Push($"}],\"structuredContent\":" $b.ToString() ",\"isError\":" $("true" if status != 0 else "false") "}")
+    return r.ToString()
+}
+
+fn textResult(text String&, isError Bool) String {
+    b := StringBuilder()
+    b.Push("{\"content\":[{\"type\":\"text\",\"text\":")
+    session.JsonStr(b, text)
+    b.Push($"}],\"isError\":" $("true" if isError else "false") "}")
+    return b.ToString()
+}
+
+fn toolError(text String&) String { return textResult(text, true) }
+
+fn str(j json.Json&, key String&) String&j { return try j[key].AsStr() catch json.JsonError default "" }
+
+fn idOf(msg json.Json&) String {
+    v := try msg["id"] catch json.JsonError { return "" }
+    return json.Encode(v)
+}
+
+fn reply(id String&, result String&) String { return $"{\"jsonrpc\":\"2.0\",\"id\":" $id ",\"result\":" $result "}" }
+
+fn errorReply(id String&, code I64, message String&) String {
+    b := StringBuilder()
+    b.Push($"{\"jsonrpc\":\"2.0\",\"id\":" $id ",\"error\":{\"code\":" $code ",\"message\":")
+    session.JsonStr(b, message)
+    b.Push("}}")
+    return b.ToString()
+}
+
+# ---- tests ----
+
+test "a test run read as outcomes" {
+    r := testResult("== f ==\nok - one\nFAIL - two: T.W\n1 passed, 1 failed\n", 1)
+    assert r.Contains("\"tests\":[{\"name\":\"one\",\"passed\":true},{\"name\":\"two: T.W\",\"passed\":false}]")
+    assert r.Contains("\"passed\":1,\"failed\":1,\"status\":1") and r.EndsWith("\"isError\":true}")
+}

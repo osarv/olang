@@ -31,6 +31,7 @@ import "interp"
 import "explain"
 import "session"
 import "lsp"
+import "mcp"
 import typecheck "check"
 import "std/pair"
 
@@ -371,6 +372,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
     if cl.Mode == Format { return format(cl) }
     if cl.Mode == Doc { return session.DocMode(cl.Files.ToArray(), cl.Word, cl.Html, c) }
     if cl.Mode == Lsp { return lsp.Serve(c) }
+    if cl.Mode == Mcp { return mcp.Serve(c, try os.ReadLink("/proc/self/exe") catch os.OsError default $args[0]) }
     files := cl.Files.ToArray()
     if cl.Mode == Compile { return build.Compile(fe, c, files[0], d) }
     if cl.Mode == Build { return build.BuildProgram(fe, c, files[0], d) }

@@ -1306,6 +1306,12 @@ fn ExitStatus(raw I32) I32 {
     return (raw >> 8) & 255 if sig == 0 else 128 + sig
 }
 
+# the file of a module named by its import path, "std/json" (M23): std's own; any other path with ".olang" after it
+fn StdModule(spec String&) String {
+    if spec.StartsWith("std/") { return $filepath.Join(load.StdDir(), spec[4:]) ".olang" }
+    return $spec ".olang"
+}
+
 # every module of the standard library: std's files, then the prelude's
 fn stdModules(out mut List<String&>&) {
     std := load.StdDir()
