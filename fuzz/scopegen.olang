@@ -120,12 +120,20 @@ Prelude := (
     "    grid List<List<Cell>>\n"
     "    anys List<any Ag&>\n"
     "    cls List<mut any Cl&>\n"
+    "    szs List<any Sz&>\n"
     "}\n"
     "# run-time trait values (T32): an open trait met by nodes, boxes, a number and the enum, a mut one, a closed one\n"
     "type Ag trait {\n    Val() I64\n}\n"
     "type Gr trait {\n    Val() I64\n    mut Grow(v I64)\n}\n"
     "type Cl trait for Node, Cnt {\n    Val() I64\n}\n"
     "type Cnt extends I64\n"
+    "# arrays copied into an any's box (T32a): their elements' references held where it lands, a conversion copied too\n"
+    "type Sz trait {\n    Len() I64\n}\n"
+    "type Lab extends String\n"
+    "fn (l Lab&) Val() I64 { return l.Len() * 7 + I64(U8(l[0])) }\n"
+    "type Ns extends Array<mut Node&>\n"
+    "fn (a Ns&) Val() I64 {\n    t I64 = 0\n    for n in a { t = t * 3 + chain(n) }\n    return t\n}\n"
+    "fn sumSz(l List<any Sz&>&) I64 {\n    t I64 = 0\n    for x in l { t = t * 7 + ($x).Len() }\n    return t\n}\n"
     "fn (c Cnt) Val() I64 { return I64(c) * 3 }\n"
     "fn (n Node&) Val() I64 { return chain(n) }\n"
     "fn (n mut Node&) Grow(v I64) { n.next = Node(v) }\n"
@@ -320,7 +328,7 @@ Checks := String&[
     "sumList(l)"
     "sumMap(m)"
     "sumArr(a)"
-    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes) * 5 + sumCells(bag.cells) * 3 + sumCells(bag.grid[0]) + sumAg(bag.anys) * 13 + sumCl(bag.cls) * 17"
+    "sumList(bag.nodes) * 7 + sumBoxes(bag.boxes) * 5 + sumCells(bag.cells) * 3 + sumCells(bag.grid[0]) + sumAg(bag.anys) * 13 + sumCl(bag.cls) * 17 + sumSz(bag.szs) * 19"
     "sumE(e)"
     "sumList(l)"
     "chain(t.items[0]) * 7 + chain(t.items[1])"
@@ -746,8 +754,21 @@ fn (g mut SG&) cellOp(b String&, ind String&) String& {
 fn (g mut SG&) anyOp(b String&, ind String&) String& {
     v := g.val()
     q := g.name("q")
-    k := g.r(12)
+    k := g.r(16)
     if k == 0 { return $ind $b ".anys.Push(" $g.newNode() ")\n" }
+    if k == 12 {    # an array of nodes made in an inner block, copied into an any kept outward: refused (T32a)
+        return ($ind "{\n" $ind "    " $q " := Array<mut Node&>(2, Node(" $v "))\n" $ind "    " $q "[1] = Node(" $v " + 1)\n" $ind "    "
+                $b ".szs.Push(" $q ")\n" $ind "}\n")
+    }
+    if k == 13 {    # an inner block's text converted to a type over String: copied into the box (T32a, T29a)
+        return $ind "{\n" $ind "    " $q " := \"t\" $" $v " \"-\" $(" $v " * 3)\n" $ind "    " $b ".anys.Push(Lab(" $q "))\n" $ind "}\n"
+    }
+    if k == 14 {    # an inner block's array of nodes converted: copied, its nodes held where the any lands - refused
+        return $ind "{\n" $ind "    " $q " := Array<mut Node&>(1, Node(" $v "))\n" $ind "    " $b ".anys.Push(Ns(" $q "))\n" $ind "}\n"
+    }
+    if k == 15 {    # an inner block's text copied into an any
+        return $ind "{\n" $ind "    " $q " := \"u\" $" $v "\n" $ind "    churn()\n" $ind "    " $b ".szs.Push(" $q ")\n" $ind "}\n"
+    }
     if k == 1 { return $ind $b ".anys.Push(Cnt(" $v "))\n" }
     if k == 2 { return $ind $b ".anys.Push(Box())\n" }
     if k == 3 { return $ind $b ".anys.Push(E.A(Box()))\n" }
