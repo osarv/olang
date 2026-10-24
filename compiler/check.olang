@@ -95,6 +95,8 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     P
     Tests                                  # a test build (the root module's test blocks are checked in every build, S15)
     RootOnly Bool = false                  # only the root module's declarations, and what they ask for (tests)
+    spellItem Bool = false                 # spelling an item of a list: a function type holding a comma is grouped (L18c)
+    spellGroup Bool = false                # the next function type is grouped: a result before its signature's "?"
     s4d List<typed.Place&>                 # S4d: the value places an assignment writes over, while its values are checked
     Bodies List<mut typed.Body&>
     Gaps List<Gap>
@@ -3152,7 +3154,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.DefaultErr { b.Push("what its body can fail with") }
         case types.Kind.Noreturn { b.Push("noreturn") }
         case types.Kind.ErrWords {
-            # R1c: "T.W + T.V", as a signature writes the words it names
+            # R1c: "T.W, T.V", as a signature writes the words it names
             et := c.P.T.ErrOf(t)
             name := c.text(c.P.T.DeclName(c.P.T.DeclOf(et)))
             ws := c.P.ErrorWords(c.P.T.DeclOf(et))
@@ -3160,7 +3162,7 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             first := true
             for i in range ws.Len() {
                 if i < 64 and (mask & (U64(1) << i)) != 0 {
-                    if not first { b.Push(" + ") }
+                    if not first { b.Push(", ") }
                     b.Push($name "." $c.text(ws[i]))
                     first = false
                 }
@@ -3173,7 +3175,10 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
         case types.Kind.Array {
             b.Push("Array<")
             # T7c: a length is never part of a type as written - fixed storage is spelled as any array
+            was := c.spellItem
+            c.spellItem = true
             c.spell(b, c.P.T.Elem(t), false)
+            c.spellItem = was
             b.PushChar('>')
         }
         case types.Kind.Ref {
@@ -3184,7 +3189,19 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
             b.PushChar('&')
         }
         case types.Kind.Func {
-            b.Push("fn(")
+            res := c.P.T.Result(t)
+            es := c.P.T.Items(c.P.T.Errors(t))
+            named := 0
+            for e in es {
+                if e != types.DefaultErrT { named++ }
+            }
+            several := (c.P.T.KindOf(res) == types.Kind.Tuple and c.P.T.Items(c.P.T.Parts(res)).Len() > 1) or named > 1
+            # L18c: an item of a list holding a comma of its own, or a result before its signature's "?", whole
+            wrap := c.spellGroup or (c.spellItem and several)
+            c.spellGroup = false
+            wasItem := c.spellItem
+            c.spellItem = true
+            b.Push("(fn(" if wrap else "fn(")
             ps := c.P.T.Items(c.P.T.Params(t))
             ns := c.P.T.NamesOf(t)
             for i in range ps.Len() {
@@ -3199,28 +3216,40 @@ fn (c mut Checker&) spell(b mut StringBuilder&, t types.TypeId, top Bool) {
                 if sh >= 0 and sh != i and sh < ns.Len() and ns.Len() == ps.Len() { b.Push(c.text(source.NameId(I32(ns[sh])))) }
             }
             b.PushChar(')')
-            res := c.P.T.Result(t)
-            if res != types.VoidT {
+            if c.P.T.KindOf(res) == types.Kind.Tuple {
+                # several results, bare (D8c)
+                parts := c.P.T.Items(c.P.T.Parts(res))
+                for i in range parts.Len() {
+                    b.Push(", " if i > 0 else " ")
+                    c.spell(b, parts[i], false)
+                }
+            } else if res != types.VoidT {
                 b.PushChar(' ')
                 rf := c.P.T.ResultFrom(t, 0) if c.P.T.KindOf(res) == types.Kind.Ref else types.FromTypeVar
                 if rf == types.OwnScope {
                     # a built result is new storage, writable (T25c)
                     c.spell(b, c.P.T.Ref(c.P.T.Referent(res), types.Writable), false)
                 } else {
+                    c.spellGroup = es.Len() > 0 and c.P.T.KindOf(res) == types.Kind.Func and
+                                   c.P.T.Items(c.P.T.Errors(res)).Len() == 0
                     c.spell(b, res, false)
+                    c.spellGroup = false
                     # a result borrowed from a parameter, "mut N&a" (T22)
                     if rf >= 0 and rf < ns.Len() and ns.Len() == ps.Len() { b.Push(c.text(source.NameId(I32(ns[rf])))) }
                 }
             }
-            es := c.P.T.Items(c.P.T.Errors(t))
+            c.spellItem = wasItem
             if es.Len() > 0 {
                 b.Push(" ?")
-                for i in range es.Len() {
-                    if es[i] == types.DefaultErrT { continue }
-                    b.Push(" " if i == 0 else " + ")
-                    c.spell(b, es[i], false)
+                k := 0
+                for e in es {
+                    if e == types.DefaultErrT { continue }
+                    b.Push(" " if k == 0 else ", ")
+                    c.spell(b, e, false)
+                    k++
                 }
             }
+            if wrap { b.PushChar(')') }
         }
         case types.Kind.Tuple { c.spellList(b, c.P.T.Parts(t), "(", ")") }
         case types.Kind.AnonEnum {
@@ -3263,10 +3292,13 @@ fn (c mut Checker&) spellList(b mut StringBuilder&, l types.ListId, open String&
     xs := c.P.T.Items(l)
     if xs.Len() == 0 and open == "<" { return }
     b.Push(open)
+    was := c.spellItem
+    c.spellItem = true
     for i in range xs.Len() {
         if i > 0 { b.Push(", ") }
         c.spell(b, xs[i], false)
     }
+    c.spellItem = was
     b.Push(end)
 }
 

@@ -119,6 +119,7 @@ type Diag enum {
     DestructInBody
     JoinPiece
     TrailingComma
+    NeedlessGroup
     VarListCount
     ErrorAfterQuestion
     ValueAfterEq
@@ -791,6 +792,9 @@ fn DestructInBody() Msg { return Msg(Diag.DestructInBody, "C7", "'destruct' foll
 
 # ERR_JOIN_PIECE
 fn JoinPiece(text String&) Msg { return Msg(Diag.JoinPiece, "E11b", "a join piece is a text literal or a '$' rendering - write '$" $text "'") }
+
+# ERR_NEEDLESS_GROUP
+fn NeedlessGroup() Msg { return Msg(Diag.NeedlessGroup, "L18c", "parentheses group a function type of several results or error items written in a list - write this type without them") }
 
 # ERR_TRAILING_COMMA
 fn TrailingComma(tok String&) Msg { return Msg(Diag.TrailingComma, "L18a", "a comma before " $tok " separates nothing - remove it") }
