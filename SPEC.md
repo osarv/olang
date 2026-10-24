@@ -6693,6 +6693,15 @@ and the program's declaration is taken at its word as any prototype is (X1a). It
 `Point&` crossing as a `struct Point *` naming the program's own instance, which the foreign function may write; an
 array of them crosses as a pointer to the first (X3).
 
+**X15 (text and C).** C's string - a `char *` naming bytes ended by a NUL - has two forms here. Text goes to C as
+`t.ToC()`, a method every `String` has (§4 M19d, the prelude): a new `Array<U8>` holding the text's bytes and a NUL
+after them, which an extern's `Array<U8>` parameter hands over as the `char *` (X3); a NUL inside the text ends the
+string C sees there. C's string comes back as a reference to the prelude's extern type `CStr` (X10) - a function
+declared `extern fn getenv(name Array<U8>) CStr?&` - and is read as text with `p.StringFromC(max)`: a new `String`
+holding its bytes up to the first NUL, or its first `max` where there is none sooner (none for a `max` of 0 or less).
+That `p` names a C string at all, and that what it names is still there, is the foreign function's word, taken as
+its prototype is (X1a). Nothing else reads what a `CStr&` names.
+
 ## 12. Generics
 
 A function or a struct type may be **generic**: parameterized over one or more types, with a separate copy compiled
