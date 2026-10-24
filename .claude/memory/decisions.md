@@ -811,3 +811,10 @@ errors and documentation - generic `+` already works).
   the callee) and after the call under `checked`; optional later: a caller condition literally matching a guarantee is
   decided. ASKED: `result` as the name (keyword only in those brackets); single results only for now (rec) or
   `result.0`.
+- CONTRACTS 2026-10-24, DECIDED (the user): result guarantees name the results that carry them - `fn sqrt(x F64)
+  [x >= 0.0] r F64 [r >= 0.0]`, `(q I64, r I64) [0 <= r < b]` - names usable only in those brackets (mine: no naked
+  returns); the guarantee comes before `? E` and holds only on a normal return (mine). DIRECTION (the user): "We are going
+  to do theorem proving" - the g(sqrt(x)) special case dropped. Rule fixed now (mine): the prover only moves conditions
+  out of "unchecked" (proved: no check even under checked; refuted: compile error; neither: unchecked unless checked),
+  so a better prover never changes a program's meaning. Prover design (logic: bit-vectors for wrapping integers;
+  own solver or an existing one) later. Trait-method conditions parked until run-time traits are discussed.
