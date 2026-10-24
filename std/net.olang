@@ -1,9 +1,9 @@
 # net - TCP and UDP sockets, blocking, over the C library's socket calls through "extern fn" (§11) as io and os are.
 # A server listens, accepts each connection and serves it - one task per connection is the shape (spawn's threads are
 # 1:1, P1e); a client dials. IPv4 and IPv6 alike: an IP is either, an Addr is an IP and a port, written as
-# "127.0.0.1:8080" or "[::1]:8080". Every failure is a net.Error naming why. There is no async I/O and no DNS here: a
-# name is not resolved (only "localhost" is known), since getaddrinfo hands back a linked list of C structures, which
-# nothing can receive across "extern fn" (X2) - addresses are written as numbers.
+# "127.0.0.1:8080" or "[::1]:8080". Every failure is a net.Error naming why. There is no async I/O. A name is resolved by
+# Lookup and Resolve, through the C library's getaddrinfo (its linked list of addrinfo is read through extern types,
+# X10, and a plain-data struct, X11); ParseIP and ParseAddr read only numbers (and "localhost").
 #
 # A Conn, a Listener and a UDP socket close their descriptor when their scope closes (a destructor, C9), and Close()
 # closes it sooner; each is held by reference (C11). Linux's socket constants, the same on x86-64 and AArch64.
@@ -45,6 +45,7 @@ shutWr I32 = 1
 # TIMEOUT: a timeout set on the socket passed, or the connection attempt timed out; RESET: the other side reset or
 # closed the connection while this side was writing; UNREACHABLE: no route to the network or host; ADDRESS: text that
 # is no address, a port outside 0-65535, or an address this machine does not have (an IPv6 one where IPv6 is off);
+# UNKNOWN_HOST: a name Lookup or Resolve was given has no address (or the name server says it does not exist);
 # CLOSED: the other side closed the connection, so there is nothing more to read - the end of the stream - or this side
 # did; DENIED: not permitted (a port below 1024, say); FAILED: any other reason
 error Error {
@@ -54,6 +55,7 @@ error Error {
     RESET
     UNREACHABLE
     ADDRESS
+    UNKNOWN_HOST
     CLOSED
     DENIED
     FAILED
@@ -349,6 +351,84 @@ fn nameOf(fd I32, peer Bool) Addr ? Error {
     return fromSockaddr(sa)
 }
 
+# ---- names ----
+
+extern type aiNode
+extern type cSockaddr
+
+# C's struct addrinfo, as glibc lays it out on x86-64 and AArch64: what getaddrinfo is asked for (hints) and one entry of
+# what it answers
+type aiFields struct() {
+    flags I32 = 0
+    family I32 = 0
+    socktype I32 = 0
+    protocol I32 = 0
+    addrlen U32 = 0
+    addr cSockaddr?& = null
+    canonname cSockaddr?& = null
+    next aiNode?& = null
+}
+
+extern fn getaddrinfo(node Array<U8>, service Array<U8>, hints aiFields&, res mut Array<aiNode?&>&) I32
+extern fn freeaddrinfo(res aiNode&)
+extern fn memcpy(dst mut aiFields&, src aiNode&, n I64) aiNode?&
+extern fn memmove(dst mut Array<U8>&, src cSockaddr&, n I64) cSockaddr?&
+
+# getaddrinfo's answers that say the name has no address: EAI_NONAME, EAI_NODATA, EAI_FAIL, EAI_ADDRFAMILY (glibc's
+# numbers); EAI_AGAIN is the name server not answering
+fn lookupFailed(rc I32) ? Error.UNKNOWN_HOST, Error.UNREACHABLE, Error.FAILED {
+    match rc {
+        case -2, -5, -4, -9 { error Error.UNKNOWN_HOST }
+        case -3 { error Error.UNREACHABLE }
+        case _ { error Error.FAILED }
+    }
+}
+
+# every address a name has - the C library's answer (its hosts file, then DNS), in its order, each once. A name that is
+# an address already is that address, asked of no one; an empty name or one with no address fails with UNKNOWN_HOST
+fn Lookup(host String&) Array<IP> ? Error.UNKNOWN_HOST, Error.UNREACHABLE, Error.FAILED {
+    if host == "" { error Error.UNKNOWN_HOST }
+    if host != "localhost" {
+        numeric := true
+        ip := try ParseIP(host) catch { numeric = false } default IP()
+        if numeric { return IP[ip] }
+    }
+    hints := aiFields()
+    hints.socktype = sockStream
+    out := Array<aiNode?&>(1)
+    rc := getaddrinfo(host.ToC(), "0".ToC(), hints, out)
+    if rc != 0 { try lookupFailed(rc) }
+    head := out[0]
+    ips := List<IP>()
+    p := head
+    for p is not null {
+        f := aiFields()
+        memcpy(f, p, 48)
+        sa := Array<U8>(28)
+        a := f.addr
+        if a is not null and (f.family == afInet or f.family == afInet6) {
+            memmove(sa, a, I64(f.addrlen.Min(28)))
+            ip := fromSockaddr(sa).Host
+            if ip not in ips { ips.Push(ip) }
+        }
+        p = f.next
+    }
+    if head is not null { freeaddrinfo(head) }
+    if ips.Len() == 0 { error Error.UNKNOWN_HOST }
+    return ips.ToArray()
+}
+
+# "host:port" - a name or an address, an IPv6 one in brackets - read into the Addr of the host's first address, failing
+# with ADDRESS for text of another shape and as Lookup does for a name with no address
+fn Resolve(t String&) Addr ? Error.ADDRESS, Error.UNKNOWN_HOST, Error.UNREACHABLE, Error.FAILED {
+    if t.Len() > 0 and t[0] == '[' { return try ParseAddr(t) }
+    colon := try t.FindLast(":") catch { error Error.ADDRESS }
+    port, end := try decimalAt(t, colon + 1, 65535)
+    if end != t.Len() { error Error.ADDRESS }
+    ips := try Lookup(t[:colon])
+    return Addr(ips[0], U16(port))
+}
+
 # ---- TCP ----
 
 # a connection, either side's: read and written as a stream of bytes until Close or the end of its scope
@@ -554,6 +634,20 @@ test "addresses are read and written as text" {
     for bad in String&["127.0.0.1", "127.0.0.1:65536", "::1:80", "[::1]80", "1.2.3.4:x"] {
         try ParseAddr(bad) catch Error.ADDRESS { continue }
         unreachable
+    }
+}
+
+test "names are resolved through the C library, numbers read as they are" {
+    for ip in Lookup("localhost")! { assert ip.IsLoopback() }
+    assert Lookup("10.1.2.3")! == IP[IPv4(10, 1, 2, 3)] and Lookup("::1")! == IP[Loopback6()]
+    a := Resolve("localhost:8080")!
+    assert a.Port == 8080 and a.Host.IsLoopback() and $Resolve("[::1]:443")! == "[::1]:443"
+    try Lookup("") catch Error.UNKNOWN_HOST { } catch { unreachable "an empty name" }
+    # a name the standard reserves never to exist (RFC 6761) - or a machine with no name server, which cannot say
+    try Lookup("no-such-host.invalid") catch Error.UNKNOWN_HOST, Error.UNREACHABLE { } catch { unreachable "resolved" }
+    for bad in String&["localhost", "localhost:", "localhost:65536", "[::1]80"] {
+        try Resolve(bad) catch Error.ADDRESS { continue } catch { }
+        unreachable $bad
     }
 }
 
