@@ -79,7 +79,8 @@ type Emitter struct(P mut generic.Program&, Lw mut lower.Lowerer&, D mut diag.Di
     dtorOf Map<types.TypeId, I64>
     indexed Bool = false
     Module Bool = false             # one module compiled alone (compile): its own bodies, no entry
-    SplitFrom I64 = 1 << 62         # the IR from which an object larger than PartSize is cut into parts (Objects)
+    SplitFrom I64 = 1 << 62         # the IR from which an object larger than PartLimit is cut into parts (Objects)
+    PartLimit I64 = PartSize        # the IR of one part at most: PartSize, or PartSizeDev in a -quick or -debug build
     emitted Bool = false
     tyDef List<String&>             # each type spelled by name, defined: "%\"NAME\" = type BODY"
     tyAt Map<String&, I64>          # a type's definition by its name (between the quotes)
@@ -391,7 +392,7 @@ fn (e mut Emitter&) parts(out mut List<Object>&, identity String&, kind ObjectKi
             if (h == home or (alsoInst and h == HomeInst)) and (grp < 0 or e.groupOf(i) == grp) and
                 (ig < 0 or e.instGroupOf(i) == ig) { size += e.itemText[i].Len() }
         }
-        cut := PartSize / 4 if grp == 1 else PartSize
+        cut := e.PartLimit / 4 if grp == 1 else e.PartLimit
         n := (size + cut - 1) / cut if split else 1
         if n < 1 { n = 1 }
         if grp == 1 and size == 0 { continue }
@@ -424,10 +425,13 @@ fn (e Emitter&) groupOf(i I64) I64 {
     return 1 if sym.StartsWith("olang_test_") or sym == "main" else 0
 }
 
-# the IR of one part an object is cut into, at most (Objects): measured (round 9) against 2 MB, the compiler's own build
-# at -quick 46 -> 24 s clean and an edit in the middle of check.olang 6.7 -> 4.1 s, at -O3 that edit 16.5 -> 9.7 s, the
-# -O3 clean build and the test build of tests/shared.olang as fast; 256 KB made the -O3 build 8% more work
-PartSize I64 = 512 << 10
+# the IR of one part an object is cut into, at most (Objects, PartLimit): 1 MB for a build linking by ThinLTO, 512 KB
+# where nothing is optimized across objects (-quick, -debug). Measured (round 9) against 2 MB on the compiler's own
+# build: an edit in the middle of check.olang at -O3 16.0 -> 8.9 s (its part's backend no longer the last to finish),
+# the clean build as fast, the compiler built so running 0.4% more instructions (at 512 KB 0.9%); at -quick the clean
+# build 46 -> 24 s and that edit 6.7 -> 4.1 s. 256 KB made the -O3 build 8% more work
+PartSize I64 = 1 << 20
+PartSizeDev I64 = 512 << 10
 
 # the part of n item i is in: its symbol's hash, so where an item goes depends on its symbol alone - but every global
 # in one, since a baked global may point into the private blobs beside another (K2b), which no other object can name

@@ -494,6 +494,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
+    if cfg.Quick or cfg.Debug { e.PartLimit = emit.PartSizeDev }
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
     return e
 }
@@ -516,7 +517,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.Stat(exe) catch os.OsError { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $tests "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $tests "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 
