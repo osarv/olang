@@ -744,3 +744,8 @@ errors and documentation - generic `+` already works).
   for unnamed sets in declarations "as with errors and return values". Proposed: inline members joined by `or` (commas
   separate type parameters): `fn mix<T for I32 or F64>(a T, b T)`, `<T Shape for Circle or Square>` (closed and must
   have Shape's methods); named traits keep commas. Rec; awaiting a yes.
+- DECIDED 2026-10-24 (the user: "let's do parenthesis as <T (I32, I64), U>"): an inline closed set is parenthesized in
+  the type parameter list, `<T Shape (Circle, Square)>` adding Shape's methods. The user asked whether parentheses
+  should become general listing / tuples: rec grouping only ("a parenthesized list is one item of the list around
+  it" - results in function types, constraint sets), no tuple values (D8c). ASKED: under that rule, bring back
+  `fn(I64) ? (A, B)` for a function type's error set (removed earlier for named sets)?
