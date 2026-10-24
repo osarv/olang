@@ -1,5 +1,5 @@
 # regex - regular expressions in RE2's style: matched in time linear in the text, whatever the pattern - no
-# backtracking, so no pattern can take exponential time - by a Pike VM: the pattern compiled to a small program whose
+# backtracking, so no pattern can take exponential time - by a lazy DFA where it serves and a Pike VM for groups: the pattern compiled to a small program whose
 # threads all advance through the text together, one step per code point. Matching is on code points of UTF-8 (a
 # byte that is not UTF-8 matches as U+FFFD); positions are byte offsets. Leftmost-first, as Perl and RE2: of the matches
 # starting leftmost, the one the pattern prefers - alternatives in order, greedy repetition longest.
@@ -87,6 +87,10 @@ type prog struct(pattern String&) {
     names Vec<String&> = Vec<String&>()       # each group's name, "" for none; [0] the whole match
     prefix mut String& = ""                  # literal text every match starts with, when the pattern begins with one
     anchored Bool = false                    # whether every match starts at the start of the text
+    code mut Array<I64>& = Array<I64>(0)     # the instructions as matching reads them: op, x, y, z for each
+    rcode mut Array<I64>& = Array<I64>(0)    # the reversed program, as code, for finding where a match starts
+    rng mut Array<U32>& = Array<U32>(0)      # the ranges, likewise
+    dfaOK Bool = false                       # whether the DFA may stand for the program (no assertion but a leading ^)
 }
 
 fn (p mut prog&) emit(op I64, x I64, y I64, z I64) I64 {
@@ -131,6 +135,7 @@ type parser struct(text String&) {
     multi Bool = false
     dotAll Bool = false
     groups I64 = 1
+    reverse Bool = false                      # emitting the reversed program: concatenations backwards, no saves
 }
 
 fn (q mut parser&) add(n node) I64 {
@@ -645,7 +650,7 @@ fn (q mut parser&) emitNode(i I64) ? SyntaxError.TOO_BIG {
         case nClass { p.emit(opClass, n.a, n.b, 1 if n.neg else 0) }
         case nAny { p.emit(opAny, 0, 1 if n.neg else 0, 0) }
         case nCat {
-            for j in range n.b { try q.emitNode(q.kids[n.a + j]) }
+            for j in range n.b { try q.emitNode(q.kids[n.a + (n.b - 1 - j if q.reverse else j)]) }
         }
         case nAlt {
             jumps := Vec<I64>()
@@ -662,11 +667,13 @@ fn (q mut parser&) emitNode(i I64) ? SyntaxError.TOO_BIG {
             for jmp in jumps.View() { p.x[jmp] = p.op.Len() }
         }
         case nGroup {
-            if n.b >= 0: p.emit(opSave, 2 * n.b, 0, 0)
+            if n.b >= 0 and not q.reverse: p.emit(opSave, 2 * n.b, 0, 0)
             try q.emitNode(n.a)
-            if n.b >= 0: p.emit(opSave, 2 * n.b + 1, 0, 0)
+            if n.b >= 0 and not q.reverse: p.emit(opSave, 2 * n.b + 1, 0, 0)
         }
-        case nAssert { p.emit(opAssert, n.a, 0, 0) }
+        case nAssert {
+            if not q.reverse: p.emit(opAssert, n.a, 0, 0)
+        }
         case nRepeat {
             for k in range n.min - 1 if n.max < 0 and n.min > 0 else n.min { try q.emitNode(n.a) }
             if n.max < 0 {
@@ -716,6 +723,18 @@ fn (p mut prog&) findPrefix() {
     p.anchored = pc < p.op.Len() and p.op[pc] == opAssert and p.x[pc] == atTextStart
 }
 
+# the instructions emitted, as matching reads them
+fn (p prog&) pack() mut Array<I64>&p {
+    c mut Array<I64>&p = Array<I64>(4 * p.op.Len())
+    for pc in range p.op.Len() {
+        c[4 * pc] = p.op[pc]
+        c[4 * pc + 1] = p.x[pc]
+        c[4 * pc + 2] = p.y[pc]
+        c[4 * pc + 3] = p.z[pc]
+    }
+    return c
+}
+
 # the pattern compiled - failing with the SyntaxError naming what is wrong with it
 fn Compile(pattern String&) Regex ? SyntaxError {
     q := parser(pattern)
@@ -728,6 +747,20 @@ fn Compile(pattern String&) Regex ? SyntaxError {
     p.emit(opSave, 1, 0, 0)
     p.emit(opMatch, 0, 0, 0)
     p.findPrefix()
+    p.code = p.pack()
+    p.dfaOK = true
+    for pc in range p.op.Len() {
+        if p.op[pc] == opAssert and not (pc == 1 and p.x[pc] == atTextStart): p.dfaOK = false
+    }
+    p.op.Clear()
+    p.x.Clear()
+    p.y.Clear()
+    p.z.Clear()
+    q.reverse = true
+    try q.emitNode(root)
+    p.emit(opMatch, 0, 0, 0)
+    p.rcode = p.pack()
+    p.rng = p.ranges.ToArray()
     return Regex(p)
 }
 
@@ -765,15 +798,17 @@ fn runeAt(t String&, i I64) I64, I64 {
 }
 
 fn (p prog&) inClass(pc I64, r I64) Bool {
-    from := p.x[pc]
+    code := p.code
+    rng := p.rng
+    from := code[4 * pc + 1]
     hit := false
-    for k in range p.y[pc] {
-        if I64(p.ranges[from + 2 * k]) <= r and r <= I64(p.ranges[from + 2 * k + 1]) {
+    for k in range code[4 * pc + 2] {
+        if I64(rng[from + 2 * k]) <= r and r <= I64(rng[from + 2 * k + 1]) {
             hit = true
             break
         }
     }
-    return hit != (p.z[pc] == 1)
+    return hit != (code[4 * pc + 3] == 1)
 }
 
 # the state of one search
@@ -781,12 +816,13 @@ type machine struct(of prog&, text String&, ncap I64) {
     p prog&of = of
     t String&text = text
     ncap
-    clist mut threads& = threads(of.op.Len(), ncap)
-    nlist mut threads& = threads(of.op.Len(), ncap)
+    clist mut threads& = threads(of.code.Len() / 4, ncap)
+    nlist mut threads& = threads(of.code.Len() / 4, ncap)
     work mut Array<I64>& = Array<I64>(ncap)   # the captures of the thread being added
-    stack := Vec<I64>()                       # pending pcs, and captures to restore (-2 - slot, then the old value)
+    stack mut Array<I64>& = Array<I64>(3 * of.code.Len() / 4 + 4)   # pending pcs, and captures to restore (-2 - slot, then the old value)
     found Bool = false
     best mut Array<I64>& = Array<I64>(ncap)   # the captures of the match found
+    only I64 = -1                             # where threads may start, when the DFA has found where; -1 anywhere
 }
 
 # whether assertion a holds at byte i
@@ -809,14 +845,16 @@ fn (m machine&) holds(a I64, i I64) Bool {
 # first), saves and assertions there and then, so a list holds only threads waiting on a code point or a match
 fn (m mut machine&) add(l mut threads&, pc0 I64, i I64) {
     p := m.p
+    code := p.code
     st := m.stack
-    st.Clear()
-    st.Push(pc0)
-    for st.Len() > 0 {
-        pc := try st.Pop() catch VecError default 0
+    sp I64 = 1
+    st[0] = pc0
+    for sp > 0 {
+        sp--
+        pc := st[sp]
         if pc < -1 {
-            slot := -2 - pc
-            m.work[slot] = try st.Pop() catch VecError default 0
+            sp--
+            m.work[-2 - pc] = st[sp]
             continue
         }
         for {
@@ -824,22 +862,24 @@ fn (m mut machine&) add(l mut threads&, pc0 I64, i I64) {
             l.sparse[pc] = l.n
             l.dense[l.n] = pc
             l.n++
-            op := p.op[pc]
+            op := code[4 * pc]
             if op == opJmp {
-                pc = p.x[pc]
+                pc = code[4 * pc + 1]
             } else if op == opSplit {
-                st.Push(p.y[pc])
-                pc = p.x[pc]
+                st[sp] = code[4 * pc + 2]
+                sp++
+                pc = code[4 * pc + 1]
             } else if op == opSave {
-                slot := p.x[pc]
+                slot := code[4 * pc + 1]
                 if slot < m.ncap {
-                    st.Push(m.work[slot])
-                    st.Push(-2 - slot)
+                    st[sp] = m.work[slot]
+                    st[sp + 1] = -2 - slot
+                    sp += 2
                     m.work[slot] = i
                 }
                 pc++
             } else if op == opAssert {
-                if not m.holds(p.x[pc], i) { break }
+                if not m.holds(code[4 * pc + 1], i) { break }
                 pc++
             } else {
                 at := (l.n - 1) * m.ncap
@@ -854,19 +894,20 @@ fn (m mut machine&) add(l mut threads&, pc0 I64, i I64) {
 # With "any", the first sign of a match is enough (ncap may be 0)
 fn (m mut machine&) run(from I64, any Bool) Bool {
     p := m.p
+    code := p.code
     t := m.t
     i := from
     m.clist.n = 0
     for {
         if not m.found and m.clist.n == 0 {
-            if p.anchored and i > 0 { break }
-            if p.prefix.Len() > 0 {
+            if (p.anchored and i > 0) or (m.only >= 0 and i > m.only) { break }
+            if p.prefix.Len() > 0 and m.only < 0 {
                 at := try t[i:].Find(p.prefix) catch TextError default -1
                 if at < 0 { break }
                 i += at
             }
         }
-        if not m.found {
+        if not m.found and (m.only < 0 or i == m.only) {
             for k in range m.ncap { m.work[k] = -1 }
             m.add(m.clist, 0, i)
         }
@@ -879,7 +920,7 @@ fn (m mut machine&) run(from I64, any Bool) Bool {
         m.nlist.n = 0
         for j in range m.clist.n {
             pc := m.clist.dense[j]
-            op := p.op[pc]
+            op := code[4 * pc]
             if op == opMatch {
                 m.found = true
                 for k in range m.ncap { m.best[k] = m.clist.caps[j * m.ncap + k] }
@@ -889,11 +930,11 @@ fn (m mut machine&) run(from I64, any Bool) Bool {
             if r < 0 { continue }
             ok := false
             if op == opChar {
-                ok = p.x[pc] == r
+                ok = code[4 * pc + 1] == r
             } else if op == opClass {
                 ok = p.inClass(pc, r)
             } else if op == opAny {
-                ok = r != '\n' or p.y[pc] == 1
+                ok = r != '\n' or code[4 * pc + 2] == 1
             }
             if ok {
                 for k in range m.ncap { m.work[k] = m.clist.caps[j * m.ncap + k] }
@@ -909,9 +950,251 @@ fn (m mut machine&) run(from I64, any Bool) Bool {
     return m.found
 }
 
+
+# ---- the DFA ----
+#
+# Without captures, all a Pike VM step carries is the ordered list of threads waiting on a code point - so that list
+# (and whether a match has been seen, after which no thread starts) is a state of a deterministic automaton, built
+# lazily as the text reaches it and cached for the rest of the search: one table lookup a byte where states repeat,
+# as RE2's DFA. The forward DFA finds where the leftmost-first match ends; the reversed program, run backwards from
+# that end keeping the longest match, finds where it starts (the leftmost start, which is the leftmost-first match's);
+# the Pike VM then runs only over the match, for its groups. A program with assertions (but a leading ^) is matched
+# by the Pike VM alone, and so is a text too short to repay building states. A DFA is built for one call, never kept
+# in the Regex, so a Regex stays read-only and usable from every task at once.
+
+dfaMinText I64 = 64
+dfaMaxStates I64 = 5000
+
+type dfa struct(of prog&, code Array<I64>&, longest Bool) {
+    p prog&of = of
+    c Array<I64>&code = code
+    longest
+    size I64 = code.Len() / 4
+    pcs Vec<I64> = Vec<I64>()                 # every state's threads, one list after another
+    from Vec<I64> = Vec<I64>()                # where each state's list starts in pcs
+    count Vec<I64> = Vec<I64>()               # and how long it is
+    flags Vec<I64> = Vec<I64>()               # bit 0: no thread may start (a match was seen); bit 1: holds a match
+    trans Vec<I64> = Vec<I64>()               # 128 entries a state: the state an ASCII code point leads to, -1 unknown
+    wide Map<I64, I64> = Map<I64, I64>()      # the same for the others, keyed by state * 0x110000 + code point
+    byHash Map<I64, I64> = Map<I64, I64>()    # a list's hash to the first state holding a list of that hash
+    nextSame Vec<I64> = Vec<I64>()            # the next state of the same hash
+    mark mut Array<I64>& = Array<I64>(code.Len() / 4)
+    gen I64 = 0
+    work Vec<I64> = Vec<I64>()                # the list being built
+    stack mut Array<I64>& = Array<I64>(code.Len() + 4)
+    full Bool = false                         # too many states: the caller goes on with the Pike VM
+}
+
+# the threads waiting on a code point that following pc reaches, appended to work - jumps, splits (preferred first),
+# saves, the leading ^ followed; each pc once per list (gen marks them)
+fn (d mut dfa&) closure(pc0 I64) {
+    c := d.c
+    st := d.stack
+    sp I64 = 1
+    st[0] = pc0
+    for sp > 0 {
+        sp--
+        pc := st[sp]
+        for {
+            if d.mark[pc] == d.gen { break }
+            d.mark[pc] = d.gen
+            op := c[4 * pc]
+            if op == opJmp {
+                pc = c[4 * pc + 1]
+            } else if op == opSplit {
+                st[sp] = c[4 * pc + 2]
+                sp++
+                pc = c[4 * pc + 1]
+            } else if op == opSave or op == opAssert {
+                pc++
+            } else {
+                d.work.Push(pc)
+                break
+            }
+        }
+    }
+}
+
+# the state whose list is work and whose flags are f - found among those made, or made now
+fn (d mut dfa&) intern(f I64) I64 {
+    w := d.work
+    h I64 = f * 1099511628211
+    for i in range w.Len() { h = (h ^ w[i]) * 1099511628211 }
+    k := try d.byHash.Get(h) catch MapError default -1
+    first := k
+    for k >= 0 {
+        if d.flags[k] == f and d.count[k] == w.Len() {
+            same := true
+            base := d.from[k]
+            for i in range w.Len() {
+                if d.pcs[base + i] != w[i] {
+                    same = false
+                    break
+                }
+            }
+            if same { return k }
+        }
+        k = d.nextSame[k]
+    }
+    id := d.from.Len()
+    if id >= dfaMaxStates: d.full = true
+    d.from.Push(d.pcs.Len())
+    d.count.Push(w.Len())
+    d.pcs.PushAll(w.View())
+    d.flags.Push(f)
+    for i in range 128 { d.trans.Push(-1) }
+    d.nextSame.Push(first)
+    d.byHash.Put(h, id)
+    return id
+}
+
+# the state a search starts in: the start's threads, or none (a ^ program at a position past 0)
+fn (d mut dfa&) initial(none Bool) I64 {
+    d.gen++
+    d.work.Clear()
+    if not none: d.closure(0)
+    f I64 = 1 if none or d.longest else 0
+    for pc in d.work.View() {
+        if d.c[4 * pc] == opMatch { f = f | 2 }
+    }
+    return d.intern(f)
+}
+
+fn (d dfa&) takes(pc I64, r I64) Bool {
+    c := d.c
+    op := c[4 * pc]
+    if op == opChar { return c[4 * pc + 1] == r }
+    if op == opAny { return r != '\n' or c[4 * pc + 2] == 1 }
+    if op != opClass { return false }
+    rng := d.p.rng
+    base := c[4 * pc + 1]
+    hit := false
+    for k in range c[4 * pc + 2] {
+        if I64(rng[base + 2 * k]) <= r and r <= I64(rng[base + 2 * k + 1]) {
+            hit = true
+            break
+        }
+    }
+    return hit != (c[4 * pc + 3] == 1)
+}
+
+# the state state s goes to on code point r - its threads before a match (all of them, when longest) each taking r,
+# then, while no match has been seen and the program is not anchored, the start's threads after them
+fn (d mut dfa&) step(s I64, r I64) I64 {
+    if r < 128 {
+        t := d.trans[128 * s + r]
+        if t >= 0 { return t }
+    } else {
+        t := try d.wide.Get(s * 0x110000 + r) catch MapError default -1
+        if t >= 0 { return t }
+    }
+    d.gen++
+    d.work.Clear()
+    f := d.flags[s]
+    base := d.from[s]
+    n := d.count[s]
+    for i in range n {
+        pc := d.pcs[base + i]
+        if d.c[4 * pc] == opMatch {
+            if not d.longest {
+                f = f | 1
+                break
+            }
+            continue
+        }
+        if d.takes(pc, r): d.closure(pc + 1)
+    }
+    if (f & 1) == 0 and not d.p.anchored: d.closure(0)
+    f = f & 1
+    for pc in d.work.View() {
+        if d.c[4 * pc] == opMatch { f = f | 2 }
+    }
+    t := d.intern(f)
+    if r < 128 { d.trans[128 * s + r] = t } else { d.wide.Put(s * 0x110000 + r, t) }
+    return t
+}
+
+fn (d dfa&) dead(s I64) Bool { return d.count[s] == 0 }
+
+# the code point ending at byte i of t, and where it starts - one byte that is not UTF-8 being U+FFFD on its own, as
+# runeAt reads it forwards
+fn runeBefore(t String&, i I64) I64, I64 {
+    c := t[i - 1]
+    if c < 0x80 { return I64(c), i - 1 }
+    j := i - 1
+    for j > 0 and i - j < 4 and (t[j] & 0xC0) == 0x80 { j-- }
+    r, n := try utf8.Decode(t, j) catch utf8.Error default utf8.Replacement, 0
+    if n == i - j { return I64(r), j }
+    return I64(utf8.Replacement), i - 1
+}
+
+# where the leftmost-first match at or after byte from ends, by the forward DFA: -1 for none, -2 when the DFA grew too
+# large (the Pike VM is to be used). With "any", the first match seen is enough
+fn (d mut dfa&) end(t String&, from I64, any Bool) I64 {
+    start := d.initial(d.p.anchored and from > 0)
+    s := start
+    i := from
+    last I64 = -1
+    prefix := d.p.prefix
+    for {
+        if s == start and prefix.Len() > 0 and last < 0 {
+            at := try t[i:].Find(prefix) catch TextError default -1
+            if at < 0 { return -1 }
+            i += at
+        }
+        if (d.flags[s] & 2) != 0 {
+            last = i
+            if any { return i }
+        }
+        if d.dead(s) or i >= t.Len() { break }
+        c := t[i]
+        if c < 0x80 {
+            s = d.step(s, I64(c))
+            i++
+        } else {
+            r, w := runeAt(t, i)
+            s = d.step(s, r)
+            i += w
+        }
+        if d.full { return -2 }
+    }
+    return last
+}
+
+# where the match ending at byte e starts - the leftmost start at or after "from" of any match ending there, by the
+# reversed program's DFA keeping the longest
+fn (d mut dfa&) begin(t String&, from I64, e I64) I64 {
+    s := d.initial(false)
+    i := e
+    first I64 = -1
+    for {
+        if (d.flags[s] & 2) != 0: first = i
+        if d.dead(s) or i <= from { break }
+        r, j := runeBefore(t, i)
+        s = d.step(s, r)
+        i = j
+        if d.full { return -2 }
+    }
+    return first
+}
+
+# the start and end of the leftmost-first match at or after from: -1, -1 for none; -2 where the DFAs gave up
+fn locate(fw mut dfa&, bw mut dfa&, t String&, from I64) I64, I64 {
+    e := fw.end(t, from, false)
+    if e < 0 { return e, e }
+    s := bw.begin(t, from, e)
+    return s, e
+}
+
 # whether the pattern matches anywhere in t
 fn (re Regex&) Matches(t String&) Bool {
-    m := machine(re.s, t, 0)
+    p := re.s
+    if p.dfaOK and t.Len() >= dfaMinText {
+        d := dfa(p, p.code, false)
+        e := d.end(t, 0, true)
+        if e != -2 { return e >= 0 }
+    }
+    m := machine(p, t, 0)
     return m.run(0, true)
 }
 
@@ -955,10 +1238,42 @@ fn (re Regex&) GroupNamed(name String&) I64 ? NotFound.NOT_FOUND {
 }
 
 # the leftmost-first match in t at or after byte "from" - failing with NOT_FOUND where there is none
+# a search of one text, match after match: the DFAs where they serve, the Pike VM for the groups
+type searcher struct(of prog&, text String&, ncap I64) {
+    t String&text = text
+    m mut machine& = machine(of, text, ncap)
+    fw mut dfa& = dfa(of, of.code, false)
+    bw mut dfa& = dfa(of, of.rcode, true)
+    useDfa Bool = of.dfaOK and text.Len() >= dfaMinText
+}
+
+# the leftmost-first match at or after byte from, in m.best; whether there is one
+fn (s mut searcher&) next(from I64) Bool {
+    m := s.m
+    m.found = false
+    m.only = -1
+    if s.useDfa {
+        b, e := locate(s.fw, s.bw, s.t, from)
+        if b == -1 { return false }
+        if b >= 0 {
+            if m.ncap == 2 {
+                m.best[0] = b
+                m.best[1] = e
+                return true
+            }
+            m.only = b
+            return m.run(b, false)
+        }
+        s.useDfa = false                          # the DFA grew too large: the Pike VM from here on
+    }
+    return m.run(from, false)
+}
+
 fn (re Regex&) FindFrom(t String&, from I64) Match ? NotFound.NOT_FOUND {
-    m := machine(re.s, t, 2 * re.s.names.Len())
-    if from < 0 or from > t.Len() or not m.run(from, false) { error NotFound.NOT_FOUND }
-    return Match(t, m.best)
+    if from < 0 or from > t.Len() { error NotFound.NOT_FOUND }
+    sr := searcher(re.s, t, 2 * re.s.names.Len())
+    if not sr.next(from) { error NotFound.NOT_FOUND }
+    return Match(t, sr.m.best)
 }
 
 fn (re Regex&) Find(t String&) Match ? NotFound.NOT_FOUND { return try re.FindFrom(t, 0) }
@@ -973,25 +1288,38 @@ fn onFrom(t String&, start I64, end I64) I64 {
 # every match in t, left to right, none overlapping; an empty match is not taken where the one before ended
 fn (re Regex&) FindAll(t String&) Vec<Match> {
     out := Vec<Match>()
-    m := machine(re.s, t, 2 * re.s.names.Len())
+    sr := searcher(re.s, t, 2 * re.s.names.Len())
+    best := sr.m.best
     from I64 = 0
     lastEnd I64 = -1
     for from <= t.Len() {
-        m.found = false
-        if not m.run(from, false) { break }
-        if m.best[0] == m.best[1] and m.best[0] == lastEnd {
-            from = onFrom(t, m.best[0], m.best[1])
+        if not sr.next(from) { break }
+        if best[0] == best[1] and best[0] == lastEnd {
+            from = onFrom(t, best[0], best[1])
             continue
         }
-        out.Push(Match(t, m.best))
-        lastEnd = m.best[1]
-        from = onFrom(t, m.best[0], m.best[1])
+        out.Push(Match(t, best))
+        lastEnd = best[1]
+        from = onFrom(t, best[0], best[1])
     }
     return out
 }
 
 # how many matches FindAll would give
-fn (re Regex&) Count(t String&) I64 { return re.FindAll(t).Len() }
+fn (re Regex&) Count(t String&) I64 {
+    sr := searcher(re.s, t, 2)
+    best := sr.m.best
+    n I64 = 0
+    from I64 = 0
+    lastEnd I64 = -1
+    for from <= t.Len() {
+        if not sr.next(from) { break }
+        if best[0] != best[1] or best[0] != lastEnd: n++
+        lastEnd = best[1]
+        from = onFrom(t, best[0], best[1])
+    }
+    return n
+}
 
 # t with every match replaced by repl, in which "$1" or "${1}" stands for what group 1 matched, "${name}" for what a
 # named group matched, "$0" for the whole match, and "$$" for a '$'; a group that took part in no match, or one the
@@ -1201,6 +1529,45 @@ test "matching takes linear time where backtracking takes exponential" {
     text := "a".Repeat(30)
     assert Compile(p.ToString())!.Matches(text)
     assert Compile("(x+x+)+y")!.Matches("x".Repeat(5000)) == false
+}
+
+# every match's groups' spans, by the DFAs and the Pike VM or by the Pike VM alone - the two must agree
+fn spans(re Regex&, t String&, dfaToo Bool) String {
+    sr := searcher(re.s, t, 2 * re.s.names.Len())
+    sr.useDfa = dfaToo and re.s.dfaOK
+    b := StringBuilder()
+    from I64 = 0
+    lastEnd I64 = -1
+    best := sr.m.best
+    for from <= t.Len() {
+        if not sr.next(from) { break }
+        if not (best[0] == best[1] and best[0] == lastEnd) {
+            for v in best { b.Push($v ",") }
+            b.PushChar(';')
+            lastEnd = best[1]
+        }
+        from = onFrom(t, best[0], best[1])
+    }
+    return b.ToString()
+}
+
+test "the DFAs find the matches the Pike VM finds" {
+    patterns := String&["a+b", "(a|ab)(c|bcd)", "[ab]*c", "a*", "(a+)(b*)", "x|y|", "(?i)AB+", "^ab", "(ab|a)(bc|c)?"
+        "a{2,4}?b", "[^a]+", "é.", "(a*)+b", ".", "b(a|b)*?a", "(?:ab){2}", "c$"]
+    texts := Vec<String&>()
+    x U32 = 7
+    for k in range 40 {
+        t := StringBuilder()
+        for i in range 70 + k * 5 {
+            x = x * 1664525 + 1013904223
+            t.Push(String&["a", "b", "c", "ab", "é", "\n", "A", "x"][(x >> 16) % 8])
+        }
+        texts.Push(t.ToString())
+    }
+    for pat in patterns {
+        re := Compile(pat)!
+        for t in texts { assert spans(re, t, true) == spans(re, t, false), ($pat " on " $t) }
+    }
 }
 
 Baked String = firstOf("(\\d+)-(\\d+)", "tel 555-1234")

@@ -20,6 +20,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
 | `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`) and the IEEE CRC-32 |
 | `flags.olang` | command-line flags declared with types, defaults and help; `--help` text; `flags.Error` |
+| `regex.olang` | RE2-style regular expressions, linear time (a lazy DFA and a Pike VM): `Compile`, `Matches`, `Find`, `FindAll`, `Replace`, `Split`, groups |
 | `json.olang` | JSON parse into an immutable tree, and encode |
 | `csv.olang` | RFC 4180 records, read and written |
 | `net.olang` | blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`) and UDP sockets, IPv4 and IPv6 addresses, `net.Error` |
