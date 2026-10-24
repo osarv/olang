@@ -300,3 +300,6 @@ on sight per rules.md, "Code rules".
   (tools/precedence_migrate.olang changed nothing in the repo), the array-literal leak (34 MB -> 1.8 MB), T17e raw-valued
   enums (`op.Value()`, `try Op.From(v)` -> CaseError.NO_CASE). Left (found): a fixed local array converted to a run-time
   value (`v = x`, `return x`) still copies into the program scope - 34 MB over 2M calls; needs the scope pass.
+- 2026-10-24 ~22:15 CEST (weekly 0.27): started wt-any (any Trait&, soundness review before merge) and wt-naming (std
+  stutter renames + `olang fix`). Next after them: C interop v2, platforms, early freeing (memory rounds 4-7) + the fixed
+  local array copy leak, then error-set generics, errors as values, generators, reflection.
