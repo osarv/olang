@@ -32,17 +32,17 @@ fn run(args Array<String&>&) {
     out := io.Writer(1)
     verbose := args.Len() > 1 and args[1] == "-v"
     dump := try os.Env("CHECKDIFF_DUMP") catch default "build/compiler_tools_checkdump"
-    root := try os.Cwd() catch os.OsError {
+    root := try os.Cwd() catch os.Error {
         stop(out, "checkdiff: no working directory")
         unreachable
     }
     if not os.Exists(dump) { stop(out, "checkdiff: " $dump " is not built (make " $dump ")") }
-    golden := try os.ReadFile("compiler/goldens/diag.txt") catch os.OsError {
+    golden := try os.ReadFile("compiler/goldens/diag.txt") catch os.Error {
         stop(out, "checkdiff: no goldens")
         unreachable
     }
     old := rows(golden)
-    names := try os.ReadDir("checks/cases") catch os.OsError {
+    names := try os.ReadDir("checks/cases") catch os.Error {
         stop(out, "checkdiff: no checks/cases")
         unreachable
     }
@@ -50,7 +50,7 @@ fn run(args Array<String&>&) {
     oks List<String&>
     for n in names {
         if not n.EndsWith(".olang") { continue }
-        text := try os.ReadFile("checks/cases/" $n) catch os.OsError { continue }
+        text := try os.ReadFile("checks/cases/" $n) catch os.Error { continue }
         if header(text, "# check:").StartsWith("fail") { fails.Push(n) } else { oks.Push(n) }
     }
 
@@ -80,7 +80,7 @@ fn run(args Array<String&>&) {
         }
         mine++
         # the case's pinned message, its header's text after "fail", said as the case says it (DESIGN.md 4)
-        text := try os.ReadFile("checks/cases/" $c) catch os.OsError default ""
+        text := try os.ReadFile("checks/cases/" $c) catch os.Error default ""
         pin := header(text, "# check:")[4:].Trim()
         said1 := try texts.Get(c) catch default ""
         if pin.Len() > 0 and (try said1.Find(pin) catch default -1) >= 0 {
@@ -108,7 +108,7 @@ fn run(args Array<String&>&) {
     runAll(said2, $root "/" $dump, $root "/checks/cases", oks, root)
     tests List<String&>
     for dir in String&["tests", "std", "compiler", "fuzz", "bench"] {
-        fs := try os.ReadDir(dir) catch os.OsError { continue }
+        fs := try os.ReadDir(dir) catch os.Error { continue }
         for f in fs {
             if f.EndsWith(".olang") { tests.Push($dir "/" $f) }
         }
@@ -159,16 +159,16 @@ fn run(args Array<String&>&) {
         at := try line[4:].Find(" ") catch default -1
         if at >= 0 { gapCount.Update(line[5 + at:], 1, fn(v I64) I64 { return v + 1 }) }
     }
-    try os.WriteFile("build/checkdiff.gaps", counted(gapCount)) catch os.OsError { }
-    try os.WriteFile("build/checkdiff.said", $said.ToString() $said2.ToString()) catch os.OsError { }
-    try os.WriteFile("build/checkdiff.missed", missed.ToString()) catch os.OsError { }
-    try out.Flush() catch io.IoError { }
+    try os.WriteFile("build/checkdiff.gaps", counted(gapCount)) catch os.Error { }
+    try os.WriteFile("build/checkdiff.said", $said.ToString() $said2.ToString()) catch os.Error { }
+    try os.WriteFile("build/checkdiff.missed", missed.ToString()) catch os.Error { }
+    try out.Flush() catch io.Error { }
 }
 
 # ends the program with why said
 fn stop(out mut io.Writer&, why String&) {
     out.Write($why "\n")
-    try out.Flush() catch io.IoError { }
+    try out.Flush() catch io.Error { }
     os.Exit(1)
 }
 
@@ -313,7 +313,7 @@ fn counted(m Map<String&, I64>&) String& {
 fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&>&, root String&) {
     plain := List<String&>()
     for c in cases {
-        text := try os.ReadFile($dir "/" $c) catch os.OsError { continue }
+        text := try os.ReadFile($dir "/" $c) catch os.Error { continue }
         flags := header(text, "# flags:")
         if flags == "" {
             plain.Push(c)
@@ -348,6 +348,6 @@ fn check(dump String&, dir String&, files Array<String&>&, root String&) String&
     args.Push("OLANG_STD=" $root "/std")
     args.Push(dump)
     for f in files { args.Push(f) }
-    o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError { return "" }
+    o := try os.Exec(args.ToArray(), "", true, dir) catch os.Error { return "" }
     return $o.Stdout $o.Stderr
 }

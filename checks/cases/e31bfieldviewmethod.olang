@@ -18,7 +18,7 @@ type Layer struct(w M, n I64) {
     w
     n
 }
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

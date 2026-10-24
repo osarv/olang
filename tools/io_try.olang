@@ -1,4 +1,4 @@
-# Puts `try` before every call of std/io's Print/Println/PrintErr/PrintErrln in code (M19f: they fail with IoError).
+# Puts `try` before every call of std/io's Print/Println/PrintErr/PrintErrln in code (M19f: they fail with io.Error).
 #
 #     $OLANG build tools/io_try.olang && build/tools_io_try PATH...
 #

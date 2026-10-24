@@ -20,7 +20,7 @@ fn (s Vs&) At(i I64) V {
     return v
 }
 fn id(p Pt&) Pt&p { return p }
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 100 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

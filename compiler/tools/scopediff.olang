@@ -31,18 +31,18 @@ fn run(args Array<String&>&) {
     out := io.Writer(1)
     verbose := args.Len() > 1 and args[1] == "-v"
     dump := try os.Env("SCOPEDIFF_DUMP") catch default "build/compiler_tools_scopedump"
-    root := try os.Cwd() catch os.OsError {
+    root := try os.Cwd() catch os.Error {
         stop(out, "scopediff: no working directory")
         unreachable
     }
     if not os.Exists(dump) { stop(out, "scopediff: " $dump " is not built (make " $dump ")") }
     exe := $dump if dump.StartsWith("/") else $root "/" $dump
-    golden := try os.ReadFile("compiler/goldens/diag.txt") catch os.OsError {
+    golden := try os.ReadFile("compiler/goldens/diag.txt") catch os.Error {
         stop(out, "scopediff: no goldens")
         unreachable
     }
     old := rows(golden)
-    names := try os.ReadDir("checks/cases") catch os.OsError {
+    names := try os.ReadDir("checks/cases") catch os.Error {
         stop(out, "scopediff: no checks/cases")
         unreachable
     }
@@ -50,7 +50,7 @@ fn run(args Array<String&>&) {
     oks List<String&>
     for n in names {
         if not n.EndsWith(".olang") { continue }
-        text := try os.ReadFile("checks/cases/" $n) catch os.OsError { continue }
+        text := try os.ReadFile("checks/cases/" $n) catch os.Error { continue }
         if header(text, "# check:").StartsWith("fail") { fails.Push(n) } else { oks.Push(n) }
     }
 
@@ -78,7 +78,7 @@ fn run(args Array<String&>&) {
     silentList := StringBuilder()
     for c in mineCases {
         want := firstRow(old, c)
-        text := try os.ReadFile("checks/cases/" $c) catch os.OsError default ""
+        text := try os.ReadFile("checks/cases/" $c) catch os.Error default ""
         pin := header(text, "# check:")[4:].Trim()
         said1 := try texts.Get(c) catch default ""
         if pin.Len() > 0 and (try said1.Find(pin) catch default -1) >= 0 {
@@ -118,7 +118,7 @@ fn run(args Array<String&>&) {
     runAll(said2, exe, $root "/checks/cases", oks, root)
     tests List<String&>
     for dir in String&["tests", "std", "compiler", "fuzz", "bench"] {
-        fs := try os.ReadDir(dir) catch os.OsError { continue }
+        fs := try os.ReadDir(dir) catch os.Error { continue }
         for f in fs {
             if f.EndsWith(".olang") { tests.Push($dir "/" $f) }
         }
@@ -169,10 +169,10 @@ fn run(args Array<String&>&) {
         }
         out.Write(counted(byRule))
     }
-    try os.WriteFile("build/scopediff.said", $saidText $said2.ToString()) catch os.OsError { }
-    try os.WriteFile("build/scopediff.missed", missed.ToString()) catch os.OsError { }
-    try os.WriteFile("build/scopediff.silent", $counted(silent) $silentList.ToString()) catch os.OsError { }
-    try out.Flush() catch io.IoError { }
+    try os.WriteFile("build/scopediff.said", $saidText $said2.ToString()) catch os.Error { }
+    try os.WriteFile("build/scopediff.missed", missed.ToString()) catch os.Error { }
+    try os.WriteFile("build/scopediff.silent", $counted(silent) $silentList.ToString()) catch os.Error { }
+    try out.Flush() catch io.Error { }
 }
 
 # whether an error row's rules name one of section 8's (the scope pass's: compiler/scope.olang)
@@ -223,7 +223,7 @@ fn scopeRows(rs List<row>&, c String&) List<String&> {
 # ends the program with why said
 fn stop(out mut io.Writer&, why String&) {
     out.Write($why "\n")
-    try out.Flush() catch io.IoError { }
+    try out.Flush() catch io.Error { }
     os.Exit(1)
 }
 
@@ -326,7 +326,7 @@ fn counted(m Map<String&, I64>&) String& {
 fn runAll(said mut StringBuilder&, dump String&, dir String&, cases List<String&>&, root String&) {
     plain := List<String&>()
     for c in cases {
-        text := try os.ReadFile($dir "/" $c) catch os.OsError { continue }
+        text := try os.ReadFile($dir "/" $c) catch os.Error { continue }
         flags := header(text, "# flags:")
         if flags == "" {
             plain.Push(c)
@@ -361,7 +361,7 @@ fn check(dump String&, dir String&, files Array<String&>&, root String&) String&
     args.Push("OLANG_STD=" $root "/std")
     args.Push(dump)
     for f in files { args.Push(f) }
-    o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError {
+    o := try os.Exec(args.ToArray(), "", true, dir) catch os.Error {
         io.PrintErrln("scopediff: cannot run " $dump)!
         os.Exit(1)
     }

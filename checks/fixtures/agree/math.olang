@@ -15,9 +15,9 @@ RoundBaked BF16 = BF16(2.5).RoundEven()
 IntPowBaked I32 = I32(7).Pow(12)
 IntSqrtBaked U64 = U64(18446744073709551615).Sqrt()
 
-fn line(t String&) ? io.IoError { try io.Print($t "\n") }
+fn line(t String&) ? io.Error { try io.Print($t "\n") }
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     try line($SqrtTwo " " $ExpSeven " " $PowBaked " " $TanhBaked " " $ErfBaked " " $FmaBaked " " $RoundBaked)
     try line($x.Sqrt() " " $y.Cbrt() " " $x.Exp() " " $y.Exp2() " " $x.Expm1() " " $x.Log())
     try line($x.Log2() " " $x.Log10() " " $y.Log1p() " " $x.Pow(y) " " $x.Hypot(y))

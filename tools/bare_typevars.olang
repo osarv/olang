@@ -8,7 +8,7 @@
 # Comments and string literals are left alone. Files are rewritten in place; with --check nothing is written and the
 # exit status says whether anything would change.
 #
-#     $OLANG build tools/bare_typevars.olang && build/tools_bare_typevars [--check] [-v] FILE|DIR...
+#     $OLANG build tools/bare_typevars.olang && build/tools_bare_typevars [--check] [-v] [--std DIR] FILE|DIR...
 #
 #   A type a file declares, std's (the std directory of the repository this tool is in) and the built-in ones are known
 #   types: "a<X>" right after a parameter's name is a type variable only when X is none of them.
@@ -473,9 +473,9 @@ fn typeDecls(text String&, out mut Map<String&, Bool>&) {
 }
 
 # the type names std declares, and the built-in ones - the prelude's are named bare in every module
-fn stdTypes(known mut Map<String&, Bool>&) {
+fn stdTypes(known mut Map<String&, Bool>&, stdDir String&) {
     for b in BuiltinTypes { known.Put($b, true) }
-    std := $srcmask.RepoRoot() "/std"
+    std := $stdDir if stdDir != "" else $srcmask.RepoRoot() "/std"
     files List<String&>
     srcmask.Walk(std, files)
     for f in files {
@@ -489,15 +489,27 @@ fn main() ? {
     verbose := false
     paths List<String&>
     args := os.Args()
-    for i in range 1, args.Len() {
-        if args[i] == "--check" { check = true } else if args[i] == "-v" { verbose = true } else { paths.Push($args[i]) }
+    stdDir String& = ""
+    i I64 = 1
+    for i < args.Len() {
+        if args[i] == "--check" {
+            check = true
+        } else if args[i] == "-v" {
+            verbose = true
+        } else if args[i] == "--std" and i + 1 < args.Len() {
+            i++
+            stdDir = $args[i]
+        } else {
+            paths.Push($args[i])
+        }
+        i++
     }
     files List<String&>
     for p in paths {
         if os.IsDir(p) { srcmask.Walk(p, files) } else { files.Push($p) }
     }
     std Map<String&, Bool>
-    stdTypes(std)
+    stdTypes(std, stdDir)
     totalEdits I64 = 0
     totalFiles I64 = 0
     totalLines I64 = 0

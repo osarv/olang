@@ -44,6 +44,7 @@ compiler/olang.olang`, M11), and `make bootstrap` rebuilds it from nothing but t
 | `lsp.olang` | `olang lsp` (B15): the Language Server Protocol, each analysis in a forked worker |
 | `mcp.olang` | `olang mcp` (B16): the Model Context Protocol - check, explain, doc, format, test as tools |
 | `emit.olang` | MIR written as LLVM IR text, one object per module - each module's, the root's instances', the root's with main or the harness (M9, in progress) |
+| `fix.olang` | `olang fix` (B17): the migration tools of `tools/`, built into the cache and run over the files in the order the changes were made |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |
 | `runtime.olang` | the runtime's IR (`std/runtime/*.ll`) filled in for a build, as stage 0 fills it |

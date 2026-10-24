@@ -9,7 +9,7 @@ type Rec struct(n I64) {
     a Nums = Nums(Array<I64>(n, 7))
 }
 fn mk(n I64) Rec { return Rec(n) }
-fn main() ? io.IoError {
+fn main() ? io.Error {
     k := mk(4)
     try io.Println($k.t " " $k.a[3])
 }

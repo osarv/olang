@@ -2335,7 +2335,7 @@ entry:
   ret i32 %v
 }
 
-; the class of the error the last failing call on this thread left in errno, as std/os's OsError numbers them -
+; the class of the error the last failing call on this thread left in errno, as std/os's os.Error numbers them -
 ; ENOENT 2: 1 (NOT_FOUND), EEXIST 17: 2, EACCES 13 and EPERM 1: 3, ENOTDIR 20: 4, EISDIR 21: 5, ENOTEMPTY 39: 6 - and
 ; for std/net's Error: ECONNREFUSED 111: 7, EADDRINUSE 98: 8, ETIMEDOUT 110 and EAGAIN 11 (a socket's timeout): 9,
 ; ECONNRESET 104, ECONNABORTED 103, EPIPE 32 and ENOTCONN 107: 10, ENETUNREACH 101 and EHOSTUNREACH 113: 11,

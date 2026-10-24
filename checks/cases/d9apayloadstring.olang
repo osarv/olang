@@ -10,7 +10,7 @@ type E enum {
     N
 }
 fn wrap(i I64) E { return E.A($i "-payload") }
-fn main() ? io.IoError {
+fn main() ? io.Error {
     e := wrap(1)
     m := match e {
         case E.A(s) => $s

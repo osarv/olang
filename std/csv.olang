@@ -5,7 +5,7 @@
 #         name := row[0]
 #         price := try row[2].ParseFloat()
 #         ...
-#     } catch csv.CsvError { ... }
+#     } catch csv.Error { ... }
 #
 #     out.Write(csv.Record(String&[name, $count, $price.Fixed(2)]))
 #
@@ -17,7 +17,7 @@
 # many as it has: a reader wanting every record the same width checks row.Len() itself.
 #
 # Strict, as RFC 4180 is: a quote inside a field that does not start with one (a"b), text after a field's closing quote
-# ("a"b) and a quote never closed are errors (CsvError), never read some way of the reader's choosing.
+# ("a"b) and a quote never closed are errors (Error), never read some way of the reader's choosing.
 #
 # Where a field lives: each row Next gives is an array built where its caller puts it (§8.5) - in "for row in", the
 # loop body's own scope, reclaimed as each turn ends. A field that is the text as written - unquoted, or quoted with
@@ -28,20 +28,20 @@
 # Record, one line of text each, to wherever text goes (an io.Writer, a StringBuilder).
 
 # why a text is not CSV
-error CsvError {
+error Error {
     BARE_QUOTE          # a quote inside a field that does not start with one: a"b - quote the field, "a""b"
     TEXT_AFTER_QUOTE    # something other than a separator or a line break after a field's closing quote: "a"b
     BAD_SEPARATOR       # a separator that is a quote or a line break, which could never be told apart from the text
     UNCLOSED_QUOTE      # the text ends inside a quoted field
 }
 
-# a text's records, one at a time: "for row in try csv.Rows(text) { ... } catch csv.CsvError { ... }". Each is an
+# a text's records, one at a time: "for row in try csv.Rows(text) { ... } catch csv.Error { ... }". Each is an
 # Array<String&> of its fields. Line is where the record Next last gave - or failed on - starts, counted from 1, so a
 # reader calling Next itself can say where a text went wrong ("for row in" walks a copy of the Rows it is given):
 #
 #     rows := csv.Rows(text)
 #     for {
-#         row := try rows.Next() catch Exhausted { break } catch csv.CsvError { io.PrintErrln("line " $rows.Line); fail }
+#         row := try rows.Next() catch Exhausted { break } catch csv.Error { io.PrintErrln("line " $rows.Line); fail }
 #         ...
 #     }
 type Rows struct(of String&, sep Char = ',') {
@@ -52,10 +52,10 @@ type Rows struct(of String&, sep Char = ',') {
     next I64 = 1                     # the line the next record starts on
 }
 
-# the next record's fields - failing with Exhausted when the text has no more, and with CsvError when the next one is
+# the next record's fields - failing with Exhausted when the text has no more, and with Error when the next one is
 # not CSV, the reader then staying where it was
-fn (r mut Rows&) Next() Array<String&> ? CsvError, Exhausted {
-    if r.sep == '"' or r.sep == '\n' or r.sep == '\r' { error CsvError.BAD_SEPARATOR }
+fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
+    if r.sep == '"' or r.sep == '\n' or r.sep == '\r' { error Error.BAD_SEPARATOR }
     t := r.text
     n I64 = t.Len()
     if r.at >= n { error Exhausted.END }
@@ -96,12 +96,12 @@ fn (r mut Rows&) Next() Array<String&> ? CsvError, Exhausted {
 
 # where the field starting at t[i] ends: just past its closing quote, or at the separator, line break or text end
 # after it - checking that it is CSV
-fn fieldEnd(t String&, i I64, sep Char) I64 ? CsvError {
+fn fieldEnd(t String&, i I64, sep Char) I64 ? Error {
     n I64 = t.Len()
     if i < n and t[i] == '"' {
         j I64 = i + 1
         for {
-            if j >= n { error CsvError.UNCLOSED_QUOTE }
+            if j >= n { error Error.UNCLOSED_QUOTE }
             if t[j] == '"' {
                 if j + 1 < n and t[j + 1] == '"' {
                     j += 2
@@ -113,13 +113,13 @@ fn fieldEnd(t String&, i I64, sep Char) I64 ? CsvError {
         }
         j++                          # past the closing quote: a separator, a line break or the end must follow
         if j < n and t[j] != sep and t[j] != '\n' and not (t[j] == '\r' and (j + 1 == n or t[j + 1] == '\n')) {
-            error CsvError.TEXT_AFTER_QUOTE
+            error Error.TEXT_AFTER_QUOTE
         }
         return j
     }
     j I64 = i
     for j < n and t[j] != sep and t[j] != '\n' {
-        if t[j] == '"' { error CsvError.BARE_QUOTE }
+        if t[j] == '"' { error Error.BARE_QUOTE }
         j++
     }
     return j
@@ -142,8 +142,8 @@ fn unquote(inner String&, pairs I64) String {
 # separator, a quote or a line break - with its quotes doubled. Other fields are written as they are, so
 # Record(String&["a", "b c", "say \"hi\""]) is a,b c,"say ""hi"""\n. No fields at all is "\n", which reads back as
 # one empty field - CSV has no record of none. New text, built at its length once, where its result is put
-fn Record(fields Array<String&>&, sep Char = ',') String ? CsvError {
-    if sep == '"' or sep == '\n' or sep == '\r' { error CsvError.BAD_SEPARATOR }
+fn Record(fields Array<String&>&, sep Char = ',') String ? Error {
+    if sep == '"' or sep == '\n' or sep == '\r' { error Error.BAD_SEPARATOR }
     n I64 = fields.Len() if fields.Len() > 0 else 1    # the separators and the line break
     for f in fields {
         n += f.Len()
@@ -196,13 +196,13 @@ fn show(text String&, sep Char = ',') String& {
             b.PushChar(']')
         }
         b.PushChar('|')
-    } catch CsvError.BARE_QUOTE {
+    } catch Error.BARE_QUOTE {
         return "bare"
-    } catch CsvError.TEXT_AFTER_QUOTE {
+    } catch Error.TEXT_AFTER_QUOTE {
         return "after"
-    } catch CsvError.UNCLOSED_QUOTE {
+    } catch Error.UNCLOSED_QUOTE {
         return "open"
-    } catch CsvError.BAD_SEPARATOR {
+    } catch Error.BAD_SEPARATOR {
         return "separator"
     }
     return b.ToString()
@@ -239,7 +239,7 @@ test "Rows reports what is not CSV, and where" {
     rows := Rows("h,i\n\"x\ny\",1\nz,2\nbad\"\n")
     n I64 = 0
     for {
-        row := try rows.Next() catch Exhausted { break } catch CsvError.BARE_QUOTE {
+        row := try rows.Next() catch Exhausted { break } catch Error.BARE_QUOTE {
             assert rows.Line == 5 and n == 3
             n = -1
             break
@@ -271,7 +271,7 @@ test "Record quotes what must be, and Rows reads it back" {
 }
 
 # a table read while compiling (K2): rows counted and a field summed
-fn csvTotal(text String&) I64 ? CsvError, ParseError {
+fn csvTotal(text String&) I64 ? Error, ParseError {
     total I64 = 0
     for row in try Rows(text) {
         total = total * 10 + (try row[1].ParseInt())

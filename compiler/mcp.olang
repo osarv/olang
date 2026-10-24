@@ -54,17 +54,17 @@ fn Serve(cfg mut build.Config&, exe String&) I32 {
     return 0
 }
 
-fn send(body String&) { try io.Write(1, $body "\n") catch io.IoError { } }
+fn send(body String&) { try io.Write(1, $body "\n") catch io.Error { } }
 
 fn handle(line String&, cfg mut build.Config&, exe String&) {
-    msg := try json.Parse(line) catch json.JsonError {
+    msg := try json.Parse(line) catch json.Error {
         send(errorReply("null", -32700, "the message is not JSON"))
         return
     }
     method := str(msg, "method")
     id := idOf(msg)
     if method == "initialize" {
-        version := try msg["params"]["protocolVersion"].AsStr() catch json.JsonError default "2025-06-18"
+        version := try msg["params"]["protocolVersion"].AsStr() catch json.Error default "2025-06-18"
         b := StringBuilder()
         b.Push("{\"protocolVersion\":")
         session.JsonStr(b, version)
@@ -87,8 +87,8 @@ fn handle(line String&, cfg mut build.Config&, exe String&) {
         return
     }
     if method == "tools/call" {
-        name := try msg["params"]["name"].AsStr() catch json.JsonError default ""
-        args := try msg["params"]["arguments"] catch json.JsonError default json.Json.Null
+        name := try msg["params"]["name"].AsStr() catch json.Error default ""
+        args := try msg["params"]["arguments"] catch json.Error default json.Json.Null
         send(reply(id, call(name, args, cfg, exe)))
         return
     }
@@ -100,17 +100,17 @@ fn call(name String&, args json.Json&, cfg mut build.Config&, exe String&) Strin
     file := str(args, "file")
     if name == "test" {
         if file == "" { return toolError("test needs a file") }
-        out := try os.Exec(String&[exe, "test", file]) catch os.OsError { return toolError("the compiler could not be run") }
+        out := try os.Exec(String&[exe, "test", file]) catch os.Error { return toolError("the compiler could not be run") }
         return testResult($out.Stdout $out.Stderr, out.Status)
     }
     if name == "explain" and file == "" {
         rule := str(args, "name")
-        out := try os.Exec(String&[exe, "explain", rule]) catch os.OsError { return toolError("the compiler could not be run") }
+        out := try os.Exec(String&[exe, "explain", rule]) catch os.Error { return toolError("the compiler could not be run") }
         return textResult($out.Stdout $out.Stderr, out.Status != 0)
     }
     if name != "check" and name != "explain" and name != "doc" and name != "format" { return toolError($"no tool " $name) }
     if file == "" { return toolError($name " needs a file") }
-    hasText := (try args["text"] catch json.JsonError default json.Json.Null) != json.Json.Null
+    hasText := (try args["text"] catch json.Error default json.Json.Null) != json.Json.Null
     text := str(args, "text")
     item := str(args, "name")
     out, status := session.ChildOutput(fn() String { return run(name, file, hasText, text, item, cfg) })
@@ -125,7 +125,7 @@ fn run(name String&, file String&, hasText Bool, text String&, item String&, cfg
     overlay := Map<String&, String&>()
     if hasText { overlay.Put(session.RealOf(path), $text) }
     if name == "format" {
-        given := text if hasText else (try os.ReadFile(path) catch os.OsError { return toolError($"cannot read " $path) })
+        given := text if hasText else (try os.ReadFile(path) catch os.Error { return toolError($"cannot read " $path) })
         formatted := try session.Format(path, given) catch { return textResult($path " does not parse - check it for its diagnostics", true) }
         return textResult(formatted, false)
     }
@@ -236,10 +236,10 @@ fn textResult(text String&, isError Bool) String {
 
 fn toolError(text String&) String { return textResult(text, true) }
 
-fn str(j json.Json&, key String&) String&j { return try j[key].AsStr() catch json.JsonError default "" }
+fn str(j json.Json&, key String&) String&j { return try j[key].AsStr() catch json.Error default "" }
 
 fn idOf(msg json.Json&) String {
-    v := try msg["id"] catch json.JsonError { return "" }
+    v := try msg["id"] catch json.Error { return "" }
     return json.Encode(v)
 }
 
@@ -268,12 +268,12 @@ fn compilerUnderTest() String {
 }
 
 test "olang mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable "no temporary directory" }
-    defer try os.RemoveAll(dir) catch os.OsError { }
+    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    defer try os.RemoveAll(dir) catch os.Error { }
     bad := $dir "/bad.olang"
     good := $dir "/good.olang"
-    try os.WriteFile(bad, "fn main() {\n    x I32 = \"no\"\n}\n") catch os.OsError { unreachable "no file" }
-    try os.WriteFile(good, "# twice n\nfn Twice(n I64) I64 { return 2*n }\n\ntest \"twice\" {\n    k := 4\n    assert Twice(k) == 8\n}\n") catch os.OsError {
+    try os.WriteFile(bad, "fn main() {\n    x I32 = \"no\"\n}\n") catch os.Error { unreachable "no file" }
+    try os.WriteFile(good, "# twice n\nfn Twice(n I64) I64 { return 2*n }\n\ntest \"twice\" {\n    k := 4\n    assert Twice(k) == 8\n}\n") catch os.Error {
         unreachable "no file"
     }
     lines := StringBuilder()
@@ -290,11 +290,11 @@ test "olang mcp answers a scripted session: tools/list, check, explain, doc, for
     lines.Push(callLine(7, "format", $"{\"file\":\"" $good "\"}"))
     lines.Push(callLine(8, "test", $"{\"file\":\"" $good "\"}"))
     lines.Push(callLine(9, "nothing", "{}"))
-    out := try os.Exec(String&[compilerUnderTest(), "mcp"], lines.ToString()) catch os.OsError { unreachable "olang mcp did not run" }
+    out := try os.Exec(String&[compilerUnderTest(), "mcp"], lines.ToString()) catch os.Error { unreachable "olang mcp did not run" }
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     for line in out.Stdout.Lines() {
-        msg := try json.Parse(line) catch json.JsonError { unreachable "a line that is no JSON: " $line }
+        msg := try json.Parse(line) catch json.Error { unreachable "a line that is no JSON: " $line }
         got.Put(idOf(msg), $line)
     }
     assert (got.Get("1")!).Contains("\"tools\":{\"listChanged\":false}")

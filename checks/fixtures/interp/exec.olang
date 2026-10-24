@@ -5,7 +5,7 @@ import "std/io"
 import "std/json"
 import "std/cancel"
 
-fn main() ? os.OsError, io.IoError, json.JsonError {
+fn main() ? os.Error, io.Error, json.Error {
     r := try os.Exec(String&["printf", "{\"a\": [1, 2.5e-3, true], \"b\": \"%s\"}", "it's ok \\u00e9"])
     doc := try json.Parse(r.Stdout)
     try io.Print($r.Status " " $json.Encode(doc) "\n")
@@ -13,13 +13,13 @@ fn main() ? os.OsError, io.IoError, json.JsonError {
     e := try os.Exec(String&["sh", "-c", "cat; echo err >&2; exit 4"], "fed in")
     try io.Print($e.Status " [" $e.Stdout "] [" $e.Stderr "]\n")
     missing := "no"
-    try os.Exec(String&["olang-no-such-program"]) catch os.OsError.NOT_FOUND { missing = "yes" }
+    try os.Exec(String&["olang-no-such-program"]) catch os.Error.NOT_FOUND { missing = "yes" }
     try io.Print("missing " $missing "\n")
     try processes()
 }
 
 # X6: a directory to run in, a deadline that kills, and programs started and waited for - the same either way
-fn processes() ? os.OsError, io.IoError {
+fn processes() ? os.Error, io.Error {
     w := try os.Exec(String&["pwd"], default, default, "/")
     try io.Print("in " $w.Stdout)
     late := "no"

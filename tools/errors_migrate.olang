@@ -9,7 +9,7 @@
 #     test block too, where an error it lets through fails the test (S16), as the old stop did - and a function then
 #     declares what it lets through (R9: "?" is added, or the error type after its list).
 #
-# Run from anywhere, on files or directories; each file is compiled with "-t" (a test build reaches everything the file
+# Run from anywhere, on files or directories; each file is compiled with "test" (a test build reaches everything the file
 # imports), what the diagnostics name is rewritten wherever they point, and that repeats until nothing more changes:
 #
 #     $OLANG build tools/errors_migrate.olang && build/tools_errors_migrate "$OLANG" shared.olang std/ ...
@@ -231,7 +231,7 @@ fn declareError(text String&, line I64, errType String&) String ? {
 fn diagnostics(olang String&, path String&) List<diagnostic> ? {
     out := List<diagnostic>()
     dir := filepath.Dir(path)
-    r := try os.Exec(String&[olang, "-t", filepath.Base(path)], "", true, dir)
+    r := try os.Exec(String&[olang, "test", filepath.Base(path)], "", true, dir)
     for row in r.Stdout.Lines() {
         # "FILE:LINE:COL: error[RULE]: MESSAGE"
         e := try row.Find(": error[") catch { continue }

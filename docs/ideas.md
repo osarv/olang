@@ -29,7 +29,7 @@ body yields - no keyword, no marker. `Iterator<T>` in a result position stands f
 (a struct of its parameters, locals and resume point), which satisfies the trait; callers use it through generics,
 `for ... in` and `:=`. Rules: a function with that result yields and returns no value (the end or a bare `return`
 ends the sequence); its `? E` is what `Next()` fails with besides `Exhausted` (the call itself runs nothing and cannot
-fail); no `yield` inside a lambda, a join or deferred code; no `defer` open across a `yield`. Both compilers (the user: syntax goes in both). Its errors are the iterator's: `fn lines(p String&) Iterator<String ? IoError>`, through the general
+fail); no `yield` inside a lambda, a join or deferred code; no `defer` open across a `yield`. Both compilers (the user: syntax goes in both). Its errors are the iterator's: `fn lines(p String&) Iterator<String ? io.Error>`, through the general
 error-set parameters `<T ? E>` (decided the same day, both compilers); a generator has no `?` of its own.
 
 **What:** a function that produces a sequence by `yield`ing values from ordinary code. The compiler turns it into an
@@ -246,7 +246,7 @@ by its own error; an error a clause catches inside the block does not leave it. 
 (a failed assert, `unreachable`, `!`, `os.Exit`), as for `defer`. One list with `defer`, in reverse registration order
 (an error exit runs both kinds, a normal exit only the defers - two lists would misorder `x := alloc(); errdefer
 free(x); y := build(x); defer log(y)`). The error is not available inside (errors are no values, T20); restricting it
-to some words (`errdefer IoError.FULL { }`) can be added later. Built in the port after self-hosting.
+to some words (`errdefer io.Error.FULL { }`) can be added later. Built in the port after self-hosting.
 
 **What:** a deferred block that runs only when its block is left by an error.
 

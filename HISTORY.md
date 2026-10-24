@@ -23305,3 +23305,61 @@ of the first. D2 says two such names are an error, and now they are.
 **Not built, as decided:** run-time checks anywhere `checked` is not written (no test or `-debug` entry checks); a
 prover; conditions on trait methods, lambdas, externs and destructors. **Mine, left for later:** a requirement whose
 arguments read a fixed local (S8c) is not asked at the call - only closed expressions are.
+
+## The std naming pass (2026-10-24)
+
+The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name
+that repeats its module's says what the dot already said. Refined after the first reading ("chan.Chan can stay no?"): a
+module named for its main type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, as Go's `list.List`), so
+`json.Json` and `chan.Chan` were not renamed; only the other names drop the prefix.
+
+**Renamed (every one an error type):** `io.IoError`, `os.OsError`, `json.JsonError`, `csv.CsvError`, `stats.StatsError`,
+`rand.RandError`, `http.HttpError`, `chan.ChanError`, `ffi.FfiError` and `filepath.PathError` (the last repeats only a
+part of its module's name, `path`; renamed with the rest because the module's one error is `Error` in every module that
+has one). Left: `linalg.ShapeError`, `ActivationError`, `SolveError` (several error types, named by subject),
+`http.HeaderError`, `regex.SyntaxError`/`NotFound`, `cancel.Stopped`, and every prelude name (`ListError`, `MapError`,
+`TextError`, `CheckError`, `CaseError`: bare everywhere, so no plain `Error` there, or it would collide with each
+module's own).
+
+**The tool** (`tools/stutter_rename.olang`, re-runnable, idempotent): a qualified use of an old name (after a `.`) is
+renamed anywhere it is written - code, comments, strings, Markdown - and the bare name only inside the module's own
+file in std/, since anywhere else a bare `IoError` can only be a type of the program's own. Run over std, compiler,
+tests, checks, fuzz, bench, editors, docs, tools and SPEC.md (the records HISTORY.md, CLAUDE.md and the memory keep
+the old names, as a record does). Bare mentions in comments and messages were changed by hand (`'? io.Error'` in the
+compiler's R1a/R1b messages, SPEC's `Print` signatures). `tools/io_fix` reads a diagnostic that now begins `Error can
+escape here`. **A visible cost, decided:** an error escaping `main` prints its type's own name alone (B5), so what was
+`unhandled error: IoError.FAILED` is `unhandled error: Error.FAILED`; two checks expect it.
+
+**Goldens:** `make diaggold` changed two rows (one case's source line); tokens, ast and layout were recaptured, and layout's
+rows that stage 0 had and the self-hosted table cannot lay out were renamed in place.
+
+## `olang fix` (B17, 2026-10-24)
+
+The user's decision: one command that applies every migration since a file was written, the tools in order, no version
+marker - "each tool already changes only old forms". Built as a driver mode over `tools/*` rather than a seventeenth
+tool: `compiler/fix.olang` holds one ordered table (name, how it is called) and `fix.Files` builds each tool into the
+cache with the compiler that is running, runs it over all the files, and compares every file before and after to list
+the ones changed. `-check` is the same run with every file put back afterwards, which is the only way to say what a
+*pipeline* would do (a later tool sees the earlier one's output); the tools' own `--check`/`--dry` would each judge the
+original text.
+
+**The premise held for fifteen of nineteen.** Each text tool was run over std, tests, compiler, checks, bench, fuzz,
+tools, docs and editors (the four driven by diagnostics over five files of std and tests, for the time they take), and
+every one but four changed only files written in the old form on purpose (checks cases, the fixtures) or its own
+documentation. The four: `io_print` takes `try` off a call of `io.Print` (the old `print` had none)
+and `io_try` puts it back - the pair turns `try io.Print(t) catch io.Error { }` into `try io.Print(t)`, and drops the
+`!` of `io.Println(x)!` for a `try`; `precedence_migrate` wraps `a & b == c` because it reads it under the old
+precedence, which is not a form that can be told from the new; `io_fix` follows `io_try`. They stay one-shot tools and
+are listed as such in tools/README.md.
+
+**Order:** introduction order (the tools' first commits), text tools first, then the four driven by diagnostics. A
+driven tool on an unmigrated file is useless (the file does not parse, so the compiler reports nothing but syntax errors,
+which they do not read), and a text tool never needs the compiler, so the split loses nothing and the order inside each
+group is the order of the changes. **Cost:** the first run builds up to fifteen tools (45 s here, once per compiler); the
+driven four compile each file, so a run over a large tree is minutes, not seconds.
+
+**Found on the way:** `errors_migrate` had been calling `olang -t FILE` since B1 removed the one-character flags -
+every run ended with "0 edits"; it calls `olang test`. `bare_typevars` read std from the directory above its binary
+(`RepoRoot`), which a cache is not; `--std DIR`. `olang fix` is also the home of `tools/stutter_rename`, the std naming
+pass above.
+

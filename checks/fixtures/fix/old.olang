@@ -1,0 +1,17 @@
+# written when a type variable was <T> everywhere, an error set joined by +, and io's error was IoError
+import "std/io"
+
+error Bad { WORD }
+
+fn id(x <T>) <T> { return x }
+
+fn half(n I64) I64 ? Bad + io.IoError {
+    if n < 0 { error Bad.WORD }
+    return n / 2
+}
+
+fn main() ? io.IoError {
+    try io.Println("fixed " $id(7))
+    r := try half(8) catch Bad default 0
+    try io.Println($r)
+}

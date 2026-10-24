@@ -1,7 +1,7 @@
 # check: fail this value's references live where its own storage does not, and the callee can store through it
 # O17 (U1): as o17tempcallresult, the parameter read-only - the callee builds through the shallow "mut" field
 import "std/io"
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

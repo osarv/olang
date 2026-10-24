@@ -16,7 +16,7 @@ type Es struct(head mut Node&) {
 }
 fn (s Es&) At(i I64) E { return E(s.head, i) }
 fn hang(e mut E&, k I64) { e.head.next = Node(k) }
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

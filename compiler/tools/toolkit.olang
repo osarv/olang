@@ -9,12 +9,12 @@ import "std/io"
 
 # t on standard output, whole - a failed write is not worth stopping a report for
 fn Say(t String&) {
-    try io.Print(t) catch io.IoError { }
+    try io.Print(t) catch io.Error { }
 }
 
 # t on standard error
 fn Warn(t String&) {
-    try io.PrintErr(t) catch io.IoError { }
+    try io.PrintErr(t) catch io.Error { }
 }
 
 # says why on standard output and ends with status 1: the tool did not run to its end
@@ -34,7 +34,7 @@ fn Run(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir String
         for e in env { full.Push(e) }
     }
     for a in args { full.Push(a) }
-    o := try os.Exec(full.ToArray(), "", true, dir) catch os.OsError {
+    o := try os.Exec(full.ToArray(), "", true, dir) catch os.Error {
         Die("cannot run " $args[0])
         unreachable
     }
@@ -50,7 +50,7 @@ fn RunShowing(args Array<String&>&, env Array<String&>& = Array<String&>(0), dir
 
 # the value of an environment variable, else fallback
 fn Env(name String&, fallback String&) String {
-    v := try os.Env(name) catch os.OsError { return $fallback }
+    v := try os.Env(name) catch os.Error { return $fallback }
     if v.Len() > 0 { return $v }
     return $fallback
 }
@@ -119,7 +119,7 @@ fn Fields(t String&) List<String&> {
 
 # a new scratch directory; the tool ends if there is none. Removing it is the caller's (Clean)
 fn Scratch(name String&) String& {
-    return try os.MkTemp("", $name ".") catch os.OsError {
+    return try os.MkTemp("", $name ".") catch os.Error {
         Die($name ": no scratch directory")
         unreachable
     }
@@ -127,17 +127,17 @@ fn Scratch(name String&) String& {
 
 # removes a scratch directory
 fn Clean(dir String&) {
-    try os.RemoveAll(dir) catch os.OsError { }
+    try os.RemoveAll(dir) catch os.Error { }
 }
 
 # writes a file; the tool ends if it cannot
 fn Write(path String&, text String&) {
-    try os.WriteFile(path, text) catch os.OsError { Die("cannot write " $path) }
+    try os.WriteFile(path, text) catch os.Error { Die("cannot write " $path) }
 }
 
 # reads a file; the tool ends if it cannot
 fn Read(path String&) String& {
-    return try os.ReadFile(path) catch os.OsError {
+    return try os.ReadFile(path) catch os.Error {
         Die("cannot read " $path)
         unreachable
     }
@@ -152,7 +152,7 @@ fn Tracked(pattern String&) List<String&> {
 # the names in dir that end in suffix, in byte order, each with dir/ before it; none for a directory that is not there
 fn Matching(dir String&, suffix String&) List<String&> {
     l := List<String&>()
-    names := try os.ReadDir(dir) catch os.OsError { return l }
+    names := try os.ReadDir(dir) catch os.Error { return l }
     for n in names {
         if n.EndsWith(suffix) { l.Push($dir "/" $n) }
     }
@@ -283,7 +283,7 @@ fn GoldenParse(t String&, what String&) Golden {
 
 # the golden at path, read; a missing one ends the tool, naming the target that captures it
 fn GoldenRead(path String&, target String&) Golden {
-    t := try os.ReadFile(path) catch os.OsError {
+    t := try os.ReadFile(path) catch os.Error {
         Die("no golden " $path " - capture it with make " $target)
         unreachable
     }
@@ -293,7 +293,7 @@ fn GoldenRead(path String&, target String&) Golden {
 # writes a golden whole, through a file beside it renamed into place
 fn GoldenWrite(path String&, text String&) {
     Write($path ".tmp", text)
-    try os.Rename($path ".tmp", path) catch os.OsError { Die("cannot write " $path) }
+    try os.Rename($path ".tmp", path) catch os.Error { Die("cannot write " $path) }
 }
 
 # FNV-1a over a text's bytes, 64 bits, as 16 hex digits - what a golden stores of a dump too large to keep
@@ -420,7 +420,7 @@ fn RunStored(g Golden&, f String&) StoredRun {
 
 # a program's output as a stored run holds it: the working directory - the repository's root - written $ROOT
 fn RunText(out String&) String {
-    here := try os.Cwd() catch os.OsError { return $out }
+    here := try os.Cwd() catch os.Error { return $out }
     return out.Replace(here, "$ROOT")
 }
 
@@ -464,7 +464,7 @@ type HashGolden struct() {
 # the hashed golden at BASE.txt and BASE.full.txt; a missing one ends the tool, naming the target that captures it
 fn HashGoldenRead(base String&, target String&) HashGolden {
     h := HashGolden()
-    table := try os.ReadFile($base ".txt") catch os.OsError {
+    table := try os.ReadFile($base ".txt") catch os.Error {
         Die("no golden " $base ".txt - capture it with make " $target)
         unreachable
     }

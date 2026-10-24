@@ -3,7 +3,7 @@
 
 import "std/io"
 
-fn main() ? io.IoError {
+fn main() ? io.Error {
     l := List<I32>()
     l.Push(5)
     l.Push(6)

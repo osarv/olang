@@ -47,7 +47,7 @@ type Source struct(Path String&, Text String&) {
 }
 
 # reads the file at path whole. A file is at most 2 GB less one byte, so an offset fits an I32
-fn Read(path String&) Source ? os.OsError {
+fn Read(path String&) Source ? os.Error {
     text := try os.ReadFile(path)
     assert text.Len() < 2147483647, "source: " $path " is larger than 2 GB"
     return Source(path, text)

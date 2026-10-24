@@ -1313,10 +1313,10 @@ fn (r mut Resolver&) notPrivate(t I64, ref Ref, n source.NameId, sp source.Span)
 
 # the rules of what names says about a program: its files as name, text pairs, the first its root
 fn testRules(files Array<String&>&, defines Array<String&>&) String {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     for k in range 0, files.Len(), 2 {
-        try os.WriteFile($dir "/" $files[k], files[k + 1]) catch os.OsError { }
+        try os.WriteFile($dir "/" $files[k], files[k + 1]) catch os.Error { }
     }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)

@@ -1,5 +1,5 @@
-# Drives a file to compile after io_try: builds it, and from the compiler's own errors adds `?`/`+ io.IoError` to a function
-# whose try lets IoError escape (R9), `try` to a call of a function that can now fail (E15), and `catch io.IoError { }` to
+# Drives a file to compile after io_try: builds it, and from the compiler's own errors adds `?`/`+ io.Error` to a function
+# whose try lets io.Error escape (R9), `try` to a call of a function that can now fail (E15), and `catch io.Error { }` to
 # a tried call in a test block or where nothing can fail (R13). Prints what it could not fix.
 #
 #     $OLANG build tools/io_fix.olang && build/tools_io_fix OLANG FILE...
@@ -146,22 +146,22 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
             pre := $srcmask.StripEnd(lines[j][:b])
             paren := lastIndex(pre, ')')
             tail := $(pre[paren + 1:] if paren >= 0 else pre[:])
-            named := msg.StartsWith("IoError")
+            named := msg.StartsWith("Error ")
             if "?" in tail {
                 if not named {
                     srcmask.Say("MANUAL " $path " " $(ln + 1) " " $srcmask.Prefix(msg, 60))
                     return 2
                 }
                 if srcmask.Strip(tail).EndsWith("?") {
-                    pre = $pre " " $alias ".IoError"
-                } else if tail.Contains("IoError") {
+                    pre = $pre " " $alias ".Error"
+                } else if tail.Contains($alias ".Error") {
                     srcmask.Say("STUCK " $path " " $(ln + 1))
                     return 2
                 } else {
-                    pre = $pre " + " $alias ".IoError"
+                    pre = $pre " + " $alias ".Error"
                 }
             } else {
-                pre = $pre " ?" $(" " $alias ".IoError" if named else "")
+                pre = $pre " ?" $(" " $alias ".Error" if named else "")
             }
             lines[j] = $pre " " $lines[j][b:]
             SigFixes++
@@ -188,7 +188,7 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
             i++
         }
         if end > 0 and not srcmask.StripStart(text[end:]).StartsWith("catch") {
-            lines[ln] = $text[:end] " catch " $alias ".IoError { }" $text[end:]
+            lines[ln] = $text[:end] " catch " $alias ".Error { }" $text[end:]
             CatchFixes++
             return 1
         }

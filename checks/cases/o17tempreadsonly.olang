@@ -3,7 +3,7 @@
 # O17 (U1): a split value - a call's result whose references are seed's - lent to reference parameters whose callees only
 # read, and build only where nothing keeps it: accepted, its copy a temporary of the loop body, read back after a churn
 import "std/io"
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

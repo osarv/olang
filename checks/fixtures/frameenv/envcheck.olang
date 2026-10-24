@@ -11,15 +11,15 @@ import "std/io"
 fn main() {
     args := os.Args()
     if args.Len() != 2 {
-        try io.PrintErr("usage: envcheck FILE.ll\n") catch io.IoError { }
+        try io.PrintErr("usage: envcheck FILE.ll\n") catch io.Error { }
         os.Exit(2)
     }
-    text := try os.ReadFile(args[1]) catch os.OsError {
-        try io.PrintErr("envcheck: cannot read " $args[1] "\n") catch io.IoError { }
+    text := try os.ReadFile(args[1]) catch os.Error {
+        try io.PrintErr("envcheck: cannot read " $args[1] "\n") catch io.Error { }
         os.Exit(2)
     }
     r := count(text)
-    try io.Println($r.First " " $r.Second) catch io.IoError { }
+    try io.Println($r.First " " $r.Second) catch io.Error { }
 }
 
 # the pairs whose environment is an alloca of their function, and the others

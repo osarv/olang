@@ -24,7 +24,7 @@ fn main() ? {
     args := os.Args()
     mode := args[1] if args.Len() >= 2 else ""
     if (mode != "-f" and mode != "-l" and mode != "-p" and mode != "-v") or args.Len() < 3 {
-        try io.PrintErrln("usage: fmt -f|-l|-p|-v FILE...") catch io.IoError { }
+        try io.PrintErrln("usage: fmt -f|-l|-p|-v FILE...") catch io.Error { }
         os.Exit(2)
     }
     os.RunOnStack(1 << 30, fn() { os.Exit(run(mode, args)) })
@@ -42,8 +42,8 @@ fn run(mode String&, args Array<String&>&) I32 {
     failed I64 = 0
     for k in range 2, args.Len() {
         path := args[k]
-        src := try source.Read(path) catch os.OsError {
-            try io.PrintErr("olang: " $path ": cannot be read\n") catch io.IoError { }
+        src := try source.Read(path) catch os.Error {
+            try io.PrintErr("olang: " $path ": cannot be read\n") catch io.Error { }
             status = 1
             continue
         }
@@ -65,7 +65,7 @@ fn run(mode String&, args Array<String&>&) I32 {
     }
     out.Write(($(same + changed + skipped + failed) " files: " $same " already formatted, " $changed " formatted, "
               $skipped " skipped (they do not parse), " $failed " failed\n"))
-    try out.Flush() catch io.IoError { return 1 }
+    try out.Flush() catch io.Error { return 1 }
     return status
 }
 
@@ -91,8 +91,8 @@ fn verify(src source.Source&, text String&, std String&, prelude String&) String
     if after != before {
         dbg := try os.Env("FMT_DEBUG") catch default ""
         if dbg != "" {
-            try os.WriteFile($dbg ".before", before) catch os.OsError { }
-            try os.WriteFile($dbg ".after", after) catch os.OsError { }
+            try os.WriteFile($dbg ".before", before) catch os.Error { }
+            try os.WriteFile($dbg ".after", after) catch os.Error { }
         }
         return "the tree read back differs: " $firstDifference(before, after)
     }

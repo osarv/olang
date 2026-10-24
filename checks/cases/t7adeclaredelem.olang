@@ -4,7 +4,7 @@
 # (review port1 r07, r11)
 import "std/io"
 type Box<T> struct(v T) { v }
-fn main() ? io.IoError {
+fn main() ? io.Error {
     a := Array<String>(3, "init")
     b := Box<String>("start")
     try io.Println($a.Len() " " $b.v)

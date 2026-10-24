@@ -16,7 +16,7 @@ fn conv<T>(x F64, like T) T {
     }
 }
 
-fn run<T>(n I64, m I64, threads I64, reps I64, mode String&, like T) ? io.IoError, linalg.ShapeError {
+fn run<T>(n I64, m I64, threads I64, reps I64, mode String&, like T) ? io.Error, linalg.ShapeError {
     a := linalg.Matrix<T>(n, m)
     b := linalg.Matrix<T>(n, m)
     c := linalg.Matrix<T>(n, m)

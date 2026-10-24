@@ -1,0 +1,148 @@
+# stutter_rename - std names no longer repeat their module's name (the user's naming rule, 2026-10-24): the error type
+# of io, once named for the module, is io.Error, and so are those of os, json, csv, stats, rand, http, chan, ffi and
+# filepath. A module named for its main type keeps that type's name (chan.Chan, json.Json, set.Set); several error types
+# in one module are named by subject (linalg.ShapeError); the prelude's names are bare everywhere, so it never declares
+# a plain Error.
+#
+# Every qualified use (the old name after a ".", in code, comments, strings and Markdown alike) is renamed; inside the
+# module's own file in std/ the bare name is renamed too. A bare name anywhere else is left alone - it can only be a
+# type of the program's own. Files are rewritten in place and a count printed; --check writes nothing and the exit
+# status says whether anything would change; running it again changes nothing. It reads .olang, .md, .txt and .want
+# files.
+#
+#     build/olang build tools/stutter_rename.olang && build/tools_stutter_rename [--check] [-v] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+
+type Count struct() { n I64 = 0 }
+
+# the module (its file std/NAME.olang), the old error type and its new name. Each old name is written in two pieces so
+# that the tool run over itself changes nothing
+Modules Array<String&> = String&["io", "os", "json", "csv", "stats", "rand", "http", "chan", "ffi", "filepath"]
+OldNames Array<String&> = String&["Io" "Error", "Os" "Error", "Json" "Error", "Csv" "Error", "Stats" "Error", "Rand" "Error", "Http" "Error", "Chan" "Error", "Ffi" "Error", "Path" "Error"]
+
+fn isDeclaringFile(path String&, module String&) Bool {
+    file := "std/" $module ".olang"
+    return path == file or path.EndsWith("/" $file)
+}
+
+# every whole word old in src that is written after a "." - or anywhere, when bare is set - replaced by to
+fn replaceName(src String&, old String&, to String&, bare Bool, c mut Count&) String {
+    out := StringBuilder()
+    at I64 = 0
+    i I64 = 0
+    for i + old.Len() <= src.Len() {
+        if src[i:i + old.Len()] == old {
+            before := i == 0 or not srcmask.IsWord(src[i - 1])
+            after := i + old.Len() == src.Len() or not srcmask.IsWord(src[i + old.Len()])
+            qualified := i > 0 and src[i - 1] == '.'
+            if before and after and (qualified or bare) {
+                out.Push(src[at:i])
+                out.Push(to)
+                i += old.Len()
+                at = i
+                c.n++
+                continue
+            }
+        }
+        i++
+    }
+    if at == 0 { return $src }
+    out.Push(src[at:])
+    return out.ToString()
+}
+
+fn rename(path String&, src String&, c mut Count&) String {
+    text := $src
+    for i in range Modules.Len() {
+        text = replaceName(text, OldNames[i], "Error", isDeclaringFile(path, Modules[i]), c)
+    }
+    return text
+}
+
+fn wanted(path String&) Bool {
+    return path.EndsWith(".olang") or path.EndsWith(".md") or path.EndsWith(".txt") or path.EndsWith(".want")
+}
+
+# the files under a directory with one of the extensions read, build/ and .git/ left out
+fn walk(dir String&, out mut List<String&>&) {
+    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    for n in names {
+        if n.StartsWith(".") or n == "build" { continue }
+        p := srcmask.PathJoin(dir, n)
+        if os.IsDir(p) {
+            walk(p, out)
+        } else if wanted(p) {
+            out.Push($p)
+        }
+    }
+}
+
+fn main() ? {
+    check := false
+    verbose := false
+    paths List<String&>
+    args := os.Args()
+    for i in range 1, args.Len() {
+        a := args[i]
+        if a == "--check" {
+            check = true
+        } else if a == "-v" {
+            verbose = true
+        } else {
+            paths.Push($a)
+        }
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: tools_stutter_rename [--check] [-v] FILE|DIR...")
+        os.Exit(2)
+    }
+    files List<String&>
+    for p in paths {
+        if os.IsDir(p) { walk(p, files) } else { files.Push($p) }
+    }
+    total := Count()
+    changed I64 = 0
+    for path in files {
+        if not wanted(path) { continue }
+        src := try srcmask.ReadText(path) catch {
+            srcmask.SayErr("stutter_rename: cannot read " $path)
+            os.Exit(1)
+            unreachable
+        }
+        out := rename(path, src, total)
+        if out == src { continue }
+        changed++
+        if verbose { srcmask.Say(path) }
+        if not check {
+            try os.WriteFile(path, out) catch {
+                srcmask.SayErr("stutter_rename: cannot write " $path)
+                os.Exit(1)
+            }
+        }
+    }
+    verb := "would change " if check else "changed "
+    srcmask.Say($verb $changed " files: " $total.n " names")
+    if check and changed > 0 { os.Exit(1) }
+}
+
+test "a qualified name is renamed everywhere; the bare one only in its module's own file" {
+    n := Count()
+    old := OldNames[0]
+    assert rename("app.olang", "fn f() ? io." $old " { }\n# fails with io." $old "\n", n) == "fn f() ? io.Error { }\n# fails with io.Error\n"
+    assert rename("app.olang", "error " $old " { A }\n", n) == "error " $old " { A }\n"
+    assert rename("std/io.olang", "error " $old " { A }\nfn f() ? " $old " { }\n", n) == "error Error { A }\nfn f() ? Error { }\n"
+    assert rename("/x/std/io.olang", "e " $old, n) == "e Error"
+    assert rename("std/os.olang", "e " $old, n) == "e " $old
+    assert n.n == 5
+}
+
+test "a longer word is left, every module is covered, and a second run changes nothing" {
+    n := Count()
+    src := "x My" $OldNames[1] " := 1\nh := json." $OldNames[2] " + ffi." $OldNames[8] " + chan." $OldNames[7] "s\n"
+    out := rename("a.olang", src, n)
+    assert out == "x My" $OldNames[1] " := 1\nh := json.Error + ffi.Error + chan." $OldNames[7] "s\n"
+    assert rename("a.olang", out, n) == out
+    assert Modules.Len() == OldNames.Len()
+}

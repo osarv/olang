@@ -2,7 +2,7 @@
 # E16a/R9a (U3): a slice of "try a[0] catch default v" returned as a borrow of a - the try's value is a copy made
 # where it is read, a temporary of the function's own block, so the slice cannot outlive it
 import "std/io"
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

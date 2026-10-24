@@ -7573,9 +7573,9 @@ if TestBuild {
                        "}\n")
 
     test "plans and summaries: a task's temporary built in its join block, an element where its list lives (O18b), a build through a stand-in apart from one into the scope itself (P2)" {
-        dir := try os.MkTemp() catch os.OsError { unreachable }
-        defer { try os.RemoveAll(dir) catch os.OsError { } }
-        try os.WriteFile($dir "/main.olang", jpTasks) catch os.OsError { }
+        dir := try os.MkTemp() catch os.Error { unreachable }
+        defer { try os.RemoveAll(dir) catch os.Error { } }
+        try os.WriteFile($dir "/main.olang", jpTasks) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
         l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
@@ -7664,9 +7664,9 @@ if TestBuild {
                         "}\n")
 
     test "plans: a returned array value is built in the result scope its function has for it (T7b); a local lent for a parameter sharing the borrowed result's scope lives there, as one a conditional's arm returns (O26a); a lambda may build only into what it builds into (decision 48)" {
-        dir := try os.MkTemp() catch os.OsError { unreachable }
-        defer { try os.RemoveAll(dir) catch os.OsError { } }
-        try os.WriteFile($dir "/main.olang", jpArrays) catch os.OsError { }
+        dir := try os.MkTemp() catch os.Error { unreachable }
+        defer { try os.RemoveAll(dir) catch os.Error { } }
+        try os.WriteFile($dir "/main.olang", jpArrays) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
         l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
@@ -7746,9 +7746,9 @@ if TestBuild {
                          "}\n")
 
     test "C2d, P1g: a task's built result stored into a '&p' field of a parameter is refused as the assignment is" {
-        dir := try os.MkTemp() catch os.OsError { unreachable }
-        defer { try os.RemoveAll(dir) catch os.OsError { } }
-        try os.WriteFile($dir "/main.olang", spDerived) catch os.OsError { }
+        dir := try os.MkTemp() catch os.Error { unreachable }
+        defer { try os.RemoveAll(dir) catch os.Error { } }
+        try os.WriteFile($dir "/main.olang", spDerived) catch os.Error { }
         consts := cond.Consts()
         consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
         l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)

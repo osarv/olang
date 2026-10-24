@@ -867,6 +867,38 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   reaches a writable parameter; contract bodies see parameters read-only; one body per item (typed.BodyOf.Contract);
   the evaluator's guarantee checks are a compile-only lowering (`Lowerer.Ensures`), never in a build. Found on the way:
   the port's resolver accepted two functions of one name in a module (D2) - an error now.
+- **std names never repeat their module's (the user's naming rule, 2026-10-24: "we don't integrate the knowledge that
+  modules have namespaces"; refined: "chan.Chan can stay no?").** `io.IoError` is `io.Error`, and likewise `os.Error`,
+  `json.Error`, `csv.Error`, `stats.Error`, `rand.Error`, `http.Error`, `chan.Error`, `ffi.Error` and
+  `filepath.Error` (was `PathError`); `net`, `base64`, `hex`, `deque`, `heap`, `flags`, `time`, `utf8` already were. A module named for its main
+  type keeps that type's name (`chan.Chan`, `json.Json`, `set.Set`, `rand.Rand`, as Go's `list.List`); a module with
+  several error types names the others by subject (`linalg.ShapeError`, `http.HeaderError`, `regex.SyntaxError`). The
+  prelude is the exception (its names are bare everywhere: `ListError`, `MapError`, `TextError`, `CheckError`,
+  `CaseError`) and must never declare a plain `Error` - a rule in std/README.md. An error escaping `main` now prints
+  its bare type name (`unhandled error: Error.FAILED`, B5 - the type's own name, as ever). `tools/stutter_rename.olang`
+  renames the old names (idempotent; a qualified use anywhere, the bare name only in the module's own std file) and
+  `olang fix` runs it. Migrated: std, compiler, tests, checks, fuzz, bench, docs, SPEC; goldens recaptured (diag.txt
+  by `make diaggold`, tokens/ast/layout by their targets).
+- **`olang fix FILE|DIR...` (B17, B1, 2026-10-24, the user: "runs every idempotent migration tool in order; no version
+  marker").** A mode of the driver (`compiler/fix.olang`) that runs the migration tools of `tools/` over the files in
+  the order the changes were made, so a file from any earlier time reads in today's language in one command; `-check`
+  lists what would change and writes nothing (the files are put back as they were), the status 1 where any would, 2 where
+  a file cannot be read or a tool built or run. **Decisions (mine).** (1) The tools are *built into the cache* (`fix/` in
+  `OLANG_CACHE`) by the running compiler on first use - and again when the compiler or `tools/` is newer - rather than
+  linked in: they are standalone programs with their own `main`, tests and the module `srcmask` they share, and several
+  call the compiler themselves; `olang format` is a linked module only because the formatter is a library of the compiler
+  too. The tools sit beside the compiler's `std/` (`../tools`, `OLANG_TOOLS` names another place). (2) **Two phases:** the
+  tools that read the text alone first, in the order of introduction, then those driven by the compiler's diagnostics
+  (`perm_mut`, `int_literal_i64`, `errors_migrate`, `null_migrate`) - an old file does not parse, so the compiler has
+  nothing to say about it until the text tools have run. (3) **Not every tool is idempotent, which the decision assumed:**
+  `io_print`/`io_try`/`io_fix` (they strip a `try ... catch` and the `!` forms from code of today) and `precedence_migrate`
+  (it reads every `a & b == c` as written for the old precedence - nine comparisons of tests/shared.olang) are left out
+  of the table and said so in tools/README.md and SPEC B17; every other text tool was run over the whole repository (the driven
+  ones over a sample) and changed nothing but the files written in the old form on purpose. (4) **Found on the way:** `errors_migrate` ran the
+  compiler as `olang -t FILE` - a flag B1 removed - and so did nothing since; it runs `olang test`. `bare_typevars` found
+  std's type names from where its binary sits; it takes `--std DIR` now (the cache is not the repository). A tool's output is shown
+  (to the standard error) when it left something for a person, changed something worth a line or failed. A check
+  scenario (`fix`) fixes an old program (type variables, an error set with `+`, `io.IoError`) and runs it.
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

@@ -1178,7 +1178,7 @@ fn (e mut Emitter&) dbgFile(file I64) I64 {
     n := e.dbgNew()
     e.dbgFiles.Put(file, n)
     path := e.D.PathOf(file)
-    dir := try os.Cwd() catch os.OsError default "."
+    dir := try os.Cwd() catch os.Error default "."
     e.dbgShared(n, $"!DIFile(filename: \"" $escape(path) "\", directory: \"" $escape(dir) "\")")
     return n
 }
@@ -4720,7 +4720,7 @@ fn (e mut Emitter&) entry(inits List<I64>, mainBody I64) {
     e.item("main", e.P.L.Root, b.ToString())
 }
 
-# an error type's name as B5 says it escaping main: its own name alone ("IoError"), as stage 0 writes it
+# an error type's name as B5 says it escaping main: its own name alone ("Error"), as stage 0 writes it
 fn (e mut Emitter&) errName(et types.TypeId) String { return $e.text(e.T.DeclName(e.T.DeclOf(et))) }
 
 # the test harness (S15/S16): each test run behind a recovery point, a failed check (or an error leaving it) ending

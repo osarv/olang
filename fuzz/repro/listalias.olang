@@ -43,6 +43,6 @@ fn c0(x0 I32) I64 {
 }
 K0 I64 = c0(3)
 v0 mut I32 = 3
-fn main() ? io.IoError {
+fn main() ? io.Error {
     try io.Print($K0 " | " $c0(v0) "\n")
 }

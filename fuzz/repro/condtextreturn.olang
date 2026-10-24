@@ -11,6 +11,6 @@ fn wrap(k I64) String& {
     return "(" $c " != " $j.Len() ")"
 }
 run mut I64 = 1
-fn main() ? io.IoError {
+fn main() ? io.Error {
     try io.Print($wrap(run) "\n")
 }

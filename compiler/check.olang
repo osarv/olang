@@ -14743,7 +14743,7 @@ fn breaks(b typed.Block?&, loop typed.BlockId) Bool {
 
 # a program of one file, main.olang, loaded over the repository's std with the host's build constants
 fn testLoad(dir String&, text String&) load.Loader {
-    try os.WriteFile($dir "/main.olang", text) catch os.OsError { }
+    try os.WriteFile($dir "/main.olang", text) catch os.Error { }
     consts := cond.Consts()
     consts.Builtins("linux", "x86_64", "x86-64", 128, 0, false, false, false)
     l := load.Loader("std", consts, fetch.Fetcher($dir "/olang.lock", $dir "/cache", "file:///nowhere/", false, true)
@@ -14777,8 +14777,8 @@ fn rootGaps(c Checker&, file I64) String {
 }
 
 test "a small program checks clean, and its main is checked" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn add(a I32, b I32) I32 { return a + b }\n"
                        "fn main() ? {\n    x I32 = 3\n    y := add(x, 4)\n    for i in range 10 { y += I32(i) }\n"
                        "    if y > 3 { y = y - 1 } else { y = 0 }\n    z I64 = y\n    assert z > 0\n}\n"))
@@ -14794,8 +14794,8 @@ test "a small program checks clean, and its main is checked" {
 }
 
 test "type errors: E12, T6b, D10a, S3" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn f(x Bool) I32 {\n    if x { return 1 }\n}\n"
                        "fn main() ? {\n    a I32 = true\n    b I64 = 3\n    c I32 = b\n    a + 1\n}\n"))
     r := names.Resolver(l)
@@ -14808,8 +14808,8 @@ test "type errors: E12, T6b, D10a, S3" {
 }
 
 test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9a, S9c, S9d, S9f, E27)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type Ix struct() { }\nfn (x Ix&) At(i I64) I64 { return i * 2 }\nfn (x Ix&) Len() I64 { return 3 }\n"
                        "fn main() ? {\n    l := List<I64>()\n    l.Push(1)\n    t I64 = 0\n    for x in l { t += x }\n"
                        "    for k, x in l.Iter() { t += x + k }\n    for x in Ix() { t += x }\n"
@@ -14826,8 +14826,8 @@ test "for-in walks iterators, runs, iterables and indexables; comprehensions (S9
 }
 
 test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16c, G9a, G9c)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn apply(f fn(x I64) I64, v I64) I64 { return f(v) }\n"
                        "fn main() ? {\n    k I64 = 3\n    a := apply(fn(x) { return x + k }, 4)\n"
                        "    g := fn(x I64) { return x * 2 }\n    b := g(5)\n"
@@ -14846,8 +14846,8 @@ test "lambdas: expected types, inference, captures, generic calls (D16, D16a-D16
 }
 
 test "a literal reaching a constrained variable takes the type the constraint names (G9a, G19, T35c)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn sq<T Float>(x T) T { return x }\nfn half<T Float>(x T, y T) T { return x }\n"
                        "fn main() ? {\n    a F64 = sq(4)\n    b F64 = sq(2 + 2)\n    c F64 = half(1, 3)\n"
                        "    d F32 = sq(F32(1))\n    assert a + b + c + F64(d) > 0.0\n}\n"))
@@ -14859,8 +14859,8 @@ test "a literal reaching a constrained variable takes the type the constraint na
     c.CheckProgram()
     assert rootRules(l) == "", rootRules(l)
     assert rootGaps(c, l.Mods[l.Root].File) == "", rootGaps(c, l.Mods[l.Root].File)
-    dir2 := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir2) catch os.OsError { } }
+    dir2 := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir2) catch os.Error { } }
     l2 := testLoad(dir2, ("fn sq<T Float>(x T) T { return x }\nfn whole<T Integer>(x T) T { return x }\n"
                          "fn main() ? {\n    n I64 = 4\n    a := sq(n)\n    b := whole(2.5)\n}\n"))
     r2 := names.Resolver(l2)
@@ -14873,8 +14873,8 @@ test "a literal reaching a constrained variable takes the type the constraint na
 }
 
 test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn main() ? {\n    k I64 = 3\n    g := fn(x) { return x }\n"
                        "    h := fn() { k = 4 }\n    h()\n}\n"))
     r := names.Resolver(l)
@@ -14887,8 +14887,8 @@ test "lambda errors: an untyped parameter, a written capture (D16a, D16c)" {
 }
 
 test "x[i] through At and SetAt: reads, stores, compound stores and increments written back (E31, E31b)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type P struct(x I64, y I64) { x\n    y }\n"
                        "fn main() ? {\n    l := List<P>()\n    l.Push(P(1, 2))\n    l[0].x = 5\n    l[0].y += 3\n"
                        "    n := List<I64>()\n    n.Push(4)\n    n[0] += 2\n    n[0]++\n    n[0] = 9\n"
@@ -14904,8 +14904,8 @@ test "x[i] through At and SetAt: reads, stores, compound stores and increments w
 }
 
 test "join and spawn: targets, failing tasks, clauses on the task, try join (P1, P1a, P1g, P4, P4a-P4c)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("error E {\n    A\n    B\n}\nfn sq(n I64) I64 ? E {\n    if n < 0 { error E.A }\n    return n * n\n}\n"
                        "fn work(n I64) { }\n"
                        "fn main() ? {\n    out := Array<I64>(3)\n    join {\n        for i in range 3 { spawn out[i] = try sq(i) catch E.A default 0 catch E.B default 1 }\n    }\n"
@@ -14922,8 +14922,8 @@ test "join and spawn: targets, failing tasks, clauses on the task, try join (P1,
 }
 
 test "join and spawn errors (P1, P1a, P4, P4c)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("error E {\n    A\n}\nfn f() ? E { error E.A }\nfn g() { }\n"
                        "fn main() ? {\n    spawn g()\n    join { g() }\n    join {\n        spawn f()\n    }\n    join {\n        spawn try f()\n    }\n}\n"))
     r := names.Resolver(l)
@@ -14936,8 +14936,8 @@ test "join and spawn errors (P1, P1a, P4, P4c)" {
 }
 
 test "errors: inferred sets across a cycle, checked, words, noreturn and ! (R1a, R1c, E15a, D8e, E35)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("error E {\n    A\n    B\n}\nextern fn exit(code I32) noreturn\nfn die() noreturn { exit(1) }\n"
                        "fn even(n I64) Bool ? {\n    if n < 0 { error E.A }\n    return true if n == 0 else try odd(n - 1)\n}\n"
                        "fn odd(n I64) Bool ? { return false if n == 0 else try even(n - 1) }\n"
@@ -14957,8 +14957,8 @@ test "errors: inferred sets across a cycle, checked, words, noreturn and ! (R1a,
 }
 
 test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11, R11a, R14, R8, E15a, E35, D8e)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("error E {\n    A\n    B\n}\nerror F {\n    C\n}\nfn f() I32 ? E { error E.A }\n"
                        "fn g() I32 ? E.A { error E.B }\nfn h() I32 { return try f() catch E.A default 1 }\n"
                        "fn k() ? E { try f() catch F { } }\nfn m() ? E {\n    try f() catch { } catch E { }\n}\n"
@@ -14974,8 +14974,8 @@ test "errors said: escaping, not produced, clauses, nothing to try (R3, R9, R11,
 }
 
 test "writes: an immutable global, a read-only reference, a value a call gave back (S6, T25b, E31)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type P struct(x I64) { x }\nG I64 = 3\nM mut I64 = 4\nfn mk() P { return P(1) }\n"
                        "fn f(p P&, q mut P&) {\n    q.x = 2\n    p.x = 3\n}\n"
                        "fn main() ? {\n    M = 5\n    G = 6\n    mk().x = 4\n}\n"))
@@ -14989,8 +14989,8 @@ test "writes: an immutable global, a read-only reference, a value a call gave ba
 }
 
 test "a destructor reads its fields bare (C9, C10)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("Closed mut I64 = 0\ntype R struct(n I64) { n } destruct {\n    Closed = Closed + n\n    bad Bool = n\n}\n"
                        "fn main() ? {\n    r := R(3)\n    assert r.n == 3\n}\n"))
     r := names.Resolver(l)
@@ -15008,8 +15008,8 @@ test "a destructor reads its fields bare (C9, C10)" {
 # list's index -1 (E16e) read whatever lay in front of its first chunk, a frame by luck in one build of the compiler
 # and a null in another, where it crashed
 test "a top-level condition is checked with no body around it (B9c)" {
-    dir := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(dir) catch os.OsError { } }
+    dir := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("fn f() I64 { return 1 }\nG I64 = 2\nif f() == 1 and G > 1 { fn g() I64 { return 1 } }\n"
                        "fn main() ? { }\n"))
     r := names.Resolver(l)

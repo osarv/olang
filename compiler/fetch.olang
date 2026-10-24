@@ -57,13 +57,13 @@ fn IsCommit(c String&) Bool {
 
 fn (f mut Fetcher&) say(line String&) {
     f.Said.Push($line)
-    if not f.Quiet { try io.PrintErrln(line) catch io.IoError { } }
+    if not f.Quiet { try io.PrintErrln(line) catch io.Error { } }
 }
 
 fn (f mut Fetcher&) load() {
     if f.loaded { return }
     f.loaded = true
-    text := try os.ReadFile(f.LockPath) catch os.OsError { return }
+    text := try os.ReadFile(f.LockPath) catch os.Error { return }
     for line in text.Lines() {
         if line.StartsWith("#") { continue }
         parts := line.Trim().Split(" ")
@@ -120,7 +120,7 @@ fn (f mut Fetcher&) lock(key String&, commit String&) {
         b.Push(f.commits[i])
         b.PushChar('\n')
     }
-    try os.WriteFile(f.LockPath, b.ToString()) catch os.OsError { }
+    try os.WriteFile(f.LockPath, b.ToString()) catch os.Error { }
 }
 
 # M23c: whether -u has updated key already in this compilation, marking it when mark
@@ -134,14 +134,14 @@ fn (f mut Fetcher&) updatedNow(key String&, mark Bool) Bool {
 
 # git, run quietly; whether it succeeded
 fn git(args Array<String&>&) Bool {
-    out := try os.Exec(args) catch os.OsError { return false }
+    out := try os.Exec(args) catch os.Error { return false }
     return out.Status == 0
 }
 
 # the commit a checked-out repository is at, or "" when it cannot be read
 fn head(dir String&) String {
     d := $dir
-    out := try os.Exec(String&["git", "-C", d, "rev-parse", "HEAD"]) catch os.OsError { return "" }
+    out := try os.Exec(String&["git", "-C", d, "rev-parse", "HEAD"]) catch os.Error { return "" }
     if out.Status != 0 { return "" }
     c := out.Stdout.Trim()
     return $c if IsCommit(c) else ""
@@ -189,8 +189,8 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
         dir := $parent "/" $locked
         if os.IsDir(dir) { return dir }
     }
-    try os.MkDirAll(parent) catch os.OsError { error FetchError.FAILED }
-    tmp := try os.MkTemp(parent, ".fetch-") catch os.OsError { error FetchError.FAILED }
+    try os.MkDirAll(parent) catch os.Error { error FetchError.FAILED }
+    tmp := try os.MkTemp(parent, ".fetch-") catch os.Error { error FetchError.FAILED }
     if hasLine {
         f.say("olang: fetching " $key " into " $cache " at " $locked[:12] ", as olang.lock says")
         dir := $parent "/" $locked
@@ -199,39 +199,39 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
                    git(String&["git", "-C", tmp, "fetch", "-q", "--depth", "1", "--", url, locked]) and
                    git(String&["git", "-C", tmp, "checkout", "-q", "FETCH_HEAD"])
         if not shallow {
-            try os.RemoveAll(tmp) catch os.OsError { }
+            try os.RemoveAll(tmp) catch os.Error { }
             if git(String&["git", "clone", "-q", "--", url, tmp]) {
                 git(String&["git", "-C", tmp, "checkout", "-q", locked])
             }
         }
         if head(tmp) != locked {
-            try os.RemoveAll(tmp) catch os.OsError { }
+            try os.RemoveAll(tmp) catch os.Error { }
             error FetchError.LOCKED_FAILED
         }
         if not os.IsDir(dir) {
-            try os.Rename(tmp, dir) catch os.OsError {
-                try os.RemoveAll(tmp) catch os.OsError { }
+            try os.Rename(tmp, dir) catch os.Error {
+                try os.RemoveAll(tmp) catch os.Error { }
                 error FetchError.LOCKED_FAILED
             }
         }
-        try os.RemoveAll(tmp) catch os.OsError { }   # another build placed it first
+        try os.RemoveAll(tmp) catch os.Error { }   # another build placed it first
         return dir
     }
     f.say("olang: fetching " $key " into " $cache)
     branch := "--branch=" $ref if at < repoAt.Len() else "--quiet"
-    try os.RemoveAll(tmp) catch os.OsError { }
+    try os.RemoveAll(tmp) catch os.Error { }
     h := ""
     if git(String&["git", "clone", "--quiet", "--depth", "1", branch, "--", url, tmp]) { h = head(tmp) }
     if h == "" {
-        try os.RemoveAll(tmp) catch os.OsError { }
+        try os.RemoveAll(tmp) catch os.Error { }
         error FetchError.FAILED
     }
     dir := $parent "/" $h
     if os.IsDir(dir) {
-        try os.RemoveAll(tmp) catch os.OsError { }   # fetched before, under another ref
+        try os.RemoveAll(tmp) catch os.Error { }   # fetched before, under another ref
     } else {
-        try os.Rename(tmp, dir) catch os.OsError {
-            try os.RemoveAll(tmp) catch os.OsError { }
+        try os.Rename(tmp, dir) catch os.Error {
+            try os.RemoveAll(tmp) catch os.Error { }
             error FetchError.FAILED
         }
     }
@@ -252,15 +252,15 @@ fn (f mut Fetcher&) Fetch(host String&, owner String&, repoAt String&) String ? 
 # ---- tests: local repositories in a scratch directory, served through OLANG_GIT_BASE ----
 
 fn sh(dir String&, args Array<String&>&) Bool {
-    out := try os.Exec(args, "", true, dir) catch os.OsError { return false }
+    out := try os.Exec(args, "", true, dir) catch os.Error { return false }
     return out.Status == 0
 }
 
 # a repository at base/host/owner/name holding one file, committed; its commit, or "" where git is missing
 fn makeRepo(base String&, name String&, text String&) String {
     dir := $base "/example.com/me/" $name
-    try os.MkDirAll(dir) catch os.OsError { return "" }
-    try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
+    try os.MkDirAll(dir) catch os.Error { return "" }
+    try os.WriteFile($dir "/lib.olang", text) catch os.Error { return "" }
     ok := sh(dir, String&["git", "init", "-q"]) and
           sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "add", "."]) and
           sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
@@ -270,7 +270,7 @@ fn makeRepo(base String&, name String&, text String&) String {
 
 fn commitAgain(base String&, name String&, text String&) String {
     dir := $base "/example.com/me/" $name
-    try os.WriteFile($dir "/lib.olang", text) catch os.OsError { return "" }
+    try os.WriteFile($dir "/lib.olang", text) catch os.Error { return "" }
     ok := sh(dir, String&["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-q"
                           "-a", "-m", "y"])
     return head(dir) if ok else ""
@@ -284,8 +284,8 @@ test "a remote's name parts are checked, and a commit is 40 or 64 hex digits" {
 }
 
 test "fetching locks a commit, a locked build is offline, deleting a line or -u updates" {
-    scratch := try os.MkTemp() catch os.OsError { unreachable }
-    defer { try os.RemoveAll(scratch) catch os.OsError { } }
+    scratch := try os.MkTemp() catch os.Error { unreachable }
+    defer { try os.RemoveAll(scratch) catch os.Error { } }
     base := $scratch "/remote"
     c1 := makeRepo(base, "tools", "fn F() I64 { return 1 }\n")
     if c1 == "" { return }   # no git here: nothing to fetch with
@@ -303,7 +303,7 @@ test "fetching locks a commit, a locked build is offline, deleting a line or -u 
     dir2 := try g.Fetch("example.com", "me", "tools") catch { unreachable }
     assert dir2 == dir and g.Said.Len() == 0
     # with the cache gone, the locked commit is fetched again by hash
-    try os.RemoveAll(cache) catch os.OsError { }
+    try os.RemoveAll(cache) catch os.Error { }
     h := Fetcher(lockPath, cache, "file://" $base "/", false, true)
     dir3 := try h.Fetch("example.com", "me", "tools") catch { unreachable }
     assert dir3 == dir and h.Said[0].Contains("as olang.lock says")
@@ -315,7 +315,7 @@ test "fetching locks a commit, a locked build is offline, deleting a line or -u 
     lock2 := try os.ReadFile(lockPath) catch default ""
     assert lock2.Contains("example.com/me/tools " $c2) and not lock2.Contains($c1)
     # a lock line naming no commit, a bad name, and a repository that is not there
-    try os.WriteFile(lockPath, "example.com/me/tools nonsense\n") catch os.OsError { unreachable }
+    try os.WriteFile(lockPath, "example.com/me/tools nonsense\n") catch os.Error { unreachable }
     v := Fetcher(lockPath, cache, "file://" $base "/", false, true)
     bad := 0
     try v.Fetch("example.com", "me", "tools") catch FetchError.NOT_A_COMMIT { bad++ }

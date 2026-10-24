@@ -15,16 +15,16 @@ Workers I64 = 4
 fn main() {
     args := os.Args()
     given := $args[1] if args.Len() > 1 else toolkit.Compiler()
-    root := try os.Cwd() catch os.OsError {
+    root := try os.Cwd() catch os.Error {
         toolkit.Die("diaggold_capture: no working directory")
     }
-    dir := try os.RealPath(filepath.Dir(given)) catch os.OsError {
+    dir := try os.RealPath(filepath.Dir(given)) catch os.Error {
         toolkit.Die("diaggold_capture: no " $given)
     }
     olang := $dir "/" $filepath.Base(given)
     work := $root "/build/diaggold"
-    try os.RemoveAll(work) catch os.OsError { }
-    try os.MkDirAll(work) catch os.OsError { toolkit.Die("diaggold_capture: cannot make " $work) }
+    try os.RemoveAll(work) catch os.Error { }
+    try os.MkDirAll(work) catch os.Error { toolkit.Die("diaggold_capture: cannot make " $work) }
     cases := List<String&>()
     for f in toolkit.Matching("checks/cases", ".olang") {
         for line in toolkit.Rows(toolkit.Read(f)) {
@@ -51,7 +51,7 @@ fn main() {
     }
     out := "compiler/goldens/diag.txt"
     toolkit.Write($out ".tmp", gold.ToString())
-    try os.Rename($out ".tmp", out) catch os.OsError { toolkit.Die("diaggold_capture: cannot write " $out) }
+    try os.Rename($out ".tmp", out) catch os.Error { toolkit.Die("diaggold_capture: cannot write " $out) }
     toolkit.Say("diaggold_capture: " $cases.Len() " cases captured into compiler/goldens/diag.txt\n")
 }
 
@@ -64,17 +64,17 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
     for k in range w, cases.Len(), Workers {
         name := filepath.Base(cases[k])
         dir := $work "/cases/" $name[0:name.Len() - 6]
-        try os.MkDirAll(dir) catch os.OsError { continue }
+        try os.MkDirAll(dir) catch os.Error { continue }
         text := read(cases[k])
-        try os.WriteFile($dir "/" $name, text) catch os.OsError { continue }
+        try os.WriteFile($dir "/" $name, text) catch os.Error { continue }
         args := List<String&>()
         args.Push(olang)
         args.Push("build")
         for f in toolkit.Fields(flagsOf(text)) { args.Push($f) }
         args.Push(name)
-        o := try os.Exec(args.ToArray(), "", true, dir) catch os.OsError { continue }
-        try os.WriteFile($dir "/out.txt", o.Stdout) catch os.OsError { }
-        try os.WriteFile($dir "/err.txt", o.Stderr) catch os.OsError { }
+        o := try os.Exec(args.ToArray(), "", true, dir) catch os.Error { continue }
+        try os.WriteFile($dir "/out.txt", o.Stdout) catch os.Error { }
+        try os.WriteFile($dir "/err.txt", o.Stderr) catch os.Error { }
     }
 }
 

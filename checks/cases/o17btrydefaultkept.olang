@@ -2,7 +2,7 @@
 # flags: -debug -sanitize
 # O17b (U2): the default taken - a handle built where the element's references are, kept by the callee and pushed on
 import "std/io"
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

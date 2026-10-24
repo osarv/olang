@@ -1073,7 +1073,7 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
     roots List<String&>
     for f in files { roots.Push($f) }
     if roots.Len() == 0 { stdModules(roots) }
-    try os.MkDirAll(html) catch os.OsError {
+    try os.MkDirAll(html) catch os.Error {
         say($"olang: " $html ": cannot be made\n")
         return 1
     }
@@ -1086,12 +1086,12 @@ fn DocMode(files Array<String&>&, word String&, html String&, cfg mut build.Conf
             status = 1
             continue
         }
-        text := try os.ReadFile(root) catch os.OsError { continue }
+        text := try os.ReadFile(root) catch os.Error { continue }
         mods.Push(doc.Module(IdentityOf(root), $root, doc.ModuleDoc(text)))
     }
     mods.Sort(fn(x doc.Module, y doc.Module) Bool { return x.Identity < y.Identity })
     index := filepath.Join(html, "index.html")
-    try os.WriteFile(index, doc.IndexHtml("olang standard library" if files.Len() == 0 else "olang", mods.ToArray())) catch os.OsError {
+    try os.WriteFile(index, doc.IndexHtml("olang standard library" if files.Len() == 0 else "olang", mods.ToArray())) catch os.Error {
         say($"olang: " $index ": cannot be written\n")
         return 1
     }
@@ -1109,7 +1109,7 @@ fn docPage(root String&, cfg mut build.Config&, html String&) I32 {
     }
     md := doc.Of(a.C!, a.Sc!, a.X!, a.L.Root, false)
     path := filepath.Join(html, doc.PageName(md.Identity))
-    try os.WriteFile(path, md.Html()) catch os.OsError {
+    try os.WriteFile(path, md.Html()) catch os.Error {
         say($"olang: " $path ": cannot be written\n")
         return 1
     }
@@ -1138,7 +1138,7 @@ fn IdentityOf(path String&) String {
 # a line for whoever reads the tool's standard error, where OLANG_TOOL_LOG is set (B15, B16): what it is doing, timed
 fn Log(text String&) {
     if (try os.Env("OLANG_TOOL_LOG") catch default "") == "" { return }
-    try io.PrintErr($"olang: " $text "\n") catch io.IoError { }
+    try io.PrintErr($"olang: " $text "\n") catch io.Error { }
 }
 
 extern fn fork() I32
@@ -1272,7 +1272,7 @@ fn (r mut Reader&) drop(k I64) {
 
 # body written to fd as one framed message (LSP's)
 fn WriteFramed(fd I32, body String&) {
-    try io.Write(fd, $"Content-Length: " $body.Len() "\r\n\r\n" $body) catch io.IoError { }
+    try io.Write(fd, $"Content-Length: " $body.Len() "\r\n\r\n" $body) catch io.Error { }
 }
 
 # what work writes, run in a child process: the text, and the child's status (ExitStatus's); where no child can be
@@ -1289,7 +1289,7 @@ fn ChildOutput(work fn() String) String, I32 {
     if pid == 0 {
         CloseFd(rd)
         Dup2(2, 1)
-        try io.Write(wr, work()) catch io.IoError { }
+        try io.Write(wr, work()) catch io.Error { }
         _exit(0)
     }
     CloseFd(wr)
@@ -1328,14 +1328,14 @@ fn stdModules(out mut List<String&>&) {
     std := load.StdDir()
     for dir in String&["", "prelude"] {
         at := filepath.Join(std, dir) if dir != "" else $std
-        found := try os.ReadDir(at) catch os.OsError { continue }
+        found := try os.ReadDir(at) catch os.Error { continue }
         for n in found {
             if n.EndsWith(".olang") { out.Push(filepath.Join(at, n)) }
         }
     }
 }
 
-fn say(text String&) { try io.Print(text) catch io.IoError { } }
+fn say(text String&) { try io.Print(text) catch io.Error { } }
 
 # ---- tests ----
 

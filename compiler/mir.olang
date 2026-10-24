@@ -294,7 +294,7 @@ type ExitKind enum {
     ArrayLength    # D14b: "array length out of range"
     As             # E32: "'as' named what the value is not"
     FixedLength    # T7d: "array length does not match its fixed storage"
-    Error          # E35: an error a "!" took - its message, the error's name ("io.IoError.FULL"), is the exit's text
+    Error          # E35: an error a "!" took - its message, the error's name ("io.Error.FULL"), is the exit's text
     Escaped        # S16: an error left a test body - the test fails, its FAIL line naming the error, the exit's text
     # D17e: while compiling, a call's guarantee did not hold - its message the guarantee's position among the
     # lowering's Guarantees; never in a build

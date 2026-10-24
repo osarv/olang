@@ -4,7 +4,7 @@
 # building through its reference - lent as its reference where the element's are (the default built there too), as the
 # List spelling already was; it was built in the loop body. Read back after a churn
 import "std/io"
-fn churn() ? io.IoError {
+fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
         if a[0] == 3 { try io.Println("x") }

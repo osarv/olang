@@ -11,7 +11,7 @@ fn churn() I64 {
 fn id(a Array<I64>&) Array<I64>&a { return a }
 type Ix Array<I64>
 fn f(v Vec<I64>&) Ix&v { return Ix(v.View()) }
-fn grow(w mut Vec<I64>&) ? io.IoError {
+fn grow(w mut Vec<I64>&) ? io.Error {
     d := f(w)
     for i in range 1000 { w.Push(i + 100) }
     churn()

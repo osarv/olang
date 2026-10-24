@@ -46,7 +46,7 @@ fn main() {
         for f in toolkit.Matching("std/prelude/tests", ".olang") { files.Push($f) }
     }
     dir := "build/emitdiff"
-    try os.MkDirAll($dir "/rt") catch os.OsError { toolkit.Die("emitdiff: cannot make " $dir) }
+    try os.MkDirAll($dir "/rt") catch os.Error { toolkit.Die("emitdiff: cannot make " $dir) }
     rt := runtime(olang, emitdump, dir)
     gold := toolkit.GoldenRead("compiler/goldens/run.txt", "rungold")
     same, differ, broken I64 = 0, 0, 0
@@ -56,7 +56,7 @@ fn main() {
         program := f.StartsWith("checks/")
         # named as stage 0 names its binary (build/std_os_test), since a program may read its own name (os.Args)
         sub := $dir "/p" $i
-        try os.MkDirAll(sub) catch os.OsError { toolkit.Die("emitdiff: cannot make " $sub) }
+        try os.MkDirAll(sub) catch os.Error { toolkit.Die("emitdiff: cannot make " $sub) }
         base := f[:f.Len() - 6] if f.EndsWith(".olang") else f
         out := $sub "/" $base.Replace("/", "_") $("" if program else "_test")
         r := compare(gold, emitdump, level, rt, f, out, program, verbose, standin)
@@ -70,7 +70,7 @@ fn main() {
         } else {
             differ++
         }
-        try os.RemoveAll(sub) catch os.OsError { }
+        try os.RemoveAll(sub) catch os.Error { }
     }
     toolkit.Say(("== total: files " $files.Len() " same " $same " differ " $differ " broken " $broken "; tests " $tests
                  " ending as stored " $testsSame "\n"))
@@ -78,7 +78,7 @@ fn main() {
 
 fn absolute(p String&) String {
     if p.StartsWith("/") { return $p }
-    cwd := try os.Cwd() catch os.OsError { return $p }
+    cwd := try os.Cwd() catch os.Error { return $p }
     return $cwd "/" $p
 }
 
@@ -86,7 +86,7 @@ fn absolute(p String&) String {
 # and, where the compiler olang names is built, a row saying whether it is the text that compiler fills in for this
 # machine (what a program declaring nothing but an import of std/ffi leaves in its build/)
 fn runtime(olang String&, emitdump String&, dir String&) Array<String&> {
-    try os.MkDirAll($dir "/rtport") catch os.OsError { toolkit.Die("emitdiff: cannot make " $dir "/rtport") }
+    try os.MkDirAll($dir "/rtport") catch os.Error { toolkit.Die("emitdiff: cannot make " $dir "/rtport") }
     e := toolkit.Run(String&[emitdump, "-rt", $dir "/rtport"])
     if e.Status != 0 { toolkit.Die("emitdiff: the port's runtime was not filled in: " $e.Stderr) }
     prt String& = $dir "/rtport/olang_runtime.ll"
