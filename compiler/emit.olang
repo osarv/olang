@@ -1134,6 +1134,10 @@ fn (fe mut fnEm&) located(sp source.Span, rest String&) String {
     e := fe.E
     text := $e.where(fe.F.File, sp) $rest
     if not e.LocApart { return e.cstr(text) }
+    # one symbol for one text in a function, as cstr gives: the code failing alike at two sites of one line is one
+    # block (the backend merging the two), and whether two sites share a line no edit outside the function changes
+    seen := try fe.locSeen.Get(text) catch default ""
+    if seen != "" { return $seen }
     key := $e.locBase(fe.Key) "|" $fe.nloc "|" $rest
     fe.nloc++
     second := $"~" $key
@@ -1142,6 +1146,7 @@ fn (fe mut fnEm&) located(sp source.Span, rest String&) String {
         def := $"@" $sym " = weak_odr constant [" $(text.Len() + 1) " x i8] c\"" $escape(text) "\\00\"\n"
         e.item(sym, HomeLoc, def, $"@" $sym " = external constant [0 x i8]\n")
     }
+    fe.locSeen.Put($text, $"@" $sym)
     return $"@" $sym
 }
 
@@ -1739,7 +1744,8 @@ type fnEm struct(E mut Emitter&, F mir.Fn&, Key mir.FnKey) {
     env Bool = false
     big Bool = false
     tagAt String& = ""      # T36: the access tag of the place addr last found, for a scalar there (empty: untagged)
-    nloc I64 = 0            # B3l: the places named so far (located)
+    nloc I64 = 0            # B3l: the places named so far (located), and the symbol each text was given
+    locSeen Map<String&, String&>
     # B2e, in a -debug build: this function's subprogram (-1 none), the location every instruction written now carries
     # (", !dbg !N"), a location per line, and the metadata written after the function
     dbgSp I64 = -1
