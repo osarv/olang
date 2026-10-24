@@ -955,3 +955,7 @@ errors and documentation - generic `+` already works).
   `T.CaseOf` dropped - an unrolled `for c in T.Cases: if v == c: return c.Name` covers generic code (reflection +
   case test). Still ASKED: raw values (`enum String { Plus = "+" }`, `.Value`, `T.From`) and defaults (text = name,
   integers from 0).
+- DECIDED 2026-10-24 (the user: "Ye"): enum raw values - `type Op enum String { Plus = "+" }`, `type Status enum U8 {
+  Ok = 0 }`, compile-time constants, distinct; `op.Value`; `try Op.From(x)`; text defaults to the case name, integers
+  count from 0 / the previous value; allowed with payloads; `$op` unchanged (source form); no T.CaseOf (reflection +
+  `==`). Prover questions 1-6 still open. The user is tired; a survey of other languages' features was started.
