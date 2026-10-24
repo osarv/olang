@@ -98,3 +98,155 @@ fn (it mut IndexIter<T, C>&) Next() T ? Exhausted {
 
 # a fresh position at the start, for any type with At and Len and no Iter of its own (M19e)
 fn (c C&) Iter<C Indexable<T>, T>() IndexIter<T, C> { return IndexIter<T, C>(c) }
+
+# ---- adapters: iterators made from iterators ----
+#
+# Each wraps the iterator it is made from - a copy of it, so the one it was made from stays where it stood - and walks
+# it lazily, one value per Next: "for x in l.Iter().Skip(2).Take(3)" reads five of l's elements and builds nothing.
+
+# the first n values, then the end
+type TakeIter<I, T> struct(of I, n I64) {
+    it I = of
+    left I64 = n
+}
+
+fn (t mut TakeIter<I, T>&) Next() T ? Exhausted {
+    if t.left <= 0 { error Exhausted.END }
+    t.left--
+    return try t.it.Next()
+}
+
+fn (it mut I&) Take<I Iterator<T>, T>(n I64) TakeIter<I, T> { return TakeIter<I, T>(it, n) }
+
+# every value after the first n
+type SkipIter<I, T> struct(of I, n I64) {
+    it I = of
+    skip I64 = n
+}
+
+fn (s mut SkipIter<I, T>&) Next() T ? Exhausted {
+    for s.skip > 0 {
+        try s.it.Next()
+        s.skip--
+    }
+    return try s.it.Next()
+}
+
+fn (it mut I&) Skip<I Iterator<T>, T>(n I64) SkipIter<I, T> { return SkipIter<I, T>(it, n) }
+
+# a value and how many came before it - what Enumerate gives
+type Indexed<T> struct(index I64, value T) {
+    Index I64 = index
+    Value T = value
+}
+
+type EnumerateIter<I, T> struct(of I) {
+    it I = of
+    i I64 = 0
+}
+
+fn (e mut EnumerateIter<I, T>&) Next() Indexed<T> ? Exhausted {
+    x := try e.it.Next()
+    e.i++
+    return Indexed<T>(e.i - 1, x)
+}
+
+# each value with its position, from 0: "for e in it.Enumerate() { ... e.Index ... e.Value }" - as "for i, x in it" does
+# in a loop, for a walk handed on to something else
+fn (it mut I&) Enumerate<I Iterator<T>, T>() EnumerateIter<I, T> { return EnumerateIter<I, T>(it) }
+
+# two values, one from each of two iterators walked side by side - what Zip gives
+type Zipped<A, B> struct(first A, second B) {
+    First A = first
+    Second B = second
+}
+
+type ZipIter<I, A, J, B> struct(a I, b J) {
+    x I = a
+    y J = b
+}
+
+fn (z mut ZipIter<I, A, J, B>&) Next() Zipped<A, B> ? Exhausted {
+    p := try z.x.Next()
+    q := try z.y.Next()
+    return Zipped<A, B>(p, q)
+}
+
+# this iterator's values paired with other's, until either runs out: "for p in xs.Iter().Zip(ys.Iter()) { p.First ...
+# p.Second }"
+fn (it mut I&) Zip<I Iterator<A>, A, J Iterator<B>, B>(other J) ZipIter<I, A, J, B> {
+    return ZipIter<I, A, J, B>(it, other)
+}
+
+# this iterator's values, then other's
+type ChainIter<I, J, T> struct(a I, b J) {
+    x I = a
+    y J = b
+    second Bool = false
+}
+
+fn (c mut ChainIter<I, J, T>&) Next() T ? Exhausted {
+    if not c.second {
+        return try c.x.Next() catch Exhausted {
+            c.second = true
+            return try c.y.Next()
+        }
+    }
+    return try c.y.Next()
+}
+
+fn (it mut I&) Chain<I Iterator<T>, T, J Iterator<T>>(other J) ChainIter<I, J, T> { return ChainIter<I, J, T>(it, other) }
+
+# every value added up, from 0 - wrapping as "+" does for integers (E6c); a sum of none is 0
+fn (it mut I&) Sum<I Iterator<T>, T Number>() T {
+    acc T = 0
+    for x in it { acc = acc + x }
+    return acc
+}
+
+# the least value by "<" - the first of several equal ones - failing with Exhausted when there is none
+fn (it mut I&) Min<I Iterator<T>, T>() T ? Exhausted {
+    best := try it.Next()
+    for x in it {
+        if x < best: best = x
+    }
+    return best
+}
+
+# the greatest value by "<" - the first of several equal ones - failing with Exhausted when there is none
+fn (it mut I&) Max<I Iterator<T>, T>() T ? Exhausted {
+    best := try it.Next()
+    for x in it {
+        if best < x: best = x
+    }
+    return best
+}
+
+# the value whose key is least, key called once per value - the first of several equal ones; failing with Exhausted
+# when there is none: "people.Iter().MinBy(fn(p Person) I64 { return p.Age })"
+fn (it mut I&) MinBy<I Iterator<T>, T, K>(key fn(x T) K) T ? Exhausted {
+    best := try it.Next()
+    bestKey := key(best)
+    for x in it {
+        k := key(x)
+        if k < bestKey {
+            best = x
+            bestKey = k
+        }
+    }
+    return best
+}
+
+# the value whose key is greatest, as MinBy
+fn (it mut I&) MaxBy<I Iterator<T>, T, K>(key fn(x T) K) T ? Exhausted {
+    best := try it.Next()
+    bestKey := key(best)
+    for x in it {
+        k := key(x)
+        if bestKey < k {
+            best = x
+            bestKey = k
+        }
+    }
+    return best
+}
