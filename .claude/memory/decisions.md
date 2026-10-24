@@ -992,3 +992,7 @@ errors and documentation - generic `+` already works).
   REFINED (the user: "chan.Chan can stay no?"): a module named for its main type keeps that type's name (chan.Chan,
   json.Json, set.Set, as Go's list.List); only other names drop the prefix (io.Error, json.Error, os.Error ...).
   `Destroy` stays as decided (the user: "It's a good implementation").
+- DECIDED 2026-10-24 (the user, on `Op.From`: "Keep it"; read as raw values decided, stated to the user): enum raw
+  values as proposed - `enum String`/`enum U8`, `op.Value` (a compiler-supplied method), `try Op.From(x)` through the
+  type's name (the reflection `T.` namespace), text defaults to the case name, integers count from 0, allowed with
+  payloads, `$op` unchanged. Back into the lang24 batch as a later round.
