@@ -82,6 +82,9 @@ type BodyOf enum {
     # a table's slot (T32b): the function an "any"'s call reaches - its parameters the slot's, the instance first as a
     # reference to the type it is stored as - calling the instance's type's method, or the default it takes
     Thunk(table I64, slot I64)
+    # a trait's method as an "any" calls it (T32b): its slot's signature and no code, the owner of the contract the
+    # trait writes on the method (D17f)
+    Slot(tr types.TypeId, slot I64)
 }
 
 type ContractKind enum {

@@ -707,7 +707,9 @@ fn (r mut Resolver&) typeDecl(t ast.TypeDecl&) {
             for e in members { r.typeRef(e) }
             for f in methods {
                 m := r.mark()
-                r.sig(f, false)
+                # D17f: a method's contract reads its parameters, declared for it
+                r.sig(f, f.S.Contract is not null)
+                r.contract(f.S)
                 r.popTo(m)
             }
         }

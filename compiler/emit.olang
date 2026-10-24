@@ -1042,6 +1042,7 @@ fn (e mut Emitter&) bodySym(id I64) String {
         case typed.BodyOf.Cond(_, _) => "olang_cond_" $id
         case typed.BodyOf.Contract(of, kind, i) => types.Symbol($e.bodySym(I64(of)) ".contract." $kind "." $i)
         case typed.BodyOf.Thunk(ti, k) => types.Symbol($"olang.slot." $e.tableName(ti) "." $k)
+        case typed.BodyOf.Slot(tr, k) => types.Symbol($"olang.traitslot." $e.canonOf(tr) "." $k)
     }
 }
 

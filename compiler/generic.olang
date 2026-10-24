@@ -125,6 +125,8 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     AnyTables List<AnyTable>
     anyTableOf Map<pair.Pair<I64, I64>, I64>
     anySlotsOf Map<types.TypeId, Array<AnySlot>&>
+    # D17f: the body owning the contract a trait writes on a slot's method, by SlotKey - -1 for none
+    SlotContracts Map<I64, I64>
 }
 
 # a table (T32): the instance's type and the trait, the type the instance is stored as (Stored: the type itself, or for
@@ -2821,6 +2823,12 @@ fn (p mut Program&) AnySlots(r types.TypeId) Array<AnySlot>&p {
     p.anySlotsOf.Put(r, kept)
     return kept
 }
+
+# the key of trait r's slot k (k under checked too) among SlotContracts
+fn (p mut Program&) SlotKey(r types.TypeId, k I64) I64 { return I64(r) * 65536 + k % p.AnySlots(r).Len() }
+
+# the body owning the contract trait r's slot k has, -1 for none or not made yet
+fn (p mut Program&) SlotContract(r types.TypeId, k I64) I64 { return try p.SlotContracts.Get(p.SlotKey(r, k)) catch default -1 }
 
 # a signature with a receiver put first: its parameters' and results' scope entries moved past it (DESIGN.md 1.6.1)
 fn (p mut Program&) WithReceiver(sig types.TypeId, recv types.TypeId) types.TypeId {

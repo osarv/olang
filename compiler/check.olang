@@ -2976,6 +2976,7 @@ fn (c mut Checker&) ctContext(b I64) generic.Context {
     match c.Bodies[b].Of {
         case typed.BodyOf.Fn(inst) { return c.P.FnContext(c.P.InstanceFn(inst), c.P.InstanceArgs(inst)) }
         case typed.BodyOf.Ctor(t, twin) { return c.P.CtorContext(t, twin) }
+        case typed.BodyOf.Slot(tr, k) { return c.P.InstanceContext(c.P.AnySlots(tr)[k].Trait) }
         nomatch { return generic.Context(c.fr().Mi, -1) }
     }
 }
@@ -3005,6 +3006,15 @@ fn (c mut Checker&) ctSourceOf(b I64) ctSource?&c {
                 }
                 nomatch { return null }
             }
+        }
+        case typed.BodyOf.Slot(tr, k) {
+            # D17f: the contract a trait writes on its method, for a call through an "any" - its receiver unnamed
+            m := c.traitMethod(c.P.AnySlots(tr)[k])
+            if m is null or m.S.Contract is null { return null }
+            d := c.P.T.DeclOf(c.P.AnySlots(tr)[k].Trait)
+            recv := m.Recv
+            if recv is null { recv = ast.Param(m.Sp, source.NameId(0), ast.TypeRef.Perm(m.Sp, null, false, false), null) }
+            return ctSource(m.S.Contract!, recv, m.S.Params, m.S.ResultNames, c.P.T.DeclModule(d), $c.ty(tr) "." $c.text(m.Name))
         }
         nomatch { return null }
     }
@@ -9423,6 +9433,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
     call := typed.Expr.Call(sp, r, typed.Call(target, targs, typed.Mark.None, site))
     # D17e: its callee's contract, decided by the evaluator where it can be, or checked under checked
     cb := c.bodyOfCallee(target)
+    if cb < 0 { cb = c.slotContract(target) }
     if cb >= 0 and c.fr().Contract == 0 and c.hasContract(cb) { call = c.contractAt(sp, nsp, r, call, target, targs, site, cb) }
     if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, r, typed.Seq(gather(c.stmts, sfrom), call)) }
     return call
@@ -14977,12 +14988,15 @@ fn (c mut Checker&) anyTable(t types.TypeId, r types.TypeId, sp source.Span) I64
     }
     tab := c.P.AnyTables[ti]
     mi := c.fr().Mi
-    for k in range slots.Len() {
-        sl := slots[k]
-        ps := c.P.T.Items(c.P.T.Params(sl.Sig))
-        perm := c.P.T.PermOf(ps[0]) & types.Writable
-        sig := c.recvReplaced(sl.Sig, c.P.T.Ref(stored, perm))
-        tab.Slots.Push(c.newBody(typed.BodyOf.Thunk(ti, k), sig, mi, sp))
+    # each slot twice: as called, then under checked - the instance's own contract checked after dispatch (D17f)
+    for twice in range 2 {
+        for k in range slots.Len() {
+            sl := slots[k]
+            ps := c.P.T.Items(c.P.T.Params(sl.Sig))
+            perm := c.P.T.PermOf(ps[0]) & types.Writable
+            sig := c.recvReplaced(c.checkedSlot(sl.Sig) if twice == 1 else sl.Sig, c.P.T.Ref(stored, perm))
+            tab.Slots.Push(c.newBody(typed.BodyOf.Thunk(ti, twice * slots.Len() + k), sig, mi, sp))
+        }
     }
     # $ through an "any" renders the instance as its type's own rendering does (T33): a Str it declares made here
     seen := Map<types.TypeId, Bool>()
@@ -15038,8 +15052,10 @@ fn (c mut Checker&) anyScopesAgree(impl types.TypeId, slot types.TypeId) Bool {
 
 # a table's slot (T32b): its parameters the slot's, the instance first as a reference to what it is stored as - a
 # call of the method the instance's type meets the slot with, its own or the default it takes, as "x.M(...)" calls it
-fn (c mut Checker&) checkThunk(id I64, ti I64, k I64) {
+fn (c mut Checker&) checkThunk(id I64, ti I64, slot I64) {
     tab := c.P.AnyTables[ti]
+    n := c.P.AnySlots(tab.Trait).Len()
+    k := slot % n
     sl := c.P.AnySlots(tab.Trait)[k]
     sig := c.cur0(id).Ty
     mi := c.thunkModule(id)
@@ -15059,6 +15075,8 @@ fn (c mut Checker&) checkThunk(id I64, ti I64, k I64) {
     for i in range 1, ps.Len() { c.exprs.Push(c.readLocal(sp, i)) }
     pre := gather(c.exprs, from)
     fr.Tries++
+    # a slot under checked: its instance's call checked as "checked" checks it (D17e, D17f)
+    if slot >= n { fr.Checks++ }
     x typed.Expr?&c = null
     m := c.P.MethodOf(t, sl.Name)
     name := c.text(sl.Name)
@@ -15076,6 +15094,7 @@ fn (c mut Checker&) checkThunk(id I64, ti I64, k I64) {
         c.gap(sp, "a table slot the instance's type meets no way")
         x = c.unknown(sp)
     }
+    if slot >= n { fr.Checks-- }
     fr.Tries--
     v := x!
     if c.P.T.Items(c.P.T.Errors(sig)).Len() > 0 { v = typed.Expr.Try(sp, typeOf(v), typed.Try(v, Array<typed.Clause&>(0))) }
@@ -15106,6 +15125,49 @@ fn (c mut Checker&) thunkModule(id I64) I64 {
 
 # s.M(args) on an "any" (T32b): through its table, M's slot - or, for a default of the trait introducing type variables
 # of its own, the default instantiated for the "any" (T32c)
+# a slot's signature as called under checked (D17f): its errors and CheckError.CONTRACT, which the instance's own
+# contract may fail with
+fn (c mut Checker&) checkedSlot(sig types.TypeId) types.TypeId {
+    es := c.P.T.Items(c.P.T.Errors(sig))
+    all := Array<types.TypeId>(es.Len() + 1)
+    for i in range es.Len() { all[i] = es[i] }
+    all[es.Len()] = c.P.T.ErrWords(c.P.PreludeType("std/prelude/check", "CheckError"), ContractWord)
+    return c.P.T.Func(c.P.T.Params(sig), c.P.T.Result(sig), c.P.T.List(all), c.P.T.ScopesOf(sig))
+}
+
+# the method a trait declares for a slot - null for a default (T32b)
+fn (c mut Checker&) traitMethod(sl generic.AnySlot) ast.Func?&c {
+    if sl.Method < 0 { return null }
+    td := c.P.TypeDecl(c.P.T.DeclOf(sl.Trait))
+    if td is null or td.Body is null { return null }
+    match td.Body {
+        case ast.TypeBody.Trait(ms, _, _) { return ms[sl.Method] if sl.Method < ms.Len() else null }
+        nomatch { return null }
+    }
+}
+
+# the owner of the contract a dispatch's trait method has (D17f), -1 for none - made once a trait and slot
+fn (c mut Checker&) slotContract(target typed.Callee&) I64 {
+    match target {
+        case typed.Callee.Dispatch(r, slot, sig) {
+            k := slot % c.P.AnySlots(r).Len()
+            key := c.P.SlotKey(r, k)
+            have := try c.P.SlotContracts.Get(key) catch default -2
+            if have != -2 { return have }
+            id := -1
+            m := c.traitMethod(c.P.AnySlots(r)[k])
+            if m is not null and m.S.Contract is not null {
+                d := c.P.T.DeclOf(c.P.AnySlots(r)[k].Trait)
+                id = c.newBody(typed.BodyOf.Slot(r, k), c.P.AnySlots(r)[k].Sig, c.P.T.DeclModule(d), m.Sp)
+                c.state[id] = 2
+            }
+            c.P.SlotContracts.Put(key, id)
+            return id
+        }
+        nomatch { return -1 }
+    }
+}
+
 fn (c mut Checker&) anyCall(sp source.Span, x ast.Expr&, rx typed.Expr&c, n source.NameId, nsp source.Span, args Array<ast.Expr&>&) typed.Expr&c {
     rt := typeOf(rx)
     if c.P.T.IsNullable(rt) {
@@ -15117,6 +15179,12 @@ fn (c mut Checker&) anyCall(sp source.Span, x ast.Expr&, rx typed.Expr&c, n sour
     slots := c.P.AnySlots(r)
     for k in range slots.Len() {
         if slots[k].Name != n { continue }
+        if c.fr().Checks > 0 {
+            # D17f: under checked, the slot checking the instance's own contract after dispatch
+            c.checkOp(typed.Check.None, ContractWord)
+            cs := c.checkedSlot(slots[k].Sig)
+            return c.callBody(sp, nsp, cs, typed.Callee.Dispatch(r, slots.Len() + k, cs), -1, rx, args, Array<typed.Expr&>(0))
+        }
         return c.callBody(sp, nsp, slots[k].Sig, typed.Callee.Dispatch(r, k, slots[k].Sig), -1, rx, args, Array<typed.Expr&>(0))
     }
     f := c.P.AnyDefault(r, n)

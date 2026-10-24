@@ -1764,6 +1764,11 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
             case typed.Callee.Body(id) {
                 if ln.guarantees(I64(id)) > 0 { gid = I64(id) }
             }
+            # D17f: a call through an "any" held to the guarantees its trait writes on the method
+            case typed.Callee.Dispatch(r, k, _) {
+                sb := ln.L.P.SlotContract(r, k)
+                if sb >= 0 and ln.guarantees(sb) > 0 { gid = sb }
+            }
             case _ { }
         }
     }

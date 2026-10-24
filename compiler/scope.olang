@@ -417,7 +417,7 @@ fn (s mut Scoper&) anyTables() {
             b := tab.Slots[k]
             if b >= s.sums.Len() or s.sums[b].Rels.Len() == 0 { continue }
             at := diag.Where.Span(tab.File, I64(tab.Sp.Start), I64(tab.Sp.End))
-            name := s.P.L.Names.Text(slots[k].Name) if k < slots.Len() else ""
+            name := s.P.L.Names.Text(slots[k % slots.Len()].Name) if slots.Len() > 0 else ""
             ty := s.Spell(tab.Concrete) if s.Spell is not null else s.P.T.Canon(tab.Concrete)
             tr := s.Spell(tab.Trait) if s.Spell is not null else s.P.T.Canon(tab.Trait)
             s.P.L.Diags.Error(at, msgs.AnyMethodObligations(ty, name, tr))

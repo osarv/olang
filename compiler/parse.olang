@@ -736,7 +736,8 @@ fn (p mut Parser&) typeBody() ast.TypeBody?&p ? Fail {
                     recv = ast.Param(msp, source.NameId(0), ast.TypeRef.Perm(msp, null, true, false), null)
                 }
                 mn := try p.methodName()
-                s := try p.sig(false)
+                # D17f: a trait's method may state the contract every call through an "any" is held to
+                s := try p.contractOn(try p.sig(false, false, true))
                 methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false))
                 try p.entryEnd()
             }
