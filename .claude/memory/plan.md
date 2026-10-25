@@ -355,3 +355,8 @@ on sight per rules.md, "Code rules".
   conversion to a type over String skips the place path (UAF, immutable global written), plan-less return copies
   differ for cond/match/try, interpret drops §8 errors. Decided: spawn target = its assignment's lowering; canKeep
   conservative (keeps unless proved); one return-copy function with/without plan; interpret runs §8 (B3e). Fix agent.
+- 2026-10-25 CEST: `any Trait&` MERGED to master (wt-any ced0302, verified; fast-forward). Five reviews; the last
+  round fixed spawn targets (assignment lowering), conservative canKeep, conversions to types over String (place path),
+  one return-copy function, scoped-call locals' home, interpret refusing what build refuses (B3e). Scope fuzzer: 67
+  findings on d4ed05d -> 0. Recorded limits: o1-o4 over-rejections, adapters through an any. No sixth review before
+  merging: master gains (many older UAFs closed); a general §8 review on master later.
