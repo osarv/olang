@@ -1,3 +1,23 @@
+=== anyenumpayload.olang
+anyenumpayload.olang:17:25: error[T17c]: this value's payload refers to storage the value would outlive - make that storage where the value is kept
+   17 |         xs.Push(Tag.Txt(s))
+      |                         ^
+compilation failed with 1 error
+=== anynocopy.olang
+anynocopy.olang:16:17: error[T32]: 'Take' keeps a copy of the value it is called on, and an any Iterator<I64>& has none - call it on the instance's own type
+   16 |     for x in it.Take(2) { n += x }
+      |                 ^~~~
+compilation failed with 1 error
+=== anynocopyfunc.olang
+anynocopyfunc.olang:21:12: error[T32]: 'Later' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   21 |     f := a.Later()
+      |            ^~~~~
+compilation failed with 1 error
+=== anynocopylist.olang
+anynocopylist.olang:24:12: error[T32]: 'Twice' keeps a copy of the value it is called on, and an any Gen& has none - call it on the instance's own type
+   24 |     l := a.Twice()
+      |            ^~~~~
+compilation failed with 1 error
 === arraytypemutual.olang
 arraytypemutual.olang:7:6: error[T29]: B holds itself through the array it is declared over - hold the array in a struct: 'type B struct(items Array<A&>&)'
     7 | type B Array<A&>
@@ -149,7 +169,7 @@ b11unknownonce.olang:11:11: error: unknown type 'Json' - did you mean 'json.Json
       |           ^~~~
 compilation failed with 1 error
 === b12foreign.olang
-olang: error[B12a]: this clang cannot build for 'aarch64-linux-gnu': its back end for that architecture cannot generate the BF16 code the runtime holds
+olang: error[B12]: '-target aarch64-linux-gnu:native': native is this machine's CPU - name the other architecture's CPU after ':', or none for its default
 === b12unknown.olang
 olang: error[B12]: unknown target 'pentium9000' - write native, x86-64, x86-64-v2, x86-64-v3, x86-64-v4, a CPU clang knows ('clang --print-supported-cpus'), or a triple x86_64-linux-gnu or aarch64-linux-gnu, ':CPU' after it if wanted
 === b12unsupported.olang
@@ -1141,10 +1161,56 @@ e23lenclash.olang:4:14: error[E23, E33, E37, P9, T17e]: the compiler supplies Le
     4 | fn (n Nums&) Len() I64 { return 7 }
       |              ^~~
 compilation failed with 1 error
+=== e25defaultunknown.olang
+e25defaultunknown.olang:6:25: error[E25]: 'q' is no local or parameter here - a scope argument names where the result is built
+    6 | fn use(q P&, p P& = mkp&q(5)) I64 { return q.n + p.n }
+      |                         ^
+compilation failed with 1 error
 === e25global.olang
 e25global.olang:8:14: error[E25, O1b]: 'G' lives in the program's scope, which a result reaches by being stored there, not by a scope argument
     8 |     x := gmk&G(2)
       |              ^
+compilation failed with 1 error
+=== e25noresultctor.olang
+e25noresultctor.olang:8:14: error[E25]: P builds no result a scope argument could place
+    8 |     out.Push(P&t(1))
+      |              ^~~~~~
+compilation failed with 1 error
+=== e25noresultscope.olang
+e25noresultscope.olang:9:10: error[E25]: num builds no result a scope argument could place
+    9 |     a := num&t(1)
+      |          ^~~~~~~~
+compilation failed with 1 error
+=== e25scopeargfield.olang
+e25scopeargfield.olang:11:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   11 |         h.p = mkp&t(i)
+      |             ^
+compilation failed with 1 error
+=== e25scopeargpush.olang
+e25scopeargpush.olang:10:12: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   10 |         xs.Push(mkp&t(i))
+      |            ^~~~
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+=== e25scopeargreturn.olang
+e25scopeargreturn.olang:8:16: error[O10d]: this value lives in this function's own scope, which closes first
+    8 |     return mkp&t(i)
+      |                ^
+compilation failed with 1 error
+=== e25scopeargreturnstore.olang
+e25scopeargreturnstore.olang:14:14: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   14 |         r := put(h, i)
+      |              ^~~
+e25scopeargreturnstore.olang:8:5: note: the callee requires it because of this statement
+    8 |     h.p = mkp&return(i)
+      |     ^
+compilation failed with 1 error
+=== e25spawninner.olang
+e25spawninner.olang:11:13: error[O25]: a reference never narrows - keep its scope: name where it lives ('x T&y'), or declare it with ':='
+   11 |             spawn x = mkp&t(i * 11 + 1)
+      |             ^~~~~
 compilation failed with 1 error
 === e28condarraylent.olang
 e28condarraylent.olang:16:15: error[E28]: a conditional or a match gives a copy of the value it chooses, which this call would write and drop - call on the place itself, 'if c { f(a) } else { f(b) }', or hold the values by reference
@@ -1426,6 +1492,31 @@ compilation failed with 1 error
 e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
    13 |     return c
       |            ^
+compilation failed with 1 error
+=== e31ccommutesbothways.olang
+e31ccommutesbothways.olang:6:10: error[E31c]: with 'commutes' here, '+' between B and A would call this method or A.Plus - remove 'commutes'
+    6 | fn (b B) Plus(a A) B commutes { return b }
+      |          ^~~~
+compilation failed with 1 error
+=== e31ccommutesclash.olang
+e31ccommutesclash.olang:6:10: error[E31c]: with 'commutes' here, '*' between B and A would call this method or A.Mul - remove 'commutes'
+    6 | fn (b B) Mul(a A) B commutes { return b }
+      |          ^~~
+compilation failed with 1 error
+=== e31ccommutesfree.olang
+e31ccommutesfree.olang:3:4: error[E31c]: 'commutes' is written only on a Plus, Mul, BitAnd, BitOr or BitXor of one parameter, and 'twice' is none - remove it
+    3 | fn twice(x I64) I64 commutes { return x * 2 }
+      |    ^~~~~
+compilation failed with 1 error
+=== e31ccommutesnothere.olang
+e31ccommutesnothere.olang:5:10: error[E31c]: 'commutes' is written only on a Plus, Mul, BitAnd, BitOr or BitXor of one parameter, and 'Minus' is none - remove it
+    5 | fn (a A) Minus(b B) A commutes { return a }
+      |          ^~~~~
+compilation failed with 1 error
+=== e31ccommutessame.olang
+e31ccommutessame.olang:4:10: error[E31c]: 'Plus' takes A, its own receiver's type, so the operator reads both ways already - remove 'commutes'
+    4 | fn (a A) Plus(b A) A commutes { return a }
+      |          ^~~~
 compilation failed with 1 error
 === e31operatorfails.olang
 e31operatorfails.olang:14:19: error[E31]: this operator calls Minus, which can fail - write 'try' before the expression
@@ -1752,6 +1843,16 @@ g12explicitlength.olang:5:10: error[G12]: 'first' takes an array by value, an in
     5 |     f := first<I64>
       |          ^~~~~~~~~~
 compilation failed with 1 error
+=== g12methodcount.olang
+g12methodcount.olang:7:17: error[G7]: type arguments for Conv: expected 1, found 2
+    7 |     c := b.Conv<F64, I64>(fn(x I64) F64 { return F64(x) })
+      |                 ^~~
+compilation failed with 1 error
+=== g12methodnotgeneric.olang
+g12methodnotgeneric.olang:7:16: error[G7]: Get is not generic, so it takes no type arguments
+    7 |     c := b.Get<I64>()
+      |                ^~~
+compilation failed with 1 error
 === g12value.olang
 g12value.olang:7:21: error[G12]: generic function 'id' is not a value - call it, or name an instance by its type arguments, as 'id<I64>'
     7 |   f fn(x I32) I32 = id
@@ -1924,15 +2025,10 @@ g23narrow.olang:9:10: note: instantiated here, with a.Len() = 3
     9 |     q := first(a)
       |          ^~~~~
 compilation failed with 1 error
-=== g4resultbare.olang
-g4resultbare.olang:4:17: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
-    4 | fn mk<T>(n I32) T { return n }
-      |                 ^
-compilation failed with 1 error
 === g4resultonly.olang
-g4resultonly.olang:4:17: error[G4]: type variable T appears in no parameter's type, so no call can infer it - introduce it in a parameter's type
-    4 | fn mk<T>(n I64) Array<T> { return Array<T>(n) }
-      |                 ^~~~~~~
+g4resultonly.olang:6:18: error[G4]: type variable T of mk appears in no parameter's type, so the call writes it - mk<...>(...)
+    6 |   a Array<I32> = mk(3)
+      |                  ^~
 compilation failed with 1 error
 === g7argcount.olang
 g7argcount.olang:5:21: error[G7]: type arguments for Box: expected 1, found 2
@@ -2437,6 +2533,35 @@ m19g16forin.olang:7:27: note: 'v' may grow here, in 'Push' - take the view after
     7 |     for x in v.View() { v.Push(x) }
       |                           ^~~~
 compilation failed with 1 error
+=== m21twiceexact.olang
+m21twiceexact.olang:8:18: error[M21]: 'Describe' is declared twice for Box<I64> - declare one per instance
+    8 | fn (b Box<I64>&) Describe() String { return "two" }
+      |                  ^~~~~~~~
+m21twiceexact.olang:7:18: note: 'Describe' is declared here
+    7 | fn (b Box<I64>&) Describe() String { return "one" }
+      |                  ^~~~~~~~
+compilation failed with 1 error
+=== m21twicegeneric.olang
+m21twicegeneric.olang:7:16: error[M21]: 'Name' is declared twice for Box<U> - declare one per instance
+    7 | fn (b Box<U>&) Name() String { return "two" }
+      |                ^~~~
+m21twicegeneric.olang:6:16: note: 'Name' is declared here
+    6 | fn (b Box<T>&) Name() String { return "one" }
+      |                ^~~~
+compilation failed with 1 error
+=== m21twiceplain.olang
+m21twiceplain.olang:7:11: error[M21]: 'Area' is declared twice for P - declare one per instance
+    7 | fn (p P&) Area() I64 { return 2 }
+      |           ^~~~
+m21twiceplain.olang:6:11: note: 'Area' is declared here
+    6 | fn (p P&) Area() I64 { return 1 }
+      |           ^~~~
+compilation failed with 1 error
+=== m21unknownrecv.olang
+m21unknownrecv.olang:12:11: error: unknown type 'Tow'
+   12 | fn (b Box<Tow<I64, I64>>&) Describe() String { return "nope" }
+      |           ^~~~~~~~~~~~~
+compilation failed with 1 error
 === m23ext.olang
 m23ext.olang:2:8: error[M23]: an import names its file without '.olang'
     2 | import "badform.olang"
@@ -2701,6 +2826,22 @@ o14btypevar.olang:13:13: error[O10c]: the callee needs one argument's scope to o
 o14btypevar.olang:8:19: note: the callee requires it because of this statement
     8 | fn id<T>(x T) T { return x }
       |                   ^~~~~~
+compilation failed with 1 error
+=== o14byvalborrow.olang
+o14byvalborrow.olang:9:30: error[O10d]: this value lives in this function's own scope, which closes first
+    9 | fn bor(p aPt) aPt&p { return p }
+      |                              ^
+o14byvalborrow.olang:9:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
+    9 | fn bor(p aPt) aPt&p { return p }
+      |        ^
+compilation failed with 1 error
+=== o14byvalborrowany.olang
+o14byvalborrowany.olang:12:37: error[O10d]: this value lives in this function's own scope, which closes first
+   12 | fn bor(p aPt) any aNamed&p { return p }
+      |                                     ^
+o14byvalborrowany.olang:12:8: note: 'p' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'p aPt&'
+   12 | fn bor(p aPt) any aNamed&p { return p }
+      |        ^
 compilation failed with 1 error
 === o14ccopyslice.olang
 o14ccopyslice.olang:8:12: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'
@@ -3097,6 +3238,9 @@ compilation failed with 1 error
 o26own.olang:8:12: error[O10d]: this value lives in this function's own scope, which closes first
     8 |     return n
       |            ^
+o26own.olang:7:6: note: 'n' is the call's own copy of its argument - take it by reference to give back what the caller passed: 'n N&'
+    7 | fn f(n N) N& {
+      |      ^
 compilation failed with 1 error
 === o26param.olang
 o26param.olang:5:20: error[T25c]: a read-only reference cannot become writable - pass a writable one, or drop the 'mut'
@@ -3587,6 +3731,11 @@ r9buncaught.olang:10:10: error[R9]: F can escape here, and this function does no
    10 |     x := try f() catch E default 1
       |          ^~~
 compilation failed with 1 error
+=== r9qualified.olang
+r9qualified.olang:7:5: error[R9]: io.Error can escape here, and this function does not declare it - add it after '?', or catch it
+    7 |     try io.Println("hello")
+      |     ^~~
+compilation failed with 1 error
 === rangefloat.olang
 rangefloat.olang:4:20: error[S9b]: a range's bounds and step are integers, found F64
     4 |     for i in range 2.5 { }
@@ -3845,9 +3994,9 @@ s12bvaluecomma.olang:7:27: error[S12b, D8c]: a match gives one value - to give s
       |                           ^
 compilation failed with 1 error
 === s12casetype.olang
-s12casetype.olang:8:16: error: expected '{', found 'Circle'
+s12casetype.olang:8:22: error: expected '{', found '&'
     8 |         case c Circle& { }
-      |                ^~~~~~
+      |                      ^
 compilation failed with 1 error
 === s13aguarded.olang
 s13aguarded.olang:8:11: error[S13a]: case A of S is not covered - add it, or 'nomatch { }'
@@ -5295,6 +5444,11 @@ t30sep.olang:3:28: error: expected '}', found 'Perim'
     3 | type Sh trait { Area() I32 Perim() I32 }
       |                            ^~~~~
 compilation failed with 1 error
+=== t31aclosedgenericbare.olang
+t31aclosedgenericbare.olang:5:23: error[G7]: type arguments for aBox: expected 1, found 0
+    5 | type aShape trait for aBox {
+      |                       ^~~~
+compilation failed with 1 error
 === t31aclosedunmet.olang
 t31aclosedunmet.olang:6:10: error[G19, T31a]: I32 does not satisfy the constraint caSmall on T: caSmall is closed, met by I8, I16 alone
     6 |     k := caKeep(I32(3))
@@ -5317,6 +5471,191 @@ t31noreturnmeets.olang:12:10: error[G19]: Q does not satisfy the constraint Quit
 t31noreturnmeets.olang:8:11: note: 'Quit' is declared here, with another signature
     8 | fn (q Q&) Quit() { os.Exit(1) }
       |           ^~~~
+compilation failed with 1 error
+=== t32anyarrcopy.olang
+t32anyarrcopy.olang:12:17: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   12 |         xs.Push(a)
+      |                 ^
+compilation failed with 1 error
+=== t32anyarrcopyassign.olang
+t32anyarrcopyassign.olang:15:15: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   15 |         h.s = a
+      |               ^
+compilation failed with 1 error
+=== t32anyarrofany.olang
+t32anyarrofany.olang:17:18: error[T32a]: the 'any' outlives what this array's elements refer to - its copy keeps them: build them where the 'any' goes
+   17 |         xs.Push(a[0:2])
+      |                  ^
+compilation failed with 1 error
+=== t32anybaretrait.olang
+t32anybaretrait.olang:9:8: error[T30, T32]: aShape& is a trait - a constraint on a type variable; a value of any type meeting it is an 'any aShape&'
+    9 | fn f(x aShape&) { }
+      |        ^~~~~~
+compilation failed with 1 error
+=== t32anycasealone.olang
+t32anycasealone.olang:13:14: error[T34]: a type case binding a name is its clause's only alternative - bind '_' to share a clause
+   13 |         case aButton b, aSlider s { return 1 }
+      |              ^~~~~~~~~
+t32anycasealone.olang:13:25: error[T34]: a type case binding a name is its clause's only alternative - bind '_' to share a clause
+   13 |         case aButton b, aSlider s { return 1 }
+      |                         ^~~~~~~~~
+t32anycasealone.olang:13:33: error[S13c]: every alternative binds the same names - bind it in each, write '_', or split the case
+   13 |         case aButton b, aSlider s { return 1 }
+      |                                 ^
+compilation failed with 3 errors
+=== t32anycasemember.olang
+t32anycasemember.olang:14:14: error[T34]: aKnob is not one of the types aWidget lists
+   14 |         case aKnob k { return k.k }
+      |              ^~~~~
+compilation failed with 1 error
+=== t32anycasenotany.olang
+t32anycasenotany.olang:13:14: error[T34]: a type case matches an 'any' of a closed trait, and this is aButton&
+   13 |         case aButton b { return b.n }
+      |              ^~~~~~~~~
+compilation failed with 1 error
+=== t32anycasetwice.olang
+t32anycasetwice.olang:15:14: error[T34]: aButton is matched by an earlier clause - this one is never reached
+   15 |         case aButton c { return 0 }
+      |              ^~~~~~~~~
+compilation failed with 1 error
+=== t32anyconvert.olang
+t32anyconvert.olang:12:40: error[T32a]: an 'any aShape&' is never made an 'any aBig&' - an 'any' is made from its instance's own type, once
+   12 | fn f(x any aShape&) any aBig& { return x }
+      |                                        ^
+compilation failed with 1 error
+=== t32anydefaultunmet.olang
+t32anydefaultunmet.olang:17:36: error[G19, T31a]: String does not satisfy the constraint Number on T: Number is closed, met by I8, I16, I32, I64, U8, U16, U32, U64, F16, BF16, F32, F64 alone
+   17 |     it mut any Iterator<String>& = w
+      |                                    ^
+t32anydefaultunmet.olang:18:20: note: 'Sum' is called through an 'any Iterator<String>&' here, so aWords needs it
+   18 |     io.Println($it.Sum())!
+      |                    ^~~
+compilation failed with 1 error
+=== t32anyglobal.olang
+t32anyglobal.olang:12:7: error[O1b]: a global holds only what lives as long as the program - store something built here, or another global's
+   12 |     G = q
+      |       ^
+compilation failed with 1 error
+=== t32anyguarantee.olang
+t32anyguarantee.olang:4:31: error[D17e]: aAcct.Take's guarantee 'left >= 0' does not hold for a call evaluated while compiling
+    4 |     mut Take(n I64) left I64 [left >= 0]
+      |                               ^~~~~~~~~
+t32anyguarantee.olang:11:47: note: the call evaluated here
+   11 | fn take(a mut any aAcct&, n I64) I64 { return a.Take(n) }
+      |                                               ^~~~~~~~~
+compilation failed with 1 error
+=== t32anyhash.olang
+t32anyhash.olang:10:14: error[G19]: any aShape& does not satisfy the constraint Hashable on K
+   10 |     m := Map<any aShape&, I64>()
+      |              ^~~~~~~~~~~
+compilation failed with 1 error
+=== t32anyleak.olang
+t32anyleak.olang:11:8: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   11 |     xs.Push(q)
+      |        ^~~~
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+t32anyleak.olang:10:5: note: 'q' is declared here, in a block that closes first - declare it where 'xs' lives: 'q mut aSq&xs = ...'
+   10 |     q := aSq(2)
+      |     ^
+compilation failed with 1 error
+=== t32anymarker.olang
+t32anymarker.olang:9:8: error[T32]: an 'any' is always a reference - write 'any aShape&'
+    9 | fn f(x any aShape) { }
+      |        ^~~~~~~~~~
+compilation failed with 1 error
+=== t32anymutimpl.olang
+t32anymutimpl.olang:17:17: error[T32a, T31]: aTally cannot be an 'any aW&': it has no method 'Seen' that fits
+   17 |     w any aW& = G
+      |                 ^
+t32anymutimpl.olang:11:20: note: 'Seen' is declared here, with another signature
+   11 | fn (t mut aTally&) Seen() I64 {
+      |                    ^~~~
+compilation failed with 1 error
+=== t32anynomethod.olang
+t32anynomethod.olang:10:36: error[T32b]: any aShape& has no method 'Side' - an 'any' is used through its trait's methods alone
+   10 | fn f(x any aShape&) I64 { return x.Side() }
+      |                                    ^~~~
+compilation failed with 1 error
+=== t32anynotmember.olang
+t32anynotmember.olang:16:7: error[T32a, T31a]: aKnob cannot be an 'any aWidget&': aWidget is closed, met by aButton, aSlider alone
+   16 |     f(k)
+      |       ^
+compilation failed with 1 error
+=== t32anynottrait.olang
+t32anynottrait.olang:3:12: error[T32]: 'any' takes a trait, and I64 is none
+    3 | fn f(x any I64&) { }
+      |            ^~~
+compilation failed with 1 error
+=== t32anyobligations.olang
+t32anyobligations.olang:14:7: error[T32a, T22a]: aBag's 'Put' relates its arguments' scopes, which a call through an 'any aSink&' cannot check - call it directly, or through generic code
+   14 |     f(b)
+      |       ^
+compilation failed with 1 error
+=== t32anyopenas.olang
+t32anyopenas.olang:9:37: error[T34]: any aShape&'s trait aShape is open, so its instance's type is never asked for - use its methods, or add the method it lacks
+    9 | fn f(x any aShape&) I64 { return (x as aSq).s }
+      |                                     ^~
+compilation failed with 1 error
+=== t32anyopenmatch.olang
+t32anyopenmatch.olang:11:14: error[T34]: any aShape&'s trait aShape is open, so its instance's type is never asked for - use its methods, or add the method it lacks
+   11 |         case aSq q { return q.s }
+      |              ^~~~~
+compilation failed with 1 error
+=== t32anyscopes.olang
+t32anyscopes.olang:12:7: error[T32a, T22]: aBox's 'Get' says where its references live as aHas's signature does not - it cannot be called through an 'any aHas&'
+   12 |     f(b)
+      |       ^
+t32anyscopes.olang:8:14: note: 'Get' is declared here
+    8 | fn (b aBox&) Get() aItem&b { return b.it }
+      |              ^~~
+compilation failed with 1 error
+=== t32anyspawned.olang
+t32anyspawned.olang:11:15: error[T32b, P1]: a task calls a function or a function value, never through an 'any''s table - write 'spawn fn() { x.Area() }'
+   11 |         spawn x.Area()
+      |               ^~~~~~~~
+compilation failed with 1 error
+=== t32anyspawntarget.olang
+t32anyspawntarget.olang:13:19: error[T32b, P1]: a task calls a function or a function value, never through an 'any''s table - write 'spawn r = fn() I64 { return a.Peek() }()'
+   13 |         spawn r = a.Peek()
+      |                   ^~~~~~~~
+compilation failed with 1 error
+=== t32anyuncovered.olang
+t32anyuncovered.olang:12:11: error[S13a]: case aSlider of any aWidget& is not covered - add it, or 'nomatch { }'
+   12 |     match x {
+      |           ^
+compilation failed with 1 error
+=== t32anyunmet.olang
+t32anyunmet.olang:13:7: error[T32a, T31]: aRound cannot be an 'any aShape&': it has no method 'Area' that fits
+   13 |     f(r)
+      |       ^
+compilation failed with 1 error
+=== t32traitoutlives.olang
+t32traitoutlives.olang:5:24: error[D17f, D17d]: a trait's method states no 'outlives' - a call through an 'any' cannot check one; write it on the type's method
+    5 |     mut Set(n aNode&) [n outlives return]
+      |                        ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== t34casebindnote.olang
+t34casebindnote.olang:18:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   18 |             case aBtn b { keep.Push(b) }
+      |                                ^~~~
+$ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+t34casebindnote.olang:18:23: note: 'b' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'keep' lives
+   18 |             case aBtn b { keep.Push(b) }
+      |                       ^
+compilation failed with 1 error
+=== t34casegenericbare.olang
+t34casegenericbare.olang:17:14: error[G7]: type arguments for aBox: expected 1, found 0
+   17 |         case aBox b { return b.n }
+      |              ^~~~
+compilation failed with 1 error
+=== t34caseunknown.olang
+t34caseunknown.olang:11:14: error: unknown type 'aBx'
+   11 |         case aBx b { return 1 }
+      |              ^~~
 compilation failed with 1 error
 === t4primname.olang
 t4primname.olang:4:6: error[D3a]: 'I32' is a built-in type's name - choose another
@@ -5406,6 +5745,11 @@ t7anested.olang:4:24: error[T7a, T7d]: an array inside an array or a struct is h
       |                        ^
 t7anested.olang: error[B4]: no main function - a program starts at 'fn main() { }'
 compilation failed with 2 errors
+=== t7aoverrows.olang
+t7aoverrows.olang:5:19: error[T7a, T7d]: an array inside an array or a struct is held by reference - write Array<I64>&, or make it of a known length where it is declared ('x := Array<T>(n)') to hold it in place
+    5 | type Grid extends Array<Array<I64>>
+      |                   ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === t7cnegative.olang
 t7cnegative.olang:4:21: error[T7c]: an array's length is from 0 to the largest whose bytes fit an I64, found -1
     4 |     a := Array<I32>(2 - 3)
@@ -5456,7 +5800,7 @@ toprecover.olang:6:7: error: expected ')', found ':='
       |       ^~
 compilation failed with 1 error
 === traitnottype.olang
-traitnottype.olang:6:8: error[T30]: S& is a trait - a constraint on a type variable, never the type of a value
+traitnottype.olang:6:8: error[T30, T32]: S& is a trait - a constraint on a type variable; a value of any type meeting it is an 'any S&'
     6 | fn f(s S&) I32 { return s.Area() }
       |        ^
 compilation failed with 1 error
@@ -5691,7 +6035,7 @@ vec71ctorfieldfunc.olang:13:11: error[C2d]: this instance holds a reference to a
       |           ^
 compilation failed with 1 error
 === vec72ctorscopearg.olang
-vec72ctorscopearg.olang:13:15: error[C2d]: this instance would outlive what its '&p' field refers to - keep it in that block, or build it there ('T&x(...)')
+vec72ctorscopearg.olang:13:15: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x(...)')
    13 |         h = H(t, 5 + i)
       |               ^
 compilation failed with 1 error
