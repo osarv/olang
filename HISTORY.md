@@ -23457,6 +23457,75 @@ arrays of two known lengths could not be compared (E10) - all fixed in the check
 a conversion of a constant expression that does not fit is a compile-time error, so it converts only from a variable,
 else under `checked` (`lossless` says which conversions cannot fail).
 
+## `any Trait&`: the second review, fixed (T32a, T32, M21, E30, B3d, G19, T17c, 2026-10-25)
+
+A follow-up read-only review of the fix round (/home/user/review/any2, reproducers in `repro/`) found a use-after-free
+the first round's fix did not reach, two new silent wrongs, a semantic change, two older refusals and a diagnostic. All
+are fixed but one refusal, which is now a limit stated as an error at the call; each has a test in `tests/any.olang`,
+`tests/shared.olang` or `checks/`.
+
+**1. A conditional, a match or a catch default put existing storage in the box (use-after-free and aliasing,
+older).** `anyCopiesItem` in lowering copied a box's array only when it was a read, a slice or a conversion of one, while
+the scope pass took every box for new storage built where the any lands: `Lab(s if c else u)`, `match`, `try f() catch
+default s` - with `s` a loop body's text - left the body's buffer in a box kept outward, and a `mut any`'s write changed
+the source. Decided (the coordinator's): copy unless the item is provably new, and decide it once. The scope pass decides
+(`anyItemNew`: a conditional, match or try only when every value it can give - a default among them - is new storage;
+constants are not, since a writable any could write through them; a leaf by `isFresh`, a call's array result by T7b) and
+records it per site (`typed.Plan.AnyNew`); lowering copies unless the plan says new, and without a plan (`interpret`)
+always copies - unobservable, since the box is new storage either way. `isFresh` itself did not fit unchanged: it calls a
+`try` fresh by its call alone and lets a conditional hold a constant, both right for where a temporary lands but not for
+what a writable box may hold, so `anyItemNew` walks the compound shapes strictly and asks `isFresh` of the leaves.
+
+**2. Two instances' methods of one name: the first declared won (silently wrong, new).** `methods` held one entry per
+(receiver key, name), the key the generic declaration, so of `fn (b Box<String&>&) Describe()` and `fn (b Box<I64>&)
+Describe()` only the first was found, and `recvApplies` then refused it for the other instance, which fell to the trait's
+default. Every method is kept now, chained by key (`sameKey`): of those that apply to the instance, an exact receiver
+(no variable in it) wins, else the first written with variables. Two that some one instance would take alike - two for
+one instance, or two with variables that overlap (a variable taken to match anything) - are an error at the later
+declaration (`MethodOverlap`, M21), which no rule enforced before: a plain struct's method declared twice was the first
+one silently. The check found one in the compiler itself, `Checker.readLocal` declared twice with the same body (removed).
+
+**3. A reused module object kept a stale default slot (`unreachable` at run time, new).** The lazy default slots (the
+first round's finding 4) are filled by calls anywhere in the program, but a module's record (B3i) is keyed on the module
+and its imports, so an importer that started calling `Count` through the module's any reused an object whose slot was
+still `unreachable`; and the slots were `linkonce_odr`, so two objects' copies of one symbol could differ. Decided: what
+depends on the whole program is emitted where the whole program is known - a table's slot functions are homed with the
+instances (`HomeInst`, B3d), defined once in the root's object; a module's object only declares them, and its record lists
+them among the instances it names, so a reusing build makes them in the root as it makes instances. The table itself
+stays `linkonce_odr` (its text is the same in every object). Rejected: putting the demand in the reuse key, which would
+reuse nothing whose any some importer could call another default through. A `checks` scenario (`reuse`) builds a
+program, adds a `Count` through a reused module's any, and checks the second build reuses that module and prints the count.
+
+**4. A chain's literal took its left neighbour's type for both comparisons (semantic change, new).** E30 says `a op1 b
+op2 c` is `a op1 b and b op2 c`; `f < 0.1 < g` with `f` an `F32` and `g` an `F64` typed `0.1` once, as an `F32`, so the
+chain was false where the written-out form was true. A literal (a literal-only expression) has no evaluation to share: it
+is now typed in each comparison it takes part in, beside that comparison's other operand, by the same code a single
+binary operator uses (`litBeside`, shared with `binary`); a comparison of two literals is `binary` itself. So `a < 5 < b`
+with an `I8` and a `U64` compiles as the written-out form does, and `300 < 400 < u` with `u` a `U8` is no longer an
+error. A conditional of literals still runs, so it is still evaluated once, adapting to the nearest operand that is none.
+
+**5. A type variable inside `any R<T>&` (older).** `Subst`, `unsubst` and `Unify` had no case for an any, so `type
+Src<T> struct(it mut any Iterator<T>&)` kept `T` in its instance's field, and `fn cnt<T>(it mut any Iterator<T>&)` was
+G4's "T appears in no parameter's type"; both walk the any's trait now (and the checker's `varsIn`, `mentionsVar`).
+`Map(fn(x I64) String& ...)` through an any failed T25c inside the prelude: `Map`'s result list was a read-only
+reference, which `Filter` and `ToList` already wrote `mut`. **The adapters stay refused, as a limit**: `Take`, `Skip`,
+`Enumerate`, `Zip` and `Chain` keep a copy of the iterator they are made from ("so the one it was made from stays where
+it stood"), and an any's instance is of a type not known there, so it has no copy to keep - holding the any's reference
+instead would change what the adapter means (the source would advance), and copying through the table would need a
+copy slot in every table. Instead of five errors inside the prelude, it is one at the call (`AnyNoCopy`, T32: a default
+whose result holds its receiver's variable by value, `HoldsVarByValue`).
+
+**6. Diagnostic (new).** The scope pass judged every `Make` under an any's box as the box's array copy (T32a's message),
+so an enum case made an any said "this array's elements"; only the box's one-part tuple is the array copy now
+(`anyArrayBox`), and a payload is judged as a payload (T17c).
+
+**7. Note (by design).** T31's `mut` rule is shared with G19 constraints (`generic.meets`): a type whose method writes
+its receiver does not meet a read-only trait method in generic code either. Kept, and said in SPEC's G19.
+
+**Fuzzer.** The scope fuzzer's any scenarios now box an inner block's text chosen by a conditional, a match or a catch
+default (`anyOp` k 16-19, a fallible `textFail` in the program's header): seeds 1-80 give 8 findings on f29a774 (every
+one these shapes, the interpreter or the sanitizer reporting the use after free), none after; seeds 100-399 none.
+
 ## The std naming pass (2026-10-24)
 
 The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name

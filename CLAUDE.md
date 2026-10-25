@@ -375,7 +375,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   type and trait; the evaluator calls through them (K2 bakes through anys). An array copied in (a slice, `Lab(s)` too)
   has its elements' references judged where the any lands; `$` counts an any as a reference (8 deep); an array of
   anys is written `any W&[a, b]`, as `$` renders it (the review of 2026-10-24, HISTORY.md "`any Trait&`: the soundness
-  review, fixed").
+  review, fixed"). **The second review's round (2026-10-25, HISTORY.md "`any Trait&`: the second review, fixed"):** an
+  array is copied into the box unless the scope pass finds it new storage built where the box is (`Scoper.anyItemNew`,
+  recorded per site in `typed.Plan.AnyNew`, which lowering follows - one decision, so a conditional, a match or a catch
+  default of existing text is copied); a table's slot functions are defined in the root's object with the instances
+  (B3d), since which defaults some call reaches is a whole-program fact and a reused module object (B3i) kept a stale
+  `unreachable`; `any R<T>&` is substituted, unified and counted for G4; an adapter keeping a copy of its receiver
+  (`Take`, `Zip` ...) through an any is an error at the call (a limit: an any has no copy); M21 keeps every instance's
+  method (an exact receiver first, two that apply alike an error); E30 types a chain's literal beside each comparison.
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
   field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk
