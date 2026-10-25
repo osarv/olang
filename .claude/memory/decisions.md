@@ -1123,3 +1123,8 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - Condition form DECIDED 2026-10-25 (the user, against the alternatives: "x.isPrime() I32 or x I32.isPrime() which
   kinda reads bad no?"): the bracket block after the parameter list, as recommended just above. Only operators (QAW)
   remain open.
+- QAW REFRAMED 2026-10-25 (the user: "Let's talk about the operators now"): operators as method-call spelling, chosen
+  by receiver like every method (no argument-type overloading). ASKED: (1) keep (rec); (2) several right-hand types by
+  one generic method + closed trait (rec) vs per-type operator overloads; (3) built-in on the left `2.0 * v`: (a) not
+  supported (rec) vs (b) right-hand methods; (4) Checked<T> wrapper + AddChecked methods (rec both); (5) fallible
+  operators kept (rec); (6) the operator list unchanged (rec).
