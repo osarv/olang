@@ -407,3 +407,7 @@ on sight per rules.md, "Code rules".
   releasetest explain) and wt-mem47 (opus xhigh: memory rounds 4 vacate/Map.Take, 6 early freeing conservative first
   version + the fixed-array copy leak, 7 Destroy). Next after them: error-set generics <T ? E>, generators,
   reflection, generic enums, errdefer, embed, lane-wise ops, arbitrary-width ints, prelude moves; then a bulk review.
+- 2026-10-25 CEST: wt-errs MERGED (ea15be7, full verify passed; merge = tip + 3 CLAUDE.md example words): T19
+  `type X error { }` (tools/errortype_migrate.olang, ~263 files), T19a named sets, R11b/R3a clause-only catch names ($e,
+  ==, narrowing, match, error e; storing refused), releasetest runs explain, seed regenerated. Agent decision worth
+  telling the user: an unused catch name is an error.
