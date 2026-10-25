@@ -990,7 +990,7 @@ fn (c mut Checker&) inheritClash(f I64) {
     # integer's bit methods, a type extending an integer's atomics
     u := c.under(rt)
     given := false
-    if c.P.T.KindOf(u) == types.Kind.Array and (name == "Len" or name == "len" or name == "Get" or name == "SliceOf") { given = true }
+    if c.P.T.KindOf(u) == types.Kind.Array and (name == "Len" or name == "len" or name == "Get" or name == "Set" or name == "SliceOf") { given = true }
     if name == "Narrow" and c.isNumber(rt) { given = true }
     if c.P.Extends(rt) {
         if name == "Bits" and c.P.T.IsFloat(u) { given = true }
@@ -9897,6 +9897,26 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         }
     }
     if name == "Value" and c.isEnum(rt) { return c.rawValue(sp, nsp, rt, rx, args) }   # T17e
+    if name == "Set" and c.arrayOf(rt) != types.UnknownT {
+        # E16d: an element stored, its index checked - failing with ArrayError.OUT_OF_RANGE, as Get's
+        if args.Len() != 2 {
+            c.err(sp, msgs.ArgCount(2, "s", args.Len()))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        p := readPlace(rx)
+        if p is null { p = typed.Place.Temp(x.Span(), typeOf(rx), rx, c.site(typed.SiteKind.Temp, x.Span())) }
+        chk := c.failOp(types.TypeId[c.outOfRange()], nsp)
+        ep := c.elemPlace(sp, p!, args[:1], chk)
+        if ep is null {
+            c.expr(args[1], types.UnknownT)
+            return c.unknown(sp)
+        }
+        from := c.stmts.Len()
+        c.notCapture(ep, c.writeAt(x))
+        c.storeInto(sp, ep, args[1], args[1].Span(), null)
+        return typed.Expr.Seq(sp, types.VoidT, typed.Seq(gather(c.stmts, from), null))
+    }
     if (name == "Get" or name == "SliceOf") and c.arrayOf(rt) != types.UnknownT {
         # E16d, E16c: an index or a slice checked, written as a call - failing with ArrayError.OUT_OF_RANGE
         want I64 = 1 if name == "Get" else 2
@@ -12040,6 +12060,30 @@ fn (c mut Checker&) samePlace(a typed.Place&, b typed.Place&) Bool {
 
 # x = v, x op= v (S4): the target's place, then the value, then the store; a compound one reads the old value through
 # Place.Target
+# a value stored into a place (S4): it fits the place's type, said at osp; target is what was written as the place, where
+# one was (a narrowed reference's path is known not null after it)
+fn (c mut Checker&) storeInto(sp source.Span, p typed.Place&c, value ast.Expr&, osp source.Span, target ast.Expr?&) {
+    t := p.Type()
+    # E12: the value fits the target, said at the "=" as stage 0 says it - a borrow in it of the place itself, or of
+    # storage within it, its old value where the value can hold a reference (S4d)
+    s4d := c.s4d.Len()
+    if not c.isRef(t) and c.P.T.HoldsRefs(t) { c.s4d.Push(p) }
+    x := c.expr(value, t)
+    vt := typeOf(x)
+    if target is not null and c.P.T.IsNullable(t) and vt != types.UnknownT and vt != types.NullT and not c.P.T.IsNullable(vt) {
+        c.fr().nonNullSet = pathOf(target)
+    }
+    wasNull := c.nullDecl
+    c.nullDecl = c.placeAt(p)
+    if t != types.UnknownT { x = c.fit(x, t, osp) }
+    c.nullDecl = wasNull
+    c.s4d.Truncate(s4d)
+    if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, t, x)) }
+    # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
+    if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
+    c.emit(typed.Stmt.Assign(sp, p, x))
+}
+
 fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value ast.Expr&) {
     if c.assignAt(sp, op, target, value) { return }
     osp0 := c.opAfter(target.Span(), 1 if op == token.Tok.Assign else 2)
@@ -12091,24 +12135,7 @@ fn (c mut Checker&) assign(sp source.Span, op token.Tok, target ast.Expr&, value
     c.notCapture(p, c.writeAt(target))
     t := p.Type()
     if op == token.Tok.Assign {
-        # E12: the value fits the target, said at the "=" as stage 0 says it - a borrow in it of the place itself, or
-        # of storage within it, its old value where the value can hold a reference (S4d)
-        s4d := c.s4d.Len()
-        if not c.isRef(t) and c.P.T.HoldsRefs(t) { c.s4d.Push(p) }
-        x := c.expr(value, t)
-        vt := typeOf(x)
-        if c.P.T.IsNullable(t) and vt != types.UnknownT and vt != types.NullT and not c.P.T.IsNullable(vt) {
-            c.fr().nonNullSet = pathOf(target)
-        }
-        wasNull := c.nullDecl
-        c.nullDecl = c.placeAt(p)
-        if t != types.UnknownT { x = c.fit(x, t, osp) }
-        c.nullDecl = wasNull
-        c.s4d.Truncate(s4d)
-        if t == c.textType() and c.isRef(typeOf(x)) { x = c.read(sp, typed.Place.Deref(sp, t, x)) }
-        # T25c: a read-only copy is not stored where it can be written - save into a read-only copy itself
-        if not c.isRef(t) and c.roRoot(p) < 0 { c.roStore(x, value.Span(), RoStored) }
-        c.emit(typed.Stmt.Assign(sp, p, x))
+        c.storeInto(sp, p, value, osp, target)
         return
     }
     bop := compoundOp(op)

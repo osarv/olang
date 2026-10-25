@@ -9280,6 +9280,32 @@ test "ArrayError.OUT_OF_RANGE from a.Get(i), caught by name and propagated" {
     assert (try a.Get(far) catch default -1) == -1
 }
 
+# E16d (the lang25 review): a.Set(i, v) stores with the index checked, as a.Get(i) reads - ArrayError.OUT_OF_RANGE, nothing
+# stored; while compiling as at run time, an element holding a reference included
+fn setChecked(k I64) I64 {
+    a := I64[1, 2, 3]
+    try a.Set(1, 20) catch { return -1 }
+    try a.Set(k, 9) catch ArrayError.OUT_OF_RANGE { }
+    r := a[0] + a[1] + a[2]
+    try a.Set(k - 1, 30) catch ArrayError { return -2 }
+    return r * 100 + a[2]
+}
+SetBaked I64 = setChecked(3)
+type SetNode struct(v I64) { v }
+
+test "E16d: a.Set(i, v) is a checked store - baked and run" {
+    assert SetBaked == 2430
+    n := 3
+    assert setChecked(n) == SetBaked and setChecked(n - 1) == 2930
+    ns := Array<SetNode&>(2, SetNode(0))
+    try ns.Set(1, SetNode(5))
+    assert churnArena() > 0
+    assert ns[1].v == 5 and ns[0].v == 0
+    caught := false
+    try ns.Set(n, SetNode(6)) catch ArrayError.OUT_OF_RANGE { caught = true }
+    assert caught and ns[1].v == 5
+}
+
 # std/arith's operations fail where the true result does not fit - integer overflow, a zero divisor, a shift amount
 # outside the width, a float result becoming infinite or NaN - each with its arith.Error word, caught or propagated
 # like any error; a narrowing fails as written (E26b)
@@ -14793,7 +14819,7 @@ fn rvSplitWalk(k I64, churn fn() I64) I64 {
     l.Push(rvN(5))
     rvWalkParam(l)
     rvCopyOut(w.h)
-    churn()
+    assert churnArena() > 0
     return w.h.items[0]!.next!.v * 100000000 + w.h.items[1]!.next!.v * 1000000 + w.h.pairs[0].n!.next!.v * 10000 +
            w.h.pairs[1].n!.next!.v * 100 + l[0].next!.v + w.h.items[0]!.next!.next!.v * 10000000000
 }
@@ -16674,7 +16700,7 @@ fn c5Views(n I64, churn fn() I64) I64 {
     a := Array<I64>(10, 3)
     a[n + 1] = 40
     v := c5Window(a, n)
-    churn()
+    assert churnArena() > 0
     return t + w.r.Offset + w.r.Len + h.ref!.Offset + h.ref!.Len + v[0] + v.Len()
 }
 C5ViewsBaked I64 = c5Views(2, fn() I64 { return 0 })

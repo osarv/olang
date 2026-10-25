@@ -3146,7 +3146,7 @@ results, or undefined (E6a, E16, E26a). A check is asked for by calling somethin
 
 | to check | write | fails with |
 |---|---|---|
-| an index | `try a.Get(i)` (E16d) | `ArrayError.OUT_OF_RANGE` (a `List`'s and a `Vec`'s `Get`: their own `OUT_OF_RANGE`) |
+| an index | `try a.Get(i)`, `try a.Set(i, v)` (E16d) | `ArrayError.OUT_OF_RANGE` (a `List`'s and a `Vec`'s `Get`: their own `OUT_OF_RANGE`) |
 | a slice | `try a.SliceOf(lo, hi)` (E16c) | `ArrayError.OUT_OF_RANGE` |
 | a narrowing conversion | `try x.Narrow<I32>()` (E26b) | `NumberError.OVERFLOW`, `NumberError.INVALID` |
 | arithmetic | `try arith.Add(a, b)`, `try arith.Checked(a) * b` (standard library `std/arith`) | `arith.Error.OVERFLOW`, `DIVIDE_BY_ZERO`, `INVALID` |
@@ -3174,9 +3174,12 @@ a.Get(2) catch default -1 }`) one instance (G29) may have the element and anothe
 index**: against `[0, base.Len())`, an out-of-range one failing with `ArrayError.OUT_OF_RANGE` (the prelude's) rather
 than reading storage the array does not own - covered by `try` or `!` as any fallible call is, so `try a.Get(i) catch
 default 0` is a checked index with a fallback and `a.Get(i)!` one that ends the program. The index is of any integer
-type, as `base[index]`'s is; the result is the element, as `base[index]` gives it. This is the mirror of E16c, which
-makes a *slice* fail instead of aborting. An index written `base[index]` is unchecked and costs nothing. A declared
-array type has `Get` as it has `Len`, and may not declare a method of that name (T29e).
+type, as `base[index]`'s is; the result is the element, as `base[index]` gives it. `base.Set(index, v)`, supplied
+beside it, **stores** `v` there with the index checked the same way - the index first, then `v` (S4's order), nothing
+stored where the index is out of range: `try a.Set(i, v)` is `a[i] = v` checked, `base` a place written as `a[i] = v`'s
+is (S6). This is the mirror of E16c, which makes a *slice* fail instead of aborting. An index written `base[index]` is
+unchecked and costs nothing. A declared array type has `Get` and `Set` as it has `Len`, and may not declare a method of
+those names (T29e).
 
 **E16e (memory safety).** An out-of-range index written `base[index]` is, with `extern fn` (§11 X1a) and
 a data race (§6.8 P8b), one of the places where memory safety rests on something the compiler does not
