@@ -1,0 +1,25 @@
+# s03 asserted: decided true while compiling (the evaluator copies) and dropped; the same comparison at run time fails
+fn tie(l mut List<String&>&, x String&l) I64 {
+    l.Push(x)
+    return l.Len()
+}
+fn f(keep mut List<String&>&, i I64) String {
+    s := "abc" $i
+    tie(keep, s)
+    return s
+}
+fn probe(i I64) String {
+    keep := List<String&>()
+    v := f(keep, i)
+    v[0] = 'Q'
+    return $keep[0]
+}
+Live mut I64 = 1
+fn main() {
+    assert probe(1) == "abc1"
+    say("decided while compiling: passed")
+    r := probe(Live)
+    say("at run time: " $r)
+    assert r == "abc1"
+    say("unreachable if the run time aliases")
+}

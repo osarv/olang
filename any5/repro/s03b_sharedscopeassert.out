@@ -1,0 +1,17 @@
+== build -debug -sanitize
+decided while compiling: passed
+at run time: Qbc1
+s03b_sharedscopeassert.olang:24: assertion failed
+./run.sh: line 17: 23029 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+decided while compiling: passed
+at run time: Qbc1
+s03b_sharedscopeassert.olang:24: assertion failed
+./run.sh: line 17: 23057 Aborted                 timeout 60 ./build/$n
+status 134
+== interpret
+decided while compiling: passed
+at run time: Qbc1
+s03b_sharedscopeassert.olang:24: assertion failed
+status 134

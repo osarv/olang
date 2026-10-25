@@ -1,0 +1,9 @@
+== build -debug -sanitize
+x abc1
+status 0
+== build
+x abc1
+status 0
+== interpret
+x abc1
+status 0

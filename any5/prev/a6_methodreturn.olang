@@ -1,0 +1,33 @@
+type P struct(n I64) { n }
+type H struct(p P?&) { p }
+type HS struct(s String&) { s }
+type V struct(p P&) { p }
+type Sh trait {
+    Show() String
+}
+fn (p P&) Show() String { return "P" $p.n }
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mkp(i I64) P& { return P(i) }
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn mkv(i I64) V { return V(P(i)) }
+error Fail {
+    BAD
+}
+fn fp(i I64) P& ? Fail {
+    if i >= 0 { error Fail.BAD }
+    return P(i)
+}
+# a method given a scope argument naming the function's own local, its text returned as a value
+fn (h HS&) mkm(i I64) String { return $h.s $i }
+fn g(i I64) String {
+    t := "local" $i
+    h := HS("pre")
+    return h.mkm&t(i)
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say($a " " $b)
+}

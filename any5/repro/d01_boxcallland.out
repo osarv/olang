@@ -1,0 +1,9 @@
+== build -debug -sanitize
+label mk0, label Loc0, label slic, label mk10, label Loc0, label mk20, label mk10, label mk1, label Loc1, label slic, label mk11, label mk1, label mk21, label slic, label mk2, label Loc2, label slic, label mk12, label mk2, label mk22, label slic, 
+status 0
+== build
+label mk0, label Loc0, label slic, label mk10, label Loc0, label mk20, label mk10, label mk1, label Loc1, label slic, label mk11, label mk1, label mk21, label slic, label mk2, label Loc2, label slic, label mk12, label mk2, label mk22, label slic, 
+status 0
+== interpret
+label mk0, label Loc0, label slic, label mk10, label Loc0, label mk20, label mk10, label mk1, label Loc1, label slic, label mk11, label mk1, label mk21, label slic, label mk2, label Loc2, label slic, label mk12, label mk2, label mk22, label slic, 
+status 0

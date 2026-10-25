@@ -1,0 +1,20 @@
+== build -debug -sanitize
+s02_genericcapture.olang:4:32: error[O10d]: this value lives in this function's own scope, which closes first
+    4 | fn cap<T>(x T) fn() T { return fn() T { return x } }
+      |                                ^~
+s02_genericcapture.olang:7:15: note: instantiated here, with T = String
+    7 |     keep.Push(cap(s))
+      |               ^~~
+compilation failed with 1 error
+== build
+s02_genericcapture.olang:4:32: error[O10d]: this value lives in this function's own scope, which closes first
+    4 | fn cap<T>(x T) fn() T { return fn() T { return x } }
+      |                                ^~
+s02_genericcapture.olang:7:15: note: instantiated here, with T = String
+    7 |     keep.Push(cap(s))
+      |               ^~~
+compilation failed with 1 error
+== interpret
+run:   v Qbc1 lambda Qbc1
+baked: v Qbc1 lambda Qbc1
+status 0

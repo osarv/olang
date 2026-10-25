@@ -1,0 +1,27 @@
+== build -debug -sanitize
+o3_forinpush.olang:10:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   10 |     for q in arr { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o3_forinpush.olang:9:5: note: 'arr' is declared here, in a block that closes first - declare it where 'l' lives: 'arr mut Array<String&>&l = ...'
+    9 |     arr := String&[s, "y"]
+      |     ^~~
+o3_forinpush.olang:10:27: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   10 |     for q in arr { l.Push(q) }
+      |                           ^
+compilation failed with 1 error
+== build
+o3_forinpush.olang:10:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   10 |     for q in arr { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o3_forinpush.olang:9:5: note: 'arr' is declared here, in a block that closes first - declare it where 'l' lives: 'arr mut Array<String&>&l = ...'
+    9 |     arr := String&[s, "y"]
+== interpret
+run: l List<String&>["abc1", "y"] x Qbc1
+baked: l List<String&>["abc1", "y"] x Qbc1
+status 0

@@ -1,0 +1,16 @@
+# T29a: a conversion of a block's local text pushed into an outer list of the declared type, and assigned to an outer
+# reference - a reference made from it borrows the local's storage (T29a), which closes with the block
+type Lab extends String
+type H struct() {
+    r Lab& = Lab("init")
+}
+fn main() {
+    l := List<Lab&>()
+    h := H()
+    for i in range 3 {
+        s := "abc" $i "-" $(i * 7)
+        l.Push(Lab(s))
+    }
+    churn()
+    say("l " $l)
+}

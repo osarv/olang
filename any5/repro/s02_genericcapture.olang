@@ -1,0 +1,20 @@
+# B (RetSole): the returned local passed by value to a generic (D9b: the callee's by-value array parameter is the
+# caller's array), which captures it in a lambda it hands back - kept in a list beside the returned value
+fn cap<T>(x T) fn() T { return fn() T { return x } }
+fn f(keep mut List<fn() String>&, i I64) String {
+    s := "abc" $i
+    keep.Push(cap(s))
+    return s
+}
+fn probe(i I64) String {
+    keep := List<fn() String>()
+    v := f(keep, i)
+    v[0] = 'Q'
+    w := keep[0]()
+    return "v " $v " lambda " $w
+}
+G := probe(1)
+fn main() {
+    say("run:   " $probe(1))
+    say("baked: " $G)
+}

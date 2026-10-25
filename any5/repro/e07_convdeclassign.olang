@@ -1,0 +1,17 @@
+# T29a: "a value declaration from [a conversion] copies as any value declaration does (T7b)" - a conversion of a value
+# local declared, and assigned to an outer value local from an inner block: neither copies, so the declared value is
+# the local's storage (writing one writes the other), and the outer value names an inner block's storage
+type Lab extends String
+fn main() {
+    s := "abc" $1
+    x := Lab(s)
+    x[0] = 'Z'
+    say("s " $s " x " $x)
+    y := Lab("outer" $2)
+    for i in range 3 {
+        t := "inner" $i "-" $(i * 7)
+        y = Lab(t)
+    }
+    churn()
+    say("y " $y)
+}

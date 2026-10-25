@@ -1,0 +1,34 @@
+# A: a scoped call whose array result holds references (Array<String&>), built where the scope argument says - the
+# function's own local t - returned directly, through a local, converted, and made an any's box outward
+type Strs extends Array<String&>
+type Named trait {
+    Name() String
+}
+fn (s Strs&) Name() String { return "strs " $s }
+fn mkarr(i I64) Array<String&> { return String&["a" $i, "b" $(i * 7)] }
+fn direct(i I64) Array<String&> {
+    t := "x" $i
+    return mkarr&t(i)
+}
+fn viaLocal(i I64) Array<String&> {
+    t := "y" $i
+    x := mkarr&t(i)
+    return x
+}
+fn conv(i I64) Strs {
+    t := "z" $i
+    return Strs(mkarr&t(i))
+}
+fn main() {
+    xs := List<any Named&>()
+    for i in range 3 {
+        t := "w" $i
+        xs.Push(Strs(mkarr&t(i)))
+    }
+    a := direct(1)
+    b := viaLocal(2)
+    c := conv(3)
+    churn()
+    say("a " $a " b " $b " c " $c)
+    for x in xs { say(x.Name()) }
+}
