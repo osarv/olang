@@ -23522,6 +23522,12 @@ so an enum case made an any said "this array's elements"; only the box's one-par
 **7. Note (by design).** T31's `mut` rule is shared with G19 constraints (`generic.meets`): a type whose method writes
 its receiver does not meet a read-only trait method in generic code either. Kept, and said in SPEC's G19.
 
+**Found on the way (B3k, pre-existing).** The verify of this round failed once in `sidebyside`: two of three builds run
+side by side compiled one object. A build claims an object by making `OBJ.lock` and then writing its process number into
+it; another reading the lock between the two found the number empty, took the holder for gone, removed the lock and
+compiled the object too. An empty number is now as young as a missing one (alive for a minute), as `holderAlive` already
+treated a lock with no number; a test in `build.olang` holds it.
+
 **Fuzzer.** The scope fuzzer's any scenarios now box an inner block's text chosen by a conditional, a match or a catch
 default (`anyOp` k 16-19, a fallible `textFail` in the program's header): seeds 1-80 give 8 findings on f29a774 (every
 one these shapes, the interpreter or the sanitizer reporting the use after free), none after; seeds 100-399 none.

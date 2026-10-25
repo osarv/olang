@@ -486,7 +486,9 @@ fn holderAlive(lock String&) Bool {
     age := time.Wall() - info.ModTime
     if age > 1800 * 1000000000 { return false }
     pid := try os.ReadFile($lock "/pid") catch os.Error { return age < 60 * 1000000000 }
-    return pid != "" and os.Exists($"/proc/" $pid)
+    # made but not yet written - read between the claiming build's create and its write: as young as no file
+    if pid == "" { return age < 60 * 1000000000 }
+    return os.Exists($"/proc/" $pid)
 }
 
 # an error about a whole file the build writes or reads
@@ -1069,6 +1071,9 @@ test "B3k: an object one build claims another waits for, unless the build that c
     # a lock no build ever finished writing is waited for a minute
     other := $dir "/n.4567.o"
     try os.MkDir($other ".lock")
+    assert holderAlive($other ".lock")
+    # nor is one whose number is not written yet - its file made, empty - taken over (two builds compiled one object)
+    try os.WriteFile($other ".lock/pid", "")
     assert holderAlive($other ".lock")
 }
 
