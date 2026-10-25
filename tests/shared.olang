@@ -7809,6 +7809,19 @@ test "E30: a chain's literal is typed beside each comparison's other operand, as
     assert chOnce() == "true 2"
 }
 
+# S12b (the third any review, finding 8): a value match whose only clause is its nomatch has that value's type
+fn nmOnly(x0 I8) I8 {
+    a := match x0 { nomatch => I8(x0) }
+    return a
+}
+NmOnlyBaked I8 = nmOnly(100)
+
+test "S12b: a value match with only a nomatch takes its value's type" {
+    assert NmOnlyBaked == 100
+    k I8 = 7
+    assert nmOnly(k) == 7
+}
+
 # E28/T29c: two pieces of written text are two Strings and two array literals two arrays, whatever their lengths; and
 # M19: a case of an enum written as a chain is a receiver like any value ("Color.Red.Hash()")
 type CondColor enum {

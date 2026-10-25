@@ -14285,7 +14285,18 @@ fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want t
         v typed.Expr?&c = null
         if nm!.Value is not null and isValue {
             ok := false
-            v, ok = c.fitQuiet(c.expr(nm!.Value, rt), rt, nm!.Value!.Span())
+            v = c.expr(nm!.Value, rt)
+            if rt == types.UnknownT and typeOf(v) != types.NullT {
+                # S12b: a match whose only value is its nomatch's has that value's type, as a case's first value gives it
+                rt = typeOf(v)
+                if c.isRef(rt) and nullValue(m) { rt = c.P.T.OrNull(rt) }
+                if c.P.T.KindOf(rt) == types.Kind.Array and c.P.T.Length(rt) != types.TypeId(0) and c.litArray(nm!.Value!) {
+                    rt = c.P.T.Array(c.P.T.Elem(rt), types.TypeId(0))
+                }
+                if c.isRef(rt) { rt = c.runLength(rt) }
+                if said == types.UnknownT { said = rt }
+            }
+            v, ok = c.fitQuiet(v!, rt, nm!.Value!.Span())
             if not ok { c.matchValueMismatch(nm!.Value!.Span(), said, rt, v!) }
         }
         code := c.close(id, outer, mark, bfrom)
