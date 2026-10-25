@@ -78,6 +78,8 @@ d493c2ecb92974e1 5f097b32b9ebd220 checks/cases/b12foreign.olang
 59aa7f4d876c0258 6864678024d5c268 checks/cases/b12unknown.olang
 2cdb754f87c16250 6864678024d5c268 checks/cases/b12unsupported.olang
 857e58e2aa198f31 3354152434cdbb93 checks/cases/b14doc.olang
+f2abdeb0c540778d 7f6a7298ace20cc0 checks/cases/b14docbuilderitem.olang
+c335889b7e6bd314 ac7ca1474a9e00df checks/cases/b14docbuilders.olang
 6d3a2f85635f023e cf84778010e530c9 checks/cases/b14docitem.olang
 21d54ba10e4cd8e6 1dd48d2637c5f92c checks/cases/b4droppedbranch.olang
 46dd90c67bb015b6 30d2dbb133911c51 checks/cases/b5acycle.olang
@@ -1264,7 +1266,7 @@ de7aedc8bf904e88 ef1c70cbd07110ce checks/cases/x2result.olang
 cee1f07ce5c823a4 9cd868f93b377def checks/cases/zeroeffect.olang
 9cf0a1944ee9bdab 34c5e858c74150fe checks/cases/zerofails.olang
 fc6df24d959d964f 81d7dc7230d73880 checks/cases/zeroshared.olang
-db9a0da25fc49f62 ac5a2a4f98522178 checks/checks.olang
+4b8beda326f0f783 67547555fe73230e checks/checks.olang
 1c182323af86f3e3 e289f65fb6da4341 checks/fixtures/agree/agree.olang
 ccaeb6a5859fc860 855092106b73d871 checks/fixtures/agree/bfrand.olang
 a11159f77eaf86c0 20676fbca43683b2 checks/fixtures/agree/math.olang
@@ -1464,10 +1466,10 @@ ff3d67ce3fe24091 d899e4811b9374cb compiler/bindgen.olang
 e3cae681f4ecdf47 96a60c79dd82d2aa compiler/check.olang
 90668d6018f5cb47 7b0e40ad592b2dff compiler/cond.olang
 0e76a017ba652cc7 fa1d844a4ab40b59 compiler/diag.olang
-85b6ed4a67f2ef35 a56ee8963885535f compiler/doc.olang
+e7074ce05610d9ae 0edd055de302c59e compiler/doc.olang
 fa0fc281a6d43c8f c99749bfc1648ae4 compiler/emit.olang
 5032054dafd4e633 51ec31c65ed0e6b2 compiler/eval.olang
-c5c4b6e07a7ee7fd f17af931b931da01 compiler/explain.olang
+208fae7e0e0a3d4f db272e94f459f6d7 compiler/explain.olang
 352150b83e1a2c29 bd81c5aa73e7ac84 compiler/fetch.olang
 a0329aa73dde63ee 734554d69776e429 compiler/fix.olang
 1618602a8a57baac d4f22f3e1fa9fe7c compiler/fmt.olang

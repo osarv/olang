@@ -1051,3 +1051,190 @@ functions; `p.StringFromC(max)` stays. The user then: "It does sound like we sho
 - Private constructors on public types: NOT added (the user 2026-10-25: "it's fine to keep ... I don't know how we would
   do that without breaking the 'capitalized means public' rule"). A constructor is as visible as its type; validation
   lives in it.
+
+**Prover questions (docs/prover.md section 10), the user 2026-10-25:** 4 DECIDED - our own solver in olang (Z3 etc.
+only as test oracles); 6 DECIDED - the prover is built after everything else already decided (build list first).
+1, 2, 3, 5: the user asked for explanations - given with examples (Clamp's broken requirement: run as written vs UB;
+three answers always-fails / broken-guarantee / might-fail and Dafny's alternative; loop invariants as asserts vs a
+loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED again; in effect: nothing built.
+- Prover, the user 2026-10-25: confirmed contracts as built (unchecked call runs normally, `checked f(x)` checks and
+  fails with CheckError.CONTRACT); "This whole thing is starting to cost more than it tastes no?" ASKED: shelve the
+  prover (contracts kept as they are, docs/prover.md as the record, a separate `olang prove` tool if ever revived) -
+  recommended yes. In effect: prover last on the list (already decided), nothing built.
+- PROVER REMOVED (the user 2026-10-25: "Let's get rid of the prover"): off the list; docs/prover.md kept as history.
+- **QAU ASKED 2026-10-25** (the user: revisit `checked` - "better solved with wrappers"; keep static scope contracts
+  optional in the signature; "move checks into the normal parameters", e.g. `fn f(x Handle& outlives y, y Handle&)`,
+  `fn f(x I32, y I32 > x)`). Proposed: (1) parameter conditions - `outlives NAME` after a reference parameter
+  (optional; obligations still inferred; body held to it), a comparison chain on the parameter after its type
+  (`> x`, `>= 0 and <= 100`, earlier parameters and constants), the bracket block, entry values, for/if/fits in
+  contracts and `checked f(x)` removed; (2) conditions decided at compile time where known, checked at run time only in
+  test and -debug builds (rec) or never; (3) result conditions `) I64 >= 0` too (rec yes); (4) remove `checked`:
+  CheckedPlus etc. by name, `try a.CheckedAt(i)`/`CheckedSlice` (maybe Get/SliceOf), `try narrow<I32>(x)`, `as` keeps
+  aborting (rec yes); (5) a prelude `Checked<T>` with failing operators for whole computations (rec yes, both). In
+  effect: contracts and checked as built.
+- QAU, the user 2026-10-25: "These would then be runtime checks on entry and they would need to be able to fail with
+  something like 'bad parameters'. It's all runtime or comptime now, nothing silently works." DECIDED: parameter
+  conditions are decided while compiling where they can be, else checked on entry in every build, failing the call
+  with a prelude error; `outlives` stays compile-time only. ASKED: (1) a call needs try by its signature even where the
+  compiler sees the condition holds (rec yes); (2) drop result conditions (rec yes - a false one is the callee's bug,
+  an assert); (3) the error `ArgumentError.INVALID`, the message naming parameter and condition (rec yes). Next topic
+  (the user): removing `checked` as its own thing.
+- QAU DECIDED 2026-10-25 (the user: "1) yes 2) yes 3) yes"): a call of a function with conditions needs try by its
+  signature; result conditions dropped; `ArgumentError.INVALID`. And: conditions may be ANY expression ("including
+  things like function calls with errors, lambdas etc"). Proposed form: a comparison right after the type keeps the
+  short form (`y I32 > x`), anything else after `if` (`n I64 if n.IsPrime()`).
+- **QAV DECIDED 2026-10-25 (the user): "For checked, I want the keyword gone completely. There is only one error system
+  and it uses try. The operators are a thing we have to talk about separately because it is the only place the language
+  allows overloading."** Proposed mapping: `try a.Get(i)`, `try a.SliceOf(lo, hi)`, `try narrow<I32>(x)`, CheckError
+  gone (each module's own errors). ASKED: (1) a condition's call error leaves as itself (rec yes); (2) a slice out of
+  range keeps aborting, SliceOf the fallible form (rec yes); (3) `as` wrong case keeps aborting, no fallible form (rec
+  yes); (4) narrow as a free function `narrow<I32>(x)` (rec) or method. NEXT: operators (the only overloading).
+- QAV answers 2026-10-25: (1) a condition's call error leaves as itself - YES; (2) slices keep aborting ("we still do
+  those checks as well since they are comparatively cheap"), SliceOf the fallible form - YES; (3) the user: "how about we
+  add try here?" for `as` - proposed: `as` always fails as written (`try e as C`, `(e as C)!`, CaseError.WRONG_CASE),
+  since try never turns a check on and narrowing covers the tested case - ASKED (rec yes); (4) the user: "the fact that
+  only written functions take type arguments is an inconsistency. Methods are just normal functions bound on object
+  types" - DECIDED: methods take written type arguments (`x.Narrow<I32>()`), C#'s rule: after a name, a `<...>` reading
+  as type arguments directly followed by `(` is type arguments, for free functions and methods alike; narrowing is
+  `try x.Narrow<I32>()` (OVERFLOW). NEXT: operators.
+- QAV (3) DECIDED 2026-10-25 (the user: "Yes as should work that way"): `as` always fails as written - `try e as C`
+  (CaseError.WRONG_CASE) or `(e as C)!`. Clarified to the user: a parameter condition is part of the parameter's
+  declaration, the same as `if not cond { error ArgumentError.INVALID }` at the body's top, checked in parameter order
+  (each may read earlier parameters and itself); the function's error set gains ArgumentError automatically.
+- Condition form taken as settled (the user asked how `if` works rather than objecting): `y I32 > x` short form,
+  `n I64 if expr` for any expression. Told the user; they may object.
+- **QAW ASKED 2026-10-25 (operators, the user's next topic: "the only place the language allows overloading"):**
+  (1) keep operator methods (rec yes - narrow overloading by the left operand, one method per type); (2) checked
+  arithmetic without `checked`: (a) prelude `Checked<T>` wrapper with failing operators, (b) methods
+  `try a.AddChecked(b)`, (c) both (rec c); (3) fallible operator methods stay (rec yes); (4) `Saturating<T>`/wrapping
+  wrappers later, additive (rec yes). In effect: E31 as built.
+- Condition form RE-ASKED 2026-10-25 (the user: "ask me about the condition form then again"): (1) short form + `if`;
+  (2) always `if` (`y I32 if y > x`) - recommended now (one spelling; short form's `Array<I32> > x` parsing trap);
+  (3) brackets `y I32 [y > x]`. In effect: undecided.
+- Conditions naming later parameters, asked by the user 2026-10-25: recommended NO - itself and earlier parameters only
+  (all arguments are evaluated before the call anyway, so a relation goes on the later parameter; one place per
+  condition; checked in order). In effect: earlier only (as proposed).
+- Condition form, the user 2026-10-25: "Maybe we bring the bracket form back? conditions on the variables that are
+  checked during entry. fn myFunc(x I32, y I32) [x > y] I64 ? ArgError {...}". Recommended YES: one block after the
+  parameter list, before the result; any Bool expressions over parameters and constants, listing rule; checked in order
+  on entry (ArgumentError.INVALID naming the condition) or decided at compile time; `outlives` relations in the same
+  block (compile time only); constructors take it; result conditions, entry values, for/if/fits and the prover gone.
+  ASKED to confirm; in effect: undecided.
+- Condition form DECIDED 2026-10-25 (the user, against the alternatives: "x.isPrime() I32 or x I32.isPrime() which
+  kinda reads bad no?"): the bracket block after the parameter list, as recommended just above. Only operators (QAW)
+  remain open.
+- QAW REFRAMED 2026-10-25 (the user: "Let's talk about the operators now"): operators as method-call spelling, chosen
+  by receiver like every method (no argument-type overloading). ASKED: (1) keep (rec); (2) several right-hand types by
+  one generic method + closed trait (rec) vs per-type operator overloads; (3) built-in on the left `2.0 * v`: (a) not
+  supported (rec) vs (b) right-hand methods; (4) Checked<T> wrapper + AddChecked methods (rec both); (5) fallible
+  operators kept (rec); (6) the operator list unchanged (rec).
+- QAW DECIDED 2026-10-25 (the user: "Keep everything", "keep the try form and require it where there can be errors"):
+  (1) keep operators, (2) one generic method + closed trait, (3) no right-hand methods, (5) fallible operators need try,
+  (6) list unchanged. (4) checked arithmetic moved to the try talk. NEW, the user's idea: `commutes` on an operator
+  method so `2.0 * v` finds `v.Mul(2.0)`, "required the other type never implements the method too". Proposed rules:
+  only + * & | ^; parameter type differs from the receiver's; the other type has no such operator for the pair (both
+  declared = error at the second); operands evaluated as written; keyword after the result like noreturn. ASKED to
+  confirm. NEXT (the user): change try's binding ("probably change the binding of try a bit") and checked with try -
+  asked whether they mean Swift's loose try (covers everything to its right) and what they want of checked.
+- commutes, the user 2026-10-25: "make the normally commutative types commute automatically if no alternative
+  implementation ... exists too. Or we just leave it completely." Answered: automatic is out (silent wrong answers:
+  Matrix*Vec, quaternion*vector - only the author knows the method commutes). ASKED: explicit `commutes` (rec) or leave
+  it out (`2.0 * v` an error naming `v * 2.0`, additive later).
+- commutes DECIDED 2026-10-25 (the user: "Nah, keep it"): explicit `commutes` on + * & | ^ operator methods, rules as
+  proposed.
+- try binding, the user asked the downside of try covering the whole following expression: (1) the reader cannot see
+  which part fails (Swift accepts; a try covering nothing stays an error); (2) a default replaces the whole expression;
+  (3) a default stays a single term (`try f() catch default 0 == 3` compares the result). A try ends at a closing
+  bracket, a list's `,`, `catch` or the statement's end; `!` stays postfix and tight. Recommended: do it. ASKED; then
+  checked-with-try (the user's next topic).
+- try binding DECIDED 2026-10-25 (the user): try takes the whole following expression, ending at its end or at
+  `catch`; each `,`-separated item of a list is its own expression; after the clauses the expression continues
+  (`try f() catch default 0 + x` does not try the +; a default is one term, compound parenthesized); a try within
+  another's reach is an error (`try f(try g())`); parentheses directly around a try's operand are an error (redundant).
+  Explained `catch default 0` (catch-all clause, fallback value). NEXT: checked with try.
+- try nesting DECIDED 2026-10-25 (the user: nested trys an error "only when they cover exactly the same thing"; the
+  outer of `try try f() catch default 0 + x` extends the whole way): every try must cover something fallible no inner
+  try already covers (R8's "a try covering nothing" per level) - replaces "a try within another's reach is an error".
+- **QAX ASKED 2026-10-25 (checked with try):** (1) arithmetic checking as a prelude wrapper `Checked<T>` whose
+  operators fail (one try over a whole computation) plus single-operation methods `try a.AddChecked(b)` (rec yes) - NOT
+  try turning checks on (that is checked renamed: context-dependent operators, hidden costs); (2) errors folded into
+  the prelude's NumberError (OVERFLOW, DIVIDE_BY_ZERO, INVALID beside NEGATIVE), CheckError gone (rec yes); (3) plain
+  integer division by zero (UB today, E6a): leave, or check-and-abort (one compare per division) - rec abort; the
+  user's call since it touches the no-per-operation-check rule.
+- QAX DECIDED 2026-10-25 (the user): (1) the Checked<T> type YES; (2) its errors in its own std module, not the prelude
+  (proposed `std/arith`: `arith.Checked`, `arith.Error.OVERFLOW/DIVIDE_BY_ZERO`); (3) plain / and % stay unchecked,
+  only Checked checks them. "Nothing silently works" is not a rule (it was a suggestion for parameter conditions).
+- **QAY ASKED 2026-10-25** (the user: "If we are doing checked mb we should return Result and Option. I think they are
+  very much in the same box here" - reversing 2026-10-24's drops of Result/QAN and Option/QAO): proposed both as std
+  generic enums (std/option, std/result), needing generic enums + errors as values (build list 10, 14). ASKED: (1)
+  std/arith for Checked; (2) Option<T> for values only, Option<T&> an error naming T?&; (3) Result<T, E> with errors as
+  values (`catch E e`, `Result.Of(fn(): return load(p))`, `try r.Value()`); (4) APIs keep returning errors, never
+  Option/Result (errors are errors) - rec yes to all.
+- QAY, the user 2026-10-25: "No." - wanted to see whether fallible functions could return Result (integration);
+  concluded it fails: a discarded Result statement (`io.Println(msg "#")`) compiles and silently drops the error (Rust
+  needs #[must_use]), where R8 makes it a compile error. SETTLED: errors stay; a fallible call is handled at the call.
+  RE-ASKED: Result/Option only as std storage types (made explicitly, `Result.Of(...)`, `Some(x)`), or drop them for now.
+- QAY 2026-10-25, the user: "Option should not be a thing, and Result must be a generic std type, how would we
+  integrate that with calls? Can we let it slip if we know the storage is a result? `x Result<T, E> = f()`. What do we
+  do with multiple returns?" DECIDED: no Option; Result<T, E> a generic std type. PROPOSED/ASKED: (1) a fallible call
+  needs no try exactly where it lands in a place whose written type is Result (typed declaration, assignment, a Result
+  parameter incl. Push into List<Result<..>>, a return of a Result-returning function); a statement call or `:=` still
+  needs try; (2) `try r` / `r!` unwrap a Result (Ok gives v, Err fails with e), match and narrowing as any enum; (3)
+  several results: (a) cannot land in a Result (rec) / (b) auto Pair / (c) one Result each; (4) several error types
+  need a named error set (errors as values). Rec yes to all, (a).
+- QAY PARKED 2026-10-25 (the user: "Store away results for now until we have talked about tuples"): Result<T, E>
+  integration (landing-place rule, try r, multi-results) waits for a talk about tuples.
+- **QAZ ASKED 2026-10-25** (the user: "Could we integrate option with the ?& system? An option on a value would signal
+  'uninitialised'"): proposed `T?` on values with exactly ?&'s rules (null absent and the zero value, is null, narrowing
+  locals/params, x!, T flows into T?, nothing read through it unnarrowed; a flag beside the value); `T?` with T a
+  reference IS `T?&`. ASKED: (1) T? on values (rec yes); (2) no `T?` function results - errors are errors, and it avoids
+  the bare-`?` clash (rec yes); (3) also forbid `T?&` results for consistency, a change to what is built (rec yes).
+- QAZ DECIDED 2026-10-25 (the user: "I don't want the option type for values, the ref one earns its keep especially
+  through narrowing ... Values are just not worth it"): no `T?` on values (a flag per value, niches only for some
+  types); `?&` unchanged; `T?&` results stay allowed (my question 3 withdrawn). Open: the tuples talk, which Result waits on.
+- TUPLES TALK started 2026-10-25 (the user: "If we do tuples we index with [] right? How does python do it?"):
+  explained Python's run-time indexing and the typed languages' (Rust t.0, C++ get<0>, TypeScript literal index);
+  proposed `t[k]` with k known while compiling (each position its own type; a run-time index an error naming Array),
+  `(1, "a")` literals, `a, b := t` unpacking. Open clashes: (1) `(...)` grouping in type lists vs a tuple type (make
+  grouping BE a tuple?), (2) several results as tuples (one concept; solves Result<(I64, I64), E>). ASKED whether to
+  work both out in full.
+- TUPLES DROPPED again 2026-10-25 (the user: "drop them again. The comptime indexing only settles it"). So Result's
+  several-results question resolves to (a): a multi-result call cannot land in a Result. Result integration (QAY 1, 2,
+  4) un-parked and re-asked.
+- RESULT DECIDED 2026-10-25 (the user: "Drop results as an integrated in the language thing and make it only an std
+  lib type that takes Result<T,E> where T and E are supplied by the user themselves"): Result<T, E> a plain std generic
+  enum, no language support (QAY's landing-place rule dropped). Explained: today errors are not values (T20) - only
+  caught by type/word, never stored, passed, or a type argument, so Result<T, os.Error> needs errors as values (QAM,
+  build list 14: `catch os.Error e`, `error e`, error types as ordinary types, named sets, `$e`). ASKED: build errors as
+  values, then Result, in that order?
+- Errors as values, the user 2026-10-25: "do we want errors as say variables? I am not sold on the idea of storing
+  errors actually". PROPOSED (rec): a catch clause may name what it took (`catch os.Error e`), usable ONLY inside the
+  clause - rendered `$e`, compared with words, re-raised `error e` - never assigned, passed, stored or a type argument;
+  the rest of QAM (error types in generics, named sets as types, storable errors) dropped; keeping failures for later
+  is the user's own enum (and Result<T, E> with user types). ASKED; in effect: errors not values (T20), QAM on the
+  build list until answered.
+- **QBA RECORDED 2026-10-25 (the user: "store the question of zero values and uninit values in the ledger"; first
+  misread as "unit"), to discuss later.** Zero values vs uninitialised values: today a declaration with no value takes
+  its type's zero value (D13c - the constructor from its parameters' defaults; none where the constructor has effects,
+  or for a never-null reference), so nothing is ever uninitialised. The alternative is definite initialisation (Rust,
+  Swift, Java locals): a local or field may be declared without a value and the compiler proves it is assigned before
+  any read - no zero value needed, so types with no zero value (effectful constructors, never-null references) could be
+  declared first and filled later; it came up with value options ("an option on a value would signal uninitialised").
+  In effect: zero values (D13c).
+- Clause-only error names worked out 2026-10-25 (the user: "go through this properly ... What is going to be built?
+  How should it interact with generics? Can we try on an error variable? We can't right, only on the unions"):
+  `catch os.Error e` / `catch A, B e` / `catch e`; e's type the set the clause took; inside the clause (block or
+  default) only: `$e`, `e == Word`, `e == Type` with narrowing, `match e` (exhaustive over what the clause took),
+  `error e` re-raises (checked against the function's set); no assign/pass/store/capture (error naming `$e`); no
+  generics involvement (error-set parameters `<T ? E>` are separate); `try e` an error naming `error e`; e is the
+  32-bit code in a local, the evaluator binds it alike. ASKED to take it as the design.
+- The user 2026-10-25: errors must stay "their own specific thing that creates a set with listing etc." - not both
+  sides of the union as normal variables; `fn f() I32 ? MyStruct` makes no sense. Confirmed: only error types after `?`
+  and in catch; sets are lists, not variable types; the clause-local `e` is a name for the error being handled (as a
+  for-in names its element), never data. ASKED to decide the clause-only name.
+- The user 2026-10-25: "we could have errors as variables and still only allow errors in the right slot. Then we
+  basically test error variables as another type of enum". Proposed (b): error types are value types like payload-free
+  enums everywhere but a function's result (incl. one of several) - parameters, fields, elements, type arguments
+  (List<os.Error>, Result<T, os.Error>), locals; only error types after `?`; ==/narrowing/match/$/Hash; the 32-bit code,
+  no scope; `catch E e` makes one, `error e` raises (checked against the set); no zero value (always initialised; QBA
+  may revisit). ASKED: (a) clause-only names or (b) error values - rec (b) now.
