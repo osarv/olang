@@ -622,10 +622,13 @@ array - builds its result from it: the elements are copied into the result scope
 scopes close, so the caller takes an array no one else holds, and nothing those scopes do as they close (a destructor
 allocating, say) can reach it. A local the result scope already holds (O26a) is the result as it is **only where nothing else can name its
 storage**: the local is only read, indexed and measured, its elements copied out, sliced or viewed only into values that
-are gone by the return, and lent only to calls that keep nothing of it (§8 O17). Anything else - a borrow of it stored
-in a field, a list or a local reference, pushed through one, handed to a method on another value, to a call that may
-keep it, a lambda, a task or a destructor-bearing value of its block - may be a second name of its storage, and the
-local is copied then too, so the caller's value is its own and writing it writes neither (`log.Push(s); return s`).
+are gone by the return, and lent only to calls that provably keep nothing of it: a function whose checked body stores
+nothing into what the argument names (§8 O17), whose obligations hold nothing of it (O10b), none of whose results, in
+any position, is borrowed from it (O13), and none of whose other parameters - its receiver included - shares a scope
+with it (`fn tie(l mut List<String&>&, x String&l)` may store `x` in `l` with no obligation). Anything else - a borrow of
+it stored in a field, a list or a local reference, pushed through one, handed to a method on another value, to a call
+that may keep it or whose body is not known, a lambda, a task or a destructor-bearing value of its block - may be a
+second name of its storage, and the local is copied then too, so the caller's value is its own and writing it writes neither (`log.Push(s); return s`).
 Which of the two a return is never changes what the program computes: the compile-time evaluator, which always copies,
 gives the same value. A result whose length is known (D8f) is a value as a struct is, its elements returned in
 it.
@@ -6260,7 +6263,8 @@ such, so what ran before it is never lost.
 
 **B3e.** `interpret <file>`: **interprets** the program whose root module is `<file>` instead of building it. The
 program is analyzed exactly as under `build` - `main` is required (B4), and every compile-time error is reported the
-same way - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
+same way, section 8's included (where values live is the same scope pass's, so a program the build refuses is not
+run) - and then `main` is run by compile-time evaluation (§13 K1) with the effects K1 refuses performed:
 nothing is generated, nothing is linked and no file is written. It behaves as the built program would run (B5):
 globals are initialized imports first (B5a) and may be read and written, an `extern` function (§11) is called in
 the interpreting process, `os.Exit` ends it with its status, an error escaping `main` is reported as B5
