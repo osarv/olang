@@ -1,0 +1,6 @@
+# check: fail error[X12]: String& cannot go back to C
+# X12: an export fn gives an array by value, copied into C's buffer - a reference would name storage the call's scope
+# reclaims as it returns
+export fn first(t String&) String&t { return t[:1] }
+
+fn main() ? { }

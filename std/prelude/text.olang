@@ -235,6 +235,31 @@ fn (t String&) ToLower() String {
     return out
 }
 
+# ---- text and C (X15) ----
+
+# a C string - "char *", NUL-terminated - as C gives one (X10): held by reference, read only through StringFromC
+extern type CStr
+
+extern fn strnlen(s CStr&, max I64) I64
+extern fn memcpy(dst Array<U8>, src CStr&, n I64) CStr?&
+
+# the text as C takes a string: its bytes and a NUL after them, as a new array - a "char *" for an extern's
+# "Array<U8>" parameter (X3). A NUL inside the text ends the string C sees there
+fn (t String&) ToC() Array<U8> {
+    out := Array<U8>(t.Len() + 1)
+    for i, c in t { out[i] = U8(c) }
+    return out
+}
+
+# the text a C string holds, copied: its bytes up to the first NUL, or the first max of them where there is none
+# sooner. That p names a C string at all is the C function's word (X1a)
+fn (p CStr&) StringFromC(max I64) String {
+    n := strnlen(p, max.Max(0))
+    out := Array<U8>(n)
+    memcpy(out, p, n)
+    return String(out)
+}
+
 # the index of the last occurrence of sub, failing with NOT_FOUND when there is none, as Find does. An empty sub is
 # found at Len()
 fn (a String&) FindLast(sub String&) I64 ? TextError.NOT_FOUND {

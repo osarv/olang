@@ -1,0 +1,10 @@
+# check: fail error[X2]: Named cannot cross the C boundary
+# X11: a struct crosses to C only when it is plain data - text is olang's own storage, with no C counterpart
+type Named struct(name String&, n I64) {
+    name
+    n
+}
+
+extern fn take(s Named) I32
+
+fn main() ? { }

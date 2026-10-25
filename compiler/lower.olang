@@ -3029,6 +3029,14 @@ fn (ln mut lowering&) renderAt(a pl, ty types.TypeId, b mir.ScopeRef, sp source.
             ln.goto(after)
         }
         ln.start(some)
+        ref := t.Referent(r)
+        if t.KindOf(ref) == types.Kind.Named and t.DeclKindOf(t.DeclOf(ref)) == types.DeclKind.Foreign {
+            # X10: what an extern type's reference names is C's, never read - it renders as the type's name
+            ln.word(b, ln.T.Names.Text(t.DeclName(t.DeclOf(ref))), sp)
+            ln.goto(after)
+            ln.start(after)
+            return
+        }
         # references followed 8 deep, then "..." - a cycle is cut off
         d := ln.depth()
         far := ln.prim(typed.PrimOp.Ge, types.BoolT, mir.Operand[d, ln.constI64(8)], sp)

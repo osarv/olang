@@ -1,0 +1,121 @@
+# the olang side of the cinterop scenario (checks/checks.olang), linked with abi.c: plain-data structs by value and
+# by reference, every number width, Bool and the 16-bit floats (X2, X11), an extern type (X10), callbacks (X12, X13)
+import "std/io"
+link "abi.o"
+type I2 struct(a I32, b I32) { a, b }
+type L2 struct(a I64, b I64) { a, b }
+type L3 struct(a I64, b I64, c I64) { a, b, c }
+type F2 struct(x F32, y F32) { x, y }
+type F3 struct(x F32, y F32, z F32) { x, y, z }
+type F5 struct(x F32, y F32, z F32, w F32, v F32) { x, y, z, w, v }
+type D2 struct(x F64, y F64) { x, y }
+type D3 struct(x F64, y F64, z F64) { x, y, z }
+type LD struct(a I64, b F64) { a, b }
+type DI struct(a F64, b I32) { a, b }
+type C3 struct() {
+    c Array<U8> = Array<U8>(3)
+}
+type SC struct(s I16, c U8) { s, c }
+type FIF struct(a F32, b I32, c F32) { a, b, c }
+type NF struct(p F2, q F2) { p, q }
+type BI struct(b Bool, i I32) { b, i }
+type CD struct(c U8, d F64) { c, d }
+type H3 struct() {
+    h Array<F16> = Array<F16>(3)
+}
+extern fn id_I2(a I2) I2
+extern fn id_L2(a L2) L2
+extern fn id_L3(a L3) L3
+extern fn id_F2(a F2) F2
+extern fn id_F3(a F3) F3
+extern fn id_F5(a F5) F5
+extern fn id_D2(a D2) D2
+extern fn id_D3(a D3) D3
+extern fn id_LD(a LD) LD
+extern fn id_DI(a DI) DI
+extern fn id_C3(a C3) C3
+extern fn id_SC(a SC) SC
+extern fn id_FIF(a FIF) FIF
+extern fn id_NF(a NF) NF
+extern fn id_BI(a BI) BI
+extern fn id_CD(a CD) CD
+extern fn id_H3(a H3) H3
+extern fn sum_l3(p mut L3&) I64
+extern fn many(a I64, b I64, c I64, d I64, e I64, s L2) F64
+extern fn many2(a F64, b F64, c F64, d F64, e F64, f F64, g F64, s D2) F64
+extern fn ret3(a I64, b I64, c I64, d I64, e I64, s L2) L3
+extern fn flip(b Bool) Bool
+extern fn neg8(x I8) I8
+extern fn widen8(x I8, y U8, z I16, w U16) I32
+extern fn halfdbl(x F16) F16
+extern fn bfadd(x BF16, y BF16) BF16
+
+# X10: an opaque type, and an out-parameter as an array of one reference
+extern type Db
+extern fn db_open(n I64) Db&
+extern fn db_none() Db?&
+extern fn db_n(d Db?&) I64
+extern fn db_close(d Db&)
+extern fn db_open2(n I64, out Array<Db?&>&) I32
+
+# X13: callbacks, with a context struct and on a thread C makes
+type Ctx struct() {
+    sum I64 = 0
+    calls I32 = 0
+}
+extern fn each(n I32, cb fn(i I32, ctx mut Ctx&), ctx mut Ctx&)
+extern fn each_on_thread(n I32, cb fn(i I32, ctx mut Ctx&), ctx mut Ctx&)
+extern fn apply(f fn(x F64) F64, x F64) F64
+
+export fn add(i I32, ctx mut Ctx&) {
+    ctx.sum += I64(i)
+    ctx.calls++
+    # olang's own storage, made on whatever thread calls (X12)
+    t := $"item " $i
+    if t.Len() == 0 { ctx.calls = 0 }
+}
+
+export fn half(x F64) F64 { return x / 2 }
+
+fn main() ? {
+    try io.Println($id_I2(I2(1, 2)))
+    try io.Println($id_L2(L2(1, 2)))
+    try io.Println($id_L3(L3(1, 2, 3)))
+    try io.Println($id_F2(F2(1, 2)))
+    try io.Println($id_F3(F3(1, 2, 3)))
+    try io.Println($id_F5(F5(1, 2, 3, 4, 5)))
+    try io.Println($id_D2(D2(1, 2)))
+    try io.Println($id_D3(D3(1, 2, 3)))
+    try io.Println($id_LD(LD(1, 2)))
+    try io.Println($id_DI(DI(1, 2)))
+    c3 := C3()
+    c3.c[0], c3.c[1], c3.c[2] = 1, 2, 3
+    try io.Println($id_C3(c3))
+    try io.Println($id_SC(SC(1, 2)))
+    try io.Println($id_FIF(FIF(1, 2, 3)))
+    try io.Println($id_NF(NF(F2(1, 2), F2(3, 4))))
+    try io.Println($id_BI(BI(true, 2)))
+    try io.Println($id_CD(CD(1, 2)))
+    h3 := H3()
+    h3.h[0], h3.h[1], h3.h[2] = 1, 2, 3
+    try io.Println($id_H3(h3))
+    p := L3(1, 2, 3)
+    try io.Println($sum_l3(p) " " $p)
+    try io.Println($many(1, 2, 3, 4, 5, L2(6, 7)))
+    try io.Println($many2(1, 2, 3, 4, 5, 6, 7, D2(8, 9)))
+    try io.Println($ret3(1, 2, 3, 4, 5, L2(6, 7)))
+    try io.Println($flip(true) " " $flip(false))
+    try io.Println($neg8(5) " " $widen8(-1, 255, -2, 65535))
+    try io.Println($halfdbl(1.5) " " $bfadd(1.0, 2.0))
+    d := db_open(42)
+    o := Array<Db?&>(1)
+    assert db_open2(7, o) == 0
+    try io.Println($db_n(d) " " $db_n(o[0]) " " $db_n(db_none()) " " $(d == d) " " $(db_none() is null) " " $d)
+    db_close(o[0]!)
+    db_close(d)
+    c := Ctx()
+    each(10, add, c)
+    e := Ctx()
+    each_on_thread(100, add, e)
+    try io.Println($c " " $e " " $apply(half, 3.0) " " $half(8.0))
+}

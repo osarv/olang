@@ -711,7 +711,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Duration extends I64` (`Millis(5)`, `d.Seconds()`, `$d` as Go's `1h2m3.5s`), `Sleep`, `Date` with RFC 3339
   `Format`/`Parse` (fixed offsets only - no zone database). `std/net`: blocking TCP (`Listen`, `Accept`, `Dial`, `Conn`
   with `Read` failing `CLOSED` at the end of the stream, `Write`, `SetTimeout`) and UDP, IPv4/IPv6 (`ParseIP`, RFC
-  5952 text), destructors closing descriptors; no DNS (getaddrinfo's list cannot cross `extern fn`, X2) - X6's
+  5952 text), destructors closing descriptors; names resolved by `Lookup`/`Resolve` over getaddrinfo (X10/X11) - X6's
   `__olang_err` gained socket classes 7-13. `std/set`, `std/deque`, `std/heap` (a `less` function), handles all.
   Prelude iterator adapters `Take Skip Enumerate Zip Chain Sum Min Max MinBy MaxBy` (empty: `Exhausted`). `std/utf8`
   (`Rune extends U32`, strict `Decode`, `Runes` walking bad bytes as U+FFFD as Go does), `std/base64`, `std/hex`,
@@ -723,9 +723,23 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   does, which P2 rejects as a task argument), so `join { for part in a.Chunks(4) { spawn work(part) } }` cannot race.
   `size` is a `ChunkSize` (a Radix-like checked `I64`, `ArrayError.BAD_CHUNK` below one; a literal checked while
   compiling). Arrays only for now; Vec later (another branch is reworking Vec).
-- **`extern fn` (X1-X8).** Numeric primitives and arrays of them; an array marshals to a pointer; no extern returns a
-  pointer; only the runtime's `__olang_` functions take a function value (X2). C math functions with their exact
-  prototypes are known and evaluated while compiling (X8).
+- **`extern fn` and C interop (X1-X16; v2 the user's design 2026-10-24, details mine).** Across the boundary: Bool and
+  every numeric primitive (F16/BF16 as `_Float16`/`__bf16`, ext attributes per architecture), arrays of them (a
+  pointer), **extern types** (`extern type Db`: held as `Db&`/`Db?&`, passed back, compared, null-tested, never read or
+  built, C may return them; outside section 8's tracking, as numbers - X10), **plain-data structs** by reference and by
+  value, classified by `compiler/cabi.olang` as clang 18 passes them on x86-64 (System V) and AArch64 (AAPCS64), tested
+  against clang (X11). `link "name"` per module (`-lname`, or a path beside the module, X9). **Callbacks are `export
+  fn`s only** (X13): C is given an export fn by name - a C entry with no closure that sets up olang's per-thread state
+  the first time C calls on a thread it made (one load and compare; that state is never released, a recorded limit) -
+  context through the user data argument. `build -library` (X14) makes `libNAME.so` (only the export fns visible,
+  globals set at load in B5a's order, a fresh scope per call) and `NAME.h` (stdint types, opaque typedefs, plain
+  structs, arrays as pointer and `int64_t` length, a fallible entry returning an `int32_t` code - library-wide, `(type
+  position from 1 << 16) | word`, `NAME_TYPE_WORD` constants - with its result through a pointer, an array result
+  copied into a caller's buffer returning its length); Python reaches it by ctypes. `t.ToC()` and `p.StringFromC(max)`
+  over the prelude's `CStr` (X15: not `String.FromC(p, max)` as decided - no type-level functions, E33's precedent).
+  `olang bindgen HEADER.h` (X16) writes a header's declarations from clang's tree, macros' values computed by clang;
+  `interpret` loads the linked libraries and refuses structs and extern types (B3e). Still no extern variables, and
+  the X1a hole stands. C math functions with their exact prototypes are known and evaluated while compiling (X8).
 - **std API details.** `List`: `Push PushAll Pop First Last Clear Truncate Insert RemoveAt SwapRemove IndexOf Remove
   Reverse Sort Join ToArray Clone`, `l[i]` unchecked, `checked l[i]` checked, first chunk held on its own. `Map`: `Put Get
   Has Remove Update Keys Values Clear Clone`, removed slots reused, a key needs `Hash` and `==`. Text: `Split` borrows

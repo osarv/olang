@@ -731,6 +731,62 @@ fn (l mut Loader&) branchGroup(mi I64, b ast.TopBranch&, chosen I64, index I64) 
 
 # ---- what later passes ask ----
 
+# X9: what the program's link names besides its objects, from every module's "link" declarations in its chosen
+# branches, each once, in the modules' order - a library's name as "-lNAME", a file's path (one naming a directory, or
+# ending in .a, .o or .so) resolved from its module's directory. A name that is neither is reported
+fn (l mut Loader&) Links() List<String&> {
+    out List<String&>
+    seen Map<String&, Bool>
+    for mi in range l.Mods.Len() { l.linksIn(mi, l.Mods[mi].Decls, out, seen) }
+    return out
+}
+
+fn (l mut Loader&) linksIn(mi I64, ds Array<ast.Decl&>&, out mut List<String&>&, seen mut Map<String&, Bool>&) {
+    for d in ds {
+        match d {
+            case ast.Decl.Link(_, path) {
+                m := l.Mods[mi]
+                text := m.Src!.Text[I64(path.Start) + 1:I64(path.End) - 1]
+                arg := ""
+                if LinkIsFile(text) {
+                    arg = $(text if filepath.IsAbs(text) else filepath.Join(filepath.Dir(m.Real), text))
+                } else if LinkName(text) {
+                    arg = $"-l" $text
+                } else {
+                    l.Diags.Error(diag.Where.Span(m.File, I64(path.Start), I64(path.End)), msgs.LinkName(msgs.Tok(text)))
+                    continue
+                }
+                if seen.Has(arg) { continue }
+                seen.Put($arg, true)
+                out.Push($arg)
+            }
+            case ast.Decl.If(_, ti) { l.linksIf(mi, ti, l.Chosen(mi, ti.Cond!.Span().Start), 0, out, seen) }
+            nomatch { }
+        }
+    }
+}
+
+fn (l mut Loader&) linksIf(mi I64, ti ast.TopIf&, chosen I64, index I64, out mut List<String&>&, seen mut Map<String&, Bool>&) {
+    if chosen == index and ti.Then!.Decls.Len() > 0 { l.linksIn(mi, ti.Then!.Decls, out, seen) }
+    if ti.ElseIf is not null { l.linksIf(mi, ti.ElseIf!, chosen, index + 1, out, seen) }
+    if ti.Else is not null and chosen == index + 1 and ti.Else!.Decls.Len() > 0 { l.linksIn(mi, ti.Else!.Decls, out, seen) }
+}
+
+# X9: whether a link names a file - its path holds a "/", or it ends in .a, .o or .so (a version after .so too)
+fn LinkIsFile(text String&) Bool {
+    return text.Contains("/") or text.EndsWith(".a") or text.EndsWith(".o") or text.EndsWith(".so") or text.Contains(".so.")
+}
+
+# X9: whether a link is a library's name: letters, digits, "_", "-", "+" and ".", the first a letter or a digit
+fn LinkName(text String&) Bool {
+    if text.Len() == 0 { return false }
+    for i, c in text {
+        if c.IsLetter() or c.IsDigit() { continue }
+        if i == 0 or (c != '_' and c != '-' and c != '+' and c != '.') { return false }
+    }
+    return true
+}
+
 # what was decided for the top-level if whose first condition starts at that offset: its chosen branch, NoBranch, or
 # Pending
 fn (l mut Loader&) Chosen(mi I64, condStart I32) I64 {

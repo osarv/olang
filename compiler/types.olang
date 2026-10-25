@@ -118,6 +118,7 @@ type DeclKind enum {
     Error
     Trait
     Over        # a type declared over a number, an array or another such type (T29)
+    Foreign     # "extern type T" (X10): a C type, held only by reference, with no layout and nothing to read
 }
 
 # a declared type: its module (an index into the program's modules), its name, what it is, and its parameters: how
@@ -624,6 +625,7 @@ fn (t Table&) ScopesFit(a TypeId, b TypeId) Bool {
 # counts as holding one
 fn (t mut Table&) HoldsRefs(id TypeId) Bool {
     k := t.KindOf(id)
+    if t.ForeignRef(id) { return false }   # X10: an extern type's reference is C's, in no scope of olang's
     # an any's instance is of a type not known here (T32): it may hold one
     if k == Kind.Ref or k == Kind.Func or k == Kind.Var or k == Kind.Any { return true }
     if k != Kind.Named and k != Kind.Array and k != Kind.Tuple and k != Kind.Record and k != Kind.AnonEnum { return false }
@@ -652,6 +654,14 @@ fn (t mut Table&) HoldsRefs(id TypeId) Bool {
     t.setHolds(id, 0 if t.holdsUnsure else 3 if holds else 2)
     t.holdsUnsure = t.holdsUnsure or outer
     return holds
+}
+
+# X10: whether a type is a reference to an extern type ("Db&", "Db?&") - a C pointer olang holds and never reads: it
+# lives in no scope of olang's, so section 8 takes it for a value holding no reference, as a number is
+fn (t Table&) ForeignRef(id TypeId) Bool {
+    if t.KindOf(id) != Kind.Ref { return false }
+    x := t.Referent(id)
+    return t.KindOf(x) == Kind.Named and t.DeclKindOf(t.DeclOf(x)) == DeclKind.Foreign
 }
 
 fn (t Table&) holdsState(id TypeId) U8 {
@@ -890,7 +900,7 @@ fn (t mut Table&) ComputeLayout(id TypeId) Bool {
                     if t.LayoutState(b) != LaidOut { return false }
                     size, align = t.Size(b), t.Align(b)
                 }
-                case DeclKind.Trait { return false }
+                case DeclKind.Trait, DeclKind.Foreign { return false }
             }
         }
         case _ { return false }

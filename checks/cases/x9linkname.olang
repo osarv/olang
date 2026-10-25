@@ -1,0 +1,5 @@
+# check: fail error[X9]: 'lib m' names no library and no file
+# X9: a link is a library's name or a file's path, nothing else
+link "lib m"
+
+fn main() ? { }

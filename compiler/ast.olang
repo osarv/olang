@@ -243,9 +243,9 @@ type Stmt enum {
 # a function, method, lambda, extern or trait method: receiver (null for none; a trait method's "mut" is a receiver of
 # no name whose type is "mut" alone), name (0 for a lambda), signature, body (null for an extern, a trait method, and a
 # function whose body did not parse - declared by its signature alone: Bodied false), and the type variables its list
-# after the name introduces (G3, QW: "fn max<T>(...)"; empty for none)
+# after the name introduces (G3, QW: "fn max<T>(...)"; empty for none); Export for "export fn" (X12): C may call it
 type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body Array<Stmt&>&
-                 TypeParams Array<TypeParam&>& = Array<TypeParam&>(0), Bodied Bool = true) {
+                 TypeParams Array<TypeParam&>& = Array<TypeParam&>(0), Bodied Bool = true, Export Bool = false) {
     Sp
     Recv
     Name
@@ -253,6 +253,7 @@ type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body 
     Body
     TypeParams
     Bodied
+    Export
 }
 
 # an enum case: name and payload
@@ -274,6 +275,7 @@ type TypeBody enum {
     Trait(methods Array<Func&>&, exts Array<TypeRef&>&, members Array<TypeRef&>&)
     # type T I32 / extends ...; a constructor over a primitive (T29d) when Ctor is not null
     Over(base TypeRef&, ctor Func?&)
+    Foreign                 # "extern type T" (X10): a C type olang holds only by reference, never reads
 }
 
 # struct[<T, ...>](params) ? errors { body } [destruct { ... }] - the destructor's span DtorSp, its body null for none;
@@ -327,6 +329,7 @@ type Decl enum {
     Errors(sp source.Span, name source.NameId, words Array<source.NameId>&)
     Test(sp source.Span, name source.Span, body Array<Stmt&>&)
     If(sp source.Span, i TopIf&)
+    Link(sp source.Span, path source.Span)     # link "name" (X9): the path's span holds its quotes
 }
 
 # where a node is

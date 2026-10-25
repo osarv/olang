@@ -27,6 +27,23 @@ import "lower"
 import "scope"
 import "eval"
 
+# ---- the libraries a program links (X9), for interpret ----
+
+extern type dlHandle
+extern fn dlopen(path Array<U8>, flags I32) dlHandle?&
+extern fn dlerror() CStr?&
+
+# loads what a link names - "-lNAME" its shared library, else the file - into this process with its symbols global
+# (RTLD_NOW | RTLD_GLOBAL), so the externs interpret calls find it as the linked program would: "" when it is loaded,
+# else why not. A static library or an object cannot be loaded
+fn LoadLibrary(link String&) String {
+    path := $("lib" $link[2:] ".so") if link.StartsWith("-l") else $link
+    if path.EndsWith(".a") or path.EndsWith(".o") { return "a static library or an object, which only a link takes" }
+    if dlopen(path.ToC(), 258) is not null { return "" }
+    e := dlerror()
+    return e.StringFromC(400) if e is not null else "dlopen failed"
+}
+
 # ---- checking with the build's decisions (B9c, S8b) ----
 
 # the program l loaded, resolved and checked - each condition the build decides that B9a could not evaluate decided by

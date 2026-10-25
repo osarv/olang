@@ -1,0 +1,29 @@
+
+# what checks/checks.olang appends to what bindgen wrote of bind.h: a program using it
+link "bind.o"
+import "std/io"
+
+export fn visit(ctx CVoid?&, value I32) I32 { return value * 10 }
+
+fn main() {
+    v := bind_add(bind_vec(), bind_vec())
+    v.x = 1.5
+    w := bind_add(v, v)
+    io.Println("add " $w.x " " $w.y)!
+    r := bind_rect()
+    r.max.x = 2.0
+    r.max.y = 3.0
+    io.Println("area " $bind_area(r))!
+    bind_grow(r, 1.0)
+    io.Println("grown " $bind_area(r) " " $r.label[0])!
+    io.Println("sum " $bind_sum(I32[1, 2, 3, 4], 4) " length " $bind_length("abcdef".ToC()))!
+    g := bind_greeting()
+    if g is not null { io.Println(g.StringFromC(100))! }
+    out := Array<bind_counter?&>(1)
+    if bind_open("c".ToC(), out) != 0 { return }
+    c := out[0]
+    for i in range 3 { bind_count(c, U8(i + 1)) }
+    io.Println("total " $bind_total(c) " each " $bind_each(c, visit, null))!
+    bind_close(c)
+    io.Println("even " $bind_even(BIND_SAFE, 4) " " $bind_even(BIND_SLOW, 4) " flags " $BIND_BOTH " big " $BIND_BIG)!
+}

@@ -308,3 +308,19 @@ on sight per rules.md, "Code rules".
   order, two phases, -check; io_print/io_try/io_fix/precedence_migrate left out - not idempotent on current code).
   Follow-up asked: errors print module-qualified (`unhandled error: io.Error.FAILED`, `$e` likewise). Build list item 14's
   `Result<T, E Error>` trait is moot (Result dropped 2026-10-24), so no prelude `Error` is needed.
+- 2026-10-25 ~01:00 CEST: wt-any fix round done (f29a774, verified): both UAFs, $ depth, lazy default slots, generic type
+  cases, O10d by-value borrow refusal (pre-existing stack UAF), recvApplies (pre-existing), fuzzers repaired (differential
+  fuzzer found 4 compiler bugs: E30, E16, E4a, E10 - fixed). Known limit: a List's iterator cannot be an `any` (T22a on
+  ListIter.Next). Follow-up review running (/home/user/review/any2); merge if clean.
+- 2026-10-25 CEST: C interop v2 merged (wt-cinterop 7f5dc98, verified; merge = tip + memory only): link, extern type,
+  plain structs by value (cabi.olang, SysV + AAPCS64), export fn, callbacks (export fn only), build -library + header,
+  ToC/StringFromC, net.Lookup/Resolve, `olang bindgen` (zlib, sqlite3 bind and run). Agent decisions 1-6 in HISTORY.
+  Open: R9's diagnostic writes another module's error words bare (net.Error.UNREACHABLE) - small fix, queue it.
+  Direction question QAS (asked): `p.StringFromC(max)` (E33 precedent) vs type-level functions `String.FromC(p, max)`.
+- 2026-10-25 CEST: any review 2 (/home/user/review/any2): the first review's findings all closed, but new/older:
+  (1) UAF - conditional/match/catch default boxed without a copy (older); (2) two instances' own methods - first wins
+  silently (new); (3) stale lazy default thunk in a reused module object -> unreachable at run time (new); (4) chain
+  literal adapts to its left neighbour for both comparisons (new); (5) older refusals (any R<T>& substitution, G4,
+  prelude iterator adapters through an any); (6) diagnostic. Fix agent on wt-any with decisions: one shared
+  copy-unless-fresh predicate; per-instance method keys; program-wide-demand thunks in the root object (B3d); a chain
+  = its written-out form. Another review before merging.

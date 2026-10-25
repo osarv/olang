@@ -607,6 +607,7 @@ fn (c mut Checker&) allFixed(xs Array<ast.Expr&>&, out mut Map<source.NameId, I6
 fn (c mut Checker&) attempt() {
     for f in range c.P.FnCount() {
         if c.P.FnIsExtern(f) and not (c.RootOnly and c.P.FnModule(f) != c.P.L.Root) { c.externRules(f) }
+        if not c.P.FnIsExtern(f) and c.P.FnDecl(f).Export and not (c.RootOnly and c.P.FnModule(f) != c.P.L.Root) { c.exportRules(f) }
         if c.P.FnIsExtern(f) or not c.P.FnDecl(f).Bodied { continue }
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
@@ -645,8 +646,9 @@ fn (c mut Checker&) errorSetKnown(f I64) {
     }
 }
 
-# X2: what crosses the C boundary - a number, or for a parameter an array of numbers; a runtime function's parameter
-# (X6, "__olang_") may be fn() too
+# X2: what crosses the C boundary - a number or a Bool, an extern type's reference (X10), a plain-data struct by value or
+# by reference (X11), and for a parameter an array of any of these; a runtime function's parameter (X6, "__olang_") may
+# be fn() too
 fn (c mut Checker&) externRules(f I64) {
     fd := c.P.FnDecl(f)
     mi := c.P.FnModule(f)
@@ -658,16 +660,162 @@ fn (c mut Checker&) externRules(f I64) {
         if i >= ps.Len() { break }
         t := ps[i]
         if t == types.UnknownT or c.externParam(t) { continue }
+        if not runtime and c.callbackType(t) { continue }   # X13: an export fn, by its C name
         if runtime and c.P.T.KindOf(t) == types.Kind.Func and c.P.T.Items(c.P.T.Params(t)).Len() == 0 and c.P.T.Result(t) == types.VoidT and c.P.T.Items(c.P.T.Errors(t)).Len() == 0 { continue }
         sp := fd.S.Params[i].Sp
         c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), msgs.ExternType(c.ty(t)))
     }
+    r := c.P.T.Result(sig)
+    if r == types.UnknownT or r == types.VoidT or r == types.NoreturnT or fd.S.Results.Len() == 0 { return }
+    if fd.S.Results.Len() > 1 or not c.externValue(r) {
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), msgs.ExternResult(c.ty(r)))
+    }
 }
 
+# X13: a function type a C function is given an export fn of: its parameters and its result an export fn's (X12),
+# none an array, and no errors
+fn (c mut Checker&) callbackType(t types.TypeId) Bool {
+    if c.P.T.KindOf(t) != types.Kind.Func or c.P.T.Items(c.P.T.Errors(t)).Len() > 0 { return false }
+    for p in c.P.T.Items(c.P.T.Params(t)) {
+        if not (c.externValue(p) or (c.isRef(p) and c.plainStruct(c.P.T.Referent(p), 0))) { return false }
+    }
+    r := c.P.T.Result(t)
+    return r == types.VoidT or c.externValue(r)
+}
+
+# X12: an export fn - a function C calls by its name: no receiver, not generic, a name that is not the program's own,
+# parameters and a result C has counterparts for (an array by reference, a result array copied out)
+fn (c mut Checker&) exportRules(f I64) {
+    fd := c.P.FnDecl(f)
+    mi := c.P.FnModule(f)
+    file := c.P.L.Mods[mi].File
+    name := c.text(fd.Name)
+    at := diag.Where.Span(file, I64(fd.Sp.Start), I64(fd.Sp.Start) + 6)
+    if fd.Recv is not null {
+        c.P.L.Diags.Error(at, msgs.ExportMethod())
+        return
+    }
+    if fd.TypeParams.Len() > 0 or c.P.VarCount(generic.FnOwner(f)) > 0 {
+        c.P.L.Diags.Error(at, msgs.ExportGeneric())
+        return
+    }
+    if name == "main" or name.StartsWith("__olang_") {
+        c.P.L.Diags.Error(at, msgs.ExportName(msgs.Tok(name)))
+        return
+    }
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    for i in range fd.S.Params.Len() {
+        if i >= ps.Len() { break }
+        t := ps[i]
+        if t == types.UnknownT or c.exportParam(t) { continue }
+        sp := fd.S.Params[i].Sp
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(sp.Start), I64(sp.Start) + c.text(fd.S.Params[i].Name).Len()), msgs.ExportType(c.ty(t)))
+    }
+    r := c.P.T.Result(sig)
+    if r == types.UnknownT or r == types.VoidT or fd.S.Results.Len() == 0 { return }
+    if fd.S.Results.Len() > 1 or not (c.externValue(r) or c.exportArray(r)) {
+        c.P.L.Diags.Error(diag.Where.Span(file, I64(fd.S.Results[0].Span().Start), I64(fd.S.Results[fd.S.Results.Len() - 1].Span().End)), msgs.ExportResult(c.ty(r)))
+    }
+}
+
+# X12: an export fn's parameter type: an extern's value (X2), a plain struct by reference, or an array by reference of
+# an extern's values - C's pointer and length
+fn (c mut Checker&) exportParam(t types.TypeId) Bool {
+    if c.externValue(t) { return true }
+    if not c.isRef(t) { return false }
+    x := c.P.T.Referent(t)
+    if c.plainStruct(x, 0) { return true }
+    u := c.under(x)
+    return c.P.T.KindOf(u) == types.Kind.Array and c.externValue(c.P.T.Elem(u))
+}
+
+# X12: an array an export fn may give: by value, its elements an extern's values - copied into the caller's buffer
+fn (c mut Checker&) exportArray(t types.TypeId) Bool {
+    if c.isRef(t) { return false }
+    u := c.under(t)
+    return c.P.T.KindOf(u) == types.Kind.Array and c.externValue(c.P.T.Elem(u))
+}
+
+# X13: what a C function is given for a parameter of a function type: an export fn, named - its C entry, which C may
+# call on any thread (X12) - and nothing else, no lambda and no function value held, which C could not call
+fn (c mut Checker&) callbackArg(x typed.Expr&, sp source.Span) {
+    match x {
+        case typed.Expr.Fn(_, _, fv) {
+            match fv {
+                case typed.FnVal.Named(body) {
+                    match c.Bodies[I64(body)].Of {
+                        case typed.BodyOf.Fn(inst) {
+                            if c.P.FnDecl(c.P.InstanceFn(inst)).Export { return }
+                        }
+                        case _ { }
+                    }
+                }
+                case _ { }
+            }
+        }
+        case _ { }
+    }
+    if typeOf(x) == types.UnknownT { return }
+    c.err(sp, msgs.CallbackNotExport())
+}
+
+# whether a call reaches a C function (X13's callbacks): an extern, not one of the runtime's own (X6)
+fn (c mut Checker&) cCallback(target typed.Callee&, f I64) Bool {
+    match target {
+        case typed.Callee.Extern(_) { return f >= 0 and not c.text(c.P.FnDecl(f).Name).StartsWith("__olang_") }
+        case _ { return false }
+    }
+}
+
+# X2: an extern's parameter type: a value that crosses (externValue), a plain struct by reference (X11), or an array -
+# by reference or not - of numbers, Bools, extern references or plain structs (X3)
 fn (c mut Checker&) externParam(t types.TypeId) Bool {
-    if c.P.T.IsNumber(t) { return true }
-    if c.isRef(t) { t = c.P.T.Referent(t) }
-    return c.P.T.KindOf(t) == types.Kind.Array and c.P.T.IsNumber(c.under(c.P.T.Elem(t)))
+    if c.externValue(t) { return true }
+    x := t
+    if c.isRef(x) {
+        x = c.P.T.Referent(x)
+        if c.plainStruct(x, 0) { return true }
+    }
+    if c.P.T.KindOf(x) != types.Kind.Array { return false }
+    e := c.P.T.Elem(x)
+    return c.externValue(e)
+}
+
+# X2: what crosses the C boundary as a value, a parameter or a result: a number, a Bool, a reference to an extern type
+# (X10), a plain-data struct by value (X11)
+fn (c mut Checker&) externValue(t types.TypeId) Bool {
+    u := c.under(t)
+    if c.P.T.IsNumber(u) or u == types.BoolT { return true }
+    if c.foreignRef(t) { return true }
+    return c.plainStruct(t, 0)
+}
+
+# X10: whether a type is a reference to an extern type - "Db&", "Db?&"
+fn (c mut Checker&) foreignRef(t types.TypeId) Bool {
+    if not c.isRef(t) { return false }
+    x := c.P.T.Referent(t)
+    return c.isNamed(x) and c.declKind(x) == types.DeclKind.Foreign
+}
+
+# X11: whether a type is a plain-data struct: a struct with no destructor whose every field is a number, a Bool, an extern
+# type's reference, an array of a length known while compiling of plain data, or a plain-data struct held by value
+fn (c mut Checker&) plainStruct(t types.TypeId, depth I64) Bool {
+    if depth > 16 or not c.isNamed(t) or c.declKind(t) != types.DeclKind.Struct or not c.P.Body(t) { return false }
+    if c.P.T.Destructs(t) { return false }
+    for fl in c.P.T.Items(c.P.T.Fields(t)) {
+        if not c.plainField(fl, depth + 1) { return false }
+    }
+    return true
+}
+
+fn (c mut Checker&) plainField(t types.TypeId, depth I64) Bool {
+    u := c.under(t)
+    if c.P.T.IsNumber(u) or u == types.BoolT or c.foreignRef(t) { return true }
+    if c.P.T.KindOf(u) == types.Kind.Array {
+        return c.P.T.KindOf(c.P.T.Length(u)) == types.Kind.Const and c.plainField(c.P.T.Elem(u), depth + 1)
+    }
+    return c.plainStruct(t, depth)
 }
 
 # the operator methods by name (E31, E31a, E10a, E11c): their operands besides the receiver, whether they give a result,
@@ -5345,6 +5493,10 @@ fn (c mut Checker&) fit(x typed.Expr&c, want types.TypeId, sp source.Span) typed
         hr := c.P.T.Referent(have)
         wr := c.P.T.Referent(want)
         if c.P.T.Same(hr, wr) or c.flowsInto(hr, wr) {
+            # X10: nothing is read or written through an extern type's reference, so its permission says nothing
+            if c.foreignRef(have) and c.P.T.Same(hr, wr) and (c.P.T.PermOf(want) & types.Owning) == 0 {
+                return c.convert(sp, x, want) if c.P.T.PermOf(have) != c.P.T.PermOf(want) else x
+            }
             if (c.P.T.PermOf(want) & types.Owning) != (c.P.T.PermOf(have) & types.Owning) and not ((c.P.T.PermOf(want) & types.Writable) != 0 and (c.P.T.PermOf(have) & types.Writable) == 0) {
                 return c.fit(c.convert(sp, x, c.P.T.Ref(hr, (c.P.T.PermOf(have) & types.Writable) | (c.P.T.PermOf(want) & types.Owning))), want, sp)
             }
@@ -5424,6 +5576,8 @@ fn (c mut Checker&) externArray(target typed.Callee&, x typed.Expr&c, want types
     if c.P.T.KindOf(have) != types.Kind.Array or c.P.T.Length(have) == types.TypeId(0) { return null }
     p := readPlace(x)
     if p is null { return null }
+    # a parameter held by reference ("Array<U8>&") takes the borrow itself, one by value the array it names
+    if c.isRef(want) { return c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(c.P.T.Referent(want), types.Writable)) }
     b := c.convert(sp, typed.Expr.Borrow(sp, c.P.T.Ref(have, types.Writable), p), c.P.T.Ref(want, types.Writable))
     return c.read(sp, typed.Place.Deref(sp, want, b))
 }
@@ -8526,6 +8680,20 @@ fn (c mut Checker&) anyWritten(tr ast.TypeRef&) Bool {
     }
 }
 
+# X10: whether a written type names an extern type, as written (a reference to one is the only way to hold one)
+fn (c mut Checker&) foreignNamed(tr ast.TypeRef&) Bool {
+    match tr {
+        case ast.TypeRef.Named(nsp, path, args) {
+            if args.Len() > 0 { return false }
+            ref := c.P.R.Use(c.fr().File, nsp.Start)
+            if path.Len() > 1 { ref = c.P.R.Member(c.fr().File, nsp.End) }
+            if ref.Kind != names.What.Type or ref.Index < 0 { return false }
+            return c.P.T.DeclKindOf(c.P.DeclFor(ref.Module, ref.Index)) == types.DeclKind.Foreign
+        }
+        nomatch { return false }
+    }
+}
+
 # T20: an error type written where a value's type goes - it has no values: said at its name, whether it is one
 fn (c mut Checker&) errorTypeHeld(tr ast.TypeRef?&) Bool {
     if tr is null { return false }
@@ -8599,6 +8767,11 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
                 return false
             }
             if c.errorTypeHeld(tr) or c.traitWritten(tr, tr) { return false }
+            if c.foreignNamed(tr) {
+                # X10: an extern type is held by reference alone
+                c.err(nsp, msgs.ForeignByValue(c.src(tr.Span())))
+                return false
+            }
             ref := c.P.R.Use(c.fr().File, nsp.Start)
             if ref.Kind == names.What.Type and ref.Index >= 0 and not c.fr().Ctx.Vars.Has(path[path.Len() - 1]) {
                 # G7: a generic type's arguments, as many as its parameters; a type with none takes none
@@ -8672,6 +8845,7 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
                 nomatch { }
             }
             if c.traitWritten(of, tr) { return false }
+            if c.foreignNamed(of) { return true }    # X10: "Db&", "Db?&"
             if not c.writtenMet(of) { return false }
             # T24: only a struct, an enum or an array is held by reference
             rt := c.P.Resolve(c.fr().Ctx, of)
@@ -9042,6 +9216,12 @@ fn (c mut Checker&) construct(sp source.Span, nsp source.Span, t types.TypeId, a
         return c.unknown(sp)
     }
     k := c.declKind(t)
+    if k == types.DeclKind.Foreign {
+        # X10: only C makes an extern type's instance
+        c.err(nsp, msgs.ForeignBuilt(c.ty(t)))
+        c.dropArgs(args)
+        return c.unknown(sp)
+    }
     if k == types.DeclKind.Struct and c.P.CtorVars(c.P.T.DeclOf(t)) > 0 { return c.twinCall(sp, nsp, t, args) }
     if k == types.DeclKind.Struct {
         sig := c.P.CtorSig(t)
@@ -9496,6 +9676,7 @@ fn (c mut Checker&) callBody(sp source.Span, nsp source.Span, sig types.TypeId, 
                     c.nullDecl = c.paramAt(target, f, k)
                     e = ex if ex is not null else c.fit(e!, ps[k], c.argSpan(args[i]))
                     c.nullDecl = wasNull
+                    if c.cCallback(target, f) and c.P.T.KindOf(ps[k]) == types.Kind.Func { c.callbackArg(e!, c.argSpan(args[i])) }
                 }
             }
         } else {

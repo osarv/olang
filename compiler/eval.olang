@@ -103,7 +103,7 @@ WhyNotModelled String& = "it uses a value compile-time evaluation does not model
 WhyPayload String& = "it reads the payload of a case the value does not hold"
 WhyLong String& = "it makes an array longer than the evaluator holds"
 WhyFfiFind String& = "it calls an external function -i cannot find in this process"
-WhyFfiPass String& = "it calls an external function with a parameter type -i cannot pass"
+WhyFfiPass String& = "it calls an external function with a parameter or result -i cannot pass - only numbers, Bools and arrays of numbers"
 WhyNoClause String& = "a task's error has no clause to take it"
 WhyWaits String& = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other"
 
@@ -3194,6 +3194,17 @@ fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, d
     }
     if name.StartsWith("__olang_") { return m.runtimeFn(fi, name, args, ty, dst, hasDst) }
     if m.When == Mode.Run and m.waitsForTask(name) { return false }
+    # the dynamic call passes numbers, Bools and arrays of numbers; a struct or an extern type's reference (X10, X11)
+    # it cannot, so a call passing one is refused rather than guessed at
+    if not m.ffiScalar(res, true) {
+        m.refuse(WhyFfiPass)
+        return false
+    }
+    for p in ps {
+        if m.ffiScalar(p, false) or ((m.shape(p) == vPair or m.shape(p) == vFixed) and m.ffiScalar(m.elemOf(p), false)) { continue }
+        m.refuse(WhyFfiPass)
+        return false
+    }
     kinds := Array<U8>(ps.Len())
     nulls := Array<Bool>(ps.Len())
     nwords I64 = 0
@@ -3395,6 +3406,12 @@ fn (m mut Machine&) putBytes(fi I64, x mir.Operand, b Array<U8>&, cap I64) {
     for i in range k { m.wr(Ptr(data.Id, data.Off + i), 1, I64(b[i])) }
 }
 
+# whether a value of this type is one the dynamic call passes alone: a number or a Bool (or nothing, for a result)
+fn (m mut Machine&) ffiScalar(ty types.TypeId, result Bool) Bool {
+    r := m.T.Repr(ty)
+    return m.T.IsNumber(r) or r == types.BoolT or (result and (r == types.VoidT or r == types.NoreturnT))
+}
+
 fn (m mut Machine&) ffiKind(ty types.TypeId) ffi.Kind {
     return match m.T.Repr(ty) {
         case types.TypeId(3) => ffi.Kind.I8
@@ -3408,6 +3425,7 @@ fn (m mut Machine&) ffiKind(ty types.TypeId) ffi.Kind {
         case types.TypeId(12) => ffi.Kind.BF16
         case types.TypeId(13) => ffi.Kind.F32
         case types.TypeId(14) => ffi.Kind.F64
+        case types.BoolT => ffi.Kind.U8
         nomatch => ffi.Kind.I64
     }
 }

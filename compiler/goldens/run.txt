@@ -951,6 +951,7 @@
 === test std/net.olang
 | status 0
 | ok - addresses are read and written as text
+| ok - names are resolved through the C library, numbers read as they are
 | ok - a TCP connection over loopback carries bytes both ways
 | ok - dialing where nothing listens is refused, and a taken address is in use
 | ok - a read times out
@@ -1155,6 +1156,7 @@
 | ok - Format writes an integer in any base from 2 to 36, read back by ParseInt and ParseUint
 | ok - Format, evaluated while compiling as at run time
 | ok - $ renders a StringBuilder as its text
+| ok - text goes to C NUL-terminated and comes back copied (X15)
 === test std/prelude/tests/vec.olang
 | status 0
 | ok - Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort, Pop, Truncate, Clone - while compiling and at run time
@@ -1721,3 +1723,9 @@
 === run vec91fieldcopygrows.olang
 | status 0
 | 0
+=== run x10handles.olang
+| status 0
+=== run x13qsort.olang
+| status 0
+=== run x9linkmath.olang
+| status 0

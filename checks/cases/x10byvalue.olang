@@ -1,0 +1,7 @@
+# check: fail error[X10]: Db is an extern type, held only by reference - write 'Db&'
+# X10: an extern type's contents are C's - it is held by reference alone, never as a value
+extern type Db
+
+fn use(d Db) { }
+
+fn main() ? { }

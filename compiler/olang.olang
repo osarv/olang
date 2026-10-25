@@ -30,6 +30,7 @@ import rt "runtime"
 import "eval"
 import "interp"
 import "explain"
+import "bindgen"
 import "session"
 import "lsp"
 import "mcp"
@@ -61,7 +62,8 @@ fn roomFor(bytes I64) Bool {
 # the modes, by number: running a file (no word - a file ending in .olang written first, B3g), then each mode's word
 ModeWords Array<String&> = String&["", "build", "compile", "test", "interpret", "format", "explain", "help", "doc", "lsp"
     "mcp"
-    "fix"]
+    "fix"
+    "bindgen"]
 Run I64 = 0
 Build I64 = 1
 Compile I64 = 2
@@ -74,6 +76,7 @@ Doc I64 = 8
 Lsp I64 = 9
 Mcp I64 = 10
 Fix I64 = 11
+Bindgen I64 = 12
 
 # what each mode is, for help
 ModeUsage Array<String&> = String&[
@@ -89,6 +92,7 @@ ModeUsage Array<String&> = String&[
     "olang lsp [OPTION...]"
     "olang mcp [OPTION...]"
     "olang fix [OPTION...] FILE.olang|DIR..."
+    "olang bindgen [OPTION...] HEADER.h"
 ]
 ModeWhat Array<String&> = String&[
     "builds the program FILE.olang is the root of, as build does, and runs it with the arguments after the file"
@@ -103,16 +107,17 @@ ModeWhat Array<String&> = String&[
     "serves the Language Server Protocol on the standard input and output, for editors (B15)"
     "serves the Model Context Protocol on the standard input and output, for agents (B16)"
     "rewrites old code to the language of today: every migration tool of tools/, in the order the changes were made (B17)"
+    "writes a C header's declarations as olang declares them, read by clang (X16)"
 ]
 
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR"]
-OptModes Array<I64> = I64[6, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256]
+    "-quick", "-html", "-library"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", ""]
+OptModes Array<I64> = I64[4102, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2]
 OptWhat Array<String&> = String&[
-    "writes the executable or the object to PATH (B3h)"
+    "writes the executable, the object or bindgen's declarations to PATH (B3h, X16)"
     "builds unoptimized, with debug information (B2c, B2e)"
     "builds with the data race detector (B2b)"
     "builds with the scope sanitizer (B2f)"
@@ -122,6 +127,7 @@ OptWhat Array<String&> = String&[
     "rewrites nothing: lists each file not in the layout (B13), or that fix would change (B17)"
     "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
     "writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)"
+    "builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -217,6 +223,7 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 7 { cl.Check = true }
             if o == 8 { c.Quick = true }
             if o == 9 { cl.Html = $v }
+            if o == 10 { c.Library = true }
             # B2g: -quick is a level of optimization, as -debug and -race set theirs
             if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
             continue
@@ -297,11 +304,12 @@ fn Prepare(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) C
     if cl.Files.Len() == 0 and cl.Mode != Lsp and cl.Mode != Mcp and cl.Mode != Doc {
         try usage(d, msgs.ModeNeedsFile(modeName(cl.Mode)))
     }
-    if (cl.Mode == Build or cl.Mode == Compile) and cl.Files.Len() != 1 {
+    if (cl.Mode == Build or cl.Mode == Compile or cl.Mode == Bindgen) and cl.Files.Len() != 1 {
         try usage(d, msgs.ModeOneFile(modeName(cl.Mode)))
     }
     if cl.Mode == Format or cl.Mode == Fix { return cl }
     if cl.Output != "" { try checkOutput(cl.Output, d) }
+    if cl.Mode == Bindgen { return cl }
     c.Output = $cl.Output
     c.Clang = target.FindClang()
     c.Store = try os.Env("OLANG_OBJECTS") catch default ""
@@ -381,6 +389,7 @@ fn RunWith<F build.Frontend>(args Array<String&>&, fe mut F&) I32 {
         exe := try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]
         return fix.Files(cl.Check, cl.Files.ToArray(), exe, load.StdDir())
     }
+    if cl.Mode == Bindgen { return bindgen.Run(cl.Files[0], cl.Output, target.FindClang()) }
     if cl.Mode == Doc { return session.DocMode(cl.Files.ToArray(), cl.Word, cl.Html, c) }
     if cl.Mode == Lsp { return lsp.Serve(c) }
     if cl.Mode == Mcp { return mcp.Serve(c, try os.ReadLink("/proc/self/exe") catch os.Error default $args[0]) }
@@ -436,7 +445,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     build.Phase("load")
     c mut typecheck.Checker&cfg = interp.Analyze(l, tests)
     build.Phase("check")
-    if kind == build.Kind.Program { c.CheckMain() }
+    if kind == build.Kind.Program and not cfg.Library { c.CheckMain() }
     asserts mut Map<pair.Pair<I64, I64>, Bool>&cfg = Map<pair.Pair<I64, I64>, Bool>()
     # T29d, D13c, K2: on a program that checked cleanly, the values evaluation decides - a literal's constructor, a
     # zero value, a global baked (one that aborts the program an error)
@@ -491,6 +500,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
                     error build.Failed.UNBUILT
                 }
                 if pir.Contains("@__olang_dyncall") { dyncall = true }
+                if e.Library { pir = libraryIr(pir) }
                 u mut build.Unit&prog = build.Unit($id, build.UnitKind.Locations if r.Locs[k] else build.UnitKind.Module, pir)
                 u.Hash = $r.Hashes[k]
                 prog.Units.Push(u)
@@ -500,6 +510,7 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
         }
         ir String&prog = o.Ir
         if ir.Contains("@__olang_dyncall") { dyncall = true }
+        if e.Library { ir = libraryIr(ir) }
         holds := match o.Kind {
             case emit.ObjectKind.Module => build.UnitKind.Module
             case emit.ObjectKind.Main => build.UnitKind.Main
@@ -516,13 +527,25 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     if kind != build.Kind.Module { keep(l, cfg, keys, e.Made, objs, hashes) }
     if (try os.Env("OLANG_CHECKREUSE") catch default "") != "" { checkReuse(e, prog, c, lw, d, cfg, kind, baked) }
+    prog.Links = l.Links()
+    if d.Errors() > 0 { error build.Failed.REPORTED }
+    if e.Library {
+        for x in e.ExportNames() { prog.Exports.Push($x) }
+        prog.Header = e.Header(build.LibName(root), root)
+    }
     prog.Runtime = try rt.Ir(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad { error build.Failed.REPORTED }
+    if e.Library { prog.Runtime = libraryIr(prog.Runtime) }
     if dyncall {
         prog.Dyncall = try rt.DyncallIr(t.Triple, t.Arch, t.Attrs, cfg.San, cfg.Race) catch rt.Bad {
             error build.Failed.REPORTED
         }
+        if e.Library { prog.Dyncall = libraryIr(prog.Dyncall) }
     }
 }
+
+# X14: an object's IR for a shared library, which dlopen loads as often as a link does - its thread-locals reached as
+# any library's are, never at the fixed offsets an executable's take
+fn libraryIr(ir String&) String { return ir.Replace("thread_local(initialexec)", "thread_local") }
 
 # the emission of a checked and placed program, for this build's modes and target
 fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnostics&, cfg mut build.Config&
@@ -539,6 +562,7 @@ fn emitter(c mut typecheck.Checker&, lw mut lower.Lowerer&, d mut diag.Diagnosti
     e.Debug = cfg.Debug
     e.VerifyMir = tests
     e.BF16Opaque = cfg.Debug or cfg.Race
+    e.Library = cfg.Library and kind == build.Kind.Program
     e.SplitFrom = build.ThinFrom  # a program linking by ThinLTO compiles its large objects in parts
     if cfg.Quick or cfg.Debug { e.PartLimit = emit.PartSizeDev }
     e.LocApart = kind != build.Kind.Module  # B3l: a failed check's place in a Locations object, out of the code
@@ -563,7 +587,7 @@ fn buildInputs(cfg build.Config&, tests Bool) String {
     info := try os.Stat(exe) catch os.Error { return "" }
     cwd := try os.Cwd() catch default ""
     t := cfg.Target
-    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $tests "\n" $
+    return ($exe " " $info.Size " " $info.ModTime "\n" $cfg.Debug " " $cfg.Race " " $cfg.San " " $cfg.Quick " " $cfg.Library " " $tests "\n" $
             t.Triple "\n" $t.Arch "\n" $t.Cpu "\n" $t.Attrs "\n" $cfg.Consts.Fingerprint() "\n" $cwd "\n" $load.StdDir())
 }
 
@@ -750,6 +774,12 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     interp.DecideAsserts(c, asserts)
     if clean { interp.Bake(c) }
     if d.Errors() > 0 { error build.Failed.REPORTED }
+    # X9: the libraries the program links, loaded into this process for its externs to be found (B3e)
+    for ln in l.Links() {
+        why := interp.LoadLibrary(ln)
+        if why != "" { d.Error(diag.Where.Nowhere, msgs.InterpLink($ln[2:] if ln.StartsWith("-l") else $ln, why)) }
+    }
+    if d.Errors() > 0 { error build.Failed.REPORTED }
     x mut interp.Exec&cfg = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Lw.AssertsTrue = asserts
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
@@ -814,11 +844,11 @@ test "a command line's mistakes are said as stage 0 says them" {
     assert mistake(String&["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
     assert mistake(String&["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, " $
-            "interpret, format, explain, help, doc, lsp, mcp and fix, and a file ending in .olang is built and run\n")
+            "interpret, format, explain, help, doc, lsp, mcp, fix and bindgen, and a file ending in .olang is built and run\n")
     assert mistake(String&["build", "m.olang", "-target"]) ==
         "olang: error[B1]: -target needs a value after it: NAME\n"
     assert mistake(String&["test", "-output", "x", "m.olang"]) ==
-        "olang: error[B1]: -output applies to build and compile, not to test\n"
+        "olang: error[B1]: -output applies to build, compile and bindgen, not to test\n"
     assert mistake(String&["format", "-debug", "m.olang"]) ==
         "olang: error[B1]: -debug applies to running a file, build, compile and test, not to format\n"
     assert mistake(String&["build", "-define", "X"]) == "olang: error[B10]: -define takes Name=value, found 'X'\n"

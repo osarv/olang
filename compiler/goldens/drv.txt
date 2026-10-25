@@ -40,7 +40,7 @@
 | status 1
 === olang test -output o main.olang
 | stdout:
-| olang: error[B1]: -output applies to build and compile, not to test
+| olang: error[B1]: -output applies to build, compile and bindgen, not to test
 | stderr:
 | status 1
 === olang format -debug a.olang
@@ -221,12 +221,12 @@
 | status 1
 === olang bogus
 | stdout:
-| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp and fix, and a file ending in .olang is built and run
+| olang: error[B1]: 'bogus' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix and bindgen, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang main.txt
 | stdout:
-| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp and fix, and a file ending in .olang is built and run
+| olang: error[B1]: 'main.txt' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix and bindgen, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang -debug main.txt
@@ -256,6 +256,7 @@
 |   lsp         serves the Language Server Protocol on the standard input and output, for editors (B15)
 |   mcp         serves the Model Context Protocol on the standard input and output, for agents (B16)
 |   fix         rewrites old code to the language of today: every migration tool of tools/, in the order the changes were made (B17)
+|   bindgen     writes a C header's declarations as olang declares them, read by clang (X16)
 | 
 | 'olang help MODE' lists a mode's options; 'olang help run' those of running a file.
 | stderr:
@@ -266,7 +267,7 @@
 | builds one program, FILE.olang its root module, into build/ (B3)
 | 
 | options:
-|   -output PATH       writes the executable or the object to PATH (B3h)
+|   -output PATH       writes the executable, the object or bindgen's declarations to PATH (B3h, X16)
 |   -debug             builds unoptimized, with debug information (B2c, B2e)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
@@ -274,6 +275,7 @@
 |   -define Name=value defines a build constant (B10)
 |   -update            moves the remote repositories the build reaches to their refs' current commits (M23c)
 |   -quick             builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)
+|   -library           builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)
 | stderr:
 | status 0
 === olang help run
@@ -297,7 +299,7 @@
 | compiles one module to an object, linking nothing (B2)
 | 
 | options:
-|   -output PATH       writes the executable or the object to PATH (B3h)
+|   -output PATH       writes the executable, the object or bindgen's declarations to PATH (B3h, X16)
 |   -debug             builds unoptimized, with debug information (B2c, B2e)
 |   -race              builds with the data race detector (B2b)
 |   -sanitize          builds with the scope sanitizer (B2f)
@@ -395,7 +397,7 @@
 | status 0
 === olang help nope
 | stdout:
-| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp and fix, and a file ending in .olang is built and run
+| olang: error[B1]: 'nope' is not a mode - the modes are build, compile, test, interpret, format, explain, help, doc, lsp, mcp, fix and bindgen, and a file ending in .olang is built and run
 | stderr:
 | status 1
 === olang help build test
@@ -424,28 +426,30 @@
 | ```
 | command   ::= "olang" [ mode-word ] { option } { argument }
 | mode-word ::= "build" | "compile" | "test" | "interpret" | "format" | "explain" | "help" | "doc" | "lsp" | "mcp" | "fix"
+|             | "bindgen"
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-race" | "-sanitize" | "-target" NAME
-|             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR
+|             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library"
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run; any other word there is a mode, and one that names none is
 | an error listing the modes. After a mode, a word that is no option is one of its files, as written. The modes are `build` (B3), `compile` (B2), `test` (B3a), `interpret` (B3e), `format` (B13),
 | `explain` (B11a, B11b), `help` (`help` lists the modes, `help MODE` a mode's options, `help run` running a file's), `doc`
-| (B14), `lsp` (B15), `mcp` (B16) and `fix` (B17). An
+| (B14), `lsp` (B15), `mcp` (B16), `fix` (B17) and `bindgen` (§11 X16). An
 | **option** is a word beginning with `-`, written after the mode (or, running a file, before the file), and applies to
 | the modes this table names; an option given to another mode is an error naming the modes it applies to, and a word
 | beginning with `-` that is no option is an error:
 | 
 | | option | applies to | rule |
 | |---|---|---|
-| | `-output PATH` | build, compile | B3h |
+| | `-output PATH` | build, compile, bindgen | B3h, §11 X16 |
 | | `-debug`, `-quick`, `-race`, `-sanitize` | running a file, build, compile, test | B2c, B2g, B2b, B2f |
 | | `-target NAME` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B12 |
 | | `-define Name=value`, `-update` | running a file, build, compile, test, interpret, explain, doc, lsp, mcp | B10, §4 M23c |
 | | `-check` | format, fix | B13, B17 |
 | | `-html DIR` | doc | B14 |
+| | `-library` | build | §11 X14 |
 | 
-| `build` and `compile` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
+| `build`, `compile` and `bindgen` take exactly one file, `test`, `format` and `fix` one or more (`fix` also a directory), `doc` one and a name or (with
 | `-html`) any number, `lsp` and `mcp` none; for running a file and for `interpret`
 | every argument after the file belongs to the program (B3f), one beginning with `-` included. There are no other
 | spellings: a flag of one character is an unknown option.

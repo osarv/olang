@@ -1,0 +1,55 @@
+# the library of the cinterop scenario (checks/checks.olang): built with "build -library", called from C (use.c) and from
+# Python's ctypes (X12, X14)
+extern fn getpid() I32
+
+type Point struct(x F64, y F64) {
+    x
+    y
+}
+
+error Bad {
+    NEGATIVE
+    TOO_BIG
+}
+
+Seen mut List<I64>& = List<I64>()
+Pid I32 = getpid()
+
+export fn add(a I32, b I32) I32 { return a + b }
+
+export fn sum(xs Array<I64>&) I64 {
+    s I64 = 0
+    for x in xs { s += x }
+    Seen.Push(s)
+    return s
+}
+
+export fn seen() I64 { return Seen.Len() }
+
+export fn greet(name String&) String { return $"hello, " $name "!" }
+
+export fn parse(t String&) I64 ? ParseError { return try t.ParseInt() }
+
+export fn check(n I64) I64 ? Bad {
+    if n < 0 { error Bad.NEGATIVE }
+    if n > 100 { error Bad.TOO_BIG }
+    return n * 2
+}
+
+export fn norm2(p Point) F64 { return p.x * p.x + p.y * p.y }
+
+export fn scale(p mut Point&, k F64) {
+    p.x *= k
+    p.y *= k
+}
+
+export fn mid(a Point, b Point) Point { return Point((a.x + b.x) / 2, (a.y + b.y) / 2) }
+
+export fn pidKnown() Bool { return Pid > 0 }
+
+export fn squares(n I64) Array<I64> ? Bad {
+    if n < 0 { error Bad.NEGATIVE }
+    out := Array<I64>(n)
+    for i in range n { out[i] = i * i }
+    return out
+}
