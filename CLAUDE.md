@@ -466,7 +466,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Opt.None` is an error naming the fix. Patterns, case tests and `as` name a case bare against the subject's instance
   (`namesEnumOf`), a case of another instance is S13's error. **Decided (mine)**: `$` writes the case without the
   arguments (`Opt.Some(4)`), as it is written; a raw-value enum may be generic (nothing forbids it, nothing needs a
-  rule); std gets no `Option`/`Result` (the decision). Reflection's `T.Cases` is not built yet. **Found on the way
+  rule); std gets no `Option`/`Result` (the decision); reflection's `T.Cases` reads an instance's cases. **Found on the way
   (pre-existing)**: `if t == Shape.Rect(_, _)` - a `_` in a local if's case test - was B10's "unknown name '_'"
   (names.name).
 - **Explicit type arguments (G12, E3, the user's calls 2026-10-24 and 2026-10-25).** `big<I64>` names a generic
@@ -553,6 +553,24 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   **Found on the way (pre-existing)**: D10a counted a `for x in it` over an iterator as a loop that never ends (its
   `break` is in the Next call's `catch Exhausted`, inside an expression), so a function ending in one compiled and
   aborted with "unreachable reached" - `breaks` now looks inside expressions' clauses (check.exprBreaks).
+- **Compile-time reflection (G32-G38, G13, docs/ideas.md #2, the user's decisions 2026-10-18; built 2026-10-25).** A
+  type's structure read through its name, while compiling only: `T.Name`, `T.Kind` (the prelude's `TypeKind`: `Struct
+  Enum Integer Float Bool Array Reference Function`, a declared type its base's), `T.Base`, `T.Element`, `T.Length`,
+  `T.Target`, `T.Size`, `T.Align`, the lists `T.Fields`, `T.Cases` (a struct's one case), `T.Params` (a constructor's or
+  a function type's), `T.Results`, and `T.Errors` where an error set is written. A list is no value: a `for` over it is
+  unrolled (the body checked per element, `break` leaving the walk), `.Len()` and a constant index are constants, a
+  comprehension makes an array. Its elements are **descriptors** - prelude structs of no fields typed by the member
+  (`FieldInfo<T, C, I>` ...), so a generic taking one is instantiated per member: `f.Name`, `f.Type`, `f.Offset`,
+  `f.Of(v)` (a place; a case's field where `v` is narrowed to it), `c.Name`, `c.Fields`, `v == c`, `c(args)` building
+  the case (mine), `p.HasDefault`, `p.Default`. Conditions over reflected constants decide `if`, conditionals, asserts
+  and `match` per instance (G35). `match T` takes trait cases and generic cases binding arguments (`case List<E>`), the
+  first that holds chosen, an unreachable case an error (G36); `case X&` holds for `mut X&` too (mine). `T(arg(p) for
+  p in T.Params)` builds through the constructor, its checks running (G37). A reflected type is a type (`P.Type`,
+  `T.Base.Element`), and called converts or constructs (G38). A struct's private fields are in `T.Fields` only in its
+  module (M6a); a case's fields everywhere (mine). Mine too: `TypeKind`, not `Kind` (a prelude name is reserved
+  everywhere); `T.Name` without the module's alias; a function type's parameters unnamed (names are no part of it).
+  `json.Encode(v)` and `json.Decode<T>(text)` take any value (structs as objects, enums externally tagged as serde,
+  decoding through constructors). The evaluator sees only unrolled, decided code, so it agrees by construction.
 
 ### Errors
 

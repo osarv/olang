@@ -1,0 +1,12 @@
+# check: fail error[G37]: a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'
+# also: compilation failed with 1 error
+# G37: an argument comprehension walks a list known while compiling; another is written in brackets
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() {
+    xs := I64[1, 2]
+    p := Point(x for x in xs)
+}

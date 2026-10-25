@@ -896,8 +896,11 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.put("]")
         }
         case ast.Expr.Compr(_, c) {
-            w.ty(c.Elem!)
-            w.put("[")
+            # G37: one written as a call's arguments has no brackets
+            if not c.InCall {
+                w.ty(c.Elem!)
+                w.put("[")
+            }
             w.expr(c.Value)
             w.put(" for ")
             if c.Key != source.NameId(0) {
@@ -911,7 +914,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
                 w.put(" if ")
                 w.expr(c.Filter!)
             }
-            w.put("]")
+            if not c.InCall { w.put("]") }
         }
         case ast.Expr.Join(_, parts) {
             for i, y in parts {

@@ -781,10 +781,128 @@ fn writeNumber(sb mut StringBuilder&, v F64) { sb.Push($v) }
 # its own, indented by "indent" once for each level ("  ", "\t"). A number is written as "$" writes it, the shortest
 # text that reads back as it; NaN and the infinities, which JSON cannot write, are written null, as JavaScript does.
 # Text is written as it is, UTF-8 left alone, with '"', '\' and the control characters escaped.
-fn Encode(j Json&, indent String& = "") String& {
+#
+# Any other value is written by its type (G32-G38, compile-time reflection): a struct as an object of its fields by
+# name (in their order; another module's private fields are not written), an enum's case with no fields as its name in
+# quotes ("North") and one with fields as an object of one member, the case's name, holding its fields
+# ({"Circle":{"r":2}}), an array, a List and a Vec as an array, a Map with text keys as an object, text as a string, a
+# Char as a string of it, numbers and Bools as themselves, a reference as what it names. "json.Encode(Point(1, 2))".
+fn Encode<T>(v T, indent String& = "") String& {
     w := writer(indent)
-    w.value(j, 0)
+    w.any(v, 0)
     return w.out.ToString()
+}
+
+# a value of type T read from JSON text, by Encode's rules backwards: "p := try json.Decode<Point>(text)". A struct is
+# built through its constructor (G37), so the constructor's checks run - one argument per parameter, read from the
+# member of its name, a missing member taking the parameter's default and failing with MISSING where it has none;
+# members no parameter names are passed over. Text, numbers (an integer only where the number is whole and fits, else
+# WRONG_KIND), Bools, Chars (text of one character), arrays, Lists, Vecs, Maps with text keys and references (to what
+# such a value is) are read as Encode writes them, an enum's case built from its name and its fields' members (G34).
+# Fails with what Parse fails with, with Error.MISSING and Error.WRONG_KIND where the text does not fit
+# the type, and with what a constructor fails with
+fn Decode<T>(text String&, at mut Position?& = null) T ? {
+    j := try Parse(text, at)
+    return try From<T>(j)
+}
+
+# a value of type T read from a tree, as Decode reads it from text
+fn From<T>(j Json&) T ? {
+    match T {
+        case String { return String(try j.AsStr()) }
+        case String& { return $(try j.AsStr()) }
+        case Char {
+            t := try j.AsStr()
+            if t.Len() != 1 { error Error.WRONG_KIND }
+            return t[0]
+        }
+        case Bool { return try j.AsBool() }
+        case List<E> {
+            l := List<E>()
+            for x in try j.AsArr() { l.Push(try From<E>(x)) }
+            return l
+        }
+        case Vec<E> {
+            l := Vec<E>()
+            for x in try j.AsArr() { l.Push(try From<E>(x)) }
+            return l
+        }
+        case Map<K, V> {
+            m := Map<K, V>()
+            o := try j.AsObj()
+            for i in range o.Len() { m.Put(try From<K>(Json.Str(o.Keys[i])), try From<V>(o.Values[i])) }
+            return m
+        }
+        case _ {
+            if T.Kind == TypeKind.Integer {
+                n := try j.AsInt()
+                return T(try n.Narrow<T.Base>() catch NumberError { error Error.WRONG_KIND })
+            } else if T.Kind == TypeKind.Float {
+                return T(T.Base(try j.AsNum()))
+            } else if T.Kind == TypeKind.Array {
+                l := List<T.Element>()
+                for x in try j.AsArr() { l.Push(try From<T.Element>(x)) }
+                return l.ToArray()
+            } else if T.Kind == TypeKind.Reference {
+                v := try From<T.Target>(j)
+                return v
+            } else if T.Kind == TypeKind.Struct {
+                o := try j.AsObj()
+                return try T(try member(o, p) for p in T.Params)
+            } else if T.Kind == TypeKind.Enum {
+                # a case with no fields as its name; one with fields as an object of one member, its name
+                match j {
+                    case Json.Str(name) {
+                        for c in T.Cases {
+                            if c.Fields.Len() == 0 {
+                                if name == c.Name { return c() }
+                            }
+                        }
+                    }
+                    case Json.Obj(o) {
+                        if o.Len() == 1 {
+                            for c in T.Cases {
+                                if o.Keys[0] == c.Name {
+                                    fs := try o.Values[0].AsObj()
+                                    return c(try caseField(fs, f) for f in c.Fields)
+                                }
+                            }
+                        }
+                    }
+                    nomatch { }
+                }
+                error Error.WRONG_KIND
+            } else {
+                assert false, "json.Decode cannot read a function value"
+                unreachable
+            }
+        }
+    }
+}
+
+# a constructor parameter's argument: the member of its name, else its default
+fn member<P>(o Object&, p P) P.Type ? {
+    if p.HasDefault {
+        if not o.Has(p.Name) { return p.Default }
+    }
+    if P.Type.Kind == TypeKind.Reference {
+        # a reference's referent read as a value and moved where the argument lands (O26a): a call's result of a
+        # reference type is read-only as written, and a constructor's argument may need it writable
+        v := try From<P.Type.Target>(try o.At(p.Name))
+        return v
+    } else {
+        return try From<P.Type>(try o.At(p.Name))
+    }
+}
+
+# a case's field's value: the member of its name
+fn caseField<F>(o Object&, f F) F.Type ? {
+    if F.Type.Kind == TypeKind.Reference {
+        v := try From<F.Type.Target>(try o.At(f.Name))
+        return v
+    } else {
+        return try From<F.Type>(try o.At(f.Name))
+    }
 }
 
 # a value renders as its compact JSON text: "$doc"
@@ -845,6 +963,105 @@ fn (w mut writer&) value(j Json&, depth I64) {
         }
         nomatch { w.out.Push("null") }              # a null reference - and nomatch keeps Str evaluable (see Eq)
     }
+}
+
+# v as JSON, by its type (Encode's rules)
+fn (w mut writer&) any<T>(v T, depth I64) {
+    match T {
+        case Json, Json& { w.value(v, depth) }
+        case String, String& { w.text(v) }
+        case Char { w.text($v) }
+        case Bool { w.out.Push("true" if v else "false") }
+        case List<E>, Vec<E> {
+            w.out.PushChar('[')
+            for i, x in v {
+                if i > 0 { w.out.PushChar(',') }
+                w.newline(depth + 1)
+                w.any(x, depth + 1)
+            }
+            if v.Len() > 0 { w.newline(depth) }
+            w.out.PushChar(']')
+        }
+        case Map<K, V> {
+            w.out.PushChar('{')
+            first := true
+            for e in v {
+                if not first { w.out.PushChar(',') }
+                first = false
+                w.newline(depth + 1)
+                w.key(e.Key)
+                w.any(e.Value, depth + 1)
+            }
+            if not first { w.newline(depth) }
+            w.out.PushChar('}')
+        }
+        case _ {
+            if T.Kind == TypeKind.Integer {
+                w.out.Push($v)
+            } else if T.Kind == TypeKind.Float {
+                x F64 = v
+                if x != x or x - x != 0.0 { w.out.Push("null") } else { writeNumber(w.out, x) }
+            } else if T.Kind == TypeKind.Array {
+                w.out.PushChar('[')
+                for i, x in v {
+                    if i > 0 { w.out.PushChar(',') }
+                    w.newline(depth + 1)
+                    w.any(x, depth + 1)
+                }
+                if v.Len() > 0 { w.newline(depth) }
+                w.out.PushChar(']')
+            } else if T.Kind == TypeKind.Reference {
+                t T.Target = v
+                w.any(t, depth)
+            } else if T.Kind == TypeKind.Struct {
+                w.fields(v, T.Fields.Len(), depth)
+            } else if T.Kind == TypeKind.Enum {
+                for c in T.Cases {
+                    if v == c {
+                        if c.Fields.Len() == 0 {
+                            w.text(c.Name)
+                        } else {
+                            w.out.PushChar('{')
+                            w.newline(depth + 1)
+                            w.key(c.Name)
+                            w.out.PushChar('{')
+                            for i, f in c.Fields {
+                                if i > 0 { w.out.PushChar(',') }
+                                w.newline(depth + 2)
+                                w.key(f.Name)
+                                w.any(f.Of(v), depth + 2)
+                            }
+                            w.newline(depth + 1)
+                            w.out.PushChar('}')
+                            w.newline(depth)
+                            w.out.PushChar('}')
+                        }
+                    }
+                }
+            } else {
+                w.out.Push("null")                  # a function value: JSON has nothing for it
+            }
+        }
+    }
+}
+
+# a struct's fields as an object - n of them, so an empty one is "{}"
+fn (w mut writer&) fields<T>(v T, n I64, depth I64) {
+    w.out.PushChar('{')
+    for i, f in T.Fields {
+        if i > 0 { w.out.PushChar(',') }
+        w.newline(depth + 1)
+        w.key(f.Name)
+        w.any(f.Of(v), depth + 1)
+    }
+    if n > 0 { w.newline(depth) }
+    w.out.PushChar('}')
+}
+
+# a member's name and the ':' after it
+fn (w mut writer&) key<K>(k K) {
+    w.text($k)
+    w.out.Push(": " if w.indent.Len() > 0 else ":")
 }
 
 hexDigits := "0123456789abcdef"
@@ -1148,5 +1365,56 @@ if TestBuild {
     test "Parse and Encode give the same while compiling as at run time" {
         assert bakedText == "{\"a\":[1,0.0025,\"é\"],\"b\":{\"c\":null}}"
         assert Encode(try Parse(sourceText)) == bakedText
+    }
+
+    # ---- values of any type (Encode and Decode by reflection, G32-G38) ----
+
+    type Member struct(Id I64, Name String&, Score F64 = 0.5, Tags List<String&> = List<String&>()) { Id, Name, Score, Tags }
+    type Wind enum {
+        Calm
+        Gust(Speed F64, Dir Char)
+    }
+    type Report struct(Who Member, Air Wind, Days Array<I32>&, Ok Bool) { Who, Air, Days, Ok }
+    type Percent struct(V I64) [V >= 0 and V <= 100] { V }
+    type Hidden struct(Open I64, shut I64) { Open, shut }
+
+    fn sample() Report { return Report(Member(7, "ada"), Wind.Gust(2.5, 'N'), I32[1, 2], true) }
+    report := sample()
+    # K1: written, read back and written again while compiling - baked (values, so nothing writable is reached)
+    bakedReport String = Encode(sample())
+    bakedId I64 = (try Decode<Member>("{\"Id\": 3, \"Name\": \"bo\"}") catch default Member(0, "")).Id
+    bakedAgain String = Encode(try Decode<Report>(Encode(sample())) catch default sample())
+
+    test "a value of any type written by its type" {
+        assert bakedReport == "{\"Who\":{\"Id\":7,\"Name\":\"ada\",\"Score\":0.5,\"Tags\":[]},\"Air\":{\"Gust\":{\"Speed\":2.5,\"Dir\":\"N\"}},\"Days\":[1,2],\"Ok\":true}"
+        assert Encode(report) == bakedReport
+        assert Encode(Wind.Calm) == "\"Calm\"" and Encode(I64[1, 2], " ") == "[\n 1,\n 2\n]"
+        m := Map<String&, I64>()
+        m.Put("a", 1)
+        assert Encode(m) == "{\"a\":1}" and Encode(Hidden(1, 2)) == "{\"Open\":1,\"shut\":2}"
+        doc := try Parse(Encode(report))
+        assert Encode(doc) == bakedReport
+    }
+
+    # a Percent's value, -1 where its constructor refuses it - the constructor's checks run (G37)
+    fn pct(text String&) I64 ? Error {
+        p := try Decode<Percent>(text) catch ArgumentError { return -1 }
+        return p.V
+    }
+
+    test "a value of any type read through its constructor" {
+        assert bakedId == 3 and bakedAgain == bakedReport
+        b := try Decode<Member>("{\"Id\": 3, \"Name\": \"bo\"}")
+        assert b.Id == bakedId and b.Name == "bo" and b.Score == 0.5
+        r := try Decode<Report>(bakedReport)
+        assert r.Who.Name == "ada" and r.Days[1] == 2 and r.Ok and Encode(r) == bakedReport
+        assert r.Air == Wind.Gust(2.5, 'N') and (try Decode<Wind>("\"Calm\"")) == Wind.Calm
+        assert (try Decode<Wind>("\"Gust\"") catch Error.WRONG_KIND default Wind.Calm) == Wind.Calm
+        l := try Decode<List<Member>>("[{\"Id\": 1, \"Name\": \"x\", \"Tags\": [\"a\", \"b\"]}]")
+        assert l.Len() == 1 and l[0].Tags.Len() == 2 and l[0].Tags[1] == "b"
+        assert (try Decode<I64>("[1]") catch Error.WRONG_KIND default -1) == -1
+        assert (try Decode<U8>("300") catch Error.WRONG_KIND default 0) == 0
+        assert (try Decode<Member>("{\"Name\": \"x\"}") catch Error.MISSING default Member(-1, "")).Id == -1
+        assert (try pct("{\"V\": 300}")) == -1 and (try pct("{\"V\": 30}")) == 30
     }
 }

@@ -24671,3 +24671,68 @@ generic functions, nested patterns, case tests, `as`, `$`, `==`, a Map key, bake
 payloads holding references read back after an arena churn (and clean under `-debug -sanitize`). checks cases: a case
 whose arguments cannot be inferred, exhaustiveness per instance, another instance's case in a pattern; genericenum.olang,
 which said an enum is never generic, now runs.
+
+## Compile-time reflection (G32-G38, G13, M6a, E36, 2026-10-25)
+
+**The decision** (docs/ideas.md #2, the user 2026-10-18: "I like the T.Fields style. We avoid intrinsics as much as
+possible", then "1) this is good yes. 2) yes. 3) we want this for sure ... let's build it now"): a type's structure read
+through its name, while compiling only - `T.Name`, `T.Kind`, `T.Base`, `T.Fields`, `T.Cases`, `T.Params`, arrays'
+`T.Element`/`T.Length`, references' `T.Target`, function types' `T.Params`/`T.Results`/`T.Errors`, `T.Size`/`T.Align`/
+`f.Offset`; the lists unrolled by `for`, counted, indexed by constants; `f.Of(v)` a place; `match T` with trait and
+generic cases; `T(decode(p, src) for p in T.Params)` building through the constructor; a reflected member's type usable
+as a type. Private fields shown only in their own module.
+
+**How it is built.** Nothing exists at run time. A list (`T.Fields` ...) is never a value: the checker recognises the
+expression (`listOf`) and expands what uses it. A `for` over one is checked once per element (`unrolled`), the loop
+variable bound in the frame's `Refl` map to a **descriptor** - a value of a prelude struct of no fields
+(`std/prelude/reflect.olang`: `FieldInfo<T, C, I>`, `CaseInfo<T, C>`, `ParamInfo<T, I>`, `ResultInfo<T, I>`) whose
+type arguments after the described type are constants - so a generic taking one (`fn arg<P>(p P) P.Type`) is
+instantiated per member by the machinery G16 already had, and everything asked of one is a constant of that instance.
+`break` and `continue` in an unrolled walk lower to an outer loop and a one-turn loop per element. Conditions over
+reflected constants are folded by the checker (`reflFold`) and decided where an `if`, a conditional, an `assert` or a
+`match` is checked, only the chosen branch checked - G30's rule, reused. `f.Of(v)` is a field place (or, for a case's
+field, the narrowed payload's), so assignment, increments and lending need nothing new. A reflected type in a type
+position (`P.Type`, `T.Base.Element`) is a path the type resolver projects (`generic.projectPath`), deferred as a
+pattern where its head is still a variable (T7c's mechanism). An argument comprehension (`InCall` on the AST's `Compr`)
+is spread into one argument per kept element before the call is checked (`spreadArgs`). `match T`'s cases became
+`typeCase`s: a plain type compared exactly, a trait met by satisfaction, a generic pattern unified with names
+introduced for the arm; the first that holds is chosen, and one an earlier case covers is an error. The evaluator
+needed nothing: it only ever sees the unrolled, decided code.
+
+**Decided (mine).** (1) The kind enum is `TypeKind`, not `Kind`: a prelude type's name is reserved in every module (D2,
+D3a), and `Kind` is the commonest such name there is - the compiler's own type table has one. (2) `T.Name` is written
+as the type's module writes it, without its module's alias (`Point`, `Tree<I64>`). (3) A function type's parameter has
+no name of its own: names are no part of a function type (T22, G16a), so an instance cannot say them and `p.Name` is
+`""` - a constructor's parameters have their names. (4) `f.Offset` of a case's field counts from the start of the
+enum, past its tag. (5) An enum case's fields are in `c.Fields` for every module, since any module reading the case
+reads them (only a struct's private fields are its module's - a generic sees what its own module sees). (6) A case
+descriptor called builds its case (`c(args)`), as `T.Case(args)` would - the one way generic code makes a case it
+walks to, which `json.Decode` needs; a reflected type called (`T.Base(x)`, `p.Type(v)`) converts or constructs as the
+type's name would. (7) A type case naming a read-only reference (`case Json&`) holds for a writable one too, writable
+converting to read-only at the top (T25b): a built result is writable, so `case Node&` never met `n := mk()` - a trap
+that made type matches over references depend on where a value came from. (8) `break` leaves the whole unrolled walk.
+
+**std/json.** `json.Encode(v)` is generic: a `Json` tree as before (`case Json, Json&`), and any other value by its
+type - a struct as an object of its fields in order (another module's private fields left out, by M6a), an enum's case
+with no fields as its name and one with fields as `{"Case": {fields}}` (serde's default, externally tagged), arrays,
+Lists and Vecs as arrays, a Map with text keys as an object, text, Chars (one-character strings), numbers (NaN and the
+infinities as null, as for a tree), Bools, references as what they name. `json.Decode<T>(text)` reads one back through
+`From<T>(tree)`: a struct through its constructor - its checks run, so `Percent`'s contract refuses `{"V": 300}` with
+`ArgumentError` - each parameter from the member of its name, a missing one taking its default and failing with
+`MISSING` where it has none, members no parameter names passed over; an integer only where the number is whole and
+fits (`Narrow`, else `WRONG_KIND`); an enum by the case its name or its one member names. Its error set is inferred per
+type. Both run while compiling: a global encoding a struct, decoding it and encoding it again is baked (its assert in
+std/json's tests beside the run-time one).
+
+**Found on the way, fixed.** Text constants made by reflection collided across instances and unrolled copies: emit and
+the evaluator keyed constant data by site and constant index, so two instances' `$f.Name` at one site were one string
+(`"Y 2"` printed for another field) - keyed by contents now. Pre-existing silent gaps, now errors: a member of a
+non-struct value (`n.Wibble` on an `I64`) gave no diagnostic, only "does not lower an unknown type"; so did a member of
+a type's namespace that is no case (`I64.Foo(3)`, now G32's error listing the members), and a type path whose head
+names nothing (`x zz.T = 3`, now M10's "'zz' is no import here").
+
+**Tests.** tests/reflect.olang (names, kinds, sizes, fields, cases of plain and generic enums, parameters and defaults,
+function types' parameters, results and errors, `f.Of` read and written, building through constructors, type cases,
+chained reflected types, unrolled `break`/`continue`, case descriptors called; baked globals and decided asserts beside
+run-time ones) and tests/reflmod.olang (another module's private fields); std/json's two new tests; 21 checks cases,
+one per diagnostic.

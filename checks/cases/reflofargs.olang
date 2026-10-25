@@ -1,0 +1,12 @@
+# check: fail error[G34]: 'Of' takes one value, found 2
+# also: compilation failed with 1 error
+# G34: f.Of takes one value
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() {
+    v := Point(1)
+    n := Point.Fields[0].Of(v, v)
+}

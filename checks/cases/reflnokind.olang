@@ -1,0 +1,10 @@
+# check: fail error[G32]: E has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference and a function type have one
+# also: compilation failed with 1 error
+# G32: an error type has no TypeKind
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+type E error { A }
+fn main() { k := E.Kind }

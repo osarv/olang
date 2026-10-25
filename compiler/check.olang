@@ -280,6 +280,9 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     Dead Map<pair.Pair<I64, I64>, Bool>
     anyBad Map<I64, Bool>       # T32: the tables a method of which the trait's signature cannot reach (said once)
     caseBroken Bool = false     # T34: a type case of the match being checked names a type wrongly (said at it)
+    reflTouched Bool = false    # G35: the condition being folded read a reflected member
+    spreadBad Bool = false      # G37: an argument comprehension that could not spread, said (its call is unknown)
+    typeCaseBinds List<pair.Pair<source.NameId, types.TypeId>>   # G36: what the type case matchOnType chose binds
     slotsCalled Map<I64, diag.Where>  # T32b: the slots (SlotKey) some call through an "any" reaches, by its first call
     lazyThunks List<I64>        # T32a: the default slots' thunks nothing has called yet, each an "unreachable" for now
 }
@@ -4072,6 +4075,8 @@ fn (c mut Checker&) local(n source.NameId, sp source.Span, ty types.TypeId, kind
     if n != source.NameId(0) and c.text(n) != "_" {
         fr.undo.Push(pair.Pair(n, try fr.bound.Get(n) catch default -1))
         fr.bound.Put(n, id)
+        # G38: a local holding a descriptor names its member's type, "p.Type"
+        if c.P.T.KindOf(ty) == types.Kind.Named and c.P.DescOf(ty).K != generic.DescNone { fr.Ctx.Refl.Put(n, ty) }
     }
     return id
 }
@@ -4656,8 +4661,9 @@ fn (c mut Checker&) typeNamed(x ast.Expr&) types.TypeId {
                 return t if t != types.UnknownT else types.TypeId(-1)
             }
             if ref.Kind == names.What.Type and ref.Index >= 0 { return c.declType(c.P.DeclFor(ref.Module, ref.Index)) }
-            if ref.Kind == names.What.TypeVar {
-                # a type variable bound here stands where a type's name may (G8b): T[a, b], x is T
+            if ref.Kind == names.What.TypeVar or ref.Kind == names.What.None {
+                # a type variable bound here stands where a type's name may (G8b): T[a, b], x is T - and so does a name a
+                # type case binds (G36)
                 t := try c.fr().Ctx.Vars.Get(n) catch default types.TypeId(-1)
                 if t >= types.TypeId(0) and c.P.T.KindOf(t) != types.Kind.Const and c.P.T.KindOf(t) != types.Kind.ConstExpr { return t }
             }
@@ -5855,7 +5861,15 @@ fn (c mut Checker&) expr(x ast.Expr?&, want types.TypeId) typed.Expr&c {
         case ast.Expr.NotIn(sp, a, b) { return c.negate(sp, c.membership(sp, a, b)) }
         case ast.Expr.Chain(sp, ch) { return c.chain(sp, ch) }
         case ast.Expr.MatchE(sp, m) { return c.matchValue(sp, m, want) }
-        case ast.Expr.Compr(sp, cm) { return c.comprehension(sp, cm) }
+        case ast.Expr.Compr(sp, cm) {
+            if cm.InCall {
+                # G37: an argument a comprehension written as arguments gave; one no call spread is an error
+                if cm.At >= 0 { return c.argItem(cm, want) }
+                c.err(sp, msgs.ReflArgCompr())
+                return c.unknown(sp)
+            }
+            return c.comprehension(sp, cm)
+        }
         case ast.Expr.Lambda(sp, f) { return c.lambda(sp, f, want) }
         case ast.Expr.Generic(sp, g, targs) if c.genericFn(g) >= 0 {
             # G12: "big<I64>" names one instance, a function value
@@ -5897,6 +5911,11 @@ fn (c mut Checker&) literal(sp source.Span, kind token.Tok, want types.TypeId) t
 fn (c mut Checker&) name(sp source.Span, n source.NameId) typed.Expr?&c {
     ref := c.P.R.Use(c.fr().File, sp.Start)
     if ref.Kind == names.What.Local and c.caughtMisused(sp, n) { return c.unknown(sp) }
+    if ref.Kind == names.What.Local and c.localNamed(n) < 0 {
+        # G33: a name an unrolled loop binds
+        rn := c.reflName(sp, n)
+        if rn is not null { return rn }
+    }
     if ref.Kind == names.What.Local {
         # S8c: in a condition's body, a fixed local of the body it was asked in is its initializer
         if c.fr().fixed.Has(n) {
@@ -8974,6 +8993,12 @@ fn (c mut Checker&) writtenMet(tr ast.TypeRef?&) Bool {
 # ---- calls (E13, E14, D8a, G9, M19) ----
 
 fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, want types.TypeId) typed.Expr&c {
+    # G37: a comprehension written as arguments gives one argument per item of its list
+    args = c.spreadArgs(args)
+    if c.spreadBad {
+        c.spreadBad = false
+        return c.unknown(sp)
+    }
     match f {
         case ast.Expr.Name(nsp, n) {
             ref := c.P.R.Use(c.fr().File, nsp.Start)
@@ -8997,6 +9022,21 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 }
                 c.dropArgs(args)
                 return c.unknown(sp)
+            }
+            if ref.Kind == names.What.Local {
+                # G34: a case descriptor called builds its case, as the case's name would - a struct's one case its
+                # constructor
+                dt := c.descTypeOf(f)
+                if dt == types.UnknownT {
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                if dt >= types.TypeId(0) and c.P.DescOf(dt).K == generic.DescCase {
+                    ds := c.P.DescOf(dt)
+                    r := c.P.ReflUnder(ds.Of)
+                    if c.isStruct(r) { return c.construct(sp, nsp, ds.Of, args) }
+                    return c.enumCase(sp, nsp, ds.Of, c.P.T.CaseNames(r)[ds.Case], args)
+                }
             }
             if ref.Kind == names.What.Local or ref.Kind == names.What.Global {
                 return c.callValue(sp, nsp, c.expr(f, types.UnknownT), args)
@@ -9029,11 +9069,49 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
                 c.gap(nsp, "a call of this kind")
                 return c.unknown(sp)
             }
+            # G38: a reflected type called is the call its type's name is - "T.Base(x)", "p.Type(v)" - unless the
+            # name is a case of the enum named ("ast.Decl.Type(...)")
+            et0 := c.typeNamed(x)
+            caseNamed := et0 >= types.TypeId(0) and c.isEnum(et0) and c.hasCase(et0, n)
+            gd0 := c.genericNamed(x)
+            if gd0 >= types.DeclId(0) and c.P.T.DeclKindOf(gd0) == types.DeclKind.Enum { caseNamed = true }
+            if generic.ProjectsType(c.text(n)) and not caseNamed {
+                rt := c.reflType(f)
+                if rt == types.UnknownT {
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+                if rt >= types.TypeId(0) and (c.P.T.IsFloat(rt) or c.P.T.IsInt(rt) or rt == types.BoolT) { return c.conversion(sp, rt, args) }
+                if rt >= types.TypeId(0) and c.isNamed(rt) { return c.construct(sp, nsp, rt, args) }
+                if rt >= types.TypeId(0) {
+                    c.err(nsp, msgs.NotCallable(c.ty(rt)))
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+            }
             et := c.typeNamed(x)
             if et >= types.TypeId(0) and c.text(n) == "From" and c.isEnum(et) and not c.hasCase(et, n) { return c.enumFrom(sp, nsp, et, args) }
             if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, args) }
             gd := c.genericNamed(x)
             if gd >= types.DeclId(0) and c.P.T.DeclKindOf(gd) == types.DeclKind.Enum { return c.genericCase(sp, nsp, gd, n, args, want) }
+            # G33, G34: a list's Len, a field's Of
+            rl := c.listOf(x)
+            if rl.Ok {
+                if c.text(n) == "Len" and args.Len() == 0 {
+                    if rl.Of == types.UnknownT { return c.unknown(sp) }
+                    return c.lit(sp, c.i64(), c.listItems(x.Span(), rl).Len())
+                }
+                c.err(x.Span(), msgs.ReflListValue($c.src(x.Span())))
+                c.dropArgs(args)
+                return c.unknown(sp)
+            }
+            dt := c.descTypeOf(x)
+            if dt >= types.TypeId(0) and c.text(n) == "Of" {
+                if dt == types.UnknownT { return c.unknown(sp) }
+                fp := c.reflOf(sp, nsp, dt, args)
+                if fp is null { return c.unknown(sp) }
+                return c.read(sp, fp)
+            }
             if ref.Kind == names.What.None and c.importPath(x) {
                 # a name the imported module does not declare (or does not export: the resolver said so already)
                 at := match x {
@@ -10469,6 +10547,9 @@ fn (c mut Checker&) member(sp source.Span, x ast.Expr&, n source.NameId, want ty
         c.gap(nsp, "a member reached through an import, of this kind")
         return c.unknown(sp)
     }
+    # G32, G34: a type's reflected members, a descriptor's
+    rv := c.reflMember(sp, nsp, x, n)
+    if rv is not null { return rv }
     et := c.typeNamed(x)
     if et >= types.TypeId(0) and (c.isNumber(et) or (isLimitName(c.text(n)) and not c.isNamed(et))) { return c.limit(sp, nsp, et, n) }
     if et >= types.TypeId(0) { return c.enumCase(sp, nsp, et, n, Array<ast.Expr&>(0)) }
@@ -10501,7 +10582,8 @@ fn (c mut Checker&) field(sp source.Span, nsp source.Span, p typed.Place&c, n so
         return null
     }
     if not c.isStruct(t) {
-        c.gap(nsp, "a member of a type of this kind")
+        # only a struct has fields: a number's, an array's, a function value's member is a misspelling
+        c.err(nsp, msgs.NoSuchMember(c.ty(t), c.text(n)))
         return null
     }
     i := c.fieldIndex(t, n)
@@ -10606,6 +10688,672 @@ fn limitBits(tt types.Table&, u types.TypeId, k I64) I64 {
     return I64[0x7FEFFFFFFFFFFFFF, 0xFFEFFFFFFFFFFFFF, 0x7FF0000000000000, 0x7FF8000000000000, 0x3CB0000000000000, 0x0010000000000000][k]
 }
 
+# ---- compile-time reflection (G32-G38) ----
+
+# a list a reflection names (G33): T.Fields, T.Cases, T.Params, T.Results, or a case's Fields - the type, which list,
+# the case (-1 for none); Ok false where an expression names no list
+type reflList struct(Ok Bool, Of types.TypeId, Which I64, Case I64) {
+    Ok, Of, Which, Case
+}
+
+fn noList() reflList { return reflList(false, types.UnknownT, 0, -1) }
+
+# a list's position among Fields, Cases, Params, Results; -1 for a name that is none
+fn listIndex(name String&) I64 {
+    return match name {
+        case "Fields" => generic.ListFields
+        case "Cases" => generic.ListCases
+        case "Params" => generic.ListParams
+        case "Results" => generic.ListResults
+        case _ => -1
+    }
+}
+
+fn listName(k I64) String { return String&["Fields", "Cases", "Params", "Results"][k] }
+
+# whether a type is named through a type variable here - reflection's then, never one of an enum's cases (G32)
+fn (c mut Checker&) viaTypeVar(x ast.Expr&) Bool {
+    match x {
+        case ast.Expr.Name(sp, _) { return c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.TypeVar }
+        nomatch { return false }
+    }
+}
+
+# the type an expression names for reflection (G32, G38): a type's name or a type variable bound here, or a type a
+# reflected member names ("T.Base", "f.Type", "T.Fields[0].Type"); Unknown where that was said wrong; -1 for none
+fn (c mut Checker&) reflType(x ast.Expr&) types.TypeId {
+    t := c.typeNamed(x)
+    if t >= types.TypeId(0) { return t }
+    match x {
+        case ast.Expr.Member(sp, b, n) {
+            name := c.text(n)
+            if not generic.ProjectsType(name) { return types.TypeId(-1) }
+            bt := types.TypeId(-1)
+            if name == "Type" { bt = c.descTypeOf(b) }
+            if bt < types.TypeId(0) { bt = c.reflType(b) }
+            if bt < types.TypeId(0) { return bt }
+            if bt == types.UnknownT { return bt }
+            pt, why := c.P.Project(bt, name)
+            if why != "" {
+                c.err(memberSpan(sp, name.Len()), msgs.ReflNoType(name, c.ty(bt), why))
+                return types.UnknownT
+            }
+            return pt
+        }
+        case ast.Expr.Paren(_, y) { return c.reflType(y) }
+        case ast.Expr.Generic(sp, g, targs) {
+            # an instance written with its arguments (G32): "Array<I64>.Kind", "Map<String&, I64>.Params"
+            builtin := false
+            match g {
+                case ast.Expr.Name(gs, _) { builtin = c.P.R.Use(c.fr().File, gs.Start).Kind == names.What.Builtin }
+                nomatch { }
+            }
+            path := typePathOf(g)
+            if path.Len() == 0 or (not builtin and c.genericNamed(g) < types.DeclId(0)) { return types.TypeId(-1) }
+            if path.Len() == 1 { return c.resolve(ast.TypeRef.Named(sp, path, targs)) }
+            d := c.genericNamed(g)
+            if not c.P.ArgsFit(d, targs) {
+                c.err(targs[0].Span() if targs.Len() > 0 else sp, msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(d), generic.WrittenTypes(targs)))
+                return types.UnknownT
+            }
+            it := c.P.Apply(c.fr().Ctx, d, targs)
+            if it == types.UnknownT or not c.instancesMet(it, sp) or not c.P.Body(it) { return types.UnknownT }
+            return it
+        }
+        nomatch { return types.TypeId(-1) }
+    }
+}
+
+# the descriptor's type a value expression has, where it is one (G34): a name an unrolled loop binds, a local or
+# parameter holding one, a constant index into a list; -1 for none. Nothing is evaluated
+fn (c mut Checker&) descTypeOf(x ast.Expr&) types.TypeId {
+    match x {
+        case ast.Expr.Name(sp, n) {
+            if c.P.R.Use(c.fr().File, sp.Start).Kind != names.What.Local { return types.TypeId(-1) }
+            r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
+            if r >= types.TypeId(0) and c.P.T.KindOf(r) != types.Kind.Const { return r }
+            id := c.localNamed(n)
+            if id >= 0 and c.P.DescOf(c.localType(id)).K != generic.DescNone { return c.localType(id) }
+            return types.TypeId(-1)
+        }
+        case ast.Expr.Index(sp, y, items) {
+            l := c.listOf(y)
+            if not l.Ok or items.Len() != 1 { return types.TypeId(-1) }
+            k := c.reflInt(items[0])
+            if not k.Ok { return types.TypeId(-1) }
+            return c.listItem(sp, l, k.I)
+        }
+        case ast.Expr.Paren(_, y) { return c.descTypeOf(y) }
+        nomatch { return types.TypeId(-1) }
+    }
+}
+
+# the list an expression names (G33)
+fn (c mut Checker&) listOf(x ast.Expr&) reflList {
+    match x {
+        case ast.Expr.Member(_, b, n) {
+            k := listIndex(c.text(n))
+            if k < 0 { return noList() }
+            ds := c.descTypeOf(b)
+            if ds >= types.TypeId(0) {
+                d := c.P.DescOf(ds)
+                if d.K == generic.DescCase and k == generic.ListFields { return reflList(true, d.Of, k, d.Case) }
+                return noList()
+            }
+            t := c.reflType(b)
+            if t < types.TypeId(0) { return noList() }
+            # an enum's own case of that name, written through the enum's name, is the case (G32)
+            if c.isEnum(t) and not c.viaTypeVar(b) and c.hasCase(t, n) { return noList() }
+            return reflList(true, t, k, -1)
+        }
+        case ast.Expr.Paren(_, y) { return c.listOf(y) }
+        nomatch { return noList() }
+    }
+}
+
+# a list's positions as this module sees them (M6a: another module's private fields left out); said where the type
+# has no such list
+fn (c mut Checker&) listItems(sp source.Span, l reflList) Array<I64> {
+    if l.Of == types.UnknownT { return Array<I64>(0) }
+    items, why := c.P.ReflItems(l.Of, l.Which, l.Case, c.fr().Mi)
+    if why != "" {
+        c.err(sp, msgs.ReflNotList(listName(l.Which), c.ty(l.Of), why))
+        return Array<I64>(0)
+    }
+    return items
+}
+
+# the descriptor of a list's k-th item (G33): Unknown where k is outside it, said
+fn (c mut Checker&) listItem(sp source.Span, l reflList, k I64) types.TypeId {
+    items := c.listItems(sp, l)
+    if l.Of == types.UnknownT { return types.UnknownT }
+    if k < 0 or k >= items.Len() {
+        c.err(sp, msgs.ReflIndexRange(k, items.Len()))
+        return types.UnknownT
+    }
+    return c.descriptor(l, items[k])
+}
+
+fn (c mut Checker&) descriptor(l reflList, at I64) types.TypeId {
+    kind := match l.Which {
+        case generic.ListFields => generic.DescField
+        case generic.ListCases => generic.DescCase
+        case generic.ListParams => generic.DescParam
+        case _ => generic.DescResult
+    }
+    if kind == generic.DescField { return c.P.Descriptor(kind, l.Of, 0 if l.Case < 0 else l.Case, at) }
+    if kind == generic.DescCase { return c.P.Descriptor(kind, l.Of, at, 0) }
+    return c.P.Descriptor(kind, l.Of, 0, at)
+}
+
+# a reflected value known while compiling (G35): an integer, a Bool, text, an enum's case (Ty the enum); Ok false where
+# an expression is none. Touched says it read a reflected member - only such a condition is reflection's to decide
+type reflVal struct(Ok Bool, K I64, I I64, S String&, Ty types.TypeId) {
+    Ok, K, I, S, Ty
+}
+
+RvInt I64 = 0
+RvBool I64 = 1
+RvText I64 = 2
+RvCase I64 = 3
+
+fn noRefl() reflVal { return reflVal(false, 0, 0, "", types.UnknownT) }
+fn rvInt(v I64) reflVal { return reflVal(true, RvInt, v, "", types.UnknownT) }
+fn rvBool(v Bool) reflVal { return reflVal(true, RvBool, 1 if v else 0, "", types.UnknownT) }
+fn rvText(s String&) reflVal { return reflVal(true, RvText, 0, s, types.UnknownT) }
+
+fn (c mut Checker&) reflInt(x ast.Expr&) reflVal {
+    v := c.reflFold(x)
+    if v.Ok and v.K == RvInt { return v }
+    return noRefl()
+}
+
+# a condition reflection decides (G35): 1 true, 0 false, -1 where it reads no reflected member or is not decided
+fn (c mut Checker&) reflDecide(x ast.Expr?&) I64 {
+    if x is null { return -1 }
+    was := c.reflTouched
+    c.reflTouched = false
+    v := c.reflFold(x)
+    touched := c.reflTouched
+    c.reflTouched = was
+    if not touched or not v.Ok or v.K != RvBool { return -1 }
+    return v.I
+}
+
+fn (c mut Checker&) reflFold(x ast.Expr&) reflVal {
+    match x {
+        case ast.Expr.Lit(sp, kind) {
+            if kind == token.Tok.BoolLit { return rvBool(c.src(sp) == "true") }
+            if kind == token.Tok.StrLit { return rvText(String(c.strBytes(sp))) }
+            v := c.fold(x)
+            if v.Ok and not v.IsFloat and not v.Big { return rvInt(v.I) }
+            return noRefl()
+        }
+        case ast.Expr.Paren(_, y) { return c.reflFold(y) }
+        case ast.Expr.Name(sp, n) {
+            if c.P.R.Use(c.fr().File, sp.Start).Kind == names.What.Local and c.localNamed(n) < 0 {
+                r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
+                if r >= types.TypeId(0) and c.P.T.KindOf(r) == types.Kind.Const {
+                    c.reflTouched = true
+                    return rvInt(c.P.T.ConstValue(r))
+                }
+            }
+            return noRefl()
+        }
+        case ast.Expr.Unary(_, op, y) {
+            v := c.reflFold(y)
+            if not v.Ok { return v }
+            if op == token.Tok.Not and v.K == RvBool { return rvBool(v.I == 0) }
+            if op == token.Tok.Minus and v.K == RvInt { return rvInt(-v.I) }
+            return noRefl()
+        }
+        case ast.Expr.Binary(_, op, a, b) {
+            va := c.reflFold(a)
+            if op == token.Tok.And and va.Ok and va.K == RvBool and va.I == 0 { return va }
+            if op == token.Tok.Or and va.Ok and va.K == RvBool and va.I == 1 { return va }
+            vb := c.reflFold(b)
+            if not va.Ok or not vb.Ok or va.K != vb.K { return noRefl() }
+            if op == token.Tok.And or op == token.Tok.Or { return vb if va.K == RvBool else noRefl() }
+            if op == token.Tok.EqEq or op == token.Tok.NotEq {
+                same := va.I == vb.I
+                if va.K == RvText { same = va.S == vb.S }
+                if va.K == RvCase { same = same and va.Ty == vb.Ty }
+                return rvBool(same == (op == token.Tok.EqEq))
+            }
+            if va.K != RvInt { return noRefl() }
+            return match op {
+                case token.Tok.Lt => rvBool(va.I < vb.I)
+                case token.Tok.Le => rvBool(va.I <= vb.I)
+                case token.Tok.Gt => rvBool(va.I > vb.I)
+                case token.Tok.Ge => rvBool(va.I >= vb.I)
+                case token.Tok.Plus => rvInt(va.I + vb.I)
+                case token.Tok.Minus => rvInt(va.I - vb.I)
+                case token.Tok.Star => rvInt(va.I * vb.I)
+                case _ => noRefl()
+            }
+        }
+        case ast.Expr.Call(_, f, args) {
+            match f {
+                case ast.Expr.Member(_, y, n) {
+                    if c.text(n) == "Len" and args.Len() == 0 {
+                        l := c.listOf(y)
+                        if l.Ok {
+                            c.reflTouched = true
+                            if l.Of == types.UnknownT { return noRefl() }
+                            items, why := c.P.ReflItems(l.Of, l.Which, l.Case, c.fr().Mi)
+                            return rvInt(items.Len()) if why == "" else noRefl()
+                        }
+                    }
+                }
+                nomatch { }
+            }
+            return noRefl()
+        }
+        case ast.Expr.Member(_, y, n) {
+            # an enum's case with no payload written by its name: TypeKind.Struct
+            et := c.typeNamed(y)
+            if et >= types.TypeId(0) and c.isEnum(et) and c.hasCase(et, n) and not c.viaTypeVar(y) {
+                cn := c.P.T.CaseNames(et)
+                for i in range cn.Len() {
+                    if cn[i] == n { return reflVal(true, RvCase, i, "", et) }
+                }
+            }
+            return c.reflConst(y, n)
+        }
+        nomatch { return noRefl() }
+    }
+}
+
+# a reflected member known while compiling (G32, G34): a type's Name, Kind, Size, Align, Length; a descriptor's Name,
+# Offset, HasDefault
+fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
+    name := c.text(n)
+    t := c.reflType(y)
+    if t >= types.TypeId(0) and not (c.isEnum(t) and not c.viaTypeVar(y) and c.hasCase(t, n)) {
+        if t == types.UnknownT { return noRefl() }
+        if name == "Name" {
+            c.reflTouched = true
+            return rvText(c.P.ReflName(t))
+        }
+        if name == "Kind" {
+            c.reflTouched = true
+            k := c.P.ReflKind(t)
+            if k < 0 { return noRefl() }
+            return reflVal(true, RvCase, k, "", c.typeKindType())
+        }
+        if name == "Size" or name == "Align" {
+            c.reflTouched = true
+            if not c.P.Layout(t) { return noRefl() }
+            return rvInt(c.P.T.Size(t) if name == "Size" else c.P.T.Align(t))
+        }
+        if name == "Length" {
+            c.reflTouched = true
+            r := c.under(t)
+            if c.P.T.KindOf(r) != types.Kind.Array or c.P.T.KindOf(c.P.T.Length(r)) != types.Kind.Const { return noRefl() }
+            return rvInt(c.P.T.ConstValue(c.P.T.Length(r)))
+        }
+        return noRefl()
+    }
+    dt := c.descTypeOf(y)
+    if dt < types.TypeId(0) { return noRefl() }
+    if dt == types.UnknownT { return noRefl() }
+    ds := c.P.DescOf(dt)
+    c.reflTouched = true
+    if name == "Name" { return rvText(c.descName(ds)) }
+    if name == "HasDefault" and ds.K == generic.DescParam { return rvBool(c.paramDefault(ds) is not null) }
+    if name == "Offset" and ds.K == generic.DescField {
+        off := c.fieldOffset(ds)
+        return rvInt(off) if off >= 0 else noRefl()
+    }
+    return noRefl()
+}
+
+fn (c mut Checker&) typeKindType() types.TypeId { return c.P.PreludeType("std/prelude/reflect", "TypeKind") }
+
+# a described member's name (G34): a field's, a case's (a struct's one case its type's name), a constructor's
+# parameter's ("" for a function type's parameter, whose name is no part of its type)
+fn (c mut Checker&) descName(ds generic.Desc) String {
+    r := c.P.ReflUnder(ds.Of)
+    if ds.K == generic.DescField {
+        ns := c.P.FieldNames(r) if c.isStruct(r) else c.P.CaseFieldNames(r, ds.Case)
+        return $c.text(ns[ds.At]) if ds.At < ns.Len() else ""
+    }
+    if ds.K == generic.DescCase {
+        if c.isStruct(r) { return $c.text(c.P.T.DeclName(c.P.T.DeclOf(r))) }
+        cn := c.P.T.CaseNames(r)
+        return $c.text(cn[ds.Case]) if ds.Case < cn.Len() else ""
+    }
+    if ds.K == generic.DescParam {
+        # a function type's parameter names are no part of its type (T22, G16a), so an instance cannot say them
+        if c.P.T.KindOf(ds.Of) == types.Kind.Func { return "" }
+        ps := c.P.CtorParams(ds.Of)
+        return $c.text(ps[ds.At].Name) if ds.At < ps.Len() else ""
+    }
+    return ""
+}
+
+# a parameter's default as written (D8a), null for none - a function type's parameters have none
+fn (c mut Checker&) paramDefault(ds generic.Desc) ast.Expr?&c {
+    if c.P.T.KindOf(ds.Of) == types.Kind.Func { return null }
+    ps := c.P.CtorParams(ds.Of)
+    if ds.At >= ps.Len() { return null }
+    return ps[ds.At].Dflt
+}
+
+# a field's offset as laid out (G32), -1 where the type is not laid out: a struct's field's, an enum case's past the tag
+# word (T17)
+fn (c mut Checker&) fieldOffset(ds generic.Desc) I64 {
+    r := c.P.ReflUnder(ds.Of)
+    if not c.P.Layout(r) { return -1 }
+    if c.isStruct(r) {
+        offs := c.P.T.Offsets(r)
+        return offs[ds.At] if ds.At < offs.Len() else -1
+    }
+    cases := c.P.T.Items(c.P.T.Cases(r))
+    if ds.Case >= cases.Len() or cases[ds.Case] == types.TypeId(0) { return -1 }
+    rec := cases[ds.Case]
+    if not c.P.Layout(rec) { return -1 }
+    offs := c.P.T.Offsets(rec)
+    return 8 + offs[ds.At] if ds.At < offs.Len() else -1
+}
+
+# a reflected value written into the program: a literal of its type
+fn (c mut Checker&) reflExpr(sp source.Span, v reflVal) typed.Expr&c {
+    if v.K == RvBool { return c.lit(sp, types.BoolT, v.I) }
+    if v.K == RvInt { return c.lit(sp, c.i64(), v.I) }
+    if v.K == RvText {
+        # by its contents, no site's (T25d): one site gives each instance its own text
+        return typed.Expr.Data(source.Span(0, 0), c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(v.S))
+    }
+    c.isEnum(v.Ty)
+    cn := c.P.T.CaseNames(v.Ty)
+    return c.enumCase(sp, sp, v.Ty, cn[v.I], Array<ast.Expr&>(0))
+}
+
+# x.n read as a reflected member (G32, G34): its value, or an error - null where x.n is no reflection (a field, an
+# enum's case, a number's limit)
+fn (c mut Checker&) reflMember(sp source.Span, nsp source.Span, x ast.Expr&, n source.NameId) typed.Expr?&c {
+    name := c.text(n)
+    l := c.listOf(ast.Expr.Member(sp, x, n))
+    if l.Ok {
+        c.err(sp, msgs.ReflListValue($c.src(sp)))
+        return c.unknown(sp)
+    }
+    t := c.reflType(x)
+    if t >= types.TypeId(0) {
+        if t == types.UnknownT { return c.unknown(sp) }
+        if c.isEnum(t) and not c.viaTypeVar(x) and c.hasCase(t, n) { return null }
+        if generic.ProjectsType(name) {
+            c.err(sp, msgs.ReflTypeNotValue($c.src(sp)))
+            return c.unknown(sp)
+        }
+        if name == "Name" or name == "Kind" or name == "Size" or name == "Align" or name == "Length" {
+            v := c.reflConst(x, n)
+            if v.Ok { return c.reflExpr(sp, v) }
+            if name == "Kind" { c.err(nsp, msgs.ReflNoKind(c.ty(t))) }
+            if name == "Length" { c.err(nsp, msgs.ReflNoLength(c.ty(t))) }
+            if name == "Size" or name == "Align" { c.err(nsp, msgs.ReflNoLayout(c.ty(t), name)) }
+            return c.unknown(sp)
+        }
+        if c.isNumber(t) or isLimitName(name) { return null }
+        if c.isEnum(t) { return null }
+        # T20: an error type's word is said as one (enumCase)
+        if c.isNamed(t) and c.declKind(t) == types.DeclKind.Error { return null }
+        c.err(nsp, msgs.ReflNoMember(c.ty(t), name))
+        return c.unknown(sp)
+    }
+    dt := c.descTypeOf(x)
+    if dt < types.TypeId(0) { return null }
+    if dt == types.UnknownT { return c.unknown(sp) }
+    ds := c.P.DescOf(dt)
+    if name == "Type" and ds.K != generic.DescCase {
+        c.err(sp, msgs.ReflTypeNotValue($c.src(sp)))
+        return c.unknown(sp)
+    }
+    if name == "Default" and ds.K == generic.DescParam { return c.reflDefault(sp, ds) }
+    v := c.reflConst(x, n)
+    if v.Ok { return c.reflExpr(sp, v) }
+    have := match ds.K {
+        case generic.DescField => "Name, Type, Offset and Of"
+        case generic.DescCase => "Name and Fields"
+        case generic.DescParam => "Name, Type, HasDefault and Default"
+        case _ => "Type"
+    }
+    what := match ds.K {
+        case generic.DescField => "field"
+        case generic.DescCase => "case"
+        case generic.DescParam => "parameter"
+        case _ => "result"
+    }
+    c.err(nsp, msgs.ReflDescNoMember(what, name, have))
+    return c.unknown(sp)
+}
+
+# p.Default (G34): the parameter's default, built in its declaration's context as a call leaving it off builds it (D8a)
+fn (c mut Checker&) reflDefault(sp source.Span, ds generic.Desc) typed.Expr&c {
+    d := c.paramDefault(ds)
+    if d is null {
+        c.err(sp, msgs.ReflNoDefault(c.descName(ds), c.ty(ds.Of)))
+        return c.unknown(sp)
+    }
+    pt, _ := c.P.DescType(ds)
+    was := c.ctorCalled
+    c.ctorCalled = ds.Of
+    x := c.ctorDefault(sp, ds.At, pt)
+    c.ctorCalled = was
+    return x
+}
+
+# f.Of(v) (G34): the field f describes of v, a place - through references; a case's field only where v, a local or a
+# parameter, is known to hold that case (S8d)
+fn (c mut Checker&) reflOf(sp source.Span, nsp source.Span, dt types.TypeId, args Array<ast.Expr&>&) typed.Place?&c {
+    ds := c.P.DescOf(dt)
+    if ds.K != generic.DescField {
+        c.err(nsp, msgs.ReflDescNoMember("case" if ds.K == generic.DescCase else ("parameter" if ds.K == generic.DescParam else "result"), "Of", "its Name and Type"))
+        c.dropArgs(args)
+        return null
+    }
+    if args.Len() != 1 {
+        c.err(sp, msgs.ReflOfArgs(args.Len()))
+        c.dropArgs(args)
+        return null
+    }
+    p := c.place(args[0])
+    if p is null { return null }
+    base := p
+    t := base.Type()
+    for k in range 4 {
+        if not c.isRef(t) { break }
+        c.nullRead(base)
+        base = typed.Place.Deref(sp, c.P.T.Referent(t), c.read(sp, base))
+        t = c.P.T.Referent(t)
+    }
+    if t == types.UnknownT { return null }
+    if not c.P.T.Same(t, ds.Of) {
+        c.err(args[0].Span(), msgs.ReflOfType(c.ty(ds.Of), c.ty(t)))
+        return null
+    }
+    ft, _ := c.P.DescType(ds)
+    if c.isStruct(t) { return typed.Place.Field(sp, ft, base, ds.At) }
+    # S8d: a case's field read where a test narrows the value to its case
+    lid := c.narrowLocal(args[0])
+    known := false
+    for nr in c.fr().narrows {
+        if nr.Local == lid and nr.Tag == ds.Case { known = true }
+    }
+    if not known {
+        cn := c.P.T.CaseNames(t)
+        c.err(args[0].Span(), msgs.FieldOfEnum(c.ty(t), $c.text(cn[ds.Case]) "'s " $c.descName(ds)))
+        return null
+    }
+    rec := c.P.T.Items(c.P.T.Cases(t))[ds.Case]
+    pp := typed.Place.Payload(sp, rec, typed.Payload(base, ds.Case, typed.Check.None))
+    return typed.Place.Field(sp, ft, pp, ds.At)
+}
+
+# the local or parameter an expression names, -1 for none
+fn (c mut Checker&) narrowLocal(x ast.Expr&) I64 {
+    match x {
+        case ast.Expr.Name(_, n) { return c.localNamed(n) }
+        case ast.Expr.Paren(_, y) { return c.narrowLocal(y) }
+        nomatch { return -1 }
+    }
+}
+
+# a name bound to a reflected member while a body is checked (G33), and what it stood for before
+fn (c mut Checker&) reflBind(n source.NameId, t types.TypeId) types.TypeId {
+    if n == source.NameId(0) or c.text(n) == "_" { return types.TypeId(-1) }
+    was := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
+    c.fr().Ctx.Refl.Put(n, t)
+    return was
+}
+
+fn (c mut Checker&) reflUnbind(n source.NameId, was types.TypeId) {
+    if n == source.NameId(0) or c.text(n) == "_" { return }
+    if was >= types.TypeId(0) { c.fr().Ctx.Refl.Put(n, was) } else { c.fr().Ctx.Refl.Remove(n) }
+}
+
+# a name an unrolled loop binds, read as a value (G33): its position, or the descriptor - a value of no fields
+fn (c mut Checker&) reflName(sp source.Span, n source.NameId) typed.Expr?&c {
+    r := try c.fr().Ctx.Refl.Get(n) catch default types.TypeId(-1)
+    if r < types.TypeId(0) { return null }
+    if c.P.T.KindOf(r) == types.Kind.Const { return c.lit(sp, c.i64(), c.P.T.ConstValue(r)) }
+    return c.zero(sp, r)
+}
+
+# for f in T.Fields { } (G33): unrolled - the body checked once per item, f bound to its descriptor, the key to its
+# position. A loop of its own for break, each item a loop of its own for continue
+fn (c mut Checker&) unrolled(sp source.Span, f ast.ForIn&, l reflList) {
+    forSp := source.Span(sp.Start, sp.Start + 3)
+    if f.Tried { c.err(forSp, msgs.ReflTryList()) }
+    items := c.listItems(f.Source.Span(), l)
+    from := c.stmts.Len()
+    oid, oouter, omark := c.open(typed.BlockKind.Loop, sp)
+    c.fr().exits.Push(oid)
+    for k in range items.Len() {
+        efrom := c.stmts.Len()
+        eid, eouter, emark := c.open(typed.BlockKind.Loop, sp)
+        c.fr().loops.Push(eid)
+        wasName := c.reflBind(f.Name, c.descriptor(l, items[k]))
+        wasKey := c.reflBind(f.Key, c.P.T.Const(c.i64(), k))
+        if f.Body.Len() > 0 { c.stmtsOf(f.Body) }
+        c.reflUnbind(f.Key, wasKey)
+        c.reflUnbind(f.Name, wasName)
+        c.emit(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(eid))))
+        try c.fr().loops.Pop() catch { }
+        eb := c.close(eid, eouter, emark, efrom)
+        # continue: to the item's post clause, which leaves the item's loop
+        pfrom := c.stmts.Len()
+        pid, pouter, pmark := c.open(typed.BlockKind.Post, sp)
+        c.emit(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(eid))))
+        pb := c.close(pid, pouter, pmark, pfrom)
+        c.emit(typed.Stmt.Loop(sp, eb, pb))
+    }
+    c.emit(typed.Stmt.Jump(sp, typed.JumpKind.Break, typed.BlockId(I32(oid))))
+    try c.fr().exits.Pop() catch { }
+    ob := c.close(oid, oouter, omark, from)
+    c.emit(typed.Stmt.Loop(sp, ob, null))
+}
+
+# T[e for x in T.Fields if c] (G33): unrolled into an array literal of the items its filter keeps - the filter decided
+# per item while compiling
+fn (c mut Checker&) unrolledCompr(sp source.Span, cm ast.Compr&, l reflList) typed.Expr&c {
+    et := c.resolve(cm.Elem)
+    items := c.listItems(cm.Source.Span(), l)
+    from := c.exprs.Len()
+    n I64 = 0
+    for k in range items.Len() {
+        wasName := c.reflBind(cm.Name, c.descriptor(l, items[k]))
+        wasKey := c.reflBind(cm.Key, c.P.T.Const(c.i64(), k))
+        keep := true
+        if cm.Filter is not null {
+            d := c.reflDecide(cm.Filter)
+            if d < 0 {
+                c.err(cm.Filter!.Span(), msgs.ReflFilterUndecided())
+                keep = false
+            } else {
+                keep = d == 1
+            }
+        }
+        if keep {
+            x := c.exprTo(cm.Value, et)
+            if not c.isRef(et) { c.roStore(x, cm.Value.Span(), RoStored) }
+            c.exprs.Push(x)
+            n++
+        }
+        c.reflUnbind(cm.Key, wasKey)
+        c.reflUnbind(cm.Name, wasName)
+    }
+    xs := gather(c.exprs, from)
+    at := c.P.T.Array(et, c.P.T.Const(c.i64(), n))
+    return typed.Expr.Make(sp, at, typed.Make(typed.MakeKind.Array, 0, xs, null, c.site(typed.SiteKind.Make, sp), typed.Check.None))
+}
+
+# T(e for p in T.Params) (G37): a comprehension standing as a call's arguments, one argument per item - each an
+# expression of its own, checked where the call checks it with its name bound (argItem)
+fn (c mut Checker&) spreadArgs(args Array<ast.Expr&>&) Array<ast.Expr&>&args {
+    if args.Len() == 0 { return args }
+    spread := false
+    for a in args {
+        match a {
+            case ast.Expr.Compr(_, cm) { if cm.InCall and cm.At < 0 { spread = true } }
+            nomatch { }
+        }
+    }
+    if not spread { return args }
+    out List<ast.Expr&>
+    for a in args {
+        match a {
+            case ast.Expr.Compr(csp, cm) {
+                if not cm.InCall or cm.At >= 0 {
+                    out.Push(a)
+                    continue
+                }
+                l := c.listOf(cm.Source)
+                if not l.Ok {
+                    c.err(cm.Source.Span(), msgs.ReflArgCompr())
+                    c.spreadBad = true
+                    continue
+                }
+                items := c.listItems(cm.Source.Span(), l)
+                for k in range items.Len() {
+                    keep := true
+                    if cm.Filter is not null {
+                        wasName := c.reflBind(cm.Name, c.descriptor(l, items[k]))
+                        wasKey := c.reflBind(cm.Key, c.P.T.Const(c.i64(), k))
+                        d := c.reflDecide(cm.Filter)
+                        c.reflUnbind(cm.Key, wasKey)
+                        c.reflUnbind(cm.Name, wasName)
+                        if d < 0 {
+                            c.err(cm.Filter!.Span(), msgs.ReflFilterUndecided())
+                            c.spreadBad = true
+                        }
+                        keep = d == 1
+                    }
+                    if keep {
+                        out.Push(ast.Expr.Compr(csp, ast.Compr(cm.Elem, cm.Value, cm.Key, cm.Name, cm.Source, null, true, k)))
+                    }
+                }
+            }
+            nomatch { out.Push(a) }
+        }
+    }
+    return out.ToArray()
+}
+
+# one argument a spread comprehension gave (G37): its value with the comprehension's names bound to its item
+fn (c mut Checker&) argItem(cm ast.Compr&, want types.TypeId) typed.Expr&c {
+    l := c.listOf(cm.Source)
+    items := c.listItems(cm.Source.Span(), l)
+    if not l.Ok or cm.At >= items.Len() { return c.unknown(cm.Value.Span()) }
+    wasName := c.reflBind(cm.Name, c.descriptor(l, items[cm.At]))
+    wasKey := c.reflBind(cm.Key, c.P.T.Const(c.i64(), cm.At))
+    x := c.expr(cm.Value, want)
+    c.reflUnbind(cm.Key, wasKey)
+    c.reflUnbind(cm.Name, wasName)
+    return x
+}
+
 # G6b, G10c: a generic enum's case written with the enum bare - "Tree.Leaf(3)": of the instance the expected type is, or
 # else of the one its arguments bind, inferred as a generic constructor's are (a reference read-only, an array value a
 # reference to it); a variable nothing binds is an error saying to write the arguments
@@ -10693,7 +11441,9 @@ fn (c mut Checker&) enumCase(sp source.Span, nsp source.Span, t types.TypeId, n 
             c.err(sp, msgs.ErrorWordAsValue(w, w))
             return c.unknown(sp)
         }
-        c.gap(nsp, "a member of a type of this kind")
+        # G32: a type's namespace holds its reflected members, its limits and an enum's cases - nothing by this name
+        c.err(nsp, msgs.ReflNoMember(c.ty(t), c.text(n)))
+        c.dropArgs(args)
         return c.unknown(sp)
     }
     tag I64 = -1
@@ -10968,6 +11718,19 @@ fn (c mut Checker&) enumFrom(sp source.Span, nsp source.Span, et types.TypeId, a
 fn (c mut Checker&) index(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) typed.Expr&c {
     et := c.typeNamed(x)
     if et >= types.TypeId(0) { return c.arrayLit(sp, et, items) }
+    # G33: an item of a list known while compiling, by a constant index
+    rl := c.listOf(x)
+    if rl.Ok {
+        if rl.Of == types.UnknownT { return c.unknown(sp) }
+        k := c.reflInt(items[0]) if items.Len() == 1 else noRefl()
+        if not k.Ok {
+            c.err(items[0].Span() if items.Len() > 0 else sp, msgs.ReflIndexNotConst())
+            return c.unknown(sp)
+        }
+        dt := c.listItem(sp, rl, k.I)
+        if dt == types.UnknownT { return c.unknown(sp) }
+        return c.zero(sp, dt)
+    }
     base := c.place(x)
     if base is null {
         for it in items { c.expr(it, types.UnknownT) }
@@ -11120,7 +11883,22 @@ fn (c mut Checker&) place(x ast.Expr&) typed.Place?&c {
             }
         }
         case ast.Expr.Index(sp, y, items) {
-            if c.typeNamed(y) < types.TypeId(0) { return c.indexPlace(sp, y, items) }
+            if c.typeNamed(y) < types.TypeId(0) and not c.listOf(y).Ok { return c.indexPlace(sp, y, items) }
+        }
+        case ast.Expr.Call(sp, f, args) {
+            # G34: f.Of(v) names v's field
+            match f {
+                case ast.Expr.Member(msp, y, n) {
+                    if c.text(n) == "Of" {
+                        dt := c.descTypeOf(y)
+                        if dt >= types.TypeId(0) {
+                            if dt == types.UnknownT { return null }
+                            return c.reflOf(sp, memberSpan(msp, 2), dt, args)
+                        }
+                    }
+                }
+                nomatch { }
+            }
         }
         nomatch { }
     }
@@ -12371,6 +13149,13 @@ fn (c mut Checker&) stmt(s ast.Stmt?&) {
         case ast.Stmt.Jump(sp, kind, msg) { c.jump(sp, kind, msg) }
         case ast.Stmt.Assert(sp, k, msg) if c.fr().Contract != 0 { c.ctCond(sp, k) }
         case ast.Stmt.Assert(sp, k, msg) {
+            # G35, S18c: one reading a reflected member is decided for this instance
+            rd := c.reflDecide(k)
+            if rd == 0 {
+                if msg is null { c.err(sp, msgs.AssertFalse()) } else { c.err(sp, msgs.AssertFalseMessage(c.src(msg.Span()))) }
+                return
+            }
+            if rd == 1 { return }
             x := c.cond1(k)
             m := c.message(msg, false)
             c.emit(typed.Stmt.Assert(sp, x, m))
@@ -13591,6 +14376,19 @@ fn (c mut Checker&) ifStmt(sp source.Span, i ast.If&) {
 
 fn (c mut Checker&) ifOf(sp source.Span, i ast.If&) typed.Stmt&c {
     if i.Cond is null { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
+    # G35: a condition reading a reflected member is decided for this instance - the chosen branch alone checked
+    rd := c.reflDecide(i.Cond)
+    if rd == 1 { return typed.Stmt.Block(sp, c.branchBlock(i.Then!)) }
+    if rd == 0 {
+        if i.Else is null { return typed.Stmt.Block(sp, typed.Block(typed.BlockId(I32(c.fr().Block)), Array<typed.Stmt&>(0))) }
+        match i.Else {
+            case ast.Stmt.If(esp, e) {
+                if e.Cond is null { return typed.Stmt.Block(esp, c.branchBlock(e.Then!)) }
+                return c.ifOf(esp, e)
+            }
+            nomatch { return c.elseOf(sp, i.Else!) }
+        }
+    }
     d := c.P.L.Diags
     # B9c, S8b: decided by evaluation in an earlier check of the program - the branch chosen alone
     key := pair.Pair(c.fr().File, I64(i.Cond!.Span().Start))
@@ -13717,6 +14515,9 @@ fn (c mut Checker&) elseDropped(s ast.Stmt&) Bool {
 # a condition reading a length this instance binds (G30: "a.Len()" of an array taken by value), decided for it: 1
 # true, 0 false, -1 where it reads none, or is not decided by the lengths alone
 fn (c mut Checker&) constCond(x ast.Expr&) I64 {
+    # G35: one reading a reflected member, decided for this instance
+    rd := c.reflDecide(x)
+    if rd >= 0 { return rd }
     if not c.readsConst(x) { return -1 }
     k := c.P.FoldKnown(c.fr().Ctx, x, types.BoolT)
     if c.P.T.KindOf(k) != types.Kind.Const { return -1 }
@@ -13824,6 +14625,12 @@ fn (c mut Checker&) doFor(sp source.Span, body Array<ast.Stmt&>&, k ast.Expr&) {
 
 # for x in range ... and for [i,] x in an array (S9a, S9b): a counted loop over a count worked out once
 fn (c mut Checker&) forIn(sp source.Span, f ast.ForIn&) {
+    # G33: a list known while compiling is unrolled, the body checked per item
+    rl := c.listOf(f.Source)
+    if rl.Ok {
+        c.unrolled(sp, f, rl)
+        return
+    }
     fr := c.fr()
     lmark := fr.leaks.Len()
     from := c.stmts.Len()
@@ -14144,6 +14951,9 @@ fn (c mut Checker&) lambdaErrs(e typed.Expr?&c, errs types.ListId) typed.Expr?&c
 # T[e for x in s if c] (E27): an Array<T> filled by the walk for-in makes over s, e yielded where c holds; its
 # storage reserved from an array's length or a range's count where the walk knows it, else grown (Reserve null)
 fn (c mut Checker&) comprehension(sp source.Span, cm ast.Compr&) typed.Expr&c {
+    # G33: over a list known while compiling, unrolled into an array literal
+    rl := c.listOf(cm.Source)
+    if rl.Ok { return c.unrolledCompr(sp, cm, rl) }
     et := c.resolve(cm.Elem)
     if et != types.UnknownT and (c.isRef(et) or c.P.T.HoldsRefs(et)) {
         # E27: not yet - where such elements live would be the array's
@@ -15026,11 +15836,15 @@ fn (c mut Checker&) matchStmt(sp source.Span, m ast.Match&) {
         if k == -2 { return }
         cs := m.NoMatch if k < 0 else m.Cases[k]
         if cs is null { return }
+        was := c.bindCase()
         if cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
+        c.unbindCase(was)
         return
     }
-    # G30: a match on an instance's length is decided for it - the chosen clause alone checked
-    k := c.lenMatch(m)
+    # G30, G35: a match on an instance's length, or on a reflected member, is decided for it - the chosen clause alone
+    # checked
+    k := c.reflMatch(m)
+    if k == -2 { k = c.lenMatch(m) }
     if k != -2 {
         cs := m.NoMatch if k < 0 else m.Cases[k]
         if cs is not null and cs.Body.Len() > 0 { c.emit(typed.Stmt.Block(sp, c.blockOf(cs.Body, typed.BlockKind.Plain, cs.Sp))) }
@@ -15068,6 +15882,41 @@ fn (c mut Checker&) lenMatch(m ast.Match&) I64 {
     return found
 }
 
+# the clause a match on a reflected member chooses (G35): its index, -1 for its nomatch or none, -2 where the match
+# is no such one - its subject reads no reflected member, or a clause has a guard or a pattern that is no value known
+# while compiling
+fn (c mut Checker&) reflMatch(m ast.Match&) I64 {
+    if m.OnType { return -2 }
+    was := c.reflTouched
+    c.reflTouched = false
+    v := c.reflFold(m.Subject)
+    touched := c.reflTouched
+    c.reflTouched = was
+    if not touched or not v.Ok { return -2 }
+    found I64 = -1
+    for i in range m.Cases.Len() {
+        cs := m.Cases[i]
+        if cs.Guard is not null { return -2 }
+        for pat in cs.Alts {
+            if isWild(pat) {
+                if found < 0 { found = i }
+                continue
+            }
+            x ast.Expr?&m = null
+            match pat {
+                case ast.Pattern.Value(_, e), ast.Pattern.Path(_, e) { x = e }
+                nomatch { return -2 }
+            }
+            w := c.reflFold(x!)
+            if not w.Ok or w.K != v.K { return -2 }
+            same := w.I == v.I and w.Ty == v.Ty
+            if v.K == RvText { same = w.S == v.S }
+            if found < 0 and same { found = i }
+        }
+    }
+    return found
+}
+
 # a match giving a value (S12b): "case P => v", or a block that leaves
 fn (c mut Checker&) matchValue(sp source.Span, m ast.Match&, want types.TypeId) typed.Expr&c {
     if not m.OnType and c.caughtName(m.Subject) >= 0 { return c.caughtMatchValue(sp, m, want) }
@@ -15079,10 +15928,14 @@ fn (c mut Checker&) matchValue(sp source.Span, m ast.Match&, want types.TypeId) 
             c.gap(sp, "a match on a type giving its value by a block (G15)")
             return c.unknown(sp)
         }
-        return c.expr(cs.Value, want)
+        was := c.bindCase()
+        v := c.expr(cs.Value, want)
+        c.unbindCase(was)
+        return v
     }
-    # G30: decided for this instance - a value match choosing nothing is an error here
-    k := c.lenMatch(m)
+    # G30, G35: decided for this instance - a value match choosing nothing is an error here
+    k := c.reflMatch(m)
+    if k == -2 { k = c.lenMatch(m) }
     if k != -2 {
         cs := m.NoMatch if k < 0 else m.Cases[k]
         if cs is null {
@@ -15106,30 +15959,199 @@ fn isWildType(c mut Checker&, t ast.TypeRef&) Bool {
     }
 }
 
-# the case "match T" chooses for this instance: its index, -1 for nomatch, -2 where the subject is not known
+# the case "match T" chooses for this instance: its index, -1 for nomatch, -2 where the subject is not known. The
+# subject is a type variable or a type a reflected member names (G38); a case is a type, a trait the type meets, or a
+# generic type or trait whose arguments name variables it binds (G36) - the first that holds is chosen, its variables
+# left in typeCaseBinds for its arm; one an earlier case takes every type of is an error
 fn (c mut Checker&) matchOnType(m ast.Match&) I64 {
-    st := types.UnknownT
-    match m.Subject {
-        case ast.Expr.Name(_, n) { st = try c.fr().Ctx.Vars.Get(n) catch default types.UnknownT }
-        nomatch { }
-    }
-    if st == types.UnknownT {
-        c.gap(m.Sp, "a match on a type not bound here (G15)")
+    c.typeCaseBinds = List<pair.Pair<source.NameId, types.TypeId>>()
+    st := c.reflType(m.Subject)
+    if st == types.UnknownT { return -2 }
+    if st < types.TypeId(0) {
+        c.err(m.Subject.Span(), msgs.ReflMatchSubject())
         return -2
     }
     # S13e: a type match chooses its case while compiling - nothing is left for a guard to decide
     for cs in m.Cases {
         if cs.Guard is not null { c.err(c.wordBefore(cs.Guard!.Span().Start, "if"), msgs.TypeMatchGuard()) }
     }
+    found I64 = -1
+    seen List<typeCase>
     for i in range m.Cases.Len() {
         for tr in m.Cases[i].Types {
-            if isWildType(c, tr) { return i }
-            if c.P.T.Same(c.resolve(tr), st) { return i }
+            if isWildType(c, tr) {
+                for e in seen {
+                    if e.Wild { c.P.L.Diags.ErrorOncePerLine(c.at(tr.Span()), msgs.ReflCaseUnreachable()) }
+                }
+                seen.Push(typeCase(true, false, types.UnknownT, 0))
+                if found < 0 { found = i }
+                continue
+            }
+            tc := c.typeCaseOf(tr)
+            if tc.Pat == types.UnknownT { continue }
+            for e in seen {
+                if c.typeCaseCovers(e, tc) { c.P.L.Diags.ErrorOncePerLine(c.at(tr.Span()), msgs.ReflCaseUnreachable()) }
+            }
+            seen.Push(tc)
+            if found >= 0 { continue }
+            if c.typeCaseHolds(tc, st, tr) { found = i }
         }
     }
+    if found >= 0 { return found }
     # G15: a type match is exhaustive for every instance - one no case covers needs a nomatch
     if m.NoMatch is null { c.err(m.Subject.Span(), msgs.TypeMatchUncovered(c.ty(st))) }
     return -1
+}
+
+# the variables the chosen type case binds, bound for its arm (G36): what they stood for before
+fn (c mut Checker&) bindCase() List<pair.Pair<source.NameId, types.TypeId>> {
+    was := List<pair.Pair<source.NameId, types.TypeId>>()
+    for b in c.typeCaseBinds {
+        was.Push(pair.Pair(b.First, try c.fr().Ctx.Vars.Get(b.First) catch default types.TypeId(-1)))
+        c.fr().Ctx.Vars.Put(b.First, b.Second)
+    }
+    return was
+}
+
+fn (c mut Checker&) unbindCase(was List<pair.Pair<source.NameId, types.TypeId>>) {
+    for b in was {
+        if b.Second >= types.TypeId(0) { c.fr().Ctx.Vars.Put(b.First, b.Second) } else { c.fr().Ctx.Vars.Remove(b.First) }
+    }
+}
+
+# a type case (G36): a wildcard, a trait, or a type - its pattern, holding N variables of its own (Owner's)
+type typeCase struct(Wild Bool, Trait Bool, Pat types.TypeId, N I64) {
+    Wild, Trait, Pat, N
+    Owner I64 = 0
+    Bare Bool = false   # a generic named bare: its variables bind nothing an arm can name
+}
+
+# a case's type read as a pattern: each argument written as a name no type has a variable of the case's own (G36)
+fn (c mut Checker&) typeCaseOf(tr ast.TypeRef&) typeCase {
+    ns List<source.NameId>
+    c.patternNames(tr, ns, false)
+    owner := -(I64(1) << 40) - I64(tr.Span().Start)
+    fr := c.fr()
+    ctx := generic.Context(fr.Ctx.Mi, fr.Ctx.Owner)
+    for e in fr.Ctx.Vars { ctx.Vars.Put(e.Key, e.Value) }
+    for e in fr.Ctx.Refl { ctx.Refl.Put(e.Key, e.Value) }
+    for k in range ns.Len() { ctx.Vars.Put(ns[k], c.P.T.Var(owner, k, types.ReadOnly)) }
+    pt := c.P.Resolve(ctx, tr)
+    # a generic type or trait named bare takes every instance: its arguments variables of the case's own
+    if pt == types.UnknownT {
+        match tr {
+            case ast.TypeRef.Named(nsp, path, args) {
+                ref := c.P.R.Use(c.fr().File, nsp.Start)
+                if args.Len() == 0 and ref.Kind == names.What.Type and ref.Index >= 0 {
+                    d := c.P.DeclFor(ref.Module, ref.Index)
+                    np := c.P.T.DeclParams(d)
+                    if np > 0 {
+                        vs := Array<types.TypeId>(np)
+                        for k in range np { vs[k] = c.P.T.Var(owner, I64(ns.Len()) + k, types.ReadOnly) }
+                        pt = c.P.Instance(d, c.P.T.List(vs))
+                        tc := typeCase(false, c.isTrait(pt), pt, ns.Len() + I64(np))
+                        tc.Owner = owner
+                        tc.Bare = true
+                        return tc
+                    }
+                }
+            }
+            nomatch { }
+        }
+    }
+    if pt == types.UnknownT {
+        c.resolve(tr)   # what is wrong with it, said
+        return typeCase(false, false, types.UnknownT, 0)
+    }
+    tc := typeCase(false, c.isTrait(pt), pt, ns.Len())
+    tc.Owner = owner
+    return tc
+}
+
+fn (c mut Checker&) isTrait(t types.TypeId) Bool {
+    return c.P.T.KindOf(t) == types.Kind.Named and c.P.T.DeclKindOf(c.P.T.DeclOf(t)) == types.DeclKind.Trait
+}
+
+# the names of a case's type that name no type, in its arguments (G36): its variables
+fn (c mut Checker&) patternNames(tr ast.TypeRef?&, out mut List<source.NameId>&, inArgs Bool) {
+    if tr is null { return }
+    match tr {
+        case ast.TypeRef.Named(nsp, path, args) {
+            if inArgs and path.Len() == 1 and args.Len() == 0 and not c.fr().Ctx.Vars.Has(path[0]) and
+               c.P.R.Use(c.fr().File, nsp.Start).Kind == names.What.None and c.text(path[0]) != "_" {
+                if not out.Has(path[0]) { out.Push(path[0]) }
+                return
+            }
+            if args.Len() > 0 {
+                for a in args { c.patternNames(a, out, true) }
+            }
+        }
+        case ast.TypeRef.Ref(_, of, _, _) { c.patternNames(of, out, inArgs) }
+        case ast.TypeRef.Perm(_, of, _, _) { c.patternNames(of, out, inArgs) }
+        nomatch { }
+    }
+}
+
+# whether a type case holds of st (G36): its pattern matching st - a trait's, st meeting it - its variables bound
+# into typeCaseBinds where it does
+fn (c mut Checker&) typeCaseHolds(tc typeCase, st types.TypeId, tr ast.TypeRef&) Bool {
+    b := generic.Binding(tc.Owner, tc.N)
+    if tc.Trait {
+        if tc.N > 0 {
+            c.P.UnifyBound(st, tc.Pat, b)
+            for k in range tc.N {
+                # a bare generic trait's argument nothing binds is the matched type ("Hashable" is Hashable<T>)
+                if b.Vals[k] == types.UnknownT and tc.Bare { b.Vals[k] = st }
+                if b.Vals[k] == types.UnknownT { return false }
+            }
+        }
+        tt := c.P.Subst(tc.Pat, tc.Owner, c.P.T.List(b.Vals)) if tc.N > 0 else tc.Pat
+        if not c.P.Satisfies(st, tt) { return false }
+    } else if tc.N == 0 {
+        # a read-only reference case takes a writable reference too (T25b: writable converts to read-only at the top),
+        # so "case Node&" holds for a "mut Node&" - "case mut Node&" before it tells them apart
+        ro := st
+        if c.isRef(st) { ro = c.P.T.Ref(c.P.T.Referent(st), c.P.T.PermOf(st) & ~types.Writable) }
+        if not c.P.T.Same(tc.Pat, st) and not c.P.T.Same(tc.Pat, ro) { return false }
+    } else {
+        if not c.P.Unify(tc.Pat, st, b, false, false) { return false }
+        for k in range tc.N {
+            if b.Vals[k] == types.UnknownT { return false }
+        }
+        if not c.P.T.Same(c.P.Subst(tc.Pat, tc.Owner, c.P.T.List(b.Vals)), st) { return false }
+    }
+    ns List<source.NameId>
+    c.patternNames(tr, ns, false)
+    for k in range ns.Len() { c.typeCaseBinds.Push(pair.Pair(ns[k], b.Vals[k])) }
+    return true
+}
+
+# whether an earlier type case takes every type a later one does (G36): a wildcard; the same type; a trait the later
+# type meets; a generic pattern of distinct variables the later one is an instance of
+fn (c mut Checker&) typeCaseCovers(e typeCase, l typeCase) Bool {
+    if e.Wild { return true }
+    if l.Wild { return false }
+    if e.Trait {
+        if l.Trait { return e.N == 0 and l.N == 0 and c.P.T.Same(e.Pat, l.Pat) }
+        return e.N == 0 and l.N == 0 and c.P.Satisfies(l.Pat, e.Pat)
+    }
+    if l.Trait { return false }
+    if e.N == 0 {
+        if l.N != 0 { return false }
+        if c.P.T.Same(e.Pat, l.Pat) { return true }
+        # a read-only reference case takes the writable one too (typeCaseHolds)
+        return c.isRef(l.Pat) and c.P.T.Same(e.Pat, c.P.T.Ref(c.P.T.Referent(l.Pat), c.P.T.PermOf(l.Pat) & ~types.Writable))
+    }
+    if c.P.T.KindOf(e.Pat) != types.Kind.Named or c.P.T.KindOf(l.Pat) != types.Kind.Named { return false }
+    if c.P.T.DeclOf(e.Pat) != c.P.T.DeclOf(l.Pat) { return false }
+    # every argument of the earlier one its own variable, each once
+    xs := c.P.T.Items(c.P.T.Args(e.Pat))
+    used List<I64>
+    for x in xs {
+        if c.P.T.KindOf(x) != types.Kind.Var or c.P.T.A(x) != e.Owner or used.Has(c.P.T.B(x)) { return false }
+        used.Push(c.P.T.B(x))
+    }
+    return true
 }
 
 fn (c mut Checker&) matchExpr(sp source.Span, m ast.Match&, isValue Bool, want types.TypeId) typed.Expr&c {
@@ -15711,6 +16733,9 @@ fn (c mut Checker&) cover(p ast.Pattern&, et types.TypeId, covered mut List<Bool
 # an enum case a pattern's path names: its tag in et, -1 where it names none of et's
 fn (c mut Checker&) caseTag(x ast.Expr&, et types.TypeId) I64 {
     if not c.isEnum(et) { return -1 }
+    # G34: a case's descriptor, of this enum
+    cd := c.caseDesc(x)
+    if cd.K == generic.DescCase { return cd.Case if c.P.T.Same(cd.Of, et) else -1 }
     match x {
         case ast.Expr.Member(_, prefix, n) {
             if not c.namesEnumOf(prefix, et) { return -1 }
@@ -15946,6 +16971,7 @@ fn (c mut Checker&) valueTest(sp source.Span, place typed.Place&c, x ast.Expr&, 
 
 # whether an expression is a case written - "Shape.Circle", "Shape.Rect(_, 2.0)" - of an enum the name before it names
 fn (c mut Checker&) caseWritten(x ast.Expr&) Bool {
+    if c.caseDesc(x).K == generic.DescCase { return true }
     match x {
         case ast.Expr.Member(_, prefix, n) {
             t := c.typeNamed(prefix)
@@ -15968,6 +16994,13 @@ fn (c mut Checker&) caseWritten(x ast.Expr&) Bool {
     }
 }
 
+# a case's descriptor an expression names (G34): DescNone where it names none
+fn (c mut Checker&) caseDesc(x ast.Expr&) generic.Desc {
+    dt := c.descTypeOf(x)
+    if dt <= types.UnknownT { return generic.Desc(generic.DescNone, types.UnknownT, 0, 0) }
+    return c.P.DescOf(dt)
+}
+
 # the case path of a case written, "Shape.Rect" of "Shape.Rect(_, 2.0)"
 fn casePath(x ast.Expr&) ast.Expr&x {
     match x {
@@ -15983,6 +17016,16 @@ fn (c mut Checker&) caseCompare(sp source.Span, op token.Tok, xa ast.Expr&, pat 
     xt := typeOf(x)
     if xt == types.UnknownT { return c.unknown(sp) }
     et := c.deref(xt)
+    cd := c.caseDesc(pat)
+    if cd.K == generic.DescCase and not c.P.T.Same(cd.Of, et) {
+        c.err(pat.Span(), msgs.ReflCaseOther(c.ty(cd.Of), c.ty(et)))
+        return c.unknown(sp)
+    }
+    if cd.K == generic.DescCase and c.isStruct(et) {
+        # G34: a struct's one case - every value holds it
+        c.emit(typed.Stmt.Eval(sp, x))
+        return c.lit(sp, types.BoolT, 1 if op == token.Tok.EqEq else 0)
+    }
     if not c.isEnum(et) {
         c.err(pat.Span(), msgs.CaseTestNotEnum(c.src(casePath(pat).Span()), c.ty(et)))
         return c.unknown(sp)
@@ -16002,6 +17045,8 @@ fn (c mut Checker&) caseCompare(sp source.Span, op token.Tok, xa ast.Expr&, pat 
 fn (c mut Checker&) caseTest(x ast.Expr&, place typed.Place&c, t types.TypeId) typed.Expr&c {
     et := c.deref(t)
     sp := x.Span()
+    cd := c.caseDesc(x)
+    if cd.K == generic.DescCase { return c.isCase(sp, place, cd.Case) }
     match x {
         case ast.Expr.Name(nsp, n) {
             if c.text(n) == "_" { return c.lit(nsp, types.BoolT, 1) }

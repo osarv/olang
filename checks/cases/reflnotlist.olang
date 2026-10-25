@@ -1,0 +1,9 @@
+# check: fail error[G33]: I64 has no Fields - only a struct and an enum's case have fields
+# also: compilation failed with 1 error
+# G33: a number has no fields
+type Point struct(x I64, y I64 = 2) { x, y }
+type Shape enum {
+    Circle(r F64)
+    Empty
+}
+fn main() { n := I64.Fields.Len() }

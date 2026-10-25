@@ -1,0 +1,10 @@
+# check: fail error[G13]: 'match' on a type takes a type known while compiling - a type variable, or a type a reflected member names
+# also: compilation failed with 1 error
+# G13: a type match's subject is a type known while compiling
+type Rec struct(Fields Array<I64>&) { Fields }
+fn main() {
+    r := Rec(I64[1, 2])
+    for f in r.Fields {
+        match f.Type { nomatch { } }
+    }
+}
