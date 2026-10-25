@@ -36,6 +36,7 @@ f931dc6f893b1978 59073b85e43f0062 bench/vec.olang
 e7088668f6c07e15 2f152e938e07cbc2 checks/cases/2digitname.olang
 0a98153ac129040e 7885b5ede57ec8df checks/cases/anyenumpayload.olang
 144b0d404afcd457 2b89076c0db2e8aa checks/cases/anynocopy.olang
+def29592a7034b12 565fb9de60c9333d checks/cases/anynocopyfunc.olang
 4fa310e38bcb24e0 668f87395b6b0127 checks/cases/anynocopylist.olang
 659b93b8f3ae65ce 51917ee43850bb53 checks/cases/arraytypemutual.olang
 0bb7a128ebc90f90 88a111f6b7ae7a04 checks/cases/arraytypeself.olang
@@ -280,11 +281,15 @@ f61f037766a51597 888f29b47ac67cb5 checks/cases/e15atryonlychecks.olang
 fdb3975832f2927a a920d6fadd38c332 checks/cases/e16constnotry.olang
 597364386727892a 9880452e1c403a34 checks/cases/e23lenclash.olang
 696b379d8dd16419 5ce1f8c148a3f728 checks/cases/e24chaininner.olang
+41693db582df0a01 9c9b2019dc9093fe checks/cases/e25defaultunknown.olang
 8656db11e526a208 3795a2efb2577fa4 checks/cases/e25global.olang
+b425677221e53fd1 06c3fc21862fb4c8 checks/cases/e25noresultctor.olang
+b9f5b8bee4ffecd3 1a56e5784eef17e5 checks/cases/e25noresultscope.olang
 182e414a054d67c8 d030c4225b2590e6 checks/cases/e25scopeargfield.olang
 2e16dc8b65a92de3 ed830ae2c7e375fc checks/cases/e25scopeargpush.olang
 471868953d201cd9 7f0e3fc64c83c292 checks/cases/e25scopeargreturn.olang
 300f134f9282d272 fad38ee7c506bc63 checks/cases/e25scopeargreturnstore.olang
+6ab96386f860ae9c 93fe8cb49cafee51 checks/cases/e25spawninner.olang
 36e12b018eb1d17e ac39de956423e64a checks/cases/e28condarraylent.olang
 adecedc3e4fa0e75 790c194d14e47002 checks/cases/e28condelementlent.olang
 7954431d314f351e 830c01c5faafbdb5 checks/cases/e28condlocallent.olang
