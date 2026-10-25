@@ -278,7 +278,10 @@ fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
     d := c.P.L.Diags
     said Map<pair.Pair<I64, I64>, Bool>
     n I64 = 0
-    for a in c.ContractAsks {
+    for ai in range c.ContractAsks.Len() {
+        a := c.ContractAsks[ai]
+        # a call whose ArgumentError a clause takes fails at run time, as written (D17e)
+        if c.ContractHandled.Has(ai) { continue }
         key := pair.Pair(a.File, (I64(a.At.Start) << 32) | I64(a.CondSp.Start))
         # one false requirement is said at a call: the first, as the call checks them in order on entry
         call := pair.Pair(a.File, I64(a.At.Start) << 32)

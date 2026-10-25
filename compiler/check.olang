@@ -234,6 +234,10 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     Contracts Map<I64, typed.ContractInfo>
     ctDone Map<I64, Bool>
     ContractAsks List<ContractAsk>
+    # each contract ask's calling body, and the asks a try handles - its clauses taking ArgumentError (D17e: decided
+    # at run time, as written)
+    contractCallers List<I64>
+    ContractHandled Map<I64, Bool>
     asking Bool = false         # a ValueAsk's body is being built: what it makes asks nothing again
     # G30: an assert's condition is being made a body of its own - a constant variable the instance it is checked for
     # binds is read as its value (a condition's is not: one parse of a local if serves every instance, S8b)
@@ -475,6 +479,8 @@ fn (c mut Checker&) reset() {
     c.Contracts = Map<I64, typed.ContractInfo>()
     c.ctDone = Map<I64, Bool>()
     c.ContractAsks = List<ContractAsk>()
+    c.contractCallers = List<I64>()
+    c.ContractHandled = Map<I64, Bool>()
     c.Faulty = Map<I64, Bool>()
     c.fixedInits = Map<pair.Pair<I64, I64>, fixedInit>()
     c.writes = Map<pair.Pair<I64, I64>, Bool>()
@@ -3452,6 +3458,7 @@ fn (c mut Checker&) contractAt(sp source.Span, nsp source.Span, r types.TypeId, 
     for i in range info.Reqs.Len() {
         ask := c.askBody(mi, sp, old, info.Reqs[i], args)
         c.ContractAsks.Push(ContractAsk(ask, file, nsp, info.File, info.ReqSps[i], info.Name, info.ReqTexts[i], cw, $ct))
+        c.contractCallers.Push(old)
     }
     return out
 }
@@ -3689,6 +3696,7 @@ fn (c mut Checker&) conversionAt(sp source.Span, argSp source.Span, x typed.Expr
     c.state[id] = 2
     cw, ct := c.P.L.Diags.TopContext()
     c.ContractAsks.Push(ContractAsk(id, file, sp, file, argSp, "", text, cw, $ct, $c.ty(t)))
+    c.contractCallers.Push(-1)
 }
 
 # ---- frames, blocks and locals ----
@@ -10630,6 +10638,7 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         case ast.Expr.Paren(psp, _) { c.err(psp, msgs.TryParens()) }
         nomatch { }
     }
+    asks := c.ContractAsks.Len()
     fr.Tries++
     x := c.expr(y, want)
     fr.Tries--
@@ -10653,9 +10662,21 @@ fn (c mut Checker&) tryExpr(sp source.Span, y ast.Expr&, clauses Array<ast.Catch
         for cl in clauses { cls.Push(c.clause(cl, rt, asValue)) }
     }
     if c.clauseRules(clauses, cls, asValue, rt) and asValue { return c.unknown(sp) }
+    c.handlesContracts(asks, cls)
     k := c.caught(mark, end, cls)
     c.escapes(source.Span(sp.Start, sp.Start + 3), mark, k)
     return typed.Expr.Try(sp, rt, typed.Try(x, cls.ToArray()))
+}
+
+# D17e: the calls whose contracts were asked of the evaluator since ask, in the body being checked, are left to the run
+# time where a clause takes ArgumentError - a call whose failure is handled fails there as written (a test of it)
+fn (c mut Checker&) handlesContracts(ask I64, cls List<typed.Clause&>&) {
+    if cls.Len() == 0 { return }
+    ae := c.P.PreludeType("std/prelude/argument", "ArgumentError")
+    if ae == types.UnknownT or c.left(ae, cls) == ae { return }
+    for i in range ask, c.ContractAsks.Len() {
+        if c.contractCallers[i] == c.fr().Body and c.ContractAsks[i].Name != "" { c.ContractHandled.Put(i, true) }
+    }
 }
 
 # a try covering nothing that can fail (R8); in a generic's body what can fail differs between instances, and nothing
@@ -10765,6 +10786,7 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
     mark := fr.leaks.Len()
     from := c.stmts.Len()
     before := fr.Fallible
+    asks := c.ContractAsks.Len()
     fr.Tries++
     c.stmt(st)
     fr.Tries--
@@ -10779,6 +10801,7 @@ fn (c mut Checker&) tryStore(sp source.Span, st ast.Stmt&, clauses Array<ast.Cat
         for cl in clauses { cls.Push(c.clause(cl, types.VoidT)) }
     }
     c.clauseRules(clauses, cls, false, types.VoidT)
+    c.handlesContracts(asks, cls)
     k := c.caught(mark, end, cls)
     c.escapes(source.Span(sp.Start, sp.Start + 3), mark, k)
     c.emit(typed.Stmt.Eval(sp, typed.Expr.Try(sp, types.VoidT, typed.Try(x, cls.ToArray()))))

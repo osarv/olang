@@ -18035,6 +18035,21 @@ test "D17e: requirements hold where the evaluator computes the calls - baked and
     assert dkPercent(30, whole)! + l.Len() + dkSum(I64[1, 2, 3])! == DkBaked
 }
 
+# D17e (the lang25 review): a call with closed arguments whose ArgumentError a clause takes is no compile-time error - it
+# fails at run time as written, which is how a test asks for the failure; while compiling it fails the same way
+DkCaught I64 = try dkHalf(7) catch ArgumentError default -1
+
+test "D17e: a closed call whose ArgumentError is caught fails as written - baked, decided and run" {
+    assert DkCaught == -1
+    assert (try dkHalf(7) catch ArgumentError.INVALID default -1) == -1
+    assert (try dkPercent(5, 0) catch default -2) == -2
+    broke := false
+    try dkPercent(5, 0) catch ArgumentError { broke = true }
+    assert broke
+    v := try (try dkHalf(9)) + 1 catch ArgumentError default -3
+    assert v == -3 and DkCaught + DkFailed == -2
+}
+
 test "D17: requirements checked on entry, in every build, failing with ArgumentError.INVALID" {
     w := 0
     v := try dkPercent(5, w) catch ArgumentError.INVALID default -1

@@ -1792,8 +1792,10 @@ of it runs.
 
 **D17e (deciding a contract while compiling).** At a call whose arguments are all values the evaluator computes -
 literals, constants, immutable globals, calls of such - and no local, each condition is decided while compiling (K1):
-a false one is a compile-time error at the call naming the condition, with a note at it, whatever handles the call's
-failure. Where the evaluator runs a call itself - a global it bakes (K2), an assert it decides (S18c) - the conditions
+a false one is a compile-time error at the call naming the condition, with a note at it - unless a `catch` at the call
+takes its `ArgumentError` (`try pick(5, 3) catch ArgumentError { }`, an item-less `catch` among them, a clause of an
+enclosing `try` of the same body too), when the call fails at run time as written: a test of the failure path is such a
+call. Where the evaluator runs a call itself - a global it bakes (K2), an assert it decides (S18c) - the conditions
 are checked as at run time, failing the same way. A condition the evaluator cannot decide is checked at run time.
 
 **D17f (contracts and function values).** A function with conditions may be made a function value (T21); its type's
