@@ -434,3 +434,8 @@ on sight per rules.md, "Code rules".
   symlink out of a remote repo, F8 json integers > 2^53, F9 generator + contract inexpressible, F10 diagnostics. Only
   relaxation 6 of mem47's six is built (held). Fixing in wt-bfix1 (directions: when in doubt keep; F5 a guaranteed
   check per resume; F8 exact integers; F9 ArgumentError in Iterator's E).
+- 2026-10-26 CEST: bfix1 merged (77709d9, verified): bulk review 1's F1-F10 fixed (yield lets go for views across it;
+  same-value only by pure path; fixed points to convergence; destructor-registering regions only end by Destroy;
+  generator re-entry a guaranteed check; extern + any export fn = nothing freed early; embed realpath; Json.Int/Uint
+  exact; generator contracts at the first Next with ArgumentError in E; diagnostics). Over-rejection 13 (returning a
+  global's storage, O10c) left - older, §8.
