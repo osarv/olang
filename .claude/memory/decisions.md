@@ -1213,3 +1213,10 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   the rest of QAM (error types in generics, named sets as types, storable errors) dropped; keeping failures for later
   is the user's own enum (and Result<T, E> with user types). ASKED; in effect: errors not values (T20), QAM on the
   build list until answered.
+- **QBA RECORDED 2026-10-25 (the user: "store the question of zero values and unit values in the ledger"), to discuss
+  later.** Reading taken: (a) zero values - which types have one and what it is (D13c: the constructor from its
+  parameters' defaults; none where the constructor has effects or a reference is never null), and whether an error or
+  a Result has one (QAM's old "null as no error"); (b) unit values - a type with one value, for "nothing" in a generic
+  position (`Result<Unit, E>` for a function with no result, `Map<K, Unit>` as a set, a channel of signals); olang has
+  none today (a function with no result has no type to bind). In effect: nothing changed. The user may mean something
+  else; ask when the topic comes up.
