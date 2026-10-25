@@ -1198,3 +1198,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   `(1, "a")` literals, `a, b := t` unpacking. Open clashes: (1) `(...)` grouping in type lists vs a tuple type (make
   grouping BE a tuple?), (2) several results as tuples (one concept; solves Result<(I64, I64), E>). ASKED whether to
   work both out in full.
+- TUPLES DROPPED again 2026-10-25 (the user: "drop them again. The comptime indexing only settles it"). So Result's
+  several-results question resolves to (a): a multi-result call cannot land in a Result. Result integration (QAY 1, 2,
+  4) un-parked and re-asked.
