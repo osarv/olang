@@ -13,12 +13,33 @@
 | ok - T32b: an any Iterator walked by for-in and its defaults
 | ok - K2: anys evaluated while compiling agree with the run time
 | ok - T32a: arrays and conversions of them are copied into the box
+| ok - T32a: a conditional, a match or a catch default put in an any is copied into its box
 | ok - E11a: $ counts an any as a reference, 8 deep
 | ok - T32a: an any Iterator whose element type some defaults do not fit
 | ok - T34: type cases naming a generic's instances
 | ok - D8a: a trait's defaults through an any
 | ok - E19: an array literal of anys, rendered as written
 | ok - M21: a method of one instance is not another's
+| ok - M21: two instances' methods each found for their own instance, an exact receiver first
+| ok - T32: a type variable in an any's trait, substituted and inferred; Map to a reference through an any
+| ok - T32a: a call's array a scope argument puts elsewhere is copied into the box
+| ok - O26a: a returned local a kept borrow names is copied at its return
+| ok - M21: Eq and Hash of one instance are not another's
+| ok - T7b, E25: a scoped call's array of plain data is copied where it is returned or boxed
+| ok - O26a, T7b: a returned array local something else names is copied at its return
+| ok - E25, P1g: a spawn target set by a call given a scope argument
+| ok - P1g, T11b: a spawn target holding an array by value is stored as its assignment
+| ok - O26a, T7b: a callee sharing a parameter's scope keeps it, so the returned local is copied
+| ok - T29a: a conversion of a place to a type over String names its storage
+| ok - T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time
+| ok - E25, O25a: a local a scoped call declares lives where the argument puts it
+=== test tests/errsets.olang
+| status 0
+| ok - an error type and a set are declared as types, and a set stands for its members
+| ok - a caught error renders as its name prints, decided while compiling and at run time alike
+| ok - a caught error is compared, narrowed and matched
+| ok - a caught error is raised again, held to the set the narrowing leaves
+| ok - a clause's name reaches its block and its default; each clause its own
 === test tests/runner.olang
 | status 0
 | ok - calling back across the cycle from runner
@@ -198,6 +219,8 @@
 | ok - a task that allocates repeatedly does not accumulate memory
 | ok - destructors registered on a task thread run when the spawner's scope closes
 | ok - G12: big<I64> names one instance, called or as a value
+| ok - G12: x.M<T>(...) names a method's own type arguments
+| ok - E31c: 2.0 * v calls v.Mul(2.0), operands still left first
 | ok - a generic used before its own declaration still gets its body
 | ok - a generic parameterised by a callback can actually call it
 | ok - slicing a compile-time-length array, with either bound omitted
@@ -433,6 +456,9 @@
 | ok - E29: membership - Has for an element, Contains for a run of the collection's own type
 | ok - E28/E29/E30: evaluated while compiling, as at run time
 | ok - E30: literals in chains adapt; indexes of any integer type; arrays of two lengths compared
+| ok - E30, G12: a chain spaced as comparisons is one, never type arguments
+| ok - E30: a chain's literal is typed beside each comparison's other operand, as the chain written out
+| ok - S12b: a value match with only a nomatch takes its value's type
 | ok - E28: written texts and array literals of different lengths, and an enum case as a receiver
 | ok - S4c/D12b: parallel assignment swaps; several names share one type
 | ok - L4a: a block comment is whitespace, and a line break where it spans one
@@ -440,14 +466,14 @@
 | ok - G19: a supplied Len or Bits meets a constraint
 | ok - E31: operators call methods named for them - arithmetic, negation, ordering, @, compound assignment
 | ok - E31: bitwise and shift operators, and ++/-- from Inc/Dec or derived from Plus/Minus
-| ok - E31: Call makes a value callable and passable as a function; try calls CheckedAt and CheckedSlice
+| ok - E31: Call makes a value callable and passable as a function; a fallible At and Slice are called with try
 | ok - E31: a Call writing its parameter and its receiver, passed where a matching function type is wanted
 | ok - E31: indexing calls At, assigning through it SetAt, slicing Slice
 | ok - E31: operators in generic code, in a constraint, and while compiling
 | ok - M19e: defaults reach satisfying types; a type's own method wins
 | ok - T17: an array of enums with a small payload is laid out at its real stride
 | ok - S9d: for-in walks At and Len as a counted loop; an own Iter wins; Indexable derives Iter
-| ok - E31/S9e: try calls the Try forms or derives them from Len; try on a store or an increment; for x in try c
+| ok - E31/E16d/S9e: a type's own fallible methods under try; try on a store or an increment; for x in try c
 | ok - E29/S9e: try reaches a fallible Has, and a comprehension's own calls
 | ok - E32: is and as on enum values
 | ok - E10, E10c: a reference compares by identity unless its type declares Eq, and 'is null' asks for none, while compiling and at run time
@@ -477,10 +503,11 @@
 | ok - T29: a type over a declared number does not take its constructor
 | ok - D15: a cursor declared with := from a field read
 | ok - E6c: integer arithmetic wraps
-| ok - CheckError.OUT_OF_BOUNDS from a checked index, caught by name and propagated
-| ok - R20: try (...) checks arithmetic, shifts, conversions and lengths
-| ok - E15a: checked operations follow IEEE's exceptions
-| ok - T6b/R20: a tried value widened where it lands keeps its checks
+| ok - ArrayError.OUT_OF_RANGE from a.Get(i), caught by name and propagated
+| ok - E16d: a.Set(i, v) is a checked store - baked and run
+| ok - std/arith checks arithmetic and shifts, Narrow conversions, Get indices
+| ok - std/arith follows IEEE's exceptions
+| ok - T6b/R9a: a tried value widened where it lands keeps its checks
 | ok - the evaluator runs checked operations as the generated code does
 | ok - the evaluator models slices, text and enum payloads as the run time does
 | ok - written text declared with := is a String as a global
@@ -530,7 +557,6 @@
 | ok - a checked index evaluates its base once
 | ok - S4: assignment is left to right, and a compound one reads its place once
 | ok - an array filled with a struct holds the struct in every element
-| ok - D14b: an array length whose byte count overflows is out of range
 | ok - a decimal literal above I64's maximum is a U64
 | ok - a long text literal is not truncated
 | ok - a block inside a match value closes at its own brace
@@ -719,7 +745,6 @@
 | ok - O18c: a reference read out of a call's value result is kept where its referent lives
 | ok - E31: writes through x[i] go back through SetAt, evaluated while compiling as at run time
 | ok - E31: an element holding references, written through x[i] in a loop
-| ok - E31/R21: try on a write through x[i] checks the read and the write back
 | ok - O17: a generic's instantiations each say what their own body does with a region
 | ok - O26a: a for-in element pushed into a returned list
 | ok - E25: a scope argument on a call whose results are destructured
@@ -767,8 +792,8 @@
 | ok - O15: a tree's nodes destruct in reverse construction order - each node after the nodes it holds were built
 | ok - R1a, R1b: an inferred set is what the body can fail with, through cycles and function values
 | ok - R8: try covers a chain, its arguments and a parenthesized expression
-| ok - E15a: checked reports a shifted-out bit, a changed conversion, an infinite narrowing and the wrong case
-| ok - E31, E31a: a fallible operator, and its checked form
+| ok - std/arith reports a shifted-out bit; Narrow a changed conversion and an infinite narrowing; as the wrong case
+| ok - E31: a fallible operator
 | ok - E35: a postfix '!' gives the value where nothing fails
 | ok - T35c: Float, Integer and Number - decided while compiling, and the same at run time
 | ok - G9a: a literal reaching a constrained variable - decided while compiling, and the same at run time
@@ -780,11 +805,13 @@
 | ok - T2c: an array is never null - its zero value is the empty array
 | ok - C2d/E28: a conditional or match passed to a constructor lands with the instance
 | ok - T30a, T31a, G19: an extended trait's methods, a closed trait's types, an intersection - baked and run
-| ok - D17e: requirements and guarantees hold where the evaluator computes the calls - baked and run
-| ok - D17e: checked f(x) checks a requirement before the call and a guarantee after it, with CheckError.CONTRACT
-| ok - D17a: for and if items, fits, a constructor's contract - checked where asked for
-| ok - D17d, D17f: written scope relations are obligations; a function with value conditions is a value, unchecked
+| ok - D17e: requirements hold where the evaluator computes the calls - baked and run
+| ok - D17e: a closed call whose ArgumentError is caught fails as written - baked, decided and run
+| ok - D17: requirements checked on entry, in every build, failing with ArgumentError.INVALID
+| ok - D17a: conditions calling functions and lambdas, a call in one failing as itself, a constructor's contract
+| ok - D17d, D17f: written scope relations are obligations; a function with value conditions is a value, checked
 | ok - D17g: a conversion checked at run time keeps its own words
+| ok - E24: a try covers the whole expression after it, and the evaluator agrees
 === test tests/worker.olang
 | status 0
 | ok - Classify accepts values inside the range
@@ -803,6 +830,12 @@
 | ok - D8a: another module's default reads its own global, never a caller's type variable of that name
 | ok - D8a/D16: a lambda default from another module
 | ok - G12: sh.PickSecond<I64> names an instance, called or as a value
+=== test std/arith.olang
+| status 0
+| ok - integers: what fits is the plain result, what does not fails
+| ok - Rem by -1 is 0, the least value's too - while compiling as at run time (the lang25 review)
+| ok - floats: IEEE's exceptions as errors
+| ok - Checked: each step checked, left to right, the same while compiling as at run time
 === test std/base64.olang
 | status 0
 | ok - the RFC 4648 test vectors
@@ -1130,7 +1163,7 @@
 | ok - NaN, the infinities and -0
 | ok - Min, Max and Clamp
 | ok - the constants
-| ok - Pow wraps as * does, and checked checks it
+| ok - Pow wraps as * does (std/arith's Pow checks it)
 | ok - an integer's Sqrt is the floor of its root, exact at every edge
 | ok - a negative signed integer has no square root
 | ok - Abs, Min, Max and Clamp on the integers
@@ -1258,6 +1291,10 @@
 | status 0
 === run d16blambdaorder.olang
 | status 0
+=== run d17entrycheck.olang
+| status 0
+=== run d17reqcaught.olang
+| status 0
 === run d8eruns.olang
 | status 0
 === run d8evalues.olang
@@ -1278,6 +1315,8 @@
 === run e13cliterals.olang
 | status 0
 === run e13cparens.olang
+| status 0
+=== run e16dgetbang.olang
 | status 0
 === run e31bhandlefieldloop.olang
 | status 0
@@ -1306,8 +1345,6 @@
 === run e35bangrun.olang
 | status 0
 | half of 8 is 4
-=== run e35checkedbang.olang
-| status 0
 === run enumcomma.olang
 | status 0
 === run errcomma.olang
@@ -1323,6 +1360,8 @@
 === run g21effect.olang
 | status 0
 === run g21mutable.olang
+| status 0
+=== run g4resultwritten.olang
 | status 0
 === run gemmflat.olang
 | status 0
@@ -1470,6 +1509,8 @@
 === run qwlist.olang
 | status 0
 === run r1cwords.olang
+| status 0
+=== run r3araisenarrowed.olang
 | status 0
 === run renderoperandhere.olang
 | status 0

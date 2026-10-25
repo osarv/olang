@@ -3556,6 +3556,76 @@ qwnointro.olang:4:11: error: expected a name, found '<'
     4 | fn pick(a <T>, b T) T { return a }
       |           ^
 compilation failed with 1 error
+=== r11bcaptured.olang
+r11bcaptured.olang:6:50: error[R11b]: 'e' is the error a clause took, which a lambda cannot capture - pass '$e' for its text
+    6 |     try f() catch e { k := fn() String { return $e } }
+      |                                                  ^
+compilation failed with 1 error
+=== r11bcaseform.olang
+r11bcaseform.olang:8:18: error[R11b]: a case of a caught error names an error word, an error type or a named set
+    8 |             case 3 { }
+      |                  ^
+compilation failed with 1 error
+=== r11bcasenever.olang
+r11bcasenever.olang:9:13: error[R11b]: this case is never reached: the cases before it take every error 'e' can be
+    9 |             case P.A { }
+      |             ^~~~~~~~~~~~
+compilation failed with 1 error
+=== r11bcomparecaught.olang
+r11bcomparecaught.olang:7:30: error[R11b]: two caught errors are never compared - compare each with an error word or an error type
+    7 |         try f() catch d { if d == e { } }
+      |                              ^~~~~~
+compilation failed with 1 error
+=== r11bcomparewhat.olang
+r11bcomparewhat.olang:6:31: error[R11b]: 'e' is compared with an error word, an error type or a named set - 'e == T.WORD', 'e == T'
+    6 |     try f() catch e { if e == 3 { } }
+      |                               ^
+compilation failed with 1 error
+=== r11blonetypo.olang
+r11blonetypo.olang:6:19: error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it: write the error type meant, or 'catch' alone
+    6 |     try f() catch PErr { }
+      |                   ^~~~
+compilation failed with 1 error
+=== r11bmatchblock.olang
+r11bmatchblock.olang:8:9: error[R11b]: a match on a caught error giving a value gives it with '=> v' in every case
+    8 |         case P.B { return }
+      |         ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== r11bmatchmissing.olang
+r11bmatchmissing.olang:7:9: error[R11b]: this match does not cover P.B - add a case for it, or 'nomatch'
+    7 |         match e {
+      |         ^~~~~
+compilation failed with 1 error
+=== r11bnever.olang
+r11bnever.olang:7:33: error[R11b]: 'e' is never Q here - it is P
+    7 |     try f() catch P e { if e == Q { } } catch Q { }
+      |                                 ^
+compilation failed with 1 error
+=== r11bnotavalue.olang
+r11bnotavalue.olang:6:28: error[R11b]: 'e' is the error this clause took: it is only rendered, compared, matched or raised again here - write '$e' where text is wanted
+    6 |     try f() catch e { y := e }
+      |                            ^
+compilation failed with 1 error
+=== r11bpassed.olang
+r11bpassed.olang:7:25: error[R11b]: 'e' is the error this clause took: it is only rendered, compared, matched or raised again here - write '$e' where text is wanted
+    7 |     try f() catch e { g(e) }
+      |                         ^
+compilation failed with 1 error
+=== r11btask.olang
+r11btask.olang:7:31: error[R11b]: a spawned call's clause runs on the task's thread and names no error - leave 'e' off, or catch it where the join fails
+    7 |         spawn try f() catch P e { }
+      |                               ^
+compilation failed with 1 error
+=== r11btry.olang
+r11btry.olang:6:32: error[R11b]: 'e' is an error already caught, not a call - raise it again with 'error e'
+    6 |     try f() catch e { x := try e }
+      |                                ^
+compilation failed with 1 error
+=== r11bunused.olang
+r11bunused.olang:6:21: error[R11b]: 'e' names the error this clause took, and nothing uses it - leave the name off
+    6 |     try f() catch P e { }
+      |                     ^
+compilation failed with 1 error
 === r11clausevalue.olang
 r11clausevalue.olang:18:9: error[R11]: a block's last value is not the clause's value - write '} default -1' after the block
    18 |         -1
@@ -3568,6 +3638,11 @@ compilation failed with 2 errors
 r11defaultexisting.olang:12:43: error[R11]: a default for a value holding references builds all it holds - a constructor call of numbers and written text, as 'List<String&>()'
    12 |     n := (try validate("x") catch default empty).Len()
       |                                           ^~~~~
+compilation failed with 1 error
+=== r14setnotproduced.olang
+r14setnotproduced.olang:8:19: error[R14]: the call does not fail with Q
+    8 |     try f() catch Q { } catch P { }
+      |                   ^
 compilation failed with 1 error
 === r1apromise.olang
 r1apromise.olang:14:5: error[R9]: B can escape here, and this function does not declare it - add it after '?', or catch it
@@ -3607,15 +3682,45 @@ r1cwordraised.olang:8:26: error[R3]: this function's '?' names LE.EMPTY, not thi
     8 |     if n == 0 { error LE.GONE }
       |                          ^~~~
 compilation failed with 1 error
+=== r1functypeunknown.olang
+r1functypeunknown.olang:3:15: error[R1]: unknown error type 'Nope'
+    3 | fn g(f fn() ? Nope) { }
+      |               ^~~~
+compilation failed with 1 error
+=== r1nosuchword.olang
+r1nosuchword.olang:4:10: error[T19]: C has no word 'W'
+    4 | fn f() ? C.W { }
+      |          ^~~
+compilation failed with 1 error
+=== r1notanerror.olang
+r1notanerror.olang:4:10: error[R1]: 'Pt' is no error type - an error set names error types, their words and named sets
+    4 | fn f() ? Pt { }
+      |          ^~
+compilation failed with 1 error
 === r1unknownerror.olang
 r1unknownerror.olang:3:14: error[R1]: unknown error type 'peErr'
     3 | fn f() I64 ? peErr { return 1 }
       |              ^~~~~
 compilation failed with 1 error
+=== r3areraiseundeclared.olang
+r3areraiseundeclared.olang:7:23: error[R3a]: the error raised again can be Q, which this function does not declare - add it after '?', or test the error first
+    7 |     try f() catch e { error e }
+      |                       ^~~~~
+compilation failed with 1 error
+=== r3areraiseword.olang
+r3areraiseword.olang:6:23: error[R3a]: the error raised again can be P.B, and this function's '?' names P.A - add it after '?', or test the error first
+    6 |     try f() catch e { error e }
+      |                       ^~~~~
+compilation failed with 1 error
 === r3bareerror.olang
 r3bareerror.olang:4:22: error: expected a name, found '}'
     4 |     if n < 0 { error }
       |                      ^
+compilation failed with 1 error
+=== r3raisenotcaught.olang
+r3raisenotcaught.olang:6:11: error[R3]: 'error' raises a word, 'error T.WORD', or the error a clause took - 'x' is neither
+    6 |     error x
+      |           ^
 compilation failed with 1 error
 === r8tryinner.olang
 r8tryinner.olang:6:10: error[R8]: nothing here can fail - write it without 'try'
@@ -4936,17 +5041,53 @@ t17sep.olang:4:23: error: unknown type 'South'
     4 | type Dir enum { North South }
       |                       ^~~~~
 compilation failed with 1 error
+=== t19asetholdsitself.olang
+t19asetholdsitself.olang:3:6: error[T19a]: 'A' reaches itself through its member 'B' - a set holds its members' errors, never itself
+    3 | type A error B { X }
+      |      ^
+t19asetholdsitself.olang:4:6: error[T19a]: 'B' reaches itself through its member 'A' - a set holds its members' errors, never itself
+    4 | type B error A
+      |      ^
+compilation failed with 2 errors
+=== t19aunknownmember.olang
+t19aunknownmember.olang:5:14: error[R1]: unknown error type 'Nope'
+    5 | type E error Nope, C.Q
+      |              ^~~~
+t19aunknownmember.olang:5:20: error[T19]: C has no word 'Q'
+    5 | type E error Nope, C.Q
+      |                    ^~~
+compilation failed with 2 errors
+=== t19awordofmember.olang
+t19awordofmember.olang:4:18: error[T19a]: word 'Z' is C's too, a member of this set - name it another way
+    4 | type D error C { Z }
+      |                  ^
+compilation failed with 1 error
+=== t19emptywords.olang
+t19emptywords.olang:3:16: error: expected an error word, found '}'
+    3 | type E error { }
+      |                ^
+compilation failed with 1 error
+=== t19nowordsnomembers.olang
+t19nowordsnomembers.olang:3:13: error: expected an error type's words or a set's members, found end of line
+    3 | type E error
+      |             ^
+compilation failed with 1 error
+=== t19worddeclaredtwice.olang
+t19worddeclaredtwice.olang:3:22: error[T19]: error word 'Y' is already declared
+    3 | type C error { Y, Z, Y }
+      |                      ^
+compilation failed with 1 error
 === t20errorparam.olang
-t20errorparam.olang:12:22: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }')
+t20errorparam.olang:12:22: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    12 | type Holder struct(e E) { e }
       |                      ^
-t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }')
+t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    13 | fn final(e E) Bool { return e != E.A }
       |            ^
-t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause
+t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == E.A { } }')
    13 | fn final(e E) Bool { return e != E.A }
       |                                  ^~~
-t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }')
+t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    15 |     x E
       |       ^
 compilation failed with 4 errors
