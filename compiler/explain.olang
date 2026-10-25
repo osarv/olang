@@ -180,6 +180,7 @@ fn receiverVars(c mut typecheck.Checker&, f I64) I64 {
 # a contract's conditions (D17), each as written in its brackets, and its results' names - its "outlives" chains are
 # among the obligations
 fn contract(b mut StringBuilder&, c mut typecheck.Checker&, s ast.Sig&, mi I64, indent String&) {
+    if s.Commutes { b.Push($indent "# commutes: the operator applies with its operands the other way round too (E31c)\n") }
     if s.Contract is null { return }
     src := c.P.L.Mods[mi].Src!.Text
     if s.ResultNames.Len() > 0 {

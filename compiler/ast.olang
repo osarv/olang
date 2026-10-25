@@ -38,7 +38,7 @@ type Param struct(Sp source.Span, Name source.NameId, Ty TypeRef?&, Dflt Expr?&)
 # declaration's contract, null for none (D17)
 type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool, Errors Array<Path&>&, NoReturn Bool = false
                 ResultNames Array<source.NameId>& = Array<source.NameId>(0), ResultSps Array<source.Span>& = Array<source.Span>(0)
-                Contract ContractBlock?& = null) {
+                Contract ContractBlock?& = null, Commutes Bool = false) {
     Params
     Results
     HasErrors
@@ -47,6 +47,7 @@ type Sig struct(Params Array<Param&>&, Results Array<TypeRef&>&, HasErrors Bool,
     ResultNames
     ResultSps
     Contract
+    Commutes   # "commutes" after an operator method's result (E31c): the operator applies with its operands swapped too
 }
 
 # a contract (D17): its bracketed block's span, its conditions as statements - a condition an Assert with no message,

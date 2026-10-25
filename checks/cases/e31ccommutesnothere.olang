@@ -1,0 +1,6 @@
+# check: fail error[E31c]: 'commutes' is written only on a Plus, Mul, BitAnd, BitOr or BitXor of one parameter, and 'Minus' is none - remove it
+# E31c: "-" does not commute
+type A struct(n I64) { n }
+type B struct(n I64) { n }
+fn (a A) Minus(b B) A commutes { return a }
+fn main() { }

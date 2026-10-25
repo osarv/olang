@@ -23940,3 +23940,44 @@ loaded and is an error naming it.
 array as a `{len, ptr}` pair where the extern wants its storage) - fixed in the checker's array marshalling. Not fixed:
 R9's diagnostic writes another module's error words bare (`Error.UNREACHABLE can escape here`) where the naming pass
 made `net.Error` the name a reader writes.
+
+## The lang25 batch: contracts on entry, `checked` removed, method type arguments, `try`'s reach, `commutes` (2026-10-25)
+
+The user's decisions of 2026-10-25, built as one batch in rounds (`wt-lang25`). The details below are mine unless
+marked.
+
+**The prover is removed from the plans (the user's decision).** `docs/prover.md` stays as the record of what was
+weighed and says so at its top; `docs/README.md` too. With contracts checked on entry (below) there is nothing left for a
+prover to move out of "unchecked".
+
+**Methods take written type arguments (G12, E3, the user's decision).** `x.Narrow<I32>()`, `xs.Map<U>(f)`. The parser
+decides by C#'s rule: after a name, a `<` whose tokens up to its matching `>` are those a type is made of - names, `.`,
+`,`, `&`, `?`, `mut`, `fn`, `return`, parentheses - on one line, with `(` directly after the `>`, begins type
+arguments of a call (`Parser.typeArgsCall`); a name the oracle knows as a generic type or function still decides by
+its name, as before. So `a < b and c > (d)` stays a comparison (`and` is no type token), and `f<I32>(x)` is a call
+whatever `f` is. Decided (mine): a method's written type arguments name **its own** variables - those its list
+introduces that its receiver's type does not name (`OwnVarIndexes`), so `fn (l List<T>&) Map<U>` takes one and `fn (x T)
+Narrow<T Number, U Number>` takes one (`U`); the receiver's are bound by the receiver. A method so given its arguments is
+only called (M19: a method is never a value). The slots a written list does not fill stay for inference (`invoke`
+skips unknown entries).
+
+**G4 relaxed (forced by Narrow).** A type variable no parameter names was an error at the declaration ("no call can
+infer it"); `x.Narrow<I32>()` is exactly such a function. Now the declaration is no error and a call that writes no
+type arguments for it is, at the call: `type variable U of Narrow appears in no parameter's type, so the call writes it
+- Narrow<...>(...)`. The checker's `unfillable` map went with it. `g4resultbare` (a body returning an `I32` as `T`)
+became a build case: with no call there is no instance to check (G16).
+
+**A type variable called (G8b, mine; recorded future work "T(x) through a type variable" since 2026-10-10).** `U(x)` in
+an instance is the call its bound type's name is - a conversion for a number type (E26), the constructor for a declared
+type - and a type that is neither is "not callable". Narrow is written with it.
+
+**`commutes` (E31c, the user's decision).** `fn (v Vec2) Mul(s F64) Vec2 commutes { }` makes `2.0 * v` call
+`v.Mul(2.0)` when the left operand's type has no such operator. Decided (mine): the word stands right after the result,
+before a `?` (where `noreturn` stands in its stead), and is a word only there (L9b) - no name is taken from programs,
+and a result named `commutes` cannot be meant (results are not named after a type); only `Plus Mul BitAnd BitOr
+BitXor` of the operator's shape, whose parameter's type is not the receiver's; a clash - `A.Mul(B)` beside a commuting
+`B.Mul(A)` - is an error at the commuting one, and of two commuting ones at the later (by declaration order); a free
+function, `Minus` and the rest are errors naming the five. The left operand is evaluated first, as written: held in a
+hidden local unless it is a literal, then `y.Mul(held)`; a literal on the left adapts to the method's parameter
+(`0.5 + w` with `Plus(s F32)` is an `F32`). The evaluator needed nothing - the call is an ordinary method call - and
+`E31cBaked` and a decided assert prove it agrees.

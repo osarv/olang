@@ -1,0 +1,8 @@
+# check: fail error[G7]: type arguments for Conv: expected 1, found 2
+# G12: one type argument per variable a method's list introduces that its receiver does not name
+type Box<T> struct(v T) { v }
+fn (b Box<T>) Conv<U>(f fn(x T) U) Box<U> { return Box<U>(f(b.v)) }
+fn main() {
+    b := Box<I64>(1)
+    c := b.Conv<F64, I64>(fn(x I64) F64 { return F64(x) })
+}

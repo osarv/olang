@@ -266,6 +266,9 @@ type Diag enum {
     TryMultiIndexNeedsTryat
     ArrayOneIndex
     OperatorResult
+    CommutesNotHere
+    CommutesSameType
+    CommutesClash
     SetatResult
     CheckedWithoutPlain
     CheckedNotSuperset
@@ -1274,7 +1277,7 @@ fn ScopeDecl() Msg { return Msg(Diag.ScopeDecl, "O3", "a scope has no name to de
 fn TypeVarNamesType(tok String&) Msg { return Msg(Diag.TypeVarNamesType, "G1", "type variable " $tok " is named after a type - choose a name no type has, as '<T>'") }
 
 # ERR_TYPE_VAR_NOT_INFERABLE
-fn TypeVarNotInferable(text String&) Msg { return Msg(Diag.TypeVarNotInferable, "G4", "type variable " $text " appears in no parameter's type, so no call can infer it - introduce it in a parameter's type") }
+fn TypeVarNotInferable(text String&, name String&) Msg { return Msg(Diag.TypeVarNotInferable, "G4", "type variable " $text " of " $name " appears in no parameter's type, so the call writes it - " $name "<...>(...)") }
 
 # ERR_EXTERN_TYPE
 fn ExternType(ty String&) Msg { return Msg(Diag.ExternType, "X2", $ty " cannot cross the C boundary - an extern parameter is a number, a Bool, an extern type's reference, a plain-data struct or a reference to one, or an array of these") }
@@ -1356,6 +1359,15 @@ fn ArrayOneIndex(ty String&) Msg { return Msg(Diag.ArrayOneIndex, "E31", $ty " t
 
 # ERR_OPERATOR_RESULT
 fn OperatorResult(text String&) Msg { return Msg(Diag.OperatorResult, "E31", $text " gives one result") }
+
+# ERR_COMMUTES_NOT_HERE
+fn CommutesNotHere(text String&) Msg { return Msg(Diag.CommutesNotHere, "E31c", "'commutes' is written only on a Plus, Mul, BitAnd, BitOr or BitXor of one parameter, and " $text " is none - remove it") }
+
+# ERR_COMMUTES_SAME_TYPE
+fn CommutesSameType(text String&, ty String&) Msg { return Msg(Diag.CommutesSameType, "E31c", $text " takes " $ty ", its own receiver's type, so the operator reads both ways already - remove 'commutes'") }
+
+# ERR_COMMUTES_CLASH
+fn CommutesClash(op String&, a String&, b String&, other String&) Msg { return Msg(Diag.CommutesClash, "E31c", "with 'commutes' here, " $op " between " $a " and " $b " would call this method or " $other " - remove 'commutes'") }
 
 # ERR_SETAT_RESULT
 fn SetatResult() Msg { return Msg(Diag.SetatResult, "E31", "SetAt gives no result") }

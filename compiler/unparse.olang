@@ -165,6 +165,7 @@ fn (w mut writer&) sig(s ast.Sig&) {
         w.group = false
     }
     w.item = was
+    if s.Commutes { w.put(" commutes") }
     w.errors(s)
     w.contract(s)
 }

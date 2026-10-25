@@ -1,0 +1,7 @@
+# check: fail error[E31c]: with 'commutes' here, '*' between B and A would call this method or A.Mul - remove 'commutes'
+# E31c: A's Mul takes a B, so a B's commuting Mul taking an A would give a * b two meanings
+type A struct(n I64) { n }
+type B struct(n I64) { n }
+fn (a A) Mul(b B) A { return a }
+fn (b B) Mul(a A) B commutes { return b }
+fn main() { }

@@ -326,7 +326,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, a lowercase spelling being module-private (M6b); `> <= >=` derive from `Less`. A
   method is the operator only in the operator's shape - another shape is an ordinary method. Checked forms are
-  `Checked...` (E31a); any operator but `Len`/`Eq`/`Str` may fail. `x[i, j]` calls `At(i, j)`. A store through `x[i]`
+  `Checked...` (E31a); any operator but `Len`/`Eq`/`Str` may fail. `x[i, j]` calls `At(i, j)`. **`commutes` (E31c, the
+  user's decision 2026-10-25)** after a `Plus Mul BitAnd BitOr BitXor`'s result lets `2.0 * v` call `v.Mul(2.0)` when the
+  left type has none, operands still evaluated left first; the parameter's type must differ from the receiver's, and a
+  clash with the other type's operator is an error at the commuting (the later) declaration. A store through `x[i]`
   reads, writes and writes back by `SetAt` (E31b); a `mut` method on `x[i]` is an error unless the element is a handle. No user-declared
   operator symbols; `==` and `$` overridable only by `Eq`/`Str`. A handle field of `x[i]`, or a handle a call gives
   (`ll[0][0]`), is lent as its reference where its call landed (O17b/O18c); a field of a try-default (R9a) and a
@@ -442,9 +445,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 
 ### Generics
 
-- **Explicit type arguments (G12, E3, the user's call 2026-10-24).** `big<I64>` names a generic function's instance, as a
-  value or at a call (`big<I64>(1, 2)`, `lib.Pick<I64>`), its arguments fitted as written ones are (count, bounds,
-  T7c lengths); only free functions (a method's are inferred). A generic still is no value unless named so; one taking
+- **Explicit type arguments (G12, E3, the user's calls 2026-10-24 and 2026-10-25).** `big<I64>` names a generic
+  function's instance, as a value or at a call (`big<I64>(1, 2)`, `lib.Pick<I64>`), its arguments fitted as written
+  ones are (count, bounds, T7c lengths); a method takes them at a call too (`x.Narrow<I32>()`, `xs.Map<U>(f)`), naming
+  its own variables - those its list introduces that its receiver does not name (mine). After any name, a `<` reading
+  as type arguments on one line with `(` right after its `>` is type arguments (C#'s rule). A variable no parameter
+  names is no error at the declaration; a call writes it (G4, relaxed 2026-10-25). `U(x)` in an instance is the bound
+  type's conversion or constructor (G8b, mine). A generic still is no value unless named so; one taking
   an array by value makes an instance per length (G29) and is never a value - the error says to pass a lambda. A
   type name read as a value (`I64 > 3`) is an error (it silently compiled to `false`).
 - **Type parameter lists (QW, G3, G8b, the user's decision 2026-10-17, reversing G8b's `<T>` introductions and

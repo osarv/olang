@@ -921,12 +921,18 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false) ast.
         p.item = wasItem
         results = gather(p.tys, from)
     }
+    # E31c: "commutes" after a method's result - a word only there, so no name is taken from programs
+    commutes := false
+    if named and results.Len() > 0 and p.sees(token.Tok.Iden) and p.text(p.tk()) == "commutes" {
+        p.advance()
+        commutes = true
+    }
     errs := try p.errorSet(one)
     if rnames.Len() != results.Len() {
         rnames.Clear()
         rsps.Clear()
     }
-    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, rnames.ToArray(), rsps.ToArray())
+    return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, rnames.ToArray(), rsps.ToArray(), null, commutes)
 }
 
 # D17: whether a result here is named - a name followed, on its line, by what starts a type
@@ -936,6 +942,8 @@ fn (p Parser&) namedResult() Bool {
     if k != token.Tok.Iden and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.LParen { return false }
     # a type name followed by "(" is the next method of a trait written on one line, never a result's type
     if k == token.Tok.Iden and p.look(2) == token.Tok.LParen { return false }
+    # "Vec2 commutes" is a result and the word (E31c)
+    if k == token.Tok.Iden and p.text(p.lookTok(1)) == "commutes" { return false }
     return not p.lookTok(1).Has(token.LineBreak)
 }
 
@@ -947,7 +955,7 @@ fn (p mut Parser&) contractOn(s ast.Sig&p) ast.Sig&p ? Fail {
     if p.sees(token.Tok.StmtEnd) and p.look(1) == token.Tok.LBrack { p.advance() }
     if not p.sees(token.Tok.LBrack) { return s }
     k := try p.contract()
-    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, s.ResultNames, s.ResultSps, k)
+    return ast.Sig(s.Params, s.Results, s.HasErrors, s.Errors, s.NoReturn, s.ResultNames, s.ResultSps, k, s.Commutes)
 }
 
 fn (p mut Parser&) contract() ast.ContractBlock&p ? Fail {
@@ -1294,6 +1302,39 @@ fn (p Parser&) nullMark() Bool {
 fn (p Parser&) closesAngle() Bool {
     k := p.peek()
     return k == token.Tok.Gt or k == token.Tok.Shr or k == token.Tok.Ge or k == token.Tok.ShrEq
+}
+
+# G12, C#'s rule: whether the "<" n tokens ahead opens a type-argument list a call follows - the tokens types are made
+# of (names, ".", ",", "&", "?", "mut", "fn", "return", parentheses), angle brackets balanced on one line, and "("
+# directly after the closing ">". So "x.Narrow<I32>()" and "f<T>(a)" are calls given type arguments, as a known
+# generic function's or type's name always is; "a < b and c > (d)" is a comparison
+fn (p Parser&) typeArgsCall(n I64) Bool {
+    if p.look(n) != token.Tok.Lt { return false }
+    depth I64 = 0
+    parens I64 = 0
+    i := n
+    for i < n + 256 {
+        k := p.look(i)
+        if k == token.Tok.Lt {
+            depth++
+        } else if k == token.Tok.Gt {
+            depth--
+        } else if k == token.Tok.Shr {
+            depth -= 2
+        } else if k == token.Tok.LParen {
+            parens++
+        } else if k == token.Tok.RParen {
+            if parens == 0 { return false }
+            parens--
+        } else if k != token.Tok.Iden and k != token.Tok.Dot and k != token.Tok.Comma and k != token.Tok.Amp and
+                  k != token.Tok.Question and k != token.Tok.Mut and k != token.Tok.Fn and k != token.Tok.Return {
+            return false
+        }
+        if depth < 0 { return false }
+        if depth == 0 { return parens == 0 and p.look(i + 1) == token.Tok.LParen }
+        i++
+    }
+    return false
 }
 
 # "<" where one opens a type-argument or a type-parameter list
@@ -2537,6 +2578,10 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&p) ast.Expr&p ? Fail {
                     # alias.big<I64>: a generic function's instance through an import (G12)
                     targs := try p.typeArgs()
                     x = ast.Expr.Generic(p.from(start), x, targs)
+                } else if p.typeArgsCall(0) {
+                    # x.Narrow<I32>(): a method's type arguments, by C#'s rule (G12)
+                    targs := try p.typeArgs()
+                    x = ast.Expr.Generic(p.from(start), x, targs)
                 }
             }
             case token.Tok.LParen {
@@ -2761,7 +2806,7 @@ fn (p mut Parser&) primary() ast.Expr&p ? Fail {
                 x := ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
                 return try p.literalAfterType(at, x)
             }
-            if k2 == token.Tok.Lt and p.oracle.fns.Has(name) {
+            if k2 == token.Tok.Lt and (p.oracle.fns.Has(name) or p.typeArgsCall(1)) {
                 # a generic function's instance: big<I64>(x), f := big<I64> (G12)
                 p.advance()
                 targs := try p.typeArgs()

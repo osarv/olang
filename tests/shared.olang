@@ -3132,6 +3132,50 @@ test "G12: big<I64> names one instance, called or as a value" {
     assert g12Big<I64> == g                     # one instance, one value (T21)
 }
 
+# G12: a method takes type arguments after its name too - its own variables, those its receiver does not name
+type g12mBox<T> struct(v T) { v }
+fn (b g12mBox<T>) Conv<U>(f fn(x T) U) g12mBox<U> { return g12mBox<U>(f(b.v)) }
+fn (b g12mBox<T>) As<U Number>() U { return U(b.v) }
+G12mBaked F64 = g12mBox<I64>(20).As<F64>() / 8.0   # K2: evaluated while compiling
+test "G12: x.M<T>(...) names a method's own type arguments" {
+    b := g12mBox<I64>(G12At * 10)
+    assert b.As<F64>() / 8.0 == 2.5
+    assert G12mBaked == 2.5
+    c := b.Conv<F32>(fn(x I64) F32 { return F32(x) })
+    assert c.v == 20.0
+    ys := I64[1, 2, 3].Map<F64>(fn(x I64) F64 { return F64(x) * 1.5 })
+    assert ys == F64[1.5, 3.0, 4.5]
+    a, d := G12At, G12At + 1
+    assert a < d and d > (a)                    # C#'s rule: no "(" right after the ">", a comparison
+    assert g12mBox<I64>(3).As<I32>() == 3       # decided while compiling (S18c)
+}
+
+# E31c: an operator method that commutes applies with its operands the other way round too
+type e31cV struct(x F64, y F64) { x, y }
+fn (v e31cV) Mul(s F64) e31cV commutes { return e31cV(v.x * s, v.y * s) }
+type e31cW struct(n F32) { n }
+fn (w e31cW) Plus(s F32) e31cW commutes { return e31cW(w.n + s) }
+E31cBaked e31cV = 3.0 * e31cV(1.0, 2.0)                # K2
+E31cOrder mut List<I64>& = List<I64>()
+fn e31cSide(n F64) F64 {
+    E31cOrder.Push(1)
+    return n
+}
+fn e31cVal(v e31cV) e31cV {
+    E31cOrder.Push(2)
+    return v
+}
+test "E31c: 2.0 * v calls v.Mul(2.0), operands still left first" {
+    v := e31cV(1.0, F64(G12At))
+    assert 2.0 * v == v * 2.0
+    assert (2.0 * v).y == 4.0
+    assert E31cBaked == e31cV(3.0, 6.0)
+    assert 0.5 + e31cW(F32(G12At)) == e31cW(2.5)   # the literal adapts to Plus's F32
+    r := e31cSide(F64(G12At)) * e31cVal(v)
+    assert r.x == 2.0 and E31cOrder.Len() == 2 and E31cOrder[0] == 1 and E31cOrder[1] == 2
+    assert (2.0 * e31cV(1.0, 1.0)).x == 2.0        # decided while compiling (S18c)
+}
+
 fn IdentityLater<T>(x T) T { return x }
 
 test "a generic used before its own declaration still gets its body" {

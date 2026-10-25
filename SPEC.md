@@ -163,8 +163,9 @@ ending in one ends its statement there. In its constructor's body such a field i
 and a later statement reading it by the word alone is a compile-time error (a constructor's other fields are its locals,
 C2a). Anywhere else - a parameter, a local, a function, a type - the words stay reserved.
 
-**L9b (words of a contract).** `fits` and `outlives` are words only inside a contract's brackets (D17): `x fits T`
+**L9b (words of one place).** `fits` and `outlives` are words only inside a contract's brackets (D17): `x fits T`
 and `a outlives b` there, ordinary names everywhere else. In a contract `return` is also a prefix operator (D17b).
+`commutes` is a word only right after a method's result (E31c), an ordinary name everywhere else.
 
 **L9c (`any`).** `any` is a word only where a type is written and the name of a type follows it on its line (T32):
 `s any Shape&`, `List<any Shape&>`, `fn f() any Shape&`; anywhere else it is an ordinary name. A result named `any`
@@ -883,7 +884,9 @@ declaration:
 type's name, as always, so a misspelled type stays an unknown type rather than becoming a variable - except in a
 receiver's type arguments, where a name no type has is the variable it introduces (G3b). A type variable is written
 bare wherever a type's name is: in a type, as a type argument (`Cell<T>`, `Pair<K, V>`), as an array literal's element
-type (`T[a, b]`, E19), after `as` (E32), and as a type `match`'s operand (`match T`, G13). The closing `>>` of
+type (`T[a, b]`, E19), after `as` (E32), as a type `match`'s operand (`match T`, G13), and called: `U(x)` is, in each
+instance, the call the bound type's name is - a conversion (E26) where it is a number type, its constructor where it is
+a struct type (C1), and an error otherwise. The closing `>>` of
 a nested type-argument list lexes as the shift token and is split where a type-argument list is being parsed, and only
 there, so `x >> 1` is unaffected. A type parameter or type argument list follows the listing rule (L18a).
 
@@ -2690,8 +2693,12 @@ where `scope-arg` is E25's own adjacency-constrained `"&" IDEN`, and
 `arg ::= expr | "default"` (E14a) (§4.4 M8),
 covered in §5.4. The optional `type-args` (§12.3 G8) is valid only when the name is a generic struct
 type, where it names the instantiation whose constructor is being called (G10a), or a generic function, where it names
-the instance being called (G12). Where `IDEN <` begins type arguments rather than a comparison is decided by the name:
-a type, or a generic function, the module declares or reaches through its imports' aliases.
+the instance being called (G12). A method call takes them too, after the method's name: `x.Narrow<I32>()`,
+`xs.Map<U>(f)` (G12). Where `IDEN <` begins type arguments rather than a comparison is decided by the name - a type,
+or a generic function, the module declares or reaches through its imports' aliases - and otherwise, after any name,
+by what follows (C#'s rule): a `<` whose tokens up to its matching `>` are those a type is made of (names, `.`, `,`,
+`&`, `?`, `mut`, `fn`, `return`, parentheses), on one line, with `(` directly after that `>`, begins type arguments
+of a call. So `a < b and c > (d)` is a comparison, and `f<I32>(x)` a call, whatever `f` is.
 
 **E4.** `literal ::= BOOL_LIT | NULL_LIT | INT_LIT | FLOAT_LIT | CHAR_LIT | STR_LIT`. An expression `op` is a
 **literal expression** (relevant to D15's `:=`, to T6's numeric adaptation, and to §5.7) exactly
@@ -3524,6 +3531,17 @@ module (M6b): there the operator calls it, and anywhere else the operator is an 
 operator by both names is an error. Any of them but `Len`, `Eq` and `Str` may **declare errors**: the operator then
 fails as written, as a call to the method would, and is covered by a `try` (R8) - `try (a + b)`, `try x[i]`, `try x[i]
 = v` (R21), `try f(x)` for a fallible `Call`; written without one it is a compile-time error naming the method.
+
+**E31c (`commutes`).** An operator method for `+`, `*`, `&`, `|` or `^` - `Plus`, `Mul`, `BitAnd`, `BitOr`,
+`BitXor` (or their private spellings, M6b) - may write the word `commutes` after its result: `fn (v Vec2) Mul(s F64)
+Vec2 commutes { }`. The operator then applies with its operands written the other way round too: `2.0 * v` - whose
+left operand's type has no such operator for a `Vec2` - calls `v.Mul(2.0)`, as `v * 2.0` does. The operands are still
+evaluated in the order they are written, the left first; a literal on the left adapts to the method's parameter as it
+would on the right. `commutes` is written only on those five methods, of the operator's shape (one parameter besides
+the receiver), whose parameter's type is not the receiver's (where they are the same, `a * b` already reads both
+ways); anywhere else it is a compile-time error. A type `A` whose `Mul` takes a `B`, beside a `B` whose `Mul` takes an
+`A` and commutes, would give `a * b` two meanings: the commuting declaration - the later of two that both commute -
+is a compile-time error naming the other. `commutes` is a word only in that position (L9b); it names nothing.
 
 **E31b (writing through `x[i]`).** `x[i]` on a type declaring `At` gives a copy of the element. A **store** through
 it - a field (or an inline element) of it assigned, `x[i].f = v` or `x[i].f op= v`; an increment `x[i].f++`; an
@@ -7045,11 +7063,10 @@ fn sortBy<T>(v mut Array<T>&, less fn(a T, b T) Bool) { ... }
 `T` here is `sortBy`'s, inferred from the call as usual (G9, which unifies through a function type's own
 parameters), and `less` is called inside the body as an ordinary function value.
 
-**G4.** Every type variable of a generic function must appear in at least one *parameter's* type. A
-variable appearing only in the return type or only in the error list is a compile-time error, since
-nothing at a call could determine it. It is reported once, at the declaration, saying to introduce the
-variable in a parameter's type; the function's body is then not checked and its calls report nothing more, since no
-call could give it the variable's value.
+**G4.** A type variable of a generic function that appears in no *parameter's* type - only in the result, say
+(`fn (x T) Narrow<T Number, U Number>() U`) - is given by the type arguments written at each call (G12):
+`x.Narrow<I32>()`. A call that writes none, so that nothing determines the variable, is a compile-time error at the
+call naming the variable and the form to write (`Narrow<...>(...)`); the declaration itself is no error.
 
 **G5.** A generic function's error set (D8) may not mention a type variable: the declared error set
 is the same for every instantiation.
@@ -7222,8 +7239,13 @@ are what the type arguments say and nothing the arguments are (G9 binds none of 
 instance's parameter as any argument does (E12), a literal adapting. Each type argument meets its variable's
 constraint (G19), and the count is G7's. A function whose instance needs a variable no type argument can name - a
 length an array taken by value gives (G29) - is a value in no instance; called, such variables are inferred from its
-arguments as always. A method's type arguments are inferred only. Only a function's own variables are written: a
-non-generic function takes none (G7).
+arguments as always. A **method** takes type arguments the same way, written after its name at a call - `x.Narrow<I32>()`,
+`xs.Map<U>(f)` - one for each variable its list introduces that its receiver's type does not name, in the list's
+order: `fn (l List<T>&) Map<U>(f fn(x T) U) List<U>` takes `U`, the receiver's `T` being the receiver's; `fn (x T)
+Narrow<T Number, U Number>() U ? NumberError` takes `U`. Those not written are inferred from the arguments, the
+receiver included. A method so given its arguments is only called, never a value (M19). Only a function's own
+variables are written: a non-generic function, and a method whose list introduces nothing its receiver does not name,
+takes none (G7).
 
 ### 12.5 Dispatching on a type parameter
 

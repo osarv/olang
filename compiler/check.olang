@@ -216,7 +216,6 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     roRefArgs List<roArg>
     unknownTypes Map<pair.Pair<I64, I64>, Bool>    # (module, name): an unknown type said there once (B11)
     unknownSaid Map<pair.Pair<I64, I64>, Bool>     # (body, name): an unknown name said there (S13f's), not again
-    unfillable Map<I64, Bool>                       # the generic functions G4 says no call can instantiate
     paramTypes Bool = false                         # a declared function's parameters' types being checked (G29)
     declMade Bool = false                           # a declaration's type, its value given: what T7d's lengths come from
     syntaxMark I64 = -1                             # the diagnostics said before checking began: the syntax errors
@@ -473,7 +472,6 @@ fn (c mut Checker&) reset() {
     c.roRefArgs = List<roArg>()
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
-    c.unfillable = Map<I64, Bool>()
     c.Asks = List<Ask>()
     c.AssertAsks = List<AssertAsk>()
     c.ValueAsks = List<ValueAsk>()
@@ -612,6 +610,11 @@ fn (c mut Checker&) attempt() {
         if c.RootOnly and c.P.FnModule(f) != c.P.L.Root { continue }
         c.P.Sig(f)
         c.errorSetKnown(f)
+        if c.P.FnDecl(f).Recv is null and c.P.FnDecl(f).S.Commutes {
+            c.push(-1, c.P.FnModule(f), types.VoidT, types.ListId(0))
+            c.err(c.nameSpan(c.P.FnDecl(f)), msgs.CommutesNotHere(c.tok(c.P.FnDecl(f).Name)))
+            c.pop()
+        }
         if c.P.FnDecl(f).Recv is not null {
             c.operatorMethod(f)
             c.inheritClash(f)
@@ -863,30 +866,7 @@ fn (c mut Checker&) fnTypeParams(f I64) {
             }
         }
     }
-    owner := generic.FnOwner(f)
-    nv := c.P.VarCount(owner)
-    if nv > 0 {
-        sig := c.P.Sig(f)
-        seen := Array<Bool>(nv, false)
-        for q in c.P.T.Items(c.P.T.Params(sig)) { c.varsIn(q, owner, seen, 0) }
-        # G9c: a variable named only in a constraint is bound through it
-        for round in range nv {
-            for i in range nv {
-                b := c.P.VarAt(owner, i).Bound
-                if seen[i] and b != types.UnknownT { c.varsIn(b, owner, seen, 0) }
-            }
-        }
-        for i in range nv {
-            if seen[i] { continue }
-            row := c.P.VarAt(owner, i)
-            at := c.writtenAt(fd, row.Name)
-            # said at the result it is written in
-            if fd.S.Results.Len() > 0 { at = source.Span(fd.S.Results[0].Span().Start, at.End) }
-            c.err(at, msgs.TypeVarNotInferable(c.text(row.Name)))
-            c.unfillable.Put(f, true)
-            break
-        }
-    }
+    # G4: a variable no parameter names is given by type arguments written at each call (G12) - said there
     c.pop()
 }
 
@@ -1098,6 +1078,7 @@ fn (c mut Checker&) operatorMethod(f I64) {
     name := c.text(fd.Name)
     if name.Len() == 0 { return }
     cap := c.operatorRole(name)
+    if fd.S.Commutes { c.commutesRule(f, fd, cap) }
     k := opShapeOf(cap)
     if k < 0 { return }
     sh := OpShapes[k]
@@ -1134,6 +1115,36 @@ fn (c mut Checker&) operatorMethod(f I64) {
         if writes { c.shapeErr(at, fd, cap, msgs.EqStrWrites(sh.Name)) }
     }
     c.pop()
+}
+
+# E31c: "commutes" only on Plus, Mul, BitAnd, BitOr, BitXor of the operator's shape, taking another type than its
+# receiver's, and never where the other type's operator takes this one (the later of two commuting ones said)
+fn (c mut Checker&) commutesRule(f I64, fd ast.Func&, cap String&) {
+    mi := c.P.FnModule(f)
+    c.push(-1, mi, types.VoidT, types.ListId(0))
+    defer c.pop()
+    at := c.nameSpan(fd)
+    sig := c.P.Sig(f)
+    ps := c.P.T.Items(c.P.T.Params(sig))
+    okName := cap == "Plus" or cap == "Mul" or cap == "BitAnd" or cap == "BitOr" or cap == "BitXor"
+    if not okName or fd.Recv is null or ps.Len() != 2 {
+        c.err(at, msgs.CommutesNotHere(c.tok(fd.Name)))
+        return
+    }
+    recv := c.P.T.Plain(c.deref(ps[0]))
+    other := c.P.T.Plain(c.deref(ps[1]))
+    if c.P.T.Same(recv, other) {
+        c.err(at, msgs.CommutesSameType(c.tok(fd.Name), c.ty(other)))
+        return
+    }
+    if not c.isNamed(other) { return }
+    m2 := c.roleMethod(other, cap, 1)
+    if m2 < 0 or m2 == f { return }
+    ps2 := c.P.T.Items(c.P.T.Params(c.P.Sig(m2)))
+    if not c.P.T.Same(c.P.T.Plain(c.deref(ps2[1])), recv) { return }
+    if c.P.FnDecl(m2).S.Commutes and m2 > f { return }   # the later of two commuting ones is said
+    opTok := "'+'" if cap == "Plus" else ("'*'" if cap == "Mul" else ("'&'" if cap == "BitAnd" else ("'|'" if cap == "BitOr" else "'^'")))
+    c.err(at, msgs.CommutesClash(opTok, c.ty(recv), c.ty(other), $c.ty(other) "." $c.text(c.P.FnDecl(m2).Name)))
 }
 
 # the operator role a method's name claims (E31, E31a, M6b): its capitalized spelling, a checked form's (CheckedPlus,
@@ -6100,7 +6111,9 @@ fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Sp
     if f < 0 { return Array<types.TypeId>(0) }
     d := c.P.FnDecl(f)
     tn := c.text(d.Name)
-    np := d.TypeParams.Len() if d.TypeParams.Len() > 0 else 0
+    # a method's own variables are those its list introduces that its receiver's type does not name (G12)
+    at := c.P.OwnVarIndexes(f)
+    np := at.Len()
     if np == 0 {
         c.err(targs[0].Span(), msgs.TypeArgsOnNonGeneric(tn))
         return Array<types.TypeId>(0)
@@ -6109,10 +6122,16 @@ fn (c mut Checker&) explicitArgs(f I64, targs Array<ast.TypeRef&>&, sp source.Sp
         c.err(targs[0].Span(), msgs.TypeArgCount(tn, np, targs.Len()))
         return Array<types.TypeId>(0)
     }
-    out mut Array<types.TypeId>&c = Array<types.TypeId>(np)
+    width I64 = 0
+    for k in at {
+        if k + 1 > width { width = k + 1 }
+    }
+    # a slot no written argument names stays unknown, left to inference (invoke skips it)
+    out mut Array<types.TypeId>&c = Array<types.TypeId>(width, types.UnknownT)
     for i in range np {
-        out[i] = c.resolve(targs[i])
-        if out[i] == types.UnknownT { return Array<types.TypeId>(0) }
+        r := c.resolve(targs[i])
+        if r == types.UnknownT { return Array<types.TypeId>(0) }
+        out[at[i]] = r
     }
     return out
 }
@@ -6422,6 +6441,7 @@ fn (c mut Checker&) litBeside(x ast.Expr&, v litv, other typed.Expr&c, op token.
     ot := typeOf(other)
     t := c.literalBeside(ot)
     if right and not c.isNumber(t) { t = c.opParam(ot, op) }
+    if not right and not c.isNumber(t) { t = c.commuteParam(ot, op) }   # E31c: "2.0 * v" adapts to v's Mul
     e := c.litOf(x, v, t) if c.litFits(v, t) else c.litOf(x, v, types.UnknownT)
     if not c.litFits(v, t) and c.noMeet(opSp, ot, typeOf(e)) { return null }
     return e
@@ -6480,6 +6500,9 @@ fn (c mut Checker&) opValues(sp source.Span, opSp source.Span, op token.Tok, x t
     if op != token.Tok.EqEq and op != token.Tok.NotEq {
         r := c.operatorCall(sp, opSp, op, x, y)
         if r is not null { return r }
+        # E31c: "2.0 * v" through v's Mul when it commutes
+        rc := c.commutedCall(sp, opSp, op, x, y)
+        if rc is not null { return rc }
     }
     # E31: "@" has no built-in meaning, so only a type declaring MatMul has it
     if op == token.Tok.At {
@@ -6580,6 +6603,48 @@ fn (c mut Checker&) operatorCall(sp source.Span, opSp source.Span, op token.Tok,
     }
     r := c.invoke(sp, opSp, m, x, Array<ast.Expr&>(0), c.one(y))
     return c.negate(sp, r) if op == token.Tok.Ge else r
+}
+
+# whether an operator may commute (E31c): + * & | ^
+fn commutative(op token.Tok) Bool {
+    return op == token.Tok.Plus or op == token.Tok.Star or op == token.Tok.Amp or op == token.Tok.Pipe or
+        op == token.Tok.Caret
+}
+
+# the commuting operator method of t for op (E31c), -1 for none
+fn (c mut Checker&) commuting(t types.TypeId, op token.Tok) I64 {
+    if not commutative(op) or not c.isNamed(t) { return -1 }
+    m := c.roleMethod(t, operatorName(op), 1)
+    if m < 0 or not c.P.FnDecl(m).S.Commutes { return -1 }
+    return m
+}
+
+# x op y through y's commuting operator method (E31c): y.Mul(x), x evaluated first as written - held in a hidden local
+# where it is no literal; null where y's type has none
+fn (c mut Checker&) commutedCall(sp source.Span, opSp source.Span, op token.Tok, x typed.Expr&c, y typed.Expr&c) typed.Expr?&c {
+    tb := c.deref(typeOf(y))
+    m := c.commuting(tb, op)
+    if m < 0 { return null }
+    c.privateRole(m, tb, operatorName(op), opSp, msgs.Tok(op.Text()))
+    c.opCall = c.text(c.P.FnDecl(m).Name)
+    match x {
+        case typed.Expr.Lit(_, _, _) { return c.invoke(sp, opSp, m, y, Array<ast.Expr&>(0), c.one(x)) }
+        nomatch { }
+    }
+    sfrom := c.stmts.Len()
+    hx := c.heldOf(sp, x)
+    r := c.invoke(sp, opSp, m, y, Array<ast.Expr&>(0), c.one(c.read(sp, hx)))
+    if c.stmts.Len() > sfrom { return typed.Expr.Seq(sp, typeOf(r), typed.Seq(gather(c.stmts, sfrom), r)) }
+    return r
+}
+
+# the type a commuting operator method of t takes its other operand as (E31c), Unknown for none
+fn (c mut Checker&) commuteParam(t types.TypeId, op token.Tok) types.TypeId {
+    m := c.commuting(c.deref(t), op)
+    if m < 0 { return types.UnknownT }
+    ps := c.P.T.Items(c.P.T.Params(c.P.Sig(m)))
+    if c.P.T.KindOf(ps[1]) == types.Kind.Var { return types.UnknownT }
+    return c.deref(ps[1])
 }
 
 # the method a type's operation calls by itself (E31, M6b): the capitalized spelling or the lowercase one, only in the
@@ -9025,6 +9090,17 @@ fn (c mut Checker&) call(sp source.Span, f ast.Expr&, args Array<ast.Expr&>&, wa
             if ref.Kind == names.What.Local or ref.Kind == names.What.Global {
                 return c.callValue(sp, nsp, c.expr(f, types.UnknownT), args)
             }
+            if ref.Kind == names.What.TypeVar {
+                # G8b: U(x) in an instance is the call its bound type's name is - a conversion, or a constructor
+                t := c.typeNamed(f)
+                if t >= types.TypeId(0) and (c.P.T.IsFloat(t) or c.P.T.IsInt(t) or t == types.BoolT) { return c.conversion(sp, t, args) }
+                if t >= types.TypeId(0) and c.isNamed(t) { return c.construct(sp, nsp, t, args) }
+                if t >= types.TypeId(0) and c.P.T.KindOf(t) != types.Kind.Var {
+                    c.err(nsp, msgs.NotCallable(c.ty(t)))
+                    c.dropArgs(args)
+                    return c.unknown(sp)
+                }
+            }
             c.gap(nsp, "a call of a name of this kind")
             return c.unknown(sp)
         }
@@ -9206,7 +9282,7 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
             }
             return c.invoke(sp, memberSpan(msp, c.text(n).Len()), f, null, args, Array<typed.Expr&>(0), ex)
         }
-        case ast.Expr.Member(msp, _, _) {
+        case ast.Expr.Member(msp, x, n) {
             # alias.Name<args>(...): a type another module declares (M10)
             ref := c.P.R.Member(c.fr().File, msp.End)
             if ref.Kind == names.What.Type and ref.Index >= 0 {
@@ -9214,6 +9290,10 @@ fn (c mut Checker&) genericCall(sp source.Span, gsp source.Span, g ast.Expr&, ta
                 if t == types.UnknownT { return c.unknown(sp) }
                 if targs.Len() > 0 and not c.instancesMet(t, targs[0].Span()) { return c.unknown(sp) }
                 return c.construct(sp, msp, t, args)
+            }
+            # x.Narrow<I32>(): a method given its own type arguments (G12)
+            if ref.Kind == names.What.None and not c.importPath(x) and c.typeNamed(x) < types.TypeId(0) {
+                return c.methodCall(sp, x, n, memberSpan(msp, c.text(n).Len()), args, targs, gsp)
             }
         }
         nomatch { }
@@ -9414,7 +9494,6 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     if c.P.FnIsExtern(f) { return c.callBody(sp, nsp, sig, typed.Callee.Extern(f), f, recv, args, pre) }
     owner := generic.FnOwner(f)
     nv := c.P.VarCount(owner)
-    if c.unfillable.Has(f) { return c.unknown(sp) }   # G4: said at its declaration, and nothing more at its calls
     if nv == 0 {
         inst := c.P.FnInstance(f, types.ListId(0))
         id := c.fnBody(inst)
@@ -9425,7 +9504,9 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     b := generic.Binding(owner, nv)
     # G12: the variables written type arguments name are theirs, whatever the arguments are
     if explicit.Len() > 0 {
-        for i in range explicit.Len() { b.Vals[i] = explicit[i] }
+        for i in range explicit.Len() {
+            if explicit[i] != types.UnknownT { b.Vals[i] = explicit[i] }
+        }
     }
     k I64 = 0
     if recv is not null {
@@ -9464,6 +9545,7 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
     }
     if explicit.Len() > 0 {
         for i in range explicit.Len() {
+            if explicit[i] == types.UnknownT { continue }
             b.Vals[i] = explicit[i]
             b.LiteralOnly[i] = false
         }
@@ -9528,7 +9610,15 @@ fn (c mut Checker&) invoke(sp source.Span, nsp source.Span, f I64, recv typed.Ex
                     }
                 }
             }
-            c.err(nsp, msgs.TypeArgsNotInferable(c.text(c.P.FnDecl(f).Name)))
+            # G4: one no parameter names is written at the call, or nothing gives it
+            seen := Array<Bool>(nv, false)
+            for q in ps { c.varsIn(q, owner, seen, 0) }
+            fname := c.text(c.P.FnDecl(f).Name)
+            if not seen[i] {
+                c.err(nsp, msgs.TypeVarNotInferable(c.text(c.P.VarAt(owner, i).Name), fname))
+            } else {
+                c.err(nsp, msgs.TypeArgsNotInferable(fname))
+            }
             return c.unknown(sp)
         }
     }
@@ -10058,13 +10148,34 @@ fn (c mut Checker&) ctorDefault(sp source.Span, k I64, want types.TypeId) typed.
 }
 
 # x.m(args): a method of x's type (M19); an array's Len supplied by the compiler (E23)
-fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp source.Span, args Array<ast.Expr&>&) typed.Expr&c {
+fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp source.Span, args Array<ast.Expr&>&
+                               targs Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0), gsp source.Span = source.Span(0, 0)) typed.Expr&c {
     # E13c: a number written as a literal is a receiver like any other value, of its own type (T6a)
     rx := c.expr(x, types.UnknownT)
     rt := typeOf(rx)
     if rt == types.UnknownT {
         c.dropArgs(args)
         return c.unknown(sp)
+    }
+    if targs.Len() > 0 {
+        # G12: type arguments name the method's own variables - only a declared method has any
+        m0 := c.P.MethodOf(c.deref(rt), n)
+        if m0 < 0 {
+            ds := c.P.DefaultMethods(c.deref(rt), n)
+            if ds.Len() == 1 { m0 = ds[0] }
+        }
+        if m0 < 0 or c.P.T.KindOf(c.deref(rt)) == types.Kind.Any {
+            c.err(targs[0].Span(), msgs.TypeArgsOnNonGeneric(c.tok(n)))
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        ex := c.explicitArgs(m0, targs, gsp)
+        if ex.Len() == 0 {
+            c.dropArgs(args)
+            return c.unknown(sp)
+        }
+        if not c.text(n)[0].IsUpper() and c.P.FnModule(m0) != c.fr().Mi { c.err(nsp, msgs.MethodIsPrivate(c.tok(n))) }
+        return c.invoke(sp, nsp, m0, rx, args, Array<typed.Expr&>(0), ex)
     }
     name := c.text(n)
     # T32b: a call through an "any" goes through its table
