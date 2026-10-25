@@ -7,12 +7,17 @@
 #     checked f(x)           ->  try f(x)                     (D17: a contract is checked on entry, ArgumentError.INVALID)
 #     (checked ...)!         ->  ...!                         the same, with "!" in place of the try
 #
-# and CheckError's words where they name what such a rewrite now fails with: OUT_OF_BOUNDS is ArrayError.OUT_OF_RANGE,
-# OVERFLOW and INVALID of a narrowing NumberError's, WRONG_CASE CaseError's, CONTRACT ArgumentError.INVALID. Everything else - "checked (a + b)", a
-# checked store or step, a checked call to a Checked form, CheckError left over - is listed for a person: arithmetic
-# that must not overflow goes through std/arith (try arith.Checked(a) + b, try arith.Add(a, b)), and an "as" fails as
-# written now (try e as C, (e as C)!), which the compiler says where it is not handled. Files are rewritten in place;
-# --check writes nothing and the exit status says whether anything would change. Running it again changes nothing.
+# The try is parenthesized - "(try a.Get(n))" - where an operator goes on after it: checked bound as tightly as old
+# "try", and a try now reads to the end of its expression, so "2 * checked a[n] + 1" is "2 * (try a.Get(n)) + 1". And
+# CheckError's words are renamed where they name what such a rewrite now fails with: OUT_OF_BOUNDS is
+# ArrayError.OUT_OF_RANGE, OVERFLOW and INVALID of a narrowing NumberError's, WRONG_CASE CaseError's, CONTRACT
+# ArgumentError.INVALID. Everything else - "checked (a + b)", a checked store or step, a checked call to a Checked form,
+# CheckError left over - is listed for a person: arithmetic that must not overflow goes through std/arith (try
+# arith.Checked(a) + b, try arith.Add(a, b)), and an "as" fails as written now (try e as C, (e as C)!), which the
+# compiler says where it is not handled. checked also checked every operation inside its operand, so one whose operand
+# holds more than the operation rewritten - "checked a[i - K]", "checked I32(x * x)" - is rewritten for that one and
+# listed for the rest. Files are rewritten in place; --check writes nothing and the exit status says whether anything
+# would change. Running it again changes nothing.
 #
 #     $OLANG build tools/checked_migrate.olang && build/tools_checked_migrate [--check] [-v] FILE|DIR...
 
@@ -134,6 +139,33 @@ fn rewrite(src String&, mask String&, parts List<I64>&) String, String {
     return "", ""
 }
 
+# whether the operand src[a:b] of a checked holds an operation it checked besides its outermost one (parts' last):
+# arithmetic, a shift, a negation, a conversion, an index or an "as" - checked once, and no longer by what replaces it
+fn innerChecks(src String&, mask String&, a I64, b I64, parts List<I64>&) Bool {
+    last := parts[parts.Len() - 2]
+    for k in range a, b {
+        if mask[k] != 'c' { continue }
+        ch := src[k]
+        if ch == '[' and k != last { return true }
+        if ch == '+' or ch == '*' or ch == '/' or ch == '%' { return true }
+        if (ch == '<' or ch == '>') and k + 1 < b and src[k + 1] == ch { return true }
+        if ch == '-' {
+            # a minus before a literal written after an operator, or at the start, is the literal's sign
+            q := k
+            for q > a and src[q - 1] == ' ' { q-- }
+            sign := q == a or not (srcmask.IsWord(src[q - 1]) or src[q - 1] == ')' or src[q - 1] == ']')
+            if not (sign and k + 1 < b and src[k + 1].IsDigit()) { return true }
+        }
+        if srcmask.IsIdStart(ch) and (k == a or not srcmask.IsWord(src[k - 1])) {
+            e := nameEnd(src, k)
+            word := src[k:e]
+            if word == "as" { return true }
+            if isNumber(word) and e < b and src[e] == '(' and k != parts[0] { return true }
+        }
+    }
+    return false
+}
+
 # whether text is one postfix chain alone - "a.b[i]", "f(x)" - so a method call after it applies to all of it
 fn chainCovers(x String&) Bool {
     m := srcmask.Mask(x, true)
@@ -195,6 +227,7 @@ fn lineOf(src String&, i I64) I64 {
 # src migrated: each checked rewritten where the text says what it is, the rest listed in c.left as "LINE: text"
 fn migrate(path String&, src String&, c mut Result&) String {
     mask := srcmask.Mask(src, true)
+    br := srcmask.Brackets(src, mask)
     out := StringBuilder()
     at I64 = 0
     i I64 = 0
@@ -231,6 +264,10 @@ fn migrate(path String&, src String&, c mut Result&) String {
             i = endOp
             continue
         }
+        # E15a checked every operation of its operand; what is written now checks the outermost one alone
+        if innerChecks(src, mask, w + 1, endOp, parts) {
+            c.left.Push($path ":" $lineOf(src, i) ": " $Word " also checked the operations inside it - arithmetic, a conversion, an index, an 'as' - which " $op " does not; check those that must not fail with std/arith, Narrow and Get: " $srcmask.Strip(lineText(src, i)))
+        }
         bang := i > 0 and src[i - 1] == '(' and src[endOp:].StartsWith(")!")
         segEnd := i - 1 if bang else i
         out.Push(renameWords(src[at:segEnd], kind if renameTo >= 0 else "", c))
@@ -239,8 +276,14 @@ fn migrate(path String&, src String&, c mut Result&) String {
             out.Push("!")
             at = endOp + 2
         } else {
+            # it bound as tightly as old "try", which a try now reads on past: where an operator goes on after it, the
+            # try is parenthesized - "2 * " Word " a[n] + 1" multiplied what it gave
+            n := srcmask.SkipGap(src, mask, br, endOp)
+            wrap := srcmask.OpAt(src[n:]).Len() > 0
+            if wrap { out.Push("(") }
             out.Push("try ")
             out.Push(op)
+            if wrap { out.Push(")") }
             at = endOp
         }
         c.changes++
@@ -356,4 +399,18 @@ test "what is not mechanical is listed and left as it was, and a second run chan
     # a word that only ends in it, and the word as a name, are left alone
     keep := "un" $Word " x\n" $Word " := true\n"
     assert migrate("f", keep, r3) == keep
+}
+
+test "a try written inside an operator expression is parenthesized, and the checks it no longer makes listed" {
+    r := Result()
+    assert migrate("f", "    x := 2 * " $Word " a[n] + 1\n", r) == "    x := 2 * (try a.Get(n)) + 1\n" and r.left.Len() == 0
+    assert migrate("f", "    x := " $Word " a[n] catch default 0\n", r) == "    x := try a.Get(n) catch default 0\n"
+    assert migrate("f", "    x := (" $Word " a[n]\n        + 1)\n", r) == "    x := ((try a.Get(n))\n        + 1)\n"
+    assert migrate("f", "    v := " $Word " a[i - K] catch default -1\n", r) == "    v := try a.Get(i - K) catch default -1\n"
+    assert r.left.Len() == 1
+    assert migrate("f", "    v := " $Word " I32(x * x) catch default -1\n", r) == "    v := try (x * x).Narrow<I32>() catch default -1\n"
+    assert r.left.Len() == 2
+    assert migrate("f", "    v := " $Word " a[b[i]]\n", r) == "    v := try a.Get(b[i])\n" and r.left.Len() == 3
+    # a sign, a plain name, a call's arguments that compute nothing: nothing more was checked
+    assert migrate("f", "    v := " $Word " a[-1] + " $Word " g(x, y)\n", r) == "    v := (try a.Get(-1)) + try g(x, y)\n" and r.left.Len() == 3
 }

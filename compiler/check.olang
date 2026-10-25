@@ -9802,7 +9802,7 @@ fn (c mut Checker&) methodCall(sp source.Span, x ast.Expr&, n source.NameId, nsp
             c.dropArgs(args)
             return c.unknown(sp)
         }
-        if supplied(name) and name != "Eq" {
+        if name == "Hash" or name == "Str" {
             c.gap(nsp, "a method the compiler supplies (E10b, E11c)")
         } else {
             c.err(nsp, msgs.UnknownMethod(c.ty(rt), c.tok(n)))   # the receiver as written, a reference one too
@@ -10017,15 +10017,6 @@ fn (c mut Checker&) baseHas(t types.TypeId, n source.NameId) Bool {
     if name == "Bits" { return c.P.T.IsFloat(u) }
     if name.EndsWith("FromBits") { return c.P.T.IsUnsigned(u) }
     if name.StartsWith("Atomic") or bitOp(name) != typed.PrimOp.Retire { return c.P.T.IsInt(u) }
-    return false
-}
-
-fn supplied(name String&) Bool {
-    for s in String&["Bits", "F16FromBits", "BF16FromBits", "F32FromBits", "F64FromBits", "AtomicLoad", "AtomicStore"
-                     "AtomicAdd", "AtomicSwap", "AtomicCompareSwap", "Hash", "Eq", "Str", "Len", "Iter", "LeadingZeros"
-                     "TrailingZeros", "PopCount", "RotateLeft", "RotateRight", "ByteSwap"] {
-        if s == name { return true }
-    }
     return false
 }
 

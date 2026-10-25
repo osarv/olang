@@ -6621,8 +6621,10 @@ place) over the files - a directory standing for every `.olang` file under it - 
 tools that read the text alone first, in that order, then those driven by the compiler's own diagnostics, which need a
 file it can read. Each tool changes only the forms it was written for, so there is no version in a file, and running `fix`
 on code of today changes nothing. It writes the name of each file it changed, one a line; with `-check` it changes nothing
-(the files are put back as they were) and its status is 1 when any would change. What a tool leaves for a person is
-written to the standard error. The status is 2 when a file cannot be read or a tool cannot be built or run. The tools
+(the files are put back as they were) and its status is 1 when any would change. What a tool leaves for a person - a
+place whose meaning the text alone cannot settle, such as a `try` read in the language of today further than when it was
+written (E24) - is written to the standard error, and then a line saying to look at them, and the status is 1, with or
+without `-check`. The status is 2 when a file cannot be read or a tool cannot be built or run. The tools
 are built when first needed, into the cache (`fix/` in `OLANG_CACHE`, M23a), and again when the compiler or their source
 is newer. A tool that is not idempotent - one that reads code of today as old code (`io_print`, `io_try`, `io_fix`,
 `precedence_migrate`) - is not run.

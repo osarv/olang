@@ -153,6 +153,7 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
         return 2
     }
     status I32 = 0
+    left I64 = 0
     for t in Order() {
         name := ToolNames[t]
         if not ensureBuilt(exe, tools, bin, name, said) {
@@ -168,11 +169,13 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
                 break
             }
             body := $r.Stdout $r.Stderr
-            # what a tool says is shown when it changed something, left something for a person or failed
-            if r.Status > 1 or body.Lines().Len() > 1 {
+            # what a tool says is shown when it left something for a person or failed
+            people := byHand(body)
+            if r.Status > 1 or people > 0 {
                 said.Write($name ":\n" $body)
                 if not body.EndsWith("\n") { said.Write("\n") }
             }
+            left += people
             if r.Status > 1 { status = 2 }
         }
         if status != 0 { break }
@@ -185,10 +188,39 @@ fn Files(check Bool, paths Array<String&>&, exe String&, std String&) I32 {
         out.Write($files[i] "\n")
         if check { try os.WriteFile(files[i], before[i]) catch os.Error { said.Write("olang: " $files[i] ": cannot be written\n") } }
     }
+    if left > 0 and status == 0 {
+        s := "" if left == 1 else "s"
+        said.Write("olang fix: " $left " place" $s " above may mean something else in the language of today than when written - look at each\n")
+    }
     try out.Flush() catch io.Error { return 2 }
     try said.Flush() catch io.Error { return 2 }
     if status != 0 { return status }
-    return 1 if check and changed > 0 else 0
+    return 1 if (check and changed > 0) or left > 0 else 0
+}
+
+# how many places what a tool said leaves to a person: its "by hand: ..." lines, and the indented lines under a "for a
+# person:" one
+fn byHand(body String&) I64 {
+    n I64 = 0
+    under := false
+    for line in body.Lines() {
+        if line.StartsWith("by hand:") {
+            n++
+        } else if line == "for a person:" {
+            under = true
+        } else if under and line.StartsWith("  ") {
+            n++
+        } else {
+            under = false
+        }
+    }
+    return n
+}
+
+test "a tool's places for a person are counted, its summary is not" {
+    assert byHand("changed 1 files: 2 rewrites\n") == 0
+    assert byHand("changed 0 files: 0 rewrites\nby hand: f:1: x\nby hand: f:2: y\n") == 2
+    assert byHand("migrated a.olang\nfor a person:\n  a.olang:3: z\n  a.olang:4: w\ndone\n") == 2
 }
 
 test "the text tools run before the driven ones, each group in the order the changes were made" {
