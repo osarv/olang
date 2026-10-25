@@ -1152,3 +1152,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (`try f() catch default 0 + x` does not try the +; a default is one term, compound parenthesized); a try within
   another's reach is an error (`try f(try g())`); parentheses directly around a try's operand are an error (redundant).
   Explained `catch default 0` (catch-all clause, fallback value). NEXT: checked with try.
+- try nesting DECIDED 2026-10-25 (the user: nested trys an error "only when they cover exactly the same thing"; the
+  outer of `try try f() catch default 0 + x` extends the whole way): every try must cover something fallible no inner
+  try already covers (R8's "a try covering nothing" per level) - replaces "a try within another's reach is an error".
