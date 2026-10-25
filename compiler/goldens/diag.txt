@@ -826,9 +826,9 @@ d17outlivesnotparam.olang:8:43: error[D17d]: 'q' is no parameter of this functio
       |                                           ^
 compilation failed with 1 error
 === d17reqfalse.olang
-d17reqfalse.olang:10:14: error[D17e]: this call breaks percent's requirement 'whole > 0'
-   10 |     p := try percent(5, Whole) catch default 0
-      |              ^~~~~~~
+d17reqfalse.olang:10:10: error[D17e]: this call breaks percent's requirement 'whole > 0'
+   10 |     p := percent(5, Whole)!
+      |          ^~~~~~~
 d17reqfalse.olang:5:34: note: the condition
     5 | fn percent(part I64, whole I64) [whole > 0, 0 <= part <= whole] I64 { return part * 100 / whole }
       |                                  ^~~~~~~~~
@@ -1433,6 +1433,16 @@ e31bviewvalue.olang:15:18: note: the callee is no view of the element because of
    15 | fn f(w mut W&) { move(w.p) }
       |                  ^~~~~~~~~
 compilation failed with 1 error
+=== e31callerrs.olang
+e31callerrs.olang:10:16: error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing - the same errors in the same order: write the function type 'fn(I64) I64 ? ArgumentError', or pass a lambda handling them
+   10 |     assert run(g, 1) == 1
+      |                ^
+compilation failed with 1 error
+=== e31callerrs2.olang
+e31callerrs2.olang:9:17: error[T22, E31]: Gate's Call fails with nothing where the function type says E - the same errors in the same order: pass a lambda calling it
+    9 |     assert run2(Gate(5), 1) == 101
+      |                 ^~~~~~~
+compilation failed with 1 error
 === e31calllocal.olang
 e31calllocal.olang:13:12: error[O10d]: this value lives in this function's own scope, which closes first
    13 |     return c
@@ -1802,6 +1812,11 @@ compilation failed with 1 error
 g12methodnotgeneric.olang:7:16: error[G7]: Get is not generic, so it takes no type arguments
     7 |     c := b.Get<I64>()
       |                ^~~
+compilation failed with 1 error
+=== g12spaced.olang
+g12spaced.olang:6:23: error[G12]: type arguments are written touching the name and the '(': 'Narrow<...>(...)' - with spaces, '<' and '>' compare
+    6 |     v := try x.Narrow <I32> ()
+      |                       ^
 compilation failed with 1 error
 === g12value.olang
 g12value.olang:7:21: error[G12]: generic function 'id' is not a value - call it, or name an instance by its type arguments, as 'id<I64>'

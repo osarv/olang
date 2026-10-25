@@ -78,6 +78,9 @@
 | RETURN 3:29-3:40
 | -- diagnostics
 | error  6:1
+=== checks/cases/g12spaced.olang
+| -- diagnostics
+| error G12 6:23
 === checks/cases/l10bdouble.olang
 | FN 3:1-5:2
 | VAR 4:5-4:16
@@ -350,6 +353,22 @@
 | VAR 4:8-4:13
 | -- diagnostics
 | error D12b 4:5
+=== checks/fixtures/fix/before25.olang
+| ERRORS 5:1-5:16
+| FN 10:1-10:60
+| FN 11:1-11:60
+| IF 10:23-10:49
+| IF 11:25-11:49
+| IMPORT 3:1-3:16
+| IMPORT 4:1-4:16
+| RAISE 10:36-10:47
+| RAISE 11:36-11:47
+| RETURN 10:50-10:58
+| RETURN 11:50-11:58
+| TYPE 6:1-9:2
+| -- diagnostics
+| error  12:27
+| error  16:20
 === checks/fixtures/fix/old.olang
 | CATCH 15:22-15:41
 | ERRORS 4:1-4:19
