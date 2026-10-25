@@ -24750,3 +24750,91 @@ function types' parameters, results and errors, `f.Of` read and written, buildin
 chained reflected types, unrolled `break`/`continue`, case descriptors called; baked globals and decided asserts beside
 run-time ones) and tests/reflmod.olang (another module's private fields); std/json's two new tests; 21 checks cases,
 one per diagnostic.
+
+## Bulk review 1, fixed (O8d, C9b, S20, S18a, D18, D17, E38, X12, B18, R11b, std/json, 2026-10-25)
+
+A read-only review of a6c2292..843871e (lang25, errs, esgen, small2, refl, mem47; /home/user/review/bulk1) reproduced ten
+findings, four of them use-after-frees in early freeing. The governing rule for those: **when in doubt, keep** - early
+freeing is an optimization, and a missed free costs memory, never safety. Each fix is the conservative one, no new
+analysis.
+
+**F1, a generator's frame across `yield` (UAF).** The final walk took a `Suspend` as a `Return`: its value's origins and
+nothing else, while between a yield and the next `Next` the consumer runs anything. A yield is now a let-go of any place
+(`LYield`) for the views and borrows the body holds across it; it is no let-go of the generator's own (not in the
+report's rows, not condition 5). What the generator was given was already held for as long as it can be resumed: its
+`Next` is a lambda whose captures escape. So 01b's `Destroy()` of an instance a suspended generator still reads is
+refused, the note naming the yield.
+
+**F2, one value of a place stored inside another (UAF, wrong output at -O3).** `storeAs` and `escape` exempted a view of
+place q stored inside a value of q - but a place's key names every instance's field, each value in a region of its own,
+so `a.n.next = b.n` linked one holder's node from another's and the next `b.n = ...` freed it. The exemption now holds
+only where the stored value is reached through the very reference the container is reached through: the same pure path
+(locals, fields, derefs, a literal or local index) read in one statement (`sameValue`). Nothing in std or the fixtures
+needed more.
+
+**F3, the fixed points cut off (UAF).** The walk's origins ran 16 rounds and went on as if converged; a view passed down
+34 locals was missed. `mustOf`'s greatest fixed point ran 8, and `decide`'s two "not sole" propagations 64. All four now
+run to convergence: origins only grow and are finitely many, a must-fact only moves down Top -> place -> none, and a
+"not sole" only turns false, so each settles - no bound, so nothing to fall back from.
+
+**F4, a destructor run early.** Condition 4 was judged by the value's type, but a constructor's top-level temporary held
+by nothing (O16) is registered where the instance lands - in the region - and the release ran it at the let-go. Now
+judged by what the region can hold: a may-summary per body, `regOut`, true where the body may register a destructor in
+one of its scope variables (a destructing type's constructor, a promotion of one into a variable, a call passing a
+variable to a callee that may, a call through a function value or a dispatch, a lambda made whose body may); a value
+made for a place whose building may register (`mayRegister`, walking the value and its parts - anything it cannot walk
+counts), a store through a value of the place, or a call building into one keeps the place (RDtor). Only an accepted
+`Destroy()` ends such instances early; otherwise their destructors run at the scope's close. **Decided (mine):** the
+static rule and no run-time fallback - a fallback refusing a release would be a second, different implementation of
+the rule in the runtime and the evaluator, and the static one is what the report states.
+
+**F5, a generator resumed inside its own walk (segfault).** `genNext` resumed a coroutine that was not suspended. It now
+tests the promise's running flag (already there, for `genDrop`) before resuming and fails a guaranteed check -
+`FILE:LINE: a generator asked for its next value inside its own walk`, the generator's line - through
+`__olang_check_failed`, so in a test that test fails and the rest run. One compare a `Next`, a guaranteed check like a
+slice's bounds: without it this is LLVM undefined behaviour. `interpret` did refuse it with the same words; it is now an
+exit of the same kind (`ExitKind.GenRunning`), status 134 as the built program's.
+
+**F6, an extern calling back an export fn (UAF).** An extern call was a let-go of nothing, but C may call an export fn
+(X12) before it returns. An extern call is now a let-go of anything when an export fn may let go (directly or through
+what it calls; the export fns' bodies count as called by every extern call, so their summaries reach it). **And
+PLAUSIBLE 3, decided (mine):** C may call an export fn from a thread of its own - one of a library's (X13) from any - so
+a program with an export fn frees nothing early (condition 3). Cheap: no std module has one.
+
+**F7, `embed` through a link (security).** The repository check was textual. A module of std or of a remote repository
+now embeds only a file whose real path lies under the repository's (or std's) real root - the root found from the
+module's path and the identity's tail. A local program's own files embed what they like, as before.
+
+**F8, large integers in std/json.** `Parse` rounded every number to an F64, so `Decode<I64>` changed integers above 2^53
+and `Decode<U64>` refused values above `I64.Max`. **Decided (mine):** two cases, `Json.Int(v I64)` and `Json.Uint(v
+U64)`, made only for a whole number written without a fraction or an exponent that an I64 or a U64 holds and its F64 does
+not hold exactly - so every tree a program builds or matches today is as it was (`Json.Num` for everything an F64 holds,
+1205 and 2^53 included). `AsNum` gives any number's F64, `AsInt`/the new `AsUint` and `Decode` read a whole number
+exactly (a Num whose F64 is whole too), `Encode` writes Int/Uint back as they were, and `==`/`Hash` compare numbers by
+value whatever case holds them. Baked while compiling and at run time alike.
+
+**F9, a generator with a contract.** D17 asked for `? ArgumentError` and D18 refused a `?` after a generator's result.
+The conditions are now checked as the generator's first `Next` begins (`contractChecks` in its Next's lambda, on the
+locals its parameters became), a false one that `Next`'s `ArgumentError.INVALID`, the walk over after it; the call making
+the generator checks nothing, and D17e decides nothing at it. D17b's "a written set must list ArgumentError" is met by
+E: `Iterator<I64 ? ArgumentError>`, a new message naming it otherwise.
+
+**F10, diagnostics.** `-memory` names a for-in's hidden local by what it walks ("what the loop on line 25 walks,
+'h.buf',"), never `''`; a place is named by its own expression - a row's collection and scope never taken from a call
+that may let go of anything (whose receiver was the hidden local, spanning a whole `for`), a row at a call naming the
+place as its own let-go writes it, a call "which may let go of anything" said so; a place whose only let-goes are such
+calls has no row of its own, and a global's initializer runs once. A lambda capturing a catch name compared (`e ==
+P.A`) is one error: the comparison is not checked further.
+
+**Over-rejections.** `r.Destroy(); continue` (or `break`) in a loop: a jump of a loop whose body declares the local ends
+its path, as a return does (C9b). Left: `fn Show() String& { return Data }` (an immutable global) is O10c's error at a
+call with no arguments - the body obliges its result scope to be the program's (O25's exactness for a built result
+returning existing storage); older than the range, a §8 question.
+
+**PLAUSIBLE 1 and 2** (mustOf's 8 rounds, decide's 64) are closed with F3.
+
+**Tests:** tests/shared.olang's bulk-review section (each early-freeing shape read back after a churn, baked and at run
+time), tests/generators.olang's contract test, std/json's exact-integer test; checks cases o8dyieldview, c9byield,
+o8dsameplace, o8dsameplacecall, o8dmapvalues, o8dorigins, o8ddtortemp, o8dwalked, o8dplacename, r11bcapturedcmp,
+d18contract (each failing on 843871e); the generators scenario's re-entry (built, `-debug -sanitize`, interpreted, in a
+test), embed's link cases (std and a remote repository), cinterop's callback.

@@ -1,0 +1,29 @@
+# check: build
+# flags: -memory
+# also: note: a reference into it is stored here, in 'a.n.next'
+# O8d (the bulk review's F2): the same, the link made in a callee
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+    next mut Node?& = null
+}
+
+type Holder struct() {
+    n mut Node& = Node(0)
+}
+
+# links b's node from a's: one value of the place stored into another value of the same place
+fn link(a mut Holder&, b Holder&) { a.n.next = b.n }
+
+fn main() {
+    a := Holder()
+    b := Holder()
+    for i in range 6 {
+        b.n = Node(i + 1)
+        if a.n.next is not null { io.Println($"linked: " $a.n.next!.v " " $a.n.next!.t)! }
+        link(a, b)
+        b.n = Node(100 + i)     # lets go of the node a's node links: freed at once
+    }
+}

@@ -1,0 +1,13 @@
+# check: fail error[R11b]: 'e' is the error a clause took, which a lambda cannot capture
+# never: error[T20]
+# R11b (the bulk review's F10): a captured caught name compared is one error
+import "std/io"
+type P error { A, B }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch e {
+        xs := I64[1, 2]
+        n := xs.Count(fn(x I64) Bool { return e == P.A })
+        io.Println($n)!
+    }
+}

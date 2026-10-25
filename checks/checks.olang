@@ -891,6 +891,26 @@ fn embedded(r mut report&) ? Failed {
                     "s/std/leak.olang && echo x > s/outside.txt && OLANG_STD=$PWD/s/std \"$OLANG\" build leaks.olang > out.txt " $
                     "2>&1") != 0, "std/leak embedding outside std built", dir)
     try r.expect(outOf(dir).Contains("error[E38]: embed '../outside.txt' reads no file: it leaves std"), "std/leak's error", dir)
+    # ...nor through a link inside it, named by its real path (the bulk review's F7)
+    try r.expect(sh(dir, "ln -s ../outside.txt s/std/link.txt && echo 'X := embed \"link.txt\"' > s/std/leak.olang && " $
+                    "OLANG_STD=$PWD/s/std \"$OLANG\" build leaks.olang > out.txt 2>&1") != 0, "std/leak embedding a link built", dir)
+    try r.expect(outOf(dir).Contains("error[E38]: embed 'link.txt' reads no file: it leaves std, through a link"), "std/leak's link error", dir)
+    # a remote repository's module: a file of its own embedded, a link to one outside refused
+    repo String& = $dir "/remote/example.com/me/tools"
+    env String& = "OLANG_GIT_BASE=file://" $dir "/remote/ OLANG_CACHE=" $dir "/cache "
+    git String& = "git -c user.name=t -c user.email=t@t"
+    try r.expect(os.Run("mkdir -p " $os.Quote($repo "/lib")) == 0, "making the repository", dir)
+    try r.expect(sh(repo, "echo inside > lib/ok.txt && ln -s " $os.Quote($dir "/s/outside.txt") " lib/data.txt && " $
+                    "echo 'Data := String(embed \"data.txt\")' > lib/peek.olang && echo 'Ok := String(embed \"ok.txt\")' > lib/good.olang && " $
+                    "git init -q && git add . && " $git " commit -qm v1") == 0, "the repository", dir)
+    try r.expect(sh(dir, "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/good\"\\nfn main() { io.Print(good.Ok)! }\\n' > good.olang && " $
+                    "printf 'import \"std/io\"\\nimport \"example.com/me/tools/lib/peek\"\\nfn main() { io.Print(peek.Data)! }\\n' > peek.olang") == 0
+                 "the programs", dir)
+    try r.expect(sh(dir, $env "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0 and outOf(dir) == "inside\n"
+                 "a remote module embedding a file of its repository", dir)
+    try r.expect(sh(dir, $env "\"$OLANG\" build peek.olang > out.txt 2>&1") != 0, "a remote module embedding a link out of it built", dir)
+    try r.expect(outOf(dir).Contains("error[E38]: embed 'data.txt' reads no file: it leaves example.com/me/tools, through a link")
+                 "the remote link's error", dir)
 }
 
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping
@@ -1431,6 +1451,17 @@ fn generators(r mut report&) ? Failed {
     try r.expect(sh(dir, "./build/walks.debug.san > d.txt 2>&1") == 0, "walks -d -s run", dir)
     try r.expect(sh(dir, "\"$OLANG\" interpret walks.olang > i.txt 2>&1") == 0, "walks -i", dir)
     try r.expect(sh(dir, "cmp -s walks.want b.txt && cmp -s b.txt d.txt && cmp -s b.txt i.txt") == 0, "walks output", dir)
+    # S20: a Next asked inside the generator's own walk - a guaranteed check, failing alike built, -d -s and interpreted
+    gone String& = "a generator asked for its next value inside its own walk"
+    try r.expect(sh(dir, "\"$OLANG\" build reentry.olang > out.txt 2>&1 && ./build/reentry > b.txt 2>&1") == 134, "reentry", dir)
+    try r.expect(sh(dir, $"grep -qx 'reentry.olang:9: " $gone "' b.txt && ! grep -q 'not reached' b.txt") == 0, "reentry's message", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize reentry.olang > out.txt 2>&1 && ./build/reentry.debug.san > d.txt 2>&1") == 134
+                 "reentry -d -s", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret reentry.olang > i.txt 2>&1") == 134 and sh(dir, $"grep -q '" $gone "' i.txt") == 0
+                 "reentry -i", dir)
+    try r.expect(sh(dir, "\"$OLANG\" test reentryt.olang > t.txt 2>&1") == 1, "reentryt", dir)
+    try r.expect(sh(dir, $"grep -q 'reentryt.olang:6: " $gone "' t.txt && grep -q 'FAIL - a generator resumed inside its own walk' t.txt " $
+                    "&& grep -q 'ok - the next test runs' t.txt") == 0, "reentryt's results", dir)
 }
 
 # K1/K2b/B5a and the review of the evaluator (2026-10-09): what compile-time evaluation, the built program at -O3 and at
@@ -1581,6 +1612,12 @@ fn cinterop(r mut report&) ? Failed {
     try r.expect(sh(dir, "cmp -s abi.txt abi.out") == 0, "abi printed otherwise than abi.out says", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize -output abi.ds abi.olang > out.txt 2>&1 && ./abi.ds > abi.ds.txt") == 0, "abi -debug -sanitize", dir)
     try r.expect(sh(dir, "cmp -s abi.ds.txt abi.out") == 0, "abi under -debug -sanitize printed otherwise", dir)
+    # O8d: a view held across an extern call that calls back an export fn letting go of what it names
+    try r.expect(sh(dir, "clang -c -O2 callback.c -o callback.o > out.txt 2>&1") == 0, "callback.c did not compile", dir)
+    try r.expect(sh(dir, "\"$OLANG\" build -memory -debug -sanitize -output cb.ds callback.olang > out.txt 2>&1 && ./cb.ds > cb.txt") == 0
+                 "callback -debug -sanitize", dir)
+    try r.expect(outOf(dir).Contains("memory: 'G.t' keeps what it lets go of") and sh(dir, "cmp -s cb.txt callback.out") == 0
+                 "callback: the view across c_run(i) was not kept", dir)
     # X11 on AAPCS64: the same calls against abi.c compiled by GCC for aarch64 - another compiler's C ABI - run through
     # the emulator, where olang builds for aarch64 here (B12a)
     if crossLibc("aarch64") and hasEmulator("aarch64") and sh(dir, "command -v aarch64-linux-gnu-gcc > /dev/null") == 0 {

@@ -1,0 +1,35 @@
+# check: build
+# flags: -memory
+# also: note: its new value may hold an instance whose destructor is still to run (O16)
+# O8d, O16 (the bulk review's F4): a constructor's instance held by nothing is registered where the node lands - a
+# let-go of the node would run its destructor early, so the place keeps
+import "std/io"
+
+Ends mut I64 = 0
+
+type Res struct(n I64) {
+    n
+} destruct {
+    Ends += 1
+}
+
+# a node whose constructor builds a resource where the node lands, held by nothing (O16): its destructor is due when
+# that scope closes
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with some text ............................................"
+    Res(v)
+}
+
+type Holder struct() {
+    n mut Node& = Node(0)
+}
+
+fn main() {
+    h := Holder()
+    for i in range 5 {
+        h.n = Node(i + 1)        # lets go of the old node
+        io.Println($"turn " $i ": " $Ends " ended")!
+    }
+    io.Println($"before the close: " $Ends " ended")!
+}

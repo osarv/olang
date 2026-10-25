@@ -108,7 +108,6 @@ WhyFfiFind String& = "it calls an external function -i cannot find in this proce
 WhyFfiPass String& = "it calls an external function with a parameter or result -i cannot pass - only numbers, Bools and arrays of numbers"
 WhyNoClause String& = "a task's error has no clause to take it"
 WhyWaits String& = "it waits for another task, and interpret runs a join's tasks one after another, never beside each other"
-WhyGenRunning String& = "it asks a generator for its next value from inside the generator's own walk"
 
 # ---- pointers ----
 
@@ -3378,7 +3377,8 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
         ri = m.genIndex(m.fns[callee], env)
         st := m.gens[ri].State
         if st == 2 {
-            m.refuse(WhyGenRunning)
+            # S20: a guaranteed check, as the built program's genNext makes it
+            m.stop(Stop.Exited(mir.ExitKind.GenRunning, m.stopFile, m.stopSp, ""))
             return -2
         }
         if st == 3 {

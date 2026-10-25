@@ -18436,3 +18436,160 @@ test "O8d: a place let go of between a generator's yields and in an errdefer - b
     assert LetGoBaked == (4 * 78 + 2 * 14000 + 2 * 24) * 100 + 24
     assert letGoLoop(4 + ctRuntimeZero) == LetGoBaked
 }
+
+# ---- the bulk review of 2026-10-25, fixed: early freeing (O8d) where it was unsound, each value read back after the
+# arena is churned; the places these let go of keep (checks/cases/o8d* say why) ----
+
+type BulkHolder struct() {
+    t String& = ""
+}
+
+fn (h mut BulkHolder&) set(i I64) { h.t = $"bulk text " $i " padded out to many bytes ........................................" }
+
+# F1: a view held in a generator's frame across a yield, the consumer letting go of what it names in between
+fn bulkWalk(h BulkHolder&) Iterator<I64> {
+    for k in range 3 {
+        v := h.t
+        yield 1
+        yield v.Len() * 1000 + I64(v[10])
+    }
+}
+
+fn bulkYield(z I64) I64 {
+    h := BulkHolder()
+    h.set(z)
+    t I64 = 0
+    for x in bulkWalk(h) {
+        h.set(x + 7)
+        churnArena()
+        t = t * 7 + x
+    }
+    return t
+}
+
+BulkYieldBaked := bulkYield(0)
+
+test "O8d, F1: a view a generator holds across a yield keeps what it names" {
+    assert BulkYieldBaked == bulkYield(I64(ctRuntimeZero))
+    assert bulkYield(I64(ctRuntimeZero)) == 189062156
+}
+
+# F2: one value of a place stored inside another value of the same place - a place's key names every instance's field
+type BulkNode struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+    next mut BulkNode?& = null
+}
+
+type BulkPair struct() {
+    n mut BulkNode& = BulkNode(0)
+}
+
+fn bulkLink(a mut BulkPair&, b BulkPair&) { a.n.next = b.n }
+
+fn bulkSamePlace(z I64, callee Bool) I64 {
+    a := BulkPair()
+    b := BulkPair()
+    t I64 = 0
+    for i in range 5 {
+        b.n = BulkNode(z + i + 1)
+        if a.n.next is not null { t = t * 10 + a.n.next!.v + I64(a.n.next!.t[5]) - I64('0') }
+        if callee { bulkLink(a, b) } else { a.n.next = b.n }
+        b.n = BulkNode(100 + i)       # lets go of the node a's links: kept
+        churnArena()
+    }
+    return t
+}
+
+fn bulkMapLink(z I64) I64 {
+    m := Map<I64, mut BulkNode&>()
+    t I64 = 0
+    for i in range 6 {
+        m.Put(i, BulkNode(z + i))
+        if i >= 1 {
+            a := try m.Get(i - 1) catch { unreachable }
+            b := try m.Get(i) catch { unreachable }
+            b.next = a
+            m.Remove(i - 1)
+        }
+        churnArena()
+        c := try m.Get(i) catch { unreachable }
+        if c.next is not null { t = t * 10 + c.next!.v + c.next!.t.Len() - 71 }
+    }
+    return t
+}
+
+BulkSameBaked := bulkSamePlace(0, false) + bulkSamePlace(0, true) + bulkMapLink(0)
+
+test "O8d, F2: a value of a place stored inside another value of that place keeps the place" {
+    assert bulkSamePlace(I64(ctRuntimeZero), false) == 2468
+    assert bulkSamePlace(I64(ctRuntimeZero), true) == bulkSamePlace(I64(ctRuntimeZero), false)
+    assert bulkMapLink(I64(ctRuntimeZero)) == 12345
+    assert BulkSameBaked == 2 * bulkSamePlace(I64(ctRuntimeZero), false) + bulkMapLink(I64(ctRuntimeZero))
+}
+
+# F4: a node whose constructor builds an instance with a destructor held by nothing (O16), registered where the node
+# lands: run when that scope closes, never when the place lets go of the node
+BulkEnds mut I64 = 0
+
+type BulkRes struct(n I64) {
+    n
+} destruct {
+    BulkEnds += 1
+}
+
+type BulkResNode struct(v I64) {
+    v
+    t String& = $"node " $v " with some text ............................................"
+    BulkRes(v)
+}
+
+type BulkResHolder struct() {
+    n mut BulkResNode& = BulkResNode(0)
+}
+
+fn bulkDtorTurns() I64 {
+    h := BulkResHolder()
+    seen I64 = 0
+    for i in range 5 {
+        h.n = BulkResNode(i + 1)
+        seen = seen * 10 + BulkEnds
+    }
+    return seen
+}
+
+test "O8d, F4: a destructor a let-go would run early runs at its scope's close" {
+    BulkEnds = 0
+    assert bulkDtorTurns() == 0 and BulkEnds == 6
+}
+
+# C9b: a break or a continue of the loop whose body declares the local ends its path, as a return does
+BulkDestroyed mut I64 = 0
+
+type BulkConn struct(n I64) {
+    n
+} destruct {
+    BulkDestroyed += 1
+}
+
+fn bulkSkipOne(z I64) I64 {
+    t I64 = 0
+    for i in range 4 {
+        r := BulkConn(i + z)
+        if i == 1 {
+            r.Destroy()
+            continue
+        }
+        if i == 3 {
+            r.Destroy()
+            break
+        }
+        t += r.n
+    }
+    return t * 10 + BulkDestroyed
+}
+
+test "C9b: r.Destroy(); continue - and break - in the loop that declares r" {
+    BulkDestroyed = 0
+    assert bulkSkipOne(I64(ctRuntimeZero)) == 24 and BulkDestroyed == 4
+}

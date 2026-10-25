@@ -243,3 +243,26 @@ test "S19e: an errdefer in a generator's body runs when the walk fails, not when
     assert edTotal(5) == 3 and EdLog == 0
     assert edTotal(1) == 101 and EdLog == 1
 }
+
+# D18, D17 (the bulk review's F9): a generator's conditions are checked as its first Next begins - a false one is that
+# Next's ArgumentError, and the walk is over after it; the call making the generator runs none of them
+fn halves(n I64, d I64) [n >= 0, d > 0] Iterator<I64 ? ArgumentError> {
+    for i in range n { yield i / d }
+}
+
+fn halvesSum(n I64, d I64) I64 {
+    t I64 = 0
+    for x in try halves(n, d) { t += x } catch ArgumentError { return -1 }
+    return t
+}
+
+HalvesBaked := halvesSum(10, 2) * 100 + halvesSum(-1, 2)
+
+test "D18: a generator's contract, failing its first Next" {
+    assert HalvesBaked == 20 * 100 - 1
+    assert halvesSum(Ten, 2) == 20 and halvesSum(Ten, 0) == -1 and halvesSum(-Ten, 1) == -1
+    g := halves(Ten - 20, 1)          # made: nothing checked yet
+    a := try g.Next() catch ArgumentError default -5 catch Exhausted default -6
+    b := try g.Next() catch ArgumentError default -5 catch Exhausted default -6
+    assert a == -5 and b == -6
+}
