@@ -1232,3 +1232,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   sides of the union as normal variables; `fn f() I32 ? MyStruct` makes no sense. Confirmed: only error types after `?`
   and in catch; sets are lists, not variable types; the clause-local `e` is a name for the error being handled (as a
   for-in names its element), never data. ASKED to decide the clause-only name.
+- The user 2026-10-25: "we could have errors as variables and still only allow errors in the right slot. Then we
+  basically test error variables as another type of enum". Proposed (b): error types are value types like payload-free
+  enums everywhere but a function's result (incl. one of several) - parameters, fields, elements, type arguments
+  (List<os.Error>, Result<T, os.Error>), locals; only error types after `?`; ==/narrowing/match/$/Hash; the 32-bit code,
+  no scope; `catch E e` makes one, `error e` raises (checked against the set); no zero value (always initialised; QBA
+  may revisit). ASKED: (a) clause-only names or (b) error values - rec (b) now.
