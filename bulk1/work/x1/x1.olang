@@ -1,0 +1,44 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+}
+
+type Reg struct() {
+    items List<Node&>
+}
+
+Ends mut I64 = 0
+
+# a resource whose constructor builds a node where the instance lives and hands it to the registry
+type Res struct(g mut Reg&, n I64) {
+    g
+    n
+    item Node& = Node(n)
+    g.items.Push(item)
+} destruct {
+    Ends += 1
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    reg := Reg()
+    for i in range 4 {
+        r := Res(reg, i)
+        r.Destroy()
+        churn()
+    }
+    for x in reg.items { io.Println(x.t)! }
+    io.Println($Ends)!
+}

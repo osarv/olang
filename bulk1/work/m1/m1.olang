@@ -1,0 +1,36 @@
+import "std/io"
+
+type Node struct(v I64) {
+    v
+    t String& = $"node " $v " with text padded out to a fair length ..........................."
+}
+
+type Holder struct() {
+    n mut Node& = Node(0)
+    m Map<I64, mut Node&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for i in range 6 {
+        h.m.Put(i % 2, Node(i + 10))
+        if i > 1 {
+            x := try h.m.Take((i + 1) % 2) catch default Node(-1)
+            h.n = x              # moved into another place
+            h.n = Node(i * 100)  # which lets go of it
+            churn()
+            io.Println(x.t)!     # x still used
+        }
+    }
+}
