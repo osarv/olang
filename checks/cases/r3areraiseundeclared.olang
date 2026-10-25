@@ -1,0 +1,9 @@
+# check: fail error[R3a]: the error raised again can be Q, which this function does not declare
+# R3a: "error e" is held to the function's set as any error statement is - by what e can be here
+type P error { A }
+type Q error { B }
+fn f() ? P, Q { error P.A }
+fn g() ? P {
+    try f() catch e { error e }
+}
+fn main() { }

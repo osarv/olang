@@ -1,0 +1,8 @@
+# check: fail error[R3]: 'error' raises a word, 'error T.WORD', or the error a clause took - 'x' is neither
+# R3: an error statement raises a word or a caught error, never a local
+type P error { A }
+fn g() ? P {
+    x := 3
+    error x
+}
+fn main() { }

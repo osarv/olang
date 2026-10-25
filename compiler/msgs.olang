@@ -2084,7 +2084,7 @@ fn NestedArrayLiteral() Msg { return Msg(Diag.NestedArrayLiteral, "E21", "there 
 fn ArrayOfErrors(ty String&) Msg { return Msg(Diag.ArrayOfErrors, "T20", $ty " has no values to put in an array") }
 
 # ERR_ERROR_TYPE_AS_VALUE
-fn ErrorTypeAsValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.ErrorTypeAsValue, "T20", $ty1 " is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch " $ty2 ".WORD { }')") }
+fn ErrorTypeAsValue(ty1 String&, ty2 String&) Msg { return Msg(Diag.ErrorTypeAsValue, "T20", $ty1 " is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch " $ty2 ".WORD { }'), or by the name a clause gives one ('catch " $ty2 " e { if e == " $ty2 ".WORD { } }')") }
 
 # ERR_COMPREHENSION_REFERENCES
 fn ComprehensionReferences() Msg { return Msg(Diag.ComprehensionReferences, "E27", "a comprehension's elements may not be or hold references yet - build the array with a loop") }
@@ -2093,7 +2093,7 @@ fn ComprehensionReferences() Msg { return Msg(Diag.ComprehensionReferences, "E27
 fn NotAnEnum(tok String&) Msg { return Msg(Diag.NotAnEnum, "E22", $tok " is not an enum type, so it has no values 'T.Case'") }
 
 # ERR_ERROR_WORD_AS_VALUE
-fn ErrorWordAsValue(text1 String&, text2 String&) Msg { return Msg(Diag.ErrorWordAsValue, "T20", "'" $text1 "' is an error word, not a value - raise it with 'error " $text2 "', tell it apart with a catch clause") }
+fn ErrorWordAsValue(text1 String&, text2 String&) Msg { return Msg(Diag.ErrorWordAsValue, "T20", "'" $text1 "' is an error word, not a value - raise it with 'error " $text2 "', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == " $text2 " { } }')") }
 
 # ERR_TAKES_NO_ARGS
 fn TakesNoArgs(tok String&) Msg { return Msg(Diag.TakesNoArgs, "E14", $tok " takes no arguments") }

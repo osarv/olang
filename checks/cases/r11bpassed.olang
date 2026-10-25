@@ -1,0 +1,8 @@
+# check: fail error[R11b]: 'e' is the error this clause took
+# R11b: the error a clause took is not passed to a function
+type P error { A }
+fn f() ? P { error P.A }
+fn g(x I64) { }
+fn main() {
+    try f() catch e { g(e) }
+}

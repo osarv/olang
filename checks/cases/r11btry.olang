@@ -1,0 +1,8 @@
+# check: fail error[R11b]: 'e' is an error already caught, not a call - raise it again with 'error e'
+# R11b: a caught error is never tried
+type P error { A }
+fn f() ? P { error P.A }
+fn g() ? P {
+    try f() catch e { x := try e }
+}
+fn main() { }

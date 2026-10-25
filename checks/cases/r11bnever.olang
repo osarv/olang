@@ -1,0 +1,8 @@
+# check: fail error[R11b]: 'e' is never Q here - it is P
+# R11b: a caught error is compared only with what it can be
+type P error { A }
+type Q error { B }
+fn f() ? P, Q { error P.A }
+fn main() {
+    try f() catch P e { if e == Q { } } catch Q { }
+}

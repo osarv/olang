@@ -1,0 +1,7 @@
+# check: fail error[R11b]: 'e' names the error this clause took, and nothing uses it - leave the name off
+# R11b: a clause that names its error uses the name
+type P error { A }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch P e { }
+}

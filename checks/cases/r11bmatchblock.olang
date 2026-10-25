@@ -1,0 +1,10 @@
+# check: fail error[R11b]: a match on a caught error giving a value gives it with '=> v' in every case
+# R11b: a value match on a caught error gives its values with "=>"
+type P error { A, B }
+fn f() I64 ? P { error P.A }
+fn main() {
+    x := try f() catch e default (match e {
+        case P.A => 1
+        case P.B { return }
+    })
+}

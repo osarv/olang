@@ -1,0 +1,6 @@
+# check: fail error[R1]: unknown error type 'Nope'
+# also: error[T19]: C has no word 'Q'
+# T19a: a set's members are error types, their words or sets
+type C error { Y }
+type E error Nope, C.Q
+fn main() { }

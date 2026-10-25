@@ -1,0 +1,7 @@
+# check: fail error[R11b]: 'e' is compared with an error word, an error type or a named set
+# R11b: a caught error is no number
+type P error { A }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch e { if e == 3 { } }
+}

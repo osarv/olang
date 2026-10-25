@@ -1,0 +1,9 @@
+# check: fail error[R11b]: a spawned call's clause runs on the task's thread and names no error
+# R11b, P4a: a task's clause is a lambda run on the task's thread - it does not name its error
+type P error { A }
+fn f() ? P { error P.A }
+fn main() {
+    join {
+        spawn try f() catch P e { }
+    }
+}
