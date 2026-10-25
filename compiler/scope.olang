@@ -7877,6 +7877,39 @@ fn (s Scoper&) Summary(b I64) String {
     return t.ToString()
 }
 
+# for the early-free analysis (compiler/free.olang, O8d): body b's obligations by scope variable, three numbers each: the variable that must outlive, the one it must
+# outlive, 1 for one half of an equality - a variable by its index in Vars, the program's scope -1, any other term -2
+# the program's bodies, callees' before their callers' (Tarjan's components, in order) - what early freeing walks its
+# summaries in, so a caller is first walked once its callees' are known (docs/memory.md 2.4)
+fn (s Scoper&) CalleesFirst() Array<I64> { return s.compNodes.ToArray() }
+
+# the bodies body b calls, as the call graph has them
+fn (s Scoper&) CalleesOf(b I64) Array<I64> {
+    if b < 0 or b + 1 >= s.edgeFrom.Len() { return Array<I64>(0) }
+    out := Array<I64>(s.edgeFrom[b + 1] - s.edgeFrom[b])
+    for k in range out.Len() { out[k] = s.edgeTo[s.edgeFrom[b] + k] }
+    return out
+}
+
+fn (s Scoper&) VarRels(b I64) Array<I64> {
+    out List<I64>
+    if b < 0 or b >= s.sums.Len() or not s.judged[b] { return out.ToArray() }
+    for r in s.sums[b].Rels {
+        out.Push(relVar(r.Hi))
+        out.Push(relVar(r.Lo))
+        out.Push(1 if r.Exact else 0)
+    }
+    return out.ToArray()
+}
+
+fn relVar(t Term) I64 {
+    return match t {
+        case Term.Var(i) => i
+        case Term.Program => -1
+        case _ => -2
+    }
+}
+
 # body b's obligations as its signature would state them (B11b, O10b): "a outlives b", each once, a parameter's scope
 # by its name, the result scope as "return", an equality as its two halves
 fn (s Scoper&) Obligations(b I64, nm source.Names&) Array<String&> {

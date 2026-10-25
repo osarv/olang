@@ -1308,12 +1308,8 @@ fn (v mut verifier&) refType(of types.TypeId, ty types.TypeId) types.TypeId {
     return ty
 }
 
-fn (v mut verifier&) takeType(of types.TypeId) types.TypeId {
-    if of != types.UnknownT and not (v.T.IsRef(of) and (v.T.PermOf(of) & types.Owning) != 0) {
-        v.bad("a take of a " $v.canon(of) ", not an own reference")
-    }
-    return of
-}
+# a take (the prelude's vacate of a sole place, O8d): what the place held, the place left empty
+fn (v mut verifier&) takeType(of types.TypeId) types.TypeId { return of }
 
 fn (v mut verifier&) tagType(of types.TypeId) types.TypeId {
     _, ok := v.casesOf(of)

@@ -731,7 +731,7 @@ type Scope enum {
     Block(b BlockId)    # a block's arena (O2); Block(0) is the frame scope - a constructor's and a destructor's too
     Var(i I64)          # one of the body's own scope variables, by its index in Vars
     Program             # the program's scope (O1b)
-    # an own object's region: made at a Promote site (O30), or read at a Region site from the slot it borrows (O32)
+    # a region the early-free analysis has lowering make at site s (O8d, Plan's Region fields)
     Region(s SiteId)
     Frame               # the body's frame, no arena: a stack slot; an environment no callee keeps (D16c)
     # a live scope nothing is built in: passed where a callee only reads - a value O12 lends for reading, the receiver
@@ -753,6 +753,12 @@ type Plan struct(Sites I64, Locals I64, Vars I64) {
     # by local: a value array the function returns, living in the result scope (O26a), that nothing else can name - so it
     # is returned as it is; every other returned array is copied at its return, so the result is the caller's own (T7b)
     RetSole mut Array<Bool>& = Array<Bool>(Locals)
+    # O8d, the early-free analysis's (compiler/free.olang): by site, a region made where the site's value is - 1 a region
+    # of its own, a kid of RegionParent (or of RegionRoot's value's region, when that is one), 2 the region RegionRoot's
+    # value is in, else RegionParent. The site's own Built, and its parts', then say Region(site)
+    RegionKind mut Array<I64>& = Array<I64>(Sites)
+    RegionParent mut Array<Scope>& = Array<Scope>(Sites)
+    RegionRoot mut Array<Expr?&>& = Array<Expr?&>(Sites)
     passedAt mut Array<I64>& = Array<I64>(Sites)  # 1 + where a call's scopes start in passed; 0 for none recorded
     passedN mut Array<I64>& = Array<I64>(Sites)
     passed List<Scope>
@@ -765,6 +771,13 @@ fn (pl mut Plan&) Pass(site SiteId, scopes Array<Scope>&) {
     pl.passedAt[I64(site)] = pl.passed.Len() + 1
     pl.passedN[I64(site)] = scopes.Len()
     for s in scopes { pl.passed.Push(s) }
+}
+
+# a call at a site passing another scope for its callee's i-th variable (compiler/free.olang's regions)
+fn (pl mut Plan&) SetPassed(site SiteId, i I64, sc Scope) {
+    at := pl.passedAt[I64(site)]
+    if at == 0 or i >= pl.passedN[I64(site)] { return }
+    pl.passed[at - 1 + i] = sc
 }
 
 # the scope a call passes for its callee's i-th passed variable: Unset where nothing is recorded

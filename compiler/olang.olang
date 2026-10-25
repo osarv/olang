@@ -23,6 +23,7 @@ import "scope"
 import "typed"
 import "types"
 import "lower"
+import "free"
 import "fmt"
 import "fix"
 import "emit"
@@ -113,9 +114,9 @@ ModeWhat Array<String&> = String&[
 # the options: their word, the value that follows ("" for none), the modes they apply to (a bit per mode number) and
 # what they do
 OptWords Array<String&> = String&["-output", "-debug", "-race", "-sanitize", "-target", "-define", "-update", "-check"
-    "-quick", "-html", "-library"]
-OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", ""]
-OptModes Array<I64> = I64[4102, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2]
+    "-quick", "-html", "-library", "-memory"]
+OptValues Array<String&> = String&["PATH", "", "", "", "NAME", "Name=value", "", "", "", "DIR", "", ""]
+OptModes Array<I64> = I64[4102, 15, 15, 15, 1887, 1887, 1887, 2080, 15, 256, 2, 11]
 OptWhat Array<String&> = String&[
     "writes the executable, the object or bindgen's declarations to PATH (B3h, X16)"
     "builds unoptimized, with debug information (B2c, B2e)"
@@ -128,6 +129,7 @@ OptWhat Array<String&> = String&[
     "builds for development: -O2 without link-time optimization, faster to build, slower to run (B2g)"
     "writes the documentation as HTML into DIR, a page a module: of each FILE, or of std where none is named (B14)"
     "builds a shared library libNAME.so of the export fns, and its C header NAME.h (X14)"
+    "reports the places that keep what they let go of until their scope closes, and why (B18)"
 ]
 
 fn modeName(m I64) String { return "running a file" if m == Run else $ModeWords[m] }
@@ -224,6 +226,7 @@ fn Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagnostics&) Com
             if o == 8 { c.Quick = true }
             if o == 9 { cl.Html = $v }
             if o == 10 { c.Library = true }
+            if o == 11 { c.Memory = true }
             # B2g: -quick is a level of optimization, as -debug and -race set theirs
             if c.Quick and (c.Debug or c.Race) { try usage(d, msgs.QuickAlone("-debug" if c.Debug else "-race")) }
             continue
@@ -466,8 +469,13 @@ fn (p mut Passes&) Analyze(root String&, kind build.Kind, cfg mut build.Config&,
     }
     lw mut lower.Lowerer&cfg = lower.Lowerer(c.P, c.Bodies)
     lw.AssertsTrue = asserts
-    lw.Plans = placement(c, cfg)
+    # O8d: early freeing is decided for a program at its root - a module compiled on its own frees nothing early (B3i)
+    fr := placement(c, cfg, -1 if kind == build.Kind.Module else l.Root)
+    lw.Plans = fr.Plans
+    lw.Free = fr
     build.Phase("scope")
+    if cfg.Memory and d.Errors() == 0 { try io.Print(fr.Report()) catch io.Error { } }
+    if (try os.Env("OLANG_FREEDUMP") catch default "") != "" { try io.PrintErr(fr.Dump()) catch io.Error { } }
     if d.Errors() > 0 { error build.Failed.REPORTED }
     e mut emit.Emitter&cfg = emitter(c, lw, d, cfg, kind, baked)
     # B3i: a module whose object a build with the same inputs made already is not lowered or written again
@@ -744,13 +752,17 @@ fn checkReuse(e mut emit.Emitter&, prog mut build.Program&, c mut typecheck.Chec
 
 # where lowering puts things: the scope pass's plans (M6), its errors reported - section 8 holds the program, each
 # temporary built where the pass places it and each local where it homes it
-fn placement(c mut typecheck.Checker&, cfg mut build.Config&) List<typed.Plan> {
+fn placement(c mut typecheck.Checker&, cfg mut build.Config&, root I64 = -1) mut free.Free&cfg {
     sc mut scope.Scoper&cfg = scope.Scoper(c.P, c.Bodies)
     # its notes name types, and the instantiation an error is in, as the checker spells them (B11, G16b)
     sc.InstNote = fn(inst I64) String { return c.InstNote(inst) }
     sc.Spell = fn(t types.TypeId) String { return c.Ty(t) }
     sc.Run()
-    return sc.Plans
+    # and early freeing's decisions written into its plans (O8d), for a program at its root
+    fr mut free.Free&cfg = free.Free(c.P, c.Bodies, sc)
+    fr.Debug = (try os.Env("OLANG_FREEDUMP") catch default "") != ""
+    fr.Decide(sc.Plans, root)
+    return fr
 }
 
 fn (p mut Passes&) load(root String&, cfg mut build.Config&, d mut diag.Diagnostics&cfg) mut load.Loader&cfg ? build.Failed {
@@ -788,9 +800,10 @@ fn (p mut Passes&) Interpret(root String&, args Array<String&>&, cfg mut build.C
     x.Lw.Cleanups = true    # a stop runs the deferred code of the blocks it leaves (B3e)
     # where things live is the scope pass's (M6), its errors reported as a build reports them: what a build refuses is
     # not run
-    plans := placement(c, cfg)
+    fr := placement(c, cfg, l.Root)
     if d.Errors() > 0 { error build.Failed.REPORTED }
-    x.Lw.Plans = plans
+    x.Lw.Plans = fr.Plans
+    x.Lw.Free = fr
     for a in args { x.M.Args.Push($a) }      # the file first (build.Interpret's)
     os.OnCrash(eval.InterpCrash)
     status := x.RunMain(d)

@@ -97,6 +97,7 @@ type Config struct() {
     Quick Bool = false  # -quick: -O2 without link-time optimization (B2g)
     Race Bool = false
     San Bool = false
+    Memory Bool = false # -memory: the early-free report printed after the build (B18)
     Library Bool = false    # -library: a shared library of the export fns, and its C header (X14)
     Update Bool = false
     Tests Bool = false
