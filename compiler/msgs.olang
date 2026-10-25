@@ -591,6 +591,7 @@ type Diag enum {
     LambdaValueObligations
     LambdaValueRelates
     CallValueObligations
+    CallValueErrors
     LambdaResultUninferable
     LambdaArity
     LambdaSignature
@@ -2331,6 +2332,9 @@ fn LambdaValueObligations(text String&) Msg { return Msg(Diag.LambdaValueObligat
 fn LambdaValueRelates() Msg { return Msg(Diag.LambdaValueRelates, "T22a", "this lambda relates its arguments' scopes, which a call through a function value cannot check") }
 
 # ERR_CALL_VALUE_OBLIGATIONS
+# a Call failing with other errors than the function type it is wanted as
+fn CallValueErrors(ty String&, has String&, wants String&, fix String&) Msg { return Msg(Diag.CallValueErrors, "T22, E31", $ty "'s Call fails with " $has " where the function type says " $wants " - the same errors in the same order: " $fix) }
+
 fn CallValueObligations(ty String&) Msg { return Msg(Diag.CallValueObligations, "T22a, E31", $ty "'s Call relates its arguments' scopes, which a call through a function value cannot check - call it by name") }
 
 # ERR_LAMBDA_RESULT_UNINFERABLE

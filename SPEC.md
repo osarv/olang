@@ -3575,7 +3575,9 @@ declares a `Get` that fails, as arrays, `List` and `Vec` have one.
 
 A value whose type declares `Call` is also accepted **where a function value is expected**, when `Call`'s parameters,
 result and errors fit the function type as a function value's would (T22: the same, but for a read-only reference
-parameter where the type passes a writable one, or a writable result where it gives a read-only one), and a generic
+parameter where the type passes a writable one, or a writable result where it gives a read-only one; its errors the
+type's, in the same order - a `Call` is no named function, whose codes R1b re-encodes - so a `Call` with a requirement
+block, failing with `ArgumentError` (D17b), is no value of an infallible function type), and a generic
 function type's variables are inferred from them:
 the function value calls that very instance's `Call`, so the instance must outlive it as a reference to it would -
 passed, stored or returned (O14: a function's own instance is not a value it may hand back) - and

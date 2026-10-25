@@ -1,0 +1,11 @@
+# check: fail error[T22, E31]: Gate's Call fails with ArgumentError where the function type says nothing
+# T22, E31 (the lang25 review, finding 1): an instance used as a function value through its Call is held to the
+# function type's error set, in order - a Call with a requirement block fails with ArgumentError (D17b), and a call
+# through an infallible function value would read the error union's code as the result
+type Gate struct(lim I64) { lim }
+fn (g Gate&) Call(x I64) [x < g.lim] I64 { return x }
+fn run(f fn(x I64) I64, v I64) I64 { return f(v) }
+fn main() ? {
+    g := Gate(5)
+    assert run(g, 1) == 1
+}

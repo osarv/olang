@@ -5750,6 +5750,12 @@ fn (c mut Checker&) adapter(sp source.Span, x typed.Expr&c, want types.TypeId) t
     }
     if not c.P.T.Same(c.deref(c.P.T.Result(sig)), c.deref(c.P.T.Result(want))) { return null }
     id := c.fnBody(inst)
+    # T22: the errors in order, as the function type lists them - a call through the value reads its codes by position
+    es := c.bodyErrors(id) if c.infersErrs(sig) else c.P.T.Errors(sig)
+    if es != c.P.T.Errors(want) and c.P.T.Items(es) != c.P.T.Items(c.P.T.Errors(want)) {
+        fix := "write the function type '" $c.ty(c.P.T.Func(c.P.T.Params(want), c.P.T.Result(want), es, c.P.T.ScopesOf(want))) "', or pass a lambda handling them" if c.P.T.Items(es).Len() > 0 else "pass a lambda calling it"
+        c.err(sp, msgs.CallValueErrors(c.ty(dt), c.errsText(es), c.errsText(c.P.T.Errors(want)), fix))
+    }
     c.roFns.Push(roFn(id, 1, c.at(sp), "'" $c.text(c.P.FnDecl(m).Name) "'"))   # T25c
     recv := c.fit(x, hp[0], sp)
     return typed.Expr.Fn(sp, want, typed.FnVal.Adapter(typed.BodyId(I32(id)), recv, c.site(typed.SiteKind.Closure, sp)))
@@ -6672,6 +6678,18 @@ fn (c mut Checker&) funcFits(h types.TypeId, w types.TypeId, named Bool) Bool {
     if c.P.T.Errors(h) == c.P.T.Errors(w) { return true }
     # R1b, T22: a named function fits a type holding every error it can fail with, in any order
     return named and c.errsCover(c.P.T.Errors(w), c.P.T.Errors(h))
+}
+
+# an error set as a signature writes it after '?', or "nothing"
+fn (c mut Checker&) errsText(es types.ListId) String {
+    items := c.P.T.Items(es)
+    if items.Len() == 0 { return "nothing" }
+    sb := StringBuilder()
+    for i in range items.Len() {
+        if i > 0 { sb.Push(" + ") }
+        sb.Push(c.ty(items[i]))
+    }
+    return sb.ToString()
 }
 
 # whether a set holds every error of another (R1b, E31a)
