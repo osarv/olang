@@ -396,6 +396,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   else copied - so the evaluator, which always copies, agrees; AnyNoCopy looks inside function types; `spawn x = f&t()`
   is a call; E25's "builds no result a scope argument could place" and "no local or parameter here" are given. Bench and
   the compiler itself: identical IR, so no copy was added there.
+  **The fifth review's round (2026-10-25, HISTORY.md "`any Trait&`: the fifth review, fixed"):** a spawn target holding an
+  array by value is stored as the assignment it is judged as (T11b in place, else a copy made on the task's thread where
+  the assignment copies - `Task.Copies`); `canKeep` keeps unless proved otherwise (no result in any position borrowed
+  from the argument, no parameter sharing its scope, the settled body storing nothing into it); a conversion of a place
+  to a type over a declared array type (`Lab`, `Path` over `String`) names its storage (the place path takes the
+  underlying kind); one return-copy decision with a plan and without; a local a scoped call declares lives where the
+  argument says; `interpret` runs the scope pass and refuses what a build refuses (B3e).
 - **No `volatile` (X3b)** - a foreign call is an opaque barrier, atomics cover threads, MMIO is inexpressible.
 - **TBAA (T36).** Every numeric primitive, the array descriptor and a reference to a struct or an enum have element and
   field tags (references since 2026-10-18, so a handle's reference hoists out of a loop); the runtime's scope and chunk

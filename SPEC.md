@@ -4453,11 +4453,13 @@ The store happens **on the task's thread, the instant its call returns** — som
 and the `join`. Two things follow. The target's type must be **exactly** the call's return type, since
 there is no caller frame left in which a conversion or a promotion could run. And the target must outlive
 the `join` block, on precisely the terms P2 states for an argument: one declared in a block nested inside
-the join closes first and is rejected. Otherwise the result is stored as an assignment's value is (§6.2): a result
-built where it lands (§8 O18a) is built where the target is - a run-time-length array value's storage included, which
-becomes the target's own, since no frame is left to copy it into storage the target already has; several targets sharing
-one result scope must all be in one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an assignment's
-value would (§8 O25, O1b). With several targets each is judged as the assignment of its own result, as a
+the join closes first and is rejected. Otherwise the result is stored as an assignment's value is (§6.2), on the task's
+thread: a result built where it lands (§8 O18a) is built where the target is; several targets sharing one result scope
+must all be in one scope, or it is a compile-time error - and one that already lives somewhere must suit the target as an
+assignment's value would (§8 O25, O1b). A target holding a run-time-length array by value takes it as that assignment
+does (T11b): its elements written into the storage the target holds where the length is unchanged, else the result's
+storage - or, where the assignment copies (a call given a scope argument builds its array where that says, E25), a copy
+made where the target's storage is. With several targets each is judged as the assignment of its own result, as a
 destructuring's are (S4b), and each is a store into what its target is in (§8 O17).
 
 The target's address is taken **at the `spawn`**, not when the task runs, which is what makes
