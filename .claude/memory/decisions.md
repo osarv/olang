@@ -1035,3 +1035,8 @@ functions; `p.StringFromC(max)` stays. The user then: "It does sound like we sho
   `time.Millis` already is); a module of several types names them for the type (`geom.RectFromCorners`); prelude types
   keep input methods; `olang doc`/`explain`/lsp list a module's functions returning a type under that type as its
   builders (godoc's grouping). In effect: nothing changed.
+- QAT, the user 2026-10-25: "We could do overloading if it makes thing better. I am a bit worried about the
+  constructor question becoming a weird feature." Answered: constructor-only overloading is the weird option; full
+  overloading costs most (literal adaptation, widening, inference, function values, name-keyed tools); recommended
+  module functions + doc grouping, full overloading later (additive) with strict rules if code wants it. ASKED: option 2
+  with doc grouping, or a spec of full overloading to look at. In effect: nothing.
