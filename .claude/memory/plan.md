@@ -346,3 +346,12 @@ on sight per rules.md, "Code rules".
   whatever it holds; B - INVERT RetCopy: no copy only when the flow proves no second name (whitelist), so the
   evaluator's always-copy is unobservable. Plus C/D/E smaller. Sent to the fix agent; another narrow review after.
   LESSON again: a blacklist of "kept" shapes misses some; prove the safe case instead.
+- 2026-10-25 CEST: any fix round 4 done (wt-any d4ed05d; full verify on 1d31a44, only goldens after): scoped plain-data
+  arrays are existing storage (A), RetCopy inverted to a RetSole whitelist (B), C/D/E fixed; scope fuzzer text +
+  second-name scenarios (54 findings on 0c37adb -> 0). Bench IR identical (no extra copies). Fifth narrow review
+  running -> /home/user/review/any5; merge if clean.
+- 2026-10-25 CEST: any review 5 (/home/user/review/any5): NEW - spawn of a scoped call stores freed storage (UAF), a
+  scoped-call local over-rejected; OLDER - canKeep misses shared-scope parameters (aliasing, evaluator disagreement),
+  conversion to a type over String skips the place path (UAF, immutable global written), plan-less return copies
+  differ for cond/match/try, interpret drops §8 errors. Decided: spawn target = its assignment's lowering; canKeep
+  conservative (keeps unless proved); one return-copy function with/without plan; interpret runs §8 (B3e). Fix agent.
