@@ -363,3 +363,10 @@ on sight per rules.md, "Code rules".
 - 2026-10-25 CEST: disk full (the ext4 reserve caps usable space near 40G on the 252G disk): freed ~10G by deleting old
   worktrees' build/ dirs and scratchpad files older than 6 h. Keep build/ only in active worktrees; delete a merged
   worktree's build/ at merge time. The platforms agent installed clang-19/20 (clang-20 moved off PATH).
+- 2026-10-25 CEST: platforms merged (wt-platforms ab0da83, full verify on the merged tip passed): LLVM 18/19/20 need no
+  IR change; aarch64 built and run under qemu (`make cross`; std/ffi and two std/os tests left out); clang chosen
+  OLANG_CLANG > release's own > newest clang-N on PATH; `make release` (52 MB tar.xz with clang-20) + `releasetest`;
+  R9 qualified names; scope-pass crash on a void callee's result (seed regenerated). SYSTEM SETUP for a fresh
+  container: apt-get install -y clang-19 clang-20 lld-19 lld-20 libclang-rt-19-dev libclang-rt-20-dev
+  qemu-user-static libc6-dev-arm64-cross libgcc-13-dev-arm64-cross gcc-aarch64-linux-gnu libffi-dev; then
+  rm /usr/bin/clang-20 (so clang-18 stays the default; clang-20 by path /usr/lib/llvm-20/bin/clang).
