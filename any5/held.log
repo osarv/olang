@@ -1,0 +1,44 @@
+a01_scopedrefsreturn       a01_scopedrefsreturn.olang:12:18: error[O26]: this value refers to this function's own storage, which dies at the return - build it in '&return'|a01_scopedrefsreturn.olang:17:12: error[O26]: this valu
+
+a02_scopedvaluecall        status 0|status 0|status 0|
+
+a03_scopedreflocal         a03_scopedreflocal.olang:14:12: error[O10d]: this value lives in this function's own scope, which closes first|a03_scopedreflocal.olang:18:16: error[O10]: this reference lives in a scope that may not 
+
+a04_scopedgenericref       a04_scopedgenericref.olang:16:15: error[E25]: gid builds no result a scope argument could place|a04_scopedgenericref.olang:16:15: error[E25]: gid builds no result a scope argument could place|a04_scop
+
+a05_scopedtupleborrow      a05_scopedtupleborrow.olang:15:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is|a05_scopedtupleborrow.olang:16:14: error[O10c]: the callee n
+
+a06_scopedvaluestore       status 0|status 0|status 0|
+
+a07_scopedreturnstore      status 0|status 0|status 0|
+
+c01_nocopyforms            status 0|status 0|status 0|
+
+c03_convparam              run:   t abc1 x aQc1 b Zbc1|baked: t abc1 x aQc1 b Zbc1|status 0|run:   t abc1 x aQc1 b Zbc1|baked: t abc1 x aQc1 b Zbc1|status 0|run:   t abc1 x aQc1 b Zbc1|baked: t abc1 x aQc1 b Zbc1|status 0|
+
+d01_boxcallland            status 0|status 0|status 0|
+
+d02_spawnscoped            status 0|status 0|status 0|
+
+d03_boxobligation          d03_boxobligation.olang:17:28: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope|d03_boxobligation.olang:19:14: error[O10c]:
+
+d05_boxnewforms            status 0|status 0|status 0|
+
+e04_convforms              run:   lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal|baked: lambda: s outer1 x Quter1; field: st.a I64[5, 5, 5] y I64[99, 5, 5]; lit: literal z Literal|st
+
+e05_convpush               status 0|status 0|status 0|
+
+e06_anyinstance            run:   b abc1 x aQc1 c Zbc1|baked: b abc1 x aQc1 c Zbc1|status 0|run:   b abc1 x aQc1 c Zbc1|baked: b abc1 x aQc1 c Zbc1|status 0|run:   b abc1 x aQc1 c Zbc1|baked: b abc1 x aQc1 c Zbc1|status 0|
+
+e08_stringfromc            status 0|status 0|olang interpret: e08_stringfromc.olang:6: it calls an external function with a parameter or result -i cannot pass - only numbers, Bools and arrays of numbers|status 1|
+
+n03_spawnscopedrace        status 0|status 0|status 0|
+
+p01_sliceret               status 0|status 0|status 0|
+
+s01_tupleborrow            s01_tupleborrow.olang:10:7: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope|s01_tupleborrow.olang:10:7: error[O10c]: the c
+
+s02_genericcapture         s02_genericcapture.olang:4:32: error[O10d]: this value lives in this function's own scope, which closes first|s02_genericcapture.olang:4:32: error[O10d]: this value lives in this function's own scope,
+
+s06_tupleborrowctor        s06_tupleborrowctor.olang:11:18: error[C2d]: this instance holds a reference to an argument it would outlive - make the argument where the instance goes, or the instance where the argument lives ('T&x
+

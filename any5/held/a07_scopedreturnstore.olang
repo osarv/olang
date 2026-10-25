@@ -1,0 +1,18 @@
+# A / O26a: a local declared from a scoped call holding references, built in the result scope (&return) - not moved by
+# O26a (madeHere is false for it) - given an element from the function's own block, then returned
+fn mkarr(i I64) Array<String&> { return String&["a" $i, "b" $i] }
+fn g(i I64) Array<String&> {
+    x := mkarr&return(i)
+    t := "local" $i "-" $(i * 7)
+    x[0] = t
+    for j in range 2 {
+        u := "loop" $j "-" $(j * 7)
+        x[1] = u
+    }
+    return x
+}
+fn main() {
+    a := g(1)
+    churn()
+    say("a " $a)
+}

@@ -1,0 +1,18 @@
+== build -debug -sanitize
+x mk1-7 y mk2-14
+z mk0-0
+z mk1-7
+z mk2-14
+status 0
+== build
+x mk1-7 y mk2-14
+z mk0-0
+z mk1-7
+z mk2-14
+status 0
+== interpret
+x mk1-7 y mk2-14
+z mk0-0
+z mk1-7
+z mk2-14
+status 0

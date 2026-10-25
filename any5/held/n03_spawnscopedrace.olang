@@ -1,0 +1,16 @@
+# D / P2: tasks given a scope argument naming the spawner's local build where it lives from their own threads, while
+# the spawner builds there too - does each task get a stand-in for that scope (P2)?
+fn mk(i I64) String { return "mk" $i "-" $(i * 7) }
+fn main() {
+    total I64 = 0
+    for r in range 20 {
+        u := "inner" $r
+        w := ""
+        join {
+            for k in range 50 { spawn mk&u(k) }
+            for k in range 500 { w = mk&u(k) }
+        }
+        total += w.Len()
+    }
+    say("total " $total)
+}

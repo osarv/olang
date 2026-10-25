@@ -1,0 +1,35 @@
+v01_listelem           run:   src List<String&>["abc1"] b Zbc1 x aQc1|baked: src List<String&>["abc1"] b Zbc1 x aQc1|status 0|run:   src List<String&>["abc1"] b Zbc1 x aQc1|baked: src List<String&>["abc1"] b Zbc1 x aQc1|status 0|run:   src List<String&>["abc1"] b Zbc1 x aQc1|baked: 
+
+v02_mapvalue           run:   src Map<I64, String&>{1: "abc1"} b Zbc1 x aQc1|baked: src Map<I64, String&>{1: "abc1"} b Zbc1 x aQc1|status 0|run:   src Map<I64, String&>{1: "abc1"} b Zbc1 x aQc1|baked: src Map<I64, String&>{1: "abc1"} b Zbc1 x aQc1|status 0|run:   src Map<I64, String
+
+v03_refield            run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v04_generic            run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v05_genericref         run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v06_lambda             run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v07_capture            run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v08_slicecall          run:   src abc1 b Zbc x aQc|baked: src abc1 b Zbc x aQc|status 0|run:   src abc1 b Zbc x aQc|baked: src abc1 b Zbc x aQc|status 0|run:   src abc1 b Zbc x aQc|baked: src abc1 b Zbc x aQc|status 0|
+
+v09_global             run:   src abc b Zbc x aQc|baked: src abc b Zbc x aQc|status 0|run:   src abc b Zbc x aQc|baked: src abc b Zbc x aQc|status 0|run:   src abc b Zbc x aQc|baked: src abc b Zbc x aQc|status 0|
+
+v10_trim               run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v11_cond               run:   src abc1 b Zbc1 x aQc1|baked: src ZQc1 b ZQc1 x ZQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src ZQc1 b ZQc1 x ZQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v12_matchbind          run:   src abc1 b Zbc1 x aQc1|baked: src ZQc1 b ZQc1 x ZQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src ZQc1 b ZQc1 x ZQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v13_asconv             run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v14_vecelem            run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+
+v15_convglobal         run:   src ZQc b ZQc x ZQc|baked: src ZQc b ZQc x ZQc|status 0|run:   src ZQc b ZQc x ZQc|baked: src ZQc b ZQc x ZQc|status 0|run:   src ZQc b ZQc x ZQc|baked: src ZQc b ZQc x ZQc|status 0|
+
+v16_convlocalret       
+v17_forin              run:   src List<String&>["abc1"] b Zbc1 x aQc1|baked: src List<String&>["abc1"] b Zbc1 x aQc1|status 0|run:   src List<String&>["abc1"] b Zbc1 x aQc1|baked: src List<String&>["abc1"] b Zbc1 x aQc1|status 0|run:   src List<String&>["abc1"] b Zbc1 x aQc1|baked: 
+
+v18_tuple              run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|run:   src abc1 b Zbc1 x aQc1|baked: src abc1 b Zbc1 x aQc1|status 0|
+

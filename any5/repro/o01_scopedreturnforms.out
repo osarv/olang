@@ -24,3 +24,15 @@ o01_scopedreturnforms.olang:12:15: note: this text lives in a block that closes 
    12 |     keep.Push(x)
       |               ^
 compilation failed with 2 errors
+== build
+o01_scopedreturnforms.olang:7:10: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+    7 |     keep.Push(x)
+      |          ^~~~
+/home/user/wt/rvany5/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o01_scopedreturnforms.olang:6:5: note: 'x' is declared here, in a block that closes first - declare it where 'keep' lives: 'x mut String&keep = ...'
+    6 |     x := mk&return(i)
+== interpret
+olang interpret: /home/user/wt/rvany5/std/prelude/array.olang:1: it uses storage after the scope it was made in closed
+status 1

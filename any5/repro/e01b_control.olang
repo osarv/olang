@@ -1,0 +1,13 @@
+# e01's control: the same function with the type declared over Array<Char> rather than over String - copied (the
+# checker's T29a place path is taken when the declared type's base is an array, not when it is a declared array type)
+type Lab2 extends Array<Char>
+fn convloc(i I64) Lab2 {
+    s := "abc" $i "-" $(i * 7)
+    return Lab2(s)
+}
+fn main() {
+    keep := List<Lab2&>()
+    for i in range 4 { keep.Push(convloc(i)) }
+    churn()
+    say("kept " $keep)
+}

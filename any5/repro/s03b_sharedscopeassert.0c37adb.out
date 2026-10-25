@@ -2,13 +2,13 @@
 decided while compiling: passed
 at run time: Qbc1
 s03b_sharedscopeassert.olang:24: assertion failed
-/home/user/review/any5/run.sh: line 17: 23195 Aborted                 timeout 60 ./build/$n.debug.san
+/home/user/review/any5/run.sh: line 17:  9453 Aborted                 timeout 60 ./build/$n.debug.san
 status 134
 == build
 decided while compiling: passed
 at run time: Qbc1
 s03b_sharedscopeassert.olang:24: assertion failed
-/home/user/review/any5/run.sh: line 17: 23223 Aborted                 timeout 60 ./build/$n
+/home/user/review/any5/run.sh: line 17:  9461 Aborted                 timeout 60 ./build/$n
 status 134
 == interpret
 decided while compiling: passed

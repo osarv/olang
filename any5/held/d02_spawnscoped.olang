@@ -1,4 +1,5 @@
-# D: "spawn x = mk&t(i)" - a call given a scope argument as a task's call, its target set from the task's thread
+# D: "spawn x = mk&t(i)" - a call given a scope argument as a task's call, its target set from the task's thread, each
+# target read while the scope argument's local lives (repro/n01 reads one after)
 fn mk(i I64) String { return "mk" $i "-" $(i * 7) }
 fn mkl(l List<String&>&, i I64) String { return "l" $i }
 fn main() {
@@ -21,13 +22,4 @@ fn main() {
         churn()
         say("z " $z)
     }
-    churn()
-    say("after " $z)
-    w := ""
-    for i in range 3 {
-        u := "assign" $i "-" $(i * 7)
-        w = mk&u(i)
-    }
-    churn()
-    say("w " $w)
 }

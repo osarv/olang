@@ -1,0 +1,12 @@
+== build -debug -sanitize
+run:   keep List<String&>["Qb"] h List<String&>["Qb"]
+baked: keep List<String&>["ab"] h List<String&>["ab"]
+status 0
+== build
+run:   keep List<String&>["Qb"] h List<String&>["Qb"]
+baked: keep List<String&>["ab"] h List<String&>["ab"]
+status 0
+== interpret
+run:   keep List<String&>["Qb"] h List<String&>["Qb"]
+baked: keep List<String&>["Qb"] h List<String&>["Qb"]
+status 0
