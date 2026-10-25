@@ -1,0 +1,11 @@
+# T32a, B3i: an any made in this module - whether a default slot of its table is reached is an importer's call
+type Ups struct(n I64) {
+    n
+    at I64 = 0
+}
+fn (u mut Ups&) Next() I64 ? Exhausted {
+    if u.at >= u.n { error Exhausted.END }
+    u.at += 1
+    return u.at
+}
+fn Make(n I64) mut any Iterator<I64>& { return Ups(n) }

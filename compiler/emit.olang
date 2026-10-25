@@ -1571,9 +1571,9 @@ fn (e mut Emitter&) need(t types.TypeId) {
 
 # where an item lives in a build of one object per module (DESIGN.md 1.9): a module's index (its functions and
 # globals, defined there and declared where named elsewhere), or one of these
-HomeShared I64 = -1     # copied, as written, into every object naming it: a declaration, a linkonce_odr helper or thunk
+HomeShared I64 = -1     # copied, as written, into every object naming it: a declaration, a linkonce_odr helper
 HomeLocal I64 = -2      # copied into every object naming it, internal and renamed there (constants, lambdas, tasks)
-HomeInst I64 = -3       # the generics' instances (B3d): the root's own object of them
+HomeInst I64 = -3       # the generics' instances and the tables' slots (B3d): the root's own object of them
 HomeLoc I64 = -4        # a failed check's place (B3l): declared in every object naming it, defined in its home's Locations
 
 # an item: its symbol, text (whole lines), home and how another object declares it; the first one made of a symbol
@@ -1977,7 +1977,10 @@ fn (e mut Emitter&) homeOf(k mir.FnKey) I64 {
                 case typed.BodyOf.Dtor(ty) { return e.typeHome(ty) }
                 case typed.BodyOf.Global(m, _) { return m }
                 case typed.BodyOf.Test(_) { return p.L.Root }
-                case typed.BodyOf.Thunk(_, _) { return HomeShared }
+                # a table's slot (T32b): what a default slot holds depends on which calls the whole program makes
+                # through an any (T32a's lazy slots), so it is defined once, in the root's object with the instances
+                # (B3d) - never copied into a module's object, which a later program may reuse (B3i)
+                case typed.BodyOf.Thunk(_, _) { return HomeInst }
                 case _ { return HomeLocal }
             }
         }

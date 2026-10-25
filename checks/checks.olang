@@ -811,6 +811,14 @@ fn reuse(r mut report&) ? Failed {
     try r.expect(sh(dir, "OLANG_CHECKREUSE=1 \"$OLANG\" build other.olang > out.txt 2>&1 && ./build/other > run.txt") == 0
                  "other's build", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'other 1000' run.txt") == 0, "other's build", dir)
+    # T32a: a table's default slot an importer starts calling through an any after the module that made the table was
+    # built - its slot is the root's, so the reused object of anylib still reaches the default (it reached an
+    # "unreachable" when the slot was in anylib's object)
+    try r.expect(sh(dir, "\"$OLANG\" build anyapp.olang > out.txt 2>&1 && ./build/anyapp > run.txt") == 0, "anyapp's build", dir)
+    try r.expect(sh(dir, "sed -i 's/^}$/    try io.Println(\"count \" $anylib.Make(5).Count(fn(x I64) Bool { return x > 2 })) " $
+                    "catch { }\\n}/' anyapp.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build anyapp.olang > out.txt 2>&1 && " $
+                    "./build/anyapp > run.txt") == 0, "anyapp's build calling Count through the any", dir)
+    try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'count 3' run.txt") == 0, "anyapp's run calling Count", dir)
 }
 
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping

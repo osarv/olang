@@ -4905,10 +4905,6 @@ fn (c mut Checker&) read(sp source.Span, p typed.Place&c) typed.Expr&c {
     return typed.Expr.Read(sp, p.Type(), p, typed.SiteId(-1))
 }
 
-fn (c mut Checker&) readLocal(sp source.Span, id I64) typed.Expr&c {
-    return c.read(sp, typed.Place.Local(sp, c.localType(id), typed.LocalId(I32(id))))
-}
-
 # CheckError's words (R20), as bits of an error set's entry (R1c): what each check can fail with
 Bounds U64 = 1
 DivideByZero U64 = 2

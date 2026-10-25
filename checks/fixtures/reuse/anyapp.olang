@@ -1,0 +1,6 @@
+# T32a, B3i: walks anylib's any; the scenario then adds a call of a default through it, anylib's object reused
+import "std/io"
+import "anylib"
+fn main() {
+    for x in anylib.Make(3) { try io.Println($x) catch { } }
+}
