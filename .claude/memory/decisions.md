@@ -1238,3 +1238,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   (List<os.Error>, Result<T, os.Error>), locals; only error types after `?`; ==/narrowing/match/$/Hash; the 32-bit code,
   no scope; `catch E e` makes one, `error e` raises (checked against the set); no zero value (always initialised; QBA
   may revisit). ASKED: (a) clause-only names or (b) error values - rec (b) now.
+- lang25's direction questions (2026-10-25), DECIDED by me as details: (1) `!` on a false condition prints the
+  condition too (`pick: y > x`) in every build - a thread-local write on the failure path only (no cost when nothing
+  fails); (2) `as` stays fallible after narrowing (the user's rule: fails as written; after narrowing read `e.r`
+  directly); (3) arrays get `try a.Set(i, v)` beside `Get` (symmetry; replaces the checked store); (4) a requirement the
+  compiler decides false stays a compile error even when the caller handles ArgumentError (such a call never succeeds).
+  To be built in lang25's follow-up after its review.

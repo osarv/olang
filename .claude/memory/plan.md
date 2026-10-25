@@ -384,3 +384,8 @@ on sight per rules.md, "Code rules".
   (assign/pass/fields/type args), the zero value, Result. Migration tool for the declaration syntax; olang fix.
 - 2026-10-25 CEST: wt-builders merged (61bbfe0 + goldens, full verify on the merged tip passed after a container
   restart killed the first run): doc/explain/lsp list a module's builders under their type (B14/B11b).
+- 2026-10-25 CEST: wt-lang25 done (43f1754; full verify on df0b897, only a SPEC sentence after): all six items
+  (requirement block, checked + CheckError removed, std/arith, as fallible, Narrow/Get/SliceOf, method type args, try
+  binding, commutes) + tools (checked/contracts/try/as_migrate in olang fix). Review running (/home/user/review/lang25);
+  then a follow-up round: the review's fixes + decisions (1) condition text in `!`'s message, (3) `a.Set(i, v)`; then
+  merge, then the queued errors batch.
