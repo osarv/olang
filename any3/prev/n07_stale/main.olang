@@ -1,6 +1,0 @@
-import "std/io"
-import "lib"
-fn main() {
-    for x in lib.Make(3) { try io.Println($x) catch { } }
-    try io.Println("count " $lib.Make(5).Count(fn(x I64) Bool { return x > 2 })) catch { }
-}
