@@ -1364,8 +1364,8 @@ fn (s mut Scoper&) isNullLit(x typed.Expr&) Bool {
 fn (s mut Scoper&) madeHere(x typed.Expr?&) Bool {
     if x is null { return false }
     return match x {
-        # a call given a scope argument builds where that says, not here (E25)
-        case typed.Expr.Call(_, _, c) => not typed.ScopedCall(c)
+        # an array a call given a scope argument builds is where that says, not here (E25, T7b)
+        case typed.Expr.Call(_, ty, c) => not typed.ScopedCall(c) or not s.arenaValue(ty)
         case typed.Expr.Make(_, _, _), typed.Expr.Collect(_, _, _) => true
         case typed.Expr.Promote(_, _, _), typed.Expr.Text(_, _, _) => true
         case typed.Expr.Lit(_, ty, _) => s.holds(ty)
@@ -5450,7 +5450,9 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             # a copy of existing storage holding references - an array copied into an "any" (T32a) - is new storage built
             # in d, its references still naming what they did: what they refer to outlives d, as an array literal's
             # elements do (O25c)
-            if pv.K == ValKind.Existing and s.holds(pr.X.Type()) { s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy) }
+            if pv.K == ValKind.Existing and s.holds(pr.X.Type()) {
+                s.fit(pv.T, d, s.storeThrough(pr.X.Type()), pr.X, FitAnyCopy if box else FitValue)
+            }
             return fresh(d)
         }
         case typed.Expr.Call(sp, ty, c) { return s.call(sp, ty, c, dest) }
@@ -5465,7 +5467,9 @@ fn (s mut Scoper&) val(x typed.Expr?&, dest Term) Val {
             for k in range m.Items.Len() { vs[k] = s.val(m.Items[k], d) }
             agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
             for k in range m.Items.Len() {
-                if agreed and vs[k].K == ValKind.Existing { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind) }
+                # an "any"'s copy of an array holding no reference keeps nothing of where it was (T32a)
+                copied := kind == FitAnyCopy and not s.holds(m.Items[k].Type())
+                if agreed and vs[k].K == ValKind.Existing and not copied { s.fit(vs[k].T, d, s.storeThrough(m.Items[k].Type()), m.Items[k], kind) }
             }
             if not s.holds(ty) and m.Site < typed.SiteId(0) { return plain() }
             return fresh(d)
@@ -6379,8 +6383,10 @@ fn (s mut Scoper&) call(sp source.Span, ty types.TypeId, c typed.Call&, dest Ter
     # a result a scope argument put where it says (E25) is existing storage there - an array of numbers or text too, whose
     # storage lives there whatever it holds - judged where it is stored, passed, returned or made an any as the same value
     # declared first would be ("x := f&t(); h.p = x", O25h)
-    if typed.ScopedCall(c) and rv >= 0 and (s.holds(ty) or s.arenaValue(ty)) { return existing(beta[rv]) }
-    if not s.holds(ty) { return plain() }
+    if not s.holds(ty) {
+        if typed.ScopedCall(c) and rv >= 0 and s.arenaValue(ty) { return existing(beta[rv]) }
+        return plain()
+    }
     if s.P.T.Role(fty) != types.RoleCtor and callee >= 0 and s.summed(callee) and s.sums[callee].ResBind.Len() > 0 {
         # the instance it gives carries the bindings its callee's returns had, through this call's (O13c): "it :=
         # l.Iter()" knows its iterator reads l

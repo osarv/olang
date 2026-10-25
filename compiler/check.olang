@@ -7243,16 +7243,60 @@ fn (c mut Checker&) cond(sp source.Span, a ast.Expr&, k ast.Expr&, b ast.Expr&, 
     return typed.Expr.Cond(sp, rt, typed.Cond(t, c.fit(x!, rt, a.Span()), c.fit(y!, rt, b.Span())))
 }
 
+# whether a value of type t has storage a scope can hold: it holds references, or is (or has as a part) an array of a
+# run-time length (T7b)
+fn (c mut Checker&) placeable(t types.TypeId) Bool {
+    if t == types.VoidT { return false }
+    if c.P.T.HoldsRefs(t) { return true }
+    r := c.P.T.Repr(t)
+    if c.P.T.KindOf(r) == types.Kind.Array { return c.P.T.Length(r) == types.TypeId(0) }
+    if c.P.T.KindOf(r) == types.Kind.Tuple or c.P.T.KindOf(r) == types.Kind.Record {
+        for x in c.P.T.Items(c.P.T.Parts(r)) {
+            if c.placeable(x) { return true }
+        }
+    }
+    return false
+}
+
+# whether a call's result is borrowed from a parameter (O13): it lives where that argument does, no scope of its own
+fn (c mut Checker&) borrowedResult(k typed.Call&) Bool {
+    fty := match k.Target {
+        case typed.Callee.Body(id) => c.Bodies[I64(id)].Ty
+        case typed.Callee.Value(f) => typeOf(f)
+        case _ => types.UnknownT
+    }
+    if fty == types.UnknownT or c.P.T.KindOf(fty) != types.Kind.Func { return false }
+    return c.P.T.ResultFrom(fty, 0) >= 0
+}
+
 # a call given a scope argument (E25): where its result is built - the scope a local or parameter lives in, a global's
 # (the program's), or the result scope; recorded on the call for section 8
 fn (c mut Checker&) scoped(sp source.Span, x typed.Expr&c, sc source.NameId) typed.Expr&c {
     m := typed.Mark.Return
     if c.text(sc) != "return" {
         id := c.localOrCapture(sc, sp)
+        if id < 0 and c.P.GlobalDecl(c.fr().Mi, sc) is null {
+            # E25: a local, a parameter or a global of the calling code - a parameter's default (D8a), checked where the
+            # function is declared, names none of the caller's
+            name := c.text(sc)
+            at := try c.src(sp).Find($"&" $name) catch default -1
+            c.err(source.Span(sp.Start + I32(at + 1), sp.Start + I32(at + 1 + name.Len())) if at >= 0 else sp, msgs.ScopeArgUnknown(c.tok(sc)))
+            return x
+        }
         m = typed.Mark.Of(typed.LocalId(I32(id))) if id >= 0 else typed.Mark.Global(c.fr().Mi, sc)
     }
     match x {
-        case typed.Expr.Call(csp, t, k) { return typed.Expr.Call(csp, t, typed.Call(k.Target, k.Args, m, k.Site, k.Zero)) }
+        case typed.Expr.Call(csp, t, k) {
+            # E25: only a result built where it goes - one holding references, or an array whose storage is made there -
+            # has a scope a scope argument could name: not nothing, a number or a struct of numbers, a borrowed result
+            if t != types.UnknownT and not c.placeable(t) or c.borrowedResult(k) {
+                nm := c.src(sp)
+                amp := try nm.Find("&") catch default nm.Len()
+                c.err(sp, msgs.ScopeArgNotAccepted(nm[:amp]))
+                return x
+            }
+            return typed.Expr.Call(csp, t, typed.Call(k.Target, k.Args, m, k.Site, k.Zero))
+        }
         case typed.Expr.Seq(ssp, t, q) { return typed.Expr.Seq(ssp, t, typed.Seq(q.Stmts, c.scoped(sp, q.X!, sc))) }
         nomatch {
             if typeOf(x) != types.UnknownT { c.gap(sp, "a scope argument on what is no call (E25)") }
@@ -11767,7 +11811,8 @@ fn (c mut Checker&) spawnStmt(sp source.Span, targets Array<ast.Expr&>&, call as
                 task = c.callBody(lsp, lsp, typeOf(lam), typed.Callee.Value(lam), -1, null, Array<ast.Expr&>(0), Array<typed.Expr&>(0))
             }
         }
-        case ast.Expr.Call(_, _, _) { task = c.expr(inner, types.UnknownT) }
+        # a call given a scope argument (E25) is a call: its result built where that says, judged where the task puts it
+        case ast.Expr.Call(_, _, _), ast.Expr.ScopeCall(_, _, _, _) { task = c.expr(inner, types.UnknownT) }
         case ast.Expr.Postfix(_, op, y) if op == token.Tok.Bang and callLike(y) {
             # E35: "spawn f(x)!" - its errors end the program from the task's thread (P6), none reaches the join
             banged = true

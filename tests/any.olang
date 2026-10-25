@@ -710,3 +710,132 @@ test "M21: Eq and Hash of one instance are not another's" {
     assert BakedInstanceEq == "1 2 true false"
     assert instanceEq(Live - 3) == BakedInstanceEq
 }
+
+# T7b, E25, O26a (the fourth any review, A): a call given a scope argument puts its array where that says whatever it
+# holds - text and arrays of numbers too - so a function returning one copies it into its result, a local declared from
+# one is not moved, and a box of a call returning one is a copy; each value read back after a churn
+fn saArr(i I64) Array<I64> { return I64[i, i * 2] }
+fn saText(p String&, i I64) String { return sArg&p(i) }
+fn saChain(p String&, i I64) String { return saText(p, i) }
+fn saNums(p String&, i I64) Array<I64> { return saArr&p(i) }
+fn saLocal(i I64) String {
+    t := "local" $i
+    r := sArg&t(i)
+    return r
+}
+fn saTuple(i I64) String, I64 {
+    t := "tuple" $i
+    return sArg&t(i), i
+}
+fn saTry(i I64) String {
+    t := "try" $i
+    return try saFail&t(i) catch default "no"
+}
+fn saFail(i I64) String ? ChOops {
+    if i < 0 { error ChOops.BAD }
+    return sArg(i)
+}
+fn aScoped(n I64) String {
+    xs := List<any Named&>()
+    out := ""
+    for i in range n {
+        t := "inner" $i
+        xs.Push(Label(saText(t, i)))
+        xs.Push(Label(saChain(t, i)))
+        a := saLocal(i)
+        b, k := saTuple(i)
+        c := saNums(t, i)
+        d := saTry(i)
+        churn()
+        out = $out $a " " $b " " $k " " $c " " $d "; "
+    }
+    churn()
+    return $out $names(xs)
+}
+BakedAScoped String = aScoped(2)
+
+test "T7b, E25: a scoped call's array of plain data is copied where it is returned or boxed" {
+    want := "text0-0 text0-0 0 I64[0, 0] text0-0; text1-7 text1-7 1 I64[1, 2] text1-7; "
+    want = $want "label text0-0, label text0-0, label text1-7, label text1-7"
+    assert BakedAScoped == want
+    assert aScoped(Live - 1) == want
+}
+
+# O26a, T7b (the fourth any review, B): a returned array local is returned as it is only where nothing else can name
+# it - a push through a reference local, a handle's copy, a call on an element, a chain of borrows longer than any pass
+# count, a destructor of the block - else it is copied; baked while compiling exactly as at run time, and an assert the
+# compiler decides agrees
+type SnK struct(s String&) { s }
+fn (k mut SnK&) Set(t String&) { k.s = t }
+fn snAlias(lst mut List<String&>&, i I64) String {
+    s := "abc" $i
+    l := lst
+    l.Push(s)
+    return s
+}
+fn snHandle(lst List<String&>, i I64) String {
+    s := "hnd" $i
+    l := lst
+    l.Push(s)
+    return s
+}
+fn snElem(ks mut List<mut SnK&>&, i I64) String {
+    s := "elm" $i
+    ks[0].Set(s)
+    return s
+}
+fn snChain(k mut SnK&, i I64) String {
+    s := "chn" $i
+    r1 String&s = ""
+    r2 String&s = ""
+    r3 String&s = ""
+    r4 String&s = ""
+    r5 String&s = ""
+    r6 String&s = ""
+    r7 String&s = ""
+    r8 String&s = ""
+    for j in range 10 {
+        k.s = r8
+        r8 = r7
+        r7 = r6
+        r6 = r5
+        r5 = r4
+        r4 = r3
+        r3 = r2
+        r2 = r1
+        r1 = s
+    }
+    return s
+}
+type SnRes struct(r mut String&) { r } destruct { r[0] = 'Z' }
+fn snDtor(i I64) String {
+    s := "dtr" $i
+    d := SnRes(s)
+    return s
+}
+fn secondNames(i I64) String {
+    a := List<String&>()
+    x := snAlias(a, i)
+    x[0] = 'Q'
+    b := List<String&>()
+    y := snHandle(b, i)
+    y[0] = 'Q'
+    ks := List<mut SnK&>()
+    ks.Push(SnK("k"))
+    z := snElem(ks, i)
+    z[0] = 'Q'
+    k := SnK("c")
+    w := snChain(k, i)
+    w[0] = 'Q'
+    v := snDtor(i)
+    churn()
+    return $a " " $x " " $b " " $y " " $ks[0].s " " $z " " $k.s " " $w " " $v
+}
+BakedSecondNames String = secondNames(1)
+
+test "O26a, T7b: a returned array local something else names is copied at its return" {
+    want := "List<String&>[\"abc1\"] Qbc1 List<String&>[\"hnd1\"] Qnd1 elm1 Qlm1 chn1 Qhn1 dtr1"
+    assert secondNames(1) == want
+    assert BakedSecondNames == want
+    assert secondNames(Live - 2) == want
+}
