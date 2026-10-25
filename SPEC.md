@@ -4000,7 +4000,7 @@ apply as in every loop; `continue` moves to the next value.
 
 **S9e (`for ... in try`).** `for x in try e block { catch-clause }`. A loop calls methods by itself - `e` when it is
 a call, `Iter()`, `Next()`, `At()` - and any of them may declare errors. `try` here, as anywhere (R8), turns no check
-on: the loop calls a type's plain `At`, never its `CheckedAt`. Such a loop is written with `try` after
+on: the loop calls a type's `At` as written. Such a loop is written with `try` after
 `in`, which covers exactly those calls (a call written in the body takes its own `try`); one whose own calls cannot
 fail may not be written with it, and one whose own calls can fail must be. `Exhausted` from `Next()` is not such a
 failure: it ends the loop, as in S9a, and is never a clause's to name. `Next()` may declare other errors beside it -
