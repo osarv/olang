@@ -1,0 +1,16 @@
+== r18c_passlimitassert
+  san:    refused: r18c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+  O3:     refused
+  interp: exit 1 r18c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling|compilation failed with 1 error|
+--- compile (-debug -sanitize)
+r18c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+r18c_passlimitassert.olang:33:20: error[S18c]: this assertion is false, evaluated while compiling
+   33 |     assert probe() == "abc1"
+      |                    ^~
+compilation failed with 1 error

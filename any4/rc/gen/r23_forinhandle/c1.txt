@@ -1,0 +1,7 @@
+r23_forinhandle.olang:7:25: error[T25c]: a read-only copy cannot be passed where it may be written - pass one of its own, made with 'Clone()'
+    7 |     for inner in lsts { inner.Push(s) }
+      |                         ^~~~~
+r23_forinhandle.olang:7:5: note: 'inner' copies a place reached read-only, so it is read-only
+    7 |     for inner in lsts { inner.Push(s) }
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error

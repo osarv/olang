@@ -1,0 +1,10 @@
+== build -debug -sanitize
+use after scope closed: storage a closed scope gave back was read or written
+/home/user/review/any4/run.sh: line 17: 32308 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+pre2 pre2
+status 0
+== interpret
+olang interpret: a6_methodreturn.olang:33: it uses storage after the scope it was made in closed
+status 1

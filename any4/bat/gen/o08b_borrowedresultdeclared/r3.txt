@@ -1,0 +1,2 @@
+borrowedresultdeclared 1
+borrowedresultdeclared 12

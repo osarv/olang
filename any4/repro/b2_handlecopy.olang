@@ -1,0 +1,19 @@
+type K struct(s String&) { s }
+# RetCopy: a List parameter by value (a handle: a second name for the caller's list) copied into a local of the block
+fn f(lst List<String&>, i I64) String {
+    s := "abc" $i
+    l := lst
+    l.Push(s)
+    return s
+}
+fn probe() String {
+    lst := List<String&>()
+    x := f(lst, 1)
+    x[0] = 'Q'
+    return "lst " $lst " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

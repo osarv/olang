@@ -1,0 +1,12 @@
+== b44_scopedgenericctor
+  san:    exit 0 genericctor 12|
+  O3:     exit 0 genericctor 12|
+  interp: exit 0 genericctor 12|
+--- compile (-debug -sanitize)
+built ./build/b44_scopedgenericctor.debug.san
+--- run san
+genericctor 12
+--- run O3
+genericctor 12
+--- interpret
+genericctor 12

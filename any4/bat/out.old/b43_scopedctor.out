@@ -1,0 +1,15 @@
+== b43_scopedctor
+  san:    exit 0 ctor 1|ctor 12|
+  O3:     exit 0 ctor 1|ctor 12|
+  interp: exit 0 ctor 1|ctor 12|
+--- compile (-debug -sanitize)
+built ./build/b43_scopedctor.debug.san
+--- run san
+ctor 1
+ctor 12
+--- run O3
+ctor 1
+ctor 12
+--- interpret
+ctor 1
+ctor 12

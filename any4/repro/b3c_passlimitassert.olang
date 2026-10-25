@@ -1,0 +1,36 @@
+type K struct(s String&) { s }
+# r18 through an assert: decided true while compiling (the evaluator copies the returned array) and dropped, while the
+# run time's k.s names the caller's value
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    r1 String&s = ""
+    r2 String&s = ""
+    r3 String&s = ""
+    r4 String&s = ""
+    r5 String&s = ""
+    r6 String&s = ""
+    r7 String&s = ""
+    for j in range 9 {
+        k.s = r7
+        r7 = r6
+        r6 = r5
+        r5 = r4
+        r4 = r3
+        r3 = r2
+        r2 = r1
+        r1 = s
+    }
+    return s
+}
+fn probe() String {
+    k := K("x")
+    x := f(k, 1)
+    x[0] = 'Q'
+    return $k.s
+}
+fn main() {
+    assert probe() == "abc1"
+    r := probe()
+    say("run: k.s " $r)
+    assert r == "abc1", "k.s changed when the caller wrote its own value"
+}

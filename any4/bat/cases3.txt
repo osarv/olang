@@ -1,0 +1,140 @@
+=== b38_destructassign
+# a scoped call's several results assigned (not declared) to outer locals
+fn mk2p(i I64) P&, P& { return P(i), P(i + 1) }
+fn main() {
+    a := P(0)
+    b := P(0)
+    for i in range 2 {
+        t := "inner" $i
+        a, b = mk2p&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("destructassign " $a.n " " $b.n)
+}
+=== b39_spawntarget
+# a task's result, built by a scoped call naming a local of the join's loop body, stored into an outer field
+fn main() {
+    h := H(null)
+    join {
+        for i in range 2 {
+            t := "inner" $i
+            spawn h.p = mkp&t(i * 11 + 1)
+        }
+    }
+    assert churn() > 0
+    say("spawntarget " $h.p!.n)
+}
+=== b40_aspayload
+# an "as" payload of a scoped call's enum result stored outward
+type E enum {
+    C(p P&)
+    N
+}
+fn mke(i I64) E { return E.C(P(i)) }
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.p = mke&t(i * 11 + 1) as E.C
+    }
+    assert churn() > 0
+    say("aspayload " $h.p!.n)
+}
+=== b41_forinscoped
+# a for-in over a scoped call's List result, its elements pushed outward
+fn mkl(i I64) List<P&> {
+    l := List<P&>()
+    l.Push(P(i))
+    l.Push(P(i + 1))
+    return l
+}
+fn main() {
+    out := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        for q in mkl&t(i * 11 + 1) { out.Push(q) }
+    }
+    assert churn() > 0
+    for x in out { say("forin " $x.n) }
+}
+=== b42_matchscoped
+# a match on a scoped call's enum result, a binding pushed outward
+type E enum {
+    C(p P&)
+    N
+}
+fn mke(i I64) E { return E.C(P(i)) }
+fn main() {
+    out := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        match mke&t(i * 11 + 1) {
+            case E.C(q) { out.Push(q) }
+            nomatch { }
+        }
+    }
+    assert churn() > 0
+    for x in out { say("match " $x.n) }
+}
+=== b43_scopedctor
+# a scoped constructor call naming an inner local, pushed outward
+fn main() {
+    out := List<P&>()
+    for i in range 2 {
+        t := "inner" $i
+        out.Push(P&t(i * 11 + 1))
+    }
+    assert churn() > 0
+    for x in out { say("ctor " $x.n) }
+}
+=== b44_scopedgenericctor
+# a scoped generic constructor naming an inner local, stored outward
+type Box<T> struct(v T) { v }
+type HB struct(b Box<I64>?&) { b }
+fn main() {
+    h := HB(null)
+    for i in range 2 {
+        t := "inner" $i
+        h.b = Box<I64>&t(i * 11 + 1)
+    }
+    assert churn() > 0
+    say("genericctor " $h.b!.v)
+}
+=== b45_lambdacapturescoped
+# a lambda returning a scoped call naming what it captured (a value array built where an inner local lives), its
+# result made an any in an outer list
+fn main() {
+    l := List<any Sh&>()
+    for i in range 3 {
+        t := "inner" $i
+        f := fn() String { return mk&t(7) }
+        l.Push(Lab(f()))
+    }
+    assert churn() > 0
+    for x in l { say($x.Show()) }
+}
+=== b46_scopedtextslicepush
+# a slice of a scoped call's text pushed outward
+fn main() {
+    l := List<String&>()
+    for i in range 2 {
+        t := "inner" $i
+        l.Push(mk&t(i)[0:6])
+    }
+    assert churn() > 0
+    say("slicepush " $l)
+}
+=== b47_scopedmethodstringreturn
+# a method given a scope argument naming the function's own local, its text returned as a value
+fn (h HS&) mkm(i I64) String { return h.s $i }
+fn g(i I64) String {
+    t := "local" $i
+    h := HS("pre")
+    return h.mkm&t(i)
+}
+fn main() {
+    a := g(1)
+    b := g(2)
+    assert churn() > 0
+    say($a " " $b)
+}

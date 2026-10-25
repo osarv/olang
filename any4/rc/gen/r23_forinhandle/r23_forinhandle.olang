@@ -1,0 +1,39 @@
+import "std/io"
+type K struct(s String&) { s }
+# RetCopy: each inner List of the caller's list of lists, walked by a for-in (an element copy is a second name of the
+# caller's inner list - a handle), pushed the borrow
+fn f(lsts mut List<List<String&>>&, i I64) String {
+    s := "abc" $i
+    for inner in lsts { inner.Push(s) }
+    return s
+}
+fn probe() String {
+    lsts := List<List<String&>>()
+    lsts.Push(List<String&>())
+    x := f(lsts, 1)
+    x[0] = 'Q'
+    return "lsts " $lsts " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

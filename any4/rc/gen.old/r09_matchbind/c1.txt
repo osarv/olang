@@ -1,0 +1,13 @@
+r09_matchbind.olang:15:25: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   15 |         case E.T(q) { l.Push(q) }
+      |                         ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+r09_matchbind.olang:15:18: note: 'q' is bound here to what the matched value holds, which lives in a block that closes first - make that where 'l' lives
+   15 |         case E.T(q) { l.Push(q) }
+      |                  ^
+r09_matchbind.olang:15:30: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   15 |         case E.T(q) { l.Push(q) }
+      |                              ^
+compilation failed with 1 error

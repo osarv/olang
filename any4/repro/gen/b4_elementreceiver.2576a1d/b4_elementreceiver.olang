@@ -1,0 +1,40 @@
+import "std/io"
+type K struct(s String&) { s }
+# RetCopy: the borrow handed to a method called on an element of the caller's list ("ks[0].Set(s)") - the receiver is a
+# call's result (At), which the third mode finds no root for, so the borrow kept there is not seen
+fn (k mut K&) Set(t String&) { k.s = t }
+fn f(ks mut List<mut K&>&, i I64) String {
+    s := "abc" $i
+    ks[0].Set(s)
+    return s
+}
+fn probe() String {
+    ks := List<mut K&>()
+    ks.Push(K("x"))
+    x := f(ks, 1)
+    x[0] = 'Q'
+    return "ks[0].s " $ks[0].s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

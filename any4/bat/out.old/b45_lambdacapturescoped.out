@@ -1,0 +1,14 @@
+== b45_lambdacapturescoped
+  san:    exit 134 use after scope closed: storage a closed scope gave back was read or written|
+  O3:     exit 0 lab text7-49|lab 7-497-49|lab 7-497-49|
+  interp: exit 1 olang interpret: b45_lambdacapturescoped.olang:11: it uses storage after the scope it was made in closed|
+--- compile (-debug -sanitize)
+built ./build/b45_lambdacapturescoped.debug.san
+--- run san
+use after scope closed: storage a closed scope gave back was read or written
+--- run O3
+lab text7-49
+lab 7-497-49
+lab 7-497-49
+--- interpret
+olang interpret: b45_lambdacapturescoped.olang:11: it uses storage after the scope it was made in closed

@@ -1,0 +1,15 @@
+== o08_borrowedresult
+  san:    exit 0 borrowedresult 1|borrowedresult 12|
+  O3:     exit 0 borrowedresult 1|borrowedresult 12|
+  interp: exit 0 borrowedresult 1|borrowedresult 12|
+--- compile (-debug -sanitize)
+built ./build/o08_borrowedresult.debug.san
+--- run san
+borrowedresult 1
+borrowedresult 12
+--- run O3
+borrowedresult 1
+borrowedresult 12
+--- interpret
+borrowedresult 1
+borrowedresult 12

@@ -1,0 +1,4 @@
+b40_aspayload.olang:32:13: error[O25h]: this value holds references into a scope the target outlives - build it where the target is
+   32 |         h.p = mke&t(i * 11 + 1) as E.C
+      |             ^
+compilation failed with 1 error

@@ -1,0 +1,14 @@
+== build -debug -sanitize
+run: lst[0] Qbc1
+b1b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value
+/home/user/review/any4/run.sh: line 17:   952 Aborted                 timeout 60 ./build/$n.debug.san
+status 134
+== build
+run: lst[0] Qbc1
+b1b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value
+/home/user/review/any4/run.sh: line 17:  1042 Aborted                 timeout 60 ./build/$n
+status 134
+== interpret
+run: lst[0] Qbc1
+b1b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value
+status 134

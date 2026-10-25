@@ -1,0 +1,26 @@
+##### b4_elementreceiver
+== build -debug -sanitize
+run: ks[0].s Qbc1 x Qbc1
+baked: ks[0].s Qbc1 x Qbc1
+status 0
+== build
+run: ks[0].s Qbc1 x Qbc1
+baked: ks[0].s Qbc1 x Qbc1
+status 0
+== interpret
+run: ks[0].s Qbc1 x Qbc1
+baked: ks[0].s Qbc1 x Qbc1
+status 0
+##### b5_destructor
+== build -debug -sanitize
+x Zbc1
+b5_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+status 134
+== build
+x Zbc1
+b5_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+status 134
+== interpret
+x Zbc1
+b5_destructor.olang:14: assertion failed: the callee's destructor wrote the caller's value
+status 134

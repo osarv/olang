@@ -1,0 +1,15 @@
+== o06_ctorofmark
+  san:    exit 0 ctorofmark 1|ctorofmark 12|
+  O3:     exit 0 ctorofmark 1|ctorofmark 12|
+  interp: exit 0 ctorofmark 1|ctorofmark 12|
+--- compile (-debug -sanitize)
+built ./build/o06_ctorofmark.debug.san
+--- run san
+ctorofmark 1
+ctorofmark 12
+--- run O3
+ctorofmark 1
+ctorofmark 12
+--- interpret
+ctorofmark 1
+ctorofmark 12

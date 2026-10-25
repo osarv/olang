@@ -1,0 +1,38 @@
+import "std/io"
+type K struct(s String&) { s }
+# RetCopy: a List parameter by value (a handle: a second name for the caller's list) copied into a local of the block
+fn f(lst List<String&>, i I64) String {
+    s := "abc" $i
+    l := lst
+    l.Push(s)
+    return s
+}
+fn probe() String {
+    lst := List<String&>()
+    x := f(lst, 1)
+    x[0] = 'Q'
+    return "lst " $lst " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

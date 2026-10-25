@@ -1,0 +1,1 @@
+olang interpret: b47_scopedmethodstringreturn.olang:33: it uses storage after the scope it was made in closed

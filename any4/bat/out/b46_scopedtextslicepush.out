@@ -1,0 +1,16 @@
+== b46_scopedtextslicepush
+  san:    refused: b46_scopedtextslicepush.olang:27:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one sco
+  O3:     refused
+  interp: exit 0 slicepush List<String&>["text0-", "text1-"]|
+--- compile (-debug -sanitize)
+b46_scopedtextslicepush.olang:27:11: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   27 |         l.Push(mk&t(i)[0:6])
+      |           ^~~~
+/home/user/wt/rvany4/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+compilation failed with 1 error
+--- run san
+--- run O3
+--- interpret
+slicepush List<String&>["text0-", "text1-"]

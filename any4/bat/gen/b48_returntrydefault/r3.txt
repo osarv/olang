@@ -1,0 +1,1 @@
+olang interpret: b48_returntrydefault.olang:35: it uses storage after the scope it was made in closed

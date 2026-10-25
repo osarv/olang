@@ -1,0 +1,19 @@
+type K struct(s String&) { s }
+# RetCopy: the borrow stored into a field of an element of the caller's list ("ks[0].s = s")
+fn f(ks mut List<mut K&>&, i I64) String {
+    s := "abc" $i
+    ks[0].s = s
+    return s
+}
+fn probe() String {
+    ks := List<mut K&>()
+    ks.Push(K("x"))
+    x := f(ks, 1)
+    x[0] = 'Q'
+    return "ks[0].s " $ks[0].s " x " $x
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}

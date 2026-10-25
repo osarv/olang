@@ -1,0 +1,15 @@
+== r20b_aliaslocalassert
+  san:    exit 134 run: lst[0] Qbc1|r20b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value|
+  O3:     exit 134 run: lst[0] Qbc1|r20b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value|
+  interp: exit 134 run: lst[0] Qbc1|r20b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value|
+--- compile (-debug -sanitize)
+built ./build/r20b_aliaslocalassert.debug.san
+--- run san
+run: lst[0] Qbc1
+r20b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value
+--- run O3
+run: lst[0] Qbc1
+r20b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value
+--- interpret
+run: lst[0] Qbc1
+r20b_aliaslocalassert.olang:19: assertion failed: the caller's list changed when it wrote its own value

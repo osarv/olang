@@ -1,0 +1,128 @@
+=== o03_returncondmark
+# accepted expected: a conditional of two &return calls returned
+fn g(i I64) P& { return mkp&return(i) if i > 5 else mkp&return(i + 100) }
+fn main() {
+    l := List<P&>()
+    for i in range 2 { l.Push(g(i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("returncondmark " $x.n) }
+}
+=== o04_returndefaultmark
+# accepted expected: a catch default built &return, returned
+fn g(i I64) P& { return try fp(i) catch default mkp&return(i) }
+fn main() {
+    l := List<P&>()
+    for i in range 2 { l.Push(g(i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("returndefaultmark " $x.n) }
+}
+=== o06_ctorofmark
+# accepted expected: a struct value holding a &return call, returned
+fn g(i I64) V {
+    x := V(mkp&return(i))
+    return x
+}
+fn main() {
+    l := List<V>()
+    for i in range 2 { l.Push(g(i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("ctorofmark " $x.p.n) }
+}
+=== o07_paramstore
+# accepted expected: a scoped call naming a parameter, stored into it
+fn put(h mut H&, i I64) { h.p = mkp&h(i) }
+fn main() {
+    h := H(null)
+    for i in range 2 { put(h, i * 11 + 1) }
+    assert churn() > 0
+    say("paramstore " $h.p!.n)
+}
+=== o07b_paramstoredeclared
+# accepted expected: o07 declared first
+fn put(h mut H&, i I64) {
+    x := mkp&h(i)
+    h.p = x
+}
+fn main() {
+    h := H(null)
+    for i in range 2 { put(h, i * 11 + 1) }
+    assert churn() > 0
+    say("paramstoredeclared " $h.p!.n)
+}
+=== o08_borrowedresult
+# accepted expected: a scoped call naming the parameter a borrowed result is borrowed from
+fn g(h H&, i I64) P&h { return mkp&h(i) }
+fn main() {
+    h := H(null)
+    l := List<P&>()
+    for i in range 2 { l.Push(g(h, i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("borrowedresult " $x.n) }
+}
+=== o08b_borrowedresultdeclared
+# accepted expected: o08 declared first
+fn g(h H&, i I64) P&h {
+    x := mkp&h(i)
+    return x
+}
+fn main() {
+    h := H(null)
+    l := List<P&>()
+    for i in range 2 { l.Push(g(h, i * 11 + 1)) }
+    assert churn() > 0
+    for x in l { say("borrowedresultdeclared " $x.n) }
+}
+=== o11_taskjoinlocal
+# accepted expected: a task handed a scoped call naming a local of the join block itself
+fn use(p P&) I64 { return p.n }
+fn main() {
+    join {
+        t := "joinlocal"
+        for i in range 3 { spawn use(mkp&t(i * 11 + 1)) }
+    }
+    say("taskjoinlocal done")
+}
+=== o12_genericexact
+# accepted expected: a scoped generic call naming the struct it is stored in
+type Box<T> struct(v T) { v }
+type HB struct(b Box<I64>?&) { b }
+fn mkb<T>(x T) Box<T>& { return Box<T>(x) }
+fn main() {
+    h := HB(null)
+    for i in range 2 { h.b = mkb&h(i * 11 + 1) }
+    assert churn() > 0
+    say("genericexact " $h.b!.v)
+}
+=== o13_methodexact
+# accepted expected: a method given a scope argument naming the struct its result is stored in
+fn (h H&) mkm(i I64) P& { return P(i) }
+fn main() {
+    g := H(null)
+    h := H(null)
+    for i in range 2 { g.p = h.mkm&g(i * 11 + 1) }
+    assert churn() > 0
+    say("methodexact " $g.p!.n)
+}
+=== o14_matchexact
+# accepted expected: a match of scoped calls naming the struct
+fn main() {
+    h := H(null)
+    for i in range 2 {
+        h.p = match i {
+            case 0 => mkp&h(3)
+            nomatch => mkp&h(i * 11 + 1)
+        }
+    }
+    assert churn() > 0
+    say("matchexact " $h.p!.n)
+}
+=== o15_destructexactassign
+# accepted expected: destructured results assigned to existing locals, built where they live
+fn mk2p(i I64) P&, P& { return P(i), P(i + 1) }
+fn main() {
+    a := mkp(0)
+    b := mkp(0)
+    for i in range 2 { a, b = mk2p&a(i * 11 + 1) }
+    assert churn() > 0
+    say("destructexactassign " $a.n " " $b.n)
+}

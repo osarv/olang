@@ -1,0 +1,24 @@
+== build -debug -sanitize
+o4_iterpush.olang:11:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   11 |     for q in tmp { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o4_iterpush.olang:11:27: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   11 |     for q in tmp { l.Push(q) }
+      |                           ^
+compilation failed with 1 error
+== build
+o4_iterpush.olang:11:22: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   11 |     for q in tmp { l.Push(q) }
+      |                      ^~~~
+/home/user/wt/rvany4-old/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
+   67 |     if s.used == s.room { s.grow(x) }
+      |                           ^
+o4_iterpush.olang:11:27: note: this text lives in a block that closes first - pass a copy, which is made where 'l' lives: write '$' before it
+   11 |     for q in tmp { l.Push(q) }
+== interpret
+run: l List<String&>["abc1"] x Qbc1
+baked: l List<String&>["abc1"] x Qbc1
+status 0

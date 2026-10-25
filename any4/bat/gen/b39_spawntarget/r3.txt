@@ -1,0 +1,4 @@
+b39_spawntarget.olang:28:25: error[P1]: 'spawn' takes a call
+   28 |             spawn h.p = mkp&t(i * 11 + 1)
+      |                         ^~~~~~~~~~~~~~~~~
+compilation failed with 1 error

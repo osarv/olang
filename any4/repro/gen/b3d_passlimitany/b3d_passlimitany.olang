@@ -1,0 +1,59 @@
+import "std/io"
+type K struct(s String&) { s }
+type Lab extends String
+# r18 through an any: the box holds the call's array as it is (AnyItemNew), which k.s names - a write through the any
+# writes k.s at run time, not while compiling
+type W trait {
+    mut Bump()
+}
+fn (l mut Lab&) Bump() { l[0] = 'Z' }
+fn f(k mut K&, i I64) String {
+    s := "abc" $i
+    r1 String&s = ""
+    r2 String&s = ""
+    r3 String&s = ""
+    r4 String&s = ""
+    r5 String&s = ""
+    r6 String&s = ""
+    r7 String&s = ""
+    for j in range 9 {
+        k.s = r7
+        r7 = r6
+        r6 = r5
+        r5 = r4
+        r4 = r3
+        r3 = r2
+        r2 = r1
+        r1 = s
+    }
+    return s
+}
+fn probe() String {
+    k := K("x")
+    b mut any W& = Lab(f(k, 2))
+    b.Bump()
+    return "k.s " $k.s
+}
+G := probe()
+fn main() {
+    say("run: " $probe())
+    say("baked: " $G)
+}
+fn say(s String&) { try io.Println(s) catch { } }
+
+fn churn() I64 {
+    t I64 = 0
+    keep Array<I64>& = Array<I64>(1, 0)
+    for k in range 200 {
+        keep = Array<I64>(64, 777)
+        t += keep[3]
+    }
+    for i in range 300 {
+        l := List<I64>()
+        for j in range 40 { l.Push(i + j) }
+        t += l.Len()
+        s := "junk " $i
+        t += s.Len()
+    }
+    return t
+}

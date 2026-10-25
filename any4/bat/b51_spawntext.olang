@@ -1,0 +1,37 @@
+type P struct(n I64) { n }
+type H struct(p P?&) { p }
+type HS struct(s String&) { s }
+type V struct(p P&) { p }
+type Sh trait {
+    Show() String
+}
+fn (p P&) Show() String { return "P" $p.n }
+type Lab extends String
+fn (l Lab&) Show() String { return "lab " $String(l) }
+fn mkp(i I64) P& { return P(i) }
+fn mk(i I64) String { return "text" $i "-" $(i * 7) }
+fn mkv(i I64) V { return V(P(i)) }
+error Fail {
+    BAD
+}
+fn fp(i I64) P& ? Fail {
+    if i >= 0 { error Fail.BAD }
+    return P(i)
+}
+# a task handed text built by a scoped call naming a local of the join's loop body (a String holds no references, so
+# the call's value is plain to the scope pass)
+fn useS(s String&) I64 {
+    w := 0
+    for k in range 300 { w += churn() % 3 }
+    say("task " $s)
+    return w
+}
+fn main() {
+    join {
+        for i in range 4 {
+            t := "inner" $i
+            spawn useS(mk&t(i * 11 + 1))
+        }
+    }
+    say("done")
+}

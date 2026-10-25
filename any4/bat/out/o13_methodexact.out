@@ -1,0 +1,12 @@
+== o13_methodexact
+  san:    exit 0 methodexact 12|
+  O3:     exit 0 methodexact 12|
+  interp: exit 0 methodexact 12|
+--- compile (-debug -sanitize)
+built ./build/o13_methodexact.debug.san
+--- run san
+methodexact 12
+--- run O3
+methodexact 12
+--- interpret
+methodexact 12
