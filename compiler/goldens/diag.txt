@@ -5336,9 +5336,9 @@ t20errorparam.olang:12:22: error[T20]: E is an error type, which has no values -
 t20errorparam.olang:13:12: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    13 | fn final(e E) Bool { return e != E.A }
       |            ^
-t20errorparam.olang:13:36: error[G32]: E has no reflected member 'A' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align
+t20errorparam.olang:13:34: error[T20]: 'E.A' is an error word, not a value - raise it with 'error E.A', tell it apart with a catch clause, or compare it with the error a clause took ('catch e { if e == E.A { } }')
    13 | fn final(e E) Bool { return e != E.A }
-      |                                    ^
+      |                                  ^~~
 t20errorparam.olang:15:7: error[T20]: E is an error type, which has no values - an error is raised and caught, never held; tell its words apart with catch clauses ('catch E.WORD { }'), or by the name a clause gives one ('catch E e { if e == E.WORD { } }')
    15 |     x E
       |       ^
