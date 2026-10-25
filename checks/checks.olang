@@ -45,7 +45,7 @@ Scenarios := String&["fix", "strheld", "fuzz", "bench", "agree", "linalg", "land
                      "preludestale", "bits", "remote", "tcrash", "ttolerant", "vecalias", "output", "remotestale"
                      "format", "lazytype", "manymods", "k2", "listloop", "typereview", "osexit", "retslot", "protopriv"
                      "s18c", "regions", "manyifs", "enumwords", "twolists", "opvis", "static", "remotebad", "nestdeep"
-                     "nestparse", "words", "diag", "sidebyside", "cinterop"]
+                     "nestparse", "words", "diag", "sidebyside", "cinterop", "embed"]
 
 # what runs side by side: every scenario, a scenario with parts as its parts ("strheld/order") and then itself, which
 # runs what is left of it. A scenario passes when all of it does
@@ -395,6 +395,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "pkg" { try pkg(r) }
         case "stale" { try stale(r) }
         case "reuse" { try reuse(r) }
+        case "embed" { try embedded(r) }
         case "interp" { try interp(r) }
         case "osargs" { try osargs(r) }
         case "osexit" { try osexit(r) }
@@ -837,6 +838,30 @@ fn reuse(r mut report&) ? Failed {
                     "catch { }\\n}/' anyapp.olang && OLANG_CHECKREUSE=1 \"$OLANG\" build anyapp.olang > out.txt 2>&1 && " $
                     "./build/anyapp > run.txt") == 0, "anyapp's build calling Count through the any", dir)
     try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'count 3' run.txt") == 0, "anyapp's run calling Count", dir)
+}
+
+# E38, B3i: an embedded file is part of what its module's object is made from - a build after it changes makes that
+# object again, with the new bytes, baked and read alike - and inside std an embed may not leave it
+test "an embedded file changed rebuilds what embeds it; an embed in std stays in std" { assert passed("embed") }
+
+fn embedded(r mut report&) ? Failed {
+    dir := fresh("embed")
+    os.Run("cp checks/fixtures/embed/* " $os.Quote(dir))
+    same := "modules reused, every object the same"
+    try r.expect(sh(dir, "\"$OLANG\" build app.olang > out.txt 2>&1 && ./build/app > run.txt") == 0, "first build", dir)
+    try r.expect(sh(dir, "grep -qx 'lib 19 19' run.txt") == 0, "the first build's output", dir)
+    # the file edited, nothing else: lib's object made again from it (CHECKREUSE says a stale reuse)
+    try r.expect(sh(dir, "echo 'pink 100' >> data.txt && OLANG_CHECKREUSE=1 \"$OLANG\" build app.olang > out.txt 2>&1 " $
+                    "&& ./build/app > run.txt") == 0, "the build after data.txt's edit", dir)
+    try r.expect(outOf(dir).Contains(same) and sh(dir, "grep -qx 'lib 119 119' run.txt") == 0
+                 "the build after data.txt's edit", dir)
+    try r.expect(sh(dir, "\"$OLANG\" interpret app.olang > out.txt 2>&1") == 0 and outOf(dir) == "lib 119 119\n"
+                 "interpret after data.txt's edit", dir)
+    # a module of std embedding what is outside it
+    try r.expect(sh(dir, "mkdir -p s && cp -r " $os.Quote($root() "/std") " s/std && echo 'X := embed \"../outside.txt\"' > " $
+                    "s/std/leak.olang && echo x > s/outside.txt && OLANG_STD=$PWD/s/std \"$OLANG\" build leaks.olang > out.txt " $
+                    "2>&1") != 0, "std/leak embedding outside std built", dir)
+    try r.expect(outOf(dir).Contains("error[E38]: embed '../outside.txt' reads no file: it leaves std"), "std/leak's error", dir)
 }
 
 # B3e: -i runs a program as the built program runs - the same output, exit status and report of an error escaping

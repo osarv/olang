@@ -1,0 +1,5 @@
+# check: fail error[E38]: an embed's path is text known while compiling - a literal, or what reads no local
+# E38: "embed" binds as a prefix operator: its operand is the whole unary after it, so an index read through an embed
+# is parenthesized - here the index is the path's, and a Char is no path
+X := embed "e38bound.olang"[0]
+fn main() ? { assert X.Len() > 0 }

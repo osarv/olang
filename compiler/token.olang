@@ -27,6 +27,7 @@ type Tok enum {
     Spawn
     Defer
     ErrDefer
+    Embed
     Break
     Continue
     Unreachable
@@ -145,6 +146,7 @@ fn (k Tok) Text() String& {
         case Tok.Spawn => "spawn"
         case Tok.Defer => "defer"
         case Tok.ErrDefer => "errdefer"
+        case Tok.Embed => "embed"
         case Tok.Break => "break"
         case Tok.Continue => "continue"
         case Tok.Unreachable => "unreachable"
@@ -268,6 +270,7 @@ fn Keyword(t String&, at I64, n I64) Tok {
         case 'e' {
             if n == 4 and spells(t, at, "else") { return Tok.Else }
             if n == 4 and spells(t, at, "enum") { return Tok.Enum }
+            if n == 5 and spells(t, at, "embed") { return Tok.Embed }
             if n == 5 and spells(t, at, "error") { return Tok.Error }
             if n == 7 and spells(t, at, "extends") { return Tok.Extends }
             if n == 8 and spells(t, at, "errdefer") { return Tok.ErrDefer }
@@ -335,7 +338,7 @@ fn spells(t String&, at I64, word String&) Bool {
 }
 
 test "Keyword finds every reserved word and nothing else" {
-    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.ErrDefer, Tok.Break
+    for k in Tok[Tok.If, Tok.Else, Tok.Try, Tok.Catch, Tok.Return, Tok.Join, Tok.Spawn, Tok.Defer, Tok.ErrDefer, Tok.Embed, Tok.Break
                  Tok.Continue, Tok.Unreachable, Tok.Extends, Tok.Noreturn, Tok.Assert, Tok.For, Tok.Do
                  Tok.In, Tok.Is, Tok.As, Tok.Range, Tok.Match, Tok.Case, Tok.Nomatch, Tok.Type, Tok.Struct, Tok.Enum
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct

@@ -1,0 +1,11 @@
+# a module embedding a file: its object is made from data.txt as from its own text (E38, B3i)
+Table := String(embed "data.txt")
+
+fn Total() I64 {
+    s I64 = 0
+    for line in Table.Lines() {
+        parts := line.Split(" ")
+        if parts.Len() == 2 { s += try parts[1].ParseInt() catch default 0 }
+    }
+    return s
+}

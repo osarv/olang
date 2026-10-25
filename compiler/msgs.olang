@@ -463,6 +463,9 @@ type Diag enum {
     WriteThroughAtCall
     DefaultArgNotAllowed
     DeferErrorEscapes
+    EmbedPathUnknown
+    EmbedPathUndecided
+    EmbedNotRead
     TryNowhereToGo
     TryErrorNotDeclared
     GenErrorNotDeclared
@@ -2004,6 +2007,15 @@ fn DefaultArgNotAllowed() Msg { return Msg(Diag.DefaultArgNotAllowed, "E14a", "'
 
 # ERR_DEFER_ERROR_ESCAPES
 fn DeferErrorEscapes() Msg { return Msg(Diag.DeferErrorEscapes, "S19b", "an error may not leave deferred code - catch it here") }
+
+# ERR_EMBED_PATH_UNKNOWN
+fn EmbedPathUnknown() Msg { return Msg(Diag.EmbedPathUnknown, "E38", "an embed's path is text known while compiling - a literal, or what reads no local") }
+
+# ERR_EMBED_PATH_UNDECIDED
+fn EmbedPathUndecided() Msg { return Msg(Diag.EmbedPathUndecided, "E38", "this embed's path cannot be computed while compiling - write it so it can, or as a literal") }
+
+# ERR_EMBED_NOT_READ
+fn EmbedNotRead(path String&, why String&) Msg { return Msg(Diag.EmbedNotRead, "E38", $"embed " $path " reads no file: " $why) }
 
 # ERR_TRY_NOWHERE_TO_GO
 fn TryNowhereToGo() Msg { return Msg(Diag.TryNowhereToGo, "R13", "an error tried here has nowhere to go - catch every one it can be") }

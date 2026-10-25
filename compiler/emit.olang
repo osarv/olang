@@ -3036,8 +3036,10 @@ fn (fe mut fnEm&) constInit(el types.TypeId, c I32) String, String, I64 {
             for i in range r.N {
                 v := fe.F.Bytes[I64(r.At) + i]
                 if v == U8('"') or v == U8('\\') or v < U8(32) or v > U8(126) {
+                    # a byte at a time, an embedded file's (E38) millions of them among the bytes
                     b.PushChar('\\')
-                    b.Push(v.Format(16).PadStart(2, '0').ToUpper())
+                    b.PushChar(hexDigits[I64(v >> 4)])
+                    b.PushChar(hexDigits[I64(v & U8(15))])
                 } else {
                     b.PushChar(Char(v))
                 }
@@ -3059,6 +3061,8 @@ fn (fe mut fnEm&) constInit(el types.TypeId, c I32) String, String, I64 {
         case mir.ConstNode.Bits(v) { return $fe.ty(el), fe.E.constText(el, v), 1 }
     }
 }
+
+hexDigits := "0123456789ABCDEF"
 
 # one element of an array constant, of type el
 fn (fe mut fnEm&) constItem(el types.TypeId, c I32) String {

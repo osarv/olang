@@ -24401,3 +24401,46 @@ beside the run time.
 **Tests.** shared.olang's S19e section (out of a function, a try passing it on, a loop's iteration, a caught error, a
 `for x in try c` ended by its error, a join failing, a test body passing) baked and decided while compiling and run;
 checks cases for a return, an error escaping, a one-line body and a yield.
+
+## `embed PATH` (E38, B3i, 2026-10-25)
+
+**The decision** (docs/ideas.md #6, the user 2026-10-18: "It's good for spelling ... Do as you want"): a builtin word
+rather than a std function the evaluator understands, files only, the bytes constant data, the path relative to the
+source file as imports are and kept inside a remote package, the content in the object's hash.
+
+**How it is built.** `embed` is a keyword and a prefix operator (`ast.Expr.Unary(_, Tok.Embed, path)`), its operand a
+`unary` - so `String(embed "f")`, `embed $Dir "/f"` (a join is one unary) and `embed f()` all read naturally, and an
+index read through an embed is parenthesized. Check (`embed`) types it `Array<U8>&` read-only and gives a
+`typed.Expr.Data` holding the bytes - exactly what a text literal gives (T25d) - so lowering, the evaluator, section 8
+and emit needed nothing: the bytes are constant data everywhere, a global built from them bakes (a table parsed while
+compiling, K2), an assert reading them is decided (S18c). A literal path is read at once; any other is checked in its
+module's context as the body of a function giving text (`ExprBody`, which refuses a local), recorded (`EmbedAsk`),
+evaluated after the check by `interp.decide` and read in the next check (`generic.Program.Embeds`, by file and offset).
+Embeds are decided first and alone in their round: until the next check the embed holds no bytes, and a length or a
+condition evaluated in the same round could have read the placeholder. The loader resolves the path as a relative
+import - against the module's own directory, an absolute one as itself, inside std or a remote repository refused when
+it leaves it - reads each file once a compilation (every check sees the same bytes), and records it with the module.
+B3i's module key (olang's `moduleKeys`) holds each embedded file's hash, so a module's object is made again when its
+file changes, which the `embed` scenario shows with `OLANG_CHECKREUSE` (a stale reuse would be a difference).
+
+**Decided (mine).**
+1. Every embedded file is an LLVM constant, whatever its size. The decision placed files over 64KB with `.incbin`
+   because "LLVM would only be slow on it" - measured, it is not: a 10MB random constant compiles in 0.18s at -O3 and
+   0.32s under -flto, and the full build of a program embedding it spends 0.8s in lowering and emission (writing the
+   escaped text and hashing it, after the escape loop stopped formatting each byte through Format/PadStart). And
+   module asm is the wrong home under olang's full LTO: the modules' asm is joined into one assembly, where two objects
+   defining one blob collide. Revisit for files of hundreds of MB.
+2. Each `embed` written is an instance of its own, as each literal is (T25d): a file embedded at two places is in the
+   binary twice; a global shares it.
+3. A wrong embed gives no bytes of its own type (not the unknown stand-in), so its body is faulty (K1a) and nothing
+   evaluates it - with the stand-in, an assert reading the global was decided false from nothing.
+4. `explain` and `doc` cut a global's value over 400 characters, saying how long it is - an embedded file's bytes
+   would otherwise be one line of megabytes.
+
+**Found on the way, not fixed (pre-existing):** `X := String(1)` (an initializer that does not check) then
+`assert X.Len() > 0` adds a second error, S18c's "this assertion is false" - the global's value is read while
+compiling though its initializer failed. Not traced to its cause here.
+
+**Tests.** tests/embed.olang (a table parsed and baked, a computed path, a view as text, decided and run, in a loop
+and a generic); checks cases for a missing file, a directory, a path reading a local, one the evaluator cannot compute,
+and the binding; the `embed` scenario (a changed file rebuilds, interpret agrees, std may not be left).

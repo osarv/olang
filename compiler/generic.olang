@@ -120,6 +120,9 @@ type Program struct(L mut load.Loader&, R mut names.Resolver&) {
     # and the ones a check met undecided (ConstAsks)
     Lengths Map<String&, I64>
     ConstAsks List<ConstAsk>
+    # E38: the paths of embeds written as no literal, evaluated while compiling - by file and offset (set before
+    # checking; interp's Analyze): the path, or "\0" where its evaluation gave none
+    Embeds Map<pair.Pair<I64, I64>, String&>
     # B5a: every module's global initializers' bodies in the order they run - a module's after its imports', each
     # after the globals its initializer reads (check's orderGlobals, once every body is checked)
     InitOrder List<I64>

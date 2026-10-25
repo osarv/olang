@@ -1,0 +1,51 @@
+# embed (E38): a file's bytes read while compiling, a read-only Array<U8>& of the program's constant data - read the
+# same by the evaluator (a table parsed and baked, K2; an assert decided, S18c) as at run time
+
+# the file's bytes, a view of them as text, and the length known while compiling
+Table := embed "embedded/table.txt"
+TableText := String(embed "embedded/table.txt")
+
+# a path that is no literal: evaluated once the program checks
+Dir := "embedded"
+Word := embed $Dir "/word.txt"
+
+# a table parsed from an embedded file while compiling: the sum of its numbers
+fn total(t String&) I64 {
+    s I64 = 0
+    for line in t.Lines() {
+        parts := line.Split(" ")
+        if parts.Len() == 2 { s += try parts[1].ParseInt() catch default 0 }
+    }
+    return s
+}
+Total := total(TableText)
+
+# read at run time, so the computation below is made by the program as well as by the evaluator
+Here mut String& = "embedded/table.txt"
+
+fn lines(b Array<U8>&) I64 {
+    n I64 = 0
+    for x in b { if x == U8(10): n++ }
+    return n
+}
+
+test "E38: embed gives the file's bytes, baked and decided while compiling, read at run time" {
+    assert Table.Len() == 22 and Table[0] == U8('r') and Table[21] == U8(10)
+    assert TableText.StartsWith("red 3") and TableText.EndsWith("blue 11\n")
+    assert String(Word) == "olang\n"
+    assert Total == 19
+    assert total(String(embed "embedded/table.txt")) == 19 # S18c: decided while compiling
+    assert lines(Table) == 3
+    t := String(Table)
+    assert total(t) == Total and Here.Len() == 18 # computed at run time
+}
+
+test "E38: an embed in a loop or a generic is its one instance's bytes each time" {
+    for k in range 2 {
+        c := embed "embedded/word.txt"
+        assert c == Word and String(c).Trim() == "olang"
+    }
+    assert first(embed "embedded/word.txt") == U8('o') and first(I64[7, 8]) == 7
+}
+
+fn first<T>(a Array<T>&) T { return a[0] }

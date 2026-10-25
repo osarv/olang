@@ -1,0 +1,4 @@
+# check: fail error[E38]: embed 'missing.bin' reads no file: no file missing.bin
+# E38: a path naming no file is a compile-time error
+Blob := embed "missing.bin"
+fn main() ? { assert Blob.Len() >= 0 }

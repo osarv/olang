@@ -14,7 +14,7 @@ When one is decided, it moves out of this file into `SPEC.md`, `CLAUDE.md` and `
 | 3 | Units of measure | F# | declined 2026-10-18 (the user: "I don't want units") |
 | 4 | Portable SIMD vectors | Zig, Rust | decided 2026-10-18 as lane-by-lane array operators, after self-hosting |
 | 5 | Arbitrary-width integers and fixed point | Zig, VHDL | integers decided 2026-10-18; fixed point open |
-| 6 | Embedding a file | Zig, Rust | decided 2026-10-18, after self-hosting |
+| 6 | Embedding a file | Zig, Rust | decided 2026-10-18; built 2026-10-25 (SPEC E38) |
 | 7 | `errdefer` | Zig | decided 2026-10-18; built 2026-10-25 (SPEC S19e) |
 | 8 | Contracts (`requires` / `ensures`) | Ada/SPARK, Eiffel, D | open |
 | 9 | Doc tests | Rust | open |
@@ -218,7 +218,7 @@ while compiling). An object is rebuilt when an embedded file changes (its conten
 to 64 KB is an LLVM constant, so the optimizer can fold reads of known bytes (a small lookup table); a larger one is
 placed in the object as raw bytes (assembler `.incbin`), since nothing is folded out of a large blob and LLVM would
 only be slow on it. Not now: directories,
-globs. Built in the port after self-hosting.
+globs. Built 2026-10-25 (SPEC E38) - every file an LLVM constant after all, measured: see HISTORY.md.
 
 **What:** a file's bytes become constant data in the binary, read while compiling.
 

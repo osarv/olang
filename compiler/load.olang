@@ -75,6 +75,7 @@ type Module struct(Path String&, Real String&, Identity String&, Prelude Bool) {
     publicDone Bool = false
     publicBusy Bool = false
     public List<I64>                   # M16, M17: the modules reached through its public aliases, itself first
+    Embeds List<String&>               # E38: the files its embeds read, by path, each once - what its object holds
 }
 
 # a program's modules. Std is the standard library's directory; Consts the build constants; Fetch the remote
@@ -93,6 +94,7 @@ type Loader struct(Std String&, Consts mut cond.Consts&, Fetch mut fetch.Fetcher
     Overlay Map<String&, String&>
     stdReal String& = ""
     cwd String& = ""
+    embedded Map<String&, Array<U8>&>  # E38: every file an embed read, by path - read once in a compilation
 }
 
 # where the standard library is: OLANG_STD, else std beside the compiler (its directory's "../std")
@@ -580,6 +582,55 @@ fn (l mut Loader&) resolve(mi I64, imp Import) String, String ? {
     }
     return path, identity
 }
+
+# ---- E38: embedded files ----
+
+# the file "embed spec" in module mi names, read: its bytes and "", or why it cannot be - its path resolved as a
+# relative import's is, against the module's own directory, and kept inside std or the remote repository the module is
+# in. A file is read once in a compilation (every check of the program sees the same bytes) and recorded with the
+# module, whose object it is part of (B3i's key reads it)
+fn (l mut Loader&) Embed(mi I64, spec String&) Array<U8>&l, String {
+    none := Array<U8>(0)
+    m := l.Mods[mi]
+    if spec.Len() == 0 { return none, "an empty path names no file" }
+    if spec.Len() >= 4096 { return none, "a path of 4096 characters or more" }
+    rel := moduleDir(m.Path)
+    path := ""
+    if spec.StartsWith("/") or rel == "." {
+        path = $Normalize(spec)
+    } else {
+        path = $Normalize($rel "/" $spec)
+    }
+    # inside std or a remote repository, an embedded file stays inside it, as a relative import does
+    fromFirst := m.Identity[:(try m.Identity.FindByte('/') catch default m.Identity.Len())]
+    remote := fromFirst.Contains(".") and fromFirst != "." and fromFirst != ".."
+    root := ""
+    if m.Identity.StartsWith("std/") {
+        root = "std"
+    } else if remote and m.Identity.Contains("/") {
+        root = $firstElems(m.Identity, 3)
+    }
+    if root != "" and (spec.StartsWith("/") or not relativeIdentity(m.Identity, spec).StartsWith($root "/")) {
+        return none, $"it leaves " $root
+    }
+    if not l.embedded.Has(path) {
+        if not os.Exists(path) { return none, $"no file " $path }
+        if os.IsDir(path) { return none, $path " is a directory" }
+        text := try os.ReadFile(path) catch os.Error { return none, $path " cannot be read" }
+        bytes := Array<U8>(text.Len())
+        for i, ch in text { bytes[i] = U8(ch) }
+        l.embedded.Put($path, bytes)
+    }
+    known := false
+    for e in m.Embeds {
+        if e == path { known = true }
+    }
+    if not known { m.Embeds.Push($path) }
+    return (try l.embedded.Get(path) catch default none), ""
+}
+
+# the bytes of the file an embed read, by its path (Embeds): what a module's key holds of it (B3i)
+fn (l Loader&) Embedded(path String&) Array<U8>&l { return try l.embedded.Get(path) catch default Array<U8>(0) }
 
 # host/owner/repo[@ref] of a remote import's parts
 fn key(parts Array<String&>&) String { return $parts[0] "/" $parts[1] "/" $parts[2] }

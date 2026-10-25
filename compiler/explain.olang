@@ -473,9 +473,14 @@ fn globalItem(c mut typecheck.Checker&, x mut interp.Exec&, mi I64, e names.Entr
     text, has := x.Text(body)
     if not has { return $head "   # set at startup\n" }
     v := c.P.T.Referent(t) if c.P.T.KindOf(t) == types.Kind.Ref else t
-    if v == c.TextType() { return $head " = " $quoted(text) "\n" }
-    return $head " = " $text "\n"
+    shown := $quoted(text) if v == c.TextType() else $text
+    # a long value - an embedded file's bytes (E38), a large table - is cut, its length said
+    if shown.Len() > LongValue { return $head " = " $shown[:LongValue] "...   # " $shown.Len() " characters\n" }
+    return $head " = " $shown "\n"
 }
+
+# the most of a global's value explain writes out
+LongValue I64 = 400
 
 # text written as a literal writes it
 fn quoted(s String&) String {

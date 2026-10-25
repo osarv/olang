@@ -53,6 +53,7 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
     decided Map<pair.Pair<I64, I64>, Bool>
     dead Map<pair.Pair<I64, I64>, Bool>
     lengths Map<String&, I64>
+    embeds Map<pair.Pair<I64, I64>, String&>
     # B9c: the top-level conditions decided as errors - each said once the last check is made, the if taking no branch
     condErrs List<CondErr>
     for {
@@ -61,11 +62,12 @@ fn Analyze(l mut load.Loader&, tests Bool) typecheck.Checker {
         r.Resolve()
         p := generic.Program(l, r)
         p.Lengths = lengths
+        p.Embeds = embeds
         c := typecheck.Checker(p, tests)
         c.Decided = decided
         c.Dead = dead
         c.CheckProgram()
-        if not decide(l, c, decided, dead, lengths, condErrs) {
+        if not decide(l, c, decided, dead, lengths, embeds, condErrs) {
             for e in condErrs { l.Diags.Error(e.At, e.M) }
             if l.Diags.Count() == mark { judgeViews(c) }
             return c
@@ -82,13 +84,25 @@ fn judgeViews(c mut typecheck.Checker&) {
 
 # the decisions one check of the program leaves to evaluation, made where they can be: whether any was
 fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, Bool>&
-    dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&, condErrs mut List<CondErr>&) Bool {
+    dead mut Map<pair.Pair<I64, I64>, Bool>&, lengths mut Map<String&, I64>&
+    embeds mut Map<pair.Pair<I64, I64>, String&>&, condErrs mut List<CondErr>&) Bool {
     tops := l.PendingIfs()
-    if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 { return false }
+    if tops.Len() == 0 and c.Asks.Len() == 0 and c.P.ConstAsks.Len() == 0 and c.EmbedAsks.Len() == 0 { return false }
     x mut Exec&c = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.ReadsBuild = c.ReadsBuild
     made := false
+    # E38: an embed's path that is no literal, evaluated - "\0" where it gives none, which the next check reports.
+    # Decided first and alone: until the next check reads the file, the embed holds no bytes, and nothing else
+    # evaluated now may read them
+    for a in c.EmbedAsks {
+        key := pair.Pair(a.File, I64(a.At))
+        if embeds.Has(key) { continue }
+        made = true
+        path, ok := x.Text(a.Body)
+        embeds.Put(key, $(path if ok else "\0"))
+    }
+    if made { return true }
     undecided List<ast.If&>
     for a in c.Asks {
         key := pair.Pair(a.File, I64(a.At))

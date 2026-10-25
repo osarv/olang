@@ -1,0 +1,4 @@
+# check: fail error[E38]: embed '.' reads no file: . is a directory
+# E38: only files: a directory is an error
+Here := embed "."
+fn main() ? { assert Here.Len() >= 0 }

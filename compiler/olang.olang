@@ -613,6 +613,8 @@ fn moduleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
         parts.Push(md.Path)
         parts.Push(md.Real)
         parts.Push(md.Src!.Text if md.Src is not null else "")
+        # E38: the files its embeds read are part of what its object is made from
+        for e in md.Embeds { parts.Push($"embed " $e " " $build.IrHash(String(l.Embedded(e)))) }
         hashOf[m] = build.HashOf(parts)
     }
     for m in range n {

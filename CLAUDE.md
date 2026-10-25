@@ -793,6 +793,15 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (by reviews and the differential fuzzer) is a bug fixed in the evaluator.
 - **`interpret` is stage 1** (no memory reclaimed, no destructors, tasks in sequence); stage 2 is the port's M8, not built in
   C.
+- **`embed PATH` (E38, the user's decision 2026-10-18; built 2026-10-25).** A file's bytes read while compiling: a
+  read-only `Array<U8>&` of constant data, as a text literal is (T25d, one instance per site); text is `String(embed
+  "f")`, a view. A prefix operator over a `unary` (mine). PATH is a literal or an expression reading no local, the
+  latter evaluated after a check (`interp.decide`, alone in its round, then read in the next check); resolved as a
+  relative import against the source file's directory, kept inside std or a remote repository (`load.Embed`, each file
+  read once a compilation). B3i's module key holds each embedded file's hash, so a changed file rebuilds its module.
+  **Decided (mine)**: every file is an LLVM constant, whatever its size - `.incbin` above 64KB was dropped, measured: a
+  10MB constant compiles in 0.18s at -O3 and 0.32s under -flto (lower+emit 0.8s), and module asm would collide symbols
+  across modules under full LTO; explain and doc cut a value over 400 characters, saying its length.
 
 ### std
 

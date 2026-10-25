@@ -2723,7 +2723,7 @@ and therefore the method.
 ```
 expr     ::= binary [ "if" binary "else" expr ]   (E28)
 binary   ::= unary { bin-op unary }          (precedence-climbing, see E5)
-unary    ::= "not" binary | text | { unary-op } postfix
+unary    ::= "not" binary | text | "embed" unary | { unary-op } postfix   (embed: E38)
 unary-op ::= "-" | "~" | "++" | "--" | "$"
 text     ::= text-piece text-piece { text-piece }     (E11b)
 text-piece ::= STR_LIT | "$" { unary-op } postfix
@@ -3821,6 +3821,27 @@ U8(0x81).RotateLeft(1)        # 0x03
 In every other respect they are methods (§4.4 M19). A declared type extending an integer type (T29f) has them as it has
 its base's other methods, and may not declare a method of the same name (T29e); a declared type that does not extend
 its base has none of them. They are not supplied for a float, whose bits E33 reads.
+
+### 5.21 Embedding a file
+
+**E38.** `embed PATH` gives the bytes of the file PATH names, read **while compiling**: a read-only `Array<U8>&` whose
+length is the file's, and which is constant data of the program, as text written in it is (T25d) - no file is read
+when the program runs, and the evaluator reads the same bytes (K1), so a table parsed from one bakes (K2). `embed`
+binds as a prefix operator does: its operand is a `unary`, so `embed "a.bin"[0]` is the embed of `"a.bin"[0]`, and an
+embed read through is parenthesized (`(embed "a.bin")[0]`). PATH is text known while compiling - a literal, or an
+expression reading no local (a global, a build constant, a call), evaluated once the program checks; one that cannot
+be is a compile-time error. It names a file as a relative import does (M23): against the directory of the source file
+the `embed` is written in (an absolute path as itself), and inside `std` or a remote repository it may not leave it. A
+path naming nothing, a directory, or a file that cannot be read is a compile-time error. Text is a view of the bytes,
+`String(embed "help.txt")` (T29a: no copy). Each `embed` written is one instance, as each literal is (T25d); a file
+embedded at two places is in the program twice - embed it once, in a global, to share it. An object holding an embed is
+made from the file as from its source: a build after the file changes rebuilds it (B3, B3i). Only files: no directory
+or pattern.
+
+```
+Help := String(embed "help.txt")
+Weights := embed "model.bin"           # an Array<U8>&, the file's bytes
+```
 
 ### 5.18 `!`
 
@@ -6444,6 +6465,7 @@ covers every change to the instantiation set. Copies a `compile` object of anoth
 first to name them in the program's order of modules (the root's own last), names; what is built is the same either way.
 
 **B3i.** Since a module's object depends on nothing but its module, its transitive imports (the prelude's included), the
+files their embeds read (E38), the
 compiler and the build's modes, target and build constants (B3d), `build` and `test` keep what each module's object is
 made from - its IR - under a hash of exactly those inputs (`build/rec/`), with the instantiations it names. A later
 build whose module has the same inputs takes that IR as the module's and does not make it again: the module is still

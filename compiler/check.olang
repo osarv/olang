@@ -246,6 +246,7 @@ type Checker struct(P mut generic.Program&, Tests Bool) {
     # check met undecided, each with its condition's body (CondBody) for the evaluator
     Decided Map<pair.Pair<I64, I64>, Bool>
     Asks List<Ask>
+    EmbedAsks List<EmbedAsk>
     # S18c: the asserts whose condition reads no local, each with its condition's body and its message's, for the
     # evaluator to decide while compiling
     AssertAsks List<AssertAsk>
@@ -352,6 +353,14 @@ type ValueKind enum {
 
 # a local if whose condition the build decides and B9a could not evaluate (S8b): the condition's body (BodyOf.Cond),
 # where it is, and the if
+# E38: an embed whose path is no literal, its path the body of a function giving it (ExprBody) - for the evaluator,
+# by its file and where it starts
+type EmbedAsk struct(Body I64, File I64, At I32) {
+    Body
+    File
+    At
+}
+
 type Ask struct(Body I64, File I64, At I32, If ast.If&, In I64, Fixed Array<I64>&) {
     Body
     File
@@ -498,6 +507,7 @@ fn (c mut Checker&) reset() {
     c.unknownTypes = Map<pair.Pair<I64, I64>, Bool>()
     c.unknownSaid = Map<pair.Pair<I64, I64>, Bool>()
     c.Asks = List<Ask>()
+    c.EmbedAsks = List<EmbedAsk>()
     c.AssertAsks = List<AssertAsk>()
     c.ValueAsks = List<ValueAsk>()
     c.Contracts = Map<I64, typed.ContractInfo>()
@@ -5053,6 +5063,50 @@ fn (c mut Checker&) charValue(sp source.Span) I64 {
 # a text literal's bytes, its escapes decoded (L14, L15), raw text as it stands (L14a)
 fn (c mut Checker&) strBytes(sp source.Span) Array<U8>&c { return scan.LiteralBytes(c.src(sp)) }
 
+# E38: "embed PATH" - the bytes of the file PATH names, read while compiling: constant data as text written in the
+# program is (T25d), a read-only Array<U8>& of the length the file has. A literal path is read here; any other is the
+# body of a function giving it, evaluated once the program has checked (interp's decide) and read in the next check -
+# until then the bytes are none. A path the evaluator cannot compute, or a file that cannot be read, is an error here
+fn (c mut Checker&) embed(sp source.Span, y ast.Expr&) typed.Expr&c {
+    fr := c.fr()
+    bt := c.P.T.Ref(c.P.T.Array(types.TypeId(7), types.TypeId(0)), types.ReadOnly)
+    # what an embed that is wrong gives: no bytes, of its type still - its body is faulty, so never evaluated (K1a)
+    none := typed.Expr.Data(sp, bt, fr.File, typed.Const.Bytes(Array<U8>(0)))
+    path := ""
+    match y {
+        case ast.Expr.Lit(lsp, token.Tok.StrLit) {
+            bs := c.strBytes(lsp)
+            b := StringBuilder()
+            for x in bs { b.PushChar(Char(x)) }
+            path = b.ToString()
+        }
+        nomatch {
+            key := pair.Pair(fr.File, I64(sp.Start))
+            if c.P.Embeds.Has(key) {
+                path = try c.P.Embeds.Get(key) catch default "\0"
+                if path == "\0" {
+                    c.err(y.Span(), msgs.EmbedPathUndecided())
+                    return none
+                }
+            } else {
+                b := c.ExprBody(fr.Mi, y, c.textType())
+                if b < 0 {
+                    c.err(y.Span(), msgs.EmbedPathUnknown())
+                    return none
+                }
+                c.EmbedAsks.Push(EmbedAsk(b, fr.File, sp.Start))
+                return none
+            }
+        }
+    }
+    bytes, why := c.P.L.Embed(fr.Mi, path)
+    if why != "" {
+        c.err(y.Span(), msgs.EmbedNotRead(msgs.Tok(path), why))
+        return none
+    }
+    return typed.Expr.Data(sp, bt, fr.File, typed.Const.Bytes(bytes))
+}
+
 # text written in the program: constant data, a read-only String reference (T25d, T29c)
 fn (c mut Checker&) textLit(sp source.Span) typed.Expr&c {
     return typed.Expr.Data(sp, c.P.T.Ref(c.textType(), types.ReadOnly), c.fr().File, typed.Const.Bytes(c.strBytes(sp)))
@@ -5988,6 +6042,7 @@ fn (c mut Checker&) buildConst(sp source.Span, n source.NameId) typed.Expr&c {
 }
 
 fn (c mut Checker&) unary(sp source.Span, op token.Tok, y ast.Expr&, want types.TypeId) typed.Expr?&c {
+    if op == token.Tok.Embed { return c.embed(sp, y) }
     if op == token.Tok.Not {
         x := c.expr(y, types.BoolT)
         if typeOf(x) != types.BoolT and typeOf(x) != types.UnknownT {
