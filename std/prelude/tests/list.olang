@@ -475,3 +475,29 @@ test "S9f: a List of references, walked by every route" {
     assert (try listFind(m, "x") catch { unreachable }).n == 4
     assert (try listFindIter(m, "x") catch { unreachable }).n == 4
 }
+
+# a removal empties the positions it no longer uses and a shift moves each element (M19d's vacate): SwapTake of the last
+# element moves nothing into its own place, Insert and TakeAt shift text across chunk boundaries, and what Clear and
+# Truncate emptied is filled again by Push - the same while compiling as at run time
+fn listVacated() I64 {
+    l := List<String&>()
+    for i in range 40 { l.Push($i) }
+    a := try l.SwapTake(39) catch default ""                 # the last: nothing moves into the gap
+    b := try l.SwapTake(0) catch default ""                  # the last moved into position 0
+    try l.Insert(7, "in") catch { unreachable }
+    c := try l.TakeAt(20) catch default ""                   # the elements after 20 move down, across chunks
+    assert l[0] == "38" and l[7] == "in" and l[8] == "7" and l[20] == "20" and l[37] == "37" and l.Len() == 38
+    l.Truncate(30)
+    for i in range 5 { l.Push("t" $i) }
+    assert l[29] == "29" and l[30] == "t0" and l[34] == "t4"
+    n := l.Len()
+    l.Clear()
+    l.Push("z")
+    assert l[0] == "z"
+    return a.Len() * 1000000 + b.Len() * 100000 + c.Len() * 10000 + n * 10 + l.Len()
+}
+listVacatedBaked := listVacated()
+
+test "removals empty what they no longer use and shifts move, evaluated while compiling as at run time" {
+    assert listVacatedBaked == 2120351 and listVacated() == listVacatedBaked
+}

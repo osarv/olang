@@ -2325,7 +2325,7 @@ with `Hash()` (E10b): `Put(k, v)` sets the value for `k`, replacing the one it h
 `MapError.MISSING` when there is none; `Update(k, init, f)` makes the value for `k` `f` of the value it had - or,
 where `k` has none, puts `f(init)` for it - with one hash and one search; `Has(k)` asks (E29), `Remove(k)` removes `k`
 and says whether it was there, `Take(k)` removes `k` and gives its value, failing with `MapError.MISSING` when there is
-none *(not yet implemented)*, and `Len()` counts. `Iter()` hands out a fresh position (S9c), each step a copy of a
+none (`Get` and `Remove` in one), and `Len()` counts. `Iter()` hands out a fresh position (S9c), each step a copy of a
 `MapEntry<K, V>` holding `Key` and `Value`, in no specified order; the entry just given may be removed while the walk
 goes on, and any other change to the map during a walk leaves which entries the rest of it gives unspecified.
 Everything a `Map` stores lives where the `Map` does, and a key's slot, once the key is removed, holds the next key
@@ -2361,8 +2361,13 @@ same `Vec` is seen on both sides (M19g), and elsewhere a mistake the compile-tim
 sanitizer reports (B2f). `==` compares its elements (E10), it hashes as they do
 (E10b), and `$` renders it as an array with `Vec` named in front: `Vec<I64>[1, 2, 3]`. A `Vec` is the growable array;
 a `List` is for what its chunks give - a `Push` never moves what is stored, so no view of it is ever stale. The prelude's
-collections say where they stop using an array with an operation only the prelude has, `a.retire()`: nothing at run
-time, it is what the evaluator and the sanitizer learn a replaced buffer from.
+collections say what they stop using with two operations only the prelude has: `a.retire()`, where they stop using an
+array - nothing at run time, it is what the evaluator and the sanitizer learn a replaced buffer from - and `p.vacate()`,
+which gives what the place `p` holds and leaves `p` empty, and as a statement lets go of it (O8d): a removal (`Pop`,
+`TakeAt`, `RemoveAt`, `SwapTake`, `SwapRemove`, `Clear`, `Truncate`, a `Map`'s `Remove`, `Take` and `Clear`) vacates
+the positions it empties, and a shift moves each element with it, so a position that no longer holds an element of
+the collection is left empty. These are no part of the language; they say which of a collection's positions
+are live, which the compiler cannot infer.
 
 **M19g (a Vec's views).** A **view** is what `v.View()` or `v.ViewMut()` gives - the elements of `v`'s buffer as it is
 when the view is taken - and so is what is made of one: a slice of it, a conversion of it (`String(v.View())`), an

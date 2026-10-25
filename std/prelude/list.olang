@@ -205,7 +205,7 @@ fn (l mut List<T>&) Pop() T ? ListError.EMPTY {
     s := l.s
     if s.count == 0 { error ListError.EMPTY }
     s.dropLast()
-    return s.tail[s.used]
+    return s.tail[s.used].vacate()
 }
 
 # one element fewer at the end. The tail stays where it is when it empties - so a Push straight after fills it again -
@@ -225,6 +225,7 @@ fn (s mut listState<T>&) dropLast() {
 # filling it again allocates nothing
 fn (l mut List<T>&) Clear() {
     s := l.s
+    s.vacateFrom(0)
     s.count = 0
     s.used = 0
     if s.made > 0 {
@@ -245,6 +246,7 @@ fn (l mut List<T>&) Truncate(n I64) {
         l.Clear()
         return
     }
+    s.vacateFrom(n)
     p I64 = n - 1 + firstChunk               # where element n - 1 lives, as At finds it
     k I64 = highBit(p) - firstChunkLog
     s.nChunks = k + 1
@@ -268,14 +270,14 @@ fn (l mut List<T>&) TakeAt(i I64) T ? ListError.OUT_OF_RANGE {
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
     c := s.chunk(k)
-    x := c[o]
-    for n in range s.count - 1 - i {          # each element after i into the place before it, chunk by chunk
+    x := c[o].vacate()
+    for n in range s.count - 1 - i {          # each element after i moved into the place before it, chunk by chunk
         if o + 1 < c.Len() {
-            c[o] = c[o + 1]
+            c[o] = c[o + 1].vacate()
             o++
         } else {
             next := s.chunk(k + 1)
-            c[o] = next[0]
+            c[o] = next[0].vacate()
             c = next
             k++
             o = 0
@@ -300,13 +302,13 @@ fn (l mut List<T>&) Insert(i I64, x T) ? ListError.OUT_OF_RANGE {
     k I64 = highBit(p) - firstChunkLog
     o I64 = p - (firstChunk << k)
     c := s.chunk(k)
-    for n in range s.count - 1 - i {          # each element from the end down to i into the place after it
+    for n in range s.count - 1 - i {          # each element from the end down to i moved into the place after it
         if o > 0 {
-            c[o] = c[o - 1]
+            c[o] = c[o - 1].vacate()
             o--
         } else {
             before := s.chunk(k - 1)
-            c[0] = before[before.Len() - 1]
+            c[0] = before[before.Len() - 1].vacate()
             c = before
             k--
             o = before.Len() - 1
@@ -597,10 +599,35 @@ fn (l mut List<T>&) SwapRemove(i I64) ? ListError.OUT_OF_RANGE { try l.SwapTake(
 fn (l mut List<T>&) SwapTake(i I64) T ? ListError.OUT_OF_RANGE {
     s := l.s
     if i < 0 or i >= s.count { error ListError.OUT_OF_RANGE }
-    x := l.At(i)
+    x := s.vacateAt(i)
     s.dropLast()
-    if i < s.count { l.SetAt(i, s.tail[s.used]) }             # the last element, just dropped, into the gap
+    if i < s.count { l.SetAt(i, s.tail[s.used].vacate()) }    # the last element, just dropped, moved into the gap
     return x
+}
+
+# the element at position i, given, and its place left empty (vacate, docs/memory.md 3.4)
+fn (s mut listState<T>&) vacateAt(i I64) T {
+    if i < firstChunk { return s.first[i].vacate() }
+    p I64 = i + firstChunk
+    k I64 = highBit(p) - firstChunkLog
+    return s.chunks[k][p - (firstChunk << k)].vacate()
+}
+
+# lets go of every element from position n on (vacate, docs/memory.md 3.4), chunk by chunk. Both loops are counted, so
+# for elements whose letting go is nothing - every element, until early freeing (O8d) - the optimizer deletes them
+fn (s mut listState<T>&) vacateFrom(n I64) {
+    if n >= s.count { return }
+    p0 I64 = n + firstChunk                  # where the first and the last element live, as At finds them
+    p1 I64 = s.count - 1 + firstChunk
+    k0 I64 = highBit(p0) - firstChunkLog
+    k1 I64 = highBit(p1) - firstChunkLog
+    for k in range k0, k1 + 1 {
+        c := s.chunk(k)
+        base I64 = firstChunk << k           # the position of c[0]
+        lo I64 = p0 - base if k == k0 else 0
+        hi I64 = p1 - base + 1 if k == k1 else c.Len()
+        for j in range lo, hi { c[j].vacate() }
+    }
 }
 
 # whether two Lists hold equal elements in the same order - "==" (E10a), each pair by its own "==", as two arrays compare

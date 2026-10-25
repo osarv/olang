@@ -999,8 +999,8 @@ compilation failed with 2 errors
 derivedhelpercount.olang:12:33: error[C2d]: this builds through a '&p' field whose scope is not known here - build where it lives, in the function that knows
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
       |                                 ^~~~~
-$ROOT/std/prelude/list.olang:455:21: note: in the standard library's code, here
-  455 |             if keep(x) { c++ }
+$ROOT/std/prelude/list.olang:457:21: note: in the standard library's code, here
+  457 |             if keep(x) { c++ }
       |                     ^
 derivedhelpercount.olang:12:33: note: instantiated here, with T = Bag&
    12 |     try io.Println($bags.Iter().Count(fn(b) { return b.items.Len() == 0 }))
@@ -2775,8 +2775,8 @@ compilation failed with 1 error
 o14bfoldshort.olang:11:32: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    11 |         longest = words.Iter().Fold(words[0], fn(best, w) { return w if w.Len() > best.Len() else best })
       |                                ^~~~
-$ROOT/std/prelude/list.olang:475:5: note: the callee requires it because of this statement
-  475 |     return acc
+$ROOT/std/prelude/list.olang:477:5: note: the callee requires it because of this statement
+  477 |     return acc
       |     ^~~~~~
 compilation failed with 1 error
 === o14btypevar.olang
@@ -3777,8 +3777,8 @@ compilation failed with 2 errors
 rv3roclone.olang:6:10: error[T25c]: 'Clone' keeps what its parameter 'l' reaches where it can be written, and this List<List<I64>> is read-only - pass a writable one
     6 |     c := ro.Clone()
       |          ^~
-$ROOT/std/prelude/list.olang:350:5: note: 'l' is declared here
-  350 | fn (l List<T>&) Clone() List<T> {
+$ROOT/std/prelude/list.olang:352:5: note: 'l' is declared here
+  352 | fn (l List<T>&) Clone() List<T> {
       |     ^~~~~~~~~~
 compilation failed with 1 error
 === rv3rofilter.olang
@@ -5824,6 +5824,11 @@ unseen.olang:7:4: error[B9c]: this top-level condition uses what exists only in 
     7 | if h() {
       |    ^~~
 compilation failed with 1 error
+=== vacate01outside.olang
+vacate01outside.olang:5:7: error[M19]: I64 has no method 'vacate'
+    5 |     x.vacate()
+      |       ^~~~~~
+compilation failed with 1 error
 === varlistcount.olang
 varlistcount.olang:4:5: error[D12b]: 2 names need as many values, found 1
     4 |     a, b I32 = 1
@@ -5942,8 +5947,8 @@ compilation failed with 1 error
 vec27cloneshort.olang:10:18: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
    10 |         keep = w.Clone()
       |                  ^~~~~
-$ROOT/std/prelude/vec.olang:230:5: note: the callee requires it because of this statement
-  230 |     c.PushAll(v.s.data[:v.s.n])
+$ROOT/std/prelude/vec.olang:233:5: note: the callee requires it because of this statement
+  233 |     c.PushAll(v.s.data[:v.s.n])
       |     ^
 compilation failed with 1 error
 === vec54assertmsgreturn.olang

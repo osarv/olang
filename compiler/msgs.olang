@@ -360,6 +360,7 @@ type Diag enum {
     DefaultArgNoDefault
     AtomicNotPlace
     AtomicNotWritable
+    VacateNotPlace
     ConversionRepresentation
     ConvertNotNumber
     NotIndexable
@@ -1629,6 +1630,9 @@ fn AtomicNotPlace() Msg { return Msg(Diag.AtomicNotPlace, "P9", "an atomic opera
 
 # ERR_ATOMIC_NOT_WRITABLE
 fn AtomicNotWritable() Msg { return Msg(Diag.AtomicNotWritable, "P9", "this atomic operation writes its place, which must be writable") }
+
+# the prelude's vacate() on what is no writable place (docs/memory.md 3.4)
+fn VacateNotPlace() Msg { return Msg(Diag.VacateNotPlace, "M19d", "vacate() empties a place - a writable variable, field or element") }
 
 # ERR_CONVERSION_REPRESENTATION
 fn ConversionRepresentation(ty1 String&, ty2 String&) Msg { return Msg(Diag.ConversionRepresentation, "T29", $ty1 " cannot become " $ty2 " - their representations differ") }

@@ -9971,6 +9971,18 @@ fn (c mut Checker&) suppliedCall(sp source.Span, nsp source.Span, x ast.Expr&, r
         c.P.L.Mods[c.fr().Mi].Retires = true
         return c.prim(sp, types.VoidT, typed.PrimOp.Retire, c.value(rx, sp), null)
     }
+    if name == "vacate" and args.Len() == 0 and c.P.L.Mods[c.fr().Mi].Prelude {
+        # docs/memory.md 3.4, O8d: what a place holds given and the place left empty - as a statement, what it held let
+        # go of. The prelude's alone: it says which of a collection's positions are live, which the compiler cannot
+        # infer. A move out of the place (Take), which lowering makes a plain read where nothing is freed early
+        p := readPlace(rx)
+        if p is null or not c.placeWritable(p) {
+            c.err(c.operandAt(x), msgs.VacateNotPlace())
+            return c.unknown(sp)
+        }
+        c.noteWrite(p)
+        return typed.Expr.Take(sp, p.Type(), p)
+    }
     if name.StartsWith("Atomic") {
         op := typed.PrimOp.AtomicLoad
         want I64 = 0

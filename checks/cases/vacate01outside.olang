@@ -1,0 +1,6 @@
+# check: fail error[M19]: I64 has no method 'vacate'
+# round 4 of docs/memory.md (M19d, O8d): vacate() is the prelude's own - outside it no place has such a method
+fn main() {
+    x I64 = 3
+    x.vacate()
+}

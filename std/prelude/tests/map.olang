@@ -430,3 +430,34 @@ test "$ renders a Map's entries, not its buckets" {
     expect.Push("}")
     assert $m == expect.ToString()
 }
+
+# Take is Get and Remove in one (M19d): it gives the value and removes the key, failing with MISSING on a miss, and the
+# slot it empties is reused by the next key put - so a map whose keys come and go through Take stays its size. Text
+# values given by it are the very values put, read after the slot was reused
+fn mapTakes() I64 {
+    m := Map<I64, String&>()
+    for i in range 50 { m.Put(i, $i "!") }
+    t I64 = 0
+    for i in range 50 {
+        if i % 2 == 0 {
+            v := try m.Take(i) catch MapError { unreachable }
+            t += v.Len()
+        }
+    }
+    assert m.Len() == 25 and 4 not in m and 5 in m
+    missed I64 = 0
+    try m.Take(4) catch MapError { missed = -1 }
+    for i in range 25 { m.Put(100 + i, "x") }                   # the 25 slots Take emptied, filled again
+    assert m.Len() == 50 and (try m.Get(7) catch default "") == "7!"
+    return t * 10 + (try m.Take(7) catch default "").Len() + missed * 1000
+}
+mapTakesBaked := mapTakes()
+
+test "Take gives a key's value and removes it, evaluated while compiling as at run time" {
+    # the even keys 0..48: five of one digit, twenty of two, each with its '!'
+    assert mapTakesBaked == (5 * 2 + 20 * 3) * 10 + 2 - 1000
+    assert mapTakes() == mapTakesBaked
+    m := Map<String&, I64>()
+    m.Put("a", 1)
+    assert (try m.Take("a") catch default 0) == 1 and m.Len() == 0 and (try m.Take("a") catch default 9) == 9
+}

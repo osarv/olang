@@ -374,3 +374,28 @@ test "Vec: a Vec local that is returned, its text read back after the arena chur
     churn()
     assert w[0].text == "kept-3" and w[0].line == 3
 }
+
+# a removal empties the positions it no longer uses and a shift moves each element (M19d's vacate): SwapTake of the last
+# element moves nothing into its own place, and what Clear and Truncate emptied is filled again by Push - the same while
+# compiling as at run time
+fn vecVacated() I64 {
+    v := Vec<String&>()
+    for i in range 20 { v.Push($i) }
+    a := try v.SwapTake(19) catch default ""                 # the last: nothing moves into the gap
+    b := try v.SwapTake(0) catch default ""                  # the last moved into position 0
+    try v.Insert(3, "in") catch { unreachable }
+    c := try v.TakeAt(10) catch default ""
+    assert v[0] == "18" and v[3] == "in" and v[4] == "3" and v[10] == "10" and v.Len() == 18
+    v.Truncate(12)
+    for i in range 3 { v.Push("t" $i) }
+    assert v[11] == "11" and v[12] == "t0" and v.Len() == 15
+    v.Clear()
+    v.Push("z")
+    assert v[0] == "z" and v.Len() == 1
+    return a.Len() * 1000 + b.Len() * 100 + c.Len() * 10 + v.Len()
+}
+vecVacatedBaked := vecVacated()
+
+test "Vec: removals empty what they no longer use and shifts move, evaluated while compiling as at run time" {
+    assert vecVacatedBaked == 2000 + 100 + 10 + 1 and vecVacated() == vecVacatedBaked
+}

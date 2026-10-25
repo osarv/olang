@@ -24152,3 +24152,36 @@ undefined there (E6a), so `Rem` returns 0 for any divisor -1 without computing i
 `try x.SliceOf(0, n).Get(i)`. `make fuzz`'s default seed was the text `seed`: the bootstrap's `SEED = seed` (the seed's
 directory) overrode the fuzz targets' `SEED ?= 1` - the directory is `SEED_DIR` now. Seeds 7100-7139 and 7300-7359: no
 findings; the scope fuzzer on 9500-9539 none.
+
+## Memory round 4: the prelude lets go explicitly (M19d, O8d, 2026-10-25)
+
+docs/memory.md's round 4. A collection's invariant - which of its positions are live - is the prelude's to know, not the
+compiler's: after a shift the last position still holds the bits of an element that now lives one place down, and after
+`Pop` the popped position holds the bits of an element the caller now has. An early-free analysis reading the
+collection's code could only take such a position for a second holder. So the prelude now says what it stops holding,
+with an operation only it has: `p.vacate()` gives what the place `p` holds and leaves `p` empty; as a statement it lets
+go of it. The checker accepts it on any writable place, in a prelude module only (`error[M19d]` on anything else; outside
+the prelude no place has the method), and builds it as the typed core's `Take` of the place, which lowering makes a plain
+read - the slot keeps its bits, which nothing reads again. So the evaluator and `interpret`, which run the lowered code,
+needed nothing.
+
+What vacates: `List` - `Pop`, `TakeAt`, `RemoveAt` (through `TakeAt`), `Insert`'s and `TakeAt`'s shifts, `SwapTake` and
+`SwapRemove`, `Truncate`, `Clear` (through two private helpers, `vacateAt` and `vacateFrom`); `Vec` - the same, plus the
+copy into a grown buffer (a move, though the old buffer is retired anyway); `Map` - `Remove` and `Clear` vacate each
+emptied entry before its slot goes to the free list, and the new `Take(k)` (Get and Remove in one, `MapError.MISSING` on
+a miss) moves the value out and vacates the key. `Vec.Clear` became `Truncate(0)`; `SwapTake` of the last element no
+longer stores the element back into its own, now dead, position.
+
+Measured: a loop of vacates over numbers must cost nothing, or `Clear` would cost per element. `List.vacateFrom` walks
+the chunks with counted loops (a `for` with a condition the optimizer cannot bound would survive as an empty loop).
+Callgrind at `-target x86-64-v3`, a program doing Pop, TakeAt, SwapTake, Insert, Truncate, Clear on a List and a Vec of
+300 elements and Remove/Clear on a Map of 40, 2000 times: 52,188,705 instructions with the old prelude, 52,176,706 with
+the new (6 fewer an iteration: the guard in SwapTake). The bench programs use no removal.
+
+Tests: a Take test (hits, a miss, slots reused, text values read after reuse) and one per List and Vec walking every
+removal across chunk boundaries with text elements, each baked while compiling (K2) and run. A checks case: `vacate()`
+outside the prelude is an unknown method.
+
+The two-step build this needed, worth knowing: the compiler's own source uses the prelude's List and Map, so a compiler
+that does not know `vacate` cannot build a prelude that uses it. The compiler was built first with the old prelude, then
+by itself with the new one; the seed is regenerated (`make seed`) so the bootstrap from nothing goes through.

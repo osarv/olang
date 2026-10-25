@@ -601,7 +601,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Vec's replaced buffer is such storage: it stays where the Vec lives until that scope closes. `own`, `take`, loans and
   borrowed copies (O30-O42, T25e, E34, built 2026-10-10 to -11) are removed from the language; the rule numbers are
   retired, and `docs/own.md` is the record. The runtime keeps its region functions, renamed `__olang_region_*` and
-  driven from C by a checks scenario, for the port.
+  driven from C by a checks scenario, for the port. **Round 4 (2026-10-25)**: the prelude says what it lets go of -
+  `p.vacate()`, prelude-only like `retire()`, gives what a place holds and leaves it empty; List's, Vec's and Map's
+  removals vacate the positions they empty and every shift moves with it, so no position past a collection's end holds
+  a duplicate. Compiled as a plain read, so nothing changes at run time (a removal loop of them is deleted; callgrind
+  over Pop/TakeAt/SwapTake/Insert/Truncate/Clear/Remove unchanged). Decided (mine): `Vec.Clear` is `Truncate(0)`;
+  `SwapTake` of the last element moves nothing into its own place; `List.Clear`/`Truncate` vacate by counted loops, which
+  the optimizer can delete.
 - **Recorded limits:** long-lived mutated structures only grow (ledger QF; `docs/memory.md`'s early freeing, round
   6); a value `List<String&>` has one scope for chunks and referents (G11); a few over-rejections are left for the
   port's §8 pass.
@@ -736,8 +742,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   trait's module). Not done: a named constant adapting like a literal (`f F32 = Pi` is an error; `F32(Pi)` is written) -
   E4a covers literal-only expressions, not names. `tools/math_methods.olang` migrates (oann later).
 - **Collections in the prelude:** `List<T>` (chunked, never moves, a handle - a copy is a second name, `Clone()`
-  copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Update`, ordered walks by
-  insertion of slot), `Vec<T>` (below), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators (and arrays) have `Some Every` (renamed from `Any All`, the user's call 2026-10-24) `Count Fold Map Filter
+  copies; indexable, `RunFrom` walks), `Map<K, V>` (a handle; `Get` fails on a miss, `Take` is `Get` and `Remove` in
+  one, `Update`, ordered walks by insertion of slot), `Vec<T>` (below), `StringBuilder`. `Pair` is `std/pair` (2026-10-17, the user's call: "Pair goes in Std not prelude"). Iterators (and arrays) have `Some Every` (renamed from `Any All`, the user's call 2026-10-24) `Count Fold Map Filter
   ToList`.
 - **`Vec<T>` is the default growable array, and a handle (M19d, round 1 of `docs/memory.md`, 2026-10-17; the user's
   QAB, approved in advance).** Its record (buffer and count) is made where it is constructed; a copy is a second name,

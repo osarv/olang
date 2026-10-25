@@ -1,6 +1,6 @@
 ===  tests/Base.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -14,8 +14,8 @@
 | module std/prelude/vec
 | module tests/Base
 ===  tests/Lib.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -28,10 +28,32 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/Lib
-===  tests/runner.olang
+===  tests/any.olang
+| module std/arith
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/any
+|   sh tests/shared
+| module tests/shared
+|   arith std/arith
+|   pair std/pair
+===  tests/runner.olang
+| module std/arith
+| module std/pair
+| module std/prelude/argument
+| module std/prelude/array
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -54,15 +76,17 @@
 |   sh tests/shared
 |   wk tests/worker
 | module tests/shared
+|   arith std/arith
 |   pair std/pair
 | module tests/worker
 |   Base tests/Base
 |   rn tests/runner
 |   sh tests/shared
 ===  tests/shared.olang
+| module std/arith
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -75,11 +99,13 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/shared
+|   arith std/arith
 |   pair std/pair
 ===  tests/worker.olang
+| module std/arith
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -102,14 +128,15 @@
 |   sh tests/shared
 |   wk tests/worker
 | module tests/shared
+|   arith std/arith
 |   pair std/pair
 | module tests/worker
 |   Base tests/Base
 |   rn tests/runner
 |   sh tests/shared
 ===  tests/geom/measure.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -126,8 +153,8 @@
 | module tests/geom/rect
 |   measure tests/geom/measure
 ===  tests/geom/rect.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -143,10 +170,25 @@
 |   rect tests/geom/rect
 | module tests/geom/rect
 |   measure tests/geom/measure
+===  std/arith.olang
+| module std/arith
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
 ===  std/base64.olang
 | module std/base64
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -160,8 +202,8 @@
 | module std/prelude/vec
 ===  std/cancel.olang
 | module std/cancel
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -177,8 +219,8 @@
 | module std/cancel
 | module std/chan
 |   cancel std/cancel
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -192,8 +234,8 @@
 | module std/prelude/vec
 ===  std/crc32.olang
 | module std/crc32
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -207,8 +249,8 @@
 | module std/prelude/vec
 ===  std/csv.olang
 | module std/csv
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -222,8 +264,8 @@
 | module std/prelude/vec
 ===  std/deque.olang
 | module std/deque
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -237,8 +279,8 @@
 | module std/prelude/vec
 ===  std/ffi.olang
 | module std/ffi
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -252,8 +294,8 @@
 | module std/prelude/vec
 ===  std/filepath.olang
 | module std/filepath
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -267,8 +309,8 @@
 | module std/prelude/vec
 ===  std/flags.olang
 | module std/flags
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -282,8 +324,8 @@
 | module std/prelude/vec
 ===  std/heap.olang
 | module std/heap
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -297,8 +339,8 @@
 | module std/prelude/vec
 ===  std/hex.olang
 | module std/hex
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -318,8 +360,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -333,8 +375,8 @@
 | module std/prelude/vec
 ===  std/io.olang
 | module std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -348,8 +390,8 @@
 | module std/prelude/vec
 ===  std/json.olang
 | module std/json
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -364,8 +406,8 @@
 ===  std/linalg.olang
 | module std/linalg
 |   rand std/rand
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -381,8 +423,8 @@
 ===  std/net.olang
 | module std/net
 |   time std/time
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -401,8 +443,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -416,8 +458,8 @@
 | module std/prelude/vec
 ===  std/pair.olang
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -430,8 +472,8 @@
 | module std/prelude/text
 | module std/prelude/vec
 ===  std/rand.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -445,8 +487,8 @@
 | module std/prelude/vec
 | module std/rand
 ===  std/regex.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -462,8 +504,8 @@
 |   utf8 std/utf8
 | module std/utf8
 ===  std/set.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -478,8 +520,8 @@
 | module std/set
 ===  std/sha256.olang
 | module std/hex
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -494,8 +536,8 @@
 | module std/sha256
 |   hex std/hex
 ===  std/stats.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -509,8 +551,8 @@
 | module std/prelude/vec
 | module std/stats
 ===  std/sync.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -524,8 +566,8 @@
 | module std/prelude/vec
 | module std/sync
 ===  std/time.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -539,8 +581,8 @@
 | module std/prelude/vec
 | module std/time
 ===  std/utf8.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -565,8 +607,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -593,8 +635,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -649,8 +691,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -676,8 +718,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -788,8 +830,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -827,8 +869,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -853,8 +895,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1047,8 +1089,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1207,8 +1249,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1247,8 +1289,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1430,8 +1472,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1454,8 +1496,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1483,8 +1525,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1540,8 +1582,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1633,8 +1675,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1806,8 +1848,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -1872,8 +1914,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -2002,8 +2044,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -2266,8 +2308,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -2530,8 +2572,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -2561,8 +2603,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -2576,8 +2618,8 @@
 | module std/prelude/vec
 ===  compiler/msgs.olang
 | module compiler/msgs
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -2654,8 +2696,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -2988,8 +3030,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3029,8 +3071,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3099,8 +3141,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3116,8 +3158,8 @@
 | module compiler/scan
 |   token compiler/token
 | module compiler/token
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3220,8 +3262,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3472,8 +3514,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3494,8 +3536,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3524,8 +3566,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3539,8 +3581,8 @@
 | module std/prelude/vec
 ===  compiler/token.olang
 | module compiler/token
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3565,8 +3607,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3588,8 +3630,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3623,8 +3665,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3727,8 +3769,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3752,8 +3794,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3774,8 +3816,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3906,8 +3948,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3937,8 +3979,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3964,8 +4006,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -3989,8 +4031,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4106,8 +4148,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4133,8 +4175,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4347,8 +4389,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4372,8 +4414,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4563,8 +4605,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4629,8 +4671,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4654,8 +4696,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4679,8 +4721,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4831,8 +4873,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4856,8 +4898,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4883,8 +4925,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4910,8 +4952,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -4932,8 +4974,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5066,8 +5108,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5406,8 +5448,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5432,8 +5474,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5454,8 +5496,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5480,8 +5522,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5510,8 +5552,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5525,8 +5567,8 @@
 | module std/prelude/vec
 ===  fuzz/gen.olang
 | module fuzz/gen
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5540,8 +5582,8 @@
 | module std/prelude/vec
 ===  fuzz/scopegen.olang
 | module fuzz/scopegen
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5562,8 +5604,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5584,8 +5626,30 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+===  bench/dispatch.olang
+| module bench/dispatch
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/argument
+| module std/prelude/array
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5606,8 +5670,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5633,8 +5697,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5661,8 +5725,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5688,8 +5752,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5710,8 +5774,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5732,8 +5796,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5754,8 +5818,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5781,8 +5845,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5805,8 +5869,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5827,8 +5891,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5850,8 +5914,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5879,8 +5943,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5905,8 +5969,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5930,8 +5994,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5955,8 +6019,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -5979,8 +6043,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6001,8 +6065,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6023,8 +6087,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6045,8 +6109,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6059,8 +6123,8 @@
 | module std/prelude/text
 | module std/prelude/vec
 === -t tests/Base.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6074,8 +6138,8 @@
 | module std/prelude/vec
 | module tests/Base
 === -t tests/Lib.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6088,10 +6152,32 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/Lib
-=== -t tests/runner.olang
+=== -t tests/any.olang
+| module std/arith
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+| module tests/any
+|   sh tests/shared
+| module tests/shared
+|   arith std/arith
+|   pair std/pair
+=== -t tests/runner.olang
+| module std/arith
+| module std/pair
+| module std/prelude/argument
+| module std/prelude/array
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6116,15 +6202,17 @@
 |   time std/time
 |   wk tests/worker
 | module tests/shared
+|   arith std/arith
 |   pair std/pair
 | module tests/worker
 |   Base tests/Base
 |   rn tests/runner
 |   sh tests/shared
 === -t tests/shared.olang
+| module std/arith
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6137,11 +6225,13 @@
 | module std/prelude/text
 | module std/prelude/vec
 | module tests/shared
+|   arith std/arith
 |   pair std/pair
 === -t tests/worker.olang
+| module std/arith
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6166,14 +6256,15 @@
 |   time std/time
 |   wk tests/worker
 | module tests/shared
+|   arith std/arith
 |   pair std/pair
 | module tests/worker
 |   Base tests/Base
 |   rn tests/runner
 |   sh tests/shared
 === -t tests/geom/measure.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6190,8 +6281,8 @@
 | module tests/geom/rect
 |   measure tests/geom/measure
 === -t tests/geom/rect.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6207,10 +6298,25 @@
 |   rect tests/geom/rect
 | module tests/geom/rect
 |   measure tests/geom/measure
+=== -t std/arith.olang
+| module std/arith
+| module std/prelude/argument
+| module std/prelude/array
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
 === -t std/base64.olang
 | module std/base64
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6224,8 +6330,8 @@
 | module std/prelude/vec
 === -t std/cancel.olang
 | module std/cancel
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6241,8 +6347,8 @@
 | module std/cancel
 | module std/chan
 |   cancel std/cancel
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6256,8 +6362,8 @@
 | module std/prelude/vec
 === -t std/crc32.olang
 | module std/crc32
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6271,8 +6377,8 @@
 | module std/prelude/vec
 === -t std/csv.olang
 | module std/csv
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6286,8 +6392,8 @@
 | module std/prelude/vec
 === -t std/deque.olang
 | module std/deque
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6301,8 +6407,8 @@
 | module std/prelude/vec
 === -t std/ffi.olang
 | module std/ffi
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6316,8 +6422,8 @@
 | module std/prelude/vec
 === -t std/filepath.olang
 | module std/filepath
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6331,8 +6437,8 @@
 | module std/prelude/vec
 === -t std/flags.olang
 | module std/flags
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6346,8 +6452,8 @@
 | module std/prelude/vec
 === -t std/heap.olang
 | module std/heap
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6361,8 +6467,8 @@
 | module std/prelude/vec
 === -t std/hex.olang
 | module std/hex
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6385,8 +6491,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6400,8 +6506,8 @@
 | module std/prelude/vec
 === -t std/io.olang
 | module std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6421,8 +6527,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6437,8 +6543,8 @@
 === -t std/linalg.olang
 | module std/linalg
 |   rand std/rand
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6454,8 +6560,8 @@
 === -t std/net.olang
 | module std/net
 |   time std/time
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6474,8 +6580,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6489,8 +6595,8 @@
 | module std/prelude/vec
 === -t std/pair.olang
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6503,8 +6609,8 @@
 | module std/prelude/text
 | module std/prelude/vec
 === -t std/rand.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6518,8 +6624,8 @@
 | module std/prelude/vec
 | module std/rand
 === -t std/regex.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6535,8 +6641,8 @@
 |   utf8 std/utf8
 | module std/utf8
 === -t std/set.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6551,8 +6657,8 @@
 | module std/set
 === -t std/sha256.olang
 | module std/hex
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6567,8 +6673,8 @@
 | module std/sha256
 |   hex std/hex
 === -t std/stats.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6582,8 +6688,8 @@
 | module std/prelude/vec
 | module std/stats
 === -t std/sync.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6597,8 +6703,8 @@
 | module std/prelude/vec
 | module std/sync
 === -t std/time.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6612,8 +6718,8 @@
 | module std/prelude/vec
 | module std/time
 === -t std/utf8.olang
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6638,8 +6744,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6667,8 +6773,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6723,8 +6829,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6750,8 +6856,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6862,8 +6968,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6901,8 +7007,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -6927,8 +7033,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7133,8 +7239,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7293,8 +7399,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7333,8 +7439,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7528,8 +7634,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7552,8 +7658,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7581,8 +7687,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7638,8 +7744,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7731,8 +7837,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7916,8 +8022,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -7982,8 +8088,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -8112,8 +8218,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -8389,8 +8495,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -8666,8 +8772,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -8697,8 +8803,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -8712,8 +8818,8 @@
 | module std/prelude/vec
 === -t compiler/msgs.olang
 | module compiler/msgs
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -8790,8 +8896,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9137,8 +9243,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9178,8 +9284,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9248,8 +9354,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9265,8 +9371,8 @@
 | module compiler/scan
 |   token compiler/token
 | module compiler/token
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9391,8 +9497,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9655,8 +9761,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9677,8 +9783,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9707,8 +9813,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9722,8 +9828,8 @@
 | module std/prelude/vec
 === -t compiler/token.olang
 | module compiler/token
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9748,8 +9854,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9771,8 +9877,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9806,8 +9912,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9932,8 +10038,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9957,8 +10063,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -9979,8 +10085,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10117,8 +10223,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10148,8 +10254,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10175,8 +10281,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10200,8 +10306,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10317,8 +10423,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10344,8 +10450,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10570,8 +10676,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10595,8 +10701,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10798,8 +10904,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10864,8 +10970,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10889,8 +10995,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -10914,8 +11020,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11072,8 +11178,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11097,8 +11203,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11124,8 +11230,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11151,8 +11257,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11173,8 +11279,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11313,8 +11419,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11666,8 +11772,8 @@
 |   cancel std/cancel
 |   io std/io
 | module std/pair
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11692,8 +11798,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11714,8 +11820,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11740,8 +11846,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11770,8 +11876,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11785,8 +11891,8 @@
 | module std/prelude/vec
 === -t fuzz/gen.olang
 | module fuzz/gen
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11800,8 +11906,8 @@
 | module std/prelude/vec
 === -t fuzz/scopegen.olang
 | module fuzz/scopegen
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11822,8 +11928,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11844,8 +11950,30 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
+| module std/prelude/complex
+| module std/prelude/enums
+| module std/prelude/f8
+| module std/prelude/float
+| module std/prelude/hash
+| module std/prelude/iterator
+| module std/prelude/list
+| module std/prelude/map
+| module std/prelude/number
+| module std/prelude/text
+| module std/prelude/vec
+=== -t bench/dispatch.olang
+| module bench/dispatch
+|   io std/io
+|   os std/os
+| module std/cancel
+| module std/io
+| module std/os
+|   cancel std/cancel
+|   io std/io
+| module std/prelude/argument
+| module std/prelude/array
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11866,8 +11994,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11893,8 +12021,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11921,8 +12049,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11948,8 +12076,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11970,8 +12098,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -11992,8 +12120,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12014,8 +12142,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12041,8 +12169,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12065,8 +12193,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12087,8 +12215,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12110,8 +12238,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12139,8 +12267,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12165,8 +12293,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12190,8 +12318,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12215,8 +12343,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12239,8 +12367,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12261,8 +12389,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12283,8 +12411,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12305,8 +12433,8 @@
 | module std/os
 |   cancel std/cancel
 |   io std/io
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8
@@ -12325,8 +12453,8 @@
 |   lib example.com/me/tools/lib
 | module main
 |   T example.com/me/tools/lib
+| module std/prelude/argument
 | module std/prelude/array
-| module std/prelude/check
 | module std/prelude/complex
 | module std/prelude/enums
 | module std/prelude/f8

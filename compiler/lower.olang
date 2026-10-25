@@ -1545,17 +1545,11 @@ fn (ln mut lowering&) read(p typed.Place&, ty types.TypeId, sp source.Span) mir.
     return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(q))), sp)
 }
 
-# a move out of a place (E34): an own reference's Take; an owner held by value copied out and its zero value left
-# (owned references are being removed, docs/memory.md: nothing is released)
+# the prelude's p.vacate() (docs/memory.md 3.4): what the place holds, read. The slot keeps its bits, which nothing
+# reads again - the prelude vacates only positions it no longer uses - so a loop of vacates over numbers is deleted by
+# the optimizer and costs nothing
 fn (ln mut lowering&) take(p typed.Place&, ty types.TypeId, sp source.Span) mir.Operand {
-    q := ln.mk(ln.place(p))
-    if ln.dead { return mir.Operand.None }
-    t := ln.T
-    pt := p.Type()
-    if t.IsRef(pt) and (t.PermOf(pt) & types.Owning) != 0 { return ln.into(ty, mir.Rvalue.Take(q), sp) }
-    v := ln.into(pt, mir.Rvalue.Use(mir.Operand.Copy(q)), sp)
-    ln.emit(mir.Stmt.Assign(sp, q, mir.Rvalue.Use(mir.Operand.Const(pt, 0))))
-    return v
+    return ln.read(p, ty, sp)
 }
 
 # a temporary given storage (E12c): New in the site's scope, a destructor-bearing instance registered there (O16)

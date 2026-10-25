@@ -51,7 +51,7 @@ fn (s mut vecState<T>&) room(need I64, fill T) {
     old := s.data
     s.data = Array<T>(r, fill)
     nb := s.data
-    for i in range s.n { nb[i] = old[i] }
+    for i in range s.n { nb[i] = old[i].vacate() }
     old.retire()
 }
 
@@ -126,17 +126,20 @@ fn (v mut Vec<T>&) Pop() T ? VecError.EMPTY {
     s := v.s
     if s.n == 0 { error VecError.EMPTY }
     s.n--
-    return s.data[s.n]
+    return s.data[s.n].vacate()
 }
 
 # removes every element, keeping the buffer for the Pushes that follow
-fn (v mut Vec<T>&) Clear() { v.s.n = 0 }
+fn (v mut Vec<T>&) Clear() { v.Truncate(0) }
 
 # keeps the first k elements and removes the rest - nothing changes when there are k or fewer, and none is kept for a k of
 # 0 or less
 fn (v mut Vec<T>&) Truncate(k I64) {
     s := v.s
-    if k < s.n { s.n = k if k > 0 else 0 }
+    if k >= s.n { return }
+    n I64 = k if k > 0 else 0
+    for i in range n, s.n { s.data[i].vacate() }
+    s.n = n
 }
 
 # the elements, lent as an array - a window on the buffer as it is now, good until the Vec grows (a Push, a PushAll, an
@@ -156,8 +159,8 @@ fn (v mut Vec<T>&) RemoveAt(i I64) ? VecError.OUT_OF_RANGE { try v.TakeAt(i) }
 fn (v mut Vec<T>&) TakeAt(i I64) T ? VecError.OUT_OF_RANGE {
     s := v.s
     if i < 0 or i >= s.n { error VecError.OUT_OF_RANGE }
-    x := s.data[i]
-    for k in range i, s.n - 1 { s.data[k] = s.data[k + 1] }
+    x := s.data[i].vacate()
+    for k in range i, s.n - 1 { s.data[k] = s.data[k + 1].vacate() }
     s.n--
     return x
 }
@@ -170,9 +173,9 @@ fn (v mut Vec<T>&) SwapRemove(i I64) ? VecError.OUT_OF_RANGE { try v.SwapTake(i)
 fn (v mut Vec<T>&) SwapTake(i I64) T ? VecError.OUT_OF_RANGE {
     s := v.s
     if i < 0 or i >= s.n { error VecError.OUT_OF_RANGE }
-    x := s.data[i]
+    x := s.data[i].vacate()
     s.n--
-    s.data[i] = s.data[s.n]
+    if i < s.n { s.data[i] = s.data[s.n].vacate() }         # the last element moved into the gap
     return x
 }
 
@@ -184,7 +187,7 @@ fn (v mut Vec<T>&) Insert(i I64, x T) ? VecError.OUT_OF_RANGE {
     if s.n == s.data.Len() { s.room(s.n + 1, x) }
     k I64 = s.n
     for k > i {
-        s.data[k] = s.data[k - 1]
+        s.data[k] = s.data[k - 1].vacate()
         k--
     }
     s.data[i] = x

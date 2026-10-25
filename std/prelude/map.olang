@@ -16,7 +16,7 @@
 # A key or value that is a reference ("Map<String&, I32>") is stored as the reference - it must outlive the
 # map, which every call checks (O10b).
 
-# what a Map's Get fails with: no value for the key
+# what a Map's Get and Take fail with: no value for the key
 error MapError {
     MISSING
 }
@@ -134,6 +134,7 @@ fn (m mut Map<K, V>&) Remove(key K) Bool {
     prev mut mapSlot<K, V>?&s = null
     for f mut mapSlot<K, V>?&s = s.buckets[i], f is not null, f = f.next {
         if f.entry.Key == key {
+            f.entry.vacate()
             if prev is null { s.buckets[i] = f.next } else { prev.next = f.next }
             f.next = s.free
             s.free = f
@@ -145,6 +146,27 @@ fn (m mut Map<K, V>&) Remove(key K) Bool {
     return false
 }
 
+# removes key and gives its value - Get and Remove in one, failing with MISSING when there is none. Its slot is kept for
+# the next key put
+fn (m mut Map<K, V>&) Take(key K) V ? MapError {
+    s := m.s
+    i := s.bucketOf(key)
+    prev mut mapSlot<K, V>?&s = null
+    for f mut mapSlot<K, V>?&s = s.buckets[i], f is not null, f = f.next {
+        if f.entry.Key == key {
+            v := f.entry.Value.vacate()
+            f.entry.Key.vacate()
+            if prev is null { s.buckets[i] = f.next } else { prev.next = f.next }
+            f.next = s.free
+            s.free = f
+            s.count--
+            return v
+        }
+        prev = f
+    }
+    error MapError.MISSING
+}
+
 # removes every key and its value. The slots are kept for the keys put next, and the buckets stay as many as they
 # were, so emptying a map and filling it again allocates nothing
 fn (m mut Map<K, V>&) Clear() {
@@ -153,6 +175,7 @@ fn (m mut Map<K, V>&) Clear() {
         f mut mapSlot<K, V>?&s = s.buckets[i]
         for f is not null {
             after := f.next
+            f.entry.vacate()
             f.next = s.free
             s.free = f
             f = after
