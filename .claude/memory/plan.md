@@ -375,3 +375,10 @@ on sight per rules.md, "Code rules".
   (entry checks, ArgumentError.INVALID, outlives in the block), `checked` + CheckError removed (Get/SliceOf/Narrow,
   `as` fallible, std/arith Checked<T> + free functions), method type arguments, try binding + nesting rule, commutes;
   migration tools in olang fix. A soundness/semantics review before merging (it touches try and the evaluator).
+- QUEUED 2026-10-25 (the user: "build the error system as we have decided so far leaving today's questions out of
+  it"), to start after wt-lang25 merges (both rewrite the checker's error handling): from QAM (2026-10-18) -
+  `type IoError error { FULL  DENIED }` declarations (replacing `error IoError { }`); named sets `type LoadError error
+  os.Error, ParseError { TIMEOUT }` (members + own words, nesting flattens, words qualified, `catch LoadError` takes
+  all, usable after `?` and in function types, parenthesized form only inside a list); catch bindings used inside the
+  clause (`$e`, `e == Word`, `e == Type` + narrowing, `match e`, `error e`). LEFT OUT (open, (a)/(b)): storing errors
+  (assign/pass/fields/type args), the zero value, Result. Migration tool for the declaration syntax; olang fix.
