@@ -1108,3 +1108,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   arithmetic without `checked`: (a) prelude `Checked<T>` wrapper with failing operators, (b) methods
   `try a.AddChecked(b)`, (c) both (rec c); (3) fallible operator methods stay (rec yes); (4) `Saturating<T>`/wrapping
   wrappers later, additive (rec yes). In effect: E31 as built.
+- Condition form RE-ASKED 2026-10-25 (the user: "ask me about the condition form then again"): (1) short form + `if`;
+  (2) always `if` (`y I32 if y > x`) - recommended now (one spelling; short form's `Array<I32> > x` parsing trap);
+  (3) brackets `y I32 [y > x]`. In effect: undecided.
