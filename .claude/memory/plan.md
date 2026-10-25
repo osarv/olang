@@ -423,3 +423,8 @@ on sight per rules.md, "Code rules".
   walks, match T on traits, building through constructors), json.Encode(any value)/json.Decode<T>. Verified at abf8c93
   (goldens recaptured at 5e47b17). Left: nullability not reflected (no T.Nullable), `x Tree.Cases` unknown silently,
   G38 vs G13 wording. mem47 (rounds 4/6/7) is merging this tip, then verifies.
+- 2026-10-25 CEST: mem47 merged (3da3976, verified): memory rounds 4 (vacate, Map.Take), 6 (early freeing O8d,
+  free.olang, -memory report, fuzz free), 7 (x.Destroy() C9b; std/net Close() gone), generators/errdefer walked by
+  early freeing, seed regenerated. Owed to the next bulk review: round 6's relaxations (view last use, pins, callback
+  summaries, element stores, per-site task reach) and round 7's (a destructor/Str/Eq/Hash that lets go keeps only what
+  it may let go of). Round 5 (removing own/take from compiler/) not built.
