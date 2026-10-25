@@ -1170,3 +1170,7 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   std/arith for Checked; (2) Option<T> for values only, Option<T&> an error naming T?&; (3) Result<T, E> with errors as
   values (`catch E e`, `Result.Of(fn(): return load(p))`, `try r.Value()`); (4) APIs keep returning errors, never
   Option/Result (errors are errors) - rec yes to all.
+- QAY, the user 2026-10-25: "No." - wanted to see whether fallible functions could return Result (integration);
+  concluded it fails: a discarded Result statement (`io.Println(msg "#")`) compiles and silently drops the error (Rust
+  needs #[must_use]), where R8 makes it a compile error. SETTLED: errors stay; a fallible call is handled at the call.
+  RE-ASKED: Result/Option only as std storage types (made explicitly, `Result.Of(...)`, `Some(x)`), or drop them for now.
