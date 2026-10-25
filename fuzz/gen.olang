@@ -937,7 +937,7 @@ fn (g mut Gen&) fallibleCall(t I32, d I64) String& {
 fn (g mut Gen&) errType() String& {
     if not g.errs {
         g.errs = true
-        g.decls = $g.decls "error Err" $g.ci " {\n    A\n    B\n    C\n}\n"
+        g.decls = $g.decls "type Err" $g.ci " error {\n    A\n    B\n    C\n}\n"
     }
     return "Err" $g.ci
 }

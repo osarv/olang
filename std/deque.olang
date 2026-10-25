@@ -7,7 +7,7 @@
 # is the copy with storage of its own. As a Vec's, a replaced buffer stays where the Deque lives until that scope closes.
 
 # what a Deque's operations fail with: a Front, Back or Pop of an empty deque
-error Error {
+type Error error {
     EMPTY
 }
 

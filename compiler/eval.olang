@@ -3539,7 +3539,7 @@ fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
 }
 
 # a frame's block that ends in no call: the machine was asked for the call index of something else
-error NotACall { TERM }
+type NotACall error { TERM }
 
 fn (m mut Machine&) callIndex(fi I64, c mir.Call) I64 ? NotACall {
     t := m.cf[m.fs[fi].Fn].Terms[m.fs[fi].Block]
@@ -4365,7 +4365,7 @@ type Image struct() {
     Slots List<I64>   # each blob's allocation in the evaluator: storage two images reach is shared (interp.Bake)
 }
 
-error NotBaked {
+type NotBaked error {
     REFUSED
 }
 

@@ -34,7 +34,7 @@
 
 # what a List's operations fail with: a First, Last or Pop of an empty list (EMPTY), an IndexOf finding nothing
 # (NOT_FOUND), and a position outside the list given to TakeAt, RemoveAt, SwapTake, SwapRemove or Insert (OUT_OF_RANGE)
-error ListError {
+type ListError error {
     EMPTY
     NOT_FOUND
     OUT_OF_RANGE

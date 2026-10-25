@@ -2,7 +2,7 @@
 # D8e: a noreturn call leaves for D10a, fits where any value is expected, and a noreturn function fits a function type
 # with no result
 import "std/os"
-error E {
+type E error {
     NO
 }
 fn die(code I32) noreturn { os.Exit(code) }

@@ -46,7 +46,7 @@ DeclarePrefix String& = "' is declared read-only here - declare it '"
 # ---- the text pass: puns ----
 
 # what punAt fails with: no pun starts there
-error noPun {
+type noPun error {
     HERE
 }
 

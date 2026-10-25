@@ -4,7 +4,7 @@
 | -- diagnostics
 | error  6:26
 === checks/cases/bareadj.olang
-| ERRORS 2:1-2:14
+| ERRORS 2:1-2:19
 | FN 3:1-3:23
 | -- diagnostics
 | error E11b 6:11
@@ -326,7 +326,7 @@
 | -- diagnostics
 | error S1b 5:13
 === checks/cases/s8bfixedbuild.olang
-| ERRORS 2:1-2:14
+| ERRORS 2:1-2:19
 | FN 6:1-6:30
 | RETURN 6:20-6:28
 | VAR 3:1-3:17
@@ -339,6 +339,14 @@
 | -- diagnostics
 | error  4:14
 | error L16 4:12
+=== checks/cases/t19emptywords.olang
+| FN 4:1-4:14
+| -- diagnostics
+| error  3:16
+=== checks/cases/t19nowordsnomembers.olang
+| FN 4:1-4:14
+| -- diagnostics
+| error  3:13
 === checks/cases/t30sep.olang
 | FN 4:1-4:16
 | -- diagnostics
@@ -354,7 +362,6 @@
 | -- diagnostics
 | error D12b 4:5
 === checks/fixtures/fix/before25.olang
-| ERRORS 5:1-5:16
 | FN 10:1-10:60
 | FN 11:1-11:60
 | IF 10:23-10:49
@@ -369,9 +376,9 @@
 | -- diagnostics
 | error  12:27
 | error  16:20
+| error L9 5:1
 === checks/fixtures/fix/old.olang
 | CATCH 15:22-15:41
-| ERRORS 4:1-4:19
 | EXPR 14:5-14:36
 | EXPR 16:5-16:23
 | FN 13:1-17:2
@@ -380,6 +387,7 @@
 | -- diagnostics
 | error  6:9
 | error  8:26
+| error L9 4:1
 === checks/fixtures/format/broken.olang
 | -- diagnostics
 | error  3:1

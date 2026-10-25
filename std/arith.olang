@@ -9,7 +9,7 @@
 # stay unchecked - a check is a call someone wrote (E15a).
 
 # what a checked operation fails with
-error Error {
+type Error error {
     OVERFLOW           # a result the type cannot hold: an integer's true result out of its range, a shift's true
                        # value x * 2^n, a finite float result made infinite from finite operands
     DIVIDE_BY_ZERO     # an integer "/" or "%" by zero, or a finite nonzero float divided by zero

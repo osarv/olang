@@ -116,13 +116,18 @@ type Compr struct(Elem TypeRef?&, Value Expr&, Key source.NameId, Name source.Na
     Filter
 }
 
-# catch A + B.word { block } default v, w - a clause with no items takes every error left (R9b)
-type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defaults Array<Expr&>&, Braced Bool = true) {
+# catch A, B.word e { block } default v, w - a clause with no items takes every error left (R9b); e names the error it
+# took, in the clause alone (R11b) - "catch e" with no items is written as one item, which the resolver finds is no
+# error type (Bind 0 then)
+type Catch struct(Sp source.Span, Items Array<Path&>&, Body Array<Stmt&>&, Defaults Array<Expr&>&, Braced Bool = true
+                  Bind source.NameId = source.NameId(0), BindSp source.Span = source.Span(0, 0)) {
     Sp
     Items
     Body
     Defaults
     Braced     # whether a block is written - "catch E { }" has one, empty, "catch E default v" none
+    Bind
+    BindSp
 }
 
 # a match, a statement's or a value's; OnType for "match T" on an introduced type variable, whose cases are types
@@ -322,7 +327,8 @@ type Decl enum {
     Type(sp source.Span, t TypeDecl&)
     Global(sp source.Span, v VarDecl&)
     Import(sp source.Span, alias source.NameId, path source.Span)   # the path's span holds its quotes
-    Errors(sp source.Span, name source.NameId, words Array<source.NameId>&)
+    # type Name error [Member, ...] [{ WORDS }] (T19, T19a): an error type's own words, and the members of a named set
+    Errors(sp source.Span, name source.NameId, words Array<source.NameId>&, members Array<Path&>&)
     Test(sp source.Span, name source.Span, body Array<Stmt&>&)
     If(sp source.Span, i TopIf&)
     Link(sp source.Span, path source.Span)     # link "name" (X9): the path's span holds its quotes

@@ -1,0 +1,8 @@
+# check: fail error[R3a]: the error raised again can be P.B, and this function's '?' names P.A
+# R3a, R1c: word by word
+type P error { A, B }
+fn f() ? P { error P.A }
+fn g() ? P.A {
+    try f() catch e { error e }
+}
+fn main() { }

@@ -2,7 +2,7 @@
 # that knows it only as Indexable all walk it run by run through RunFrom, an iterator helper walks its chunks, and none
 # of them calls At. I16 so that nothing in the prelude instantiates it too.
 
-error Stop {
+type Stop error {
     HERE
 }
 fn total<C Indexable<T>, T>(c C&) I64 {

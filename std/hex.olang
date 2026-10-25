@@ -1,7 +1,7 @@
 # hex - bytes as hexadecimal text, two digits a byte: Encode writes lowercase ("48656c6c6f"), Decode reads either case
 # and fails with Error.INVALID for an odd length or a character that is no hex digit. Imported with `import "std/hex"`.
 
-error Error {
+type Error error {
     INVALID
 }
 

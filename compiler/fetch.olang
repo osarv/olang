@@ -14,7 +14,7 @@ import "std/os"
 import "std/filepath"
 import "std/io"
 
-error FetchError {
+type FetchError error {
     BAD_NAME        # M23a: a part of the path git and the cache cannot be trusted with
     NOT_A_COMMIT    # M23b: the lock line names no commit
     FAILED          # M23a: git could not fetch it
@@ -80,7 +80,7 @@ fn (f mut Fetcher&) load() {
 }
 
 # Locked's miss: the lock file has no line for the key
-error unlocked {
+type unlocked error {
     KEY
 }
 

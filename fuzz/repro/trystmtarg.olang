@@ -8,7 +8,7 @@
 # isTried, which the checker sets on a try-expr's call and never on a try statement's; the statement now marks its
 # call for the evaluation (ctTried), the computed-callee path too. Fixed.
 import "std/io"
-error E {
+type E error {
     A
     B
 }

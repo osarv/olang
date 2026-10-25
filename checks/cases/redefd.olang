@@ -2,6 +2,6 @@
 # flags: -define Level=3
 # B10: a declaration of a name -define defines is an error - unless it gives the constant a default (B10c), which a function
 # never does
-error E { X }
+type E error { X }
 fn Level() I32 { return 1 }
 fn main() ? E { }

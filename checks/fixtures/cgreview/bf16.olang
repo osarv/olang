@@ -1,7 +1,7 @@
 # a BF16 inside a fallible call's result, read in another block: LLVM 18 at -O0 carried it across the branch unwidened
 import "std/io"
 
-error E {
+type E error {
     BAD
 }
 

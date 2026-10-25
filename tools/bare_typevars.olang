@@ -85,7 +85,7 @@ fn paramNameBefore(src String&, i I64, known Map<String&, Bool>&) Bool {
 }
 
 # what occurrenceAt fails with: no type variable is written there
-error notVariable {
+type notVariable error {
     HERE
 }
 

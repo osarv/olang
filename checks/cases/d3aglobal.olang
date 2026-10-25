@@ -1,5 +1,5 @@
 # check: fail D3a
-error E { X }
+type E error { X }
 Count I32 = 1
 fn helper() { }
 fn f() { Count := 2 }

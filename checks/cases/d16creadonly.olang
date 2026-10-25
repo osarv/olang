@@ -1,5 +1,5 @@
 # check: fail error[D16c]: a lambda's captures are read-only
-error E { X }
+type E error { X }
 fn main() ? E {
     n I32 = 1
     f := fn() { n = 2 }

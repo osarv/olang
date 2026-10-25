@@ -238,7 +238,7 @@ fn (p mut Program&) TypeEntry(mi I64, name source.NameId) I64 {
 }
 
 # FindDecl's miss: no module of that identity, or no type of that name in it
-error Undeclared {
+type Undeclared error {
     TYPE
 }
 
@@ -582,8 +582,16 @@ fn (p mut Program&) markOf(t ast.TypeRef?&) source.NameId {
     }
 }
 
-# an error set's item: an error type, its own module's or one an alias chain reaches (names records the head)
+# an error set's item: an error type, its own module's or one an alias chain reaches (names records the head); Unknown
+# for a type of another kind
 fn (p mut Program&) errorType(c Context&, e ast.Path&) types.TypeId {
+    t := p.namedType(c, e)
+    if t == types.UnknownT or p.T.DeclKindOf(p.T.DeclOf(t)) != types.DeclKind.Error { return types.UnknownT }
+    return t
+}
+
+# a declared type a dotted path names, of any kind
+fn (p mut Program&) namedType(c Context&, e ast.Path&) types.TypeId {
     ref := p.R.Use(p.file(c.Mi), e.Sp.Start)
     n := e.Parts.Len()
     if n == 1 {
@@ -617,64 +625,171 @@ fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
 }
 
 # an error set as written (R1, R1c): its items in order, the words of one type one entry, a type named whole holding
-# every word of it; "?" alone the inferred set's mark (R1a)
+# every word of it, a named set its members (T19a); "?" alone the inferred set's mark (R1a)
 fn (p mut Program&) errorList(c Context&, has Bool, items Array<ast.Path&>&) types.ListId {
     es List<types.TypeId>
     if has and items.Len() == 0 { es.Push(types.DefaultErrT) }
     if has {
+        flat List<types.TypeId>
         for e in items {
-            t := p.errorSetItem(c, e)
-            k I64 = -1
-            for j in range es.Len() {
-                if t != types.UnknownT and p.T.ErrOf(es[j]) == p.T.ErrOf(t) { k = j }
-            }
-            if k < 0 {
-                es.Push(t)
-            } else if p.T.KindOf(es[k]) != types.Kind.ErrWords or p.T.KindOf(t) != types.Kind.ErrWords {
-                es[k] = p.T.ErrOf(t)
-            } else {
-                es[k] = p.T.ErrWords(p.T.ErrOf(t), p.T.ErrMask(es[k]) | p.T.ErrMask(t))
-            }
+            p.ErrorItemKnown(c, e)
+            p.errorSetEntries(c, e, flat)
         }
+        p.mergeEntries(flat, es)
     }
     return p.T.List(es.ToArray())
 }
 
-# the words an error type declares (T19), in order - its declaration found among its module's, a top-level if's too
-fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
-    ds := p.L.Mods[p.T.DeclModule(d)].Decls
-    w := wordsIn(ds, p.T.DeclName(d))
-    return w if w.Len() > 0 else Array<source.NameId>(0)
+fn (p mut Program&) ErrorList(c Context&, has Bool, items Array<ast.Path&>&) types.ListId { return p.errorList(c, has, items) }
+
+# entries merged as one set holds them (R1c): the words of one type one entry, a type named whole holding every word
+fn (p mut Program&) mergeEntries(flat List<types.TypeId>&, es mut List<types.TypeId>&) {
+    for t in flat {
+        k I64 = -1
+        for j in range es.Len() {
+            if t != types.UnknownT and p.T.ErrOf(es[j]) == p.T.ErrOf(t) { k = j }
+        }
+        if k < 0 {
+            es.Push(t)
+        } else if p.T.KindOf(es[k]) != types.Kind.ErrWords or p.T.KindOf(t) != types.Kind.ErrWords {
+            es[k] = p.T.ErrOf(t)
+        } else {
+            es[k] = p.T.ErrWords(p.T.ErrOf(t), p.T.ErrMask(es[k]) | p.T.ErrMask(t))
+        }
+    }
 }
 
-fn wordsIn(ds Array<ast.Decl&>&, name source.NameId) Array<source.NameId>&ds {
-    if ds.Len() == 0 { return Array<source.NameId>(0) }
+# an error set's item as the entries it stands for (T19a): an error type, or one of its words, itself; a named set its
+# members in order, each flattened, then its own words where it declares any - a set reached again on its way (a cycle,
+# said at its declaration) and an unknown item stand for nothing (Unknown, an unknown one)
+fn (p mut Program&) errorSetEntries(c Context&, e ast.Path&, out mut List<types.TypeId>&) {
+    seen List<types.DeclId>
+    p.entriesOf(p.errorSetItem(c, e), out, seen)
+}
+
+fn (p mut Program&) ErrorSetEntries(c Context&, e ast.Path&, out mut List<types.TypeId>&) { p.errorSetEntries(c, e, out) }
+
+fn (p mut Program&) ErrorSetItem(c Context&, e ast.Path&) types.TypeId { return p.errorSetItem(c, e) }
+
+# the entries an error type or a set stands for (T19a)
+fn (p mut Program&) EntriesOf(t types.TypeId, out mut List<types.TypeId>&) {
+    seen List<types.DeclId>
+    p.entriesOf(t, out, seen)
+}
+
+fn (p mut Program&) entriesOf(t types.TypeId, out mut List<types.TypeId>&, seen mut List<types.DeclId>&) {
+    if t == types.UnknownT or p.T.KindOf(t) != types.Kind.Named {
+        out.Push(t)
+        return
+    }
+    d := p.T.DeclOf(t)
+    ms := p.ErrorMembers(d)
+    if ms.Len() == 0 {
+        out.Push(t)
+        return
+    }
+    for s in seen {
+        if s == d { return }
+    }
+    seen.Push(d)
+    mc := Context(p.T.DeclModule(d), -1)
+    for m in ms { p.entriesOf(p.errorSetItem(mc, m), out, seen) }
+    seen.Pop()!
+    if p.ErrorWords(d).Len() > 0 { out.Push(t) }
+}
+
+# R1, T19a: an error set's item names an error type, one of its words or a named set - said once where it does not,
+# false then
+fn (p mut Program&) ErrorItemKnown(c Context&, e ast.Path&) Bool {
+    if e.Parts.Len() == 0 or p.errorSetItem(c, e) != types.UnknownT { return true }
+    at := p.at(c.Mi, e.Sp)
+    t := p.namedType(c, e)
+    if t != types.UnknownT {
+        p.L.Diags.ErrorOncePerLine(at, msgs.NotAnErrorType(msgs.Tok(p.text(p.T.DeclName(p.T.DeclOf(t))))))
+        return false
+    }
+    n := e.Parts.Len()
+    if n >= 2 {
+        et := p.errorType(c, ast.Path(e.Sp, e.Parts[:n - 1]))
+        if et != types.UnknownT {
+            w := e.Parts[n - 1]
+            ws := p.ErrorWords(p.T.DeclOf(et))
+            far := false
+            for i in range ws.Len() {
+                if ws[i] == w { far = true }
+            }
+            nm := p.text(p.T.DeclName(p.T.DeclOf(et)))
+            if far {
+                p.L.Diags.ErrorOncePerLine(at, msgs.ErrorWordTooFar(nm))
+            } else {
+                p.L.Diags.ErrorOncePerLine(at, msgs.NoSuchErrorWord(nm, msgs.Tok(p.text(w))))
+            }
+            return false
+        }
+    }
+    text := p.L.Mods[c.Mi].Src!.Text[I64(e.Sp.Start):I64(e.Sp.End)]
+    p.L.Diags.ErrorOncePerLine(at, msgs.UnknownErrorType(msgs.Tok(text)))
+    return false
+}
+
+# whether an error type is a named set (T19a): it declares members
+fn (p mut Program&) IsErrorSet(t types.TypeId) Bool {
+    return t != types.UnknownT and p.T.KindOf(t) == types.Kind.Named and p.ErrorMembers(p.T.DeclOf(t)).Len() > 0
+}
+
+# the words an error type declares (T19), in order - its declaration found among its module's, a top-level if's too
+fn (p mut Program&) ErrorWords(d types.DeclId) Array<source.NameId>&p {
+    e := p.errorDecl(d)
+    if e is null { return Array<source.NameId>(0) }
+    return match e {
+        case ast.Decl.Errors(_, _, words, _) => words
+        case _ => Array<source.NameId>(0)
+    }
+}
+
+# the members a named error set declares (T19a), in order, as written in its module
+fn (p mut Program&) ErrorMembers(d types.DeclId) Array<ast.Path&>&p {
+    e := p.errorDecl(d)
+    if e is null { return Array<ast.Path&>(0) }
+    return match e {
+        case ast.Decl.Errors(_, _, _, members) => members
+        case _ => Array<ast.Path&>(0)
+    }
+}
+
+# an error type's declaration (T19), among its module's and a top-level if's; null for none
+fn (p mut Program&) errorDecl(d types.DeclId) ast.Decl?&p {
+    return errorDeclIn(p.L.Mods[p.T.DeclModule(d)].Decls, p.T.DeclName(d))
+}
+
+fn errorDeclIn(ds Array<ast.Decl&>&, name source.NameId) ast.Decl?&ds {
+    if ds.Len() == 0 { return null }
     for d in ds {
         match d {
-            case ast.Decl.Errors(_, n, words) {
-                if n == name { return words }
+            case ast.Decl.Errors(_, n, _, _) {
+                if n == name { return d }
             }
             case ast.Decl.If(_, ti) {
-                w := wordsInIf(ti, name)
-                if w.Len() > 0 { return w }
+                e := errorDeclInIf(ti, name)
+                if e is not null { return e }
             }
             nomatch { }
         }
     }
-    return Array<source.NameId>(0)
+    return null
 }
 
-fn wordsInIf(ti ast.TopIf&, name source.NameId) Array<source.NameId>&ti {
+fn errorDeclInIf(ti ast.TopIf&, name source.NameId) ast.Decl?&ti {
     if ti.Then is not null {
-        w := wordsIn(ti.Then!.Decls, name)
-        if w.Len() > 0 { return w }
+        e := errorDeclIn(ti.Then!.Decls, name)
+        if e is not null { return e }
     }
     if ti.ElseIf is not null {
-        w := wordsInIf(ti.ElseIf!, name)
-        if w.Len() > 0 { return w }
+        e := errorDeclInIf(ti.ElseIf!, name)
+        if e is not null { return e }
     }
-    if ti.Else is not null { return wordsIn(ti.Else!.Decls, name) }
-    return Array<source.NameId>(0)
+    if ti.Else is not null { return errorDeclIn(ti.Else!.Decls, name) }
+    return null
 }
 
 # the module an alias of a module reaches, -1 for none
@@ -3146,7 +3261,7 @@ fn (p mut Program&) AnyDefault(r types.TypeId, name source.NameId) I64 {
 # ---- canonical texts ----
 
 # what a canonical text that names no type fails with
-error BadCanon {
+type BadCanon error {
     TEXT
 }
 
@@ -3337,7 +3452,7 @@ test "declared types and instances: laid out as C lays them out, their canonical
     dir := try os.MkTemp() catch os.Error { unreachable }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     l := testLoad(dir, ("type P struct(a U8, b I64, c U16) {\n    a\n    b\n    c\n}\ntype Box<T> struct(v T, n I64) {\n    v\n    n\n}\n"
-                       "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\nerror E { BAD }\n"
+                       "type Shape enum {\n    Dot\n    Rect(w I32, h I64)\n}\ntype E error { BAD }\n"
                        "type Meters extends I32\ntype Buf struct() { a := Array<U8>(5) }\nfn main() ? { }\n"))
     r := names.Resolver(l)
     r.Resolve()

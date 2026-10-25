@@ -3974,6 +3974,7 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
         case typed.Stmt.Jump(_, _, _) { }
         case typed.Stmt.Return(sp, x) { s.ret(sp, x) }
         case typed.Stmt.Raise(_, _, _) { }
+        case typed.Stmt.Reraise(_, x, _) { s.val(x, Term.None) }
         case typed.Stmt.Exit(_, _, m) { s.val(m, Term.None) }
         case typed.Stmt.Assert(_, c, m) {
             s.val(c, Term.None)

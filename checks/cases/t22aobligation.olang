@@ -10,7 +10,7 @@ fn hang(a mut Node&, b Node&) {
 fn apply(f fn(a mut Node&, b Node&), a mut Node&, b Node&) {
     f(a, b)
 }
-error E { X }
+type E error { X }
 fn main() ? E {
     a mut Node& = Node(1)
     b Node& = Node(2)

@@ -5,7 +5,7 @@
 type Node struct(v I64) {
     v
 }
-error Odd { NO }
+type Odd error { NO }
 fn f(i I64) mut Node?& ? Odd {
     if i >= 0 { error Odd.NO }
     return null

@@ -2,7 +2,7 @@
 # import, and it is the one place methods on the built-in types are declared (M19d).
 
 # what Next fails with once there are no more values: running out is how a walk ends (S9a)
-error Exhausted {
+type Exhausted error {
     END
 }
 

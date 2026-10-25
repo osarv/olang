@@ -174,7 +174,7 @@ type report struct() {
     text mut String& = ""
 }
 
-error Failed {
+type Failed error {
     CHECK
 }
 
@@ -1198,7 +1198,7 @@ fn nestparse(r mut report&) ? Failed {
     lambdas String& = nested("fn k() { }\nfn f(g fn()) { g() }\nfn main() ? {\n    ", "f(fn() { ", "k()", " })", "\n}\n", 40)
     try os.WriteFile($dir "/lambdas.olang", lambdas) catch { }
     try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret lambdas.olang > out.txt 2>&1") == 0, "nested lambdas", dir)
-    tries String& = nested("error E { X }\nfn k() { }\nfn g() ? E { error E.X }\nfn main() ? {\n    "
+    tries String& = nested("type E error { X }\nfn k() { }\nfn g() ? E { error E.X }\nfn main() ? {\n    "
                            "try g() catch E { ", "k()", " }", "\n}\n", 40)
     try os.WriteFile($dir "/tries.olang", tries) catch { }
     try r.expect(sh(dir, "timeout 60 \"$OLANG\" interpret tries.olang > out.txt 2>&1") == 0, "nested try-catch", dir)

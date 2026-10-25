@@ -32,7 +32,7 @@ type Target struct() {
 }
 
 # a target that could not be resolved - its diagnostic said
-error Bad { TARGET }
+type Bad error { TARGET }
 
 # ---- the architectures ----
 
@@ -232,7 +232,7 @@ fn refuse(d mut diag.Diagnostics&, m msgs.Msg) ? Bad {
 }
 
 # why a probe's output names no target
-error Probe {
+type Probe error {
     UNKNOWN     # clang said nothing a target can be read from
     UNSUPPORTED # not a 64-bit little-endian machine (T4's layouts)
 }

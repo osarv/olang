@@ -1,4 +1,4 @@
-error E { X }
+type E error { X }
 fn twice(n I32) I32 { return n * 2 }
 fn main() ? E {
     k I32 = 4

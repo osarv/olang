@@ -2,7 +2,7 @@
 # a catch
 # default, tasks and a for condition
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 type Big struct(n I64) {

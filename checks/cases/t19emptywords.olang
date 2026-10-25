@@ -1,0 +1,4 @@
+# check: fail expected an error word, found '}'
+# T19: an error type declares at least one word - braces with none are an error
+type E error { }
+fn main() { }

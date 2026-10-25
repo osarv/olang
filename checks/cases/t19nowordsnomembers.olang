@@ -1,0 +1,4 @@
+# check: fail expected an error type's words or a set's members
+# T19: "type Name error" is followed by members, braces, or both
+type E error
+fn main() { }

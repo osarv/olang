@@ -705,6 +705,15 @@ fn (ln mut lowering&) stmt(s typed.Stmt&) {
             code := mir.ErrorCode(ln.T, ln.T.Errors(ln.B.Ty), err, word)
             ln.raise(sp, mir.Operand.Const(mir.I32T, code))
         }
+        case typed.Stmt.Reraise(sp, x, from) {
+            # R3a: a caught error raised again - its code recoded from the clause's set to the body's
+            v := ln.val(x)
+            if not ln.dead and ln.T.Items(ln.T.Errors(ln.B.Ty)).Len() > 0 {
+                ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(v, from, ln.T.Errors(ln.B.Ty)), sp))
+            } else if not ln.dead {
+                ln.raise(sp, v)
+            }
+        }
         case typed.Stmt.Exit(sp, kind, msg) {
             # S16d: the message is computed only here, where the unreachable is reached
             m := mir.Operand.None
@@ -1326,7 +1335,7 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         if t.KindOf(et) != types.Kind.Named { continue }
         d := t.DeclOf(et)
         dm := t.DeclModule(d)
-        q := ErrQualifier(ln.L.P.L.Mods[dm].Identity, dm == ln.L.P.L.Root)
+        q := load.ErrQualifier(ln.L.P.L.Mods[dm].Identity, dm == ln.L.P.L.Root)
         ws := ln.L.P.ErrorWords(d)
         for w in range ws.Len() {
             out.Push(mir.Operand.Const(mir.I32T, ((j + 1) << 16) | w))
@@ -1334,14 +1343,6 @@ fn (ln mut lowering&) bangNames(from types.ListId, sp source.Span = source.Span(
         }
     }
     return out.ToArray()
-}
-
-# how an error type's name is written outside its module ("io." for std/io): the module's alias, its identity's base name.
-# The prelude's names are bare everywhere, and so are the root program's own, which is the code that is running
-fn ErrQualifier(identity String&, inRoot Bool) String {
-    if inRoot or identity.StartsWith("std/prelude") { return "" }
-    k := try identity.FindLast("/") catch default -1
-    return $identity[k + 1:] "."
 }
 
 # text as constant data (T25d), a String&
@@ -1391,13 +1392,13 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
             }
             if not always and test1 == mir.Operand.None { continue }
             if always {
-                ln.toClause(tc, ci)
+                ln.toClause(tc, ci, code, from)
                 return
             }
             yes, no := ln.F.NewBlock(), ln.F.NewBlock()
             ln.end(mir.Term.Branch(test1, yes, no))
             ln.start(yes)
-            ln.toClause(tc, ci)
+            ln.toClause(tc, ci, code, from)
             ln.start(no)
         }
         # what this try's clauses do not take leaves the body - past a "!", it ends the program
@@ -1428,8 +1429,14 @@ fn (ln mut lowering&) dispatch(code mir.Operand, from types.ListId, sp source.Sp
     ln.raise(sp, ln.into(mir.I32T, mir.Rvalue.Recode(code, from, mineErrs), sp))
 }
 
-# from here to clause ci of try tc: the scopes opened since the try closed, then a jump to the clause's entry
-fn (ln mut lowering&) toClause(tc tryCtx, ci I64) {
+# from here to clause ci of try tc: the error, where the clause names it, recoded from its list to the clause's own set
+# (R11b), then the scopes opened since the try closed, then a jump to the clause's entry
+fn (ln mut lowering&) toClause(tc tryCtx, ci I64, code mir.Operand, from types.ListId) {
+    cl := tc.Clauses[ci]
+    if cl.Caught >= 0 {
+        bind := mir.L(mir.LocalId(I32(cl.Caught)))
+        ln.emit(mir.Stmt.Assign(cl.Sp, bind, mir.Rvalue.Recode(code, from, cl.CaughtSet)))
+    }
     was := ln.erroring
     ln.erroring = true
     ln.leave(tc.Depth)
@@ -3288,7 +3295,7 @@ test "a function lowers to straight-line MIR: its operands in temporaries, its f
 
 test "control flow verifies clean: ifs, loops with break and continue, ranges, for-in, matches, tries, defers" {
     text := ("type Shape enum {\n    Circle(r I64)\n    Square\n}\n"
-             "error E {\n    BAD\n    WORSE\n}\n"
+             "type E error {\n    BAD\n    WORSE\n}\n"
              "fn pick(n I64) I64 ? E {\n    if n < 0 { error E.BAD }\n    if n > 100 { error E.WORSE }\n    return n\n}\n"
              "fn area(s Shape) I64 {\n    return match s {\n        case Shape.Circle(r) => 3 * r * r\n        case Shape.Square => 1\n    }\n}\n"
              "fn walk(a Array<I64>&) I64 ? E {\n    t I64 = 0\n    defer { t = 0 }\n    for x in a {\n        if x == 2 { continue }\n"

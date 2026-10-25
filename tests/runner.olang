@@ -5,7 +5,7 @@ import wk "worker"
 import "geom/rect"
 import "geom/measure"
 
-error RunnerError {
+type RunnerError error {
     STARTUP_FAILED
 }
 

@@ -54,17 +54,17 @@ import "std/rand"
 extern fn sysconf(name I32) I64
 
 # a shape that does not fit the operation - two operands of different shapes, a product whose inner dimensions differ
-error ShapeError {
+type ShapeError error {
     MISMATCH
 }
 
 # an activation an element type has not: an integer has only the identity and ReLU
-error ActivationError {
+type ActivationError error {
     NOT_FOR_INTEGERS
 }
 
 # a linear system with no unique solution
-error SolveError {
+type SolveError error {
     SINGULAR
 }
 

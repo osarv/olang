@@ -1,0 +1,12 @@
+# check: fail error[R11b]: this case is never reached: the cases before it take every error 'e' can be
+# R11b: a case after the cases have covered everything is dead
+type P error { A, B }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch e {
+        match e {
+            case P { }
+            case P.A { }
+        }
+    }
+}

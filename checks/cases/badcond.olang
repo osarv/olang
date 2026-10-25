@@ -1,5 +1,5 @@
 # check: fail reads a mutable global
-error E { X }
+type E error { X }
 seed mut I32 = 1
 fn f() I32 { return seed }
 if f() == 1 {

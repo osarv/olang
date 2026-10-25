@@ -1,6 +1,6 @@
 # check: fail D3a
 # flags: -define Level=2
-error E { X }
+type E error { X }
 fn main() ? E {
     Level := 1
     if Level > 3 { return }

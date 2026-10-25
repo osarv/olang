@@ -36,7 +36,7 @@ import "diagedit"
 # ---- the notes ----
 
 # what localType and rangeEnd fail with: the note asks for no type, or there is no range end there
-error noFix {
+type noFix error {
     HERE
 }
 

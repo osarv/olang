@@ -2,7 +2,7 @@
 # vec4 (x1_assert_message_return_i_vs_b): the review's repro
 # -i and the built program disagree: a return inside an assert message's catch block
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 fn h(k I64) String ? {

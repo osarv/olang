@@ -231,7 +231,7 @@ fn (r mut Resolver&) collect(mi I64, decls Array<ast.Decl&>&) {
                 r.addValue(mi, f.Name, r.nameSpan(mi, from, f.Name), false, true, f.Recv is not null, null)
             }
             case ast.Decl.Type(sp, t) { r.addType(mi, t.Name, r.nameSpan(mi, sp.Start, t.Name), t) }
-            case ast.Decl.Errors(sp, name, _) { r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null) }
+            case ast.Decl.Errors(sp, name, _, _) { r.addType(mi, name, r.nameSpan(mi, sp.Start, name), null) }
             case ast.Decl.Global(_, v) {
                 for i in range v.Names.Len() { r.addValue(mi, v.Names[i], v.NameSps[i], writable(v.Ty), false, false, v) }
             }
@@ -261,7 +261,7 @@ fn (r mut Resolver&) waitBranch(mi I64, b ast.TopBranch&) {
             case ast.Decl.If(_, ti) { r.waitAside(mi, ti) }
             case ast.Decl.Fn(f), ast.Decl.Extern(f) { t.waiting.Put(f.Name, true) }
             case ast.Decl.Type(_, td) { t.waiting.Put(td.Name, true) }
-            case ast.Decl.Errors(_, name, _) { t.waiting.Put(name, true) }
+            case ast.Decl.Errors(_, name, _, _) { t.waiting.Put(name, true) }
             case ast.Decl.Global(_, v) {
                 for n in v.Names { t.waiting.Put(n, true) }
             }
@@ -534,6 +534,10 @@ fn (r mut Resolver&) bodies(mi I64, decls Array<ast.Decl&>&) {
             case ast.Decl.Test(_, _, body) {
                 r.startItem(mi)
                 r.block(body)
+            }
+            case ast.Decl.Errors(_, _, _, members) {
+                r.startItem(mi)
+                for m in members { r.path(m) }
             }
             nomatch { }
         }
@@ -937,13 +941,32 @@ fn (r mut Resolver&) decideLocal(c ast.Expr&) cond.Outcome, Bool {
     return e.Local(c)
 }
 
+# a try's clauses: each one's items, then its block and defaults with the name it gives the error it took declared
+# (R11b) - "catch e", one bare item naming no type, is that name
 fn (r mut Resolver&) clauses(cl Array<ast.Catch&>&) {
     if cl.Len() == 0 { return }
     for c in cl {
-        for p in c.Items { r.path(p) }
+        bind := c.Bind
+        bsp := c.BindSp
+        if bind == source.NameId(0) and LoneCatchName(c, r.lookup(c.Items[0].Parts[0]).Kind if c.Items.Len() == 1 and c.Items[0].Parts.Len() == 1 else What.Type) {
+            bind = c.Items[0].Parts[0]
+            bsp = c.Items[0].Sp
+        } else {
+            for p in c.Items { r.path(p) }
+        }
+        m := r.mark()
+        if bind != source.NameId(0) { r.declare(bind, bsp) }
         r.block(c.Body)
         for x in c.Defaults { r.expr(x) }
+        r.popTo(m)
     }
+}
+
+# R11b: whether a clause's one bare item is the name it gives the error it took rather than an error type - what the
+# name resolves to (kind) names no type
+fn LoneCatchName(c ast.Catch&, kind What) Bool {
+    if c.Bind != source.NameId(0) or c.Items.Len() != 1 or c.Items[0].Parts.Len() != 1 { return false }
+    return kind != What.Type and kind != What.Builtin and kind != What.TypeVar
 }
 
 fn (r mut Resolver&) matchOf(mt ast.Match&) {

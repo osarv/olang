@@ -1,6 +1,6 @@
 # check: fail error[P4c]: no task of this join can fail - drop the 'try'
 # P4c: "try join" on a join none of whose tasks can fail - every error each task can be is taken by its own clause
-error E {
+type E error {
     BAD
 }
 fn work(n I32) ? E {

@@ -2,7 +2,7 @@
 # flags: -target x86-64-v2
 # B10a/B12: the build constants follow -a - an x86-64 level's CPU, SSE's 128-bit vectors and no FMA - while compiling
 # (decided asserts, a top-level condition) and at run time
-error E { X }
+type E error { X }
 if TargetVectorBits == 128 and not TargetHasFma {
     Level String& = TargetCpu
 }

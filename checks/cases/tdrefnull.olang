@@ -1,5 +1,5 @@
 # check: build
-error E { X }
+type E error { X }
 fn two() I32, I32 ? E { return 1, 2 }
 fn none() ? E { }
 type P struct(v I32) { v }

@@ -2,7 +2,7 @@
 # flags: -define Mode=fast
 # B10/T29c: a text build constant is a String - it compares by content in a call deciding a top-level condition
 # (compile-time evaluation), at run time, and passes wherever a String& is wanted
-error E { X }
+type E error { X }
 fn modeIs(m String&) Bool { return Mode == m }
 if modeIs("fast") {
     fn pick() I32 { return 1 }

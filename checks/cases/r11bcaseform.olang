@@ -1,0 +1,12 @@
+# check: fail error[R11b]: a case of a caught error names an error word, an error type or a named set
+# R11b: a case of a caught error is no value pattern
+type P error { A }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch e {
+        match e {
+            case 3 { }
+            nomatch { }
+        }
+    }
+}

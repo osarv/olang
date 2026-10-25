@@ -1,6 +1,6 @@
 # check: fail error[S9e]: a loop's catch clause runs after the loop has ended, so it has no loop to break or continue
 # S9e: break in a for-in's catch clause
-error E {
+type E error {
     X
 }
 type It struct() {

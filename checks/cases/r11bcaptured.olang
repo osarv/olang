@@ -1,0 +1,7 @@
+# check: fail error[R11b]: 'e' is the error a clause took, which a lambda cannot capture - pass '$e' for its text
+# R11b: a lambda in a clause does not capture the error it took
+type P error { A }
+fn f() ? P { error P.A }
+fn main() {
+    try f() catch e { k := fn() String { return $e } }
+}

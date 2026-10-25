@@ -1,5 +1,5 @@
 # E35, S18d: a "!" in a program with no "?" - the error and where it went, in a -d build and under -i
-error FxErr {
+type FxErr error {
     GONE
 }
 Depth mut I64 = 3

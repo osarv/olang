@@ -4,7 +4,7 @@
 import "std/io"
 import "std/os"
 
-error Usage {
+type Usage error {
     ARGS
     MODE
 }

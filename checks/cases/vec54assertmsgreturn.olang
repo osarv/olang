@@ -1,7 +1,7 @@
 # check: fail error[S17]: an assert's message may not return
 # vec4 (f1e_assert_message_return): the review's repro
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 fn churn() I64 {

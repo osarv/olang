@@ -5,7 +5,7 @@
 # and reads its IR: every lambda here asks for its captured scope (__olang_capture_scope), the Call adapter for its
 # instance's (__olang_scope_mine)
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 type Node struct(v I64) {

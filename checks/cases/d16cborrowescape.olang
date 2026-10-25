@@ -4,5 +4,5 @@ fn leak() fn(x I32) I32 {
     a := I32[1, 2, 3]
     return fn(x) { return a[0] + x }
 }
-error E { X }
+type E error { X }
 fn main() ? E { }

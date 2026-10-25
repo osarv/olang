@@ -1,6 +1,6 @@
 # check: run
 # flags: -define Level=3
-error E { X }
+type E error { X }
 fn main() ? E {
     x := 0
     if Level > 2 {

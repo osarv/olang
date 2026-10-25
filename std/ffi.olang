@@ -16,7 +16,7 @@ extern fn __olang_dyncall_check(name Array<U8>, kinds Array<U8>, ret U8) I32
 
 # why a call could not be made: no function by its name in what the process has loaded (nor in the C math library),
 # or a kind nothing can pass - a 16-bit float alone, an array as the result, a code that names no kind
-error Error {
+type Error error {
     NOT_FOUND
     UNSUPPORTED
     BAD_ARGUMENTS

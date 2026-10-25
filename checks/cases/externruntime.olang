@@ -4,7 +4,7 @@
 extern fn exit(status I32)
 extern fn strlen(s Array<U8>) I64
 
-error E {
+type E error {
     X
 }
 

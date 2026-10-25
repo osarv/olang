@@ -1,6 +1,6 @@
 # check: fail error[P4a]: an error may not leave a task's clause - catch it here; the task lets through what its clauses do not take
 # P4a: a try in a clause must catch everything it can be - the clause may not be left by an error
-error E {
+type E error {
     BAD
 }
 fn work(n I32) ? E {

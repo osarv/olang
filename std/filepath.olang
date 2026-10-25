@@ -141,7 +141,7 @@ fn Join(a String&, b String&, c String& = "", d String& = "", e String& = "", f 
 }
 
 # what Rel fails with: no relative path can be known from the text alone
-error Error {
+type Error error {
     UNRELATED
 }
 

@@ -1,0 +1,7 @@
+# check: fail error[R11b]: 'PErr' names no error type, so it names the error this clause took - and nothing uses it
+# R11b: "catch e" with one bare item naming no error type is a name - a misspelled type is caught by its going unused
+type PEr error { A }
+fn f() ? PEr { error PEr.A }
+fn main() {
+    try f() catch PErr { }
+}

@@ -1,6 +1,6 @@
 # check: build
 # S15: a bare 'return' ends a test as passed (s15returnvalue: one with a value is an error)
-error E { X }
+type E error { X }
 fn main() ? E { }
 test "early" {
     return

@@ -403,14 +403,18 @@ release: $(OLANG)
 	$(MAKE) --no-print-directory releasetest
 
 # a release unpacked into a fresh directory builds and runs a program with nothing but its own clang: PATH holds only
-# the system's tools a build runs (the linker), never a clang
+# the system's tools a build runs (the linker), never a clang - and "olang explain T6a" reads the SPEC.md shipped beside
+# bin/
 releasetest:
 	@t=$$(mktemp -d) && tar -C $$t -xJf build/release/$(RELEASE_NAME).tar.xz && mkdir $$t/work $$t/path && \
 	for p in ld ld.bfd as sh cat; do ln -s $$(command -v $$p) $$t/path/$$p; done && \
 	printf 'import "std/io"\n\nfn main() {\n    io.Println("hello from " $$TargetArch)!\n}\n' > $$t/work/hello.olang && \
 	cd $$t/work && env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang hello.olang > out.txt 2>&1; \
 	st=$$?; cat $$t/work/out.txt; \
-	if [ $$st -eq 0 ] && grep -q "hello from $$(uname -m)" $$t/work/out.txt; then echo "releasetest: built and ran"; rm -rf $$t; \
+	env -i HOME=$$t PATH=$$t/path OLANG_CACHE=$$t/cache $$t/$(RELEASE_NAME)/bin/olang explain T6a > explain.txt 2>&1; \
+	ex=$$?; head -3 $$t/work/explain.txt; \
+	if [ $$st -eq 0 ] && grep -q "hello from $$(uname -m)" $$t/work/out.txt && [ $$ex -eq 0 ] && grep -q "T6a" $$t/work/explain.txt; \
+	then echo "releasetest: built and ran, and explain read SPEC.md"; rm -rf $$t; \
 	else echo "releasetest: failed ($$t)"; exit 1; fi
 
 # the whole suite under ThreadSanitizer (P7). Deliberately NOT part of "verify": the corpus contains one

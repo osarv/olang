@@ -728,7 +728,7 @@ fn ruleIdAt(line String&) String&line {
 }
 
 # Explain's failure: the specification states no such rule
-error RuleError {
+type RuleError error {
     NOT_FOUND
 }
 

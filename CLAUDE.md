@@ -188,7 +188,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Comprehensions `T[e for x in c if p]` (E27, the user's design)** - element type required, brackets; reserved up
   front from a known length, else 100 and doubling (the user's numbers).
 - **Error words, enum cases and constructor fields follow the listing rule (T17/T19/C2, QY):** commas on a line, line
-  breaks between lines.
+  breaks between lines; a named set's members are on its line (T19a).
 - **Keywords as names (L9/L9a):** any keyword names a method after a receiver or `.`; statement-like and non-value
   keywords may name fields (typed, never punned). `_` discards and is never a name.
 - **Numeric literals (L10-L12b).** `_` only between digits (L10b); a decimal above `I64`'s max is `U64`, beyond 64
@@ -222,7 +222,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   returning, a program by `os.Exit`); `own` and `take` (2026-10-18, `docs/memory.md` round 3: freeing early is the
   compiler's); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (2026-10-24, QP1-QP4: a
   length is inferred where an array is made, a view is a slice); `checked`, `CheckError` and the `Checked...` forms
-  (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25).
+  (2026-10-25: `try a.Get(i)`, `x.Narrow<T>()`, `std/arith`); contract guarantees, named results and `fits` (2026-10-25); `error IoError { ... }` declarations (2026-10-25, `type
+  IoError error { ... }`, T19).
 
 ### Types
 
@@ -549,6 +550,29 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Catch clauses (R9a/R9b, R11, the user's calls).** Any number, in order; an item-less `catch` takes the rest; in
   value position each clause leaves or gives its own `default`; a default belongs to its clause, and errors no clause
   names propagate. `try f() default d` is gone. A reference default lives exactly in the result's scope.
+- **Error types are declared as types; named sets; a clause names what it took (T19, T19a, R11b, R3a, 2026-10-25, the
+  user's decisions QAM and the clause-only names of the same day).** `type IoError error { FULL  DENIED }` (the
+  listing rule; at least one word) replaces `error IoError { }`; `type LoadError error os.Error, ParseError { TIMEOUT }`
+  is a **named set** - members (error types, words, sets, flattened in order) and optionally words of its own, its own
+  type then the last member of its own set; one grammar `type Name error [Member, ...] [{ WORDS }]`. A set is written
+  wherever an error set is (`? LoadError`, `fn(I64) ? LoadError` - so no parentheses in a list -, trait methods,
+  `catch LoadError`) and is the same set as its members written out (the same function type); never a code space of its
+  own (R6 codes per member type, expanded in `generic.errorList`). A set reaching itself, a word repeating a member's,
+  a word declared twice and a member naming nothing are errors (the last two, and `? Pt` with `Pt` a struct, and an
+  unknown error type in a function type or a lambda's set, were never reported - fixed). **`catch os.Error e { }`,
+  `catch A, B e`, `catch e`** (one bare item naming no type is the name - names.LoneCatchName; a misspelled type is
+  caught by the rule that a clause's name must be used) name the error **for the clause alone** (its block and
+  defaults): `$e` (`os.Error.DENIED`, qualified as errors print, B5), `e == Word`/`e == Type`/`e == Set` (each side
+  something it can be), narrowing after such tests (as S8d: in a branch, after a leaving `if`; `and`/`or`/`not`
+  combine), `match e` (read as the if-chain it is; exhaustive or `nomatch`/`case _`; a value form with `=>`), `error e`
+  (R3a, held to the function's set by what narrowing leaves). Nothing else - assigning, `:=`, passing, storing,
+  capturing, returning, `try e` - each an error naming `$e`/`error e`. **Not built (the user's open question):** errors
+  as storable values, a zero value for errors, Result. Representation (mine): the name is a hidden `I32` local holding
+  the code recoded to the clause's own set (canonical order), assigned where the clause is entered (lowering's
+  `toClause`), so the evaluator and `interpret` need nothing new; `error e` is `typed.Stmt.Reraise`, recoded to the
+  body's set. Decided (mine): a spawned call's clause names no error (it is a lambda on the task's thread - an error
+  naming it); a value `match e` gives every value with `=>`; a case after the cases cover everything is an error.
+  `tools/errortype_migrate.olang` (text, idempotent, last of `olang fix`'s text tools) rewrites old declarations.
 - **Errors are errors (the user's rule).** Nothing returns a value beside a flag: iterators fail with `Exhausted`
   (`Next() T ? Exhausted`), `Map.Get`, `Find`, `Pop` fail with their errors.
 - **`main`**: no parameters or result, any error set or none (QU); an escaping error prints `unhandled error: T.W`
@@ -1004,7 +1028,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (`ListError.EMPTY`), and so do the root program's own (`Bad.WORD` for a `Bad` in the file being run - from outside it
   would be `main.Bad`, which no program writes for its own); the rule is one function, `lower.ErrQualifier`, used by `!`'s
   names, `main`'s message (emit) and the interpreter. Before, `!` qualified relative to the module the code is in (a
-  bang inside std/io said `Error.X`). Error values are not renderable (T20), so `$e` has nothing to print.
+  bang inside std/io said `Error.X`). The error a catch clause names renders the same way (`$e`, R11b); the rule is
+  `load.ErrQualifier` (moved from lower, 2026-10-25).
 - **The formal specification (`SPEC.md`) and the spec-first process.** `SPEC.md` is the normative, current-state-only
   reference manual for the language (rules numbered `<prefix><n>`, e.g. `T24`, `O13`; EBNF grammar) - no narrative, no
   history, and no mention of CLAUDE.md, Claude, or the design process anywhere in it. A language change is made

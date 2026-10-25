@@ -2,7 +2,7 @@
 # E11c/R9a: the same one call down - the helper hands its parameter's scope to the default's landing call, so the helper
 # builds there; codegen also holds a body to it where it only passes a scope on to a callee building there (C1d)
 import "std/io"
-error Stop {
+type Stop error {
     HERE
 }
 type Node struct(v I64) {

@@ -111,7 +111,7 @@ fn (a Analysis&) RealOfFile(file I64) String {
 # ---- what is written at an offset ----
 
 # nothing to say: no name there, or nothing known of it
-error Nothing { HERE }
+type Nothing error { HERE }
 
 # the identifier at or just before offset at of t: its span, empty where none is there
 fn WordAt(t String&, at I64) source.Span {
@@ -677,7 +677,7 @@ fn (w mut symWriter&) decl(b mut StringBuilder&, d ast.Decl&, nm source.Names&) 
                 w.leaf(b, nm.Text(v.Names[k]), KindVariable, I64(sp.Start), I64(sp.End), I64(ns.Start), I64(ns.End), "")
             }
         }
-        case ast.Decl.Errors(sp, n, words) {
+        case ast.Decl.Errors(sp, n, words, _) {
             name := nm.Text(n)
             s := nameIn(t, I64(sp.Start), name)
             w.open(b, name, KindEnum, I64(sp.Start), I64(sp.End), s, s + name.Len(), "error")
@@ -1222,7 +1222,7 @@ fn (r mut Reader&) Fill() Bool {
 }
 
 # no whole message is buffered yet
-error Incomplete { MORE }
+type Incomplete error { MORE }
 
 # the next whole framed message's body, taken out of the buffer
 fn (r mut Reader&) Next() String ? Incomplete {
