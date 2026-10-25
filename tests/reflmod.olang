@@ -1,0 +1,19 @@
+# compile-time reflection across a module (G34): a type with a private field, which only this module's reflection
+# walks (M6a), and a generic that walks what it is given - the generic's module is the one that sees
+
+type Secret struct(Open I64, hidden I64) {
+    Open, hidden
+}
+
+# the names of T's fields as this module sees them
+fn FieldNames<T>() String {
+    s := ""
+    for f in T.Fields { s = $s $f.Name " " }
+    return s
+}
+
+test "a module's own reflection sees its private fields; its generics see what this module sees" {
+    assert FieldNames<Secret>() == "Open hidden "
+    n := Secret.Fields.Len()
+    assert n == 2
+}

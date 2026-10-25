@@ -10655,6 +10655,25 @@ fn (c mut Checker&) reflType(x ast.Expr&) types.TypeId {
             return pt
         }
         case ast.Expr.Paren(_, y) { return c.reflType(y) }
+        case ast.Expr.Generic(sp, g, targs) {
+            # an instance written with its arguments (G32): "Array<I64>.Kind", "Map<String&, I64>.Params"
+            builtin := false
+            match g {
+                case ast.Expr.Name(gs, _) { builtin = c.P.R.Use(c.fr().File, gs.Start).Kind == names.What.Builtin }
+                nomatch { }
+            }
+            path := typePathOf(g)
+            if path.Len() == 0 or (not builtin and c.genericNamed(g) < types.DeclId(0)) { return types.TypeId(-1) }
+            if path.Len() == 1 { return c.resolve(ast.TypeRef.Named(sp, path, targs)) }
+            d := c.genericNamed(g)
+            if not c.P.ArgsFit(d, targs) {
+                c.err(targs[0].Span() if targs.Len() > 0 else sp, msgs.TypeArgCount(c.text(path[path.Len() - 1]), c.P.WrittenArity(d), generic.WrittenTypes(targs)))
+                return types.UnknownT
+            }
+            it := c.P.Apply(c.fr().Ctx, d, targs)
+            if it == types.UnknownT or not c.instancesMet(it, sp) or not c.P.Body(it) { return types.UnknownT }
+            return it
+        }
         nomatch { return types.TypeId(-1) }
     }
 }
@@ -10905,8 +10924,8 @@ fn (c mut Checker&) reflConst(y ast.Expr&, n source.NameId) reflVal {
 
 fn (c mut Checker&) typeKindType() types.TypeId { return c.P.PreludeType("std/prelude/reflect", "TypeKind") }
 
-# a described member's name (G34): a field's, a case's (a struct's one case its type's name), a parameter's ("" for a
-# function type's parameter written without one)
+# a described member's name (G34): a field's, a case's (a struct's one case its type's name), a constructor's
+# parameter's ("" for a function type's parameter, whose name is no part of its type)
 fn (c mut Checker&) descName(ds generic.Desc) String {
     r := c.P.ReflUnder(ds.Of)
     if ds.K == generic.DescField {
@@ -10919,10 +10938,8 @@ fn (c mut Checker&) descName(ds generic.Desc) String {
         return $c.text(cn[ds.Case]) if ds.Case < cn.Len() else ""
     }
     if ds.K == generic.DescParam {
-        if c.P.T.KindOf(ds.Of) == types.Kind.Func {
-            ns := c.P.T.NamesOf(ds.Of)
-            return $c.text(source.NameId(I32(ns[ds.At]))) if ds.At < ns.Len() else ""
-        }
+        # a function type's parameter names are no part of its type (T22, G16a), so an instance cannot say them
+        if c.P.T.KindOf(ds.Of) == types.Kind.Func { return "" }
         ps := c.P.CtorParams(ds.Of)
         return $c.text(ps[ds.At].Name) if ds.At < ps.Len() else ""
     }

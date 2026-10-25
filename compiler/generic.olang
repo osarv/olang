@@ -387,8 +387,8 @@ fn (p mut Program&) ErrSetOf(entries types.ListId) types.TypeId {
 }
 
 fn (p mut Program&) errBefore(a types.TypeId, b types.TypeId) Bool {
-    av := p.T.KindOf(a) == types.Kind.Var
-    bv := p.T.KindOf(b) == types.Kind.Var
+    av := p.T.KindOf(a) == types.Kind.Var or p.T.KindOf(a) == types.Kind.ConstExpr
+    bv := p.T.KindOf(b) == types.Kind.Var or p.T.KindOf(b) == types.Kind.ConstExpr
     if av or bv {
         if av != bv { return bv }
         return p.T.A(a) < p.T.A(b) or (p.T.A(a) == p.T.A(b) and p.T.B(a) < p.T.B(b))
@@ -417,7 +417,16 @@ fn (p mut Program&) substErrs(l types.ListId, owner I64, args types.ListId) type
     flat List<types.TypeId>
     changed := false
     for e in p.T.Items(l) {
-        if p.T.KindOf(e) == types.Kind.Var and p.T.A(e) == owner and p.T.B(e) < xs.Len() {
+        if p.T.KindOf(e) == types.Kind.ConstExpr {
+            # G38: "? F.Errors" put off until F is bound - the set it is, spliced in
+            v := p.Subst(e, owner, args)
+            if v != e { changed = true }
+            if p.T.KindOf(v) == types.Kind.ErrSet {
+                for x in p.T.Items(p.T.ErrSetItems(v)) { flat.Push(x) }
+            } else if v != types.UnknownT {
+                flat.Push(v)
+            }
+        } else if p.T.KindOf(e) == types.Kind.Var and p.T.A(e) == owner and p.T.B(e) < xs.Len() {
             v := xs[p.T.B(e)]
             changed = true
             if p.T.KindOf(v) == types.Kind.ErrSet {
@@ -854,6 +863,11 @@ fn (p mut Program&) errorSetItem(c Context&, e ast.Path&) types.TypeId {
         v := try c.Vars.Get(e.Parts[0]) catch default types.TypeId(-1)
         if v >= types.TypeId(0) and (p.IsErrVar(v) or p.T.KindOf(v) == types.Kind.ErrSet) { return v }
         if v >= types.TypeId(0) { return types.UnknownT }
+    }
+    # G38: "F.Errors" - the error set of the function type a type variable or a descriptor reaches
+    if e.Parts.Len() >= 2 and p.text(e.Parts[e.Parts.Len() - 1]) == "Errors" {
+        h := p.reflHead(c, e.Parts[0])
+        if h >= types.TypeId(0) { return p.projectPath(c, e.Sp, h, e.Parts, Array<ast.TypeRef&>(0)) }
     }
     t := p.errorType(c, e)
     n := e.Parts.Len()
@@ -3901,6 +3915,10 @@ fn (p mut Program&) Project(t types.TypeId, name String&) types.TypeId, String {
         if p.T.KindOf(t) == types.Kind.Ref { return p.T.Referent(t), "" }
         return types.UnknownT, "only a reference has a Target"
     }
+    if name == "Errors" {
+        if p.T.KindOf(t) == types.Kind.Func { return p.ErrSetOf(p.T.Errors(t)), "" }
+        return types.UnknownT, "only a function type has Errors"
+    }
     return types.UnknownT, "a type's reflected types are Base, Element and Target, a field's, a parameter's and a result's Type"
 }
 
@@ -3929,7 +3947,8 @@ fn (p mut Program&) projectPath(c Context&, sp source.Span, h types.TypeId, path
         if t == types.UnknownT { return t }
         if not p.T.Closed(t) {
             key := p.T.ConstExpr("refl:" $c.Owner ":" $c.Mi ":" $sp.Start ":" $sp.End)
-            p.patterns.Put(p.T.A(key), pattern(null, c.Mi, c.Owner, types.UnknownT, ast.TypeRef.Named(sp, path, args)))
+            # its own copy of the path, made where the patterns live
+            p.patterns.Put(p.T.A(key), pattern(null, c.Mi, c.Owner, types.UnknownT, ast.TypeRef.Named(sp, source.NameId[x for x in path], Array<ast.TypeRef&>(0))))
             return key
         }
         name := p.text(path[k])
