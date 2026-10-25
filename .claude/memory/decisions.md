@@ -1201,3 +1201,9 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
 - TUPLES DROPPED again 2026-10-25 (the user: "drop them again. The comptime indexing only settles it"). So Result's
   several-results question resolves to (a): a multi-result call cannot land in a Result. Result integration (QAY 1, 2,
   4) un-parked and re-asked.
+- RESULT DECIDED 2026-10-25 (the user: "Drop results as an integrated in the language thing and make it only an std
+  lib type that takes Result<T,E> where T and E are supplied by the user themselves"): Result<T, E> a plain std generic
+  enum, no language support (QAY's landing-place rule dropped). Explained: today errors are not values (T20) - only
+  caught by type/word, never stored, passed, or a type argument, so Result<T, os.Error> needs errors as values (QAM,
+  build list 14: `catch os.Error e`, `error e`, error types as ordinary types, named sets, `$e`). ASKED: build errors as
+  values, then Result, in that order?
