@@ -1,0 +1,57 @@
+# check: build
+# flags: -memory
+# also: note: what the loop on line 30 walks, 'h.buf', is used here, after it lets go of it (line 31); read what you need before
+# never: ''
+# B18 (the bulk review's F10): a for-in's hidden local said by what it walks
+import "std/io"
+
+type Holder struct() {
+    buf Array<I64>& = Array<I64>(0)
+    l List<String&>
+    m Map<I64, String&>
+}
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+fn main() {
+    h := Holder()
+    for r in range 3 {
+        h.buf = Array<I64>(50, r)
+        t I64 = 0
+        for x in h.buf {
+            h.buf = Array<I64>(50, x + 100)   # the array walked is let go of
+            churn()
+            t += x
+        }
+        io.Println($t)!
+    }
+    for r in range 3 {
+        for k in range 5 { h.l.Push($"list text " $k " padded ............................................") }
+        t I64 = 0
+        for s in h.l {
+            h.l.Clear()                       # the elements walked let go of
+            churn()
+            t += s.Len()
+        }
+        io.Println($t)!
+    }
+    for r in range 3 {
+        for k in range 5 { h.m.Put(k, $"map text " $k " padded ............................................") }
+        t I64 = 0
+        for e in h.m {
+            h.m.Remove(e.Key)
+            churn()
+            t += e.Value.Len()
+        }
+        io.Println($t)!
+    }
+}

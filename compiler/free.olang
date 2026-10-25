@@ -1493,7 +1493,16 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
         return
     }
     w.goIdx.Push(f.goes.Len())
-    f.goes.Push(letGo(k, w.Id, w.body().File, w.stmtSp, sp, kind, recv, callee, w.loops > 0 or f.fnName(w.Id) != "main"))
+    f.goes.Push(letGo(k, w.Id, w.body().File, w.stmtSp, sp, kind, recv, callee, w.loops > 0 or w.runsAgain()))
+}
+
+# whether the body can run more than once: any function but main - not a global's initializer, a test, a contract's
+# condition run with its function
+fn (w mut walker&) runsAgain() Bool {
+    return match w.body().Of {
+        case typed.BodyOf.Global(_, _), typed.BodyOf.Test(_) => false
+        case _ => w.F.fnName(w.Id) != "main"
+    }
 }
 
 # a constructor's field given a value: a store into the field's place, or the instance holding what it is given
@@ -3586,8 +3595,9 @@ fn (f mut Free&) Report() String {
         # the row is at the place's own let-go - an assignment, a vacate, a value dropped - where there is one, else at
         # the first call that lets go of it
         first := -1
+        # ...its own: a call that may let go of anything names no place (its row, a view's, is said below)
         for g in range f.goes.Len() {
-            if not f.goes[g].Of(k) or not f.shown(f.goes[g]) or not f.goes[g].Again: continue
+            if f.goes[g].Place != k or not f.shown(f.goes[g]) or not f.goes[g].Again: continue
             if first < 0 or f.rowBefore(f.goes[g], f.goes[first]): first = g
         }
         if first < 0: continue
@@ -3598,8 +3608,8 @@ fn (f mut Free&) Report() String {
         if f.whyKind[k] == RView { row = try f.viewGo.Get(k) catch default first }
         g := f.goes[row]
         at := f.lineStart(g.File, I64(g.At.Start))
-        # a row at a call that may let go of anything says the place as its own let-go writes it
-        if g.Place == AnyPlace and f.goes[first].Place == k { g = f.goes[first] }
+        # a row at a call - one that may let go of anything too - says the place as its own let-go writes it
+        if g.Kind == LCall and f.goes[first].Kind != LCall { g = f.goes[first] }
         what := ""
         if f.keyField[k] < 0 or f.isContents(k) {
             what = $"removed elements of '" $f.collection(k, g.Body, g) "' are kept until " $f.scopeName(g, k) " closes"

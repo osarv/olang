@@ -1,0 +1,7 @@
+# check: fail error[D18, D17]: evens has conditions, so its first Next fails with ArgumentError where one is false - add it to its result's errors, 'Iterator<T ? ArgumentError>'
+# D18, D17 (the bulk review's F9): a generator's conditions are its first Next's, and its errors say so
+fn evens(n I64) [n >= 0] Iterator<I64> {
+    for i in range n { yield 2 * i }
+}
+
+fn main() { }

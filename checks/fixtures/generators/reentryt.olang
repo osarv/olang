@@ -1,0 +1,18 @@
+# S20 in a test: the test it fails in fails, and the tests after it run
+type Cell struct() {
+    g Generator<I64> = Generator<I64>(fn() I64 ? Exhausted { error Exhausted.END })
+}
+
+fn gen(c mut Cell&) Iterator<I64> {
+    yield 1
+    x := try c.g.Next() catch Exhausted default -1
+    yield x + 100
+}
+
+test "a generator resumed inside its own walk" {
+    c := Cell()
+    c.g = gen(c)
+    for x in c.g { assert x == 1 }
+}
+
+test "the next test runs" { assert 1 + 1 == 2 }

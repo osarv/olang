@@ -1,0 +1,42 @@
+# check: build
+# flags: -memory
+# also: note: 'v' (line 28) is used here, after 'yield 1' (line 29), where the generator's caller may let go of it
+# O8d, D18 (the bulk review's F1): between a yield and the next Next the generator's consumer may let go of any place,
+# so a view the generator's frame holds across a yield keeps what it names
+import "std/io"
+
+type Holder struct() {
+    t String& = ""
+}
+
+fn (h mut Holder&) set(i I64) { h.t = $"text number " $i " padded out to many bytes ........................................" }
+
+fn churn() I64 {
+    t I64 = 0
+    for i in range 300 {
+        a := Array<I64>(64, -7)
+        t += a[3]
+        s := $i $i $i "-" $(i * 7) " some more text to fill the chunk ......"
+        t += s.Len()
+    }
+    return t
+}
+
+# a view of h.t held across a yield: the consumer lets go of h.t between Next calls
+fn walk(h Holder&) Iterator<I64> {
+    for k in range 4 {
+        v := h.t
+        yield 1
+        yield v.Len() * 1000 + I64(v[12])
+    }
+}
+
+fn main() {
+    h := Holder()
+    h.set(0)
+    for x in walk(h) {
+        h.set(x + 7)
+        churn()
+        io.Println($x)!
+    }
+}
