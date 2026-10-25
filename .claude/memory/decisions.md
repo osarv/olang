@@ -1120,3 +1120,6 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   on entry (ArgumentError.INVALID naming the condition) or decided at compile time; `outlives` relations in the same
   block (compile time only); constructors take it; result conditions, entry values, for/if/fits and the prover gone.
   ASKED to confirm; in effect: undecided.
+- Condition form DECIDED 2026-10-25 (the user, against the alternatives: "x.isPrime() I32 or x I32.isPrime() which
+  kinda reads bad no?"): the bracket block after the parameter list, as recommended just above. Only operators (QAW)
+  remain open.
