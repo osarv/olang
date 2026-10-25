@@ -3007,7 +3007,9 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where B
         return "undef"
     }
     # T25d: one instance for each site written, two sites two - what lowering synthesizes (no span) by its contents
-    site := "" if sp.Start == I32(0) and sp.End == I32(0) else $file ":" $sp.Start ":" $sp.End ":" $c ":" $t.Canon(ty)
+    # (by its contents too: an unrolled loop, G33, writes one site several times in a function, and its instances
+    # each their own way)
+    site := "" if sp.Start == I32(0) and sp.End == I32(0) else $file ":" $sp.Start ":" $sp.End ":" $t.Canon(ty)
     g, n := fe.constGlobal(t.Elem(a), c, site)
     if t.IsRef(r) and fe.fixed(a) { return "" if where else g }
     if fe.fixed(a) { return g if where else fe.load(fe.ty(a), g) }
@@ -3018,7 +3020,7 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where B
 # constant c of this function's tables, elements of type el, as a private global: its name and its length
 fn (fe mut fnEm&) constGlobal(el types.TypeId, c I32, site String&) String, I64 {
     lt, init, n := fe.constInit(el, c)
-    key := "d:" $lt " " $init if site == "" else "s:" $site
+    key := "d:" $lt " " $init if site == "" else "s:" $site " " $lt " " $init
     if fe.E.dataAt.Has(key) { return (try fe.E.dataAt.Get(key) catch default ""), n }
     s := "@.d" $fe.E.nconst
     fe.E.nconst++

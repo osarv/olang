@@ -284,7 +284,7 @@ fn declOf(c mut typecheck.Checker&, mi I64, name String&) I64 {
 }
 
 # a field of a struct type: its name, type, doc comment and where it is declared
-type FieldInfo struct(Name String&, Ty types.TypeId, Doc String&, Real String&, At I64) {
+type memberInfo struct(Name String&, Ty types.TypeId, Doc String&, Real String&, At I64) {
     Name
     Ty
     Doc
@@ -292,7 +292,7 @@ type FieldInfo struct(Name String&, Ty types.TypeId, Doc String&, Real String&, 
     At
 }
 
-fn (a Analysis&) field(t types.TypeId, index I64) FieldInfo ? Nothing {
+fn (a Analysis&) field(t types.TypeId, index I64) memberInfo ? Nothing {
     c := a.C
     tt := c!.P.T.Referent(t) if c!.P.T.KindOf(t) == types.Kind.Ref else t
     if c!.P.T.KindOf(tt) != types.Kind.Named { error Nothing.HERE }
@@ -308,7 +308,7 @@ fn (a Analysis&) field(t types.TypeId, index I64) FieldInfo ? Nothing {
                 name := $text[I64(l.Sp.Start):I64(l.Sp.End)] if l.Name == source.NameId(0) else $c!.P.L.Names.Text(l.Name)
                 tys := c!.P.T.Items(c!.P.T.Fields(tt))
                 ty := tys[index] if index < tys.Len() else l.Ty
-                return FieldInfo(name, ty, doc.Comment(text, I64(l.Sp.Start), true), $a.L.Mods[mi].Real, I64(l.Sp.Start))
+                return memberInfo(name, ty, doc.Comment(text, I64(l.Sp.Start), true), $a.L.Mods[mi].Real, I64(l.Sp.Start))
             }
             case _ { }
         }

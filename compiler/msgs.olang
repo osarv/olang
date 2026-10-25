@@ -699,9 +699,51 @@ type Diag enum {
     CaughtCaseNever
     CaughtCaseForm
     CaughtMatchMissing
+    ReflNoMember
+    ReflNoKind
+    ReflNoLength
+    ReflNoLayout
+    ReflNotList
+    ReflListValue
+    ReflIndexNotConst
+    ReflIndexRange
+    ReflFilterUndecided
+    ReflTryList
+    ReflNoDefault
+    ReflOfArgs
+    ReflOfType
+    ReflDescNoMember
+    ReflTypeNotValue
+    ReflCaseOther
+    ReflCaseUnreachable
+    ReflArgCompr
+    ReflNoType
+    ReflMatchSubject
 }
 
 # one function each, under the id it is known by
+
+# compile-time reflection (G32-G38)
+fn ReflNoMember(ty String&, name String&) Msg { return Msg(Diag.ReflNoMember, "G32", $ty " has no reflected member '" $name "' - a type's are Name, Kind, Base, Fields, Cases, Params, Results, Element, Length, Target, Size and Align") }
+fn ReflNoKind(ty String&) Msg { return Msg(Diag.ReflNoKind, "G32", $ty " has no TypeKind - only a struct, an enum, a number, Bool, an array, a reference and a function type have one") }
+fn ReflNoLength(ty String&) Msg { return Msg(Diag.ReflNoLength, "G32", $ty " has no Length - only an array whose length is known while compiling has one") }
+fn ReflNoLayout(ty String&, name String&) Msg { return Msg(Diag.ReflNoLayout, "G32", $ty " has no " $name " - it is not laid out (a trait, an error type, an extern type)") }
+fn ReflNotList(name String&, ty String&, why String&) Msg { return Msg(Diag.ReflNotList, "G33", $ty " has no " $name " - " $why) }
+fn ReflListValue(list String&) Msg { return Msg(Diag.ReflListValue, "G33", $list " is a list known while compiling, no value - walk it with 'for', count it with '.Len()', index it with a constant, or make an array of it with a comprehension") }
+fn ReflIndexNotConst() Msg { return Msg(Diag.ReflIndexNotConst, "G33", "a list known while compiling is indexed by a constant - this index is known only at run time") }
+fn ReflIndexRange(k I64, n I64) Msg { return Msg(Diag.ReflIndexRange, "G33", $"index " $k " is outside the list, which holds " $n) }
+fn ReflFilterUndecided() Msg { return Msg(Diag.ReflFilterUndecided, "G33", "a comprehension over a list known while compiling keeps an element by a filter decided while compiling - this one is known only at run time") }
+fn ReflTryList() Msg { return Msg(Diag.ReflTryList, "G33", "a list known while compiling is walked with no call that can fail - write 'for x in ...' without 'try'") }
+fn ReflNoDefault(name String&, ty String&) Msg { return Msg(Diag.ReflNoDefault, "G34", $"parameter '" $name "' of " $ty " has no default - read 'p.Default' only where 'p.HasDefault' holds") }
+fn ReflOfArgs(n I64) Msg { return Msg(Diag.ReflOfArgs, "G34", $"'Of' takes one value, found " $n) }
+fn ReflOfType(want String&, have String&) Msg { return Msg(Diag.ReflOfType, "G34", $"this field is " $want "'s, and the value is " $have) }
+fn ReflDescNoMember(what String&, name String&, have String&) Msg { return Msg(Diag.ReflDescNoMember, "G34", $"a " $what " has no '" $name "' - its members are " $have) }
+fn ReflTypeNotValue(name String&) Msg { return Msg(Diag.ReflTypeNotValue, "G38", $"'" $name "' is a type, not a value - write it where a type goes, as 'x " $name " = ...'") }
+fn ReflCaseOther(c String&, ty String&) Msg { return Msg(Diag.ReflCaseOther, "G34", $"this case is " $c "'s, and the value is " $ty) }
+fn ReflCaseUnreachable() Msg { return Msg(Diag.ReflCaseUnreachable, "G36", "no type can reach this case - a case before it takes every type it does") }
+fn ReflArgCompr() Msg { return Msg(Diag.ReflArgCompr, "G37", "a comprehension written as a call's arguments walks a list known while compiling - 'T.Params', 'T.Fields' ...; another is written in brackets, 'T[e for x in c]'") }
+fn ReflNoType(name String&, ty String&, why String&) Msg { return Msg(Diag.ReflNoType, "G38", $"'" $name "' of " $ty ": " $why) }
+fn ReflMatchSubject() Msg { return Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling - a type variable, or a type a reflected member names") }
 
 # ERR_USAGE
 fn Usage() Msg { return Msg(Diag.Usage, "B1", "nothing to do - write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
