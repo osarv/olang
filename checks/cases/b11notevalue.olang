@@ -1,12 +1,14 @@
 # check: fail error[O10c]: the callee needs one argument's scope to outlive another's
-# also: declare it where 'out' lives: 'p mut String&out = ...'
-# never: 'Join&out(...)'
-# B11: a scope argument builds a call's result where it says, which moves a reference local's referent but never a value
-# local's own storage - so for a value local the note names a declaration instead, which compiles (study 4's r05)
+# also: make it where 'out' lives: 'Join&out(...)'
+# never: 'p mut String&out = ...'
+# B11, E25: a value local a call given a scope argument declares lives where the argument says (the fifth any review,
+# 5) - so the note names the scope argument to change, never a declaration (study 4's r05 had it the other way, when
+# such a local's storage was its block)
 import "std/filepath"
 fn joined(dir String&, names Array<String&>&, out mut List<String&>&) {
     for name in names {
-        p := filepath.Join&out(dir, name)
+        t := "x" $name
+        p := filepath.Join&t(dir, name)
         out.Push(p)
     }
 }

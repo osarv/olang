@@ -238,6 +238,14 @@ Prelude := (
     "# for second-name scenarios (the fourth any review's B): a returned text local something else names\n"
     "type TK struct(s String&) { s }\n"
     "fn (k mut TK&) Set(t String&) { k.s = t }\n"
+    "# the fifth review's: parameters sharing a scope, which a callee may store one into the other with no obligation\n"
+    "type TH struct(l mut List<String&>&) { l }\n"
+    "fn (h mut TH&) Add(x String&h) I64 {\n    h.l.Push(x)\n    return 1\n}\n"
+    "fn (x String&) AddTo(h mut TH&x) I64 {\n    h.l.Push(x)\n    return 3\n}\n"
+    "fn tieTo(l mut List<String&>&, x String&l) I64 {\n    l.Push(x)\n    return 2\n}\n"
+    "# conversions of a place to a type over String (T29a), returned\n"
+    "fn retConv(v I64) Lab {\n    s := \"cv\" $v\n    return Lab(s)\n}\n"
+    "fn retConvCond(v I64) Lab {\n    s := \"cc\" $v\n    u := \"cu\" $v\n    return Lab(s) if Run > 0 else Lab(u)\n}\n"
     "fn mkChain(v I64) mut Node& {\n"
     "    n := Node(v)\n"
     "    n.next = Node(v + 1)\n"
@@ -296,6 +304,10 @@ Prelude := (
     "}\n"
     "fn textFail(v I64) String ? {\n"
     "    if Run > 0 { error SgErr.E }\n"
+    "    return \"never\" $v\n"
+    "}\n"
+    "fn textNo(v I64) String ? {\n"
+    "    if v < 1000000 { error SgErr.E }\n"
     "    return \"never\" $v\n"
     "}\n"
     "fn mkFail(v I64) mut Node& ? {\n"
@@ -368,6 +380,8 @@ type SG struct(seed U64) {
     boxKind I64 = 0                    # what boxOp's box is: 0 a value, 1 a reference, 2 a copy of an enum's payload
     dtors Bool = false                 # the program has destructor-bearing types (HasDtors)
     global Bool = false                # the target is a global: nothing destructor-bearing is made over it
+    outer mut String& = ""             # a text scenario's declarations before its loop
+    after mut String& = ""             # ... and its statements after it
 }
 
 # xorshift64
@@ -1075,18 +1089,33 @@ fn (g mut SG&) strScenario(k I64) String& {
 # a catch default, kept as a local past a churn, captured by a lambda and boxed into anys outside the loop - each read
 # back after a churn
 fn (g mut SG&) textScenario(k I64) String& {
+    g.outer = ""
+    g.after = ""
     body mut String& = ""
     for c in range 2 + g.r(4) { body = $body $g.textOp("        ") }
-    return ("fn s" $k "() I64 {\n    bag := Bag()\n    acc I64 = 0\n    for i in range 3 {\n        t := \"in\" $i\n" $body
-            "        churn()\n    }\n    churn()\n    return acc * 7 + sumAg(bag.anys) * 3 + sumSz(bag.szs)\n}\n")
+    return ("fn s" $k "() I64 {\n    bag := Bag()\n    acc I64 = 0\n" $g.outer "    for i in range 3 {\n        t := \"in\" $i\n" $body
+            "        churn()\n    }\n    churn()\n" $g.after "    return acc * 7 + sumAg(bag.anys) * 3 + sumSz(bag.szs)\n}\n")
 }
 
 fn (g mut SG&) textOp(ind String&) String& {
     v := g.val()
     q := g.name("q")
-    texts := String&["retAt(t, ", "retAtChain(t, ", "retLocal(", "retDirect(", "retCond(t, ", "retTry(", "mkText&t("]
+    texts := String&["retAt(t, ", "retAtChain(t, ", "retLocal(", "retDirect(", "retCond(t, ", "retTry(", "mkText&t(", "retConv("
+                     "retConvCond("]
     call String& = $texts[g.r(texts.Len())] $v ")"
-    k := g.r(8)
+    k := g.r(10)
+    if k == 8 or k == 9 {    # a spawned call given a scope argument, its target outside the loop (the fifth review's 1)
+        z := g.name("z")
+        g.outer = $g.outer "    " $z " := \"\"\n"
+        g.after = $g.after "    acc = acc * 31 + " $z ".Hash()\n"
+        if k == 9 {
+            n := g.name("n")
+            g.outer = $g.outer "    " $n " := Array<I64>(0)\n"
+            g.after = $g.after "    acc = acc * 31 + hashNums(" $n ")\n"
+            return $ind "join {\n" $ind "    spawn " $z " = mkText&t(" $v ")\n" $ind "    spawn " $n " = mkNums&t(" $v ")\n" $ind "}\n"
+        }
+        return $ind "join { spawn " $z " = mkText&t(" $v ") }\n"
+    }
     if k == 0 {    # numbers a scope argument puts in the loop body, returned on or made here
         nums mut String& = $"mkNums&t(" $v ")"
         if g.chance(50) { nums = $"retNumsAt(t, " $v ")" }
@@ -1114,7 +1143,7 @@ fn (g mut SG&) secondScenario(k I64) String& {
     f := "sn" $k
     b := "sb" $k
     v := g.val()
-    kind := g.r(7)
+    kind := g.r(13)
     sbody String& = "    s := \"abc\" $i\n"
     head mut String& = ""
     probe mut String& = ""
@@ -1140,6 +1169,25 @@ fn (g mut SG&) secondScenario(k I64) String& {
         }
         head = "fn " $f "(k mut TK&, i I64) String {\n" $sbody $refs $loop "    return s\n}\n"
         probe = "    k := TK(\"c\")\n    x := " $f "(k, i)\n    x[0] = 'Q'\n    return $k.s \" \" $x\n"
+    } else if kind == 7 or kind == 8 or kind == 9 {
+        # a callee one of whose parameters - its receiver too - shares the borrow's scope (the fifth review's 2)
+        use String& = String&["    h.Add(s)\n", "    h.Add(s[0:2])\n", "    s.AddTo(h)\n"][kind - 7]
+        head = "fn " $f "(h mut TH&, i I64) String {\n" $sbody $use "    return s\n}\n"
+        probe = ("    keep := List<String&>()\n    h := TH(keep)\n    x := " $f "(h, i)\n    x[0] = 'Q'\n"
+                 "    return $keep \" \" $x\n")
+    } else if kind == 10 {
+        head = "fn " $f "(keep mut List<String&>&, i I64) String {\n" $sbody "    tieTo(keep, s)\n    return s\n}\n"
+        probe = "    keep := List<String&>()\n    x := " $f "(keep, i)\n    x[0] = 'Q'\n    return $keep \" \" $x\n"
+    } else if kind == 11 {
+        # a returned conditional, match or catch default of a parameter's text (the fifth review's 4)
+        ret String& = String&["p if i > 0 else q", "match i { case 0 => p case _ => q }", "try textNo&p(i) catch default q"][g.r(3)]
+        head = "fn " $f "(p String&, q String&, i I64) String { return " $ret " }\n"
+        probe = ("    s := \"abc\" $i\n    u := \"def\" $i\n    x := " $f "(s, u, i)\n    x[0] = 'Q'\n"
+                 "    return $s \" \" $u \" \" $x\n")
+    } else if kind == 12 {
+        # a conversion of a place to a type over String, returned and written (the fifth review's 3)
+        head = "fn " $f "(i I64) Lab {\n" $sbody "    return Lab(s)\n}\n"
+        probe = "    s := \"ghi\" $i\n    y := Lab(s)\n    y[0] = 'Q'\n    x := " $f "(i)\n    x[0] = 'R'\n    return $s \" \" $y \" \" $x\n"
     } else if kind == 4 {
         head = "fn " $f "(fs mut List<fn() I64>&, i I64) String {\n" $sbody "    fs.Push(fn() I64 { return I64(U8(s[0])) })\n    return s\n}\n"
         probe = "    fs := List<fn() I64>()\n    x := " $f "(fs, i)\n    x[0] = 'Q'\n    return $fs[0]() \" \" $x\n"

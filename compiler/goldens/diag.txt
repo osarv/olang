@@ -130,17 +130,17 @@ b11notehandle.olang:14:16: note: this text lives in a block that closes first - 
       |                ^
 compilation failed with 1 error
 === b11notevalue.olang
-b11notevalue.olang:10:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
-   10 |         out.Push(p)
+b11notevalue.olang:12:13: error[O10c]: the callee needs one argument's scope to outlive another's, and nothing here shows it - pass them from one scope
+   12 |         out.Push(p)
       |             ^~~~
 $ROOT/std/prelude/list.olang:67:27: note: the callee requires it because of this statement
    67 |     if s.used == s.room { s.grow(x) }
       |                           ^
-b11notevalue.olang:9:9: note: 'p' is declared here, in a block that closes first - declare it where 'out' lives: 'p mut String&out = ...'
-    9 |         p := filepath.Join&out(dir, name)
+b11notevalue.olang:11:9: note: 'p' is made here, in a block that closes first - make it where 'out' lives: 'Join&out(...)'
+   11 |         p := filepath.Join&t(dir, name)
       |         ^
-b11notevalue.olang:10:18: note: this text lives in a block that closes first - pass a copy, which is made where 'out' lives: write '$' before it
-   10 |         out.Push(p)
+b11notevalue.olang:12:18: note: this text lives in a block that closes first - pass a copy, which is made where 'out' lives: write '$' before it
+   12 |         out.Push(p)
       |                  ^
 compilation failed with 1 error
 === b11unknownonce.olang

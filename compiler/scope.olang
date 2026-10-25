@@ -2275,9 +2275,11 @@ fn (s mut Scoper&) canKeep(c typed.Call&, j I64) Bool {
     }
     callee := s.bodyOf(c.Target)
     if callee < 0 or not s.sums[callee].Done or s.sums[callee].Judging { return true }
-    # what the settled body stores into what the argument names, or hands a writable reference into out (O17)
+    # what the settled body stores into what the argument names, or hands a writable reference into out (O17) - a
+    # reference to it the body keeps elsewhere is an obligation (above), a result borrowed from it, or one of a
+    # parameter sharing its scope
     sm := s.sums[callee]
-    if j >= sm.Keeps.Len() or sm.Keeps[j] or sm.Stores[j] or sm.Puts[j] { return true }
+    if j >= sm.Stores.Len() or sm.Stores[j] or sm.Puts[j] { return true }
     vars := s.P.T.ScopeVarsOf(fty)
     k := s.P.T.ShareOf(fty, j)
     q := k if k >= 0 else j
