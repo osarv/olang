@@ -1174,3 +1174,11 @@ loop bracket; strict mode as `olang prove -strict` vs a marker in code). ASKED a
   concluded it fails: a discarded Result statement (`io.Println(msg "#")`) compiles and silently drops the error (Rust
   needs #[must_use]), where R8 makes it a compile error. SETTLED: errors stay; a fallible call is handled at the call.
   RE-ASKED: Result/Option only as std storage types (made explicitly, `Result.Of(...)`, `Some(x)`), or drop them for now.
+- QAY 2026-10-25, the user: "Option should not be a thing, and Result must be a generic std type, how would we
+  integrate that with calls? Can we let it slip if we know the storage is a result? `x Result<T, E> = f()`. What do we
+  do with multiple returns?" DECIDED: no Option; Result<T, E> a generic std type. PROPOSED/ASKED: (1) a fallible call
+  needs no try exactly where it lands in a place whose written type is Result (typed declaration, assignment, a Result
+  parameter incl. Push into List<Result<..>>, a return of a Result-returning function); a statement call or `:=` still
+  needs try; (2) `try r` / `r!` unwrap a Result (Ok gives v, Err fails with e), match and narrowing as any enum; (3)
+  several results: (a) cannot land in a Result (rec) / (b) auto Pair / (c) one Result each; (4) several error types
+  need a named error set (errors as values). Rec yes to all, (a).
