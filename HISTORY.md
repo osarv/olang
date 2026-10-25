@@ -23646,6 +23646,75 @@ while compiling and again at run time, and a line "BAD" (or a destructor having 
 Seeds 1-60: 54 findings on 0c37adb (7 disagreements between -d -s and -i, 31 uses after a scope closed that -i itself
 stopped on, 16 failed self-checks), none after; seeds 61-300 on the fixed compiler (1,519 scenarios run), none.
 
+## `any Trait&`: the fifth review, fixed (P1g, T11b, O26a, T7b, T29a, K1, E25, O25a, B3e, 2026-10-25)
+
+A fifth read-only review (/home/user/review/any5) of the fourth round found a use-after-free its D introduced, an
+over-rejection its A introduced, and four older holes. All are fixed, each with a test; the decisions are the
+coordinator's, the details mine.
+
+**1. A spawned call given a scope argument stored its array into the target as it was (use-after-free, new).** The
+scope pass judges `spawn z = mk&u(i)` as the assignment `z = mk&u(i)`, which lowering copies - but the task stored the
+call's result straight into the target's place, so `z`, outside `u`'s block, named freed storage (one of several
+results, a catch default and an array of numbers alike). Decided: a spawn target is stored exactly as the assignment it
+is judged as. A task now carries, per target, where that assignment would copy (`mir.Task.Copies`, a scope reference
+or `Frame` for none), and the store on the task's thread is the assignment's: the elements written into the storage the
+target holds where the length is unchanged (T11b - which the task's plain store never did either), else the target
+given the result's storage, or a copy made where the target's storage is. Emitted as a fix-up after the trampoline's
+stores (and after a clause's), allocating through a stand-in for the target's scope folded at the join (P2), so
+`-race` stays clean; the evaluator stores the same way (`Machine.arrayTarget`). One lowering for both: the copy decision
+is `copiesArray`, the assignment's.
+
+**2. `canKeep` missed a callee keeping an argument with no obligation (value semantics, evaluator disagreement,
+older).** `fn tie(l mut List<String&>&, x String&l)`, `fn (h mut Holder&) Add(x String&h)`, `fn (x String&) AddTo(h
+mut Holder&x)`: a parameter sharing another's scope may be stored into it with no obligation - the signature already
+says they are one scope - so RetSole took the returned local for sole and the caller's value and the list's element
+were one storage, while the evaluator copied. Decided: `canKeep` answers "keeps nothing" only where no result in any
+position (a tuple's included, the review's finding 6) is borrowed from the argument or from what it shares, no other
+parameter - the receiver included - shares a scope with it, the callee's body is settled (checked, not in a cycle
+still being judged) and its obligations hold nothing of it. **Decided (mine)**: the region facts were tried first (a
+body storing into what the argument names counted as keeping) and dropped - storing into the argument's referent makes
+no second name of it, and the over-reading moved a checker `Map` local into its caller's scope (a flow through
+`wantStr(seen)`), refused `o18claterlend` and changed the compiler's IR; with them left out the compiler and every
+bench program compile to the same IR as d4ed05d.
+
+**3. A conversion of a value place to a type over `String` skipped T29a's place path (use-after-free, an immutable
+global written, older).** The checker took the place path only where the target's base kind was `Array`; for
+`type Lab extends String` or `type Path String` the base is a declared array type, so `Lab(s)` became a plain
+conversion of the place's read, a value naming the place's storage that nothing copied: `return Lab(s)` returned the
+callee's frame, `cg() Path { return Path(G) }` handed out an immutable global's storage, `x := Lab(s)` aliased `s`, and
+`wr(Lab(s))` wrote a copy where T29a says it borrows. The place path now takes the underlying kind. Defensively,
+`copiesArray` and `returnedArrays` look through a conversion - only of a run-time-length array: a fixed array made a
+run-time value is copied out already, and looking through that one too copied every returned fixed local twice
+(std/rand's `State`), caught by comparing the bench IR.
+
+**4. The evaluator did not copy a returned conditional, match or catch default (older).** Without a plan, `retArrays`
+asked `copiesArray` of the whole returned expression - false for a `Cond`, `Match` or `Try` - while the planned path
+asked `retCopies`, which looks into each value; so `return p if c else q` returned the caller's own array while
+compiling and a copy at run time, and a correct assert was refused. Decided: one function decides what a return
+copies (`retCopies`), with a plan and without; without one every existing array is copied. The separate S19 copy for
+deferred code went with it (the same decision covers it).
+
+**5. A local a scoped call declares was taken to live in its block (over-rejection, new).** `x := mk&return(i);
+keep.Push(x); return x` and `x := mk&keep(i)` were O10c, with a note proposing what `mk&keep` already says. Such a
+local's storage now lives where the argument puts it; the note for a scoped-call local names the scope argument to
+change (`'Join&out(...)'`), never a declaration - `checks/cases/b11notevalue` now checks that note (its old expectation
+was this rule reversed).
+
+**6. `interpret` dropped section 8's errors (older).** B3e said every compile-time error is reported the same way, but
+`interp.Exec.Place` forgot the scope pass's diagnostics, its reason (stage 0's checker reported them) gone with stage 0.
+Decided: `interpret` runs the same placement a build does and refuses what it refuses; `Exec.Place` is removed. The
+checks harness and the fuzzers never relied on interpreting a refused program (the scope fuzzer leaves refused
+scenarios out by the build's diagnostics).
+
+**Limits recorded:** the review's held/ probes still hold; any4's o1-o4 stay refused.
+
+**Fuzzer.** The scope fuzzer writes the review's shapes: spawns of scoped calls into targets outside the loop (text and
+numbers), callees sharing a parameter's scope (`h.Add(s)`, `h.Add(s[0:2])`, `s.AddTo(h)`, `tieTo(keep, s)`), returned
+conditionals, matches and catch defaults of parameters, and conversions to a type over `String` (returned, declared and
+written), the second-name ones checked against a baked global. Seeds 1-80: 67 findings on d4ed05d (10 disagreements
+between -d -s and -i, 41 uses after a scope closed `-i` stopped on, 16 failed self-checks), none after; seeds 1-240 on
+the final compiler: FUZZFINAL.
+
 ## The std naming pass (2026-10-24)
 
 The user's rule, from looking at `io.IoError`: "we don't integrate the knowledge that modules have namespaces" - a name

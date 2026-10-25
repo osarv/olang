@@ -622,8 +622,8 @@ array - builds its result from it: the elements are copied into the result scope
 scopes close, so the caller takes an array no one else holds, and nothing those scopes do as they close (a destructor
 allocating, say) can reach it. A local the result scope already holds (O26a) is the result as it is **only where nothing else can name its
 storage**: the local is only read, indexed and measured, its elements copied out, sliced or viewed only into values that
-are gone by the return, and lent only to calls that provably keep nothing of it: a function whose checked body stores
-nothing into what the argument names (§8 O17), whose obligations hold nothing of it (O10b), none of whose results, in
+are gone by the return, and lent only to calls that provably keep nothing of it: a function whose body is checked and settled
+(not one still being judged in a cycle of calls), whose obligations hold nothing of it (O10b), none of whose results, in
 any position, is borrowed from it (O13), and none of whose other parameters - its receiver included - shares a scope
 with it (`fn tie(l mut List<String&>&, x String&l)` may store `x` in `l` with no obligation). Anything else - a borrow of
 it stored in a field, a list or a local reference, pushed through one, handed to a method on another value, to a call
