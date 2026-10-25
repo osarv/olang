@@ -399,3 +399,7 @@ on sight per rules.md, "Code rules".
   readings agree, else lists and exits 1.
 - SMALL, next batch: `make releasetest` also runs `olang explain T6a` in the unpacked release (SPEC.md must ship
   beside bin/, as std/ and tools/ do; the user asked 2026-10-25).
+- 2026-10-25 CEST: wt-lang25 MERGED (0d775bc, full verify passed; merge = tip + memory): the batch plus its review's 8
+  fixes (Call adapter error sets T22/E31, olang fix lists every changed-reading site and exits 1, `x.Len()` unknown
+  method, touching type arguments, D17e only where nothing catches ArgumentError, Rem(MIN,-1)=0, `!` prints the
+  condition, `a.Set(i, v)`). Next: the errors batch (queued above). Bulk review later over several batches.
