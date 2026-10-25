@@ -33,6 +33,22 @@
 | ok - T29a: a conversion of a place to a type over String names its storage
 | ok - T7b, K1: a returned conditional, match or catch default is copied while compiling as at run time
 | ok - E25, O25a: a local a scoped call declares lives where the argument puts it
+=== test tests/embed.olang
+| status 0
+| ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
+| ok - E38: an embed in a loop or a generic is its one instance's bytes each time
+=== test tests/errsetparams.olang
+| status 0
+| ok - G1a: an error-set parameter takes what the callback fails with, nothing where it cannot fail
+| ok - G1a: an instance at the empty set is called without try
+| ok - QAH: the helpers take callbacks that fail
+| ok - QAH: a comparator that fails stops the sort
+| ok - QAH: an iterator's own errors reach what walks it
+| ok - G1a: a type's error-set parameter, and catch E in its methods
+| ok - T19a: a named set as an error-set argument
+| ok - K1: error-set instances are evaluated while compiling
+| ok - G12: an instance named with its error set, and one whose set is left to inference
+| ok - T32, T31: an any of a fallible iterator, and a set written in another order
 === test tests/errsets.olang
 | status 0
 | ok - an error type and a set are declared as types, and a set stands for its members
@@ -40,6 +56,24 @@
 | ok - a caught error is compared, narrowed and matched
 | ok - a caught error is raised again, held to the set the narrowing leaves
 | ok - a clause's name reaches its block and its default; each clause its own
+=== test tests/genenums.olang
+| status 0
+| ok - G6b: generic enums - built, matched, compared, rendered - baked, decided while compiling and run
+| ok - G6b, E10b: an instance of a generic enum is a Map key, hashed per instance
+| ok - G6b, T17c: payloads holding references live where the value does - read back after an arena churn
+=== test tests/generators.olang
+| status 0
+| ok - D18: a generator walked by for-in and by the iterator helpers, while compiling and at run time
+| ok - D18: a generic generator, a generator method, text built for each value
+| ok - D18: errors - the error leaves, Exhausted after it
+| ok - D18a: return ends a walk, and Next after the end fails with Exhausted again
+| ok - D18: a generator over another iterator ends where that one does
+| ok - D18: a copy of a Generator is the same walk; a field holds one
+| ok - D18b: a walk stopped part way closes its scopes with the scope the generator lives in
+| ok - D18: a walk churned between values reads what it made, not reused storage
+| ok - D18b: a generator builds into what it was given, where that lives
+| ok - D18c: a generator yields copies of what it was given
+| ok - S19e: an errdefer in a generator's body runs when the walk fails, not when it ends
 === test tests/runner.olang
 | status 0
 | ok - calling back across the cycle from runner
@@ -550,6 +584,9 @@
 | ok - E5: the bitwise operators bind tighter than the comparisons
 | ok - T17e: raw values
 | ok - S19: deferred code runs on every way out of its block, while compiling and at run time
+| ok - S19e: errdefer runs only on an error's way out, in the defers' order, while compiling and at run time
+| ok - errdefer pending in a test body is not run when the test passes
+| ok - ...and was not run
 | ok - S19a: deferred code runs before its block's scope closes
 | ok - a block inside a catch clause closes at its own brace
 | ok - a statement after a return compiles
@@ -1295,6 +1332,11 @@
 | status 0
 === run d17reqcaught.olang
 | status 0
+=== run d18run.olang
+| status 0
+| 0
+| 2
+| 4
 === run d8eruns.olang
 | status 0
 === run d8evalues.olang
@@ -1364,6 +1406,8 @@
 === run g4resultwritten.olang
 | status 0
 === run gemmflat.olang
+| status 0
+=== run genericenum.olang
 | status 0
 === run globalvaluecopy.olang
 | status 0

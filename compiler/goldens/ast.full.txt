@@ -307,6 +307,11 @@
 | TYPE 4:1-4:32
 | -- diagnostics
 | error  8:22
+=== checks/cases/s19eline.olang
+| EXPR 6:13-6:17
+| FN 6:1-6:19
+| -- diagnostics
+| error S1b 4:15
 === checks/cases/s1bblock.olang
 | -- diagnostics
 | error S1b 5:15

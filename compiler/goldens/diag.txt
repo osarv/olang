@@ -1683,6 +1683,31 @@ e37redeclared.olang:4:13: error[E23, E33, E37, P9, T17e]: the compiler supplies 
     4 | fn (b Bits) LeadingZeros() I64 { return 0 }
       |             ^~~~~~~~~~~~
 compilation failed with 1 error
+=== e38bound.olang
+e38bound.olang:4:12: error[E38]: an embed's path is text known while compiling - a literal, or what reads no local
+    4 | X := embed "e38bound.olang"[0]
+      |            ^~~~~~~~~~~~~~~~~~~
+compilation failed with 1 error
+=== e38dir.olang
+e38dir.olang:3:15: error[E38]: embed '.' reads no file: . is a directory
+    3 | Here := embed "."
+      |               ^~~
+compilation failed with 1 error
+=== e38local.olang
+e38local.olang:3:43: error[E38]: an embed's path is text known while compiling - a literal, or what reads no local
+    3 | fn load(path String&) I64 { return (embed path).Len() }
+      |                                           ^~~~
+compilation failed with 1 error
+=== e38nofile.olang
+e38nofile.olang:3:15: error[E38]: embed 'missing.bin' reads no file: no file missing.bin
+    3 | Blob := embed "missing.bin"
+      |               ^~~~~~~~~~~~~
+compilation failed with 1 error
+=== e38undecided.olang
+e38undecided.olang:5:15: error[E38]: this embed's path cannot be computed while compiling - write it so it can, or as a literal
+    5 | Data := embed where()
+      |               ^~~~~~~
+compilation failed with 1 error
 === e4aexact.olang
 e4aexact.olang:5:24: error[E4a]: this literal expression's value does not fit I32
     5 |     x I32 = 2147483647 + 1
@@ -2084,6 +2109,21 @@ g4resultonly.olang:6:18: error[G4]: type variable T of mk appears in no paramete
     6 |   a Array<I32> = mk(3)
       |                  ^~
 compilation failed with 1 error
+=== g6bcover.olang
+g6bcover.olang:8:18: error[S13a]: case None of Opt<I64> is not covered - add it, or 'nomatch { }'
+    8 |     return match o {
+      |                  ^
+compilation failed with 1 error
+=== g6binfer.olang
+g6binfer.olang:8:14: error[G10c]: the type arguments of Opt cannot be inferred from this case - write them, 'Opt<...>.None', or give it a type to land in
+    8 |     x := Opt.None
+      |              ^~~~
+compilation failed with 1 error
+=== g6bother.olang
+g6bother.olang:9:14: error[S13]: a case value here is Opt<I64>, found Opt<F64>
+    9 |         case Opt<F64>.Some(_) { return 1 }
+      |              ^~~~~~~~~~~~~~~~
+compilation failed with 1 error
 === g7argcount.olang
 g7argcount.olang:5:21: error[G7]: type arguments for Box: expected 1, found 2
     5 | fn main() ? { b Box<I32, I64> = Box<I32>(1) }
@@ -2115,13 +2155,8 @@ g9dhashable.olang:11:22: error[G19, E10b]: Res& does not satisfy the constraint 
       |                      ^~~~~~
 compilation failed with 1 error
 === genericarray.olang
-genericarray.olang:3:10: error[G6]: only a struct or a trait takes type parameters
+genericarray.olang:3:10: error[G6]: only a struct, an enum or a trait takes type parameters
     3 | type Arr<T> Array<T>
-      |          ^
-compilation failed with 1 error
-=== genericenum.olang
-genericenum.olang:4:10: error[G6]: only a struct or a trait takes type parameters
-    4 | type Opt<T> enum {
       |          ^
 compilation failed with 1 error
 === globaltypename.olang
@@ -4265,10 +4300,30 @@ s19break.olang:10:24: error[S19b]: 'break' may not leave deferred code - it runs
    10 |             if t > 1 { break }
       |                        ^~~~~
 compilation failed with 1 error
+=== s19eescape.olang
+s19eescape.olang:6:14: error[S19b]: an error may not leave deferred code - catch it here
+    6 |     errdefer try g()
+      |              ^~~
+compilation failed with 1 error
+=== s19eline.olang
+s19eline.olang:4:15: error[S1b]: a one-line body is one simple statement, not an errdefer - write a block, '{ ... }'
+    4 |     if x > 0: errdefer x = 2
+      |               ^~~~~~~~
+compilation failed with 1 error
+=== s19ereturn.olang
+s19ereturn.olang:6:20: error[S19b]: deferred code may not return - it runs while its block is left
+    6 |         if n > 1 { return 3 }
+      |                    ^~~~~~
+compilation failed with 1 error
 === s19error.olang
 s19error.olang:8:20: error[S19b]: an error may not leave deferred code - catch it here
     8 |         if n > 1 { error E.BAD }
       |                    ^~~~~
+compilation failed with 1 error
+=== s19eyield.olang
+s19eyield.olang:8:5: error[S20]: a yield with deferred code pending around it - a walk stopped there would never run it; yield outside the deferring block
+    8 |     yield 2
+      |     ^~~~~
 compilation failed with 1 error
 === s19later.olang
 s19later.olang:4:16: error: unknown name 'later'
